@@ -103,7 +103,7 @@ COPY agents/hermes/patches/sitecustomize-nemo-flow.py /tmp/sitecustomize-nemo-fl
 # hadolint ignore=DL3013
 RUN if [ "$ENABLE_NEMO_FLOW" = "1" ]; then \
         echo "[nemo-flow] Installing nemo-flow==${NEMO_FLOW_VERSION} from PyPI and patching Hermes" \
-        && curl -fsSL "https://raw.githubusercontent.com/NVIDIA/NeMo-Flow/v${NEMO_FLOW_VERSION}/patches/hermes-agent/0001-add-nemo-flow-integration.patch" \
+        && curl -fsSL "https://raw.githubusercontent.com/NVIDIA/NeMo-Flow/${NEMO_FLOW_VERSION}/patches/hermes-agent/0001-add-nemo-flow-integration.patch" \
              -o /tmp/nemo-flow.patch \
         && curl -fsSL "https://github.com/NousResearch/hermes-agent/archive/${HERMES_NEMO_FLOW_COMMIT}.tar.gz" \
              | tar -xz -C /tmp/ \

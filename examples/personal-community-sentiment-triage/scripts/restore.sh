@@ -34,7 +34,7 @@ fi
 
 # Validate the sandbox is up — restoring into a non-existent sandbox would
 # silently land in a tmpfs and disappear.
-if ! openshell sandbox list 2>/dev/null | grep -E "^\s*$SANDBOX_NAME\s" | grep -q ready; then
+if ! openshell sandbox list 2>/dev/null | grep -E "^\s*$SANDBOX_NAME\s" | grep -qi ready; then
   echo "Sandbox $SANDBOX_NAME is not ready — bring it up first (scripts/bring-up.sh)" >&2
   exit 1
 fi

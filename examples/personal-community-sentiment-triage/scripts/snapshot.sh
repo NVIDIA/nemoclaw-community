@@ -30,7 +30,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$DIR/_lib.sh"
 
 # Validate the sandbox is up before trying to download from it.
-if ! openshell sandbox list 2>/dev/null | grep -E "^\s*$SANDBOX_NAME\s" | grep -q ready; then
+if ! openshell sandbox list 2>/dev/null | grep -E "^\s*$SANDBOX_NAME\s" | grep -qi ready; then
   echo "Sandbox $SANDBOX_NAME is not ready — bring it up first" >&2
   exit 1
 fi

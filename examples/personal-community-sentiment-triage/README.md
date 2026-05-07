@@ -7,6 +7,118 @@ can be aligned against actual community demand. The agent draws on signal
 from GitHub issues, NVIDIA forums, and Slack channels; you interact with it
 via Outlook email (the primary channel), optionally over Slack.
 
+## Architecture
+
+The Hermes sandbox operates with a deliberately narrow egress policy. It connects
+live to Slack and Outlook for interactions and research. GitHub and NVIDIA forum
+data are never fetched live from inside the sandbox — host-side ETL containers
+scrape those sources on a schedule and write results into Postgres, and the
+sandbox queries that mirror through a read-only PostgREST HTTP bridge.
+
+```mermaid
+flowchart LR
+    %% External services declared first so Mermaid binds them outside the host subgraph
+    nvidia["Internal\nLLM Inference Provider"]
+    slack["Internal\nSlack Bot App"]
+    outlook["Internal\nOutlook / MS Graph"]
+    entra["Internal\nMS Entra ID"]
+    github["External\nGitHub API\nissues · PRs · discussions"]
+    forums["External\nNVIDIA Forums\nnemoclaw tag"]
+
+    subgraph host["Host Machine"]
+        direction TB
+
+        subgraph sandbox["OpenShell Sandbox"]
+            agent["Hermes Agent\nLLM + NemoFlow"]
+            outlookBridge["Outlook Bridge"]
+            credSidecar["MS Graph Sidecar\n127.0.0.1:8766"]
+
+            subgraph sourceSkills["Source Skills"]
+                direction LR
+                s1["source-etl-query"]
+                s4["cross-source-gap-analysis"]
+            end
+
+            subgraph slackSkills["Slack Skills"]
+                direction LR
+                k1["slack-channel-finder"]
+                k2["slack-channel-summarizer"]
+            end
+
+            subgraph outlookSkills["Outlook Skills"]
+                direction LR
+                o1["outlook-email-search"]
+            end
+
+            agent --> sourceSkills
+            agent --> slackSkills
+            agent -->|"messaging channel"| outlookBridge
+            agent --> outlookSkills
+            agent -->|"OTLP traces"| proxy
+            sourceSkills -->|"HTTP REST"| proxy
+            slackSkills -->|"comms + research"| proxy
+            outlookSkills --> credSidecar
+            outlookBridge --> credSidecar
+            credSidecar -->|"fetch live token\nsession UUID"| proxy
+            credSidecar -->|"Graph API\nHTTPS"| proxy
+        end
+
+        proxy["L7 Proxy"]
+        phoenix["Phoenix Telemetry\n:6006"]
+        postgrest["PostgREST\nread-only :3100"]
+        postgres[("PostgreSQL\nsource mirror")]
+        etls["Source ETLs\nGitHub + Forums\nhourly deltas"]
+        tokenManager["MS Graph Token Manager\nMSAL sessions\n:8765"]
+
+        proxy -->|"OTLP traces"| phoenix
+        proxy -->|"HTTP REST"| postgrest
+        proxy -->|"token fetch"| tokenManager
+        postgrest --> postgres
+        etls -->|"write deltas"| postgres
+    end
+
+    %% Cross-boundary edges (host → external) live outside any subgraph
+    proxy -->|"inference"| nvidia
+    proxy -->|"Slack bot"| slack
+    proxy -->|"Graph API"| outlook
+    tokenManager -->|"MSAL auth"| entra
+    entra -.->|"issues token"| tokenManager
+    etls -->|"scheduled scrape"| github
+    etls -->|"scheduled scrape"| forums
+
+    style host fill:#f7f6ef,stroke:#8a8068,stroke-width:2px
+    style sandbox fill:#e7f0ff,stroke:#2b5fab,stroke-width:3px
+    style sourceSkills fill:#f0f4ff,stroke:#7090cc,stroke-width:1px
+    style slackSkills fill:#f0f4ff,stroke:#7090cc,stroke-width:1px
+    style outlookSkills fill:#f0f4ff,stroke:#7090cc,stroke-width:1px
+
+    classDef internal fill:#eef7e9,stroke:#6aa84f,stroke-width:2px
+    classDef external fill:#fce5cd,stroke:#e69138,stroke-width:2px
+
+    class nvidia,slack,outlook,entra internal
+    class github,forums external
+```
+
+**Key invariants:**
+
+- The agent never has direct network access to GitHub or the NVIDIA forums. All GitHub and forum data the agent sees comes from the Postgres mirror.
+- Slack and Outlook are live connections from the sandbox; the agent can read and write both in real time.
+- Compatible-endpoint inference egress is required for the agent's LLM calls — it's not a research/data-ingestion path.
+- The ETL containers are non-agentic — fixed scraper logic on an hourly interval, no LLM involvement.
+- The PostgREST bridge exposes a read-only HTTP API on host port `3100` and internal port `3000` inside the `openshell-cluster-*` gateway Docker network, so the sandbox can reach it without live GitHub or forum egress.
+
+## Agent skills
+
+Skills are loaded on demand by the agent when relevant to a task. They live in [agents/hermes/skills/](agents/hermes/skills/).
+
+| Skill | Purpose |
+|-------|---------|
+| `source-etl-query` | Query the host-side PostgREST bridge for mirrored GitHub and NVIDIA forum data. Primary data-access skill for both GitHub and forum research. |
+| `slack-channel-finder` | Discover Slack channels by topic, team, or domain and infer what each channel is for. |
+| `slack-channel-summarizer` | Resolve Slack channels by name or ID and read message history via the Slack Web API. |
+| `outlook-email-search` | Search the Outlook mailbox via Microsoft Graph to find and read emails relevant to a question. |
+| `cross-source-gap-analysis` | Synthesize findings across Slack, GitHub, and NVIDIA forum sources to identify gaps, alignment issues, and follow-ups. |
+
 ## Intended user journey
 
 The bring-up has two distinct halves: a host-side bootstrap (Docker services that hold
@@ -37,7 +149,8 @@ Now edit `.env` and fill in everything you already have:
 - `OUTLOOK_TARGET_MAILBOX`, `OUTLOOK_REPLY_TO` — the agent's mailbox and your personal mailbox
 - (optional) `TOKEN_CACHE_SALT` — set to a unique random string for any deployment that
   holds real Entra sessions; leave commented for local experimentation
-- (optional) `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN`, `GITHUB_TOKEN`, `PHOENIX_COLLECTOR_ENDPOINT`
+- (optional) `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` / `SLACK_ALLOWED_IDS` — see [docs/set-up-slack.md](docs/set-up-slack.md)
+- (optional) `GITHUB_TOKEN`, `PHOENIX_COLLECTOR_ENDPOINT`
 
 Leave **`OUTLOOK_SESSION_UUID` blank for now** — Phase 4 produces it.
 
@@ -104,13 +217,14 @@ phase if you don't need the cross-source ETL skills — the agent works without 
 ## What this example owns
 
 - **Owns** (in this directory): `agents/hermes/` (the full Hermes asset tree, staged
-  here for convenience), `policy.yaml` (sandbox network/filesystem policy — replaces
-  the inherited `agents/hermes/policy-additions.yaml`), `extras/`, `.env`, and `scripts/`:
+  here for convenience), `policy.yaml` (sandbox network/filesystem policy), `extras/`,
+  `.env`, and `scripts/`:
   - `00-host-services.sh` — host-side bootstrap (Phase 3, also re-run in Phase 6 for postgrest). Independent of the sandbox lifecycle.
   - `01-gateway.sh` / `02-providers.sh` / `03-sandbox.sh` — phase scripts called by the bring-up orchestrator.
   - `bring-up.sh` — orchestrator for 01 → 02 → 03; does **not** invoke `00-host-services.sh` (host services are long-lived).
   - `tear-down.sh` — removes the sandbox and per-sandbox providers; preserves host services unless `STOP_HOST_SERVICES=1`.
   - `snapshot.sh` / `restore.sh` — explicit Hermes state preservation across tear-down/bring-up cycles.
+  - `host-tls-proxy.py` — optional plain-HTTP forwarder for hosts where the sandbox can't validate the inference endpoint's TLS chain (corporate VPN, split-horizon DNS, mkcert). See [docs/host-tls-proxy.md](docs/host-tls-proxy.md).
 - **Generates and discards**: a sed-patched `.Dockerfile.staged` at the example dir
   root. OpenShell does the actual build; we patch ARG defaults beforehand because
   `openshell sandbox create` doesn't expose `--build-arg`.
@@ -122,9 +236,10 @@ example is **fully self-contained** and never needs a NemoClaw checkout.
 When `PHOENIX_COLLECTOR_ENDPOINT` is set, `bring-up.sh` flips
 `ARG ENABLE_NEMO_FLOW=1` in the staged Dockerfile, which triggers an in-image
 `pip install` of the `nemo-flow` version pinned by `NEMO_FLOW_VERSION` in
-[agents/hermes/Dockerfile](agents/hermes/Dockerfile) (from PyPI) plus a
-re-install of Hermes with the vendored NeMo-Flow integration patch applied.
-No Rust toolchain, no separate base image, no `third_party/nemo-flow` submodule.
+[agents/hermes/Dockerfile](agents/hermes/Dockerfile) (from PyPI), plus a
+re-install of Hermes with the NeMo-Flow integration patch fetched from
+[NVIDIA/NeMo-Flow](https://github.com/NVIDIA/NeMo-Flow) at the pinned
+`NEMO_FLOW_VERSION` tag and applied during the build.
 
 ## Prerequisites
 

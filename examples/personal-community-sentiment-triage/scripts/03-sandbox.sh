@@ -106,6 +106,13 @@ PROVIDER_FLAGS=(--provider "$SANDBOX_NAME-outlook")
 [[ -n "${GITHUB_TOKEN:-}" || -n "${GH_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-github")
 
 # ── Create the sandbox ─────────────────────────────────────────────────
+# `openshell sandbox create` proxies the running sandbox's stdout to the
+# local terminal until the initial command exits. Our initial command is a
+# long-running daemon, so the call would block forever. The fix mirrors
+# NemoClaw's streamSandboxCreate() in src/lib/sandbox-create-stream.ts:
+# spawn create in the background, poll for ready, then SIGTERM the local
+# proxy as soon as the sandbox reports ready. The sandbox runs on the
+# gateway and survives the local proxy being killed.
 echo "Creating sandbox $SANDBOX_NAME (OpenShell will build the image)…"
 openshell sandbox create \
   --from "$STAGED_DOCKERFILE" \
@@ -120,21 +127,41 @@ openshell sandbox create \
     NEMOCLAW_MESSAGING_CHANNELS_B64="$CHANNELS_B64" \
     CHAT_UI_URL="http://127.0.0.1:8642" \
     PHOENIX_COLLECTOR_ENDPOINT="${PHOENIX_COLLECTOR_ENDPOINT:-}" \
-  nemoclaw-start
+  nemoclaw-start </dev/null &
+CREATE_PID=$!
 
 # ── Wait for ready ─────────────────────────────────────────────────────
+# 180 × 2s = 6 min, generous enough for a cold-cache build. If the create
+# process dies before ready, bail with its exit status rather than hanging.
 echo "Waiting for sandbox $SANDBOX_NAME to reach ready…"
-for _ in {1..60}; do
-  if openshell sandbox list 2>/dev/null | grep -E "^\s*$SANDBOX_NAME\s" | grep -q ready; then
+READY=0
+for _ in {1..180}; do
+  if openshell sandbox list 2>/dev/null | grep -E "^\s*$SANDBOX_NAME\s" | grep -qi ready; then
     READY=1
     break
   fi
+  if ! kill -0 "$CREATE_PID" 2>/dev/null; then
+    wait "$CREATE_PID" 2>/dev/null
+    echo "openshell sandbox create exited before sandbox reached ready" >&2
+    exit 1
+  fi
   sleep 2
 done
-[[ "${READY:-0}" == "1" ]] || {
-  echo "Sandbox did not reach ready in 120s — check 'openshell sandbox logs $SANDBOX_NAME'" >&2
+
+# Detach: SIGTERM the local proxy and don't wait for it to exit. NemoClaw's
+# upstream pattern (sandbox-create-stream.ts) does the same — SIGTERM, detach
+# listeners, unref. If the proxy ignores SIGTERM, a backgrounded SIGKILL
+# follows after a short grace period. The script returns either way; the
+# sandbox runs on the gateway independent of this proxy.
+kill -TERM "$CREATE_PID" 2>/dev/null || true
+( sleep 2; kill -KILL "$CREATE_PID" 2>/dev/null ) &
+disown 2>/dev/null || true
+
+if [[ "$READY" != "1" ]]; then
+  echo "Sandbox did not reach ready in 360s — check 'openshell sandbox logs $SANDBOX_NAME'" >&2
   exit 1
-}
+fi
+echo "  Sandbox reported ready; detached local create stream."
 
 # ── Re-apply policy (matches nemoclaw onboard's two-stage flow) ────────
 # Without this, network rules from policy.yaml may not be activated even
