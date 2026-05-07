@@ -1,7 +1,11 @@
-# personal-community-sentiment-triage: Hermes + Outlook (examples-repo workflow)
+# personal-community-sentiment-triage: Hermes + Outlook
 
-Stands up a Hermes-with-Outlook sandbox using only a NemoClaw install + Docker + OpenShell,
-without running `nemoclaw onboard`.
+A personal Hermes agent that surfaces what the developer community is working
+on, struggling with, asking about, and flagging as gaps — and compares it
+against what internal developer/product teams are prioritizing, so resources
+can be aligned against actual community demand. The agent draws on signal
+from GitHub issues, NVIDIA forums, and Slack channels; you interact with it
+via Outlook email (the primary channel), optionally over Slack.
 
 ## Intended user journey
 
