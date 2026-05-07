@@ -1,0 +1,134 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Combined stack: Phoenix telemetry + Outlook token manager + source ETLs.
+# Usage: docker compose up --build
+# Auth credentials are passed via nemoclaw onboard — no .env file required.
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Telemetry
+  # ---------------------------------------------------------------------------
+
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    ports:
+      - "6006:6006"   # Phoenix UI
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+
+  # ---------------------------------------------------------------------------
+  # Outlook auth
+  # ---------------------------------------------------------------------------
+
+  ms-graph-token-manager:
+    build: ./ms-graph-token-manager
+    environment:
+      TOKEN_CACHE_SALT: ${TOKEN_CACHE_SALT:-nemoclaw-ms-graph-v1}
+    volumes:
+      - token-cache:/token-cache
+    ports:
+      - "8765:8765"   # Token manager API
+      - "51247:51247" # OAuth redirect callback
+    stdin_open: true
+    tty: true
+
+  # ---------------------------------------------------------------------------
+  # Source ETLs
+  # ---------------------------------------------------------------------------
+
+  postgres:
+    build:
+      context: ./source-etls/postgres
+    container_name: source-etls-postgres
+    restart: unless-stopped
+    ports:
+      - "${SOURCE_ETL_POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: "${SOURCE_ETL_POSTGRES_DB:-source_etls}"
+      POSTGRES_USER: "${SOURCE_ETL_POSTGRES_SUPERUSER:-postgres}"
+      POSTGRES_PASSWORD: "${SOURCE_ETL_POSTGRES_SUPERUSER_PASSWORD:-postgres}"
+      SOURCE_ETL_POSTGRES_APP_USER: "${SOURCE_ETL_POSTGRES_APP_USER:-source_etl_writer}"
+      SOURCE_ETL_POSTGRES_APP_PASSWORD: "${SOURCE_ETL_POSTGRES_APP_PASSWORD:-source_etl_writer}"
+      SOURCE_ETL_POSTGRES_READER_USER: "${SOURCE_ETL_POSTGRES_READER_USER:-source_etl_reader}"
+      SOURCE_ETL_POSTGRES_READER_PASSWORD: "${SOURCE_ETL_POSTGRES_READER_PASSWORD:-source_etl_reader}"
+    volumes:
+      - source-etls-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  github-etl:
+    build:
+      context: ./source-etls/github-etl
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SYNC_INTERVAL_SECONDS: "${SOURCE_ETL_INTERVAL_SECONDS:-3600}"
+      BACKFILL_HOURS: "${SOURCE_ETL_INITIAL_BACKFILL_HOURS:-72}"
+      GITHUB_REPOSITORY: "${SOURCE_ETL_GITHUB_REPO:-NVIDIA/NemoClaw}"
+      GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: "${SOURCE_ETL_POSTGRES_DB:-source_etls}"
+      POSTGRES_USER: "${SOURCE_ETL_POSTGRES_APP_USER:-source_etl_writer}"
+      POSTGRES_PASSWORD: "${SOURCE_ETL_POSTGRES_APP_PASSWORD:-source_etl_writer}"
+      POSTGRES_SCHEMA: github_raw
+      ETL_STATE_DIR: /var/lib/github-etl/state
+    volumes:
+      - github-etl-state:/var/lib/github-etl/state
+
+  forums-etl:
+    build:
+      context: ./source-etls/forums-etl
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ETL_INTERVAL_SECONDS: "${SOURCE_ETL_INTERVAL_SECONDS:-3600}"
+      ETL_INITIAL_BACKFILL_HOURS: "${SOURCE_ETL_INITIAL_BACKFILL_HOURS:-72}"
+      ETL_OVERLAP_HOURS: "${SOURCE_ETL_OVERLAP_HOURS:-72}"
+      SOURCE_ETL_FORUM_TAG: "${SOURCE_ETL_FORUM_TAG:-nemoclaw}"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: "${SOURCE_ETL_POSTGRES_DB:-source_etls}"
+      POSTGRES_USER: "${SOURCE_ETL_POSTGRES_APP_USER:-source_etl_writer}"
+      POSTGRES_PASSWORD: "${SOURCE_ETL_POSTGRES_APP_PASSWORD:-source_etl_writer}"
+
+  postgrest:
+    image: postgrest/postgrest:v13.0.4
+    container_name: source-etls-postgrest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${SOURCE_ETL_API_PORT:-3100}:3000"
+    environment:
+      PGRST_DB_URI: "postgres://${SOURCE_ETL_POSTGRES_READER_USER:-source_etl_reader}:${SOURCE_ETL_POSTGRES_READER_PASSWORD:-source_etl_reader}@postgres:5432/${SOURCE_ETL_POSTGRES_DB:-source_etls}"
+      PGRST_DB_SCHEMAS: api
+      PGRST_DB_ANON_ROLE: "${SOURCE_ETL_POSTGRES_READER_USER:-source_etl_reader}"
+      PGRST_SERVER_PORT: 3000
+      PGRST_OPENAPI_MODE: follow-privileges
+    networks:
+      - default
+      - openshell
+
+networks:
+  default:
+  openshell:
+    name: "${SOURCE_ETL_OPENSHELL_NETWORK:-openshell-cluster-nemoclaw}"
+    external: true
+
+volumes:
+  token-cache:
+  source-etls-postgres-data:
+  github-etl-state:

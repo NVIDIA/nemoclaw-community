@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Prod-like run: source baked into image at build time.
+# Usage: docker compose up --build
+
+services:
+  token-manager:
+    build: .
+    env_file: .env
+    environment:
+      TOKEN_CACHE_SALT: ${TOKEN_CACHE_SALT:-nemoclaw-ms-graph-v1}
+    volumes:
+      - token-cache:/token-cache
+    ports:
+      - "8765:8765"
+      - "51247:51247"
+    stdin_open: true   # keep stdin open so device code prompt is visible
+    tty: true
+
+volumes:
+  token-cache:         # persists MSAL token cache across container restarts

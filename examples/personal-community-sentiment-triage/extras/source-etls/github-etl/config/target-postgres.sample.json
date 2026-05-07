@@ -1,0 +1,10 @@
+{
+  "host": "postgres",
+  "port": 5432,
+  "user": "postgres",
+  "password": "postgres",
+  "database": "postgres",
+  "default_target_schema": "github_raw",
+  "load_method": "upsert",
+  "add_record_metadata": true
+}
