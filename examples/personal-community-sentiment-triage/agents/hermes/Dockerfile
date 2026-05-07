@@ -158,6 +158,13 @@ RUN chmod -R a+rX /opt/nemoclaw-hermes-plugin/ \
     && chmod a+r /opt/nemoclaw-patch-hermes-gateway.py \
     && chmod -R a+rX /usr/local/lib/nemoclaw-bridges/
 
+# Install shared sandbox-init.sh primitives (capability drop, atomic rc-file
+# rewrite, cleanup_on_signal, verify_config_integrity, validate/harden symlinks,
+# emit_sandbox_sourced_file, validate_tmp_permissions, lock_rc_files).
+# start.sh sources this from /usr/local/lib/nemoclaw/sandbox-init.sh.
+COPY scripts/lib/sandbox-init.sh /usr/local/lib/nemoclaw/sandbox-init.sh
+RUN chmod 644 /usr/local/lib/nemoclaw/sandbox-init.sh
+
 # Copy startup script
 COPY agents/hermes/start.sh /usr/local/bin/nemoclaw-start
 RUN chmod 755 /usr/local/bin/nemoclaw-start

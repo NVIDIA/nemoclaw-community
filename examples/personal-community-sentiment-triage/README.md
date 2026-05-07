@@ -128,8 +128,8 @@ itself). The session UUID for Outlook gets produced *between* them, so the order
 ### Phase 1 — Install prerequisites
 
 ```console
-$ git clone <this-repo> && cd examples/personal-community-sentiment-triage/
-$ curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash   # installs NemoClaw + OpenShell
+$ git clone https://github.com/NVIDIA/nemoclaw-community.git && cd examples/personal-community-sentiment-triage/
+$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION=v0.0.36 bash
 ```
 
 You also need a running Docker daemon. If you haven't already, register an Azure
