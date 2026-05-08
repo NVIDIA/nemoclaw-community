@@ -24,6 +24,20 @@ status: published
 
 This guide walks through the one-time host setup that this example needs: registering an Azure application, running the MS Graph token manager, and obtaining a session UUID. Once those are done, you populate `.env` and run `bash scripts/bring-up.sh` from the example root — see the [example README](../README.md) for the full bring-up flow.
 
+## How the agent account works
+
+The agent account is a dedicated Entra mailbox that you treat like a chatbot endpoint reachable over email. You don't sign in to it day to day — it exists so the agent has its own inbox to receive requests on and its own outbox to reply from.
+
+Interaction loop:
+
+1. From your own mailbox, send an email to the agent account. Use the body to describe a task, ask a question, or paste content for the agent to act on.
+2. The bridge picks the message up, passes the sender, subject, and body to the agent as a single prompt, and the agent processes the request. Up to 5 emails are handled concurrently; additional messages queue.
+3. The agent replies in-thread to your original message via Microsoft Graph's reply API, so the response lands in your inbox as a `Re: <your subject>` reply. End-to-end latency is typically around 30 seconds.
+
+The agent reads from and sends from this mailbox using **delegated** Microsoft Graph permissions — it acts as the agent account itself, not as an application with tenant-wide access. That's the security boundary: the agent can only access mailboxes it has been signed in to. The mechanics (token manager, credential sidecar, session UUID) are explained in the sections below.
+
+The agent account address is what you'll set as `OUTLOOK_TARGET_MAILBOX`. A second, separate variable — `OUTLOOK_REPLY_TO` — points at *your own* mailbox and is used only by the `outlook-email-search` skill so the agent can read your mail on your behalf when researching. Both are summarized in the variable list further down.
+
 The Outlook channel uses delegated OAuth2 authentication via the **MS Graph token manager**.
 The token manager runs on the host machine and holds live MSAL sessions.
 A credential sidecar (`ms_graph_sidecar.py`) runs inside the sandbox and injects a live delegated token whenever a bridge or skill sends `Authorization: Bearer MS_GRAPH_TOKEN_PLACEHOLDER_OUTLOOK` to `MS_GRAPH_SIDECAR_URL`.
