@@ -307,17 +307,29 @@ $ bash scripts/tear-down.sh
 Removes the sandbox, the Outlook/GitHub/Slack providers, and any leftover
 `.Dockerfile.staged`. **Does not** destroy the gateway or stop host services
 (phoenix, token manager, postgres, ETLs, postgrest) by default — those are
-typically long-lived. Opt-in flags:
+typically long-lived. Opt-in flags (mutually exclusive):
 
-- `STOP_HOST_SERVICES=1` — also `docker compose down` the [extras/](extras/) stack
-- `DELETE_INFERENCE_PROVIDER=1` — also remove the shared `compatible-endpoint` provider
-- `openshell gateway destroy --name examples-gateway` — manual gateway cleanup
+- `--stop-host-services` — also stop the [extras/](extras/) stack (volumes preserved; delegates to `00-host-services.sh down`).
+- `--purge-host-services` — also stop the stack AND wipe its volumes. Forces Outlook re-auth via `authenticate.sh` and ETL re-scrape on the next `up`. Delegates to `00-host-services.sh down --volumes`.
+
+Manual cleanup for less-common operations:
+
+- `openshell gateway destroy --name examples-gateway` — destroy the gateway.
+- `openshell provider delete compatible-endpoint` — remove the shared inference provider.
+
+To stop *just* the host services without removing the sandbox:
+
+```console
+$ bash scripts/00-host-services.sh down
+```
+
+Add `--volumes` (or `-v`) to also wipe `token-cache` (forces Outlook re-auth via `authenticate.sh`) and the source-etls Postgres data (forces ETL re-scrape on the next `up`).
 
 ## Persistence: collective wisdom across restarts
 
 What survives a `tear-down.sh && bring-up.sh` cycle by default:
 
-- **Postgres ETL data** — backed by the named Docker volume `source-etls-postgres-data` in [extras/docker-compose.yml](extras/docker-compose.yml). Survives unless you opt in to `STOP_HOST_SERVICES=1`.
+- **Postgres ETL data** — backed by the named Docker volume `source-etls-postgres-data` in [extras/docker-compose.yml](extras/docker-compose.yml). Survives unless you opt in to `--purge-host-services` (or run `bash scripts/00-host-services.sh down --volumes` directly).
 - **Host services state** (phoenix's traces, token-manager's MSAL cache) — also volume-backed.
 
 What does **not** survive by default:
