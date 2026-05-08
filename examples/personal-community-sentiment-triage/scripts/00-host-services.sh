@@ -17,8 +17,8 @@
 #
 # Most of these come up with no host-side prerequisites. The exception is
 # `postgrest`: its compose entry attaches to an external network named
-# `${SOURCE_ETL_OPENSHELL_NETWORK:-openshell-cluster-nemoclaw}`, which is
-# created by OpenShell when the gateway starts. So:
+# `${SOURCE_ETL_OPENSHELL_NETWORK:-openshell-cluster-examples-gateway}`,
+# which is created by OpenShell when the gateway starts. So:
 #
 #   * If you run this script before 01-gateway.sh, postgrest is skipped
 #     with a notice. Re-run after the gateway is up to bring postgrest in.
@@ -50,7 +50,7 @@ SERVICES=(phoenix ms-graph-token-manager postgres github-etl forums-etl)
 
 # Postgrest needs the openshell-cluster-* network that OpenShell creates
 # when a sandbox is launched on the gateway. Check before including it.
-NETWORK_NAME="${SOURCE_ETL_OPENSHELL_NETWORK:-openshell-cluster-nemoclaw}"
+NETWORK_NAME="${SOURCE_ETL_OPENSHELL_NETWORK:-openshell-cluster-examples-gateway}"
 if docker network inspect "$NETWORK_NAME" >/dev/null 2>&1; then
   echo "openshell network '$NETWORK_NAME' present — including postgrest"
   SERVICES+=(postgrest)

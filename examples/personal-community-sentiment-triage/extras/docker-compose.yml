@@ -125,7 +125,7 @@ services:
 networks:
   default:
   openshell:
-    name: "${SOURCE_ETL_OPENSHELL_NETWORK:-openshell-cluster-nemoclaw}"
+    name: "${SOURCE_ETL_OPENSHELL_NETWORK:-openshell-cluster-examples-gateway}"
     external: true
 
 volumes:
