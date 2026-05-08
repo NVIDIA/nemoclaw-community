@@ -249,6 +249,11 @@ re-install of Hermes with the NeMo-Flow integration patch fetched from
   the host address (Docker bridge gateway on Linux, e.g. `172.17.0.1`; `host.docker.internal`
   fallback on macOS) — set `TOKEN_MANAGER_HOST` to override.
 - `.env` populated with the credentials below.
+- **(Optional)** If your network performs TLS interception (e.g. an
+  SSL-inspecting proxy), place the inspection CA certificate(s) as `.crt`
+  files in the example-root `certs/` directory before running `bring-up.sh`.
+  Otherwise leave it empty. See [`certs/README.md`](certs/README.md) for
+  details.
 
 ## Providers created (mirrors what `nemoclaw onboard` produces)
 

@@ -67,6 +67,14 @@ RUN (apt-get remove --purge -y gcc gcc-12 g++ g++-12 cpp cpp-12 make \
 # agent from accessing the sidecar's process memory via /proc.
 RUN adduser --disabled-password --gecos "" --uid 1001 ms-graph-proxy
 
+# Optional: register additional trusted CA certificates inside the sandbox.
+# Drop *.crt files into the example-root certs/ directory before building —
+# typically needed only when the build/runtime network performs TLS
+# interception. Empty by default; update-ca-certificates is a safe no-op
+# when no .crt files are present. See certs/README.md for details.
+COPY certs/ /usr/local/share/ca-certificates/
+RUN update-ca-certificates
+
 # Install GitHub CLI (gh) — not in the base image.
 # GH_TOKEN is set below so gh authenticates via the OpenShell provider pipeline.
 RUN mkdir -p /etc/apt/keyrings \
