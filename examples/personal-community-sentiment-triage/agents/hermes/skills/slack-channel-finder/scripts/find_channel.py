@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 """
@@ -13,9 +13,9 @@ flagged so the caller knows full history/pins signals are available via
 describe_slack_channel.py.
 
 Usage:
-    python3 find_channel.py --query "inference deployments"
-    python3 find_channel.py --query "nemoclaw" --top 5
-    python3 find_channel.py --query "k8s" --member-only
+    /usr/bin/python3 find_channel.py --query "inference deployments"
+    /usr/bin/python3 find_channel.py --query "nemoclaw" --top 5
+    /usr/bin/python3 find_channel.py --query "k8s" --member-only
 
 Environment:
     SLACK_BOT_TOKEN must be set.

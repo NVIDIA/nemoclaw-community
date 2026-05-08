@@ -29,7 +29,7 @@ directly.
 If the user gives only a channel name, use the bundled resolver script:
 
 ```bash
-python3 /sandbox/.hermes-data/skills/slack-channel-summarizer/scripts/resolve_slack_channel.py --name 'CHANNEL_NAME'
+/usr/bin/python3 /sandbox/.hermes-data/skills/slack-channel-summarizer/scripts/resolve_slack_channel.py --name 'CHANNEL_NAME'
 ```
 
 Interpret the result this way:

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 """
@@ -20,11 +20,11 @@ the description itself — that synthesis belongs in the agent layer where
 output formatting can change without redeploying the script.
 
 Usage:
-    python3 describe_slack_channel.py --channel-id C0ABCDE1234
-    python3 describe_slack_channel.py --channel-id C0ABCDE1234 --no-history
-    python3 describe_slack_channel.py --channel-id C0ABCDE1234 --history-limit 100
-    python3 describe_slack_channel.py --channel-id C0ABCDE1234 --replies
-    python3 describe_slack_channel.py --channel-id C0ABCDE1234 --resolve-users
+    /usr/bin/python3 describe_slack_channel.py --channel-id C0ABCDE1234
+    /usr/bin/python3 describe_slack_channel.py --channel-id C0ABCDE1234 --no-history
+    /usr/bin/python3 describe_slack_channel.py --channel-id C0ABCDE1234 --history-limit 100
+    /usr/bin/python3 describe_slack_channel.py --channel-id C0ABCDE1234 --replies
+    /usr/bin/python3 describe_slack_channel.py --channel-id C0ABCDE1234 --resolve-users
 
 Environment:
     SLACK_BOT_TOKEN must be set. The bot must be a member of private

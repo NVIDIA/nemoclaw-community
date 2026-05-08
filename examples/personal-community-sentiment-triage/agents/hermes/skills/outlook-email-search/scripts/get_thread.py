@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 """
@@ -8,7 +8,7 @@ Routes requests through the credential sidecar (MS_GRAPH_SIDECAR_URL) which swap
 Authorization: Bearer MS_GRAPH_TOKEN_PLACEHOLDER for a live delegated access token.
 
 Usage:
-    python3 get_thread.py --conversation-id <ID> [--top N]
+    /usr/bin/python3 get_thread.py --conversation-id <ID> [--top N]
 
 The conversation_id is returned by search_emails.py in the "conversation_id" field
 of each message.

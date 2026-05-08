@@ -58,7 +58,7 @@ For topic or team queries, use `find_channel.py` — it searches all discoverabl
 public channels (not just bot-member channels) and returns scored matches:
 
 ```bash
-python3 /sandbox/.hermes-data/skills/slack-channel-finder/scripts/find_channel.py \
+/usr/bin/python3 /sandbox/.hermes-data/skills/slack-channel-finder/scripts/find_channel.py \
   --query "nemoclaw inference" --top 5
 ```
 
@@ -106,10 +106,10 @@ For cases where you need the complete channel list rather than a scored search:
 
 ```bash
 # Bot-member channels only (fast)
-python3 .../list_accessible_channels.py
+/usr/bin/python3 .../list_accessible_channels.py
 
 # All public channels in the workspace
-python3 .../list_accessible_channels.py --all-public
+/usr/bin/python3 .../list_accessible_channels.py --all-public
 ```
 
 Output: `{ "ok": true, "count": N, "channels": [...], "discovery_mode": "workspace" }`
@@ -134,16 +134,16 @@ they're discussing — use `describe_slack_channel.py`:
 
 ```bash
 # Full mode (name + topic + purpose + pins + bookmarks + recent history)
-python3 .../describe_slack_channel.py --channel-id C0ASZUN3L5D
+/usr/bin/python3 .../describe_slack_channel.py --channel-id C0ASZUN3L5D
 
 # Fast mode (skips conversations.history — useful for breadth scans)
-python3 .../describe_slack_channel.py --channel-id C0ASZUN3L5D --no-history
+/usr/bin/python3 .../describe_slack_channel.py --channel-id C0ASZUN3L5D --no-history
 
 # With thread content (expands reply threads for high-activity messages)
-python3 .../describe_slack_channel.py --channel-id C0ASZUN3L5D --replies
+/usr/bin/python3 .../describe_slack_channel.py --channel-id C0ASZUN3L5D --replies
 
 # With resolved user display names on top contributors
-python3 .../describe_slack_channel.py --channel-id C0ASZUN3L5D --resolve-users
+/usr/bin/python3 .../describe_slack_channel.py --channel-id C0ASZUN3L5D --resolve-users
 ```
 
 **Options:**
@@ -216,11 +216,11 @@ content, use `--replies` on `describe_slack_channel.py` or directly call
 
 ```bash
 # Via describe (expands all threads in the sampled history)
-python3 .../describe_slack_channel.py --channel-id C0ASZUN3L5D --replies --replies-limit 10
+/usr/bin/python3 .../describe_slack_channel.py --channel-id C0ASZUN3L5D --replies --replies-limit 10
 
 # Direct API (for a specific thread you already know the ts for)
 curl -s "https://slack.com/api/conversations.replies?channel=C0ASZUN3L5D&ts=1776809496.989829&limit=20" \
-  -H "Authorization: Bearer $SLACK_BOT_TOKEN" | python3 -m json.tool
+  -H "Authorization: Bearer $SLACK_BOT_TOKEN" | /usr/bin/python3 -m json.tool
 ```
 
 ### 5. Chain into summarization if requested
@@ -234,22 +234,22 @@ user can ask for more.
 
 **Find channels matching a topic:**
 ```bash
-python3 .../find_channel.py --query "nemoclaw deployments"
+/usr/bin/python3 .../find_channel.py --query "nemoclaw deployments"
 ```
 
 **See all public channels in the workspace:**
 ```bash
-python3 .../list_accessible_channels.py --all-public
+/usr/bin/python3 .../list_accessible_channels.py --all-public
 ```
 
 **Understand a specific channel (fast, no history):**
 ```bash
-python3 .../describe_slack_channel.py --channel-id C0ASZUN3L5D --no-history
+/usr/bin/python3 .../describe_slack_channel.py --channel-id C0ASZUN3L5D --no-history
 ```
 
 **Understand a channel with thread context and user names:**
 ```bash
-python3 .../describe_slack_channel.py --channel-id C0ASZUN3L5D --replies --resolve-users
+/usr/bin/python3 .../describe_slack_channel.py --channel-id C0ASZUN3L5D --replies --resolve-users
 ```
 
 ## Pitfalls

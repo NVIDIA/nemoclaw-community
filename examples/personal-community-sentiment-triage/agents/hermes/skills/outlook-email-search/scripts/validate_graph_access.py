@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 """
@@ -9,14 +9,14 @@ are present, then probes each Graph endpoint the skill uses. Run this when
 debugging 403 errors or after changing auth config.
 
 Usage (from host, token manager on localhost:8765):
-    python3 validate_graph_access.py \\
+    /usr/bin/python3 validate_graph_access.py \\
         --session-id f1ffdb3c-c2f5-475a-b81f-5b8109cf1285 \\
         --reply-to mpenn@nvidia.com \\
         --target-mailbox agt-mpenn@nvidia.com \\
         [--token-manager http://localhost:8765]
 
 Usage (from sandbox, via sidecar):
-    python3 validate_graph_access.py \\
+    /usr/bin/python3 validate_graph_access.py \\
         --session-id "$OUTLOOK_SESSION_UUID" \\
         --reply-to "$OUTLOOK_REPLY_TO" \\
         --target-mailbox "$OUTLOOK_TARGET_MAILBOX" \\

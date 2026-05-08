@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 """
@@ -13,10 +13,10 @@ It is the cheap "what channels exist" endpoint. For per-channel deep
 inspection, use describe_slack_channel.py.
 
 Usage:
-    python3 list_accessible_channels.py
-    python3 list_accessible_channels.py --include-archived
-    python3 list_accessible_channels.py --types public_channel,private_channel
-    python3 list_accessible_channels.py --all-public
+    /usr/bin/python3 list_accessible_channels.py
+    /usr/bin/python3 list_accessible_channels.py --include-archived
+    /usr/bin/python3 list_accessible_channels.py --types public_channel,private_channel
+    /usr/bin/python3 list_accessible_channels.py --all-public
 
 Environment:
     SLACK_BOT_TOKEN must be set.

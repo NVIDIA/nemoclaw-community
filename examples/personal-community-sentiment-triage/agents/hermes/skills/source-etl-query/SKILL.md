@@ -34,17 +34,17 @@ as a named skill tool.
 ### 1. Query the mirrored source through the REST bridge
 
 ```bash
-python3 /sandbox/.hermes-data/skills/source-etl-query/scripts/query_source_etl.py github-issues --limit 20
-python3 /sandbox/.hermes-data/skills/source-etl-query/scripts/query_source_etl.py github-prs --limit 20
-python3 /sandbox/.hermes-data/skills/source-etl-query/scripts/query_source_etl.py github-discussions --limit 20
-python3 /sandbox/.hermes-data/skills/source-etl-query/scripts/query_source_etl.py forum-topics --limit 20
+/usr/bin/python3 /sandbox/.hermes-data/skills/source-etl-query/scripts/query_source_etl.py github-issues --limit 20
+/usr/bin/python3 /sandbox/.hermes-data/skills/source-etl-query/scripts/query_source_etl.py github-prs --limit 20
+/usr/bin/python3 /sandbox/.hermes-data/skills/source-etl-query/scripts/query_source_etl.py github-discussions --limit 20
+/usr/bin/python3 /sandbox/.hermes-data/skills/source-etl-query/scripts/query_source_etl.py forum-topics --limit 20
 ```
 
 ### 2. Narrow the result set when needed
 
 ```bash
-python3 /sandbox/.hermes-data/skills/source-etl-query/scripts/query_source_etl.py github-issues --search <keyword> --limit 10
-python3 /sandbox/.hermes-data/skills/source-etl-query/scripts/query_source_etl.py forum-topics --search <keyword> --limit 10
+/usr/bin/python3 /sandbox/.hermes-data/skills/source-etl-query/scripts/query_source_etl.py github-issues --search <keyword> --limit 10
+/usr/bin/python3 /sandbox/.hermes-data/skills/source-etl-query/scripts/query_source_etl.py forum-topics --search <keyword> --limit 10
 ```
 
 ### 3. Interpret the results and handle empty or mismatched data
@@ -64,8 +64,8 @@ is asking about.
 **If results exist but are not relevant to the user's question:**
 - Run a broad unfiltered query first to show what IS in the database:
   ```bash
-  python3 /sandbox/.hermes-data/skills/source-etl-query/scripts/query_source_etl.py github-issues --limit 5
-  python3 /sandbox/.hermes-data/skills/source-etl-query/scripts/query_source_etl.py forum-topics --limit 5
+  /usr/bin/python3 /sandbox/.hermes-data/skills/source-etl-query/scripts/query_source_etl.py github-issues --limit 5
+  /usr/bin/python3 /sandbox/.hermes-data/skills/source-etl-query/scripts/query_source_etl.py forum-topics --limit 5
   ```
 - Then tell the user what repo/topics the mirror actually contains, e.g.:
   "The ETL mirror contains issues from `NVIDIA/NemoClaw` and forum topics

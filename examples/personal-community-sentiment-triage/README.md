@@ -293,7 +293,7 @@ $ openshell sandbox exec hermes-direct \
     ls -l /usr/local/bin/ms-graph-sidecar     # binary present
 $ openshell sandbox exec hermes-direct \
     ls /usr/local/lib/nemoclaw-bridges/outlook/  # bridge present
-$ openshell sandbox exec hermes-direct python3 \
+$ openshell sandbox exec hermes-direct /usr/bin/python3 \
     /sandbox/.hermes-data/skills/outlook-email-search/scripts/search_emails.py \
     --query "nemoclaw" --since 7d              # {"ok": true, "count": N, ...}
 ```

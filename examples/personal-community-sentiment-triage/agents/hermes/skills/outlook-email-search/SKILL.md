@@ -45,7 +45,7 @@ The scripts are at:
 ```
 
 ```bash
-python3 /sandbox/.hermes-data/skills/outlook-email-search/scripts/search_emails.py [OPTIONS]
+/usr/bin/python3 /sandbox/.hermes-data/skills/outlook-email-search/scripts/search_emails.py [OPTIONS]
 ```
 
 **Options:**
@@ -101,7 +101,7 @@ When you need the complete back-and-forth of an email conversation, use
 `get_thread.py` with the `conversation_id` from a search result:
 
 ```bash
-python3 /sandbox/.hermes-data/skills/outlook-email-search/scripts/get_thread.py \
+/usr/bin/python3 /sandbox/.hermes-data/skills/outlook-email-search/scripts/get_thread.py \
   --conversation-id "AAQkADlh..."
 ```
 
@@ -133,7 +133,7 @@ one message directly:
 ```bash
 # Replace USER@nvidia.com with the value of OUTLOOK_REPLY_TO
 curl -s "${MS_GRAPH_SIDECAR_URL}/v1.0/users/USER@nvidia.com/messages/MESSAGE_ID?\$select=subject,body,from,receivedDateTime" \
-  -H "Authorization: Bearer MS_GRAPH_TOKEN_PLACEHOLDER_OUTLOOK" | python3 -c "
+  -H "Authorization: Bearer MS_GRAPH_TOKEN_PLACEHOLDER_OUTLOOK" | /usr/bin/python3 -c "
 import json, sys, html, re
 d = json.load(sys.stdin)
 content = d.get('body', {}).get('content', '')
@@ -188,14 +188,14 @@ developers discussing things that haven't come up in our daily updates this week
 
 Search for the recurring update emails by subject pattern:
 ```bash
-python3 .../search_emails.py --subject "nemotron update" --since 7d --body --top 10
+/usr/bin/python3 .../search_emails.py --subject "nemotron update" --since 7d --body --top 10
 ```
 Extract the main topics mentioned: product areas, bugs, features, names.
 
 **Step 2 — Get external emails on the same project**
 
 ```bash
-python3 .../search_emails.py --query "nemotron" --external-only --since 7d --pages 2 --top 30
+/usr/bin/python3 .../search_emails.py --query "nemotron" --external-only --since 7d --pages 2 --top 30
 ```
 If `--external-only` returns fewer results than expected, increase `--pages`.
 
@@ -204,7 +204,7 @@ If `--external-only` returns fewer results than expected, increase `--pages`.
 For each external email that looks potentially new or interesting, read the
 full thread to understand what is actually being discussed:
 ```bash
-python3 .../get_thread.py --conversation-id "AAQkADlh..."
+/usr/bin/python3 .../get_thread.py --conversation-id "AAQkADlh..."
 ```
 
 **Step 4 — Compare and present the gaps**
@@ -225,42 +225,42 @@ internal updates. Format:
 
 **Find emails about a topic from this week:**
 ```bash
-python3 .../search_emails.py --query "budget approval" --since 7d
+/usr/bin/python3 .../search_emails.py --query "budget approval" --since 7d
 ```
 
 **What did a specific person send recently?**
 ```bash
-python3 .../search_emails.py --from person@nvidia.com --since 30d --top 10
+/usr/bin/python3 .../search_emails.py --from person@nvidia.com --since 30d --top 10
 ```
 
 **Unread emails with full body:**
 ```bash
-python3 .../search_emails.py --unread --body --top 10
+/usr/bin/python3 .../search_emails.py --unread --body --top 10
 ```
 
 **Search sent folder for something you sent:**
 ```bash
-python3 .../search_emails.py --query "project update" --folder sent --since 2w
+/usr/bin/python3 .../search_emails.py --query "project update" --folder sent --since 2w
 ```
 
 **Check for a specific subject in a date window:**
 ```bash
-python3 .../search_emails.py --subject "Q1 report" --since 2026-04-01 --until 2026-04-30
+/usr/bin/python3 .../search_emails.py --subject "Q1 report" --since 2026-04-01 --until 2026-04-30
 ```
 
 **External senders only (e.g. community feedback):**
 ```bash
-python3 .../search_emails.py --external-only --since 7d --pages 2 --top 30
+/usr/bin/python3 .../search_emails.py --external-only --since 7d --pages 2 --top 30
 ```
 
 **All email from one external partner's domain:**
 ```bash
-python3 .../search_emails.py --domain partner.com --since 30d
+/usr/bin/python3 .../search_emails.py --domain partner.com --since 30d
 ```
 
 **Read a full thread:**
 ```bash
-python3 .../get_thread.py --conversation-id "AAQkADlhN2..."
+/usr/bin/python3 .../get_thread.py --conversation-id "AAQkADlhN2..."
 ```
 
 ## Pitfalls
