@@ -285,18 +285,30 @@ compatible-endpoint --model <NEMOCLAW_MODEL>` rather than `--provider` on sandbo
 
 ## Verification (what success looks like)
 
+The plumbing checks below confirm the bridge, sidecar, and skill scripts are wired correctly. For an end-to-end walkthrough that actually exercises each skill via Slack DM and Outlook email, plus a reproducible cross-channel collective-wisdom demo, see [docs/verify-and-demo.md](docs/verify-and-demo.md).
+
 ```console
+# Source .env so $MS_GRAPH_SIDECAR_URL / $OUTLOOK_REPLY_TO are in your shell.
+$ set -a; . ./.env; set +a
+
 $ openshell sandbox list                      # hermes-direct should be ready
-$ openshell sandbox exec hermes-direct \
+$ openshell sandbox exec --name hermes-direct -- \
     curl -sf http://localhost:8642/health     # {"status":"ok",...}
-$ openshell sandbox exec hermes-direct \
+$ openshell sandbox exec --name hermes-direct -- \
     ls -l /usr/local/bin/ms-graph-sidecar     # binary present
-$ openshell sandbox exec hermes-direct \
+$ openshell sandbox exec --name hermes-direct -- \
     ls /usr/local/lib/nemoclaw-bridges/outlook/  # bridge present
-$ openshell sandbox exec hermes-direct /usr/bin/python3 \
-    /sandbox/.hermes-data/skills/outlook-email-search/scripts/search_emails.py \
-    --query "nemoclaw" --since 7d              # {"ok": true, "count": N, ...}
+
+$ openshell sandbox exec --name hermes-direct -- env \
+    MS_GRAPH_SIDECAR_URL="$MS_GRAPH_SIDECAR_URL" \
+    OUTLOOK_TARGET_MAILBOX="$OUTLOOK_TARGET_MAILBOX" \
+    /usr/bin/python3 /sandbox/.hermes-data/skills/outlook-email-search/scripts/search_emails.py \
+      --query "nemoclaw" --since 7d           # {"ok": true, "count": N, ...}
 ```
+
+> **Note 1:** `openshell sandbox exec` requires `--name <SANDBOX>` and a `--` separator before the command — without them, the sandbox name is parsed as the command itself (`hermes-direct: command not found`).
+>
+> **Note 2:** The verification points the search at `OUTLOOK_TARGET_MAILBOX` (the bot's own mailbox) because the delegated token always has access to it. Substituting `OUTLOOK_REPLY_TO` to query your *personal* mailbox via shared-folder access requires you to have granted the bot account delegate access in Outlook (**Outlook → File → Account Settings → Delegate Access**, or send a folder-share invitation); without that, Graph returns `HTTP 403: Cannot find row based on condition.`
 
 ## Tear-down
 

@@ -77,6 +77,34 @@ The session UUID (`OUTLOOK_SESSION_UUID`) is stored in an OpenShell provider and
 
 No client secret is required — the delegated flow authenticates as the agent account, not as the application.
 
+## Populate `.env` (initial values)
+
+Copy `.env.example` to `.env` at the example root and fill in everything you have so far. `OUTLOOK_SESSION_UUID` is the only value you don't have yet — leave it blank; the next step produces it.
+
+```bash
+OUTLOOK_CLIENT_ID=<application-client-id>
+OUTLOOK_TENANT_ID=<directory-tenant-id>
+OUTLOOK_SESSION_UUID=                       # filled in after authenticate.sh
+OUTLOOK_TARGET_MAILBOX=agt-you@yourdomain.com
+OUTLOOK_REPLY_TO=you@yourdomain.com
+```
+
+Optional comma-separated sender allowlist (the bridge ignores email from addresses not on this list):
+
+```bash
+OUTLOOK_ALLOWED_SENDERS=alice@example.com,bob@example.com
+```
+
+Leave `OUTLOOK_ALLOWED_SENDERS` unset or blank to accept email from any sender.
+
+Now source `.env` into your current shell so the remaining steps (`authenticate.sh`, `bring-up.sh`) can resolve `$OUTLOOK_CLIENT_ID`, `$OUTLOOK_TENANT_ID`, and `$OUTLOOK_TARGET_MAILBOX`:
+
+```console
+$ set -a; . ./.env; set +a
+```
+
+`set -a` exports every variable assigned by `. ./.env`; `set +a` turns that behavior off again. Re-run this line whenever you edit `.env` (e.g. after pasting in `OUTLOOK_SESSION_UUID` below).
+
 ## Start the MS Graph Token Manager
 
 The token manager is an MSAL OAuth server that holds delegated sessions and issues short-lived access tokens to the credential sidecar on demand.
@@ -130,25 +158,13 @@ $ ./extras/ms-graph-token-manager/scripts/authenticate.sh \
     --session-id "$OUTLOOK_SESSION_UUID"
 ```
 
-## Populate `.env`
+## Save the Session UUID to `.env`
 
-Copy `.env.example` to `.env` at the example root and fill in the Outlook values:
+Paste the `SESSION_ID` value from the previous step into `.env` as `OUTLOOK_SESSION_UUID`, then re-source so subsequent commands pick it up:
 
-```bash
-OUTLOOK_CLIENT_ID=<application-client-id>
-OUTLOOK_TENANT_ID=<directory-tenant-id>
-OUTLOOK_SESSION_UUID=<session-uuid-from-authenticate.sh>
-OUTLOOK_TARGET_MAILBOX=agt-you@yourdomain.com
-OUTLOOK_REPLY_TO=you@yourdomain.com
+```console
+$ set -a; . ./.env; set +a
 ```
-
-Optional comma-separated sender allowlist (the bridge ignores email from addresses not on this list):
-
-```bash
-OUTLOOK_ALLOWED_SENDERS=alice@example.com,bob@example.com
-```
-
-Leave `OUTLOOK_ALLOWED_SENDERS` unset or blank to accept email from any sender.
 
 ## Run `bring-up.sh`
 
