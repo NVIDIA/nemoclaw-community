@@ -113,8 +113,16 @@ PROVIDER_FLAGS=(--provider "$SANDBOX_NAME-outlook")
 # spawn create in the background, poll for ready, then SIGTERM the local
 # proxy as soon as the sandbox reports ready. The sandbox runs on the
 # gateway and survives the local proxy being killed.
+#
+# `setsid` puts openshell in its own session/process-group (PGID == its PID).
+# openshell spawns an `ssh` subprocess to stream sandbox stdout, and that
+# ssh inherits openshell's PGID. On SIGTERM, openshell exits but does NOT
+# clean up its ssh child (UX bug in openshell 0.0.36); the orphaned ssh
+# would otherwise keep streaming sandbox logs to the user's terminal.
+# By signalling the negative PID (`kill -- -$PID`) we hit the whole pgrp,
+# including the orphan ssh, so the terminal goes silent on detach.
 echo "Creating sandbox $SANDBOX_NAME (OpenShell will build the image)…"
-openshell sandbox create \
+setsid openshell sandbox create \
   --from "$STAGED_DOCKERFILE" \
   --name "$SANDBOX_NAME" \
   --policy "$EXAMPLE_DIR/policy.yaml" \
@@ -148,14 +156,20 @@ for _ in {1..180}; do
   sleep 2
 done
 
-# Detach: SIGTERM the local proxy and don't wait for it to exit. NemoClaw's
-# upstream pattern (sandbox-create-stream.ts) does the same — SIGTERM, detach
-# listeners, unref. If the proxy ignores SIGTERM, a backgrounded SIGKILL
-# follows after a short grace period. The script returns either way; the
-# sandbox runs on the gateway independent of this proxy.
-kill -TERM "$CREATE_PID" 2>/dev/null || true
-( sleep 2; kill -KILL "$CREATE_PID" 2>/dev/null ) &
-disown 2>/dev/null || true
+# Detach: SIGTERM the whole openshell process group (negative PID via
+# `kill -- -$PID`). This catches both the openshell CLI itself and the
+# `ssh` subprocess it spawns to stream sandbox stdout — without the pgrp
+# kill, openshell exits but doesn't clean up its ssh child, leaving an
+# orphan process attached to the user's terminal. SIGKILL fallback after
+# 2s caps the worst case. `wait` on the openshell PID confirms it's gone
+# before the script returns, so the terminal is silent on prompt return.
+# The sandbox itself runs on the gateway and survives the local kill.
+kill -TERM -- -"$CREATE_PID" 2>/dev/null || true
+( sleep 2; kill -KILL -- -"$CREATE_PID" 2>/dev/null ) &
+SIGKILL_BG_PID=$!
+wait "$CREATE_PID" 2>/dev/null || true
+kill "$SIGKILL_BG_PID" 2>/dev/null || true
+wait "$SIGKILL_BG_PID" 2>/dev/null || true
 
 if [[ "$READY" != "1" ]]; then
   echo "Sandbox did not reach ready in 360s — check 'openshell sandbox logs $SANDBOX_NAME'" >&2
