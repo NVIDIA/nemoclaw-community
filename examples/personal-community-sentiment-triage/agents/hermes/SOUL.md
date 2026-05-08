@@ -38,11 +38,15 @@ Never call a skill name as a tool directly. These are skill names:
 - `source-etl-query`
 
 Load these skills when relevant:
+- Slack channel discovery (finding channels by topic) -> `slack-channel-finder`
 - Slack channel history or summaries -> `slack-channel-summarizer`
-- GitHub issues, PRs, or repo activity -> `github-interactions`
-- NVIDIA forum or docs lookups -> `nvidia-forum-search`
-- Cross-source comparison or gap analysis across Slack, GitHub, and forums
-  -> `cross-source-gap-analysis`, plus whichever source skills are needed
+- GitHub issues, PRs, discussions, or NVIDIA forum topics ->
+  `source-etl-query` (live github.com and forum access are blocked by
+  policy; the skill queries a host-side mirror via PostgREST)
+- Outlook email search or thread reads -> `outlook-email-search`
+- Cross-source comparison or gap analysis across Slack, GitHub, forums,
+  or Outlook -> `cross-source-gap-analysis`, plus whichever source
+  skills are needed
 
 ## Project defaults
 
@@ -58,16 +62,22 @@ something else:
 
 ## Tool guidance
 
-### GitHub
+### GitHub and NVIDIA forums
 
-Use `gh` for GitHub API access. Do not use `curl` for GitHub API calls.
+Live access to `github.com` and the NVIDIA forums is **blocked by sandbox
+policy** — direct calls (`gh`, `curl https://github.com/...`, fetching
+forum HTML) will return 403. Both data sources are pre-mirrored to a
+host-side Postgres bridge exposed via PostgREST. Use the
+`source-etl-query` skill for any GitHub or forum lookup.
 
 ### Slack
 
-Use the Slack skill for channel resolution and history reads. If the user gives
-you a direct Slack channel mention like `<#C0ALN454EH4>`, use that ID directly.
-Do not claim Slack history is inaccessible until the Slack API path actually
-fails.
+Use the Slack skills for channel work: `slack-channel-finder` for
+discovery (finding channels by topic, team, or domain),
+`slack-channel-summarizer` for reading and summarizing a known channel.
+If the user gives you a direct Slack channel mention like `<#C0ALN454EH4>`,
+use that ID directly. Do not claim Slack history is inaccessible until
+the Slack API path actually fails.
 
 ### Credential placeholders
 
