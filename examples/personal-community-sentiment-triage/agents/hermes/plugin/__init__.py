@@ -90,8 +90,16 @@ def _get_sandbox_info():
     }
 
 
-def _handle_status(tool_input, context):
-    """Handle the nemoclaw_status tool call."""
+def _handle_status(tool_input, **kwargs):
+    """Handle the nemoclaw_status tool call.
+
+    The ``**kwargs`` swallows the context fields (``task_id``, ``session_id``,
+    ``tool_call_id``, ``parent_agent``) that ``tools/registry.dispatch``
+    forwards to every handler — see ``handler(args, **kwargs)`` at
+    ``tools/registry.py:306``. Without this, calls fail with
+    ``TypeError: got an unexpected keyword argument 'task_id'`` and the
+    tool surfaces an error to the user instead of running.
+    """
     info = _get_sandbox_info()
     lines = [
         "NemoClaw Sandbox Status (Hermes)",
@@ -106,8 +114,11 @@ def _handle_status(tool_input, context):
     return "\n".join(lines)
 
 
-def _handle_info(tool_input, context):
-    """Handle the nemoclaw_info tool call \u2014 returns structured JSON."""
+def _handle_info(tool_input, **kwargs):
+    """Handle the nemoclaw_info tool call \u2014 returns structured JSON.
+
+    See ``_handle_status`` for the rationale on ``**kwargs``.
+    """
     return json.dumps(_get_sandbox_info(), indent=2)
 
 
@@ -133,8 +144,11 @@ def _reload_skills():
         return None
 
 
-def _handle_reload_skills(tool_input, context):
-    """Handle the nemoclaw_reload_skills tool call."""
+def _handle_reload_skills(tool_input, **kwargs):
+    """Handle the nemoclaw_reload_skills tool call.
+
+    See ``_handle_status`` for the rationale on ``**kwargs``.
+    """
     commands = _reload_skills()
     if commands is None:
         return (

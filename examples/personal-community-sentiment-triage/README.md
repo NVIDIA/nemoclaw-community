@@ -1,3 +1,5 @@
+![NVIDIA NemoClaw](assets/nvidia_header.png)
+
 # personal-community-sentiment-triage: Hermes + Outlook
 
 A personal Hermes agent that surfaces what the developer community is working
@@ -285,7 +287,7 @@ compatible-endpoint --model <NEMOCLAW_MODEL>` rather than `--provider` on sandbo
 
 ## Verification (what success looks like)
 
-The plumbing checks below confirm the bridge, sidecar, and skill scripts are wired correctly. For an end-to-end walkthrough that actually exercises each skill via Slack DM and Outlook email, plus a reproducible cross-channel collective-wisdom demo, see [docs/verify-and-demo.md](docs/verify-and-demo.md).
+The plumbing checks below confirm the bridge, sidecar, and skill scripts are wired correctly. For an end-to-end walkthrough that exercises each skill via Slack DM and Outlook email, see [docs/verify-functionality.md](docs/verify-functionality.md). For a cross-channel, multi-user demo where one user teaches the agent a new skill and a different user invokes it from a different channel after a full sandbox rebuild, see [docs/collective-wisdom.md](docs/collective-wisdom.md).
 
 ```console
 # Source .env so $MS_GRAPH_SIDECAR_URL / $OUTLOOK_REPLY_TO are in your shell.
@@ -374,3 +376,5 @@ To pin a specific snapshot instead of the latest, pass the path:
 [scripts/snapshot.sh](scripts/snapshot.sh) excludes obvious credential-bearing files (`.env`, `*secret*`, `*token*`, `auth-profiles*`, etc.) so the tarballs are safe to share — same spirit as NemoClaw's upstream `createSnapshotBundle()` redaction, with file-level exclusion in place of content-aware redaction.
 
 The `.snapshots/` directory is `.gitignore`'d.
+
+For a hands-on demo of this in action — including a learned skill surviving a full rebuild and being invoked by a different user from a different channel — see [docs/collective-wisdom.md](docs/collective-wisdom.md).
