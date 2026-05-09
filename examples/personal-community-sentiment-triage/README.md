@@ -1,4 +1,4 @@
-![NVIDIA NemoClaw](assets/nvidia_header.png)
+![NVIDIA](assets/nvidia_header.png)
 
 # personal-community-sentiment-triage: Hermes + Outlook
 

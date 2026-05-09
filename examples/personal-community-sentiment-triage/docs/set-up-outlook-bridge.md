@@ -20,7 +20,7 @@ status: published
   SPDX-License-Identifier: Apache-2.0
 -->
 
-![NVIDIA NemoClaw](../assets/nvidia_header.png)
+![NVIDIA](../assets/nvidia_header.png)
 
 # Set Up Outlook
 
