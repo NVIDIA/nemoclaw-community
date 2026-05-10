@@ -1,3 +1,5 @@
+![NVIDIA](assets/nvidia_header.png)
+
 # openclaw-omni-demo: OpenClaw Vision Sub-Agent
 
 A NemoClaw/OpenClaw demo that keeps the main agent text-focused and delegates

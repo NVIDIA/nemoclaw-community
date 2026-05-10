@@ -1,3 +1,5 @@
+![NVIDIA](../assets/nvidia_header.png)
+
 # NemoClaw + Omni Vision Sub-Agent Setup
 
 > This is the upstream walkthrough preserved for detail. For the standardized

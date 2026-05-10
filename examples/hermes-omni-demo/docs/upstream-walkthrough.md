@@ -1,3 +1,5 @@
+![NVIDIA](../assets/nvidia_header.png)
+
 # Hermes + Omni on NemoClaw
 
 > This is the upstream walkthrough preserved for detail. For the standardized

@@ -1,3 +1,5 @@
+![NVIDIA](assets/nvidia_header.png)
+
 # hermes-omni-demo: Hermes + Nemotron Omni
 
 A browser-based multimodal demo for an existing Hermes sandbox. Drop in a video,

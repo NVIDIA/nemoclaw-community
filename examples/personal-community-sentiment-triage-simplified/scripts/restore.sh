@@ -41,7 +41,9 @@ fi
 
 echo "Restoring from $SNAP_PATH"
 echo "Tarball contents (sample):"
-tar tzf "$SNAP_PATH" | head -10 | sed 's/^/  /'
+# `tar | head` exits with SIGPIPE under `set -o pipefail` once head closes
+# stdin after 10 lines. `awk` reads to EOF, so the script continues to upload.
+tar tzf "$SNAP_PATH" | awk 'NR<=10 {print "  " $0}'
 TOTAL=$(tar tzf "$SNAP_PATH" | wc -l)
 echo "  … ($TOTAL files total)"
 
@@ -50,10 +52,14 @@ echo "  … ($TOTAL files total)"
 # keeps the path explicit and the failure modes obvious.
 REMOTE_TMP="/tmp/hermes-snapshot-$$.tar.gz"
 echo "Uploading tarball to $REMOTE_TMP …"
-openshell sandbox upload "$SANDBOX_NAME" "$SNAP_PATH" "$REMOTE_TMP"
+# Snapshots live under .snapshots/, which is intentionally gitignored. OpenShell
+# upload filters through .gitignore by default, so opt out for this artifact.
+openshell sandbox upload --no-git-ignore "$SANDBOX_NAME" "$SNAP_PATH" "$REMOTE_TMP"
 
 echo "Extracting into /sandbox/.hermes-data …"
-openshell sandbox exec "$SANDBOX_NAME" -- \
+# `openshell sandbox exec` requires --name <SANDBOX>; otherwise the sandbox
+# name is parsed as the command.
+openshell sandbox exec --name "$SANDBOX_NAME" -- \
   bash -c "tar xzf '$REMOTE_TMP' -C /sandbox/.hermes-data && rm -f '$REMOTE_TMP'"
 
 echo "Restore complete. New sessions will see the prior agent state."

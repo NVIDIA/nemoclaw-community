@@ -1,3 +1,5 @@
+![NVIDIA](assets/nvidia_header.png)
+
 # personal-community-sentiment-triage-simplified: Hermes + Slack + Live Search
 
 A personal Hermes agent that helps track what the developer community is
@@ -67,7 +69,7 @@ Skills live in [agents/hermes/skills/](agents/hermes/skills/).
 ```console
 $ git clone https://github.com/NVIDIA/nemoclaw-community.git
 $ cd nemoclaw-community/examples/personal-community-sentiment-triage-simplified
-$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION=v0.0.36 bash
+$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/v0.0.36/install.sh | OPENSHELL_VERSION=v0.0.36 bash
 ```
 
 You also need a running Docker daemon.
@@ -150,6 +152,12 @@ $ openshell provider list | grep hermes-direct
 Inside Slack, send the bot a DM from an allowlisted account. It should respond
 within a few seconds.
 
+For an end-to-end conversational verification that exercises each skill, see
+[docs/verify-functionality.md](docs/verify-functionality.md). For a
+Slack/live-search collective-wisdom walkthrough where the agent learns a
+reusable digest format and restores it after a rebuild, see
+[docs/collective-wisdom.md](docs/collective-wisdom.md).
+
 To smoke-test the live research skills inside the sandbox:
 
 ```console
@@ -200,3 +208,6 @@ $ bash scripts/tear-down.sh
 $ bash scripts/bring-up.sh
 $ bash scripts/restore.sh
 ```
+
+For a hands-on demo of learned skills surviving a rebuild, see
+[docs/collective-wisdom.md](docs/collective-wisdom.md).

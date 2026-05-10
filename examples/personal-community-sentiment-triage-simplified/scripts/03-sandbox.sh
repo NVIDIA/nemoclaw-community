@@ -54,6 +54,14 @@ sed -i \
   -e "s|^ARG NEMOCLAW_BUILD_ID=.*|ARG NEMOCLAW_BUILD_ID=$(date +%s)|" \
   "$STAGED_DOCKERFILE"
 
+# Propagate the inference model name from .env into the Dockerfile ARG so
+# changes to NEMOCLAW_MODEL land in the agent's baked config.yaml on the next
+# bring-up. Without this, the agent keeps requesting the Dockerfile default
+# even after 02-providers.sh updates the gateway/provider model.
+if [[ -n "${NEMOCLAW_MODEL:-}" ]]; then
+  sed -i -e "s|^ARG NEMOCLAW_MODEL=.*|ARG NEMOCLAW_MODEL=$NEMOCLAW_MODEL|" "$STAGED_DOCKERFILE"
+fi
+
 # Phoenix telemetry — flip ENABLE_NEMO_FLOW=1 so the Dockerfile installs
 # nemo-flow==0.1.0 from PyPI and applies the Hermes integration patch.
 if [[ -n "${PHOENIX_COLLECTOR_ENDPOINT:-}" ]]; then

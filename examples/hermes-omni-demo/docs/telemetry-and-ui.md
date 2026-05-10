@@ -1,3 +1,5 @@
+![NVIDIA](../assets/nvidia_header.png)
+
 # Telemetry And UI Notes
 
 ## How The UI Works
