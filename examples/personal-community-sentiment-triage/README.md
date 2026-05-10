@@ -131,7 +131,7 @@ itself). The session UUID for Outlook gets produced *between* them, so the order
 
 ```console
 $ git clone https://github.com/NVIDIA/nemoclaw-community.git && cd examples/personal-community-sentiment-triage/
-$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION=v0.0.36 bash
+$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/v0.0.36/install.sh | OPENSHELL_VERSION=v0.0.36 bash
 ```
 
 You also need a running Docker daemon. If you haven't already, register an Azure
