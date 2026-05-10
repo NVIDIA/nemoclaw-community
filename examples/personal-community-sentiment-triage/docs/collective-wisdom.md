@@ -168,14 +168,18 @@ Expected:
 
 - First line is `---`, then `name: <something>`, then `description: <something>`, then `---`
 - Body contains the format scaffolding from step 1.2: `**NemoClaw Daily Issue Digest …**`, `**Top issues**`, `**Bottom line:**`
-- `$NEW_SKILL` is the **frontmatter `name`** (e.g. `nemoclaw-daily-digest`) — this is the canonical identity the gateway uses, regardless of how the agent organized the directory tree
+- `$NEW_SKILL` is the **frontmatter `name`** — whatever the agent picked (or `daily-issue-digest` if you used Plan B). This is the canonical identity the gateway uses, regardless of how the agent organized the directory tree
 - `$NEW_SKILL_DIR` is the leaf dir holding `SKILL.md` (used by later steps for snapshot/restore/reset)
 
 #### 2c — Confirm the gateway sees it
 
 Two ways to check:
 
-- DM `@<your-bot>` with `What skills do you have?` — the reply lists `$NEW_SKILL` alongside the other five.
+- DM `@<your-bot>` with:
+
+  > Can you list your skills you have now.
+
+  The reply lists `$NEW_SKILL` alongside the other five.
 - Or look at the `nemoclaw_reload_skills` output the agent printed in step 1.3 — the tool returns the full registry inline.
 
 If the skill is on disk (2a) but not yet visible in the registry (2c), tell the agent `Reload skills using nemoclaw_reload_skills`. The plugin's `on_session_start` hook also auto-rescans on the next message in any new session, so the skill becomes visible automatically there.
@@ -187,13 +191,13 @@ If the skill is on disk (2a) but not yet visible in the registry (2c), tell the 
 First confirm `$NEW_SKILL` is populated in this shell (it was set in step 2b). If `echo $NEW_SKILL` is empty, re-run step 2a + 2b before continuing.
 
 ```console
-$ echo "NEW_SKILL=$NEW_SKILL"        # must print the agent's skill name, e.g. nemoclaw-daily-digest
+$ echo "NEW_SKILL=$NEW_SKILL"        # must print the skill's name (agent-picked, or 'daily-issue-digest' from Plan B)
 $ SNAP=$(bash scripts/snapshot.sh)
 $ echo "Snapshot tarball: $SNAP"
 $ tar tzf "$SNAP" | grep "/$NEW_SKILL/"
 ```
 
-Expected: the `tar tzf` grep prints the skill's directory and its files inside the tarball — e.g. `./skills/nemoclaw-daily-digest/SKILL.md` for a flat layout, or `./skills/reporting/nemoclaw-daily-digest/SKILL.md` for a categorized one. The grep matches `$NEW_SKILL` as a path component, so it works regardless of whether the agent flat or nested the skill, and regardless of the `./` prefix `tar` adds when capturing from `-C $STATE_ROOT .`.
+Expected: the `tar tzf` grep prints the skill's directory and its files inside the tarball — e.g. `./skills/<your-skill-name>/SKILL.md` for a flat layout, or `./skills/<category>/<your-skill-name>/SKILL.md` for a categorized one. The grep matches `$NEW_SKILL` as a path component, so it works regardless of whether the agent flat or nested the skill, and regardless of the `./` prefix `tar` adds when capturing from `-C $STATE_ROOT .`.
 
 The snapshot script's credential filter (file-name match on `.env`, `*token*`, `*secret*`, etc.) leaves regular `.md` and `.py` files untouched — see the state-dir list and the `# ── Credential filter ───` block in `scripts/snapshot.sh`.
 
