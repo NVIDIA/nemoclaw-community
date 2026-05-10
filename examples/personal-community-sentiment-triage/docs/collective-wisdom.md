@@ -37,6 +37,7 @@ The README's [§ Persistence: collective wisdom across restarts](../README.md#pe
 | Check | One-liner |
 |---|---|
 | Sandbox is `Ready` | `openshell sandbox list \| grep hermes-direct` |
+| Slack app handle | Note your bot's `@`-handle from the Slack app manifest (see [set-up-slack.md](set-up-slack.md)). The doc refers to it as `@<your-bot>` — substitute as you go. |
 | At least one Slack user authorized | `grep SLACK_ALLOWED_IDS .env` lists ≥1 `U…` ID. The cross-user step (7) wants ≥2 — if you only have one, run that step yourself from a different channel and the cross-channel claim still holds. |
 | Outlook bridge works | Send `ping` to `OUTLOOK_TARGET_MAILBOX` from any address in `OUTLOOK_ALLOWED_SENDERS` (or any sender if that var is empty); reply within ~30s. |
 | ETL has data | `curl -sf http://localhost:3100/github_issues?limit=1 \| head -c 200` returns a non-empty array |
@@ -57,6 +58,8 @@ The demo has two roles. Whoever fills them is up to you and what's in your allow
 | **User B** | Outlook email | Never participated in User A's conversation. Asks for the same kind of update from a fresh session and gets the same format. |
 
 If you have a coworker whose Slack ID is in `SLACK_ALLOWED_IDS` and whose email is on the `OUTLOOK_ALLOWED_SENDERS` list (or who can send from any address if that variable is empty), they're a natural User B — the cross-user claim is fully proven. If you're running solo, you can play both roles on different channels (Slack DM in step 1, Outlook email in step 7); cross-channel still holds, and "cross-user" softens to "different sessions, same human."
+
+> **Note**: Throughout this doc, `@<your-bot>` is a placeholder for the handle of your Slack app — whatever name you set in the manifest (see [set-up-slack.md](set-up-slack.md)). Replace with your actual handle as you go.
 
 ---
 
@@ -84,7 +87,7 @@ $ openshell sandbox exec --name hermes-direct -- bash -c 'cd /sandbox/.hermes-da
 
 ### Step 1 — User A iterates on a format via Slack DM
 
-User A sends three prompts in the same DM thread to `@myuser_nemoclaw`, each narrowing the previous reply. The third prompt is the load-bearing one: it expresses a desire for the format to stick around without naming the mechanism. The agent should infer that this is a candidate for a reusable skill on its own.
+User A sends three prompts in the same DM thread to `@<your-bot>`, each narrowing the previous reply. The third prompt is the load-bearing one: it expresses a desire for the format to stick around without naming the mechanism. The agent should infer that this is a candidate for a reusable skill on its own.
 
 **Prompt 1.1 — start vague:**
 
@@ -172,7 +175,7 @@ Expected:
 
 Two ways to check:
 
-- DM `@myuser_nemoclaw` with `What skills do you have?` — the reply lists `$NEW_SKILL` alongside the other five.
+- DM `@<your-bot>` with `What skills do you have?` — the reply lists `$NEW_SKILL` alongside the other five.
 - Or look at the `nemoclaw_reload_skills` output the agent printed in step 1.3 — the tool returns the full registry inline.
 
 If the skill is on disk (2a) but not yet visible in the registry (2c), tell the agent `Reload skills using nemoclaw_reload_skills`. The plugin's `on_session_start` hook also auto-rescans on the next message in any new session, so the skill becomes visible automatically there.
@@ -255,7 +258,7 @@ Expected: the email reply opens with `**NemoClaw Daily Issue Digest — {date}, 
 
 ### Step 8 — Cross-verify on Slack
 
-User A DMs `@myuser_nemoclaw` from a *new* DM thread (not the one from step 1, so no conversational context carries over):
+User A DMs `@<your-bot>` from a *new* DM thread (not the one from step 1, so no conversational context carries over):
 
 > Daily NemoClaw digest, last 3 days please.
 

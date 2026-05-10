@@ -49,6 +49,8 @@ Open [slack_app_manifest.json](slack_app_manifest.json) in a text editor and rep
 
 Note your slash command — that's what users will type in Slack.
 
+The bot's `@`-handle in Slack is derived from `bot_user.display_name` (e.g. `Alice NemoClaw` → `@alice_nemoclaw`). Note your handle — other docs (like the [Collective Wisdom demo](collective-wisdom.md)) reference it as `@<your-bot>` and expect you to substitute your actual value.
+
 ### Register the app
 
 1. Go to [api.slack.com/apps](https://api.slack.com/apps) and click **Create New App**.
