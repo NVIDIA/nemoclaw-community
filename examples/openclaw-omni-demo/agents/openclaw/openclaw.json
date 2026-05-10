@@ -1,0 +1,329 @@
+{
+  "wizard": {
+    "lastRunAt": "2026-03-30T17:52:56.352Z",
+    "lastRunVersion": "2026.3.11",
+    "lastRunCommand": "doctor",
+    "lastRunMode": "local"
+  },
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "inference": {
+        "baseUrl": "https://inference.local/v1",
+        "apiKey": "unused",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "nvidia/nemotron-3-super-120b-a12b",
+            "name": "inference/nvidia/nemotron-3-super-120b-a12b",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 4096
+          }
+        ]
+      },
+      "nvidia-omni": {
+        "baseUrl": "https://integrate.api.nvidia.com/v1",
+        "apiKey": "__NVIDIA_API_KEY_FROM_ENV__",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+            "name": "nvidia-omni/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+            "reasoning": true,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 131072,
+            "maxTokens": 16384
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "inference/nvidia/nemotron-3-super-120b-a12b"
+      },
+      "timeoutSeconds": 300,
+      "subagents": {
+        "maxConcurrent": 4,
+        "maxSpawnDepth": 1
+      }
+    },
+    "list": [
+      {
+        "id": "main",
+        "model": {
+          "primary": "inference/nvidia/nemotron-3-super-120b-a12b"
+        },
+        "subagents": {
+          "allowAgents": [
+            "vision-operator"
+          ]
+        },
+        "tools": {
+          "profile": "full"
+        }
+      },
+      {
+        "id": "vision-operator",
+        "workspace": "/sandbox/.openclaw-data/workspace",
+        "model": {
+          "primary": "nvidia-omni/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+        },
+        "tools": {
+          "profile": "full",
+          "deny": [
+            "message",
+            "sessions_spawn"
+          ]
+        }
+      }
+    ]
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "restart": true,
+    "ownerDisplay": "raw"
+  },
+  "channels": {
+    "defaults": {}
+  },
+  "gateway": {
+    "mode": "local",
+    "controlUi": {
+      "allowedOrigins": [
+        "http://127.0.0.1:18789"
+      ],
+      "allowInsecureAuth": true,
+      "dangerouslyDisableDeviceAuth": true
+    },
+    "auth": {
+      "token": "__OPENCLAW_GATEWAY_TOKEN__"
+    },
+    "trustedProxies": [
+      "127.0.0.1",
+      "::1"
+    ]
+  },
+  "meta": {
+    "lastTouchedVersion": "2026.3.11",
+    "lastTouchedAt": "2026-03-30T17:52:56.359Z"
+  },
+  "plugins": {
+    "enabled": false,
+    "slots": {
+      "memory": "none"
+    },
+    "entries": {
+      "acpx": {
+        "enabled": false
+      },
+      "alibaba": {
+        "enabled": false
+      },
+      "amazon-bedrock": {
+        "enabled": false
+      },
+      "amazon-bedrock-mantle": {
+        "enabled": false
+      },
+      "anthropic": {
+        "enabled": false
+      },
+      "anthropic-vertex": {
+        "enabled": false
+      },
+      "arcee": {
+        "enabled": false
+      },
+      "browser": {
+        "enabled": false
+      },
+      "byteplus": {
+        "enabled": false
+      },
+      "chutes": {
+        "enabled": false
+      },
+      "cloudflare-ai-gateway": {
+        "enabled": false
+      },
+      "codex": {
+        "enabled": false
+      },
+      "comfy": {
+        "enabled": false
+      },
+      "copilot-proxy": {
+        "enabled": false
+      },
+      "deepgram": {
+        "enabled": false
+      },
+      "deepseek": {
+        "enabled": false
+      },
+      "device-pair": {
+        "enabled": false
+      },
+      "document-extract": {
+        "enabled": false
+      },
+      "elevenlabs": {
+        "enabled": false
+      },
+      "fal": {
+        "enabled": false
+      },
+      "fireworks": {
+        "enabled": false
+      },
+      "github-copilot": {
+        "enabled": false
+      },
+      "google": {
+        "enabled": false
+      },
+      "groq": {
+        "enabled": false
+      },
+      "huggingface": {
+        "enabled": false
+      },
+      "kilocode": {
+        "enabled": false
+      },
+      "kimi": {
+        "enabled": false
+      },
+      "litellm": {
+        "enabled": false
+      },
+      "lmstudio": {
+        "enabled": false
+      },
+      "microsoft": {
+        "enabled": false
+      },
+      "microsoft-foundry": {
+        "enabled": false
+      },
+      "memory-core": {
+        "enabled": false
+      },
+      "minimax": {
+        "enabled": false
+      },
+      "mistral": {
+        "enabled": false
+      },
+      "moonshot": {
+        "enabled": false
+      },
+      "ollama": {
+        "enabled": false
+      },
+      "openai": {
+        "enabled": false
+      },
+      "opencode": {
+        "enabled": false
+      },
+      "opencode-go": {
+        "enabled": false
+      },
+      "openrouter": {
+        "enabled": false
+      },
+      "nvidia": {
+        "enabled": false
+      },
+      "phone-control": {
+        "enabled": false
+      },
+      "qianfan": {
+        "enabled": false
+      },
+      "qqbot": {
+        "enabled": false
+      },
+      "qwen": {
+        "enabled": false
+      },
+      "runway": {
+        "enabled": false
+      },
+      "sglang": {
+        "enabled": false
+      },
+      "stepfun": {
+        "enabled": false
+      },
+      "synthetic": {
+        "enabled": false
+      },
+      "talk-voice": {
+        "enabled": false
+      },
+      "tencent": {
+        "enabled": false
+      },
+      "together": {
+        "enabled": false
+      },
+      "venice": {
+        "enabled": false
+      },
+      "vercel-ai-gateway": {
+        "enabled": false
+      },
+      "vllm": {
+        "enabled": false
+      },
+      "volcengine": {
+        "enabled": false
+      },
+      "voyage": {
+        "enabled": false
+      },
+      "vydra": {
+        "enabled": false
+      },
+      "web-readability": {
+        "enabled": false
+      },
+      "xai": {
+        "enabled": false
+      },
+      "xiaomi": {
+        "enabled": false
+      },
+      "zai": {
+        "enabled": false
+      },
+      "bonjour": {
+        "enabled": false
+      }
+    }
+  }
+}

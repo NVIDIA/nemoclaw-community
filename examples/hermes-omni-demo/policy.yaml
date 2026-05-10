@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Network policy additions for the Hermes + Omni + NemoClaw cookbook.
+#
+# `scripts/setup.sh` appends these blocks to the active sandbox policy's
+# `network_policies:` section.
+#
+# What they enforce:
+#   wikipedia       — Wikipedia REST summary API + search API, python3 only
+#   free_dictionary — Free Dictionary API (entry endpoints), python3 only
+#
+# Both are path-restricted: raw /wiki/ pages remain blocked, and curl/wget/node
+# cannot reach either host. Everything else stays deny-by-default.
+
+  wikipedia:
+    name: wikipedia
+    endpoints:
+      - host: en.wikipedia.org
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        tls: terminate
+        rules:
+          - allow: { method: GET, path: "/api/rest_v1/page/summary/**" }
+          - allow: { method: GET, path: "/w/api.php" }
+    binaries:
+      - { path: /usr/bin/python3.11 }
+
+  free_dictionary:
+    name: free_dictionary
+    endpoints:
+      - host: api.dictionaryapi.dev
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        tls: terminate
+        rules:
+          - allow: { method: GET, path: "/api/v2/entries/**" }
+    binaries:
+      - { path: /usr/bin/python3.11 }

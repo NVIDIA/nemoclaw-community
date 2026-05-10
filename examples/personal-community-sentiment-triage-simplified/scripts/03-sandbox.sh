@@ -43,12 +43,14 @@ CHANNELS_B64="${_B64[0]}"
 ALLOWED_IDS_B64="${_B64[1]}"
 echo "Channels:    $(printf '%s' "$CHANNELS_B64" | base64 -d)"
 echo "Allowed IDs: $(printf '%s' "$ALLOWED_IDS_B64" | base64 -d)"
+NEMO_FLOW_PROJECT_NAME="${NEMO_FLOW_PROJECT_NAME:-personal-community-sentiment-triage-simplified}"
 
 # ── Stage the Dockerfile and patch ARG defaults ────────────────────────
 cp "$EXAMPLE_DIR/agents/hermes/Dockerfile" "$STAGED_DOCKERFILE"
 sed -i \
   -e "s|^ARG NEMOCLAW_MESSAGING_CHANNELS_B64=.*|ARG NEMOCLAW_MESSAGING_CHANNELS_B64=$CHANNELS_B64|" \
   -e "s|^ARG NEMOCLAW_MESSAGING_ALLOWED_IDS_B64=.*|ARG NEMOCLAW_MESSAGING_ALLOWED_IDS_B64=$ALLOWED_IDS_B64|" \
+  -e "s|^ARG NEMO_FLOW_PROJECT_NAME=.*|ARG NEMO_FLOW_PROJECT_NAME=$NEMO_FLOW_PROJECT_NAME|" \
   -e "s|^ARG NEMOCLAW_BUILD_ID=.*|ARG NEMOCLAW_BUILD_ID=$(date +%s)|" \
   "$STAGED_DOCKERFILE"
 
@@ -81,6 +83,7 @@ setsid openshell sandbox create \
     NEMOCLAW_MESSAGING_CHANNELS_B64="$CHANNELS_B64" \
     CHAT_UI_URL="http://127.0.0.1:8642" \
     PHOENIX_COLLECTOR_ENDPOINT="${PHOENIX_COLLECTOR_ENDPOINT:-}" \
+    NEMO_FLOW_PROJECT_NAME="$NEMO_FLOW_PROJECT_NAME" \
   nemoclaw-start </dev/null &
 CREATE_PID=$!
 

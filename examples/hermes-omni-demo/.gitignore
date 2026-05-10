@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Node / Vite
+app/ui/node_modules/
+app/ui/dist/
+
+# Local upload scratch
+app/ui/.vite/

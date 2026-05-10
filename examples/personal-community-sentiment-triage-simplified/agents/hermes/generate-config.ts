@@ -39,6 +39,10 @@ const ALLOWED_USERS_ENV: Record<string, string> = {
 function main(): void {
   const model = process.env.NEMOCLAW_MODEL!;
   const baseUrl = process.env.NEMOCLAW_INFERENCE_BASE_URL!;
+  const phoenixEndpoint = process.env.PHOENIX_COLLECTOR_ENDPOINT?.trim() ?? "";
+  const nemoFlowProjectName = (
+    process.env.NEMO_FLOW_PROJECT_NAME || "personal-community-sentiment-triage-simplified"
+  ).trim();
 
   const channelsB64 = process.env.NEMOCLAW_MESSAGING_CHANNELS_B64 || "W10=";
   const allowedIdsB64 = process.env.NEMOCLAW_MESSAGING_ALLOWED_IDS_B64 || "e30=";
@@ -106,6 +110,23 @@ function main(): void {
       timeout: 60,
     },
   };
+
+  if (phoenixEndpoint && nemoFlowProjectName) {
+    config.nemo_flow = {
+      enabled: true,
+      openinference: {
+        enabled: true,
+        transport: "http_binary",
+        endpoint: phoenixEndpoint,
+        service_name: nemoFlowProjectName,
+        instrumentation_scope: `${nemoFlowProjectName}/nemo-flow/openinference`,
+        resource_attributes: {
+          "openinference.project.name": nemoFlowProjectName,
+          "nemo.claw.example": nemoFlowProjectName,
+        },
+      },
+    };
+  }
 
   // Messaging platforms (if configured during onboard)
   const platformsConfig: Record<string, Record<string, unknown>> = {};

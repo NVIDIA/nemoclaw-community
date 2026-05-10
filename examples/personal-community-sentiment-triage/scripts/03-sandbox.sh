@@ -76,6 +76,7 @@ echo "Allowed IDs: $(printf '%s' "$ALLOWED_IDS_B64" | base64 -d)"
 ALLOWED_SENDERS="${OUTLOOK_ALLOWED_SENDERS:-}"
 TM_HOST="$(detect_token_manager_host)"
 echo "Resolved TOKEN_MANAGER_HOST → $TM_HOST"
+NEMO_FLOW_PROJECT_NAME="${NEMO_FLOW_PROJECT_NAME:-personal-community-sentiment-triage}"
 
 # ── Stage the Dockerfile and patch ARG defaults ────────────────────────
 cp "$EXAMPLE_DIR/agents/hermes/Dockerfile" "$STAGED_DOCKERFILE"
@@ -84,10 +85,11 @@ sed -i \
   -e "s|^ARG NEMOCLAW_MESSAGING_ALLOWED_IDS_B64=.*|ARG NEMOCLAW_MESSAGING_ALLOWED_IDS_B64=$ALLOWED_IDS_B64|" \
   -e "s|^ARG OUTLOOK_TARGET_MAILBOX=.*|ARG OUTLOOK_TARGET_MAILBOX=$OUTLOOK_TARGET_MAILBOX|" \
   -e "s|^ARG OUTLOOK_REPLY_TO=.*|ARG OUTLOOK_REPLY_TO=$OUTLOOK_REPLY_TO|" \
-  -e "s|^ARG OUTLOOK_ALLOWED_SENDERS=.*|ARG OUTLOOK_ALLOWED_SENDERS=$ALLOWED_SENDERS|" \
-  -e "s|^ARG TOKEN_MANAGER_HOST=.*|ARG TOKEN_MANAGER_HOST=$TM_HOST|" \
-  -e "s|^ARG NEMOCLAW_BUILD_ID=.*|ARG NEMOCLAW_BUILD_ID=$(date +%s)|" \
-  "$STAGED_DOCKERFILE"
+    -e "s|^ARG OUTLOOK_ALLOWED_SENDERS=.*|ARG OUTLOOK_ALLOWED_SENDERS=$ALLOWED_SENDERS|" \
+    -e "s|^ARG TOKEN_MANAGER_HOST=.*|ARG TOKEN_MANAGER_HOST=$TM_HOST|" \
+    -e "s|^ARG NEMO_FLOW_PROJECT_NAME=.*|ARG NEMO_FLOW_PROJECT_NAME=$NEMO_FLOW_PROJECT_NAME|" \
+    -e "s|^ARG NEMOCLAW_BUILD_ID=.*|ARG NEMOCLAW_BUILD_ID=$(date +%s)|" \
+    "$STAGED_DOCKERFILE"
 
 # Phoenix telemetry — flip ENABLE_NEMO_FLOW=1 so the Dockerfile installs
 # nemo-flow==0.1.0 from PyPI and applies the Hermes integration patch.
@@ -135,6 +137,7 @@ setsid openshell sandbox create \
     NEMOCLAW_MESSAGING_CHANNELS_B64="$CHANNELS_B64" \
     CHAT_UI_URL="http://127.0.0.1:8642" \
     PHOENIX_COLLECTOR_ENDPOINT="${PHOENIX_COLLECTOR_ENDPOINT:-}" \
+    NEMO_FLOW_PROJECT_NAME="$NEMO_FLOW_PROJECT_NAME" \
   nemoclaw-start </dev/null &
 CREATE_PID=$!
 

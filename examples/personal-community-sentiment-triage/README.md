@@ -239,7 +239,10 @@ When `PHOENIX_COLLECTOR_ENDPOINT` is set, `bring-up.sh` flips
 [agents/hermes/Dockerfile](agents/hermes/Dockerfile) (from PyPI), plus a
 re-install of Hermes with the NeMo-Flow integration patch fetched from
 [NVIDIA/NeMo-Flow](https://github.com/NVIDIA/NeMo-Flow) at the pinned
-`NEMO_FLOW_VERSION` tag and applied during the build.
+`NEMO_FLOW_VERSION` tag and applied during the build. The generated Hermes
+config also sets the Phoenix/OpenInference project resource attribute from
+`NEMO_FLOW_PROJECT_NAME` so traces land under
+`personal-community-sentiment-triage` instead of Phoenix's `default` project.
 
 ## Prerequisites
 
@@ -281,6 +284,7 @@ compatible-endpoint --model <NEMOCLAW_MODEL>` rather than `--provider` on sandbo
 | `COMPATIBLE_API_KEY` | (none) | Inference API key. Mirrors NemoClaw's `REMOTE_PROVIDER_CONFIG.custom`. (`OPENAI_API_KEY` is also accepted.) |
 | `TOKEN_MANAGER_HOST` | (auto-detected: Docker bridge gateway IP, e.g. `172.17.0.1`) | Host where the MS Graph token manager is reachable from inside the sandbox. Auto-resolved via `docker network inspect bridge` to mirror NemoClaw onboard. |
 | `PHOENIX_COLLECTOR_ENDPOINT` | (none) | Set to e.g. `http://172.17.0.1:6006/v1/traces` to enable OpenInference telemetry. When set, bring-up flips `ENABLE_NEMO_FLOW=1` so the Dockerfile installs the `nemo-flow` version pinned by `NEMO_FLOW_VERSION` in the Dockerfile from PyPI and applies the Hermes integration patch (~1-2 min on first build, cached on rebuild). |
+| `NEMO_FLOW_PROJECT_NAME` | `personal-community-sentiment-triage` | Phoenix project/resource name for traces. |
 | `DELETE_INFERENCE_PROVIDER` | `0` | If set to `1` during `tear-down.sh`, also removes the shared `compatible-endpoint` provider. |
 
 ## Verification (what success looks like)

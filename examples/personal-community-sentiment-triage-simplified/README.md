@@ -96,6 +96,7 @@ $ bash scripts/00-host-services.sh
 Then set:
 
 ```bash
+NEMO_FLOW_PROJECT_NAME=personal-community-sentiment-triage-simplified
 PHOENIX_COLLECTOR_ENDPOINT=http://172.17.0.1:6006/v1/traces
 ```
 
@@ -132,6 +133,7 @@ This runs:
 | `TAVILY_API_KEY` | Yes | Tavily search API key. |
 | `GITHUB_TOKEN` | Yes | Authenticates `gh` for live GitHub search. |
 | `PHOENIX_COLLECTOR_ENDPOINT` | No | Enables optional NeMo-Flow/OpenInference telemetry. |
+| `NEMO_FLOW_PROJECT_NAME` | No | Phoenix project/resource name for traces; default `personal-community-sentiment-triage-simplified`. |
 | `SANDBOX_NAME` | No | Sandbox name, default `hermes-direct`. |
 | `OPENSHELL_GATEWAY` | No | Gateway name, default `examples-gateway`. |
 | `OPENSHELL_GATEWAY_PORT` | No | Gateway port, default `8090`. |
