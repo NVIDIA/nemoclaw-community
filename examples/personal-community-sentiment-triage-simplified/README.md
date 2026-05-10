@@ -1,4 +1,4 @@
-![NVIDIA](assets/nvidia_header.png)
+![NVIDIA](../assets/nvidia_header.png)
 
 # personal-community-sentiment-triage-simplified: Hermes + Slack + Live Search
 

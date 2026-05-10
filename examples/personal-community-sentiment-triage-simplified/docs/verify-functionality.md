@@ -20,7 +20,7 @@ status: published
   SPDX-License-Identifier: Apache-2.0
 -->
 
-![NVIDIA](../assets/nvidia_header.png)
+![NVIDIA](../../assets/nvidia_header.png)
 
 # Verify Simplified Skill Functionality
 

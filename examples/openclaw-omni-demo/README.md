@@ -1,4 +1,4 @@
-![NVIDIA](assets/nvidia_header.png)
+![NVIDIA](../assets/nvidia_header.png)
 
 # openclaw-omni-demo: OpenClaw Vision Sub-Agent
 
