@@ -20,6 +20,8 @@ status: published
   SPDX-License-Identifier: Apache-2.0
 -->
 
+![NVIDIA](../assets/nvidia_header.png)
+
 # Set Up Outlook
 
 This guide walks through the one-time host setup that this example needs: registering an Azure application, running the MS Graph token manager, and obtaining a session UUID. Once those are done, you populate `.env` and run `bash scripts/bring-up.sh` from the example root — see the [example README](../README.md) for the full bring-up flow.

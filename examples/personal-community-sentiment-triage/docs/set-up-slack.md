@@ -20,6 +20,8 @@ status: published
   SPDX-License-Identifier: Apache-2.0
 -->
 
+![NVIDIA](../assets/nvidia_header.png)
+
 # Set Up Slack
 
 This guide walks through the one-time Slack app registration that this example needs: creating the app from the bundled manifest, enabling Socket Mode, installing it to your workspace, and capturing the two tokens. Once you have them, you populate `.env` and run `bash scripts/bring-up.sh` from the example root — see the [example README](../README.md) for the full bring-up flow.
@@ -46,6 +48,8 @@ Open [slack_app_manifest.json](slack_app_manifest.json) in a text editor and rep
 | `features.slash_commands[].command` | `/myuser-nemoclaw` | `/alice-nemoclaw` |
 
 Note your slash command — that's what users will type in Slack.
+
+The bot's `@`-handle in Slack is derived from `bot_user.display_name` (e.g. `Alice NemoClaw` → `@alice_nemoclaw`). Note your handle — other docs (like the [Collective Wisdom demo](collective-wisdom.md)) reference it as `@<your-bot>` and expect you to substitute your actual value.
 
 ### Register the app
 

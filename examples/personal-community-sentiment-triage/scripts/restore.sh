@@ -41,7 +41,10 @@ fi
 
 echo "Restoring from $SNAP_PATH"
 echo "Tarball contents (sample):"
-tar tzf "$SNAP_PATH" | head -10 | sed 's/^/  /'
+# Note: `tar | head` exits with SIGPIPE (141) under `set -o pipefail` once
+# head closes stdin after 10 lines, which silently halts the script before
+# the upload step ever runs. `awk` reads to EOF, so no SIGPIPE.
+tar tzf "$SNAP_PATH" | awk 'NR<=10 {print "  " $0}'
 TOTAL=$(tar tzf "$SNAP_PATH" | wc -l)
 echo "  … ($TOTAL files total)"
 
@@ -50,10 +53,18 @@ echo "  … ($TOTAL files total)"
 # keeps the path explicit and the failure modes obvious.
 REMOTE_TMP="/tmp/hermes-snapshot-$$.tar.gz"
 echo "Uploading tarball to $REMOTE_TMP …"
-openshell sandbox upload "$SANDBOX_NAME" "$SNAP_PATH" "$REMOTE_TMP"
+# `--no-git-ignore` is required: by default `openshell sandbox upload`
+# filters source paths through .gitignore, and `.snapshots/` is gitignored
+# (snapshots are demo artifacts, not source). Without this flag the tarball
+# is silently dropped — upload reports "✓ Upload complete" with zero bytes
+# transferred and the next exec fails with "tar: Cannot open: No such file".
+openshell sandbox upload --no-git-ignore "$SANDBOX_NAME" "$SNAP_PATH" "$REMOTE_TMP"
 
 echo "Extracting into /sandbox/.hermes-data …"
-openshell sandbox exec "$SANDBOX_NAME" -- \
+# `openshell sandbox exec` requires --name <SANDBOX> — without it the
+# positional sandbox name is parsed as the command (`bash: hermes-direct:
+# command not found` followed by exit 127).
+openshell sandbox exec --name "$SANDBOX_NAME" -- \
   bash -c "tar xzf '$REMOTE_TMP' -C /sandbox/.hermes-data && rm -f '$REMOTE_TMP'"
 
 echo "Restore complete. New sessions will see the prior agent state."

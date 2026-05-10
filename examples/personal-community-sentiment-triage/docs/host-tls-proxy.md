@@ -20,6 +20,8 @@ status: published
   SPDX-License-Identifier: Apache-2.0
 -->
 
+![NVIDIA](../assets/nvidia_header.png)
+
 # Host-side TLS proxy
 
 This is an **optional** path. Most readers running the example on a personal laptop or a clean cloud VM should skip it — point [NEMOCLAW_ENDPOINT_URL](../.env.example) directly at the HTTPS inference endpoint and `bring-up.sh` will work.
