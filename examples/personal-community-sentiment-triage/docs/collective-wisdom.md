@@ -26,8 +26,8 @@ status: published
 
 This demo proves three durability properties of the agent in a single 15-minute walkthrough:
 
-1. **Skills are learnable from conversation.** User A iteratively narrows a vague request into a specific output format, then expresses they'd like the same format next time and for coworkers — without ever using the words "skill," "save," or "write a file." The agent infers a reusable skill is the right durable mechanism, writes a `SKILL.md` under `/sandbox/.hermes-data/skills/`, and registers it via `nemoclaw_reload_skills` — see [`agents/hermes/plugin/__init__.py:136-154`](../agents/hermes/plugin/__init__.py).
-2. **Skills survive a full sandbox rebuild.** `scripts/snapshot.sh` captures `/sandbox/.hermes-data/skills/` (line 8-13 of that script lists `skills/` explicitly). After `tear-down.sh` + `bring-up.sh`, `scripts/restore.sh` re-extracts the tarball, and the next session's `on_session_start` hook ([`plugin/__init__.py:215-219`](../agents/hermes/plugin/__init__.py)) auto-rescans — no manual reload needed.
+1. **Skills are learnable from conversation.** User A iteratively narrows a vague request into a specific output format, then expresses they'd like the same format next time and for coworkers — without ever using the words "skill," "save," or "write a file." The agent infers a reusable skill is the right durable mechanism, writes a `SKILL.md` under `/sandbox/.hermes-data/skills/`, and registers it via `nemoclaw_reload_skills` — see the `_reload_skills()` function in [`agents/hermes/plugin/__init__.py`](../agents/hermes/plugin/__init__.py).
+2. **Skills survive a full sandbox rebuild.** `scripts/snapshot.sh` captures `/sandbox/.hermes-data/skills/` (see the state-dir list comment block at the top of that script). After `tear-down.sh` + `bring-up.sh`, `scripts/restore.sh` re-extracts the tarball, and the next session's `on_session_start` hook in [`plugin/__init__.py`](../agents/hermes/plugin/__init__.py) auto-rescans — no manual reload needed.
 3. **Skills are not user-bound or channel-bound.** A different person, on a different channel, who never saw the original conversation, invokes the same skill and gets a structurally identical reply — because the skill (the file on disk), not the conversation, encodes the format.
 
 The README's [§ Persistence: collective wisdom across restarts](../README.md#persistence-collective-wisdom-across-restarts) covers the snapshot/restore mechanics in prose. This guide turns those mechanics into a reproducible end-to-end demo.
@@ -128,7 +128,7 @@ Whatever path you take, what should land on disk afterward is a new directory un
 
 ### Step 2 — Verify the new skill is on disk and loaded
 
-The agent picked its own name and its own organizational layout — for example, it might place the skill flat at `skills/<name>/SKILL.md`, or it might categorize it under `skills/<category>/<name>/SKILL.md`. Both are fine: Hermes' skill scanner walks the skills tree recursively (`rglob("SKILL.md")` in [`agent/skill_commands.py:230`](https://github.com/NVIDIA/NemoClaw)), so any depth works, and skills are identified by their YAML `name:` field rather than their directory path. Three short sub-steps: **find** → **inspect / capture** → **confirm gateway**.
+The agent picked its own name and its own organizational layout — for example, it might place the skill flat at `skills/<name>/SKILL.md`, or it might categorize it under `skills/<category>/<name>/SKILL.md`. Both are fine: Hermes' skill scanner walks the skills tree recursively (see the `rglob("SKILL.md")` call in `agent/skill_commands.py` — searchable via [github.com/NVIDIA/NemoClaw](https://github.com/NVIDIA/NemoClaw)), so any depth works, and skills are identified by their YAML `name:` field rather than their directory path. Three short sub-steps: **find** → **inspect / capture** → **confirm gateway**.
 
 **Preview**
 ![Verifying the skill](../assets/collective_wisdom_demo/Step%202.png)
@@ -192,7 +192,7 @@ $ tar tzf "$SNAP" | grep "/$NEW_SKILL/"
 
 Expected: the `tar tzf` grep prints the skill's directory and its files inside the tarball — e.g. `./skills/nemoclaw-daily-digest/SKILL.md` for a flat layout, or `./skills/reporting/nemoclaw-daily-digest/SKILL.md` for a categorized one. The grep matches `$NEW_SKILL` as a path component, so it works regardless of whether the agent flat or nested the skill, and regardless of the `./` prefix `tar` adds when capturing from `-C $STATE_ROOT .`.
 
-The snapshot script's credential filter (file-name match on `.env`, `*token*`, `*secret*`, etc.) leaves regular `.md` and `.py` files untouched — see `scripts/snapshot.sh` lines 8-13 and 57-71.
+The snapshot script's credential filter (file-name match on `.env`, `*token*`, `*secret*`, etc.) leaves regular `.md` and `.py` files untouched — see the state-dir list and the `# ── Credential filter ───` block in `scripts/snapshot.sh`.
 
 **This proves:** snapshots capture user-authored skills, not just memories.
 
@@ -232,7 +232,7 @@ $ openshell sandbox exec --name hermes-direct -- cat "$NEW_SKILL_PATH" | head -1
 
 Expected: the `find` returns the same path you captured in step 2a (same depth, same parent dir — the agent's chosen layout is preserved end-to-end). The `cat` prints the SKILL.md byte-identical to what step 2b captured.
 
-The `on_session_start` hook (`plugin/__init__.py:215-219`) auto-rescans on the next message in any new session, so the next conversation will see the restored skill without a manual reload.
+The `on_session_start` hook in `plugin/__init__.py` auto-rescans on the next message in any new session, so the next conversation will see the restored skill without a manual reload.
 
 **This proves:** restore is byte-faithful for skills, and the gateway picks them up automatically.
 
