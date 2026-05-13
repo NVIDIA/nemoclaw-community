@@ -24,4 +24,4 @@ jobs:
           python-version: "3.12"
 
       - name: Check SPDX license headers
-        run: python scripts/check_license_headers.py --check
+        run: bash scripts/check-spdx-headers.sh

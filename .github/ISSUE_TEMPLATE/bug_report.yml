@@ -1,0 +1,61 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: Bug Report
+description: Report a bug you confirmed and could not fix.
+title: "[Bug]: "
+labels: ["bug", "status: triage"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction Steps
+      description: Minimal steps to reproduce the issue.
+      placeholder: |
+        1. Open an example directory
+        2. Configure the required environment variables
+        3. Run the documented setup or validation command
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Docker version, OpenShell version, NemoClaw version, example path, and any other relevant details.
+      placeholder: |
+        - OS: macOS 15.2 / Ubuntu 24.04 / Windows 11 + WSL2
+        - Docker: Docker Desktop 4.x / Docker Engine 27.x
+        - NemoClaw: v0.x.x, if applicable
+        - OpenShell: v0.x.x, if applicable
+        - Example: examples/...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Sanitized log output, error messages, or stack traces.
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I confirmed this bug is reproducible
+          required: true
+        - label: I searched existing issues and this is not a duplicate
+          required: true

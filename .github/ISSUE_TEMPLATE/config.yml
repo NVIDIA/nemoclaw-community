@@ -1,8 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-blank_issues_enabled: true
+blank_issues_enabled: false
 contact_links:
-  - name: Security vulnerability report
-    url: https://www.nvidia.com/object/submit-security-vulnerability.html
-    about: Please do not report security vulnerabilities through GitHub issues.
+  - name: Security vulnerability?
+    url: https://github.com/NVIDIA/nemoclaw-community/blob/main/SECURITY.md
+    about: >
+      Do not report security vulnerabilities through GitHub issues. Follow
+      the disclosure process in SECURITY.md.

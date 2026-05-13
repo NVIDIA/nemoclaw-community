@@ -12,12 +12,12 @@ Thank you for your interest in improving NemoClaw Community.
 
 ## Developer Certificate Of Origin
 
-All contributions must include a `Signed-off-by` line in each commit message, certifying that you wrote or have the right to submit the code under this project's open-source license. This is the [Developer Certificate of Origin](https://developercertificate.org/).
+All contributions must include a `Signed-off-by` line in the pull request description, certifying that you wrote or have the right to submit the code under this project's open-source license. This is the [Developer Certificate of Origin](https://developercertificate.org/).
 
-Add the sign-off automatically with:
+Use the sign-off line included in the pull request template:
 
-```bash
-git commit -s -m "Describe the change"
+```text
+Signed-off-by: Your Name <your-email@example.com>
 ```
 
 ## Development Setup
