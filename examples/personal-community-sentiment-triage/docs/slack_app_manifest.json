@@ -17,7 +17,7 @@
         "slash_commands": [
             {
                 "command": "/myuser-nemoclaw",
-                "description": "Query NemoClaw",
+                "description": "Talk to your personal NemoClaw agent — any text after the command is sent to the agent (e.g. `/clear`, `/help`, or a free-form question). Customize the command name per your workspace before installing.",
                 "should_escape": false
             }
         ]

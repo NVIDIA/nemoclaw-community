@@ -146,6 +146,34 @@ RUN if [ "$ENABLE_NEMO_FLOW" = "1" ]; then \
 ENV HERMES_TELEGRAM_DISABLE_FALLBACK_IPS=1 \
     GH_TOKEN=openshell:resolve:env:GITHUB_TOKEN
 
+# Propagate nemo-flow + OpenInference toggles into the image's ENV so the
+# daemon (and any subprocess) inherits them automatically. Two parallel
+# name conventions need to stay in sync because different code paths read
+# different names:
+#
+#   - Legacy: NEMO_FLOW_ENABLED, PHOENIX_OPENINFERENCE_ENABLED — read by
+#     the base image's start.sh at startup; drive the [nemo-flow] banner
+#     lines in /tmp/gateway.log and any base-image-level conditional
+#     behavior. If only ONE of them is set (e.g. an older installer
+#     flipped PHOENIX_OPENINFERENCE_ENABLED whenever PHOENIX_COLLECTOR_ENDPOINT
+#     was non-empty), the banner becomes contradictory:
+#       [nemo-flow] NEMO_FLOW_ENABLED=0
+#       [nemo-flow] PHOENIX_OPENINFERENCE_ENABLED=1
+#   - New: HERMES_NEMO_FLOW_* — read by plugins.nemo_flow.config via
+#     is_enabled() / openinference_enabled() to gate whether LLM-call and
+#     tool-call observability hooks emit OTLP spans to Phoenix.
+#
+# Both sets derive from a SINGLE source of truth — the ENABLE_NEMO_FLOW
+# build arg, which 03-sandbox.sh sed-patches based on the ENABLE_NEMO_FLOW
+# value from .env. So ENABLE_NEMO_FLOW=0 means everything off, full stop;
+# ENABLE_NEMO_FLOW=1 means everything on. They cannot diverge.
+ENV NEMO_FLOW_ENABLED=${ENABLE_NEMO_FLOW} \
+    PHOENIX_OPENINFERENCE_ENABLED=${ENABLE_NEMO_FLOW} \
+    HERMES_NEMO_FLOW_ENABLED=${ENABLE_NEMO_FLOW} \
+    HERMES_NEMO_FLOW_OPENINFERENCE_ENABLED=${ENABLE_NEMO_FLOW} \
+    HERMES_NEMO_FLOW_OPENINFERENCE_TRANSPORT=http_binary \
+    HERMES_NEMO_FLOW_OPENINFERENCE_ENDPOINT=${PHOENIX_COLLECTOR_ENDPOINT}
+
 # Copy NemoClaw plugin for Hermes (Python-based)
 COPY agents/hermes/plugin/ /opt/nemoclaw-hermes-plugin/
 
