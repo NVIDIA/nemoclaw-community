@@ -18,6 +18,7 @@
 #   <sandbox>-slack-bridge        — Slack bot token
 #   <sandbox>-slack-app           — Slack app token
 #   <sandbox>-github              — GitHub token
+#   <sandbox>-tavily              — Tavily API key
 #
 # OpenShell commands you'll see:
 #   - openshell provider create / update / get / list
@@ -96,6 +97,13 @@ if [[ -n "${GITHUB_TOKEN:-}" || -n "${GH_TOKEN:-}" ]]; then
     echo "Upserting provider $GH_PROVIDER (credential: GH_TOKEN)"
     upsert_cred "$GH_PROVIDER" github GH_TOKEN "$GH_TOKEN"
   fi
+fi
+
+# ── Tavily provider ─────────────────────────────────────────────────────
+if [[ -n "${TAVILY_API_KEY:-}" ]]; then
+  TAVILY_PROVIDER="$SANDBOX_NAME-tavily"
+  echo "Upserting provider $TAVILY_PROVIDER"
+  upsert_cred "$TAVILY_PROVIDER" generic TAVILY_API_KEY "$TAVILY_API_KEY"
 fi
 
 echo "Provider summary (this sandbox + shared inference):"

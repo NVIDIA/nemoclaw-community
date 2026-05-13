@@ -205,6 +205,10 @@ function main(): void {
       envLines.push(`${key}=${value}`);
     }
   }
+  if ((process.env.TAVILY_ENABLED ?? "").trim() === "1") {
+    envLines.push("TAVILY_API_KEY=openshell:resolve:env:TAVILY_API_KEY");
+    envLines.push("TAVILY_API_BASE_URL=https://api.tavily.com");
+  }
 
   const envPath = join(homedir(), ".hermes", ".env");
   writeFileSync(envPath, envLines.length > 0 ? envLines.join("\n") + "\n" : "");

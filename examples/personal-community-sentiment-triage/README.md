@@ -120,6 +120,7 @@ Skills are loaded on demand by the agent when relevant to a task. They live in [
 | `slack-channel-summarizer` | Resolve Slack channels by name or ID and read message history via the Slack Web API. |
 | `outlook-email-search` | Search the Outlook mailbox via Microsoft Graph to find and read emails relevant to a question. |
 | `cross-source-gap-analysis` | Synthesize findings across Slack, GitHub, and NVIDIA forum sources to identify gaps, alignment issues, and follow-ups. |
+| `tavily-web-research` | Search the live web and extract page content through Tavily when mirrored sources are insufficient or stale. |
 
 ## Intended user journey
 
@@ -183,6 +184,7 @@ Now edit `.env` and fill in everything you already have:
   holds real Entra sessions; leave commented for local experimentation
 - (optional) `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` / `SLACK_ALLOWED_IDS` — see [docs/set-up-slack.md](docs/set-up-slack.md)
 - (optional) `GITHUB_TOKEN`, `PHOENIX_COLLECTOR_ENDPOINT`
+- (optional) `TAVILY_API_KEY` — see [docs/set-up-tavily.md](docs/set-up-tavily.md)
 
 Leave **`OUTLOOK_SESSION_UUID` blank for now** — Phase 4 produces it.
 
@@ -299,6 +301,7 @@ compatible-endpoint --model <NEMOCLAW_MODEL>` rather than `--provider` on sandbo
 | `NEMOCLAW_MODEL` | `nvidia/nemotron-3-super-120b-a12b` | Inference model passed to `openshell inference set`. |
 | `NEMOCLAW_ENDPOINT_URL` | `https://integrate.api.nvidia.com/v1` | Upstream base URL for the `compatible-endpoint` provider. (`OPENAI_BASE_URL` is also accepted as a fallback.) |
 | `COMPATIBLE_API_KEY` | (none) | Inference API key. Mirrors NemoClaw's `REMOTE_PROVIDER_CONFIG.custom`. (`OPENAI_API_KEY` is also accepted.) |
+| `TAVILY_API_KEY` | (none) | Optional key for the bundled `tavily-web-research` skill. Creates the `<sandbox>-tavily` provider and injects a `TAVILY_API_KEY` placeholder into the sandbox. |
 | `TOKEN_MANAGER_HOST` | `host.openshell.internal` | Host where the MS Graph token manager is reachable from inside the sandbox. |
 | `PHOENIX_COLLECTOR_ENDPOINT` | (none) | Set to e.g. `http://host.openshell.internal:6006/v1/traces` to enable OpenInference telemetry. When set, bring-up flips `ENABLE_NEMO_FLOW=1` so the Dockerfile installs the `nemo-flow` version pinned by `NEMO_FLOW_VERSION` in the Dockerfile from PyPI and applies the Hermes integration patch (~1-2 min on first build, cached on rebuild). |
 | `DELETE_INFERENCE_PROVIDER` | `0` | If set to `1` during `tear-down.sh`, also removes the shared `compatible-endpoint` provider. |
@@ -324,6 +327,10 @@ $ openshell sandbox exec --name hermes-direct -- env \
     OUTLOOK_TARGET_MAILBOX="$OUTLOOK_TARGET_MAILBOX" \
     /usr/bin/python3 /sandbox/.hermes-data/skills/outlook-email-search/scripts/search_emails.py \
       --query "nemoclaw" --since 7d           # {"ok": true, "count": N, ...}
+
+$ openshell sandbox exec --name hermes-direct -- \
+    /usr/bin/python3 /sandbox/.hermes-data/skills/tavily-web-research/scripts/query_tavily.py \
+      search --query "latest OpenShell gateway docs" --max-results 3
 ```
 
 > **Note 1:** `openshell sandbox exec` requires `--name <SANDBOX>` and a `--` separator before the command — without them, the sandbox name is parsed as the command itself (`hermes-direct: command not found`).

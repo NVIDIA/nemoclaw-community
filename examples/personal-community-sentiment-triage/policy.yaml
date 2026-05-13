@@ -204,3 +204,22 @@ network_policies:
     - path: /usr/local/bin/hermes
     - path: /opt/hermes/.venv/bin/hermes
     - path: /opt/hermes/.venv/bin/python
+  tavily:
+    name: tavily
+    endpoints:
+    - host: api.tavily.com
+      port: 443
+      protocol: rest
+      tls: terminate
+      enforcement: enforce
+      rules:
+      - allow:
+          method: POST
+          path: /search
+      - allow:
+          method: POST
+          path: /extract
+    binaries:
+    - path: /usr/bin/python3
+    - path: /usr/bin/python3.13
+    - path: /opt/hermes/.venv/bin/python

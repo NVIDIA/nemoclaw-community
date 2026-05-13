@@ -103,6 +103,10 @@ if [[ -n "${NEMOCLAW_MODEL:-}" ]]; then
   sed -i -e "s|^ARG NEMOCLAW_MODEL=.*|ARG NEMOCLAW_MODEL=$NEMOCLAW_MODEL|" "$STAGED_DOCKERFILE"
 fi
 
+if [[ -n "${TAVILY_API_KEY:-}" ]]; then
+  sed -i -e "s|^ARG TAVILY_ENABLED=.*|ARG TAVILY_ENABLED=1|" "$STAGED_DOCKERFILE"
+fi
+
 # Phoenix telemetry — flip ENABLE_NEMO_FLOW=1 so the Dockerfile installs
 # nemo-flow==0.1.0 from PyPI and applies the Hermes integration patch.
 if [[ -n "${PHOENIX_COLLECTOR_ENDPOINT:-}" ]]; then
@@ -118,6 +122,7 @@ PROVIDER_FLAGS=(--provider "$SANDBOX_NAME-outlook")
 [[ -n "${SLACK_BOT_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-slack-bridge")
 [[ -n "${SLACK_APP_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-slack-app")
 [[ -n "${GITHUB_TOKEN:-}" || -n "${GH_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-github")
+[[ -n "${TAVILY_API_KEY:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-tavily")
 
 # ── Create the sandbox ─────────────────────────────────────────────────
 # `openshell sandbox create` proxies the running sandbox's stdout to the

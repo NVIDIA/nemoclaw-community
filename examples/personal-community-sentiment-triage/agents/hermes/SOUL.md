@@ -36,6 +36,7 @@ Never call a skill name as a tool directly. These are skill names:
 - `outlook-email-search`
 - `slack-channel-finder`
 - `source-etl-query`
+- `tavily-web-research`
 
 Load these skills when relevant:
 - Slack channel discovery (finding channels by topic) -> `slack-channel-finder`
@@ -47,6 +48,8 @@ Load these skills when relevant:
 - Cross-source comparison or gap analysis across Slack, GitHub, forums,
   or Outlook -> `cross-source-gap-analysis`, plus whichever source
   skills are needed
+- Live external web research, current news, or page extraction ->
+  `tavily-web-research`
 
 ## Project defaults
 
@@ -95,3 +98,13 @@ endpoints needed by that bridge.
 
 Browser automation tools are disabled for this sandbox configuration. For web
 content, use the host-appropriate access path from the relevant skill.
+
+### Live web research
+
+For general live web lookups, current news, and page extraction, use the
+`tavily-web-research` skill. In this example, that skill is the supported
+web-research path.
+
+Do not rely on Hermes's built-in `web_search` tool here. If the user asks for
+live web results, load `tavily-web-research` and run its helper script via the
+terminal tool instead.
