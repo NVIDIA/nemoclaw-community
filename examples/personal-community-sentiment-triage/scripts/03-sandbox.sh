@@ -103,14 +103,26 @@ if [[ -n "${NEMOCLAW_MODEL:-}" ]]; then
   sed -i -e "s|^ARG NEMOCLAW_MODEL=.*|ARG NEMOCLAW_MODEL=$NEMOCLAW_MODEL|" "$STAGED_DOCKERFILE"
 fi
 
-# Phoenix telemetry — flip ENABLE_NEMO_FLOW=1 so the Dockerfile installs
-# nemo-flow==0.1.0 from PyPI and applies the Hermes integration patch.
-if [[ -n "${PHOENIX_COLLECTOR_ENDPOINT:-}" ]]; then
-  echo "Phoenix endpoint: $PHOENIX_COLLECTOR_ENDPOINT — enabling NeMo-Flow telemetry"
+# NeMo-Flow toggle — explicit ENABLE_NEMO_FLOW=1 in .env opts into the
+# whole stack (pip install, sitecustomize patches, runtime ENV gates).
+# Default 0 keeps the image lean and matches upstream-unpatched behavior.
+# PHOENIX_COLLECTOR_ENDPOINT is independent: when nemo-flow is enabled,
+# the endpoint controls where OpenInference traces ship; without nemo-flow
+# the endpoint is unused.
+ENABLE_NEMO_FLOW="${ENABLE_NEMO_FLOW:-0}"
+if [[ "$ENABLE_NEMO_FLOW" == "1" ]]; then
+  echo "ENABLE_NEMO_FLOW=1 — patching Dockerfile to install nemo-flow + observability"
+  if [[ -n "${PHOENIX_COLLECTOR_ENDPOINT:-}" ]]; then
+    echo "  Phoenix endpoint: $PHOENIX_COLLECTOR_ENDPOINT"
+  else
+    echo "  PHOENIX_COLLECTOR_ENDPOINT not set — nemo-flow installed but no OTLP target"
+  fi
   sed -i \
     -e "s|^ARG ENABLE_NEMO_FLOW=.*|ARG ENABLE_NEMO_FLOW=1|" \
-    -e "s|^ARG PHOENIX_COLLECTOR_ENDPOINT=.*|ARG PHOENIX_COLLECTOR_ENDPOINT=$PHOENIX_COLLECTOR_ENDPOINT|" \
+    -e "s|^ARG PHOENIX_COLLECTOR_ENDPOINT=.*|ARG PHOENIX_COLLECTOR_ENDPOINT=${PHOENIX_COLLECTOR_ENDPOINT:-}|" \
     "$STAGED_DOCKERFILE"
+else
+  echo "ENABLE_NEMO_FLOW=0 (or unset) — skipping nemo-flow install and observability patches"
 fi
 
 # ── Build provider flags from what 02-providers.sh actually created ────

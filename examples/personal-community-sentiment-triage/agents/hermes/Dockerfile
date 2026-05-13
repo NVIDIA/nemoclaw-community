@@ -157,22 +157,20 @@ COPY agents/hermes/bridges/ /usr/local/lib/nemoclaw-bridges/
 # Install under /usr/local/lib so Landlock's read_only /usr rule permits
 # the sandbox process to read both the decode proxy and preload files.
 COPY agents/hermes/generate-config.ts /opt/nemoclaw-generate-config.ts
-RUN mkdir -p /usr/local/lib/nemoclaw-slack-shims
+RUN mkdir -p /usr/local/lib/nemoclaw-slack-shims/patches
 COPY agents/hermes/decode-proxy.py /usr/local/lib/nemoclaw-slack-shims/decode-proxy.py
-COPY agents/hermes/discord-preload/ /usr/local/lib/nemoclaw-slack-shims/discord-preload/
-# Chain-load nemoclaw-patches.py beside the discord-preload sitecustomize so
-# Python imports a single sitecustomize but all patch sets run. Without this:
-# nemoclaw-patches.py is copied to ${PY_SITE_DIR}/sitecustomize.py when
-# ENABLE_NEMO_FLOW=1 (see line ~134), but PYTHONPATH puts discord-preload/
-# first on sys.path so Python imports discord-preload/sitecustomize.py and
-# never loads the patches bundle — silently shadowing the httpx transport
-# fix, Slack catch-all, and NeMo-Flow session finalization patches. The
-# nemo-flow meta_path hook in the bundle is a no-op when nemo-flow isn't
-# installed, so this COPY runs unconditionally.
-COPY agents/hermes/patches/nemoclaw-patches.py /usr/local/lib/nemoclaw-slack-shims/discord-preload/nemoclaw_patches.py
+# Runtime sitecustomize patches: agents/hermes/patches/sitecustomize.py is
+# the entry point Python imports (because nemoclaw-slack-shims/patches/ is
+# first on PYTHONPATH); it chain-loads nemoclaw_patches.py for the httpx
+# transport fix, Slack catch-all, and NeMo-Flow on_session_end finalization.
+# Both files live together in patches/ to make the relationship obvious.
+# Note: nemoclaw-patches.py (with a hyphen) is renamed to nemoclaw_patches.py
+# (with an underscore) at COPY time so it's a valid Python module name.
+COPY agents/hermes/patches/sitecustomize.py /usr/local/lib/nemoclaw-slack-shims/patches/sitecustomize.py
+COPY agents/hermes/patches/nemoclaw-patches.py /usr/local/lib/nemoclaw-slack-shims/patches/nemoclaw_patches.py
 RUN chmod 755 /usr/local/lib/nemoclaw-slack-shims/decode-proxy.py \
-    && find /usr/local/lib/nemoclaw-slack-shims/discord-preload -type d -exec chmod 755 {} + \
-    && find /usr/local/lib/nemoclaw-slack-shims/discord-preload -type f -exec chmod 444 {} +
+    && find /usr/local/lib/nemoclaw-slack-shims/patches -type d -exec chmod 755 {} + \
+    && find /usr/local/lib/nemoclaw-slack-shims/patches -type f -exec chmod 444 {} +
 
 # NOTE: This example removes the upstream NemoClaw `COPY nemoclaw-blueprint/`
 # step. Nothing in the Hermes runtime (start.sh, plugin/, bridges/, sidecars/,
