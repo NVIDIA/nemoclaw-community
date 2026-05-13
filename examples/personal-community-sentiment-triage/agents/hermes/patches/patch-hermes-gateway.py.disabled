@@ -1,7 +1,36 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Patch Hermes gateway Slack UX inside the sandbox image."""
+"""Patch Hermes gateway Slack UX inside the sandbox image.
+
+STATUS: PARKED / DISABLED. The `.disabled` filename suffix prevents
+accidental loading. To re-enable, rename to `patch-hermes-gateway.py` and
+re-add the COPY + RUN lines to agents/hermes/Dockerfile (they used to live
+right after the COPY of decode-proxy.py; see git history for the exact
+shape — the build invoked `python3 /opt/nemoclaw-patch-hermes-gateway.py`).
+
+WHY IT'S PARKED:
+This file patches `/opt/hermes/gateway/platforms/slack.py` via brittle
+text replacement (`replace_once` below). The new hermes-sandbox-base
+image's slack.py may have drifted from the snippet matched in `old =`
+below, in which case the build will hard-fail with
+`Expected snippet not found in /opt/hermes/gateway/platforms/slack.py`.
+Before re-enabling, verify the snippet still matches.
+
+WHAT IT ADDS (vs upstream Hermes):
+1. ❌ reaction on rejected messages — gives non-allowlisted Slack users
+   visible feedback that their DM was dropped (upstream silently ignores).
+2. 🤔 instead of 👀 as the "thinking" reaction.
+3. try/finally around `handle_message` so the thinking-reaction always
+   gets cleaned up even if the handler raises.
+
+WHAT YOU LOSE BY LEAVING IT DISABLED:
+ONLY the UX feedback (no ❌), the emoji change (still 👀), and the small
+cleanup bugfix. Allowlist *enforcement* itself is still active because
+hermes' upstream Slack gateway honors SLACK_ALLOWED_USERS natively in
+its `_is_user_authorized` check (see generate-config.ts:32 for how that
+env var is wired into ~/.hermes/.env at build time).
+"""
 
 import site
 from pathlib import Path
