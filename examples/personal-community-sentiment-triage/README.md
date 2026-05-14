@@ -168,6 +168,8 @@ You also need a running Docker daemon. If you haven't already, register an Azure
 application and a dedicated agent mailbox per [docs/set-up-outlook-bridge.md](docs/set-up-outlook-bridge.md)
 — that's a one-time setup that produces your `OUTLOOK_CLIENT_ID` and `OUTLOOK_TENANT_ID`.
 
+This example will download and install additional third-party open source software projects. Review the license terms of these open source projects before use. The repository-level `THIRD-PARTY-NOTICES` file tracks the expected inventory.
+
 ### Phase 2 — Pre-populate `.env` with what you know upfront
 
 ```console

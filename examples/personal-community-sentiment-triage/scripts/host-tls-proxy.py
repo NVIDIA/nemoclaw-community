@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Small HTTP reverse proxy for host-side TLS endpoints.
 
 For use with local OpenShell gateways that cannot validate certificates issued

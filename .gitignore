@@ -1,0 +1,43 @@
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+secrets/
+credentials.json
+token.json
+*.token
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+.uv/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# OpenShell/NemoClaw local artifacts
+.Dockerfile.staged
+.snapshots/
+docker-compose.override.yml
+docker-compose.override.yaml
+
+# OS/editor noise
+.DS_Store
+.vscode/
+*.swp
+*.swo
+*.bak
+*.orig
+*~

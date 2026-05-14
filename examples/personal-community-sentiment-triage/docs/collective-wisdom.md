@@ -95,17 +95,11 @@ User A sends three prompts in the same DM thread to `@<your-bot>`, each narrowin
 
 The agent will pick its own structure — probably calls `source-etl-query` and replies with prose plus some bullets. Read it. Decide what you'd want every day.
 
-**Preview**
-![Preview of Step 1, Prompt 1.1](../assets/collective_wisdom_demo/Step%201,%20Prompt%201.1.png)
-
 **Prompt 1.2 — pin down the format:**
 
 > That's good but too long. Give me exactly 5 top issues and 3 discussions, each with the issue number, title, state, the GitHub URL, and a one-line "why it matters". Open with a bold header line `**NemoClaw Daily Issue Digest — {date}, last 7 days**` and close with `**Bottom line:**` in 2-3 sentences. No flowing prose anywhere else.
 
 The reply should now look exactly like the format you want every day. This is the format you're about to crystallize as a skill.
-
-**Preview**
-![Preview of Step 1, Prompt 1.2](../assets/collective_wisdom_demo/Step%201,%20Prompt%201.2.png)
 
 **Prompt 1.3 — express the desire, leave the mechanism to the agent:**
 
@@ -126,15 +120,9 @@ Whatever path you take, what should land on disk afterward is a new directory un
 
 **This proves:** the agent can recognize a "make this repeatable for me and others" moment and durably encode the format from a conversational specification.
 
-**Preview**
-![Preview of Step 1, Prompt 1.3](../assets/collective_wisdom_demo/Step%201,%20Prompt%201.3.png)
-
 ### Step 2 — Verify the new skill is on disk and loaded
 
 The agent picked its own name and its own organizational layout — for example, it might place the skill flat at `skills/<name>/SKILL.md`, or it might categorize it under `skills/<category>/<name>/SKILL.md`. Both are fine: Hermes' skill scanner walks the skills tree recursively (see the `rglob("SKILL.md")` call in `agent/skill_commands.py` — searchable via [github.com/NVIDIA/NemoClaw](https://github.com/NVIDIA/NemoClaw)), so any depth works, and skills are identified by their YAML `name:` field rather than their directory path. Three short sub-steps: **find** → **inspect / capture** → **confirm gateway**.
-
-**Preview**
-![Verifying the skill](../assets/collective_wisdom_demo/Step%202.png)
 
 #### 2a — Find the new SKILL.md
 
@@ -256,9 +244,6 @@ Wait ~30s for the bridge to reply by email.
 Expected: the email reply opens with `**NemoClaw Daily Issue Digest — {date}, last 3 day(s)**`, contains exactly 5 issue bullets and 3 discussion/forum bullets, and closes with `**Bottom line:**` followed by 2-3 sentences. Actual issue numbers and titles are pulled live from the mirror — they will be specific real `NVIDIA/NemoClaw` issues, not placeholders.
 
 **This proves:** a different user, on a different channel, who never saw the seeding conversation, gets the same output shape — and got there from natural language, not the skill's internal name. The skill, not the conversation, holds the format.
-
-**Preview**
-![Preview of Outlook Verification](../assets/collective_wisdom_demo/Step%207,%20Outlook.png)
 
 ### Step 8 — Cross-verify on Slack
 

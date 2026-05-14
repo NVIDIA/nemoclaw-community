@@ -1,0 +1,196 @@
+THIRD-PARTY SOFTWARE NOTICES
+
+This file lists third-party software and services used by NemoClaw Community
+examples. It is maintained for attribution and open-source review readiness.
+
+================================================================================
+Docker Base Images
+================================================================================
+
+Image: ghcr.io/nvidia/nemoclaw/hermes-sandbox-base
+License: See the image source and included notices
+URL: https://github.com/NVIDIA/nemoclaw-community
+
+Image: python:3.12-slim
+License: Python Software Foundation License and Debian component licenses
+URL: https://hub.docker.com/_/python
+
+Image: python:3.11-slim
+License: Python Software Foundation License and Debian component licenses
+URL: https://hub.docker.com/_/python
+
+Image: postgres:16
+License: PostgreSQL License and Debian component licenses
+URL: https://hub.docker.com/_/postgres
+
+Image: ghcr.io/astral-sh/uv:latest
+License: Apache-2.0 OR MIT
+URL: https://github.com/astral-sh/uv
+
+================================================================================
+Docker Compose Images
+================================================================================
+
+Image: arizephoenix/phoenix:latest
+License: Elastic License 2.0
+URL: https://github.com/Arize-ai/phoenix
+
+Image: postgrest/postgrest:v13.0.4
+License: MIT
+URL: https://github.com/PostgREST/postgrest
+
+================================================================================
+System Packages
+================================================================================
+
+Package: bash
+License: GPL-3.0+
+URL: https://packages.debian.org/
+
+Package: binutils
+License: GPL-3.0+
+URL: https://packages.debian.org/
+
+Package: ca-certificates
+License: MPL-2.0
+URL: https://packages.debian.org/
+
+Package: gh (GitHub CLI)
+License: MIT
+URL: https://github.com/cli/cli
+
+Package: git
+License: GPL-2.0
+URL: https://git-scm.com/
+
+Package: libpython
+License: Python Software Foundation License
+URL: https://packages.debian.org/
+
+Package: postgresql-client
+License: PostgreSQL License
+URL: https://packages.debian.org/
+
+Package: python3-pip
+License: MIT
+URL: https://packages.debian.org/
+
+Package: tzdata
+License: Public domain / BSD-style notices
+URL: https://packages.debian.org/
+
+================================================================================
+Python Packages
+================================================================================
+
+Package: aiohttp
+License: Apache-2.0 AND MIT
+URL: https://github.com/aio-libs/aiohttp
+
+Package: cryptography
+License: Apache-2.0 OR BSD-3-Clause
+URL: https://github.com/pyca/cryptography
+
+Package: dlt[postgres]
+License: Apache-2.0
+URL: https://github.com/dlt-hub/dlt
+
+Package: hermes-agent
+License: MIT
+URL: https://github.com/NousResearch/hermes-agent
+
+Package: httpx
+License: BSD-3-Clause
+URL: https://github.com/encode/httpx
+
+Package: markdown-it-py
+License: MIT
+URL: https://github.com/executablebooks/markdown-it-py
+
+Package: meltanolabs-tap-github
+License: Apache-2.0
+URL: https://github.com/MeltanoLabs/tap-github
+
+Package: meltanolabs-target-postgres
+License: MIT
+URL: https://github.com/MeltanoLabs/target-postgres
+
+Package: msal
+License: MIT
+URL: https://github.com/AzureAD/microsoft-authentication-library-for-python
+
+Package: nemo-flow
+License: Apache-2.0
+URL: https://github.com/NVIDIA/NeMo-Flow
+
+Package: psycopg[binary]
+License: LGPL-3.0-only
+URL: https://github.com/psycopg/psycopg
+
+Package: pyinstaller
+License: GPL-2.0-or-later with bootloader exception
+URL: https://github.com/pyinstaller/pyinstaller
+
+Package: python-telegram-bot
+License: LGPL-3.0-only
+URL: https://github.com/python-telegram-bot/python-telegram-bot
+
+Package: pyyaml
+License: MIT
+URL: https://github.com/yaml/pyyaml
+
+Package: slack-bolt
+License: MIT
+URL: https://github.com/slackapi/bolt-python
+
+================================================================================
+GitHub Actions
+================================================================================
+
+Action: actions/checkout@v4
+License: MIT
+URL: https://github.com/actions/checkout
+
+Action: actions/setup-python@v5
+License: MIT
+URL: https://github.com/actions/setup-python
+
+Action: gsactions/dco-check@v1.1.1
+License: ISC
+URL: https://github.com/gsactions/dco-check
+
+================================================================================
+External Source Archives And Services
+================================================================================
+
+Project: NousResearch/hermes-agent source archive
+License: MIT
+URL: https://github.com/NousResearch/hermes-agent
+
+Project: NVIDIA/NeMo-Flow patch archive
+License: Apache-2.0
+URL: https://github.com/NVIDIA/NeMo-Flow
+
+Service: GitHub API
+Terms: See provider terms
+URL: https://docs.github.com/
+
+Service: Microsoft Graph
+Terms: See provider terms
+URL: https://learn.microsoft.com/graph/
+
+Service: Slack API
+Terms: See provider terms
+URL: https://api.slack.com/
+
+Service: NVIDIA Developer Forums
+Terms: See provider terms
+URL: https://forums.developer.nvidia.com/
+
+================================================================================
+Assets
+================================================================================
+
+Asset: NVIDIA header image under examples/personal-community-sentiment-triage/assets/
+Owner: NVIDIA
+Notes: Personal/workspace screenshots are intentionally not distributed in this repository.

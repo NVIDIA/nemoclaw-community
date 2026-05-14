@@ -46,6 +46,6 @@ docker run --rm \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=postgres \
   -e POSTGRES_DB=postgres \
-  -e GITHUB_TOKEN=ghp_xxx \
+  -e GITHUB_TOKEN='<github-token>' \
   github-etl
 ```
