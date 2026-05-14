@@ -87,13 +87,17 @@ class ProxyHandler(BaseHTTPRequestHandler):
         return self.rfile.read(int(length))
 
     def _forward_headers(self, body_len: int) -> dict[str, str]:
+        # Lowercase keys: http.client doesn't dedup, and duplicate Content-Length
+        # (case-mismatched inbound + proxy override) is an RFC 7230 §3.3.3
+        # violation that nginx upstreams reject with 400.
         headers: dict[str, str] = {}
         for key, value in self.headers.items():
-            if key.lower() not in HOP_BY_HOP_HEADERS and key.lower() != "host":
-                headers[key] = value
-        headers["Host"] = self.upstream_host
-        headers["Content-Length"] = str(body_len)
-        headers["Connection"] = "close"
+            lk = key.lower()
+            if lk not in HOP_BY_HOP_HEADERS:
+                headers[lk] = value
+        headers["host"] = self.upstream_host
+        headers["content-length"] = str(body_len)
+        headers["connection"] = "close"
         return headers
 
     def _connect(self) -> http.client.HTTPConnection:
