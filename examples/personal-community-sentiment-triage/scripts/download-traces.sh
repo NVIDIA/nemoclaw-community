@@ -12,13 +12,12 @@
 # on tear-down — so capture before destroying the sandbox if you want to
 # keep traces from that session.
 #
-# When traces actually appear: only when the `nemo_flow` Python package is
-# importable inside the sandbox, which the Dockerfile pip-installs when
-# bring-up.sh flips ENABLE_NEMO_FLOW=1. That flip is gated on
-# PHOENIX_COLLECTOR_ENDPOINT being set in .env at bring-up time. If neither
-# was set, /tmp/atif still exists (start.sh mkdir -p's it unconditionally)
-# but stays empty — this script will still produce a tarball, with a note
-# in the manifest explaining why it's empty.
+# When traces actually appear: NeMo-Flow is now installed unconditionally
+# by the Dockerfile, so the agent writes ATIF records to /tmp/atif on every
+# turn. If the directory is still empty when this script runs, the most
+# likely cause is that the agent hasn't had a turn yet — interact with it
+# (e.g. send a DM or email) and try again. The tarball is still produced
+# in the empty case, with a corresponding note in the manifest.
 #
 # Output: $EXAMPLE_DIR/.traces/atif-{ISO-timestamp}.tar.gz plus a sidecar
 # manifest.json. Tarball path is printed on stdout so callers can capture:
@@ -97,10 +96,9 @@ excluded = [x for x in sys.argv[7:] if x]
 file_count = int(file_count)
 if file_count == 0:
     note = (
-        "ATIF directory was empty. Likely causes: NeMo-Flow not enabled "
-        "(PHOENIX_COLLECTOR_ENDPOINT unset at bring-up), or the agent has "
-        "not yet produced any traces. See agents/hermes/start.sh for the "
-        "trace write path."
+        "ATIF directory was empty. The agent has likely not had a turn yet "
+        "since bring-up — interact with it (DM, email, etc.) and re-run. "
+        "See agents/hermes/start.sh for the trace write path."
     )
 else:
     note = "File-level credential filter applied. Inspect with `tar tzf <path>`."

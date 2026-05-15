@@ -120,12 +120,14 @@ if [[ -n "${NEMOCLAW_MODEL:-}" ]]; then
   sed -i -e "s|^ARG NEMOCLAW_MODEL=.*|ARG NEMOCLAW_MODEL=$NEMOCLAW_MODEL|" "$STAGED_DOCKERFILE"
 fi
 
-# Phoenix telemetry — flip ENABLE_NEMO_FLOW=1 so the Dockerfile installs
-# nemo-flow==0.1.0 from PyPI and applies the Hermes integration patch.
+# Phoenix endpoint — bake into the image so the agent emits OpenInference
+# traces to the collector. NeMo-Flow itself is now installed unconditionally
+# by the Dockerfile (ATIF traces always written to /tmp/atif/), so this
+# block is Phoenix-specific: no point overwriting the ARG with empty when
+# the user hasn't configured a collector.
 if [[ -n "${PHOENIX_COLLECTOR_ENDPOINT:-}" ]]; then
-  echo "Phoenix endpoint: $PHOENIX_COLLECTOR_ENDPOINT — enabling NeMo-Flow telemetry"
+  echo "Phoenix endpoint: $PHOENIX_COLLECTOR_ENDPOINT — enabling OpenInference egress"
   sed -i \
-    -e "s|^ARG ENABLE_NEMO_FLOW=.*|ARG ENABLE_NEMO_FLOW=1|" \
     -e "s|^ARG PHOENIX_COLLECTOR_ENDPOINT=.*|ARG PHOENIX_COLLECTOR_ENDPOINT=$PHOENIX_COLLECTOR_ENDPOINT|" \
     "$STAGED_DOCKERFILE"
 fi
