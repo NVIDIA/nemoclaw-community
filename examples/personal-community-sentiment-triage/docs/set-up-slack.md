@@ -31,7 +31,7 @@ The agent uses Slack via **Socket Mode** — there's no public URL or webhook to
 ## Prerequisites
 
 - A Slack workspace where you have permission to create apps. (For most workspaces this means workspace-admin or App Manager rights; check your workspace settings if you're unsure.)
-- A dedicated user account in that workspace (yours is fine for personal use). Its **member ID** becomes `SLACK_ALLOWED_IDS` — the agent only responds to users on this allowlist.
+- A dedicated user account in that workspace (yours is fine for personal use). Its **member ID** can become `SLACK_ALLOWED_IDS` if you want to restrict access; leave the variable empty to let anyone in the workspace message the bot.
 
 ## Create the Slack App from the Bundled Manifest
 
@@ -85,16 +85,16 @@ Save it for the `.env` step below — this is `SLACK_APP_TOKEN`.
 
 Save it — this is `SLACK_BOT_TOKEN`.
 
-## Find Your Slack User ID for `SLACK_ALLOWED_IDS`
+## (Optional) Find Your Slack User ID for `SLACK_ALLOWED_IDS`
 
-The agent only responds to users on the allowlist; this is the primary access control.
+`SLACK_ALLOWED_IDS` is an optional allowlist. **Leaving it empty lets anyone in the workspace DM or @-mention the bot** — fine for personal workspaces and small trusted teams. Set it when you need to restrict access to specific users.
 
 1. In the Slack desktop or web client, click your name or avatar.
 2. Click **Profile**.
 3. Click the **⋮** (more) menu, then **Copy member ID**.
 4. The ID looks like `U0887Q5UVV4`.
 
-To allow multiple users, you'll comma-separate their IDs in `.env` (for example `U0887Q5UVV4,U1XYZABC123`).
+To allow multiple users, comma-separate their IDs in `.env` (for example `U0887Q5UVV4,U1XYZABC123`).
 
 ## Populate `.env`
 
@@ -103,6 +103,7 @@ Open `.env` at the example root and uncomment / set the three Slack values:
 ```bash
 SLACK_BOT_TOKEN=xoxb-<your bot token from OAuth & Permissions>
 SLACK_APP_TOKEN=xapp-<your app-level token from Socket Mode>
+# Optional — leave empty to allow anyone in the workspace
 SLACK_ALLOWED_IDS=U0887Q5UVV4
 ```
 
@@ -140,7 +141,7 @@ $ tail -f /sandbox/.hermes/logs/hermes.log
 If the bot does not respond, verify that:
 
 - `openshell provider list` shows both `<sandbox>-slack-bridge` and `<sandbox>-slack-app`.
-- Your Slack member ID matches one of the entries in `SLACK_ALLOWED_IDS` exactly (Slack IDs are case-sensitive and start with `U`).
+- If `SLACK_ALLOWED_IDS` is set, your Slack member ID matches one of its entries exactly (Slack IDs are case-sensitive and start with `U`). If it's empty, this check doesn't apply — anyone in the workspace can message the bot.
 - The bot user is installed in your workspace (re-check **OAuth & Permissions** in your app's settings).
 - Socket Mode is still enabled (re-check **Socket Mode** in your app's settings).
 
