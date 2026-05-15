@@ -17,7 +17,7 @@ Use this skill to query the host-side REST bridge served by `source-etls`.
 ## Access model
 
 - Use the helper script in this skill.
-- Do not hand-write REST queries unless the user explicitly asks for them.
+- Prefer the helper scripts over custom REST queries
 - The sandbox should treat this bridge as the default source for mirrored GitHub
   and forum data in the NVIDIA setup path.
 

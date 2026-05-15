@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 import urllib.error
@@ -24,8 +23,10 @@ import urllib.parse
 import urllib.request
 from typing import Any, Dict, Optional
 
+from slack_api_common import get_slack_bot_token
 
-API_BASE = "https://api.slack.com/api"
+
+API_BASE = "https://slack.com/api"
 
 
 def api_call(token: str, method: str, params: Dict[str, str]) -> Dict[str, Any]:
@@ -144,7 +145,7 @@ def main() -> int:
     parser.add_argument("--page-cap", type=int, default=25)
     args = parser.parse_args()
 
-    token = os.environ.get("SLACK_BOT_TOKEN", "").strip()
+    token = get_slack_bot_token()
     if not token:
         print(json.dumps({"ok": False, "error": "missing_token"}))
         return 1

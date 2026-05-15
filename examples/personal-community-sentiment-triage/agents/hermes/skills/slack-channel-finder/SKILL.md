@@ -1,48 +1,39 @@
 ---
 name: slack-channel-finder
-description: Discover Slack channels by topic, team, or domain and infer what each channel is for. Use when the user wants to find which channels are relevant to a topic ("which channels does the inference team use", "where do we discuss deployments") or to understand what an unfamiliar channel is for. Pairs with slack-channel-summarizer for follow-up reads.
+description: Discover Slack channels by topic, team, or domain and determine the channel ID.
 ---
 
 # slack-channel-finder
 
-Use this skill to discover Slack channels matching a topic, team, or domain,
-and to infer what each channel is for.
+Use this skill to discover Slack channels ID by name or topic
 
 ## When to use
 
-- "Which channels does the X team use?"
-- "Find me Slack channels about Y"
-- "Where do we discuss Z?"
-- "What is #cryptic-channel-name for?"
-- The user wants to discover channels they don't already know by name
-- The user wants to understand an unfamiliar channel before reading history
+Do NOT use this skill when the user has already provided a slack channel ID 
 
-Do NOT use this skill when the user has already named a specific channel and
-just wants its history summarized — use slack-channel-summarizer instead.
+## Instructions
 
-## Access model
+- Because of the sandbox, the best path is to use the provided helper scripts
+- Avoid writing custom curl or python commands
+- Only customize if the existing scrips fail, and in that case follow their 
+authorization patterns closely
+- Be aware that slack access is through a Slack bot, whose token might have certain
+scopes or might be missing scopes
 
-- The bot token is available as `openshell:resolve:env:SLACK_BOT_TOKEN`.
-- **Confirmed granted scopes**: `channels:history`, `channels:read`, `users:read`,
-  `app_mentions:read`, `chat:write`, `reactions:write`
-- **Scopes not in this token**: `pins:read`, `bookmarks:read`, `groups:read`
-  - `pins.list` and `bookmarks.list` will return `missing_scope`; the scripts
-    handle this gracefully and return empty lists — treat as normal
-  - Private channels (`groups:read`) are not accessible; discovery is
-    public-only
-- **Two discovery modes**:
-  - `users.conversations` — channels the bot is a **member** of (fast, restricted)
-  - `conversations.list` — **all public** channels in the workspace (broader, used
-    by `find_channel.py` and `list_accessible_channels.py --all-public`)
-- History, thread replies, and user info all work with the current token.
-- `search.messages` requires a user token (not a bot token) — not available.
 
 ## Scripts
 
-All scripts are at:
+Check for scripts at:
 ```
 /sandbox/.hermes-data/skills/slack-channel-finder/scripts/
 ```
+
+or at 
+
+```
+/sandbox/.hermes/skills/slack-channel-finder/scripts
+```
+
 
 | Script | Purpose |
 |--------|---------|
@@ -52,7 +43,24 @@ All scripts are at:
 
 ## Procedure
 
-### 1. Search for candidate channels
+
+### 1. Distinguish summary requests from discovery requests
+
+- If the user is asking to summarize or inspect a specific Slack channel, and
+  they likely know the channel already but did not provide the exact name or
+  ID, ask them for the channel name.
+- If the user is asking you to help find which Slack channel is relevant to a
+  topic, team, or project, use the discovery flow below instead of asking for a
+  channel name first.
+
+### 2. If you are given a channel name, start with `list_accessible_channels.py` and try to match channel name to ID
+
+/usr/bin/python3 .../list_accessible_channels.py
+
+
+### 3. If you are unclear on what channel the user is talking about, ask them for the channel name
+
+### 4. If the user wants help finding a channel, attempt to find one based on the user's topic or query
 
 For topic or team queries, use `find_channel.py` — it searches all discoverable
 public channels (not just bot-member channels) and returns scored matches:
@@ -100,7 +108,9 @@ and thread signals are available only for member channels.
 | `--member-only` | Restrict to bot-member channels only |
 | `--min-score N` | Minimum score to include (default 1) |
 
-### 2. List all channels (when you need the full inventory)
+## Information on other scripts
+
+###  List all channels (when you need the full inventory)
 
 For cases where you need the complete channel list rather than a scored search:
 
@@ -127,7 +137,7 @@ hasn't been added — you can see name/topic/purpose but NOT read their history.
 | `--include-archived` | Include archived channels |
 | `--types TYPES` | Comma-separated types (default `public_channel`) |
 
-### 3. Describe a channel in depth
+### Describe a channel in depth
 
 When you need to understand a specific channel — what it's for, who's active, what
 they're discussing — use `describe_slack_channel.py`:
@@ -208,7 +218,10 @@ The `confidence` field (`high`, `medium`, `low`) reflects how many independent
 signals were available. For `low`-confidence channels, hedge ("appears to be
 about ...") or ask the user to confirm.
 
-### 4. Read thread content
+
+## Other 
+
+###  Read thread content
 
 When a message has a high `reply_count` and you need the actual discussion
 content, use `--replies` on `describe_slack_channel.py` or directly call
@@ -216,14 +229,11 @@ content, use `--replies` on `describe_slack_channel.py` or directly call
 
 ```bash
 # Via describe (expands all threads in the sampled history)
-/usr/bin/python3 .../describe_slack_channel.py --channel-id C0ASZUN3L5D --replies --replies-limit 10
-
-# Direct API (for a specific thread you already know the ts for)
-curl -s "https://slack.com/api/conversations.replies?channel=C0ASZUN3L5D&ts=1776809496.989829&limit=20" \
-  -H "Authorization: Bearer $SLACK_BOT_TOKEN" | /usr/bin/python3 -m json.tool
+/usr/bin/python3 .../describe_slack_channel.py --channel-id [channel-id] --replies --replies-limit [n]
 ```
 
-### 5. Chain into summarization if requested
+
+### Chain into summarization if requested
 
 If the user's goal goes beyond discovery ("tell me what the X team is working
 on"), once channels are identified, hand off to `slack-channel-summarizer`
@@ -252,25 +262,3 @@ user can ask for more.
 /usr/bin/python3 .../describe_slack_channel.py --channel-id C0ASZUN3L5D --replies --resolve-users
 ```
 
-## Pitfalls
-
-- Do not claim a channel doesn't exist when the bot simply hasn't been invited.
-  `find_channel.py` searches all public channels via `conversations.list`; for
-  channels that show up there with `is_member=false`, note that history is
-  unavailable without the bot being added.
-- Do not rely solely on `topic` and `purpose` — many channels leave them empty
-  or stale. Channel name and message themes are usually stronger signals.
-- Do not return archived channels unless the user explicitly asks for them.
-- Do not invent channel IDs, names, or descriptions. Only return what the API
-  actually returned.
-- `pins.list` and `bookmarks.list` require `pins:read` and `bookmarks:read`
-  scopes respectively. If the token lacks them, the scripts return empty lists —
-  this is handled gracefully and is not an error to surface to the user.
-- Do not run `describe_slack_channel.py` in full mode across many channels.
-  Use `--no-history` for breadth scans, full mode for the final 1-3 candidates.
-- Bot messages (GitHub, CI integrations) dominate volume in engineering channels
-  and carry no topic signal. `describe_slack_channel.py` filters them
-  automatically — `recent_human_messages` contains only real human posts.
-- `search.messages` requires a user token, not the bot token. Do not attempt it.
-- The API will 429 (rate limit) under heavy load. All scripts automatically
-  retry with the `Retry-After` backoff — do not add extra delays.

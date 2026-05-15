@@ -263,7 +263,7 @@ internal updates. Format:
 /usr/bin/python3 .../get_thread.py --conversation-id "AAQkADlhN2..."
 ```
 
-## Pitfalls
+# Pitfalls
 
 - `--body` is significantly slower — it makes one Graph request per message.
   Use it only when `preview` is insufficient.

@@ -31,13 +31,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 import time
 from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
+
+from slack_api_common import get_slack_bot_token
 
 
 SLACK_API_BASE = "https://slack.com/api"
@@ -219,7 +220,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    token = os.environ.get("SLACK_BOT_TOKEN")
+    token = get_slack_bot_token()
     if not token:
         print(json.dumps({"ok": False, "error": "missing_token"}))
         return 1

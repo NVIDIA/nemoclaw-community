@@ -13,11 +13,13 @@ Use this skill to resolve a Slack channel and read its history.
 - Review conversation history for a time range
 - Check what was discussed in a channel before answering a question
 
-## Access model
+## Instructions
 
-- The bot token is available as `openshell:resolve:env:SLACK_BOT_TOKEN`.
-- Slack Web API access is allowed from the sandbox.
-- The bot must be invited to a channel before it can read its history.
+- The best way to access slack given the sandbox is through the provided python scripts.
+- Direct curl requests, or Python scripts, are unlikely to succeed
+- The SLACK_BOT_TOKEN contains a placeholder env var that is resolved by the sandbox on egress
+- Only refer to helper scripts that actually exist in this sandbox image
+
 
 ## Procedure
 
@@ -26,33 +28,34 @@ Use this skill to resolve a Slack channel and read its history.
 If the user gives a direct Slack mention like `<#C0ALN454EH4>`, use that ID
 directly.
 
-If the user gives only a channel name, use the bundled resolver script:
+If the request comes from a tagged Slack channel and the runtime context already
+gives you the current channel ID, treat that as the resolved channel ID for
+phrases like "this channel".
 
-```bash
-/usr/bin/python3 /sandbox/.hermes-data/skills/slack-channel-summarizer/scripts/resolve_slack_channel.py --name 'CHANNEL_NAME'
-```
-
-Interpret the result this way:
-
-- `ok: true`
-  Use the returned `channel_id`.
-- `missing_private_discovery_scope`
-  Public lookup did not find the channel and private discovery by name is not
-  available with this token. Ask the user for a direct Slack channel mention or
-  a Slack channel URL.
-- `channel_not_found`
-  The channel could not be found through the allowed lookup path.
+Otherwise, use your slack channel finder skill.
 
 ### 2. Read channel history
 
-Use `conversations.history` with the resolved channel ID:
+Use the existing channel-description helper with the resolved channel ID. It
+includes recent human messages and channel metadata that are sufficient for a
+summary:
 
 ```bash
-curl -s "https://api.slack.com/api/conversations.history?channel=CHANNEL_ID&limit=15" \
-  -H "Authorization: Bearer openshell:resolve:env:SLACK_BOT_TOKEN"
+/usr/bin/python3 /sandbox/.hermes-data/skills/slack-channel-finder/scripts/describe_slack_channel.py \
+  --channel-id CHANNEL_ID --history-limit 15
 ```
 
-If needed, add `oldest=` and `latest=` to constrain the time range.
+Useful variants:
+
+```bash
+/usr/bin/python3 /sandbox/.hermes-data/skills/slack-channel-finder/scripts/describe_slack_channel.py \
+  --channel-id CHANNEL_ID --history-limit 30 --replies
+```
+
+```bash
+/usr/bin/python3 /sandbox/.hermes-data/skills/slack-channel-finder/scripts/describe_slack_channel.py \
+  --channel-id CHANNEL_ID --history-limit 15 --resolve-users
+```
 
 Interpret common failures explicitly:
 
@@ -73,12 +76,3 @@ Summarize only what the user asked for. Good defaults are:
 - main topics
 - active participants
 - decisions or action items
-
-## Pitfalls
-
-- Do not use `session_search` to discover Slack channel IDs.
-- Do not start discovery with `users.conversations?types=public_channel,private_channel`.
-- Do not say Slack access is unavailable just because `groups:read` is missing.
-  That only blocks private-channel discovery by name.
-- If the channel ID is already known, skip discovery and go straight to
-  `conversations.history`.
