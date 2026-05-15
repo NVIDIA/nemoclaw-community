@@ -34,11 +34,29 @@ source "$DIR/_lib.sh"
 
 load_env
 
-# Outlook is the focal point of this example — fail loudly if any leg is
-# missing rather than producing a sandbox that can't auth to MS Graph.
-for v in OUTLOOK_CLIENT_ID OUTLOOK_TENANT_ID OUTLOOK_SESSION_UUID; do
-  [[ -n "${!v:-}" ]] || { echo "Missing $v — populate $EXAMPLE_DIR/.env" >&2; exit 1; }
+# At least one messaging channel must be configured — without one the
+# sandbox comes up with no way for the user to reach the agent.
+if [[ -z "${OUTLOOK_CLIENT_ID:-}" && -z "${SLACK_BOT_TOKEN:-}" ]]; then
+  echo "No messaging channel configured — set Outlook (all five OUTLOOK_* vars) or Slack (SLACK_BOT_TOKEN + SLACK_APP_TOKEN) in $EXAMPLE_DIR/.env" >&2
+  exit 1
+fi
+
+# Outlook is opt-in: leave the block blank to skip it entirely. But if the
+# user has started filling it in, require *all five* — a partially-configured
+# Outlook channel would silently bake a broken bridge into the image.
+OUTLOOK_VARS=(OUTLOOK_TENANT_ID OUTLOOK_CLIENT_ID OUTLOOK_SESSION_UUID OUTLOOK_TARGET_MAILBOX OUTLOOK_REPLY_TO)
+OUTLOOK_SET=()
+OUTLOOK_MISSING=()
+for v in "${OUTLOOK_VARS[@]}"; do
+  if [[ -n "${!v:-}" ]]; then OUTLOOK_SET+=("$v"); else OUTLOOK_MISSING+=("$v"); fi
 done
+if (( ${#OUTLOOK_SET[@]} > 0 && ${#OUTLOOK_MISSING[@]} > 0 )); then
+  echo "Partial Outlook configuration in $EXAMPLE_DIR/.env" >&2
+  echo "  Set:     ${OUTLOOK_SET[*]}" >&2
+  echo "  Missing: ${OUTLOOK_MISSING[*]}" >&2
+  echo "Fill all five OUTLOOK_* vars or leave the entire block empty." >&2
+  exit 1
+fi
 
 # ── Inference provider (shared, not sandbox-prefixed) ───────────────────
 # Mirrors NemoClaw's REMOTE_PROVIDER_CONFIG.custom:
@@ -68,11 +86,13 @@ else
 fi
 
 # ── Outlook provider (3 credentials on one provider name) ───────────────
-OUTLOOK_PROVIDER="$SANDBOX_NAME-outlook"
-echo "Upserting provider $OUTLOOK_PROVIDER (3 credentials)"
-upsert_cred "$OUTLOOK_PROVIDER" generic OUTLOOK_CLIENT_ID    "$OUTLOOK_CLIENT_ID"
-upsert_cred "$OUTLOOK_PROVIDER" generic OUTLOOK_TENANT_ID    "$OUTLOOK_TENANT_ID"
-upsert_cred "$OUTLOOK_PROVIDER" generic OUTLOOK_SESSION_UUID "$OUTLOOK_SESSION_UUID"
+if [[ -n "${OUTLOOK_CLIENT_ID:-}" ]]; then
+  OUTLOOK_PROVIDER="$SANDBOX_NAME-outlook"
+  echo "Upserting provider $OUTLOOK_PROVIDER (3 credentials)"
+  upsert_cred "$OUTLOOK_PROVIDER" generic OUTLOOK_CLIENT_ID    "$OUTLOOK_CLIENT_ID"
+  upsert_cred "$OUTLOOK_PROVIDER" generic OUTLOOK_TENANT_ID    "$OUTLOOK_TENANT_ID"
+  upsert_cred "$OUTLOOK_PROVIDER" generic OUTLOOK_SESSION_UUID "$OUTLOOK_SESSION_UUID"
+fi
 
 # ── Slack providers (each on its own name, type=generic) ────────────────
 if [[ -n "${SLACK_BOT_TOKEN:-}" ]]; then

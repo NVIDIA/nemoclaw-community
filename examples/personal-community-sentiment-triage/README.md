@@ -7,7 +7,8 @@ on, struggling with, asking about, and flagging as gaps — and compares it
 against what internal developer/product teams are prioritizing, so resources
 can be aligned against actual community demand. The agent draws on signal
 from GitHub issues, NVIDIA forums, and Slack channels; you interact with it
-via Outlook email (the primary channel), optionally over Slack.
+via Outlook email and/or Slack. Outlook is the recommended primary channel,
+but either is enough on its own — at least one of the two must be configured.
 
 ## Architecture
 
@@ -179,14 +180,17 @@ $ cp .env.example .env
 Now edit `.env` and fill in everything you already have:
 
 - `COMPATIBLE_API_KEY` — your inference key
-- `OUTLOOK_TENANT_ID`, `OUTLOOK_CLIENT_ID` — from your Azure app registration
-- `OUTLOOK_TARGET_MAILBOX`, `OUTLOOK_REPLY_TO` — the agent's mailbox and your personal mailbox
+- **At least one messaging channel** — Outlook or Slack (or both):
+  - **Outlook** (recommended primary channel): set **all five** Outlook vars together, or leave the entire block empty.
+    - `OUTLOOK_TENANT_ID`, `OUTLOOK_CLIENT_ID` — from your Azure app registration
+    - `OUTLOOK_TARGET_MAILBOX`, `OUTLOOK_REPLY_TO` — the agent's mailbox and your personal mailbox
+    - `OUTLOOK_SESSION_UUID` — leave **blank for now**; Phase 4 produces it
+  - **Slack**: `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` (both required) — see [docs/set-up-slack.md](docs/set-up-slack.md). Partial Outlook configuration (some vars set, some empty) is rejected at bring-up.
 - (optional) `TOKEN_CACHE_SALT` — set to a unique random string for any deployment that
   holds real Entra sessions; leave commented for local experimentation
-- (optional) `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` / `SLACK_ALLOWED_IDS` — see [docs/set-up-slack.md](docs/set-up-slack.md)
+- (optional) `SLACK_ALLOWED_IDS` — comma-separated Slack user IDs to restrict who can DM the agent; leave empty to allow anyone in the workspace
+- (optional) `OUTLOOK_ALLOWED_SENDERS` — comma-separated allowlist of email senders the agent will respond to; leave empty to accept any sender
 - (optional) `GITHUB_TOKEN`, `PHOENIX_COLLECTOR_ENDPOINT`
-
-Leave **`OUTLOOK_SESSION_UUID` blank for now** — Phase 4 produces it.
 
 ### Phase 3 — Start host services
 
@@ -200,9 +204,12 @@ phoenix (telemetry), MS Graph token manager (Outlook OAuth broker on port 8765),
 
 These services are designed to outlive the sandbox: a `bash scripts/tear-down.sh` followed
 by another `bash scripts/bring-up.sh` does **not** require re-running this phase. Only run
-it again on a fresh checkout, or after `STOP_HOST_SERVICES=1 bash scripts/tear-down.sh`.
+it again on a fresh checkout, or after `bash scripts/tear-down.sh --stop-host-services`
+(or `--purge-host-services`).
 
 ### Phase 4 — Obtain the Outlook session UUID
+
+> **Skip this phase** if you're doing a Slack-only setup (Outlook block left empty in `.env`).
 
 The token manager (now running from Phase 3) holds delegated MSAL sessions and issues
 short-lived tokens to the credential sidecar inside the sandbox. To create a session,
@@ -282,9 +289,9 @@ re-install of Hermes with the NeMo-Flow integration patch fetched from
 | Provider name | `--type` | Credential env var | Required? |
 |---|---|---|---|
 | `compatible-endpoint` | `openai` | `COMPATIBLE_API_KEY` (or `OPENAI_API_KEY`) — passed to OpenShell as `OPENAI_API_KEY`. URL: `NEMOCLAW_ENDPOINT_URL` (or `OPENAI_BASE_URL`) → `OPENAI_BASE_URL` config. | Required for inference. If omitted, the agent has no LLM. |
-| `<sandbox>-outlook` | `generic` | `OUTLOOK_CLIENT_ID`, `OUTLOOK_TENANT_ID`, `OUTLOOK_SESSION_UUID` | Required (this example is Outlook-focused) |
-| `<sandbox>-slack-bridge` | `generic` | `SLACK_BOT_TOKEN` | Optional |
-| `<sandbox>-slack-app` | `generic` | `SLACK_APP_TOKEN` | Optional |
+| `<sandbox>-outlook` | `generic` | `OUTLOOK_CLIENT_ID`, `OUTLOOK_TENANT_ID`, `OUTLOOK_SESSION_UUID` | Optional. Created only when the Outlook block is fully populated; partial config is rejected. At least one of Outlook or Slack must be configured. |
+| `<sandbox>-slack-bridge` | `generic` | `SLACK_BOT_TOKEN` | Optional. At least one of Outlook or Slack must be configured. |
+| `<sandbox>-slack-app` | `generic` | `SLACK_APP_TOKEN` | Optional. Required if Slack is enabled (Socket Mode needs both tokens). |
 | `<sandbox>-github` | `github` | `GITHUB_TOKEN` (or `GH_TOKEN`) | Optional |
 
 The `compatible-endpoint` provider is **not** prefixed with the sandbox name — it's a
@@ -303,7 +310,6 @@ compatible-endpoint --model <NEMOCLAW_MODEL>` rather than `--provider` on sandbo
 | `COMPATIBLE_API_KEY` | (none) | Inference API key. Mirrors NemoClaw's `REMOTE_PROVIDER_CONFIG.custom`. (`OPENAI_API_KEY` is also accepted.) |
 | `TOKEN_MANAGER_HOST` | `host.openshell.internal` | Host where the MS Graph token manager is reachable from inside the sandbox. |
 | `PHOENIX_COLLECTOR_ENDPOINT` | (none) | Set to e.g. `http://host.openshell.internal:6006/v1/traces` to enable OpenInference telemetry. When set, bring-up flips `ENABLE_NEMO_FLOW=1` so the Dockerfile installs the `nemo-flow` version pinned by `NEMO_FLOW_VERSION` in the Dockerfile from PyPI and applies the Hermes integration patch (~1-2 min on first build, cached on rebuild). |
-| `DELETE_INFERENCE_PROVIDER` | `0` | If set to `1` during `tear-down.sh`, also removes the shared `compatible-endpoint` provider. |
 
 ## Verification (what success looks like)
 
@@ -348,7 +354,7 @@ typically long-lived. Opt-in flags (mutually exclusive):
 
 Manual cleanup for less-common operations:
 
-- `openshell gateway destroy --name examples-gateway` — destroy the gateway.
+- `openshell gateway destroy --name "${OPENSHELL_GATEWAY:-openshell}"` — destroy the gateway (substitute `snap-docker` if you registered it under that name).
 - `openshell provider delete compatible-endpoint` — remove the shared inference provider.
 
 To stop *just* the host services without removing the sandbox:

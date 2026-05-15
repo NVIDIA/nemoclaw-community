@@ -184,6 +184,12 @@ function main(): void {
       envLines.push(`${ALLOWED_USERS_ENV[ch]}=${ids.map(String).join(",")}`);
     }
   }
+  // When Slack is enabled but no allowlist is set, flip Hermes's
+  // SLACK_ALLOW_ALL_USERS so the gateway authorizes every workspace user
+  // instead of falling through to the pairing-code flow.
+  if (msgChannels.includes("slack") && (allowedIds.slack?.length ?? 0) === 0) {
+    envLines.push("SLACK_ALLOW_ALL_USERS=true");
+  }
   // Suppress the "no home channel" first-message prompt without setting a real channel.
   if (msgChannels.includes("slack")) {
     envLines.push("SLACK_HOME_CHANNEL=none");

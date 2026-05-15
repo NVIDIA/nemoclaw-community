@@ -35,11 +35,28 @@ source "$DIR/_lib.sh"
 
 load_env
 
-# Required input — fail loudly rather than building an unauthable sandbox.
-for v in OUTLOOK_CLIENT_ID OUTLOOK_TENANT_ID OUTLOOK_SESSION_UUID \
-         OUTLOOK_TARGET_MAILBOX OUTLOOK_REPLY_TO; do
-  [[ -n "${!v:-}" ]] || { echo "Missing $v — populate $EXAMPLE_DIR/.env" >&2; exit 1; }
+# At least one messaging channel must be configured. Repeats the
+# 02-providers.sh check so direct invocations of this script still get the
+# safety net.
+if [[ -z "${OUTLOOK_CLIENT_ID:-}" && -z "${SLACK_BOT_TOKEN:-}" ]]; then
+  echo "No messaging channel configured — set Outlook (all five OUTLOOK_* vars) or Slack (SLACK_BOT_TOKEN + SLACK_APP_TOKEN) in $EXAMPLE_DIR/.env" >&2
+  exit 1
+fi
+
+# Partial-Outlook detection: any of the five set ⇒ all five required.
+OUTLOOK_VARS=(OUTLOOK_TENANT_ID OUTLOOK_CLIENT_ID OUTLOOK_SESSION_UUID OUTLOOK_TARGET_MAILBOX OUTLOOK_REPLY_TO)
+OUTLOOK_SET=()
+OUTLOOK_MISSING=()
+for v in "${OUTLOOK_VARS[@]}"; do
+  if [[ -n "${!v:-}" ]]; then OUTLOOK_SET+=("$v"); else OUTLOOK_MISSING+=("$v"); fi
 done
+if (( ${#OUTLOOK_SET[@]} > 0 && ${#OUTLOOK_MISSING[@]} > 0 )); then
+  echo "Partial Outlook configuration in $EXAMPLE_DIR/.env" >&2
+  echo "  Set:     ${OUTLOOK_SET[*]}" >&2
+  echo "  Missing: ${OUTLOOK_MISSING[*]}" >&2
+  echo "Fill all five OUTLOOK_* vars or leave the entire block empty." >&2
+  exit 1
+fi
 command -v openshell >/dev/null || { echo "openshell not in PATH" >&2; exit 1; }
 
 STAGED_DOCKERFILE="$EXAMPLE_DIR/.Dockerfile.staged"
@@ -84,8 +101,8 @@ cp "$EXAMPLE_DIR/agents/hermes/Dockerfile" "$STAGED_DOCKERFILE"
 sed -i \
   -e "s|^ARG NEMOCLAW_MESSAGING_CHANNELS_B64=.*|ARG NEMOCLAW_MESSAGING_CHANNELS_B64=$CHANNELS_B64|" \
   -e "s|^ARG NEMOCLAW_MESSAGING_ALLOWED_IDS_B64=.*|ARG NEMOCLAW_MESSAGING_ALLOWED_IDS_B64=$ALLOWED_IDS_B64|" \
-  -e "s|^ARG OUTLOOK_TARGET_MAILBOX=.*|ARG OUTLOOK_TARGET_MAILBOX=$OUTLOOK_TARGET_MAILBOX|" \
-  -e "s|^ARG OUTLOOK_REPLY_TO=.*|ARG OUTLOOK_REPLY_TO=$OUTLOOK_REPLY_TO|" \
+  -e "s|^ARG OUTLOOK_TARGET_MAILBOX=.*|ARG OUTLOOK_TARGET_MAILBOX=${OUTLOOK_TARGET_MAILBOX:-}|" \
+  -e "s|^ARG OUTLOOK_REPLY_TO=.*|ARG OUTLOOK_REPLY_TO=${OUTLOOK_REPLY_TO:-}|" \
   -e "s|^ARG OUTLOOK_ALLOWED_SENDERS=.*|ARG OUTLOOK_ALLOWED_SENDERS=$ALLOWED_SENDERS|" \
   -e "s|^ARG TOKEN_MANAGER_HOST=.*|ARG TOKEN_MANAGER_HOST=$TM_HOST|" \
   -e "s|^ARG SOURCE_ETL_API_HOST=.*|ARG SOURCE_ETL_API_HOST=$SOURCE_ETL_HOST|" \
@@ -114,7 +131,8 @@ if [[ -n "${PHOENIX_COLLECTOR_ENDPOINT:-}" ]]; then
 fi
 
 # ── Build provider flags from what 02-providers.sh actually created ────
-PROVIDER_FLAGS=(--provider "$SANDBOX_NAME-outlook")
+PROVIDER_FLAGS=()
+[[ -n "${OUTLOOK_CLIENT_ID:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-outlook")
 [[ -n "${SLACK_BOT_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-slack-bridge")
 [[ -n "${SLACK_APP_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-slack-app")
 [[ -n "${GITHUB_TOKEN:-}" || -n "${GH_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-github")
@@ -142,8 +160,8 @@ setsid openshell sandbox create \
   --policy "$EXAMPLE_DIR/policy.yaml" \
   "${PROVIDER_FLAGS[@]}" \
   -- env \
-    OUTLOOK_TARGET_MAILBOX="$OUTLOOK_TARGET_MAILBOX" \
-    OUTLOOK_REPLY_TO="$OUTLOOK_REPLY_TO" \
+    OUTLOOK_TARGET_MAILBOX="${OUTLOOK_TARGET_MAILBOX:-}" \
+    OUTLOOK_REPLY_TO="${OUTLOOK_REPLY_TO:-}" \
     OUTLOOK_ALLOWED_SENDERS="$ALLOWED_SENDERS" \
     TOKEN_MANAGER_HOST="$TM_HOST" \
     NEMOCLAW_MESSAGING_CHANNELS_B64="$CHANNELS_B64" \
