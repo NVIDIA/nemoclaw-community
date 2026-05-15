@@ -12,8 +12,7 @@
 # on tear-down — so capture before destroying the sandbox if you want to
 # keep traces from that session.
 #
-# When traces actually appear: NeMo-Flow is now installed unconditionally
-# by the Dockerfile, so the agent writes ATIF records to /tmp/atif on every
+# The agent writes ATIF records to /tmp/atif on every
 # turn. If the directory is still empty when this script runs, the most
 # likely cause is that the agent hasn't had a turn yet — interact with it
 # (e.g. send a DM or email) and try again. The tarball is still produced

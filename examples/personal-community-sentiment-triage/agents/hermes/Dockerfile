@@ -94,8 +94,7 @@ RUN pip3 install --no-cache-dir --break-system-packages "httpx>=0.27" "markdown-
 # ── NeMo-Flow patched Hermes (always installed) ─────────────────────────
 # Replaces the unpatched Hermes from the base image with a NeMo-Flow-patched
 # build so the agent writes ATIF (Agent Trajectory Format) traces to
-# /tmp/atif. nemo-flow itself comes from PyPI (no Rust toolchain, no
-# submodule, no separate base-image build needed). The patch itself patches
+# /tmp/atif. nemo-flow itself comes from PyPI. The patch itself patches
 # Hermes — adding a [nemo-flow] extra, a hermes_agent.plugins entry point,
 # and an ACG override seam in run_agent.py — so it's still required even
 # with the PyPI install of nemo_flow itself.
