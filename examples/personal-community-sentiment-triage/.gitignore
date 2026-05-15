@@ -8,6 +8,10 @@
 # Snapshot tarballs from scripts/snapshot.sh. Demo artifacts — local only.
 .snapshots/
 
+# ATIF trace tarballs from scripts/download-traces.sh. Analysis artifacts —
+# local only.
+.traces/
+
 # Local env variants (keep .env.example tracked).
 .env.*
 !.env.example
