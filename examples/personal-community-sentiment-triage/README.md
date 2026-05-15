@@ -184,6 +184,7 @@ Now edit `.env` and fill in everything you already have:
 - (optional) `TOKEN_CACHE_SALT` — set to a unique random string for any deployment that
   holds real Entra sessions; leave commented for local experimentation
 - (optional) `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` / `SLACK_ALLOWED_IDS` — see [docs/set-up-slack.md](docs/set-up-slack.md)
+- (optional) `OUTLOOK_ALLOWED_SENDERS` — comma-separated allowlist of email senders the agent will respond to; leave empty to accept any sender
 - (optional) `GITHUB_TOKEN`, `PHOENIX_COLLECTOR_ENDPOINT`
 
 Leave **`OUTLOOK_SESSION_UUID` blank for now** — Phase 4 produces it.
@@ -200,7 +201,8 @@ phoenix (telemetry), MS Graph token manager (Outlook OAuth broker on port 8765),
 
 These services are designed to outlive the sandbox: a `bash scripts/tear-down.sh` followed
 by another `bash scripts/bring-up.sh` does **not** require re-running this phase. Only run
-it again on a fresh checkout, or after `STOP_HOST_SERVICES=1 bash scripts/tear-down.sh`.
+it again on a fresh checkout, or after `bash scripts/tear-down.sh --stop-host-services`
+(or `--purge-host-services`).
 
 ### Phase 4 — Obtain the Outlook session UUID
 
@@ -303,7 +305,6 @@ compatible-endpoint --model <NEMOCLAW_MODEL>` rather than `--provider` on sandbo
 | `COMPATIBLE_API_KEY` | (none) | Inference API key. Mirrors NemoClaw's `REMOTE_PROVIDER_CONFIG.custom`. (`OPENAI_API_KEY` is also accepted.) |
 | `TOKEN_MANAGER_HOST` | `host.openshell.internal` | Host where the MS Graph token manager is reachable from inside the sandbox. |
 | `PHOENIX_COLLECTOR_ENDPOINT` | (none) | Set to e.g. `http://host.openshell.internal:6006/v1/traces` to enable OpenInference telemetry. When set, bring-up flips `ENABLE_NEMO_FLOW=1` so the Dockerfile installs the `nemo-flow` version pinned by `NEMO_FLOW_VERSION` in the Dockerfile from PyPI and applies the Hermes integration patch (~1-2 min on first build, cached on rebuild). |
-| `DELETE_INFERENCE_PROVIDER` | `0` | If set to `1` during `tear-down.sh`, also removes the shared `compatible-endpoint` provider. |
 
 ## Verification (what success looks like)
 
@@ -348,7 +349,7 @@ typically long-lived. Opt-in flags (mutually exclusive):
 
 Manual cleanup for less-common operations:
 
-- `openshell gateway destroy --name examples-gateway` — destroy the gateway.
+- `openshell gateway destroy --name "${OPENSHELL_GATEWAY:-openshell}"` — destroy the gateway (substitute `snap-docker` if you registered it under that name).
 - `openshell provider delete compatible-endpoint` — remove the shared inference provider.
 
 To stop *just* the host services without removing the sandbox:
