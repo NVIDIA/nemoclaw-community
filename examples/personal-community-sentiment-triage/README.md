@@ -255,6 +255,7 @@ endpoint into the image so OpenInference traces stream into Phoenix at
   - `bring-up.sh` — orchestrator for 01 → 02 → 03; does **not** invoke `00-host-services.sh` (host services are long-lived).
   - `tear-down.sh` — removes the sandbox and per-sandbox providers; preserves host services unless `STOP_HOST_SERVICES=1`.
   - `snapshot.sh` / `restore.sh` — explicit Hermes state preservation across tear-down/bring-up cycles.
+  - `download-traces.sh` — pull ATIF trace records from `/tmp/atif/` inside the sandbox into a host-side tarball. See [Capturing ATIF traces](#capturing-atif-traces) for the env knobs.
   - `host-tls-proxy.py` — optional plain-HTTP forwarder for hosts where the sandbox can't validate the inference endpoint's TLS chain (corporate VPN, split-horizon DNS, mkcert). See [docs/host-tls-proxy.md](docs/host-tls-proxy.md).
 - **Generates and discards**: a sed-patched `.Dockerfile.staged` at the example dir
   root. OpenShell does the actual build; we patch ARG defaults beforehand because
@@ -279,6 +280,38 @@ OpenInference egress: when present, `03-sandbox.sh` bakes the URL into the
 image so the agent streams traces to a Phoenix collector. The collector is
 included in [extras/docker-compose.yml](extras/docker-compose.yml) and runs
 on host port `6006`.
+
+### Capturing ATIF traces
+
+The agent writes ATIF (Agent Trajectory Format) records to `/tmp/atif/`
+inside the sandbox on every turn. That directory is ephemeral — it lives
+on the sandbox's writable layer and is destroyed by `tear-down.sh` — so
+capture before destroying the sandbox if you want to keep the traces.
+
+```console
+$ bash scripts/download-traces.sh
+```
+
+Writes `$EXAMPLE_DIR/.traces/atif-{ISO-timestamp}.tar.gz` plus a JSON
+manifest sidecar. The tarball path is printed on stdout (progress goes to
+stderr), so callers can capture it:
+
+```console
+$ TRACE=$(bash scripts/download-traces.sh)
+```
+
+Two env vars answer the "from where / to where" questions and can be
+overridden at the call site:
+
+| Env var | Default | What it controls |
+|---|---|---|
+| `SANDBOX_NAME` | `hermes-direct` | Which OpenShell sandbox to pull `/tmp/atif/` from. Shared with the rest of the example's scripts (defined in `_lib.sh`). |
+| `TRACES_DIR` | `$EXAMPLE_DIR/.traces` | Host-side directory the tarball is written to. |
+
+If `/tmp/atif/` is empty when the script runs (e.g. the agent hasn't had
+a turn yet), the script still emits a valid empty tarball whose manifest
+carries an explanatory `note` — downstream tooling never has to
+special-case "no file."
 
 ## Prerequisites
 
