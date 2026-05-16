@@ -108,14 +108,15 @@ RUN pip3 install --no-cache-dir --break-system-packages "httpx>=0.27" "markdown-
 # same release we install via pip; HERMES_NEMO_FLOW_COMMIT must match the
 # Hermes commit that NeMo-Flow's patch was generated against (see
 # https://github.com/NVIDIA/NeMo-Flow/blob/v0.1.0/third_party/sources.lock).
-# nemoclaw-patches.py is example-owned (not in NeMo-Flow upstream) so it
-# stays vendored. It's the chain-loaded patch bundle for hermes (httpx
-# transport fix, Slack catch-all, NeMo-Flow session finalization).
+# agents/hermes/patches/ is example-owned (not in NeMo-Flow upstream) so it
+# stays vendored. It holds the PYTHONPATH-targeted sitecustomize.py bootstrap
+# and the nemoclaw_patches.py chain-loaded bundle (httpx transport fix, Slack
+# catch-all, NeMo-Flow session finalization).
 ARG ENABLE_NEMO_FLOW=1
 ARG NEMO_FLOW_VERSION=0.1.0
 ARG HERMES_NEMO_FLOW_COMMIT=2367c6ffd53b16daa0ffa1b338f3f9ee5587d4d5
 
-COPY agents/hermes/patches/nemoclaw-patches.py /tmp/nemoclaw-patches.py
+COPY agents/hermes/patches/ /usr/local/lib/nemoclaw-patches/
 
 # hadolint ignore=DL3013
 RUN if [ "$ENABLE_NEMO_FLOW" = "1" ]; then \
@@ -136,11 +137,9 @@ RUN if [ "$ENABLE_NEMO_FLOW" = "1" ]; then \
              "slack-bolt>=1.19" \
         && hermes --version \
         && export PY_SITE_DIR="$(python3 -c 'import site; print(site.getsitepackages()[0])')" \
-        && cp /tmp/nemoclaw-patches.py "${PY_SITE_DIR}/sitecustomize.py" \
-        && chmod 644 "${PY_SITE_DIR}/sitecustomize.py" \
+        && ln -sfn /usr/local/lib/nemoclaw-patches/sitecustomize.py "${PY_SITE_DIR}/sitecustomize.py" \
         && rm -rf /tmp/hermes-agent /tmp/nemo-flow.patch; \
-    fi \
-    && rm -f /tmp/nemoclaw-patches.py
+    fi
 
 # Hermes v2026.4.13+ auto-detects HTTPS_PROXY and skips fallback-IP
 # transport when a proxy is present. The sandbox proxy chain
@@ -163,20 +162,9 @@ COPY agents/hermes/bridges/ /usr/local/lib/nemoclaw-bridges/
 COPY agents/hermes/generate-config.ts /opt/nemoclaw-generate-config.ts
 RUN mkdir -p /usr/local/lib/nemoclaw-slack-shims
 COPY agents/hermes/decode-proxy.py /usr/local/lib/nemoclaw-slack-shims/decode-proxy.py
-COPY agents/hermes/discord-preload/ /usr/local/lib/nemoclaw-slack-shims/discord-preload/
-# Chain-load nemoclaw-patches.py beside the discord-preload sitecustomize so
-# Python imports a single sitecustomize but all patch sets run. Without this:
-# nemoclaw-patches.py is copied to ${PY_SITE_DIR}/sitecustomize.py when
-# ENABLE_NEMO_FLOW=1 (see line ~134), but PYTHONPATH puts discord-preload/
-# first on sys.path so Python imports discord-preload/sitecustomize.py and
-# never loads the patches bundle — silently shadowing the httpx transport
-# fix, Slack catch-all, and NeMo-Flow session finalization patches. The
-# nemo-flow meta_path hook in the bundle is a no-op when nemo-flow isn't
-# installed, so this COPY runs unconditionally.
-COPY agents/hermes/patches/nemoclaw-patches.py /usr/local/lib/nemoclaw-slack-shims/discord-preload/nemoclaw_patches.py
 RUN chmod 755 /usr/local/lib/nemoclaw-slack-shims/decode-proxy.py \
-    && find /usr/local/lib/nemoclaw-slack-shims/discord-preload -type d -exec chmod 755 {} + \
-    && find /usr/local/lib/nemoclaw-slack-shims/discord-preload -type f -exec chmod 444 {} +
+    && find /usr/local/lib/nemoclaw-patches -type d -exec chmod 755 {} + \
+    && find /usr/local/lib/nemoclaw-patches -type f -exec chmod 444 {} +
 
 # NOTE: This example removes the upstream NemoClaw `COPY nemoclaw-blueprint/`
 # step. Nothing in the Hermes runtime (start.sh, plugin/, bridges/, sidecars/,

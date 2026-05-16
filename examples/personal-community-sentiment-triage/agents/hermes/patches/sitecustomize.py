@@ -253,11 +253,11 @@ if aiohttp is not None:
 # + NeMo-Flow session finalization).
 #
 # Python imports the first `sitecustomize` it finds on sys.path. Because
-# PYTHONPATH puts this directory before site-packages, the venv's own
-# sitecustomize is shadowed and never runs. The Dockerfile installs
-# patches/nemoclaw-patches.py beside us as `nemoclaw_patches.py`; this import
-# triggers its module-level _patch_httpx + _patch_slack_commands and registers
-# the NeMo-Flow meta_path hook.
+# PYTHONPATH puts /usr/local/lib/nemoclaw-patches/ before site-packages, the
+# venv's own sitecustomize is shadowed and never runs. The Dockerfile copies
+# agents/hermes/patches/nemoclaw_patches.py into the same directory, so this
+# import triggers its module-level _patch_httpx + _patch_slack_commands and
+# registers the NeMo-Flow meta_path hook.
 try:
     import nemoclaw_patches  # noqa: F401  side-effect import
 except Exception:

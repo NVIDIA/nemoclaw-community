@@ -3,12 +3,12 @@
 #
 # NemoClaw runtime patches for the Hermes sandbox.
 #
-# Bundled into the image as
-# /usr/local/lib/nemoclaw-slack-shims/discord-preload/nemoclaw_patches.py and
-# chain-loaded by the neighboring sitecustomize.py (which Python imports
-# preferentially because discord-preload/ is first on PYTHONPATH). Also
-# installed at ${PY_SITE_DIR}/sitecustomize.py when ENABLE_NEMO_FLOW=1 as a
-# fallback for runs without PYTHONPATH.
+# Bundled into the image at /usr/local/lib/nemoclaw-patches/nemoclaw_patches.py
+# and chain-loaded by the neighboring sitecustomize.py (which Python imports
+# preferentially because /usr/local/lib/nemoclaw-patches/ is first on
+# PYTHONPATH). When ENABLE_NEMO_FLOW=1, ${PY_SITE_DIR}/sitecustomize.py is a
+# symlink back to the same sitecustomize.py — a fallback for child processes
+# that lose PYTHONPATH.
 #
 # The NeMo-Flow meta_path hook below is a no-op when nemo-flow isn't
 # installed, so this file is safe to load regardless of build mode.

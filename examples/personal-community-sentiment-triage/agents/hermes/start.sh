@@ -366,6 +366,7 @@ start_socat_forwarder() {
 # before HTTPS serialization.
 HERMES_VENV_PYTHON="/opt/hermes/.venv/bin/python"
 SLACK_SHIMS_DIR="/usr/local/lib/nemoclaw-slack-shims"
+PATCHES_DIR="/usr/local/lib/nemoclaw-patches"
 DECODE_PROXY_PID=""
 DECODE_PROXY_PORT=3129
 start_decode_proxy() {
@@ -477,7 +478,7 @@ export NO_PROXY="$_NO_PROXY_VAL"
 export http_proxy="$_PROXY_URL"
 export https_proxy="$_PROXY_URL"
 export no_proxy="$_NO_PROXY_VAL"
-export PYTHONPATH="${SLACK_SHIMS_DIR}/discord-preload${PYTHONPATH:+:${PYTHONPATH}}"
+export PYTHONPATH="${PATCHES_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
 
 # OpenShell injects SSL_CERT_FILE/CURL_CA_BUNDLE for its L7 proxy CA. Persist
 # them into connect-session shells so Python Slack probes and Hermes tools trust
@@ -517,7 +518,7 @@ export NO_PROXY="$_NO_PROXY_VAL"
 export http_proxy="$_PROXY_URL"
 export https_proxy="$_PROXY_URL"
 export no_proxy="$_NO_PROXY_VAL"
-export PYTHONPATH="${SLACK_SHIMS_DIR}/discord-preload\${PYTHONPATH:+:\${PYTHONPATH}}"
+export PYTHONPATH="${PATCHES_DIR}\${PYTHONPATH:+:\${PYTHONPATH}}"
 export HERMES_HOME="${HERMES_WRITABLE}"
 export SLACK_BOT_TOKEN="${SLACK_BOT_TOKEN:-openshell:resolve:env:SLACK_BOT_TOKEN}"
 export GITHUB_TOKEN="${GITHUB_TOKEN:-openshell:resolve:env:GITHUB_TOKEN}"
@@ -583,7 +584,7 @@ if [ "$(id -u)" -ne 0 ]; then
     HTTP_PROXY="${_PROXY_URL}" \
     https_proxy="${_PROXY_URL}" \
     http_proxy="${_PROXY_URL}" \
-    PYTHONPATH="${SLACK_SHIMS_DIR}/discord-preload${PYTHONPATH:+:${PYTHONPATH}}" \
+    PYTHONPATH="${PATCHES_DIR}${PYTHONPATH:+:${PYTHONPATH}}" \
     HERMES_NEMO_FLOW_ENABLED="${NEMO_FLOW_ENABLED:-0}" \
     HERMES_NEMO_FLOW_ATIF_DIR="/tmp/atif" \
     HERMES_NEMO_FLOW_ACG_ENABLED="0" \
@@ -667,7 +668,7 @@ HERMES_HOME="${HERMES_WRITABLE}" \
   HTTP_PROXY="${_PROXY_URL}" \
   https_proxy="${_PROXY_URL}" \
   http_proxy="${_PROXY_URL}" \
-  PYTHONPATH="${SLACK_SHIMS_DIR}/discord-preload${PYTHONPATH:+:${PYTHONPATH}}" \
+  PYTHONPATH="${PATCHES_DIR}${PYTHONPATH:+:${PYTHONPATH}}" \
   HERMES_NEMO_FLOW_ENABLED="${NEMO_FLOW_ENABLED:-0}" \
   HERMES_NEMO_FLOW_ATIF_DIR="/tmp/atif" \
   HERMES_NEMO_FLOW_ACG_ENABLED="0" \
