@@ -112,7 +112,6 @@ PUBLIC_PORT=8642
 # Hermes binds to 127.0.0.1 regardless of config (upstream bug).
 # Run it on an internal port and use socat to expose on PUBLIC_PORT.
 INTERNAL_PORT=18642
-HERMES="$(command -v hermes)" # Resolve once, use absolute path everywhere
 
 # Hermes writes state files (PID, state.db, .channel_directory) directly into
 # HERMES_HOME. We cannot point it at the immutable /sandbox/.hermes dir.
@@ -565,19 +564,15 @@ if [ "$(id -u)" -ne 0 ]; then
 
   # Prepare ATIF telemetry directory (ephemeral, writable by the current user).
   mkdir -p /tmp/atif
-  # Detect NeMo-Flow by package availability — more reliable than env var inheritance.
-  if python3 -c "import nemo_flow" 2>/dev/null; then
-    NEMO_FLOW_ENABLED=1
+  # NeMo-Flow observability is configured via /etc/nemo-flow/plugins.toml
+  # (baked at image build time). Verify the binary and config are present.
+  if [ -x /usr/local/bin/nemo-flow ] \
+     && [ -r /etc/nemo-flow/config.toml ] \
+     && [ -r /etc/nemo-flow/plugins.toml ]; then
+    echo "[nemo-flow] gateway wrapper ready (config.toml + plugins.toml in /etc/nemo-flow)" | tee -a /tmp/gateway.log >&2
   else
-    NEMO_FLOW_ENABLED=0
+    echo "[nemo-flow] WARNING: gateway wrapper or config missing — telemetry disabled" | tee -a /tmp/gateway.log >&2
   fi
-  {
-    echo "[nemo-flow] NEMO_FLOW_ENABLED=${NEMO_FLOW_ENABLED}"
-    echo "[nemo-flow] PHOENIX_COLLECTOR_ENDPOINT=${PHOENIX_COLLECTOR_ENDPOINT:-<unset>}"
-  } | tee -a /tmp/gateway.log >&2
-  PHOENIX_OPENINFERENCE_ENABLED=0
-  [ -n "${PHOENIX_COLLECTOR_ENDPOINT:-}" ] && PHOENIX_OPENINFERENCE_ENABLED=1
-  echo "[nemo-flow] PHOENIX_OPENINFERENCE_ENABLED=${PHOENIX_OPENINFERENCE_ENABLED}" | tee -a /tmp/gateway.log >&2
 
   HERMES_HOME="${HERMES_WRITABLE}" \
     HTTPS_PROXY="${_PROXY_URL}" \
@@ -585,15 +580,8 @@ if [ "$(id -u)" -ne 0 ]; then
     https_proxy="${_PROXY_URL}" \
     http_proxy="${_PROXY_URL}" \
     PYTHONPATH="${PATCHES_DIR}${PYTHONPATH:+:${PYTHONPATH}}" \
-    HERMES_NEMO_FLOW_ENABLED="${NEMO_FLOW_ENABLED:-0}" \
-    HERMES_NEMO_FLOW_ATIF_DIR="/tmp/atif" \
-    HERMES_NEMO_FLOW_ACG_ENABLED="0" \
-    HERMES_NEMO_FLOW_OPENINFERENCE_ENABLED="${PHOENIX_OPENINFERENCE_ENABLED}" \
-    HERMES_NEMO_FLOW_OPENINFERENCE_TRANSPORT="http_binary" \
-    HERMES_NEMO_FLOW_OPENINFERENCE_ENDPOINT="${PHOENIX_COLLECTOR_ENDPOINT:-}" \
-    HERMES_NEMO_FLOW_OPENINFERENCE_SERVICE_NAME="hermes-agent" \
     API_SERVER_KEY="nemoclaw-internal" \
-    nohup "$HERMES" gateway run >>/tmp/gateway.log 2>&1 &
+    nohup /usr/local/bin/nemo-flow hermes -- gateway run >>/tmp/gateway.log 2>&1 &
   GATEWAY_PID=$!
   echo "[gateway] hermes gateway launched (pid $GATEWAY_PID)" >&2
   start_gateway_log_stream
@@ -638,19 +626,13 @@ prepare_restricted_log /tmp/gateway.log gateway:gateway 600
 # gateway user (launched via gosu below) can write to it.
 mkdir -p /tmp/atif
 chown gateway:gateway /tmp/atif
-# Detect NeMo-Flow by package availability — more reliable than env var inheritance.
-if python3 -c "import nemo_flow" 2>/dev/null; then
-  NEMO_FLOW_ENABLED=1
+# NeMo-Flow observability is configured via /etc/nemo-flow/plugins.toml
+# (baked at image build time). Verify the binary and config are present.
+if [ -x /usr/local/bin/nemo-flow ] && [ -r /etc/nemo-flow/plugins.toml ]; then
+  echo "[nemo-flow] gateway wrapper ready (plugins.toml=/etc/nemo-flow/plugins.toml)" | tee -a /tmp/gateway.log >&2
 else
-  NEMO_FLOW_ENABLED=0
+  echo "[nemo-flow] WARNING: gateway wrapper missing — telemetry disabled" | tee -a /tmp/gateway.log >&2
 fi
-{
-  echo "[nemo-flow] NEMO_FLOW_ENABLED=${NEMO_FLOW_ENABLED}"
-  echo "[nemo-flow] PHOENIX_COLLECTOR_ENDPOINT=${PHOENIX_COLLECTOR_ENDPOINT:-<unset>}"
-} | tee -a /tmp/gateway.log >&2
-PHOENIX_OPENINFERENCE_ENABLED=0
-[ -n "${PHOENIX_COLLECTOR_ENDPOINT:-}" ] && PHOENIX_OPENINFERENCE_ENABLED=1
-echo "[nemo-flow] PHOENIX_OPENINFERENCE_ENABLED=${PHOENIX_OPENINFERENCE_ENABLED}" | tee -a /tmp/gateway.log >&2
 
 # Defence-in-depth: verify /tmp file permissions before launching services.
 # shellcheck disable=SC2119
@@ -662,22 +644,20 @@ validate_config_symlinks "${HERMES_IMMUTABLE}" "${HERMES_WRITABLE}"
 # Lock .hermes directory after validation.
 harden_config_symlinks "${HERMES_IMMUTABLE}" "hermes"
 
-# Start the gateway as the 'gateway' user.
+# Start the gateway as the 'gateway' user, wrapped in `nemo-flow hermes`.
+# The wrapper binds an ephemeral 127.0.0.1 gateway, exports NEMO_FLOW_GATEWAY_URL
+# into Hermes's environment, and spawns `hermes gateway run` as the child.
+# Hermes's hook subprocesses inherit NEMO_FLOW_GATEWAY_URL and forward
+# events to the in-proc gateway via `nemo-flow hook-forward hermes`.
 HERMES_HOME="${HERMES_WRITABLE}" \
   HTTPS_PROXY="${_PROXY_URL}" \
   HTTP_PROXY="${_PROXY_URL}" \
   https_proxy="${_PROXY_URL}" \
   http_proxy="${_PROXY_URL}" \
   PYTHONPATH="${PATCHES_DIR}${PYTHONPATH:+:${PYTHONPATH}}" \
-  HERMES_NEMO_FLOW_ENABLED="${NEMO_FLOW_ENABLED:-0}" \
-  HERMES_NEMO_FLOW_ATIF_DIR="/tmp/atif" \
-  HERMES_NEMO_FLOW_ACG_ENABLED="0" \
-  HERMES_NEMO_FLOW_OPENINFERENCE_ENABLED="${PHOENIX_OPENINFERENCE_ENABLED}" \
-  HERMES_NEMO_FLOW_OPENINFERENCE_TRANSPORT="http_binary" \
-  HERMES_NEMO_FLOW_OPENINFERENCE_ENDPOINT="${PHOENIX_COLLECTOR_ENDPOINT:-}" \
-  HERMES_NEMO_FLOW_OPENINFERENCE_SERVICE_NAME="hermes-agent" \
   API_SERVER_KEY="nemoclaw-internal" \
-  nohup gosu gateway "$HERMES" gateway run >>/tmp/gateway.log 2>&1 &
+  nohup gosu gateway /usr/local/bin/nemo-flow hermes -- gateway run \
+    >>/tmp/gateway.log 2>&1 &
 GATEWAY_PID=$!
 echo "[gateway] hermes gateway launched as 'gateway' user (pid $GATEWAY_PID)" >&2
 start_gateway_log_stream

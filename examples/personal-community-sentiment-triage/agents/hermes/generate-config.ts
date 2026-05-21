@@ -113,6 +113,40 @@ function main(): void {
       mode: "smart",
       timeout: 60,
     },
+    // NeMo-Flow shell hooks — each event spawns `nemo-flow hook-forward hermes`,
+    // which reads the JSON payload from stdin and POSTs it to NEMO_FLOW_GATEWAY_URL
+    // (injected by the `nemo-flow hermes` wrapper). Events are the intersection of
+    // NeMo-Flow's HERMES_HOOK_EVENTS (installer.rs) and Hermes's VALID_HOOKS
+    // (hermes_cli/plugins.py). NeMo-Flow's "api_request_error" and "subagent_start"
+    // are forward-looking — current Hermes only exposes "subagent_stop" and reports
+    // request errors via "post_api_request" payloads, so we omit them here to
+    // avoid "unknown hook event" warnings.
+    //
+    // `on_session_end` gets a SECOND command (`nemo-flow-finalize-shim`) that
+    // synthesizes a per-turn `on_session_finalize`. Hermes fires real finalize
+    // only from its idle-session expiry watcher (~5 min default), but
+    // NeMo-Flow's ATIF writer and root-span closer only act on finalize. The
+    // shim closes the agent scope every turn so each conversation produces a
+    // complete Phoenix root span and a fresh ATIF JSON file.
+    hooks: (() => {
+      const fwd = { command: "/usr/local/bin/nemo-flow hook-forward hermes", timeout: 30 };
+      const finalize_shim = { command: "/usr/local/bin/nemo-flow-finalize-shim", timeout: 30 };
+      const events = [
+        "on_session_start", "on_session_finalize", "on_session_reset",
+        "pre_llm_call", "post_llm_call",
+        "pre_api_request", "post_api_request",
+        "pre_tool_call", "post_tool_call",
+        "subagent_stop",
+      ];
+      const result: Record<string, unknown[]> = Object.fromEntries(events.map((ev) => [ev, [fwd]]));
+      result.on_session_end = [fwd, finalize_shim];
+      return result;
+    })(),
+    // Auto-accept the hook commands. The sandbox is non-interactive; without
+    // this the first hook fires a TTY consent prompt and gets skipped,
+    // dropping all observability silently. Safe here because config.yaml is
+    // root-owned + chmod 444 at build time.
+    hooks_auto_accept: true,
   };
 
   // Messaging platforms (if configured during onboard)

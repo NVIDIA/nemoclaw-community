@@ -35,6 +35,24 @@ RUN pyinstaller \
       --hidden-import aiohttp.web \
       ms_graph_sidecar.py
 
+# ── Stage 1: build the nemo-flow CLI binary ──────────────────────────────────
+# Built inside ${BASE_IMAGE} so the resulting binary links against the same
+# glibc as the runtime — same constraint as the sidecar-builder stage above.
+# 0.2.0 publishes nemo-flow-cli to crates.io, so `cargo install` is the
+# simplest reproducible path. The ~3-5 min toolchain bootstrap is amortized
+# across the cargo target cache when the version pin doesn't change.
+FROM ${BASE_IMAGE} AS nemo-flow-builder
+ARG NEMO_FLOW_CLI_VERSION=0.2.0
+RUN apt-get update -qq \
+    && apt-get install -y --no-install-recommends \
+       build-essential ca-certificates curl pkg-config libssl-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+       | sh -s -- -y --default-toolchain stable --profile minimal \
+    && /root/.cargo/bin/cargo install --locked --root /out \
+       nemo-flow-cli --version "${NEMO_FLOW_CLI_VERSION}"
+# Produces /out/bin/nemo-flow
+
 # ── Main sandbox image ────────────────────────────────────────────────────────
 FROM ${BASE_IMAGE}
 
@@ -91,55 +109,72 @@ RUN mkdir -p /etc/apt/keyrings \
 
 RUN pip3 install --no-cache-dir --break-system-packages "httpx>=0.27" "markdown-it-py>=3"
 
-# ── NeMo-Flow patched Hermes (always installed) ─────────────────────────
-# Replaces the unpatched Hermes from the base image with a NeMo-Flow-patched
-# build so the agent writes ATIF (Agent Trajectory Format) traces to
-# /tmp/atif. nemo-flow itself comes from PyPI. The patch itself patches
-# Hermes — adding a [nemo-flow] extra, a hermes_agent.plugins entry point,
-# and an ACG override seam in run_agent.py — so it's still required even
-# with the PyPI install of nemo_flow itself.
+# ── NeMo-Flow 0.2.0 wrapped-CLI integration ─────────────────────────────
+# Drop-in observability via `nemo-flow hermes -- gateway run`. Hermes stays
+# unpatched (from BASE_IMAGE); native hook events configured in
+# ~/.hermes/config.yaml route through the wrapper's ephemeral gateway, which
+# runs the ATIF writer and OpenInference OTLP exporter from the baked
+# /etc/nemo-flow/plugins.toml. No Hermes patch, no nemo-flow PyPI package,
+# no HERMES_NEMO_FLOW_* env vars.
 #
 # ATIF writes are local-disk-only — no collector required. To additionally
-# stream OpenInference traces to Phoenix, set PHOENIX_COLLECTOR_ENDPOINT in
-# .env; that's a separate runtime knob and does not gate this install.
+# stream OpenInference traces to Phoenix, set PHOENIX_COLLECTOR_ENDPOINT;
+# empty disables OpenInference but keeps ATIF on.
 #
-# The patch is fetched from NeMo-Flow's GitHub tag at build time rather than
-# vendored, so we never drift from upstream. Pin NEMO_FLOW_VERSION to the
-# same release we install via pip; HERMES_NEMO_FLOW_COMMIT must match the
-# Hermes commit that NeMo-Flow's patch was generated against (see
-# https://github.com/NVIDIA/NeMo-Flow/blob/v0.1.0/third_party/sources.lock).
-# agents/hermes/patches/ is example-owned (not in NeMo-Flow upstream) so it
-# stays vendored. It holds the PYTHONPATH-targeted sitecustomize.py bootstrap
-# and the nemoclaw_patches.py chain-loaded bundle (httpx transport fix, Slack
-# catch-all, NeMo-Flow session finalization).
-ARG ENABLE_NEMO_FLOW=1
-ARG NEMO_FLOW_VERSION=0.1.0
-ARG HERMES_NEMO_FLOW_COMMIT=2367c6ffd53b16daa0ffa1b338f3f9ee5587d4d5
+# agents/hermes/patches/ is example-owned (not in NeMo-Flow upstream). It
+# holds the PYTHONPATH-targeted sitecustomize.py bootstrap (Slack-SDK
+# placeholder rewrite) and the nemoclaw_patches.py chain-loaded bundle
+# (Slack catch-all slash command).
+COPY --from=nemo-flow-builder /out/bin/nemo-flow /usr/local/bin/nemo-flow
+RUN chmod 755 /usr/local/bin/nemo-flow
+
+# Per-turn finalize shim. Hermes only fires `on_session_finalize` from its
+# idle-session expiry watcher (~5 min default), but NeMo-Flow's ATIF writer
+# and root-span closer only act on `on_session_finalize` / `on_session_reset`.
+# This shim, registered as a second hook on `on_session_end`, rewrites the
+# event name and re-posts to the gateway so each turn closes its agent scope.
+COPY agents/hermes/nemo-flow-finalize-shim /usr/local/bin/nemo-flow-finalize-shim
+RUN chmod 755 /usr/local/bin/nemo-flow-finalize-shim
 
 COPY agents/hermes/patches/ /usr/local/lib/nemoclaw-patches/
 
-# hadolint ignore=DL3013
-RUN if [ "$ENABLE_NEMO_FLOW" = "1" ]; then \
-        echo "[nemo-flow] Installing nemo-flow==${NEMO_FLOW_VERSION} from PyPI and patching Hermes" \
-        && curl -fsSL "https://raw.githubusercontent.com/NVIDIA/NeMo-Flow/${NEMO_FLOW_VERSION}/patches/hermes-agent/0001-add-nemo-flow-integration.patch" \
-             -o /tmp/nemo-flow.patch \
-        && curl -fsSL "https://github.com/NousResearch/hermes-agent/archive/${HERMES_NEMO_FLOW_COMMIT}.tar.gz" \
-             | tar -xz -C /tmp/ \
-        && mv "/tmp/hermes-agent-${HERMES_NEMO_FLOW_COMMIT}" /tmp/hermes-agent \
-        && git -C /tmp/hermes-agent init -q \
-        && git -C /tmp/hermes-agent apply /tmp/nemo-flow.patch \
-        && pip3 install --no-cache-dir --break-system-packages --force-reinstall \
-             "nemo-flow==${NEMO_FLOW_VERSION}" \
-             "/tmp/hermes-agent[nemo-flow,slack]" \
-             "pyyaml==6.0.3" \
-             "python-telegram-bot>=21.0" \
-             "httpx>=0.27" \
-             "slack-bolt>=1.19" \
-        && hermes --version \
-        && export PY_SITE_DIR="$(python3 -c 'import site; print(site.getsitepackages()[0])')" \
-        && ln -sfn /usr/local/lib/nemoclaw-patches/sitecustomize.py "${PY_SITE_DIR}/sitecustomize.py" \
-        && rm -rf /tmp/hermes-agent /tmp/nemo-flow.patch; \
-    fi
+# Pin slack-bolt / python-telegram-bot / pyyaml / httpx into Hermes's venv
+# interpreter so the sitecustomize patches (Slack catch-all, SDK placeholder
+# rewrite) find the modules they wrap. hadolint ignore=DL3013
+RUN pip3 install --no-cache-dir --break-system-packages \
+       "pyyaml==6.0.3" \
+       "python-telegram-bot>=21.0" \
+       "httpx>=0.27" \
+       "slack-bolt>=1.19" \
+    && hermes --version \
+    && export PY_SITE_DIR="$(python3 -c 'import site; print(site.getsitepackages()[0])')" \
+    && ln -sfn /usr/local/lib/nemoclaw-patches/sitecustomize.py "${PY_SITE_DIR}/sitecustomize.py"
+
+# ── NeMo-Flow plugin config (immutable, baked at build time) ────────────
+# Discovery order: /etc/nemo-flow → project ./.nemo-flow → user XDG
+# (NeMo-Flow crates/cli/src/config.rs:618-633). /etc/ is the cleanest
+# location for a containerized agent because it ignores CWD.
+#
+# Two files are baked here:
+#   config.toml  — `[agents.hermes]` block so `nemo-flow hermes` finds a
+#                  configured agent and skips the interactive setup wizard
+#                  (which fails in non-TTY sandboxes).
+#   plugins.toml — observability component (ATIF + OpenInference).
+COPY agents/hermes/nemo-flow-plugins.toml.in /tmp/nemo-flow-plugins.toml.in
+RUN mkdir -p /etc/nemo-flow \
+    && printf '%s\n' '[agents.hermes]' 'command = "hermes"' > /etc/nemo-flow/config.toml \
+    && chmod 444 /etc/nemo-flow/config.toml \
+    && PHOENIX_URL="${PHOENIX_COLLECTOR_ENDPOINT:-}" \
+    && if [ -z "$PHOENIX_URL" ]; then \
+         PHOENIX_ENABLED=false; PHOENIX_ENDPOINT=""; \
+       else \
+         PHOENIX_ENABLED=true; PHOENIX_ENDPOINT="${PHOENIX_URL%/}/v1/traces"; \
+       fi \
+    && sed -e "s|@@PHOENIX_ENABLED@@|${PHOENIX_ENABLED}|g" \
+           -e "s|@@PHOENIX_ENDPOINT@@|${PHOENIX_ENDPOINT}|g" \
+       /tmp/nemo-flow-plugins.toml.in > /etc/nemo-flow/plugins.toml \
+    && rm /tmp/nemo-flow-plugins.toml.in \
+    && chmod 444 /etc/nemo-flow/plugins.toml
 
 # Hermes v2026.4.13+ auto-detects HTTPS_PROXY and skips fallback-IP
 # transport when a proxy is present. The sandbox proxy chain

@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# NeMo-Flow gateway plugin config — installed at /etc/nemo-flow/plugins.toml.
+# Substituted at image build time from PHOENIX_COLLECTOR_ENDPOINT.
+# Schema: nemo_flow.observability.ObservabilityConfig
+# (NeMo-Flow python/nemo_flow/observability.py).
+
+version = 1
+
+[[components]]
+kind = "observability"
+enabled = true
+
+[components.config.atif]
+enabled = true
+output_directory = "/tmp/atif"
+
+[components.config.openinference]
+enabled = @@PHOENIX_ENABLED@@
+transport = "http_binary"
+endpoint = "@@PHOENIX_ENDPOINT@@"
+service_name = "hermes-agent"
+timeout_millis = 3000

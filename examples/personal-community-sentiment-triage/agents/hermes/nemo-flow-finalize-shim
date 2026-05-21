@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# NeMo-Flow gateway-mode finalize shim.
+#
+# Hermes fires `on_session_end` at every `run_conversation` turn boundary but
+# only fires `on_session_finalize` from its idle-session expiry watcher every
+# ~5 minutes. NeMo-Flow 0.2.0's gateway adapter (crates/cli/src/adapters/
+# hermes.rs:55-64) maps `on_session_end` to `TurnEnded`, which is documented
+# as NOT closing the agent scope — and the ATIF writer in
+# crates/core/src/observability/plugin_component.rs:684-685 only writes when
+# the agent scope closes. Result: orphaned Phoenix spans and no ATIF files
+# per turn.
+#
+# This shim is registered as a SECOND command on `on_session_end`. It rewrites
+# the JSON payload's `hook_event_name` to `on_session_finalize` and pipes it
+# back into `nemo-flow hook-forward hermes`, so the gateway closes the agent
+# scope and writes ATIF every turn. The first command (the unmodified
+# `hook-forward`) still delivers the on_session_end event for any other
+# downstream handling.
+import json
+import os
+import subprocess
+import sys
+
+
+def main() -> int:
+    try:
+        payload = json.load(sys.stdin)
+    except json.JSONDecodeError:
+        # Empty or malformed stdin — emit a synthesized payload so the gateway
+        # still observes a finalize for whatever session_id we have.
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    payload["hook_event_name"] = "on_session_finalize"
+    rewritten = json.dumps(payload)
+
+    proc = subprocess.run(
+        ["/usr/local/bin/nemo-flow", "hook-forward", "hermes"],
+        input=rewritten,
+        text=True,
+        env=os.environ.copy(),
+        check=False,
+    )
+    # Hermes only inspects stdout when looking for hook decisions. Emit an
+    # empty object so the agent loop treats this as a silent observer.
+    sys.stdout.write("{}\n")
+    return proc.returncode
+
+
+if __name__ == "__main__":
+    sys.exit(main())
