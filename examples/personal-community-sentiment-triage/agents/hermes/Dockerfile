@@ -8,7 +8,7 @@
 
 # ARGs that appear in FROM instructions must be declared before the first FROM
 # so Docker treats them as global build args (multi-stage scoping rule).
-ARG BASE_IMAGE=ghcr.io/nvidia/nemoclaw/hermes-sandbox-base@sha256:176ec6ec056cdf2dd45f60a0095fb6aac962eb5d7382d28d5734098a72399000
+ARG BASE_IMAGE=ghcr.io/nvidia/nemoclaw/hermes-sandbox-base@sha256:f76a2ed0509570b1ce5380327c7ebe2e120e97f524e9271e145d2ea34c83ba5e
 
 # ── Stage 0: build the MS Graph API sidecar binary ────────────────────────────
 # PyInstaller produces a self-contained executable at a unique path
@@ -109,6 +109,48 @@ RUN mkdir -p /etc/apt/keyrings \
 
 RUN pip3 install --no-cache-dir --break-system-packages "httpx>=0.27" "markdown-it-py>=3"
 
+# ── Upgrade Hermes from base image's v0.11.0 to v0.14.0 ─────────────────
+# NemoClaw's base image (even at its latest tag) pins HERMES_VERSION=v2026.4.23
+# (Hermes v0.11.0). v0.11.0's plugin hooks ship metadata-only kwargs to
+# pre_api_request / post_api_request — no real messages, no real response —
+# so observability backends (Langfuse, NeMo-Flow's hermes adapter) cannot
+# emit LLM spans with full content. v0.14.0 (v2026.5.16, "The Foundation
+# Release") adds rich-kwargs hook delivery and ships the bundled Langfuse
+# plugin that depends on it.
+#
+# We mirror NemoClaw's tarball + uv-sync install pattern, but for a newer
+# version. /opt/hermes/.venv is preserved across the upgrade so uv can
+# incrementally reconcile dependencies against v0.14.0's uv.lock.
+ARG HERMES_UPGRADE_VERSION=v2026.5.16
+ARG HERMES_UPGRADE_TARBALL_SHA256=c0a554050a50ee9a62f3fa5cd288a167ba5640c42d647d100cdea084b7294143
+ARG HERMES_UV_EXTRAS="messaging web"
+# Match the uv version NemoClaw uses for the base-image install.
+ARG UV_INSTALL_VERSION=0.11.8
+
+USER root
+RUN set -eu \
+    && curl -LsSf "https://astral.sh/uv/${UV_INSTALL_VERSION}/install.sh" \
+       | env INSTALLER_NO_MODIFY_PATH=1 sh \
+    && UV_BIN="" \
+    && for candidate in /root/.local/bin/uv /root/.cargo/bin/uv /usr/local/bin/uv; do \
+         if [ -x "$candidate" ]; then UV_BIN="$candidate"; break; fi; \
+       done \
+    && if [ -z "$UV_BIN" ]; then echo "uv installer did not produce a binary in any known location" >&2; exit 1; fi \
+    && install -m 755 "$UV_BIN" /usr/local/bin/uv \
+    && /usr/local/bin/uv --version \
+    && curl -fsSL "https://github.com/NousResearch/hermes-agent/archive/refs/tags/${HERMES_UPGRADE_VERSION}.tar.gz" \
+       -o /tmp/hermes.tgz \
+    && echo "${HERMES_UPGRADE_TARBALL_SHA256}  /tmp/hermes.tgz" | sha256sum -c - \
+    && find /opt/hermes -mindepth 1 -maxdepth 1 -not -name '.venv' -exec rm -rf {} + \
+    && tar -xzf /tmp/hermes.tgz -C /opt/hermes --strip-components=1 \
+    && rm /tmp/hermes.tgz \
+    && cd /opt/hermes \
+    && extras_args="" \
+    && for e in ${HERMES_UV_EXTRAS}; do extras_args="${extras_args} --extra ${e}"; done \
+    && UV_PROJECT_ENVIRONMENT=/opt/hermes/.venv /usr/local/bin/uv sync \
+       ${extras_args} --no-dev \
+    && chown -R sandbox:sandbox /opt/hermes
+
 # ── NeMo-Flow 0.2.0 wrapped-CLI integration ─────────────────────────────
 # Drop-in observability via `nemo-flow hermes -- gateway run`. Hermes stays
 # unpatched (from BASE_IMAGE); native hook events configured in
@@ -187,6 +229,12 @@ ENV HERMES_TELEGRAM_DISABLE_FALLBACK_IPS=1 \
 # Copy NemoClaw plugin for Hermes (Python-based)
 COPY agents/hermes/plugin/ /opt/nemoclaw-hermes-plugin/
 
+# Copy nemo-flow-bridge plugin: in-process forwarder for pre/post_api_request
+# events that enriches NeMo-Flow hook payloads with the real OpenAI request
+# body and response body (the shell-hook path is metadata-only by design).
+# Requires Hermes >= v0.14.0 because earlier versions sanitized plugin kwargs.
+COPY agents/hermes/plugin-nemo-flow/ /opt/nemo-flow-hermes-plugin/
+
 # Copy bridges and default cron jobs.
 # Install under /usr/local/lib/ so Landlock's read_only /usr rule permits access.
 COPY agents/hermes/bridges/ /usr/local/lib/nemoclaw-bridges/
@@ -210,6 +258,7 @@ RUN chmod 755 /usr/local/lib/nemoclaw-slack-shims/decode-proxy.py \
 # Ensure sandbox user can read all /opt/nemoclaw-* and bridge files.
 # Source files may have restrictive permissions that Docker COPY preserves.
 RUN chmod -R a+rX /opt/nemoclaw-hermes-plugin/ \
+    && chmod -R a+rX /opt/nemo-flow-hermes-plugin/ \
     && chmod a+r /opt/nemoclaw-generate-config.ts \
     && chmod -R a+rX /usr/local/lib/nemoclaw-bridges/
 
@@ -278,6 +327,11 @@ RUN node --experimental-strip-types /opt/nemoclaw-generate-config.ts
 # Install NemoClaw plugin into Hermes
 RUN mkdir -p /sandbox/.hermes-data/plugins/nemoclaw \
     && cp -r /opt/nemoclaw-hermes-plugin/* /sandbox/.hermes-data/plugins/nemoclaw/
+
+# Install nemo-flow-bridge plugin into Hermes. HERMES_HOME=/sandbox/.hermes-data
+# (set in start.sh) and Hermes' plugin loader scans $HERMES_HOME/plugins/.
+RUN mkdir -p /sandbox/.hermes-data/plugins/nemo-flow-bridge \
+    && cp -r /opt/nemo-flow-hermes-plugin/* /sandbox/.hermes-data/plugins/nemo-flow-bridge/
 
 # Symlink SOUL.md into the immutable home so Hermes's ensure_hermes_home() finds it.
 RUN ln -s /sandbox/.hermes-data/SOUL.md /sandbox/.hermes/SOUL.md

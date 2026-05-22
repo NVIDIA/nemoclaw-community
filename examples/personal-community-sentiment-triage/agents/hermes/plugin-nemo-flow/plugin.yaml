@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: nemo-flow-bridge
+version: "0.0.1"
+description: "Forwards Hermes pre/post_api_request hooks to NeMo-Flow with exact request/response bodies for full Phoenix LLM spans."
+author: "NVIDIA Corporation"
+manifest_version: 1
+hooks:
+  - pre_api_request
+  - post_api_request

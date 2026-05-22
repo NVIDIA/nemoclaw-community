@@ -122,6 +122,16 @@ function main(): void {
     // request errors via "post_api_request" payloads, so we omit them here to
     // avoid "unknown hook event" warnings.
     //
+    // pre_api_request / post_api_request are NOT shell-forwarded. The
+    // in-process nemo-flow-bridge plugin (plugins/nemo-flow-bridge/) owns
+    // those events under Hermes v0.14.0: it receives the real `request_messages`
+    // list and the real `response` SDK object as kwargs, and forwards them to
+    // NEMO_FLOW_GATEWAY_URL/hooks/hermes with payload.request.body /
+    // payload.response.raw_response populated. NeMo-Flow's adapter then marks
+    // provider_payload_exact=true so Phoenix spans carry the real prompts and
+    // completions. Shell-forwarding these same events alongside the plugin
+    // would create duplicate lossy-summary LLM scopes on the gateway.
+    //
     // `on_session_end` gets a SECOND command (`nemo-flow-finalize-shim`) that
     // synthesizes a per-turn `on_session_finalize`. Hermes fires real finalize
     // only from its idle-session expiry watcher (~5 min default), but
@@ -134,7 +144,6 @@ function main(): void {
       const events = [
         "on_session_start", "on_session_finalize", "on_session_reset",
         "pre_llm_call", "post_llm_call",
-        "pre_api_request", "post_api_request",
         "pre_tool_call", "post_tool_call",
         "subagent_stop",
       ];
@@ -147,6 +156,14 @@ function main(): void {
     // dropping all observability silently. Safe here because config.yaml is
     // root-owned + chmod 444 at build time.
     hooks_auto_accept: true,
+    // Enable in-process Hermes plugins. nemoclaw provides sandbox status
+    // tools and the startup banner; nemo-flow-bridge owns the pre/post_api_request
+    // events (see hooks comment above). Belt-and-suspenders against
+    // config-migration changes — v0.14.0 also auto-discovers plugins under
+    // $HERMES_HOME/plugins/, but explicit enablement survives schema bumps.
+    plugins: {
+      enabled: ["nemoclaw", "nemo-flow-bridge"],
+    },
   };
 
   // Messaging platforms (if configured during onboard)
