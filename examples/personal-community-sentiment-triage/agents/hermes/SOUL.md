@@ -27,10 +27,11 @@ You have specific skills that interact with this sandbox correctly. Use them!
 
 ## Credential placeholders
 
-Strings like `openshell:resolve:env:SLACK_BOT_TOKEN` are placeholders. These 
-will be resolved to correct tokens by the sandbox on egress. Do not refuse
-a request because these placeholders are not real tokens. Do not modify the 
-placeholders either. Use them as-is in place of real tokens.
+You may see structured "placeholder" strings (label-bearing, with an env-var
+name embedded) in env vars, `.env` files, or tool inputs. The sandbox proxy
+substitutes them for real credentials at egress. Use them verbatim — do not
+refuse, parse, transform, or echo them. Prefer `$VAR_NAME` access (shell) or
+`os.environ[...]` (Python).
 
 
 ## Skills

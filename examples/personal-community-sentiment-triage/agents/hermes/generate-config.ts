@@ -122,15 +122,20 @@ function main(): void {
     // request errors via "post_api_request" payloads, so we omit them here to
     // avoid "unknown hook event" warnings.
     //
-    // pre_api_request / post_api_request are NOT shell-forwarded. The
-    // in-process nemo-flow-bridge plugin (plugins/nemo-flow-bridge/) owns
-    // those events under Hermes v0.14.0: it receives the real `request_messages`
-    // list and the real `response` SDK object as kwargs, and forwards them to
+    // pre_api_request / post_api_request and pre_tool_call / post_tool_call
+    // are NOT shell-forwarded. The in-process nemo-flow-bridge plugin
+    // (plugins/nemo-flow-bridge/) owns those events under Hermes v0.14.0: it
+    // receives the real `request_messages` list and the real `response` SDK
+    // object as kwargs for api_request, and synthesizes stable tool_call_ids
+    // for tool_call events to work around NeMo-Flow's adapters/mod.rs:231-247
+    // synthesizing a fresh UUID per call when Hermes' defensive
+    // `tool_call_id or ""` strips the id. The plugin forwards everything to
     // NEMO_FLOW_GATEWAY_URL/hooks/hermes with payload.request.body /
-    // payload.response.raw_response populated. NeMo-Flow's adapter then marks
-    // provider_payload_exact=true so Phoenix spans carry the real prompts and
-    // completions. Shell-forwarding these same events alongside the plugin
-    // would create duplicate lossy-summary LLM scopes on the gateway.
+    // payload.response.raw_response / paired tool_call_id populated. The
+    // adapter then marks provider_payload_exact=true (api_request) and pairs
+    // pre/post tool events into a single Phoenix span. Shell-forwarding the
+    // same events alongside the plugin would create duplicate lossy-summary
+    // scopes on the gateway.
     //
     // `on_session_end` gets a SECOND command (`nemo-flow-finalize-shim`) that
     // synthesizes a per-turn `on_session_finalize`. Hermes fires real finalize
@@ -144,7 +149,6 @@ function main(): void {
       const events = [
         "on_session_start", "on_session_finalize", "on_session_reset",
         "pre_llm_call", "post_llm_call",
-        "pre_tool_call", "post_tool_call",
         "subagent_stop",
       ];
       const result: Record<string, unknown[]> = Object.fromEntries(events.map((ev) => [ev, [fwd]]));

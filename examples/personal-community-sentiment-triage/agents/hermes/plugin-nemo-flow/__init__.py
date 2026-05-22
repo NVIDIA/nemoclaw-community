@@ -24,15 +24,18 @@ Failure mode is fail-open: any exception is swallowed and logged at debug.
 Hermes turns must never break because the bridge can't reach NeMo-Flow.
 
 Modeled on the bundled Langfuse plugin
-(/home/mpenn/hermes-agent/plugins/observability/langfuse/__init__.py).
+(`hermes-agent/plugins/observability/langfuse/__init__.py` in the Hermes
+source tree).
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
 import threading
+from collections import deque
 from types import SimpleNamespace
 from typing import Any, Optional
 
@@ -45,6 +48,25 @@ _CLIENT: Optional[Any] = None  # httpx.Client, lazily created
 _GATEWAY_URL: Optional[str] = None
 _GATEWAY_LOOKED_UP = False
 _DISABLED_LOGGED = False
+
+# FIFO of synthesized tool_call_ids keyed by (task_id, tool_name). The key
+# uses task_id (not session_id) because Hermes' pre/post call sites are
+# asymmetric: agent_runtime_helpers.py:1500-1503 fires pre_tool_call without
+# passing session_id (defaults to ""), while model_tools.py:851-859 fires
+# post_tool_call with the real session_id. task_id and tool_name are passed
+# consistently to both, so they form a stable join key. post_tool_call pops
+# from the matching queue to pair with the right pre.
+#
+# Each bucket is a bounded deque so a stream of pre_tool_call events
+# without matching post_tool_call (tool blocked, agent crash mid-turn,
+# post handler exception) can't grow without bound. 512 entries is far
+# more than any realistic single turn produces (single-digit tool calls)
+# but leaves generous safety margin before the oldest unmatched pre is
+# evicted. Empty buckets are deleted on pop so the outer dict tracks only
+# currently-pending pairs.
+_PENDING_MAX_PER_KEY = 512
+_PENDING_PRE: dict[tuple[str, str], deque[str]] = {}
+_PENDING_LOCK = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +276,35 @@ def _correlation(kwargs: dict) -> dict:
     }
 
 
+def _stable_tool_call_id(
+    *,
+    task_id: str,
+    tool_name: str,
+    args: Any,
+    supplied: Any,
+) -> str:
+    """Return supplied tool_call_id if non-empty; otherwise synthesize a stable
+    id from (task_id, tool_name, args) so pre and post produce the same id
+    and the gateway pairs them into a single Phoenix span.
+
+    task_id (not session_id) is in the digest because Hermes' pre call site
+    at agent_runtime_helpers.py:1500-1503 doesn't pass session_id (defaults
+    to ""), while the post call site at model_tools.py:851-859 does — so
+    including session_id would make pre's hash differ from post's. task_id
+    is passed to both call sites and is unique per turn.
+    """
+    if isinstance(supplied, str) and supplied.strip():
+        return supplied
+    try:
+        args_blob = json.dumps(_safe_jsonable(args), sort_keys=True, default=str)
+    except Exception:
+        args_blob = repr(args)[:1024]
+    digest = hashlib.sha1(
+        f"{task_id}|{tool_name}|{args_blob}".encode("utf-8")
+    ).hexdigest()[:16]
+    return f"nfb-{digest}"
+
+
 # ---------------------------------------------------------------------------
 # Hook handlers
 # ---------------------------------------------------------------------------
@@ -267,11 +318,23 @@ def on_pre_api_request(**kwargs: Any) -> None:
             conversation_history=kwargs.get("conversation_history"),
             user_message=kwargs.get("user_message"),
         )
+        # Wrap as {"messages": [...], "model": ..., ...} to match NeMo-Flow's
+        # documented LlmRequest.content convention
+        # (docs/integrate-frameworks/wrap-llm-calls.md, asserted by
+        # crates/core/tests/unit/observability/openinference_tests.rs). With
+        # this shape, openinference.rs:llm_input_display_value finds the
+        # messages list via content.get("messages") and renders each as
+        # "role: content", so Phoenix's input.value carries the full prompt
+        # rather than a lossy "Requested tools: ..." summary. ATIF's
+        # unwrap_llm_request surfaces the same dict at
+        # step.extra.llm_request, matching the documented shape.
         payload["request"] = {
-            "body": _safe_jsonable(messages),
-            "model": kwargs.get("model"),
+            "body": {
+                "messages": _safe_jsonable(messages),
+                "model": kwargs.get("model"),
+                "max_tokens": kwargs.get("max_tokens"),
+            },
             "api_mode": kwargs.get("api_mode"),
-            "max_tokens": kwargs.get("max_tokens"),
         }
         _forward(payload)
     except Exception as exc:
@@ -304,16 +367,92 @@ def on_post_api_request(**kwargs: Any) -> None:
         logger.debug("nemo-flow-bridge: on_post_api_request failed: %s", exc)
 
 
+def on_pre_tool_call(**kwargs: Any) -> None:
+    try:
+        task_id = kwargs.get("task_id") or ""
+        tool_name = kwargs.get("tool_name") or ""
+        args = kwargs.get("args")
+        tcid = _stable_tool_call_id(
+            task_id=task_id,
+            tool_name=tool_name,
+            args=args,
+            supplied=kwargs.get("tool_call_id"),
+        )
+        with _PENDING_LOCK:
+            bucket = _PENDING_PRE.get((task_id, tool_name))
+            if bucket is None:
+                bucket = deque(maxlen=_PENDING_MAX_PER_KEY)
+                _PENDING_PRE[(task_id, tool_name)] = bucket
+            bucket.append(tcid)
+        payload = _correlation(kwargs)
+        payload["hook_event_name"] = "pre_tool_call"
+        payload["tool_name"] = tool_name
+        payload["args"] = _safe_jsonable(args)
+        payload["tool_call_id"] = tcid
+        _forward(payload)
+    except Exception as exc:
+        logger.debug("nemo-flow-bridge: on_pre_tool_call failed: %s", exc)
+
+
+def on_post_tool_call(**kwargs: Any) -> None:
+    try:
+        task_id = kwargs.get("task_id") or ""
+        tool_name = kwargs.get("tool_name") or ""
+        args = kwargs.get("args")
+        # Hermes' tool-dispatch path fires pre_tool_call with tool_call_id=""
+        # (agent_runtime_helpers.py:1500-1503 calls
+        # get_pre_tool_call_block_message without passing tool_call_id or
+        # session_id) and post_tool_call with the real provider id and the
+        # real session_id (model_tools.py:851-859). The pre already shipped a
+        # synthesized id to the gateway; we must echo the SAME id at post or
+        # the gateway adapter treats them as two unpaired spans. FIFO key is
+        # (task_id, tool_name) since those two are the only fields passed
+        # consistently to both call sites. FIFO-pop first; fall back to the
+        # supplied id only if the FIFO is empty (e.g. a post without a
+        # matching pre, which would happen if we missed the pre event during
+        # startup).
+        with _PENDING_LOCK:
+            bucket = _PENDING_PRE.get((task_id, tool_name))
+            popped = bucket.popleft() if bucket else None
+            if bucket is not None and not bucket:
+                del _PENDING_PRE[(task_id, tool_name)]
+        if popped is not None:
+            tcid = popped
+        else:
+            tcid = _stable_tool_call_id(
+                task_id=task_id,
+                tool_name=tool_name,
+                args=args,
+                supplied=kwargs.get("tool_call_id"),
+            )
+        payload = _correlation(kwargs)
+        payload["hook_event_name"] = "post_tool_call"
+        payload["tool_name"] = tool_name
+        payload["args"] = _safe_jsonable(args)
+        payload["result"] = _safe_jsonable(kwargs.get("result"))
+        payload["duration_ms"] = kwargs.get("duration_ms")
+        payload["tool_call_id"] = tcid
+        _forward(payload)
+    except Exception as exc:
+        logger.debug("nemo-flow-bridge: on_post_tool_call failed: %s", exc)
+
+
 # ---------------------------------------------------------------------------
 # Plugin entry-point
 # ---------------------------------------------------------------------------
 
 def register(ctx) -> None:
-    """Wire pre/post_api_request to the in-process forwarders.
+    """Wire pre/post_api_request and pre/post_tool_call to the in-process
+    forwarders.
 
-    Shell-hook entries for these two events are intentionally removed from
+    Shell-hook entries for these four events are intentionally removed from
     config.yaml (see generate-config.ts) so the gateway sees exactly one
-    event per call — the enriched one from this plugin.
+    event per call — the enriched one from this plugin. For tool calls the
+    plugin also guarantees a stable tool_call_id, which Hermes' defensive
+    `tool_call_id or ""` would otherwise strip, causing the gateway adapter
+    to synthesize a fresh UUID per call and emit two unpaired spans.
     """
     ctx.register_hook("pre_api_request", on_pre_api_request)
     ctx.register_hook("post_api_request", on_post_api_request)
+    ctx.register_hook("pre_tool_call", on_pre_tool_call)
+    ctx.register_hook("post_tool_call", on_post_tool_call)

@@ -332,6 +332,25 @@ start_gateway_log_stream() {
   GATEWAY_LOG_TAIL_PID=$!
 }
 
+# Force the OpenInference BatchSpanProcessor (OpenTelemetry SDK 0.31, used
+# by nemo-flow's HTTP exporter at
+# crates/core/src/observability/openinference.rs:449-460) to flush every
+# span immediately instead of batching for 5 seconds. Without these, real
+# multi-scope Hermes turns produce a single larger POST that the OpenShell
+# L7 proxy appears to acknowledge with 200 but not forward to Phoenix,
+# causing silent span loss. With BSP_MAX_EXPORT_BATCH_SIZE=1 every span
+# becomes a small single-span POST, matching the manual-probe shape that
+# we confirmed lands cleanly. Tracked upstream as missing force_flush()
+# on turn boundary in nemo-flow's session.rs end_turn().
+#
+# Exports into the parent shell so both privilege paths inherit the same
+# values without duplicating the rationale at each call site.
+_export_otel_bsp_tunings() {
+  export OTEL_BSP_MAX_EXPORT_BATCH_SIZE=1
+  export OTEL_BSP_SCHEDULE_DELAY=100
+  export OTEL_BSP_EXPORT_TIMEOUT=2000
+}
+
 # ── socat forwarder ──────────────────────────────────────────────
 # Hermes API server binds to 127.0.0.1 regardless of config (upstream bug).
 # OpenShell needs the port accessible on 0.0.0.0 for port forwarding.
@@ -574,16 +593,7 @@ if [ "$(id -u)" -ne 0 ]; then
     echo "[nemo-flow] WARNING: gateway wrapper or config missing — telemetry disabled" | tee -a /tmp/gateway.log >&2
   fi
 
-  # OTEL_BSP_* force the OpenInference BatchSpanProcessor (OpenTelemetry SDK
-  # 0.31, used by nemo-flow's HTTP exporter at
-  # crates/core/src/observability/openinference.rs:449-460) to flush every
-  # span immediately instead of batching for 5 seconds. Without these, real
-  # multi-scope Hermes turns produce a single larger POST that the OpenShell
-  # L7 proxy appears to acknowledge with 200 but not forward to Phoenix,
-  # causing silent span loss. With BSP_MAX_EXPORT_BATCH_SIZE=1 every span
-  # becomes a small single-span POST, matching the manual-probe shape that
-  # we confirmed lands cleanly. Tracked upstream as missing force_flush() on
-  # turn boundary in nemo-flow's session.rs end_turn().
+  _export_otel_bsp_tunings
   HERMES_HOME="${HERMES_WRITABLE}" \
     HTTPS_PROXY="${_PROXY_URL}" \
     HTTP_PROXY="${_PROXY_URL}" \
@@ -591,9 +601,6 @@ if [ "$(id -u)" -ne 0 ]; then
     http_proxy="${_PROXY_URL}" \
     PYTHONPATH="${PATCHES_DIR}${PYTHONPATH:+:${PYTHONPATH}}" \
     API_SERVER_KEY="nemoclaw-internal" \
-    OTEL_BSP_MAX_EXPORT_BATCH_SIZE=1 \
-    OTEL_BSP_SCHEDULE_DELAY=100 \
-    OTEL_BSP_EXPORT_TIMEOUT=2000 \
     nohup /usr/local/bin/nemo-flow hermes -- gateway run >>/tmp/gateway.log 2>&1 &
   GATEWAY_PID=$!
   echo "[gateway] hermes gateway launched (pid $GATEWAY_PID)" >&2
@@ -662,10 +669,7 @@ harden_config_symlinks "${HERMES_IMMUTABLE}" "hermes"
 # into Hermes's environment, and spawns `hermes gateway run` as the child.
 # Hermes's hook subprocesses inherit NEMO_FLOW_GATEWAY_URL and forward
 # events to the in-proc gateway via `nemo-flow hook-forward hermes`.
-#
-# OTEL_BSP_* force the OpenInference BatchSpanProcessor to flush every span
-# immediately (single-span POSTs to Phoenix) instead of batching for 5s. See
-# the matching block in the non-root path above for full rationale.
+_export_otel_bsp_tunings
 HERMES_HOME="${HERMES_WRITABLE}" \
   HTTPS_PROXY="${_PROXY_URL}" \
   HTTP_PROXY="${_PROXY_URL}" \
@@ -673,9 +677,6 @@ HERMES_HOME="${HERMES_WRITABLE}" \
   http_proxy="${_PROXY_URL}" \
   PYTHONPATH="${PATCHES_DIR}${PYTHONPATH:+:${PYTHONPATH}}" \
   API_SERVER_KEY="nemoclaw-internal" \
-  OTEL_BSP_MAX_EXPORT_BATCH_SIZE=1 \
-  OTEL_BSP_SCHEDULE_DELAY=100 \
-  OTEL_BSP_EXPORT_TIMEOUT=2000 \
   nohup gosu gateway /usr/local/bin/nemo-flow hermes -- gateway run \
     >>/tmp/gateway.log 2>&1 &
 GATEWAY_PID=$!
