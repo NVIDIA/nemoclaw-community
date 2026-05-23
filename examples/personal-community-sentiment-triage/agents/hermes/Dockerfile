@@ -175,7 +175,7 @@ RUN chmod 755 /usr/local/bin/nemo-flow
 # and root-span closer only act on `on_session_finalize` / `on_session_reset`.
 # This shim, registered as a second hook on `on_session_end`, rewrites the
 # event name and re-posts to the gateway so each turn closes its agent scope.
-COPY agents/hermes/nemo-flow-finalize-shim /usr/local/bin/nemo-flow-finalize-shim
+COPY agents/hermes/nemo-flow/finalize-shim /usr/local/bin/nemo-flow-finalize-shim
 RUN chmod 755 /usr/local/bin/nemo-flow-finalize-shim
 
 COPY agents/hermes/patches/ /usr/local/lib/nemoclaw-patches/
@@ -202,7 +202,7 @@ RUN pip3 install --no-cache-dir --break-system-packages \
 #                  configured agent and skips the interactive setup wizard
 #                  (which fails in non-TTY sandboxes).
 #   plugins.toml — observability component (ATIF + OpenInference).
-COPY agents/hermes/nemo-flow-plugins.toml.in /tmp/nemo-flow-plugins.toml.in
+COPY agents/hermes/nemo-flow/plugins.toml.in /tmp/nemo-flow-plugins.toml.in
 RUN mkdir -p /etc/nemo-flow \
     && printf '%s\n' '[agents.hermes]' 'command = "hermes"' > /etc/nemo-flow/config.toml \
     && chmod 444 /etc/nemo-flow/config.toml \
@@ -227,13 +227,13 @@ ENV HERMES_TELEGRAM_DISABLE_FALLBACK_IPS=1 \
     GH_TOKEN=openshell:resolve:env:GITHUB_TOKEN
 
 # Copy NemoClaw plugin for Hermes (Python-based)
-COPY agents/hermes/plugin/ /opt/nemoclaw-hermes-plugin/
+COPY agents/hermes/plugins/nemoclaw/ /opt/nemoclaw-hermes-plugin/
 
-# Copy nemo-flow-bridge plugin: in-process forwarder for pre/post_api_request
+# Copy nemo-flow plugin: in-process forwarder for pre/post_api_request
 # events that enriches NeMo-Flow hook payloads with the real OpenAI request
 # body and response body (the shell-hook path is metadata-only by design).
 # Requires Hermes >= v0.14.0 because earlier versions sanitized plugin kwargs.
-COPY agents/hermes/plugin-nemo-flow/ /opt/nemo-flow-hermes-plugin/
+COPY agents/hermes/plugins/nemo-flow/ /opt/nemo-flow-hermes-plugin/
 
 # Copy bridges and default cron jobs.
 # Install under /usr/local/lib/ so Landlock's read_only /usr rule permits access.
@@ -328,10 +328,10 @@ RUN node --experimental-strip-types /opt/nemoclaw-generate-config.ts
 RUN mkdir -p /sandbox/.hermes-data/plugins/nemoclaw \
     && cp -r /opt/nemoclaw-hermes-plugin/* /sandbox/.hermes-data/plugins/nemoclaw/
 
-# Install nemo-flow-bridge plugin into Hermes. HERMES_HOME=/sandbox/.hermes-data
+# Install nemo-flow plugin into Hermes. HERMES_HOME=/sandbox/.hermes-data
 # (set in start.sh) and Hermes' plugin loader scans $HERMES_HOME/plugins/.
-RUN mkdir -p /sandbox/.hermes-data/plugins/nemo-flow-bridge \
-    && cp -r /opt/nemo-flow-hermes-plugin/* /sandbox/.hermes-data/plugins/nemo-flow-bridge/
+RUN mkdir -p /sandbox/.hermes-data/plugins/nemo-flow \
+    && cp -r /opt/nemo-flow-hermes-plugin/* /sandbox/.hermes-data/plugins/nemo-flow/
 
 # Symlink SOUL.md into the immutable home so Hermes's ensure_hermes_home() finds it.
 RUN ln -s /sandbox/.hermes-data/SOUL.md /sandbox/.hermes/SOUL.md

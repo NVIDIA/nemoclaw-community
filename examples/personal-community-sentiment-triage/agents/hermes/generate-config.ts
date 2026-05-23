@@ -123,8 +123,8 @@ function main(): void {
     // avoid "unknown hook event" warnings.
     //
     // pre_api_request / post_api_request and pre_tool_call / post_tool_call
-    // are NOT shell-forwarded. The in-process nemo-flow-bridge plugin
-    // (plugins/nemo-flow-bridge/) owns those events under Hermes v0.14.0: it
+    // are NOT shell-forwarded. The in-process nemo-flow plugin
+    // (plugins/nemo-flow/) owns those events under Hermes v0.14.0: it
     // receives the real `request_messages` list and the real `response` SDK
     // object as kwargs for api_request, and synthesizes stable tool_call_ids
     // for tool_call events to work around NeMo-Flow's adapters/mod.rs:231-247
@@ -161,12 +161,12 @@ function main(): void {
     // root-owned + chmod 444 at build time.
     hooks_auto_accept: true,
     // Enable in-process Hermes plugins. nemoclaw provides sandbox status
-    // tools and the startup banner; nemo-flow-bridge owns the pre/post_api_request
+    // tools and the startup banner; nemo-flow owns the pre/post_api_request
     // events (see hooks comment above). Belt-and-suspenders against
     // config-migration changes — v0.14.0 also auto-discovers plugins under
     // $HERMES_HOME/plugins/, but explicit enablement survives schema bumps.
     plugins: {
-      enabled: ["nemoclaw", "nemo-flow-bridge"],
+      enabled: ["nemoclaw", "nemo-flow"],
     },
   };
 

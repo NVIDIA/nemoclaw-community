@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 """
-nemo-flow-bridge: in-process Hermes plugin that forwards pre/post_api_request
+nemo-flow: in-process Hermes plugin that forwards pre/post_api_request
 hooks to NeMo-Flow with the real request body and response body attached.
 
 Under Hermes v0.14.0, plugin hooks carry real data:
@@ -83,7 +83,7 @@ def _gateway_url() -> Optional[str]:
         if not url:
             if not _DISABLED_LOGGED:
                 logger.debug(
-                    "nemo-flow-bridge: NEMO_FLOW_GATEWAY_URL is not set; "
+                    "nemo-flow: NEMO_FLOW_GATEWAY_URL is not set; "
                     "bridge will not forward hooks (expected when Hermes "
                     "runs outside `nemo-flow hermes -- ...`)."
                 )
@@ -104,7 +104,7 @@ def _client():
             _CLIENT = httpx.Client(timeout=2.0)
             return _CLIENT
         except Exception as exc:  # pragma: no cover
-            logger.debug("nemo-flow-bridge: failed to construct httpx client: %s", exc)
+            logger.debug("nemo-flow: failed to construct httpx client: %s", exc)
             return None
 
 
@@ -258,7 +258,7 @@ def _forward(payload: dict) -> None:
     try:
         client.post(f"{url}/hooks/hermes", json=_cap_payload(payload))
     except Exception as exc:
-        logger.debug("nemo-flow-bridge: forward to %s failed: %s", url, exc)
+        logger.debug("nemo-flow: forward to %s failed: %s", url, exc)
 
 
 def _correlation(kwargs: dict) -> dict:
@@ -338,7 +338,7 @@ def on_pre_api_request(**kwargs: Any) -> None:
         }
         _forward(payload)
     except Exception as exc:
-        logger.debug("nemo-flow-bridge: on_pre_api_request failed: %s", exc)
+        logger.debug("nemo-flow: on_pre_api_request failed: %s", exc)
 
 
 def on_post_api_request(**kwargs: Any) -> None:
@@ -364,7 +364,7 @@ def on_post_api_request(**kwargs: Any) -> None:
         }
         _forward(payload)
     except Exception as exc:
-        logger.debug("nemo-flow-bridge: on_post_api_request failed: %s", exc)
+        logger.debug("nemo-flow: on_post_api_request failed: %s", exc)
 
 
 def on_pre_tool_call(**kwargs: Any) -> None:
@@ -391,7 +391,7 @@ def on_pre_tool_call(**kwargs: Any) -> None:
         payload["tool_call_id"] = tcid
         _forward(payload)
     except Exception as exc:
-        logger.debug("nemo-flow-bridge: on_pre_tool_call failed: %s", exc)
+        logger.debug("nemo-flow: on_pre_tool_call failed: %s", exc)
 
 
 def on_post_tool_call(**kwargs: Any) -> None:
@@ -434,7 +434,7 @@ def on_post_tool_call(**kwargs: Any) -> None:
         payload["tool_call_id"] = tcid
         _forward(payload)
     except Exception as exc:
-        logger.debug("nemo-flow-bridge: on_post_tool_call failed: %s", exc)
+        logger.debug("nemo-flow: on_post_tool_call failed: %s", exc)
 
 
 # ---------------------------------------------------------------------------
