@@ -210,7 +210,11 @@ RUN mkdir -p /etc/nemo-flow \
     && if [ -z "$PHOENIX_URL" ]; then \
          PHOENIX_ENABLED=false; PHOENIX_ENDPOINT=""; \
        else \
-         PHOENIX_ENABLED=true; PHOENIX_ENDPOINT="${PHOENIX_URL%/}/v1/traces"; \
+         # PHOENIX_COLLECTOR_ENDPOINT is consumed verbatim — the user supplies
+         # the full OTLP HTTP/binary URL (typically including the /v1/traces
+         # suffix). The trailing-slash strip is the only normalization. See
+         # .env.example and README for the documented value format.
+         PHOENIX_ENABLED=true; PHOENIX_ENDPOINT="${PHOENIX_URL%/}"; \
        fi \
     && sed -e "s|@@PHOENIX_ENABLED@@|${PHOENIX_ENABLED}|g" \
            -e "s|@@PHOENIX_ENDPOINT@@|${PHOENIX_ENDPOINT}|g" \
