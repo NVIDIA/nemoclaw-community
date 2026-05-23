@@ -269,8 +269,38 @@ install_configure_guard() {
   local marker_begin="# nemoclaw-configure-guard begin"
   local marker_end="# nemoclaw-configure-guard end"
   local snippet
+  # Canonical hermes() wrapper for interactive sandbox shells. Appended
+  # LAST to /sandbox/.bashrc (rewrite_rc_marker_block appends after any
+  # Dockerfile-time content), so under bash's last-define-wins this
+  # shadows anything earlier. Cases:
+  #   - setup/doctor: block in-sandbox config mutations
+  #   - gateway: pass through (start.sh runs the long-running gateway;
+  #     user-level `hermes gateway` is unusual but supported)
+  #   - chat/no-args: route through `nemo-flow hermes --` so the TUI
+  #     inherits NEMO_FLOW_GATEWAY_URL and traces flow to Phoenix/ATIF
+  #   - everything else: pass through
+  #
+  # The two HERMES_* exports below MUST live here, not in the Dockerfile
+  # ENV: OpenShell's exec-session env allowlist strips non-HERMES_HOME
+  # HERMES_* vars, so anything baked into image ENV vanishes before the
+  # user's shell sees it. PID-1 (start.sh-launched gateway) does get the
+  # Docker ENV, hence we keep HERMES_DISABLE_LAZY_INSTALLS in both
+  # places. HERMES_TUI_THEME is only meaningful for the TUI, so bashrc
+  # alone is enough.
+  #   - HERMES_TUI_THEME=dark: short-circuits Hermes's OSC 11 background
+  #     probe (cli.py:_is_light_mode_detected priority 2 of 6) so the
+  #     response doesn't leak into the TUI input buffer under `openshell
+  #     sandbox connect`'s relayed PTY. COLORFGBG (priority 4) would
+  #     also work but is stripped by the same allowlist.
+  #   - HERMES_DISABLE_LAZY_INSTALLS=1: stops `hermes chat`'s banner
+  #     from hanging on `uv pip install` attempts for any optional
+  #     feature not pre-installed via HERMES_UV_EXTRAS (the sandbox
+  #     can't reach PyPI by policy). Lazy-install check_fns return False
+  #     and the tool is filtered out of the registry instead.
   read -r -d '' snippet <<'GUARD' || true
 # nemoclaw-configure-guard begin
+export HERMES_TUI_THEME=dark
+export HERMES_DISABLE_LAZY_INSTALLS=1
 hermes() {
   case "$1" in
     setup|doctor)
@@ -281,8 +311,19 @@ hermes() {
       echo "  nemoclaw onboard --resume" >&2
       return 1
       ;;
+    gateway)
+      command hermes "$@"
+      ;;
+    chat|"")
+      # No exec — keep the bash shell alive so Ctrl+C / TUI exit returns
+      # the user to their sandbox prompt instead of dropping the whole
+      # `openshell sandbox connect` session.
+      /usr/local/bin/nemo-flow hermes -- "$@"
+      ;;
+    *)
+      command hermes "$@"
+      ;;
   esac
-  command hermes "$@"
 }
 # nemoclaw-configure-guard end
 GUARD

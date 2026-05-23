@@ -123,7 +123,18 @@ RUN pip3 install --no-cache-dir --break-system-packages "httpx>=0.27" "markdown-
 # incrementally reconcile dependencies against v0.14.0's uv.lock.
 ARG HERMES_UPGRADE_VERSION=v2026.5.16
 ARG HERMES_UPGRADE_TARBALL_SHA256=c0a554050a50ee9a62f3fa5cd288a167ba5640c42d647d100cdea084b7294143
-ARG HERMES_UV_EXTRAS="messaging web"
+# messaging: slack-bolt + slack-sdk + aiohttp (and friends) for the Slack
+#   platform path.
+# web: fastapi + uvicorn for Hermes's web tools.
+# cli: simple-term-menu, used by `hermes chat` TUI menus. Without this the
+#   TUI banner path can try to lazy-install at runtime, which the
+#   locked-down sandbox can't satisfy.
+# edge-tts: edge-tts==7.2.7. The TTS check_fn fires during banner
+#   enumeration regardless of toolset config; pre-installing avoids the
+#   PyPI fetch attempt at runtime. HERMES_DISABLE_LAZY_INSTALLS=1 (set
+#   below + in start.sh) is the belt-and-suspenders fallback for any
+#   other lazy feature we haven't pre-installed.
+ARG HERMES_UV_EXTRAS="messaging web cli edge-tts"
 # Match the uv version NemoClaw uses for the base-image install.
 ARG UV_INSTALL_VERSION=0.11.8
 
@@ -204,7 +215,11 @@ RUN pip3 install --no-cache-dir --break-system-packages \
 #   plugins.toml — observability component (ATIF + OpenInference).
 COPY agents/hermes/nemo-flow/plugins.toml.in /tmp/nemo-flow-plugins.toml.in
 RUN mkdir -p /etc/nemo-flow \
-    && printf '%s\n' '[agents.hermes]' 'command = "hermes"' > /etc/nemo-flow/config.toml \
+    && printf '%s\n' \
+         '[agents.hermes]' \
+         'command = "hermes"' \
+         'hooks_path = "/sandbox/.hermes/config.yaml"' \
+         > /etc/nemo-flow/config.toml \
     && chmod 444 /etc/nemo-flow/config.toml \
     && PHOENIX_URL="${PHOENIX_COLLECTOR_ENDPOINT:-}" \
     && if [ -z "$PHOENIX_URL" ]; then \
@@ -227,7 +242,16 @@ RUN mkdir -p /etc/nemo-flow \
 # (decode-proxy → OpenShell L7 proxy) handles credential placeholder
 # rewriting and hostname-based policy enforcement. The Python preload
 # rewrites Slack SDK-shaped placeholders before HTTPS serialization.
+#
+# Only HERMES_HOME and HERMES_DISABLE_LAZY_INSTALLS reliably reach
+# user processes — OpenShell's exec-session allowlist strips most other
+# HERMES_* vars. PID-1 (start.sh-launched gateway) keeps everything;
+# HERMES_DISABLE_LAZY_INSTALLS is also re-exported in start.sh's bashrc
+# snippet so interactive shells get it. See start.sh:install_configure_guard
+# for the full rationale.
 ENV HERMES_TELEGRAM_DISABLE_FALLBACK_IPS=1 \
+    HERMES_DISABLE_LAZY_INSTALLS=1 \
+    HERMES_HOME=/sandbox/.hermes-data \
     GH_TOKEN=openshell:resolve:env:GITHUB_TOKEN
 
 # Copy NemoClaw plugin for Hermes (Python-based)
@@ -350,6 +374,15 @@ RUN chown root:root /sandbox/.hermes \
     && chmod 755 /sandbox/.hermes \
     && chmod 444 /sandbox/.hermes/config.yaml \
     && chmod 444 /sandbox/.hermes/.env
+
+# The `hermes()` shell-function wrapper that routes interactive
+# `hermes` / `hermes chat` invocations through `nemo-flow hermes --`
+# (so the TUI's NEMO_FLOW_GATEWAY_URL is populated and traces flow) is
+# installed at runtime by start.sh's install_configure_guard(). That
+# function owns /sandbox/.bashrc's tracked configure-guard block via
+# marker-bounded rewrite, and is the LAST writer to the file at sandbox
+# init — so Dockerfile-time appends would be shadowed. The merged
+# function (configure-guard + tracing wrapper) lives in start.sh.
 
 # Pin config hash at build time for integrity verification at startup.
 RUN sha256sum /sandbox/.hermes/config.yaml /sandbox/.hermes/.env \
