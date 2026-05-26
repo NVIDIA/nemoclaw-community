@@ -1,8 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 """
-nemo-flow: in-process Hermes plugin that forwards pre/post_api_request
-hooks to NeMo-Flow with the real request body and response body attached.
+nemo-relay: in-process Hermes plugin that forwards pre/post_api_request
+hooks to NeMo-Relay with the real request body and response body attached.
 
 Under Hermes v0.14.0, plugin hooks carry real data:
   - pre_api_request receives `request_messages` (list of dicts), `user_message`,
@@ -12,16 +12,16 @@ Under Hermes v0.14.0, plugin hooks carry real data:
     OpenAI ChatCompletion shape with .choices/.usage/.model/.id) and
     `assistant_message` (a NormalizedResponse with .content/.tool_calls).
 
-NeMo-Flow's Hermes adapter (crates/cli/src/adapters/hermes.rs) flips
+NeMo-Relay's Hermes adapter (crates/cli/src/adapters/hermes.rs) flips
 `provider_payload_exact` to true and emits Phoenix LLM spans with the full
 prompt+completion when it finds `payload.request.body` (pre) or
 `payload.response.{raw_response,choices,assistant_message}` (post). This plugin
 builds those payload shapes from the in-process kwargs and POSTs them to
-`${NEMO_FLOW_GATEWAY_URL}/hooks/hermes` — the URL is exported into the Hermes
-child env by the `nemo-flow hermes -- gateway run` wrapper at start.sh.
+`${NEMO_RELAY_GATEWAY_URL}/hooks/hermes` — the URL is exported into the Hermes
+child env by the `nemo-relay hermes -- gateway run` wrapper at start.sh.
 
 Failure mode is fail-open: any exception is swallowed and logged at debug.
-Hermes turns must never break because the bridge can't reach NeMo-Flow.
+Hermes turns must never break because the bridge can't reach NeMo-Relay.
 
 Modeled on the bundled Langfuse plugin
 (`hermes-agent/plugins/observability/langfuse/__init__.py` in the Hermes
@@ -79,13 +79,13 @@ def _gateway_url() -> Optional[str]:
         if _GATEWAY_LOOKED_UP:
             return _GATEWAY_URL
         _GATEWAY_LOOKED_UP = True
-        url = os.environ.get("NEMO_FLOW_GATEWAY_URL", "").strip()
+        url = os.environ.get("NEMO_RELAY_GATEWAY_URL", "").strip()
         if not url:
             if not _DISABLED_LOGGED:
                 logger.debug(
-                    "nemo-flow: NEMO_FLOW_GATEWAY_URL is not set; "
+                    "nemo-relay: NEMO_RELAY_GATEWAY_URL is not set; "
                     "bridge will not forward hooks (expected when Hermes "
-                    "runs outside `nemo-flow hermes -- ...`)."
+                    "runs outside `nemo-relay hermes -- ...`)."
                 )
                 _DISABLED_LOGGED = True
             return None
@@ -104,7 +104,7 @@ def _client():
             _CLIENT = httpx.Client(timeout=2.0)
             return _CLIENT
         except Exception as exc:  # pragma: no cover
-            logger.debug("nemo-flow: failed to construct httpx client: %s", exc)
+            logger.debug("nemo-relay: failed to construct httpx client: %s", exc)
             return None
 
 
@@ -191,7 +191,7 @@ def _serialize_tool_calls(tool_calls: Any) -> list:
 
 
 def _serialize_assistant_message(obj: Any) -> Optional[dict]:
-    """Pull the fields NeMo-Flow's adapter inspects on
+    """Pull the fields NeMo-Relay's adapter inspects on
     `response.assistant_message` (adapters/hermes.rs:264-280)."""
     if obj is None:
         return None
@@ -258,11 +258,11 @@ def _forward(payload: dict) -> None:
     try:
         client.post(f"{url}/hooks/hermes", json=_cap_payload(payload))
     except Exception as exc:
-        logger.debug("nemo-flow: forward to %s failed: %s", url, exc)
+        logger.debug("nemo-relay: forward to %s failed: %s", url, exc)
 
 
 def _correlation(kwargs: dict) -> dict:
-    """The fields NeMo-Flow's adapter uses to synthesize api_call_id and
+    """The fields NeMo-Relay's adapter uses to synthesize api_call_id and
     correlate hook events back to the right session/turn scope."""
     return {
         "task_id": kwargs.get("task_id"),
@@ -318,7 +318,7 @@ def on_pre_api_request(**kwargs: Any) -> None:
             conversation_history=kwargs.get("conversation_history"),
             user_message=kwargs.get("user_message"),
         )
-        # Wrap as {"messages": [...], "model": ..., ...} to match NeMo-Flow's
+        # Wrap as {"messages": [...], "model": ..., ...} to match NeMo-Relay's
         # documented LlmRequest.content convention
         # (docs/integrate-frameworks/wrap-llm-calls.md, asserted by
         # crates/core/tests/unit/observability/openinference_tests.rs). With
@@ -338,7 +338,7 @@ def on_pre_api_request(**kwargs: Any) -> None:
         }
         _forward(payload)
     except Exception as exc:
-        logger.debug("nemo-flow: on_pre_api_request failed: %s", exc)
+        logger.debug("nemo-relay: on_pre_api_request failed: %s", exc)
 
 
 def on_post_api_request(**kwargs: Any) -> None:
@@ -364,7 +364,7 @@ def on_post_api_request(**kwargs: Any) -> None:
         }
         _forward(payload)
     except Exception as exc:
-        logger.debug("nemo-flow: on_post_api_request failed: %s", exc)
+        logger.debug("nemo-relay: on_post_api_request failed: %s", exc)
 
 
 def on_pre_tool_call(**kwargs: Any) -> None:
@@ -391,7 +391,7 @@ def on_pre_tool_call(**kwargs: Any) -> None:
         payload["tool_call_id"] = tcid
         _forward(payload)
     except Exception as exc:
-        logger.debug("nemo-flow: on_pre_tool_call failed: %s", exc)
+        logger.debug("nemo-relay: on_pre_tool_call failed: %s", exc)
 
 
 def on_post_tool_call(**kwargs: Any) -> None:
@@ -434,7 +434,7 @@ def on_post_tool_call(**kwargs: Any) -> None:
         payload["tool_call_id"] = tcid
         _forward(payload)
     except Exception as exc:
-        logger.debug("nemo-flow: on_post_tool_call failed: %s", exc)
+        logger.debug("nemo-relay: on_post_tool_call failed: %s", exc)
 
 
 # ---------------------------------------------------------------------------

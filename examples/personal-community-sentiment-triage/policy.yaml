@@ -129,7 +129,7 @@ network_policies:
           method: POST
           path: /**
     binaries:
-    - path: /usr/local/bin/nemo-flow
+    - path: /usr/local/bin/nemo-relay
     - path: /usr/bin/python3
     - path: /usr/bin/python3.13
     - path: /opt/hermes/.venv/bin/python

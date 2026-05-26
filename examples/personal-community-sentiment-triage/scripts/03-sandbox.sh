@@ -121,7 +121,7 @@ if [[ -n "${NEMOCLAW_MODEL:-}" ]]; then
 fi
 
 # Phoenix endpoint — bake into the image so the agent emits OpenInference
-# traces to the collector. NeMo-Flow itself is now installed unconditionally
+# traces to the collector. NeMo-Relay itself is now installed unconditionally
 # by the Dockerfile (ATIF traces always written to /tmp/atif/), so this
 # block is Phoenix-specific: no point overwriting the ARG with empty when
 # the user hasn't configured a collector.

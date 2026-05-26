@@ -106,7 +106,7 @@ def _build_banner(info):
     horizontal = "─" * (inner + 2)
 
     # Border in palette green, TTY-gated and NO_COLOR-respecting — matches
-    # NeMo Flow's launcher.rs:eprint_border_line.
+    # NeMo Relay's launcher.rs:eprint_border_line.
     use_color = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
     if use_color:
         green, reset = "\x1b[38;5;112m", "\x1b[0m"

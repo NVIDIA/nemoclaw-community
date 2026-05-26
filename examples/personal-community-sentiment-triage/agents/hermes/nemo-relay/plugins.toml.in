@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# NeMo-Flow gateway plugin config — installed at /etc/nemo-flow/plugins.toml.
+# NeMo-Relay gateway plugin config — installed at /etc/nemo-relay/plugins.toml.
 # Substituted at image build time from PHOENIX_COLLECTOR_ENDPOINT.
-# Schema: nemo_flow.observability.ObservabilityConfig
-# (NeMo-Flow python/nemo_flow/observability.py).
+# Schema: nemo_relay.observability.ObservabilityConfig
+# (NeMo-Relay python/nemo_relay/observability.py).
 
 version = 1
 

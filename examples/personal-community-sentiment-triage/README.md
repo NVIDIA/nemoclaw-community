@@ -32,7 +32,7 @@ flowchart LR
         direction TB
 
         subgraph sandbox["OpenShell Sandbox"]
-            agent["Hermes Agent\nLLM + NemoFlow"]
+            agent["Hermes Agent\nLLM + NemoRelay"]
             outlookBridge["Outlook Bridge"]
             credSidecar["MS Graph Sidecar\n127.0.0.1:8766"]
 
@@ -239,7 +239,7 @@ $ bash scripts/bring-up.sh
 
 The script auto-sources `.env`, then runs `01-gateway.sh` → `02-providers.sh` →
 `03-sandbox.sh` (select or register the local OpenShell gateway, upsert provider
-credentials, build and launch the sandbox). The image always installs NeMo-Flow
+credentials, build and launch the sandbox). The image always installs NeMo-Relay
 so the agent writes ATIF traces to `/tmp/atif/` regardless of Phoenix config.
 If `PHOENIX_COLLECTOR_ENDPOINT` is set, `03-sandbox.sh` additionally bakes the
 endpoint into the image so OpenInference traces stream into Phoenix at
@@ -265,12 +265,12 @@ The example's Dockerfile drops the upstream `COPY nemoclaw-blueprint/` step —
 nothing in the Hermes runtime reads `/sandbox/.nemoclaw/blueprints/`, so this
 example is **fully self-contained** and never needs a NemoClaw checkout.
 
-The Dockerfile always installs NeMo-Flow: an in-image `pip install` of the
-`nemo-flow` version pinned by `NEMO_FLOW_VERSION` in
+The Dockerfile always installs NeMo-Relay: an in-image `pip install` of the
+`nemo-relay` version pinned by `NEMO_RELAY_VERSION` in
 [agents/hermes/Dockerfile](agents/hermes/Dockerfile) (from PyPI), plus a
-re-install of Hermes with the NeMo-Flow integration patch fetched from
-[NVIDIA/NeMo-Flow](https://github.com/NVIDIA/NeMo-Flow) at the pinned
-`NEMO_FLOW_VERSION` tag and applied during the build (~1-2 min on a cold
+re-install of Hermes with the NeMo-Relay integration patch fetched from
+[NVIDIA/NeMo-Relay](https://github.com/NVIDIA/NeMo-Relay) at the pinned
+`NEMO_RELAY_VERSION` tag and applied during the build (~1-2 min on a cold
 build, cached on rebuild). That alone is enough for the agent to write ATIF
 trace records to `/tmp/atif/` — capture them with
 [`scripts/download-traces.sh`](scripts/download-traces.sh).
@@ -352,7 +352,7 @@ compatible-endpoint --model <NEMOCLAW_MODEL>` rather than `--provider` on sandbo
 | `NEMOCLAW_ENDPOINT_URL` | `https://integrate.api.nvidia.com/v1` | Upstream base URL for the `compatible-endpoint` provider. (`OPENAI_BASE_URL` is also accepted as a fallback.) |
 | `COMPATIBLE_API_KEY` | (none) | Inference API key. Mirrors NemoClaw's `REMOTE_PROVIDER_CONFIG.custom`. (`OPENAI_API_KEY` is also accepted.) |
 | `TOKEN_MANAGER_HOST` | `host.openshell.internal` | Host where the MS Graph token manager is reachable from inside the sandbox. |
-| `PHOENIX_COLLECTOR_ENDPOINT` | (none) | Set to e.g. `http://host.openshell.internal:6006/v1/traces` to stream OpenInference traces to a Phoenix collector. ATIF trace generation does not depend on this — NeMo-Flow is always installed and writes ATIF locally to `/tmp/atif/` regardless. |
+| `PHOENIX_COLLECTOR_ENDPOINT` | (none) | Set to e.g. `http://host.openshell.internal:6006/v1/traces` to stream OpenInference traces to a Phoenix collector. ATIF trace generation does not depend on this — NeMo-Relay is always installed and writes ATIF locally to `/tmp/atif/` regardless. |
 
 ## Verification (what success looks like)
 

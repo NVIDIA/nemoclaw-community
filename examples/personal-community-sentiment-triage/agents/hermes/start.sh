@@ -112,6 +112,11 @@ PUBLIC_PORT=8642
 # Hermes binds to 127.0.0.1 regardless of config (upstream bug).
 # Run it on an internal port and use socat to expose on PUBLIC_PORT.
 INTERNAL_PORT=18642
+# Persistent NeMo-Relay gateway port. Every Hermes process discovers it via
+# NEMO_RELAY_GATEWAY_URL in env and forwards hook events to /hooks/hermes —
+# replacing the per-invocation `nemo-relay hermes --` ephemeral gateway model.
+# 4040 is the upstream default (NeMo-Relay crates/cli/src/config.rs:419).
+NEMO_RELAY_GATEWAY_PORT=4040
 
 # Hermes writes state files (PID, state.db, .channel_directory) directly into
 # HERMES_HOME. We cannot point it at the immutable /sandbox/.hermes dir.
@@ -276,8 +281,8 @@ install_configure_guard() {
   #   - setup/doctor: block in-sandbox config mutations
   #   - gateway: pass through (start.sh runs the long-running gateway;
   #     user-level `hermes gateway` is unusual but supported)
-  #   - chat/no-args: route through `nemo-flow hermes --` so the TUI
-  #     inherits NEMO_FLOW_GATEWAY_URL and traces flow to Phoenix/ATIF
+  #   - chat/no-args: route through `nemo-relay hermes --` so the TUI
+  #     inherits NEMO_RELAY_GATEWAY_URL and traces flow to Phoenix/ATIF
   #   - everything else: pass through
   #
   # The two HERMES_* exports below MUST live here, not in the Dockerfile
@@ -318,7 +323,7 @@ hermes() {
       # No exec — keep the bash shell alive so Ctrl+C / TUI exit returns
       # the user to their sandbox prompt instead of dropping the whole
       # `openshell sandbox connect` session.
-      /usr/local/bin/nemo-flow hermes -- "$@"
+      /usr/local/bin/nemo-relay hermes -- "$@"
       ;;
     *)
       command hermes "$@"
@@ -374,7 +379,7 @@ start_gateway_log_stream() {
 }
 
 # Force the OpenInference BatchSpanProcessor (OpenTelemetry SDK 0.31, used
-# by nemo-flow's HTTP exporter at
+# by nemo-relay's HTTP exporter at
 # crates/core/src/observability/openinference.rs:449-460) to flush every
 # span immediately instead of batching for 5 seconds. Without these, real
 # multi-scope Hermes turns produce a single larger POST that the OpenShell
@@ -382,7 +387,7 @@ start_gateway_log_stream() {
 # causing silent span loss. With BSP_MAX_EXPORT_BATCH_SIZE=1 every span
 # becomes a small single-span POST, matching the manual-probe shape that
 # we confirmed lands cleanly. Tracked upstream as missing force_flush()
-# on turn boundary in nemo-flow's session.rs end_turn().
+# on turn boundary in nemo-relay's session.rs end_turn().
 #
 # Exports into the parent shell so both privilege paths inherit the same
 # values without duplicating the rationale at each call site.
@@ -442,6 +447,48 @@ start_decode_proxy() {
     attempts=$((attempts + 1))
   done
   echo "[gateway] decode-proxy failed to start — placeholder rewriting may not work" >&2
+}
+
+# ── NeMo-Relay sidecar gateway ──────────────────────────────────
+# Long-running standalone NeMo-Relay gateway that all Hermes processes
+# (PID-1 gateway, Slack/Outlook bridge-driven turns, interactive TUI in
+# Phase 2) forward hook events to via NEMO_RELAY_GATEWAY_URL. Replaces the
+# old per-invocation `nemo-relay hermes -- <cmd>` ephemeral-gateway model so
+# all telemetry lands in a single Phoenix/ATIF correlated session.
+NEMO_RELAY_PID=""
+start_nemo_relay_sidecar() {
+  if ! [ -x /usr/local/bin/nemo-relay ]; then
+    echo "[nemo-relay] binary not found at /usr/local/bin/nemo-relay, skipping" >&2
+    return 0
+  fi
+  # OTEL BSP tunings shape the OpenInference exporter's flush behavior; on the
+  # sidecar process now, not on hermes — see _export_otel_bsp_tunings comment.
+  _export_otel_bsp_tunings
+  if [ "$(id -u)" -eq 0 ]; then
+    nohup gosu gateway /usr/local/bin/nemo-relay \
+      --bind "127.0.0.1:${NEMO_RELAY_GATEWAY_PORT}" \
+      --plugin-config /etc/nemo-relay/plugins.toml \
+      >>/tmp/nemo-relay.log 2>&1 &
+  else
+    nohup /usr/local/bin/nemo-relay \
+      --bind "127.0.0.1:${NEMO_RELAY_GATEWAY_PORT}" \
+      --plugin-config /etc/nemo-relay/plugins.toml \
+      >>/tmp/nemo-relay.log 2>&1 &
+  fi
+  NEMO_RELAY_PID=$!
+  # Wait for /healthz before returning so the PID-1 hermes launch downstream
+  # doesn't race the sidecar (else first-turn events drop silently).
+  local attempts=0
+  while [ "$attempts" -lt 30 ]; do
+    if curl -sf "http://127.0.0.1:${NEMO_RELAY_GATEWAY_PORT}/healthz" >/dev/null 2>&1; then
+      echo "[nemo-relay] sidecar healthy on 127.0.0.1:${NEMO_RELAY_GATEWAY_PORT} (pid $NEMO_RELAY_PID)" >&2
+      return 0
+    fi
+    sleep 0.5
+    attempts=$((attempts + 1))
+  done
+  echo "[nemo-relay] WARNING: sidecar did not become healthy within 15s (pid $NEMO_RELAY_PID) — telemetry may be missing" >&2
+  return 0
 }
 
 # Outlook bridge / MS Graph sidecar PIDs (populated at launch).
@@ -584,6 +631,7 @@ export GITHUB_TOKEN="${GITHUB_TOKEN:-openshell:resolve:env:GITHUB_TOKEN}"
 export OUTLOOK_CLIENT_ID="${OUTLOOK_CLIENT_ID:-openshell:resolve:env:OUTLOOK_CLIENT_ID}"
 export OUTLOOK_SESSION_UUID="${OUTLOOK_SESSION_UUID:-openshell:resolve:env:OUTLOOK_SESSION_UUID}"
 export MS_GRAPH_SIDECAR_URL="http://127.0.0.1:${SIDECAR_PORT}"
+export NEMO_RELAY_GATEWAY_URL="http://127.0.0.1:${NEMO_RELAY_GATEWAY_PORT}"
 PROXYEOF
   for _ca_env_name in SSL_CERT_FILE CURL_CA_BUNDLE REQUESTS_CA_BUNDLE GIT_SSL_CAINFO; do
     _ca_env_value="${!_ca_env_name:-}"
@@ -624,17 +672,20 @@ if [ "$(id -u)" -ne 0 ]; then
 
   # Prepare ATIF telemetry directory (ephemeral, writable by the current user).
   mkdir -p /tmp/atif
-  # NeMo-Flow observability is configured via /etc/nemo-flow/plugins.toml
+  # NeMo-Relay observability is configured via /etc/nemo-relay/plugins.toml
   # (baked at image build time). Verify the binary and config are present.
-  if [ -x /usr/local/bin/nemo-flow ] \
-     && [ -r /etc/nemo-flow/config.toml ] \
-     && [ -r /etc/nemo-flow/plugins.toml ]; then
-    echo "[nemo-flow] gateway wrapper ready (config.toml + plugins.toml in /etc/nemo-flow)" | tee -a /tmp/gateway.log >&2
+  if [ -x /usr/local/bin/nemo-relay ] \
+     && [ -r /etc/nemo-relay/config.toml ] \
+     && [ -r /etc/nemo-relay/plugins.toml ]; then
+    echo "[nemo-relay] binary + config present (config.toml + plugins.toml in /etc/nemo-relay)" | tee -a /tmp/gateway.log >&2
   else
-    echo "[nemo-flow] WARNING: gateway wrapper or config missing — telemetry disabled" | tee -a /tmp/gateway.log >&2
+    echo "[nemo-relay] WARNING: binary or config missing — telemetry disabled" | tee -a /tmp/gateway.log >&2
   fi
 
-  _export_otel_bsp_tunings
+  # Start the NeMo-Relay sidecar BEFORE PID-1 hermes, so the gateway's first
+  # turn finds NEMO_RELAY_GATEWAY_URL reachable and doesn't drop hook events.
+  start_nemo_relay_sidecar
+
   HERMES_HOME="${HERMES_WRITABLE}" \
     HTTPS_PROXY="${_PROXY_URL}" \
     HTTP_PROXY="${_PROXY_URL}" \
@@ -642,7 +693,8 @@ if [ "$(id -u)" -ne 0 ]; then
     http_proxy="${_PROXY_URL}" \
     PYTHONPATH="${PATCHES_DIR}${PYTHONPATH:+:${PYTHONPATH}}" \
     API_SERVER_KEY="nemoclaw-internal" \
-    nohup /usr/local/bin/nemo-flow hermes -- gateway run >>/tmp/gateway.log 2>&1 &
+    NEMO_RELAY_GATEWAY_URL="http://127.0.0.1:${NEMO_RELAY_GATEWAY_PORT}" \
+    nohup hermes gateway run >>/tmp/gateway.log 2>&1 &
   GATEWAY_PID=$!
   echo "[gateway] hermes gateway launched (pid $GATEWAY_PID)" >&2
   start_gateway_log_stream
@@ -651,6 +703,7 @@ if [ "$(id -u)" -ne 0 ]; then
   # registration and the final append is a small race window (same as before
   # the shared-library refactor). Acceptable for entrypoint-level cleanup.
   SANDBOX_CHILD_PIDS=("$GATEWAY_PID")
+  [ -n "${NEMO_RELAY_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$NEMO_RELAY_PID")
   [ -n "${GATEWAY_LOG_TAIL_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$GATEWAY_LOG_TAIL_PID")
   # shellcheck disable=SC2034  # read by cleanup_on_signal from sandbox-init.sh
   SANDBOX_WAIT_PID="$GATEWAY_PID"
@@ -687,12 +740,12 @@ prepare_restricted_log /tmp/gateway.log gateway:gateway 600
 # gateway user (launched via gosu below) can write to it.
 mkdir -p /tmp/atif
 chown gateway:gateway /tmp/atif
-# NeMo-Flow observability is configured via /etc/nemo-flow/plugins.toml
+# NeMo-Relay observability is configured via /etc/nemo-relay/plugins.toml
 # (baked at image build time). Verify the binary and config are present.
-if [ -x /usr/local/bin/nemo-flow ] && [ -r /etc/nemo-flow/plugins.toml ]; then
-  echo "[nemo-flow] gateway wrapper ready (plugins.toml=/etc/nemo-flow/plugins.toml)" | tee -a /tmp/gateway.log >&2
+if [ -x /usr/local/bin/nemo-relay ] && [ -r /etc/nemo-relay/plugins.toml ]; then
+  echo "[nemo-relay] binary + config present (plugins.toml=/etc/nemo-relay/plugins.toml)" | tee -a /tmp/gateway.log >&2
 else
-  echo "[nemo-flow] WARNING: gateway wrapper missing — telemetry disabled" | tee -a /tmp/gateway.log >&2
+  echo "[nemo-relay] WARNING: binary or config missing — telemetry disabled" | tee -a /tmp/gateway.log >&2
 fi
 
 # Defence-in-depth: verify /tmp file permissions before launching services.
@@ -705,12 +758,17 @@ validate_config_symlinks "${HERMES_IMMUTABLE}" "${HERMES_WRITABLE}"
 # Lock .hermes directory after validation.
 harden_config_symlinks "${HERMES_IMMUTABLE}" "hermes"
 
-# Start the gateway as the 'gateway' user, wrapped in `nemo-flow hermes`.
-# The wrapper binds an ephemeral 127.0.0.1 gateway, exports NEMO_FLOW_GATEWAY_URL
-# into Hermes's environment, and spawns `hermes gateway run` as the child.
-# Hermes's hook subprocesses inherit NEMO_FLOW_GATEWAY_URL and forward
-# events to the in-proc gateway via `nemo-flow hook-forward hermes`.
-_export_otel_bsp_tunings
+# Start the NeMo-Relay sidecar (as 'gateway' user) BEFORE PID-1 hermes, so
+# the gateway's first turn finds NEMO_RELAY_GATEWAY_URL reachable and
+# doesn't drop hook events. start_nemo_relay_sidecar waits on /healthz.
+start_nemo_relay_sidecar
+
+# Start Hermes as the 'gateway' user. NEMO_RELAY_GATEWAY_URL points at the
+# sidecar started above; Hermes's nemo-relay plugin reads the env var at
+# request time and POSTs hook events to /hooks/hermes on the sidecar.
+# Slack/Outlook bridge-driven turns inherit this env var via the explicit
+# launch list (the bridges themselves don't emit telemetry, but their
+# messages funnel into this PID-1 process which does).
 HERMES_HOME="${HERMES_WRITABLE}" \
   HTTPS_PROXY="${_PROXY_URL}" \
   HTTP_PROXY="${_PROXY_URL}" \
@@ -718,7 +776,8 @@ HERMES_HOME="${HERMES_WRITABLE}" \
   http_proxy="${_PROXY_URL}" \
   PYTHONPATH="${PATCHES_DIR}${PYTHONPATH:+:${PYTHONPATH}}" \
   API_SERVER_KEY="nemoclaw-internal" \
-  nohup gosu gateway /usr/local/bin/nemo-flow hermes -- gateway run \
+  NEMO_RELAY_GATEWAY_URL="http://127.0.0.1:${NEMO_RELAY_GATEWAY_PORT}" \
+  nohup gosu gateway hermes gateway run \
     >>/tmp/gateway.log 2>&1 &
 GATEWAY_PID=$!
 echo "[gateway] hermes gateway launched as 'gateway' user (pid $GATEWAY_PID)" >&2
@@ -728,6 +787,7 @@ start_gateway_log_stream
 # registration and the final append is a small race window (same as before
 # the shared-library refactor). Acceptable for entrypoint-level cleanup.
 SANDBOX_CHILD_PIDS=("$GATEWAY_PID")
+[ -n "${NEMO_RELAY_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$NEMO_RELAY_PID")
 [ -n "${DECODE_PROXY_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$DECODE_PROXY_PID")
 [ -n "${GATEWAY_LOG_TAIL_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$GATEWAY_LOG_TAIL_PID")
 # shellcheck disable=SC2034  # read by cleanup_on_signal from sandbox-init.sh

@@ -5,8 +5,8 @@
 # Pull Agent Trajectory Format (ATIF) traces off the running sandbox into a
 # host-side tarball for offline analysis.
 #
-# Where ATIF comes from: Hermes's NeMo-Flow integration writes per-turn
-# trajectory records to HERMES_NEMO_FLOW_ATIF_DIR=/tmp/atif inside the
+# Where ATIF comes from: Hermes's NeMo-Relay integration writes per-turn
+# trajectory records to HERMES_NEMO_RELAY_ATIF_DIR=/tmp/atif inside the
 # sandbox (see agents/hermes/start.sh). The directory is ephemeral — it
 # lives on the sandbox's writable layer and disappears with the container
 # on tear-down — so capture before destroying the sandbox if you want to
