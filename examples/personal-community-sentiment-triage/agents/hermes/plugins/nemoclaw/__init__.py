@@ -17,6 +17,7 @@ skills automatically at session boundaries.
 import json
 import os
 import subprocess
+import sys
 import yaml
 
 
@@ -88,6 +89,40 @@ def _get_sandbox_info():
         "gateway": "running" if gateway_ok else "stopped",
         "port": 8642,
     }
+
+
+def _build_banner(info):
+    # No Gateway field: at register() time Hermes's API server isn't up
+    # yet, so the live health check would always report "stopped".
+    lines = [
+        "NemoClaw registered (Hermes)",
+        "",
+        f"Model:    {info['model']}",
+        f"Provider: {info['provider']}",
+        "Tools:    nemoclaw_status, nemoclaw_info,",
+        "          nemoclaw_reload_skills",
+    ]
+    inner = max(len(line) for line in lines)
+    horizontal = "─" * (inner + 2)
+
+    # Border in palette green, TTY-gated and NO_COLOR-respecting — matches
+    # NeMo Flow's launcher.rs:eprint_border_line.
+    use_color = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+    if use_color:
+        green, reset = "\x1b[38;5;112m", "\x1b[0m"
+        top = f"{green}╭{horizontal}╮{reset}"
+        bot = f"{green}╰{horizontal}╯{reset}"
+        pipe = f"{green}│{reset}"
+    else:
+        top = f"╭{horizontal}╮"
+        bot = f"╰{horizontal}╯"
+        pipe = "│"
+
+    rows = ["", top]
+    for line in lines:
+        rows.append(f"{pipe} {line.ljust(inner)} {pipe}")
+    rows.append(bot)
+    return "\n".join(rows)
 
 
 def _handle_status(tool_input, **kwargs):
@@ -226,28 +261,16 @@ def register(ctx):
         description="Reload skills from disk without gateway restart",
     )
 
-    # Startup banner on session start
     def _on_session_start(**kwargs):
-        # Refresh skill cache so skills installed since last session are
-        # immediately available as slash commands.
         _reload_skills()
 
-        info = _get_sandbox_info()
-        banner = (
-            "\n"
-            "  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n"
-            "  \u2502  NemoClaw registered (Hermes)                       \u2502\n"
-            "  \u2502                                                     \u2502\n"
-            f"  \u2502  Model:     {info['model']:<40}\u2502\n"
-            f"  \u2502  Provider:  {info['provider']:<40}\u2502\n"
-            f"  \u2502  Gateway:   {info['gateway']:<40}\u2502\n"
-            "  \u2502  Tools:     nemoclaw_status, nemoclaw_info,         \u2502\n"
-            "  \u2502             nemoclaw_reload_skills                   \u2502\n"
-            "  \u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n"
-        )
-        try:
-            ctx.inject_message(banner, role="system")
-        except Exception:
-            print(banner)
-
     ctx.register_hook("on_session_start", _on_session_start)
+
+    # Print at register() time, not from on_session_start: on_session_start
+    # fires inside run_conversation and routes the banner into the first
+    # user-message frame. try/except so a config-read failure can't block
+    # tool registration above.
+    try:
+        print(_build_banner(_get_sandbox_info()))
+    except Exception:
+        pass
