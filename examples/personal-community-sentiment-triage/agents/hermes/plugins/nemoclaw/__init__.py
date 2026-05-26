@@ -17,7 +17,6 @@ skills automatically at session boundaries.
 import json
 import os
 import subprocess
-import sys
 import yaml
 
 
@@ -91,47 +90,13 @@ def _get_sandbox_info():
     }
 
 
-def _build_banner(info):
-    # No Gateway field: at register() time Hermes's API server isn't up
-    # yet, so the live health check would always report "stopped".
-    lines = [
-        "NemoClaw registered (Hermes)",
-        "",
-        f"Model:    {info['model']}",
-        f"Provider: {info['provider']}",
-        "Tools:    nemoclaw_status, nemoclaw_info,",
-        "          nemoclaw_reload_skills",
-    ]
-    inner = max(len(line) for line in lines)
-    horizontal = "─" * (inner + 2)
-
-    # Border in palette green, TTY-gated and NO_COLOR-respecting — matches
-    # NeMo Relay's launcher.rs:eprint_border_line.
-    use_color = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
-    if use_color:
-        green, reset = "\x1b[38;5;112m", "\x1b[0m"
-        top = f"{green}╭{horizontal}╮{reset}"
-        bot = f"{green}╰{horizontal}╯{reset}"
-        pipe = f"{green}│{reset}"
-    else:
-        top = f"╭{horizontal}╮"
-        bot = f"╰{horizontal}╯"
-        pipe = "│"
-
-    rows = ["", top]
-    for line in lines:
-        rows.append(f"{pipe} {line.ljust(inner)} {pipe}")
-    rows.append(bot)
-    return "\n".join(rows)
-
-
 def _handle_status(tool_input, **kwargs):
     """Handle the nemoclaw_status tool call.
 
     The ``**kwargs`` swallows the context fields (``task_id``, ``session_id``,
     ``tool_call_id``, ``parent_agent``) that ``tools/registry.dispatch``
     forwards to every handler — see ``handler(args, **kwargs)`` at
-    ``tools/registry.py:306``. Without this, calls fail with
+    ``tools/registry.py``. Without this, calls fail with
     ``TypeError: got an unexpected keyword argument 'task_id'`` and the
     tool surfaces an error to the user instead of running.
     """
@@ -265,12 +230,3 @@ def register(ctx):
         _reload_skills()
 
     ctx.register_hook("on_session_start", _on_session_start)
-
-    # Print at register() time, not from on_session_start: on_session_start
-    # fires inside run_conversation and routes the banner into the first
-    # user-message frame. try/except so a config-read failure can't block
-    # tool registration above.
-    try:
-        print(_build_banner(_get_sandbox_info()))
-    except Exception:
-        pass

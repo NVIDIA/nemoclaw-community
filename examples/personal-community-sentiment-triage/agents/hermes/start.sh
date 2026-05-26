@@ -112,7 +112,7 @@ PUBLIC_PORT=8642
 # Hermes binds to 127.0.0.1 regardless of config (upstream bug).
 # Run it on an internal port and use socat to expose on PUBLIC_PORT.
 INTERNAL_PORT=18642
-NEMO_RELAY_GATEWAY_PORT=4040  # upstream default (crates/cli/src/config.rs:419)
+NEMO_RELAY_GATEWAY_PORT=4040  # upstream default (crates/cli/src/config.rs)
 
 # Hermes writes state files (PID, state.db, .channel_directory) directly into
 # HERMES_HOME. We cannot point it at the immutable /sandbox/.hermes dir.
@@ -244,7 +244,7 @@ start_gateway_log_stream() {
 
 # Force the OpenInference BatchSpanProcessor (OpenTelemetry SDK 0.31, used
 # by nemo-relay's HTTP exporter at
-# crates/core/src/observability/openinference.rs:449-460) to flush every
+# crates/core/src/observability/openinference.rs) to flush every
 # span immediately instead of batching for 5 seconds. Without these, real
 # multi-scope Hermes turns produce a single larger POST that the OpenShell
 # L7 proxy appears to acknowledge with 200 but not forward to Phoenix,
@@ -527,10 +527,8 @@ if [ "$(id -u)" -ne 0 ]; then
   mkdir -p /tmp/atif
   # NeMo-Relay observability is configured via /etc/nemo-relay/plugins.toml
   # (baked at image build time). Verify the binary and config are present.
-  if [ -x /usr/local/bin/nemo-relay ] \
-     && [ -r /etc/nemo-relay/config.toml ] \
-     && [ -r /etc/nemo-relay/plugins.toml ]; then
-    echo "[nemo-relay] binary + config present (config.toml + plugins.toml in /etc/nemo-relay)" | tee -a /tmp/gateway.log >&2
+  if [ -x /usr/local/bin/nemo-relay ] && [ -r /etc/nemo-relay/plugins.toml ]; then
+    echo "[nemo-relay] binary + config present (plugins.toml=/etc/nemo-relay/plugins.toml)" | tee -a /tmp/gateway.log >&2
   else
     echo "[nemo-relay] WARNING: binary or config missing — telemetry disabled" | tee -a /tmp/gateway.log >&2
   fi

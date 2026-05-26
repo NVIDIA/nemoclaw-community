@@ -115,7 +115,8 @@ function main(): void {
     },
     // NeMo-Relay shell hooks — each event spawns `nemo-relay hook-forward hermes`,
     // which reads the JSON payload from stdin and POSTs it to NEMO_RELAY_GATEWAY_URL
-    // (injected by the `nemo-relay hermes` wrapper). Events are the intersection of
+    // (exported by start.sh into PID-1 hermes's launch env, pointing at the
+    // persistent sidecar gateway on 127.0.0.1:4040). Events are the intersection of
     // NeMo-Relay's HERMES_HOOK_EVENTS (installer.rs) and Hermes's VALID_HOOKS
     // (hermes_cli/plugins.py). NeMo-Relay's "api_request_error" and "subagent_start"
     // are forward-looking — current Hermes only exposes "subagent_stop" and reports
@@ -127,7 +128,7 @@ function main(): void {
     // (plugins/nemo-relay/) owns those events under Hermes v0.14.0: it
     // receives the real `request_messages` list and the real `response` SDK
     // object as kwargs for api_request, and synthesizes stable tool_call_ids
-    // for tool_call events to work around NeMo-Relay's adapters/mod.rs:231-247
+    // for tool_call events to work around NeMo-Relay's adapters/mod.rs
     // synthesizing a fresh UUID per call when Hermes' defensive
     // `tool_call_id or ""` strips the id. The plugin forwards everything to
     // NEMO_RELAY_GATEWAY_URL/hooks/hermes with payload.request.body /
@@ -137,22 +138,22 @@ function main(): void {
     // same events alongside the plugin would create duplicate lossy-summary
     // scopes on the gateway.
     //
-    // `on_session_end` gets a SECOND command (`nemo-relay-finalize-shim`) that
+    // `on_session_end` gets a SECOND command (`nemo-relay-finalize-hook`) that
     // synthesizes a per-turn `on_session_finalize`. Hermes fires real finalize
     // only from its idle-session expiry watcher (~5 min default), but
     // NeMo-Relay's ATIF writer and root-span closer only act on finalize. The
-    // shim closes the agent scope every turn so each conversation produces a
+    // hook closes the agent scope every turn so each conversation produces a
     // complete Phoenix root span and a fresh ATIF JSON file.
     hooks: (() => {
       const fwd = { command: "/usr/local/bin/nemo-relay hook-forward hermes", timeout: 30 };
-      const finalize_shim = { command: "/usr/local/bin/nemo-relay-finalize-shim", timeout: 30 };
+      const finalize_hook = { command: "/usr/local/lib/nemoclaw/bin/nemo-relay-finalize-hook", timeout: 30 };
       const events = [
         "on_session_start", "on_session_finalize", "on_session_reset",
         "pre_llm_call", "post_llm_call",
         "subagent_stop",
       ];
       const result: Record<string, unknown[]> = Object.fromEntries(events.map((ev) => [ev, [fwd]]));
-      result.on_session_end = [fwd, finalize_shim];
+      result.on_session_end = [fwd, finalize_hook];
       return result;
     })(),
     // Auto-accept the hook commands. The sandbox is non-interactive; without

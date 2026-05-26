@@ -178,18 +178,20 @@ RUN set -eu \
 COPY --from=nemo-relay-builder /out/bin/nemo-relay /usr/local/bin/nemo-relay
 RUN chmod 755 /usr/local/bin/nemo-relay
 
-# Per-turn finalize shim. Hermes only fires `on_session_finalize` from its
+RUN mkdir -p /usr/local/lib/nemoclaw/bin
+
+# Per-turn finalize hook. Hermes only fires `on_session_finalize` from its
 # idle-session expiry watcher (~5 min default), but NeMo-Relay's ATIF writer
 # and root-span closer only act on `on_session_finalize` / `on_session_reset`.
-# This shim, registered as a second hook on `on_session_end`, rewrites the
-# event name and re-posts to the gateway so each turn closes its agent scope.
-COPY agents/hermes/nemo-relay/finalize-shim /usr/local/bin/nemo-relay-finalize-shim
-RUN chmod 755 /usr/local/bin/nemo-relay-finalize-shim
+# This hook handler, registered as a second command on `on_session_end`,
+# rewrites the event name and re-posts to the gateway so each turn closes
+# its agent scope.
+COPY agents/hermes/nemo-relay/finalize-hook /usr/local/lib/nemoclaw/bin/nemo-relay-finalize-hook
+RUN chmod 755 /usr/local/lib/nemoclaw/bin/nemo-relay-finalize-hook
 
 # Interactive-shell shim for `hermes`. Prepended to PATH for sandbox shells
 # (via _PROXY_ENV_FILE in start.sh) so `hermes` resolves here first; blocks
 # setup/doctor in-sandbox and execs the upstream binary for everything else.
-RUN mkdir -p /usr/local/lib/nemoclaw/bin
 COPY agents/hermes/nemo-relay/hermes-cli-shim /usr/local/lib/nemoclaw/bin/hermes
 RUN chmod 755 /usr/local/lib/nemoclaw/bin/hermes
 
@@ -209,22 +211,16 @@ RUN pip3 install --no-cache-dir --break-system-packages \
 
 # ── NeMo-Relay plugin config (immutable, baked at build time) ────────────
 # Discovery order: /etc/nemo-relay → project ./.nemo-relay → user XDG
-# (NeMo-Relay crates/cli/src/config.rs:618-633). /etc/ is the cleanest
-# location for a containerized agent because it ignores CWD.
+# (see NeMo-Relay crates/cli/src/config.rs). /etc/ is the cleanest location
+# for a containerized agent because it ignores CWD.
 #
-# Two files are baked here:
-#   config.toml  — `[agents.hermes]` block so `nemo-relay hermes` finds a
-#                  configured agent and skips the interactive setup wizard
-#                  (which fails in non-TTY sandboxes).
-#   plugins.toml — observability component (ATIF + OpenInference).
+# Only plugins.toml is baked — observability component (ATIF + OpenInference).
+# The daemon doesn't need a config.toml here: --bind is passed explicitly by
+# start.sh, and the wrapped-CLI `[agents.hermes]` block isn't used in the
+# sidecar/daemon architecture (agents POST to the daemon; it doesn't launch
+# them).
 COPY agents/hermes/nemo-relay/plugins.toml.in /tmp/nemo-relay-plugins.toml.in
 RUN mkdir -p /etc/nemo-relay \
-    && printf '%s\n' \
-         '[agents.hermes]' \
-         'command = "hermes"' \
-         'hooks_path = "/sandbox/.hermes/config.yaml"' \
-         > /etc/nemo-relay/config.toml \
-    && chmod 444 /etc/nemo-relay/config.toml \
     && PHOENIX_URL="${PHOENIX_COLLECTOR_ENDPOINT:-}" \
     && if [ -z "$PHOENIX_URL" ]; then \
          PHOENIX_ENABLED=false; PHOENIX_ENDPOINT=""; \

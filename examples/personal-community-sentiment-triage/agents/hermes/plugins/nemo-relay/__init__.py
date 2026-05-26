@@ -17,8 +17,10 @@ NeMo-Relay's Hermes adapter (crates/cli/src/adapters/hermes.rs) flips
 prompt+completion when it finds `payload.request.body` (pre) or
 `payload.response.{raw_response,choices,assistant_message}` (post). This plugin
 builds those payload shapes from the in-process kwargs and POSTs them to
-`${NEMO_RELAY_GATEWAY_URL}/hooks/hermes` — the URL is exported into the Hermes
-child env by the `nemo-relay hermes -- gateway run` wrapper at start.sh.
+`${NEMO_RELAY_GATEWAY_URL}/hooks/hermes` — the URL is exported by start.sh
+into PID-1 hermes's launch env and into `_PROXY_ENV_FILE` (sourced by
+`/sandbox/.bashrc` for interactive shells), pointing at the persistent
+sidecar gateway on `127.0.0.1:4040`.
 
 Failure mode is fail-open: any exception is swallowed and logged at debug.
 Hermes turns must never break because the bridge can't reach NeMo-Relay.
@@ -51,8 +53,8 @@ _DISABLED_LOGGED = False
 
 # FIFO of synthesized tool_call_ids keyed by (task_id, tool_name). The key
 # uses task_id (not session_id) because Hermes' pre/post call sites are
-# asymmetric: agent_runtime_helpers.py:1500-1503 fires pre_tool_call without
-# passing session_id (defaults to ""), while model_tools.py:851-859 fires
+# asymmetric: agent_runtime_helpers.py fires pre_tool_call without
+# passing session_id (defaults to ""), while model_tools.py fires
 # post_tool_call with the real session_id. task_id and tool_name are passed
 # consistently to both, so they form a stable join key. post_tool_call pops
 # from the matching queue to pair with the right pre.
@@ -84,8 +86,9 @@ def _gateway_url() -> Optional[str]:
             if not _DISABLED_LOGGED:
                 logger.debug(
                     "nemo-relay: NEMO_RELAY_GATEWAY_URL is not set; "
-                    "bridge will not forward hooks (expected when Hermes "
-                    "runs outside `nemo-relay hermes -- ...`)."
+                    "bridge will not forward hooks. start.sh exports this "
+                    "for PID-1 hermes and interactive shells — a missing "
+                    "value in either context indicates a misconfiguration."
                 )
                 _DISABLED_LOGGED = True
             return None
@@ -160,7 +163,7 @@ def _coerce_request_messages(
     """Hermes v0.14.0 passes a real `request_messages` list of {role, content}
     dicts. Fall back to conversation_history, then synthesize a single user
     message from user_message — mirrors Langfuse's resolver at
-    plugins/observability/langfuse/__init__.py:409."""
+    plugins/observability/langfuse/__init__.py."""
     for candidate in (request_messages, conversation_history):
         if isinstance(candidate, list) and candidate:
             return candidate
@@ -192,7 +195,7 @@ def _serialize_tool_calls(tool_calls: Any) -> list:
 
 def _serialize_assistant_message(obj: Any) -> Optional[dict]:
     """Pull the fields NeMo-Relay's adapter inspects on
-    `response.assistant_message` (adapters/hermes.rs:264-280)."""
+    `response.assistant_message` (adapters/hermes.rs)."""
     if obj is None:
         return None
     if isinstance(obj, dict):
@@ -207,7 +210,7 @@ def _serialize_assistant_message(obj: Any) -> Optional[dict]:
 def _serialize_response_object(response: Any) -> Optional[dict]:
     """Turn the v0.14.0 `response=` kwarg (a SimpleNamespace with
     .choices/.usage/.model/.id) into a dict. The result has `choices` at
-    top-level, which adapters/hermes.rs:251-256 recognizes as a real
+    top-level, which adapters/hermes.rs recognizes as a real
     provider response and uses to mark provider_payload_exact=true."""
     if response is None:
         return None
@@ -288,8 +291,8 @@ def _stable_tool_call_id(
     and the gateway pairs them into a single Phoenix span.
 
     task_id (not session_id) is in the digest because Hermes' pre call site
-    at agent_runtime_helpers.py:1500-1503 doesn't pass session_id (defaults
-    to ""), while the post call site at model_tools.py:851-859 does — so
+    at agent_runtime_helpers.py doesn't pass session_id (defaults
+    to ""), while the post call site at model_tools.py does — so
     including session_id would make pre's hash differ from post's. task_id
     is passed to both call sites and is unique per turn.
     """
@@ -400,10 +403,10 @@ def on_post_tool_call(**kwargs: Any) -> None:
         tool_name = kwargs.get("tool_name") or ""
         args = kwargs.get("args")
         # Hermes' tool-dispatch path fires pre_tool_call with tool_call_id=""
-        # (agent_runtime_helpers.py:1500-1503 calls
+        # (agent_runtime_helpers.py calls
         # get_pre_tool_call_block_message without passing tool_call_id or
         # session_id) and post_tool_call with the real provider id and the
-        # real session_id (model_tools.py:851-859). The pre already shipped a
+        # real session_id (model_tools.py). The pre already shipped a
         # synthesized id to the gateway; we must echo the SAME id at post or
         # the gateway adapter treats them as two unpaired spans. FIFO key is
         # (task_id, tool_name) since those two are the only fields passed
