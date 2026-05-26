@@ -165,19 +165,11 @@ RUN set -eu \
     && chown -R sandbox:sandbox /opt/hermes
 
 # ── NeMo-Relay 0.3.0 sidecar gateway integration ─────────────────────────
-# Drop-in observability via a long-running sidecar gateway started by
-# start.sh (`nemo-relay --bind 127.0.0.1:4040 ...`). Every Hermes process
-# (PID-1 gateway, Slack/Outlook-driven turns, interactive TUI) discovers it
-# via NEMO_RELAY_GATEWAY_URL in env and forwards hook events to a single
-# correlated session. Hermes stays unpatched (from BASE_IMAGE); native hook
-# events configured in ~/.hermes/config.yaml POST to the sidecar's
-# /hooks/hermes endpoint, which runs the ATIF writer and OpenInference OTLP
-# exporter from the baked /etc/nemo-relay/plugins.toml. No Hermes patch, no
-# nemo-relay PyPI package, no HERMES_NEMO_RELAY_* env vars.
-#
-# ATIF writes are local-disk-only — no collector required. To additionally
-# stream OpenInference traces to Phoenix, set PHOENIX_COLLECTOR_ENDPOINT;
-# empty disables OpenInference but keeps ATIF on.
+# Hermes stays unpatched (from BASE_IMAGE). start.sh launches a long-running
+# nemo-relay daemon; Hermes processes POST hook events to it via
+# NEMO_RELAY_GATEWAY_URL. ATIF writes are local-disk-only (no collector
+# required); set PHOENIX_COLLECTOR_ENDPOINT to additionally export
+# OpenInference traces to Phoenix.
 #
 # agents/hermes/patches/ is example-owned (not in NeMo-Relay upstream). It
 # holds the PYTHONPATH-targeted sitecustomize.py bootstrap (Slack-SDK
@@ -193,6 +185,13 @@ RUN chmod 755 /usr/local/bin/nemo-relay
 # event name and re-posts to the gateway so each turn closes its agent scope.
 COPY agents/hermes/nemo-relay/finalize-shim /usr/local/bin/nemo-relay-finalize-shim
 RUN chmod 755 /usr/local/bin/nemo-relay-finalize-shim
+
+# Interactive-shell shim for `hermes`. Prepended to PATH for sandbox shells
+# (via _PROXY_ENV_FILE in start.sh) so `hermes` resolves here first; blocks
+# setup/doctor in-sandbox and execs the upstream binary for everything else.
+RUN mkdir -p /usr/local/lib/nemoclaw/bin
+COPY agents/hermes/nemo-relay/hermes-cli-shim /usr/local/lib/nemoclaw/bin/hermes
+RUN chmod 755 /usr/local/lib/nemoclaw/bin/hermes
 
 COPY agents/hermes/patches/ /usr/local/lib/nemoclaw-patches/
 
@@ -251,9 +250,8 @@ RUN mkdir -p /etc/nemo-relay \
 # Only HERMES_HOME and HERMES_DISABLE_LAZY_INSTALLS reliably reach
 # user processes — OpenShell's exec-session allowlist strips most other
 # HERMES_* vars. PID-1 (start.sh-launched gateway) keeps everything;
-# HERMES_DISABLE_LAZY_INSTALLS is also re-exported in start.sh's bashrc
-# snippet so interactive shells get it. See start.sh:install_configure_guard
-# for the full rationale.
+# HERMES_DISABLE_LAZY_INSTALLS is also re-exported from start.sh's
+# _PROXY_ENV_FILE so interactive shells get it.
 ENV HERMES_TELEGRAM_DISABLE_FALLBACK_IPS=1 \
     HERMES_DISABLE_LAZY_INSTALLS=1 \
     HERMES_HOME=/sandbox/.hermes-data \
@@ -380,14 +378,10 @@ RUN chown root:root /sandbox/.hermes \
     && chmod 444 /sandbox/.hermes/config.yaml \
     && chmod 444 /sandbox/.hermes/.env
 
-# The `hermes()` shell-function wrapper that routes interactive
-# `hermes` / `hermes chat` invocations through `nemo-relay hermes --`
-# (so the TUI's NEMO_RELAY_GATEWAY_URL is populated and traces flow) is
-# installed at runtime by start.sh's install_configure_guard(). That
-# function owns /sandbox/.bashrc's tracked configure-guard block via
-# marker-bounded rewrite, and is the LAST writer to the file at sandbox
-# init — so Dockerfile-time appends would be shadowed. The merged
-# function (configure-guard + tracing wrapper) lives in start.sh.
+# Interactive `hermes` invocations resolve through a PATH-prepended shim at
+# /usr/local/lib/nemoclaw/bin/hermes (installed above). The shim blocks
+# setup/doctor and execs the upstream binary; NEMO_RELAY_GATEWAY_URL in env
+# carries telemetry to the sidecar.
 
 # Pin config hash at build time for integrity verification at startup.
 RUN sha256sum /sandbox/.hermes/config.yaml /sandbox/.hermes/.env \
