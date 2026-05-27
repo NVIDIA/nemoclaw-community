@@ -64,6 +64,13 @@ FROM ${BASE_IMAGE}
 ARG PHOENIX_COLLECTOR_ENDPOINT=""
 ENV PHOENIX_COLLECTOR_ENDPOINT=${PHOENIX_COLLECTOR_ENDPOINT}
 
+# Phoenix project name — sets openinference.project.name on every exported
+# span via plugins.toml's resource_attributes. Default routes traces under
+# this example's name; override per-build to keep multiple deployments
+# separate in the same Phoenix instance.
+ARG PHOENIX_PROJECT_NAME="default"
+ENV PHOENIX_PROJECT_NAME=${PHOENIX_PROJECT_NAME}
+
 # Host address of the Outlook token manager (port 8765).
 # Baked at image build time using the same pattern as PHOENIX_COLLECTOR_ENDPOINT —
 # start.sh reads it as a real env var so the sidecar can open a TCP connection
@@ -234,6 +241,7 @@ RUN mkdir -p /etc/nemo-relay \
        fi \
     && sed -e "s|@@PHOENIX_ENABLED@@|${PHOENIX_ENABLED}|g" \
            -e "s|@@PHOENIX_ENDPOINT@@|${PHOENIX_ENDPOINT}|g" \
+           -e "s|@@PHOENIX_PROJECT_NAME@@|${PHOENIX_PROJECT_NAME}|g" \
        /tmp/nemo-relay-plugins.toml.in > /etc/nemo-relay/plugins.toml \
     && rm /tmp/nemo-relay-plugins.toml.in \
     && chmod 444 /etc/nemo-relay/plugins.toml

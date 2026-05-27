@@ -2,7 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # NeMo-Relay gateway plugin config — installed at /etc/nemo-relay/plugins.toml.
-# Substituted at image build time from PHOENIX_COLLECTOR_ENDPOINT.
+# Tokens substituted at image build time (see Dockerfile):
+#   @@PHOENIX_ENABLED@@        — true if PHOENIX_COLLECTOR_ENDPOINT is set
+#   @@PHOENIX_ENDPOINT@@       — Phoenix OTLP collector URL
+#   @@PHOENIX_PROJECT_NAME@@   — openinference.project.name (Phoenix routing key;
+#                                falls back to service.name when absent)
 # Schema: nemo_relay.observability.ObservabilityConfig
 # (NeMo-Relay python/nemo_relay/observability.py).
 
@@ -22,3 +26,6 @@ transport = "http_binary"
 endpoint = "@@PHOENIX_ENDPOINT@@"
 service_name = "hermes-agent"
 timeout_millis = 3000
+
+[components.config.openinference.resource_attributes]
+"openinference.project.name" = "@@PHOENIX_PROJECT_NAME@@"
