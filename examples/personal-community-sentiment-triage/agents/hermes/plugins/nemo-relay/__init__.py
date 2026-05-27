@@ -1,33 +1,19 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""
-nemo-relay: in-process Hermes plugin that forwards pre/post_api_request
-hooks to NeMo-Relay with the real request body and response body attached.
+"""In-process Hermes plugin that forwards pre/post_api_request and
+pre/post_tool_call hooks to the NeMo-Relay sidecar at
+`${NEMO_RELAY_GATEWAY_URL}/hooks/hermes` with the real request/response
+bodies attached. Wrapping the body as `{messages, model, max_tokens}`
+and synthesizing stable tool_call_ids are workarounds — see the inline
+comments at each call site for the upstream rationale.
 
-Under Hermes v0.14.0, plugin hooks carry real data:
-  - pre_api_request receives `request_messages` (list of dicts), `user_message`,
-    and `conversation_history` — the actual OpenAI-shape messages array Hermes
-    is about to send upstream.
-  - post_api_request receives `response` (a SimpleNamespace mirroring the
-    OpenAI ChatCompletion shape with .choices/.usage/.model/.id) and
-    `assistant_message` (a NormalizedResponse with .content/.tool_calls).
+Fail-open: exceptions are logged at debug; Hermes turns must never break
+because the bridge can't reach NeMo-Relay. Modeled on Hermes's bundled
+Langfuse observability plugin.
 
-NeMo-Relay's Hermes adapter (crates/cli/src/adapters/hermes.rs) flips
-`provider_payload_exact` to true and emits Phoenix LLM spans with the full
-prompt+completion when it finds `payload.request.body` (pre) or
-`payload.response.{raw_response,choices,assistant_message}` (post). This plugin
-builds those payload shapes from the in-process kwargs and POSTs them to
-`${NEMO_RELAY_GATEWAY_URL}/hooks/hermes` — the URL is exported by start.sh
-into PID-1 hermes's launch env and into `_PROXY_ENV_FILE` (sourced by
-`/sandbox/.bashrc` for interactive shells), pointing at the persistent
-sidecar gateway on `127.0.0.1:4040`.
-
-Failure mode is fail-open: any exception is swallowed and logged at debug.
-Hermes turns must never break because the bridge can't reach NeMo-Relay.
-
-Modeled on the bundled Langfuse plugin
-(`hermes-agent/plugins/observability/langfuse/__init__.py` in the Hermes
-source tree).
+TODO(upstream): this whole plugin is retirable when
+https://github.com/NousResearch/hermes-agent/pull/29724 lands a built-in
+NeMo-Flow telemetry plugin.
 """
 
 from __future__ import annotations
@@ -42,8 +28,6 @@ from types import SimpleNamespace
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
-
-_MAX_PAYLOAD_BYTES = 262_144  # 256 KiB; oversize payloads drop body fields, keep correlation.
 
 _LOCK = threading.Lock()
 _CLIENT: Optional[Any] = None  # httpx.Client, lazily created
@@ -226,31 +210,6 @@ def _serialize_response_object(response: Any) -> Optional[dict]:
 # Forwarder
 # ---------------------------------------------------------------------------
 
-def _cap_payload(payload: dict) -> dict:
-    """If JSON-encoded payload exceeds 256 KiB, drop body fields but keep
-    correlation keys. Adapter's truncation guard then degrades to lossy
-    fallback rather than discarding the event."""
-    try:
-        encoded = json.dumps(payload, default=str)
-    except Exception:
-        return payload
-    if len(encoded) <= _MAX_PAYLOAD_BYTES:
-        return payload
-    trimmed = dict(payload)
-    request = trimmed.get("request")
-    if isinstance(request, dict) and "body" in request:
-        request = dict(request)
-        request.pop("body", None)
-        trimmed["request"] = request
-    response = trimmed.get("response")
-    if isinstance(response, dict):
-        response = dict(response)
-        response.pop("raw_response", None)
-        response.pop("assistant_message", None)
-        trimmed["response"] = response
-    return trimmed
-
-
 def _forward(payload: dict) -> None:
     url = _gateway_url()
     if not url:
@@ -259,7 +218,7 @@ def _forward(payload: dict) -> None:
     if client is None:
         return
     try:
-        client.post(f"{url}/hooks/hermes", json=_cap_payload(payload))
+        client.post(f"{url}/hooks/hermes", json=payload)
     except Exception as exc:
         logger.debug("nemo-relay: forward to %s failed: %s", url, exc)
 

@@ -322,6 +322,10 @@ a turn yet), the script still emits a valid empty tarball whose manifest
 carries an explanatory `note` — downstream tooling never has to
 special-case "no file."
 
+**Lifecycle note**: no automatic rotation — files accumulate until
+sandbox teardown. For long-lived sessions, prune manually inside the
+sandbox, e.g. `find /tmp/atif -type f -mtime +7 -delete`.
+
 ## Prerequisites
 
 - Docker daemon running.

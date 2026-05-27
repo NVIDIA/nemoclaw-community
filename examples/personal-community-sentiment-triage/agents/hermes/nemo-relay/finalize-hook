@@ -4,6 +4,10 @@
 #
 # NeMo-Relay gateway-mode per-turn finalize hook.
 #
+# TODO(upstream): retire when NeMo-Relay exposes a `flush_on_turn_end` knob in
+# AtifSectionConfig (or equivalent), or when Hermes fires `on_session_finalize`
+# per turn natively. Currently this shim is the only path to per-turn ATIF.
+#
 # Hermes fires `on_session_end` at every `run_conversation` turn boundary but
 # only fires `on_session_finalize` from its idle-session expiry watcher every
 # ~5 minutes. NeMo-Relay 0.3.0's gateway adapter (crates/cli/src/adapters/

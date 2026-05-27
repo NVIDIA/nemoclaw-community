@@ -4,10 +4,8 @@
 
 from __future__ import annotations
 
-import os
 import re
 import urllib.request
-from urllib.parse import ParseResult, parse_qsl, urlencode, urlparse, urlunparse
 
 
 SLACK_PLACEHOLDER_RE = re.compile(
@@ -165,98 +163,44 @@ if _httpx is not None:
     _httpx.AsyncClient.request = _nemoclaw_httpx_async_client_request
 
 
-FACADE_URL = os.getenv("NEMOCLAW_DISCORD_FACADE_URL", "").strip()
 if aiohttp is not None:
     _original_request = aiohttp.ClientSession._request
 
-    if FACADE_URL:
-        _facade = urlparse(FACADE_URL)
-        _original_ws_connect = aiohttp.ClientSession.ws_connect
-    else:
-        _facade = None
-
-    _api_hosts = {"discord.com", "discordapp.com", "canary.discord.com", "ptb.discord.com"}
-    _gateway_hosts = {"gateway.discord.gg"}
-
-    def _replace_netloc(parsed: ParseResult, *, scheme: str, path: str) -> str:
-        if _facade is None:
-            return str(parsed)
-        return urlunparse((scheme, _facade.netloc, path, "", parsed.query, ""))
-
-    def _rewrite_rest_url(url: object) -> str | None:
-        if _facade is None:
-            return None
-        parsed = urlparse(str(url))
-        if parsed.hostname not in _api_hosts:
-            return None
-        if not parsed.path.startswith("/api"):
-            return None
-        return _replace_netloc(parsed, scheme=_facade.scheme or "http", path=parsed.path)
-
-    def _rewrite_gateway_url(url: object) -> str | None:
-        if _facade is None:
-            return None
-        parsed = urlparse(str(url))
-        hostname = parsed.hostname or ""
-        if hostname not in _gateway_hosts and not hostname.endswith(".discord.gg"):
-            return None
-        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
-        if "v" not in query:
-            query["v"] = "10"
-        rewritten_query = urlencode(query)
-        scheme = "wss" if (_facade.scheme == "https") else "ws"
-        return urlunparse((scheme, _facade.netloc, "/gateway", "", rewritten_query, ""))
-
-    def _is_facade_url(url: object) -> bool:
-        if _facade is None:
-            return False
-        try:
-            return urlparse(str(url)).netloc == _facade.netloc
-        except Exception:
-            return False
-
     async def _nemoclaw_request(self, method, str_or_url, **kwargs):
-        rewritten = _rewrite_rest_url(str_or_url)
-        if rewritten:
-            kwargs.pop("proxy", None)
-            kwargs.pop("proxy_auth", None)
-            kwargs.pop("ssl", None)
-            str_or_url = rewritten
-        elif _is_facade_url(str_or_url):
-            kwargs.pop("proxy", None)
-            kwargs.pop("proxy_auth", None)
-            kwargs.pop("ssl", None)
-        str_or_url = _rewrite_slack_url(str_or_url)
-        return await _original_request(self, method, str_or_url, **_rewrite_slack_kwargs(kwargs))
+        return await _original_request(
+            self, method, _rewrite_slack_url(str_or_url), **_rewrite_slack_kwargs(kwargs)
+        )
 
     aiohttp.ClientSession._request = _nemoclaw_request
 
-    if FACADE_URL:
-        def _nemoclaw_ws_connect(self, url, **kwargs):
-            rewritten = _rewrite_gateway_url(url)
-            if rewritten:
-                kwargs.pop("proxy", None)
-                kwargs.pop("proxy_auth", None)
-                kwargs.pop("ssl", None)
-                url = rewritten
-            elif _is_facade_url(url):
-                kwargs.pop("proxy", None)
-                kwargs.pop("proxy_auth", None)
-                kwargs.pop("ssl", None)
-            return _original_ws_connect(self, url, **kwargs)
-
-        aiohttp.ClientSession.ws_connect = _nemoclaw_ws_connect
-
 
 # ---------------------------------------------------------------------------
-# Chain-load nemoclaw_patches (Slack catch-all slash command).
-#
-# Python imports the first `sitecustomize` it finds on sys.path. Because
-# PYTHONPATH puts /usr/local/lib/nemoclaw-patches/ before site-packages, the
-# venv's own sitecustomize is shadowed and never runs. The Dockerfile copies
-# agents/hermes/patches/nemoclaw_patches.py into the same directory, so this
-# import triggers its module-level _patch_slack_commands.
-try:
-    import nemoclaw_patches  # noqa: F401  side-effect import
-except Exception:
-    pass
+# Slack catch-all slash command — Hermes only registers "/hermes" as its bolt
+# command handler. Any workspace-specific command name (e.g. /my-assistant)
+# produces an "Unhandled request" warning. After SlackAdapter connects,
+# register a catch-all that routes every other slash command through the same
+# response path.
+def _patch_slack_commands() -> None:
+    try:
+        from gateway.platforms.slack import SlackAdapter
+        _orig_connect = SlackAdapter.connect
+
+        async def _patched_connect(self):
+            result = await _orig_connect(self)
+            if getattr(self, "_app", None) is not None:
+                @self._app.command(re.compile(".+"))
+                async def _handle_unknown_command(ack, command, respond):
+                    await ack()
+                    cmd = command.get("command", "this command")
+                    await respond(
+                        f"I don't recognize `{cmd}`. "
+                        "Send me a *direct message* or @mention me to chat"
+                    )
+            return result
+
+        SlackAdapter.connect = _patched_connect
+    except Exception:
+        pass
+
+
+_patch_slack_commands()

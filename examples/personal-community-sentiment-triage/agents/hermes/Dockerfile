@@ -173,9 +173,9 @@ RUN set -eu \
 # OpenInference traces to Phoenix.
 #
 # agents/hermes/patches/ is example-owned (not in NeMo-Relay upstream). It
-# holds the PYTHONPATH-targeted sitecustomize.py bootstrap (Slack-SDK
-# placeholder rewrite) and the nemoclaw_patches.py chain-loaded bundle
-# (Slack catch-all slash command).
+# holds the PYTHONPATH-targeted sitecustomize.py bootstrap that monkey-patches
+# urllib/requests/httpx/aiohttp to rewrite Slack token placeholders at egress
+# and installs a catch-all handler for non-/hermes Slack slash commands.
 COPY --from=nemo-relay-builder /out/bin/nemo-relay /usr/local/bin/nemo-relay
 RUN chmod 755 /usr/local/bin/nemo-relay
 
