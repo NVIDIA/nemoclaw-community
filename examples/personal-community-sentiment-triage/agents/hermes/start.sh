@@ -249,25 +249,6 @@ start_gateway_log_stream() {
   GATEWAY_LOG_TAIL_PID=$!
 }
 
-# Force the OpenInference BatchSpanProcessor (OpenTelemetry SDK 0.31, used
-# by nemo-relay's HTTP exporter at
-# crates/core/src/observability/openinference.rs) to flush every
-# span immediately instead of batching for 5 seconds. Without these, real
-# multi-scope Hermes turns produce a single larger POST that the OpenShell
-# L7 proxy appears to acknowledge with 200 but not forward to Phoenix,
-# causing silent span loss. With BSP_MAX_EXPORT_BATCH_SIZE=1 every span
-# becomes a small single-span POST, matching the manual-probe shape that
-# we confirmed lands cleanly. Tracked upstream as missing force_flush()
-# on turn boundary in nemo-relay's session.rs end_turn().
-#
-# Exports into the parent shell so both privilege paths inherit the same
-# values without duplicating the rationale at each call site.
-_export_otel_bsp_tunings() {
-  export OTEL_BSP_MAX_EXPORT_BATCH_SIZE=1
-  export OTEL_BSP_SCHEDULE_DELAY=100
-  export OTEL_BSP_EXPORT_TIMEOUT=2000
-}
-
 # ── socat forwarder ──────────────────────────────────────────────
 # Hermes API server binds to 127.0.0.1 regardless of config (upstream bug).
 # OpenShell needs the port accessible on 0.0.0.0 for port forwarding.
@@ -327,7 +308,6 @@ start_nemo_relay_sidecar() {
     echo "[nemo-relay] binary not found at /usr/local/bin/nemo-relay, skipping" >&2
     return 0
   fi
-  _export_otel_bsp_tunings
   if [ "$(id -u)" -eq 0 ]; then
     nohup gosu gateway /usr/local/bin/nemo-relay \
       --bind "127.0.0.1:${NEMO_RELAY_GATEWAY_PORT}" \
