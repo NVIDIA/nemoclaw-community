@@ -160,11 +160,17 @@ RUN chmod 755 /usr/local/lib/nemoclaw/bin/nemo-relay-finalize-hook
 COPY agents/hermes/nemo-relay/hermes-cli-shim /usr/local/lib/nemoclaw/bin/hermes
 RUN chmod 755 /usr/local/lib/nemoclaw/bin/hermes
 
+# Helper invoked by start.sh's refresh_hermes_provider_placeholders to rewrite
+# .hermes-data/.env with the latest provider-injected placeholder values.
+COPY agents/hermes/refresh-placeholders.py /usr/local/lib/nemoclaw/refresh-placeholders.py
+RUN chmod 755 /usr/local/lib/nemoclaw/refresh-placeholders.py
+
 COPY agents/hermes/patches/ /usr/local/lib/nemoclaw-patches/
 
-# Pin slack-bolt / python-telegram-bot / pyyaml / httpx into Hermes's venv
-# interpreter so the sitecustomize patches (Slack catch-all, SDK placeholder
-# rewrite) find the modules they wrap. hadolint ignore=DL3013
+# Pin slack-bolt / python-telegram-bot / pyyaml / httpx into the system
+# python interpreter. slack-bolt is needed by the sitecustomize.py
+# catch-all-command patch (via gateway.platforms.slack.SlackAdapter); the
+# others are general Hermes runtime deps. hadolint ignore=DL3013
 RUN pip3 install --no-cache-dir --break-system-packages \
        "pyyaml==6.0.3" \
        "python-telegram-bot>=21.0" \
@@ -204,10 +210,8 @@ RUN mkdir -p /etc/nemo-relay \
     && chmod 444 /etc/nemo-relay/plugins.toml
 
 # Hermes v2026.4.13+ auto-detects HTTPS_PROXY and skips fallback-IP
-# transport when a proxy is present. The sandbox proxy chain
-# (decode-proxy → OpenShell L7 proxy) handles credential placeholder
-# rewriting and hostname-based policy enforcement. The Python preload
-# rewrites Slack SDK-shaped placeholders before HTTPS serialization.
+# transport when a proxy is present. The OpenShell L7 proxy owns credential
+# placeholder rewriting and hostname-based policy enforcement.
 #
 # Only HERMES_HOME and HERMES_DISABLE_LAZY_INSTALLS reliably reach
 # user processes — OpenShell's exec-session allowlist strips most other
@@ -232,14 +236,10 @@ COPY agents/hermes/plugins/nemo-relay/ /opt/nemo-relay-hermes-plugin/
 # Install under /usr/local/lib/ so Landlock's read_only /usr rule permits access.
 COPY agents/hermes/bridges/ /usr/local/lib/nemoclaw-bridges/
 
-# Copy config generation script and Slack helper shims.
-# Install under /usr/local/lib so Landlock's read_only /usr rule permits
-# the sandbox process to read both the decode proxy and preload files.
+# Copy config generation script. Installed under /usr/local/lib so Landlock's
+# read_only /usr rule permits the sandbox process to read it.
 COPY agents/hermes/generate-config.ts /opt/nemoclaw-generate-config.ts
-RUN mkdir -p /usr/local/lib/nemoclaw-slack-shims
-COPY agents/hermes/decode-proxy.py /usr/local/lib/nemoclaw-slack-shims/decode-proxy.py
-RUN chmod 755 /usr/local/lib/nemoclaw-slack-shims/decode-proxy.py \
-    && find /usr/local/lib/nemoclaw-patches -type d -exec chmod 755 {} + \
+RUN find /usr/local/lib/nemoclaw-patches -type d -exec chmod 755 {} + \
     && find /usr/local/lib/nemoclaw-patches -type f -exec chmod 444 {} +
 
 # NOTE: This example removes the upstream NemoClaw `COPY nemoclaw-blueprint/`

@@ -160,54 +160,7 @@ refresh_hermes_provider_placeholders() {
   fi
 
   NEMOCLAW_PROVIDER_PLACEHOLDER_KEYS="$keys" \
-    python3 - "$env_file" <<'PYPLACEHOLDERS'
-import os
-import sys
-
-env_file = sys.argv[1]
-prefix = "openshell:resolve:env:"
-keys = os.environ.get("NEMOCLAW_PROVIDER_PLACEHOLDER_KEYS", "").split()
-replacements = {}
-
-for key in keys:
-    value = os.environ.get(key, "")
-    if value.startswith(prefix):
-        replacements[key] = value
-
-if not replacements:
-    sys.exit(0)
-
-with open(env_file, encoding="utf-8") as f:
-    lines = f.readlines()
-
-changed = False
-updated = []
-seen = set()
-for line in lines:
-    stripped = line.rstrip("\n")
-    replaced = False
-    for key, value in replacements.items():
-        if stripped.startswith(f"{key}="):
-            new_line = f"{key}={value}\n"
-            updated.append(new_line)
-            seen.add(key)
-            changed = changed or new_line != line
-            replaced = True
-            break
-    if not replaced:
-        updated.append(line)
-
-for key, value in replacements.items():
-    if key not in seen:
-        updated.append(f"{key}={value}\n")
-        changed = True
-
-if not changed:
-    sys.exit(0)
-
-with open(env_file, "w", encoding="utf-8") as f:
-    f.writelines(updated)
-PYPLACEHOLDERS
+    python3 /usr/local/lib/nemoclaw/refresh-placeholders.py "$env_file"
 
   echo "[config] Refreshed Hermes provider placeholders from OpenShell runtime env" >&2
 }
@@ -271,33 +224,8 @@ start_socat_forwarder() {
   echo "[gateway] socat forwarder 0.0.0.0:${PUBLIC_PORT} → 127.0.0.1:${INTERNAL_PORT} (pid $SOCAT_PID)" >&2
 }
 
-# ── Placeholder rewrite proxy ───────────────────────────────────
-# Python HTTP clients (httpx) URL-encode colons in paths, breaking
-# OpenShell's openshell:resolve:env: placeholder pattern. This proxy
-# sits between the Hermes process and the OpenShell proxy, URL-decoding
-# request targets so the L7 proxy recognizes REST placeholders. Slack
-# SDK-shaped placeholders are canonicalized in the Hermes Python preload
-# before HTTPS serialization.
-HERMES_VENV_PYTHON="/opt/hermes/.venv/bin/python"
-SLACK_SHIMS_DIR="/usr/local/lib/nemoclaw-slack-shims"
+# PATCHES_DIR is referenced by PYTHONPATH below + the _PROXY_ENV_FILE export.
 PATCHES_DIR="/usr/local/lib/nemoclaw-patches"
-DECODE_PROXY_PID=""
-DECODE_PROXY_PORT=3129
-start_decode_proxy() {
-  nohup "$HERMES_VENV_PYTHON" "${SLACK_SHIMS_DIR}/decode-proxy.py" >/dev/null 2>&1 &
-  DECODE_PROXY_PID=$!
-  # Wait for it to start listening
-  local attempts=0
-  while [ "$attempts" -lt 10 ]; do
-    if ss -tln 2>/dev/null | grep -q "127.0.0.1:${DECODE_PROXY_PORT}"; then
-      echo "[gateway] decode-proxy listening on 127.0.0.1:${DECODE_PROXY_PORT} (pid $DECODE_PROXY_PID)" >&2
-      return
-    fi
-    sleep 0.5
-    attempts=$((attempts + 1))
-  done
-  echo "[gateway] decode-proxy failed to start — placeholder rewriting may not work" >&2
-}
 
 # ── NeMo-Relay sidecar gateway ──────────────────────────────────
 NEMO_RELAY_PID=""
@@ -368,6 +296,60 @@ start_outlook_bridge() {
   fi
   OUTLOOK_BRIDGE_PID=$!
   echo "[outlook-bridge] started (pid ${OUTLOOK_BRIDGE_PID})" >&2
+}
+
+# ── Shared launch helpers (called by both non-root and root branches) ──
+
+# Prepare /tmp/gateway.log + /tmp/atif, verify NeMo-Relay binary+config, and
+# start the sidecar. Pass "gateway:gateway" as $1 for root; "" for non-root.
+prepare_runtime() {
+  local owner="$1"
+  prepare_restricted_log /tmp/gateway.log "$owner" 600
+  # shellcheck disable=SC2119
+  validate_tmp_permissions
+  mkdir -p /tmp/atif
+  [ -n "$owner" ] && chown "$owner" /tmp/atif
+  if [ -x /usr/local/bin/nemo-relay ] && [ -r /etc/nemo-relay/plugins.toml ]; then
+    echo "[nemo-relay] binary + config present (plugins.toml=/etc/nemo-relay/plugins.toml)" | tee -a /tmp/gateway.log >&2
+  else
+    echo "[nemo-relay] WARNING: binary or config missing — telemetry disabled" | tee -a /tmp/gateway.log >&2
+  fi
+  start_nemo_relay_sidecar
+}
+
+# Launch the Hermes gateway with the standard env block.
+# $1 = "" (non-root) or "gosu gateway" (root, drops to gateway user).
+launch_hermes_gateway() {
+  local user_wrap="$1"
+  # shellcheck disable=SC2086
+  HERMES_HOME="${HERMES_WRITABLE}" \
+    HTTPS_PROXY="${_PROXY_URL}" HTTP_PROXY="${_PROXY_URL}" \
+    https_proxy="${_PROXY_URL}" http_proxy="${_PROXY_URL}" \
+    PYTHONPATH="${PATCHES_DIR}${PYTHONPATH:+:${PYTHONPATH}}" \
+    API_SERVER_KEY="nemoclaw-internal" \
+    NEMO_RELAY_GATEWAY_URL="http://127.0.0.1:${NEMO_RELAY_GATEWAY_PORT}" \
+    nohup $user_wrap hermes gateway run >>/tmp/gateway.log 2>&1 &
+  GATEWAY_PID=$!
+  echo "[gateway] hermes gateway launched${user_wrap:+ as 'gateway' user} (pid $GATEWAY_PID)" >&2
+}
+
+# Wire up supervisor PIDs, signal trap, and side-services after the gateway
+# is launched. Reads GATEWAY_PID; populates SANDBOX_CHILD_PIDS + SANDBOX_WAIT_PID.
+wire_post_launch_supervision() {
+  start_gateway_log_stream
+
+  SANDBOX_CHILD_PIDS=("$GATEWAY_PID")
+  [ -n "${NEMO_RELAY_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$NEMO_RELAY_PID")
+  [ -n "${GATEWAY_LOG_TAIL_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$GATEWAY_LOG_TAIL_PID")
+  # shellcheck disable=SC2034  # read by cleanup_on_signal from sandbox-init.sh
+  SANDBOX_WAIT_PID="$GATEWAY_PID"
+  trap cleanup_on_signal SIGTERM SIGINT
+
+  start_socat_forwarder
+  [ -n "${SOCAT_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$SOCAT_PID")
+  start_outlook_bridge
+  [ -n "${OUTLOOK_BRIDGE_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$OUTLOOK_BRIDGE_PID")
+  print_dashboard_urls
 }
 
 # cleanup_on_signal is provided by sandbox-init.sh. It reads
@@ -466,53 +448,9 @@ if [ "$(id -u)" -ne 0 ]; then
     exec "${NEMOCLAW_CMD[@]}"
   fi
 
-  prepare_restricted_log /tmp/gateway.log "" 600
-
-  # Defence-in-depth: verify /tmp file permissions before launching services.
-  # shellcheck disable=SC2119
-  validate_tmp_permissions
-
-  # Prepare ATIF telemetry directory (ephemeral, writable by the current user).
-  mkdir -p /tmp/atif
-  # NeMo-Relay observability is configured via /etc/nemo-relay/plugins.toml
-  # (baked at image build time). Verify the binary and config are present.
-  if [ -x /usr/local/bin/nemo-relay ] && [ -r /etc/nemo-relay/plugins.toml ]; then
-    echo "[nemo-relay] binary + config present (plugins.toml=/etc/nemo-relay/plugins.toml)" | tee -a /tmp/gateway.log >&2
-  else
-    echo "[nemo-relay] WARNING: binary or config missing — telemetry disabled" | tee -a /tmp/gateway.log >&2
-  fi
-
-  # Sidecar must be healthy before PID-1 hermes starts (else first-turn drops).
-  start_nemo_relay_sidecar
-
-  HERMES_HOME="${HERMES_WRITABLE}" \
-    HTTPS_PROXY="${_PROXY_URL}" \
-    HTTP_PROXY="${_PROXY_URL}" \
-    https_proxy="${_PROXY_URL}" \
-    http_proxy="${_PROXY_URL}" \
-    PYTHONPATH="${PATCHES_DIR}${PYTHONPATH:+:${PYTHONPATH}}" \
-    API_SERVER_KEY="nemoclaw-internal" \
-    NEMO_RELAY_GATEWAY_URL="http://127.0.0.1:${NEMO_RELAY_GATEWAY_PORT}" \
-    nohup hermes gateway run >>/tmp/gateway.log 2>&1 &
-  GATEWAY_PID=$!
-  echo "[gateway] hermes gateway launched (pid $GATEWAY_PID)" >&2
-  start_gateway_log_stream
-
-  # NOTE: PIDs are collected after launch; a signal arriving between trap
-  # registration and the final append is a small race window (same as before
-  # the shared-library refactor). Acceptable for entrypoint-level cleanup.
-  SANDBOX_CHILD_PIDS=("$GATEWAY_PID")
-  [ -n "${NEMO_RELAY_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$NEMO_RELAY_PID")
-  [ -n "${GATEWAY_LOG_TAIL_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$GATEWAY_LOG_TAIL_PID")
-  # shellcheck disable=SC2034  # read by cleanup_on_signal from sandbox-init.sh
-  SANDBOX_WAIT_PID="$GATEWAY_PID"
-  trap cleanup_on_signal SIGTERM SIGINT
-
-  start_socat_forwarder
-  [ -n "${SOCAT_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$SOCAT_PID")
-  start_outlook_bridge
-  [ -n "${OUTLOOK_BRIDGE_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$OUTLOOK_BRIDGE_PID")
-  print_dashboard_urls
+  prepare_runtime ""
+  launch_hermes_gateway ""
+  wire_post_launch_supervision
 
   wait "$GATEWAY_PID"
   exit $?
@@ -529,67 +467,13 @@ if [ ${#NEMOCLAW_CMD[@]} -gt 0 ]; then
   exec gosu sandbox "${NEMOCLAW_CMD[@]}"
 fi
 
-# SECURITY: Protect gateway log from sandbox user tampering.
-prepare_restricted_log /tmp/gateway.log gateway:gateway 600
-
-# Prepare ATIF telemetry directory. Root pre-creates and chowns so the
-# gateway user (launched via gosu below) can write to it.
-mkdir -p /tmp/atif
-chown gateway:gateway /tmp/atif
-# NeMo-Relay observability is configured via /etc/nemo-relay/plugins.toml
-# (baked at image build time). Verify the binary and config are present.
-if [ -x /usr/local/bin/nemo-relay ] && [ -r /etc/nemo-relay/plugins.toml ]; then
-  echo "[nemo-relay] binary + config present (plugins.toml=/etc/nemo-relay/plugins.toml)" | tee -a /tmp/gateway.log >&2
-else
-  echo "[nemo-relay] WARNING: binary or config missing — telemetry disabled" | tee -a /tmp/gateway.log >&2
-fi
-
-# Defence-in-depth: verify /tmp file permissions before launching services.
-# shellcheck disable=SC2119
-validate_tmp_permissions
-
-# Verify ALL symlinks in .hermes point to expected .hermes-data targets.
+# Root-only: lock down .hermes symlinks before launching the gateway.
 validate_config_symlinks "${HERMES_IMMUTABLE}" "${HERMES_WRITABLE}"
-
-# Lock .hermes directory after validation.
 harden_config_symlinks "${HERMES_IMMUTABLE}" "hermes"
 
-# Sidecar must be healthy before PID-1 hermes starts (else first-turn drops).
-start_nemo_relay_sidecar
-
-# NEMO_RELAY_GATEWAY_URL must be in the explicit launch env — PID-1 hermes
-# does not read _PROXY_ENV_FILE, and Slack/Outlook bridge-driven turns funnel
-# through this process to emit telemetry.
-HERMES_HOME="${HERMES_WRITABLE}" \
-  HTTPS_PROXY="${_PROXY_URL}" \
-  HTTP_PROXY="${_PROXY_URL}" \
-  https_proxy="${_PROXY_URL}" \
-  http_proxy="${_PROXY_URL}" \
-  PYTHONPATH="${PATCHES_DIR}${PYTHONPATH:+:${PYTHONPATH}}" \
-  API_SERVER_KEY="nemoclaw-internal" \
-  NEMO_RELAY_GATEWAY_URL="http://127.0.0.1:${NEMO_RELAY_GATEWAY_PORT}" \
-  nohup gosu gateway hermes gateway run \
-    >>/tmp/gateway.log 2>&1 &
-GATEWAY_PID=$!
-echo "[gateway] hermes gateway launched as 'gateway' user (pid $GATEWAY_PID)" >&2
-start_gateway_log_stream
-
-# NOTE: PIDs are collected after launch; a signal arriving between trap
-# registration and the final append is a small race window (same as before
-# the shared-library refactor). Acceptable for entrypoint-level cleanup.
-SANDBOX_CHILD_PIDS=("$GATEWAY_PID")
-[ -n "${NEMO_RELAY_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$NEMO_RELAY_PID")
-[ -n "${DECODE_PROXY_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$DECODE_PROXY_PID")
-[ -n "${GATEWAY_LOG_TAIL_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$GATEWAY_LOG_TAIL_PID")
-# shellcheck disable=SC2034  # read by cleanup_on_signal from sandbox-init.sh
-SANDBOX_WAIT_PID="$GATEWAY_PID"
-trap cleanup_on_signal SIGTERM SIGINT
-
-start_socat_forwarder
-[ -n "${SOCAT_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$SOCAT_PID")
-start_outlook_bridge
-[ -n "${OUTLOOK_BRIDGE_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$OUTLOOK_BRIDGE_PID")
-print_dashboard_urls
+prepare_runtime "gateway:gateway"
+launch_hermes_gateway "gosu gateway"
+wire_post_launch_supervision
 
 # Keep container running by waiting on the gateway process.
 wait "$GATEWAY_PID"
