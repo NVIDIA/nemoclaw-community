@@ -1,9 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Combined stack: Phoenix telemetry + Outlook token manager + source ETLs.
+# Combined stack: Phoenix telemetry + source ETLs.
 # Usage: docker compose up --build
-# Auth credentials are passed via nemoclaw onboard — no .env file required.
+# Outlook auth is handled by OpenShell provider v2 (no token-manager service).
 
 services:
 
@@ -17,22 +17,6 @@ services:
       - "6006:6006"   # Phoenix UI
       - "4317:4317"   # OTLP gRPC
       - "4318:4318"   # OTLP HTTP
-
-  # ---------------------------------------------------------------------------
-  # Outlook auth
-  # ---------------------------------------------------------------------------
-
-  ms-graph-token-manager:
-    build: ./ms-graph-token-manager
-    environment:
-      TOKEN_CACHE_SALT: ${TOKEN_CACHE_SALT:-nemoclaw-ms-graph-v1}
-    volumes:
-      - token-cache:/token-cache
-    ports:
-      - "8765:8765"   # Token manager API
-      - "51247:51247" # OAuth redirect callback
-    stdin_open: true
-    tty: true
 
   # ---------------------------------------------------------------------------
   # Source ETLs
@@ -120,6 +104,5 @@ services:
       PGRST_OPENAPI_MODE: follow-privileges
 
 volumes:
-  token-cache:
   source-etls-postgres-data:
   github-etl-state:

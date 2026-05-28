@@ -10,34 +10,10 @@
 # so Docker treats them as global build args (multi-stage scoping rule).
 ARG BASE_IMAGE=ghcr.io/nvidia/nemoclaw/hermes-sandbox-base@sha256:f76a2ed0509570b1ce5380327c7ebe2e120e97f524e9271e145d2ea34c83ba5e
 
-# ── Stage 0: build the MS Graph API sidecar binary ────────────────────────────
-# PyInstaller produces a self-contained executable at a unique path
-# (/usr/local/bin/ms-graph-sidecar), distinct from /usr/bin/python3,
-# enabling OpenShell binary-path policy enforcement to restrict token-manager
-# access to the sidecar only.
-#
-# IMPORTANT: build inside ${BASE_IMAGE}, not python:3.12-slim, so the compiled
-# binary links against the same glibc as the runtime. Using a newer builder
-# image (e.g. Debian trixie glibc 2.41) produces a binary that crashes on the
-# Ubuntu 22.04 runtime (glibc 2.35) with "GLIBC_2.38 not found".
-FROM ${BASE_IMAGE} AS sidecar-builder
-RUN apt-get update -qq \
-    && export PY_MINOR="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')" \
-    && apt-get install -y --no-install-recommends "libpython${PY_MINOR}" binutils python3-pip \
-    && rm -rf /var/lib/apt/lists/*
-RUN pip3 install --no-cache-dir --break-system-packages aiohttp pyinstaller
-COPY agents/hermes/sidecars/ms_graph_sidecar/ms_graph_sidecar.py /build/
-WORKDIR /build
-RUN pyinstaller \
-      --onefile \
-      --name ms-graph-sidecar \
-      --hidden-import aiohttp \
-      --hidden-import aiohttp.web \
-      ms_graph_sidecar.py
-
-# ── Stage 1: build the nemo-relay CLI binary ──────────────────────────────────
+# ── Stage 0: build the nemo-relay CLI binary ──────────────────────────────────
 # Built inside ${BASE_IMAGE} so the resulting binary links against the same
-# glibc as the runtime — same constraint as the sidecar-builder stage above.
+# glibc as the runtime (Ubuntu 22.04 glibc 2.35 — newer builder images produce
+# binaries that won't load).
 # 0.3.0-beta.2 is the first NeMo-Relay release on crates.io (the predecessor
 # crate `nemo-flow-cli` was published through 0.2.0 before the project's rename
 # from NeMo-Flow). `cargo install` is the simplest reproducible path; the
@@ -71,30 +47,11 @@ ENV PHOENIX_COLLECTOR_ENDPOINT=${PHOENIX_COLLECTOR_ENDPOINT}
 ARG PHOENIX_PROJECT_NAME="default"
 ENV PHOENIX_PROJECT_NAME=${PHOENIX_PROJECT_NAME}
 
-# Host address of the Outlook token manager (port 8765).
-# Baked at image build time using the same pattern as PHOENIX_COLLECTOR_ENDPOINT —
-# start.sh reads it as a real env var so the sidecar can open a TCP connection
-# without going through the OpenShell provider placeholder mechanism.
-# Default works with the package-managed and snap-managed OpenShell gateway
-# services, which expose host-routed services at host.openshell.internal.
-ARG TOKEN_MANAGER_HOST=host.openshell.internal
-ENV TOKEN_MANAGER_HOST=${TOKEN_MANAGER_HOST}
-
-# Install the MS Graph sidecar binary from the builder stage.
-# The distinct binary path enables OpenShell binary-path policy enforcement.
-COPY --from=sidecar-builder /build/dist/ms-graph-sidecar /usr/local/bin/ms-graph-sidecar
-RUN chmod 755 /usr/local/bin/ms-graph-sidecar
-
 # Harden: remove unnecessary build tools and network probes
 RUN (apt-get remove --purge -y gcc gcc-12 g++ g++-12 cpp cpp-12 make \
         netcat-openbsd netcat-traditional ncat 2>/dev/null || true) \
     && apt-get autoremove --purge -y \
     && rm -rf /var/lib/apt/lists/*
-
-# Add dedicated user for the MS Graph sidecar (uid 1001).
-# Running as a separate user from the sandbox (uid 1000) prevents the Hermes
-# agent from accessing the sidecar's process memory via /proc.
-RUN adduser --disabled-password --gecos "" --uid 1001 ms-graph-proxy
 
 # Optional: register additional trusted CA certificates inside the sandbox.
 # Drop *.crt files into the example-root certs/ directory before building —
@@ -286,10 +243,8 @@ RUN chmod 755 /usr/local/lib/nemoclaw-slack-shims/decode-proxy.py \
     && find /usr/local/lib/nemoclaw-patches -type f -exec chmod 444 {} +
 
 # NOTE: This example removes the upstream NemoClaw `COPY nemoclaw-blueprint/`
-# step. Nothing in the Hermes runtime (start.sh, plugin/, bridges/, sidecars/,
-# skills/) reads /sandbox/.nemoclaw/blueprints/0.1.0/ — it was build-time
-# scaffolding only. Dropping it means the example doesn't need NemoClaw's
-# nemoclaw-blueprint/ directory in its build context.
+# step. Nothing in the Hermes runtime reads /sandbox/.nemoclaw/blueprints/0.1.0/ —
+# it was build-time scaffolding only.
 
 # Ensure sandbox user can read all /opt/nemoclaw-* and bridge files.
 # Source files may have restrictive permissions that Docker COPY preserves.
@@ -332,7 +287,6 @@ ARG SOURCE_ETL_API_URL=
 ARG SOURCE_ETL_API_HOST=host.openshell.internal
 ARG SOURCE_ETL_API_PORT=3100
 ARG NEMOCLAW_BUILD_ID=default
-ARG MS_GRAPH_SERVICES="outlook"
 
 # Promote build-args to env vars for the config generation script.
 ENV NEMOCLAW_MODEL=${NEMOCLAW_MODEL} \
@@ -345,7 +299,6 @@ ENV NEMOCLAW_MODEL=${NEMOCLAW_MODEL} \
     OUTLOOK_REPLY_TO=${OUTLOOK_REPLY_TO} \
     OUTLOOK_ALLOWED_SENDERS=${OUTLOOK_ALLOWED_SENDERS} \
     GITHUB_READONLY_REPO=${GITHUB_READONLY_REPO} \
-    MS_GRAPH_SERVICES=${MS_GRAPH_SERVICES} \
     SOURCE_ETL_GITHUB_REPO=${SOURCE_ETL_GITHUB_REPO} \
     SOURCE_ETL_FORUM_TAG=${SOURCE_ETL_FORUM_TAG} \
     SOURCE_ETL_API_URL=${SOURCE_ETL_API_URL} \

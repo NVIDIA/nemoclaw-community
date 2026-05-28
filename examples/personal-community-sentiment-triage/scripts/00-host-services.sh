@@ -4,29 +4,21 @@
 #
 # Lifecycle utility for the host-side services in extras/docker-compose.yml.
 # These services run on the host (not in the sandbox) and are reached by
-# the agent via the L7 proxy. They're modeled as one stack so the user
-# only has to learn one compose file.
+# the agent via the L7 proxy. Outlook OAuth is handled directly by the
+# OpenShell v2 outlook provider — no host-side token manager.
 #
-#   phoenix                  — OpenInference trace collector (UI on :6006)
-#   ms-graph-token-manager   — Outlook OAuth token broker (host port 8765)
-#   postgres                 — backing store for source ETLs
-#   github-etl               — pulls GitHub issues/comments into postgres
-#   forums-etl               — pulls NVIDIA forum posts into postgres
-#   postgrest                — REST API in front of postgres (host port 3100)
+#   phoenix      — OpenInference trace collector (UI on :6006)
+#   postgres     — backing store for source ETLs
+#   github-etl   — pulls GitHub issues/comments into postgres
+#   forums-etl   — pulls NVIDIA forum posts into postgres
+#   postgrest    — REST API in front of postgres (host port 3100)
 #
 # Verbs:
 #   up                  Start the stack (default if no arg).
 #   down                Stop and remove containers, preserve volumes.
-#   down --volumes      Also remove named volumes (token-cache,
-#                       source-etls-postgres-data, github-etl-state).
-#                       DESTRUCTIVE: requires Outlook re-auth and forces
-#                       ETL re-scrape on next `up`.
-#
-# Try after this script:
-#   $ docker compose -f extras/docker-compose.yml ps
-#   $ curl -s http://localhost:8765/health    # token manager
-#   $ curl -s http://localhost:6006           # phoenix UI
-#   $ curl -s http://localhost:3100/          # postgrest
+#   down --volumes      Also remove named volumes
+#                       (source-etls-postgres-data, github-etl-state).
+#                       DESTRUCTIVE: forces ETL re-scrape on next `up`.
 
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -45,17 +37,16 @@ Usage: $(basename "$0") [up|down [--volumes]]
   down        Stop and remove containers; preserve named volumes.
   down -v
   down --volumes
-              Also remove named volumes (token-cache,
-              source-etls-postgres-data, github-etl-state).
-              DESTRUCTIVE: requires Outlook re-auth via
-              authenticate.sh and forces ETL re-scrape on next up.
+              Also remove named volumes (source-etls-postgres-data,
+              github-etl-state). DESTRUCTIVE: forces ETL re-scrape
+              on next up.
 EOF
 }
 
 cmd_up() {
-  echo "Starting host services: phoenix ms-graph-token-manager postgres github-etl forums-etl postgrest"
+  echo "Starting host services: phoenix postgres github-etl forums-etl postgrest"
   docker compose -f "$COMPOSE_FILE" up -d --build \
-    phoenix ms-graph-token-manager postgres github-etl forums-etl postgrest
+    phoenix postgres github-etl forums-etl postgrest
 
   echo
   echo "Status:"
@@ -72,7 +63,6 @@ cmd_down() {
 
   if [[ "$with_volumes" == "1" ]]; then
     echo "Stopping host services and REMOVING NAMED VOLUMES."
-    echo "  - token-cache (Outlook MSAL sessions — re-run authenticate.sh after next 'up')"
     echo "  - source-etls-postgres-data (mirrored GitHub + forum data — ETLs will re-scrape)"
     echo "  - github-etl-state (ETL cursor)"
     docker compose -f "$COMPOSE_FILE" down -v

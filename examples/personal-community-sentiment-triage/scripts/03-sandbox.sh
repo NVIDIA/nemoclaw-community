@@ -4,29 +4,11 @@
 #
 # Step 3 of 3: Build the sandbox image and create the sandbox.
 #
-# OpenShell builds the image from a Dockerfile (`openshell sandbox create
-# --from <Dockerfile>`). We can't pre-build with `docker build` and then
-# pass a local-only tag — `--from` only accepts a Dockerfile path, a build
-# directory, or a registry-hosted image. OpenShell also doesn't expose a
-# `--build-arg` passthrough, so this script sed-patches a staged copy of
-# the Dockerfile to bake in the per-run values (mailbox, channels, Phoenix
-# endpoint, etc.) before handing it to OpenShell.
-#
-# After create, this script re-applies the policy via `openshell policy
-# set --wait`. That's the second stage of NemoClaw's two-stage policy
-# pattern — create with a base policy, then activate the network policies.
-# Without this, certain rules (notably the outlook token-manager allow)
-# fail to take effect even though the YAML was loaded at create time.
-#
-# OpenShell commands you'll see:
-#   - openshell sandbox create --from <Dockerfile> --policy <yaml> --provider <p> -- env … cmd
-#   - openshell sandbox list / logs / connect
-#   - openshell policy set --wait <sandbox>
-#
-# Try after this script:
-#   $ openshell sandbox list
-#   $ openshell sandbox exec hermes-direct curl -sf http://localhost:8642/health
-#   $ openshell sandbox connect hermes-direct
+# `openshell sandbox create --from <Dockerfile>` builds the image — there's
+# no --build-arg passthrough, so we sed-patch a staged Dockerfile copy with
+# the per-run values before handing it off. After create, we re-apply policy
+# via `openshell policy set --wait` (NemoClaw's two-stage pattern: create
+# with base policy, then activate network policies).
 
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,117 +16,63 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$DIR/_lib.sh"
 
 load_env
-
-# At least one messaging channel must be configured. Repeats the
-# 02-providers.sh check so direct invocations of this script still get the
-# safety net.
-if [[ -z "${OUTLOOK_CLIENT_ID:-}" && -z "${SLACK_BOT_TOKEN:-}" ]]; then
-  echo "No messaging channel configured — set Outlook (all five OUTLOOK_* vars) or Slack (SLACK_BOT_TOKEN + SLACK_APP_TOKEN) in $EXAMPLE_DIR/.env" >&2
-  exit 1
-fi
-
-# Partial-Outlook detection: any of the five set ⇒ all five required.
-OUTLOOK_VARS=(OUTLOOK_TENANT_ID OUTLOOK_CLIENT_ID OUTLOOK_SESSION_UUID OUTLOOK_TARGET_MAILBOX OUTLOOK_REPLY_TO)
-OUTLOOK_SET=()
-OUTLOOK_MISSING=()
-for v in "${OUTLOOK_VARS[@]}"; do
-  if [[ -n "${!v:-}" ]]; then OUTLOOK_SET+=("$v"); else OUTLOOK_MISSING+=("$v"); fi
-done
-if (( ${#OUTLOOK_SET[@]} > 0 && ${#OUTLOOK_MISSING[@]} > 0 )); then
-  echo "Partial Outlook configuration in $EXAMPLE_DIR/.env" >&2
-  echo "  Set:     ${OUTLOOK_SET[*]}" >&2
-  echo "  Missing: ${OUTLOOK_MISSING[*]}" >&2
-  echo "Fill all five OUTLOOK_* vars or leave the entire block empty." >&2
-  exit 1
-fi
+assert_messaging_config
 command -v openshell >/dev/null || { echo "openshell not in PATH" >&2; exit 1; }
 
 STAGED_DOCKERFILE="$EXAMPLE_DIR/.Dockerfile.staged"
 STAGED_POLICY="$EXAMPLE_DIR/.policy.staged.yaml"
 trap 'rm -f "$STAGED_DOCKERFILE" "$STAGED_POLICY"' EXIT
 
-# ── Build CHANNELS_B64 and ALLOWED_IDS_B64 ─────────────────────────────
-# These two base64-JSON blobs tell the Hermes config generator which
-# messaging platforms are enabled and per-platform user allowlists. The
-# Dockerfile bakes them in as ARGs, then generate-config.ts decodes them
-# at image build time into SLACK_ALLOWED_USERS / TELEGRAM_ALLOWED_USERS
-# config keys. Same shape as `nemoclaw onboard` produces — see
-# src/lib/onboard.ts:1568-1572.
-read -r -d '' _BUILD_B64_PY <<'PY' || true
-import os, json, base64
-channels = []
-if os.environ.get("OUTLOOK_CLIENT_ID"):  channels.append("outlook")
-if os.environ.get("SLACK_BOT_TOKEN"):    channels.append("slack")
-if os.environ.get("TELEGRAM_BOT_TOKEN"): channels.append("telegram")
-if os.environ.get("DISCORD_BOT_TOKEN"):  channels.append("discord")
-allowed = {}
-for ch, env in [("slack", "SLACK_ALLOWED_IDS"), ("telegram", "TELEGRAM_ALLOWED_IDS")]:
-    v = (os.environ.get(env) or "").strip()
-    if v:
-        allowed[ch] = [s.strip() for s in v.split(",") if s.strip()]
-print(base64.b64encode(json.dumps(channels).encode()).decode())
-print(base64.b64encode(json.dumps(allowed).encode()).decode())
-PY
-mapfile -t _B64 < <(python3 -c "$_BUILD_B64_PY")
+# Build base64-JSON blobs for the Hermes config generator (channels + allowed IDs).
+mapfile -t _B64 < <("$DIR/lib/build-channels.py")
 CHANNELS_B64="${_B64[0]}"
 ALLOWED_IDS_B64="${_B64[1]}"
 echo "Channels:    $(printf '%s' "$CHANNELS_B64" | base64 -d)"
 echo "Allowed IDs: $(printf '%s' "$ALLOWED_IDS_B64" | base64 -d)"
 
 ALLOWED_SENDERS="${OUTLOOK_ALLOWED_SENDERS:-}"
-TM_HOST="$(detect_token_manager_host)"
 SOURCE_ETL_HOST="${SOURCE_ETL_API_HOST:-host.openshell.internal}"
 SOURCE_ETL_PORT="${SOURCE_ETL_API_PORT:-3100}"
+INFERENCE_BASE_URL="${NEMOCLAW_ENDPOINT_URL:-${OPENAI_BASE_URL:-https://integrate.api.nvidia.com/v1}}"
 GITHUB_READONLY_REPO="${GITHUB_READONLY_REPO:-NVIDIA/OpenShell}"
 if [[ ! "$GITHUB_READONLY_REPO" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]+$ ]]; then
   echo "Invalid GITHUB_READONLY_REPO '$GITHUB_READONLY_REPO' — expected owner/repo" >&2
   exit 1
 fi
-echo "Resolved TOKEN_MANAGER_HOST → $TM_HOST"
 echo "GitHub read-only repo scope: $GITHUB_READONLY_REPO"
 
 # ── Stage the Dockerfile and patch ARG defaults ────────────────────────
-cp "$EXAMPLE_DIR/agents/hermes/Dockerfile" "$STAGED_DOCKERFILE"
-sed -i \
-  -e "s|^ARG NEMOCLAW_MESSAGING_CHANNELS_B64=.*|ARG NEMOCLAW_MESSAGING_CHANNELS_B64=$CHANNELS_B64|" \
-  -e "s|^ARG NEMOCLAW_MESSAGING_ALLOWED_IDS_B64=.*|ARG NEMOCLAW_MESSAGING_ALLOWED_IDS_B64=$ALLOWED_IDS_B64|" \
-  -e "s|^ARG OUTLOOK_TARGET_MAILBOX=.*|ARG OUTLOOK_TARGET_MAILBOX=${OUTLOOK_TARGET_MAILBOX:-}|" \
-  -e "s|^ARG OUTLOOK_REPLY_TO=.*|ARG OUTLOOK_REPLY_TO=${OUTLOOK_REPLY_TO:-}|" \
-  -e "s|^ARG OUTLOOK_ALLOWED_SENDERS=.*|ARG OUTLOOK_ALLOWED_SENDERS=$ALLOWED_SENDERS|" \
-  -e "s|^ARG GITHUB_READONLY_REPO=.*|ARG GITHUB_READONLY_REPO=$GITHUB_READONLY_REPO|" \
-  -e "s|^ARG TOKEN_MANAGER_HOST=.*|ARG TOKEN_MANAGER_HOST=$TM_HOST|" \
-  -e "s|^ARG SOURCE_ETL_API_HOST=.*|ARG SOURCE_ETL_API_HOST=$SOURCE_ETL_HOST|" \
-  -e "s|^ARG SOURCE_ETL_API_PORT=.*|ARG SOURCE_ETL_API_PORT=$SOURCE_ETL_PORT|" \
-  -e "s|^ARG NEMOCLAW_BUILD_ID=.*|ARG NEMOCLAW_BUILD_ID=$(date +%s)|" \
-  "$STAGED_DOCKERFILE"
-
-# Propagate the inference model name from .env into the Dockerfile ARG so
-# changes to NEMOCLAW_MODEL actually land in the agent's baked config.yaml
-# on the next bring-up. Without this, the agent keeps requesting the old
-# model name (the Dockerfile's hardcoded ARG default) regardless of what
-# .env says, even though `02-providers.sh` has already updated the cluster
-# gateway and provider with the new model.
-if [[ -n "${NEMOCLAW_MODEL:-}" ]]; then
-  sed -i -e "s|^ARG NEMOCLAW_MODEL=.*|ARG NEMOCLAW_MODEL=$NEMOCLAW_MODEL|" "$STAGED_DOCKERFILE"
-fi
-
-# Phoenix endpoint — bake into the image so the agent emits OpenInference
-# traces to the collector. NeMo-Relay itself is now installed unconditionally
-# by the Dockerfile (ATIF traces always written to /tmp/atif/), so this
-# block is Phoenix-specific: no point overwriting the ARG with empty when
-# the user hasn't configured a collector.
+# Build args go through sed substitution because `openshell sandbox create
+# --from <Dockerfile>` doesn't expose --build-arg passthrough. Values must
+# not contain `|` (the sed delimiter).
+declare -A DOCKERFILE_ARGS=(
+  [NEMOCLAW_MESSAGING_CHANNELS_B64]="$CHANNELS_B64"
+  [NEMOCLAW_MESSAGING_ALLOWED_IDS_B64]="$ALLOWED_IDS_B64"
+  [OUTLOOK_TARGET_MAILBOX]="${OUTLOOK_TARGET_MAILBOX:-}"
+  [OUTLOOK_REPLY_TO]="${OUTLOOK_REPLY_TO:-}"
+  [OUTLOOK_ALLOWED_SENDERS]="$ALLOWED_SENDERS"
+  [GITHUB_READONLY_REPO]="$GITHUB_READONLY_REPO"
+  [SOURCE_ETL_API_HOST]="$SOURCE_ETL_HOST"
+  [SOURCE_ETL_API_PORT]="$SOURCE_ETL_PORT"
+  [NEMOCLAW_INFERENCE_BASE_URL]="$INFERENCE_BASE_URL"
+  [NEMOCLAW_BUILD_ID]="$(date +%s)"
+)
+# Optional patches — leave the Dockerfile default in place if unset.
+[[ -n "${NEMOCLAW_MODEL:-}" ]] && DOCKERFILE_ARGS[NEMOCLAW_MODEL]="$NEMOCLAW_MODEL"
 if [[ -n "${PHOENIX_COLLECTOR_ENDPOINT:-}" ]]; then
   echo "Phoenix endpoint: $PHOENIX_COLLECTOR_ENDPOINT — enabling OpenInference egress"
-  sed -i \
-    -e "s|^ARG PHOENIX_COLLECTOR_ENDPOINT=.*|ARG PHOENIX_COLLECTOR_ENDPOINT=$PHOENIX_COLLECTOR_ENDPOINT|" \
-    "$STAGED_DOCKERFILE"
+  DOCKERFILE_ARGS[PHOENIX_COLLECTOR_ENDPOINT]="$PHOENIX_COLLECTOR_ENDPOINT"
 fi
 if [[ -n "${PHOENIX_PROJECT_NAME:-}" ]]; then
   echo "Phoenix project: $PHOENIX_PROJECT_NAME"
-  sed -i \
-    -e "s|^ARG PHOENIX_PROJECT_NAME=.*|ARG PHOENIX_PROJECT_NAME=$PHOENIX_PROJECT_NAME|" \
-    "$STAGED_DOCKERFILE"
+  DOCKERFILE_ARGS[PHOENIX_PROJECT_NAME]="$PHOENIX_PROJECT_NAME"
 fi
+
+cp "$EXAMPLE_DIR/agents/hermes/Dockerfile" "$STAGED_DOCKERFILE"
+for arg in "${!DOCKERFILE_ARGS[@]}"; do
+  value="${DOCKERFILE_ARGS[$arg]}"
+  sed -i -e "s|^ARG ${arg}=.*|ARG ${arg}=${value}|" "$STAGED_DOCKERFILE"
+done
 
 # ── Stage policy and patch per-run repo scope ───────────────────────────
 cp "$EXAMPLE_DIR/policy.yaml" "$STAGED_POLICY"
@@ -154,27 +82,25 @@ sed -i \
 
 # ── Build provider flags from what 02-providers.sh actually created ────
 PROVIDER_FLAGS=()
+if [[ -n "${OPENAI_API_KEY:-}" || -n "${COMPATIBLE_API_KEY:-}" ]]; then
+  PROVIDER_FLAGS+=(--provider compatible-endpoint)
+fi
 [[ -n "${OUTLOOK_CLIENT_ID:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-outlook")
-[[ -n "${SLACK_BOT_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-slack-bridge")
-[[ -n "${SLACK_APP_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-slack-app")
+[[ -n "${SLACK_BOT_TOKEN:-}" || -n "${SLACK_APP_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-slack")
 [[ -n "${GITHUB_TOKEN:-}" || -n "${GH_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-github")
 
 # ── Create the sandbox ─────────────────────────────────────────────────
-# `openshell sandbox create` proxies the running sandbox's stdout to the
-# local terminal until the initial command exits. Our initial command is a
-# long-running daemon, so the call would block forever. The fix mirrors
-# NemoClaw's streamSandboxCreate() in src/lib/sandbox-create-stream.ts:
-# spawn create in the background, poll for ready, then SIGTERM the local
-# proxy as soon as the sandbox reports ready. The sandbox runs on the
-# gateway and survives the local proxy being killed.
+# `openshell sandbox create` proxies the sandbox's stdout to the local
+# terminal until the initial command exits — our command is a long-running
+# daemon, so we spawn create in the background, poll for ready, then signal
+# the openshell process group to detach. The sandbox itself runs on the
+# gateway and survives the local kill.
 #
-# `setsid` puts openshell in its own session/process-group (PGID == its PID).
-# openshell spawns an `ssh` subprocess to stream sandbox stdout, and that
-# ssh inherits openshell's PGID. On SIGTERM, openshell exits but does NOT
-# clean up its ssh child (UX bug in openshell 0.0.36); the orphaned ssh
-# would otherwise keep streaming sandbox logs to the user's terminal.
-# By signalling the negative PID (`kill -- -$PID`) we hit the whole pgrp,
-# including the orphan ssh, so the terminal goes silent on detach.
+# `setsid` + pgrp-kill is a workaround for an OpenShell ≤ 0.0.36 UX bug
+# where the `ssh` subprocess streaming sandbox stdout wasn't cleaned up on
+# SIGTERM. If `pgrep -af openshell | grep -v grep` is empty after this
+# script returns on 0.0.50+, the bug is fixed and the `setsid` wrapper +
+# SIGKILL backstop below can be simplified to plain `&` + `kill -TERM $PID`.
 echo "Creating sandbox $SANDBOX_NAME (OpenShell will build the image)…"
 setsid openshell sandbox create \
   --from "$STAGED_DOCKERFILE" \
@@ -185,7 +111,6 @@ setsid openshell sandbox create \
     OUTLOOK_TARGET_MAILBOX="${OUTLOOK_TARGET_MAILBOX:-}" \
     OUTLOOK_REPLY_TO="${OUTLOOK_REPLY_TO:-}" \
     OUTLOOK_ALLOWED_SENDERS="$ALLOWED_SENDERS" \
-    TOKEN_MANAGER_HOST="$TM_HOST" \
     GITHUB_READONLY_REPO="$GITHUB_READONLY_REPO" \
     NEMOCLAW_MESSAGING_CHANNELS_B64="$CHANNELS_B64" \
     CHAT_UI_URL="http://127.0.0.1:8642" \

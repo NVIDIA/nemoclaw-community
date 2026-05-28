@@ -1,17 +1,13 @@
 #!/usr/bin/python3
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""
-Fetch all messages in a single email thread (conversation) via Microsoft Graph.
+"""Fetch all messages in an Outlook conversation via Microsoft Graph.
 
-Routes requests through the credential sidecar (MS_GRAPH_SIDECAR_URL) which swaps
-Authorization: Bearer MS_GRAPH_TOKEN_PLACEHOLDER for a live delegated access token.
+Authorization is the placeholder `openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN`;
+the OpenShell L7 proxy substitutes a live access token on egress.
 
-Usage:
-    /usr/bin/python3 get_thread.py --conversation-id <ID> [--top N]
-
-The conversation_id is returned by search_emails.py in the "conversation_id" field
-of each message.
+Usage: /usr/bin/python3 get_thread.py --conversation-id <ID> [--top N]
+The conversation_id comes from search_emails.py output.
 """
 
 from __future__ import annotations
@@ -26,12 +22,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-MS_GRAPH_TOKEN_PLACEHOLDER = "MS_GRAPH_TOKEN_PLACEHOLDER_OUTLOOK"
-
-
-def _graph_base() -> str:
-    sidecar = os.environ.get("MS_GRAPH_SIDECAR_URL", "").rstrip("/")
-    return f"{sidecar}/v1.0" if sidecar else "https://graph.microsoft.com/v1.0"
+MS_GRAPH_ACCESS_TOKEN = os.environ.get(
+    "MS_GRAPH_ACCESS_TOKEN", "openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN"
+)
+GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 
 def _mailbox() -> str:
@@ -43,11 +37,11 @@ def _mailbox() -> str:
 
 
 def _graph_get(path: str) -> dict:
-    url = f"{_graph_base()}/{path.lstrip('/')}"
+    url = f"{GRAPH_BASE}/{path.lstrip('/')}"
     req = urllib.request.Request(
         url,
         headers={
-            "Authorization": f"Bearer {MS_GRAPH_TOKEN_PLACEHOLDER}",
+            "Authorization": f"Bearer {MS_GRAPH_ACCESS_TOKEN}",
             "Accept": "application/json",
         },
     )

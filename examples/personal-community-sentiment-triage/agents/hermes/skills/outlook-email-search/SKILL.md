@@ -20,10 +20,11 @@ was communicated, or pulling context from recent correspondence.
 
 ## Access model
 
-- All Graph API requests go through the credential sidecar at `$MS_GRAPH_SIDECAR_URL`.
-- Use `Authorization: Bearer MS_GRAPH_TOKEN_PLACEHOLDER_OUTLOOK` — the sidecar swaps
-  this for a live delegated token before forwarding to `graph.microsoft.com`.
-- `MS_GRAPH_SIDECAR_URL` is already set in the environment; the helper script reads it.
+- Graph API requests go directly to `https://graph.microsoft.com/v1.0`.
+- Use `Authorization: Bearer $MS_GRAPH_ACCESS_TOKEN`. The OpenShell L7 proxy
+  substitutes the placeholder with a gateway-refreshed delegated access token
+  on egress. The env var is injected by the OpenShell provider; you never see
+  the real token.
 - **Two mailbox env vars** — understand the distinction:
   - `OUTLOOK_REPLY_TO` — the **human owner's** personal address (e.g. `you@nvidia.com`).
     When the user says "my emails", this is what they mean. This is the
@@ -132,8 +133,8 @@ one message directly:
 
 ```bash
 # Replace USER@nvidia.com with the value of OUTLOOK_REPLY_TO
-curl -s "${MS_GRAPH_SIDECAR_URL}/v1.0/users/USER@nvidia.com/messages/MESSAGE_ID?\$select=subject,body,from,receivedDateTime" \
-  -H "Authorization: Bearer MS_GRAPH_TOKEN_PLACEHOLDER_OUTLOOK" | /usr/bin/python3 -c "
+curl -s "https://graph.microsoft.com/v1.0/users/USER@nvidia.com/messages/MESSAGE_ID?\$select=subject,body,from,receivedDateTime" \
+  -H "Authorization: Bearer $MS_GRAPH_ACCESS_TOKEN" | /usr/bin/python3 -c "
 import json, sys, html, re
 d = json.load(sys.stdin)
 content = d.get('body', {}).get('content', '')

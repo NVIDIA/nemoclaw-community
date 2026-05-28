@@ -107,7 +107,7 @@ SLACK_APP_TOKEN=xapp-<your app-level token from Socket Mode>
 SLACK_ALLOWED_IDS=U0887Q5UVV4
 ```
 
-Leaving `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` unset disables Slack entirely — the example runs Outlook-only. If you set the tokens, both `<sandbox>-slack-bridge` and `<sandbox>-slack-app` providers are upserted by [scripts/02-providers.sh](../scripts/02-providers.sh).
+Leaving `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` unset disables Slack entirely — the example runs Outlook-only. If you set the tokens, a single `<sandbox>-slack` provider is upserted by [scripts/02-providers.sh](../scripts/02-providers.sh) with both credentials attached.
 
 ## Run `bring-up.sh`
 
@@ -119,7 +119,7 @@ $ bash scripts/bring-up.sh
 
 The script (auto-sources `.env` if needed) does the following for Slack:
 
-- Creates OpenShell providers `<sandbox>-slack-bridge` (`SLACK_BOT_TOKEN`) and `<sandbox>-slack-app` (`SLACK_APP_TOKEN`).
+- Creates an OpenShell provider `<sandbox>-slack` with both `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` credentials (one v2 provider, two credentials).
 - Bakes `slack` into the sandbox image's channel list (`NEMOCLAW_MESSAGING_CHANNELS_B64`) alongside `outlook`.
 - Bakes `SLACK_ALLOWED_IDS` into the image's per-channel allowlist (`NEMOCLAW_MESSAGING_ALLOWED_IDS_B64`).
 - Builds the sandbox image and launches it; the Hermes Slack channel opens its Socket Mode WebSocket on startup.
@@ -140,7 +140,7 @@ $ tail -f /sandbox/.hermes/logs/hermes.log
 
 If the bot does not respond, verify that:
 
-- `openshell provider list` shows both `<sandbox>-slack-bridge` and `<sandbox>-slack-app`.
+- `openshell provider list` shows `<sandbox>-slack` with both `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` in its credential keys.
 - If `SLACK_ALLOWED_IDS` is set, your Slack member ID matches one of its entries exactly (Slack IDs are case-sensitive and start with `U`). If it's empty, this check doesn't apply — anyone in the workspace can message the bot.
 - The bot user is installed in your workspace (re-check **OAuth & Permissions** in your app's settings).
 - Socket Mode is still enabled (re-check **Socket Mode** in your app's settings).

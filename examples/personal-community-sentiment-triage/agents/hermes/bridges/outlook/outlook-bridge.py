@@ -1,20 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Outlook bridge for NemoClaw / Hermes Agent — delegated auth edition.
-#
-# Polls Microsoft Graph API for new emails using delta queries, relays
-# each message body to the Hermes HTTP API, and sends the reply back to the
-# sender via Graph API. Also runs scheduled jobs from cron/outlook-jobs.json.
-#
-# Credential injection: all Graph API requests carry
-#   Authorization: Bearer MS_GRAPH_TOKEN_PLACEHOLDER
-# The credential sidecar (127.0.0.1:8766) intercepts these, swaps the
-# placeholder with the live delegated access token, and forwards to Graph.
-# The bridge never holds or requests a real token.
-#
-# To use without the sidecar (testing only), leave MS_GRAPH_SIDECAR_URL unset;
-# requests go directly to graph.microsoft.com — but will fail without auth.
+# Outlook bridge — polls Microsoft Graph for new mail, relays to the Hermes
+# HTTP API, sends replies. Authorization is `Bearer
+# openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN`: the OpenShell L7 proxy
+# substitutes the placeholder with a live, gateway-refreshed delegated access
+# token on egress. The bridge never holds a real token.
 
 import asyncio
 import datetime
@@ -91,8 +82,12 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 # ── Auth placeholder ─────────────────────────────────────────────────────────
-# Sentinel swapped by the credential sidecar before the request reaches Graph.
-MS_GRAPH_TOKEN_PLACEHOLDER = "MS_GRAPH_TOKEN_PLACEHOLDER_OUTLOOK"
+# OpenShell provider v2 injects MS_GRAPH_ACCESS_TOKEN as the literal placeholder
+# string `openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN`; the L7 proxy substitutes
+# the live access token on egress to graph.microsoft.com.
+MS_GRAPH_ACCESS_TOKEN = os.environ.get(
+    "MS_GRAPH_ACCESS_TOKEN", "openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN"
+)
 
 # ── Mailbox config ───────────────────────────────────────────────────────────
 # OpenShell provider placeholder — the L7 proxy rewrites it at egress.
@@ -119,24 +114,11 @@ def _reply_to_address() -> str | None:
         return None
     return raw
 
-# ── Graph API base URL ───────────────────────────────────────────────────────
-# When MS_GRAPH_SIDECAR_URL is set (e.g. http://127.0.0.1:8766), all Graph API
-# requests go to the credential sidecar over plain HTTP on loopback. The sidecar
-# injects the real bearer token and forwards to graph.microsoft.com over HTTPS.
-# Without it, requests go directly to graph.microsoft.com (testing only).
-_MS_GRAPH_SIDECAR_URL = os.environ.get("MS_GRAPH_SIDECAR_URL", "").rstrip("/")
-# GRAPH_BASE always ends with /v1.0 — sidecar URL is the scheme+host only.
-# Requests arrive at the sidecar as /v1.0/... paths; it forwards them to
-# https://graph.microsoft.com with the path unchanged.
-GRAPH_BASE = (f"{_MS_GRAPH_SIDECAR_URL}/v1.0" if _MS_GRAPH_SIDECAR_URL
-              else "https://graph.microsoft.com/v1.0")
+GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 
 def _graph_url(path_or_url: str) -> str:
-    """Resolve a relative path or absolute Graph URL, routing through the sidecar."""
-    if path_or_url.startswith("https://graph.microsoft.com/v1.0") and _MS_GRAPH_SIDECAR_URL:
-        # Rewrite delta links (absolute URLs from Graph responses) to go via sidecar
-        return path_or_url.replace("https://graph.microsoft.com/v1.0", GRAPH_BASE, 1)
+    """Resolve a relative path or absolute Graph URL."""
     if path_or_url.startswith("http"):
         return path_or_url
     return f"{GRAPH_BASE}/{path_or_url.lstrip('/')}"
@@ -211,7 +193,7 @@ async def wait_for_hermes() -> None:
 async def _graph_request(method: str, path_or_url: str, **kwargs) -> dict | None:
     url = _graph_url(path_or_url)
     headers = {
-        "Authorization": f"Bearer {MS_GRAPH_TOKEN_PLACEHOLDER}",
+        "Authorization": f"Bearer {MS_GRAPH_ACCESS_TOKEN}",
         **kwargs.pop("headers", {}),
     }
     resp = await getattr(_client, method)(url, headers=headers, **kwargs)

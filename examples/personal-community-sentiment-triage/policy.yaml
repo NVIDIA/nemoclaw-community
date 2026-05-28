@@ -25,6 +25,10 @@ process:
   run_as_user: sandbox
   run_as_group: sandbox
 network_policies:
+  # Load-bearing: per-path allow rules for the NVIDIA inference API.
+  # providers/compatible-endpoint.yaml grants read-write over these hosts but
+  # cannot express path scoping (v2 ProviderProfile schema has no rules[]).
+  # Removing this block widens egress to all /v1/* paths.
   nvidia:
     name: nvidia
     endpoints:
@@ -77,41 +81,8 @@ network_policies:
     - path: /usr/bin/python3
     - path: /usr/bin/python3.13
     - path: /opt/hermes/.venv/bin/python
-  outlook:
-    name: outlook
-    endpoints:
-    - host: graph.microsoft.com
-      port: 443
-      protocol: rest
-      enforcement: enforce
-      rules:
-      - allow: { method: GET, path: "/**" }
-      - allow: { method: POST, path: "/**" }
-      - allow: { method: PATCH, path: "/**" }
-    - host: host.openshell.internal
-      port: 8765
-      protocol: rest
-      enforcement: enforce
-      allowed_ips:
-      - 10.0.0.0/8
-      - 172.0.0.0/8
-      - 192.168.0.0/16
-      - fc00::/7
-      rules:
-      - allow: { method: GET, path: /token }
-    - host: host.docker.internal
-      port: 8765
-      protocol: rest
-      enforcement: enforce
-      allowed_ips:
-      - 10.0.0.0/8
-      - 172.0.0.0/8
-      - 192.168.0.0/16
-      - fc00::/7
-      rules:
-      - allow: { method: GET, path: /token }
-    binaries:
-    - path: /usr/local/bin/ms-graph-sidecar
+  # Credential-less host-routed service — no v2 provider profile equivalent.
+  # Sandbox policy is the sole authorization gate.
   phoenix_collector:
     name: phoenix_collector
     endpoints:
@@ -133,6 +104,7 @@ network_policies:
     - path: /usr/bin/python3
     - path: /usr/bin/python3.13
     - path: /opt/hermes/.venv/bin/python
+  # Credential-less host-routed service — see phoenix_collector above.
   source_etl_api:
     name: source_etl_api
     endpoints:
@@ -156,6 +128,11 @@ network_policies:
     - path: /usr/local/bin/hermes
     - path: /opt/hermes/.venv/bin/hermes
     - path: /usr/bin/curl
+  # Load-bearing: per-repo path scoping for live GitHub REST reads.
+  # providers/github.yaml grants read-only over all of api.github.com.
+  # This block is the sole gate preventing reads from repos other than
+  # $GITHUB_READONLY_REPO. Do not delete without an upstream OpenShell
+  # change that adds per-path rules to the v2 ProviderProfile schema.
   github_repo_readonly:
     name: github-repo-readonly
     # scripts/03-sandbox.sh replaces __GITHUB_READONLY_REPO__ with
@@ -188,56 +165,4 @@ network_policies:
     - path: /usr/bin/curl
     - path: /usr/bin/python3
     - path: /usr/bin/python3.13
-    - path: /opt/hermes/.venv/bin/python
-  slack:
-    name: slack
-    endpoints:
-    - host: slack.com
-      port: 443
-      protocol: rest
-      enforcement: enforce
-      rules:
-      - allow:
-          method: GET
-          path: /**
-      - allow:
-          method: POST
-          path: /**
-    - host: api.slack.com
-      port: 443
-      protocol: rest
-      enforcement: enforce
-      rules:
-      - allow:
-          method: GET
-          path: /**
-      - allow:
-          method: POST
-          path: /**
-    - host: hooks.slack.com
-      port: 443
-      protocol: rest
-      enforcement: enforce
-      rules:
-      - allow:
-          method: GET
-          path: /**
-      - allow:
-          method: POST
-          path: /**
-    - host: wss-primary.slack.com
-      port: 443
-      access: full
-    - host: wss-backup.slack.com
-      port: 443
-      access: full
-    binaries:
-    - path: /usr/bin/curl
-    - path: /usr/local/bin/node
-    - path: /usr/bin/node
-    - path: /usr/bin/python3
-    - path: /usr/bin/python3.13
-    - path: /usr/local/bin/python3
-    - path: /usr/local/bin/hermes
-    - path: /opt/hermes/.venv/bin/hermes
     - path: /opt/hermes/.venv/bin/python

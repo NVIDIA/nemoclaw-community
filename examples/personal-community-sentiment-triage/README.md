@@ -141,7 +141,7 @@ itself). The session UUID for Outlook gets produced *between* them, so the order
 
 ```console
 $ git clone https://github.com/NVIDIA/nemoclaw-community.git && cd examples/personal-community-sentiment-triage/
-$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION=v0.0.38 sh
+$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION=v0.0.50 sh
 ```
 
 The package-managed installer starts a local gateway service for you. This
@@ -174,6 +174,15 @@ sets it automatically once linger is on.
 The service's `ExecStartPre` provisions the mTLS bundle the CLI needs, so
 once the unit is `active (running)`, `bring-up.sh` can register the gateway.
 
+This example uses OpenShell provider v2 (OAuth refresh-token rotation via
+`openshell provider refresh configure`). Enable it once at gateway scope:
+
+```console
+$ openshell settings set --global --key providers_v2_enabled --value true --yes
+```
+
+`scripts/02-providers.sh` verifies this is set and refuses to run otherwise.
+
 You also need a running Docker daemon. If you haven't already, register an Azure
 application and a dedicated agent mailbox per [docs/set-up-outlook-bridge.md](docs/set-up-outlook-bridge.md)
 — that's a one-time setup that produces your `OUTLOOK_CLIENT_ID` and `OUTLOOK_TENANT_ID`.
@@ -190,18 +199,15 @@ Now edit `.env` and fill in everything you already have:
 
 - `COMPATIBLE_API_KEY` — your inference key
 - **At least one messaging channel** — Outlook or Slack (or both):
-  - **Outlook** (recommended primary channel): set **all five** Outlook vars together, or leave the entire block empty.
+  - **Outlook** (recommended primary channel): set **all four** Outlook vars together, or leave the entire block empty.
     - `OUTLOOK_TENANT_ID`, `OUTLOOK_CLIENT_ID` — from your Azure app registration
     - `OUTLOOK_TARGET_MAILBOX`, `OUTLOOK_REPLY_TO` — the agent's mailbox and your personal mailbox
-    - `OUTLOOK_SESSION_UUID` — leave **blank for now**; Phase 4 produces it
   - **Slack**: `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` (both required) — see [docs/set-up-slack.md](docs/set-up-slack.md). Partial Outlook configuration (some vars set, some empty) is rejected at bring-up.
-- (optional) `TOKEN_CACHE_SALT` — set to a unique random string for any deployment that
-  holds real Entra sessions; leave commented for local experimentation
 - (optional) `SLACK_ALLOWED_IDS` — comma-separated Slack user IDs to restrict who can DM the agent; leave empty to allow anyone in the workspace
 - (optional) `OUTLOOK_ALLOWED_SENDERS` — comma-separated allowlist of email senders the agent will respond to; leave empty to accept any sender
 - (optional) `GITHUB_TOKEN` or `GH_TOKEN` for authenticated sandbox read-only
   GitHub REST, `GITHUB_READONLY_REPO`,
-  `PHOENIX_COLLECTOR_ENDPOINT`
+  `PHOENIX_COLLECTOR_ENDPOINT`, `PHOENIX_PROJECT_NAME`
 
 ### Phase 3 — Start host services
 
@@ -210,51 +216,37 @@ $ bash scripts/00-host-services.sh
 ```
 
 Brings up the long-lived Docker stack from [extras/docker-compose.yml](extras/docker-compose.yml):
-phoenix (telemetry), MS Graph token manager (Outlook OAuth broker on port 8765), postgres
-(ETL backing store), source ETL workers for mirrored discussions/forums, and PostgREST on host port 3100.
+phoenix (telemetry), postgres (ETL backing store), source ETL workers for mirrored
+discussions/forums, and PostgREST on host port 3100. Outlook OAuth is handled by the
+OpenShell v2 outlook provider (gateway-managed refresh-token rotation), not a host
+container.
 
 These services are designed to outlive the sandbox: a `bash scripts/tear-down.sh` followed
 by another `bash scripts/bring-up.sh` does **not** require re-running this phase. Only run
 it again on a fresh checkout, or after `bash scripts/tear-down.sh --stop-host-services`
 (or `--purge-host-services`).
 
-### Phase 4 — Obtain the Outlook session UUID
-
-> **Skip this phase** if you're doing a Slack-only setup (Outlook block left empty in `.env`).
-
-The token manager (now running from Phase 3) holds delegated MSAL sessions and issues
-short-lived tokens to the credential sidecar inside the sandbox. To create a session,
-authenticate as the **agent account** (`OUTLOOK_TARGET_MAILBOX`):
-
-```console
-$ eval "$(bash extras/ms-graph-token-manager/scripts/authenticate.sh \
-    --client-id "$OUTLOOK_CLIENT_ID" \
-    --tenant-id "$OUTLOOK_TENANT_ID" \
-    --login-hint "$OUTLOOK_TARGET_MAILBOX" \
-    --flow device)"
-$ echo "$SESSION_ID"   # the UUID to paste into .env
-```
-
-The script prints `SESSION_ID=<uuid>` on stdout (everything else is on stderr); `eval`
-turns that into a shell variable named `SESSION_ID`. On a headless host, swap `--flow
-browser` for `--flow device`. See [docs/set-up-outlook-bridge.md](docs/set-up-outlook-bridge.md)
-for what each flag does and how to renew an expired session.
-
-Open `.env` and set `OUTLOOK_SESSION_UUID=<the-value-of-$SESSION_ID>`.
-
-### Phase 5 — Bring up the agent
+### Phase 4 — Bring up the agent
 
 ```console
 $ bash scripts/bring-up.sh
 ```
 
 The script auto-sources `.env`, then runs `01-gateway.sh` → `02-providers.sh` →
-`03-sandbox.sh` (select or register the local OpenShell gateway, upsert provider
-credentials, build and launch the sandbox). The image always installs NeMo-Relay
-so the agent writes ATIF traces to `/tmp/atif/` regardless of Phoenix config.
-If `PHOENIX_COLLECTOR_ENDPOINT` is set, `03-sandbox.sh` additionally bakes the
-endpoint into the image so OpenInference traces stream into Phoenix at
-`http://localhost:6006`.
+`03-sandbox.sh` (select or register the local OpenShell gateway, import v2 provider
+profiles, upsert providers, build and launch the sandbox).
+
+On the first bring-up with Outlook configured, `02-providers.sh` runs an interactive
+Microsoft device-code login (it prints a URL + code; complete it in a browser as the
+`OUTLOOK_TARGET_MAILBOX` user) and caches the resulting refresh token at
+`.bootstrap/cache/ms-graph-token.json`. Subsequent bring-ups reuse the cached refresh
+token. Re-login with `OUTLOOK_FORCE_LOGIN=1 bash scripts/bring-up.sh` when the
+refresh token eventually expires (~90 days unattended on Microsoft's side).
+
+The image always installs NeMo-Relay so the agent writes ATIF traces to `/tmp/atif/`
+regardless of Phoenix config. If `PHOENIX_COLLECTOR_ENDPOINT` is set, `03-sandbox.sh`
+additionally bakes the endpoint into the image so OpenInference traces stream into
+Phoenix at `http://localhost:6006`.
 
 ## What this example owns
 
@@ -330,9 +322,8 @@ sandbox, e.g. `find /tmp/atif -type f -mtime +7 -delete`.
 
 - Docker daemon running.
 - `openshell` CLI on PATH (installed transitively by the NemoClaw installer).
-- MS Graph token manager running on the host at port `8765`. `bring-up.sh` defaults
-  to `host.openshell.internal` for host-routed services; set `TOKEN_MANAGER_HOST`
-  to override.
+- `providers_v2_enabled` set globally on the OpenShell gateway
+  (`openshell settings set --global --key providers_v2_enabled --value true --yes`).
 - `.env` populated with the credentials below.
 - **(Optional)** If your network performs TLS interception (e.g. an
   SSL-inspecting proxy), place the inspection CA certificate(s) as `.crt`
@@ -342,17 +333,36 @@ sandbox, e.g. `find /tmp/atif -type f -mtime +7 -delete`.
 
 ## Providers created by `bring-up.sh`
 
+All five providers are v2 (custom profiles under [providers/](providers/),
+imported by `02-providers.sh` via `openshell provider profile import`). The
+agent calls each upstream host directly with a placeholder bearer header; the
+OpenShell L7 proxy substitutes a live token on egress. No `inference.local`
+routing — `NEMOCLAW_ENDPOINT_URL` is baked into the Dockerfile at build time
+via `scripts/03-sandbox.sh`.
+
 | Provider name | `--type` | Credential env var | Required? |
 |---|---|---|---|
-| `compatible-endpoint` | `openai` | `COMPATIBLE_API_KEY` (or `OPENAI_API_KEY`) — passed to OpenShell as `OPENAI_API_KEY`. URL: `NEMOCLAW_ENDPOINT_URL` (or `OPENAI_BASE_URL`) → `OPENAI_BASE_URL` config. | Required for inference. If omitted, the agent has no LLM. |
-| `<sandbox>-outlook` | `generic` | `OUTLOOK_CLIENT_ID`, `OUTLOOK_TENANT_ID`, `OUTLOOK_SESSION_UUID` | Optional. Created only when the Outlook block is fully populated; partial config is rejected. At least one of Outlook or Slack must be configured. |
-| `<sandbox>-slack-bridge` | `generic` | `SLACK_BOT_TOKEN` | Optional. At least one of Outlook or Slack must be configured. |
-| `<sandbox>-slack-app` | `generic` | `SLACK_APP_TOKEN` | Optional. Required if Slack is enabled (Socket Mode needs both tokens). |
-| `<sandbox>-github` | `github` | `GITHUB_TOKEN` or `GH_TOKEN` | Optional but recommended. Enables authenticated live GitHub REST reads. The sandbox receives only the OpenShell placeholder; `policy.yaml` limits use to repo-scoped `GET` routes from approved binaries. |
+| `compatible-endpoint` | `nemoclaw-compatible-endpoint` | `OPENAI_API_KEY` (or `COMPATIBLE_API_KEY`). URL: `NEMOCLAW_ENDPOINT_URL` (or `OPENAI_BASE_URL`), baked into the image at build time. | Required for inference. If omitted, the agent has no LLM. |
+| `<sandbox>-outlook` | `nemoclaw-outlook-email` | `MS_GRAPH_ACCESS_TOKEN` (auto-rotated by the gateway from the registered refresh token). Refresh material: `OUTLOOK_TENANT_ID`, `OUTLOOK_CLIENT_ID`, refresh_token (cached from device-code login). | Optional. Created only when the Outlook block is fully populated; partial config is rejected. At least one of Outlook or Slack must be configured. |
+| `<sandbox>-slack` | `nemoclaw-slack` | `SLACK_BOT_TOKEN` (Web API) + `SLACK_APP_TOKEN` (Socket Mode) | Optional. Both credentials are `required: true` on the profile — partial Slack config fails at provider-create time. At least one of Outlook or Slack must be configured. |
+| `<sandbox>-github` | `nemoclaw-github` | `GITHUB_TOKEN` or `GH_TOKEN` | Optional but recommended. Enables authenticated live GitHub REST reads. The sandbox receives only the OpenShell placeholder; `policy.yaml` further limits use to repo-scoped `GET` routes from approved binaries. |
 
 The `compatible-endpoint` provider is **not** prefixed with the sandbox name — it's a
-shared inference provider and is consumed via `openshell inference set --provider
-compatible-endpoint --model <NEMOCLAW_MODEL>` rather than `--provider` on sandbox create.
+shared inference provider attached via `--provider compatible-endpoint` on sandbox
+create, the same way every other v2 provider is attached. The agent dials the upstream
+host directly; the L7 proxy substitutes the `OPENAI_API_KEY` placeholder on egress.
+
+### How `policy.yaml` and provider profiles compose
+
+Sandbox network policy ([`policy.yaml`](policy.yaml)) layers on top of the per-provider
+endpoint scopes above. For most providers the profile is the sole source of policy;
+`policy.yaml` only carries restrictions that the v2 ProviderProfile schema can't
+express today — specifically per-path allow rules (used to scope the NVIDIA inference
+API to specific `/v1/*` paths and GitHub reads to one repo via `GITHUB_READONLY_REPO`)
+and credential-less host-routed services (Phoenix collector, Source-ETL API). Surviving
+`network_policies` blocks in `policy.yaml` carry **load-bearing comments** explaining
+why they can't be folded into provider profiles. Fully-redundant blocks (e.g. the
+former `slack` block) have been removed.
 
 `GITHUB_TOKEN` is attached as `<sandbox>-github` for live sandbox GitHub reads.
 If `GITHUB_TOKEN` is empty but `GH_TOKEN` is set, `GH_TOKEN` is used for the
@@ -408,28 +418,30 @@ unless you remove the compose volumes.
 | `GITHUB_TOKEN` / `GH_TOKEN` | (none) | Optional GitHub token for authenticated live REST reads. `GITHUB_TOKEN` also feeds the optional host GitHub mirror; if it is unset, `GH_TOKEN` can still create the sandbox provider. |
 | `GITHUB_READONLY_REPO` | `NVIDIA/OpenShell` | The only repo allowed by the live GitHub REST policy, formatted as `owner/repo`. Recreate the sandbox after changing it. |
 | `SOURCE_ETL_GITHUB_REPO` | `NVIDIA/NemoClaw` | Host-side GitHub mirror repo for source-etls. This is independent of `GITHUB_READONLY_REPO`. |
-| `TOKEN_MANAGER_HOST` | `host.openshell.internal` | Host where the MS Graph token manager is reachable from inside the sandbox. |
+| `OUTLOOK_FORCE_LOGIN` | (unset) | Set to `1` to discard the cached Microsoft refresh token at `.bootstrap/cache/ms-graph-token.json` and re-run device-code login on the next `bring-up.sh`. |
 | `PHOENIX_COLLECTOR_ENDPOINT` | (none) | Set to e.g. `http://host.openshell.internal:6006/v1/traces` to stream OpenInference traces to a Phoenix collector. ATIF trace generation does not depend on this — NeMo-Relay is always installed and writes ATIF locally to `/tmp/atif/` regardless. |
 | `PHOENIX_PROJECT_NAME` | `default` | Sets `openinference.project.name` on every exported span so Phoenix routes traces to a named project. Override per-build to keep multiple deployments separate in the same Phoenix instance. |
 
 ## Verification (what success looks like)
 
-The plumbing checks below confirm the bridge, sidecar, and skill scripts are wired correctly. For an end-to-end walkthrough that exercises each skill via Slack DM and Outlook email, see [docs/verify-functionality.md](docs/verify-functionality.md). For a cross-channel, multi-user demo where one user teaches the agent a new skill and a different user invokes it from a different channel after a full sandbox rebuild, see [docs/collective-wisdom.md](docs/collective-wisdom.md).
+The plumbing checks below confirm the bridge and skill scripts are wired correctly. For an end-to-end walkthrough that exercises each skill via Slack DM and Outlook email, see [docs/verify-functionality.md](docs/verify-functionality.md). For a cross-channel, multi-user demo where one user teaches the agent a new skill and a different user invokes it from a different channel after a full sandbox rebuild, see [docs/collective-wisdom.md](docs/collective-wisdom.md).
 
 ```console
-# Source .env so $MS_GRAPH_SIDECAR_URL / $OUTLOOK_REPLY_TO are in your shell.
 $ set -a; . ./.env; set +a
 
 $ openshell sandbox list                      # hermes-direct should be ready
 $ openshell sandbox exec --name hermes-direct -- \
     curl -sf http://localhost:8642/health     # {"status":"ok",...}
 $ openshell sandbox exec --name hermes-direct -- \
-    ls -l /usr/local/bin/ms-graph-sidecar     # binary present
-$ openshell sandbox exec --name hermes-direct -- \
     ls /usr/local/lib/nemoclaw-bridges/outlook/  # bridge present
 
+# Verify the v2 outlook provider's gateway-managed refresh works end-to-end.
+# The L7 proxy substitutes the placeholder with a live access token on egress.
+$ openshell sandbox exec --name hermes-direct -- \
+    curl -sS -H "Authorization: Bearer openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN" \
+      'https://graph.microsoft.com/v1.0/me' | head -c 300
+
 $ openshell sandbox exec --name hermes-direct -- env \
-    MS_GRAPH_SIDECAR_URL="$MS_GRAPH_SIDECAR_URL" \
     OUTLOOK_TARGET_MAILBOX="$OUTLOOK_TARGET_MAILBOX" \
     /usr/bin/python3 /sandbox/.hermes-data/skills/outlook-email-search/scripts/search_emails.py \
       --query "nemoclaw" --since 7d           # {"ok": true, "count": N, ...}
@@ -451,7 +463,7 @@ staged Dockerfile/policy files. **Does not** destroy the gateway or stop host se
 typically long-lived. Opt-in flags (mutually exclusive):
 
 - `--stop-host-services` — also stop the [extras/](extras/) stack (volumes preserved; delegates to `00-host-services.sh down`).
-- `--purge-host-services` — also stop the stack AND wipe its volumes. Forces Outlook re-auth via `authenticate.sh` and ETL re-scrape on the next `up`. Delegates to `00-host-services.sh down --volumes`.
+- `--purge-host-services` — also stop the stack AND wipe its volumes. Forces ETL re-scrape on the next `up`. Delegates to `00-host-services.sh down --volumes`.
 
 Manual cleanup for less-common operations:
 
@@ -464,14 +476,15 @@ To stop *just* the host services without removing the sandbox:
 $ bash scripts/00-host-services.sh down
 ```
 
-Add `--volumes` (or `-v`) to also wipe `token-cache` (forces Outlook re-auth via `authenticate.sh`) and the source-etls Postgres data (forces ETL re-scrape on the next `up`).
+Add `--volumes` (or `-v`) to also wipe the source-etls Postgres data (forces ETL re-scrape on the next `up`). Outlook re-auth is independent — re-run `bash scripts/bring-up.sh` with `OUTLOOK_FORCE_LOGIN=1`.
 
 ## Persistence: collective wisdom across restarts
 
 What survives a `tear-down.sh && bring-up.sh` cycle by default:
 
 - **Postgres ETL data** — backed by the named Docker volume `source-etls-postgres-data` in [extras/docker-compose.yml](extras/docker-compose.yml). Survives unless you opt in to `--purge-host-services` (or run `bash scripts/00-host-services.sh down --volumes` directly).
-- **Host services state** (phoenix's traces, token-manager's MSAL cache) — also volume-backed.
+- **Host services state** (phoenix's traces) — also volume-backed.
+- **Microsoft refresh token** (in `.bootstrap/cache/ms-graph-token.json`) — survives tear-down/bring-up cycles. Delete the file (or set `OUTLOOK_FORCE_LOGIN=1`) to force a fresh device-code login.
 
 What does **not** survive by default:
 

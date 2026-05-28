@@ -210,13 +210,17 @@ function main(): void {
   writeFileSync(configPath, toYaml(config));
   chmodSync(configPath, 0o600);
 
-  // Write .env — API server config and messaging token placeholders
+  // Write .env — API server config, inference key placeholder, messaging tokens
   const envLines: string[] = [
     "API_SERVER_PORT=18642",
     "API_SERVER_HOST=127.0.0.1",
     // Internal API key for session continuation (X-Hermes-Session-Id support).
     // The Outlook bridge uses this key to trigger on_session_finalize for ATIF/Phoenix.
     "API_SERVER_KEY=nemoclaw-internal",
+    // The compatible-endpoint v2 provider injects OPENAI_API_KEY into the sandbox
+    // env as this placeholder; the L7 proxy substitutes a live key on egress to
+    // the inference upstream.
+    "OPENAI_API_KEY=openshell:resolve:env:OPENAI_API_KEY",
   ];
   for (const ch of msgChannels) {
     if (ch in TOKEN_ENV) {
@@ -251,16 +255,13 @@ function main(): void {
     envLines.push("SLACK_HOME_CHANNEL=none");
   }
   if (msgChannels.includes("outlook")) {
-    const sidecarPort = process.env.SIDECAR_LISTEN_PORT ?? "8766";
-    envLines.push(`MS_GRAPH_SIDECAR_URL=http://127.0.0.1:${sidecarPort}`);
-    envLines.push(`MS_GRAPH_SERVICES=${process.env.MS_GRAPH_SERVICES ?? "outlook"}`);
     for (const key of ["OUTLOOK_TARGET_MAILBOX", "OUTLOOK_REPLY_TO", "OUTLOOK_ALLOWED_SENDERS"]) {
       const value = process.env[key]?.trim();
       if (value) {
         envLines.push(`${key}=${value}`);
       }
     }
-  }  
+  }
   for (const key of SOURCE_ETL_ENV) {
     const value = process.env[key]?.trim();
     if (value) {

@@ -213,11 +213,9 @@ PYPLACEHOLDERS
 }
 
 _has_outlook_channel() {
-  # Primary: OUTLOOK_CLIENT_ID is injected by OpenShell providers at runtime,
-  # making it a reliable signal that the Outlook channel was configured.
-  # Secondary: NEMOCLAW_MESSAGING_CHANNELS_B64 (baked at build time, may not
-  # be present if OpenShell doesn't forward Docker ENV vars).
-  [ -n "${OUTLOOK_CLIENT_ID:-}" ] \
+  # MS_GRAPH_ACCESS_TOKEN is injected by the OpenShell v2 outlook provider when
+  # attached; its presence signals the Outlook channel is wired up.
+  [ -n "${MS_GRAPH_ACCESS_TOKEN:-}" ] \
     || echo "${NEMOCLAW_MESSAGING_CHANNELS_B64:-W10=}" \
     | python3 -c "import sys,base64,json; d=json.loads(base64.b64decode(sys.stdin.read().strip())); sys.exit(0 if 'outlook' in d else 1)" 2>/dev/null
 }
@@ -337,45 +335,8 @@ start_nemo_relay_sidecar() {
   exit 1
 }
 
-# Outlook bridge / MS Graph sidecar PIDs (populated at launch).
+# Outlook bridge PID (populated at launch).
 OUTLOOK_BRIDGE_PID=""
-MS_GRAPH_SIDECAR_PID=""
-
-start_ms_graph_sidecar() {
-  _has_outlook_channel || return 0
-  local sidecar_bin="/usr/local/bin/ms-graph-sidecar"
-  [ -f "$sidecar_bin" ] || {
-    echo "[ms-graph-sidecar] binary not found at ${sidecar_bin}, skipping" >&2
-    return 0
-  }
-  # TOKEN_MANAGER_HOST is baked into the image as a Docker ARG/ENV (Phoenix pattern).
-  # The sidecar uses trust_env=True so it inherits HTTP_PROXY=http://10.200.0.1:3128
-  # from this script's exported environment. All requests (Graph API and token manager)
-  # flow through the OpenShell L7 proxy directly, which attributes them to the sidecar
-  # binary path for policy enforcement. No decode-proxy hop needed here.
-  local sidecar_env
-  sidecar_env="SIDECAR_LISTEN_HOST=${SIDECAR_LISTEN_ADDR} SIDECAR_LISTEN_PORT=${SIDECAR_PORT}"
-  if [ "$(id -u)" -eq 0 ]; then
-    # shellcheck disable=SC2086
-    nohup env ${sidecar_env} gosu ms-graph-proxy "$sidecar_bin" >>/tmp/ms-graph-sidecar.log 2>&1 &
-  else
-    # shellcheck disable=SC2086
-    nohup env ${sidecar_env} "$sidecar_bin" >>/tmp/ms-graph-sidecar.log 2>&1 &
-  fi
-  MS_GRAPH_SIDECAR_PID=$!
-  echo "[ms-graph-sidecar] started (pid ${MS_GRAPH_SIDECAR_PID})" >&2
-  # Wait for sidecar to be listening before bridge starts
-  local attempts=0
-  while [ "$attempts" -lt 15 ]; do
-    if ss -tln 2>/dev/null | grep -q "${SIDECAR_LISTEN_ADDR}:${SIDECAR_PORT}"; then
-      echo "[ms-graph-sidecar] listening on ${SIDECAR_LISTEN_ADDR}:${SIDECAR_PORT}" >&2
-      return 0
-    fi
-    sleep 1
-    attempts=$((attempts + 1))
-  done
-  echo "[ms-graph-sidecar] WARNING: sidecar may not be ready yet (${SIDECAR_LISTEN_ADDR}:${SIDECAR_PORT} not detected)" >&2
-}
 
 start_outlook_bridge() {
   if ! _has_outlook_channel; then
@@ -385,13 +346,11 @@ start_outlook_bridge() {
     echo "[outlook-bridge] bridge script not found, skipping" >&2
     return 0
   }
+  # The bridge dials graph.microsoft.com directly with
+  # Authorization: Bearer openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN — the
+  # OpenShell L7 proxy substitutes a gateway-refreshed access token on egress.
   local bridge_env
-  # MS_GRAPH_SIDECAR_URL routes Graph API calls through the credential sidecar on
-  # loopback (plain HTTP). The sidecar injects the live token and forwards to
-  # graph.microsoft.com over HTTPS via the OpenShell proxy.
-  # NO_PROXY ensures the local Hermes gateway is always reached directly.
   bridge_env="HERMES_HOME=${HERMES_WRITABLE} \
-    MS_GRAPH_SIDECAR_URL=http://127.0.0.1:${SIDECAR_PORT} \
     HTTPS_PROXY=${_PROXY_URL} \
     HTTP_PROXY=${_PROXY_URL} \
     https_proxy=${_PROXY_URL} \
@@ -421,9 +380,6 @@ PROXY_HOST="${NEMOCLAW_PROXY_HOST:-10.200.0.1}"
 PROXY_PORT="${NEMOCLAW_PROXY_PORT:-3128}"
 _PROXY_URL="http://${PROXY_HOST}:${PROXY_PORT}"
 _NO_PROXY_VAL="localhost,127.0.0.1,::1,${PROXY_HOST}"
-# Sidecar bind address and port — consumers always connect via 127.0.0.1 (loopback)
-SIDECAR_PORT="${SIDECAR_LISTEN_PORT:-8766}"
-SIDECAR_LISTEN_ADDR="${SIDECAR_LISTEN_HOST:-127.0.0.1}"
 export HTTP_PROXY="$_PROXY_URL"
 export HTTPS_PROXY="$_PROXY_URL"
 export NO_PROXY="$_NO_PROXY_VAL"
@@ -444,12 +400,10 @@ if [ -n "${SSL_CERT_FILE:-}" ] && [ -f "${SSL_CERT_FILE}" ]; then
   export REQUESTS_CA_BUNDLE="${REQUESTS_CA_BUNDLE:-$SSL_CERT_FILE}"
   export GIT_SSL_CAINFO="${GIT_SSL_CAINFO:-$SSL_CERT_FILE}"
 fi
-# Preserve provider-injected placeholders from OpenShell 0.37+, which are
-# revision-scoped (openshell:resolve:env:v..._KEY). Only fall back to the legacy
-# placeholder format when nothing was injected so local/dev flows still boot.
-export OUTLOOK_CLIENT_ID="${OUTLOOK_CLIENT_ID:-openshell:resolve:env:OUTLOOK_CLIENT_ID}"
-export OUTLOOK_SESSION_UUID="${OUTLOOK_SESSION_UUID:-openshell:resolve:env:OUTLOOK_SESSION_UUID}"
-export MS_GRAPH_SIDECAR_URL="http://127.0.0.1:${SIDECAR_PORT}"
+# Preserve provider-injected MS_GRAPH_ACCESS_TOKEN placeholder for outbound Graph
+# calls. Fall back to the literal placeholder string so local/dev flows still boot
+# (the L7 proxy substitutes it when the v2 outlook provider is attached).
+export MS_GRAPH_ACCESS_TOKEN="${MS_GRAPH_ACCESS_TOKEN:-openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN}"
 
 # SECURITY FIX: Write proxy + tool env to a standalone file via
 # emit_sandbox_sourced_file() (root:root 444) instead of appending
@@ -470,9 +424,7 @@ export PYTHONPATH="${PATCHES_DIR}\${PYTHONPATH:+:\${PYTHONPATH}}"
 export HERMES_HOME="${HERMES_WRITABLE}"
 export SLACK_BOT_TOKEN="${SLACK_BOT_TOKEN:-openshell:resolve:env:SLACK_BOT_TOKEN}"
 export GITHUB_READONLY_REPO="${GITHUB_READONLY_REPO:-NVIDIA/OpenShell}"
-export OUTLOOK_CLIENT_ID="${OUTLOOK_CLIENT_ID:-openshell:resolve:env:OUTLOOK_CLIENT_ID}"
-export OUTLOOK_SESSION_UUID="${OUTLOOK_SESSION_UUID:-openshell:resolve:env:OUTLOOK_SESSION_UUID}"
-export MS_GRAPH_SIDECAR_URL="http://127.0.0.1:${SIDECAR_PORT}"
+export MS_GRAPH_ACCESS_TOKEN="${MS_GRAPH_ACCESS_TOKEN:-openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN}"
 export NEMO_RELAY_GATEWAY_URL="http://127.0.0.1:${NEMO_RELAY_GATEWAY_PORT}"
 export PATH="/usr/local/lib/nemoclaw/bin:\$PATH"
 export HERMES_TUI_THEME=dark
@@ -558,8 +510,6 @@ if [ "$(id -u)" -ne 0 ]; then
 
   start_socat_forwarder
   [ -n "${SOCAT_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$SOCAT_PID")
-  start_ms_graph_sidecar
-  [ -n "${MS_GRAPH_SIDECAR_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$MS_GRAPH_SIDECAR_PID")
   start_outlook_bridge
   [ -n "${OUTLOOK_BRIDGE_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$OUTLOOK_BRIDGE_PID")
   print_dashboard_urls
@@ -637,8 +587,6 @@ trap cleanup_on_signal SIGTERM SIGINT
 
 start_socat_forwarder
 [ -n "${SOCAT_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$SOCAT_PID")
-start_ms_graph_sidecar
-[ -n "${MS_GRAPH_SIDECAR_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$MS_GRAPH_SIDECAR_PID")
 start_outlook_bridge
 [ -n "${OUTLOOK_BRIDGE_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$OUTLOOK_BRIDGE_PID")
 print_dashboard_urls
