@@ -50,8 +50,5 @@ binaries:
   - /usr/local/bin/hermes
   - /usr/bin/python3
   - /usr/bin/python3.13
-  - /usr/local/bin/python3
-  - /usr/bin/node
-  - /usr/local/bin/node
   - /usr/bin/curl
   - /usr/local/bin/curl

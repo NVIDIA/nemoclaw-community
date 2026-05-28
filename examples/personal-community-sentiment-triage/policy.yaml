@@ -75,7 +75,6 @@ network_policies:
           method: GET
           path: /v1/models/**
     binaries:
-    - path: /usr/local/bin/claude
     - path: /usr/local/bin/hermes
     - path: /opt/hermes/.venv/bin/hermes
     - path: /usr/bin/python3
