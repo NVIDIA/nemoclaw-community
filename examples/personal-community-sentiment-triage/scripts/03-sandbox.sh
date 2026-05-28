@@ -139,6 +139,12 @@ if [[ -n "${PHOENIX_COLLECTOR_ENDPOINT:-}" ]]; then
     -e "s|^ARG PHOENIX_COLLECTOR_ENDPOINT=.*|ARG PHOENIX_COLLECTOR_ENDPOINT=$PHOENIX_COLLECTOR_ENDPOINT|" \
     "$STAGED_DOCKERFILE"
 fi
+if [[ -n "${PHOENIX_PROJECT_NAME:-}" ]]; then
+  echo "Phoenix project: $PHOENIX_PROJECT_NAME"
+  sed -i \
+    -e "s|^ARG PHOENIX_PROJECT_NAME=.*|ARG PHOENIX_PROJECT_NAME=$PHOENIX_PROJECT_NAME|" \
+    "$STAGED_DOCKERFILE"
+fi
 
 # ── Stage policy and patch per-run repo scope ───────────────────────────
 cp "$EXAMPLE_DIR/policy.yaml" "$STAGED_POLICY"
