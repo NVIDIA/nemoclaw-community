@@ -88,7 +88,7 @@ To sign in, use a web browser to open the page https://microsoft.com/devicelogin
 and enter the code ABCD1234 to authenticate.
 ```
 
-Open that URL in a browser, sign in **as the agent account** (`OUTLOOK_TARGET_MAILBOX`), and enter the code. The script captures the refresh token and registers it with the gateway via `openshell provider refresh configure`. The token is cached at `.bootstrap/cache/ms-graph-token.json` (umask 077) so subsequent bring-ups reuse it.
+Open that URL in a browser, sign in **as the agent account** (`OUTLOOK_TARGET_MAILBOX`), and enter the code. The script captures the refresh token and registers it with the gateway via `openshell provider refresh configure`. The token is cached at `.bootstrap/cache/ms-graph-token.json` (mode 0600; ignored by `.gitignore`) so subsequent bring-ups reuse it. Set `OUTLOOK_NO_CACHE=1` to skip the on-disk cache entirely — see the security note below.
 
 After this, the gateway auto-rotates the access token in the background. The sandbox bridge and skills call `https://graph.microsoft.com` directly with the placeholder header; the L7 proxy substitutes a live token on egress.
 
@@ -113,6 +113,17 @@ $ OUTLOOK_FORCE_LOGIN=1 bash scripts/bring-up.sh
 
 This discards the cached token at `.bootstrap/cache/ms-graph-token.json`, prompts you to re-authenticate, and re-configures the provider's refresh material.
 
+## Security note: where the refresh token lives
+
+After the device-code login succeeds, the refresh token lives in two places:
+
+1. **Inside OpenShell's gateway credential store** — encrypted at rest, registered via `provider refresh configure --secret-material-key refresh_token`. This is the *authoritative* copy; OpenShell mints access tokens from it transparently.
+2. **`examples/personal-community-sentiment-triage/.bootstrap/cache/ms-graph-token.json` in the repo working tree** — plaintext, mode 0600, used only to skip device-code re-auth on subsequent `bash scripts/bring-up.sh` runs. The repo `.gitignore` excludes `.bootstrap/` so `git add -A` won't sweep it in; if you'd rather not have any on-disk cache at all, set `OUTLOOK_NO_CACHE=1`. Lose this file and you'll just do one device-code login; nothing else changes.
+
+If you'd prefer the refresh token never touch disk on your machine — shared workstation, demo environment, security-sensitive context — set `OUTLOOK_NO_CACHE=1` in your `.env`. Bring-up will run device-code login on every invocation and write nothing locally. The gateway-side encrypted copy still gets refreshed each time, so the sandbox itself is unaffected. `OUTLOOK_FORCE_LOGIN` becomes a no-op in this mode (you're already re-doing device-code each run).
+
+Microsoft's refresh tokens expire after roughly 90 days of inactivity. If yours expires, re-run `OUTLOOK_FORCE_LOGIN=1 bash scripts/bring-up.sh` to go through device-code again and refresh both copies.
+
 ## Shared / delegate mailbox access
 
 The `outlook-email-search` skill reads from `OUTLOOK_REPLY_TO` (your personal mailbox), not the agent's own inbox. For this to work over Graph, you must grant the agent account **delegate access** to your mailbox — in Outlook desktop: **File → Account Settings → Delegate Access**, or send a folder-share invitation that the agent account accepts. Without delegate access, Graph returns `HTTP 403: Cannot find row based on condition.` when the skill queries `/users/$OUTLOOK_REPLY_TO/`.
@@ -122,4 +133,4 @@ The `outlook-email-search` skill reads from `OUTLOOK_REPLY_TO` (your personal ma
 - **`provider refresh rotate` fails with `invalid_grant`** — the refresh token expired or was revoked. Re-run `OUTLOOK_FORCE_LOGIN=1 bash scripts/bring-up.sh`.
 - **Bridge logs `HTTP 401`** — the access token isn't being substituted. Confirm `providers_v2_enabled` is set, the `hermes-direct-outlook` provider exists (`openshell provider get hermes-direct-outlook`), and the sandbox was created **after** the provider (provider attachments are evaluated at sandbox create time).
 - **Bridge logs `HTTP 403: Cannot find row based on condition`** — missing delegate access for `OUTLOOK_REPLY_TO`. See the section above.
-- **Device-code prompt never appears** — `scripts/02-providers.sh` short-circuited because the cache file at `.bootstrap/cache/ms-graph-token.json` exists. Either delete it or use `OUTLOOK_FORCE_LOGIN=1`.
+- **Device-code prompt never appears** — `scripts/02-providers.sh` short-circuited because the cache file at `.bootstrap/cache/ms-graph-token.json` exists. Either delete it or use `OUTLOOK_FORCE_LOGIN=1` (or `OUTLOOK_NO_CACHE=1` to skip the cache permanently).

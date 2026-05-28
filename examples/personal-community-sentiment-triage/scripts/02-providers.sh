@@ -4,8 +4,9 @@
 #
 # Step 2 of 3: Import v2 provider profiles and upsert this sandbox's providers.
 # Outlook providers run an interactive Microsoft device-code login the first
-# time (refresh token cached under .bootstrap/cache/). Set OUTLOOK_FORCE_LOGIN=1
-# to re-login.
+# time (refresh token cached under .bootstrap/cache/, ignored by .gitignore).
+# Set OUTLOOK_FORCE_LOGIN=1 to re-login; set OUTLOOK_NO_CACHE=1 to never write
+# the cache (device-code every run).
 
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -76,20 +77,25 @@ fi
 if [[ -n "${OUTLOOK_CLIENT_ID:-}" ]]; then
   OUTLOOK_PROVIDER="$SANDBOX_NAME-outlook"
   OUTLOOK_LOGIN_CACHE="${OUTLOOK_LOGIN_CACHE:-$EXAMPLE_DIR/.bootstrap/cache/ms-graph-token.json}"
-  mkdir -p "$(dirname "$OUTLOOK_LOGIN_CACHE")"
+  CACHE_OK=1
+  [[ "${OUTLOOK_NO_CACHE:-}" == "1" ]] && CACHE_OK=
 
-  if [[ -f "$OUTLOOK_LOGIN_CACHE" && "${OUTLOOK_FORCE_LOGIN:-}" != "1" ]]; then
-    echo "Reusing cached Microsoft refresh token at $OUTLOOK_LOGIN_CACHE (OUTLOOK_FORCE_LOGIN=1 to redo)"
+  if [[ -n "$CACHE_OK" && -f "$OUTLOOK_LOGIN_CACHE" && "${OUTLOOK_FORCE_LOGIN:-}" != "1" ]]; then
+    echo "Reusing cached Microsoft refresh token at $OUTLOOK_LOGIN_CACHE (OUTLOOK_FORCE_LOGIN=1 to redo, OUTLOOK_NO_CACHE=1 to disable)"
     login_json="$(cat "$OUTLOOK_LOGIN_CACHE")"
   else
+    [[ -z "$CACHE_OK" ]] && echo "OUTLOOK_NO_CACHE=1 — running device-code login (no on-disk cache)"
     login_hint_args=()
     [[ -n "${OUTLOOK_TARGET_MAILBOX:-}" ]] && login_hint_args+=(--login-hint "$OUTLOOK_TARGET_MAILBOX")
     login_json="$(python3 "$DIR/login-ms-graph.py" \
       --tenant-id "$OUTLOOK_TENANT_ID" \
       --client-id "$OUTLOOK_CLIENT_ID" \
       "${login_hint_args[@]}")"
-    umask 077
-    printf '%s\n' "$login_json" > "$OUTLOOK_LOGIN_CACHE"
+    if [[ -n "$CACHE_OK" ]]; then
+      mkdir -p "$(dirname "$OUTLOOK_LOGIN_CACHE")"
+      umask 077
+      printf '%s\n' "$login_json" > "$OUTLOOK_LOGIN_CACHE"
+    fi
   fi
 
   refresh_token="$(printf '%s' "$login_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["refresh_token"])')"

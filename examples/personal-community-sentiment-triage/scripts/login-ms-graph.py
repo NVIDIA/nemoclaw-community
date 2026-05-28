@@ -121,7 +121,7 @@ def main() -> int:
             print("", file=sys.stderr)
             print(f"  {GREEN}✓{RESET} Microsoft Graph authenticated", file=sys.stderr)
             print("", file=sys.stderr)
-            print(json.dumps(result))
+            print(json.dumps(result, indent=2))
             return 0
 
         error = token.get("error")

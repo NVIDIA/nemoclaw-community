@@ -239,9 +239,11 @@ profiles, upsert providers, build and launch the sandbox).
 On the first bring-up with Outlook configured, `02-providers.sh` runs an interactive
 Microsoft device-code login (it prints a URL + code; complete it in a browser as the
 `OUTLOOK_TARGET_MAILBOX` user) and caches the resulting refresh token at
-`.bootstrap/cache/ms-graph-token.json`. Subsequent bring-ups reuse the cached refresh
-token. Re-login with `OUTLOOK_FORCE_LOGIN=1 bash scripts/bring-up.sh` when the
-refresh token eventually expires (~90 days unattended on Microsoft's side).
+`.bootstrap/cache/ms-graph-token.json` (mode 0600; ignored by `.gitignore`). Subsequent
+bring-ups reuse the cached refresh token. Re-login with `OUTLOOK_FORCE_LOGIN=1 bash
+scripts/bring-up.sh` when the refresh token eventually expires (~90 days unattended on
+Microsoft's side). Set `OUTLOOK_NO_CACHE=1` to skip the cache entirely and do
+device-code on every bring-up — see [docs/set-up-outlook-bridge.md](docs/set-up-outlook-bridge.md#security-note-where-the-refresh-token-lives).
 
 The image always installs NeMo-Relay so the agent writes ATIF traces to `/tmp/atif/`
 regardless of Phoenix config. If `PHOENIX_COLLECTOR_ENDPOINT` is set, `03-sandbox.sh`
@@ -423,6 +425,7 @@ unless you remove the compose volumes.
 | `GITHUB_READONLY_REPO` | `NVIDIA/OpenShell` | The only repo allowed by the live GitHub REST policy, formatted as `owner/repo`. Recreate the sandbox after changing it. |
 | `SOURCE_ETL_GITHUB_REPO` | `NVIDIA/NemoClaw` | Host-side GitHub mirror repo for source-etls. This is independent of `GITHUB_READONLY_REPO`. |
 | `OUTLOOK_FORCE_LOGIN` | (unset) | Set to `1` to discard the cached Microsoft refresh token at `.bootstrap/cache/ms-graph-token.json` and re-run device-code login on the next `bring-up.sh`. |
+| `OUTLOOK_NO_CACHE` | (unset) | Set to `1` to skip the on-disk refresh-token cache entirely. Bring-up runs device-code login every invocation and writes nothing locally. Use on shared workstations or in security-sensitive contexts. The gateway-side encrypted credential copy is unaffected. |
 | `PHOENIX_COLLECTOR_ENDPOINT` | (none) | Set to e.g. `http://host.openshell.internal:6006/v1/traces` to stream OpenInference traces to a Phoenix collector. ATIF trace generation does not depend on this — NeMo-Relay is always installed and writes ATIF locally to `/tmp/atif/` regardless. |
 | `PHOENIX_PROJECT_NAME` | `default` | Sets `openinference.project.name` on every exported span so Phoenix routes traces to a named project. Override per-build to keep multiple deployments separate in the same Phoenix instance. |
 
@@ -488,7 +491,7 @@ What survives a `tear-down.sh && bring-up.sh` cycle by default:
 
 - **Postgres ETL data** — backed by the named Docker volume `source-etls-postgres-data` in [extras/docker-compose.yml](extras/docker-compose.yml). Survives unless you opt in to `--purge-host-services` (or run `bash scripts/00-host-services.sh down --volumes` directly).
 - **Host services state** (phoenix's traces) — also volume-backed.
-- **Microsoft refresh token** (in `.bootstrap/cache/ms-graph-token.json`) — survives tear-down/bring-up cycles. Delete the file (or set `OUTLOOK_FORCE_LOGIN=1`) to force a fresh device-code login.
+- **Microsoft refresh token** (in `.bootstrap/cache/ms-graph-token.json`; ignored by `.gitignore`) — survives tear-down/bring-up cycles. Delete the file (or set `OUTLOOK_FORCE_LOGIN=1`) to force a fresh device-code login. Set `OUTLOOK_NO_CACHE=1` to skip the cache altogether.
 
 What does **not** survive by default:
 
