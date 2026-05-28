@@ -153,7 +153,7 @@ filter_credential_files() {
   fi
 }
 
-# Write the sidecar manifest JSON for a tarball produced by snapshot.sh or
+# Write the companion manifest JSON for a tarball produced by snapshot.sh or
 # download-traces.sh. Trailing positional args are the excluded file list
 # (relative paths from the source root); leave empty if filter_credential_files
 # excluded nothing. `--empty-note "<text>"` overrides the default "filter

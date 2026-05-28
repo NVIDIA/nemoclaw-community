@@ -1,5 +1,19 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+#
+# Forward-looking placeholder. NOT imported by scripts/02-providers.sh today.
+#
+# The active inference path uses OpenShell's built-in `nvidia` v2 profile via
+# `openshell inference set` (see 02-providers.sh) — that's the only way to get
+# cluster-inference hardening (streaming timeout, header sanitization, model
+# enforcement, gateway-side credential injection) on OpenShell ≤ 0.0.50.
+#
+# When OpenShell ships "Inference mounting from attached providers"
+# (docs/sandboxes/providers-v2.mdx:73 — auto-creates inference.local routes
+# from inference_capable v2 profiles), switch 02-providers.sh's inference
+# block from `--type nvidia` to `--type nemoclaw-compatible-endpoint` and
+# add this file to the per-file `provider profile import` loop. The shape
+# below is already correct; only the wiring in 02-providers.sh changes.
 
 id: nemoclaw-compatible-endpoint
 display_name: NemoClaw Inference (OpenAI-compatible)

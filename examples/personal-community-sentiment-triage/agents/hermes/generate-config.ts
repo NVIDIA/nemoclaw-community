@@ -8,7 +8,8 @@
 //   ~/.hermes/.env         — Messaging token placeholders (immutable at runtime)
 //
 // Sets what's required for Hermes to run inside OpenShell:
-//   - Model and inference endpoint (custom provider pointing at inference.local)
+//   - Model and inference endpoint (Hermes calls OpenShell's `inference.local`
+//     route, bound to the `compatible-endpoint` provider by `openshell inference set`)
 //   - API server on internal port (socat forwards to public port)
 //   - Messaging platform tokens (if configured during onboard)
 //   - Agent defaults (terminal, memory, skills, display)
@@ -210,17 +211,16 @@ function main(): void {
   writeFileSync(configPath, toYaml(config));
   chmodSync(configPath, 0o600);
 
-  // Write .env — API server config, inference key placeholder, messaging tokens
+  // Write .env — API server config + messaging token placeholders.
+  // No OPENAI_API_KEY: inference runs through OpenShell's `inference.local`
+  // route, which injects the bearer at the gateway. The key never enters
+  // the sandbox env.
   const envLines: string[] = [
     "API_SERVER_PORT=18642",
     "API_SERVER_HOST=127.0.0.1",
     // Internal API key for session continuation (X-Hermes-Session-Id support).
     // The Outlook bridge uses this key to trigger on_session_finalize for ATIF/Phoenix.
     "API_SERVER_KEY=nemoclaw-internal",
-    // The compatible-endpoint v2 provider injects OPENAI_API_KEY into the sandbox
-    // env as this placeholder; the L7 proxy substitutes a live key on egress to
-    // the inference upstream.
-    "OPENAI_API_KEY=openshell:resolve:env:OPENAI_API_KEY",
   ];
   for (const ch of msgChannels) {
     if (ch in TOKEN_ENV) {

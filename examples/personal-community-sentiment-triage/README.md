@@ -333,16 +333,20 @@ sandbox, e.g. `find /tmp/atif -type f -mtime +7 -delete`.
 
 ## Providers created by `bring-up.sh`
 
-All five providers are v2 (custom profiles under [providers/](providers/),
-imported by `02-providers.sh` via `openshell provider profile import`). The
-agent calls each upstream host directly with a placeholder bearer header; the
-OpenShell L7 proxy substitutes a live token on egress. No `inference.local`
-routing — `NEMOCLAW_ENDPOINT_URL` is baked into the Dockerfile at build time
-via `scripts/03-sandbox.sh`.
+Four of the five providers use custom v2 profiles in [providers/](providers/)
+and are attached to the sandbox directly. Inference goes through OpenShell's
+built-in `nvidia` v2 profile + `openshell inference set` + `inference.local`
+routing for gateway-side hardening (streaming timeout, header sanitization,
+model-ID enforcement, credential never enters the sandbox env). The custom
+[`providers/compatible-endpoint.yaml`](providers/compatible-endpoint.yaml) is
+checked in as a forward-looking placeholder for when OpenShell adds inference-
+route auto-creation from `inference_capable` v2 profiles; until then it's not
+imported. The agent calls each non-inference upstream directly with a placeholder
+bearer header; the OpenShell L7 proxy substitutes a live token on egress.
 
 | Provider name | `--type` | Credential env var | Required? |
 |---|---|---|---|
-| `compatible-endpoint` | `nemoclaw-compatible-endpoint` | `OPENAI_API_KEY` (or `COMPATIBLE_API_KEY`). URL: `NEMOCLAW_ENDPOINT_URL` (or `OPENAI_BASE_URL`), baked into the image at build time. | Required for inference. If omitted, the agent has no LLM. |
+| `compatible-endpoint` | `nvidia` (built-in v2; consumed via `openshell inference set`, not attached to the sandbox directly) | `NVIDIA_API_KEY` (populated from `OPENAI_API_KEY` / `COMPATIBLE_API_KEY` at provider-create time). URL: `NEMOCLAW_ENDPOINT_URL` → `NVIDIA_BASE_URL` provider config. Routing via `inference.local`. | Required for inference. If omitted, the agent has no LLM. |
 | `<sandbox>-outlook` | `nemoclaw-outlook-email` | `MS_GRAPH_ACCESS_TOKEN` (auto-rotated by the gateway from the registered refresh token). Refresh material: `OUTLOOK_TENANT_ID`, `OUTLOOK_CLIENT_ID`, refresh_token (cached from device-code login). | Optional. Created only when the Outlook block is fully populated; partial config is rejected. At least one of Outlook or Slack must be configured. |
 | `<sandbox>-slack` | `nemoclaw-slack` | `SLACK_BOT_TOKEN` (Web API) + `SLACK_APP_TOKEN` (Socket Mode) | Optional. Both credentials are `required: true` on the profile — partial Slack config fails at provider-create time. At least one of Outlook or Slack must be configured. |
 | `<sandbox>-github` | `nemoclaw-github` | `GITHUB_TOKEN` or `GH_TOKEN` | Optional but recommended. Enables authenticated live GitHub REST reads. The sandbox receives only the OpenShell placeholder; `policy.yaml` further limits use to repo-scoped `GET` routes from approved binaries. |

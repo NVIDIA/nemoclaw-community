@@ -33,7 +33,6 @@ echo "Allowed IDs: $(printf '%s' "$ALLOWED_IDS_B64" | base64 -d)"
 ALLOWED_SENDERS="${OUTLOOK_ALLOWED_SENDERS:-}"
 SOURCE_ETL_HOST="${SOURCE_ETL_API_HOST:-host.openshell.internal}"
 SOURCE_ETL_PORT="${SOURCE_ETL_API_PORT:-3100}"
-INFERENCE_BASE_URL="${NEMOCLAW_ENDPOINT_URL:-${OPENAI_BASE_URL:-https://integrate.api.nvidia.com/v1}}"
 GITHUB_READONLY_REPO="${GITHUB_READONLY_REPO:-NVIDIA/OpenShell}"
 if [[ ! "$GITHUB_READONLY_REPO" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]+$ ]]; then
   echo "Invalid GITHUB_READONLY_REPO '$GITHUB_READONLY_REPO' — expected owner/repo" >&2
@@ -54,7 +53,6 @@ declare -A DOCKERFILE_ARGS=(
   [GITHUB_READONLY_REPO]="$GITHUB_READONLY_REPO"
   [SOURCE_ETL_API_HOST]="$SOURCE_ETL_HOST"
   [SOURCE_ETL_API_PORT]="$SOURCE_ETL_PORT"
-  [NEMOCLAW_INFERENCE_BASE_URL]="$INFERENCE_BASE_URL"
   [NEMOCLAW_BUILD_ID]="$(date +%s)"
 )
 # Optional patches — leave the Dockerfile default in place if unset.
@@ -82,9 +80,8 @@ sed -i \
 
 # ── Build provider flags from what 02-providers.sh actually created ────
 PROVIDER_FLAGS=()
-if [[ -n "${OPENAI_API_KEY:-}" || -n "${COMPATIBLE_API_KEY:-}" ]]; then
-  PROVIDER_FLAGS+=(--provider compatible-endpoint)
-fi
+# Inference (`compatible-endpoint`) is consumed via `openshell inference set`
+# routing (inference.local), not via direct sandbox attachment.
 [[ -n "${OUTLOOK_CLIENT_ID:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-outlook")
 [[ -n "${SLACK_BOT_TOKEN:-}" || -n "${SLACK_APP_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-slack")
 [[ -n "${GITHUB_TOKEN:-}" || -n "${GH_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-github")
