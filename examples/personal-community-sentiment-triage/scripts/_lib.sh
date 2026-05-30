@@ -13,21 +13,23 @@ latest_snapshot() {
   ls -1t "$SNAPSHOT_DIR"/*.tar.gz 2>/dev/null | head -1
 }
 
-# Auto-source .env if present and key vars are missing. Called by every
-# phase script that needs credentials, so a developer can run any one of
-# them directly without `set -a && source .env` in the shell first. The
-# `Auto-sourcing` echo prints once per process tree (sentinel exported into
-# env) so bring-up.sh doesn't print it 3x.
+# Auto-source .env if present. Always re-sources on every call so that
+# vars added to .env after the operator's last manual `set -a; source .env`
+# don't silently stay unset — that bug bit us during the ATIF_STORAGE_*
+# rename: a stale shell had OUTLOOK_TENANT_ID set but no ATIF_STORAGE_*,
+# and the old "skip if these key vars exist" heuristic was making load_env
+# think .env was already loaded. Sourcing is idempotent (set -a + . file).
+# The `Auto-sourcing` echo prints once per process tree (sentinel exported
+# into env) so bring-up.sh doesn't print it on every phase.
 load_env() {
-  if [[ -f "$EXAMPLE_DIR/.env" && -z "${OUTLOOK_TENANT_ID:-}${SLACK_BOT_TOKEN:-}" ]]; then
-    [[ -z "${_NEMOCLAW_ENV_LOADED:-}" ]] && \
-      echo "Auto-sourcing $EXAMPLE_DIR/.env (vars not present in shell)"
-    set -a
-    # shellcheck disable=SC1091
-    . "$EXAMPLE_DIR/.env"
-    set +a
-    export _NEMOCLAW_ENV_LOADED=1
-  fi
+  [[ -f "$EXAMPLE_DIR/.env" ]] || return 0
+  [[ -z "${_NEMOCLAW_ENV_LOADED:-}" ]] && \
+    echo "Auto-sourcing $EXAMPLE_DIR/.env"
+  set -a
+  # shellcheck disable=SC1091
+  . "$EXAMPLE_DIR/.env"
+  set +a
+  export _NEMOCLAW_ENV_LOADED=1
 }
 
 # Validate messaging-channel config. Fails fast if no channel is configured
@@ -73,6 +75,17 @@ default_gateway_endpoint() {
   esac
 }
 
+# Returns 0 if ATIF_STORAGE_BACKEND selects a remote backend (minio|s3),
+# 1 if it selects local mode (unset or "local"). Exits 1 on any other value
+# so a typo doesn't silently degrade to local-only and lose traces.
+atif_remote_enabled() {
+  case "${ATIF_STORAGE_BACKEND:-}" in
+    minio|s3)  return 0 ;;
+    ""|local)  return 1 ;;
+    *) echo "Unknown ATIF_STORAGE_BACKEND: $ATIF_STORAGE_BACKEND (expected local|minio|s3)" >&2; exit 1 ;;
+  esac
+}
+
 # Whether the given provider exists with the expected type. Strips ANSI
 # escapes that `openshell provider get` emits even when piped.
 provider_type_matches() {
@@ -82,30 +95,38 @@ provider_type_matches() {
     | grep -qE "^[[:space:]]*Type:[[:space:]]+$expected[[:space:]]*\$"
 }
 
-# Upsert a single credential on a provider. Uses `env -i` to build a clean
-# sub-environment, so the value openshell stores is the one we explicitly
-# pass — not whatever is leaking in from the parent shell. Without this,
-# `openshell provider update --credential X` silently picks up an empty
-# value when the caller forgets to `set -a && source .env` first, breaking
+# Upsert one or more credentials on a provider. Trailing args are
+# `KEY=value` pairs. Uses `env -i` to build a clean sub-environment, so
+# the values openshell stores are the ones we explicitly pass — not
+# whatever leaks in from the parent shell. Without this, `openshell
+# provider update --credential X` silently picks up an empty value when
+# the caller forgets to `set -a && source .env` first, breaking
 # placeholder substitution at the L7 proxy at sandbox-start time.
-# If the existing provider has a different type, drop it first — `provider
-# update` cannot change a provider's type.
+#
+# If the existing provider has a different type, drop it first —
+# `provider update` cannot change a provider's type.
+#
+# Usage:
+#   upsert_cred my-provider my-type FOO_TOKEN="$FOO_TOKEN"
+#   upsert_cred my-provider my-type FOO_TOKEN="$FOO" BAR_TOKEN="$BAR"
 upsert_cred() {
-  local pname="$1" ptype="$2" envkey="$3" value="$4"
-  if [[ -z "$value" ]]; then
-    echo "  skip $pname.$envkey (no value)"
-    return 0
-  fi
+  local pname="$1" ptype="$2"
+  shift 2
+  local env_args=() cred_args=() pair
+  for pair in "$@"; do
+    env_args+=("$pair")
+    cred_args+=(--credential "${pair%%=*}")
+  done
   if openshell provider get "$pname" >/dev/null 2>&1 && ! provider_type_matches "$pname" "$ptype"; then
     echo "  $pname exists with wrong type; recreating as $ptype"
     openshell provider delete "$pname" >/dev/null
   fi
   if openshell provider get "$pname" >/dev/null 2>&1; then
-    env -i HOME="$HOME" PATH="$PATH" "$envkey=$value" \
-      openshell provider update "$pname" --credential "$envkey"
+    env -i HOME="$HOME" PATH="$PATH" "${env_args[@]}" \
+      openshell provider update "$pname" "${cred_args[@]}"
   else
-    env -i HOME="$HOME" PATH="$PATH" "$envkey=$value" \
-      openshell provider create --name "$pname" --type "$ptype" --credential "$envkey"
+    env -i HOME="$HOME" PATH="$PATH" "${env_args[@]}" \
+      openshell provider create --name "$pname" --type "$ptype" "${cred_args[@]}"
   fi
 }
 

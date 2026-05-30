@@ -65,6 +65,19 @@ if [[ -n "${PHOENIX_PROJECT_NAME:-}" ]]; then
   echo "Phoenix project: $PHOENIX_PROJECT_NAME"
   DOCKERFILE_ARGS[PHOENIX_PROJECT_NAME]="$PHOENIX_PROJECT_NAME"
 fi
+# ATIF S3 export — bake the bucket + key_prefix into the relay's plugins.toml
+# at sandbox-create time (the SDK reads them from there). When the bucket is
+# unset (or BACKEND=local), no storage block is emitted; start.sh's
+# ATIF_STORAGE_ENABLED probe (which greps plugins.toml for the storage block)
+# returns 0, the bridge stays down, AWS_* exports are skipped, and ATIF
+# writes go to the sandbox's local /tmp/atif/ instead.
+if atif_remote_enabled; then
+  echo "ATIF S3 export: backend=$ATIF_STORAGE_BACKEND bucket=${ATIF_STORAGE_BUCKET:-} prefix=${ATIF_STORAGE_KEY_PREFIX:-hermes/}"
+  DOCKERFILE_ARGS[ATIF_STORAGE_BACKEND]="$ATIF_STORAGE_BACKEND"
+  DOCKERFILE_ARGS[ATIF_STORAGE_BUCKET]="${ATIF_STORAGE_BUCKET:-}"
+  DOCKERFILE_ARGS[ATIF_STORAGE_KEY_PREFIX]="${ATIF_STORAGE_KEY_PREFIX:-hermes/}"
+  [[ -n "${ATIF_S3_REGION:-}" ]] && DOCKERFILE_ARGS[ATIF_S3_REGION]="$ATIF_S3_REGION"
+fi
 
 cp "$EXAMPLE_DIR/agents/hermes/Dockerfile" "$STAGED_DOCKERFILE"
 for arg in "${!DOCKERFILE_ARGS[@]}"; do
@@ -85,6 +98,7 @@ PROVIDER_FLAGS=()
 [[ -n "${OUTLOOK_CLIENT_ID:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-outlook")
 [[ -n "${SLACK_BOT_TOKEN:-}" || -n "${SLACK_APP_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-slack")
 [[ -n "${GITHUB_TOKEN:-}" || -n "${GH_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-github")
+atif_remote_enabled && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-atif-export-relay")
 
 # ── Create the sandbox ─────────────────────────────────────────────────
 # `openshell sandbox create` proxies the sandbox's stdout to the local
@@ -155,9 +169,11 @@ fi
 echo "  Sandbox reported ready; detached local create stream."
 
 # ── Re-apply policy (matches nemoclaw onboard's two-stage flow) ────────
-# Without this, network rules from the staged policy may not be activated even
-# though they were passed at create time. Symptom: L7 proxy denies outlook
-# token-manager requests with `[policy:outlook]` despite a matching rule.
+# Without this, network rules from the staged policy may not be activated
+# even though they were passed at create time. Symptom: L7 proxy denies
+# sandbox outbound requests with `[policy:<provider>]` despite a matching
+# rule (e.g. MS Graph for outlook, api.github.com for github, the relay
+# endpoint for atif).
 echo "Re-applying policy via 'openshell policy set --wait' (stage 2)"
 openshell policy set --policy "$STAGED_POLICY" --wait "$SANDBOX_NAME"
 

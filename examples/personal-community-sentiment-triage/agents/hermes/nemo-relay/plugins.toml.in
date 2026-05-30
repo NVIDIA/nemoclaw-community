@@ -8,7 +8,16 @@
 #   @@PHOENIX_PROJECT_NAME@@   — openinference.project.name (Phoenix routing key;
 #                                falls back to service.name when absent)
 # Schema: nemo_relay.observability.ObservabilityConfig
-# (NeMo-Relay python/nemo_relay/observability.py).
+# (NeMo-Relay crates/core/src/observability/plugin_component.rs).
+#
+# Per-component ATIF is local-OR-remote (sink_targets() at line ~1009), and
+# only ONE `[[components]]` block with kind=observability is permitted by
+# the plugin loader. When ATIF_STORAGE_BUCKET is set the Dockerfile
+# substitutes a `[[components.config.atif.storage]]` array entry at the
+# storage-block token below; in that mode /tmp/atif/ writes are SKIPPED
+# (the relay forwards every completed trajectory to S3/MinIO instead).
+# When the bucket is empty, the token expands to "" and trajectories are
+# written locally — recoverable via scripts/download-traces.sh.
 
 version = 1
 
@@ -19,6 +28,7 @@ enabled = true
 [components.config.atif]
 enabled = true
 output_directory = "/tmp/atif"
+@@ATIF_STORAGE_BLOCK@@
 
 [components.config.openinference]
 enabled = @@PHOENIX_ENABLED@@

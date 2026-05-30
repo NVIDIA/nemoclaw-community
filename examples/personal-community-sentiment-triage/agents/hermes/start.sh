@@ -38,6 +38,18 @@ fi
 # SECURITY: Lock down PATH
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
+# ── ATIF storage probe (computed once) ───────────────────────────
+# "Enabled" iff plugins.toml has the [[components.config.atif.storage]]
+# block. Set at image-build time (Dockerfile keys on ATIF_STORAGE_BUCKET
+# + ATIF_STORAGE_BACKEND), so the runtime check here is authoritative
+# regardless of what env vars OpenShell's exec-session allowlist did or
+# didn't propagate. Drives the atif-bridge gate and the AWS_* exports
+# below; all three are in lockstep — either all on or all off.
+ATIF_STORAGE_ENABLED=0
+if grep -q '^\[\[components\.config\.atif\.storage\]\]' /etc/nemo-relay/plugins.toml 2>/dev/null; then
+  ATIF_STORAGE_ENABLED=1
+fi
+
 # ── Early stderr/stdout capture ──────────────────────────────────
 # Capture all entrypoint output to /tmp/nemoclaw-start.log so startup
 # failures before /tmp/gateway.log exists are still diagnosable.
@@ -263,6 +275,74 @@ start_nemo_relay_sidecar() {
   exit 1
 }
 
+# ── ATIF protocol-bridge sidecar ──────────────────────────────────
+# Tiny HTTP→HTTPS shim that lets nemo-relay-cli (rustls via object_store /
+# reqwest) reach the host atif-export-relay over TLS. rustls 0.23+ rejects
+# OpenShell's L7-proxy MITM cert because the cert lacks the serverAuth EKU
+# extension (OpenShell `crates/openshell-sandbox/src/l7/tls.rs:115-135`).
+# The bridge re-emits each request as HTTPS via Python's ssl module
+# (OpenSSL backend), which accepts certs without that EKU — same property
+# that lets curl / Python requests / git / every other Hermes outbound work
+# through the same L7 proxy today. nemo-relay points at the bridge over
+# loopback HTTP; the bridge talks HTTPS upstream; the L7 proxy MITMs and
+# substitutes the AWS_SESSION_TOKEN placeholder during that hop. Bearer
+# stays in L7 proxy process memory only.
+ATIF_BRIDGE_PID=""
+start_atif_bridge() {
+  # Only start when ATIF S3 export is configured — see ATIF_STORAGE_ENABLED
+  # probe at top of script.
+  [ "$ATIF_STORAGE_ENABLED" = "1" ] || return 0
+  # Readability suffices — we invoke as `python3 <path>`, so the file
+  # doesn't need the executable bit (and Dockerfile's `chmod -R a+rX`
+  # deliberately doesn't set +x on regular files).
+  if ! [ -r /usr/local/lib/nemoclaw-bridges/atif/atif-bridge.py ]; then
+    echo "[atif-bridge] /usr/local/lib/nemoclaw-bridges/atif/atif-bridge.py not readable, skipping" >&2
+    return 0
+  fi
+  # Scrub credential-shaped env vars before handing off to the bridge.
+  # Defense in depth: bridge.py also refuses to start if any of these are
+  # set. Belt-and-suspenders so a future start.sh regression can't silently
+  # leak a bearer into the bridge's process memory.
+  local scrub=(
+    -u ATIF_RELAY_AUTH_TOKEN
+    -u AWS_SESSION_TOKEN
+    -u AWS_ACCESS_KEY_ID
+    -u AWS_SECRET_ACCESS_KEY
+    -u GITHUB_TOKEN
+    -u GH_TOKEN
+    -u MS_GRAPH_ACCESS_TOKEN
+    -u SLACK_BOT_TOKEN
+  )
+  if [ "$(id -u)" -eq 0 ]; then
+    nohup env "${scrub[@]}" \
+      ATIF_BRIDGE_UPSTREAM_URL="https://host.openshell.internal:18443" \
+      gosu gateway python3 /usr/local/lib/nemoclaw-bridges/atif/atif-bridge.py \
+      >>/tmp/atif-bridge.log 2>&1 &
+  else
+    nohup env "${scrub[@]}" \
+      ATIF_BRIDGE_UPSTREAM_URL="https://host.openshell.internal:18443" \
+      python3 /usr/local/lib/nemoclaw-bridges/atif/atif-bridge.py \
+      >>/tmp/atif-bridge.log 2>&1 &
+  fi
+  ATIF_BRIDGE_PID=$!
+  local attempts=0
+  while [ "$attempts" -lt 30 ]; do
+    if curl -sf "http://127.0.0.1:18444/healthz" >/dev/null 2>&1; then
+      echo "[atif-bridge] healthy on 127.0.0.1:18444 (pid $ATIF_BRIDGE_PID)" >&2
+      return 0
+    fi
+    sleep 0.5
+    attempts=$((attempts + 1))
+  done
+  # Fail-hard: if the bridge isn't up, every trace upload would return
+  # ECONNREFUSED. Quieter than a silent telemetry loss.
+  echo "[atif-bridge] FATAL: bridge did not become healthy within 15s (pid $ATIF_BRIDGE_PID)" >&2
+  echo "[atif-bridge] --- last 30 lines of /tmp/atif-bridge.log ---" >&2
+  tail -n 30 /tmp/atif-bridge.log >&2 2>/dev/null || echo "[atif-bridge] (log unreadable)" >&2
+  echo "[atif-bridge] --- end log ---" >&2
+  exit 1
+}
+
 # Outlook bridge PID (populated at launch).
 OUTLOOK_BRIDGE_PID=""
 
@@ -314,6 +394,9 @@ prepare_runtime() {
   else
     echo "[nemo-relay] WARNING: binary or config missing — telemetry disabled" | tee -a /tmp/gateway.log >&2
   fi
+  # Bridge must be up before nemo-relay so the first PutObject doesn't race
+  # against a closed bridge port.
+  start_atif_bridge
   start_nemo_relay_sidecar
 }
 
@@ -340,6 +423,7 @@ wire_post_launch_supervision() {
 
   SANDBOX_CHILD_PIDS=("$GATEWAY_PID")
   [ -n "${NEMO_RELAY_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$NEMO_RELAY_PID")
+  [ -n "${ATIF_BRIDGE_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$ATIF_BRIDGE_PID")
   [ -n "${GATEWAY_LOG_TAIL_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$GATEWAY_LOG_TAIL_PID")
   # shellcheck disable=SC2034  # read by cleanup_on_signal from sandbox-init.sh
   SANDBOX_WAIT_PID="$GATEWAY_PID"
@@ -387,6 +471,36 @@ fi
 # (the L7 proxy substitutes it when the v2 outlook provider is attached).
 export MS_GRAPH_ACCESS_TOKEN="${MS_GRAPH_ACCESS_TOKEN:-openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN}"
 
+# ATIF S3 export — Nemo Relay's `object_store` reads AWS_* env vars at
+# startup. The per-sandbox bearer rides in AWS_SESSION_TOKEN: the SDK
+# emits that env var verbatim as a standalone `x-amz-security-token`
+# HTTP header, which matches OpenShell's L7-proxy whole-header-value
+# substitution path. AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are
+# intentionally literal junk — the SDK builds a SigV4 Authorization
+# envelope with them, but it's purely vestigial (atif-export-relay
+# never verifies SigV4; it reads the bearer from x-amz-security-token).
+#
+# AWS_ENDPOINT_URL points at the in-container atif-bridge sidecar on
+# loopback (start_atif_bridge above). The bridge re-emits each request
+# as HTTPS to host.openshell.internal:18443 using Python's ssl module
+# (OpenSSL backend), which the L7 proxy MITMs and substitutes during
+# transit. The real bearer never enters nemo-relay or bridge memory;
+# only the L7 proxy resolves the placeholder. See docs/atif-export.md
+# "Sandbox→relay TLS via Python protocol-bridge sidecar" for the wire
+# diagram and the OpenShell EKU bug that makes the bridge necessary.
+# Production downstream (relay → real S3 / MinIO) is end-to-end HTTPS
+# via boto3. Gated on ATIF_STORAGE_ENABLED so local-mode sandboxes don't
+# carry six dead AWS_* vars that imply S3 export is happening when it
+# isn't.
+if [ "$ATIF_STORAGE_ENABLED" = "1" ]; then
+  export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-nemo-relay-sandbox}"
+  export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-relay-ignores-this-value}"
+  export AWS_SESSION_TOKEN="${AWS_SESSION_TOKEN:-openshell:resolve:env:ATIF_RELAY_AUTH_TOKEN}"
+  export AWS_ENDPOINT_URL="${AWS_ENDPOINT_URL:-http://127.0.0.1:18444}"
+  export AWS_ALLOW_HTTP="${AWS_ALLOW_HTTP:-true}"
+  export AWS_REGION="${AWS_REGION:-${ATIF_S3_REGION:-us-east-1}}"
+fi
+
 # SECURITY FIX: Write proxy + tool env to a standalone file via
 # emit_sandbox_sourced_file() (root:root 444) instead of appending
 # inline to .bashrc/.profile. The old approach left .bashrc writable
@@ -424,6 +538,24 @@ PROXYEOF
       printf 'export %s=%q\n' "$_provider_env_name" "$_provider_env_value"
     fi
   done
+  # AWS_* for ATIF S3 export — bearer rides in AWS_SESSION_TOKEN (emitted
+  # by the SDK as x-amz-security-token, a standalone header the L7 proxy
+  # can substitute). ACCESS_KEY_ID / SECRET_ACCESS_KEY are literal junk;
+  # the SigV4 envelope they produce is vestigial. AWS_ENDPOINT_URL points
+  # at the in-container atif-bridge on loopback; the bridge re-emits
+  # HTTPS upstream and the L7 proxy MITMs + substitutes from there. See
+  # docs/atif-export.md for the wire diagram. Gated on ATIF_STORAGE_ENABLED
+  # so local-mode sandbox-user shells don't see dead AWS_* exports.
+  if [ "$ATIF_STORAGE_ENABLED" = "1" ]; then
+    cat <<'STORAGEEOF'
+export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-nemo-relay-sandbox}"
+export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-relay-ignores-this-value}"
+export AWS_SESSION_TOKEN="${AWS_SESSION_TOKEN:-openshell:resolve:env:ATIF_RELAY_AUTH_TOKEN}"
+export AWS_ENDPOINT_URL="${AWS_ENDPOINT_URL:-http://127.0.0.1:18444}"
+export AWS_ALLOW_HTTP="${AWS_ALLOW_HTTP:-true}"
+export AWS_REGION="${AWS_REGION:-us-east-1}"
+STORAGEEOF
+  fi
 } | emit_sandbox_sourced_file "$_PROXY_ENV_FILE"
 
 # ── Main ─────────────────────────────────────────────────────────

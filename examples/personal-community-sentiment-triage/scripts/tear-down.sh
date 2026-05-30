@@ -5,14 +5,15 @@
 # Tear down everything brought up by the phase scripts.
 #
 # Default scope: the per-sandbox state — sandbox itself + the providers
-# scoped to it. Host services from 00-host-services.sh (phoenix, token
-# manager, postgres, ETLs, postgrest) keep running, since they're
-# typically long-lived across multiple bring-ups.
+# scoped to it. Host services from 00-host-services.sh (phoenix, postgres,
+# github-etl, forums-etl, postgrest, plus minio + atif-export-relay when
+# ATIF_STORAGE_BACKEND is set) keep running, since they're typically
+# long-lived across multiple bring-ups.
 #
 # Opt-in flags (mutually exclusive):
-#   --stop-host-services    also stop the extras stack (phoenix, token
-#                            manager, postgres, ETLs, postgrest); volumes
-#                            preserved.
+#   --stop-host-services    also stop the extras stack (phoenix, postgres,
+#                            ETLs, postgrest, and storage if enabled);
+#                            volumes preserved.
 #   --purge-host-services   also stop the extras stack AND remove its
 #                            named volumes (source-etls-postgres-data,
 #                            github-etl-state). DESTRUCTIVE: forces ETL
@@ -75,14 +76,16 @@ echo "Deleting sandbox $SANDBOX_NAME (if present)"
 openshell sandbox delete "$SANDBOX_NAME" 2>/dev/null || true
 
 echo "Deleting per-sandbox providers"
-openshell provider delete "$SANDBOX_NAME-outlook"      2>/dev/null || true
-openshell provider delete "$SANDBOX_NAME-github"       2>/dev/null || true
-openshell provider delete "$SANDBOX_NAME-slack"        2>/dev/null || true
-# Legacy split slack providers — left here so users with pre-merge state
-# still get a clean tear-down. Safe to remove once everyone is on the merged
-# provider.
-openshell provider delete "$SANDBOX_NAME-slack-bridge" 2>/dev/null || true
-openshell provider delete "$SANDBOX_NAME-slack-app"    2>/dev/null || true
+openshell provider delete "$SANDBOX_NAME-outlook"           2>/dev/null || true
+openshell provider delete "$SANDBOX_NAME-github"            2>/dev/null || true
+openshell provider delete "$SANDBOX_NAME-slack"             2>/dev/null || true
+openshell provider delete "$SANDBOX_NAME-atif-export-relay" 2>/dev/null || true
+# Legacy provider names — kept for one migration cycle so operators with
+# pre-rename state get a clean tear-down. Remove after two or three release
+# cycles.
+openshell provider delete "$SANDBOX_NAME-slack-bridge"      2>/dev/null || true
+openshell provider delete "$SANDBOX_NAME-slack-app"         2>/dev/null || true
+openshell provider delete "$SANDBOX_NAME-storage"           2>/dev/null || true
 
 case "$stop_mode" in
   stop)

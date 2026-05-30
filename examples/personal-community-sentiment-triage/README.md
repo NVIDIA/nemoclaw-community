@@ -291,6 +291,17 @@ inside the sandbox on every turn. That directory is ephemeral — it lives
 on the sandbox's writable layer and is destroyed by `tear-down.sh` — so
 capture before destroying the sandbox if you want to keep the traces.
 
+For production / always-on capture, set `ATIF_STORAGE_BACKEND=minio`
+or `s3` to have NeMo-Relay upload completed trajectories directly to
+S3-compatible storage via a host-side relay. The sandbox never holds real
+AWS credentials; OpenShell's provider store manages a per-sandbox bearer
+token instead. See [docs/atif-export.md](docs/atif-export.md) for setup,
+IAM template, and the auth model.
+
+The on-disk capture below still works in parallel — it remains useful for
+forensic captures and works regardless of whether the S3 backend is
+configured.
+
 ```console
 $ bash scripts/download-traces.sh
 ```

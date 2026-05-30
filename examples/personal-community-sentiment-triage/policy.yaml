@@ -80,6 +80,39 @@ network_policies:
     - path: /usr/bin/python3
     - path: /usr/bin/python3.13
     - path: /opt/hermes/.venv/bin/python
+  # ATIF object-storage export — sandbox uploads completed trajectories to
+  # the host-side atif-export-relay (which then forwards to MinIO or real S3).
+  # Auth: per-sandbox bearer token carried in the SigV4 Credential= slot via
+  # OpenShell L7 placeholder substitution (provider: nemoclaw-atif-export-relay).
+  atif_export_relay:
+    name: atif_export_relay
+    endpoints:
+    - host: host.openshell.internal
+      port: 18443
+      protocol: rest
+      enforcement: enforce
+      allowed_ips:
+      - 10.0.0.0/8
+      - 172.0.0.0/8
+      - 192.168.0.0/16
+      - fc00::/7
+      rules:
+      - allow:
+          method: PUT
+          path: /**
+      - allow:
+          method: GET
+          path: /healthz
+    binaries:
+    # nemo-relay-cli is kept for the post-EKU-fix sunset path (when the
+    # bridge is removed, nemo-relay will talk to this endpoint directly).
+    - path: /usr/local/bin/nemo-relay
+    # atif-bridge sidecar at /usr/local/lib/nemoclaw-bridges/atif/atif-bridge.py
+    # — Python ssl/OpenSSL accepts the L7 MITM cert despite missing
+    # serverAuth EKU; this is the live data path until OpenShell ships the
+    # EKU fix. See docs/atif-export.md.
+    - path: /usr/bin/python3
+    - path: /usr/bin/python3.13
   # Credential-less host-routed service — no v2 provider profile equivalent.
   # Sandbox policy is the sole authorization gate.
   phoenix_collector:
