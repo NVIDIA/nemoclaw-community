@@ -209,22 +209,19 @@ Now edit `.env` and fill in everything you already have:
   GitHub REST, `GITHUB_READONLY_REPO`,
   `PHOENIX_COLLECTOR_ENDPOINT`, `PHOENIX_PROJECT_NAME`
 
-### Phase 3 — Start host services
+### Phase 3 — Host services (handled by bring-up.sh, no manual step)
 
-```console
-$ bash scripts/00-host-services.sh
-```
+[scripts/bring-up.sh](scripts/bring-up.sh) handles host services as its phase 1/4 by
+invoking [scripts/00-host-services.sh](scripts/00-host-services.sh) before the
+sandbox-side phases. The stack from [extras/docker-compose.yml](extras/docker-compose.yml)
+— phoenix (telemetry), postgres (ETL backing store), source ETL workers, PostgREST on
+host port 3100, plus minio + atif-export-relay when `ATIF_STORAGE_BACKEND=minio|s3` — is
+designed to outlive the sandbox, so subsequent `tear-down.sh && bring-up.sh` cycles
+re-touch only the sandbox by default (00-host-services is idempotent).
 
-Brings up the long-lived Docker stack from [extras/docker-compose.yml](extras/docker-compose.yml):
-phoenix (telemetry), postgres (ETL backing store), source ETL workers for mirrored
-discussions/forums, and PostgREST on host port 3100. Outlook OAuth is handled by the
-OpenShell v2 outlook provider (gateway-managed refresh-token rotation), not a host
-container.
-
-These services are designed to outlive the sandbox: a `bash scripts/tear-down.sh` followed
-by another `bash scripts/bring-up.sh` does **not** require re-running this phase. Only run
-it again on a fresh checkout, or after `bash scripts/tear-down.sh --stop-host-services`
-(or `--purge-host-services`).
+You can also manage host services independently: `bash scripts/00-host-services.sh up`
+or `bash scripts/00-host-services.sh down` for direct control without touching the
+sandbox.
 
 ### Phase 4 — Bring up the agent
 
@@ -240,10 +237,10 @@ On the first bring-up with Outlook configured, `02-providers.sh` runs an interac
 Microsoft device-code login (it prints a URL + code; complete it in a browser as the
 `OUTLOOK_TARGET_MAILBOX` user) and caches the resulting refresh token at
 `.bootstrap/cache/ms-graph-token.json` (mode 0600; ignored by `.gitignore`). Subsequent
-bring-ups reuse the cached refresh token. Re-login with `OUTLOOK_FORCE_LOGIN=1 bash
-scripts/bring-up.sh` when the refresh token eventually expires (~90 days unattended on
-Microsoft's side). Set `OUTLOOK_NO_CACHE=1` to skip the cache entirely and do
-device-code on every bring-up — see [docs/set-up-outlook-bridge.md](docs/set-up-outlook-bridge.md#security-note-where-the-refresh-token-lives).
+bring-ups reuse the cached refresh token (auto-refreshing on staleness ~90 days). Force
+a fresh login with `OUTLOOK_LOGIN_CACHE=2 bash scripts/bring-up.sh`. Set
+`OUTLOOK_LOGIN_CACHE=0` to skip the cache entirely and do device-code on every
+bring-up — see [docs/set-up-outlook-bridge.md](docs/set-up-outlook-bridge.md#security-note-where-the-refresh-token-lives).
 
 The image always installs NeMo-Relay so the agent writes ATIF traces to `/tmp/atif/`
 regardless of Phoenix config. If `PHOENIX_COLLECTOR_ENDPOINT` is set, `03-sandbox.sh`
@@ -255,10 +252,10 @@ Phoenix at `http://localhost:6006`.
 - **Owns** (in this directory): `agents/hermes/` (the full Hermes asset tree, staged
   here for convenience), `policy.yaml` (sandbox network/filesystem policy template), `extras/`,
   `.env`, and `scripts/`:
-  - `00-host-services.sh` — host-side bootstrap (Phase 3). Independent of the sandbox lifecycle.
-  - `01-gateway.sh` / `02-providers.sh` / `03-sandbox.sh` — phase scripts called by the bring-up orchestrator.
-  - `bring-up.sh` — orchestrator for 01 → 02 → 03; does **not** invoke `00-host-services.sh` (host services are long-lived).
-  - `tear-down.sh` — removes the sandbox and per-sandbox providers; preserves host services unless `STOP_HOST_SERVICES=1`.
+  - `00-host-services.sh` — host-side stack lifecycle (phoenix, postgres, ETLs, postgrest, and minio + atif-export-relay when `ATIF_STORAGE_BACKEND` is set). Idempotent; safe to invoke directly for `up` or `down`.
+  - `01-gateway.sh` / `02-providers.sh` / `03-sandbox.sh` — sandbox-side phase scripts called by the bring-up orchestrator.
+  - `bring-up.sh` — orchestrator: invokes `00-host-services.sh up` (phase 1/4) followed by 01 → 02 → 03 (phases 2-4/4). `00-host-services.sh` is idempotent, so re-running `bring-up.sh` on an already-up host stack is a no-op for those services and only re-runs the sandbox-side phases.
+  - `tear-down.sh` — removes the sandbox and per-sandbox providers; preserves host services. Add `--stop-host-services` to also stop them (volumes preserved) or `--purge-host-services` to stop and wipe named volumes.
   - `snapshot.sh` / `restore.sh` — explicit Hermes state preservation across tear-down/bring-up cycles.
   - `download-traces.sh` — pull ATIF trace records from `/tmp/atif/` inside the sandbox into a host-side tarball. See [Capturing ATIF traces](#capturing-atif-traces) for the env knobs.
   - `host-tls-proxy.py` — optional plain-HTTP forwarder for hosts where the sandbox can't validate the inference endpoint's TLS chain (corporate VPN, split-horizon DNS, mkcert). See [docs/host-tls-proxy.md](docs/host-tls-proxy.md).
@@ -435,8 +432,7 @@ unless you remove the compose volumes.
 | `GITHUB_TOKEN` / `GH_TOKEN` | (none) | Optional GitHub token for authenticated live REST reads. `GITHUB_TOKEN` also feeds the optional host GitHub mirror; if it is unset, `GH_TOKEN` can still create the sandbox provider. |
 | `GITHUB_READONLY_REPO` | `NVIDIA/OpenShell` | The only repo allowed by the live GitHub REST policy, formatted as `owner/repo`. Recreate the sandbox after changing it. |
 | `SOURCE_ETL_GITHUB_REPO` | `NVIDIA/NemoClaw` | Host-side GitHub mirror repo for source-etls. This is independent of `GITHUB_READONLY_REPO`. |
-| `OUTLOOK_FORCE_LOGIN` | (unset) | Set to `1` to discard the cached Microsoft refresh token at `.bootstrap/cache/ms-graph-token.json` and re-run device-code login on the next `bring-up.sh`. |
-| `OUTLOOK_NO_CACHE` | (unset) | Set to `1` to skip the on-disk refresh-token cache entirely. Bring-up runs device-code login every invocation and writes nothing locally. Use on shared workstations or in security-sensitive contexts. The gateway-side encrypted credential copy is unaffected. |
+| `OUTLOOK_LOGIN_CACHE` | `1` | Controls the Microsoft refresh-token cache at `.bootstrap/cache/ms-graph-token.json`. `1` = use the cache (auto-refresh on staleness, ~90 days). `0` = skip the cache entirely (device-code every bring-up, nothing on disk; use on shared workstations or security-sensitive contexts). `2` = force device-code login and rewrite the cache. The gateway-side encrypted credential copy is unaffected by this knob. |
 | `PHOENIX_COLLECTOR_ENDPOINT` | (none) | Set to e.g. `http://host.openshell.internal:6006/v1/traces` to stream OpenInference traces to a Phoenix collector. ATIF trace generation does not depend on this — NeMo-Relay is always installed and writes ATIF locally to `/tmp/atif/` regardless. |
 | `PHOENIX_PROJECT_NAME` | `default` | Sets `openinference.project.name` on every exported span so Phoenix routes traces to a named project. Override per-build to keep multiple deployments separate in the same Phoenix instance. |
 
@@ -477,7 +473,7 @@ $ bash scripts/tear-down.sh
 
 Removes the sandbox, the Outlook/GitHub/Slack providers, and any leftover
 staged Dockerfile/policy files. **Does not** destroy the gateway or stop host services
-(phoenix, token manager, postgres, ETLs, postgrest) by default — those are
+(phoenix, postgres, ETLs, postgrest) by default — those are
 typically long-lived. Opt-in flags (mutually exclusive):
 
 - `--stop-host-services` — also stop the [extras/](extras/) stack (volumes preserved; delegates to `00-host-services.sh down`).
@@ -494,7 +490,7 @@ To stop *just* the host services without removing the sandbox:
 $ bash scripts/00-host-services.sh down
 ```
 
-Add `--volumes` (or `-v`) to also wipe the source-etls Postgres data (forces ETL re-scrape on the next `up`). Outlook re-auth is independent — re-run `bash scripts/bring-up.sh` with `OUTLOOK_FORCE_LOGIN=1`.
+Add `--volumes` (or `-v`) to also wipe the source-etls Postgres data (forces ETL re-scrape on the next `up`). Outlook re-auth is independent — re-run `bash scripts/bring-up.sh` with `OUTLOOK_LOGIN_CACHE=2`.
 
 ## Persistence: collective wisdom across restarts
 
@@ -502,7 +498,7 @@ What survives a `tear-down.sh && bring-up.sh` cycle by default:
 
 - **Postgres ETL data** — backed by the named Docker volume `source-etls-postgres-data` in [extras/docker-compose.yml](extras/docker-compose.yml). Survives unless you opt in to `--purge-host-services` (or run `bash scripts/00-host-services.sh down --volumes` directly).
 - **Host services state** (phoenix's traces) — also volume-backed.
-- **Microsoft refresh token** (in `.bootstrap/cache/ms-graph-token.json`; ignored by `.gitignore`) — survives tear-down/bring-up cycles. Delete the file (or set `OUTLOOK_FORCE_LOGIN=1`) to force a fresh device-code login. Set `OUTLOOK_NO_CACHE=1` to skip the cache altogether.
+- **Microsoft refresh token** (in `.bootstrap/cache/ms-graph-token.json`; ignored by `.gitignore`) — survives tear-down/bring-up cycles, auto-refreshed on staleness. Set `OUTLOOK_LOGIN_CACHE=2` to force a fresh device-code login + cache rewrite, or `OUTLOOK_LOGIN_CACHE=0` to skip the cache altogether.
 
 What does **not** survive by default:
 

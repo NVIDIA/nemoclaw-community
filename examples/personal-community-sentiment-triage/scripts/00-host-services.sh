@@ -5,7 +5,7 @@
 # Lifecycle utility for the host-side services in extras/docker-compose.yml.
 # These services run on the host (not in the sandbox) and are reached by
 # the agent via the L7 proxy. Outlook OAuth is handled directly by the
-# OpenShell v2 outlook provider — no host-side token manager.
+# OpenShell v2 outlook provider.
 #
 #   phoenix      — OpenInference trace collector (UI on :6006)
 #   postgres     — backing store for source ETLs
@@ -53,27 +53,18 @@ cmd_up() {
   local backend="${ATIF_STORAGE_BACKEND:-}"
   if atif_remote_enabled; then
     profile_args=(--profile "$backend")
-    echo "Storage backend: $backend (atif-export-relay will be brought up)"
+    echo "Storage backend: $backend (atif-export-relay + ${backend} will be brought up)"
+    # Cert is bind-mounted into the relay container at startup; generate
+    # it now so the relay doesn't crashloop on missing files. See
+    # docs/atif-export.md "Sandbox→relay TLS via Python protocol-bridge
+    # sidecar" for the wider architecture.
+    bash "$EXAMPLE_DIR/extras/atif-export-relay/generate-tls-cert.sh"
   else
     echo "Storage backend: local (traces written to sandbox /tmp/atif; no host services for ATIF)"
   fi
 
-  echo "Starting host services: phoenix postgres github-etl forums-etl postgrest${profile_args:+ + profile=$backend}"
-  docker compose -f "$COMPOSE_FILE" "${profile_args[@]}" up -d --build \
-    phoenix postgres github-etl forums-etl postgrest
-
-  # Relay serves HTTPS on host loopback. The sandbox→relay leg is end-to-end
-  # TLS via the in-sandbox atif-bridge protocol shim, which terminates HTTP
-  # from nemo-relay on loopback and re-emits HTTPS through OpenShell's L7
-  # proxy (using Python's ssl/OpenSSL backend that's permissive about the
-  # L7 MITM cert's missing serverAuth EKU — same property used by curl /
-  # Python requests / git in the sandbox today). See docs/atif-export.md
-  # "Sandbox→relay TLS via Python protocol-bridge sidecar" for the wire
-  # diagram and the OpenShell EKU bug that makes the bridge necessary.
-  if [[ -n "$backend" ]]; then
-    bash "$EXAMPLE_DIR/extras/atif-export-relay/generate-tls-cert.sh"
-    docker compose -f "$COMPOSE_FILE" "${profile_args[@]}" up -d --build
-  fi
+  echo "Starting host services${profile_args:+ (profile=$backend)}"
+  docker compose -f "$COMPOSE_FILE" "${profile_args[@]}" up -d --build
 
   # Wait for MinIO healthy + create the bucket (idempotent).
   if [[ "$backend" == "minio" ]]; then
@@ -107,14 +98,17 @@ cmd_down() {
     *) echo "Unknown flag: $1" >&2; usage >&2; exit 2 ;;
   esac
 
+  # --profile '*' wildcards across all profiles so profile-gated containers
+  # (minio, atif-export-relay) get torn down regardless of which backend was
+  # active at up time. Without this, `down` silently leaves them running.
   if [[ "$with_volumes" == "1" ]]; then
     echo "Stopping host services and REMOVING NAMED VOLUMES."
     echo "  - source-etls-postgres-data (mirrored GitHub + forum data — ETLs will re-scrape)"
     echo "  - github-etl-state (ETL cursor)"
-    docker compose -f "$COMPOSE_FILE" down -v
+    docker compose -f "$COMPOSE_FILE" --profile '*' down -v
   else
     echo "Stopping host services (volumes preserved)."
-    docker compose -f "$COMPOSE_FILE" down
+    docker compose -f "$COMPOSE_FILE" --profile '*' down
   fi
 }
 

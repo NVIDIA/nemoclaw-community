@@ -315,12 +315,12 @@ start_atif_bridge() {
   )
   if [ "$(id -u)" -eq 0 ]; then
     nohup env "${scrub[@]}" \
-      ATIF_BRIDGE_UPSTREAM_URL="https://host.openshell.internal:18443" \
+      ATIF_BRIDGE_UPSTREAM_URL="${ATIF_RELAY_ENDPOINT:-https://host.openshell.internal:18443}" \
       gosu gateway python3 /usr/local/lib/nemoclaw-bridges/atif/atif-bridge.py \
       >>/tmp/atif-bridge.log 2>&1 &
   else
     nohup env "${scrub[@]}" \
-      ATIF_BRIDGE_UPSTREAM_URL="https://host.openshell.internal:18443" \
+      ATIF_BRIDGE_UPSTREAM_URL="${ATIF_RELAY_ENDPOINT:-https://host.openshell.internal:18443}" \
       python3 /usr/local/lib/nemoclaw-bridges/atif/atif-bridge.py \
       >>/tmp/atif-bridge.log 2>&1 &
   fi

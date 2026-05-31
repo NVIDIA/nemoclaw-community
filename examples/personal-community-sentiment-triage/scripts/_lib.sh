@@ -56,6 +56,36 @@ assert_messaging_config() {
 # Auto-source .env before deriving any defaults from it.
 load_env
 
+# Parse ATIF_RELAY_ENDPOINT into the parts every downstream consumer needs:
+# the canonical URL (docker-compose env, bridge upstream, provider profile,
+# policy egress rule), the host (TLS cert CN + first SAN), and the port
+# (relay bind addr, compose healthcheck). One operator-facing knob, three
+# derived forms. Fails fast on a malformed URL so a typo doesn't quietly
+# break TLS / sandbox-bridge handshake at runtime.
+export ATIF_RELAY_ENDPOINT="${ATIF_RELAY_ENDPOINT:-https://host.openshell.internal:18443}"
+{
+  _url="$ATIF_RELAY_ENDPOINT"
+  _scheme="${_url%%://*}"
+  if [[ "$_scheme" != "https" || "$_scheme" == "$_url" ]]; then
+    echo "ATIF_RELAY_ENDPOINT must be an https:// URL (got: $ATIF_RELAY_ENDPOINT)" >&2
+    exit 1
+  fi
+  _hostport="${_url#*://}"
+  _hostport="${_hostport%%/*}"
+  ATIF_RELAY_HOST="${_hostport%%:*}"
+  ATIF_RELAY_PORT="${_hostport##*:}"
+  if [[ -z "$ATIF_RELAY_HOST" || "$ATIF_RELAY_PORT" == "$ATIF_RELAY_HOST" ]]; then
+    echo "ATIF_RELAY_ENDPOINT must include host:port (got: $ATIF_RELAY_ENDPOINT)" >&2
+    exit 1
+  fi
+  if ! [[ "$ATIF_RELAY_PORT" =~ ^[0-9]+$ ]]; then
+    echo "ATIF_RELAY_ENDPOINT port must be numeric (got: $ATIF_RELAY_PORT)" >&2
+    exit 1
+  fi
+  export ATIF_RELAY_HOST ATIF_RELAY_PORT
+  unset _url _scheme _hostport
+}
+
 # Shared, overridable knobs.
 SANDBOX_NAME="${SANDBOX_NAME:-hermes-direct}"
 GATEWAY_NAME="${OPENSHELL_GATEWAY:-openshell}"

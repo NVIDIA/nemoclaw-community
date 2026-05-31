@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Step 3 of 3: Build the sandbox image and create the sandbox.
+# Phase 4 of 4: Build the sandbox image and create the sandbox.
 #
 # `openshell sandbox create --from <Dockerfile>` builds the image — there's
 # no --build-arg passthrough, so we sed-patch a staged Dockerfile copy with
@@ -77,6 +77,7 @@ if atif_remote_enabled; then
   DOCKERFILE_ARGS[ATIF_STORAGE_BUCKET]="${ATIF_STORAGE_BUCKET:-}"
   DOCKERFILE_ARGS[ATIF_STORAGE_KEY_PREFIX]="${ATIF_STORAGE_KEY_PREFIX:-hermes/}"
   [[ -n "${ATIF_S3_REGION:-}" ]] && DOCKERFILE_ARGS[ATIF_S3_REGION]="$ATIF_S3_REGION"
+  DOCKERFILE_ARGS[ATIF_RELAY_ENDPOINT]="$ATIF_RELAY_ENDPOINT"
 fi
 
 cp "$EXAMPLE_DIR/agents/hermes/Dockerfile" "$STAGED_DOCKERFILE"
@@ -89,6 +90,8 @@ done
 cp "$EXAMPLE_DIR/policy.yaml" "$STAGED_POLICY"
 sed -i \
   -e "s|__GITHUB_READONLY_REPO__|$GITHUB_READONLY_REPO|g" \
+  -e "s|__ATIF_RELAY_HOST__|$ATIF_RELAY_HOST|g" \
+  -e "s|__ATIF_RELAY_PORT__|$ATIF_RELAY_PORT|g" \
   "$STAGED_POLICY"
 
 # ── Build provider flags from what 02-providers.sh actually created ────

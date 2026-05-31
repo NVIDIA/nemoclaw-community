@@ -80,12 +80,6 @@ openshell provider delete "$SANDBOX_NAME-outlook"           2>/dev/null || true
 openshell provider delete "$SANDBOX_NAME-github"            2>/dev/null || true
 openshell provider delete "$SANDBOX_NAME-slack"             2>/dev/null || true
 openshell provider delete "$SANDBOX_NAME-atif-export-relay" 2>/dev/null || true
-# Legacy provider names — kept for one migration cycle so operators with
-# pre-rename state get a clean tear-down. Remove after two or three release
-# cycles.
-openshell provider delete "$SANDBOX_NAME-slack-bridge"      2>/dev/null || true
-openshell provider delete "$SANDBOX_NAME-slack-app"         2>/dev/null || true
-openshell provider delete "$SANDBOX_NAME-storage"           2>/dev/null || true
 
 case "$stop_mode" in
   stop)

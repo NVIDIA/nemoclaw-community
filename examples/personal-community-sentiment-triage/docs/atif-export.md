@@ -266,40 +266,16 @@ This means tenant isolation lives at two layers — the VM (network + uid + file
 
 There is no "force" verb here — credentials are issued by the local script, not by an upstream identity provider. Just delete the `.env` line and re-run bring-up.
 
-### Migrating env-var prefixes from `NEMOCLAW_` to `ATIF_`
+### Customizing the relay endpoint
 
-Four env vars previously lived under the generic `NEMOCLAW_` prefix; they're now under `ATIF_` to identify the subsystem they actually configure. If your `.env` carries the old names, rename them once:
+The relay's public endpoint is one operator-facing knob: `ATIF_RELAY_ENDPOINT` (default `https://host.openshell.internal:18443`). Everything that depends on it — the relay bind port, the sandbox-side bridge upstream URL, the OpenShell provider profile endpoint, the policy egress rule, and the leaf cert CN/SAN — is derived from that value during bring-up.
 
-```bash
-sed -i \
-  -e 's/^NEMOCLAW_STORAGE_BACKEND=/ATIF_STORAGE_BACKEND=/' \
-  -e 's/^NEMOCLAW_STORAGE_BUCKET=/ATIF_STORAGE_BUCKET=/' \
-  -e 's/^NEMOCLAW_STORAGE_KEY_PREFIX=/ATIF_STORAGE_KEY_PREFIX=/' \
-  -e 's/^NEMOCLAW_S3_REGION=/ATIF_S3_REGION=/' \
-  .env
-```
+Common cases:
 
-Then re-run `bash scripts/bring-up.sh`. The old names are not accepted (no compat shim).
+- **Port conflict** — set `ATIF_RELAY_ENDPOINT=https://host.openshell.internal:19443` in `.env` and re-run bring-up. No cert regeneration needed (the cert SAN is host-bound, not port-bound).
+- **Different DNS name** — set `ATIF_RELAY_ENDPOINT=https://my-vm.local:18443`. The next bring-up auto-detects the CN mismatch and regenerates the leaf cert with the new primary SAN. Use `ATIF_RELAY_FORCE_CERT=1` to force regen explicitly.
 
-### Migrating from the legacy `codex/` key prefix
-
-The default `ATIF_STORAGE_KEY_PREFIX` was renamed from `codex/` to `hermes/` to match the agent's actual name. Existing object stores keep their old keys — only *new* uploads land under `hermes/`. Three handling options:
-
-1. **New deployments** — no action; everything lands under `hermes/`.
-2. **Preserve continuity with existing data** — pin `ATIF_STORAGE_KEY_PREFIX=codex/` in `.env` before bring-up. New uploads continue to use the old prefix.
-3. **Consolidate** — pin the new default and move existing objects once:
-   ```bash
-   # MinIO
-   docker run --rm --network=host \
-     -e "MC_HOST_local=http://minioadmin:minioadmin@localhost:9000" \
-     minio/mc cp --recursive local/<bucket>/codex/ local/<bucket>/hermes/
-   docker run --rm --network=host \
-     -e "MC_HOST_local=http://minioadmin:minioadmin@localhost:9000" \
-     minio/mc rm --recursive --force local/<bucket>/codex/
-
-   # S3 (run from a host with the right IAM)
-   aws s3 mv --recursive s3://<bucket>/codex/ s3://<bucket>/hermes/
-   ```
+The host's `.env` is the source of truth; `scripts/_lib.sh` validates the URL on load (must be `https://`, must include `host:port`, port must be numeric) and exports `ATIF_RELAY_HOST` / `ATIF_RELAY_PORT` for downstream consumers.
 
 ### Tearing down
 

@@ -2,11 +2,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Step 2 of 3: Import v2 provider profiles and upsert this sandbox's providers.
+# Phase 3 of 4: Import v2 provider profiles and upsert this sandbox's providers.
 # Outlook providers run an interactive Microsoft device-code login the first
 # time (refresh token cached under .bootstrap/cache/, ignored by .gitignore).
-# Set OUTLOOK_FORCE_LOGIN=1 to re-login; set OUTLOOK_NO_CACHE=1 to never write
-# the cache (device-code every run).
+# OUTLOOK_LOGIN_CACHE controls the cache: 0=off, 1=use (default), 2=force-rewrite.
 
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,17 +27,27 @@ echo "Importing v2 provider profiles from $EXAMPLE_DIR/providers/"
 # rejects existing IDs rather than upserting; ignoring delete errors covers
 # first-run (nothing to delete) and any pre-existing custom profiles.
 for profile_id in nemoclaw-outlook-email nemoclaw-slack nemoclaw-github \
-                  nemoclaw-atif-export-relay \
-                  nemoclaw-slack-bridge nemoclaw-slack-app \
-                  nemoclaw-generic-storage; do  # legacy id, kept for one migration cycle
+                  nemoclaw-atif-export-relay; do
   openshell provider profile delete "$profile_id" >/dev/null 2>&1 || true
 done
 # Import each active profile by name. nemoclaw-compatible-endpoint is a
 # forward-looking placeholder (see the header in providers/compatible-endpoint.yaml)
 # and is deliberately NOT imported — the active inference path uses the
 # built-in `nvidia` v2 profile via `openshell inference set` below.
+#
+# atif-export-relay.yaml carries __ATIF_RELAY_HOST/PORT__ placeholders so
+# the endpoint tracks ATIF_RELAY_ENDPOINT — stage through sed before import.
+STAGED_RELAY_PROFILE="$EXAMPLE_DIR/providers/.atif-export-relay.staged.yaml"
+trap 'rm -f "$STAGED_RELAY_PROFILE"' EXIT
 for profile_file in outlook-email.yaml slack.yaml github.yaml atif-export-relay.yaml; do
-  openshell provider profile import --file "$EXAMPLE_DIR/providers/$profile_file"
+  src="$EXAMPLE_DIR/providers/$profile_file"
+  if [[ "$profile_file" == "atif-export-relay.yaml" ]]; then
+    sed -e "s|__ATIF_RELAY_HOST__|$ATIF_RELAY_HOST|g" \
+        -e "s|__ATIF_RELAY_PORT__|$ATIF_RELAY_PORT|g" \
+        "$src" > "$STAGED_RELAY_PROFILE"
+    src="$STAGED_RELAY_PROFILE"
+  fi
+  openshell provider profile import --file "$src"
 done
 
 # ── Inference provider (built-in nvidia v2 profile via inference.local) ─
@@ -78,25 +87,51 @@ fi
 # ── Outlook provider with gateway-managed OAuth refresh ─────────────────
 if [[ -n "${OUTLOOK_CLIENT_ID:-}" ]]; then
   OUTLOOK_PROVIDER="$SANDBOX_NAME-outlook"
-  OUTLOOK_LOGIN_CACHE="${OUTLOOK_LOGIN_CACHE:-$EXAMPLE_DIR/.bootstrap/cache/ms-graph-token.json}"
-  CACHE_OK=1
-  [[ "${OUTLOOK_NO_CACHE:-}" == "1" ]] && CACHE_OK=
+  OUTLOOK_LOGIN_CACHE_PATH="$EXAMPLE_DIR/.bootstrap/cache/ms-graph-token.json"
+  case "${OUTLOOK_LOGIN_CACHE:-1}" in
+    0|1|2) ;;
+    *) echo "Invalid OUTLOOK_LOGIN_CACHE=$OUTLOOK_LOGIN_CACHE (expected 0, 1, or 2)" >&2; exit 1 ;;
+  esac
 
-  if [[ -n "$CACHE_OK" && -f "$OUTLOOK_LOGIN_CACHE" && "${OUTLOOK_FORCE_LOGIN:-}" != "1" ]]; then
-    echo "Reusing cached Microsoft refresh token at $OUTLOOK_LOGIN_CACHE (OUTLOOK_FORCE_LOGIN=1 to redo, OUTLOOK_NO_CACHE=1 to disable)"
-    login_json="$(cat "$OUTLOOK_LOGIN_CACHE")"
-  else
-    [[ -z "$CACHE_OK" ]] && echo "OUTLOOK_NO_CACHE=1 — running device-code login (no on-disk cache)"
+  login_json=""
+  mode="${OUTLOOK_LOGIN_CACHE:-1}"
+
+  # Mode 1: try the cache, with a freshness check on expires_at_ms.
+  if [[ "$mode" == "1" && -f "$OUTLOOK_LOGIN_CACHE_PATH" ]]; then
+    cached_expires_at_ms="$(python3 -c '
+import json, sys
+try:
+    print(json.load(open(sys.argv[1]))["expires_at_ms"])
+except Exception:
+    print(0)
+' "$OUTLOOK_LOGIN_CACHE_PATH" 2>/dev/null || echo 0)"
+    now_ms=$(( $(date +%s) * 1000 ))
+    if [[ "$cached_expires_at_ms" -gt "$now_ms" ]]; then
+      days_left=$(( (cached_expires_at_ms - now_ms) / 1000 / 86400 ))
+      echo "Reusing cached Microsoft refresh token at $OUTLOOK_LOGIN_CACHE_PATH (${days_left}d until expiry)"
+      login_json="$(cat "$OUTLOOK_LOGIN_CACHE_PATH")"
+    else
+      echo "Cached refresh token at $OUTLOOK_LOGIN_CACHE_PATH is expired or unreadable; re-running device-code login"
+    fi
+  fi
+
+  # Fall through to device-code login: mode 0, mode 2, or mode 1 cache miss/stale.
+  if [[ -z "$login_json" ]]; then
+    case "$mode" in
+      0) echo "OUTLOOK_LOGIN_CACHE=0 — device-code login, no on-disk cache" ;;
+      2) echo "OUTLOOK_LOGIN_CACHE=2 — forcing device-code login + cache rewrite" ;;
+    esac
     login_hint_args=()
     [[ -n "${OUTLOOK_TARGET_MAILBOX:-}" ]] && login_hint_args+=(--login-hint "$OUTLOOK_TARGET_MAILBOX")
     login_json="$(python3 "$DIR/login-ms-graph.py" \
       --tenant-id "$OUTLOOK_TENANT_ID" \
       --client-id "$OUTLOOK_CLIENT_ID" \
       "${login_hint_args[@]}")"
-    if [[ -n "$CACHE_OK" ]]; then
-      mkdir -p "$(dirname "$OUTLOOK_LOGIN_CACHE")"
+    # Modes 1 and 2 write the cache; mode 0 doesn't.
+    if [[ "$mode" != "0" ]]; then
+      mkdir -p "$(dirname "$OUTLOOK_LOGIN_CACHE_PATH")"
       umask 077
-      printf '%s\n' "$login_json" > "$OUTLOOK_LOGIN_CACHE"
+      printf '%s\n' "$login_json" > "$OUTLOOK_LOGIN_CACHE_PATH"
     fi
   fi
 
@@ -172,10 +207,6 @@ if atif_remote_enabled; then
   fi
 
   STORAGE_PROVIDER="$SANDBOX_NAME-atif-export-relay"
-  # One-time cleanup: the previous instance name was "$SANDBOX_NAME-storage";
-  # remove it from operators' OpenShell stores so it doesn't accumulate as
-  # an orphan. Remove this line after two or three release cycles.
-  openshell provider delete "$SANDBOX_NAME-storage" >/dev/null 2>&1 || true
   # Idempotency: every `provider update --credential` bumps the credential's
   # internal revision, which invalidates any running sandbox's revisioned
   # placeholder (env vars hold `openshell:resolve:env:v<N>_KEY`, set at

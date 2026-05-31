@@ -87,8 +87,8 @@ network_policies:
   atif_export_relay:
     name: atif_export_relay
     endpoints:
-    - host: host.openshell.internal
-      port: 18443
+    - host: __ATIF_RELAY_HOST__
+      port: __ATIF_RELAY_PORT__
       protocol: rest
       enforcement: enforce
       allowed_ips:

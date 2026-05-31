@@ -29,14 +29,22 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TLS_DIR="$DIR/tls"
 mkdir -p "$TLS_DIR"
 
+# Host the cert is issued for. Normally derived from ATIF_RELAY_ENDPOINT by
+# scripts/_lib.sh; falls back to the canonical default for standalone runs.
+RELAY_HOST="${ATIF_RELAY_HOST:-host.openshell.internal}"
+
 # Re-generate iff (a) any of the three files is missing, (b) the leaf is
-# missing serverAuth EKU (old-format self-signed cert), or (c) the
-# operator explicitly forced it.
+# missing serverAuth EKU (old-format self-signed cert), (c) the existing
+# leaf CN no longer matches $RELAY_HOST (operator changed the endpoint
+# host), or (d) the operator explicitly forced it.
 needs_regen=0
 if [[ ! -f "$TLS_DIR/ca.crt" || ! -f "$TLS_DIR/server.crt" || ! -f "$TLS_DIR/server.key" ]]; then
   needs_regen=1
 elif ! openssl x509 -in "$TLS_DIR/server.crt" -noout -ext extendedKeyUsage 2>/dev/null \
        | grep -q "TLS Web Server Authentication"; then
+  needs_regen=1
+elif ! openssl x509 -in "$TLS_DIR/server.crt" -noout -subject 2>/dev/null \
+       | grep -qE "CN[[:space:]]*=[[:space:]]*${RELAY_HOST}([[:space:]]|$|,)"; then
   needs_regen=1
 fi
 if [[ "${ATIF_RELAY_FORCE_CERT:-}" == "1" ]]; then
@@ -70,13 +78,24 @@ openssl req -x509 -newkey rsa:4096 -days 3650 -nodes \
 openssl req -new -newkey rsa:4096 -nodes \
   -keyout "$TLS_DIR/server.key" \
   -out    "$TMP/leaf.csr" \
-  -subj   "/CN=host.openshell.internal"
+  -subj   "/CN=$RELAY_HOST"
 
-cat > "$TMP/leaf.ext" <<'EOF'
+# SAN list: $RELAY_HOST first, then the docker/host aliases that remain
+# useful regardless of the configured primary host. Skip an alias if it
+# equals $RELAY_HOST to avoid a duplicate DNS entry.
+san_entries=("DNS:$RELAY_HOST")
+for alias in host.openshell.internal host.containers.internal host.docker.internal localhost; do
+  [[ "$alias" == "$RELAY_HOST" ]] && continue
+  san_entries+=("DNS:$alias")
+done
+san_entries+=("IP:127.0.0.1")
+san_csv="$(IFS=,; echo "${san_entries[*]}")"
+
+cat > "$TMP/leaf.ext" <<EOF
 basicConstraints = critical,CA:FALSE
 keyUsage = critical,digitalSignature,keyEncipherment
 extendedKeyUsage = serverAuth
-subjectAltName = DNS:host.openshell.internal,DNS:host.containers.internal,DNS:host.docker.internal,DNS:localhost,IP:127.0.0.1
+subjectAltName = $san_csv
 EOF
 
 openssl x509 -req -in "$TMP/leaf.csr" -days 3650 \

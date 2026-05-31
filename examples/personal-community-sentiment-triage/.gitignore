@@ -22,8 +22,7 @@
 .envrc
 .direnv/
 
-# Secrets / credentials — never commit. Auth tokens and keys are handled by
-# the MS Graph token manager and live outside the repo.
+# Secrets / credentials — never commit.
 *.pem
 *.key
 *.p12

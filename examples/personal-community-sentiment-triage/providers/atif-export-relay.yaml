@@ -40,8 +40,8 @@ credentials:
     env_vars: [ATIF_RELAY_AUTH_TOKEN]
     required: true
 endpoints:
-  - host: host.openshell.internal
-    port: 18443
+  - host: __ATIF_RELAY_HOST__
+    port: __ATIF_RELAY_PORT__
     protocol: rest
     enforcement: enforce
     # host.openshell.internal resolves to a private internal address

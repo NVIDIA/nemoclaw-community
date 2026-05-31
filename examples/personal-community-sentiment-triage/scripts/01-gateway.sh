@@ -2,7 +2,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Step 1 of 3: ensure the CLI is pointed at a running OpenShell gateway.
+# Phase 2 of 4 (after 00-host-services.sh): ensure the CLI is pointed at a
+# running OpenShell gateway.
 #
 # OpenShell 0.37+ no longer starts gateways from the CLI. The expected flow is:
 #   - install OpenShell with the package-managed installer, which starts the
