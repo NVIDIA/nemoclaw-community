@@ -87,7 +87,7 @@ RUN mkdir -p /etc/apt/keyrings \
     && apt-get install -y --no-install-recommends gh postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --no-cache-dir --break-system-packages "httpx>=0.27" "markdown-it-py>=3"
+RUN pip3 install --no-cache-dir --break-system-packages "httpx>=0.27" "markdown-it-py>=3" "aiohttp>=3.10,<4"
 
 # ── Upgrade Hermes from base image's v0.11.0 to v0.14.0 ─────────────────
 # NemoClaw's base image (even at its latest tag) pins HERMES_VERSION=v2026.4.23
