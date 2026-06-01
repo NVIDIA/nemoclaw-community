@@ -137,7 +137,7 @@ The solution: ride the bearer in the standalone `x-amz-security-token` HTTP head
    x-amz-security-token: openshell:resolve:env:ATIF_RELAY_AUTH_TOKEN   ← whole-value placeholder
    Authorization: AWS4-HMAC-SHA256 Credential=nemo-relay-sandbox/.../aws4_request, Signature=<junk>
    ```
-   The destination is the in-container **atif-bridge** sidecar — a pure HTTP→HTTPS protocol shim running as `gateway` uid. The bridge does not inspect or modify headers; it re-emits each request as HTTPS to `host.openshell.internal:18443` using Python's `ssl` module (OpenSSL backend). The bridge exists because nemo-relay's rustls TLS client cannot validate OpenShell's L7-proxy MITM cert — see "Sandbox→relay TLS via Python protocol-bridge sidecar" below.
+   The destination is the in-container **atif-bridge** sidecar — a pure HTTP→HTTPS protocol shim running as the sandbox uid. The bridge does not inspect or modify headers; it re-emits each request as HTTPS to `host.openshell.internal:18443` using Python's `ssl` module (OpenSSL backend). The bridge exists because nemo-relay's rustls TLS client cannot validate OpenShell's L7-proxy MITM cert — see "Sandbox→relay TLS via Python protocol-bridge sidecar" below.
 4. OpenShell's L7 proxy intercepts the bridge's HTTPS outbound, MITM-terminates it, iterates outbound headers, and matches the standalone placeholder in `x-amz-security-token` against `rewrite_header_value`'s direct-match branch. The proxy substitutes the real bearer:
    ```
    x-amz-security-token: atif-<hex>                                    ← resolved
@@ -154,16 +154,16 @@ The solution: ride the bearer in the standalone `x-amz-security-token` HTTP head
 
 ### Sandbox→relay TLS via Python protocol-bridge sidecar
 
-The sandbox→relay leg is **TLS end-to-end on the bytes that cross the trust boundary** (sandbox container → host relay), accomplished via a small in-sandbox protocol-bridge sidecar. The only in-container plaintext hop is loopback HTTP between nemo-relay-cli and the bridge — same network namespace, never on the wire. Bearer credentials remain in the OpenShell L7 proxy's process memory only; they never enter nemo-relay, the bridge, or any sandbox-uid memory.
+The sandbox→relay leg is **TLS end-to-end on the bytes that cross the trust boundary** (sandbox container → host relay), accomplished via a small in-sandbox protocol-bridge sidecar. The only in-container plaintext hop is loopback HTTP between nemo-relay-cli and the bridge — same network namespace, never on the wire. Bearer credentials remain in the OpenShell L7 proxy's process memory only; they never enter nemo-relay, the bridge, or any sandbox process memory.
 
 #### Wire diagram
 
 ```
-nemo-relay-cli (rustls, gateway uid)
+nemo-relay-cli (rustls, sandbox uid)
   └─ plain HTTP to 127.0.0.1:18444 (loopback, in-container)
                        │
                        ▼
-       atif-bridge.py (gateway uid, Python ssl = OpenSSL)
+       atif-bridge.py (sandbox uid, Python ssl = OpenSSL)
        Pure HTTP→HTTPS protocol shim. Holds no bearer.
                        │
                        ▼ HTTPS to host.openshell.internal:18443
@@ -203,10 +203,10 @@ The bridge is a pure protocol shim — it does not inspect or modify headers, do
 
 | Component | Sees real bearer? |
 |---|---|
-| sandbox uid (Hermes agent code) | No |
-| gateway uid (nemo-relay) | No — only the placeholder string |
-| gateway uid (atif-bridge) | No — only the placeholder string |
-| proxy uid (OpenShell L7 proxy) | **Yes** — resolves placeholder during MITM |
+| Hermes agent code | No |
+| nemo-relay | No — only the placeholder string |
+| atif-bridge | No — only the placeholder string |
+| OpenShell L7 proxy | **Yes** — resolves placeholder during MITM |
 | atif-export-relay (host) | Yes — receives substituted value |
 | AWS S3 / MinIO | No (relay re-signs with its own creds via boto3) |
 

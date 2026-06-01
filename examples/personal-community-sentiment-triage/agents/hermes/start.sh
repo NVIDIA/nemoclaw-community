@@ -55,8 +55,7 @@ fi
 # failures before /tmp/gateway.log exists are still diagnosable.
 prepare_restricted_log() {
   local path="$1"
-  local owner="${2:-}"
-  local mode="${3:-600}"
+  local mode="${2:-600}"
   local dir base tmp
 
   dir="$(dirname "$path")"
@@ -66,10 +65,6 @@ prepare_restricted_log() {
     rm -f "$tmp"
     return 1
   }
-  if [ "$(id -u)" -eq 0 ] && [ -n "$owner" ] && ! chown "$owner" "$tmp"; then
-    rm -f "$tmp"
-    return 1
-  fi
   if ! chmod "$mode" "$tmp"; then
     rm -f "$tmp"
     return 1
@@ -81,11 +76,7 @@ prepare_restricted_log() {
 }
 
 _START_LOG="/tmp/nemoclaw-start.log"
-if [ "$(id -u)" -eq 0 ]; then
-  prepare_restricted_log "$_START_LOG" root:root 600
-else
-  prepare_restricted_log "$_START_LOG" "" 600
-fi
+prepare_restricted_log "$_START_LOG" 600
 exec > >(tee -a "$_START_LOG") 2> >(tee -a "$_START_LOG" >&2)
 
 # ── Drop unnecessary Linux capabilities (shared) ────────────────
@@ -139,14 +130,8 @@ HERMES_HASH_FILE="${HERMES_IMMUTABLE}/.config-hash"
 # Copy verified immutable config into the writable HERMES_HOME so the
 # gateway process can read it alongside its own state files.
 deploy_config_to_writable() {
-  # When running as root, use gosu to write as sandbox user (owner of .hermes-data).
-  if [ "$(id -u)" -eq 0 ]; then
-    gosu sandbox cp "${HERMES_IMMUTABLE}/config.yaml" "${HERMES_WRITABLE}/config.yaml"
-    gosu sandbox cp "${HERMES_IMMUTABLE}/.env" "${HERMES_WRITABLE}/.env"
-  else
-    cp "${HERMES_IMMUTABLE}/config.yaml" "${HERMES_WRITABLE}/config.yaml"
-    cp "${HERMES_IMMUTABLE}/.env" "${HERMES_WRITABLE}/.env"
-  fi
+  cp "${HERMES_IMMUTABLE}/config.yaml" "${HERMES_WRITABLE}/config.yaml"
+  cp "${HERMES_IMMUTABLE}/.env" "${HERMES_WRITABLE}/.env"
   chmod 600 "${HERMES_WRITABLE}/config.yaml" "${HERMES_WRITABLE}/.env" 2>/dev/null || true
   echo "[config] Deployed verified config to ${HERMES_WRITABLE}" >&2
 }
@@ -246,15 +231,9 @@ start_nemo_relay_sidecar() {
     echo "[nemo-relay] binary not found at /usr/local/bin/nemo-relay, skipping" >&2
     return 0
   fi
-  if [ "$(id -u)" -eq 0 ]; then
-    nohup gosu gateway /usr/local/bin/nemo-relay \
-      --bind "127.0.0.1:${NEMO_RELAY_GATEWAY_PORT}" \
-      >>/tmp/nemo-relay.log 2>&1 &
-  else
-    nohup /usr/local/bin/nemo-relay \
-      --bind "127.0.0.1:${NEMO_RELAY_GATEWAY_PORT}" \
-      >>/tmp/nemo-relay.log 2>&1 &
-  fi
+  nohup /usr/local/bin/nemo-relay \
+    --bind "127.0.0.1:${NEMO_RELAY_GATEWAY_PORT}" \
+    >>/tmp/nemo-relay.log 2>&1 &
   NEMO_RELAY_PID=$!
   # Wait for /healthz so PID-1 hermes doesn't race the sidecar (silent drops).
   local attempts=0
@@ -313,17 +292,10 @@ start_atif_bridge() {
     -u MS_GRAPH_ACCESS_TOKEN
     -u SLACK_BOT_TOKEN
   )
-  if [ "$(id -u)" -eq 0 ]; then
-    nohup env "${scrub[@]}" \
-      ATIF_BRIDGE_UPSTREAM_URL="${ATIF_RELAY_ENDPOINT:-https://host.openshell.internal:18443}" \
-      gosu gateway python3 /usr/local/lib/nemoclaw-bridges/atif/atif-bridge.py \
-      >>/tmp/atif-bridge.log 2>&1 &
-  else
-    nohup env "${scrub[@]}" \
-      ATIF_BRIDGE_UPSTREAM_URL="${ATIF_RELAY_ENDPOINT:-https://host.openshell.internal:18443}" \
-      python3 /usr/local/lib/nemoclaw-bridges/atif/atif-bridge.py \
-      >>/tmp/atif-bridge.log 2>&1 &
-  fi
+  nohup env "${scrub[@]}" \
+    ATIF_BRIDGE_UPSTREAM_URL="${ATIF_RELAY_ENDPOINT:-https://host.openshell.internal:18443}" \
+    python3 /usr/local/lib/nemoclaw-bridges/atif/atif-bridge.py \
+    >>/tmp/atif-bridge.log 2>&1 &
   ATIF_BRIDGE_PID=$!
   local attempts=0
   while [ "$attempts" -lt 30 ]; do
@@ -365,30 +337,22 @@ start_outlook_bridge() {
     http_proxy=${_PROXY_URL} \
     NO_PROXY=localhost,127.0.0.1,::1 \
     no_proxy=localhost,127.0.0.1,::1"
-  if [ "$(id -u)" -eq 0 ]; then
-    # shellcheck disable=SC2086
-    nohup env ${bridge_env} gosu sandbox python3 /usr/local/lib/nemoclaw-bridges/outlook/outlook-bridge.py \
-      >>/tmp/outlook-bridge.log 2>&1 &
-  else
-    # shellcheck disable=SC2086
-    nohup env ${bridge_env} python3 /usr/local/lib/nemoclaw-bridges/outlook/outlook-bridge.py \
-      >>/tmp/outlook-bridge.log 2>&1 &
-  fi
+  # shellcheck disable=SC2086
+  nohup env ${bridge_env} python3 /usr/local/lib/nemoclaw-bridges/outlook/outlook-bridge.py \
+    >>/tmp/outlook-bridge.log 2>&1 &
   OUTLOOK_BRIDGE_PID=$!
   echo "[outlook-bridge] started (pid ${OUTLOOK_BRIDGE_PID})" >&2
 }
 
-# ── Shared launch helpers (called by both non-root and root branches) ──
+# ── Launch helpers ──────────────────────────────────────────────
 
 # Prepare /tmp/gateway.log + /tmp/atif, verify NeMo-Relay binary+config, and
-# start the sidecar. Pass "gateway:gateway" as $1 for root; "" for non-root.
+# start the sidecar.
 prepare_runtime() {
-  local owner="$1"
-  prepare_restricted_log /tmp/gateway.log "$owner" 600
+  prepare_restricted_log /tmp/gateway.log 600
   # shellcheck disable=SC2119
   validate_tmp_permissions
   mkdir -p /tmp/atif
-  [ -n "$owner" ] && chown "$owner" /tmp/atif
   if [ -x /usr/local/bin/nemo-relay ] && [ -r /etc/nemo-relay/plugins.toml ]; then
     echo "[nemo-relay] binary + config present (plugins.toml=/etc/nemo-relay/plugins.toml)" | tee -a /tmp/gateway.log >&2
   else
@@ -401,19 +365,16 @@ prepare_runtime() {
 }
 
 # Launch the Hermes gateway with the standard env block.
-# $1 = "" (non-root) or "gosu gateway" (root, drops to gateway user).
 launch_hermes_gateway() {
-  local user_wrap="$1"
-  # shellcheck disable=SC2086
   HERMES_HOME="${HERMES_WRITABLE}" \
     HTTPS_PROXY="${_PROXY_URL}" HTTP_PROXY="${_PROXY_URL}" \
     https_proxy="${_PROXY_URL}" http_proxy="${_PROXY_URL}" \
     PYTHONPATH="${PATCHES_DIR}${PYTHONPATH:+:${PYTHONPATH}}" \
     API_SERVER_KEY="nemoclaw-internal" \
     NEMO_RELAY_GATEWAY_URL="http://127.0.0.1:${NEMO_RELAY_GATEWAY_PORT}" \
-    nohup $user_wrap hermes gateway run >>/tmp/gateway.log 2>&1 &
+    nohup hermes gateway run >>/tmp/gateway.log 2>&1 &
   GATEWAY_PID=$!
-  echo "[gateway] hermes gateway launched${user_wrap:+ as 'gateway' user} (pid $GATEWAY_PID)" >&2
+  echo "[gateway] hermes gateway launched (pid $GATEWAY_PID)" >&2
 }
 
 # Wire up supervisor PIDs, signal trap, and side-services after the gateway
@@ -560,51 +521,25 @@ STORAGEEOF
 
 # ── Main ─────────────────────────────────────────────────────────
 
-echo 'Setting up NemoClaw (Hermes)...' >&2
+echo "Setting up NemoClaw (Hermes) as $(id -un) (uid=$(id -u))..." >&2
 
-# ── Non-root fallback ──────────────────────────────────────────
-if [ "$(id -u)" -ne 0 ]; then
-  echo "[gateway] Running as non-root (uid=$(id -u)) — privilege separation disabled" >&2
-  export HOME=/sandbox
-  export HERMES_HOME="${HERMES_WRITABLE}"
+export HOME=/sandbox
+export HERMES_HOME="${HERMES_WRITABLE}"
 
-  if ! verify_config_integrity "${HERMES_IMMUTABLE}" "${HERMES_HASH_FILE}"; then
-    echo "[SECURITY] Config integrity check failed — refusing to start (non-root mode)" >&2
-    exit 1
-  fi
-  deploy_config_to_writable
-  refresh_hermes_provider_placeholders
-  configure_messaging_channels
-
-  if [ ${#NEMOCLAW_CMD[@]} -gt 0 ]; then
-    exec "${NEMOCLAW_CMD[@]}"
-  fi
-
-  prepare_runtime ""
-  launch_hermes_gateway ""
-  wire_post_launch_supervision
-
-  wait "$GATEWAY_PID"
-  exit $?
+if ! verify_config_integrity "${HERMES_IMMUTABLE}" "${HERMES_HASH_FILE}"; then
+  echo "[SECURITY] Config integrity check failed — refusing to start" >&2
+  exit 1
 fi
-
-# ── Root path (full privilege separation via gosu) ─────────────
-
-verify_config_integrity "${HERMES_IMMUTABLE}" "${HERMES_HASH_FILE}"
 deploy_config_to_writable
 refresh_hermes_provider_placeholders
 configure_messaging_channels
 
 if [ ${#NEMOCLAW_CMD[@]} -gt 0 ]; then
-  exec gosu sandbox "${NEMOCLAW_CMD[@]}"
+  exec "${NEMOCLAW_CMD[@]}"
 fi
 
-# Root-only: lock down .hermes symlinks before launching the gateway.
-validate_config_symlinks "${HERMES_IMMUTABLE}" "${HERMES_WRITABLE}"
-harden_config_symlinks "${HERMES_IMMUTABLE}" "hermes"
-
-prepare_runtime "gateway:gateway"
-launch_hermes_gateway "gosu gateway"
+prepare_runtime
+launch_hermes_gateway
 wire_post_launch_supervision
 
 # Keep container running by waiting on the gateway process.

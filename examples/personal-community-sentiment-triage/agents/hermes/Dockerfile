@@ -393,8 +393,9 @@ RUN sha256sum /sandbox/.hermes/config.yaml /sandbox/.hermes/.env \
     && chmod 444 /sandbox/.hermes/.config-hash \
     && chown root:root /sandbox/.hermes/.config-hash
 
-# start.sh handles privilege separation: runs as root initially to perform
-# symlink validation and hardening, then drops to 'gateway' user via gosu
-# for the agent process. See the root-path branch in start.sh.
+# start.sh assumes it is launched as the workload uid (under OpenShell:
+# sandbox/998). All bridges, the Hermes gateway, and the nemo-relay sidecar
+# run as that uid; the only DAC-enforced boundary at runtime is the
+# root:root 444 immutable config dir baked in above.
 ENTRYPOINT ["/usr/local/bin/nemoclaw-start"]
 CMD ["/bin/bash"]

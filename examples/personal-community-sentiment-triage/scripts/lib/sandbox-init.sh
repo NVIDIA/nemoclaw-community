@@ -20,22 +20,13 @@
 [ -z "${_SANDBOX_INIT_LOADED:-}" ] || return 0
 _SANDBOX_INIT_LOADED=1
 
-# ── /tmp trust boundary map ──────────────────────────────────────
-# Files in /tmp that cross user boundaries. Every file sourced by
-# .bashrc/.profile MUST be root-owned 444 in root mode.
-#
-# File                         Owner      Mode  Writer   Reader    Sourced?
-# /tmp/nemoclaw-proxy-env.sh   root       444   root     sandbox   YES (.bashrc/.profile)
-# /tmp/gateway.log             gateway    644   gateway  all       no (world-readable for diagnostics)
-# /tmp/auto-pair.log           sandbox    600   sandbox  sandbox   no
-# /tmp/.npm-cache/             sandbox    755   sandbox  sandbox   no (tool data)
-# /tmp/.cache/                 sandbox    755   sandbox  sandbox   no (tool data)
-# /tmp/.config/                sandbox    755   sandbox  sandbox   no (tool data)
-# /tmp/.gnupg/                 sandbox    700   sandbox  sandbox   no (key data)
-#
-# In non-root mode privilege separation is disabled — all files are
-# owned by sandbox. chmod 444 is best-effort (owner can chmod back).
-# This is an accepted limitation documented in the OpenShell security model.
+# ── /tmp trust boundary ──────────────────────────────────────────
+# Under OpenShell, entrypoints run as the workload uid (sandbox/998).
+# Every file under /tmp is therefore owned by that uid, including the
+# logs (/tmp/gateway.log, /tmp/auto-pair.log) and the .bashrc-sourced
+# config (/tmp/nemoclaw-proxy-env.sh). Sourced files get chmod 444 as
+# a best-effort defense — the owner can chmod back, but the immutable
+# config + Landlock together remain the load-bearing boundary.
 #
 # See also: https://github.com/NVIDIA/NemoClaw/issues/2181
 # ─────────────────────────────────────────────────────────────────
@@ -45,7 +36,7 @@ _SANDBOX_INIT_LOADED=1
 # in /tmp. Using these helpers instead of ad-hoc chmod/chown ensures
 # consistent security posture and prevents the class of bug in #2181.
 
-# Write a file that the sandbox user can SOURCE but not MODIFY.
+# Write a file the sandbox user can SOURCE but not MODIFY.
 # Reads content from stdin. Caller usage:
 #   emit_sandbox_sourced_file /path <<'EOF'
 #   export FOO="bar"
@@ -54,13 +45,10 @@ _SANDBOX_INIT_LOADED=1
 # Or pipe into it:
 #   generate_content | emit_sandbox_sourced_file /path
 #
-# Root mode:  root:root 444 — sandbox cannot chmod (not owner).
-# Non-root:   sandbox:sandbox 444 — best-effort (owner can chmod back;
-#             accepted limitation since privilege separation is disabled).
-#
-# SECURITY: write to a temp file in the same directory, then atomically rename
-# it into place. This closes the rm+recreate race where another user could
-# recreate the destination as a symlink between unlink and open.
+# Atomic write via tmpfile + rename closes the rm+recreate race where another
+# process could recreate the destination as a symlink between unlink and open.
+# 444 is best-effort since the owner can chmod back — the immutable config +
+# Landlock are the load-bearing boundary.
 emit_sandbox_sourced_file() {
   local path="$1"
   local dir base tmp
@@ -200,8 +188,12 @@ lock_config_after_write() {
 # at startup using capsh. The bounding set limits what caps any child process
 # (gateway, sandbox, agent) can ever acquire.
 #
-# Kept: cap_chown, cap_setuid, cap_setgid, cap_fowner, cap_kill
-#   — required by the entrypoint for gosu privilege separation and chown.
+# Kept: cap_chown, cap_setuid, cap_setgid, cap_fowner, cap_kill.
+# Historically these supported gosu-based privilege separation when the
+# entrypoint launched as root. Modern OpenShell deployments launch the
+# workload as a non-root uid directly, so they're only consumed by
+# entrypoint variants in this library's other consumer(s) that still
+# gosu-drop.
 # Ref: https://github.com/NVIDIA/NemoClaw/issues/797
 #
 # Usage:
