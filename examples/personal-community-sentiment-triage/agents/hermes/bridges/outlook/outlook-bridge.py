@@ -18,7 +18,8 @@ import signal
 import sys
 import time
 
-import httpx
+import aiofiles
+import aiohttp
 from markdown_it import MarkdownIt
 
 _md = MarkdownIt().enable("table")
@@ -147,28 +148,40 @@ SENDER_POLL_INTERVAL = 30
 _DELTA_LINK_FILE = pathlib.Path(HERMES_HOME) / "outlook" / "delta-link.json"
 
 
-def _load_delta_link() -> str | None:
+async def _load_delta_link() -> str | None:
     try:
-        return json.loads(_DELTA_LINK_FILE.read_text())["delta_link"]
+        async with aiofiles.open(_DELTA_LINK_FILE) as f:
+            return json.loads(await f.read())["delta_link"]
     except (FileNotFoundError, KeyError, json.JSONDecodeError):
         return None
 
 
-def _save_delta_link(link: str) -> None:
+async def _save_delta_link(link: str) -> None:
     try:
-        _DELTA_LINK_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _DELTA_LINK_FILE.write_text(json.dumps({"delta_link": link}))
+        _DELTA_LINK_FILE.parent.mkdir(parents=True, exist_ok=True)  # single syscall, wrapping overhead would dominate
+        async with aiofiles.open(_DELTA_LINK_FILE, "w") as f:
+            await f.write(json.dumps({"delta_link": link}))
     except OSError:
         log.warning("Could not persist delta link to %s", _DELTA_LINK_FILE)
 
 
 # ── Module-level state ───────────────────────────────────────────────────────
-_client: httpx.AsyncClient | None = None
+_client: aiohttp.ClientSession | None = None
 _delta_link: str | None = None
 _consecutive_empty: int = 0
 ALLOWED_SENDERS: set[str] = set()
 _in_flight: set[str] = set()
 _sem = asyncio.Semaphore(MAX_CONCURRENT_MESSAGES)
+
+# create_task returns a weakref; without a strong ref the GC can drop in-flight tasks.
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _spawn(coro) -> asyncio.Task:
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
 
 
 # ── Startup health check ─────────────────────────────────────────────────────
@@ -176,11 +189,11 @@ _sem = asyncio.Semaphore(MAX_CONCURRENT_MESSAGES)
 async def wait_for_hermes() -> None:
     for attempt in range(HEALTH_MAX_RETRIES):
         try:
-            r = await _client.get(HEALTH_URL, timeout=5)
-            if r.status_code == 200:
-                log.info("Hermes gateway is healthy")
-                return
-        except httpx.RequestError:
+            async with _client.get(HEALTH_URL, timeout=aiohttp.ClientTimeout(total=5)) as r:
+                if r.status == 200:
+                    log.info("Hermes gateway is healthy")
+                    return
+        except aiohttp.ClientError:
             pass
         log.info("Waiting for Hermes gateway (attempt %d/%d)…", attempt + 1, HEALTH_MAX_RETRIES)
         await asyncio.sleep(HEALTH_RETRY_SECONDS)
@@ -196,33 +209,36 @@ async def _graph_request(method: str, path_or_url: str, **kwargs) -> dict | None
         "Authorization": f"Bearer {MS_GRAPH_ACCESS_TOKEN}",
         **kwargs.pop("headers", {}),
     }
-    resp = await getattr(_client, method)(url, headers=headers, **kwargs)
-
-    if resp.status_code == 429:
-        retry_after = int(resp.headers.get("Retry-After", 60))
-        log.warning("Graph API rate limited — retrying after %ds", retry_after)
-        await asyncio.sleep(retry_after)
-        resp = await getattr(_client, method)(url, headers=headers, **kwargs)
-
-    resp.raise_for_status()
-    return resp.json() if resp.content else None
+    for attempt in range(2):
+        async with _client.request(method, url, headers=headers, **kwargs) as resp:
+            if resp.status == 429 and attempt == 0:
+                retry_after = int(resp.headers.get("Retry-After", 60))
+                log.warning("Graph API rate limited — retrying after %ds", retry_after)
+                await asyncio.sleep(retry_after)
+                continue
+            resp.raise_for_status()
+            body = await resp.read()
+            return await resp.json() if body else None
+    return None  # unreachable; loop only exits via early return
 
 
 async def graph_get(path_or_url: str) -> dict:
-    return await _graph_request("get", path_or_url, timeout=15)
+    return await _graph_request("get", path_or_url, timeout=aiohttp.ClientTimeout(total=15))
 
 
 async def graph_post(path_or_url: str, payload: dict) -> None:
     await _graph_request(
         "post", path_or_url,
-        json=payload, headers={"Content-Type": "application/json"}, timeout=15,
+        json=payload, headers={"Content-Type": "application/json"},
+        timeout=aiohttp.ClientTimeout(total=15),
     )
 
 
 async def graph_patch(path_or_url: str, payload: dict) -> None:
     await _graph_request(
         "patch", path_or_url,
-        json=payload, headers={"Content-Type": "application/json"}, timeout=10,
+        json=payload, headers={"Content-Type": "application/json"},
+        timeout=aiohttp.ClientTimeout(total=10),
     )
 
 
@@ -268,20 +284,20 @@ async def initialize_allowed_senders(shutdown: asyncio.Event) -> set[str]:
     while not shutdown.is_set():
         try:
             return await resolve_allowed_senders()
-        except httpx.RemoteProtocolError:
+        except aiohttp.ServerDisconnectedError:
             last_error = sys.exc_info()[1]
             log.warning(
                 "Outlook bridge bootstrap blocked by proxy. "
                 "Retrying in %ds; resolves once policy presets finish loading.",
                 BOOTSTRAP_RETRY_SECONDS,
             )
-        except httpx.HTTPStatusError as exc:
+        except aiohttp.ClientResponseError as exc:
             last_error = exc
             log.warning(
                 "Graph request returned HTTP %d. Retrying in %ds.",
-                exc.response.status_code, BOOTSTRAP_RETRY_SECONDS,
+                exc.status, BOOTSTRAP_RETRY_SECONDS,
             )
-        except httpx.RequestError as exc:
+        except aiohttp.ClientError as exc:
             last_error = exc
             log.warning(
                 "Bridge bootstrap request failed (%s). Retrying in %ds.",
@@ -303,15 +319,16 @@ async def initialize_allowed_senders(shutdown: asyncio.Event) -> set[str]:
 
 async def ask_hermes(prompt: str) -> tuple[str | None, str | None]:
     try:
-        resp = await _client.post(
+        async with _client.post(
             HERMES_URL,
             json={"model": "hermes-agent", "messages": [{"role": "user", "content": prompt}]},
             headers={"Authorization": f"Bearer {HERMES_API_KEY}"},
-            timeout=1200,
-        )
-        resp.raise_for_status()
-        session_id = resp.headers.get("X-Hermes-Session-Id")
-        return resp.json()["choices"][0]["message"]["content"], session_id
+            timeout=aiohttp.ClientTimeout(total=1200),
+        ) as resp:
+            resp.raise_for_status()
+            session_id = resp.headers.get("X-Hermes-Session-Id")
+            payload = await resp.json()
+            return payload["choices"][0]["message"]["content"], session_id
     except Exception:
         log.exception("Error calling Hermes API")
         return None, None
@@ -331,9 +348,9 @@ async def poll_inbox() -> int:
     messages: list[dict] = []
     try:
         data = await graph_get(path)
-    except httpx.HTTPStatusError as exc:
-        if exc.response.status_code in (400, 410):
-            log.warning("Delta link expired (status %d) — resetting state", exc.response.status_code)
+    except aiohttp.ClientResponseError as exc:
+        if exc.status in (400, 410):
+            log.warning("Delta link expired (status %d) — resetting state", exc.status)
             _delta_link = None
             return 0
         raise
@@ -350,11 +367,11 @@ async def poll_inbox() -> int:
 
     if dl := data.get("@odata.deltaLink"):
         _delta_link = dl
-        _save_delta_link(dl)
+        await _save_delta_link(dl)
 
     new_messages = [m for m in messages if m["id"] not in _in_flight]
     for msg in new_messages:
-        asyncio.create_task(_handle_message_guarded(msg))
+        _spawn(_handle_message_guarded(msg))
 
     return len(new_messages)
 
@@ -433,13 +450,13 @@ async def _poll_loop(shutdown: asyncio.Event) -> None:
 
 # ── Scheduled jobs ───────────────────────────────────────────────────────────
 
-def _load_jobs() -> list[dict]:
-    if not os.path.exists(JOBS_FILE):
+async def _load_jobs() -> list[dict]:
+    if not os.path.exists(JOBS_FILE):  # single syscall, wrapping overhead would dominate
         log.info("No jobs file at %s — scheduled jobs disabled", JOBS_FILE)
         return []
     try:
-        with open(JOBS_FILE) as f:
-            jobs = json.load(f)
+        async with aiofiles.open(JOBS_FILE) as f:
+            jobs = json.loads(await f.read())
         for job in jobs:
             log.info("Loaded job '%s' at %s daily", job.get("name", "?"), job.get("time", "?"))
         return jobs
@@ -461,7 +478,7 @@ async def _job_loop(jobs: list[dict], shutdown: asyncio.Event) -> None:
             for job in jobs:
                 if job.get("time") == time_str and not job.get("_fired_today"):
                     job["_fired_today"] = True
-                    asyncio.create_task(_run_job(job))
+                    _spawn(_run_job(job))
         except Exception:
             log.exception("Error in job loop tick")
         try:
@@ -512,17 +529,18 @@ async def _async_main() -> None:
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, lambda: (log.info("Shutdown signal received"), shutdown.set()))
 
-    async with httpx.AsyncClient() as client:
+    # trust_env=True so HTTPS_PROXY (OpenShell L7) is honored; aiohttp ignores it by default.
+    async with aiohttp.ClientSession(trust_env=True) as client:
         _client = client
         await wait_for_hermes()
 
         # Restore delta link from previous run — avoids re-processing old mail
-        _delta_link = _load_delta_link()
+        _delta_link = await _load_delta_link()
         if _delta_link:
             log.info("Restored delta link from %s", _DELTA_LINK_FILE)
 
         ALLOWED_SENDERS = await initialize_allowed_senders(shutdown)
-        jobs = _load_jobs()
+        jobs = await _load_jobs()
         log.info(
             "Bridge ready — polling inbox (%ds active / %ds quiet)",
             MIN_POLL_INTERVAL, MAX_POLL_INTERVAL,
