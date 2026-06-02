@@ -42,3 +42,4 @@ docker-compose.override.yaml
 *.bak
 *.orig
 *~
+examples/github-pr-review-agent/.env

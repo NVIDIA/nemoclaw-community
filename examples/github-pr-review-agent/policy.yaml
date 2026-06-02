@@ -1,0 +1,18 @@
+version: "1"
+name: github-pr-review-agent
+description: Allow agent to access GitHub API only
+
+network:
+  egress:
+    - hostname: api.github.com
+      ports: [443]
+      comment: GitHub REST API for PR reads and comment writes
+    - hostname: inference.local
+      ports: [443]
+      comment: Routed inference endpoint (Nemotron via OpenShell)
+
+filesystem:
+  read:
+    - /workspace
+  write:
+    - /workspace/output
