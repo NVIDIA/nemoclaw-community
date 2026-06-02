@@ -1,5 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 munnamihir
 # SPDX-License-Identifier: Apache-2.0
+
+# SPDX-FileCopyrightText: Copyright (c) 2026 munnamihir
+# SPDX-License-Identifier: Apache-2.0
 #!/usr/bin/env python3
 # Quick script to auto-review GitHub PRs using a local llama model via Ollama.
 # Runs inside NemoClaw/OpenShell sandbox - only talks to github and inference.local

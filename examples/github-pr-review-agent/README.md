@@ -1,3 +1,6 @@
+<!--- SPDX-FileCopyrightText: Copyright (c) 2026 munnamihir -->
+<!--- SPDX-License-Identifier: Apache-2.0 -->
+
 # GitHub PR Review Agent
 
 A NemoClaw community example that automatically reviews open GitHub pull requests
