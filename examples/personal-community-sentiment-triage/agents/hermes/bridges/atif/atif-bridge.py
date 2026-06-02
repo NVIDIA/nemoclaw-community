@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import logging
 import os
+import ssl
 import sys
 
 import aiohttp
@@ -111,9 +112,13 @@ async def _init_session(app: web.Application) -> None:
     # namespace. aiohttp does NOT consult HTTPS_PROXY by default (httpx,
     # requests, curl all do); this flag is the explicit opt-in. Without it
     # session.request() hangs silently until the sock_connect timeout fires.
+    # Reject any peer that can't do TLS 1.3 — modern peer set, fail loud on degradation.
+    ssl_ctx = ssl.create_default_context()
+    ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_3
     app["session"] = aiohttp.ClientSession(
         timeout=aiohttp.ClientTimeout(total=60.0, sock_connect=5.0),
         trust_env=True,
+        connector=aiohttp.TCPConnector(ssl=ssl_ctx),
     )
 
 

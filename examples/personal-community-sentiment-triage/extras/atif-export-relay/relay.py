@@ -178,6 +178,8 @@ def main() -> None:
     tls_cert = _required("ATIF_RELAY_TLS_CERT")
     tls_key = _required("ATIF_RELAY_TLS_KEY")
     ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    # Reject any peer that can't do TLS 1.3 — modern peer set, fail loud on degradation.
+    ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_3
     ssl_ctx.load_cert_chain(tls_cert, tls_key)
 
     host, _, port_str = BIND_ADDR.partition(":")

@@ -15,6 +15,7 @@ import os
 import pathlib
 import re
 import signal
+import ssl
 import sys
 import time
 
@@ -529,8 +530,14 @@ async def _async_main() -> None:
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, lambda: (log.info("Shutdown signal received"), shutdown.set()))
 
+    # Reject any peer that can't do TLS 1.3 — modern peer set, fail loud on degradation.
+    ssl_ctx = ssl.create_default_context()
+    ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_3
     # trust_env=True so HTTPS_PROXY (OpenShell L7) is honored; aiohttp ignores it by default.
-    async with aiohttp.ClientSession(trust_env=True) as client:
+    async with aiohttp.ClientSession(
+        trust_env=True,
+        connector=aiohttp.TCPConnector(ssl=ssl_ctx),
+    ) as client:
         _client = client
         await wait_for_hermes()
 
