@@ -499,6 +499,20 @@ PROXYEOF
       printf 'export %s=%q\n' "$_provider_env_name" "$_provider_env_value"
     fi
   done
+  # Per-user config injected via `-- env` at sandbox-create (kept out of the image
+  # so it stays generic). PID-1 (gateway + bridges) inherit these directly; re-emit
+  # them here so interactive `hermes` shells (exec/SSH) see the same Outlook mailbox
+  # and Slack authorization — otherwise a manually-run gateway has no allowlist and
+  # denies every Slack user. Emit only what's set; SLACK_ALLOWED_USERS and
+  # SLACK_ALLOW_ALL_USERS are mutually exclusive (see scripts/03-sandbox.sh).
+  for _runtime_env_name in \
+    OUTLOOK_TARGET_MAILBOX OUTLOOK_REPLY_TO OUTLOOK_ALLOWED_SENDERS \
+    SLACK_ALLOWED_USERS SLACK_ALLOW_ALL_USERS; do
+    _runtime_env_value="${!_runtime_env_name:-}"
+    if [ -n "$_runtime_env_value" ]; then
+      printf 'export %s=%q\n' "$_runtime_env_name" "$_runtime_env_value"
+    fi
+  done
   # AWS_* for ATIF S3 export — bearer rides in AWS_SESSION_TOKEN (emitted
   # by the SDK as x-amz-security-token, a standalone header the L7 proxy
   # can substitute). ACCESS_KEY_ID / SECRET_ACCESS_KEY are literal junk;
