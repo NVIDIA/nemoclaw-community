@@ -15,23 +15,20 @@ ARG BASE_IMAGE=ghcr.io/nvidia/nemoclaw/hermes-sandbox-base@sha256:f76a2ed0509570
 # glibc as the runtime (Ubuntu 22.04 glibc 2.35 — newer builder images produce
 # binaries that won't load).
 #
-# Currently building from the GitHub tag rather than crates.io because the
-# merged S3 ATIF export plugin (NVIDIA/NeMo-Relay#163) is in 0.3.0-rc.1 but
-# crates.io still only carries 0.3.0-beta.2. Switch back to `--version` once
-# 0.3.0 (or a later beta) is published to crates.io.
+# Installed from crates.io (the upstream-recommended method) now that 0.3.0 —
+# including the S3 ATIF export plugin (NVIDIA/NeMo-Relay#163) — is published.
 FROM ${BASE_IMAGE} AS nemo-relay-builder
-ARG NEMO_RELAY_CLI_TAG=0.3.0-rc.1
+ARG NEMO_RELAY_CLI_VERSION=0.3.0
 RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends \
-       build-essential ca-certificates curl pkg-config libssl-dev git \
+       build-essential ca-certificates curl pkg-config libssl-dev \
     && rm -rf /var/lib/apt/lists/* \
     && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
        | sh -s -- -y --default-toolchain stable --profile minimal \
     && /root/.cargo/bin/cargo install --locked --root /out \
-       --git https://github.com/NVIDIA/NeMo-Relay \
-       --tag "${NEMO_RELAY_CLI_TAG}" \
+       --version "${NEMO_RELAY_CLI_VERSION}" \
        nemo-relay-cli
-# Produces /out/bin/nemo-relay
+# Produces /out/bin/nemo-relay (glibc-dynamic, built against BASE_IMAGE glibc 2.35)
 
 # ── Main sandbox image ────────────────────────────────────────────────────────
 FROM ${BASE_IMAGE}
