@@ -22,6 +22,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import threading
 from collections import deque
 from types import SimpleNamespace
@@ -207,6 +208,31 @@ def _serialize_response_object(response: Any) -> Optional[dict]:
 
 
 # ---------------------------------------------------------------------------
+# OpenShell placeholder sanitization
+# ---------------------------------------------------------------------------
+
+# NeMo Relay resolves openshell:resolve:env:VARNAME strings at ingest time.
+# If a literal placeholder appears in LLM content or tool output it triggers
+# a failed resolution and the span is silently dropped before reaching
+# Phoenix. Redact any such strings before forwarding.
+_OPENSHELL_RE = re.compile(r"openshell:resolve:[^\s\"'<>\\]*", re.IGNORECASE)
+_OPENSHELL_REDACTED = "<redacted:openshell-placeholder>"
+
+
+def _sanitize(value: Any, _depth: int = 0) -> Any:
+    """Recursively replace openshell:resolve:* placeholders in strings."""
+    if _depth > 12:
+        return value
+    if isinstance(value, str):
+        return _OPENSHELL_RE.sub(_OPENSHELL_REDACTED, value)
+    if isinstance(value, dict):
+        return {k: _sanitize(v, _depth + 1) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_sanitize(v, _depth + 1) for v in value]
+    return value
+
+
+# ---------------------------------------------------------------------------
 # Forwarder
 # ---------------------------------------------------------------------------
 
@@ -218,7 +244,7 @@ def _forward(payload: dict) -> None:
     if client is None:
         return
     try:
-        client.post(f"{url}/hooks/hermes", json=payload)
+        client.post(f"{url}/hooks/hermes", json=_sanitize(payload))
     except Exception as exc:
         logger.debug("nemo-relay: forward to %s failed: %s", url, exc)
 
