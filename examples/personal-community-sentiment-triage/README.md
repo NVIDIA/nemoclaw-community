@@ -11,6 +11,28 @@ and Slack channels; you interact with it via Outlook email and/or Slack.
 Outlook is the recommended primary channel, but either is enough on its own —
 at least one of the two must be configured.
 
+## Deployment model
+
+This is a personal agent designed to run on a **managed image/VM provisioned by
+enterprise IT** (e.g. Ubuntu) — one you authenticate into, that ships sanctioned
+pre-installed software and can reach only specific resources. The agent rides that
+infrastructure with *delegated* access: its credentials live in OpenShell providers
+(GitHub, Slack, Microsoft Graph), and it acts on your behalf within them.
+
+Protection is layered. The managed image provides **coarse** protections (authenticated
+access, a restricted set of reachable resources, host hardening). OpenShell adds
+**workload-specific** protections on top: per-sandbox L7 egress allowlists, credential
+placeholder substitution (real secrets never enter the sandbox), binary allowlists, and
+Landlock/seccomp.
+
+Concretely, the OpenShell gateway runs on that host under its **Docker compute driver**:
+each sandbox is a host-networked container, and the agent reaches the example's host-side
+services (the PostgREST forum bridge, ATIF export relay) through
+`host.openshell.internal`. Under this driver the container is a thin, host-networked
+execution layer — the meaningful workload boundary is OpenShell's policy/proxy/credential
+and Landlock/seccomp enforcement, not the container itself. This is a single-host model,
+not a Kubernetes/cluster deployment.
+
 ## Architecture
 
 The Hermes sandbox operates with a deliberately narrow egress policy. It connects
@@ -121,7 +143,7 @@ flowchart LR
 ## Agent skills
 
 Skills are loaded on demand by the agent when relevant to a task. They live in [agents/hermes/skills/](agents/hermes/skills/).
-
+0.0.
 | Skill | Purpose |
 |-------|---------|
 | `github-readonly-live` | Query the configured live GitHub repo via authenticated, policy-scoped REST `GET` requests. |
@@ -141,7 +163,7 @@ itself). The session UUID for Outlook gets produced *between* them, so the order
 
 ```console
 $ git clone https://github.com/NVIDIA/nemoclaw-community.git && cd examples/personal-community-sentiment-triage/
-$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION=v0.0.50 sh
+$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION=v0.0.53 sh
 ```
 
 The package-managed installer starts a local gateway service for you. This
