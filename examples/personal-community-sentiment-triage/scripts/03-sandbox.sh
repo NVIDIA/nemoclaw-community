@@ -30,6 +30,26 @@ ALLOWED_IDS_B64="${_B64[1]}"
 echo "Channels:    $(printf '%s' "$CHANNELS_B64" | base64 -d)"
 echo "Allowed IDs: $(printf '%s' "$ALLOWED_IDS_B64" | base64 -d)"
 
+# ── Slack authorization (runtime env, not baked into the image) ─────────
+# SLACK_ALLOWED_IDS (from .env, normalized by build-channels.py into the
+# base64 allowed-IDs map) maps to the gateway's SLACK_ALLOWED_USERS, read by
+# run.py:_is_user_authorized from os.environ. Empty allowlist + Slack enabled
+# → SLACK_ALLOW_ALL_USERS=true (any workspace user), preserving the prior
+# generate-config.ts default. Injected at create time so the image carries no
+# per-user allowlist. Security default — log the resolved decision.
+SLACK_ENV=()
+if [[ -n "${SLACK_BOT_TOKEN:-}" || -n "${SLACK_APP_TOKEN:-}" ]]; then
+  slack_ids="$(printf '%s' "$ALLOWED_IDS_B64" | base64 -d \
+    | python3 -c 'import json,sys; print(",".join(json.load(sys.stdin).get("slack", [])))')"
+  if [[ -n "$slack_ids" ]]; then
+    SLACK_ENV+=("SLACK_ALLOWED_USERS=$slack_ids")
+    echo "Slack auth: allowlist ($slack_ids)"
+  else
+    SLACK_ENV+=("SLACK_ALLOW_ALL_USERS=true")
+    echo "Slack auth: ALLOW-ALL (no SLACK_ALLOWED_IDS — any workspace user can DM the bot)"
+  fi
+fi
+
 ALLOWED_SENDERS="${OUTLOOK_ALLOWED_SENDERS:-}"
 SOURCE_ETL_HOST="${SOURCE_ETL_API_HOST:-host.openshell.internal}"
 SOURCE_ETL_PORT="${SOURCE_ETL_API_PORT:-3100}"
@@ -46,10 +66,6 @@ echo "GitHub read-only repo scope: $GITHUB_READONLY_REPO"
 # not contain `|` (the sed delimiter).
 declare -A DOCKERFILE_ARGS=(
   [NEMOCLAW_MESSAGING_CHANNELS_B64]="$CHANNELS_B64"
-  [NEMOCLAW_MESSAGING_ALLOWED_IDS_B64]="$ALLOWED_IDS_B64"
-  [OUTLOOK_TARGET_MAILBOX]="${OUTLOOK_TARGET_MAILBOX:-}"
-  [OUTLOOK_REPLY_TO]="${OUTLOOK_REPLY_TO:-}"
-  [OUTLOOK_ALLOWED_SENDERS]="$ALLOWED_SENDERS"
   [GITHUB_READONLY_REPO]="$GITHUB_READONLY_REPO"
   [SOURCE_ETL_API_HOST]="$SOURCE_ETL_HOST"
   [SOURCE_ETL_API_PORT]="$SOURCE_ETL_PORT"
@@ -129,6 +145,7 @@ setsid openshell sandbox create \
     NEMOCLAW_MESSAGING_CHANNELS_B64="$CHANNELS_B64" \
     CHAT_UI_URL="http://127.0.0.1:8642" \
     PHOENIX_COLLECTOR_ENDPOINT="${PHOENIX_COLLECTOR_ENDPOINT:-}" \
+    "${SLACK_ENV[@]}" \
   nemoclaw-start </dev/null &
 CREATE_PID=$!
 

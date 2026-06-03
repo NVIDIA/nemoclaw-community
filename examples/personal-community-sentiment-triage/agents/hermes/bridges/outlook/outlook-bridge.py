@@ -92,7 +92,13 @@ MS_GRAPH_ACCESS_TOKEN = os.environ.get(
 )
 
 # ── Mailbox config ───────────────────────────────────────────────────────────
-# OpenShell provider placeholder — the L7 proxy rewrites it at egress.
+# OUTLOOK_TARGET_MAILBOX / OUTLOOK_REPLY_TO are non-secret per-user config,
+# injected at sandbox-create time via `-- env` and read from os.environ below.
+# Unlike MS_GRAPH_ACCESS_TOKEN above (a real credential the L7 proxy substitutes
+# at egress), these are NOT proxy-rewritten — even though the mailbox lands in
+# the Graph URL path, it is not a provider credential. The `openshell:resolve:`
+# string is only a sentinel for the unconfigured case: the helpers below detect
+# it and fall back to /me (mailbox) or the job's `to` field (reply-to).
 # Omit OUTLOOK_TARGET_MAILBOX to use /me (the authenticated account's inbox).
 _TARGET_MAILBOX = "openshell:resolve:env:OUTLOOK_TARGET_MAILBOX"
 # OUTLOOK_REPLY_TO: address used as the recipient for outbound scheduled-job

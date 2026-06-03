@@ -176,7 +176,7 @@ configure_messaging_channels() {
   [ -n "${TELEGRAM_BOT_TOKEN:-}" ] || [ -n "${DISCORD_BOT_TOKEN:-}" ] \
     || [ -n "${SLACK_BOT_TOKEN:-}" ] || _has_outlook_channel || return 0
 
-  echo "[channels] Messaging channels active (baked at build time):" >&2
+  echo "[channels] Messaging channels active (channel set baked; per-user auth via runtime env):" >&2
   [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && echo "[channels]   telegram" >&2
   [ -n "${DISCORD_BOT_TOKEN:-}" ] && echo "[channels]   discord" >&2
   [ -n "${SLACK_BOT_TOKEN:-}" ] && echo "[channels]   slack" >&2

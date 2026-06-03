@@ -121,7 +121,7 @@ The script (auto-sources `.env` if needed) does the following for Slack:
 
 - Creates an OpenShell provider `<sandbox>-slack` with both `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` credentials (one v2 provider, two credentials).
 - Bakes `slack` into the sandbox image's channel list (`NEMOCLAW_MESSAGING_CHANNELS_B64`) alongside `outlook`.
-- Bakes `SLACK_ALLOWED_IDS` into the image's per-channel allowlist (`NEMOCLAW_MESSAGING_ALLOWED_IDS_B64`).
+- Injects `SLACK_ALLOWED_IDS` as the gateway's `SLACK_ALLOWED_USERS` at sandbox-create time (runtime `-- env`, not baked into the image). An empty allowlist sets `SLACK_ALLOW_ALL_USERS=true` so any workspace user can DM the bot.
 - Builds the sandbox image and launches it; the Hermes Slack channel opens its Socket Mode WebSocket on startup.
 
 If you change Slack credentials after a sandbox already exists, run `bash scripts/tear-down.sh && bash scripts/bring-up.sh` so the providers and image are rebuilt with the new values.

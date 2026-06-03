@@ -7,6 +7,11 @@
 //   ~/.hermes/config.yaml  — Hermes configuration (immutable at runtime)
 //   ~/.hermes/.env         — Messaging token placeholders (immutable at runtime)
 //
+// Per-user identity/allowlist values (OUTLOOK_TARGET_MAILBOX/REPLY_TO/
+// ALLOWED_SENDERS, SLACK_ALLOWED_USERS/ALLOW_ALL_USERS) are NOT written here —
+// they are injected at sandbox-create time via `-- env` (scripts/03-sandbox.sh)
+// so the built image stays generic. The gateway/bridge read them from os.environ.
+//
 // Sets what's required for Hermes to run inside OpenShell:
 //   - Model and inference endpoint (Hermes calls OpenShell's `inference.local`
 //     route, bound to the `compatible-endpoint` provider by `openshell inference set`)
@@ -30,13 +35,6 @@ const EXTRA_TOKEN_ENV: Record<string, string> = {
   slack: "SLACK_APP_TOKEN",
 };
 
-// Gateway reads these env vars in _is_user_authorized — NOT config.yaml allowed_users.
-const ALLOWED_USERS_ENV: Record<string, string> = {
-  telegram: "TELEGRAM_ALLOWED_USERS",
-  discord: "DISCORD_ALLOWED_USERS",
-  slack: "SLACK_ALLOWED_USERS",
-};
-
 const SOURCE_ETL_ENV = [
   "SOURCE_ETL_GITHUB_REPO",
   "SOURCE_ETL_FORUM_TAG",
@@ -50,13 +48,9 @@ function main(): void {
   const baseUrl = process.env.NEMOCLAW_INFERENCE_BASE_URL!;
 
   const channelsB64 = process.env.NEMOCLAW_MESSAGING_CHANNELS_B64 || "W10=";
-  const allowedIdsB64 = process.env.NEMOCLAW_MESSAGING_ALLOWED_IDS_B64 || "e30=";
 
   const msgChannels: string[] = JSON.parse(
     Buffer.from(channelsB64, "base64").toString("utf-8"),
-  );
-  const allowedIds: Record<string, (string | number)[]> = JSON.parse(
-    Buffer.from(allowedIdsB64, "base64").toString("utf-8"),
   );
 
   const config: Record<string, unknown> = {
@@ -184,7 +178,8 @@ function main(): void {
         enabled: true,
         token: tokenPlaceholder,
       };
-      // allowed_users in config.yaml is not read by the gateway — see ALLOWED_USERS_ENV below
+      // allowed_users in config.yaml is not read by the gateway; it reads the
+      // *_ALLOWED_USERS env vars (injected at sandbox-create, not written here).
       platformsConfig[ch] = pCfg;
     }
   }
@@ -238,29 +233,15 @@ function main(): void {
       }
     }
   }
-  // Write allowed-user IDs so gateway _is_user_authorized reads them from env.
-  for (const [ch, ids] of Object.entries(allowedIds)) {
-    if (ch in ALLOWED_USERS_ENV && ids.length > 0) {
-      envLines.push(`${ALLOWED_USERS_ENV[ch]}=${ids.map(String).join(",")}`);
-    }
-  }
-  // When Slack is enabled but no allowlist is set, flip Hermes's
-  // SLACK_ALLOW_ALL_USERS so the gateway authorizes every workspace user
-  // instead of falling through to the pairing-code flow.
-  if (msgChannels.includes("slack") && (allowedIds.slack?.length ?? 0) === 0) {
-    envLines.push("SLACK_ALLOW_ALL_USERS=true");
-  }
+  // Slack allowlist (SLACK_ALLOWED_USERS / SLACK_ALLOW_ALL_USERS) and the
+  // Outlook per-user vars (OUTLOOK_TARGET_MAILBOX/REPLY_TO/ALLOWED_SENDERS) are
+  // NOT written here — they are injected at sandbox-create time via `-- env`
+  // (scripts/03-sandbox.sh) to keep the image generic. The gateway and the
+  // Outlook bridge read them from os.environ.
+  //
   // Suppress the "no home channel" first-message prompt without setting a real channel.
   if (msgChannels.includes("slack")) {
     envLines.push("SLACK_HOME_CHANNEL=none");
-  }
-  if (msgChannels.includes("outlook")) {
-    for (const key of ["OUTLOOK_TARGET_MAILBOX", "OUTLOOK_REPLY_TO", "OUTLOOK_ALLOWED_SENDERS"]) {
-      const value = process.env[key]?.trim();
-      if (value) {
-        envLines.push(`${key}=${value}`);
-      }
-    }
   }
   for (const key of SOURCE_ETL_ENV) {
     const value = process.env[key]?.trim();
