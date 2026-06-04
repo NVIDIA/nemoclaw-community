@@ -105,14 +105,34 @@ default_gateway_endpoint() {
   esac
 }
 
-# Returns 0 if ATIF_STORAGE_BACKEND selects a remote backend (minio|s3),
-# 1 if it selects local mode (unset or "local"). Exits 1 on any other value
-# so a typo doesn't silently degrade to local-only and lose traces.
+# ATIF export is governed by two orthogonal vars:
+#   ATIF_EXPORT_MODE   = local (default) | relay   — deployment-wide: in-sandbox
+#                        /tmp/atif vs host-relay export. Gates the sandbox bake,
+#                        host services, and providers.
+#   ATIF_RELAY_BACKEND = s3 | minio                — the relay's downstream, only
+#                        meaningful when mode=relay (see atif_relay_backend).
+#
+# Returns 0 if export goes through the relay (mode=relay), 1 for local (unset or
+# "local"). Exits 1 on any other value so a typo doesn't silently degrade to
+# local-only and lose traces.
 atif_remote_enabled() {
-  case "${ATIF_STORAGE_BACKEND:-}" in
-    minio|s3)  return 0 ;;
-    ""|local)  return 1 ;;
-    *) echo "Unknown ATIF_STORAGE_BACKEND: $ATIF_STORAGE_BACKEND (expected local|minio|s3)" >&2; exit 1 ;;
+  case "${ATIF_EXPORT_MODE:-local}" in
+    relay)     return 0 ;;
+    local)     return 1 ;;
+    *) echo "Unknown ATIF_EXPORT_MODE: $ATIF_EXPORT_MODE (expected local|relay)" >&2; exit 1 ;;
+  esac
+}
+
+# Echo the validated relay downstream backend (s3|minio). Only call when
+# atif_remote_enabled is true; exits 1 (loud) if ATIF_RELAY_BACKEND is
+# unset/invalid so a misconfigured relay run fails at bring-up rather than
+# silently defaulting. Used as the docker-compose profile and the s3-vs-minio
+# decision in the host-services/providers scripts.
+atif_relay_backend() {
+  case "${ATIF_RELAY_BACKEND:-}" in
+    s3|minio|s3-compatible) echo "$ATIF_RELAY_BACKEND" ;;
+    "") echo "ATIF_EXPORT_MODE=relay requires ATIF_RELAY_BACKEND (s3|minio|s3-compatible) to be set in $EXAMPLE_DIR/.env" >&2; exit 1 ;;
+    *)  echo "Unknown ATIF_RELAY_BACKEND: $ATIF_RELAY_BACKEND (expected s3|minio|s3-compatible)" >&2; exit 1 ;;
   esac
 }
 

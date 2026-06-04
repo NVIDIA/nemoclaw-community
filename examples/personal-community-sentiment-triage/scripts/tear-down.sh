@@ -7,7 +7,7 @@
 # Default scope: the per-sandbox state — sandbox itself + the providers
 # scoped to it. Host services from 00-host-services.sh (phoenix, postgres,
 # github-etl, forums-etl, postgrest, plus minio + atif-export-relay when
-# ATIF_STORAGE_BACKEND is set) keep running, since they're typically
+# ATIF_EXPORT_MODE=relay) keep running, since they're typically
 # long-lived across multiple bring-ups.
 #
 # Opt-in flags (mutually exclusive):

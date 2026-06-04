@@ -28,13 +28,15 @@ NeMo-Relay's S3 plugin uploads completed ATIF trajectories to object storage. Th
 
 The deployment model is **one tenant per VM**, with a bucket per tenant and a single bearer token per VM. Tenant isolation lives at the VM and bucket boundary, not inside the relay's bearer check (see "[Deployment model](#deployment-model-one-tenant-per-vm)" below for the rationale).
 
-Three backend values are supported by the same wiring:
+Two `.env` knobs control export, split by scope:
 
-- **`local`** *(default if unset)* — traces stay in the sandbox at `/tmp/atif`; recoverable via `scripts/download-traces.sh`. No host services or AWS infrastructure involved. Use for solo development with no remote-storage dependency.
-- **`minio`** — local MinIO container, no AWS infrastructure required. Use for testing the full upload path before AWS infra exists.
-- **`s3`** — real AWS S3. Uses the host EC2 instance profile for the relay's outbound credentials (no static keys on the host).
+- **`ATIF_EXPORT_MODE`** *(deployment-wide)* — `local` *(default)* keeps traces in the sandbox at `/tmp/atif` (recoverable via `scripts/download-traces.sh`; no host services); `relay` sends them through the host-side `atif-export-relay`.
+- **`ATIF_RELAY_BACKEND`** *(relay-only, required when `mode=relay`)* — the relay's downstream:
+  - **`minio`** — local MinIO container, no AWS infrastructure required. Use for testing the full upload path before AWS infra exists.
+  - **`s3`** — real AWS S3. Uses the host EC2 instance profile for the relay's outbound credentials (no static keys on the host).
+  - **`s3-compatible`** — any external S3-compatible store reached via an explicit endpoint + static/HMAC creds (`ATIF_RELAY_S3_ENDPOINT` / `ATIF_RELAY_S3_ACCESS_KEY` / `ATIF_RELAY_S3_SECRET_KEY`): OCI Object Storage (S3 Compat API), Nebius, GCS XML/interop, self-hosted. See "[Extending to other clouds](#extending-to-other-clouds)".
 
-Switching between them is a one-line edit in `.env`.
+Switching is a one- or two-line edit in `.env`.
 
 ## Quick start — MinIO
 
@@ -42,9 +44,10 @@ Local-only flow, no AWS account needed.
 
 ```bash
 cat >>.env <<'EOF'
-ATIF_STORAGE_BACKEND=minio
-ATIF_STORAGE_BUCKET=nemo-relay-traces
-ATIF_STORAGE_KEY_PREFIX=hermes/
+ATIF_EXPORT_MODE=relay
+ATIF_RELAY_BACKEND=minio
+ATIF_RELAY_BUCKET=nemo-relay-traces
+ATIF_RELAY_KEY_PREFIX=hermes/      # optional static folder (relay-applied)
 EOF
 
 bash scripts/00-host-services.sh   # starts MinIO + atif-export-relay; creates the bucket
@@ -69,10 +72,13 @@ Production flow. Requires the EC2 host to have an IAM instance profile with `s3:
 
 ```bash
 cat >>.env <<'EOF'
-ATIF_STORAGE_BACKEND=s3
-ATIF_STORAGE_BUCKET=your-traces-bucket-name
-ATIF_S3_REGION=us-west-2
-ATIF_STORAGE_KEY_PREFIX=hermes/
+ATIF_EXPORT_MODE=relay
+ATIF_RELAY_BACKEND=s3
+ATIF_RELAY_BUCKET=your-traces-bucket-name
+ATIF_RELAY_S3_REGION=us-west-2
+# Relay scopes every object key under the EC2 instance-id (matches the IAM
+# policy below) → final keys are "<instance-id>/<session>.atif.json".
+ATIF_RELAY_PREFIXER=ec2-instance-id
 EOF
 
 bash scripts/00-host-services.sh   # starts atif-export-relay (boto3 picks up IMDS creds)
@@ -81,9 +87,31 @@ bash scripts/bring-up.sh
 
 The host EC2's IAM role is what authenticates to S3 — there are no static AWS keys anywhere in this flow. The relay's `boto3.Session()` automatically fetches and rotates short-lived STS credentials from IMDS.
 
+**The relay owns the bucket and the prefix; the sandbox bakes neither.** Neither S3 nor the sandbox auto-applies them — the sandbox sends a *vestigial placeholder* bucket and a *bare* object key (`PUT /atif-export/<session>.atif.json`), and the relay rewrites both: it writes to the configured `ATIF_RELAY_BUCKET` under a key prefix it composes itself (see "[Key prefixing](#key-prefixing)"). With `ATIF_RELAY_PREFIXER=ec2-instance-id`, the relay resolves the EC2 instance-id from IMDSv2 **at startup** (fail-loud: it refuses to start if IMDS is unreachable) and prepends `"<instance-id>/"`, so traces land exactly where the instance-scoped IAM policy below permits. The sandbox image therefore carries no real bucket, prefix, or credentials and is fully generic — and a compromised sandbox cannot influence where traces land.
+
+### Key prefixing
+
+The relay composes every object key from two relay-owned knobs (the sandbox is not trusted to assert its own scope):
+
+```
+effective_prefix = prefixer.compute() + ATIF_RELAY_KEY_PREFIX
+final key         = effective_prefix + <bare key from sandbox>
+```
+
+| `ATIF_RELAY_PREFIXER` | `ATIF_RELAY_KEY_PREFIX` | Resulting key |
+|---|---|---|
+| `none` *(default)* | *(empty)* | `<session>.atif.json` (bucket root) |
+| `none` | `hermes/` | `hermes/<session>.atif.json` (e.g. MinIO dev) |
+| `ec2-instance-id` | *(empty)* | `<instance-id>/<session>.atif.json` |
+| `ec2-instance-id` | `hermes/` | `<instance-id>/hermes/<session>.atif.json` |
+
+`ec2-instance-id` resolves the EC2 instance-id via IMDSv2 once at relay startup and memoizes it; a replaced instance (new id) self-corrects on the next relay restart with no sandbox rebuild. Add your own strategy (hostname, date-partition, tenant-from-tag, …) by subclassing `KeyPrefixer` and registering it in [`extras/atif-export-relay/backends/prefixers.py`](../extras/atif-export-relay/backends/prefixers.py) — same extension pattern as storage backends. Prefixing is applied uniformly to both backends ([`s3_compatible.py`](../extras/atif-export-relay/backends/s3_compatible.py)); MinIO normally runs `prefixer=none`.
+
 ### Required IAM policy for the EC2 instance role
 
-Minimum-privilege policy. Scope per-host via `${aws:userid}` or per-instance via your own provisioning:
+Minimum-privilege policy. With `ATIF_RELAY_PREFIXER=ec2-instance-id` the relay writes
+only under `<instance-id>/`, so scope `s3:PutObject` to that path — the instance
+role then physically cannot write outside its own prefix:
 
 ```json
 {
@@ -92,18 +120,20 @@ Minimum-privilege policy. Scope per-host via `${aws:userid}` or per-instance via
     {
       "Sid": "AllowS3Write",
       "Effect": "Allow",
-      "Action": ["s3:PutObject", "s3:PutObjectAcl"],
-      "Resource": "arn:aws:s3:::your-traces-bucket-name/*"
-    },
-    {
-      "Sid": "AllowS3BucketRead",
-      "Effect": "Allow",
-      "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
-      "Resource": "arn:aws:s3:::your-traces-bucket-name"
+      "Action": ["s3:PutObject"],
+      "Resource": "arn:aws:s3:::your-traces-bucket-name/${instance-id}/*"
     }
   ]
 }
 ```
+
+`${instance-id}` is a placeholder you substitute at provisioning time (Terraform/
+CloudFormation/etc.) with the actual `i-…` of the host — the same id the relay
+resolves from IMDS, so the policy's allowed path and the relay's key prefix match.
+Only `s3:PutObject` is needed: the relay sets no ACL (no `s3:PutObjectAcl`) and
+makes no `ListBucket`/`GetBucketLocation` call (its startup probe only checks that
+boto3 has usable credentials). For an unscoped setup, use
+`arn:aws:s3:::your-traces-bucket-name/*` with `ATIF_RELAY_PREFIXER=none`.
 
 If the bucket uses SSE-KMS, add:
 
@@ -116,7 +146,7 @@ If the bucket uses SSE-KMS, add:
 }
 ```
 
-The relay's per-request policy boundary (bucket allowlist enforced at `extras/atif-export-relay/relay.py`) ensures the sandbox can only target the configured bucket even if the IAM policy is broader.
+The relay is the per-request policy boundary: it writes every object to its single configured `ATIF_RELAY_BUCKET` (the sandbox's request bucket is a vestigial placeholder, ignored — `extras/atif-export-relay/relay.py`), and its prefixer scopes every key under the resolved `<instance-id>/`. So a compromised sandbox can influence neither the bucket nor the prefix, regardless of what it requests — strictly stronger than an allowlist.
 
 ## How the auth model works
 
@@ -144,12 +174,12 @@ The solution: ride the bearer in the standalone `x-amz-security-token` HTTP head
    ```
    The `Authorization` SigV4 envelope contains no placeholder, so it passes through untouched. The fail-closed scan confirms no placeholders remain in the rewritten request, and the proxy forwards upstream.
 5. `atif-export-relay` reads the bearer header (default `X-Amz-Security-Token`; configurable via `ATIF_RELAY_AUTH_HEADER`) and compares it constant-time against `ATIF_RELAY_AUTH_TOKEN`. The SigV4 envelope is ignored entirely — neither the proxy nor the relay verifies its signature, and the relay's outbound leg is freshly signed by boto3 with real downstream credentials.
-6. The relay verifies the bucket against its allowlist, then constructs a fresh PutObject via boto3 (which signs correctly with real downstream credentials from IMDS or MinIO admin) and forwards to the configured downstream.
+6. The relay ignores the request's vestigial placeholder bucket and constructs a fresh PutObject to its configured `ATIF_RELAY_BUCKET`, under the relay-owned key prefix, via boto3 (which signs correctly with real downstream credentials from IMDS or MinIO admin) and forwards to the configured downstream.
 
 **Threat model**:
 
 - Real AWS / MinIO credentials are only present on the host, only in the `atif-export-relay` process. Never enter the sandbox.
-- Sandbox-side credentials are scoped bearer tokens. If exfiltrated, the attacker can submit S3-shaped PutObject requests to the relay but is bounded by (a) the relay's bucket allowlist, (b) the downstream IAM policy (PutObject-only on the configured prefix), and (c) network access to the host's `:18443`. They cannot reach AWS APIs directly, cannot read or delete existing objects, and cannot reach other AWS services.
+- Sandbox-side credentials are scoped bearer tokens. If exfiltrated, the attacker can submit S3-shaped PutObject requests to the relay but is bounded by (a) the relay writing only to its single configured `ATIF_RELAY_BUCKET` — the request's bucket is a vestigial placeholder, ignored, so the sandbox cannot choose the target bucket at all, (b) the relay's key prefixer — with `ec2-instance-id` the relay forces every key under `<instance-id>/`, server-side, regardless of the key the request asks for, (c) the downstream IAM policy (PutObject-only on `<bucket>/<instance-id>/*`), and (d) network access to the host's `:18443`. They cannot reach AWS APIs directly, cannot read or delete existing objects, and cannot reach other AWS services.
 - Revocation granularity: the bearer token is **per VM, not per sandbox**, and that's the chosen granularity given one tenant per VM (see "[Deployment model](#deployment-model-one-tenant-per-vm)"). Rotating `ATIF_RELAY_AUTH_TOKEN` revokes export access for every sandbox on the VM — which is the same scope of trust anyway, since they belong to the same tenant. To rotate: remove the token from OpenShell, regenerate `ATIF_RELAY_AUTH_TOKEN`, restart the relay so it reloads the new value from env.
 
 ### Sandbox→relay TLS via Python protocol-bridge sidecar
@@ -289,16 +319,48 @@ To also wipe the MinIO data:
 bash scripts/00-host-services.sh down --volumes
 ```
 
+## Extending to other clouds
+
+The relay pattern is cloud-agnostic by design: the sandbox→relay leg is always
+S3-shaped (nemo-relay's `object_store` speaks S3) and carries only a bearer
+placeholder, so the relay is the single translation point where real credentials
+live and the downstream is chosen. Two extension axes, both registries:
+
+**1. Storage backend** (`ATIF_RELAY_BACKEND`, registry in
+[`backends/__init__.py`](../extras/atif-export-relay/backends/__init__.py)). Most
+clouds expose an S3-compatible API, so they need **no new code** — just
+`ATIF_RELAY_BACKEND=s3-compatible` + the `ATIF_RELAY_S3_*` endpoint/keys:
+
+| Target | Object store | Backend | How |
+|---|---|---|---|
+| AWS | S3 | `s3` | IMDS creds, no endpoint |
+| MinIO | S3-compatible | `minio` | zero-config local preset of `s3-compatible` (defaults to `http://localhost:9000` + `minioadmin`) |
+| OCI | Object Storage (S3 Compat API) | `s3-compatible` | per-namespace endpoint + Customer Secret Keys |
+| Nebius | S3-compatible | `s3-compatible` | Nebius endpoint + access/secret keys |
+| GCP | GCS XML / interop | `s3-compatible` | interop endpoint + HMAC keys |
+| Azure | Blob (**not** S3-compatible) | *new backend* | implement the generic `StorageBackend` ABC ([`base.py`](../extras/atif-export-relay/backends/base.py)) with `azure-storage-blob` (map bucket→container, key→blob); it does **not** inherit `S3CompatibleBackend` |
+
+`minio` and `s3-compatible` are the **same class** ([`s3_endpoint.py`](../extras/atif-export-relay/backends/s3_endpoint.py)) reading the **same env** (`ATIF_RELAY_S3_ENDPOINT` / `_ACCESS_KEY` / `_SECRET_KEY` / `_REGION`); `minio` just supplies local-dev defaults instead of requiring them. A **remote endpoint must be `https://`** — the relay refuses cleartext credentials (only loopback, e.g. local MinIO, may be `http://`). The generic↔S3-compatible ABC split ([`base.py`](../extras/atif-export-relay/backends/base.py) vs [`s3_compatible.py`](../extras/atif-export-relay/backends/s3_compatible.py)) is what lets Azure slot in without S3 baggage.
+
+**2. Key-prefix strategy** (`ATIF_RELAY_PREFIXER`, registry in
+[`prefixers.py`](../extras/atif-export-relay/backends/prefixers.py)). Each cloud's
+instance-identity comes from a different metadata service, so each gets a ~20-line
+`KeyPrefixer` sibling of `ec2-instance-id`: `gcp-instance-id`
+(`metadata.google.internal`, `Metadata-Flavor: Google`), `azure-vm-id` (IMDS
+`/metadata/instance`, `Metadata:true`), `oci-instance-id` (`/opc/v2/instance/id`),
+etc. Drop-in via the registry; no core changes.
+
 ## Troubleshooting
 
 | Symptom | Probable cause | Fix |
 |---|---|---|
 | Sandbox logs `403 bad bearer token` from the relay | The sandbox's `AWS_SESSION_TOKEN` placeholder didn't get substituted, OR the relay's `ATIF_RELAY_AUTH_TOKEN` doesn't match | Confirm the OpenShell provider exists: `openshell provider get hermes-direct-atif-export-relay`. Confirm the relay's env: `docker exec atif-export-relay env \| grep ATIF_RELAY_AUTH_TOKEN`. The provider-stored token and the relay's env must match. Also check the supervisor log for `credential injection failed` warnings — if present, the placeholder didn't resolve at egress (provider not attached or credential revision drift from re-running `provider create`; the idempotent path in `scripts/02-providers.sh` prevents the latter). |
 | Sandbox logs `403 missing x-amz-security-token` from the relay | `AWS_SESSION_TOKEN` is unset in the sandbox env, or the sandbox image predates the AWS_SESSION_TOKEN transport switch | Rebuild and recreate the sandbox: `openshell sandbox delete --name hermes-direct && bash scripts/03-sandbox.sh`. Confirm with `openshell sandbox exec --name hermes-direct -- env \| grep AWS_SESSION_TOKEN` that the placeholder is set. |
-| Relay log `downstream_error code=AccessDenied` | The relay's IAM identity (instance profile, for `s3`) lacks `s3:PutObject` on the bucket | Verify with `aws s3 cp /tmp/probe s3://<bucket>/probe.txt` from the host. Update the IAM policy if denied. |
-| Relay log `downstream_error code=NoSuchBucket` | Bucket doesn't exist or the relay is pointing at the wrong region | For `s3`: confirm bucket exists in `ATIF_S3_REGION`. For `minio`: confirm `00-host-services.sh` created the bucket. |
+| Relay won't start: `downstream credentials unavailable at startup: could not resolve EC2 instance-id from IMDS` | `ATIF_RELAY_PREFIXER=ec2-instance-id` but IMDS is unreachable — not on EC2, IMDS disabled (`AWS_EC2_METADATA_DISABLED`), or the hop limit is too low for the relay's network namespace | This is fail-loud by design (better than silent runtime 403s). Confirm the host is EC2 and IMDS works: `TOKEN=$(curl -sX PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60'); curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id`. The relay uses `network_mode: host`, so if boto3 creds resolve, the instance-id should too. To export without instance scoping, set `ATIF_RELAY_PREFIXER=none`. |
+| Relay log `downstream_error code=AccessDenied` | The relay's IAM identity (instance profile, for `s3`) lacks `s3:PutObject`, OR the key prefix doesn't match the IAM-scoped path (e.g. policy allows `<bucket>/<instance-id>/*` but the key isn't under `<instance-id>/`) | Check the relay's resolved prefix in `docker logs atif-export-relay \| grep key_prefix`; it must match the `${instance-id}` in the IAM policy. Verify writeability with `aws s3api put-object --bucket <bucket> --key "<instance-id>/probe.txt" --body /etc/hostname --region <region>`. Update the IAM policy or the prefixer if mismatched. |
+| Relay log `downstream_error code=NoSuchBucket` | Bucket doesn't exist or the relay is pointing at the wrong region | For `s3`: confirm `ATIF_RELAY_BUCKET` exists in `ATIF_RELAY_S3_REGION`. For `minio`: confirm `00-host-services.sh` created the bucket. |
 | Relay log `downstream_exception` with connection error | Downstream container (MinIO) is down, or network egress blocked | Check `docker ps`. For `s3`, verify HTTPS:443 to `s3.<region>.amazonaws.com` is allowed by your VPC. |
-| Sandbox uploads succeed but objects don't show up | Bucket name mismatch between `ATIF_STORAGE_BUCKET` (relay accept-list) and the bucket the relay's downstream client targets | Both must match. The relay's accept-list is the source of truth; `s3_client.put_object` uses the bucket from the request path. |
+| Sandbox uploads succeed (relay logs `forwarded status=200`) but objects aren't where you expect | Looking under the wrong bucket/prefix | The relay writes to `ATIF_RELAY_BUCKET` under `<prefixer output><ATIF_RELAY_KEY_PREFIX>`. Check the relay's startup log (`bucket=… key_prefix=…`) and the per-PUT `put … key=…` line for the exact destination — that's the source of truth, not anything in the sandbox. |
 | `mc: <ERROR> Access Denied` when running `mc` directly | `docker run --rm minio/mc alias set ...` doesn't persist between invocations | Use the inline form: `docker run --rm -e MC_HOST_local=http://USER:PASS@localhost:9000 minio/mc <cmd>` |
 | Supervisor logs `NET:FAIL [LOW] host.openshell.internal:18443` and no traffic at the relay | Likely a transport mismatch: sandbox env says `https://` but the relay is HTTP, or someone re-enabled TLS without the upstream OpenShell EKU fix landing | Confirm both sides: `openshell sandbox exec --name hermes-direct -- env \| grep AWS_ENDPOINT_URL` should be `http://...:18443`. `docker logs atif-export-relay \| head` should show `transport=http`. See "Why this leg is plain HTTP" above. |
 | Relay won't start: `required env var unset: ATIF_RELAY_AUTH_TOKEN` | `.env` has no `ATIF_RELAY_AUTH_TOKEN` set | Run `bash scripts/02-providers.sh` to issue a token, or set the var manually in `.env`. |
@@ -307,10 +369,14 @@ bash scripts/00-host-services.sh down --volumes
 
 | Path | Role |
 |---|---|
-| [`extras/atif-export-relay/relay.py`](../extras/atif-export-relay/relay.py) | The relay service. Validates bearer tokens, forwards PUTs to the configured downstream via boto3. |
+| [`extras/atif-export-relay/relay.py`](../extras/atif-export-relay/relay.py) | The relay service. Validates bearer tokens; writes every PUT to `ATIF_RELAY_BUCKET` (ignoring the request's placeholder bucket). Key-agnostic — the backend owns key prefixing. |
+| [`extras/atif-export-relay/backends/base.py`](../extras/atif-export-relay/backends/base.py) | Generic `StorageBackend` ABC (the contract `relay.py` depends on) + `PutResult` and error types. A future non-S3 backend implements this directly. |
+| [`extras/atif-export-relay/backends/s3_compatible.py`](../extras/atif-export-relay/backends/s3_compatible.py) | `S3CompatibleBackend` ABC shared by every boto3 backend: the PutObject + error translation, the key-prefix lifecycle, and per-request effective-key logging. The single place the prefix contract lives. |
+| [`extras/atif-export-relay/backends/s3_endpoint.py`](../extras/atif-export-relay/backends/s3_endpoint.py) | `S3CompatibleEndpointBackend` — generic custom-endpoint + static-creds backend (`ATIF_RELAY_S3_*`) for any external S3-compatible store (OCI/Nebius/GCS/self-hosted). `MinioBackend` is its local-dev preset. |
+| [`extras/atif-export-relay/backends/prefixers.py`](../extras/atif-export-relay/backends/prefixers.py) | Pluggable key-prefix strategies (`none`, `ec2-instance-id`) selected by `ATIF_RELAY_PREFIXER`. The `ec2-instance-id` strategy resolves the EC2 instance-id via botocore's `IMDSFetcher` at relay startup (fail-loud). Add new strategies (e.g. `gcp-instance-id`) here. |
 | [`extras/atif-export-relay/Dockerfile`](../extras/atif-export-relay/Dockerfile) | python:3.13-slim + aiohttp + boto3. |
 | [`extras/atif-export-relay/generate-tls-cert.sh`](../extras/atif-export-relay/generate-tls-cert.sh) | Dormant. One-shot 10-year self-signed cert generator for the relay listener — kept on disk for re-enabling TLS once the upstream OpenShell EKU fix lands (see "Why this leg is plain HTTP"). Not currently called by any bring-up step. |
 | [`extras/docker-compose.yml`](../extras/docker-compose.yml) | Adds `atif-export-relay` (profiles: minio, s3) and `minio` (profile: minio). |
 | [`providers/atif-export-relay.yaml`](../providers/atif-export-relay.yaml) | OpenShell v2 provider profile (`nemoclaw-atif-export-relay`) holding the per-sandbox `ATIF_RELAY_AUTH_TOKEN` credential. |
 | [`policy.yaml`](../policy.yaml) | `atif_export_relay` network-policy block: HTTPS:18443 to `host.openshell.internal`, PUT-only, IP-restricted. |
-| [`agents/hermes/nemo-relay/plugins.toml.in`](../agents/hermes/nemo-relay/plugins.toml.in) | NeMo-Relay observability config; the `[[components.config.atif.storage]]` block is patched in at sandbox-create time when `ATIF_STORAGE_BUCKET` is set. |
+| [`agents/hermes/nemo-relay/plugins.toml.in`](../agents/hermes/nemo-relay/plugins.toml.in) | NeMo-Relay observability config; the `[[components.config.atif.storage]]` block (with a placeholder bucket + empty key_prefix) is patched in at sandbox-create time when `ATIF_EXPORT_MODE=relay`. The relay owns the real bucket/prefix. |

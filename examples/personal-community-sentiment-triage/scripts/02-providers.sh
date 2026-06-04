@@ -26,6 +26,14 @@ echo "Importing v2 provider profiles from $EXAMPLE_DIR/providers/"
 # Delete-then-import so YAML edits land on re-run. `provider profile import`
 # rejects existing IDs rather than upserting; ignoring delete errors covers
 # first-run (nothing to delete) and any pre-existing custom profiles.
+#
+# A profile that is attached to a live sandbox CANNOT be deleted — the gateway
+# returns FailedPrecondition ("in use by sandboxes: ..."). On a re-run (sandbox
+# already exists) the delete is therefore a no-op and the import below would
+# collide; the import loop tolerates that "already exists" case (the profile is
+# already registered, just not re-importable while attached). To force a fresh
+# import of an edited profile, delete the sandbox first (then its provider no
+# longer holds the profile) and re-run.
 for profile_id in nemoclaw-outlook-email nemoclaw-slack nemoclaw-github \
                   nemoclaw-atif-export-relay; do
   openshell provider profile delete "$profile_id" >/dev/null 2>&1 || true
@@ -47,7 +55,18 @@ for profile_file in outlook-email.yaml slack.yaml github.yaml atif-export-relay.
         "$src" > "$STAGED_RELAY_PROFILE"
     src="$STAGED_RELAY_PROFILE"
   fi
-  openshell provider profile import --file "$src"
+  # Tolerate the in-use case: if the delete above was refused because a live
+  # sandbox holds the profile, the profile is still registered and import
+  # reports "already exists". That's a no-op for our purposes (re-run), so
+  # don't abort the phase; surface anything else as a real failure.
+  if ! import_out="$(openshell provider profile import --file "$src" 2>&1)"; then
+    if grep -qi "already exists" <<<"$import_out"; then
+      echo "  $profile_file: profile already registered (attached to a sandbox; not re-imported)"
+    else
+      printf '%s\n' "$import_out" >&2
+      exit 1
+    fi
+  fi
 done
 
 # ── Inference provider (built-in nvidia v2 profile via inference.local) ─
@@ -179,8 +198,8 @@ fi
 
 # ── ATIF object-storage provider (bearer token for atif-export-relay) ───
 # Only configured when atif_remote_enabled returns true (i.e.,
-# ATIF_STORAGE_BACKEND=minio or s3). For BACKEND=local or unset, this
-# block is skipped and ATIF writes go to the sandbox's /tmp/atif. The
+# ATIF_EXPORT_MODE=relay). For local/unset, this block is skipped and ATIF
+# writes go to the sandbox's /tmp/atif. The
 # credential is a per-VM bearer token: the sandbox env carries a
 # placeholder (`openshell:resolve:env:ATIF_RELAY_AUTH_TOKEN`), the L7
 # proxy substitutes the real value on egress, and atif-export-relay
@@ -202,7 +221,7 @@ if atif_remote_enabled; then
     echo "Issued new ATIF_RELAY_AUTH_TOKEN, appended to .env"
     # Force-recreate the relay container so it picks up the new token.
     docker compose -f "$EXAMPLE_DIR/extras/docker-compose.yml" \
-      --profile "$ATIF_STORAGE_BACKEND" \
+      --profile "$(atif_relay_backend)" \
       up -d --force-recreate atif-export-relay >/dev/null 2>&1 || true
   fi
 

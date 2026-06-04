@@ -13,9 +13,9 @@
 #   forums-etl   — pulls NVIDIA forum posts into postgres
 #   postgrest    — REST API in front of postgres (host port 3100)
 #
-# When ATIF_STORAGE_BACKEND is set (minio|s3), the atif-export-relay
-# service is also brought up via the matching compose profile. When backend
-# is minio, the minio container is brought up too — a one-shot mc client
+# When ATIF_EXPORT_MODE=relay, the atif-export-relay service is also brought up
+# via the compose profile matching ATIF_RELAY_BACKEND (s3|minio). When the relay
+# backend is minio, the minio container is brought up too — a one-shot mc client
 # creates the bucket after MinIO is healthy.
 #
 # Verbs:
@@ -49,18 +49,18 @@ EOF
 }
 
 cmd_up() {
-  local profile_args=()
-  local backend="${ATIF_STORAGE_BACKEND:-}"
+  local profile_args=() backend=""
   if atif_remote_enabled; then
+    backend="$(atif_relay_backend)"   # validates s3|minio (loud error if unset)
     profile_args=(--profile "$backend")
-    echo "Storage backend: $backend (atif-export-relay + ${backend} will be brought up)"
+    echo "ATIF export: relay → $backend (atif-export-relay + ${backend} will be brought up)"
     # Cert is bind-mounted into the relay container at startup; generate
     # it now so the relay doesn't crashloop on missing files. See
     # docs/atif-export.md "Sandbox→relay TLS via Python protocol-bridge
     # sidecar" for the wider architecture.
     bash "$EXAMPLE_DIR/extras/atif-export-relay/generate-tls-cert.sh"
   else
-    echo "Storage backend: local (traces written to sandbox /tmp/atif; no host services for ATIF)"
+    echo "ATIF export: local (traces written to sandbox /tmp/atif; no host services for ATIF)"
   fi
 
   echo "Starting host services${profile_args:+ (profile=$backend)}"
@@ -68,7 +68,7 @@ cmd_up() {
 
   # Wait for MinIO healthy + create the bucket (idempotent).
   if [[ "$backend" == "minio" ]]; then
-    local bucket="${ATIF_STORAGE_BUCKET:-nemo-relay-traces}"
+    local bucket="${ATIF_RELAY_BUCKET:-nemo-relay-traces}"
     local minio_user="${NEMOCLAW_MINIO_ROOT_USER:-minioadmin}"
     local minio_pw="${NEMOCLAW_MINIO_ROOT_PASSWORD:-minioadmin}"
     echo "Waiting for MinIO healthy then ensuring bucket $bucket exists"

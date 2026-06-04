@@ -81,18 +81,18 @@ if [[ -n "${PHOENIX_PROJECT_NAME:-}" ]]; then
   echo "Phoenix project: $PHOENIX_PROJECT_NAME"
   DOCKERFILE_ARGS[PHOENIX_PROJECT_NAME]="$PHOENIX_PROJECT_NAME"
 fi
-# ATIF S3 export — bake the bucket + key_prefix into the relay's plugins.toml
-# at sandbox-create time (the SDK reads them from there). When the bucket is
-# unset (or BACKEND=local), no storage block is emitted; start.sh's
-# ATIF_STORAGE_ENABLED probe (which greps plugins.toml for the storage block)
-# returns 0, the bridge stays down, AWS_* exports are skipped, and ATIF
-# writes go to the sandbox's local /tmp/atif/ instead.
+# ATIF export — the sandbox bakes ONLY the export mode (gates the storage block)
+# and the relay endpoint. It bakes NO bucket, key prefix, region, or creds: the
+# host-side relay owns all of those and rewrites them at egress (the relay
+# backend, s3 vs minio, is a relay concern the sandbox never needs). When
+# ATIF_EXPORT_MODE != relay, no storage block is emitted; start.sh's
+# ATIF_STORAGE_ENABLED probe (greps plugins.toml for the block header) then
+# returns 0, the bridge stays down, AWS_* exports are skipped, and ATIF writes
+# go to /tmp/atif/.
 if atif_remote_enabled; then
-  echo "ATIF S3 export: backend=$ATIF_STORAGE_BACKEND bucket=${ATIF_STORAGE_BUCKET:-} prefix=${ATIF_STORAGE_KEY_PREFIX:-hermes/}"
-  DOCKERFILE_ARGS[ATIF_STORAGE_BACKEND]="$ATIF_STORAGE_BACKEND"
-  DOCKERFILE_ARGS[ATIF_STORAGE_BUCKET]="${ATIF_STORAGE_BUCKET:-}"
-  DOCKERFILE_ARGS[ATIF_STORAGE_KEY_PREFIX]="${ATIF_STORAGE_KEY_PREFIX:-hermes/}"
-  [[ -n "${ATIF_S3_REGION:-}" ]] && DOCKERFILE_ARGS[ATIF_S3_REGION]="$ATIF_S3_REGION"
+  # atif_relay_backend validates ATIF_RELAY_BACKEND is set (loud error if not).
+  echo "ATIF export: mode=relay backend=$(atif_relay_backend) (bucket + key prefix owned by the relay)"
+  DOCKERFILE_ARGS[ATIF_EXPORT_MODE]="${ATIF_EXPORT_MODE}"
   DOCKERFILE_ARGS[ATIF_RELAY_ENDPOINT]="$ATIF_RELAY_ENDPOINT"
 fi
 

@@ -26,19 +26,24 @@ from .base import (
 )
 from .minio import MinioBackend
 from .s3 import S3Backend
+from .s3_compatible import S3CompatibleBackend
+from .s3_endpoint import S3CompatibleEndpointBackend
 
 __all__ = [
     "BACKENDS",
     "BackendError",
     "BackendTransportError",
     "PutResult",
+    "S3CompatibleBackend",
+    "S3CompatibleEndpointBackend",
     "StorageBackend",
     "build_backend",
 ]
 
 BACKENDS: dict[str, type[StorageBackend]] = {
-    "s3": S3Backend,
-    "minio": MinioBackend,
+    "s3": S3Backend,            # AWS S3 — IMDS credential chain, no endpoint
+    "minio": MinioBackend,      # local-dev preset (MINIO_* env, localhost:9000)
+    "s3-compatible": S3CompatibleEndpointBackend,  # OCI / Nebius / GCS-XML / self-hosted
 }
 
 

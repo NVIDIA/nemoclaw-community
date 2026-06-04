@@ -5,6 +5,12 @@ configurable header (default `X-Amz-Security-Token`), and forwards via a
 pluggable storage backend (S3, MinIO, or future Azure/GCS/etc — see
 [backends/__init__.py](backends/__init__.py)).
 
+The handler is key-agnostic: it forwards `(bucket, key)` to the backend as-is.
+The S3 backend may *scope* the key under a computed prefix (e.g. the EC2
+instance-id, for an instance-scoped bucket IAM policy) via its pluggable
+prefixer — see [backends/prefixers.py](backends/prefixers.py). That is a
+backend concern; this handler does not touch keys.
+
 **Why we don't validate the SigV4 signature**: doing so would require the
 relay to share the AWS secret access key with whatever signs the request.
 In our flow the signer is the SDK inside the sandbox, which means the
@@ -60,11 +66,12 @@ def _required(key: str) -> str:
 
 DOWNSTREAM = _required("ATIF_RELAY_DOWNSTREAM")
 BIND_ADDR = os.environ.get("ATIF_RELAY_BIND_ADDR", "0.0.0.0:18443")
-BUCKET_ALLOWLIST: frozenset[str] = frozenset(
-    b.strip()
-    for b in _required("ATIF_RELAY_BUCKET_ALLOWLIST").split(",")
-    if b.strip()
-)
+# The relay is the sole owner of the downstream bucket. The sandbox bakes no
+# real bucket name — it sends a vestigial placeholder in the request path (like
+# the junk SigV4 creds) — and the relay writes every object to THIS configured
+# bucket. The sandbox therefore cannot influence the target bucket at all,
+# which is strictly stronger than the old request-bucket allowlist.
+RELAY_BUCKET = _required("ATIF_RELAY_BUCKET")
 
 # Single bearer token issued at sandbox bring-up. `hmac.compare_digest` is
 # used at check time for constant-time comparison.
@@ -105,24 +112,24 @@ async def relay(req: web.Request) -> web.StreamResponse:
 
     # Path-style only: `/bucket/key`. Virtual-hosted addressing is never
     # used in our flow (the atif-bridge pins Host to host.openshell.internal).
-    bucket, _, rest = req.path.lstrip("/").partition("/")
-    if not bucket or bucket not in BUCKET_ALLOWLIST:
-        log.info("reject reason=bucket_not_allowed bucket=%s path=%s", bucket, req.path)
-        return web.Response(status=403, text="bucket not in allowlist")
+    # The leading path segment is a VESTIGIAL placeholder (the sandbox bakes no
+    # real bucket name); parse it only to split off the object key, then ignore
+    # it — the relay always writes to RELAY_BUCKET. The backend owns the key
+    # prefix, so the key here is the bare key from the sandbox.
+    req_bucket, _, rest = req.path.lstrip("/").partition("/")
     key = unquote(rest)
     if not key:
         return web.Response(status=400, text="empty object key")
 
     body = await req.read()
     content_type = req.headers.get("Content-Type")
+    if req_bucket and req_bucket != RELAY_BUCKET:
+        log.debug("ignoring vestigial request bucket=%s (relay writes to %s)", req_bucket, RELAY_BUCKET)
 
-    log.info(
-        "forward bucket=%s key=%s backend=%s bytes_up=%d",
-        bucket, key, backend.label, len(body),
-    )
-
+    # backend.put_object applies the relay-owned key prefix and logs the
+    # effective key (see S3CompatibleBackend); no pre-prefix log here.
     try:
-        result = await backend.put_object(bucket, key, body, content_type)
+        result = await backend.put_object(RELAY_BUCKET, key, body, content_type)
     except BackendError as e:
         log.warning("downstream_error code=%s status=%d msg=%s", e.code, e.status, e.message)
         return web.Response(status=e.status, text=str(e))
@@ -136,7 +143,10 @@ async def relay(req: web.Request) -> web.StreamResponse:
     # which then permanently filters that sink out for the rest of the
     # process lifetime. See backends/base.py:PutResult.
     response_headers = {"ETag": result.etag} if result.etag else {}
-    log.info("forwarded status=200 bucket=%s key=%s etag=%s", bucket, key, result.etag or "(missing)")
+    log.info(
+        "forwarded status=200 bucket=%s key=%s etag=%s",
+        RELAY_BUCKET, result.key or key, result.etag or "(missing)",
+    )
     return web.Response(status=200, text="", headers=response_headers)
 
 
@@ -154,10 +164,10 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
     log.info(
-        "starting atif-export-relay backend=%s bind=%s buckets=%s auth_header=%s transport=https",
+        "starting atif-export-relay backend=%s bind=%s bucket=%s auth_header=%s transport=https",
         backend.label,
         BIND_ADDR,
-        sorted(BUCKET_ALLOWLIST),
+        RELAY_BUCKET,
         AUTH_HEADER,
     )
 

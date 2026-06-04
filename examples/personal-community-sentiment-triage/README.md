@@ -237,7 +237,7 @@ Now edit `.env` and fill in everything you already have:
 invoking [scripts/00-host-services.sh](scripts/00-host-services.sh) before the
 sandbox-side phases. The stack from [extras/docker-compose.yml](extras/docker-compose.yml)
 — phoenix (telemetry), postgres (ETL backing store), source ETL workers, PostgREST on
-host port 3100, plus minio + atif-export-relay when `ATIF_STORAGE_BACKEND=minio|s3` — is
+host port 3100, plus minio + atif-export-relay when `ATIF_EXPORT_MODE=relay` — is
 designed to outlive the sandbox, so subsequent `tear-down.sh && bring-up.sh` cycles
 re-touch only the sandbox by default (00-host-services is idempotent).
 
@@ -274,7 +274,7 @@ Phoenix at `http://localhost:6006`.
 - **Owns** (in this directory): `agents/hermes/` (the full Hermes asset tree, staged
   here for convenience), `policy.yaml` (sandbox network/filesystem policy template), `extras/`,
   `.env`, and `scripts/`:
-  - `00-host-services.sh` — host-side stack lifecycle (phoenix, postgres, ETLs, postgrest, and minio + atif-export-relay when `ATIF_STORAGE_BACKEND` is set). Idempotent; safe to invoke directly for `up` or `down`.
+  - `00-host-services.sh` — host-side stack lifecycle (phoenix, postgres, ETLs, postgrest, and minio + atif-export-relay when `ATIF_EXPORT_MODE=relay`). Idempotent; safe to invoke directly for `up` or `down`.
   - `01-gateway.sh` / `02-providers.sh` / `03-sandbox.sh` — sandbox-side phase scripts called by the bring-up orchestrator.
   - `bring-up.sh` — orchestrator: invokes `00-host-services.sh up` (phase 1/4) followed by 01 → 02 → 03 (phases 2-4/4). `00-host-services.sh` is idempotent, so re-running `bring-up.sh` on an already-up host stack is a no-op for those services and only re-runs the sandbox-side phases.
   - `tear-down.sh` — removes the sandbox and per-sandbox providers; preserves host services. Add `--stop-host-services` to also stop them (volumes preserved) or `--purge-host-services` to stop and wipe named volumes.
@@ -310,9 +310,9 @@ inside the sandbox on every turn. That directory is ephemeral — it lives
 on the sandbox's writable layer and is destroyed by `tear-down.sh` — so
 capture before destroying the sandbox if you want to keep the traces.
 
-For production / always-on capture, set `ATIF_STORAGE_BACKEND=minio`
-or `s3` to have NeMo-Relay upload completed trajectories directly to
-S3-compatible storage via a host-side relay. The sandbox never holds real
+For production / always-on capture, set `ATIF_EXPORT_MODE=relay` (with
+`ATIF_RELAY_BACKEND=minio` or `s3`) to have NeMo-Relay upload completed
+trajectories to S3-compatible storage via a host-side relay. The sandbox never holds real
 AWS credentials; OpenShell's provider store manages a per-sandbox bearer
 token instead. See [docs/atif-export.md](docs/atif-export.md) for setup,
 IAM template, and the auth model.

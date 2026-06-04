@@ -103,11 +103,12 @@ services:
   # ---------------------------------------------------------------------------
   # ATIF export — receives SigV4 requests from the sandbox, re-signs with
   # downstream credentials, forwards to MinIO (testing) or real S3 (prod).
-  # Activated via `docker compose --profile $ATIF_STORAGE_BACKEND up -d`.
+  # Activated via `docker compose --profile $ATIF_RELAY_BACKEND up -d` when
+  # ATIF_EXPORT_MODE=relay.
   # ---------------------------------------------------------------------------
 
   atif-export-relay:
-    profiles: ["minio", "s3"]
+    profiles: ["minio", "s3", "s3-compatible"]
     build:
       context: ./atif-export-relay
     restart: unless-stopped
@@ -121,9 +122,12 @@ services:
       # scripts/00-host-services.sh via atif-export-relay/generate-tls-cert.sh.
       - ./atif-export-relay/tls:/etc/atif-export-relay/tls:ro
     environment:
-      ATIF_RELAY_DOWNSTREAM: "${ATIF_STORAGE_BACKEND:-minio}"
+      ATIF_RELAY_DOWNSTREAM: "${ATIF_RELAY_BACKEND:-minio}"
       ATIF_RELAY_BIND_ADDR: "${ATIF_RELAY_BIND_ADDR:-0.0.0.0:${ATIF_RELAY_PORT:-18443}}"
-      ATIF_RELAY_BUCKET_ALLOWLIST: "${ATIF_STORAGE_BUCKET:-nemo-relay-traces}"
+      # The relay owns the downstream bucket: the sandbox sends a vestigial
+      # placeholder bucket and the relay writes everything HERE. Set this to the
+      # real bucket in .env (the default is the local-MinIO dev bucket).
+      ATIF_RELAY_BUCKET: "${ATIF_RELAY_BUCKET:-nemo-relay-traces}"
       # TLS paths are not env-defaulted because they have to match the
       # volume mount target above. Override the mount + these together if
       # you need a different layout.
@@ -139,12 +143,28 @@ services:
       # S3-SDK client; flip to "Authorization" (or anything else) if/when
       # a non-S3-SDK client wires in.
       ATIF_RELAY_AUTH_HEADER: "${ATIF_RELAY_AUTH_HEADER:-X-Amz-Security-Token}"
-      # Used when downstream=s3 (boto3 picks up IMDS creds automatically):
-      AWS_REGION: "${ATIF_S3_REGION:-us-west-2}"
-      # Used when downstream=minio:
-      MINIO_ENDPOINT: "${MINIO_ENDPOINT:-http://localhost:9000}"
-      MINIO_ROOT_USER: "${NEMOCLAW_MINIO_ROOT_USER:-minioadmin}"
-      MINIO_ROOT_PASSWORD: "${NEMOCLAW_MINIO_ROOT_PASSWORD:-minioadmin}"
+      # AWS region for the AWS `s3` backend (boto3 picks up IMDS creds):
+      AWS_REGION: "${ATIF_RELAY_S3_REGION:-us-west-2}"
+      # Signing region for the minio / s3-compatible backends (they read this
+      # directly; most S3-compatible stores ignore it but boto3 requires one):
+      ATIF_RELAY_S3_REGION: "${ATIF_RELAY_S3_REGION:-us-west-2}"
+      # Relay-owned object-key prefix (applies to whichever backend is active).
+      # The relay composes the prefix as prefixer.compute() + ATIF_RELAY_KEY_PREFIX.
+      # Prefixer `ec2-instance-id` resolves the EC2 instance-id via IMDSv2 at relay
+      # startup → keys land under "<instance-id>/", matching a bucket IAM policy
+      # scoped to <bucket>/<instance-id>/*. Default `none` adds no dynamic
+      # segment (use a static ATIF_RELAY_KEY_PREFIX, e.g. hermes/, for MinIO).
+      # See extras/atif-export-relay/backends/prefixers.py.
+      ATIF_RELAY_PREFIXER: "${ATIF_RELAY_PREFIXER:-none}"
+      ATIF_RELAY_KEY_PREFIX: "${ATIF_RELAY_KEY_PREFIX:-}"
+      # Endpoint + static creds for the custom-endpoint backends: `minio`
+      # (local-dev preset; defaults to http://localhost:9000 + minioadmin when
+      # these are empty) and `s3-compatible` (external store: OCI / Nebius /
+      # GCS-XML / self-hosted — required, fail-loud). AWS `s3` uses IMDS creds
+      # (above), not these. Remote endpoints must be https (loopback may be http).
+      ATIF_RELAY_S3_ENDPOINT: "${ATIF_RELAY_S3_ENDPOINT:-}"
+      ATIF_RELAY_S3_ACCESS_KEY: "${ATIF_RELAY_S3_ACCESS_KEY:-}"
+      ATIF_RELAY_S3_SECRET_KEY: "${ATIF_RELAY_S3_SECRET_KEY:-}"
     healthcheck:
       # -k: skip cert verification — the self-signed relay cert isn't in the
       # host's curl trust store; we only need to confirm the listener is up.
@@ -154,8 +174,8 @@ services:
       retries: 3
 
   # MinIO — S3-compatible local store for ATIF export testing. Only active
-  # when ATIF_STORAGE_BACKEND=minio. Bucket creation is done by
-  # scripts/00-host-services.sh after MinIO comes healthy.
+  # when ATIF_RELAY_BACKEND=minio (under ATIF_EXPORT_MODE=relay). Bucket
+  # creation is done by scripts/00-host-services.sh after MinIO comes healthy.
   minio:
     profiles: ["minio"]
     image: minio/minio:latest

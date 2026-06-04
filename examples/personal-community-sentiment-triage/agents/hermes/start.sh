@@ -40,8 +40,8 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 # ── ATIF storage probe (computed once) ───────────────────────────
 # "Enabled" iff plugins.toml has the [[components.config.atif.storage]]
-# block. Set at image-build time (Dockerfile keys on ATIF_STORAGE_BUCKET
-# + ATIF_STORAGE_BACKEND), so the runtime check here is authoritative
+# block. Set at image-build time (Dockerfile emits it when ATIF_EXPORT_MODE
+# is relay), so the runtime check here is authoritative
 # regardless of what env vars OpenShell's exec-session allowlist did or
 # didn't propagate. Drives the atif-bridge gate and the AWS_* exports
 # below; all three are in lockstep — either all on or all off.
@@ -459,7 +459,9 @@ if [ "$ATIF_STORAGE_ENABLED" = "1" ]; then
   export AWS_SESSION_TOKEN="${AWS_SESSION_TOKEN:-openshell:resolve:env:ATIF_RELAY_AUTH_TOKEN}"
   export AWS_ENDPOINT_URL="${AWS_ENDPOINT_URL:-http://127.0.0.1:18444}"
   export AWS_ALLOW_HTTP="${AWS_ALLOW_HTTP:-true}"
-  export AWS_REGION="${AWS_REGION:-${ATIF_S3_REGION:-us-east-1}}"
+  # Vestigial signing region — the SigV4 envelope is junk the relay ignores and
+  # re-signs with its own (relay-owned) region. Fixed placeholder, not configurable.
+  export AWS_REGION="${AWS_REGION:-us-east-1}"
 fi
 
 # SECURITY FIX: Write proxy + tool env to a standalone file via

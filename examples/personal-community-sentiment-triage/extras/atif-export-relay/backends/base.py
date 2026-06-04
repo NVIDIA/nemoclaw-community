@@ -31,9 +31,14 @@ class PutResult:
     rest of the process lifetime. Backends that don't natively produce an
     ETag should synthesize one (e.g. MD5 of the body) rather than returning
     "".
+
+    `key` is the effective object key the backend actually wrote (after any
+    prefixing). The relay logs it on success so the operator sees the real
+    destination, not the bare key the sandbox sent.
     """
 
     etag: str
+    key: str = ""
 
 
 class BackendError(Exception):

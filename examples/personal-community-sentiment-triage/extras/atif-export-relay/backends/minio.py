@@ -1,9 +1,11 @@
-"""MinIO backend — boto3 with static creds + custom endpoint.
+"""MinIO backend — local-dev preset of the generic S3-compatible endpoint backend.
 
-Local-development target. MinIO speaks the S3 wire format, so we use the
-same boto3 S3 client with an explicit `endpoint_url` pointing at the MinIO
-service and static admin credentials (no IMDS chain). Forces path-style
-addressing since MinIO doesn't do virtual-hosted by default.
+MinIO is just an S3-compatible store at a fixed local endpoint, so this is a thin
+preset of [s3_endpoint.py](s3_endpoint.py)'s `S3CompatibleEndpointBackend`. It
+reads the SAME unified `ATIF_RELAY_S3_*` env as every other custom-endpoint store
+— it only differs by supplying local-dev DEFAULTS (http://localhost:9000 +
+minioadmin) so MinIO stays zero-config, where `s3-compatible` requires them
+(fail-loud). External stores (OCI / Nebius / GCS) use `s3-compatible`.
 """
 
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
@@ -11,82 +13,24 @@ addressing since MinIO doesn't do virtual-hosted by default.
 
 from __future__ import annotations
 
-import asyncio
 import os
-import re
-import sys
 
-import boto3
-from botocore.client import Config
-from botocore.exceptions import ClientError
-
-from .base import BackendError, BackendTransportError, PutResult, StorageBackend
+from .prefixers import build_prefixer
+from .s3_endpoint import S3CompatibleEndpointBackend
 
 
-def _required(name: str) -> str:
-    v = os.environ.get(name)
-    if not v:
-        sys.stderr.write(f"required env var unset: {name} (minio backend)\n")
-        sys.exit(2)
-    return v
-
-
-class MinioBackend(StorageBackend):
+class MinioBackend(S3CompatibleEndpointBackend):
     label = "minio"
-
-    def __init__(
-        self,
-        endpoint: str,
-        access_key: str,
-        secret_key: str,
-    ):
-        self._endpoint = endpoint
-        self._client = boto3.client(
-            "s3",
-            endpoint_url=endpoint,
-            aws_access_key_id=access_key,
-            aws_secret_access_key=secret_key,
-            region_name="us-east-1",  # MinIO doesn't care; required by boto3
-            config=Config(
-                retries={"max_attempts": 3, "mode": "standard"},
-                s3={"addressing_style": "path"},
-                signature_version="s3v4",
-            ),
-        )
 
     @classmethod
     def from_env(cls) -> MinioBackend:
+        # Same env names as the generic backend, but with local-dev defaults
+        # instead of fail-loud — MinIO is zero-config out of the box.
         return cls(
-            endpoint=_required("MINIO_ENDPOINT"),
-            access_key=_required("MINIO_ROOT_USER"),
-            secret_key=_required("MINIO_ROOT_PASSWORD"),
+            endpoint=os.environ.get("ATIF_RELAY_S3_ENDPOINT") or "http://localhost:9000",
+            access_key=os.environ.get("ATIF_RELAY_S3_ACCESS_KEY") or "minioadmin",
+            secret_key=os.environ.get("ATIF_RELAY_S3_SECRET_KEY") or "minioadmin",
+            prefixer=build_prefixer(os.environ.get("ATIF_RELAY_PREFIXER", "none")),
+            static_prefix=os.environ.get("ATIF_RELAY_KEY_PREFIX", ""),
+            region=os.environ.get("ATIF_RELAY_S3_REGION") or "us-west-2",
         )
-
-    async def put_object(
-        self,
-        bucket: str,
-        key: str,
-        body: bytes,
-        content_type: str | None,
-    ) -> PutResult:
-        kwargs: dict[str, object] = {"Bucket": bucket, "Key": key, "Body": body}
-        if content_type:
-            kwargs["ContentType"] = content_type
-        loop = asyncio.get_running_loop()
-        try:
-            result = await loop.run_in_executor(
-                None, lambda: self._client.put_object(**kwargs)
-            )
-        except ClientError as e:
-            status = e.response.get("ResponseMetadata", {}).get("HTTPStatusCode", 500)
-            code = e.response.get("Error", {}).get("Code", "Unknown")
-            message = e.response.get("Error", {}).get("Message", str(e))
-            raise BackendError(status, code, message) from e
-        except Exception as e:  # noqa: BLE001 — any transport-level failure surfaces as 502
-            raise BackendTransportError(str(e)) from e
-        return PutResult(etag=result.get("ETag", ""))
-
-    def health_probe(self) -> str:
-        # Static creds are already in the client; just confirm endpoint shape.
-        host = re.sub(r"^https?://", "", self._endpoint)
-        return f"static minio admin endpoint={host}"

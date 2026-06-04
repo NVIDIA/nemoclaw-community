@@ -202,16 +202,18 @@ RUN pip3 install --no-cache-dir --break-system-packages \
 # start.sh, and the wrapped-CLI `[agents.hermes]` block isn't used in the
 # sidecar/daemon architecture (agents POST to the daemon; it doesn't launch
 # them).
-# All four ATIF storage ARGs live here together because the RUN below
-# substitutes them at plugins.toml render time. Docker only resolves
-# ${ARG_NAME} in instructions that come AFTER the ARG declaration, so
-# splitting these across the file would silently leave the RUN with
-# empty values for the later ARGs. 03-sandbox.sh sets the defaults via
-# sed-patch on the staged Dockerfile (no --build-arg passthrough).
-ARG ATIF_STORAGE_BUCKET=
-ARG ATIF_STORAGE_KEY_PREFIX=hermes/
-ARG ATIF_STORAGE_BACKEND=
-ARG ATIF_S3_REGION=us-east-1
+# ATIF storage ARGs live here together because the RUN below substitutes them
+# at plugins.toml render time. Docker only resolves ${ARG_NAME} in instructions
+# that come AFTER the ARG declaration, so splitting them would leave the RUN
+# with empty values. 03-sandbox.sh sets these via sed-patch on the staged
+# Dockerfile (no --build-arg passthrough).
+#
+# The sandbox bakes NO real infra identifiers: the storage block below uses a
+# VESTIGIAL placeholder bucket and an EMPTY key_prefix. The host-side relay is
+# the sole owner of the real bucket, the key prefix, and the credentials — it
+# rewrites them at egress (see extras/atif-export-relay/). This keeps the image
+# generic/shareable and means the sandbox can't influence where traces land.
+ARG ATIF_EXPORT_MODE=
 ARG ATIF_RELAY_ENDPOINT=https://host.openshell.internal:18443
 
 COPY agents/hermes/nemo-relay/plugins.toml.in /tmp/nemo-relay-plugins.toml.in
@@ -226,15 +228,15 @@ RUN mkdir -p /etc/nemo-relay \
          # .env.example and README for the documented value format.
          PHOENIX_ENABLED=true; PHOENIX_ENDPOINT="${PHOENIX_URL%/}"; \
        fi \
-    && if [ -z "${ATIF_STORAGE_BUCKET}" ] || [ "${ATIF_STORAGE_BACKEND}" = "local" ]; then \
+    && if [ "${ATIF_EXPORT_MODE}" != "relay" ]; then \
          ATIF_STORAGE_BLOCK=""; \
        else \
-         # NeMo-Relay's S3 plugin reads AWS_* env vars at runtime; we don't
-         # bake credentials into TOML. region falls back to AWS_REGION and
-         # endpoint_url to AWS_ENDPOINT_URL (both set by start.sh when the
-         # storage backend is configured). Use printf for POSIX-portable
-         # newlines — RUN runs under /bin/sh which doesn't support $'...'.
-         ATIF_STORAGE_BLOCK="$(printf '\n[[components.config.atif.storage]]\ntype = \"s3\"\nbucket = \"%s\"\nkey_prefix = \"%s\"\n' "${ATIF_STORAGE_BUCKET}" "${ATIF_STORAGE_KEY_PREFIX}")"; \
+         # Emit a storage block with a VESTIGIAL placeholder bucket and EMPTY
+         # key_prefix — the host-side relay owns the real bucket/prefix/creds
+         # and rewrites them (NeMo-Relay's S3 plugin reads AWS_* at runtime; see
+         # start.sh). Constant values, so no printf format args. Use printf for
+         # POSIX-portable newlines — RUN runs under /bin/sh (no $'...').
+         ATIF_STORAGE_BLOCK="$(printf '\n[[components.config.atif.storage]]\ntype = \"s3\"\nbucket = \"atif-export\"\nkey_prefix = \"\"\n')"; \
        fi \
     && awk \
          -v atif_block="${ATIF_STORAGE_BLOCK}" \
@@ -339,8 +341,7 @@ ENV NEMOCLAW_MODEL=${NEMOCLAW_MODEL} \
     SOURCE_ETL_API_URL=${SOURCE_ETL_API_URL} \
     SOURCE_ETL_API_HOST=${SOURCE_ETL_API_HOST} \
     SOURCE_ETL_API_PORT=${SOURCE_ETL_API_PORT} \
-    ATIF_STORAGE_BACKEND=${ATIF_STORAGE_BACKEND} \
-    ATIF_S3_REGION=${ATIF_S3_REGION} \
+    ATIF_EXPORT_MODE=${ATIF_EXPORT_MODE} \
     ATIF_RELAY_ENDPOINT=${ATIF_RELAY_ENDPOINT}
 
 WORKDIR /sandbox
