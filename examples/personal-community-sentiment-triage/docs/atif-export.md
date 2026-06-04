@@ -154,7 +154,7 @@ The challenge: NeMo-Relay's S3 plugin reads `AWS_*` env vars at startup and uses
 
 The solution: ride the bearer in the standalone `x-amz-security-token` HTTP header, which the AWS SDK emits verbatim from `AWS_SESSION_TOKEN`. A whole-header-value placeholder is exactly the substitution shape OpenShell's L7 proxy handles via its first match branch.
 
-1. `scripts/02-providers.sh` generates a random bearer token (`atif-<hex>`) and stores it in OpenShell's provider store as a credential named `ATIF_RELAY_AUTH_TOKEN`. The same value also goes into the host's `.env` so the relay container can pre-populate its accept-set.
+1. Bring-up generates a random bearer token (`atif-<hex>`) once into the gitignored `.bootstrap/cache/atif-relay-token` (via `scripts/_lib.sh`, like the Outlook refresh token — never written to `.env`). The same value is then read from that cache by both consumers: `scripts/00-host-services.sh` passes it to the relay container, and `scripts/02-providers.sh` registers it in OpenShell's provider store as the credential `ATIF_RELAY_AUTH_TOKEN`. (Set `ATIF_RELAY_AUTH_TOKEN` in `.env` to override.)
 2. The sandbox's env (set by `agents/hermes/start.sh`) carries:
    ```
    AWS_SESSION_TOKEN=openshell:resolve:env:ATIF_RELAY_AUTH_TOKEN
@@ -180,7 +180,7 @@ The solution: ride the bearer in the standalone `x-amz-security-token` HTTP head
 
 - Real AWS / MinIO credentials are only present on the host, only in the `atif-export-relay` process. Never enter the sandbox.
 - Sandbox-side credentials are scoped bearer tokens. If exfiltrated, the attacker can submit S3-shaped PutObject requests to the relay but is bounded by (a) the relay writing only to its single configured `ATIF_RELAY_BUCKET` — the request's bucket is a vestigial placeholder, ignored, so the sandbox cannot choose the target bucket at all, (b) the relay's key prefixer — with `ec2-instance-id` the relay forces every key under `<instance-id>/`, server-side, regardless of the key the request asks for, (c) the downstream IAM policy (PutObject-only on `<bucket>/<instance-id>/*`), and (d) network access to the host's `:18443`. They cannot reach AWS APIs directly, cannot read or delete existing objects, and cannot reach other AWS services.
-- Revocation granularity: the bearer token is **per VM, not per sandbox**, and that's the chosen granularity given one tenant per VM (see "[Deployment model](#deployment-model-one-tenant-per-vm)"). Rotating `ATIF_RELAY_AUTH_TOKEN` revokes export access for every sandbox on the VM — which is the same scope of trust anyway, since they belong to the same tenant. To rotate: remove the token from OpenShell, regenerate `ATIF_RELAY_AUTH_TOKEN`, restart the relay so it reloads the new value from env.
+- Revocation granularity: the bearer token is **per VM, not per sandbox**, and that's the chosen granularity given one tenant per VM (see "[Deployment model](#deployment-model-one-tenant-per-vm)"). Rotating `ATIF_RELAY_AUTH_TOKEN` revokes export access for every sandbox on the VM — which is the same scope of trust anyway, since they belong to the same tenant. To rotate: delete the cache file and re-run bring-up (see "[Rotating the auth token](#rotating-the-auth-token)").
 
 ### Sandbox→relay TLS via Python protocol-bridge sidecar
 
@@ -280,11 +280,11 @@ The relay's outbound leg to real AWS S3 (or MinIO) is signed and TLS-encrypted b
 ### Rotating the auth token
 
 ```bash
-sed -i '/^ATIF_RELAY_AUTH_TOKEN=/d' .env
+rm -f .bootstrap/cache/atif-relay-token .bootstrap/cache/atif-relay-token.registered
 bash scripts/bring-up.sh
 ```
 
-`scripts/02-providers.sh` notices the missing line, generates a fresh token, appends it to `.env`, force-recreates the relay container, and re-registers with OpenShell. The old token is rejected on the next request.
+Bring-up regenerates the token into the cache, recreates the relay with the new value (its env changed), and re-registers with OpenShell (the fingerprint no longer matches). The old token is rejected on the next request. (To pin a specific value instead, set `ATIF_RELAY_AUTH_TOKEN` in `.env` — it overrides the cache.)
 
 ### Deployment model: one tenant per VM
 
@@ -363,7 +363,7 @@ etc. Drop-in via the registry; no core changes.
 | Sandbox uploads succeed (relay logs `forwarded status=200`) but objects aren't where you expect | Looking under the wrong bucket/prefix | The relay writes to `ATIF_RELAY_BUCKET` under `<prefixer output><ATIF_RELAY_KEY_PREFIX>`. Check the relay's startup log (`bucket=… key_prefix=…`) and the per-PUT `put … key=…` line for the exact destination — that's the source of truth, not anything in the sandbox. |
 | `mc: <ERROR> Access Denied` when running `mc` directly | `docker run --rm minio/mc alias set ...` doesn't persist between invocations | Use the inline form: `docker run --rm -e MC_HOST_local=http://USER:PASS@localhost:9000 minio/mc <cmd>` |
 | Supervisor logs `NET:FAIL [LOW] host.openshell.internal:18443` and no traffic at the relay | Likely a transport mismatch: sandbox env says `https://` but the relay is HTTP, or someone re-enabled TLS without the upstream OpenShell EKU fix landing | Confirm both sides: `openshell sandbox exec --name hermes-direct -- env \| grep AWS_ENDPOINT_URL` should be `http://...:18443`. `docker logs atif-export-relay \| head` should show `transport=http`. See "Why this leg is plain HTTP" above. |
-| Relay won't start: `required env var unset: ATIF_RELAY_AUTH_TOKEN` | `.env` has no `ATIF_RELAY_AUTH_TOKEN` set | Run `bash scripts/02-providers.sh` to issue a token, or set the var manually in `.env`. |
+| Relay won't start: `required env var unset: ATIF_RELAY_AUTH_TOKEN` | The relay was started outside the bring-up scripts (which export the token from `.bootstrap/cache/atif-relay-token`), or `ATIF_EXPORT_MODE` isn't `relay` | Bring it up via `bash scripts/00-host-services.sh` (it generates/reads the cache and exports the token before `docker compose up`). To pin a value, set `ATIF_RELAY_AUTH_TOKEN` in `.env`. |
 
 ## Files
 

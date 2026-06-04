@@ -53,6 +53,9 @@ cmd_up() {
   if atif_remote_enabled; then
     backend="$(atif_relay_backend)"   # validates s3|minio (loud error if unset)
     profile_args=(--profile "$backend")
+    # Generate/read the per-VM bearer from the gitignored cache (not .env) so
+    # the relay starts WITH it on the first `up` — no crash-then-recreate.
+    export ATIF_RELAY_AUTH_TOKEN="${ATIF_RELAY_AUTH_TOKEN:-$(atif_relay_token)}"
     echo "ATIF export: relay → $backend (atif-export-relay + ${backend} will be brought up)"
     # Cert is bind-mounted into the relay container at startup; generate
     # it now so the relay doesn't crashloop on missing files. See

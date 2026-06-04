@@ -136,6 +136,22 @@ atif_relay_backend() {
   esac
 }
 
+# The per-VM relay bearer is a generated secret, NOT operator config — so it
+# lives in the gitignored .bootstrap/cache/ (like the Outlook refresh token),
+# never in .env. Generate-once-then-reuse: callers do
+#   export ATIF_RELAY_AUTH_TOKEN="${ATIF_RELAY_AUTH_TOKEN:-$(atif_relay_token)}"
+# before bringing up the relay / registering the OpenShell provider, so both
+# read the SAME value. An operator may still set ATIF_RELAY_AUTH_TOKEN in .env
+# to override. Rotate by deleting the cache file (+ .registered) and re-running.
+ATIF_RELAY_TOKEN_CACHE="$EXAMPLE_DIR/.bootstrap/cache/atif-relay-token"
+atif_relay_token() {
+  if [[ ! -s "$ATIF_RELAY_TOKEN_CACHE" ]]; then
+    mkdir -p "$(dirname "$ATIF_RELAY_TOKEN_CACHE")"
+    ( umask 077; printf 'atif-%s\n' "$(openssl rand -hex 24)" > "$ATIF_RELAY_TOKEN_CACHE" )
+  fi
+  cat "$ATIF_RELAY_TOKEN_CACHE"
+}
+
 # Whether the given provider exists with the expected type. Strips ANSI
 # escapes that `openshell provider get` emits even when piped.
 provider_type_matches() {
