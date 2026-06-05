@@ -22,11 +22,11 @@ Do not use this skill for GitHub discussions or NVIDIA forums. Use
 ## Access model
 
 - The allowed repository is `$GITHUB_READONLY_REPO`.
-- Requests use the OpenShell GitHub provider placeholder from `GITHUB_TOKEN`
-  or `GH_TOKEN` when present. Treat it as a secret placeholder: do not print
+- Requests use the OpenShell GitHub provider placeholder from `GITHUB_TOKEN`.
+  Treat it as a secret placeholder: do not print
   it, modify it, or copy it into responses.
 - Do not run `env`, `printenv`, `echo`, or similar commands against
-  `GITHUB_TOKEN` or `GH_TOKEN`. The helper loads the placeholder itself.
+  `GITHUB_TOKEN`. The helper loads the placeholder itself.
 - Do not inspect `.env` files, shell environments, proxy settings, or token
   variables to troubleshoot GitHub. If the helper cannot authenticate or reach
   GitHub, it will report the error itself.
@@ -42,7 +42,7 @@ Do not use this skill for GitHub discussions or NVIDIA forums. Use
 Write-block validation pattern:
 
 ```bash
-auth="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+auth="${GITHUB_TOKEN:-}"
 curl -sS -o /tmp/github-write-denied.json -w 'HTTP Status: %{http_code}\n' \
   -X POST \
   -H "Authorization: Bearer ${auth}" \

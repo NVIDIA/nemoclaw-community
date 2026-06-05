@@ -140,7 +140,7 @@ refresh_hermes_provider_placeholders() {
   local env_file="${HERMES_WRITABLE}/.env"
   [ -f "$env_file" ] || return 0
 
-  local keys="TELEGRAM_BOT_TOKEN DISCORD_BOT_TOKEN SLACK_BOT_TOKEN SLACK_APP_TOKEN GITHUB_TOKEN GH_TOKEN"
+  local keys="TELEGRAM_BOT_TOKEN DISCORD_BOT_TOKEN SLACK_BOT_TOKEN SLACK_APP_TOKEN GITHUB_TOKEN"
   local has_scoped_placeholder=0
   local key value
   for key in $keys; do
@@ -288,7 +288,6 @@ start_atif_bridge() {
     -u AWS_ACCESS_KEY_ID
     -u AWS_SECRET_ACCESS_KEY
     -u GITHUB_TOKEN
-    -u GH_TOKEN
     -u MS_GRAPH_ACCESS_TOKEN
     -u SLACK_BOT_TOKEN
   )
@@ -495,7 +494,7 @@ PROXYEOF
       printf 'export %s=%q\n' "$_ca_env_name" "$_ca_env_value"
     fi
   done
-  for _provider_env_name in GITHUB_TOKEN GH_TOKEN; do
+  for _provider_env_name in GITHUB_TOKEN; do
     _provider_env_value="${!_provider_env_name:-}"
     if [ -n "$_provider_env_value" ]; then
       printf 'export %s=%q\n' "$_provider_env_name" "$_provider_env_value"

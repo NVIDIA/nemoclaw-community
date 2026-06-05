@@ -136,6 +136,23 @@ atif_relay_backend() {
   esac
 }
 
+# Echo the validated relay downstream bucket for the given (already-validated)
+# backend. minio defaults to the dev bucket; s3 / s3-compatible REQUIRE an
+# explicit ATIF_RELAY_BUCKET — the dev default would point at a nonexistent or
+# foreign real bucket and fail only later, per-trace, at PutObject. Loud on miss.
+atif_relay_bucket() {
+  local backend="$1"
+  case "$backend" in
+    minio) echo "${ATIF_RELAY_BUCKET:-nemo-relay-traces}" ;;
+    s3|s3-compatible)
+      if [[ -z "${ATIF_RELAY_BUCKET:-}" ]]; then
+        echo "ATIF_RELAY_BACKEND=$backend requires ATIF_RELAY_BUCKET (the real downstream bucket) to be set in $EXAMPLE_DIR/.env" >&2
+        exit 1
+      fi
+      echo "$ATIF_RELAY_BUCKET" ;;
+  esac
+}
+
 # The per-VM relay bearer is a generated secret, NOT operator config — so it
 # lives in the gitignored .bootstrap/cache/ (like the Outlook refresh token),
 # never in .env. Generate-once-then-reuse: callers do

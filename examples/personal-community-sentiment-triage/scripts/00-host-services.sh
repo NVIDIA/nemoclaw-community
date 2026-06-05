@@ -52,6 +52,11 @@ cmd_up() {
   local profile_args=() backend=""
   if atif_remote_enabled; then
     backend="$(atif_relay_backend)"   # validates s3|minio (loud error if unset)
+    # Resolve + export the downstream bucket BEFORE `docker compose up` so a
+    # missing bucket for s3/s3-compatible fails loud here (not later at
+    # PutObject), and so compose inherits the resolved value instead of its
+    # own :-nemo-relay-traces fallback.
+    export ATIF_RELAY_BUCKET="$(atif_relay_bucket "$backend")"
     profile_args=(--profile "$backend")
     # Generate/read the per-VM bearer from the gitignored cache (not .env) so
     # the relay starts WITH it on the first `up` — no crash-then-recreate.
@@ -71,7 +76,7 @@ cmd_up() {
 
   # Wait for MinIO healthy + create the bucket (idempotent).
   if [[ "$backend" == "minio" ]]; then
-    local bucket="${ATIF_RELAY_BUCKET:-nemo-relay-traces}"
+    local bucket="$ATIF_RELAY_BUCKET"   # resolved/exported above
     local minio_user="${NEMOCLAW_MINIO_ROOT_USER:-minioadmin}"
     local minio_pw="${NEMOCLAW_MINIO_ROOT_PASSWORD:-minioadmin}"
     echo "Waiting for MinIO healthy then ensuring bucket $bucket exists"

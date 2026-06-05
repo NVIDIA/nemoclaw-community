@@ -82,7 +82,7 @@ in these origial skills and scripts when creating new skills or saving memories.
 Live GitHub access is available only through authenticated, policy-scoped `GET`
 requests to `api.github.com` for the single configured repo in
 `$GITHUB_READONLY_REPO`. GitHub auth comes from an OpenShell provider
-placeholder in `GITHUB_TOKEN` or `GH_TOKEN`; use it only through the
+placeholder in `GITHUB_TOKEN`; use it only through the
 `github-readonly-live` helper and do not print, inspect, or modify it.
 For any live GitHub request, your first action must be either to read the
 `github-readonly-live` skill or to run the exact helper path documented by that

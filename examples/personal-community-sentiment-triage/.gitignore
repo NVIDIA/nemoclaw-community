@@ -19,6 +19,7 @@
 # Local env variants (keep .env.example tracked).
 .env.*
 !.env.example
+!.env.example.s3
 .envrc
 .direnv/
 

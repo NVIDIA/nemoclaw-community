@@ -164,7 +164,7 @@ $ openshell sandbox exec --name hermes-direct -- sh -lc \
 ```
 
 **Expected:** the response shows the authenticated GitHub REST rate limit when
-`GITHUB_TOKEN` or `GH_TOKEN` is configured. The token itself should never appear
+`GITHUB_TOKEN` is configured. The token itself should never appear
 in output.
 
 Ask the agent:

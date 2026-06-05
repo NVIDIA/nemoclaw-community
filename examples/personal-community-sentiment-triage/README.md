@@ -227,7 +227,7 @@ Now edit `.env` and fill in everything you already have:
   - **Slack**: `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` (both required) — see [docs/set-up-slack.md](docs/set-up-slack.md). Partial Outlook configuration (some vars set, some empty) is rejected at bring-up.
 - (optional) `SLACK_ALLOWED_IDS` — comma-separated Slack user IDs to restrict who can DM the agent; leave empty to allow anyone in the workspace
 - (optional) `OUTLOOK_ALLOWED_SENDERS` — comma-separated allowlist of email senders the agent will respond to; leave empty to accept any sender
-- (optional) `GITHUB_TOKEN` or `GH_TOKEN` for authenticated sandbox read-only
+- (optional) `GITHUB_TOKEN` for authenticated sandbox read-only
   GitHub REST, `GITHUB_READONLY_REPO`,
   `PHOENIX_COLLECTOR_ENDPOINT`, `PHOENIX_PROJECT_NAME`
 
@@ -381,7 +381,7 @@ bearer header; the OpenShell L7 proxy substitutes a live token on egress.
 | `compatible-endpoint` | `nvidia` (built-in v2; consumed via `openshell inference set`, not attached to the sandbox directly) | `NVIDIA_API_KEY` (populated from `OPENAI_API_KEY` / `COMPATIBLE_API_KEY` at provider-create time). URL: `NEMOCLAW_ENDPOINT_URL` → `NVIDIA_BASE_URL` provider config. Routing via `inference.local`. | Required for inference. If omitted, the agent has no LLM. |
 | `<sandbox>-outlook` | `nemoclaw-outlook-email` | `MS_GRAPH_ACCESS_TOKEN` (auto-rotated by the gateway from the registered refresh token). Refresh material: `OUTLOOK_TENANT_ID`, `OUTLOOK_CLIENT_ID`, refresh_token (cached from device-code login). | Optional. Created only when the Outlook block is fully populated; partial config is rejected. At least one of Outlook or Slack must be configured. |
 | `<sandbox>-slack` | `nemoclaw-slack` | `SLACK_BOT_TOKEN` (Web API) + `SLACK_APP_TOKEN` (Socket Mode) | Optional. Both credentials are `required: true` on the profile — partial Slack config fails at provider-create time. At least one of Outlook or Slack must be configured. |
-| `<sandbox>-github` | `nemoclaw-github` | `GITHUB_TOKEN` or `GH_TOKEN` | Optional but recommended. Enables authenticated live GitHub REST reads. The sandbox receives only the OpenShell placeholder; `policy.yaml` further limits use to repo-scoped `GET` routes from approved binaries. |
+| `<sandbox>-github` | `nemoclaw-github` | `GITHUB_TOKEN` | Optional but recommended. Enables authenticated live GitHub REST reads. The sandbox receives only the OpenShell placeholder; `policy.yaml` further limits use to repo-scoped `GET` routes from approved binaries. |
 
 The `compatible-endpoint` provider is **not** prefixed with the sandbox name — it's a
 shared inference provider attached via `--provider compatible-endpoint` on sandbox
@@ -401,8 +401,7 @@ why they can't be folded into provider profiles. Fully-redundant blocks (e.g. th
 former `slack` block) have been removed.
 
 `GITHUB_TOKEN` is attached as `<sandbox>-github` for live sandbox GitHub reads.
-If `GITHUB_TOKEN` is empty but `GH_TOKEN` is set, `GH_TOKEN` is used for the
-provider instead. In both cases, the sandbox sees only an OpenShell placeholder;
+The sandbox sees only an OpenShell placeholder;
 the raw token is resolved by the proxy on egress. GitHub write attempts are
 still blocked by the applied policy, which allows only selected `GET` paths
 under `api.github.com/repos/$GITHUB_READONLY_REPO`. If you keep the optional
@@ -413,7 +412,7 @@ host GitHub mirror enabled, it also reads `GITHUB_TOKEN` for API rate limits.
 The live GitHub policy is repo-scoped. To change the repo the sandbox can read:
 
 1. Set `GITHUB_READONLY_REPO=owner/repo` in `.env`.
-2. For practical API rate limits, set `GITHUB_TOKEN` or `GH_TOKEN`. Private
+2. For practical API rate limits, set `GITHUB_TOKEN`. Private
    repos require a token with access to the target repo; public repos can be
    read without a token but use GitHub's lower unauthenticated API limits.
 3. Recreate the sandbox so `scripts/03-sandbox.sh` can stage the Dockerfile env
@@ -451,7 +450,7 @@ unless you remove the compose volumes.
 | `NEMOCLAW_MODEL` | `nvidia/nemotron-3-super-120b-a12b` | Inference model passed to `openshell inference set`. |
 | `NEMOCLAW_ENDPOINT_URL` | `https://integrate.api.nvidia.com/v1` | Upstream base URL for the `compatible-endpoint` provider. (`OPENAI_BASE_URL` is also accepted as a fallback.) |
 | `COMPATIBLE_API_KEY` | (none) | Inference API key. Mirrors NemoClaw's `REMOTE_PROVIDER_CONFIG.custom`. (`OPENAI_API_KEY` is also accepted.) |
-| `GITHUB_TOKEN` / `GH_TOKEN` | (none) | Optional GitHub token for authenticated live REST reads. `GITHUB_TOKEN` also feeds the optional host GitHub mirror; if it is unset, `GH_TOKEN` can still create the sandbox provider. |
+| `GITHUB_TOKEN` | (none) | Optional GitHub token for authenticated live REST reads. Also feeds the optional host GitHub mirror. |
 | `GITHUB_READONLY_REPO` | `NVIDIA/OpenShell` | The only repo allowed by the live GitHub REST policy, formatted as `owner/repo`. Recreate the sandbox after changing it. |
 | `SOURCE_ETL_GITHUB_REPO` | `NVIDIA/NemoClaw` | Host-side GitHub mirror repo for source-etls. This is independent of `GITHUB_READONLY_REPO`. |
 | `OUTLOOK_LOGIN_CACHE` | `1` | Controls the Microsoft refresh-token cache at `.bootstrap/cache/ms-graph-token.json`. `1` = use the cache (auto-refresh on staleness, ~90 days). `0` = skip the cache entirely (device-code every bring-up, nothing on disk; use on shared workstations or security-sensitive contexts). `2` = force device-code login and rewrite the cache. The gateway-side encrypted credential copy is unaffected by this knob. |

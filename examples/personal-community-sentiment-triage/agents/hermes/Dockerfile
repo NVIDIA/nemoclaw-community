@@ -260,8 +260,7 @@ RUN mkdir -p /etc/nemo-relay \
 # _PROXY_ENV_FILE so interactive shells get it.
 ENV HERMES_TELEGRAM_DISABLE_FALLBACK_IPS=1 \
     HERMES_DISABLE_LAZY_INSTALLS=1 \
-    HERMES_HOME=/sandbox/.hermes-data \
-    GH_TOKEN=openshell:resolve:env:GITHUB_TOKEN
+    HERMES_HOME=/sandbox/.hermes-data
 
 # Copy NemoClaw plugin for Hermes (Python-based)
 COPY agents/hermes/plugins/nemoclaw/ /opt/nemoclaw-hermes-plugin/

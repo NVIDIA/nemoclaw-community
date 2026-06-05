@@ -7,8 +7,8 @@ description: GitHub REST read-only access for live api.github.com reads; sandbox
 category: source_control
 credentials:
   - name: api_token
-    description: GitHub personal access token (or GH_TOKEN fallback)
-    env_vars: [GITHUB_TOKEN, GH_TOKEN]
+    description: GitHub personal access token
+    env_vars: [GITHUB_TOKEN]
     required: true
     auth_style: bearer
     header_name: authorization

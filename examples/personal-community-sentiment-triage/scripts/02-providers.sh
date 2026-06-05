@@ -185,15 +185,10 @@ if [[ -n "${SLACK_BOT_TOKEN:-}" || -n "${SLACK_APP_TOKEN:-}" ]]; then
 fi
 
 # ── GitHub provider ─────────────────────────────────────────────────────
-if [[ -n "${GITHUB_TOKEN:-}" || -n "${GH_TOKEN:-}" ]]; then
+if [[ -n "${GITHUB_TOKEN:-}" ]]; then
   GH_PROVIDER="$SANDBOX_NAME-github"
-  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    echo "Upserting provider $GH_PROVIDER (credential: GITHUB_TOKEN)"
-    upsert_cred "$GH_PROVIDER" nemoclaw-github "GITHUB_TOKEN=$GITHUB_TOKEN"
-  else
-    echo "Upserting provider $GH_PROVIDER (credential: GH_TOKEN)"
-    upsert_cred "$GH_PROVIDER" nemoclaw-github "GH_TOKEN=$GH_TOKEN"
-  fi
+  echo "Upserting provider $GH_PROVIDER (credential: GITHUB_TOKEN)"
+  upsert_cred "$GH_PROVIDER" nemoclaw-github "GITHUB_TOKEN=$GITHUB_TOKEN"
 fi
 
 # ── ATIF object-storage provider (bearer token for atif-export-relay) ───

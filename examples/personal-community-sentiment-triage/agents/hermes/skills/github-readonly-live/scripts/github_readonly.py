@@ -79,7 +79,7 @@ def load_env_defaults() -> None:
 
 def auth_header() -> str | None:
     load_env_defaults()
-    token = (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "").strip()
+    token = (os.environ.get("GITHUB_TOKEN") or "").strip()
     if not token:
         return None
     return f"Bearer {token}"
