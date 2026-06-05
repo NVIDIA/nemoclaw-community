@@ -47,106 +47,118 @@ that mirror through a read-only PostgREST HTTP bridge.
 
 ```mermaid
 flowchart LR
-    %% ── External services ─────────────────────────────────────────
+
     nvidia["Internal\nLLM Inference Provider"]
+    entra["Internal\nMS Entra ID"]
     slack["Internal\nSlack workspace"]
     outlook["Internal\ngraph.microsoft.com\nmailbox"]
-    entra["Internal\nMS Entra ID"]
     github["External\nGitHub API"]
     forums["External\nNVIDIA Forums\n(nemoclaw tag)"]
-    s3["Internal\nS3 (prod) / MinIO (dev)\nATIF trace storage"]
+    s3["Internal\nAWS S3 (prod)\nATIF trace storage"]
 
-    %% ── Host ──────────────────────────────────────────────────────
-    subgraph host["Host Machine/Virtual Machine"]
+    subgraph host["Omnistation Host"]
         direction TB
 
-        subgraph sandbox["OpenShell Sandbox (uid=sandbox)"]
+        subgraph supervisor["OpenShell Supervisor"]
             direction TB
 
-            agent["Hermes Agent\n+ Slack messaging channel"]
-            outlookBridge["outlook-bridge\nMS Graph poller"]
-            nemoSidecar["nemo-relay-cli sidecar\n127.0.0.1:4040"]
-            traceDisk[("/tmp/atif/\n(local-mode fallback)")]
-            atifBridge["atif-bridge\n127.0.0.1:18444\nHTTP→HTTPS shim"]
+            l7["OpenShell L7 Proxy\n10.200.0.1:3128"]
+            privacyRouter["OpenShell Privacy Router\n(CONNECT proxy)"]
 
-            subgraph sourceSkills["Source Skills"]
+            subgraph sandbox["Sandbox (uid=sandbox)"]
                 direction LR
-                s1["source-etl-query"]
-                s4["cross-source-gap-analysis"]
+
+                agent["Hermes Agent\n+ Slack messaging channel"]
+                outlookBridge["outlook-bridge\nMS Graph poller"]
+                nemoSidecar["nemo-relay-cli sidecar\n127.0.0.1:4040"]
+                atifBridge["atif-bridge\n127.0.0.1:18444\nHTTP→HTTPS shim"]
+                traceDisk[("/tmp/atif/\n(local-mode fallback)")]
+
+                subgraph sourceSkills["Source Skills"]
+                    direction LR
+                    s1["source-etl-query"]
+                    s4["cross-source-gap-analysis"]
+                end
+
+                subgraph slackSkills["Slack Skills"]
+                    direction LR
+                    k1["slack-channel-finder"]
+                    k2["slack-channel-summarizer"]
+                end
+
+                subgraph outlookSkills["Outlook Skills"]
+                    direction LR
+                    o1["outlook-email-search"]
+                end
+
+                outlookBridge <-->|"HTTP POST\ndeliver · reply"| agent
+                agent -->|"tool call\nskill dispatch"| sourceSkills
+                agent -->|"tool call\nskill dispatch"| slackSkills
+                agent -->|"tool call\nskill dispatch"| outlookSkills
+                agent -->|"HTTP POST\nhook events"| nemoSidecar
+                nemoSidecar -.->|"file write\nlocal fallback"| traceDisk
+                nemoSidecar -->|"HTTP PUT\nS3 trace"| atifBridge
+                nemoSidecar -->|"OTLP HTTP POST\ntelemetry traces"| l7
+                atifBridge -->|"HTTPS PUT\nS3 forward"| l7
+                outlookBridge -->|"HTTPS GET/POST\nmail poll · reply"| l7
+                agent <-->|"WSS socket-mode\nmessaging channel"| l7
+                agent -->|"HTTPS POST\nLLM request"| privacyRouter
+                sourceSkills -->|"HTTP GET\nsource queries"| l7
+                slackSkills -->|"HTTPS POST\nSlack API"| l7
+                outlookSkills -->|"HTTPS GET\nGraph API"| l7
             end
-
-            subgraph slackSkills["Slack Skills"]
-                direction LR
-                k1["slack-channel-finder"]
-                k2["slack-channel-summarizer"]
-            end
-
-            subgraph outlookSkills["Outlook Skills"]
-                direction LR
-                o1["outlook-email-search"]
-            end
-
-            outlookBridge <-->|"deliver inbound email\n(POST /v1/chat/completions)\n+ receive reply"| agent
-
-            agent --> sourceSkills
-            agent --> slackSkills
-            agent --> outlookSkills
-            agent -->|"hook events"| nemoSidecar
-            nemoSidecar -.->|"local-mode write"| traceDisk
-            nemoSidecar -->|"S3 PUT"| atifBridge
-            nemoSidecar -->|"OTLP HTTP"| l7
-            atifBridge -->|"S3 PUT"| l7
-            outlookBridge -->|"poll · reply"| l7
-            agent <-->|"messaging channel\n(socket-mode WebSocket)"| l7
-            sourceSkills -->|"HTTP REST"| l7
-            slackSkills -->|"Slack API"| l7
-            outlookSkills -->|"Graph API"| l7
         end
 
-        l7["OpenShell L7 Proxy\n10.200.0.1:3128"]
         gateway["OpenShell Gateway\n127.0.0.1:17670\nprovider store ·\nrefresh-token rotation"]
         atifRelay["atif-export-relay\n:18443\nbearer auth · re-signs"]
         phoenix["Phoenix\n:6006"]
         postgrest["PostgREST\n:3100"]
         postgres[("PostgreSQL\nsource mirror")]
         etls["Source ETLs\nGitHub + Forums\nhourly deltas"]
+        minio["MinIO (dev)\n:9000"]
 
-        l7 -->|"OTLP traces"| phoenix
-        l7 -->|"REST"| postgrest
-        l7 -->|"S3 PUT"| atifRelay
-        postgrest --> postgres
-        etls -->|"write deltas"| postgres
-        gateway -.->|"Minted access tokens"| l7
+        l7 -->|"OTLP HTTP POST\ntrace ingest"| phoenix
+        l7 -->|"HTTP GET\nREST queries"| postgrest
+        l7 -->|"HTTPS PUT\nS3 relay"| atifRelay
+        postgrest -->|"SQL\ndata queries"| postgres
+        etls -->|"SQL INSERT\nhourly deltas"| postgres
+        gateway <-->|"gRPC stream\ncredential refresh"| l7
+        atifRelay -.->|"HTTP PUT\nS3 PutObject"| minio
     end
 
-    %% ── Cross-boundary egress ─────────────────────────────────────
-    l7 -->|"inference"| nvidia
-    l7 <-->|"socket-mode events\n+ chat.postMessage"| slack
-    l7 -->|"Graph API"| outlook
-    l7 -->|"REST"| github
-    atifRelay -->|"S3 PutObject"| s3
-    gateway <-->|"refresh-token rotation"| entra
-    etls -->|"scheduled scrape"| github
-    etls -->|"scheduled scrape"| forums
+    privacyRouter -->|"HTTPS POST\nLLM inference"| nvidia
+    l7 <-->|"WSS / HTTPS POST\nSlack messaging"| slack
+    l7 -->|"HTTPS GET/POST\nGraph API"| outlook
+    l7 -->|"HTTPS GET\nGitHub REST"| github
+    atifRelay -->|"HTTPS PUT\nS3 PutObject"| s3
+    gateway <-->|"HTTPS POST\ntoken rotation"| entra
+    etls -->|"HTTPS GET\nscheduled scrape"| github
+    etls -->|"HTTPS GET\nscheduled scrape"| forums
 
-    %% ── Styles ────────────────────────────────────────────────────
-    style host fill:#f7f6ef,stroke:#8a8068,stroke-width:2px
-    style sandbox fill:#e7f0ff,stroke:#2b5fab,stroke-width:3px
-    style sourceSkills fill:#f0f4ff,stroke:#7090cc,stroke-width:1px
-    style slackSkills fill:#f0f4ff,stroke:#7090cc,stroke-width:1px
+    style host       fill:#f7f6ef,stroke:#8a8068,stroke-width:2px
+    style supervisor fill:#e7f0ff,stroke:#2b5fab,stroke-width:3px
+    style sandbox    fill:#d8e8ff,stroke:#2b5fab,stroke-width:1px,stroke-dasharray:5 3
+
+    style sourceSkills  fill:#f0f4ff,stroke:#7090cc,stroke-width:1px
+    style slackSkills   fill:#f0f4ff,stroke:#7090cc,stroke-width:1px
     style outlookSkills fill:#f0f4ff,stroke:#7090cc,stroke-width:1px
-    style nemoSidecar fill:#fef9e7,stroke:#f39c12,stroke-width:2px
-    style traceDisk fill:#fef9e7,stroke:#f39c12,stroke-width:1px
-    style atifBridge fill:#fef0e7,stroke:#e67e22,stroke-width:2px
-    style atifRelay fill:#fef0e7,stroke:#e67e22,stroke-width:2px
+
+    style agent         fill:#dbeafe,stroke:#3b82f6,stroke-width:1.5px
+    style nemoSidecar   fill:#fef9e7,stroke:#f39c12,stroke-width:2px
+    style atifBridge    fill:#fef0e7,stroke:#e67e22,stroke-width:2px
+    style atifRelay     fill:#fef0e7,stroke:#e67e22,stroke-width:2px
     style outlookBridge fill:#fef0e7,stroke:#e67e22,stroke-width:2px
-    style l7 fill:#fce5cd,stroke:#e69138,stroke-width:2px
-    style gateway fill:#e7eef0,stroke:#5d6d75,stroke-width:2px
-    style s3 fill:#eef7e9,stroke:#6aa84f,stroke-width:2px
+    style traceDisk     fill:#fef9e7,stroke:#f39c12,stroke-width:1px
+
+    style l7            fill:#fce5cd,stroke:#e69138,stroke-width:2px
+    style privacyRouter fill:#e7eef0,stroke:#5d6d75,stroke-width:2px
+    style gateway       fill:#e7eef0,stroke:#5d6d75,stroke-width:2px
+
+    style s3    fill:#eef7e9,stroke:#6aa84f,stroke-width:2px
+    style minio fill:#eef7e9,stroke:#6aa84f,stroke-width:1px,stroke-dasharray:4 2
 
     classDef internal fill:#eef7e9,stroke:#6aa84f,stroke-width:2px
     classDef external fill:#fce5cd,stroke:#e69138,stroke-width:2px
-
     class nvidia,slack,outlook,entra,s3 internal
     class github,forums external
 ```
