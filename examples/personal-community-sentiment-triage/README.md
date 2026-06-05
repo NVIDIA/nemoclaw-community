@@ -46,6 +46,7 @@ containers that scrape on a schedule, write results into Postgres, and expose
 that mirror through a read-only PostgREST HTTP bridge.
 
 ```mermaid
+%%{init: {'flowchart': {'nodeSpacing': 50, 'rankSpacing': 100, 'curve': 'basis', 'padding': 20}, 'themeVariables': {'edgeLabelBackground': '#ffffff00', 'fontSize': '13px'}}}%%
 flowchart LR
 
     nvidia["Internal\nLLM Inference Provider"]
