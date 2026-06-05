@@ -56,7 +56,7 @@ flowchart LR
     forums["External\nNVIDIA Forums\n(nemoclaw tag)"]
     s3["Internal\nAWS S3 (prod)\nATIF trace storage"]
 
-    subgraph host["Omnistation Host"]
+    subgraph host["Host Machine/Virtual Machine"]
         direction TB
 
         subgraph supervisor["OpenShell Supervisor"]
