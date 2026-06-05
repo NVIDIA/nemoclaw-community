@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """AWS S3 backend — boto3 + IMDS credential chain.
 
 Production target. Uses the standard boto3 credential chain (IMDS first, then
@@ -15,9 +18,6 @@ resolves the EC2 instance-id via IMDSv2 → `"<instance-id>/"`, for buckets whos
 IAM policy scopes `s3:PutObject` to `<bucket>/<instance-id>/*`; `ATIF_RELAY_KEY_PREFIX`
 is an optional literal appended after it. See [prefixers.py](prefixers.py).
 """
-
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
 

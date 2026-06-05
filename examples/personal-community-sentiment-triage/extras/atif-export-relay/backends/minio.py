@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """MinIO backend — local-dev preset of the generic S3-compatible endpoint backend.
 
 MinIO is just an S3-compatible store at a fixed local endpoint, so this is a thin
@@ -7,9 +10,6 @@ reads the SAME unified `ATIF_RELAY_S3_*` env as every other custom-endpoint stor
 minioadmin) so MinIO stays zero-config, where `s3-compatible` requires them
 (fail-loud). External stores (OCI / Nebius / GCS) use `s3-compatible`.
 """
-
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
 

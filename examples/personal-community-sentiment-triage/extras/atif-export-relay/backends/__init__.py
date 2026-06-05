@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Storage-backend registry for atif-export-relay.
 
 The relay picks a backend at startup from `ATIF_RELAY_DOWNSTREAM`. To add a
@@ -10,9 +13,6 @@ new backend (Azure Blob, GCS, custom non-S3 endpoint, etc.):
 
 The handler in `relay.py` is backend-agnostic — no changes needed there.
 """
-
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
 

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Generic S3-compatible backend for a custom endpoint + static credentials.
 
 Covers any S3-compatible object store reached via an explicit `endpoint_url` and
@@ -16,9 +19,6 @@ Adding a new external S3-compatible cloud is therefore just config — set
 non-S3 store such as Azure Blob would instead implement the generic
 `StorageBackend` ABC directly with its own SDK.)
 """
-
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
 

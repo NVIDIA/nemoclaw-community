@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Storage-backend ABC + error types for atif-export-relay.
 
 Every backend (S3, MinIO, and any future Azure/GCS/custom) implements the
@@ -11,9 +14,6 @@ Adding a new backend (e.g. Azure Blob, GCS, a custom non-S3 endpoint):
 2. Add its SDK to the relay's Dockerfile pip install.
 3. Add `"<name>": <Name>Backend` to BACKENDS in `backends/__init__.py`.
 """
-
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
 

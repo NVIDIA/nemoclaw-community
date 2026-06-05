@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """S3-compatible backend base — shared boto3 mechanics + key-prefix lifecycle.
 
 Both the real-AWS S3 backend and the local MinIO backend speak the S3 wire
@@ -16,9 +19,6 @@ is an optional literal (`ATIF_RELAY_KEY_PREFIX`). See [prefixers.py](prefixers.p
 The prefixer is resolved once at startup by `health_probe` (fail-loud) and
 memoized, so `put_object` is a pure string op per request.
 """
-
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
 

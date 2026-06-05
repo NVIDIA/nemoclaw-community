@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """ATIF export relay.
 
 Accepts S3-shaped requests from sandboxes, validates a bearer token in a
@@ -31,9 +34,6 @@ enter the sandbox.
 
 Architecture: ../../docs/atif-export.md (or the plan file under .claude/plans/).
 """
-
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
 

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """ATIF protocol-bridge sidecar.
 
 Tiny HTTP→HTTPS forwarder that sits between nemo-relay-cli and OpenShell's

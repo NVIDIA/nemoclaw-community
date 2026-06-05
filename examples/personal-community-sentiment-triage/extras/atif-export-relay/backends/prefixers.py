@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """Key-prefix strategies for the S3 backend.
 
 The S3 backend composes its object-key prefix from two S3-only knobs:
@@ -22,9 +25,6 @@ returning "" — the relay's startup health probe turns that into a fail-loud
 exit, which is preferable to silently writing objects outside the IAM-scoped
 key path the instance role is allowed to write.
 """
-
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
 
 from __future__ import annotations
 
