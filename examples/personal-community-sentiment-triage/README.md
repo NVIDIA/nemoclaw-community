@@ -291,7 +291,7 @@ The example's Dockerfile drops the upstream `COPY nemoclaw-blueprint/` step —
 nothing in the Hermes runtime reads `/sandbox/.nemoclaw/blueprints/`, so this
 example is **fully self-contained** and never needs a NemoClaw checkout.
 
-The Dockerfile always installs NeMo-Relay: it builds the pinned
+The Dockerfile always installs NeMo-Relay: it fetches the pinned, prebuilt
 `nemo-relay-cli` release in a builder stage, upgrades Hermes to a version with
 rich plugin hook payloads, and runs a sidecar gateway at startup. That is
 enough for the agent to write ATIF trace records to `/tmp/atif/` — capture

@@ -10,25 +10,30 @@
 # so Docker treats them as global build args (multi-stage scoping rule).
 ARG BASE_IMAGE=ghcr.io/nvidia/nemoclaw/hermes-sandbox-base@sha256:f76a2ed0509570b1ce5380327c7ebe2e120e97f524e9271e145d2ea34c83ba5e
 
-# ── Stage 0: build the nemo-relay CLI binary ──────────────────────────────────
-# Built inside ${BASE_IMAGE} so the resulting binary links against the same
-# glibc as the runtime (Ubuntu 22.04 glibc 2.35 — newer builder images produce
-# binaries that won't load).
-#
-# Installed from crates.io (the upstream-recommended method) now that 0.3.0 —
-# including the S3 ATIF export plugin (NVIDIA/NeMo-Relay#163) — is published.
+# ── Stage 0: binstall the pinned, prebuilt nemo-relay CLI (no source build) ────
+# Upstream publishes musl-static CLI release assets (zero glibc linkage), so the
+# binary loads on the glibc-2.35 runtime regardless of build host — no in-base-
+# image compile needed. cargo-binstall auto-detects host arch + libc and resolves
+# the matching release asset, so no architecture is named here; the build is
+# always native (openshell builds with no --platform), so host arch == target.
+# 0.3.0 includes the S3 ATIF export plugin (NVIDIA/NeMo-Relay#163), pulled in
+# unconditionally via the cli crate's `object-store` feature.
 FROM ${BASE_IMAGE} AS nemo-relay-builder
 ARG NEMO_RELAY_CLI_VERSION=0.3.0
-RUN apt-get update -qq \
-    && apt-get install -y --no-install-recommends \
-       build-essential ca-certificates curl pkg-config libssl-dev \
+# PATH includes cargo's bin dir so the install script's --self-install step
+# finds it (silences its cosmetic "path is missing /root/.cargo/bin" warning)
+# and cargo-binstall resolves by name on the next line.
+RUN export PATH="/root/.cargo/bin:$PATH" \
+    && apt-get update -qq \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \
-    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-       | sh -s -- -y --default-toolchain stable --profile minimal \
-    && /root/.cargo/bin/cargo install --locked --root /out \
-       --version "${NEMO_RELAY_CLI_VERSION}" \
-       nemo-relay-cli
-# Produces /out/bin/nemo-relay (glibc-dynamic, built against BASE_IMAGE glibc 2.35)
+    && curl -L --proto '=https' --tlsv1.2 -sSf \
+       https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash \
+    && cargo-binstall --no-confirm --strategies crate-meta-data \
+       --install-path /out/bin "nemo-relay-cli@${NEMO_RELAY_CLI_VERSION}"
+# --strategies crate-meta-data: only resolve the crate's own [metadata.binstall]
+# release asset; fail loud (no silent source recompile) if none matches the host.
+# Produces /out/bin/nemo-relay (musl-static; runs on any glibc/musl Linux)
 
 # ── Main sandbox image ────────────────────────────────────────────────────────
 FROM ${BASE_IMAGE}
