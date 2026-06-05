@@ -57,7 +57,7 @@ flowchart LR
     s3["Internal\nS3 (prod) / MinIO (dev)\nATIF trace storage"]
 
     %% ── Host ──────────────────────────────────────────────────────
-    subgraph host["Omnistation Host"]
+    subgraph host["Host Machine/Virtual Machine"]
         direction TB
 
         subgraph sandbox["OpenShell Sandbox (uid=sandbox)"]
