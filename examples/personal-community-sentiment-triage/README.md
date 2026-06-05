@@ -46,7 +46,7 @@ containers that scrape on a schedule, write results into Postgres, and expose
 that mirror through a read-only PostgREST HTTP bridge.
 
 ```mermaid
-%%{init: {'flowchart': {'nodeSpacing': 50, 'rankSpacing': 100, 'curve': 'basis', 'padding': 20}, 'themeVariables': {'edgeLabelBackground': '#ffffff00', 'fontSize': '13px'}}}%%
+%%{init: {'theme': 'default', 'flowchart': {'nodeSpacing': 50, 'rankSpacing': 100, 'curve': 'basis', 'padding': 20}, 'themeVariables': {'fontSize': '13px'}}}%%
 flowchart LR
 
     nvidia["Internal\nLLM Inference Provider"]
@@ -60,13 +60,13 @@ flowchart LR
     subgraph host["Host Machine/Virtual Machine"]
         direction TB
 
-        subgraph supervisor["OpenShell Supervisor"]
+        subgraph supervisor["OpenShell Sandbox Supervisor"]
             direction TB
 
             l7["OpenShell L7 Proxy\n10.200.0.1:3128"]
             privacyRouter["OpenShell Privacy Router\n(CONNECT proxy)"]
 
-            subgraph sandbox["Sandbox (uid=sandbox)"]
+            subgraph sandbox["Sandbox"]
                 direction LR
 
                 agent["Hermes Agent\n+ Slack messaging channel"]
