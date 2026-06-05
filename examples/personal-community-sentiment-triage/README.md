@@ -47,25 +47,30 @@ that mirror through a read-only PostgREST HTTP bridge.
 
 ```mermaid
 flowchart LR
-    %% External services declared first so Mermaid binds them outside the host subgraph
+    %% ── External services ─────────────────────────────────────────
     nvidia["Internal\nLLM Inference Provider"]
-    slack["Internal\nSlack Bot App"]
-    outlook["Internal\nOutlook / MS Graph"]
+    slack["Internal\nSlack workspace"]
+    outlook["Internal\ngraph.microsoft.com\nmailbox"]
     entra["Internal\nMS Entra ID"]
-    github["External\nGitHub API\nissues · PRs · contents"]
-    forums["External\nNVIDIA Forums\nnemoclaw tag"]
+    github["External\nGitHub API"]
+    forums["External\nNVIDIA Forums\n(nemoclaw tag)"]
+    s3["Internal\nS3 (prod) / MinIO (dev)\nATIF trace storage"]
 
-    subgraph host["Host Machine"]
+    %% ── Host ──────────────────────────────────────────────────────
+    subgraph host["Omnistation Host"]
         direction TB
 
-        subgraph sandbox["OpenShell Sandbox"]
-            agent["Hermes Agent\nLLM + NemoRelay"]
-            outlookBridge["Outlook Bridge"]
-            credSidecar["MS Graph Sidecar\n127.0.0.1:8766"]
+        subgraph sandbox["OpenShell Sandbox (uid=sandbox)"]
+            direction TB
+
+            agent["Hermes Agent\n+ Slack messaging channel"]
+            outlookBridge["outlook-bridge\nMS Graph poller"]
+            nemoSidecar["nemo-relay-cli sidecar\n127.0.0.1:4040"]
+            traceDisk[("/tmp/atif/\n(local-mode fallback)")]
+            atifBridge["atif-bridge\n127.0.0.1:18444\nHTTP→HTTPS shim"]
 
             subgraph sourceSkills["Source Skills"]
                 direction LR
-                s0["github-readonly-live"]
                 s1["source-etl-query"]
                 s4["cross-source-gap-analysis"]
             end
@@ -81,53 +86,68 @@ flowchart LR
                 o1["outlook-email-search"]
             end
 
+            outlookBridge <-->|"deliver inbound email\n(POST /v1/chat/completions)\n+ receive reply"| agent
+
             agent --> sourceSkills
             agent --> slackSkills
-            agent -->|"messaging channel"| outlookBridge
             agent --> outlookSkills
-            agent -->|"OTLP traces"| proxy
-            sourceSkills -->|"HTTP REST"| proxy
-            slackSkills -->|"comms + research"| proxy
-            outlookSkills --> credSidecar
-            outlookBridge --> credSidecar
-            credSidecar -->|"fetch live token\nsession UUID"| proxy
-            credSidecar -->|"Graph API\nHTTPS"| proxy
+            agent -->|"hook events"| nemoSidecar
+            nemoSidecar -.->|"local-mode write"| traceDisk
+            nemoSidecar -->|"S3 PUT"| atifBridge
+            nemoSidecar -->|"OTLP HTTP"| l7
+            atifBridge -->|"S3 PUT"| l7
+            outlookBridge -->|"poll · reply"| l7
+            agent <-->|"messaging channel\n(socket-mode WebSocket)"| l7
+            sourceSkills -->|"HTTP REST"| l7
+            slackSkills -->|"Slack API"| l7
+            outlookSkills -->|"Graph API"| l7
         end
 
-        proxy["L7 Proxy"]
-        phoenix["Phoenix Telemetry\n:6006"]
-        postgrest["PostgREST\nread-only :3100"]
+        l7["OpenShell L7 Proxy\n10.200.0.1:3128"]
+        gateway["OpenShell Gateway\n127.0.0.1:17670\nprovider store ·\nrefresh-token rotation"]
+        atifRelay["atif-export-relay\n:18443\nbearer auth · re-signs"]
+        phoenix["Phoenix\n:6006"]
+        postgrest["PostgREST\n:3100"]
         postgres[("PostgreSQL\nsource mirror")]
-        etls["Source ETLs\nGitHub discussions + Forums\nhourly deltas"]
-        tokenManager["MS Graph Token Manager\nMSAL sessions\n:8765"]
+        etls["Source ETLs\nGitHub + Forums\nhourly deltas"]
 
-        proxy -->|"OTLP traces"| phoenix
-        proxy -->|"HTTP REST"| postgrest
-        proxy -->|"token fetch"| tokenManager
+        l7 -->|"OTLP traces"| phoenix
+        l7 -->|"REST"| postgrest
+        l7 -->|"S3 PUT"| atifRelay
         postgrest --> postgres
         etls -->|"write deltas"| postgres
+        gateway -.->|"Minted access tokens"| l7
     end
 
-    %% Cross-boundary edges (host → external) live outside any subgraph
-    proxy -->|"inference"| nvidia
-    proxy -->|"Slack bot"| slack
-    proxy -->|"Graph API"| outlook
-    proxy -->|"auth read-only REST\none configured repo"| github
-    tokenManager -->|"MSAL auth"| entra
-    entra -.->|"issues token"| tokenManager
+    %% ── Cross-boundary egress ─────────────────────────────────────
+    l7 -->|"inference"| nvidia
+    l7 <-->|"socket-mode events\n+ chat.postMessage"| slack
+    l7 -->|"Graph API"| outlook
+    l7 -->|"REST"| github
+    atifRelay -->|"S3 PutObject"| s3
+    gateway <-->|"refresh-token rotation"| entra
     etls -->|"scheduled scrape"| github
     etls -->|"scheduled scrape"| forums
 
+    %% ── Styles ────────────────────────────────────────────────────
     style host fill:#f7f6ef,stroke:#8a8068,stroke-width:2px
     style sandbox fill:#e7f0ff,stroke:#2b5fab,stroke-width:3px
     style sourceSkills fill:#f0f4ff,stroke:#7090cc,stroke-width:1px
     style slackSkills fill:#f0f4ff,stroke:#7090cc,stroke-width:1px
     style outlookSkills fill:#f0f4ff,stroke:#7090cc,stroke-width:1px
+    style nemoSidecar fill:#fef9e7,stroke:#f39c12,stroke-width:2px
+    style traceDisk fill:#fef9e7,stroke:#f39c12,stroke-width:1px
+    style atifBridge fill:#fef0e7,stroke:#e67e22,stroke-width:2px
+    style atifRelay fill:#fef0e7,stroke:#e67e22,stroke-width:2px
+    style outlookBridge fill:#fef0e7,stroke:#e67e22,stroke-width:2px
+    style l7 fill:#fce5cd,stroke:#e69138,stroke-width:2px
+    style gateway fill:#e7eef0,stroke:#5d6d75,stroke-width:2px
+    style s3 fill:#eef7e9,stroke:#6aa84f,stroke-width:2px
 
     classDef internal fill:#eef7e9,stroke:#6aa84f,stroke-width:2px
     classDef external fill:#fce5cd,stroke:#e69138,stroke-width:2px
 
-    class nvidia,slack,outlook,entra internal
+    class nvidia,slack,outlook,entra,s3 internal
     class github,forums external
 ```
 
