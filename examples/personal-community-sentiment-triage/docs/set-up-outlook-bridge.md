@@ -105,7 +105,7 @@ The `/me` call should return the agent account's profile JSON.
 
 ## Renewing an expired refresh token
 
-Microsoft caps unattended refresh-token lifetime around 90 days. The script's freshness check catches this automatically on the next bring-up (cached `expires_at_ms` past the current time → device-code login fires + cache is rewritten). You can also force it explicitly:
+Microsoft caps unattended refresh-token lifetime around 90 days; the gateway rotates the refresh token transparently before then. If it does expire or gets revoked, re-authenticate by forcing a fresh device-code login:
 
 ```console
 $ OUTLOOK_LOGIN_CACHE=2 bash scripts/bring-up.sh
@@ -122,7 +122,7 @@ After the device-code login succeeds, the refresh token lives in two places:
 
 If you'd prefer the refresh token never touch disk on your machine — shared workstation, demo environment, security-sensitive context — set `OUTLOOK_LOGIN_CACHE=0` in your `.env`. Bring-up will run device-code login on every invocation and write nothing locally. The gateway-side encrypted copy still gets refreshed each time, so the sandbox itself is unaffected.
 
-Microsoft's refresh tokens expire after roughly 90 days of inactivity. The script's freshness check (against the cached `expires_at_ms`) catches this automatically on the next bring-up, or you can force it with `OUTLOOK_LOGIN_CACHE=2 bash scripts/bring-up.sh`.
+Microsoft's refresh tokens expire after roughly 90 days of inactivity; the gateway rotates the token transparently before then. If it does lapse, force a fresh device-code login with `OUTLOOK_LOGIN_CACHE=2 bash scripts/bring-up.sh`.
 
 ## Shared / delegate mailbox access
 

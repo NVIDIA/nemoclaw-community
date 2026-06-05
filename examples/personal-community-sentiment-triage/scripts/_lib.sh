@@ -15,10 +15,9 @@ latest_snapshot() {
 
 # Auto-source .env if present. Always re-sources on every call so that
 # vars added to .env after the operator's last manual `set -a; source .env`
-# don't silently stay unset — that bug bit us during the ATIF_STORAGE_*
-# rename: a stale shell had OUTLOOK_TENANT_ID set but no ATIF_STORAGE_*,
-# and the old "skip if these key vars exist" heuristic was making load_env
-# think .env was already loaded. Sourcing is idempotent (set -a + . file).
+# don't silently stay unset — an "already loaded if these key vars exist"
+# heuristic once let a stale shell skip re-sourcing and miss newly-added vars.
+# Sourcing is idempotent (set -a + . file).
 # The `Auto-sourcing` echo prints once per process tree (sentinel exported
 # into env) so bring-up.sh doesn't print it on every phase.
 load_env() {
@@ -138,8 +137,8 @@ atif_relay_backend() {
 
 # Echo the validated relay downstream bucket for the given (already-validated)
 # backend. minio defaults to the dev bucket; s3 / s3-compatible REQUIRE an
-# explicit ATIF_RELAY_BUCKET — the dev default would point at a nonexistent or
-# foreign real bucket and fail only later, per-trace, at PutObject. Loud on miss.
+# explicit ATIF_RELAY_BUCKET and fail loud here at bring-up if it's unset
+# (the dev default would otherwise silently target a wrong real bucket).
 atif_relay_bucket() {
   local backend="$1"
   case "$backend" in

@@ -514,14 +514,9 @@ PROXYEOF
       printf 'export %s=%q\n' "$_runtime_env_name" "$_runtime_env_value"
     fi
   done
-  # AWS_* for ATIF S3 export — bearer rides in AWS_SESSION_TOKEN (emitted
-  # by the SDK as x-amz-security-token, a standalone header the L7 proxy
-  # can substitute). ACCESS_KEY_ID / SECRET_ACCESS_KEY are literal junk;
-  # the SigV4 envelope they produce is vestigial. AWS_ENDPOINT_URL points
-  # at the in-container atif-bridge on loopback; the bridge re-emits
-  # HTTPS upstream and the L7 proxy MITMs + substitutes from there. See
-  # docs/atif-export.md for the wire diagram. Gated on ATIF_STORAGE_ENABLED
-  # so local-mode sandbox-user shells don't see dead AWS_* exports.
+  # AWS_* for ATIF S3 export, re-emitted to the proxy env file so sandbox-user
+  # shells inherit them (mechanism explained on the first AWS_* export block
+  # above). Gated on ATIF_STORAGE_ENABLED so local-mode shells see no dead exports.
   if [ "$ATIF_STORAGE_ENABLED" = "1" ]; then
     cat <<'STORAGEEOF'
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-nemo-relay-sandbox}"

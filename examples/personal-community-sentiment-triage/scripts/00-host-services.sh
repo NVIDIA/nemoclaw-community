@@ -52,10 +52,9 @@ cmd_up() {
   local profile_args=() backend=""
   if atif_remote_enabled; then
     backend="$(atif_relay_backend)"   # validates s3|minio (loud error if unset)
-    # Resolve + export the downstream bucket BEFORE `docker compose up` so a
-    # missing bucket for s3/s3-compatible fails loud here (not later at
-    # PutObject), and so compose inherits the resolved value instead of its
-    # own :-nemo-relay-traces fallback.
+    # Resolve + export the downstream bucket BEFORE `docker compose up`: s3 /
+    # s3-compatible fail loud here if ATIF_RELAY_BUCKET is unset, and compose
+    # inherits the resolved value.
     export ATIF_RELAY_BUCKET="$(atif_relay_bucket "$backend")"
     profile_args=(--profile "$backend")
     # Generate/read the per-VM bearer from the gitignored cache (not .env) so
