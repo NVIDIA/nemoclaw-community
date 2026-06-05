@@ -66,7 +66,7 @@ flowchart LR
             l7["OpenShell L7 Proxy\n10.200.0.1:3128"]
             privacyRouter["OpenShell Privacy Router\n(CONNECT proxy)"]
 
-            subgraph sandbox["Sandbox"]
+            subgraph sandbox["OpenShell Sandbox"]
                 direction LR
 
                 agent["Hermes Agent\n+ Slack messaging channel"]
