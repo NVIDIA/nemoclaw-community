@@ -150,11 +150,20 @@ setsid openshell sandbox create \
 CREATE_PID=$!
 
 # ── Wait for ready ─────────────────────────────────────────────────────
-# 180 × 2s = 6 min, generous enough for a cold-cache build. If the create
-# process dies before ready, bail with its exit status rather than hanging.
-echo "Waiting for sandbox $SANDBOX_NAME to reach ready…"
+# A cold, uncached image build (the ~73-step hermes Dockerfile) can take many
+# minutes — far longer than a warm rebuild — so wait on a generous, configurable
+# deadline instead of a fixed cap (a too-short cap was killing healthy in-progress
+# builds and making the first bring-up look like it needed a second run). We keep
+# polling while the create process is alive (build still progressing) and only
+# give up at the deadline or if that process dies. Override with
+# SANDBOX_READY_TIMEOUT_SECS for very slow hosts/networks.
+SANDBOX_READY_TIMEOUT_SECS="${SANDBOX_READY_TIMEOUT_SECS:-1200}"
+echo "Waiting for sandbox $SANDBOX_NAME to reach ready (timeout ${SANDBOX_READY_TIMEOUT_SECS}s; the first cold build can take several minutes)…"
 READY=0
-for _ in {1..180}; do
+_wait_start=$(date +%s)
+_deadline=$(( _wait_start + SANDBOX_READY_TIMEOUT_SECS ))
+_next_heartbeat=$(( _wait_start + 60 ))
+while [ "$(date +%s)" -lt "$_deadline" ]; do
   if openshell sandbox list 2>/dev/null | grep -E "^\s*$SANDBOX_NAME\s" | grep -qi ready; then
     READY=1
     break
@@ -163,6 +172,10 @@ for _ in {1..180}; do
     wait "$CREATE_PID" 2>/dev/null
     echo "openshell sandbox create exited before sandbox reached ready" >&2
     exit 1
+  fi
+  if [ "$(date +%s)" -ge "$_next_heartbeat" ]; then
+    echo "  … still building/booting ($(( ($(date +%s) - _wait_start) / 60 ))m elapsed)"
+    _next_heartbeat=$(( $(date +%s) + 60 ))
   fi
   sleep 2
 done
@@ -183,7 +196,7 @@ kill "$SIGKILL_BG_PID" 2>/dev/null || true
 wait "$SIGKILL_BG_PID" 2>/dev/null || true
 
 if [[ "$READY" != "1" ]]; then
-  echo "Sandbox did not reach ready in 360s — check 'openshell sandbox logs $SANDBOX_NAME'" >&2
+  echo "Sandbox did not reach ready in ${SANDBOX_READY_TIMEOUT_SECS}s — likely a slow cold image build. Re-run bring-up (it resumes from cached layers) or raise SANDBOX_READY_TIMEOUT_SECS. Check 'openshell sandbox logs $SANDBOX_NAME'." >&2
   exit 1
 fi
 echo "  Sandbox reported ready; detached local create stream."
