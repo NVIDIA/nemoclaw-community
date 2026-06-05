@@ -39,7 +39,7 @@ The README's [§ Persistence: collective wisdom across restarts](../README.md#pe
 | Sandbox is `Ready` | `openshell sandbox list \| grep hermes-direct` |
 | Slack app handle | Note your bot's `@`-handle from the Slack app manifest (see [set-up-slack.md](set-up-slack.md)). The doc refers to it as `@<your-bot>` — substitute as you go. |
 | At least one Slack user authorized | `grep SLACK_ALLOWED_IDS .env` lists ≥1 `U…` ID. The cross-user step (7) wants ≥2 — if you only have one, run that step yourself from a different channel and the cross-channel claim still holds. |
-| Outlook bridge works | Send `ping` to `OUTLOOK_TARGET_MAILBOX` from any address in `OUTLOOK_ALLOWED_SENDERS` (or any sender if that var is empty); reply within ~30s. |
+| Outlook bridge works | Send `ping` to `OUTLOOK_TARGET_MAILBOX` from an address in `OUTLOOK_ALLOWED_SENDERS` (or from `OUTLOOK_REPLY_TO` if that var is empty); reply within ~30s. |
 | Live GitHub works | `openshell sandbox exec --name hermes-direct -- sh -lc '/usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py rate-limit'` returns JSON without printing a token |
 | Discussion/forum mirror has data | `curl -sf http://localhost:3100/github_discussions?limit=1 \| head -c 200` or `curl -sf http://localhost:3100/forum_topics?limit=1 \| head -c 200` returns a non-empty array |
 | Skills dir is writable | `openshell sandbox exec --name hermes-direct -- ls -la /sandbox/.hermes-data/skills/` lists 6 baked-in skills, all owned by `sandbox` |
@@ -58,7 +58,7 @@ The demo has two roles. Whoever fills them is up to you and what's in your allow
 | **User A** | Slack DM | Iterates on a daily-update format, then expresses to the agent that they'd like the same format next time. |
 | **User B** | Outlook email | Never participated in User A's conversation. Asks for the same kind of update from a fresh session and gets the same format. |
 
-If you have a coworker whose Slack ID is in `SLACK_ALLOWED_IDS` and whose email is on the `OUTLOOK_ALLOWED_SENDERS` list (or who can send from any address if that variable is empty), they're a natural User B — the cross-user claim is fully proven. If you're running solo, you can play both roles on different channels (Slack DM in step 1, Outlook email in step 7); cross-channel still holds, and "cross-user" softens to "different sessions, same human."
+If you have a coworker whose Slack ID is in `SLACK_ALLOWED_IDS` and whose email is on the `OUTLOOK_ALLOWED_SENDERS` list (or matches `OUTLOOK_REPLY_TO` if that list is empty), they're a natural User B — the cross-user claim is fully proven. If you're running solo, you can play both roles on different channels (Slack DM in step 1, Outlook email in step 7); cross-channel still holds, and "cross-user" softens to "different sessions, same human."
 
 > **Note**: Throughout this doc, `@<your-bot>` is a placeholder for the handle of your Slack app — whatever name you set in the manifest (see [set-up-slack.md](set-up-slack.md)). Replace with your actual handle as you go.
 
@@ -234,7 +234,7 @@ The `on_session_start` hook in `plugin/__init__.py` auto-rescans on the next mes
 
 ### Step 7 — User B invokes the format from Outlook
 
-User B — who never participated in step 1's conversation, never saw the format negotiation, and is using a different channel — emails `OUTLOOK_TARGET_MAILBOX` from an address on the `OUTLOOK_ALLOWED_SENDERS` list. Note: the prompt below uses the same natural language User A would, never the skill's filename. The agent should match it against the skill via the skill's `description:` field.
+User B — who never participated in step 1's conversation, never saw the format negotiation, and is using a different channel — emails `OUTLOOK_TARGET_MAILBOX` from an address on the `OUTLOOK_ALLOWED_SENDERS` list (or from `OUTLOOK_REPLY_TO` if that list is empty). Note: the prompt below uses the same natural language User A would, never the skill's filename. The agent should match it against the skill via the skill's `description:` field.
 
 **Subject:** `Daily NemoClaw digest`
 

@@ -166,7 +166,6 @@ BOOTSTRAP_RETRY_WINDOW_SECONDS = 300
 
 HERMES_HOME = os.environ.get("HERMES_HOME", "/sandbox/.hermes-data")
 JOBS_FILE = os.path.join(HERMES_HOME, "cron", "outlook-jobs.json")
-SENDER_POLL_INTERVAL = 30
 
 # ── Delta link persistence ───────────────────────────────────────────────────
 _DELTA_LINK_FILE = pathlib.Path(HERMES_HOME) / "outlook" / "delta-link.json"
@@ -271,9 +270,8 @@ async def graph_patch(path_or_url: str, payload: dict) -> None:
 async def resolve_allowed_senders() -> set[str]:
     """Return the set of allowed sender addresses.
 
-    Reads OUTLOOK_ALLOWED_SENDERS env var (comma-separated) if set.
-    Otherwise waits for the first email in the target inbox and uses
-    that sender — preserving the original "activate by sending a message" UX.
+    Reads OUTLOOK_ALLOWED_SENDERS (comma-separated) if set; otherwise falls
+    back to OUTLOOK_REPLY_TO. Raises RuntimeError if neither is configured.
     """
     configured = os.environ.get("OUTLOOK_ALLOWED_SENDERS", "").strip()
     if configured:
@@ -281,25 +279,14 @@ async def resolve_allowed_senders() -> set[str]:
         log.info("Allowed senders from OUTLOOK_ALLOWED_SENDERS: %s", senders)
         return senders
 
-    # Discover from inbox — wait for first email
-    logged_waiting = False
-    while True:
-        data = await graph_get(
-            f"{_mailbox_base()}/mailFolders/inbox/messages"
-            "?$top=10&$select=from&$orderby=receivedDateTime desc"
-        )
-        for msg in data.get("value", []):
-            address = msg.get("from", {}).get("emailAddress", {}).get("address", "").lower()
-            if "@" in address:
-                log.info("Allowed senders discovered via inbox: %s", address)
-                return {address}
-        if not logged_waiting:
-            log.info(
-                "Inbox empty — waiting for first email to activate the bridge. "
-                "Send a message or set OUTLOOK_ALLOWED_SENDERS to skip discovery."
-            )
-            logged_waiting = True
-        await asyncio.sleep(SENDER_POLL_INTERVAL)
+    reply_to = os.environ.get("OUTLOOK_REPLY_TO", "").strip()
+    if reply_to and "@" in reply_to:
+        log.info("Allowed senders from OUTLOOK_REPLY_TO: %s", reply_to)
+        return {reply_to.lower()}
+
+    raise RuntimeError(
+        "Cannot determine allowed senders: set OUTLOOK_ALLOWED_SENDERS or OUTLOOK_REPLY_TO."
+    )
 
 
 async def initialize_allowed_senders(shutdown: asyncio.Event) -> set[str]:

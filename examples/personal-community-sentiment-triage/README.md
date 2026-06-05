@@ -246,7 +246,7 @@ Now edit `.env` and fill in everything you already have:
     - `OUTLOOK_TARGET_MAILBOX`, `OUTLOOK_REPLY_TO` — the agent's mailbox and your personal mailbox
   - **Slack**: `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` (both required) — see [docs/set-up-slack.md](docs/set-up-slack.md). Partial Outlook configuration (some vars set, some empty) is rejected at bring-up.
 - (optional) `SLACK_ALLOWED_IDS` — comma-separated Slack user IDs to restrict who can DM the agent; leave empty to allow anyone in the workspace
-- (optional) `OUTLOOK_ALLOWED_SENDERS` — comma-separated allowlist of email senders the agent will respond to; leave empty to accept any sender
+- (optional) `OUTLOOK_ALLOWED_SENDERS` — comma-separated allowlist of email senders the agent will respond to; leave empty to fall back to OUTLOOK_REPLY_TO
 - (optional) `GITHUB_TOKEN` for authenticated sandbox read-only
   GitHub REST, `GITHUB_READONLY_REPO`,
   `PHOENIX_COLLECTOR_ENDPOINT`, `PHOENIX_PROJECT_NAME`
