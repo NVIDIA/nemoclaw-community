@@ -29,7 +29,7 @@ Inside the Brev instance:
 
 ```bash
 git clone https://github.com/NVIDIA/nemoclaw-community.git
-cd nemoclaw-community/examples/financial-analyst-hermes
+cd nemoclaw-community
 ```
 
 If you are testing this feature branch before it is merged:
@@ -38,6 +38,11 @@ If you are testing this feature branch before it is merged:
 git remote add pastorsj https://github.com/pastorsj/nemoclaw-community.git || true
 git fetch pastorsj feature/hermes-financial-assistant
 git checkout feature/hermes-financial-assistant
+```
+
+Then enter the example directory:
+
+```bash
 cd examples/financial-analyst-hermes
 ```
 
@@ -50,6 +55,12 @@ export NVIDIA_API_KEY=<your-build-api-key>
 
 curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash
 nemohermes onboard --fresh --name financial-analyst
+```
+
+The equivalent generic CLI form is:
+
+```bash
+nemoclaw onboard --agent hermes --fresh --name financial-analyst
 ```
 
 Choose NVIDIA Endpoints and use:

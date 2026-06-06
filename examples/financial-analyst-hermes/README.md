@@ -50,6 +50,7 @@ examples/financial-analyst-hermes/
     brev-deployment.md
     verify-functionality.md
     nemo-relay-notes.md
+    demo-script.md
 ```
 
 ## 1. Onboard NemoHermes
@@ -61,6 +62,14 @@ export NEMOCLAW_AGENT=hermes
 curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash
 
 nemohermes onboard --fresh --name financial-analyst
+```
+
+`nemohermes onboard` is the preferred Hermes-specific entry point. If you want
+to start from the generic NemoClaw command named in many docs and demos, use the
+same sandbox name with the Hermes agent selected:
+
+```bash
+nemoclaw onboard --agent hermes --fresh --name financial-analyst
 ```
 
 When prompted, choose NVIDIA Endpoints, enter your `NVIDIA_API_KEY`, and select
@@ -203,6 +212,11 @@ For Nemo Relay style trace forwarding, see
 `personal-community-sentiment-triage` example already contains a richer
 Nemo Relay/Phoenix integration that can be used as the starting point for a
 custom Hermes image.
+
+## 8. Demo Runbook
+
+For a concise walkthrough that shows the NemoClaw/OpenShell/Hermes value rather
+than only the final assistant output, see [docs/demo-script.md](docs/demo-script.md).
 
 ## Security and Analyst Caveats
 
