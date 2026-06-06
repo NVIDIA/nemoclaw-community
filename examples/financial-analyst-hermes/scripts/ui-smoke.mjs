@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const url = process.env.FINANCE_UI_URL || 'http://127.0.0.1:8765/';
 const apiBaseUrl = process.env.FINANCE_API_BASE_URL || `${url.replace(/\/$/, '')}/v1`;
 const apiToken = process.env.FINANCE_API_TOKEN || 'test-token';
-const expectedText = process.env.FINANCE_EXPECT_TEXT || 'Mock analyst brief';
+const expectedText = process.env.FINANCE_EXPECT_TEXT === undefined ? 'Mock analyst brief' : process.env.FINANCE_EXPECT_TEXT;
 const responseTimeoutMs = Number(process.env.FINANCE_RESPONSE_TIMEOUT_MS || '120000');
 const exampleRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const screenshot = resolve(exampleRoot, 'docs', 'ui-smoke.png');
