@@ -18,4 +18,4 @@ for skill_dir in "${ROOT_DIR}"/skills/*; do
 done
 
 echo "Done. Try:"
-echo "  nemohermes ${SANDBOX_NAME} exec -- /usr/bin/python3 /sandbox/.hermes-data/skills/financial-market-snapshot/scripts/finance_snapshot.py quote NVDA MSFT"
+echo "  nemohermes ${SANDBOX_NAME} exec -- /usr/bin/python3 /sandbox/.hermes/skills/financial-market-snapshot/scripts/finance_snapshot.py quote NVDA MSFT"

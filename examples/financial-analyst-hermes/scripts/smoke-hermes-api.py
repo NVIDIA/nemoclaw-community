@@ -11,13 +11,19 @@ import sys
 import urllib.request
 
 
-def request_json(url: str, method: str = "GET", payload: dict[str, object] | None = None, token: str | None = None) -> dict[str, object]:
+def request_json(
+    url: str,
+    method: str = "GET",
+    payload: dict[str, object] | None = None,
+    token: str | None = None,
+    timeout: int = 180,
+) -> dict[str, object]:
     headers = {"Content-Type": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
-    with urllib.request.urlopen(req, timeout=45) as response:
+    with urllib.request.urlopen(req, timeout=timeout) as response:
         raw = response.read().decode("utf-8", errors="replace")
     return json.loads(raw) if raw else {}
 
@@ -27,10 +33,11 @@ def main() -> int:
     parser.add_argument("--base-url", default=os.environ.get("HERMES_BASE_URL", "http://127.0.0.1:8642/v1"))
     parser.add_argument("--token", default=os.environ.get("HERMES_API_KEY", ""))
     parser.add_argument("--model", default=os.environ.get("HERMES_MODEL", "nvidia/nemotron-3-ultra-550b-a55b"))
+    parser.add_argument("--timeout", type=int, default=int(os.environ.get("HERMES_TIMEOUT", "180")))
     args = parser.parse_args()
 
     root = args.base_url.rsplit("/v1", 1)[0].rstrip("/")
-    health = request_json(f"{root}/health", token=args.token or None)
+    health = request_json(f"{root}/health", token=args.token or None, timeout=args.timeout)
     payload = {
         "model": args.model,
         "messages": [
@@ -51,6 +58,7 @@ def main() -> int:
         method="POST",
         payload=payload,
         token=args.token or None,
+        timeout=args.timeout,
     )
     message = completion.get("choices", [{}])[0].get("message", {}).get("content", "")
     print(

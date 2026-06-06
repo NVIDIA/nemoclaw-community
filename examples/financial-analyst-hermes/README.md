@@ -86,22 +86,24 @@ export NEMOCLAW_AGENT=hermes
 export NEMOCLAW_NON_INTERACTIVE=1
 export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 export NEMOCLAW_SANDBOX_NAME=financial-analyst
-export NEMOCLAW_PROVIDER=nvidia-prod
+export NEMOCLAW_PROVIDER=build
 export NEMOCLAW_MODEL=nvidia/nemotron-3-ultra-550b-a55b
 export NVIDIA_API_KEY=<your-build-api-key>
 
 curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash
 ```
 
-If your installed NemoClaw build does not honor `NEMOCLAW_MODEL` during
-non-interactive onboarding, onboard with the default NVIDIA model and switch
-afterwards:
+On some remote hosts, Nemotron Ultra can take longer than the onboarding
+validator's short chat-completions timeout. If validation times out, onboard
+with `nvidia/nemotron-3-super-120b-a12b` first, then switch the configured route
+to Ultra without revalidating:
 
 ```bash
 nemohermes inference set \
   --sandbox financial-analyst \
   --provider nvidia-prod \
-  --model nvidia/nemotron-3-ultra-550b-a55b
+  --model nvidia/nemotron-3-ultra-550b-a55b \
+  --no-verify
 ```
 
 ## 2. Install Finance Skills and Policy
@@ -134,10 +136,10 @@ nemohermes financial-analyst policy-add \
 
 ```bash
 nemohermes financial-analyst exec -- \
-  /usr/bin/python3 /sandbox/.hermes-data/skills/financial-market-snapshot/scripts/finance_snapshot.py quote NVDA MSFT
+  /usr/bin/python3 /sandbox/.hermes/skills/financial-market-snapshot/scripts/finance_snapshot.py quote NVDA MSFT
 
 nemohermes financial-analyst exec -- \
-  /usr/bin/python3 /sandbox/.hermes-data/skills/sec-company-facts/scripts/sec_company_facts.py facts NVDA
+  /usr/bin/python3 /sandbox/.hermes/skills/sec-company-facts/scripts/sec_company_facts.py facts NVDA
 ```
 
 For SEC usage in a real workflow, set a descriptive user agent:
@@ -159,7 +161,8 @@ Run the included API smoke:
 ```bash
 python3 scripts/smoke-hermes-api.py \
   --base-url http://127.0.0.1:8642/v1 \
-  --token "$HERMES_API_KEY"
+  --token "$HERMES_API_KEY" \
+  --timeout 180
 ```
 
 Use the dashboard URL:

@@ -27,13 +27,13 @@ export SEC_USER_AGENT="Your Name your.email@example.com"
 ### 1. Resolve a ticker
 
 ```bash
-/usr/bin/python3 /sandbox/.hermes-data/skills/sec-company-facts/scripts/sec_company_facts.py lookup NVDA
+/usr/bin/python3 /sandbox/.hermes/skills/sec-company-facts/scripts/sec_company_facts.py lookup NVDA
 ```
 
 ### 2. Pull a compact facts summary
 
 ```bash
-/usr/bin/python3 /sandbox/.hermes-data/skills/sec-company-facts/scripts/sec_company_facts.py facts NVDA
+/usr/bin/python3 /sandbox/.hermes/skills/sec-company-facts/scripts/sec_company_facts.py facts NVDA
 ```
 
 ### 3. Explain the result carefully

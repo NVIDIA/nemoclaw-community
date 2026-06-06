@@ -69,13 +69,18 @@ Choose NVIDIA Endpoints and use:
 nvidia/nemotron-3-ultra-550b-a55b
 ```
 
-If the wizard creates the sandbox with a different NVIDIA model, switch it:
+On the tested Brev instance, direct Nemotron Ultra chat completions worked but
+took about 50 seconds, which exceeded the onboarding validator's shorter
+timeout. If Ultra validation times out during onboarding, onboard with
+`nvidia/nemotron-3-super-120b-a12b` first, then switch the configured route to
+Ultra:
 
 ```bash
 nemohermes inference set \
   --sandbox financial-analyst \
   --provider nvidia-prod \
-  --model nvidia/nemotron-3-ultra-550b-a55b
+  --model nvidia/nemotron-3-ultra-550b-a55b \
+  --no-verify
 ```
 
 ## 4. Install Skills and Policy
@@ -88,10 +93,10 @@ Verify the installed tools from the sandbox:
 
 ```bash
 nemohermes financial-analyst exec -- \
-  /usr/bin/python3 /sandbox/.hermes-data/skills/financial-market-snapshot/scripts/finance_snapshot.py quote NVDA MSFT
+  /usr/bin/python3 /sandbox/.hermes/skills/financial-market-snapshot/scripts/finance_snapshot.py quote NVDA MSFT
 
 nemohermes financial-analyst exec -- \
-  /usr/bin/python3 /sandbox/.hermes-data/skills/sec-company-facts/scripts/sec_company_facts.py facts NVDA
+  /usr/bin/python3 /sandbox/.hermes/skills/sec-company-facts/scripts/sec_company_facts.py facts NVDA
 ```
 
 ## 5. Forward Ports From Brev

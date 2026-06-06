@@ -23,13 +23,13 @@ returns structured JSON. Prefer the helper over ad hoc web scraping.
 Run the helper from inside the sandbox:
 
 ```bash
-/usr/bin/python3 /sandbox/.hermes-data/skills/financial-market-snapshot/scripts/finance_snapshot.py quote NVDA MSFT AAPL
+/usr/bin/python3 /sandbox/.hermes/skills/financial-market-snapshot/scripts/finance_snapshot.py quote NVDA MSFT AAPL
 ```
 
 For a saved watchlist:
 
 ```bash
-/usr/bin/python3 /sandbox/.hermes-data/skills/financial-market-snapshot/scripts/finance_snapshot.py watchlist --file /sandbox/workspace/watchlist.txt
+/usr/bin/python3 /sandbox/.hermes/skills/financial-market-snapshot/scripts/finance_snapshot.py watchlist --file /sandbox/workspace/watchlist.txt
 ```
 
 ### 2. Interpret the JSON

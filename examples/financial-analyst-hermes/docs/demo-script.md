@@ -63,10 +63,10 @@ demo. It does not get brokerage, email, Slack, or arbitrary internal access.
 
 ```bash
 nemohermes financial-analyst exec -- \
-  /usr/bin/python3 /sandbox/.hermes-data/skills/financial-market-snapshot/scripts/finance_snapshot.py quote NVDA MSFT
+  /usr/bin/python3 /sandbox/.hermes/skills/financial-market-snapshot/scripts/finance_snapshot.py quote NVDA MSFT
 
 nemohermes financial-analyst exec -- \
-  /usr/bin/python3 /sandbox/.hermes-data/skills/sec-company-facts/scripts/sec_company_facts.py facts NVDA
+  /usr/bin/python3 /sandbox/.hermes/skills/sec-company-facts/scripts/sec_company_facts.py facts NVDA
 ```
 
 Talking point: the tools return structured JSON that Hermes can cite and
@@ -76,7 +76,7 @@ synthesize, while OpenShell still constrains where the helper can connect.
 
 ```bash
 curl -sf http://127.0.0.1:8642/health
-python3 scripts/smoke-hermes-api.py --base-url http://127.0.0.1:8642/v1
+python3 scripts/smoke-hermes-api.py --base-url http://127.0.0.1:8642/v1 --timeout 180
 ```
 
 Talking point: Hermes exposes an OpenAI-compatible API, so existing internal
