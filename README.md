@@ -19,6 +19,7 @@ Some examples are included in this repository. Others currently live in [brevdev
 
 | Example | Description | Link |
 | ---- | ----------- | ---- |
+| Financial Analyst Hermes Assistant | Minimal NemoHermes assistant for analyst briefs with Nemotron Ultra, read-only public finance skills, SEC facts, delayed quote snapshots, OpenAI-compatible API access, a small UI, and Brev deployment guidance. | [Guide](examples/financial-analyst-hermes/README.md) |
 | Personal Community Sentiment Triage | Pairs a Hermes harness with an OpenShell sandbox and community-signal integrations across Slack, Outlook, live read-only GitHub REST, GitHub discussion mirrors, and NVIDIA forum mirrors. | [Guide](examples/personal-community-sentiment-triage/README.md) |
 | Hermes Brev Launchable | Provides a notebook path from a fresh Brev CPU instance to a working NemoClaw-managed Hermes sandbox, including installation, onboarding, API verification, and terminal access. | [Guide](examples/hermes-launchable/README.md) |
 | OpenClaw Omni Example | Sets up a NemoClaw sandbox with a Nemotron Omni vision sub-agent, including reference OpenClaw configuration, policy, agent instructions, and verification scripts. | [Guide](https://github.com/brevdev/nemoclaw-demos/blob/main/openclaw-omni-demo/README.md) |

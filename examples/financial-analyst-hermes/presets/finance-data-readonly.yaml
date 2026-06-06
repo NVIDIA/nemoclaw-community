@@ -1,0 +1,43 @@
+preset:
+  name: finance-data-readonly
+  description: "Read-only public finance data for analyst snapshots: Yahoo chart quotes and SEC company facts."
+network_policies:
+  finance-yahoo-chart:
+    name: finance-yahoo-chart
+    endpoints:
+      - host: query1.finance.yahoo.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/v8/finance/chart/**" }
+    binaries:
+      - { path: /usr/bin/python3 }
+      - { path: /usr/local/bin/python3 }
+      - { path: /usr/bin/curl }
+  finance-sec-www:
+    name: finance-sec-www
+    endpoints:
+      - host: www.sec.gov
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/files/company_tickers.json" }
+    binaries:
+      - { path: /usr/bin/python3 }
+      - { path: /usr/local/bin/python3 }
+      - { path: /usr/bin/curl }
+  finance-sec-data:
+    name: finance-sec-data
+    endpoints:
+      - host: data.sec.gov
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/api/xbrl/companyfacts/**" }
+    binaries:
+      - { path: /usr/bin/python3 }
+      - { path: /usr/local/bin/python3 }
+      - { path: /usr/bin/curl }
