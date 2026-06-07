@@ -51,7 +51,7 @@ openshell forward start --background 8642 financial-analyst
 nemohermes financial-analyst dashboard-url --quiet
 ```
 
-Expected result: a local URL on port `18789`.
+Expected result: the local dashboard URL reported by NemoHermes.
 
 ## Tiny UI
 

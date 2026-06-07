@@ -36,7 +36,8 @@ image with `nemohermes onboard --from <Dockerfile>`.
 1. Start from the stock NemoClaw Hermes Dockerfile contract.
 2. Copy the Nemo Relay binary and plugin assets into the image.
 3. Preserve `/sandbox/.hermes/plugins/nemoclaw`.
-4. Add the Nemo Relay plugin under `/sandbox/.hermes-data/plugins/`.
+4. Add the Nemo Relay plugin under the Hermes plugin directory used by your
+   custom image.
 5. Add policy for your trace sink, such as local Phoenix or an internal relay.
 6. Re-onboard with:
 

@@ -104,7 +104,6 @@ nemohermes financial-analyst exec -- \
 From your local machine:
 
 ```bash
-brev port-forward financial-assistant-agent -p 18789:18789
 brev port-forward financial-assistant-agent -p 8642:8642
 ```
 

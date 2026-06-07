@@ -21,8 +21,8 @@ to brokerage accounts, place trades, or provide personalized investment advice.
 - Brev deployment commands in [docs/brev-deployment.md](docs/brev-deployment.md).
 
 Current NemoClaw docs describe `nemohermes` as the Hermes-selected alias for
-NemoClaw, with the Hermes dashboard on port `18789` and the OpenAI-compatible
-API on port `8642`. See the official
+NemoClaw. Use `nemohermes <sandbox> dashboard-url --quiet` to discover the
+dashboard URL; the OpenAI-compatible API is exposed on port `8642`. See the official
 [NemoClaw Hermes quickstart](https://docs.nvidia.com/nemoclaw/latest/user-guide/hermes/get-started/quickstart)
 and [NemoClaw inference options](https://docs.nvidia.com/nemoclaw/latest/inference/inference-options.html).
 
