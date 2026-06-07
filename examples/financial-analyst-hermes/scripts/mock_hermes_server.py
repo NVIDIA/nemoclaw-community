@@ -9,10 +9,13 @@ import json
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+import urllib.request
 
 
 ROOT = Path(__file__).resolve().parents[1]
 UI_DIR = ROOT / "ui"
+PROXY_BASE_URL = ""
+PROXY_TIMEOUT = 240
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -30,12 +33,18 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self) -> None:
+        if PROXY_BASE_URL and self.path == "/health":
+            self._proxy()
+            return
         if self.path == "/health":
             self._json({"status": "ok", "service": "mock-hermes"})
             return
         super().do_GET()
 
     def do_POST(self) -> None:
+        if PROXY_BASE_URL and self.path.startswith("/v1/"):
+            self._proxy()
+            return
         if self.path.rstrip("/") == "/v1/chat/completions":
             length = int(self.headers.get("Content-Length", "0"))
             body = self.rfile.read(length).decode("utf-8", errors="replace")
@@ -78,14 +87,41 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _proxy(self) -> None:
+        target = f"{PROXY_BASE_URL.rstrip('/')}{self.path}"
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length) if length else None
+        headers = {
+            key: value
+            for key, value in self.headers.items()
+            if key.lower() not in {"host", "content-length"}
+        }
+        req = urllib.request.Request(target, data=body, headers=headers, method=self.command)
+        try:
+            with urllib.request.urlopen(req, timeout=PROXY_TIMEOUT) as response:
+                data = response.read()
+                self.send_response(response.status)
+                self.send_header("Content-Type", response.headers.get("Content-Type", "application/json"))
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+        except Exception as exc:
+            self._json({"ok": False, "error": type(exc).__name__, "message": str(exc)})
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--proxy-base-url", default="", help="proxy /v1/* and /health to a live Hermes base URL, e.g. http://127.0.0.1:8642")
+    parser.add_argument("--proxy-timeout", type=int, default=240)
     args = parser.parse_args()
+    global PROXY_BASE_URL, PROXY_TIMEOUT
+    PROXY_BASE_URL = args.proxy_base_url
+    PROXY_TIMEOUT = args.proxy_timeout
     server = ThreadingHTTPServer((args.host, args.port), Handler)
-    print(f"Serving finance UI and mock Hermes API at http://{args.host}:{args.port}", flush=True)
+    mode = f"proxying Hermes at {PROXY_BASE_URL}" if PROXY_BASE_URL else "mocking Hermes"
+    print(f"Serving finance UI at http://{args.host}:{args.port} ({mode})", flush=True)
     server.serve_forever()
     return 0
 

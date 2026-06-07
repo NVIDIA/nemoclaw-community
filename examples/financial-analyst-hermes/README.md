@@ -173,16 +173,19 @@ nemohermes financial-analyst dashboard-url --quiet
 
 ## 5. Use the Tiny UI
 
-Serve the UI locally:
+Serve the UI locally with same-origin proxying to Hermes:
 
 ```bash
-cd examples/financial-analyst-hermes/ui
-python3 -m http.server 8080
+cd examples/financial-analyst-hermes
+python3 scripts/mock_hermes_server.py \
+  --port 18080 \
+  --proxy-base-url http://127.0.0.1:8642
 ```
 
-Open `http://127.0.0.1:8080`, set the API base URL to
-`http://127.0.0.1:8642/v1`, enter the Hermes API token if required, and send a
-prompt.
+Open `http://127.0.0.1:18080`, set the API base URL to
+`http://127.0.0.1:18080/v1`, enter the Hermes API token if required, and send a
+prompt. The helper server avoids browser CORS issues by proxying `/v1/*` to
+Hermes on the host.
 
 For a no-sandbox UI smoke test, use the mock Hermes server:
 

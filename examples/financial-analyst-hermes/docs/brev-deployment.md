@@ -126,18 +126,22 @@ In the Brev shell:
 
 ```bash
 cd nemoclaw-community/examples/financial-analyst-hermes
-python3 -m http.server 8080 --directory ui
+python3 scripts/mock_hermes_server.py \
+  --host 0.0.0.0 \
+  --port 18080 \
+  --proxy-base-url http://127.0.0.1:8642
 ```
 
 From your local machine:
 
 ```bash
-brev port-forward financial-assistant-agent -p 8080:8080
+brev port-forward financial-assistant-agent -p 18080:18080
 ```
 
-Open `http://127.0.0.1:8080`, set the API base URL to
-`http://127.0.0.1:8642/v1`, and enter the Hermes API token if your sandbox
-requires it.
+Open `http://127.0.0.1:18080`, set the API base URL to
+`http://127.0.0.1:18080/v1`, and enter the Hermes API token if your sandbox
+requires it. The helper server proxies `/v1/*` to Hermes, avoiding browser CORS
+issues and avoiding port `8080`, which OpenShell uses for the gateway.
 
 ## 7. Operational Checks
 

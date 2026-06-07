@@ -85,11 +85,11 @@ apps can call the sandboxed assistant without learning a custom protocol.
 ## 6. Show the UI
 
 ```bash
-python3 -m http.server 8080 --directory ui
+python3 scripts/mock_hermes_server.py --port 18080 --proxy-base-url http://127.0.0.1:8642
 ```
 
-Open `http://127.0.0.1:8080`, set API base URL to
-`http://127.0.0.1:8642/v1`, and use this prompt:
+Open `http://127.0.0.1:18080`, set API base URL to
+`http://127.0.0.1:18080/v1`, and use this prompt:
 
 ```text
 Create a concise analyst brief for NVDA. Use a public market snapshot and SEC
