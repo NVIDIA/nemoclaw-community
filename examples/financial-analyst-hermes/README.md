@@ -1,9 +1,9 @@
 # Financial Analyst Hermes Assistant
 
 A small NemoClaw/NemoHermes example for a financial analyst. It uses a stock
-NemoHermes sandbox, NVIDIA-hosted Nemotron Ultra, three installable Hermes
-skills, a read-only finance data policy preset, and a tiny host UI that talks to
-the Hermes OpenAI-compatible API.
+NemoHermes sandbox, a configurable OpenAI-compatible chat API, four installable
+Hermes skills, a read-only finance data policy preset, and a streaming
+financial desk UI that talks to the Hermes OpenAI-compatible API.
 
 This example is intentionally narrow: public quote snapshots, SEC
 company facts, concise analyst briefs, and explicit caveats. It does not connect
@@ -12,12 +12,13 @@ to brokerage accounts, place trades, or provide personalized investment advice.
 ## What It Shows
 
 - `nemohermes onboard` as the main lifecycle command.
-- `nvidia/nemotron-3-ultra-550b-a55b` through NVIDIA Endpoints on
-  `https://integrate.api.nvidia.com/v1`.
+- A provider-agnostic API route configured with API URL, API key, and model.
 - Hermes skills installed with `nemohermes <sandbox> skill install <path>`.
 - Read-only OpenShell/NemoClaw policy for public finance data.
 - API access through Hermes on `http://127.0.0.1:8642/v1`.
-- A tiny local UI for prompt templates and OpenAI-compatible chat calls.
+- A financial desk UI for streaming chat, Outlook-style email prompts, and run
+  telemetry.
+- Optional Outlook, NeMo Relay, and Phoenix integration scaffolding.
 - Brev deployment commands in [docs/brev-deployment.md](docs/brev-deployment.md).
 
 Current NemoClaw docs describe `nemohermes` as the Hermes-selected alias for
@@ -34,22 +35,41 @@ examples/financial-analyst-hermes/
     financial-market-snapshot/
     sec-company-facts/
     financial-analyst-brief/
+    financial-analyst-playbook/
   presets/
     finance-data-readonly.yaml
   scripts/
     install-skills.sh
     smoke-hermes-api.py
-    smoke-nemotron-ultra.py
-    mock_hermes_server.py
+    smoke-compatible-api.py
+    finance_ui_server.py
+    outlook_finance_bridge.py
     ui-smoke.mjs
+  providers/
+    compatible-chat-api.yaml
+    outlook-email.yaml
+  agents/hermes/
+    plugins/nemo-relay/
+    nemo-relay/finalize-hook
+    nemo-relay/plugins.toml.in
+    relay-hooks.yaml
+  observability/
+    phoenix-compose.yml
+  fixtures/
+    outlook-emails.json
   ui/
     index.html
-    styles.css
-    app.js
+    src/
+      App.tsx
+      styles.css
   docs/
     brev-deployment.md
     verify-functionality.md
     nemo-relay-notes.md
+    booth-demo-upgrade.md
+    outlook-integration.md
+    relay-phoenix.md
+    self-evolving-demo.md
     demo-script.md
 ```
 
@@ -72,11 +92,27 @@ same sandbox name with the Hermes agent selected:
 nemoclaw onboard --agent hermes --fresh --name financial-analyst
 ```
 
-When prompted, choose NVIDIA Endpoints, enter your `NVIDIA_API_KEY`, and select
-the model ID:
+When prompted, choose an OpenAI-compatible provider and enter the API key for
+that provider. Onboard can use a default model first; then switch the running
+Hermes sandbox to the provider and model you want for the demo:
 
-```text
-nvidia/nemotron-3-ultra-550b-a55b
+```bash
+export FINANCE_API_URL=<your-compatible-api-url>
+export FINANCE_API_KEY=<your-compatible-api-key>
+export FINANCE_MODEL=openai/openai/gpt-5.5
+export OPENAI_API_KEY="$FINANCE_API_KEY"
+
+openshell provider create \
+  --name compatible-chat-api \
+  --type openai \
+  --credential OPENAI_API_KEY \
+  --config OPENAI_BASE_URL="$FINANCE_API_URL"
+
+nemohermes inference set \
+  --sandbox financial-analyst \
+  --provider compatible-chat-api \
+  --model "$FINANCE_MODEL" \
+  --no-verify
 ```
 
 Non-interactive starter:
@@ -86,25 +122,25 @@ export NEMOCLAW_AGENT=hermes
 export NEMOCLAW_NON_INTERACTIVE=1
 export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 export NEMOCLAW_SANDBOX_NAME=financial-analyst
-export NEMOCLAW_PROVIDER=build
-export NEMOCLAW_MODEL=nvidia/nemotron-3-ultra-550b-a55b
-export NVIDIA_API_KEY=<your-build-api-key>
+export NEMOCLAW_PROVIDER=openai
+export NEMOCLAW_MODEL=openai/openai/gpt-5.5
+export OPENAI_API_KEY=<your-compatible-api-key>
 
 curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash
 ```
 
-On some remote hosts, Nemotron Ultra can take longer than the onboarding
-validator's short chat-completions timeout. If validation times out, onboard
-with `nvidia/nemotron-3-super-120b-a12b` first, then switch the configured route
-to Ultra without revalidating:
+The provider route is:
 
-```bash
-nemohermes inference set \
-  --sandbox financial-analyst \
-  --provider nvidia-prod \
-  --model nvidia/nemotron-3-ultra-550b-a55b \
-  --no-verify
+```text
+provider: compatible-chat-api
+API URL: set by FINANCE_API_URL or OPENAI_BASE_URL
+model: set by FINANCE_MODEL or OPENAI_MODEL
 ```
+
+Verification note from 2026-06-08: the Brev demo was redeployed with
+`openai/openai/gpt-5.5` through a compatible chat-completions provider and
+Hermes. If a selected model returns upstream errors, choose another model
+supported by the same API provider and rerun the smoke tests below.
 
 ## 2. Install Finance Skills and Policy
 
@@ -116,7 +152,7 @@ bash scripts/install-skills.sh financial-analyst
 ```
 
 The script applies [presets/finance-data-readonly.yaml](presets/finance-data-readonly.yaml)
-and installs all three skill directories.
+and installs all four skill directories.
 
 The policy allows read-only requests from Python helpers to:
 
@@ -160,9 +196,14 @@ Run the included API smoke:
 
 ```bash
 python3 scripts/smoke-hermes-api.py \
-  --base-url http://127.0.0.1:8642/v1 \
-  --token "$HERMES_API_KEY" \
+  --api-url http://127.0.0.1:8642/v1 \
   --timeout 180
+```
+
+Smoke-test a compatible API directly before changing a sandbox route:
+
+```bash
+python3 scripts/smoke-compatible-api.py --env-file ../../.env
 ```
 
 Use the dashboard URL:
@@ -171,30 +212,34 @@ Use the dashboard URL:
 nemohermes financial-analyst dashboard-url --quiet
 ```
 
-## 5. Use the Tiny UI
+## 5. Use the Financial Desk UI
 
 Serve the UI locally with same-origin proxying to Hermes:
 
 ```bash
 cd examples/financial-analyst-hermes
-python3 scripts/mock_hermes_server.py \
+npm install
+npm run build
+python3 scripts/finance_ui_server.py \
   --port 18080 \
-  --proxy-base-url http://127.0.0.1:8642
+  --api-url http://127.0.0.1:8642
 ```
 
-Open `http://127.0.0.1:18080`, set the API base URL to
-`http://127.0.0.1:18080/v1`, enter the Hermes API token if required, and send a
-prompt. The helper server avoids browser CORS issues by proxying `/v1/*` to
-Hermes on the host.
+Open `http://127.0.0.1:18080` and send a prompt. The helper server avoids
+browser CORS issues by proxying `/v1/*` to Hermes on the host. Chat responses
+stream token chunks into the UI, assistant markdown is rendered inline, and the
+browser does not ask for an API token or API URL.
 
-For a no-sandbox UI smoke test, use the mock Hermes server:
+The UI also includes Outlook-style inbox cards for a booth-safe email demo.
+For the upgraded walkthrough, see
+[docs/booth-demo-upgrade.md](docs/booth-demo-upgrade.md).
+
+Run the UI smoke in prompt and email modes:
 
 ```bash
-cd examples/financial-analyst-hermes
-python3 scripts/mock_hermes_server.py --port 8765
+FINANCE_UI_URL=http://127.0.0.1:18080/ npm run ui:smoke
+FINANCE_UI_URL=http://127.0.0.1:18080/ FINANCE_SMOKE_MODE=email npm run ui:smoke
 ```
-
-Then open `http://127.0.0.1:8765`.
 
 ## 6. Good Demo Prompt
 
@@ -204,22 +249,47 @@ and SEC company facts. Separate facts from hypotheses, include checks before
 acting, and include a caveat that this is not investment advice.
 ```
 
-## 7. Nemo Relay Logging
+## 7. Outlook Email
 
-The minimal path uses current NemoHermes lifecycle logs:
+Fixture rehearsal:
 
 ```bash
-nemohermes financial-analyst status
-nemohermes financial-analyst logs --follow
+python3 scripts/outlook_finance_bridge.py \
+  --api-url http://127.0.0.1:18080/v1 \
+  --fixture fixtures/outlook-emails.json \
+  --limit 1
 ```
 
-For Nemo Relay style trace forwarding, see
-[docs/nemo-relay-notes.md](docs/nemo-relay-notes.md). The existing
-`personal-community-sentiment-triage` example already contains a richer
-Nemo Relay/Phoenix integration that can be used as the starting point for a
-custom Hermes image.
+For real Microsoft Graph setup, see
+[docs/outlook-integration.md](docs/outlook-integration.md).
 
-## 8. Demo Runbook
+## 8. Self-Evolving Analyst Demo
+
+Run the 10-question/follow-up evaluation to prove the assistant uses the right
+skills, remembers session preferences, and improves into a consistent briefing
+playbook:
+
+```bash
+python3 scripts/self_evolving_eval.py \
+  --api-url http://127.0.0.1:18080/v1 \
+  --questions fixtures/self-evolving-questions.json
+```
+
+The full walkthrough is in
+[docs/self-evolving-demo.md](docs/self-evolving-demo.md).
+
+## 9. Nemo Relay And Phoenix
+
+Use the same sidecar pattern as the personal community sentiment agent:
+Hermes owns skills and LLM/tool hooks, NeMo Relay runs on loopback inside the
+sandbox, and Phoenix receives OpenInference traces from Relay. The UI server
+does not emit traces.
+
+See [agents/hermes/README.md](agents/hermes/README.md),
+[docs/relay-phoenix.md](docs/relay-phoenix.md), and
+[docs/nemo-relay-notes.md](docs/nemo-relay-notes.md).
+
+## 10. Demo Runbook
 
 For a concise walkthrough that shows the NemoClaw/OpenShell/Hermes value rather
 than only the final assistant output, see [docs/demo-script.md](docs/demo-script.md).

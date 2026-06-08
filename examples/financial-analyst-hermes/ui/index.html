@@ -1,53 +1,12 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>NemoHermes Financial Analyst</title>
-    <link rel="stylesheet" href="styles.css">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NemoHermes Financial Desk</title>
   </head>
   <body>
-    <main class="app">
-      <section class="workspace" aria-label="Financial analyst workspace">
-        <header class="topbar">
-          <div>
-            <p class="eyebrow">NemoClaw · Hermes · Nemotron Ultra</p>
-            <h1>Financial Analyst Assistant</h1>
-          </div>
-          <div class="status" id="status">Ready</div>
-        </header>
-
-        <section class="controls" aria-label="Connection settings">
-          <label>
-            <span>API base URL</span>
-            <input id="baseUrl" aria-label="API base URL" value="http://127.0.0.1:8642/v1">
-          </label>
-          <label>
-            <span>API token</span>
-            <input id="apiToken" aria-label="API token" type="password" placeholder="Hermes bearer token">
-          </label>
-        </section>
-
-        <section class="prompt-row" aria-label="Prompt shortcuts">
-          <button data-template="snapshot">Watchlist snapshot</button>
-          <button data-template="earnings">Earnings prep</button>
-          <button data-template="sec">SEC facts</button>
-        </section>
-
-        <section class="conversation" id="conversation" aria-live="polite">
-          <article class="message assistant">
-            <strong>Assistant</strong>
-            <p>Ask for a market snapshot, SEC facts summary, or short analyst brief.</p>
-          </article>
-        </section>
-
-        <form class="composer" id="composer">
-          <label class="sr-only" for="prompt">Prompt</label>
-          <textarea id="prompt" rows="4">Create a concise analyst brief for NVDA using a public market snapshot and SEC company facts. Include caveats.</textarea>
-          <button type="submit">Send</button>
-        </form>
-      </section>
-    </main>
-    <script src="app.js"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

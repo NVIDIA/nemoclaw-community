@@ -1,6 +1,6 @@
 # Nemo Relay Notes
 
-This example keeps logging simple by default:
+This example keeps lifecycle logging simple by default:
 
 ```bash
 nemohermes financial-analyst status
@@ -10,26 +10,28 @@ nemohermes financial-analyst logs --follow
 That path is enough to show the NemoClaw lifecycle, OpenShell sandbox state,
 Hermes API availability, and runtime logs.
 
-## When to Add Nemo Relay
+## Sidecar Pattern
 
-Add Nemo Relay when you want structured traces across:
+For booth observability, add NeMo Relay inside the Hermes sandbox, following
+the same pattern as the personal community sentiment agent. Relay gives
+structured traces across:
 
 - API requests into Hermes
 - tool calls from Hermes
 - per-turn artifacts
 - optional Phoenix or object-store export
 
-The repository already includes a fuller reference implementation under
-`examples/personal-community-sentiment-triage/agents/hermes/`:
+This finance example includes the minimal sidecar assets under
+`agents/hermes/`:
 
-- `nemo-relay/plugins.toml.in`
 - `plugins/nemo-relay/`
 - `nemo-relay/finalize-hook`
-- `bridges/atif/`
-- Phoenix and ATIF relay documentation
+- `nemo-relay/plugins.toml.in`
+- `relay-hooks.yaml`
 
-Use that example when you want to bake Nemo Relay into a custom Hermes sandbox
-image with `nemohermes onboard --from <Dockerfile>`.
+The personal sentiment agent remains the full production reference for baking
+Relay into a custom Hermes sandbox image and for optional Outlook/ATIF relay
+bridges.
 
 ## Minimal Adaptation Path
 
@@ -45,5 +47,6 @@ image with `nemohermes onboard --from <Dockerfile>`.
 nemohermes onboard --from ./Dockerfile --name financial-analyst
 ```
 
-For this introductory finance assistant, the added image complexity is optional.
-The skills and API workflow work without Nemo Relay.
+For a live sandbox retrofit, install the Relay binary, copy these assets into
+Hermes home, set `NEMO_RELAY_GATEWAY_URL=http://127.0.0.1:4040`, merge
+`relay-hooks.yaml`, and start the sidecar before `hermes gateway run`.

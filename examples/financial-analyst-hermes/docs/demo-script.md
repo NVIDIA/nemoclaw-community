@@ -18,7 +18,7 @@ sandbox. OpenShell enforces the policy boundary around the agent.
 
 ```bash
 export NEMOCLAW_AGENT=hermes
-export NVIDIA_API_KEY=<your-build-api-key>
+export OPENAI_API_KEY=<your-compatible-api-key>
 nemohermes onboard --fresh --name financial-analyst
 ```
 
@@ -28,10 +28,25 @@ Equivalent generic NemoClaw form:
 nemoclaw onboard --agent hermes --fresh --name financial-analyst
 ```
 
-Choose NVIDIA Endpoints and model:
+After onboarding, switch Hermes to the provider and model you want to demo:
 
-```text
-nvidia/nemotron-3-ultra-550b-a55b
+```bash
+export FINANCE_API_URL=<your-compatible-api-url>
+export FINANCE_API_KEY=<your-compatible-api-key>
+export FINANCE_MODEL=<your-chat-model>
+export OPENAI_API_KEY="$FINANCE_API_KEY"
+
+openshell provider create \
+  --name compatible-chat-api \
+  --type openai \
+  --credential OPENAI_API_KEY \
+  --config OPENAI_BASE_URL="$FINANCE_API_URL"
+
+nemohermes inference set \
+  --sandbox financial-analyst \
+  --provider compatible-chat-api \
+  --model "$FINANCE_MODEL" \
+  --no-verify
 ```
 
 ## 3. Show the Governed Policy
@@ -76,20 +91,21 @@ synthesize, while OpenShell still constrains where the helper can connect.
 
 ```bash
 curl -sf http://127.0.0.1:8642/health
-python3 scripts/smoke-hermes-api.py --base-url http://127.0.0.1:8642/v1 --timeout 180
+python3 scripts/smoke-hermes-api.py --api-url http://127.0.0.1:8642/v1 --timeout 180
 ```
 
-Talking point: Hermes exposes an OpenAI-compatible API, so existing internal
-apps can call the sandboxed assistant without learning a custom protocol.
+Talking point: Hermes exposes an OpenAI-compatible API, so existing apps can
+call the sandboxed assistant without learning a custom protocol. For this demo,
+OpenShell routes that API through the configured provider while keeping
+credentials server-side.
 
 ## 6. Show the UI
 
 ```bash
-python3 scripts/mock_hermes_server.py --port 18080 --proxy-base-url http://127.0.0.1:8642
+python3 scripts/finance_ui_server.py --port 18080 --api-url http://127.0.0.1:8642
 ```
 
-Open `http://127.0.0.1:18080`, set API base URL to
-`http://127.0.0.1:18080/v1`, and use this prompt:
+Open `http://127.0.0.1:18080` and use this prompt:
 
 ```text
 Create a concise analyst brief for NVDA. Use a public market snapshot and SEC

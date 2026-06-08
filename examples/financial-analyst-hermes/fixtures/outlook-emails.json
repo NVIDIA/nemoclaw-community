@@ -1,0 +1,14 @@
+[
+  {
+    "id": "fixture-nvda-brief",
+    "from": "pm@northstar-cap.com",
+    "subject": "NVDA pre-market brief",
+    "body": "Please create a concise NVDA analyst brief using a public market snapshot and SEC company facts. Include caveats and next checks before acting."
+  },
+  {
+    "id": "fixture-risk-check",
+    "from": "risk@northstar-cap.com",
+    "subject": "Exposure check",
+    "body": "Review NVDA using only public data. Separate facts from hypotheses and call out what still needs validation."
+  }
+]

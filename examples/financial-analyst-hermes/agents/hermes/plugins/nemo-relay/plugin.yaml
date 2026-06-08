@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: nemo-relay
+version: "0.0.1"
+description: "Forwards Hermes pre/post_api_request and pre/post_tool_call hooks to NeMo-Relay with exact bodies and stable tool_call_ids for paired Phoenix spans."
+author: "NVIDIA Corporation"
+manifest_version: 1
+hooks:
+  - pre_api_request
+  - post_api_request
+  - pre_tool_call
+  - post_tool_call

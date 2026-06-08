@@ -9,6 +9,7 @@ import json
 import time
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Iterable
 
 
@@ -39,7 +40,9 @@ class Quote:
     def change_percent(self) -> float | None:
         if self.previous_close in (None, 0) or self.close is None:
             return None
-        return round(((self.close - self.previous_close) / self.previous_close) * 100, 4)
+        return round(
+            ((self.close - self.previous_close) / self.previous_close) * 100, 4
+        )
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -47,6 +50,7 @@ class Quote:
             "exchange_name": self.exchange_name,
             "currency": self.currency,
             "timestamp": self.timestamp,
+            "timestamp_utc": unix_to_utc(self.timestamp),
             "open": self.open,
             "high": self.high,
             "low": self.low,
@@ -72,6 +76,12 @@ def latest_value(values: list[object] | None) -> object | None:
         if value is not None:
             return value
     return None
+
+
+def unix_to_utc(value: int | None) -> str | None:
+    if value is None:
+        return None
+    return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
 
 
 def fetch_quote(symbol: str, timeout: int) -> Quote:
@@ -125,7 +135,9 @@ def load_watchlist(path: str) -> list[str]:
         for line in handle:
             stripped = line.split("#", 1)[0].strip()
             if stripped:
-                symbols.extend(part.strip() for part in stripped.split(",") if part.strip())
+                symbols.extend(
+                    part.strip() for part in stripped.split(",") if part.strip()
+                )
     return symbols
 
 
@@ -135,14 +147,20 @@ def emit(payload: dict[str, object]) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--timeout", type=int, default=20, help="request timeout in seconds")
+    parser.add_argument(
+        "--timeout", type=int, default=20, help="request timeout in seconds"
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     quote = subparsers.add_parser("quote", help="fetch public quote snapshots")
     quote.add_argument("symbols", nargs="+", help="tickers such as NVDA or MSFT")
 
-    watchlist = subparsers.add_parser("watchlist", help="fetch symbols from a text file")
-    watchlist.add_argument("--file", required=True, help="newline or comma separated ticker file")
+    watchlist = subparsers.add_parser(
+        "watchlist", help="fetch symbols from a text file"
+    )
+    watchlist.add_argument(
+        "--file", required=True, help="newline or comma separated ticker file"
+    )
     return parser
 
 
@@ -157,6 +175,7 @@ def main(argv: list[str] | None = None) -> int:
                 "source": "yahoo-finance-chart-json",
                 "source_url": "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
                 "retrieved_at_unix": int(time.time()),
+                "retrieved_at_utc": unix_to_utc(int(time.time())),
                 "count": len(quotes),
                 "quotes": [quote.as_dict() for quote in quotes],
                 "caveat": "Public quote snapshot; may be delayed and is not investment advice.",

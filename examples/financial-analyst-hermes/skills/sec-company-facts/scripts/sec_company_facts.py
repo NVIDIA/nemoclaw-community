@@ -7,7 +7,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 import time
 import urllib.request
 from functools import lru_cache
@@ -16,7 +15,9 @@ from typing import Any
 
 SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SEC_FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
-DEFAULT_USER_AGENT = "nemoclaw-community-financial-analyst-example/1.0 contact@example.com"
+DEFAULT_USER_AGENT = (
+    "nemoclaw-community-financial-analyst-example/1.0 contact@example.com"
+)
 METRICS = [
     "Revenues",
     "RevenueFromContractWithCustomerExcludingAssessedTax",
@@ -87,7 +88,11 @@ def latest_fact(metric: dict[str, Any]) -> dict[str, Any] | None:
         return None
     return sorted(
         candidates,
-        key=lambda item: (item.get("filed", ""), item.get("end", ""), item.get("fy") or 0),
+        key=lambda item: (
+            item.get("filed", ""),
+            item.get("end", ""),
+            item.get("fy") or 0,
+        ),
         reverse=True,
     )[0]
 
@@ -121,7 +126,9 @@ def emit(payload: dict[str, object]) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--timeout", type=int, default=20, help="request timeout in seconds")
+    parser.add_argument(
+        "--timeout", type=int, default=20, help="request timeout in seconds"
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     lookup = subparsers.add_parser("lookup", help="resolve ticker to SEC CIK")

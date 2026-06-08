@@ -7,7 +7,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 import urllib.request
 
 
@@ -30,14 +29,27 @@ def request_json(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base-url", default=os.environ.get("HERMES_BASE_URL", "http://127.0.0.1:8642/v1"))
+    parser.add_argument(
+        "--api-url",
+        dest="base_url",
+        default=os.environ.get("HERMES_API_URL", "http://127.0.0.1:8642/v1"),
+    )
     parser.add_argument("--token", default=os.environ.get("HERMES_API_KEY", ""))
-    parser.add_argument("--model", default=os.environ.get("HERMES_MODEL", "nvidia/nemotron-3-ultra-550b-a55b"))
-    parser.add_argument("--timeout", type=int, default=int(os.environ.get("HERMES_TIMEOUT", "180")))
+    parser.add_argument(
+        "--model",
+        default=os.environ.get(
+            "FINANCE_MODEL", os.environ.get("HERMES_MODEL", "financial-assistant")
+        ),
+    )
+    parser.add_argument(
+        "--timeout", type=int, default=int(os.environ.get("HERMES_TIMEOUT", "180"))
+    )
     args = parser.parse_args()
 
     root = args.base_url.rsplit("/v1", 1)[0].rstrip("/")
-    health = request_json(f"{root}/health", token=args.token or None, timeout=args.timeout)
+    health = request_json(
+        f"{root}/health", token=args.token or None, timeout=args.timeout
+    )
     payload = {
         "model": args.model,
         "messages": [
@@ -79,5 +91,10 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except Exception as exc:
-        print(json.dumps({"ok": False, "error": type(exc).__name__, "message": str(exc)}, indent=2))
+        print(
+            json.dumps(
+                {"ok": False, "error": type(exc).__name__, "message": str(exc)},
+                indent=2,
+            )
+        )
         raise SystemExit(1)

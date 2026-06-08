@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Merge this block into the Hermes config used by the financial analyst
+# sandbox. It mirrors the personal community sentiment agent:
+# - shell hooks forward session and LLM lifecycle events to the Relay sidecar
+# - the in-process plugins/nemo-relay package forwards API/tool hooks
+# - on_session_end also synthesizes a per-turn finalize event
+
+hooks:
+  on_session_start:
+    - command: /usr/local/bin/nemo-relay hook-forward hermes
+      timeout: 30
+  on_session_finalize:
+    - command: /usr/local/bin/nemo-relay hook-forward hermes
+      timeout: 30
+  on_session_reset:
+    - command: /usr/local/bin/nemo-relay hook-forward hermes
+      timeout: 30
+  pre_llm_call:
+    - command: /usr/local/bin/nemo-relay hook-forward hermes
+      timeout: 30
+  post_llm_call:
+    - command: /usr/local/bin/nemo-relay hook-forward hermes
+      timeout: 30
+  subagent_stop:
+    - command: /usr/local/bin/nemo-relay hook-forward hermes
+      timeout: 30
+  on_session_end:
+    - command: /usr/local/bin/nemo-relay hook-forward hermes
+      timeout: 30
+    - command: /usr/local/lib/nemoclaw/bin/nemo-relay-finalize-hook
+      timeout: 30
+hooks_auto_accept: true
+plugins:
+  enabled:
+    - nemoclaw
+    - nemo-relay
