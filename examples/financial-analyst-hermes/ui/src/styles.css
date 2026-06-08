@@ -74,6 +74,17 @@ textarea {
   line-height: 1;
 }
 
+.nv-appbar .nv-app-bar-slot-center {
+  flex: 1 1 auto;
+}
+
+.nv-appbar .nv-app-bar-slot-end {
+  margin-left: auto;
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
 .nvidia-logo {
   width: 118px;
   height: auto;
@@ -481,6 +492,17 @@ dd {
   .brand-lockup {
     width: 100%;
     justify-content: space-between;
+  }
+
+  .nv-appbar .nv-app-bar-slot-start,
+  .nv-appbar .nv-app-bar-slot-center,
+  .nv-appbar .nv-app-bar-slot-end {
+    width: 100%;
+  }
+
+  .nv-appbar .nv-app-bar-slot-end {
+    margin-left: 0;
+    justify-content: flex-start;
   }
 
   .resource-links {
