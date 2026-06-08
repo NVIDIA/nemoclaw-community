@@ -207,6 +207,151 @@ def _serialize_response_object(response: Any) -> Optional[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Payload truncation
+# ---------------------------------------------------------------------------
+
+# Axum's default Json<Value> extractor rejects bodies above ~2 MiB.
+# Stay safely under that limit so large-but-valid LLM turns still
+# produce telemetry.
+_MAX_PAYLOAD_BYTES = 1_500_000  # 1.5 MiB — headroom under Axum's ~2 MiB limit
+
+
+def _truncate_str(text: str, max_len: int = 4096) -> str:
+    """Truncate a string, appending a marker so consumers know it was cut."""
+    if len(text) <= max_len:
+        return text
+    return text[:max_len] + "...[truncated]"
+
+
+def _estimate_size(payload: dict) -> int:
+    """Fast serialized-size estimate (UTF-8 bytes of JSON)."""
+    try:
+        return len(json.dumps(payload, default=str, ensure_ascii=False).encode("utf-8"))
+    except Exception:
+        return 0
+
+
+def _truncate_payload(payload: dict) -> dict:
+    """Iteratively shrink a hook payload until it fits under the Axum body limit.
+
+    Truncation order (largest fields first):
+      1. message content strings in request.body.messages
+      2. response.raw_response deep content
+      3. response.assistant_message content
+      4. tool args / result strings
+
+    Correlation metadata (task_id, session_id, model, etc.) is never touched.
+    """
+    size = _estimate_size(payload)
+    if size <= _MAX_PAYLOAD_BYTES:
+        return payload
+
+    # Work on a mutable copy
+    payload = dict(payload)
+
+    # --- Phase 1: truncate LLM message content ---
+    request_body = (payload.get("request") or {}).get("body")
+    if isinstance(request_body, dict):
+        messages = request_body.get("messages")
+        if isinstance(messages, list):
+            budget_per_msg = max(512, _MAX_PAYLOAD_BYTES // max(len(messages), 1) // 4)
+            changed = False
+            for i, msg in enumerate(messages):
+                if isinstance(msg, dict):
+                    content = msg.get("content")
+                    if isinstance(content, str) and len(content) > budget_per_msg:
+                        messages[i] = {**msg, "content": _truncate_str(content, budget_per_msg)}
+                        changed = True
+                    elif isinstance(content, list):
+                        # multimodal content blocks
+                        for j, block in enumerate(content):
+                            if isinstance(block, dict):
+                                text = block.get("text")
+                                if isinstance(text, str) and len(text) > budget_per_msg:
+                                    content[j] = {**block, "text": _truncate_str(text, budget_per_msg)}
+                                    changed = True
+            if changed:
+                payload["request"] = {**payload.get("request", {}), "body": {**request_body, "messages": messages}}
+
+        size = _estimate_size(payload)
+        if size <= _MAX_PAYLOAD_BYTES:
+            return payload
+
+    # --- Phase 2: truncate response content ---
+    response = payload.get("response")
+    if isinstance(response, dict):
+        raw = response.get("raw_response")
+        if isinstance(raw, dict):
+            # Truncate choice text content
+            for key in ("choices", "output", "content"):
+                val = raw.get(key)
+                if isinstance(val, list):
+                    for i, choice in enumerate(val):
+                        if isinstance(choice, dict):
+                            msg = choice.get("message") or choice.get("text")
+                            if isinstance(msg, dict):
+                                c = msg.get("content")
+                                if isinstance(c, str) and len(c) > 2048:
+                                    msg = {**msg, "content": _truncate_str(c, 2048)}
+                                    raw[key][i] = {**choice, "message": msg}
+                            elif isinstance(msg, str) and len(msg) > 2048:
+                                raw[key][i] = {**choice, "text": _truncate_str(msg, 2048)}
+
+        assistant_msg = response.get("assistant_message")
+        if isinstance(assistant_msg, dict):
+            c = assistant_msg.get("content")
+            if isinstance(c, str) and len(c) > 2048:
+                response["assistant_message"] = {**assistant_msg, "content": _truncate_str(c, 2048)}
+
+        payload["response"] = response
+
+        size = _estimate_size(payload)
+        if size <= _MAX_PAYLOAD_BYTES:
+            return payload
+
+    # --- Phase 3: truncate tool args and results ---
+    for field in ("args", "result"):
+        val = payload.get(field)
+        if isinstance(val, str) and len(val) > 2048:
+            payload[field] = _truncate_str(val, 2048)
+        elif isinstance(val, dict):
+            s = json.dumps(val, default=str, ensure_ascii=False)
+            if len(s) > 4096:
+                # Truncate to a compact representation
+                payload[field] = _truncate_str(s, 4096)
+
+    size = _estimate_size(payload)
+    if size <= _MAX_PAYLOAD_BYTES:
+        return payload
+
+    # --- Phase 4: aggressive — truncate everything to a summary ---
+    # At this point the payload is still too large; strip all content to bare
+    # correlation metadata so the relay at least records the span exists.
+    if isinstance(payload.get("request"), dict):
+        body = payload["request"].get("body")
+        if isinstance(body, dict):
+            msgs = body.get("messages")
+            if isinstance(msgs, list):
+                body["messages"] = [
+                    {k: ("[truncated]" if k == "content" else v)
+                     for k, v in m.items()}
+                    if isinstance(m, dict) else m
+                    for m in msgs
+                ]
+    if isinstance(payload.get("response"), dict):
+        resp = payload["response"]
+        if isinstance(resp.get("raw_response"), dict):
+            resp["raw_response"] = "[truncated: payload exceeded body limit]"
+        if isinstance(resp.get("assistant_message"), dict):
+            am = resp["assistant_message"]
+            if isinstance(am.get("content"), str):
+                resp["assistant_message"] = {**am, "content": "[truncated]"}
+
+    payload["_truncated"] = True
+    return payload
+
+
+# ---------------------------------------------------------------------------
 # Forwarder
 # ---------------------------------------------------------------------------
 
@@ -218,6 +363,7 @@ def _forward(payload: dict) -> None:
     if client is None:
         return
     try:
+        payload = _truncate_payload(payload)
         client.post(f"{url}/hooks/hermes", json=payload)
     except Exception as exc:
         logger.debug("nemo-relay: forward to %s failed: %s", url, exc)
