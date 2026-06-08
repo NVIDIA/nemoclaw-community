@@ -495,6 +495,42 @@ export function App() {
               <span>NemoHermes Financial Desk</span>
             </div>
           }
+          slotEnd={
+            <nav className="resource-links" aria-label="Demo resources">
+              <a
+                className="resource-link"
+                href="https://build.nvidia.com/"
+                rel="noreferrer"
+                target="_blank"
+              >
+                🚀 Build
+              </a>
+              <a
+                className="resource-link"
+                href="https://github.com/NVIDIA/NemoClaw"
+                rel="noreferrer"
+                target="_blank"
+              >
+                🧰 NemoClaw
+              </a>
+              <a
+                className="resource-link"
+                href="https://github.com/NVIDIA/OpenShell"
+                rel="noreferrer"
+                target="_blank"
+              >
+                🖥️ OpenShell
+              </a>
+              <a
+                className="resource-link"
+                href="https://github.com/NVIDIA/nemoclaw-community"
+                rel="noreferrer"
+                target="_blank"
+              >
+                📦 Community
+              </a>
+            </nav>
+          }
         />
         <main className="desk-grid">
           <aside className="left-column">

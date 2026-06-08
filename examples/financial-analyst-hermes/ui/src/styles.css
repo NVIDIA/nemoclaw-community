@@ -61,6 +61,7 @@ textarea {
   padding: 14px 32px;
   display: flex;
   align-items: center;
+  gap: 24px;
   border-bottom: 1px solid var(--line);
   background: #050607;
 }
@@ -80,6 +81,41 @@ textarea {
   padding: 6px 8px;
   border-radius: 3px;
   background: #ffffff;
+}
+
+.resource-links {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.resource-link {
+  min-height: 32px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid rgba(155, 168, 178, 0.32);
+  border-radius: 6px;
+  color: var(--text);
+  background: rgba(16, 20, 24, 0.72);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.resource-link:hover,
+.resource-link:focus-visible {
+  color: #ffffff;
+  border-color: rgba(118, 185, 0, 0.7);
+  background: rgba(118, 185, 0, 0.14);
+  outline: none;
 }
 
 .desk-grid {
@@ -430,6 +466,34 @@ dd {
 }
 
 @media (max-width: 760px) {
+  .app-shell {
+    grid-template-rows: auto 1fr;
+  }
+
+  .nv-appbar {
+    min-height: 0;
+    padding: 12px 18px;
+    align-items: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .brand-lockup {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .resource-links {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .resource-link {
+    min-height: 30px;
+    padding: 0 8px;
+    font-size: 0.74rem;
+  }
+
   .desk-grid {
     grid-template-columns: 1fr;
   }

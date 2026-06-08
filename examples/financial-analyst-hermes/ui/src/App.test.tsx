@@ -70,6 +70,22 @@ describe("financial React UI", () => {
   it("renders NVIDIA finance shell with live quotes", async () => {
     render(<App />);
     expect(screen.getByText("NemoHermes Financial Desk")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Build/i })).toHaveAttribute(
+      "href",
+      "https://build.nvidia.com/",
+    );
+    expect(screen.getByRole("link", { name: /NemoClaw/i })).toHaveAttribute(
+      "href",
+      "https://github.com/NVIDIA/NemoClaw",
+    );
+    expect(screen.getByRole("link", { name: /OpenShell/i })).toHaveAttribute(
+      "href",
+      "https://github.com/NVIDIA/OpenShell",
+    );
+    expect(screen.getByRole("link", { name: /Community/i })).toHaveAttribute(
+      "href",
+      "https://github.com/NVIDIA/nemoclaw-community",
+    );
     expect(screen.getByText("Agent Activity")).toBeInTheDocument();
     expect(screen.getByText("Waiting")).toBeInTheDocument();
     await screen.findByText("$100.00");
