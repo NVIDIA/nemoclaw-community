@@ -330,21 +330,27 @@ textarea {
 
 .markdown-body p,
 .markdown-body ul,
+.markdown-body ol,
+.markdown-body blockquote,
+.markdown-body pre,
+.markdown-body table,
 .markdown-body h2,
 .markdown-body h3,
 .markdown-body h4,
-.markdown-body h5,
-.markdown-body .table-wrap {
+.markdown-body h5 {
   margin: 12px 0 0;
 }
 
 .markdown-body p:first-child,
 .markdown-body ul:first-child,
+.markdown-body ol:first-child,
+.markdown-body blockquote:first-child,
+.markdown-body pre:first-child,
+.markdown-body table:first-child,
 .markdown-body h2:first-child,
 .markdown-body h3:first-child,
 .markdown-body h4:first-child,
-.markdown-body h5:first-child,
-.markdown-body .table-wrap:first-child {
+.markdown-body h5:first-child {
   margin-top: 0;
 }
 
@@ -354,28 +360,45 @@ textarea {
   background: #232b31;
 }
 
-.table-wrap {
+.markdown-body pre {
+  overflow-x: auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #0b0f12;
+}
+
+.markdown-body pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.markdown-body blockquote {
+  padding-left: 12px;
+  border-left: 3px solid var(--nv-green);
+  color: var(--muted);
+}
+
+.markdown-body table {
+  display: block;
   max-width: 100%;
   overflow-x: auto;
   border: 1px solid var(--line);
   border-radius: 6px;
-}
-
-table {
   width: 100%;
   border-collapse: collapse;
   color: var(--text);
 }
 
-th,
-td {
+.markdown-body th,
+.markdown-body td {
   padding: 8px 10px;
   text-align: left;
   vertical-align: top;
   border-bottom: 1px solid var(--line);
 }
 
-th {
+.markdown-body th {
   color: var(--muted);
   font-size: 0.75rem;
   text-transform: uppercase;

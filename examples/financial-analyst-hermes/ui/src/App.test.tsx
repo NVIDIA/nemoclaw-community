@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { Markdown } from "./Markdown";
 import {
   detectSkillActivity,
   parseSseBlock,
@@ -204,5 +205,42 @@ describe("financial React UI", () => {
         'data: {"choices":[{"delta":{"tool_calls":[{"function":{"name":"sec_company_facts"}}]}}]}\n',
       ).rawTool,
     ).toBe("sec_company_facts");
+  });
+
+  it("renders loose markdown tables without separator rows", () => {
+    render(
+      <Markdown
+        text={[
+          "Skill | What it is for",
+          "financial-market-snapshot | Pull public quote snapshots",
+          "sec-company-facts | Summarize SEC company facts",
+        ].join("\n")}
+      />,
+    );
+
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Skill" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("cell", { name: /Pull public quote snapshots/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders safe model HTML and removes unsafe HTML", () => {
+    const { container } = render(
+      <Markdown
+        text={
+          '<h3>Skills</h3><p><strong>Market snapshots</strong></p><img src=x onerror="alert(1)"><script>alert(1)</script>'
+        }
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Skills", level: 3 }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Market snapshots")).toBeInTheDocument();
+    expect(container.querySelector("script")).not.toBeInTheDocument();
+    expect(container.querySelector("img")?.getAttribute("onerror")).toBeNull();
   });
 });
