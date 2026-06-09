@@ -18,10 +18,12 @@ to brokerage accounts, place trades, or provide personalized investment advice.
   bundled skills into every request.
 - Read-only OpenShell/NemoClaw policy for public finance data.
 - API access through Hermes on `http://127.0.0.1:8642/v1`.
-- A financial desk UI for streaming chat, Outlook-style email prompts, and run
-  telemetry.
+- A financial desk UI for streaming chat, market watch context, and observable
+  agent activity.
 - Optional Outlook, NeMo Relay, and Phoenix integration scaffolding.
 - Brev deployment commands in [docs/brev-deployment.md](docs/brev-deployment.md).
+- Current live verification evidence in
+  [docs/live-verification.md](docs/live-verification.md).
 
 Current NemoClaw docs describe `nemohermes` as the Hermes-selected alias for
 NemoClaw. Use `nemohermes <sandbox> dashboard-url --quiet` to discover the
@@ -74,8 +76,8 @@ examples/financial-analyst-hermes/
     booth-demo-upgrade.md
     outlook-integration.md
     relay-phoenix.md
-    self-evolving-demo.md
     demo-script.md
+    live-verification.md
 ```
 
 ## 1. Onboard NemoHermes
@@ -256,9 +258,10 @@ browser CORS issues by proxying `/v1/*` to Hermes on the host. Chat responses
 stream token chunks into the UI, assistant markdown is rendered inline, and the
 browser does not ask for an API token or API URL.
 
-The UI also includes Outlook-style inbox cards for a booth-safe email demo.
-For the upgraded walkthrough, see
-[docs/booth-demo-upgrade.md](docs/booth-demo-upgrade.md).
+For the upgraded booth walkthrough, see
+[docs/booth-demo-upgrade.md](docs/booth-demo-upgrade.md). For the current live
+Brev verification record, see
+[docs/live-verification.md](docs/live-verification.md).
 
 Run the UI smoke in prompt and email modes:
 
@@ -299,22 +302,7 @@ bash scripts/setup-outlook-provider.sh financial-analyst
 
 Then validate with `--reply-mode print` before using `--reply-mode graph`.
 
-## 8. Self-Evolving Analyst Demo
-
-Run the 10-question/follow-up evaluation to prove the assistant uses the right
-skills, remembers session preferences, and improves into a consistent briefing
-playbook:
-
-```bash
-python3 scripts/self_evolving_eval.py \
-  --api-url http://127.0.0.1:18080/v1 \
-  --questions fixtures/self-evolving-questions.json
-```
-
-The full walkthrough is in
-[docs/self-evolving-demo.md](docs/self-evolving-demo.md).
-
-## 9. Nemo Relay And Phoenix
+## 8. Nemo Relay And Phoenix
 
 Use the same sidecar pattern as the personal community sentiment agent:
 Hermes owns skills and LLM/tool hooks, NeMo Relay runs on loopback inside the
@@ -325,7 +313,7 @@ See [agents/hermes/README.md](agents/hermes/README.md),
 [docs/relay-phoenix.md](docs/relay-phoenix.md), and
 [docs/nemo-relay-notes.md](docs/nemo-relay-notes.md).
 
-## 10. Demo Runbook
+## 9. Demo Runbook
 
 For a concise walkthrough that shows the NemoClaw/OpenShell/Hermes value rather
 than only the final assistant output, see [docs/demo-script.md](docs/demo-script.md).

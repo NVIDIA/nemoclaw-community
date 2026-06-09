@@ -1,0 +1,127 @@
+# Live Verification
+
+Last updated: 2026-06-09
+
+This page records the current verified state of the Brev-hosted financial
+assistant demo.
+
+## Brev Deployment
+
+- Public UI: `https://demo-ykokji2ig.brevlab.com/`
+- Brev server: `financial-assistant-agent`
+- Active release path:
+  `/home/ubuntu/financial-assistant-agent/releases/20260609001354-3315a0f2`
+- Branch: `feature/hermes-financial-assistant`
+- Verification baseline commit: `e3349e50`
+
+Live health:
+
+```json
+{"status":"ok","platform":"finance-ui","upstream":"http://127.0.0.1:8642","model":"openai/openai/gpt-5.5"}
+```
+
+Live config:
+
+```json
+{"model":"openai/openai/gpt-5.5","upstream_label":"Compatible API"}
+```
+
+## Runtime Evidence
+
+The Brev host is running:
+
+- OpenShell gateway container
+- Hermes sandbox container:
+  `openshell-financial-analyst-0a86a162-5f08-4466-bb56-1574ab176069`
+- Finance UI server on port `18080`
+- Phoenix container: `observability-phoenix-1`
+- NeMo Relay sidecar in the sandbox:
+  `/sandbox/.hermes/bin/nemo-relay --bind 127.0.0.1:4040`
+
+## UI Verification
+
+Passed checks:
+
+- `npm test`: 7 tests passed.
+- `npm run build`: passed.
+- Live Playwright smoke against `https://demo-ykokji2ig.brevlab.com/`: passed.
+- Live smoke ran with Phoenix trace evidence required.
+
+Observed UI behavior:
+
+- No visible API URL or API token field.
+- No Demo Prompts, Ten-Question Eval, Session Context, Skill Usage, Tool Calls,
+  or Run Telemetry panels.
+- Enter submits the composer.
+- The composer starts empty.
+- Responses stream into the conversation.
+- The thinking state displays animated `Thinking ...` dots before token output.
+- Markdown is rendered with `markdown-it`.
+- Safe inline HTML can render; unsafe HTML is sanitized with `DOMPurify`.
+
+## Phoenix And NeMo Relay
+
+Recent live Phoenix evidence from `/api/phoenix/recent`:
+
+```json
+{
+  "ok": true,
+  "span_count": 12,
+  "kinds": ["llm", "tool"],
+  "projects": ["financial-assistant-relay"]
+}
+```
+
+The trace path is Hermes/Relay-to-Phoenix, not a synthetic UI span.
+
+## Outlook
+
+Implemented:
+
+- `scripts/setup-outlook-provider.sh` configures the OpenShell Outlook provider
+  using gateway-managed Microsoft Graph refresh-token rotation.
+- `scripts/login-ms-graph.py` runs Microsoft device-code login.
+- `scripts/outlook_finance_bridge.py` runs the one-owner bridge:
+  - reads only `OUTLOOK_TARGET_MAILBOX`,
+  - processes only `OUTLOOK_REPLY_TO`,
+  - replies only in-thread,
+  - persists processed message IDs.
+
+Verified:
+
+- Fixture rehearsal passed against the public Brev `/v1` endpoint in
+  `--reply-mode print`.
+
+Current external blocker:
+
+- Real Microsoft Graph send/reply is blocked by tenant conditional access for
+  the attempted account/app sign-in. The observed Microsoft error was
+  `AADSTS53003`.
+- Once tenant policy permits the agent account/app device-code login, rerun:
+
+```bash
+bash scripts/setup-outlook-provider.sh financial-analyst
+python3 scripts/outlook_finance_bridge.py \
+  --api-url http://127.0.0.1:8642/v1 \
+  --limit 1 \
+  --reply-mode print
+```
+
+Use `--reply-mode graph` only after print-mode validation succeeds.
+
+## Requirement Status
+
+Completed:
+
+- NemoHermes/NemoClaw financial assistant example.
+- Finance skills, tools, API access, and Brev deployment docs.
+- Streaming financial assistant UI deployed on Brev.
+- Markdown and safe HTML rendering.
+- NVIDIA logo and demo resource links.
+- GPT 5.5 live route: `openai/openai/gpt-5.5`.
+- Phoenix and NeMo Relay producing real spans.
+- Outlook fixture bridge and provider setup path.
+
+Not fully completed:
+
+- Real Outlook Graph send/reply awaits tenant conditional-access approval.

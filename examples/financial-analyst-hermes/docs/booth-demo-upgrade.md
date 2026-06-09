@@ -86,9 +86,9 @@ npm run ui:smoke
 
 ## Outlook Rehearsal Mode
 
-The browser UI includes two Outlook-style inbox cards. They are fixture prompts
-that exercise the same assistant route as chat, so they are safe for a booth
-without Microsoft credentials.
+For a booth-safe email surface without Microsoft credentials, paste an
+email-style request into the browser composer or run the fixture bridge below.
+Both paths exercise the same assistant route as chat.
 
 For command-line rehearsal:
 
