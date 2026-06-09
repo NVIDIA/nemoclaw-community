@@ -220,6 +220,32 @@ python3 scripts/outlook_finance_bridge.py \
 For real Outlook setup, follow [outlook-integration.md](outlook-integration.md)
 and use `providers/outlook-email.yaml`.
 
+If your `.env` contains `OUTLOOK_TENANT_ID`, `OUTLOOK_CLIENT_ID`,
+`OUTLOOK_TARGET_MAILBOX`, and `OUTLOOK_REPLY_TO`, configure the OpenShell
+provider from the Brev shell:
+
+```bash
+bash scripts/setup-outlook-provider.sh financial-analyst
+```
+
+The helper prints a Microsoft device-code URL and code. Sign in as
+`OUTLOOK_TARGET_MAILBOX`, not your personal mailbox. If Microsoft returns a
+conditional-access error such as `AADSTS53003`, the tenant blocked the app or
+sign-in context; fix that policy/app assignment and rerun the helper.
+
+Validate the agent email flow without sending mail first:
+
+```bash
+python3 scripts/outlook_finance_bridge.py \
+  --api-url http://127.0.0.1:8642/v1 \
+  --limit 1 \
+  --reply-mode print
+```
+
+Only after that works should you use `--reply-mode graph`. The bridge reads only
+`OUTLOOK_TARGET_MAILBOX`, accepts only `OUTLOOK_REPLY_TO`, and replies only
+in-thread.
+
 ## 9. Phoenix
 
 Start Phoenix on Brev:

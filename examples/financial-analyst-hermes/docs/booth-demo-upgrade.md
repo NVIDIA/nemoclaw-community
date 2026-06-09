@@ -23,12 +23,15 @@ https://docs.nvidia.com/nemoclaw/latest/user-guide/openclaw/inference/use-local-
 ## Booth Flow
 
 1. Open `http://127.0.0.1:18080`.
-2. Click `NVDA brief`, `Market snapshot`, `SEC facts`, or `Email triage`.
-3. Watch the response stream into the conversation with markdown tables and the
-   animated `Thinking ...` state.
-4. Point to the telemetry panel for run ID, chunk count, channel, Phoenix link,
-   and the `Tool Calls / Trace Clues` table populated from recent Phoenix spans.
-5. In Phoenix, show the corresponding Hermes turn trace from the Relay sidecar.
+2. Send a natural finance prompt such as an NVDA analyst brief, market snapshot,
+   SEC facts summary, or email-style response draft.
+3. Watch the response stream into the conversation with rendered Markdown and
+   the animated `Thinking ...` state.
+4. Point to the left rail: Market Watch shows public quote context, and Agent
+   Activity shows observable request, capability, streaming, tool-event, and
+   trace-captured steps. Private model reasoning is not displayed.
+5. In Phoenix, show the corresponding Hermes turn trace from the Relay sidecar
+   with agent/root, LLM, and tool spans.
 
 ## Brev / Live Hermes Mode
 

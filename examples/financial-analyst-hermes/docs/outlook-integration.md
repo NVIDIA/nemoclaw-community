@@ -53,6 +53,38 @@ python3 scripts/outlook_finance_bridge.py \
   --limit 1
 ```
 
+## Configure the OpenShell Provider
+
+Put the non-secret mailbox values and Entra app IDs in the repo root `.env` or
+this example's `.env`:
+
+```dotenv
+OUTLOOK_TENANT_ID=<directory-tenant-id>
+OUTLOOK_CLIENT_ID=<application-client-id>
+OUTLOOK_TARGET_MAILBOX=<agent mailbox>
+OUTLOOK_REPLY_TO=<your mailbox>
+OUTLOOK_ALLOWED_SENDERS=<same value as OUTLOOK_REPLY_TO>
+```
+
+Then run:
+
+```bash
+bash scripts/setup-outlook-provider.sh financial-analyst
+```
+
+The setup helper:
+
+- imports `providers/outlook-email.yaml`,
+- enables OpenShell provider v2 if needed,
+- runs Microsoft Graph device-code login as `OUTLOOK_TARGET_MAILBOX`,
+- registers the refresh token with OpenShell's gateway-managed refresh flow,
+- rotates `MS_GRAPH_ACCESS_TOKEN` once so the provider is ready.
+
+If Microsoft returns a conditional-access error such as `AADSTS53003`, the
+login succeeded but the tenant blocked access for that app, device, location, or
+policy. Fix that policy/app assignment first, then rerun the helper. The script
+does not register a half-configured provider after a failed login.
+
 Real Graph read/reply after provider setup:
 
 ```bash
@@ -102,3 +134,7 @@ python3 /sandbox/.hermes/outlook/outlook_finance_bridge.py \
   --interval 30 \
   --limit 3
 ```
+
+If `financial-analyst` was already running before the Outlook provider was
+created, recreate or restart the sandbox with the provider attached before
+expecting OpenShell token substitution to work from inside the sandbox.

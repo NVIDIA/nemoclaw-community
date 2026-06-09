@@ -46,7 +46,9 @@ examples/financial-analyst-hermes/
     smoke-hermes-api.py
     smoke-compatible-api.py
     finance_ui_server.py
+    login-ms-graph.py
     outlook_finance_bridge.py
+    setup-outlook-provider.sh
     ui-smoke.mjs
   providers/
     compatible-chat-api.yaml
@@ -286,6 +288,16 @@ python3 scripts/outlook_finance_bridge.py \
 
 For real Microsoft Graph setup, see
 [docs/outlook-integration.md](docs/outlook-integration.md).
+
+The real Outlook path is deliberately one-owner only. It reads only
+`OUTLOOK_TARGET_MAILBOX`, accepts only messages from `OUTLOOK_REPLY_TO`, and
+replies only in-thread. Configure the OpenShell provider with:
+
+```bash
+bash scripts/setup-outlook-provider.sh financial-analyst
+```
+
+Then validate with `--reply-mode print` before using `--reply-mode graph`.
 
 ## 8. Self-Evolving Analyst Demo
 

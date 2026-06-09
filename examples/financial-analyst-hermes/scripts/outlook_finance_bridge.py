@@ -30,7 +30,10 @@ def request_json(url: str, payload: dict[str, Any], timeout: int) -> dict[str, A
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "NemoHermes financial assistant Outlook bridge",
+        },
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=timeout) as response:
@@ -53,6 +56,7 @@ def graph_request(
         headers={
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
+            "User-Agent": "NemoHermes financial assistant Outlook bridge",
         },
         method=method,
     )

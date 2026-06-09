@@ -82,9 +82,16 @@ python3 scripts/finance_ui_server.py --port 18080 --api-url http://127.0.0.1:864
 ```
 
 Open `http://127.0.0.1:18080`. The UI sends requests to same-origin `/v1`, so
-there is no visible API URL or API token field. The left rail should show live
-public quotes from `/api/quotes`, and the right rail should show skill usage,
-run telemetry, and recent Phoenix span evidence from `/api/phoenix/recent`.
+there is no visible API URL or API token field. The left rail should show
+Market Watch quotes from `/api/quotes` and an Agent Activity panel with
+observable request, capability, streaming, tool-event, and trace-captured
+steps. It should not show the removed Session Context, Skill Usage, Tool Calls,
+Run Telemetry, Demo Prompts, or Ten-Question Eval panels.
+
+Assistant output is rendered through the UI Markdown renderer. Valid Markdown,
+loose model tables, links, code blocks, and safe inline HTML should render as
+structured content. Unsafe HTML such as scripts or event handlers should be
+removed before rendering.
 
 Playwright checks:
 
