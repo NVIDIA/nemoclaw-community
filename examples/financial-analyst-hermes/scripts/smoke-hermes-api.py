@@ -42,7 +42,7 @@ def main() -> int:
         ),
     )
     parser.add_argument(
-        "--timeout", type=int, default=int(os.environ.get("HERMES_TIMEOUT", "180"))
+        "--timeout", type=int, default=int(os.environ.get("HERMES_TIMEOUT", "240"))
     )
     args = parser.parse_args()
 
@@ -59,11 +59,11 @@ def main() -> int:
             },
             {
                 "role": "user",
-                "content": "Give me a three-bullet checklist for reviewing NVDA before earnings.",
+                "content": "In one short sentence, define free cash flow yield.",
             },
         ],
         "temperature": 0.2,
-        "max_tokens": 180,
+        "max_tokens": 64,
     }
     completion = request_json(
         f"{args.base_url.rstrip('/')}/chat/completions",

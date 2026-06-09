@@ -62,7 +62,7 @@ Fill in at least:
 ```dotenv
 FINANCE_API_URL=https://integrate.api.nvidia.com/v1
 FINANCE_API_KEY=<your-build-api-key>
-FINANCE_MODEL=nvidia/nvidia/nemotron-3-ultra
+FINANCE_MODEL=nvidia/nemotron-3-ultra-550b-a55b
 NEMOCLAW_SANDBOX_NAME=financial-analyst
 ```
 
@@ -128,26 +128,33 @@ nemohermes inference set \
   --provider compatible-endpoint \
   --model "$FINANCE_MODEL" \
   --no-verify
+
+openshell inference set \
+  --provider compatible-endpoint \
+  --model "$FINANCE_MODEL" \
+  --timeout 240 \
+  --no-verify
 ```
 
 Verify the route:
 
 ```bash
 nemohermes inference get --json
-python3 scripts/smoke-hermes-api.py --api-url http://127.0.0.1:8642/v1 --timeout 180
+openshell inference get
+python3 scripts/smoke-hermes-api.py --api-url http://127.0.0.1:8642/v1 --timeout 240
 ```
 
 Expected route:
 
 ```text
 provider: compatible-endpoint
-model: nvidia/nvidia/nemotron-3-ultra
+model: nvidia/nemotron-3-ultra-550b-a55b
 ```
 
-Verification note from 2026-06-08: the Brev demo was redeployed with
-`nvidia/nvidia/nemotron-3-ultra` and passed the UI smoke through Hermes. If the
-endpoint returns upstream errors, confirm the Build API key, endpoint, and model
-access, then rerun the smoke tests.
+Verification note from 2026-06-09: the Brev demo was redeployed with
+`nvidia/nemotron-3-ultra-550b-a55b`; direct Build API smoke and the minimal
+Hermes route smoke passed. If the endpoint returns upstream errors, confirm the
+Build API key, endpoint, and model access, then rerun the smoke tests.
 
 ## 5. Install Skills and Policy
 

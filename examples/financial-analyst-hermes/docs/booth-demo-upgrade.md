@@ -40,7 +40,7 @@ First route Hermes through the Build API compatible endpoint:
 ```bash
 export FINANCE_API_URL=https://integrate.api.nvidia.com/v1
 export FINANCE_API_KEY=<your-build-api-key>
-export FINANCE_MODEL=nvidia/nvidia/nemotron-3-ultra
+export FINANCE_MODEL=nvidia/nemotron-3-ultra-550b-a55b
 export NVIDIA_API_KEY="${NVIDIA_API_KEY:-$FINANCE_API_KEY}"
 openshell provider create \
   --name compatible-endpoint \
@@ -51,6 +51,11 @@ nemohermes inference set \
   --sandbox financial-analyst \
   --provider compatible-endpoint \
   --model "$FINANCE_MODEL" \
+  --no-verify
+openshell inference set \
+  --provider compatible-endpoint \
+  --model "$FINANCE_MODEL" \
+  --timeout 240 \
   --no-verify
 ```
 

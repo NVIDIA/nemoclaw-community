@@ -82,7 +82,7 @@ Fill in at least:
 ```dotenv
 FINANCE_API_URL=https://integrate.api.nvidia.com/v1
 FINANCE_API_KEY=<your-build-api-key>
-FINANCE_MODEL=nvidia/nvidia/nemotron-3-ultra
+FINANCE_MODEL=nvidia/nemotron-3-ultra-550b-a55b
 NEMOCLAW_SANDBOX_NAME=financial-analyst
 ```
 
@@ -161,6 +161,12 @@ nemohermes inference set \
   --sandbox "$NEMOCLAW_SANDBOX_NAME" \
   --provider compatible-endpoint \
   --model "$FINANCE_MODEL" \
+  --no-verify
+
+openshell inference set \
+  --provider compatible-endpoint \
+  --model "$FINANCE_MODEL" \
+  --timeout 240 \
   --no-verify
 ```
 

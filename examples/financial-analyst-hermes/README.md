@@ -119,6 +119,12 @@ nemohermes inference set \
   --model "$FINANCE_MODEL" \
   --no-verify
 
+openshell inference set \
+  --provider compatible-endpoint \
+  --model "$FINANCE_MODEL" \
+  --timeout 240 \
+  --no-verify
+
 bash scripts/install-skills.sh "${NEMOCLAW_SANDBOX_NAME:-financial-analyst}"
 npm install
 npm run build
@@ -158,7 +164,7 @@ to the Build API endpoint and Nemotron Ultra model for the demo:
 ```bash
 export FINANCE_API_URL=https://integrate.api.nvidia.com/v1
 export FINANCE_API_KEY=<your-build-api-key>
-export FINANCE_MODEL=nvidia/nvidia/nemotron-3-ultra
+export FINANCE_MODEL=nvidia/nemotron-3-ultra-550b-a55b
 export NVIDIA_API_KEY="${NVIDIA_API_KEY:-$FINANCE_API_KEY}"
 
 if openshell provider get compatible-endpoint >/dev/null 2>&1; then
@@ -178,6 +184,12 @@ nemohermes inference set \
   --provider compatible-endpoint \
   --model "$FINANCE_MODEL" \
   --no-verify
+
+openshell inference set \
+  --provider compatible-endpoint \
+  --model "$FINANCE_MODEL" \
+  --timeout 240 \
+  --no-verify
 ```
 
 Non-interactive starter:
@@ -188,7 +200,7 @@ export NEMOCLAW_NON_INTERACTIVE=1
 export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 export NEMOCLAW_SANDBOX_NAME=financial-analyst
 export NEMOCLAW_PROVIDER=nvidia
-export NEMOCLAW_MODEL=nvidia/nvidia/nemotron-3-ultra
+export NEMOCLAW_MODEL=nvidia/nemotron-3-ultra-550b-a55b
 export NVIDIA_API_KEY=<your-build-api-key>
 
 curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash
@@ -203,7 +215,7 @@ model: set by FINANCE_MODEL
 ```
 
 Verification note from 2026-06-08: the Brev demo was redeployed with
-`nvidia/nvidia/nemotron-3-ultra` through the Build API compatible endpoint and
+`nvidia/nemotron-3-ultra-550b-a55b` through the Build API compatible endpoint and
 Hermes. If the endpoint returns upstream errors, confirm the Build API key,
 endpoint, and model access, then rerun the smoke tests below.
 
