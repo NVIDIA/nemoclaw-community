@@ -3,6 +3,10 @@
 This guide deploys the financial analyst assistant on a Brev NVIDIA instance
 using the current `brev` CLI command shapes.
 
+For the complete copy/paste runbook, including local forwarding, Phoenix,
+Outlook fixture rehearsal, real Outlook setup, and cleanup, see
+[start-agent.md](start-agent.md).
+
 ## 1. Pick or Create an Instance
 
 List existing instances:
@@ -46,12 +50,31 @@ Then enter the example directory:
 cd examples/financial-analyst-hermes
 ```
 
+Create the environment file from the committed template:
+
+```bash
+cp .env.example .env
+${EDITOR:-vi} .env
+```
+
+Fill in at least:
+
+```dotenv
+FINANCE_API_URL=https://api.example.com/v1
+FINANCE_API_KEY=<your-compatible-api-key>
+FINANCE_MODEL=openai/openai/gpt-5.5
+NEMOCLAW_SANDBOX_NAME=financial-analyst
+```
+
 ## 3. Install and Onboard NemoHermes
 
 ```bash
 export NEMOCLAW_AGENT=hermes
 export NEMOCLAW_SANDBOX_NAME=financial-analyst
-export OPENAI_API_KEY=<your-compatible-api-key>
+set -a
+. ./.env
+set +a
+export OPENAI_API_KEY="${OPENAI_API_KEY:-$FINANCE_API_KEY}"
 
 curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash
 nemohermes onboard --fresh --name financial-analyst

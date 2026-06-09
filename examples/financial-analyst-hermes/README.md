@@ -21,6 +21,7 @@ to brokerage accounts, place trades, or provide personalized investment advice.
 - A financial desk UI for streaming chat, market watch context, and observable
   agent activity.
 - Optional Outlook, NeMo Relay, and Phoenix integration scaffolding.
+- Copy/paste start guide in [docs/start-agent.md](docs/start-agent.md).
 - Brev deployment commands in [docs/brev-deployment.md](docs/brev-deployment.md).
 - Current live verification evidence in
   [docs/live-verification.md](docs/live-verification.md).
@@ -35,6 +36,7 @@ and [NemoClaw inference options](https://docs.nvidia.com/nemoclaw/latest/inferen
 
 ```text
 examples/financial-analyst-hermes/
+  .env.example
   skills/
     financial-market-snapshot/
     sec-company-facts/
@@ -70,6 +72,7 @@ examples/financial-analyst-hermes/
       App.tsx
       styles.css
   docs/
+    start-agent.md
     brev-deployment.md
     verify-functionality.md
     nemo-relay-notes.md
@@ -79,6 +82,56 @@ examples/financial-analyst-hermes/
     demo-script.md
     live-verification.md
 ```
+
+## Quick Start
+
+For a fresh Brev instance or local host, follow
+[docs/start-agent.md](docs/start-agent.md). The shortest path is:
+
+```bash
+cd examples/financial-analyst-hermes
+cp .env.example .env
+${EDITOR:-vi} .env
+
+set -a
+. ./.env
+set +a
+export OPENAI_API_KEY="${OPENAI_API_KEY:-$FINANCE_API_KEY}"
+
+export NEMOCLAW_AGENT=hermes
+curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash
+nemohermes onboard --fresh --name "${NEMOCLAW_SANDBOX_NAME:-financial-analyst}"
+
+if openshell provider get compatible-chat-api >/dev/null 2>&1; then
+  openshell provider update compatible-chat-api \
+    --credential OPENAI_API_KEY \
+    --config OPENAI_BASE_URL="$FINANCE_API_URL"
+else
+  openshell provider create \
+    --name compatible-chat-api \
+    --type openai \
+    --credential OPENAI_API_KEY \
+    --config OPENAI_BASE_URL="$FINANCE_API_URL"
+fi
+
+nemohermes inference set \
+  --sandbox "${NEMOCLAW_SANDBOX_NAME:-financial-analyst}" \
+  --provider compatible-chat-api \
+  --model "$FINANCE_MODEL" \
+  --no-verify
+
+bash scripts/install-skills.sh "${NEMOCLAW_SANDBOX_NAME:-financial-analyst}"
+npm install
+npm run build
+python3 scripts/finance_ui_server.py \
+  --env-file .env \
+  --port 18080 \
+  --api-url http://127.0.0.1:8642 \
+  --model "$FINANCE_MODEL"
+```
+
+Open `http://127.0.0.1:18080` and ask for a market snapshot, SEC facts
+summary, or concise analyst brief.
 
 ## 1. Onboard NemoHermes
 
@@ -109,11 +162,17 @@ export FINANCE_API_KEY=<your-compatible-api-key>
 export FINANCE_MODEL=openai/openai/gpt-5.5
 export OPENAI_API_KEY="$FINANCE_API_KEY"
 
-openshell provider create \
-  --name compatible-chat-api \
-  --type openai \
-  --credential OPENAI_API_KEY \
-  --config OPENAI_BASE_URL="$FINANCE_API_URL"
+if openshell provider get compatible-chat-api >/dev/null 2>&1; then
+  openshell provider update compatible-chat-api \
+    --credential OPENAI_API_KEY \
+    --config OPENAI_BASE_URL="$FINANCE_API_URL"
+else
+  openshell provider create \
+    --name compatible-chat-api \
+    --type openai \
+    --credential OPENAI_API_KEY \
+    --config OPENAI_BASE_URL="$FINANCE_API_URL"
+fi
 
 nemohermes inference set \
   --sandbox financial-analyst \
