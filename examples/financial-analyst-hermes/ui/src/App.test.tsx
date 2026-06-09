@@ -119,6 +119,16 @@ describe("financial React UI", () => {
     expect(screen.queryByText(/Skill path/i)).not.toBeInTheDocument();
     expect(screen.getByText("Capability queued")).toBeInTheDocument();
     expect(screen.getByText("Streaming response")).toBeInTheDocument();
+    const chatCall = vi
+      .mocked(global.fetch)
+      .mock.calls.find(([input]) => String(input).startsWith("/v1/chat/completions"));
+    expect(chatCall).toBeTruthy();
+    const body = JSON.parse(String(chatCall?.[1]?.body));
+    expect(body).toMatchObject({
+      max_tokens: 2048,
+      reasoning_effort: "low",
+    });
+    expect(body).not.toHaveProperty("temperature");
   });
 
   it("recovers with a non-streamed retry when the chat stream fails", async () => {
