@@ -35,7 +35,7 @@ PROXY_TIMEOUT = 240
 PROXY_AUTH_ENV = ""
 PROXY_API_KEY = ""
 CHAT_MODEL = "financial-assistant"
-UPSTREAM_LABEL = "Compatible API"
+UPSTREAM_LABEL = "Build API"
 PHOENIX_GRAPHQL_URL = "http://127.0.0.1:6006/graphql"
 QUOTE_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 QUOTE_TTL_SECONDS = 25
@@ -239,14 +239,14 @@ def main() -> int:
         "--api-url",
         dest="proxy_base_url",
         default=os.environ.get(
-            "FINANCE_API_URL", os.environ.get("OPENAI_BASE_URL", "")
+            "FINANCE_API_URL", os.environ.get("NVIDIA_BASE_URL", "")
         ),
-        help="proxy /v1/* to an OpenAI-compatible API URL, e.g. http://127.0.0.1:8642",
+        help="proxy /v1/* to a chat-completions compatible API URL, e.g. http://127.0.0.1:8642",
     )
     parser.add_argument("--proxy-timeout", type=int, default=240)
     parser.add_argument(
         "--api-key",
-        default=os.environ.get("FINANCE_API_KEY", os.environ.get("OPENAI_API_KEY", "")),
+        default=os.environ.get("FINANCE_API_KEY", os.environ.get("NVIDIA_API_KEY", "")),
         help="upstream bearer token to inject server-side; never sent to the browser",
     )
     parser.add_argument(
@@ -256,9 +256,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--model",
-        default=os.environ.get(
-            "FINANCE_MODEL", os.environ.get("OPENAI_MODEL", CHAT_MODEL)
-        ),
+        default=os.environ.get("FINANCE_MODEL", CHAT_MODEL),
         help="model name sent by the browser client in chat completions requests",
     )
     parser.add_argument(

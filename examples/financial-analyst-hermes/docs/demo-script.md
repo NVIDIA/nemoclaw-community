@@ -18,7 +18,7 @@ sandbox. OpenShell enforces the policy boundary around the agent.
 
 ```bash
 export NEMOCLAW_AGENT=hermes
-export OPENAI_API_KEY=<your-compatible-api-key>
+export NVIDIA_API_KEY=<your-build-api-key>
 nemohermes onboard --fresh --name financial-analyst
 ```
 
@@ -31,20 +31,20 @@ nemoclaw onboard --agent hermes --fresh --name financial-analyst
 After onboarding, switch Hermes to the provider and model you want to demo:
 
 ```bash
-export FINANCE_API_URL=<your-compatible-api-url>
-export FINANCE_API_KEY=<your-compatible-api-key>
-export FINANCE_MODEL=<your-chat-model>
-export OPENAI_API_KEY="$FINANCE_API_KEY"
+export FINANCE_API_URL=https://integrate.api.nvidia.com/v1
+export FINANCE_API_KEY=<your-build-api-key>
+export FINANCE_MODEL=nvidia/nvidia/nemotron-3-ultra
+export NVIDIA_API_KEY="${NVIDIA_API_KEY:-$FINANCE_API_KEY}"
 
 openshell provider create \
-  --name compatible-chat-api \
-  --type openai \
-  --credential OPENAI_API_KEY \
-  --config OPENAI_BASE_URL="$FINANCE_API_URL"
+  --name compatible-endpoint \
+  --type nvidia \
+  --credential NVIDIA_API_KEY \
+  --config NVIDIA_BASE_URL="$FINANCE_API_URL"
 
 nemohermes inference set \
   --sandbox financial-analyst \
-  --provider compatible-chat-api \
+  --provider compatible-endpoint \
   --model "$FINANCE_MODEL" \
   --no-verify
 ```
@@ -94,10 +94,10 @@ curl -sf http://127.0.0.1:8642/health
 python3 scripts/smoke-hermes-api.py --api-url http://127.0.0.1:8642/v1 --timeout 180
 ```
 
-Talking point: Hermes exposes an OpenAI-compatible API, so existing apps can
-call the sandboxed assistant without learning a custom protocol. For this demo,
-OpenShell routes that API through the configured provider while keeping
-credentials server-side.
+Talking point: Hermes exposes a chat-completions API, so existing apps can call
+the sandboxed assistant without learning a custom protocol. For this demo,
+OpenShell routes that API through Build API while keeping credentials
+server-side.
 
 ## 6. Show the UI
 

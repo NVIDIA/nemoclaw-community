@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Smoke-test a Hermes OpenAI-compatible API endpoint."""
+"""Smoke-test a Hermes chat-completions API endpoint."""
 
 from __future__ import annotations
 

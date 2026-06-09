@@ -10,7 +10,7 @@ This example now supports a simple multi-surface demo:
 
 ## Streaming
 
-The UI sends OpenAI-compatible chat-completions requests with `stream: true`.
+The UI sends chat-completions compatible requests with `stream: true`.
 The helper server proxies `text/event-stream` responses from Hermes/OpenShell
 without buffering and the browser renders each incoming delta.
 
@@ -35,21 +35,21 @@ https://docs.nvidia.com/nemoclaw/latest/user-guide/openclaw/inference/use-local-
 
 ## Brev / Live Hermes Mode
 
-First route Hermes through the compatible API provider you want to demo:
+First route Hermes through the Build API compatible endpoint:
 
 ```bash
-export FINANCE_API_URL=<your-compatible-api-url>
-export FINANCE_API_KEY=<your-compatible-api-key>
-export FINANCE_MODEL=<your-chat-model>
-export OPENAI_API_KEY="$FINANCE_API_KEY"
+export FINANCE_API_URL=https://integrate.api.nvidia.com/v1
+export FINANCE_API_KEY=<your-build-api-key>
+export FINANCE_MODEL=nvidia/nvidia/nemotron-3-ultra
+export NVIDIA_API_KEY="${NVIDIA_API_KEY:-$FINANCE_API_KEY}"
 openshell provider create \
-  --name compatible-chat-api \
-  --type openai \
-  --credential OPENAI_API_KEY \
-  --config OPENAI_BASE_URL="$FINANCE_API_URL"
+  --name compatible-endpoint \
+  --type nvidia \
+  --credential NVIDIA_API_KEY \
+  --config NVIDIA_BASE_URL="$FINANCE_API_URL"
 nemohermes inference set \
   --sandbox financial-analyst \
-  --provider compatible-chat-api \
+  --provider compatible-endpoint \
   --model "$FINANCE_MODEL" \
   --no-verify
 ```

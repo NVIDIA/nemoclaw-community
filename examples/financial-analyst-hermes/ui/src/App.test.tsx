@@ -27,7 +27,7 @@ describe("financial React UI", () => {
       if (url.startsWith("/config")) {
         return Response.json({
           model: "financial-assistant",
-          upstream_label: "Compatible API",
+          upstream_label: "Build API",
         });
       }
       if (url.startsWith("/api/quotes")) {

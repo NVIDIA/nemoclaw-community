@@ -11,7 +11,7 @@ Browser UI on :18080
   -> same-origin /v1 proxy
   -> NemoHermes API on 127.0.0.1:8642
   -> OpenShell provider route
-  -> compatible chat-completions API
+  -> Build API compatible chat-completions endpoint
 
 Hermes sandbox
   -> finance skills
@@ -80,9 +80,9 @@ ${EDITOR:-vi} .env
 Fill in at least:
 
 ```dotenv
-FINANCE_API_URL=https://api.example.com/v1
-FINANCE_API_KEY=<your-compatible-api-key>
-FINANCE_MODEL=openai/openai/gpt-5.5
+FINANCE_API_URL=https://integrate.api.nvidia.com/v1
+FINANCE_API_KEY=<your-build-api-key>
+FINANCE_MODEL=nvidia/nvidia/nemotron-3-ultra
 NEMOCLAW_SANDBOX_NAME=financial-analyst
 ```
 
@@ -113,9 +113,7 @@ set -a
 . ./.env
 set +a
 
-export OPENAI_API_KEY="${OPENAI_API_KEY:-$FINANCE_API_KEY}"
-export OPENAI_BASE_URL="${OPENAI_BASE_URL:-$FINANCE_API_URL}"
-export OPENAI_MODEL="${OPENAI_MODEL:-$FINANCE_MODEL}"
+export NVIDIA_API_KEY="${NVIDIA_API_KEY:-$FINANCE_API_KEY}"
 export NEMOCLAW_SANDBOX_NAME="${NEMOCLAW_SANDBOX_NAME:-financial-analyst}"
 ```
 
@@ -134,25 +132,25 @@ The equivalent generic NemoClaw form is:
 nemoclaw onboard --agent hermes --fresh --name "$NEMOCLAW_SANDBOX_NAME"
 ```
 
-When the onboarding flow asks for an inference provider, choose an
-OpenAI-compatible provider. It is fine to choose a default model first; the next
-step sets the exact route for this demo.
+When the onboarding flow asks for an inference provider, choose a compatible
+provider. It is fine to choose a default route first; the next step sets the
+exact Build API route for this demo.
 
 ## 5. Connect The Model Route
 
 Create or update the OpenShell provider:
 
 ```bash
-if openshell provider get compatible-chat-api >/dev/null 2>&1; then
-  openshell provider update compatible-chat-api \
-    --credential OPENAI_API_KEY \
-    --config OPENAI_BASE_URL="$FINANCE_API_URL"
+if openshell provider get compatible-endpoint >/dev/null 2>&1; then
+  openshell provider update compatible-endpoint \
+    --credential NVIDIA_API_KEY \
+    --config NVIDIA_BASE_URL="$FINANCE_API_URL"
 else
   openshell provider create \
-    --name compatible-chat-api \
-    --type openai \
-    --credential OPENAI_API_KEY \
-    --config OPENAI_BASE_URL="$FINANCE_API_URL"
+    --name compatible-endpoint \
+    --type nvidia \
+    --credential NVIDIA_API_KEY \
+    --config NVIDIA_BASE_URL="$FINANCE_API_URL"
 fi
 ```
 
@@ -161,7 +159,7 @@ Point NemoHermes at that provider and model:
 ```bash
 nemohermes inference set \
   --sandbox "$NEMOCLAW_SANDBOX_NAME" \
-  --provider compatible-chat-api \
+  --provider compatible-endpoint \
   --model "$FINANCE_MODEL" \
   --no-verify
 ```
@@ -235,7 +233,7 @@ python3 scripts/finance_ui_server.py \
   --port 18080 \
   --api-url http://127.0.0.1:8642 \
   --model "$FINANCE_MODEL" \
-  --upstream-label "${FINANCE_UPSTREAM_LABEL:-Compatible API}" \
+  --upstream-label "${FINANCE_UPSTREAM_LABEL:-Build API}" \
   --phoenix-url "${FINANCE_PHOENIX_GRAPHQL_URL:-http://127.0.0.1:6006/graphql}"
 ```
 

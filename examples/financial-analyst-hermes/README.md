@@ -1,9 +1,9 @@
 # Financial Analyst Hermes Assistant
 
 A small NemoClaw/NemoHermes example for a financial analyst. It uses a stock
-NemoHermes sandbox, a configurable OpenAI-compatible chat API, four installable
+NemoHermes sandbox, a configurable chat-completions API, four installable
 Hermes skills, a read-only finance data policy preset, and a streaming
-financial desk UI that talks to the Hermes OpenAI-compatible API.
+financial desk UI that talks to the Hermes chat-completions API.
 
 This example is intentionally narrow: public quote snapshots, SEC
 company facts, concise analyst briefs, and explicit caveats. It does not connect
@@ -28,7 +28,7 @@ to brokerage accounts, place trades, or provide personalized investment advice.
 
 Current NemoClaw docs describe `nemohermes` as the Hermes-selected alias for
 NemoClaw. Use `nemohermes <sandbox> dashboard-url --quiet` to discover the
-dashboard URL; the OpenAI-compatible API is exposed on port `8642`. See the official
+dashboard URL; the chat-completions API is exposed on port `8642`. See the official
 [NemoClaw Hermes quickstart](https://docs.nvidia.com/nemoclaw/latest/user-guide/hermes/get-started/quickstart)
 and [NemoClaw inference options](https://docs.nvidia.com/nemoclaw/latest/inference/inference-options.html).
 
@@ -55,7 +55,6 @@ examples/financial-analyst-hermes/
     setup-outlook-provider.sh
     ui-smoke.mjs
   providers/
-    compatible-chat-api.yaml
     outlook-email.yaml
   agents/hermes/
     plugins/nemo-relay/
@@ -96,27 +95,27 @@ ${EDITOR:-vi} .env
 set -a
 . ./.env
 set +a
-export OPENAI_API_KEY="${OPENAI_API_KEY:-$FINANCE_API_KEY}"
+export NVIDIA_API_KEY="${NVIDIA_API_KEY:-$FINANCE_API_KEY}"
 
 export NEMOCLAW_AGENT=hermes
 curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash
 nemohermes onboard --fresh --name "${NEMOCLAW_SANDBOX_NAME:-financial-analyst}"
 
-if openshell provider get compatible-chat-api >/dev/null 2>&1; then
-  openshell provider update compatible-chat-api \
-    --credential OPENAI_API_KEY \
-    --config OPENAI_BASE_URL="$FINANCE_API_URL"
+if openshell provider get compatible-endpoint >/dev/null 2>&1; then
+  openshell provider update compatible-endpoint \
+    --credential NVIDIA_API_KEY \
+    --config NVIDIA_BASE_URL="$FINANCE_API_URL"
 else
   openshell provider create \
-    --name compatible-chat-api \
-    --type openai \
-    --credential OPENAI_API_KEY \
-    --config OPENAI_BASE_URL="$FINANCE_API_URL"
+    --name compatible-endpoint \
+    --type nvidia \
+    --credential NVIDIA_API_KEY \
+    --config NVIDIA_BASE_URL="$FINANCE_API_URL"
 fi
 
 nemohermes inference set \
   --sandbox "${NEMOCLAW_SANDBOX_NAME:-financial-analyst}" \
-  --provider compatible-chat-api \
+  --provider compatible-endpoint \
   --model "$FINANCE_MODEL" \
   --no-verify
 
@@ -152,31 +151,31 @@ same sandbox name with the Hermes agent selected:
 nemoclaw onboard --agent hermes --fresh --name financial-analyst
 ```
 
-When prompted, choose an OpenAI-compatible provider and enter the API key for
-that provider. Onboard can use a default model first; then switch the running
-Hermes sandbox to the provider and model you want for the demo:
+When prompted, choose a compatible provider and enter the Build API key.
+Onboard can use a default route first; then switch the running Hermes sandbox
+to the Build API endpoint and Nemotron Ultra model for the demo:
 
 ```bash
-export FINANCE_API_URL=<your-compatible-api-url>
-export FINANCE_API_KEY=<your-compatible-api-key>
-export FINANCE_MODEL=openai/openai/gpt-5.5
-export OPENAI_API_KEY="$FINANCE_API_KEY"
+export FINANCE_API_URL=https://integrate.api.nvidia.com/v1
+export FINANCE_API_KEY=<your-build-api-key>
+export FINANCE_MODEL=nvidia/nvidia/nemotron-3-ultra
+export NVIDIA_API_KEY="${NVIDIA_API_KEY:-$FINANCE_API_KEY}"
 
-if openshell provider get compatible-chat-api >/dev/null 2>&1; then
-  openshell provider update compatible-chat-api \
-    --credential OPENAI_API_KEY \
-    --config OPENAI_BASE_URL="$FINANCE_API_URL"
+if openshell provider get compatible-endpoint >/dev/null 2>&1; then
+  openshell provider update compatible-endpoint \
+    --credential NVIDIA_API_KEY \
+    --config NVIDIA_BASE_URL="$FINANCE_API_URL"
 else
   openshell provider create \
-    --name compatible-chat-api \
-    --type openai \
-    --credential OPENAI_API_KEY \
-    --config OPENAI_BASE_URL="$FINANCE_API_URL"
+    --name compatible-endpoint \
+    --type nvidia \
+    --credential NVIDIA_API_KEY \
+    --config NVIDIA_BASE_URL="$FINANCE_API_URL"
 fi
 
 nemohermes inference set \
   --sandbox financial-analyst \
-  --provider compatible-chat-api \
+  --provider compatible-endpoint \
   --model "$FINANCE_MODEL" \
   --no-verify
 ```
@@ -188,9 +187,9 @@ export NEMOCLAW_AGENT=hermes
 export NEMOCLAW_NON_INTERACTIVE=1
 export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 export NEMOCLAW_SANDBOX_NAME=financial-analyst
-export NEMOCLAW_PROVIDER=openai
-export NEMOCLAW_MODEL=openai/openai/gpt-5.5
-export OPENAI_API_KEY=<your-compatible-api-key>
+export NEMOCLAW_PROVIDER=nvidia
+export NEMOCLAW_MODEL=nvidia/nvidia/nemotron-3-ultra
+export NVIDIA_API_KEY=<your-build-api-key>
 
 curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash
 ```
@@ -198,15 +197,15 @@ curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash
 The provider route is:
 
 ```text
-provider: compatible-chat-api
-API URL: set by FINANCE_API_URL or OPENAI_BASE_URL
-model: set by FINANCE_MODEL or OPENAI_MODEL
+provider: compatible-endpoint
+API URL: set by FINANCE_API_URL or NVIDIA_BASE_URL
+model: set by FINANCE_MODEL
 ```
 
 Verification note from 2026-06-08: the Brev demo was redeployed with
-`openai/openai/gpt-5.5` through a compatible chat-completions provider and
-Hermes. If a selected model returns upstream errors, choose another model
-supported by the same API provider and rerun the smoke tests below.
+`nvidia/nvidia/nemotron-3-ultra` through the Build API compatible endpoint and
+Hermes. If the endpoint returns upstream errors, confirm the Build API key,
+endpoint, and model access, then rerun the smoke tests below.
 
 ## 2. Install Finance Skills and Policy
 

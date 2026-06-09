@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Smoke-test an OpenAI-compatible chat completions API."""
+"""Smoke-test a chat-completions compatible API."""
 
 from __future__ import annotations
 
@@ -21,14 +21,12 @@ def main() -> int:
         "--api-url",
         dest="base_url",
         default=os.environ.get(
-            "FINANCE_API_URL", os.environ.get("OPENAI_BASE_URL", DEFAULT_BASE_URL)
+            "FINANCE_API_URL", os.environ.get("NVIDIA_BASE_URL", DEFAULT_BASE_URL)
         ),
     )
     parser.add_argument(
         "--model",
-        default=os.environ.get(
-            "FINANCE_MODEL", os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
-        ),
+        default=os.environ.get("FINANCE_MODEL", DEFAULT_MODEL),
     )
     parser.add_argument("--env-file", default=os.environ.get("ENV_FILE", ""))
     parser.add_argument("--timeout", type=int, default=120)
@@ -37,13 +35,13 @@ def main() -> int:
     if args.env_file:
         load_env_file(Path(args.env_file))
 
-    api_key = os.environ.get("FINANCE_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    api_key = os.environ.get("FINANCE_API_KEY") or os.environ.get("NVIDIA_API_KEY")
     if not api_key:
         print(
             json.dumps(
                 {
                     "ok": False,
-                    "message": "FINANCE_API_KEY or OPENAI_API_KEY is not set",
+                    "message": "FINANCE_API_KEY or NVIDIA_API_KEY is not set",
                 },
                 indent=2,
             )

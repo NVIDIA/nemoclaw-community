@@ -12,18 +12,18 @@ assistant demo.
 - Active release path:
   `/home/ubuntu/financial-assistant-agent/releases/20260609001354-3315a0f2`
 - Branch: `feature/hermes-financial-assistant`
-- Verification baseline commit: `e3349e50`
+- Verification source: current pushed feature branch
 
 Live health:
 
 ```json
-{"status":"ok","platform":"finance-ui","upstream":"http://127.0.0.1:8642","model":"openai/openai/gpt-5.5"}
+{"status":"ok","platform":"finance-ui","upstream":"http://127.0.0.1:8642","model":"nvidia/nvidia/nemotron-3-ultra"}
 ```
 
 Live config:
 
 ```json
-{"model":"openai/openai/gpt-5.5","upstream_label":"Compatible API"}
+{"model":"nvidia/nvidia/nemotron-3-ultra","upstream_label":"Build API"}
 ```
 
 ## Runtime Evidence
@@ -118,7 +118,7 @@ Completed:
 - Streaming financial assistant UI deployed on Brev.
 - Markdown and safe HTML rendering.
 - NVIDIA logo and demo resource links.
-- GPT 5.5 live route: `openai/openai/gpt-5.5`.
+- Nemotron Ultra live route: `nvidia/nvidia/nemotron-3-ultra`.
 - Phoenix and NeMo Relay producing real spans.
 - Outlook fixture bridge and provider setup path.
 

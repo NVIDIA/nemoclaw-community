@@ -60,9 +60,9 @@ ${EDITOR:-vi} .env
 Fill in at least:
 
 ```dotenv
-FINANCE_API_URL=https://api.example.com/v1
-FINANCE_API_KEY=<your-compatible-api-key>
-FINANCE_MODEL=openai/openai/gpt-5.5
+FINANCE_API_URL=https://integrate.api.nvidia.com/v1
+FINANCE_API_KEY=<your-build-api-key>
+FINANCE_MODEL=nvidia/nvidia/nemotron-3-ultra
 NEMOCLAW_SANDBOX_NAME=financial-analyst
 ```
 
@@ -74,7 +74,7 @@ export NEMOCLAW_SANDBOX_NAME=financial-analyst
 set -a
 . ./.env
 set +a
-export OPENAI_API_KEY="${OPENAI_API_KEY:-$FINANCE_API_KEY}"
+export NVIDIA_API_KEY="${NVIDIA_API_KEY:-$FINANCE_API_KEY}"
 
 curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash
 nemohermes onboard --fresh --name financial-analyst
@@ -86,7 +86,7 @@ The equivalent generic CLI form is:
 nemoclaw onboard --agent hermes --fresh --name financial-analyst
 ```
 
-Choose the compatible API provider you want to use. It is fine to onboard with
+Use the Build API compatible endpoint for the demo. It is fine to onboard with
 the default model first, then switch to the model and provider route for the
 demo after the sandbox is healthy.
 
@@ -99,25 +99,25 @@ browser. On the Brev instance, from this example directory:
 set -a
 . ./.env
 set +a
-export OPENAI_API_KEY="$FINANCE_API_KEY"
+export NVIDIA_API_KEY="${NVIDIA_API_KEY:-$FINANCE_API_KEY}"
 ```
 
 Create or update OpenShell's NemoHermes-compatible endpoint provider:
 
 ```bash
 openshell provider create \
-  --name compatible-chat-api \
-  --type openai \
-  --credential OPENAI_API_KEY \
-  --config OPENAI_BASE_URL="$FINANCE_API_URL"
+  --name compatible-endpoint \
+  --type nvidia \
+  --credential NVIDIA_API_KEY \
+  --config NVIDIA_BASE_URL="$FINANCE_API_URL"
 ```
 
 If the provider already exists, update it instead:
 
 ```bash
-openshell provider update compatible-chat-api \
-  --credential OPENAI_API_KEY \
-  --config OPENAI_BASE_URL="$FINANCE_API_URL"
+openshell provider update compatible-endpoint \
+  --credential NVIDIA_API_KEY \
+  --config NVIDIA_BASE_URL="$FINANCE_API_URL"
 ```
 
 Then sync the Hermes sandbox route:
@@ -125,7 +125,7 @@ Then sync the Hermes sandbox route:
 ```bash
 nemohermes inference set \
   --sandbox financial-analyst \
-  --provider compatible-chat-api \
+  --provider compatible-endpoint \
   --model "$FINANCE_MODEL" \
   --no-verify
 ```
@@ -140,14 +140,14 @@ python3 scripts/smoke-hermes-api.py --api-url http://127.0.0.1:8642/v1 --timeout
 Expected route:
 
 ```text
-provider: compatible-chat-api
-model: openai/openai/gpt-5.5
+provider: compatible-endpoint
+model: nvidia/nvidia/nemotron-3-ultra
 ```
 
 Verification note from 2026-06-08: the Brev demo was redeployed with
-`openai/openai/gpt-5.5` and passed the UI smoke through Hermes. If your selected
-model returns upstream errors, switch `FINANCE_MODEL` to another model available
-from the same provider and rerun the smoke tests.
+`nvidia/nvidia/nemotron-3-ultra` and passed the UI smoke through Hermes. If the
+endpoint returns upstream errors, confirm the Build API key, endpoint, and model
+access, then rerun the smoke tests.
 
 ## 5. Install Skills and Policy
 

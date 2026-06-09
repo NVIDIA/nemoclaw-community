@@ -13,7 +13,7 @@ nemohermes inference get
 Expected provider route for the booth demo:
 
 ```text
-provider: compatible-chat-api
+provider: compatible-endpoint
 model: value of FINANCE_MODEL
 ```
 
