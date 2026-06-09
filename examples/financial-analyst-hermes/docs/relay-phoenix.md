@@ -77,6 +77,14 @@ PHOENIX_PROJECT_NAME=financial-assistant-relay
 ```
 
 The sandbox policy must allow POST traffic from the `nemo-relay` binary to the
-Phoenix host/port. The live retrofit used by the booth rehearsal installs
-`nemo-relay` in the sandbox, starts it on `127.0.0.1:4040`, and merges
+Phoenix host/port:
+
+```bash
+nemohermes financial-analyst policy-add \
+  --from-file examples/financial-analyst-hermes/presets/financial-phoenix-relay.yaml \
+  --yes
+```
+
+The live retrofit used by the booth rehearsal installs `nemo-relay` in the
+sandbox, starts it on `127.0.0.1:4040`, and merges
 `agents/hermes/relay-hooks.yaml` into Hermes config.

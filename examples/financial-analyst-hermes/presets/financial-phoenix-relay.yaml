@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+
+preset:
+  name: financial-phoenix-relay
+  description: "Allow in-sandbox NeMo Relay to export OpenInference traces to local Phoenix."
+
+network_policies:
+  phoenix_collector:
+    name: phoenix_collector
+    endpoints:
+      - host: host.openshell.internal
+        port: 6006
+        protocol: rest
+        enforcement: enforce
+        allowed_ips:
+          - 10.0.0.0/8
+          - 172.0.0.0/8
+          - 192.168.0.0/16
+          - fc00::/7
+        rules:
+          - allow: { method: POST, path: "/**" }
+    binaries:
+      - { path: /sandbox/.hermes/bin/nemo-relay }
+      - { path: /usr/bin/python3 }
+      - { path: /usr/bin/python3.13 }
+      - { path: /opt/hermes/.venv/bin/python }

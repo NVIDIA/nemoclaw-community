@@ -64,3 +64,41 @@ python3 scripts/outlook_finance_bridge.py \
 
 Use `--reply-mode print` during first validation so no emails are sent until you
 have reviewed the generated response format.
+
+## One-Owner Mailbox Mode
+
+The finance bridge is intentionally narrow:
+
+- `OUTLOOK_TARGET_MAILBOX` is the only mailbox it reads and replies from.
+- `OUTLOOK_REPLY_TO` is the only sender it will process.
+- Replies are sent only in-thread via Microsoft Graph's message reply API.
+- Processed message IDs are persisted under
+  `$HERMES_HOME/outlook/processed.json` to avoid duplicate replies.
+
+Required sandbox env:
+
+```text
+OUTLOOK_TARGET_MAILBOX=<agent mailbox>
+OUTLOOK_REPLY_TO=<your mailbox>
+OUTLOOK_ALLOWED_SENDERS=<same value as OUTLOOK_REPLY_TO>
+MS_GRAPH_ACCESS_TOKEN=openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN
+```
+
+On Brev, apply the Python bridge policy:
+
+```bash
+nemohermes financial-analyst policy-add \
+  --from-file examples/financial-analyst-hermes/presets/financial-outlook-mailbox.yaml \
+  --yes
+```
+
+Then run the bridge in polling mode inside the sandbox:
+
+```bash
+python3 /sandbox/.hermes/outlook/outlook_finance_bridge.py \
+  --api-url http://127.0.0.1:8642/v1 \
+  --reply-mode graph \
+  --poll \
+  --interval 30 \
+  --limit 3
+```

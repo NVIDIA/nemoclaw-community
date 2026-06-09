@@ -14,6 +14,8 @@ to brokerage accounts, place trades, or provide personalized investment advice.
 - `nemohermes onboard` as the main lifecycle command.
 - A provider-agnostic API route configured with API URL, API key, and model.
 - Hermes skills installed with `nemohermes <sandbox> skill install <path>`.
+- A scoped financial skill profile so the model does not load unrelated
+  bundled skills into every request.
 - Read-only OpenShell/NemoClaw policy for public finance data.
 - API access through Hermes on `http://127.0.0.1:8642/v1`.
 - A financial desk UI for streaming chat, Outlook-style email prompts, and run
@@ -40,6 +42,7 @@ examples/financial-analyst-hermes/
     finance-data-readonly.yaml
   scripts/
     install-skills.sh
+    configure-finance-skills.sh
     smoke-hermes-api.py
     smoke-compatible-api.py
     finance_ui_server.py
@@ -152,7 +155,28 @@ bash scripts/install-skills.sh financial-analyst
 ```
 
 The script applies [presets/finance-data-readonly.yaml](presets/finance-data-readonly.yaml)
-and installs all four skill directories.
+installs all four skill directories, and narrows the active Hermes skill set to:
+
+- `financial-market-snapshot`
+- `sec-company-facts`
+- `financial-analyst-brief`
+- `financial-analyst-playbook`
+- `nemoclaw-openshell-runtime-context`
+
+That scoping matters. A stock Hermes sandbox may include many bundled skills;
+loading all of them can add substantial prompt context and make skill selection
+less predictable for a focused finance demo.
+
+To reapply the scoped profile after adding or removing skills:
+
+```bash
+bash scripts/configure-finance-skills.sh financial-analyst
+```
+
+If the gateway is already running and you add a new skill file manually, ask the
+agent to reload skills or restart the sandbox before expecting automatic skill
+matching to change. Explicitly named skills can still be used when present on
+disk, but automatic matching is best after the reload.
 
 The policy allows read-only requests from Python helpers to:
 

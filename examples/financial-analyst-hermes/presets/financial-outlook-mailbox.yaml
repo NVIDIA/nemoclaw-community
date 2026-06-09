@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+
+preset:
+  name: financial-outlook-mailbox
+  description: "Allow the finance Outlook bridge to read and reply through Microsoft Graph."
+
+network_policies:
+  financial_outlook_graph:
+    name: financial_outlook_graph
+    endpoints:
+      - host: graph.microsoft.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/**" }
+          - allow: { method: POST, path: "/**" }
+          - allow: { method: PATCH, path: "/**" }
+    binaries:
+      - { path: /usr/bin/python3 }
+      - { path: /usr/bin/python3.13 }
+      - { path: /opt/hermes/.venv/bin/python }

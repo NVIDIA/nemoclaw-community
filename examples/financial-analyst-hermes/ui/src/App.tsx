@@ -38,7 +38,7 @@ type ActivityStep = {
 };
 
 const systemPrompt =
-  "You are a finance-first NemoHermes financial assistant running inside an NVIDIA OpenShell sandbox managed by NemoClaw. Your default work is public market context, SEC company facts, concise analyst briefs, investment-committee prep, risk checks, and Outlook-style financial email drafts. Use installed finance skills internally when helpful, but do not display skill names, skill paths, tool names, tool paths, trace details, or implementation labels in normal responses unless the user explicitly asks for them. If asked what you are or what you can do, describe capabilities in plain business language without mentioning skills or tools. Separate facts from hypotheses with explicit labels when requested. If asked whether to buy or sell, explicitly say you cannot provide a buy/sell recommendation and reframe as research support. Do not provide investment advice. If asked about yourself, describe yourself as a financial assistant agent running in OpenShell, not as a generic Hermes assistant. Explain OpenShell config in API-agnostic terms. Never name provider IDs, internal routing labels, model IDs, endpoint URLs, base URLs, local hostnames, internal-only services, or secret values in normal answers. Say 'configured compatible API provider' instead. End finance answers with a brief caveat.";
+  "You are a financial assistant agent running in an NVIDIA OpenShell sandbox managed by NemoClaw. Help with public market snapshots, SEC company facts, concise analyst briefs, risk checks, investment-committee prep, and Outlook-style financial email drafts. Use installed finance skills and helpers when relevant. Separate facts from interpretation and caveats. Do not provide personalized investment advice or buy/sell/hold recommendations. Do not expose secret values, endpoint URLs, base URLs, provider IDs, model IDs, or internal-only service names. If the user explicitly asks which skills or tools were used, name them briefly; otherwise keep the answer focused on the financial work.";
 
 const streamFirstTokenTimeoutMs = 90_000;
 const streamIdleTimeoutMs = 18_000;
@@ -95,6 +95,19 @@ function cleanAssistantText(text: string) {
     .filter((line) => !/^\s*\*?\s*(skill|tool)\s+path\s*:/i.test(line))
     .join("\n")
     .trim();
+}
+
+function chatPayload(cleanPrompt: string, model: string, stream: boolean) {
+  return {
+    model,
+    stream,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: cleanPrompt },
+    ],
+    temperature: 0.2,
+    max_tokens: 1000,
+  };
 }
 
 export function App() {
@@ -238,6 +251,8 @@ export function App() {
       { id: assistantId, role: "assistant", content: "", thinking: true },
     ]);
 
+    let streamedOutput = "";
+
     try {
       const controller = new AbortController();
       const responseTimer = window.setTimeout(
@@ -252,16 +267,7 @@ export function App() {
           "X-Finance-Run-Id": traceId,
           "X-Finance-Channel": nextChannel,
         },
-        body: JSON.stringify({
-          model: runtime.model,
-          stream: true,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: cleanPrompt },
-          ],
-          temperature: 0.2,
-          max_tokens: 1000,
-        }),
+        body: JSON.stringify(chatPayload(cleanPrompt, runtime.model, true)),
       });
       window.clearTimeout(responseTimer);
 
@@ -353,6 +359,7 @@ export function App() {
           }
           if (parsed.token) {
             output += parsed.token;
+            streamedOutput = output;
             chunkCount += 1;
             setChunks(chunkCount);
             setActivitySteps((current) =>
@@ -436,12 +443,90 @@ export function App() {
           : error instanceof Error
             ? error.message
             : String(error);
+
+      if (!streamedOutput) {
+        try {
+          setActivitySteps((current) =>
+            current.map((step) =>
+              step.status === "running" || step.status === "queued"
+                ? {
+                    ...step,
+                    status: "running",
+                    detail: "Streaming failed; retrying once without streaming.",
+                  }
+                : step,
+            ),
+          );
+          const retry = await fetch("/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Finance-Run-Id": `${traceId}-retry`,
+              "X-Finance-Channel": nextChannel,
+            },
+            body: JSON.stringify(chatPayload(cleanPrompt, runtime.model, false)),
+          });
+          if (!retry.ok) throw new Error(`Retry returned HTTP ${retry.status}`);
+          const payload = await retry.json();
+          const content = cleanAssistantText(
+            payload?.choices?.[0]?.message?.content ||
+              payload?.message ||
+              "(No assistant message returned.)",
+          );
+          setMessages((current) =>
+            current.map((item) =>
+              item.id === assistantId
+                ? { ...item, content, thinking: false }
+                : item,
+            ),
+          );
+          setChunks(1);
+          setLatency(`${((performance.now() - started) / 1000).toFixed(1)}s`);
+          setActivitySteps((current) =>
+            current.map((step) =>
+              step.status === "running" || step.status === "queued"
+                ? {
+                    ...step,
+                    status: "done",
+                    detail: "Recovered with non-streamed response.",
+                  }
+                : step,
+            ),
+          );
+          return;
+        } catch (retryError) {
+          const retryMessage =
+            retryError instanceof Error ? retryError.message : String(retryError);
+          setMessages((current) =>
+            current.map((item) =>
+              item.id === assistantId
+                ? {
+                    ...item,
+                    content: `Request failed: ${message}; retry failed: ${retryMessage}`,
+                    thinking: false,
+                  }
+                : item,
+            ),
+          );
+          setActivitySteps((current) =>
+            current.map((step) =>
+              step.status === "running" || step.status === "queued"
+                ? { ...step, status: "error", detail: retryMessage }
+                : step,
+            ),
+          );
+          return;
+        }
+      }
+
       setMessages((current) =>
         current.map((item) =>
           item.id === assistantId
             ? {
                 ...item,
-                content: `Request failed: ${message}`,
+                content:
+                  cleanAssistantText(streamedOutput) ||
+                  "(Stream ended before an assistant message was returned.)",
                 thinking: false,
               }
             : item,
@@ -450,7 +535,11 @@ export function App() {
       setActivitySteps((current) =>
         current.map((step) =>
           step.status === "running" || step.status === "queued"
-            ? { ...step, status: "error", detail: message }
+            ? {
+                ...step,
+                status: "done",
+                detail: "Stream closed early after partial response.",
+              }
             : step,
         ),
       );

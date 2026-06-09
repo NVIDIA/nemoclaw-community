@@ -120,7 +120,8 @@ describe("financial React UI", () => {
     expect(screen.getByText("Streaming response")).toBeInTheDocument();
   });
 
-  it("keeps the app alive when the chat stream fails", async () => {
+  it("recovers with a non-streamed retry when the chat stream fails", async () => {
+    let chatCalls = 0;
     global.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.startsWith("/config"))
@@ -128,6 +129,19 @@ describe("financial React UI", () => {
       if (url.startsWith("/api/quotes"))
         return Response.json({ ok: true, quotes: [] });
       if (url.startsWith("/v1/chat/completions")) {
+        chatCalls += 1;
+        if (chatCalls > 1) {
+          return Response.json({
+            choices: [
+              {
+                message: {
+                  content:
+                    "Recovered response from non-streamed fallback.",
+                },
+              },
+            ],
+          });
+        }
         return new Response(
           new ReadableStream({
             start(controller) {
@@ -149,7 +163,8 @@ describe("financial React UI", () => {
     )[0];
     await user.type(input, "Can you tell me about yourself?{Enter}");
 
-    await screen.findByText(/Request failed: Cannot read properties of null/i);
+    await screen.findByText(/Recovered response from non-streamed fallback/i);
+    expect(screen.queryByText(/Request failed/i)).not.toBeInTheDocument();
     expect(
       screen.getAllByLabelText("Message the financial assistant")[0],
     ).toBeEnabled();

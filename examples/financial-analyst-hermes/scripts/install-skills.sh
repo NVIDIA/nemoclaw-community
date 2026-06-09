@@ -17,5 +17,8 @@ for skill_dir in "${ROOT_DIR}"/skills/*; do
   nemohermes "${SANDBOX_NAME}" skill install "${skill_dir}"
 done
 
+echo "Configuring the sandbox to prefer the financial skill set"
+bash "${ROOT_DIR}/scripts/configure-finance-skills.sh" "${SANDBOX_NAME}"
+
 echo "Done. Try:"
 echo "  nemohermes ${SANDBOX_NAME} exec -- /usr/bin/python3 /sandbox/.hermes/skills/financial-market-snapshot/scripts/finance_snapshot.py quote NVDA MSFT"

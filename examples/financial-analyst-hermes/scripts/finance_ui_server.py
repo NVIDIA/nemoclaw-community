@@ -307,7 +307,7 @@ def fetch_recent_phoenix_spans(limit: int = 12) -> list[dict[str, Any]]:
         edges {
           node {
             name
-            spans(first: 100) {
+            spans(first: 1000) {
               edges {
                 node {
                   name

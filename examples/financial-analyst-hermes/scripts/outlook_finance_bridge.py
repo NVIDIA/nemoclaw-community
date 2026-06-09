@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -39,7 +40,9 @@ def request_json(url: str, payload: dict[str, Any], timeout: int) -> dict[str, A
 def graph_request(
     path: str, *, method: str = "GET", payload: dict[str, Any] | None = None
 ) -> dict[str, Any]:
-    token = os.environ.get("MS_GRAPH_ACCESS_TOKEN")
+    token = os.environ.get(
+        "MS_GRAPH_ACCESS_TOKEN", "openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN"
+    )
     if not token:
         raise RuntimeError("MS_GRAPH_ACCESS_TOKEN is required for Graph mode")
     url = f"https://graph.microsoft.com/v1.0{path}"
@@ -59,6 +62,48 @@ def graph_request(
         return json.load(response)
 
 
+def env_email(name: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if "@" not in value:
+        raise RuntimeError(f"{name} must be set to an email address")
+    return value
+
+
+def mailbox_base() -> str:
+    mailbox = env_email("OUTLOOK_TARGET_MAILBOX")
+    return f"/users/{urllib.parse.quote(mailbox, safe='')}"
+
+
+def allowed_sender() -> str:
+    return env_email("OUTLOOK_REPLY_TO").lower()
+
+
+def state_path() -> Path:
+    default = (
+        Path(os.environ.get("HERMES_HOME", "/sandbox/.hermes"))
+        / "outlook"
+        / "processed.json"
+    )
+    return Path(os.environ.get("OUTLOOK_BRIDGE_STATE", str(default)))
+
+
+def load_processed(path: Path) -> set[str]:
+    if not path.exists():
+        return set()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+    if not isinstance(data, list):
+        return set()
+    return {str(item) for item in data}
+
+
+def save_processed(path: Path, processed: set[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(sorted(processed), indent=2), encoding="utf-8")
+
+
 def load_fixture(path: Path) -> list[dict[str, Any]]:
     with path.open("r", encoding="utf-8") as handle:
         data = json.load(handle)
@@ -67,26 +112,34 @@ def load_fixture(path: Path) -> list[dict[str, Any]]:
     return data
 
 
-def load_graph_messages(limit: int) -> list[dict[str, Any]]:
+def load_graph_messages(limit: int, *, include_read: bool = False) -> list[dict[str, Any]]:
     query = urllib.parse.urlencode(
         {
-            "$top": str(limit),
+            "$top": str(max(limit * 5, 10)),
             "$orderby": "receivedDateTime desc",
-            "$select": "id,from,subject,bodyPreview",
+            "$select": "id,from,subject,bodyPreview,isRead,receivedDateTime",
         }
     )
-    data = graph_request(f"/me/mailFolders/inbox/messages?{query}")
+    data = graph_request(f"{mailbox_base()}/mailFolders/inbox/messages?{query}")
     messages = []
+    sender_allow = allowed_sender()
     for item in data.get("value", []):
         sender = item.get("from", {}).get("emailAddress", {}).get("address", "unknown")
+        if sender.lower() != sender_allow:
+            continue
+        if item.get("isRead") and not include_read:
+            continue
         messages.append(
             {
                 "id": item.get("id"),
                 "from": sender,
                 "subject": item.get("subject", "(no subject)"),
                 "body": item.get("bodyPreview", ""),
+                "receivedDateTime": item.get("receivedDateTime"),
             }
         )
+        if len(messages) >= limit:
+            break
     return messages
 
 
@@ -115,8 +168,50 @@ def ask_agent(base_url: str, message: dict[str, Any], timeout: int) -> str:
 
 def reply_graph(message_id: str, body: str) -> None:
     graph_request(
-        f"/me/messages/{message_id}/reply", method="POST", payload={"comment": body}
+        f"{mailbox_base()}/messages/{message_id}/reply",
+        method="POST",
+        payload={"comment": body},
     )
+
+
+def mark_read(message_id: str) -> None:
+    graph_request(
+        f"{mailbox_base()}/messages/{message_id}",
+        method="PATCH",
+        payload={"isRead": True},
+    )
+
+
+def process_messages(args: argparse.Namespace, processed: set[str]) -> list[dict[str, Any]]:
+    messages = (
+        load_fixture(args.fixture)
+        if args.fixture
+        else load_graph_messages(args.limit, include_read=args.include_read)
+    )
+    results = []
+    for message in messages[: args.limit]:
+        message_id = str(message.get("id") or "")
+        if message_id and message_id in processed:
+            continue
+        if str(message.get("from", "")).lower() != allowed_sender():
+            continue
+        reply = ask_agent(args.base_url, message, args.timeout)
+        if args.reply_mode == "graph":
+            if not message_id:
+                raise RuntimeError("Graph reply mode requires message id")
+            reply_graph(message_id, reply)
+            mark_read(message_id)
+            processed.add(message_id)
+        results.append(
+            {
+                "id": message.get("id"),
+                "from": message.get("from"),
+                "subject": message.get("subject"),
+                "reply_excerpt": reply[:700],
+                "reply_mode": args.reply_mode,
+            }
+        )
+    return results
 
 
 def main() -> int:
@@ -128,27 +223,39 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=2)
     parser.add_argument("--timeout", type=int, default=180)
     parser.add_argument("--reply-mode", choices=["print", "graph"], default="print")
+    parser.add_argument("--poll", action="store_true", help="Continuously poll Outlook")
+    parser.add_argument("--interval", type=int, default=30, help="Poll interval in seconds")
+    parser.add_argument(
+        "--include-read",
+        action="store_true",
+        help="Include read messages during validation. Ignored for fixture mode.",
+    )
     args = parser.parse_args()
 
-    messages = (
-        load_fixture(args.fixture) if args.fixture else load_graph_messages(args.limit)
-    )
-    results = []
-    for message in messages[: args.limit]:
-        reply = ask_agent(args.base_url, message, args.timeout)
+    processed_path = state_path()
+    processed = load_processed(processed_path)
+    results: list[dict[str, Any]] = []
+    while True:
+        batch = process_messages(args, processed)
+        results.extend(batch)
         if args.reply_mode == "graph":
-            if not message.get("id"):
-                raise RuntimeError("Graph reply mode requires message id")
-            reply_graph(str(message["id"]), reply)
-        results.append(
-            {
-                "id": message.get("id"),
-                "from": message.get("from"),
-                "subject": message.get("subject"),
-                "reply_excerpt": reply[:700],
-                "reply_mode": args.reply_mode,
-            }
+            save_processed(processed_path, processed)
+        if not args.poll:
+            break
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "processed": len(batch),
+                    "target_mailbox": os.environ.get("OUTLOOK_TARGET_MAILBOX"),
+                    "allowed_sender": os.environ.get("OUTLOOK_REPLY_TO"),
+                },
+                indent=2,
+            ),
+            flush=True,
         )
+        time.sleep(max(args.interval, 5))
+
     print(
         json.dumps(
             {"ok": True, "processed": len(results), "results": results}, indent=2
