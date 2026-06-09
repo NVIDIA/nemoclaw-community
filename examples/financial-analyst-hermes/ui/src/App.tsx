@@ -105,7 +105,6 @@ function chatPayload(cleanPrompt: string, model: string, stream: boolean) {
       { role: "system", content: systemPrompt },
       { role: "user", content: cleanPrompt },
     ],
-    temperature: 0.2,
     max_tokens: 512,
   };
 }
