@@ -125,8 +125,8 @@ describe("financial React UI", () => {
     expect(chatCall).toBeTruthy();
     const body = JSON.parse(String(chatCall?.[1]?.body));
     expect(body).toMatchObject({
-      max_tokens: 2048,
-      reasoning_effort: "low",
+      max_tokens: 8192,
+      reasoning_effort: "medium",
     });
     expect(body).not.toHaveProperty("temperature");
   });
