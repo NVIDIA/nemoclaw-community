@@ -7,6 +7,9 @@ For the complete copy/paste runbook, including local forwarding, Phoenix,
 Outlook fixture rehearsal, real Outlook setup, and cleanup, see
 [start-agent.md](start-agent.md).
 
+For root cause analysis, operational requirements, and recovery commands for a
+running Brev instance, see [brev-rca-recovery.md](brev-rca-recovery.md).
+
 ## 1. Pick or Create an Instance
 
 List existing instances:
@@ -177,19 +180,14 @@ nemohermes financial-analyst exec -- \
 From your local machine:
 
 ```bash
-brev port-forward financial-assistant-agent -p 8642:8642
+bash examples/financial-analyst-hermes/scripts/forward-brev-demo.sh financial-assistant-agent
 ```
 
-Open the Hermes dashboard:
+This forwards the UI and Phoenix:
 
-```bash
-nemohermes financial-analyst dashboard-url --quiet
-```
-
-Or use the API:
-
-```bash
-curl -sf http://127.0.0.1:8642/health
+```text
+UI:      http://127.0.0.1:18080
+Phoenix: http://127.0.0.1:6006
 ```
 
 ## 7. Run the Streaming UI on Brev
@@ -200,24 +198,21 @@ In the Brev shell:
 cd nemoclaw-community/examples/financial-analyst-hermes
 npm install
 npm run build
-python3 scripts/finance_ui_server.py \
-  --host 0.0.0.0 \
-  --port 18080 \
-  --api-url http://127.0.0.1:8642 \
-  --model "$FINANCE_MODEL"
+FINANCE_SKIP_BUILD=1 bash scripts/recover-brev-demo.sh
 ```
 
-From your local machine:
+The recovery/start script keeps the correct runtime topology:
 
-```bash
-brev port-forward financial-assistant-agent -p 18080:18080
+```text
+Browser -> finance UI -> Hermes sandbox -> host NeMo Relay -> configured API
+                                  \-> Phoenix trace export
 ```
 
 Open `http://127.0.0.1:18080`. The helper server proxies same-origin `/v1/*` to
 Hermes, avoiding browser CORS issues and avoiding port `8080`, which OpenShell
-uses for the gateway. Hermes is already routed to the configured provider
-through OpenShell, so the UI does not need an API token or visible endpoint
-field. Chat responses stream as token chunks in the browser.
+uses for the gateway. Hermes routes model traffic through the Relay sidecar, so
+the UI does not need an API token or visible endpoint field. Chat responses
+stream as token chunks in the browser.
 
 Run browser smoke tests from your local checkout while the tunnel is active:
 
@@ -307,19 +302,22 @@ agents/hermes/relay-hooks.yaml
 The sidecar runtime shape is:
 
 ```text
-Hermes hooks/plugin -> nemo-relay sidecar on 127.0.0.1:4040 -> Phoenix
+Hermes hooks/plugin -> host nemo-relay sidecar on :4040 -> Phoenix
 ```
 
-Set the collector endpoint for a Brev-hosted Phoenix instance to:
+The critical Hermes process environment is:
 
 ```text
-PHOENIX_COLLECTOR_ENDPOINT=http://host.openshell.internal:6006/v1/traces
-PHOENIX_PROJECT_NAME=financial-assistant-relay
+NEMO_RELAY_GATEWAY_URL=http://host.openshell.internal:4040
 ```
 
 After a chat request, Phoenix should show a real Hermes turn trace: agent/root
-span, LLM spans, tool spans, and per-turn finalize. If Phoenix only shows a flat
-synthetic UI span, the wrong component is exporting telemetry.
+span, LLM spans, tool spans, and per-turn finalize. If Phoenix shows fresh LLM
+spans but no fresh tool spans, restart with:
+
+```bash
+bash scripts/recover-brev-demo.sh
+```
 
 ## 10. Operational Checks
 

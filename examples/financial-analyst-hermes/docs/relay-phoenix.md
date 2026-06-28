@@ -13,6 +13,9 @@ Hermes shell hooks + in-process nemo-relay plugin
 The UI server only serves files and proxies `/v1/*` to Hermes so the browser can
 stream chat responses without CORS issues.
 
+For Brev recovery and the full RCA behind the current setup, see
+[brev-rca-recovery.md](brev-rca-recovery.md).
+
 ## Start Phoenix
 
 ```bash
@@ -72,19 +75,38 @@ instead.
 For a Brev-hosted Phoenix collector, use:
 
 ```text
-PHOENIX_COLLECTOR_ENDPOINT=http://host.openshell.internal:6006/v1/traces
 PHOENIX_PROJECT_NAME=financial-assistant-relay
 ```
 
-The sandbox policy must allow POST traffic from the `nemo-relay` binary to the
-Phoenix host/port:
+The current Brev booth path runs Relay on the host, not as a browser/UI
+exporter:
 
-```bash
-nemohermes financial-analyst policy-add \
-  --from-file examples/financial-analyst-hermes/presets/financial-phoenix-relay.yaml \
-  --yes
+```text
+Hermes sandbox -> http://host.openshell.internal:4040/v1 -> host Relay
+host Relay -> http://127.0.0.1:6006/v1/traces -> Phoenix
 ```
 
-The live retrofit used by the booth rehearsal installs `nemo-relay` in the
-sandbox, starts it on `127.0.0.1:4040`, and merges
-`agents/hermes/relay-hooks.yaml` into Hermes config.
+The Hermes gateway process must include:
+
+```bash
+NEMO_RELAY_GATEWAY_URL=http://host.openshell.internal:4040
+NO_PROXY=...host.openshell.internal...
+```
+
+This matters because Hermes can still answer and call tools without that
+environment variable, but the in-process `nemo-relay` plugin cannot forward
+`pre_tool_call` and `post_tool_call` events. The symptom is Phoenix showing
+fresh LLM spans but no fresh `skill_view`, `terminal`, or other tool spans.
+
+Recover the known-good path from the Brev instance with:
+
+```bash
+cd "$(find ~/financial-assistant-agent ~/nemoclaw-community -path '*/examples/financial-analyst-hermes' -type d 2>/dev/null | sort | tail -1)"
+bash scripts/recover-brev-demo.sh
+```
+
+Verify tool spans:
+
+```bash
+curl -sf http://127.0.0.1:18080/api/phoenix/recent | python3 -m json.tool
+```

@@ -9,15 +9,15 @@ the commands differ.
 ```text
 Browser UI on :18080
   -> same-origin /v1 proxy
-  -> NemoHermes API on 127.0.0.1:8642
-  -> OpenShell provider route
-  -> Build API compatible chat-completions endpoint
+  -> NemoHermes API in the OpenShell sandbox on :8642
+  -> host NeMo Relay sidecar on :4040
+  -> configured chat-completions endpoint
 
 Hermes sandbox
   -> finance skills
   -> read-only public finance helpers
-  -> optional NeMo Relay sidecar
-  -> optional Phoenix on :6006
+  -> NeMo Relay hook forwarding
+  -> Phoenix on :6006
   -> optional Outlook bridge
 ```
 
@@ -90,7 +90,6 @@ Optional but useful:
 
 ```dotenv
 SEC_USER_AGENT=Your Name your.email@example.com
-PHOENIX_COLLECTOR_ENDPOINT=http://host.openshell.internal:6006/v1/traces
 PHOENIX_PROJECT_NAME=financial-assistant-relay
 FINANCE_PHOENIX_GRAPHQL_URL=http://127.0.0.1:6006/graphql
 ```
@@ -199,7 +198,7 @@ Both commands should return structured JSON with `"ok": true`.
 
 ## 7. Start Phoenix
 
-Phoenix is optional for basic chat, but recommended for a booth demo:
+Phoenix is optional for basic chat, but required for the booth-demo trace view:
 
 ```bash
 docker compose -f observability/phoenix-compose.yml up -d
@@ -211,13 +210,6 @@ Check that it is reachable on the Brev host:
 curl -sf http://127.0.0.1:6006 | head
 ```
 
-If you enable the Relay/Phoenix hooks in the sandbox, use:
-
-```dotenv
-PHOENIX_COLLECTOR_ENDPOINT=http://host.openshell.internal:6006/v1/traces
-PHOENIX_PROJECT_NAME=financial-assistant-relay
-```
-
 The current demo assets for Relay live under:
 
 ```text
@@ -227,32 +219,29 @@ agents/hermes/nemo-relay/plugins.toml.in
 agents/hermes/relay-hooks.yaml
 ```
 
-## 8. Build And Start The Financial Desk UI
+## 8. Start The Booth Runtime
+
+For the full Brev demo, use the scripted startup path. It keeps the browser UI
+pointed at Hermes, starts host Relay, and checks Phoenix freshness:
 
 ```bash
 npm install
 npm run build
 
-python3 scripts/finance_ui_server.py \
-  --env-file .env \
-  --host 0.0.0.0 \
-  --port 18080 \
-  --api-url http://127.0.0.1:8642 \
-  --model "$FINANCE_MODEL" \
-  --upstream-label "${FINANCE_UPSTREAM_LABEL:-Build API}" \
-  --phoenix-url "${FINANCE_PHOENIX_GRAPHQL_URL:-http://127.0.0.1:6006/graphql}"
+FINANCE_SKIP_BUILD=1 bash scripts/recover-brev-demo.sh
 ```
 
 In another local terminal, forward the UI:
 
 ```bash
-brev port-forward financial-assistant-agent -p 18080:18080
+bash examples/financial-analyst-hermes/scripts/forward-brev-demo.sh financial-assistant-agent
 ```
 
 Open:
 
 ```text
 http://127.0.0.1:18080
+http://127.0.0.1:6006
 ```
 
 Ask:
@@ -260,6 +249,18 @@ Ask:
 ```text
 Create a concise analyst brief for NVDA using a public market snapshot and SEC company facts. Include caveats.
 ```
+
+If the UI is already deployed on a Brev public URL or you are repairing an
+existing instance, use the recovery script instead:
+
+```bash
+cd "$(find ~/financial-assistant-agent ~/nemoclaw-community -path '*/examples/financial-analyst-hermes' -type d 2>/dev/null | sort | tail -1)"
+bash scripts/recover-brev-demo.sh
+```
+
+The recovery script verifies the important trace path by asking what skills are
+installed and checking for fresh `skill_view` tool spans in Phoenix. For the
+full RCA and manual checks, see [brev-rca-recovery.md](brev-rca-recovery.md).
 
 ## 9. Run Smoke Tests
 
@@ -357,6 +358,13 @@ nemohermes inference get --json
 curl -sf http://127.0.0.1:8642/health
 curl -sf http://127.0.0.1:18080/health
 curl -sf http://127.0.0.1:18080/api/phoenix/recent | python3 -m json.tool
+```
+
+The UI health response should show `upstream` pointing at Hermes, not Relay. If
+it does not, run:
+
+```bash
+bash scripts/recover-brev-demo.sh
 ```
 
 ## 13. Cleanup

@@ -23,6 +23,8 @@ to brokerage accounts, place trades, or provide personalized investment advice.
 - Optional Outlook, NeMo Relay, and Phoenix integration scaffolding.
 - Copy/paste start guide in [docs/start-agent.md](docs/start-agent.md).
 - Brev deployment commands in [docs/brev-deployment.md](docs/brev-deployment.md).
+- Brev RCA and one-command recovery in
+  [docs/brev-rca-recovery.md](docs/brev-rca-recovery.md).
 - Current live verification evidence in
   [docs/live-verification.md](docs/live-verification.md).
 
@@ -54,6 +56,9 @@ examples/financial-analyst-hermes/
     outlook_finance_bridge.py
     setup-outlook-provider.sh
     ui-smoke.mjs
+    recover-brev-demo.sh
+    start-brev-demo.sh
+    forward-brev-demo.sh
   providers/
     outlook-email.yaml
   agents/hermes/
@@ -80,6 +85,7 @@ examples/financial-analyst-hermes/
     relay-phoenix.md
     demo-script.md
     live-verification.md
+    brev-rca-recovery.md
 ```
 
 ## Quick Start

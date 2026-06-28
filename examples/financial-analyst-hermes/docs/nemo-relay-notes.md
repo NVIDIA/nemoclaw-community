@@ -47,6 +47,13 @@ bridges.
 nemohermes onboard --from ./Dockerfile --name financial-analyst
 ```
 
-For a live sandbox retrofit, install the Relay binary, copy these assets into
-Hermes home, set `NEMO_RELAY_GATEWAY_URL=http://127.0.0.1:4040`, merge
-`relay-hooks.yaml`, and start the sidecar before `hermes gateway run`.
+For a live Brev sandbox retrofit, prefer:
+
+```bash
+bash scripts/recover-brev-demo.sh
+```
+
+The recovery script starts host Relay on `0.0.0.0:4040`, refreshes the Hermes
+plugin assets, restarts Hermes with
+`NEMO_RELAY_GATEWAY_URL=http://host.openshell.internal:4040`, and verifies that
+Phoenix receives fresh `skill_view` tool spans.

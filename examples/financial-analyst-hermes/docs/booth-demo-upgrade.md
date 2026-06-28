@@ -143,11 +143,12 @@ For a custom Hermes sandbox image, use the sidecar assets in `agents/hermes/`:
 - `nemo-relay/plugins.toml.in` for ATIF and Phoenix OpenInference export,
 - `relay-hooks.yaml` for Hermes shell hooks.
 
-Set the collector endpoint to:
+For the Brev booth path, host Relay exports to Phoenix and Hermes points at the
+host Relay sidecar:
 
 ```text
-PHOENIX_COLLECTOR_ENDPOINT=http://host.openshell.internal:6006/v1/traces
 PHOENIX_PROJECT_NAME=financial-assistant-relay
+NEMO_RELAY_GATEWAY_URL=http://host.openshell.internal:4040
 ```
 
 The UI server should not emit Phoenix traces; it only proxies browser chat to
