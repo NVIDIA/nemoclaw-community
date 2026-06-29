@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NemoClaw Supply Chain Demo — Getting Started</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f6f8; color: #1a1a2e; line-height: 1.65; }
+
+  .hero { background: #1a1a2e; color: #fff; padding: 48px 60px 40px; }
+  .hero .eyebrow { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.5; margin-bottom: 10px; }
+  .hero h1 { font-size: 2rem; font-weight: 700; line-height: 1.2; }
+  .hero p { margin-top: 12px; font-size: 1rem; opacity: 0.7; max-width: 620px; }
+
+  .content { max-width: 860px; margin: 0 auto; padding: 48px 40px 80px; }
+
+  /* Section headers */
+  .section { margin-bottom: 48px; }
+  .section-label {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+    color: #76b900; margin-bottom: 12px;
+  }
+  .section-label::before {
+    content: ""; display: inline-block; width: 18px; height: 2px; background: #76b900;
+  }
+  .section h2 { font-size: 1.35rem; font-weight: 700; margin-bottom: 14px; }
+  .section p { color: #333; font-size: 0.95rem; margin-bottom: 12px; }
+  .section p:last-child { margin-bottom: 0; }
+
+  /* Info card */
+  .card { background: #fff; border-radius: 8px; padding: 24px 28px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); margin-bottom: 16px; }
+  .card h3 { font-size: 1rem; font-weight: 600; margin-bottom: 8px; }
+  .card p { font-size: 0.9rem; color: #444; }
+
+  /* Step list */
+  .steps { list-style: none; counter-reset: step; }
+  .steps li { counter-increment: step; display: flex; gap: 16px; margin-bottom: 18px; align-items: flex-start; }
+  .steps li::before {
+    content: counter(step);
+    flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
+    background: #1a1a2e; color: #fff; font-size: 0.8rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; margin-top: 1px;
+  }
+  .steps li .step-body { font-size: 0.93rem; color: #333; }
+  .steps li .step-body strong { color: #1a1a2e; }
+
+  /* Connector pills */
+  .connectors { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+  .connector-pill {
+    display: flex; align-items: center; gap: 8px;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 6px;
+    padding: 8px 14px; font-size: 0.85rem; font-weight: 500; color: #1a1a2e;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .connector-pill .icon { font-size: 1.1rem; }
+
+  /* Table */
+  .data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin: 16px 0; }
+  .data-table th { background: #1a1a2e; color: #fff; padding: 10px 14px; text-align: left; font-weight: 600; }
+  .data-table td { padding: 9px 14px; border-bottom: 1px solid #e8eaed; }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:nth-child(even) td { background: #f8f9fa; }
+  code { font-family: "SF Mono", "Fira Code", monospace; font-size: 0.82em; background: #edf2f7; padding: 2px 5px; border-radius: 3px; }
+
+  /* CSV snippet */
+  .csv-block {
+    background: #1a1a2e; color: #a0d8a0; font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.78rem; padding: 18px 20px; border-radius: 6px; overflow-x: auto;
+    margin: 16px 0; line-height: 1.9;
+  }
+  .csv-block .csv-header { color: #76b900; font-weight: 700; }
+
+  /* Prompt box */
+  .prompt-box {
+    background: #fff; border: 2px solid #76b900; border-radius: 8px;
+    padding: 24px 28px; margin: 20px 0;
+  }
+  .prompt-box .prompt-label { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #76b900; margin-bottom: 10px; }
+  .prompt-box blockquote { font-size: 1.05rem; font-style: italic; color: #2d3748; line-height: 1.6; }
+
+  .try-it { background: #1a1a2e; color: #fff; border-radius: 8px; padding: 20px 24px; margin-top: 20px; }
+  .try-it p { font-size: 0.9rem; color: rgba(255,255,255,0.88); }
+  .try-it strong { color: #76b900; }
+
+  /* NemoClaw diagram */
+  .diagram { display: flex; align-items: center; gap: 0; margin: 20px 0; flex-wrap: wrap; }
+  .diagram-box {
+    background: #fff; border: 1.5px solid #e2e8f0; border-radius: 8px;
+    padding: 14px 18px; text-align: center; min-width: 130px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .diagram-box .box-label { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #666; margin-bottom: 4px; }
+  .diagram-box .box-name { font-size: 0.95rem; font-weight: 700; }
+  .diagram-arrow { font-size: 1.4rem; color: #cbd5e0; padding: 0 8px; }
+  .diagram-box.highlight { background: #1a1a2e; border-color: #1a1a2e; color: #fff; }
+  .diagram-box.highlight .box-label { color: #76b900; }
+
+  .divider { border: none; border-top: 1px solid #e2e8f0; margin: 40px 0; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="eyebrow">Supply Chain AI Demo</div>
+  <h1>Getting Started with NemoClaw</h1>
+</div>
+
+<div class="content">
+
+  <!-- ── 1. SETUP ─────────────────────────────────────── -->
+  <div class="section">
+    <div class="section-label">Setup</div>
+    <h2>What you're working with</h2>
+    <p>
+      You're interacting with <strong>NemoClaw</strong>, an AI agent that can work with data, execute code, and publish results. It's hosted on a virtual machine. Throughout this tutorial, the agent sets itself up, locates your data and connects to it securely. You communicate with NemoClaw by typing plain-English requests. NemoClaw figures out the technical steps, does the work, and reports back.
+    </p>
+
+  </div>
+
+  <hr class="divider">
+
+  <!-- ── 2. WHAT IS NEMOCLAW ───────────────────────────── -->
+  <div class="section">
+    <div class="section-label">Background</div>
+    <h2>What is NemoClaw?</h2>
+
+    <div class="card">
+      <h3>Agent Harnesses</h3>
+      <p>An <strong>agent harness</strong> is a framework that lets an AI model do more than just answer questions — it gives the AI the ability to take actions: read files, run code, browse the web, call external tools, and chain these steps together to complete a goal. Think of it as scaffolding that turns a smart assistant into an autonomous worker. <strong>OpenClaw</strong> is an open-source agent harness.</p>
+    </div>
+
+    <div class="card">
+      <h3>NemoClaw</h3>
+      <p><strong>NemoClaw</strong> is NVIDIA's implementation of the OpenClaw framework. It's built on the same open-source foundation but optimized for NVIDIA infrastructure, integrated with NVIDIA's model stack, and extended with enterprise features like security controls.</p>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ── 3. DATA CONNECTORS ────────────────────────────── -->
+  <div class="section">
+    <div class="section-label">Data Access</div>
+    <h2>How NemoClaw connects to your data</h2>
+    <p>
+      NemoClaw can pull data from a wide range of sources — not just files on the VM, but cloud drives, databases, code repositories, and more. It does this through <strong>data connectors</strong>: command-line tools (CLIs) that the agent can use to reach out and retrieve data just like a developer would.
+    </p>
+
+
+    <p>
+      For today's demo, data is stored in a GitHub repository. When you reference it in your prompt, NemoClaw uses Github's CLI (<code>git clone</code>) to pull the data directly into its working environment. It then writes updated content directly back to Github so you can see changes in real time— no manual downloads or uploads needed.
+    </p>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ── 4. THE DATA ───────────────────────────────────── -->
+  <div class="section">
+    <div class="section-label">The Data</div>
+    <h2>Today's Scenario: Factory delivery &amp; headcount data</h2>
+    <p>
+      The dataset covers <strong>24 months</strong> (May 2024 – April 2026) of monthly headcount and on-time delivery performance for two factories. Each row is one factory, one month.
+    </p>
+
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Column</th>
+          <th>What it means</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>month</code></td><td>The month of the observation (YYYY-MM-DD)</td></tr>
+        <tr><td><code>factory</code></td><td>Which factory: <em>Factory A (Europe)</em> or <em>Factory B (Asia)</em></td></tr>
+        <tr><td><code>total_headcount</code></td><td>Total workers on site that month</td></tr>
+        <tr><td><code>new_hires</code></td><td>Workers who joined <em>this</em> month (not yet productive)</td></tr>
+        <tr><td><code>workers_1mo</code></td><td>Workers who joined last month (partially ramped)</td></tr>
+        <tr><td><code>workers_2mo</code></td><td>Workers who joined two months ago (almost fully ramped)</td></tr>
+        <tr><td><code>tenured</code></td><td>Workers with 3+ months on site (fully productive)</td></tr>
+        <tr><td><code>fulfillment_pct</code></td><td>% of customer orders delivered on time that month</td></tr>
+      </tbody>
+    </table>
+
+    <p>Here's a sample of what the data looks like:</p>
+
+    <table class="data-table" style="margin-top:12px;">
+      <thead>
+        <tr>
+          <th>Month</th>
+          <th>Factory</th>
+          <th>Total HC</th>
+          <th>New Hires</th>
+          <th>1mo</th>
+          <th>2mo</th>
+          <th>Tenured</th>
+          <th>Fulfillment %</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>2024-05</td><td>Factory A (Europe)</td><td>249</td><td>9</td><td>0</td><td>8</td><td>232</td><td>60.67%</td></tr>
+        <tr><td>2024-06</td><td>Factory A (Europe)</td><td>247</td><td>10</td><td>9</td><td>0</td><td>228</td><td>60.99%</td></tr>
+        <tr><td>2024-07</td><td>Factory A (Europe)</td><td>242</td><td>6</td><td>10</td><td>9</td><td>217</td><td>57.54%</td></tr>
+        <tr><td>2024-05</td><td>Factory B (Asia)</td><td>198</td><td>7</td><td>0</td><td>7</td><td>184</td><td>61.04%</td></tr>
+        <tr><td>2024-06</td><td>Factory B (Asia)</td><td>197</td><td>9</td><td>7</td><td>0</td><td>181</td><td>60.70%</td></tr>
+        <tr><td>2024-07</td><td>Factory B (Asia)</td><td>196</td><td>8</td><td>9</td><td>7</td><td>172</td><td>57.55%</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ── KB EXPLAINER ──────────────────────────────────── -->
+  <div class="section">
+    <div class="section-label">Domain Knowledge</div>
+    <h2>How the agent learns about your company</h2>
+    <div class="card" style="margin-top:16px;">
+      <h3>Company documentation</h3>
+      <p>AI models are general-purpose — they don't know your factories, your KPIs, or how you define on-time delivery. To give the agent that context, you simply point it to documentation and ask it to read before it starts, just like a new hire reads an onboarding wiki before their first project. Unlike a new hire who might click through pages in a browser, your agent will access it directly via CLI — pulling the file from wherever it lives and reading it in full before proceeding.</p>
+    </div>
+
+    <div class="card">
+      <h3>Skills</h3>
+      <p>For more structured guidance, you can write a <strong>skill</strong> — a special document written for the agent rather than for humans. A skill is a plain-language, step-by-step instruction file (e.g. <code>skill.md</code>) that tells the agent exactly how to approach a specific type of task: what data to use, what model to fit, how to format results, where to publish. The agent loads it like a briefing document before starting work.</p>
+      <p style="margin-top:8px;">The <code>enterprise-knowledge-base.md</code> file in this repo is an example: it describes the factories, defines the performance thresholds, specifies the forecasting methodology, and tells the agent where to publish charts — all in plain English.</p>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ── 5. TRY IT ─────────────────────────────────────── -->
+  <div class="section">
+    <div class="section-label">Your turn</div>
+    <h2>Try your first prompt</h2>
+
+    <div class="card" style="background:#f8fafc; border-left: 4px solid #76b900; margin-bottom: 24px;">
+      <h3 style="margin-bottom: 10px;">Scenario</h3>
+      <p>You are an operations manager at a manufacturing company that owns two factories — one in Germany, one in China. You need to ensure that next month's on-time fulfillment rate at the German factory does not fall below 70%. To hit that target, you can hire additional workers. But while it's intuitive that more workers means better fulfillment, it's unclear exactly what the relationship is between the number of new hires and your actual fulfillment rate. Fortunately, you do have historical data: monthly new hire counts and monthly fulfillment rates for the past two years. So maybe you and your agent can figure something out.</p>
+    </div>
+
+    <p>
+      Open your NemoClaw session and type the prompt below exactly as written. NemoClaw will locate the data, analyze it, write a mathematical formula that predicts future factory output, and tell you where Germany's on-time delivery rate is headed. All you have to do is describe the outcome you want to reach — due to its exceptional autonomy, the agent figures out the code and technicalities in between.
+    </p>
+
+    <div class="prompt-box">
+      <div class="prompt-label">Prompt 1</div>
+      <blockquote>
+        I have some data about how worker headcount affected factory delivery timeliness over the past couple years for my Germany factory — it's in https://github.com/katherineh123/nemoclaw-demo.git, file is called factory-delivery-data. There's also a knowledge base there that gives you domain knowledge/context about our company — make sure to read the full thing before proceeding. Based on my most recent headcount numbers, what's the projected timeliness for next month? I'm trying to figure out if I need to add additional headcount or not. We need to be at at least 70% fulfillment.
+      </blockquote>
+    </div>
+
+    <div style="display:flex; align-items:flex-start; gap:10px; background:#fffbeb; border:1px solid #f59e0b; border-left:4px solid #f59e0b; border-radius:6px; padding:12px 16px; margin-top:12px;">
+      <span style="font-size:1rem; line-height:1.4;">⏱</span>
+      <p style="margin:0; font-size:0.88rem; color:#78350f; line-height:1.5;"><strong>Heads up:</strong> If the URL shows a 404 or other error, wait a few seconds and refresh — GitHub Pages takes a moment to go live on the first push.</p>
+    </div>
+
+    <div class="prompt-box" style="margin-top:20px;">
+      <div class="prompt-label">Prompt 2</div>
+      <blockquote>Can you show me this as a visualization?</blockquote>
+    </div>
+    <div style="display:flex; align-items:flex-start; gap:10px; background:#fffbeb; border:1px solid #f59e0b; border-left:4px solid #f59e0b; border-radius:6px; padding:12px 16px; margin-top:12px;">
+      <span style="font-size:1rem; line-height:1.4;">⏱</span>
+      <p style="margin:0; font-size:0.88rem; color:#78350f; line-height:1.5;"><strong>Heads up:</strong> After the agent pushes an update, wait a few seconds before refreshing — GitHub Pages can take a moment to reflect the latest changes.</p>
+    </div>
+
+    <div class="prompt-box" style="margin-top:20px;">
+      <div class="prompt-label">Prompt 3</div>
+      <blockquote>I need to reach a higher fulfillment rate in my Germany factory and that's not gonna happen based on your projection. What if I move 50 people from my Asia factory to Germany? Can you give a visualization showing what both factories look like?</blockquote>
+    </div>
+
+    <div class="prompt-box" style="margin-top:20px;">
+      <div class="prompt-label">Prompt 4</div>
+      <blockquote>Can you make it interactive so I can change how much headcount I move between the 2 factories and see how it affects fulfillment for both?</blockquote>
+    </div>
+
+    <div class="card" style="margin-top:24px; border-left: 4px solid #76b900; background:#f8fafc;">
+      <h3 style="margin-bottom:6px;">Now try it yourself</h3>
+      <p>You've seen what NemoClaw can do with a guided prompt — now go off-script. Ask it anything related to the data, request a different chart style, or explore a scenario of your own. Type whatever you'd like to see next.</p>
+    </div>
+
+    <div style="display:flex; align-items:flex-start; gap:10px; background:#f0f4ff; border:1px solid #a5b4fc; border-left:4px solid #6366f1; border-radius:6px; padding:12px 16px; margin-top:12px;">
+      <span style="font-size:1rem; line-height:1.4;">💡</span>
+      <div style="font-size:0.88rem; color:#3730a3; line-height:1.5;">
+        <strong>Quick tip:</strong> If the dashboard doesn't look like what you asked for, it could be two things — the agent didn't do it right, or GitHub just hasn't propagated the update yet. To tell the difference, ask the agent to add an emoji to the page title. If you see the emoji when you refresh, it worked and your earlier request probably went wrong. If you don't see it, changes haven't propagated yet — wait a few seconds and try again.
+      </div>
+    </div>
+
+  </div>
+
+  <hr class="divider">
+
+  <!-- ── OPENSHELL SECURITY ────────────────────────────── -->
+  <div class="section">
+    <div class="section-label">Security</div>
+    <h2>How OpenShell makes autonomous agents safe</h2>
+    <p>
+      NemoClaw is designed to take action, not just answer questions. <strong>OpenShell</strong> is the safety layer around that autonomy: it gives each agent a controlled workspace and limits what the agent can access.
+    </p>
+
+    <div class="card" style="margin-top:16px;">
+      <h3>The agent can use credentials without seeing them</h3>
+      <p>In this demo, NemoClaw needs access to services such as GitHub and the model endpoint. OpenShell handles those credentials behind the scenes. The agent can complete approved actions, like pulling data or publishing a chart, but it is not given the actual API keys to read, print, or save.</p>
+    </div>
+
+    <div class="card">
+      <h3>The agent only reaches approved places</h3>
+      <p>OpenShell also controls where the agent is allowed to connect. For example, a demo can allow access to GitHub for the dataset and dashboard, while blocking unrelated websites or internal systems. If the agent tries to go somewhere outside the allowed list, OpenShell stops the request.</p>
+      <p style="margin-top:8px;">This means the agent can still work independently, but within boundaries your organization defines.</p>
+    </div>
+
+    <div class="card">
+      <h3>How today's demo is set up</h3>
+      <p>For this hands-on session, everything runs from one virtual machine. That VM hosts multiple OpenShell sandboxes, and each sandbox contains its own NemoClaw session. Each participant gets a separate link into their own sandbox, so everyone can try the same workflow independently without sharing a chat history or workspace.</p>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ── OPEN STACK ───────────────────────────────────── -->
+  <div class="section">
+    <div class="section-label">The Open Stack</div>
+    <h2>Open Model, Open Harness, Open Runtime</h2>
+    <p>
+      The agent system you're using today can be built entirely on open source components.
+</p>
+
+    <div class="card">
+      <h3>The three layers</h3>
+      <p><strong>Open models</strong> — NVIDIA develops and publishes <strong>Nemotron</strong>, a family of open LLMs available for organizations to run and fine-tune on their own infrastructure.</p>
+      <p style="margin-top:8px;"><strong>Open harnesses</strong> — NVIDIA contributes to and collaborates with open-source agent harnesses including <strong>OpenClaw</strong> and <strong>Hermes</strong>, the scaffolding that connects models to tools, memory, and multi-step workflows.</p>
+      <p style="margin-top:8px;"><strong>Open runtime</strong> — NVIDIA created <strong>OpenShell</strong>, the execution layer that governs what agents can access and how credentials are handled securely.</p>
+    </div>
+
+    <div class="card" style="background:#f8fafc; border-left: 4px solid #76b900;">
+      <h3>NemoClaw — Reference Blueprints</h3>
+      <p><strong>NemoClaw</strong> is NVIDIA's open reference implementation showing how these three layers — model, harness, and runtime — fit together. The goal is to create a composable "blueprint"; you can take it as is, extend it, or only take the pieces you need — giving enterprise teams a reference architecture for deploying highly autonomous and secure AI agents.</p>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
