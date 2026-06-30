@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 """Run Microsoft Graph device-code auth and print token material as JSON."""
@@ -57,7 +58,9 @@ def print_banner(verification: str, user_code: str, login_hint: str | None) -> N
     print(f"        {BOLD}{CYAN}{user_code}{RESET}", file=sys.stderr)
     if login_hint:
         print("", file=sys.stderr)
-        print(f"  {DIM}3.{RESET} Sign in as: {BOLD}{login_hint}{RESET}", file=sys.stderr)
+        print(
+            f"  {DIM}3.{RESET} Sign in as: {BOLD}{login_hint}{RESET}", file=sys.stderr
+        )
     print("", file=sys.stderr)
     print(f"{CYAN}{bar}{RESET}", file=sys.stderr)
     print("  Waiting for browser confirmation (Ctrl-C to cancel)...", file=sys.stderr)
@@ -144,7 +147,9 @@ def main() -> int:
         return 1
 
     print("", file=sys.stderr)
-    print("Timed out waiting for Microsoft device-code authentication.", file=sys.stderr)
+    print(
+        "Timed out waiting for Microsoft device-code authentication.", file=sys.stderr
+    )
     return 1
 
 

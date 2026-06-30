@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 """Smoke-test a Hermes chat-completions API endpoint."""
 
@@ -8,6 +9,26 @@ import argparse
 import json
 import os
 import urllib.request
+
+
+ERROR_MARKERS = (
+    "api call failed",
+    "request failed",
+    "internal error",
+    "downstreamexecutionerror",
+    "degraded function cannot be invoked",
+    "no assistant message returned",
+)
+
+
+def validate_assistant_message(message: object) -> str:
+    text = str(message).strip()
+    if not text:
+        raise RuntimeError("Hermes returned no assistant message")
+    lowered = text.lower()
+    if any(marker in lowered for marker in ERROR_MARKERS):
+        raise RuntimeError(f"Hermes returned an upstream error: {text[:800]}")
+    return text
 
 
 def request_json(
@@ -54,16 +75,12 @@ def main() -> int:
         "model": args.model,
         "messages": [
             {
-                "role": "system",
-                "content": "You are a concise financial analyst. Do not provide investment advice.",
-            },
-            {
                 "role": "user",
                 "content": "In one short sentence, define free cash flow yield.",
             },
         ],
-        "temperature": 0.2,
-        "max_tokens": 64,
+        "max_tokens": 512,
+        "reasoning_effort": "medium",
     }
     completion = request_json(
         f"{args.base_url.rstrip('/')}/chat/completions",
@@ -72,14 +89,16 @@ def main() -> int:
         token=args.token or None,
         timeout=args.timeout,
     )
-    message = completion.get("choices", [{}])[0].get("message", {}).get("content", "")
+    message = validate_assistant_message(
+        completion.get("choices", [{}])[0].get("message", {}).get("content", "")
+    )
     print(
         json.dumps(
             {
                 "ok": True,
                 "health": health,
                 "model": args.model,
-                "assistant_excerpt": str(message)[:800],
+                "assistant_excerpt": message[:800],
             },
             indent=2,
         )

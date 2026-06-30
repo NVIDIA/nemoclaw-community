@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Configure the finance demo's OpenShell Microsoft Graph provider using the
@@ -13,18 +14,49 @@ SANDBOX_NAME="${1:-${NEMOCLAW_SANDBOX_NAME:-financial-analyst}}"
 OUTLOOK_PROVIDER="${OUTLOOK_PROVIDER:-$SANDBOX_NAME-outlook}"
 CACHE_PATH="${OUTLOOK_LOGIN_CACHE_PATH:-$EXAMPLE_DIR/.bootstrap/cache/ms-graph-token.json}"
 
-load_env_file() {
-  local file="$1"
-  if [[ -f "$file" ]]; then
-    set -a
-    # shellcheck disable=SC1090
-    source "$file"
-    set +a
-  fi
+dotenv_value() {
+  local name="$1" file value
+  for file in "$EXAMPLE_DIR/.env" "$REPO_ROOT/.env"; do
+    [[ -f "$file" ]] || continue
+    value="$(python3 - "$file" "$name" <<'PY'
+from pathlib import Path
+import sys
+
+path, wanted = Path(sys.argv[1]), sys.argv[2]
+for raw in path.read_text(encoding="utf-8").splitlines():
+    line = raw.strip()
+    if not line or line.startswith("#") or "=" not in line:
+        continue
+    key, value = line.split("=", 1)
+    if key.strip() == wanted:
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        print(value)
+        raise SystemExit
+PY
+    )"
+    if [[ -n "$value" ]]; then
+      printf '%s' "$value"
+      return
+    fi
+  done
 }
 
-load_env_file "$REPO_ROOT/.env"
-load_env_file "$EXAMPLE_DIR/.env"
+load_setting() {
+  local name value
+  name="$1"
+  value="${!name:-}"
+  [[ -n "$value" ]] || value="$(dotenv_value "$name")"
+  printf -v "$name" '%s' "$value"
+  export "${name?}"
+}
+
+for setting_name in \
+  OUTLOOK_TENANT_ID OUTLOOK_CLIENT_ID OUTLOOK_TARGET_MAILBOX OUTLOOK_REPLY_TO \
+  OUTLOOK_LOGIN_CACHE; do
+  load_setting "$setting_name"
+done
 
 require_env() {
   local name="$1"
@@ -39,8 +71,29 @@ require_env OUTLOOK_CLIENT_ID
 require_env OUTLOOK_TARGET_MAILBOX
 require_env OUTLOOK_REPLY_TO
 
+mkdir -p "$EXAMPLE_DIR/.runtime"
+staged_provider="$EXAMPLE_DIR/.runtime/outlook-provider.yaml"
+python3 - "$EXAMPLE_DIR/providers/outlook-email.yaml" \
+  "$staged_provider" "$OUTLOOK_TARGET_MAILBOX" <<'PY'
+from pathlib import Path
+import sys
+from urllib.parse import quote
+
+source, target, mailbox = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
+target.write_text(
+    source.read_text(encoding="utf-8").replace(
+        "__OUTLOOK_MAILBOX__", quote(mailbox, safe="")
+    ),
+    encoding="utf-8",
+)
+PY
+
 command -v openshell >/dev/null || {
   echo "openshell not found in PATH" >&2
+  exit 1
+}
+command -v nemohermes >/dev/null || {
+  echo "nemohermes not found in PATH; run scripts/demo.sh up first" >&2
   exit 1
 }
 
@@ -50,7 +103,8 @@ if ! openshell settings get --global 2>/dev/null | grep -qE "providers_v2_enable
 fi
 
 echo "Importing finance Outlook provider profile."
-if ! import_out="$(openshell provider profile import --file "$EXAMPLE_DIR/providers/outlook-email.yaml" 2>&1)"; then
+openshell provider profile delete nemoclaw-finance-outlook-email >/dev/null 2>&1 || true
+if ! import_out="$(openshell provider profile import --file "$staged_provider" 2>&1)"; then
   if grep -qi "already exists" <<<"$import_out"; then
     echo "  profile already registered"
   else
@@ -117,6 +171,9 @@ if ! openshell provider get "$OUTLOOK_PROVIDER" >/dev/null 2>&1; then
     --credential "MS_GRAPH_ACCESS_TOKEN=bootstrap-placeholder"
 fi
 
+# OpenShell 0.0.44 accepts refresh material only as KEY=VALUE arguments. Keep
+# this command short-lived, never enable shell tracing, and use a single-user
+# demo host. --secret-material-key prevents the gateway from exposing it later.
 openshell provider refresh configure "$OUTLOOK_PROVIDER" \
   --credential-key MS_GRAPH_ACCESS_TOKEN \
   --strategy oauth2-refresh-token \
@@ -134,5 +191,28 @@ echo "Outlook provider is configured: $OUTLOOK_PROVIDER"
 echo "Target mailbox: $OUTLOOK_TARGET_MAILBOX"
 echo "Allowed sender: $OUTLOOK_REPLY_TO"
 echo
-echo "If the sandbox already exists, recreate or restart it with this provider attached."
-echo "Then run the bridge with --reply-mode print first, and --reply-mode graph only after validation."
+echo "Attaching the provider and read/reply policy to $SANDBOX_NAME."
+if ! attach_out="$(openshell sandbox provider attach "$SANDBOX_NAME" "$OUTLOOK_PROVIDER" 2>&1)"; then
+  if ! grep -qi "already" <<<"$attach_out"; then
+    printf '%s\n' "$attach_out" >&2
+    exit 1
+  fi
+fi
+staged_policy="$EXAMPLE_DIR/.runtime/outlook-policy.yaml"
+python3 - "$EXAMPLE_DIR/presets/financial-outlook-mailbox.yaml" \
+  "$staged_policy" "$OUTLOOK_TARGET_MAILBOX" <<'PY'
+from pathlib import Path
+import sys
+from urllib.parse import quote
+
+source, target, mailbox = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
+rendered = source.read_text(encoding="utf-8").replace(
+    "__OUTLOOK_MAILBOX__", quote(mailbox, safe="")
+)
+target.write_text(rendered, encoding="utf-8")
+PY
+nemohermes "$SANDBOX_NAME" policy-add --from-file "$staged_policy" --yes
+nemohermes "$SANDBOX_NAME" upload \
+  "$DIR/outlook_finance_bridge.py" /sandbox/outlook_finance_bridge.py
+
+echo "Outlook is attached. Validate in print mode before enabling Graph replies."

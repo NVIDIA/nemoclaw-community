@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 """Bridge Outlook-style email requests to the financial assistant.
 
@@ -56,6 +57,7 @@ def graph_request(
         headers={
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
+            "Prefer": 'outlook.body-content-type="text"',
             "User-Agent": "NemoHermes financial assistant Outlook bridge",
         },
         method=method,
@@ -105,7 +107,10 @@ def load_processed(path: Path) -> set[str]:
 
 def save_processed(path: Path, processed: set[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(sorted(processed), indent=2), encoding="utf-8")
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(json.dumps(sorted(processed), indent=2), encoding="utf-8")
+    temporary.chmod(0o600)
+    os.replace(temporary, path)
 
 
 def load_fixture(path: Path) -> list[dict[str, Any]]:
@@ -116,12 +121,14 @@ def load_fixture(path: Path) -> list[dict[str, Any]]:
     return data
 
 
-def load_graph_messages(limit: int, *, include_read: bool = False) -> list[dict[str, Any]]:
+def load_graph_messages(
+    limit: int, *, include_read: bool = False
+) -> list[dict[str, Any]]:
     query = urllib.parse.urlencode(
         {
             "$top": str(max(limit * 5, 10)),
             "$orderby": "receivedDateTime desc",
-            "$select": "id,from,subject,bodyPreview,isRead,receivedDateTime",
+            "$select": "id,from,subject,body,bodyPreview,isRead,receivedDateTime",
         }
     )
     data = graph_request(f"{mailbox_base()}/mailFolders/inbox/messages?{query}")
@@ -133,12 +140,13 @@ def load_graph_messages(limit: int, *, include_read: bool = False) -> list[dict[
             continue
         if item.get("isRead") and not include_read:
             continue
+        body = item.get("body", {})
         messages.append(
             {
                 "id": item.get("id"),
                 "from": sender,
                 "subject": item.get("subject", "(no subject)"),
-                "body": item.get("bodyPreview", ""),
+                "body": body.get("content") or item.get("bodyPreview", ""),
                 "receivedDateTime": item.get("receivedDateTime"),
             }
         )
@@ -186,7 +194,9 @@ def mark_read(message_id: str) -> None:
     )
 
 
-def process_messages(args: argparse.Namespace, processed: set[str]) -> list[dict[str, Any]]:
+def process_messages(
+    args: argparse.Namespace, processed: set[str], processed_path: Path
+) -> list[dict[str, Any]]:
     messages = (
         load_fixture(args.fixture)
         if args.fixture
@@ -197,15 +207,21 @@ def process_messages(args: argparse.Namespace, processed: set[str]) -> list[dict
         message_id = str(message.get("id") or "")
         if message_id and message_id in processed:
             continue
+        # Fixture mode must enforce the same sender boundary as Graph mode.
         if str(message.get("from", "")).lower() != allowed_sender():
             continue
         reply = ask_agent(args.base_url, message, args.timeout)
+        if not reply.strip():
+            raise RuntimeError("Hermes returned an empty Outlook reply")
         if args.reply_mode == "graph":
             if not message_id:
                 raise RuntimeError("Graph reply mode requires message id")
+            # Persist intent before the irreversible Graph call. A crash after
+            # Graph accepts the reply remains at-most-once after restart.
+            processed.add(message_id)
+            save_processed(processed_path, processed)
             reply_graph(message_id, reply)
             mark_read(message_id)
-            processed.add(message_id)
         results.append(
             {
                 "id": message.get("id"),
@@ -228,7 +244,9 @@ def main() -> int:
     parser.add_argument("--timeout", type=int, default=180)
     parser.add_argument("--reply-mode", choices=["print", "graph"], default="print")
     parser.add_argument("--poll", action="store_true", help="Continuously poll Outlook")
-    parser.add_argument("--interval", type=int, default=30, help="Poll interval in seconds")
+    parser.add_argument(
+        "--interval", type=int, default=30, help="Poll interval in seconds"
+    )
     parser.add_argument(
         "--include-read",
         action="store_true",
@@ -240,7 +258,7 @@ def main() -> int:
     processed = load_processed(processed_path)
     results: list[dict[str, Any]] = []
     while True:
-        batch = process_messages(args, processed)
+        batch = process_messages(args, processed, processed_path)
         results.extend(batch)
         if args.reply_mode == "graph":
             save_processed(processed_path, processed)

@@ -1,9 +1,15 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 services:
   phoenix:
-    image: arizephoenix/phoenix:latest
+    container_name: financial-phoenix
+    image: arizephoenix/phoenix:17.13.0
+    restart: unless-stopped
     ports:
       - "6006:6006"
-      - "4317:4317"
-      - "4318:4318"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:6006/', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 24

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 preset:
   name: finance-data-readonly
   description: "Read-only public finance data for analyst snapshots: Yahoo chart quotes and SEC company facts."

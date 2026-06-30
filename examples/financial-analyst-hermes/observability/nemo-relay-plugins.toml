@@ -1,4 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+
+# Loaded in-process by Hermes's bundled observability/nemo_relay plugin.
 version = 1
 
 [[components]]
@@ -8,24 +11,20 @@ enabled = true
 [components.config]
 version = 1
 
-[components.config.atof]
-enabled = true
-path = "/tmp/finance-assistant-atof.jsonl"
-
-[components.config.atif]
-enabled = true
-output_dir = "/tmp/finance-assistant-atif"
-
 [components.config.openinference]
 enabled = true
 transport = "http_binary"
 endpoint = "http://host.openshell.internal:6006/v1/traces"
 service_name = "financial-assistant-agent"
-service_namespace = "nemo"
-service_version = "1.0.0"
-instrumentation_scope = "nemo-relay-openinference"
 timeout_millis = 3000
 
 [components.config.openinference.resource_attributes]
-"deployment.environment" = "brev-demo"
-"demo.channel" = "web-outlook"
+"openinference.project.name" = "financial-assistant-agent"
+"deployment.environment" = "demo"
+
+[[components]]
+kind = "adaptive"
+enabled = true
+
+[components.config.tool_parallelism]
+mode = "observe_only"

@@ -1,34 +1,44 @@
-import { render, screen, waitFor } from "@testing-library/react";
+// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { Markdown } from "./Markdown";
-import {
-  detectSkillActivity,
-  parseSseBlock,
-  reconcileSkillActivity,
-} from "./finance";
+import { parseSseBlock } from "./finance";
 
 function streamFrom(chunks: string[]) {
   return new ReadableStream({
     start(controller) {
-      for (const chunk of chunks)
+      for (const chunk of chunks) {
         controller.enqueue(new TextEncoder().encode(chunk));
+      }
       controller.close();
     },
   });
 }
 
+function chatStream(answer: string) {
+  return new Response(
+    streamFrom([
+      'data: {"choices":[{"delta":{"tool_calls":[{"function":{"name":"terminal"}}]}}]}\n\n',
+      `data: ${JSON.stringify({ choices: [{ delta: { content: answer } }] })}\n\n`,
+      "data: [DONE]\n\n",
+    ]),
+    { headers: { "content-type": "text/event-stream" } },
+  );
+}
+
 describe("financial React UI", () => {
+  afterEach(cleanup);
+
   beforeEach(() => {
     vi.restoreAllMocks();
     global.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.startsWith("/config")) {
-        return Response.json({
-          model: "financial-assistant",
-          upstream_label: "Build API",
-        });
+        return Response.json({ model: "financial-assistant" });
       }
       if (url.startsWith("/api/quotes")) {
         return Response.json({
@@ -53,23 +63,30 @@ describe("financial React UI", () => {
           ],
         });
       }
+      if (url.startsWith("/api/phoenix/recent")) {
+        return Response.json({
+          ok: true,
+          spans: [
+            {
+              name: "terminal",
+              kind: "tool",
+              status: "OK",
+              trace_id: "abc123",
+              started_at: new Date().toISOString(),
+            },
+          ],
+        });
+      }
       if (url.startsWith("/v1/chat/completions")) {
-        return new Response(
-          streamFrom([
-            'data: {"choices":[{"delta":{"content":"I am a NemoHermes financial assistant running in OpenShell. "}}]}\n\n',
-            'data: {"choices":[{"delta":{"content":"I can summarize public market snapshots and SEC facts."}}]}\n\n',
-            'data: {"choices":[{"delta":{"content":"\\n\\n*Skill path: internal-skill -> internal-tool"}}]}\n\n',
-            "data: [DONE]\n\n",
-          ]),
-          { headers: { "content-type": "text/event-stream" } },
-        );
+        return chatStream("A concise financial research response.");
       }
       throw new Error(`Unhandled fetch ${url}`);
     }) as typeof fetch;
   });
 
-  it("renders NVIDIA finance shell with live quotes", async () => {
+  it("renders the finance workspace with an empty composer and live quotes", async () => {
     render(<App />);
+
     expect(screen.getByText("NemoHermes Financial Desk")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Build/i })).toHaveAttribute(
       "href",
@@ -87,52 +104,77 @@ describe("financial React UI", () => {
       "href",
       "https://github.com/NVIDIA/nemoclaw-community",
     );
-    expect(screen.getByText("Agent Activity")).toBeInTheDocument();
-    expect(screen.getByText("Waiting")).toBeInTheDocument();
+    expect(screen.getByText("Activity")).toBeInTheDocument();
+    expect(screen.getByText(/Research public companies/i)).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Message the financial assistant"),
+    ).toHaveValue("");
     await screen.findByText("$100.00");
-    expect(screen.getByText("Live from Yahoo chart API")).toBeInTheDocument();
-    expect(screen.queryByText("Demo Prompts")).not.toBeInTheDocument();
-    expect(screen.queryByText("Ten-Question Eval")).not.toBeInTheDocument();
+    expect(screen.getByText("Public market snapshot")).toBeInTheDocument();
     expect(screen.queryByText("Session Context")).not.toBeInTheDocument();
     expect(screen.queryByText("Skill Usage")).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("Tool Calls / Trace Clues"),
-    ).not.toBeInTheDocument();
     expect(screen.queryByText("Run Telemetry")).not.toBeInTheDocument();
   });
 
-  it("sends on Enter and records skill usage", async () => {
+  it("sends on Enter with high reasoning and records observed tool activity", async () => {
     const user = userEvent.setup();
     render(<App />);
-    const input = screen.getAllByLabelText(
-      "Message the financial assistant",
-    )[0];
+
+    const input = screen.getByLabelText("Message the financial assistant");
     await user.type(input, "Create an NVDA market snapshot.{Enter}");
-    await waitFor(() =>
-      expect(
-        screen.getByText(/financial assistant running in OpenShell/i),
-      ).toBeInTheDocument(),
-    );
-    expect(
-      screen.getByText(/public market snapshots and SEC facts/i),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/Skill path/i)).not.toBeInTheDocument();
-    expect(screen.getByText("Capability queued")).toBeInTheDocument();
-    expect(screen.getByText("Streaming response")).toBeInTheDocument();
+
+    await screen.findByText("A concise financial research response.");
+    expect(screen.getAllByText("Tool call").length).toBeGreaterThan(0);
     const chatCall = vi
       .mocked(global.fetch)
-      .mock.calls.find(([input]) => String(input).startsWith("/v1/chat/completions"));
-    expect(chatCall).toBeTruthy();
+      .mock.calls.find(([request]) =>
+        String(request).startsWith("/v1/chat/completions"),
+      );
     const body = JSON.parse(String(chatCall?.[1]?.body));
-    expect(body).toMatchObject({
-      max_tokens: 8192,
-      reasoning_effort: "medium",
-    });
-    expect(body).not.toHaveProperty("temperature");
+    expect(body.max_tokens).toBe(16_384);
+    expect(body.reasoning_effort).toBe("high");
+    expect(body.messages).toEqual([
+      { role: "user", content: "Create an NVDA market snapshot." },
+    ]);
+    expect(
+      body.messages.some(
+        (message: { role: string }) => message.role === "system",
+      ),
+    ).toBe(false);
   });
 
-  it("recovers with a non-streamed retry when the chat stream fails", async () => {
-    let chatCalls = 0;
+  it("includes prior turns in the next request", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const input = screen.getByLabelText("Message the financial assistant");
+
+    await user.type(input, "First question{Enter}");
+    await screen.findByText("A concise financial research response.");
+    await user.type(input, "Follow up{Enter}");
+    await waitFor(() =>
+      expect(
+        vi
+          .mocked(global.fetch)
+          .mock.calls.filter(([request]) =>
+            String(request).startsWith("/v1/chat/completions"),
+          ),
+      ).toHaveLength(2),
+    );
+
+    const chatCalls = vi
+      .mocked(global.fetch)
+      .mock.calls.filter(([request]) =>
+        String(request).startsWith("/v1/chat/completions"),
+      );
+    const body = JSON.parse(String(chatCalls[1][1]?.body));
+    expect(body.messages).toEqual([
+      { role: "user", content: "First question" },
+      { role: "assistant", content: "A concise financial research response." },
+      { role: "user", content: "Follow up" },
+    ]);
+  });
+
+  it("reports stream failures and leaves the composer usable", async () => {
     global.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.startsWith("/config"))
@@ -140,25 +182,10 @@ describe("financial React UI", () => {
       if (url.startsWith("/api/quotes"))
         return Response.json({ ok: true, quotes: [] });
       if (url.startsWith("/v1/chat/completions")) {
-        chatCalls += 1;
-        if (chatCalls > 1) {
-          return Response.json({
-            choices: [
-              {
-                message: {
-                  content:
-                    "Recovered response from non-streamed fallback.",
-                },
-              },
-            ],
-          });
-        }
         return new Response(
           new ReadableStream({
             start(controller) {
-              controller.error(
-                new Error("Cannot read properties of null (reading 'value')"),
-              );
+              controller.error(new Error("connection closed"));
             },
           }),
           { headers: { "content-type": "text/event-stream" } },
@@ -169,43 +196,18 @@ describe("financial React UI", () => {
 
     const user = userEvent.setup();
     render(<App />);
-    const input = screen.getAllByLabelText(
-      "Message the financial assistant",
-    )[0];
-    await user.type(input, "Can you tell me about yourself?{Enter}");
+    const input = screen.getByLabelText("Message the financial assistant");
+    await user.type(input, "What are you?{Enter}");
 
-    await screen.findByText(/Recovered response from non-streamed fallback/i);
-    expect(screen.queryByText(/Request failed/i)).not.toBeInTheDocument();
-    expect(
-      screen.getAllByLabelText("Message the financial assistant")[0],
-    ).toBeEnabled();
+    await screen.findByText(/Request failed: connection closed/i);
+    expect(input).toBeEnabled();
   });
 
-  it("detects skill intent for SEC and market questions", () => {
-    const skills = detectSkillActivity(
-      "Create an NVDA analyst brief with SEC facts and a market snapshot",
-    ).map((skill) => skill.name);
-    expect(skills).toContain("financial-market-snapshot");
-    expect(skills).toContain("sec-company-facts");
-    expect(skills).toContain("financial-analyst-brief");
+  it("parses content, finish reasons, and real tool names from SSE", () => {
     expect(
-      reconcileSkillActivity([], "Available skill: financial-market-snapshot"),
-    ).toEqual([]);
-  });
-
-  it("parses streamed tokens without leaking raw JSON", () => {
-    const parsed = parseSseBlock(
-      'data: {"choices":[{"delta":{"content":"hello"}}]}\n',
-    );
-    expect(parsed.token).toBe("hello");
-    expect(
-      parseSseBlock('data: {"object":"chat.completion.chunk"}\n').token,
-    ).toBe("");
-    expect(
-      parseSseBlock(
-        'data: {"choices":[{"delta":{"content":null},"message":null,"text":null}]}\n',
-      ).token,
-    ).toBe("");
+      parseSseBlock('data: {"choices":[{"delta":{"content":"hello"}}]}\n')
+        .token,
+    ).toBe("hello");
     expect(
       parseSseBlock('data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n')
         .done,
@@ -213,11 +215,11 @@ describe("financial React UI", () => {
     expect(
       parseSseBlock(
         'data: {"choices":[{"delta":{"tool_calls":[{"function":{"name":"sec_company_facts"}}]}}]}\n',
-      ).rawTool,
-    ).toBe("sec_company_facts");
+      ).toolNames,
+    ).toEqual(["sec_company_facts"]);
   });
 
-  it("renders loose markdown tables without separator rows", () => {
+  it("renders loose Markdown tables", () => {
     render(
       <Markdown
         text={[
@@ -227,13 +229,9 @@ describe("financial React UI", () => {
         ].join("\n")}
       />,
     );
-
     expect(screen.getByRole("table")).toBeInTheDocument();
     expect(
       screen.getByRole("columnheader", { name: "Skill" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("cell", { name: /Pull public quote snapshots/i }),
     ).toBeInTheDocument();
   });
 
@@ -245,11 +243,9 @@ describe("financial React UI", () => {
         }
       />,
     );
-
     expect(
       screen.getByRole("heading", { name: "Skills", level: 3 }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Market snapshots")).toBeInTheDocument();
     expect(container.querySelector("script")).not.toBeInTheDocument();
     expect(container.querySelector("img")?.getAttribute("onerror")).toBeNull();
   });

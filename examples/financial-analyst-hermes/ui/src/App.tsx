@@ -1,22 +1,16 @@
-import {
-  AppBar,
-  Button,
-  Card,
-  Panel,
-  Text,
-  TextArea,
-  ThemeProvider,
-} from "@nvidia/foundations-react-core";
+// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+import { Activity, ArrowUp, ExternalLink } from "lucide-react";
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import nvidiaLogo from "./assets/nvidia_header.png";
 import { Markdown } from "./Markdown";
 import {
-  Quote,
-  SkillActivity,
-  detectSkillActivity,
   formatMoney,
   formatPercent,
   parseSseBlock,
+  Quote,
+  TraceSpan,
 } from "./finance";
 
 type Message = {
@@ -26,35 +20,18 @@ type Message = {
   thinking?: boolean;
 };
 
-type RuntimeConfig = {
-  model: string;
-};
-
 type ActivityStep = {
   id: string;
   label: string;
   detail: string;
-  status: "queued" | "running" | "done" | "error";
+  status: "running" | "done" | "error";
 };
 
-const systemPrompt =
-  "You are the NemoHermes Financial Desk, a financial assistant agent for public market snapshots, SEC company facts, concise analyst briefs, risk checks, investment-committee prep, and Outlook-style financial email drafts. If asked who or what you are, answer as a financial assistant first: say what financial work you help with and that you are research support, not a broker or investment adviser. Mention OpenShell, NemoClaw, tools, runtime details, child sandboxes, traces, providers, or model routing only when the user explicitly asks about configuration or internals. Use installed finance skills and helpers when relevant. Separate facts from interpretation and caveats. For skill or capability lists, prefer short Markdown bullets over tables; if you use a table, include a valid Markdown separator row. Do not provide personalized investment advice or buy/sell/hold recommendations. Do not expose secret values, endpoint URLs, base URLs, provider IDs, model IDs, or internal-only service names. If the user explicitly asks which skills or tools were used, name them briefly; otherwise keep the answer focused on the financial work.";
+const firstTokenTimeoutMs = 180_000;
+const streamIdleTimeoutMs = 120_000;
 
-const streamFirstTokenTimeoutMs = 180_000;
-const streamIdleTimeoutMs = 18_000;
-
-function id(prefix: string) {
+function makeId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 7)}`;
-}
-
-function readInputValue(event: {
-  currentTarget?: EventTarget | null;
-  target?: EventTarget | null;
-}): string {
-  const source = event.currentTarget || event.target;
-  if (source && "value" in source && typeof source.value === "string")
-    return source.value;
-  return "";
 }
 
 function readStreamChunk(
@@ -82,68 +59,50 @@ function readStreamChunk(
   });
 }
 
-function skillLabel(skill: SkillActivity) {
-  return skill.name
-    .split("-")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function cleanAssistantText(text: string) {
-  return text
-    .split(/\r?\n/)
-    .filter((line) => !/^\s*\*?\s*(skill|tool)\s+path\s*:/i.test(line))
-    .join("\n")
-    .trim();
-}
-
-function chatPayload(cleanPrompt: string, model: string, stream: boolean) {
-  return {
-    model,
-    stream,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: cleanPrompt },
-    ],
-    max_tokens: 8192,
-    reasoning_effort: "medium",
+function assistantContent(payload: unknown): string {
+  const data = payload as {
+    choices?: Array<{ message?: { content?: string } }>;
+    message?: string;
   };
+  return (
+    data?.choices?.[0]?.message?.content ??
+    data?.message ??
+    "(No assistant message returned.)"
+  );
+}
+
+function activityLabel(span: TraceSpan) {
+  const kind = span.kind.toLowerCase();
+  if (kind === "tool") return "Tool call";
+  if (kind === "llm") return "Model call";
+  if (kind === "agent") return "Agent turn";
+  return "Trace span";
 }
 
 export function App() {
-  const [runtime, setRuntime] = useState<RuntimeConfig>({
-    model: "financial-assistant",
-  });
+  const [model, setModel] = useState("financial-assistant");
   const [quotes, setQuotes] = useState<Quote[]>([]);
-  const [quoteStatus, setQuoteStatus] = useState("Loading live prices");
+  const [quoteStatus, setQuoteStatus] = useState("Loading market data");
   const [messages, setMessages] = useState<Message[]>([]);
   const [prompt, setPrompt] = useState("");
   const [isBusy, setIsBusy] = useState(false);
-  const [chunks, setChunks] = useState(0);
-  const [latency, setLatency] = useState("0.0s");
-  const [activitySteps, setActivitySteps] = useState<ActivityStep[]>([
-    {
-      id: "idle",
-      label: "Waiting",
-      detail:
-        "Send a finance question to see the assistant's observable steps.",
-      status: "queued",
-    },
-  ]);
+  const [activitySteps, setActivitySteps] = useState<ActivityStep[]>([]);
   const conversationRef = useRef<HTMLDivElement | null>(null);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
-  const activityRef = useRef<HTMLDivElement | null>(null);
   const promptRef = useRef<HTMLTextAreaElement | null>(null);
+  const activeRunRef = useRef<string | null>(null);
+
+  useEffect(
+    () => () => {
+      activeRunRef.current = null;
+    },
+    [],
+  );
 
   useEffect(() => {
     fetch("/config")
       .then((response) => (response.ok ? response.json() : null))
-      .then((config) => {
-        if (!config) return;
-        setRuntime({
-          model: config.model || "financial-assistant",
-        });
-      })
+      .then((config) => setModel(config?.model || "financial-assistant"))
       .catch(() => undefined);
   }, []);
 
@@ -156,18 +115,15 @@ export function App() {
         );
         const payload = await response.json();
         if (cancelled) return;
-        setQuotes(payload.quotes || []);
+        setQuotes(payload.quotes ?? []);
         setQuoteStatus(
-          payload.ok ? "Live from Yahoo chart API" : "Quote feed unavailable",
+          payload.ok ? "Public market snapshot" : "Market data unavailable",
         );
-      } catch (error) {
-        if (!cancelled)
-          setQuoteStatus(
-            error instanceof Error ? error.message : "Quote feed unavailable",
-          );
+      } catch {
+        if (!cancelled) setQuoteStatus("Market data unavailable");
       }
     }
-    loadQuotes();
+    void loadQuotes();
     const timer = window.setInterval(loadQuotes, 30_000);
     return () => {
       cancelled = true;
@@ -178,228 +134,209 @@ export function App() {
   useEffect(() => {
     const node = conversationRef.current;
     if (!node) return;
-
-    const behavior: ScrollBehavior = isBusy ? "smooth" : "auto";
-    const scrollToEnd = () => {
-      node.scrollTo({ top: node.scrollHeight, behavior });
-      conversationEndRef.current?.scrollIntoView({ block: "end", behavior });
+    const scroll = () => {
+      node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+      conversationEndRef.current?.scrollIntoView({ block: "end" });
     };
+    scroll();
+    const frame = window.requestAnimationFrame(scroll);
+    return () => window.cancelAnimationFrame(frame);
+  }, [messages]);
 
-    scrollToEnd();
-    const frame = window.requestAnimationFrame(scrollToEnd);
-    const timer = window.setTimeout(scrollToEnd, 80);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.clearTimeout(timer);
-    };
-  }, [messages, chunks, isBusy]);
+  function addToolActivity(runId: string, toolName: string) {
+    const activityId = `${runId}-tool-${toolName}`;
+    setActivitySteps((current) =>
+      current.some((step) => step.id === activityId)
+        ? current
+        : [
+            ...current,
+            {
+              id: activityId,
+              label: "Tool call",
+              detail: toolName,
+              status: "done",
+            },
+          ],
+    );
+  }
 
-  useEffect(() => {
-    const node = activityRef.current;
-    if (!node) return;
-    node.scrollTo({
-      top: node.scrollHeight,
-      behavior: isBusy ? "smooth" : "auto",
-    });
-  }, [activitySteps, isBusy]);
+  async function loadTraceActivity(runId: string, startedAt: number) {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      if (activeRunRef.current !== runId) return;
+      try {
+        const since = encodeURIComponent(new Date(startedAt).toISOString());
+        const response = await fetch(`/api/phoenix/recent?since=${since}`);
+        const payload = await response.json();
+        const spans: TraceSpan[] = payload.spans ?? [];
+        if (spans.length && activeRunRef.current === runId) {
+          setActivitySteps((current) => [
+            ...current.filter((step) => !step.id.startsWith(`${runId}-span-`)),
+            ...spans.slice(0, 8).map((span, index) => ({
+              id: `${runId}-span-${span.trace_id}-${index}`,
+              label: activityLabel(span),
+              detail: span.name,
+              status:
+                span.status === "ERROR"
+                  ? ("error" as const)
+                  : ("done" as const),
+            })),
+          ]);
+          return;
+        }
+      } catch {
+        // Phoenix is supplementary; chat remains usable while it catches up.
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 750));
+    }
+  }
 
-  async function submit(nextPrompt = prompt, nextChannel = "web") {
-    const cleanPrompt = nextPrompt.trim();
+  async function submit() {
+    const cleanPrompt = prompt.trim();
     if (!cleanPrompt || isBusy) return;
 
-    const traceId = `run-${Date.now().toString(36).slice(-7)}`;
-    const started = performance.now();
-    const assistantId = id("assistant");
-    const plannedSkills = detectSkillActivity(cleanPrompt).slice(0, 4);
+    const runId = `run-${Date.now().toString(36)}`;
+    activeRunRef.current = runId;
+    const startedAt = Date.now();
+    const assistantId = makeId("assistant");
+    const history = messages
+      .filter((message) => !message.thinking && message.content)
+      .map(({ role, content }) => ({ role, content }));
 
     setPrompt("");
     setIsBusy(true);
-    setChunks(0);
-    setLatency("0.0s");
     setActivitySteps([
       {
-        id: `${traceId}-received`,
-        label: "Request received",
-        detail:
-          nextChannel === "web"
-            ? "Web chat message accepted."
-            : `${nextChannel} message accepted.`,
-        status: "done",
-      },
-      ...plannedSkills.map((skill) => ({
-        id: `${traceId}-${skill.name}`,
-        label: "Capability queued",
-        detail: `${skillLabel(skill)}: ${skill.reason}.`,
-        status: "queued" as const,
-      })),
-      {
-        id: `${traceId}-model`,
-        label: "Model call",
-        detail: "Sending request to the configured compatible API provider.",
+        id: `${runId}-request`,
+        label: "Request sent",
+        detail: "Hermes accepted the conversation turn.",
         status: "running",
-      },
-      {
-        id: `${traceId}-stream`,
-        label: "Streaming response",
-        detail: "Waiting for first token.",
-        status: "queued",
       },
     ]);
     setMessages((current) => [
       ...current,
-      { id: id("user"), role: "user", content: cleanPrompt },
+      { id: makeId("user"), role: "user", content: cleanPrompt },
       { id: assistantId, role: "assistant", content: "", thinking: true },
     ]);
 
-    let streamedOutput = "";
-
+    const controller = new AbortController();
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     try {
-      const controller = new AbortController();
-      const responseTimer = window.setTimeout(
-        () => controller.abort(),
-        streamFirstTokenTimeoutMs,
-      );
       const response = await fetch("/v1/chat/completions", {
         method: "POST",
         signal: controller.signal,
-        headers: {
-          "Content-Type": "application/json",
-          "X-Finance-Run-Id": traceId,
-          "X-Finance-Channel": nextChannel,
-        },
-        body: JSON.stringify(chatPayload(cleanPrompt, runtime.model, true)),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          stream: true,
+          messages: [...history, { role: "user", content: cleanPrompt }],
+          max_tokens: 16_384,
+          reasoning_effort: "high",
+        }),
       });
-      window.clearTimeout(responseTimer);
 
-      if (!response.ok || !response.body) {
-        throw new Error(`API returned HTTP ${response.status}`);
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(
+          payload?.error?.message || `Hermes returned HTTP ${response.status}`,
+        );
       }
 
-      const contentType = response.headers.get("content-type") || "";
       setActivitySteps((current) =>
         current.map((step) =>
-          step.id === `${traceId}-model`
-            ? { ...step, status: "done", detail: "Model request accepted." }
-            : step.id === `${traceId}-stream`
-              ? {
-                  ...step,
-                  status: "running",
-                  detail: "Receiving streamed tokens.",
-                }
-              : step,
+          step.id === `${runId}-request`
+            ? { ...step, label: "Hermes connected", status: "done" }
+            : step,
         ),
       );
-      if (!contentType.includes("text/event-stream")) {
+
+      if (
+        !response.body ||
+        !response.headers.get("content-type")?.includes("text/event-stream")
+      ) {
         const payload = await response.json();
-        const content = cleanAssistantText(
-          payload?.choices?.[0]?.message?.content ||
-            payload?.message ||
-            "(No assistant message returned.)",
-        );
         setMessages((current) =>
           current.map((message) =>
             message.id === assistantId
-              ? { ...message, content, thinking: false }
-              : message,
-          ),
-        );
-        setChunks(1);
-        setActivitySteps((current) =>
-          current.map((step) =>
-            step.id === `${traceId}-stream`
               ? {
-                  ...step,
-                  status: "done",
-                  detail: "Non-streamed assistant message received.",
+                  ...message,
+                  content: assistantContent(payload),
+                  thinking: false,
                 }
-              : step,
+              : message,
           ),
         );
         return;
       }
 
-      const reader = response.body.getReader();
+      reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
       let output = "";
-      let chunkCount = 0;
-      let shouldStop = false;
+      let chunks = 0;
+      let finished = false;
 
-      while (!shouldStop) {
-        const { done, timedOut, value } = await readStreamChunk(
+      setActivitySteps((current) => [
+        ...current,
+        {
+          id: `${runId}-stream`,
+          label: "Response streaming",
+          detail: "Waiting for the first response token.",
+          status: "running",
+        },
+      ]);
+
+      while (!finished) {
+        const result = await readStreamChunk(
           reader,
-          output ? streamIdleTimeoutMs : streamFirstTokenTimeoutMs,
+          output ? streamIdleTimeoutMs : firstTokenTimeoutMs,
         );
-        if (timedOut) {
-          if (!output)
-            throw new Error("Timed out waiting for streamed response");
-          break;
+        if (result.timedOut) {
+          await reader.cancel();
+          throw new Error(
+            output
+              ? "The response stream stopped before completion."
+              : "Timed out waiting for the first response token.",
+          );
         }
-        if (done) break;
-        if (!value) continue;
-        buffer += decoder.decode(value, { stream: true });
+        if (result.done) break;
+        if (!result.value) continue;
+
+        buffer = (
+          buffer + decoder.decode(result.value, { stream: true })
+        ).replaceAll("\r\n", "\n");
         const blocks = buffer.split("\n\n");
-        buffer = blocks.pop() || "";
+        buffer = blocks.pop() ?? "";
         for (const block of blocks) {
           const parsed = parseSseBlock(block);
-          if (parsed.rawTool) {
-            setActivitySteps((current) => {
-              const toolId = `${traceId}-tool-${parsed.rawTool}`;
-              if (current.some((step) => step.id === toolId)) return current;
-              return [
-                ...current,
-                {
-                  id: toolId,
-                  label: "Tool event",
-                  detail: parsed.rawTool,
-                  status: "done",
-                },
-              ];
-            });
-          }
+          parsed.toolNames.forEach((name) => addToolActivity(runId, name));
           if (parsed.token) {
             output += parsed.token;
-            streamedOutput = output;
-            chunkCount += 1;
-            setChunks(chunkCount);
-            setActivitySteps((current) =>
-              current.map((step) =>
-                step.id === `${traceId}-stream`
-                  ? {
-                      ...step,
-                      status: "running",
-                      detail: `${chunkCount} streamed token chunk${chunkCount === 1 ? "" : "s"} received.`,
-                    }
-                  : step,
-              ),
-            );
+            chunks += 1;
             setMessages((current) =>
               current.map((message) =>
                 message.id === assistantId
-                  ? {
-                      ...message,
-                      content: cleanAssistantText(output),
-                      thinking: false,
-                    }
+                  ? { ...message, content: output, thinking: false }
                   : message,
               ),
             );
-            setLatency(`${((performance.now() - started) / 1000).toFixed(1)}s`);
+            setActivitySteps((current) =>
+              current.map((step) =>
+                step.id === `${runId}-stream`
+                  ? { ...step, detail: `${chunks} streamed chunks received.` }
+                  : step,
+              ),
+            );
           }
-          if (parsed.done) {
-            shouldStop = true;
-            break;
-          }
+          finished ||= parsed.done;
         }
       }
+
       setMessages((current) =>
         current.map((message) =>
           message.id === assistantId
             ? {
                 ...message,
-                content:
-                  cleanAssistantText(output) ||
-                  "(No assistant message returned.)",
+                content: output || "(No assistant message returned.)",
                 thinking: false,
               }
             : message,
@@ -407,153 +344,40 @@ export function App() {
       );
       setActivitySteps((current) =>
         current.map((step) =>
-          step.id === `${traceId}-stream`
-            ? {
-                ...step,
-                status: "done",
-                detail: output
-                  ? `Response complete in ${((performance.now() - started) / 1000).toFixed(1)}s.`
-                  : "Response finished.",
-              }
-            : step.status === "queued" && step.id.startsWith(traceId)
-              ? { ...step, status: "done" }
-              : step,
+          step.id === `${runId}-stream`
+            ? { ...step, detail: "Response complete.", status: "done" }
+            : step,
         ),
       );
-      fetch("/api/phoenix/recent")
-        .then((response) => (response.ok ? response.json() : null))
-        .then((payload) => {
-          if (!payload?.spans?.length) return;
-          setActivitySteps((current) => [
-            ...current.filter((step) => step.id !== `${traceId}-trace`),
-            {
-              id: `${traceId}-trace`,
-              label: "Trace captured",
-              detail:
-                "Phoenix has recent agent, LLM, or tool spans for inspection.",
-              status: "done",
-            },
-          ]);
-        })
-        .catch(() => undefined);
+      void loadTraceActivity(runId, startedAt);
     } catch (error) {
-      const message =
-        error instanceof DOMException && error.name === "AbortError"
-          ? "Timed out waiting for API response"
-          : error instanceof Error
-            ? error.message
-            : String(error);
-
-      if (!streamedOutput) {
-        try {
-          setActivitySteps((current) =>
-            current.map((step) =>
-              step.status === "running" || step.status === "queued"
-                ? {
-                    ...step,
-                    status: "running",
-                    detail: "Streaming failed; retrying once without streaming.",
-                  }
-                : step,
-            ),
-          );
-          const retry = await fetch("/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Finance-Run-Id": `${traceId}-retry`,
-              "X-Finance-Channel": nextChannel,
-            },
-            body: JSON.stringify(chatPayload(cleanPrompt, runtime.model, false)),
-          });
-          if (!retry.ok) throw new Error(`Retry returned HTTP ${retry.status}`);
-          const payload = await retry.json();
-          const content = cleanAssistantText(
-            payload?.choices?.[0]?.message?.content ||
-              payload?.message ||
-              "(No assistant message returned.)",
-          );
-          setMessages((current) =>
-            current.map((item) =>
-              item.id === assistantId
-                ? { ...item, content, thinking: false }
-                : item,
-            ),
-          );
-          setChunks(1);
-          setLatency(`${((performance.now() - started) / 1000).toFixed(1)}s`);
-          setActivitySteps((current) =>
-            current.map((step) =>
-              step.status === "running" || step.status === "queued"
-                ? {
-                    ...step,
-                    status: "done",
-                    detail: "Recovered with non-streamed response.",
-                  }
-                : step,
-            ),
-          );
-          return;
-        } catch (retryError) {
-          const retryMessage =
-            retryError instanceof Error ? retryError.message : String(retryError);
-          setMessages((current) =>
-            current.map((item) =>
-              item.id === assistantId
-                ? {
-                    ...item,
-                    content: `Request failed: ${message}; retry failed: ${retryMessage}`,
-                    thinking: false,
-                  }
-                : item,
-            ),
-          );
-          setActivitySteps((current) =>
-            current.map((step) =>
-              step.status === "running" || step.status === "queued"
-                ? { ...step, status: "error", detail: retryMessage }
-                : step,
-            ),
-          );
-          return;
-        }
-      }
-
+      const detail = error instanceof Error ? error.message : String(error);
       setMessages((current) =>
-        current.map((item) =>
-          item.id === assistantId
+        current.map((message) =>
+          message.id === assistantId
             ? {
-                ...item,
-                content:
-                  cleanAssistantText(streamedOutput) ||
-                  "(Stream ended before an assistant message was returned.)",
+                ...message,
+                content: `Request failed: ${detail}`,
                 thinking: false,
               }
-            : item,
+            : message,
         ),
       );
       setActivitySteps((current) =>
         current.map((step) =>
-          step.status === "running" || step.status === "queued"
-            ? {
-                ...step,
-                status: "done",
-                detail: "Stream closed early after partial response.",
-              }
+          step.status === "running"
+            ? { ...step, detail, status: "error" }
             : step,
         ),
       );
     } finally {
+      controller.abort();
+      reader?.releaseLock();
       setIsBusy(false);
-      window.setTimeout(() => {
-        const node = conversationRef.current;
-        if (node) node.scrollTo({ top: node.scrollHeight, behavior: "auto" });
-        conversationEndRef.current?.scrollIntoView({
-          block: "end",
-          behavior: "auto",
-        });
-        promptRef.current?.focus({ preventScroll: true });
-      }, 100);
+      window.setTimeout(
+        () => promptRef.current?.focus({ preventScroll: true }),
+        50,
+      );
     }
   }
 
@@ -567,192 +391,193 @@ export function App() {
       event.key !== "Enter" ||
       event.shiftKey ||
       event.nativeEvent.isComposing
-    )
+    ) {
       return;
+    }
     event.preventDefault();
     void submit();
   }
 
   return (
-    <ThemeProvider density="compact" theme="dark">
-      <div className="app-shell">
-        <AppBar
-          className="nv-appbar"
-          slotStart={
-            <div className="brand-lockup">
-              <img alt="NVIDIA" className="nvidia-logo" src={nvidiaLogo} />
-              <span>NemoHermes Financial Desk</span>
+    <div className="app-shell">
+      <header className="topbar">
+        <div className="brand-lockup">
+          <img alt="NVIDIA" className="nvidia-logo" src={nvidiaLogo} />
+          <div>
+            <strong>NemoHermes Financial Desk</strong>
+            <span>Public-market research assistant</span>
+          </div>
+        </div>
+        <nav className="resource-links" aria-label="Demo resources">
+          <a href="https://build.nvidia.com/" rel="noreferrer" target="_blank">
+            🚀 Build
+          </a>
+          <a
+            href="https://github.com/NVIDIA/NemoClaw"
+            rel="noreferrer"
+            target="_blank"
+          >
+            🧰 NemoClaw
+          </a>
+          <a
+            href="https://github.com/NVIDIA/OpenShell"
+            rel="noreferrer"
+            target="_blank"
+          >
+            🖥️ OpenShell
+          </a>
+          <a
+            href="https://github.com/NVIDIA/nemoclaw-community"
+            rel="noreferrer"
+            target="_blank"
+          >
+            📦 Community
+          </a>
+        </nav>
+      </header>
+
+      <main className="desk-grid">
+        <aside className="market-panel" aria-label="Market watch">
+          <div className="panel-heading">
+            <div>
+              <h2>Market Watch</h2>
+              <p>{quoteStatus}</p>
             </div>
-          }
-          slotEnd={
-            <nav className="resource-links" aria-label="Demo resources">
-              <a
-                className="resource-link"
-                href="https://build.nvidia.com/"
-                rel="noreferrer"
-                target="_blank"
-              >
-                🚀 Build
-              </a>
-              <a
-                className="resource-link"
-                href="https://github.com/NVIDIA/NemoClaw"
-                rel="noreferrer"
-                target="_blank"
-              >
-                🧰 NemoClaw
-              </a>
-              <a
-                className="resource-link"
-                href="https://github.com/NVIDIA/OpenShell"
-                rel="noreferrer"
-                target="_blank"
-              >
-                🖥️ OpenShell
-              </a>
-              <a
-                className="resource-link"
-                href="https://github.com/NVIDIA/nemoclaw-community"
-                rel="noreferrer"
-                target="_blank"
-              >
-                📦 Community
-              </a>
-            </nav>
-          }
-        />
-        <main className="desk-grid">
-          <aside className="left-column">
-            <Panel
-              slotHeading="Market Watch"
-              className="panel-frame market-watch"
-            >
-              <p className="panel-caption">{quoteStatus}</p>
-              <div className="quote-list" aria-label="Live stock prices">
-                {quotes.map((quote) => (
-                  <div
-                    className="quote-row"
-                    data-direction={
-                      (quote.change_percent || 0) >= 0 ? "up" : "down"
+            <span className="live-dot" aria-label="Live" />
+          </div>
+          <div className="quote-list">
+            {quotes.map((quote) => (
+              <div className="quote-row" key={quote.symbol}>
+                <div>
+                  <strong>{quote.symbol}</strong>
+                  <span>
+                    {quote.exchange || quote.market_state || "Public quote"}
+                  </span>
+                </div>
+                <div>
+                  <strong>
+                    {quote.ok ? formatMoney(quote.price, quote.currency) : "--"}
+                  </strong>
+                  <span
+                    className={
+                      (quote.change_percent ?? 0) >= 0 ? "positive" : "negative"
                     }
-                    key={quote.symbol}
                   >
-                    <div>
-                      <strong>{quote.symbol}</strong>
-                      <span>
-                        {quote.exchange || quote.market_state || "Public quote"}
-                      </span>
-                    </div>
-                    <div>
-                      <strong>
-                        {quote.ok
-                          ? formatMoney(quote.price, quote.currency)
-                          : "--"}
-                      </strong>
-                      <span>
-                        {quote.ok
-                          ? formatPercent(quote.change_percent)
-                          : quote.error}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                    {quote.ok
+                      ? formatPercent(quote.change_percent)
+                      : "Unavailable"}
+                  </span>
+                </div>
               </div>
-            </Panel>
+            ))}
+          </div>
+        </aside>
 
-            <Panel
-              slotHeading="Agent Activity"
-              className="panel-frame activity-panel"
-            >
-              <p className="panel-caption">
-                Observable steps only. Private model reasoning is not displayed.
-              </p>
-              <div
-                className="activity-list"
-                aria-label="Agent activity"
-                ref={activityRef}
-              >
-                {activitySteps.map((step) => (
-                  <div
-                    className="activity-row"
-                    data-status={step.status}
-                    key={step.id}
-                  >
-                    <span aria-hidden="true" />
-                    <div>
-                      <strong>{step.label}</strong>
-                      <p>{step.detail}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Panel>
-          </aside>
+        <section className="workspace">
+          <header className="workspace-heading">
+            <div>
+              <p>Financial research workspace</p>
+              <h1>Financial assistant</h1>
+              <span>
+                Market snapshots, SEC facts, earnings prep, and concise analyst
+                briefs.
+              </span>
+            </div>
+            <span className={`run-state ${isBusy ? "busy" : ""}`}>
+              {isBusy ? "Working" : "Ready"}
+            </span>
+          </header>
 
-          <section className="chat-column">
-            <Card className="hero-card">
-              <div>
-                <Text kind="label/semibold/md">Market research workspace</Text>
-                <h1>Financial assistant agent</h1>
+          <div
+            className="conversation"
+            ref={conversationRef}
+            aria-live="polite"
+          >
+            {messages.length === 0 && (
+              <div className="welcome">
+                <h2>Research public companies with a traceable assistant.</h2>
                 <p>
-                  Public-company research, SEC facts, market snapshots, earnings
-                  prep, and concise analyst briefs.
+                  Ask for current market context, SEC company facts, an earnings
+                  brief, a risk checklist, or a financial email draft.
                 </p>
               </div>
-              <span id="status" className="sr-only">
-                {isBusy ? "Streaming" : "Ready"}
-              </span>
-            </Card>
+            )}
+            {messages.map((message) => (
+              <article className={`message ${message.role}`} key={message.id}>
+                <strong>
+                  {message.role === "user" ? "You" : "Financial assistant"}
+                </strong>
+                {message.thinking ? (
+                  <div className="thinking" aria-label="Assistant is thinking">
+                    Thinking<span>.</span>
+                    <span>.</span>
+                    <span>.</span>
+                  </div>
+                ) : (
+                  <Markdown text={message.content} />
+                )}
+              </article>
+            ))}
+            <div ref={conversationEndRef} aria-hidden="true" />
+          </div>
 
-            <div
-              className="conversation"
-              ref={conversationRef}
-              aria-live="polite"
-            >
-              {messages.map((message) => (
-                <article className={`message ${message.role}`} key={message.id}>
-                  <strong>
-                    {message.role === "user" ? "You" : "Assistant"}
-                  </strong>
-                  {message.thinking ? (
-                    <div className="thinking">
-                      Thinking<span>.</span>
-                      <span>.</span>
-                      <span>.</span>
-                    </div>
-                  ) : (
-                    <Markdown text={message.content} />
-                  )}
-                </article>
-              ))}
-              <div
-                ref={conversationEndRef}
-                aria-hidden="true"
-                className="conversation-end"
-              />
+          <form className="composer" onSubmit={onSubmit}>
+            <textarea
+              aria-label="Message the financial assistant"
+              onChange={(event) => setPrompt(event.currentTarget.value)}
+              onKeyDown={onPromptKeyDown}
+              placeholder="Message the financial assistant"
+              ref={promptRef}
+              rows={3}
+              value={prompt}
+            />
+            <button disabled={isBusy || !prompt.trim()} type="submit">
+              <ArrowUp aria-hidden="true" size={18} />
+              <span>Send</span>
+            </button>
+          </form>
+        </section>
+
+        <aside className="activity-panel" aria-label="Agent activity">
+          <div className="panel-heading">
+            <div>
+              <h2>Activity</h2>
+              <p>Observed run events</p>
             </div>
-
-            <form className="composer" onSubmit={onSubmit}>
-              <TextArea
-                aria-label="Message the financial assistant"
-                onChange={(event) => setPrompt(readInputValue(event))}
-                onKeyDown={onPromptKeyDown}
-                placeholder="Message the financial assistant"
-                ref={promptRef}
-                rows={4}
-                value={prompt}
-              />
-              <Button
-                color="brand"
-                disabled={isBusy || !prompt.trim()}
-                type="submit"
-              >
-                Send
-              </Button>
-            </form>
-          </section>
-        </main>
-      </div>
-    </ThemeProvider>
+            <Activity aria-hidden="true" size={19} />
+          </div>
+          <div className="activity-list">
+            {activitySteps.length === 0 ? (
+              <p className="activity-empty">
+                Run activity and trace spans will appear here.
+              </p>
+            ) : (
+              activitySteps.map((step) => (
+                <div
+                  className="activity-row"
+                  data-status={step.status}
+                  key={step.id}
+                >
+                  <span aria-hidden="true" />
+                  <div>
+                    <strong>{step.label}</strong>
+                    <p>{step.detail}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <a
+            className="phoenix-link"
+            href="http://127.0.0.1:6006"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open Phoenix on port 6006{" "}
+            <ExternalLink aria-hidden="true" size={14} />
+          </a>
+        </aside>
+      </main>
+    </div>
   );
 }

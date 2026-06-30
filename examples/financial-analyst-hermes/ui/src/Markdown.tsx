@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 import DOMPurify from "dompurify";
 import MarkdownIt from "markdown-it";
 import { useMemo } from "react";
@@ -88,9 +91,6 @@ export function Markdown({ text }: { text: string }) {
   }, [text]);
 
   return (
-    <div
-      className="markdown-body"
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <div className="markdown-body" dangerouslySetInnerHTML={{ __html: html }} />
   );
 }

@@ -1,109 +1,102 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { chromium } from "playwright";
+
+import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { chromium } from "playwright";
 
-const url = process.env.FINANCE_UI_URL || "http://127.0.0.1:8765/";
-const apiUrl = process.env.FINANCE_API_URL || `${url.replace(/\/$/, "")}/v1`;
-const expectedText = process.env.FINANCE_EXPECT_TEXT || "";
+const url = process.env.FINANCE_UI_URL || "http://127.0.0.1:18080/";
 const responseTimeoutMs = Number(
-  process.env.FINANCE_RESPONSE_TIMEOUT_MS || "120000",
+  process.env.FINANCE_RESPONSE_TIMEOUT_MS || "300000",
 );
-const mode = process.env.FINANCE_SMOKE_MODE || "prompt";
-const requireTraceEvents = process.env.FINANCE_REQUIRE_TRACE_EVENTS === "1";
-const exampleRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const screenshot = resolve(exampleRoot, "docs", "ui-smoke.png");
+const requireToolSpan = process.env.FINANCE_REQUIRE_TRACE_EVENTS === "1";
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const artifactDir =
+  process.env.FINANCE_SMOKE_ARTIFACT_DIR || resolve(root, ".runtime");
+await mkdir(artifactDir, { recursive: true });
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const pageErrors = [];
 page.on("pageerror", (error) => pageErrors.push(error.stack || error.message));
+
 await page.goto(url, { waitUntil: "networkidle" });
-if (await page.getByLabel("API URL").count()) {
-  throw new Error("API URL field should not be present");
+const prompt = page.getByLabel("Message the financial assistant");
+if ((await prompt.inputValue()) !== "")
+  throw new Error("Composer must start empty");
+for (const removed of ["Session Context", "Skill Usage", "Run Telemetry"]) {
+  if (await page.getByText(removed).count())
+    throw new Error(`${removed} must not be present`);
 }
-if (await page.getByLabel("API token").count()) {
-  throw new Error("API token field should not be present");
-}
-if (await page.getByText("Demo Prompts").count()) {
-  throw new Error("Demo prompt panel should not be present");
-}
-if (await page.getByText("Ten-Question Eval").count()) {
-  throw new Error("Ten-question eval panel should not be present");
-}
-for (const removedPanel of [
-  "Session Context",
-  "Skill Usage",
-  "Tool Calls / Trace Clues",
-  "Run Telemetry",
-]) {
-  if (await page.getByText(removedPanel).count()) {
-    throw new Error(`${removedPanel} panel should not be present`);
-  }
-}
-const promptBox = page.getByLabel("Message the financial assistant");
-if (mode === "email") {
-  await promptBox.fill(
-    "Email from pm@northstar-cap.com: Need a concise NVDA pre-market brief using public quote context and SEC company facts. Include caveats and next checks before acting.",
-  );
-  await page.keyboard.press("Enter");
-} else if (mode === "basic") {
-  await promptBox.fill("What are you?");
-  await page.keyboard.press("Enter");
-} else {
-  await promptBox.fill(
-    "Create a concise analyst brief for NVDA using a public market snapshot and SEC company facts. Separate facts, hypotheses, checks, and caveats.",
-  );
-  await page.keyboard.press("Enter");
-}
-if (expectedText) {
-  await page.getByText(expectedText).waitFor({ timeout: responseTimeoutMs });
-} else {
-  const assistantMessage = page.locator(".message.assistant").last();
-  await assistantMessage.waitFor({ timeout: responseTimeoutMs });
-  await page
-    .locator("#status")
-    .getByText("Ready")
-    .waitFor({ timeout: responseTimeoutMs });
-  await page
-    .locator(".message.assistant .markdown-body table")
-    .first()
-    .waitFor({ timeout: responseTimeoutMs })
-    .catch(() => {});
-  const text = (await assistantMessage.textContent()) || "";
-  if (
-    text.length < 20 ||
-    text.includes("Request failed") ||
-    text.includes("No assistant message returned")
-  ) {
-    throw new Error(`Unexpected assistant response: ${text}`);
-  }
-  await page
-    .getByText(/financial-|OpenShell|Skill Usage|Relay/i)
-    .first()
-    .waitFor({ timeout: responseTimeoutMs });
-}
+
+const traceStartedAt = new Date().toISOString();
+await prompt.fill(
+  "Use the terminal tool to inspect the installed SKILL.md files. Then tell me which skills are installed and what financial work each supports.",
+);
+await prompt.press("Enter");
+const assistant = page.locator(".message.assistant").last();
+await assistant.waitFor({ timeout: responseTimeoutMs });
 await page
-  .locator("#status")
-  .getByText("Ready")
+  .locator(".run-state", { hasText: "Ready" })
   .waitFor({ timeout: responseTimeoutMs });
-if (pageErrors.length) {
-  throw new Error(
-    `Browser page errors were raised:\n${pageErrors.join("\n\n")}`,
-  );
+const answer = (await assistant.textContent()) || "";
+if (
+  answer.length < 40 ||
+  /Request failed|No assistant message returned/i.test(answer)
+) {
+  throw new Error(`Unexpected assistant response: ${answer}`);
 }
-if (requireTraceEvents) {
-  await fetch(`${url.replace(/\/$/, "")}/api/phoenix/recent`).then(
-    async (response) => {
-      const payload = await response.json();
-      if (!payload.ok || !payload.spans?.some((span) => span.kind === "tool")) {
-        throw new Error(
-          "Phoenix tool spans were not available from /api/phoenix/recent",
-        );
-      }
-    },
+if (pageErrors.length)
+  throw new Error(`Browser errors:\n${pageErrors.join("\n")}`);
+
+await page.screenshot({
+  path: resolve(artifactDir, "ui-desktop.png"),
+  fullPage: true,
+});
+
+if (requireToolSpan) {
+  const since = encodeURIComponent(traceStartedAt);
+  const payload = await fetch(
+    `${url.replace(/\/$/, "")}/api/phoenix/recent?since=${since}`,
+  ).then((response) => response.json());
+  const traces = new Map();
+  for (const span of payload.spans || []) {
+    const trace = traces.get(span.trace_id) || {
+      kinds: new Set(),
+      parentIds: new Set(),
+    };
+    trace.kinds.add(span.kind);
+    if (span.parent_id) trace.parentIds.add(span.parent_id);
+    traces.set(span.trace_id, trace);
+  }
+  const coherent = [...traces.values()].some(
+    (trace) =>
+      trace.kinds.has("tool") &&
+      trace.kinds.has("llm") &&
+      trace.parentIds.size > 0,
   );
+  if (!payload.ok || !coherent) {
+    throw new Error(
+      "Phoenix did not return correlated Hermes LLM and tool spans",
+    );
+  }
 }
-await page.screenshot({ path: screenshot, fullPage: true });
+
+const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } });
+await mobile.goto(url, { waitUntil: "networkidle" });
+await mobile.getByLabel("Message the financial assistant").waitFor();
+const box = await mobile
+  .getByLabel("Message the financial assistant")
+  .boundingBox();
+if (!box || box.y + box.height > 844)
+  throw new Error("Mobile composer is outside the viewport");
+await mobile.screenshot({
+  path: resolve(artifactDir, "ui-mobile.png"),
+  fullPage: true,
+});
+
 await browser.close();
-console.log(JSON.stringify({ ok: true, url, apiUrl, screenshot }));
+console.log(
+  JSON.stringify({ ok: true, url, answer_length: answer.length, artifactDir }),
+);

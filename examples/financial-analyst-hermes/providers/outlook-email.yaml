@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
 id: nemoclaw-finance-outlook-email
@@ -32,8 +33,11 @@ endpoints:
   - host: graph.microsoft.com
     port: 443
     protocol: rest
-    access: read-write
     enforcement: enforce
+    rules:
+      - allow: { method: GET, path: "/v1.0/users/__OUTLOOK_MAILBOX__/mailFolders/inbox/messages" }
+      - allow: { method: POST, path: "/v1.0/users/__OUTLOOK_MAILBOX__/messages/**/reply" }
+      - allow: { method: PATCH, path: "/v1.0/users/__OUTLOOK_MAILBOX__/messages/**" }
 binaries:
   - /usr/bin/python3
   - /usr/bin/python3.13
