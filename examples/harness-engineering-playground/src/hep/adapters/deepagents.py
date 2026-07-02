@@ -365,6 +365,11 @@ class DeepAgentsAdapter(HarnessAdapter):
                 cmd += ["--eval-category", cat]
 
         env = os.environ.copy()
+        # This subprocess is a separate `uv` project (its own .venv under
+        # self._evals_dir). Drop any inherited VIRTUAL_ENV so uv manages that
+        # project's own venv instead of warning about a path mismatch against
+        # hep's own .venv.
+        env.pop("VIRTUAL_ENV", None)
         env.setdefault("LANGSMITH_TEST_SUITE", "deepagents-evals")
         env["HEP_PROFILE_FILE"] = str(config_file)
         existing_pythonpath = env.get("PYTHONPATH")
