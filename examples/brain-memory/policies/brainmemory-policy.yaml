@@ -1,0 +1,71 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Omelas. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# NemoClaw / OpenShell network-policy preset for Brain Memory.
+#
+# NemoClaw runs OpenClaw inside an OpenShell sandbox with a deny-by-default
+# egress policy. This preset allowlists the Brain Memory remote MCP endpoint
+# so the zero-install integration
+#   openclaw mcp add brain-memory --url https://mcp.brainmemory.ai/mcp --auth oauth
+# works from inside the sandbox:
+#   - POST /mcp  — MCP JSON-RPC (memory tools, session negotiation)
+#   - GET  /**   — OAuth 2.0 discovery + authorization flow
+#                  (used by `openclaw mcp login brain-memory`)
+#
+# Apply to a running sandbox:
+#   nemoclaw <sandbox-name> policy-add \
+#     --from-file examples/brain-memory/policies/brainmemory-policy.yaml --yes
+#
+# Persist across sandbox recreations by merging the network_policies entry
+# into your baseline openclaw-sandbox.yaml and re-running `nemoclaw onboard`.
+#
+# Durability note: treat everything inside the sandbox as disposable. If you
+# run the local `brain` CLI in the sandbox instead of the remote MCP, do NOT
+# keep the only copy of ~/.brain there — configure brain sync (Brain Cloud or
+# a private git remote) so memories survive sandbox recreation. Uncomment the
+# matching endpoint entries below when sync runs from inside the sandbox.
+
+preset:
+  name: brain-memory
+  description: "Brain Memory remote MCP (mcp.brainmemory.ai) for OpenClaw/NemoClaw"
+
+network_policies:
+  brain-memory:
+    name: brain-memory
+    endpoints:
+      - host: mcp.brainmemory.ai
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          # MCP JSON-RPC endpoint (tool calls, session negotiation).
+          - allow: { method: POST, path: "/mcp" }
+          # OAuth 2.0 discovery + authorization endpoints used by
+          # `openclaw mcp login brain-memory`.
+          - allow: { method: GET, path: "/**" }
+      # --- Optional: Brain Cloud sync from inside the sandbox -------------
+      # Uncomment when the sandboxed `brain` CLI pushes via Brain Cloud
+      # (`brain memorize --sync` / `/brain:sync push`):
+      # - host: api.brainmemory.ai
+      #   port: 443
+      #   protocol: rest
+      #   enforcement: enforce
+      #   rules:
+      #     - allow: { method: GET, path: "/**" }
+      #     - allow: { method: POST, path: "/**" }
+      # --- Optional: git-remote sync ---------------------------------------
+      # For `~/.brain` git sync, allowlist your git host instead, e.g.:
+      # - host: github.com
+      #   port: 443
+      #   protocol: rest
+      #   enforcement: enforce
+      #   rules:
+      #     - allow: { method: GET, path: "/**" }
+      #     - allow: { method: POST, path: "/**" }
+    binaries:
+      # VERIFY: binary paths depend on the sandbox image; OpenClaw's Gateway
+      # runs on Node, and git handles git-remote sync. Adjust to match the
+      # image used by your sandbox before enforcing.
+      - { path: /usr/local/bin/node }
+      - { path: /usr/bin/node }
+      - { path: /usr/bin/git }
