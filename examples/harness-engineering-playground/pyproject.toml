@@ -28,6 +28,9 @@ dev = [
     "mypy>=1.10",
 ]
 
+[tool.uv.sources]
+deepagents = { path = "external/deepagents/libs/deepagents", editable = true }
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

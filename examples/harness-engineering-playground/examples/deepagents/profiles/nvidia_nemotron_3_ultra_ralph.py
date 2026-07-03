@@ -12,7 +12,7 @@ needed.
 from deepagents import HarnessProfile, register_harness_profile
 
 
-_NEMOTRON_ULTRA_MODEL_KEY: str = "openai:nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B"
+_NEMOTRON_ULTRA_PROFILE_KEY: str = "openai:nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B"
 
 
 def register() -> None:
@@ -21,4 +21,4 @@ def register() -> None:
         system_prompt_suffix="",
         extra_middleware=[],
     )
-    register_harness_profile(_NEMOTRON_ULTRA_MODEL_KEY, profile)
+    register_harness_profile(_NEMOTRON_ULTRA_PROFILE_KEY, profile)

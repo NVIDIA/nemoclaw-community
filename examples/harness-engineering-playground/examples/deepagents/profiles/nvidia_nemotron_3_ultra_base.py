@@ -12,17 +12,13 @@ needed.
 from deepagents import HarnessProfile, register_harness_profile
 
 
-_NEMOTRON_ULTRA_MODEL_SPECS: tuple[str, ...] = (
-    # Self-hosted Nemotron 3 Ultra with openai API.
-    "openai:nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
-)
+_NEMOTRON_ULTRA_PROFILE_KEY: str = "openai:nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B"
 
 
 def register() -> None:
     """Register the built-in Nemotron 3 Ultra harness profile."""
-    profile = HarnessProfile(
+    profile: HarnessProfile = HarnessProfile(
         system_prompt_suffix="",
         extra_middleware=[],
     )
-    for spec in _NEMOTRON_ULTRA_MODEL_SPECS:
-        register_harness_profile(spec, profile)
+    register_harness_profile(_NEMOTRON_ULTRA_PROFILE_KEY, profile)

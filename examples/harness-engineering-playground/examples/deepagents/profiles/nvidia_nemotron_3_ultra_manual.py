@@ -14,11 +14,7 @@ from typing import Any, Awaitable, Callable
 from deepagents import HarnessProfile, register_harness_profile
 from langchain.agents.middleware.types import AgentMiddleware, ToolCallRequest, ToolMessage, Command
 
-
-from deepagents import HarnessProfile, register_harness_profile
-
-
-_NEMOTRON_ULTRA_MODEL_KEY: str = "openai:nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B"
+_NEMOTRON_ULTRA_PROFILE_KEY: str = "openai:nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B"
 
 _READ_NOTICE_DEFAULT_LIMIT = 100  # Deep Agents default read limit (FilesystemMiddleware).
 
@@ -93,6 +89,6 @@ def register() -> None:
     """Register the built-in Nemotron 3 Ultra harness profile."""
     profile: HarnessProfile = HarnessProfile(
         system_prompt_suffix="",
-        extra_middleware=[],
+        extra_middleware=[ReadFileContinuationNoticeMiddleware()],
     )
-    register_harness_profile(_NEMOTRON_ULTRA_MODEL_KEY, profile)
+    register_harness_profile(_NEMOTRON_ULTRA_PROFILE_KEY, profile)

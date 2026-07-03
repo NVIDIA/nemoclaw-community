@@ -342,7 +342,7 @@ wheels = [
 [[package]]
 name = "deepagents"
 version = "0.6.12"
-source = { registry = "https://pypi.org/simple" }
+source = { editable = "external/deepagents/libs/deepagents" }
 dependencies = [
     { name = "langchain" },
     { name = "langchain-anthropic" },
@@ -351,9 +351,37 @@ dependencies = [
     { name = "langsmith" },
     { name = "wcmatch" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e0/db/a6acdc72a9e90c3f07ed10de35c951734a02d4facb693bb59684ad368801/deepagents-0.6.12.tar.gz", hash = "sha256:1f281c0bc5a63132f62e2ee345c1dc593b23188da6e23016401f6879fbe54b5f", size = 211364, upload-time = "2026-06-25T17:26:52.775Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/98/49/af7219b3c13520fee047bb807cfaefba17f8e4584c551d946773589a4f08/deepagents-0.6.12-py3-none-any.whl", hash = "sha256:28b8fa0119ca0a689e3e18e288c4634e4046062acfc87a1cb34289d3af3a1c88", size = 236120, upload-time = "2026-06-25T17:26:51.736Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "langchain", specifier = ">=1.3.11,<2.0.0" },
+    { name = "langchain-anthropic", specifier = ">=1.4.7,<2.0.0" },
+    { name = "langchain-aws", marker = "extra == 'aws'", specifier = ">=1.6.1,<2.0.0" },
+    { name = "langchain-core", specifier = ">=1.4.8,<2.0.0" },
+    { name = "langchain-google-genai", specifier = ">=4.2.6,<5.0.0" },
+    { name = "langchain-quickjs", marker = "extra == 'quickjs'", specifier = ">=0.3.2" },
+    { name = "langsmith", specifier = ">=0.9.3" },
+    { name = "wcmatch", specifier = ">=10.1" },
+]
+provides-extras = ["aws", "quickjs"]
+
+[package.metadata.requires-dev]
+test = [
+    { name = "build" },
+    { name = "langchain-openai" },
+    { name = "langchain-tests", specifier = ">=1.1.9" },
+    { name = "pytest" },
+    { name = "pytest-asyncio", specifier = ">=1.4.0" },
+    { name = "pytest-benchmark" },
+    { name = "pytest-codspeed", specifier = ">=5.0.3,<6.0.0" },
+    { name = "pytest-cov" },
+    { name = "pytest-socket" },
+    { name = "pytest-timeout", specifier = ">=2.4.0,<3.0.0" },
+    { name = "pytest-watcher", specifier = ">=0.6.3,<1.0.0" },
+    { name = "pytest-xdist" },
+    { name = "ruff", specifier = ">=0.15.20,<0.16.0" },
+    { name = "twine" },
+    { name = "ty", specifier = ">=0.0.54,<1.0.0" },
 ]
 
 [[package]]
@@ -455,7 +483,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "deepagents", marker = "extra == 'deepagents'", specifier = ">=0.6" },
+    { name = "deepagents", marker = "extra == 'deepagents'", editable = "external/deepagents/libs/deepagents" },
     { name = "langchain", marker = "extra == 'deepagents'" },
     { name = "langchain-anthropic", marker = "extra == 'deepagents'" },
     { name = "typer", specifier = ">=0.9" },
