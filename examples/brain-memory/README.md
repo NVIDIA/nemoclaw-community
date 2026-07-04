@@ -99,7 +99,20 @@ See the [full integration guide](https://github.com/omelas-tech/brain/blob/main/
 
 ## Verification Status
 
-> **Note:** the remote MCP endpoint and OAuth flow are live and in use by OpenClaw installs today. However, this policy preset has **not yet been exercised against a live NemoClaw sandbox** by the author. In particular, the `binaries:` paths in the preset depend on the sandbox image and carry explicit `VERIFY` comments — adjust them to your image before enforcing. Feedback from a maintainer run is very welcome.
+Verified live on 2026-07-04 against NemoClaw v0.0.73 / OpenShell 0.0.71 (docker, default image), sandbox agent OpenClaw v2026.5.27:
+
+| Probe (inside the sandbox) | Result | Proves |
+|---|---|---|
+| `curl https://mcp.brainmemory.ai/mcp` before `policy-add` | CONNECT tunnel refused (403) | deny-by-default egress |
+| same `curl` after `policy-add` | CONNECT tunnel refused (403) | `binaries:` least-privilege enforced — curl is deliberately not allowlisted |
+| `node` `fetch()` after `policy-add` | HTTP response received | the policy admits exactly the intended binary to exactly the intended host |
+
+The preset applied cleanly both times it was loaded (`policy-add` → "Policy version N loaded"), including once after a sandbox `rebuild`. The `binaries:` path `/usr/local/bin/node` is confirmed correct for the default docker image (node v22.22.2); other images may differ.
+
+Two honest caveats:
+
+- The in-sandbox **OAuth login flow was not exercised**: NemoClaw v0.0.73 pins OpenClaw v2026.5.27, which predates the `openclaw mcp add/login/probe` CLI (its `mcp set` exists, but there is no login command to complete OAuth). The same connector's OAuth + memory tools are verified end-to-end on a host OpenClaw 2026.6.11 install; once NemoClaw ships an OpenClaw ≥ 2026.6, the documented `mcp add`/`mcp login` flow applies as written.
+- A sandbox **`rebuild` resets applied policies** ("Policies: none" afterwards) — re-run `policy-add`, or merge the `network_policies` entry into your baseline `openclaw-sandbox.yaml` as recommended above.
 
 ## Durability Note
 
@@ -107,9 +120,10 @@ Treat everything inside the sandbox as disposable. The remote-MCP path stores no
 
 ## Troubleshooting
 
-- **Egress denials for `mcp.brainmemory.ai`** — the preset is not applied to the running sandbox; re-run the `policy-add` command and watch the OpenShell TUI for interception prompts.
-- **OAuth login never completes** — the `GET /**` rule is required for discovery and authorization; confirm it was not trimmed when merging the preset into a baseline policy.
-- **Binary denials** — adjust the `binaries:` paths in the preset to match your sandbox image (see the `VERIFY` comment).
+- **Egress denials for `mcp.brainmemory.ai`** — the preset is not applied to the running sandbox; re-run the `policy-add` command and watch the OpenShell TUI for interception prompts. Note that a sandbox `rebuild` resets applied policies — re-apply afterwards.
+- **OAuth login never completes** — the `GET /**` rule is required for discovery and authorization; confirm it was not trimmed when merging the preset into a baseline policy. Also check your sandbox's OpenClaw version: `openclaw mcp login` requires OpenClaw ≥ 2026.6 (NemoClaw v0.0.73 ships 2026.5.27).
+- **`curl` probes fail even with the preset applied** — expected: the policy's `binaries:` clause allowlists only the OpenClaw Gateway's node (and git); test reachability with `node` `fetch()` instead, or temporarily add your probe binary.
+- **Binary denials** — the preset's paths are verified for the default docker image (`/usr/local/bin/node`); adjust them if your sandbox uses a custom image.
 - **Plugin path: "brain CLI not found" in the Gateway log** — install it (`npm install -g brain-memory`) or set `plugins.entries.brain-memory.config.brainBin` to its absolute path.
 
 ## Credits And Learn More

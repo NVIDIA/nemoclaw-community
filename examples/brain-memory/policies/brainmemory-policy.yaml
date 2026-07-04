@@ -63,9 +63,10 @@ network_policies:
       #     - allow: { method: GET, path: "/**" }
       #     - allow: { method: POST, path: "/**" }
     binaries:
-      # VERIFY: binary paths depend on the sandbox image; OpenClaw's Gateway
-      # runs on Node, and git handles git-remote sync. Adjust to match the
-      # image used by your sandbox before enforcing.
+      # Verified 2026-07-04 on the default NemoClaw docker image (OpenShell
+      # 0.0.71): the OpenClaw Gateway's node is /usr/local/bin/node. The extra
+      # entries cover images that place node/git elsewhere — adjust for
+      # custom images.
       - { path: /usr/local/bin/node }
       - { path: /usr/bin/node }
       - { path: /usr/bin/git }
