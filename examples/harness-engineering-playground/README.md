@@ -74,8 +74,9 @@ is immediately usable against every existing adapter.
 cd examples/harness-engineering-playground
 git submodule update --init                 # fetches external/deepagents if not already present
 uv sync --extra deepagents
-cp .env.example .env   # fill in RALPH_API_KEY (or ANTHROPIC_API_KEY)
-uv run hep langchain ralph \
+cp .env.example .env   # fill in proposer creds (RALPH_API_KEY / ANTHROPIC_API_KEY)
+                       # and the model-under-test creds (OPENAI_API_BASE / OPENAI_API_KEY)
+uv run --env-file .env hep langchain ralph \
   --model "openai:nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B" \
   --profile external/deepagents/libs/deepagents/deepagents/profiles/harness/_nvidia_nemotron_3_ultra.py \
   --ralph-model anthropic:claude-opus-4-8 \
@@ -92,6 +93,25 @@ See [docs/verify-functionality.md](docs/verify-functionality.md) to confirm your
 before running a real improvement loop, and the `Extending` section below for how to add a
 new `Optimizer` or a new `HarnessAdapter`.
 
+## Environment
+
+`hep` does not read `.env` itself — pass `--env-file .env` to `uv run` (as shown above), or export
+the variables in your shell. There are two distinct credential sets, plus optional tracing:
+
+- **Proposer model** — the frontier model that diagnoses failures and edits the profile:
+  `RALPH_API_KEY` (falls back to `ANTHROPIC_API_KEY`), plus optional `RALPH_MODEL` and
+  `RALPH_BASE_URL`.
+- **Model under evaluation** — the harness target named by `--model`, using its provider's standard
+  LangChain env vars. For an `openai:`-compatible endpoint that's `OPENAI_API_BASE` and
+  `OPENAI_API_KEY`. These are inherited by the eval subprocess.
+- **LangSmith (optional tracing)** — the bundled eval suite refuses to start unless tracing is
+  enabled. To run fully offline with no LangSmith account, set `LANGSMITH_TRACING=true` **and**
+  `LANGSMITH_TEST_TRACKING=false` (this satisfies the suite's gate while skipping all LangSmith
+  network calls). To log real traces instead, set a valid `LANGSMITH_API_KEY` and drop
+  `LANGSMITH_TEST_TRACKING`.
+
+All of these have entries in `.env.example`.
+
 ## Try it: optimize a blank profile from scratch
 
 `examples/deepagents/profiles/nvidia_nemotron_3_ultra_base.py` is a deliberately blank
@@ -99,7 +119,7 @@ new `Optimizer` or a new `HarnessAdapter`.
 copying, no editing the submodule checkout at all:
 
 ```bash
-uv run hep langchain ralph \
+uv run --env-file .env hep langchain ralph \
   --model "openai:nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B" \
   --profile examples/deepagents/profiles/nvidia_nemotron_3_ultra_base.py \
   --category file_operations \
