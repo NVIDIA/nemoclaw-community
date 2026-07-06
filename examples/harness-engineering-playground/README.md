@@ -1,8 +1,41 @@
 # Harness Engineering Playground (`hep`)
 
-A CLI for automated, eval-driven harness profile improvement. `hep` is a standalone dev-tool
-example — a CLI you run against a source checkout, not an OpenShell-run agent blueprint like the
-other examples in this repository.
+> **⚠️ Experimental.** `hep` is an early, evolving example — expect rough
+> edges and breaking changes. Today it ships one framework adapter
+> (`deepagents`) and one optimizer (`ralph`); the extension seams exist so
+> more can be added. Not intended for production use.
+
+`hep` automatically tunes an agent **harness** for a given model so the model performs better on
+real agent tasks — it runs a benchmark, has a frontier model diagnose and fix the failures, and
+verifies each fix sticks. It's a standalone dev-tool example (a CLI you run against a source
+checkout), not an OpenShell-run agent blueprint like the other examples in this repository.
+
+## What problem this solves
+
+A few terms first, since they drive everything below:
+
+- **Agent harness** — the scaffolding wrapped around a raw LLM to turn it into a useful agent: the
+  system prompt, the set of tools and their descriptions, and middleware that pre-/post-processes
+  tool calls and results. The *same model* behaves very differently under a good vs. a poor
+  harness.
+- **Harness profile** — deepagents' name for that scaffolding expressed as config for one model,
+  a [`HarnessProfile`](https://github.com/langchain-ai/deepagents) with fields like
+  `system_prompt_suffix`, `extra_middleware`, and tool-description overrides. deepagents ships
+  tuned built-in profiles for popular models; a newer or less-common model often starts with a
+  blank or generic profile and underperforms until someone tunes it.
+- **The deepagents eval suite** — a pytest-based *behavioral benchmark* (bundled here as the
+  `external/deepagents` submodule's `libs/evals`) that runs a model through concrete agent tasks —
+  file operations, tool use, memory, retrieval, and more — and scores each task pass/fail on
+  whether the agent actually accomplished it. This is the objective signal `hep` optimizes against.
+
+Tuning a harness profile by hand is slow guess-and-check: run the evals, read the failures, tweak
+the prompt or middleware, re-run, repeat. `hep` closes that loop automatically. It runs the
+benchmark, feeds each failing task to a frontier "proposer" model that can investigate the SDK and
+eval-suite source before editing the profile, then re-runs the fix several times to confirm it
+holds and doesn't regress anything else — producing a tuned profile the way a careful engineer
+would, without the manual grind.
+
+## Architecture
 
 `hep` is built around two extension seams:
 
@@ -85,6 +118,25 @@ convention every built-in profile file already follows
 `register_harness_profile`/`_register_harness_profile_impl`). Point `--profile` at any file
 following that shape, anywhere, and `ralph` will tune it — no deepagents source edits
 required.
+
+## Arguments
+
+`hep langchain ralph` options:
+
+| Flag | What it does | Default | Env var |
+| --- | --- | --- | --- |
+| `--model` | Model spec under evaluation — the harness target | *required* | |
+| `--profile` | Path to the `HarnessProfile` Python file to improve | *required* | |
+| `--evals-dir` | A deepagents checkout's `libs/evals` directory | bundled `external/deepagents` submodule | `HEP_EVALS_DIR` |
+| `--ralph-model` | Proposer model that investigates and edits the profile | `anthropic:claude-opus-4-8` | `RALPH_MODEL` |
+| `--ralph-max-turns` | Max tool-call turns per proposer session | `500` | `RALPH_MAX_TURNS` |
+| `--ralph-base-url` | Custom Anthropic-compatible base URL for the proposer | none | `RALPH_BASE_URL` |
+| `--category` | Restrict evals to a category (repeatable) | all categories | |
+| `--max-iters` | Max improvement iterations across all failures | `5` | |
+| `--max-iters-per-failure` | Max fix attempts per failing test per round | `3` | |
+| `--verify-runs` | Consecutive passing runs required to confirm a fix | `1` | |
+
+Run `uv run hep langchain ralph --help` for the authoritative, always-current list.
 
 ## Layout
 
