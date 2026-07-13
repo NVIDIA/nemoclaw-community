@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+version = 1
+
+[[components]]
+kind = "observability"
+enabled = true
+
+[components.config.atif]
+enabled = true
+output_directory = "/sandbox/atif"
+
+[components.config.openinference]
+enabled = @@PHOENIX_ENABLED@@
+transport = "http_binary"
+endpoint = @@PHOENIX_ENDPOINT@@
+service_name = "finguard-payment-ops"
+timeout_millis = 3000
+@@OPENINFERENCE_RESOURCE_ATTRIBUTES@@

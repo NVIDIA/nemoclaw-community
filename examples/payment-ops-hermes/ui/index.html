@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FinGuard — Payment Operations Desk</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="terminal">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">NVIDIA NeMo Claw · Payment Operations</p>
+        <h1>FinGuard <span class="sub">— the agent that can't move money</span></h1>
+      </div>
+      <div class="topbar-actions">
+        <span class="pill dark">Maker: FinGuard (sandbox)</span>
+        <span class="pill">Checker: human (host)</span>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="left-rail">
+        <div class="panel">
+          <div class="panel-heading"><strong>Outbound queue</strong><span id="queueCount"></span></div>
+          <p class="hint">ISO 20022 pain.001 · synthetic</p>
+          <div id="queue"></div>
+          <button id="screenAll" class="ghost-btn">Screen all through FinGuard</button>
+        </div>
+      </aside>
+
+      <section class="center-stage">
+        <div class="prompt-row">
+          <div class="tabs">
+            <button id="tabScreen" class="tab active" type="button">Screening &amp; release</button>
+            <button id="tabChat" class="tab" type="button">Ask FinGuard</button>
+          </div>
+          <span id="selected" class="stage-hint">Select a payment to screen</span>
+        </div>
+        <div class="stage-area">
+          <div id="detail" class="detail">
+            <div class="empty">FinGuard screens each payment against limit, OFAC sanctions,
+            duplicate, and beneficiary checks — then prepares cleared items for a human approver.
+            It cannot release: the payment rail is denied at the sandbox layer.</div>
+          </div>
+          <div id="chatlog" class="chatlog" hidden>
+            <div class="msg"><div class="role">FinGuard</div><div class="body">Ask me to screen the
+            queue, explain a hold, or about myself. I prepare and screen payments — I can't release
+            one; a human approver does that.</div></div>
+          </div>
+        </div>
+        <div id="composer" class="composer" hidden>
+          <textarea id="chatInput" rows="2" placeholder="Ask FinGuard… e.g. Screen the queue and prepare cleared items for a human approver."></textarea>
+          <button id="chatSend" class="btn go" type="button">Send</button>
+        </div>
+      </section>
+
+      <aside class="right-rail">
+        <div class="panel">
+          <div class="panel-heading"><strong>Policy posture</strong></div>
+          <div class="posture ok"><span>Inference</span><b>allowed</b></div>
+          <div class="posture ok"><span>OFAC SDN fixture</span><b>local</b></div>
+          <div class="posture deny"><span>payments-rail.internal</span><b>denied</b></div>
+          <p class="hint">Deny-by-default · agent rail tests execute inside the sandbox</p>
+        </div>
+        <div class="panel">
+          <div class="panel-heading"><strong>Observability</strong></div>
+          <div class="posture"><span>Run ID</span><b id="runId">—</b></div>
+          <div class="posture"><span>Screened</span><b id="screenedN">0</b></div>
+          <div class="posture"><span>Released</span><b id="releasedN">0</b></div>
+          <p class="hint">Agent spans: NeMo Relay · human checker spans: host audit service</p>
+          <a class="tele-link" href="http://127.0.0.1:6006" target="_blank" rel="noopener">Open Phoenix traces ↗</a>
+        </div>
+        <div class="panel">
+          <div class="panel-heading"><strong>Audit log</strong><span id="ledgerCount"></span></div>
+          <div id="audit" class="audit"></div>
+        </div>
+      </aside>
+    </main>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

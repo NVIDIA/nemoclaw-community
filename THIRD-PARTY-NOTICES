@@ -55,6 +55,10 @@ Package: ca-certificates
 License: MPL-2.0
 URL: https://packages.debian.org/
 
+Package: curl
+License: curl license
+URL: https://curl.se/docs/copyright.html
+
 Package: gh (GitHub CLI)
 License: MIT
 URL: https://github.com/cli/cli
@@ -75,6 +79,10 @@ Package: python3-pip
 License: MIT
 URL: https://packages.debian.org/
 
+Package: socat
+License: GPL-2.0-only
+URL: https://packages.debian.org/socat
+
 Package: tzdata
 License: Public domain / BSD-style notices
 URL: https://packages.debian.org/
@@ -86,6 +94,10 @@ Python Packages
 Package: aiohttp
 License: Apache-2.0 AND MIT
 URL: https://github.com/aio-libs/aiohttp
+
+Package: aiofiles
+License: Apache-2.0
+URL: https://github.com/Tinche/aiofiles
 
 Package: cryptography
 License: Apache-2.0 OR BSD-3-Clause
@@ -167,6 +179,18 @@ Project: NousResearch/hermes-agent source archive
 License: MIT
 URL: https://github.com/NousResearch/hermes-agent
 
+Project: NVIDIA/NeMo-Relay release binary
+License: Apache-2.0
+URL: https://github.com/NVIDIA/NeMo-Relay
+
+Project: NVIDIA/OpenShell installer and runtime
+License: Apache-2.0
+URL: https://github.com/NVIDIA/OpenShell
+
+Project: Astral uv installer and package manager
+License: Apache-2.0 OR MIT
+URL: https://github.com/astral-sh/uv
+
 Project: NVIDIA/NeMo-Flow patch archive
 License: Apache-2.0
 URL: https://github.com/NVIDIA/NeMo-Flow
@@ -187,6 +211,10 @@ Service: NVIDIA Developer Forums
 Terms: See provider terms
 URL: https://forums.developer.nvidia.com/
 
+Dataset: Curated fixture derived from the U.S. Treasury OFAC Specially Designated Nationals list
+License: U.S. Government work, public domain
+URL: https://sanctionslistservice.ofac.treas.gov/
+
 ================================================================================
 Assets
 ================================================================================
@@ -194,3 +222,7 @@ Assets
 Asset: NVIDIA header image under examples/personal-community-sentiment-triage/assets/
 Owner: NVIDIA
 Notes: Personal/workspace screenshots are intentionally not distributed in this repository.
+
+Asset: NVIDIA header image under examples/payment-ops-hermes/assets/
+Owner: NVIDIA
+Notes: Reuses the repository's existing NVIDIA-owned header asset.

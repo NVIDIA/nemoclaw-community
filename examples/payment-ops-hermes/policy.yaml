@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+version: 1
+filesystem_policy:
+  include_workdir: true
+  read_only:
+    - /usr
+    - /lib
+    - /opt/hermes
+    - /etc
+    - /proc
+  read_write:
+    - /sandbox
+    - /tmp
+    - /dev/null
+landlock:
+  compatibility: best_effort
+process:
+  run_as_user: sandbox
+  run_as_group: sandbox
+network_policies:
+  phoenix:
+    name: phoenix
+    endpoints:
+      - host: host.openshell.internal
+        port: 6006
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: POST, path: "/**" }
+    binaries:
+      - { path: /usr/local/bin/nemo-relay }
+# Deliberately absent: payments-rail.internal and every real payment network.
+# OpenShell's deny-by-default egress is the maker/checker enforcement boundary.

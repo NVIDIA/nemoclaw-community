@@ -24,6 +24,7 @@ The table below lists examples maintained in this repository. Additional NemoCla
 | Harness Engineering Playground | A CLI dev tool (not an OpenShell blueprint) for automated, eval-driven harness profile improvement, with pluggable target-framework adapters and optimization techniques. | [Guide](examples/harness-engineering-playground/README.md) |
 | Retail Assistant | Deploys a Telegram-based retail management assistant that maps users to store roles, queries retail data through a FastAPI service, and runs the agent inside an OpenShell sandbox. | [Guide](examples/retail-assistant/README.md) |
 | Watchtower | Runs a scheduled web-monitoring agent that searches watchlist topics with Tavily, extracts source text when needed, dedups against persistent seen-state, and writes cited Markdown digests plus JSON changelogs from an OpenShell sandbox. | [Guide](examples/watchtower/README.md) |
+| Payment Operations Hermes Assistant | Runs a regulated payment-operations workflow in a constrained Hermes sandbox, with NeMo Relay evidence, sanctions screening, and a platform-enforced human release boundary. | [Guide](examples/payment-ops-hermes/README.md) |
 
 ## Getting Started
 

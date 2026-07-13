@@ -1,0 +1,90 @@
+{
+  "Document": {
+    "CstmrCdtTrfInitn": {
+      "GrpHdr": {
+        "MsgId": "FINGUARD-DEMO-20260609-001",
+        "CreDtTm": "2026-06-08T22:00:00Z",
+        "NbOfTxs": "6",
+        "CtrlSum": 3080000.00,
+        "InitgPty": { "Nm": "Northwind Capital LLC" }
+      },
+      "PmtInf": [
+        {
+          "PmtInfId": "BATCH-2026-06-09-A",
+          "PmtMtd": "TRF",
+          "NbOfTxs": "4",
+          "ReqdExctnDt": { "Dt": "2026-06-09" },
+          "Dbtr": { "Nm": "Northwind Capital LLC" },
+          "DbtrAcct": { "Id": { "IBAN": "US64SVBKUS6S3300958879" } },
+          "DbtrAgt": { "FinInstnId": { "BICFI": "CHASUS33" } },
+          "CdtTrfTxInf": [
+            {
+              "PmtId": { "InstrId": "INSTR-1007", "EndToEndId": "WIRE-1007" },
+              "PmtTpInf": { "SvcLvl": { "Prtry": "WIRE" } },
+              "Amt": { "InstdAmt": { "Ccy": "USD", "value": 250000.00 } },
+              "CdtrAgt": { "FinInstnId": { "BICFI": "DEUTDEFF", "Nm": "Deutsche Bank AG" } },
+              "Cdtr": { "Nm": "Acme Manufacturing GmbH", "PstlAdr": { "Ctry": "DE" } },
+              "CdtrAcct": { "Id": { "IBAN": "DE89370400440532013000" } },
+              "RmtInf": { "Ustrd": ["Q2 component supply invoice 88421"] }
+            },
+            {
+              "PmtId": { "InstrId": "INSTR-1008", "EndToEndId": "WIRE-1008" },
+              "PmtTpInf": { "SvcLvl": { "Prtry": "WIRE" } },
+              "Amt": { "InstdAmt": { "Ccy": "USD", "value": 2500000.00 } },
+              "CdtrAgt": { "FinInstnId": { "BICFI": "DNBANOKK", "Nm": "DNB Bank ASA" } },
+              "Cdtr": { "Nm": "Nordwind Logistics AS", "PstlAdr": { "Ctry": "NO" } },
+              "CdtrAcct": { "Id": { "IBAN": "NO9386011117947" } },
+              "RmtInf": { "Ustrd": ["Charter settlement"] }
+            },
+            {
+              "PmtId": { "InstrId": "INSTR-2003", "EndToEndId": "ACH-2003" },
+              "PmtTpInf": { "SvcLvl": { "Prtry": "ACH" } },
+              "Amt": { "InstdAmt": { "Ccy": "USD", "value": 50000.00 } },
+              "CdtrAgt": { "FinInstnId": { "BICFI": "ROSYRU2P", "Nm": "BANK ROSSIYA" } },
+              "Cdtr": { "Nm": "Volkov Trading LLC", "PstlAdr": { "Ctry": "RU" } },
+              "CdtrAcct": { "Id": { "IBAN": "RU0204452560040702810412345678901" } },
+              "RmtInf": { "Ustrd": ["Consulting services"] }
+            },
+            {
+              "PmtId": { "InstrId": "INSTR-2004", "EndToEndId": "ACH-2004" },
+              "PmtTpInf": { "SvcLvl": { "Prtry": "ACH" } },
+              "Amt": { "InstdAmt": { "Ccy": "USD", "value": 40000.00 } },
+              "CdtrAgt": { "FinInstnId": { "BICFI": "FNBOUS44", "Nm": "First National Bank" } },
+              "Cdtr": { "Nm": "Bright Future Foundation", "PstlAdr": { "Ctry": "US" } },
+              "RmtInf": { "Ustrd": ["Grant disbursement"] }
+            }
+          ]
+        },
+        {
+          "PmtInfId": "BATCH-2026-06-10-A",
+          "PmtMtd": "TRF",
+          "NbOfTxs": "2",
+          "ReqdExctnDt": { "Dt": "2026-06-10" },
+          "Dbtr": { "Nm": "Northwind Capital LLC" },
+          "DbtrAcct": { "Id": { "IBAN": "US64SVBKUS6S3300958879" } },
+          "DbtrAgt": { "FinInstnId": { "BICFI": "CHASUS33" } },
+          "CdtTrfTxInf": [
+            {
+              "PmtId": { "InstrId": "INSTR-1011", "EndToEndId": "WIRE-1011" },
+              "PmtTpInf": { "SvcLvl": { "Prtry": "WIRE" } },
+              "Amt": { "InstdAmt": { "Ccy": "USD", "value": 120000.00 } },
+              "CdtrAgt": { "FinInstnId": { "BICFI": "HBUKGB4B", "Nm": "HSBC UK Bank plc" } },
+              "Cdtr": { "Nm": "Meridian Steel Co", "PstlAdr": { "Ctry": "GB" } },
+              "CdtrAcct": { "Id": { "IBAN": "GB29NWBK60161331926819" } },
+              "RmtInf": { "Ustrd": ["Raw materials PO 55120"] }
+            },
+            {
+              "PmtId": { "InstrId": "INSTR-1012", "EndToEndId": "WIRE-1012" },
+              "PmtTpInf": { "SvcLvl": { "Prtry": "WIRE" } },
+              "Amt": { "InstdAmt": { "Ccy": "USD", "value": 120000.00 } },
+              "CdtrAgt": { "FinInstnId": { "BICFI": "HBUKGB4B", "Nm": "HSBC UK Bank plc" } },
+              "Cdtr": { "Nm": "Meridian Steel Co", "PstlAdr": { "Ctry": "GB" } },
+              "CdtrAcct": { "Id": { "IBAN": "GB29NWBK60161331926819" } },
+              "RmtInf": { "Ustrd": ["Raw materials PO 55120 (resubmitted)"] }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

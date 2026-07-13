@@ -1,0 +1,28 @@
+{
+  "source": "OFAC Specially Designated Nationals (SDN) List",
+  "source_url": "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.CSV",
+  "retrieved": "2026-06-08",
+  "license": "U.S. Government work, public domain",
+  "record_count": 3,
+  "note": "Curated public-data fixture for deterministic offline screening. It contains the BANK ROSSIYA positive control plus two unrelated SDN records. It is not a complete or current sanctions list and must not be used for production screening.",
+  "entries": [
+    {
+      "ent_num": "36",
+      "name": "AEROCARIBBEAN AIRLINES",
+      "type": "entity",
+      "programs": "CUBA"
+    },
+    {
+      "ent_num": "306",
+      "name": "BANCO NACIONAL DE CUBA",
+      "type": "entity",
+      "programs": "CUBA"
+    },
+    {
+      "ent_num": "16681",
+      "name": "BANK ROSSIYA",
+      "type": "entity",
+      "programs": "UKRAINE-EO13661"
+    }
+  ]
+}

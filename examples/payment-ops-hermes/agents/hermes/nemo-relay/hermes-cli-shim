@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# PATH-prepended shim for the `hermes` CLI in interactive sandbox shells.
+# Installed at /usr/local/lib/nemoclaw/bin/hermes and reached by PATH order
+# (set in /tmp/nemoclaw-proxy-env.sh, sourced by /sandbox/.bashrc).
+#
+# For setup/doctor it prints a brief note about the in-sandbox config
+# lifecycle (writes go to /sandbox/.hermes-data and are reset on next
+# bring-up unless captured via scripts/snapshot.sh + scripts/restore.sh),
+# then execs the upstream binary. All other subcommands are pure passthrough.
+# Telemetry flows via NEMO_RELAY_GATEWAY_URL in env.
+
+set -euo pipefail
+
+case "${1:-}" in
+  setup|doctor)
+    echo "Note: 'hermes $1' writes to /sandbox/.hermes-data/ — preserve across" >&2
+    echo "restarts with 'scripts/snapshot.sh' + 'scripts/restore.sh', else changes" >&2
+    echo "reset to the host-managed config on next sandbox bring-up." >&2
+    echo "" >&2
+    ;;
+esac
+
+exec /usr/local/bin/hermes "$@"
