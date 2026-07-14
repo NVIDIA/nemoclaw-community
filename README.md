@@ -24,9 +24,18 @@ The table below lists examples maintained in this repository. Additional NemoCla
 | Harness Engineering Playground | A CLI dev tool (not an OpenShell blueprint) for automated, eval-driven harness profile improvement, with pluggable target-framework adapters and optimization techniques. | [Guide](examples/harness-engineering-playground/README.md) |
 | Retail Assistant | Deploys a Telegram-based retail management assistant that maps users to store roles, queries retail data through a FastAPI service, and runs the agent inside an OpenShell sandbox. | [Guide](examples/retail-assistant/README.md) |
 
+## External Community Examples
+
+These examples are maintained in their own repositories and follow their own
+support and compatibility policies.
+
+| Example | Description | Link |
+| ---- | ----------- | ---- |
+| Agent Voice Bot | Adds a responsive Pipecat voice frontend to OpenClaw, Hermes, or LangChain Deep Agents Code running directly or through NemoClaw, while keeping the latency-sensitive voice loop separate from background agent work. | [Guide](https://github.com/chadbailey59/agent-voice-bot) |
+
 ## Getting Started
 
-Choose an example from the table above and follow its guide. To run an example from this repository, clone the repo first:
+Choose an example from the tables above and follow its guide. To run an example from this repository, clone the repo first:
 
 ```bash
 git clone https://github.com/NVIDIA/nemoclaw-community.git
