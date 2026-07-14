@@ -197,8 +197,11 @@ itself). The session UUID for Outlook gets produced *between* them, so the order
 
 ```console
 $ git clone https://github.com/NVIDIA/nemoclaw-community.git && cd examples/personal-community-sentiment-triage/
-$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION=v0.0.53 sh
+$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION=v0.0.72 sh
 ```
+
+OpenShell `v0.0.72` matches the supported version in the NemoClaw `v0.0.82`
+release that publishes this example's pinned Hermes sandbox base image.
 
 The package-managed installer starts a local gateway service for you. This
 example assumes that default path and targets the `openshell` gateway at
@@ -346,11 +349,12 @@ The example's Dockerfile drops the upstream `COPY nemoclaw-blueprint/` step —
 nothing in the Hermes runtime reads `/sandbox/.nemoclaw/blueprints/`, so this
 example is **fully self-contained** and never needs a NemoClaw checkout.
 
-The Dockerfile always installs NeMo-Relay: it fetches the pinned, prebuilt
-`nemo-relay-cli` release in a builder stage, upgrades Hermes to a version with
-rich plugin hook payloads, and runs a sidecar gateway at startup. That is
-enough for the agent to write ATIF trace records to `/tmp/atif/` — capture
-them with [`scripts/download-traces.sh`](scripts/download-traces.sh).
+The Dockerfile inherits Hermes from the pinned NemoClaw Hermes sandbox base
+image, fetches the pinned, prebuilt `nemo-relay-cli` release in a builder stage,
+and runs a sidecar gateway at startup. The pinned base is published by NemoClaw
+and includes a Hermes version with rich plugin hook payloads. That is enough for
+the agent to write ATIF trace records to `/tmp/atif/` — capture them with
+[`scripts/download-traces.sh`](scripts/download-traces.sh).
 
 Setting `PHOENIX_COLLECTOR_ENDPOINT` is a separate opt-in for live
 OpenInference egress: when present, `03-sandbox.sh` bakes the URL into the

@@ -9,7 +9,9 @@
 
 # ARGs that appear in FROM instructions must be declared before the first FROM
 # so Docker treats them as global build args (multi-stage scoping rule).
-ARG BASE_IMAGE=ghcr.io/nvidia/nemoclaw/hermes-sandbox-base@sha256:f76a2ed0509570b1ce5380327c7ebe2e120e97f524e9271e145d2ea34c83ba5e
+# Published by NVIDIA/NemoClaw v0.0.82. This base includes Hermes
+# v2026.7.1 (0.18.0), so this example does not reinstall Hermes separately.
+ARG BASE_IMAGE=ghcr.io/nvidia/nemoclaw/hermes-sandbox-base@sha256:fa05221f5c7bcafea7e263c84e5d06f87e37d1ccb78dc28c113f1a4066aa544c
 
 # ── Stage 0: fetch the pinned, prebuilt nemo-relay CLI (no source build) ──────
 # Upstream publishes musl-static CLI release assets (zero glibc linkage), so the
@@ -99,59 +101,6 @@ RUN mkdir -p /etc/apt/keyrings \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip3 install --no-cache-dir --break-system-packages "httpx>=0.27" "markdown-it-py>=3" "aiohttp>=3.10,<4" "aiofiles>=23.2,<25"
-
-# ── Upgrade Hermes from base image's v0.11.0 to v0.14.0 ─────────────────
-# NemoClaw's base image (even at its latest tag) pins HERMES_VERSION=v2026.4.23
-# (Hermes v0.11.0). v0.11.0's plugin hooks ship metadata-only kwargs to
-# pre_api_request / post_api_request — no real messages, no real response —
-# so observability backends (Langfuse, NeMo-Relay's hermes adapter) cannot
-# emit LLM spans with full content. v0.14.0 (v2026.5.16, "The Foundation
-# Release") adds rich-kwargs hook delivery and ships the bundled Langfuse
-# plugin that depends on it.
-#
-# We mirror NemoClaw's tarball + uv-sync install pattern, but for a newer
-# version. /opt/hermes/.venv is preserved across the upgrade so uv can
-# incrementally reconcile dependencies against v0.14.0's uv.lock.
-ARG HERMES_UPGRADE_VERSION=v2026.5.16
-ARG HERMES_UPGRADE_TARBALL_SHA256=c0a554050a50ee9a62f3fa5cd288a167ba5640c42d647d100cdea084b7294143
-# messaging: slack-bolt + slack-sdk + aiohttp (and friends) for the Slack
-#   platform path.
-# web: fastapi + uvicorn for Hermes's web tools.
-# cli: simple-term-menu, used by `hermes chat` TUI menus. Without this the
-#   TUI banner path can try to lazy-install at runtime, which the
-#   locked-down sandbox can't satisfy.
-# edge-tts: edge-tts==7.2.7. The TTS check_fn fires during banner
-#   enumeration regardless of toolset config; pre-installing avoids the
-#   PyPI fetch attempt at runtime. HERMES_DISABLE_LAZY_INSTALLS=1 (set
-#   below + in start.sh) is the belt-and-suspenders fallback for any
-#   other lazy feature we haven't pre-installed.
-ARG HERMES_UV_EXTRAS="messaging web cli edge-tts"
-# Match the uv version NemoClaw uses for the base-image install.
-ARG UV_INSTALL_VERSION=0.11.8
-
-USER root
-RUN set -eu \
-    && curl -LsSf "https://astral.sh/uv/${UV_INSTALL_VERSION}/install.sh" \
-       | env INSTALLER_NO_MODIFY_PATH=1 sh \
-    && UV_BIN="" \
-    && for candidate in /root/.local/bin/uv /root/.cargo/bin/uv /usr/local/bin/uv; do \
-         if [ -x "$candidate" ]; then UV_BIN="$candidate"; break; fi; \
-       done \
-    && if [ -z "$UV_BIN" ]; then echo "uv installer did not produce a binary in any known location" >&2; exit 1; fi \
-    && install -m 755 "$UV_BIN" /usr/local/bin/uv \
-    && /usr/local/bin/uv --version \
-    && curl -fsSL "https://github.com/NousResearch/hermes-agent/archive/refs/tags/${HERMES_UPGRADE_VERSION}.tar.gz" \
-       -o /tmp/hermes.tgz \
-    && echo "${HERMES_UPGRADE_TARBALL_SHA256}  /tmp/hermes.tgz" | sha256sum -c - \
-    && find /opt/hermes -mindepth 1 -maxdepth 1 -not -name '.venv' -exec rm -rf {} + \
-    && tar -xzf /tmp/hermes.tgz -C /opt/hermes --strip-components=1 \
-    && rm /tmp/hermes.tgz \
-    && cd /opt/hermes \
-    && extras_args="" \
-    && for e in ${HERMES_UV_EXTRAS}; do extras_args="${extras_args} --extra ${e}"; done \
-    && UV_PROJECT_ENVIRONMENT=/opt/hermes/.venv /usr/local/bin/uv sync \
-       ${extras_args} --no-dev \
-    && chown -R sandbox:sandbox /opt/hermes
 
 # ── NeMo-Relay 0.3.0 sidecar gateway integration ─────────────────────────
 # Hermes stays unpatched (from BASE_IMAGE). start.sh launches a long-running
