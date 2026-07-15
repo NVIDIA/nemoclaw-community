@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """In-process Hermes plugin that forwards pre/post_api_request and
 pre/post_tool_call hooks to the NeMo-Relay sidecar at
-`${NEMO_RELAY_GATEWAY_URL}/hooks/hermes` with the real request/response
-bodies attached. Wrapping the body as `{messages, model, max_tokens}`
-and synthesizing stable tool_call_ids are workarounds — see the inline
-comments at each call site for the upstream rationale.
+`${NEMO_RELAY_GATEWAY_URL}/hooks/hermes` with the sanitized Hermes 0.18
+request/response bodies attached. Legacy rich-kwargs payloads remain supported,
+and stable tool_call_ids are synthesized where Hermes does not supply one — see
+the inline comments at each call site for the upstream rationale.
 
 Fail-open: exceptions are logged at debug; Hermes turns must never break
 because the bridge can't reach NeMo-Relay. Modeled on Hermes's bundled
@@ -59,6 +59,7 @@ _PENDING_LOCK = threading.Lock()
 # Gateway URL + HTTP client
 # ---------------------------------------------------------------------------
 
+
 def _gateway_url() -> Optional[str]:
     global _GATEWAY_URL, _GATEWAY_LOOKED_UP, _DISABLED_LOGGED
     with _LOCK:
@@ -98,6 +99,7 @@ def _client():
 # ---------------------------------------------------------------------------
 # Value coercion
 # ---------------------------------------------------------------------------
+
 
 def _safe_jsonable(value: Any, _depth: int = 0) -> Any:
     """Recursively coerce any value into something json.dumps can serialize.
@@ -144,10 +146,11 @@ def _coerce_request_messages(
     conversation_history: Any = None,
     user_message: Any = None,
 ) -> list:
-    """Hermes v0.14.0 passes a real `request_messages` list of {role, content}
-    dicts. Fall back to conversation_history, then synthesize a single user
-    message from user_message — mirrors Langfuse's resolver at
-    plugins/observability/langfuse/__init__.py."""
+    """Resolve legacy rich-kwargs request messages.
+
+    Hermes 0.18 callers should use the sanitized ``request.body`` payload;
+    this fallback keeps older base images and test fixtures compatible.
+    """
     for candidate in (request_messages, conversation_history):
         if isinstance(candidate, list) and candidate:
             return candidate
@@ -156,6 +159,14 @@ def _coerce_request_messages(
     if isinstance(request_messages, list):
         return request_messages
     return []
+
+
+def _serialize_request_object(request: Any) -> Optional[dict]:
+    """Return Hermes 0.18's sanitized request object when it has a body."""
+    blob = _safe_jsonable(request)
+    if not isinstance(blob, dict) or not isinstance(blob.get("body"), dict):
+        return None
+    return blob
 
 
 def _serialize_tool_calls(tool_calls: Any) -> list:
@@ -169,11 +180,13 @@ def _serialize_tool_calls(tool_calls: Any) -> list:
         fn = getattr(tc, "function", None)
         name = getattr(fn, "name", None) if fn else None
         args = getattr(fn, "arguments", None) if fn else None
-        out.append({
-            "id": getattr(tc, "id", None),
-            "type": getattr(tc, "type", None) or "function",
-            "function": {"name": name, "arguments": _safe_jsonable(args)},
-        })
+        out.append(
+            {
+                "id": getattr(tc, "id", None),
+                "type": getattr(tc, "type", None) or "function",
+                "function": {"name": name, "arguments": _safe_jsonable(args)},
+            }
+        )
     return out
 
 
@@ -192,10 +205,12 @@ def _serialize_assistant_message(obj: Any) -> Optional[dict]:
 
 
 def _serialize_response_object(response: Any) -> Optional[dict]:
-    """Turn the v0.14.0 `response=` kwarg (a SimpleNamespace with
-    .choices/.usage/.model/.id) into a dict. The result has `choices` at
-    top-level, which adapters/hermes.rs recognizes as a real
-    provider response and uses to mark provider_payload_exact=true."""
+    """Serialize a legacy raw provider response when Hermes supplies one.
+
+    Hermes 0.18 instead supplies a sanitized mapping with
+    ``assistant_message`` at the top level. That mapping is handled separately
+    so it is not mislabeled as an exact raw provider response.
+    """
     if response is None:
         return None
     blob = _safe_jsonable(response)
@@ -209,6 +224,7 @@ def _serialize_response_object(response: Any) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 # Forwarder
 # ---------------------------------------------------------------------------
+
 
 def _forward(payload: dict) -> None:
     url = _gateway_url()
@@ -271,33 +287,29 @@ def _stable_tool_call_id(
 # Hook handlers
 # ---------------------------------------------------------------------------
 
+
 def on_pre_api_request(**kwargs: Any) -> None:
     try:
         payload = _correlation(kwargs)
         payload["hook_event_name"] = "pre_api_request"
-        messages = _coerce_request_messages(
-            request_messages=kwargs.get("request_messages"),
-            conversation_history=kwargs.get("conversation_history"),
-            user_message=kwargs.get("user_message"),
-        )
-        # Wrap as {"messages": [...], "model": ..., ...} to match NeMo-Relay's
-        # documented LlmRequest.content convention
-        # (docs/integrate-frameworks/wrap-llm-calls.md, asserted by
-        # crates/core/tests/unit/observability/openinference_tests.rs). With
-        # this shape, openinference.rs:llm_input_display_value finds the
-        # messages list via content.get("messages") and renders each as
-        # "role: content", so Phoenix's input.value carries the full prompt
-        # rather than a lossy "Requested tools: ..." summary. ATIF's
-        # unwrap_llm_request surfaces the same dict at
-        # step.extra.llm_request, matching the documented shape.
-        payload["request"] = {
-            "body": {
-                "messages": _safe_jsonable(messages),
-                "model": kwargs.get("model"),
-                "max_tokens": kwargs.get("max_tokens"),
-            },
-            "api_mode": kwargs.get("api_mode"),
-        }
+        request = _serialize_request_object(kwargs.get("request"))
+        if request is None:
+            messages = _coerce_request_messages(
+                request_messages=kwargs.get("request_messages"),
+                conversation_history=kwargs.get("conversation_history"),
+                user_message=kwargs.get("user_message"),
+            )
+            # Legacy fallback matching NeMo-Relay's documented
+            # LlmRequest.content convention.
+            request = {
+                "body": {
+                    "messages": _safe_jsonable(messages),
+                    "model": kwargs.get("model"),
+                    "max_tokens": kwargs.get("max_tokens"),
+                },
+                "api_mode": kwargs.get("api_mode"),
+            }
+        payload["request"] = request
         _forward(payload)
     except Exception as exc:
         logger.debug("nemo-relay: on_pre_api_request failed: %s", exc)
@@ -307,22 +319,33 @@ def on_post_api_request(**kwargs: Any) -> None:
     try:
         payload = _correlation(kwargs)
         payload["hook_event_name"] = "post_api_request"
-        # Primary path: serialize the real response SimpleNamespace into a
-        # dict with `choices/usage/model/id`. The adapter's
-        # hermes_exact_response sees .choices and returns the whole dict,
-        # which OpenInference renders as input/output.value.
-        raw_response = _serialize_response_object(kwargs.get("response"))
-        # Redundant fallback path: include serialized assistant_message in
-        # case raw_response can't be extracted. Adapter has a separate
-        # branch for response.assistant_message.{content,tool_calls}.
-        assistant_message = _serialize_assistant_message(kwargs.get("assistant_message"))
+        response_value = kwargs.get("response")
+        response_blob = _safe_jsonable(response_value)
+        response_fields = response_blob if isinstance(response_blob, dict) else {}
+        # Older Hermes versions passed the raw SDK response. Hermes 0.18 passes
+        # a sanitized mapping instead; keep it out of raw_response and consume
+        # its explicit assistant/model/usage fields below.
+        raw_response = _serialize_response_object(response_value)
+        assistant_source = kwargs.get("assistant_message")
+        if assistant_source is None:
+            assistant_source = response_fields.get("assistant_message")
+        assistant_message = _serialize_assistant_message(assistant_source)
+        usage = kwargs.get("usage")
+        if usage is None:
+            usage = response_fields.get("usage")
         payload["response"] = {
             "raw_response": raw_response,
             "assistant_message": assistant_message,
-            "model": kwargs.get("response_model") or kwargs.get("model"),
-            "finish_reason": kwargs.get("finish_reason"),
+            "model": (
+                kwargs.get("response_model")
+                or response_fields.get("model")
+                or kwargs.get("model")
+            ),
+            "finish_reason": (
+                kwargs.get("finish_reason") or response_fields.get("finish_reason")
+            ),
             "api_duration": kwargs.get("api_duration"),
-            "usage": _safe_jsonable(kwargs.get("usage")),
+            "usage": _safe_jsonable(usage),
         }
         _forward(payload)
     except Exception as exc:
@@ -402,6 +425,7 @@ def on_post_tool_call(**kwargs: Any) -> None:
 # ---------------------------------------------------------------------------
 # Plugin entry-point
 # ---------------------------------------------------------------------------
+
 
 def register(ctx) -> None:
     """Wire pre/post_api_request and pre/post_tool_call to the in-process

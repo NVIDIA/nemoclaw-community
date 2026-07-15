@@ -141,6 +141,7 @@ COPY agents/hermes/refresh-placeholders.py /usr/local/lib/nemoclaw/refresh-place
 RUN chmod 755 /usr/local/lib/nemoclaw/refresh-placeholders.py
 
 COPY agents/hermes/patches/ /usr/local/lib/nemoclaw-patches/
+COPY agents/hermes/tests/verify-rich-block-renderer.py /tmp/verify-rich-block-renderer.py
 
 # Pin slack-bolt / python-telegram-bot / pyyaml / httpx into the system
 # python interpreter. slack-bolt is needed by the sitecustomize.py
@@ -152,6 +153,8 @@ RUN pip3 install --no-cache-dir --break-system-packages \
        "httpx>=0.27" \
        "slack-bolt>=1.19" \
     && hermes --version \
+    && /opt/hermes/.venv/bin/python /tmp/verify-rich-block-renderer.py \
+    && rm /tmp/verify-rich-block-renderer.py \
     && export PY_SITE_DIR="$(python3 -c 'import site; print(site.getsitepackages()[0])')" \
     && ln -sfn /usr/local/lib/nemoclaw-patches/sitecustomize.py "${PY_SITE_DIR}/sitecustomize.py"
 
@@ -283,6 +286,7 @@ ARG CHAT_UI_URL=http://127.0.0.1:8642
 # injected at sandbox-create time via `-- env` (scripts/03-sandbox.sh) so the
 # image stays generic and shareable.
 ARG NEMOCLAW_MESSAGING_CHANNELS_B64=W10=
+ARG NEMOCLAW_SLACK_RICH_BLOCKS=false
 ARG GITHUB_READONLY_REPO=NVIDIA/OpenShell
 ARG SOURCE_ETL_GITHUB_REPO=
 ARG SOURCE_ETL_FORUM_TAG=
@@ -297,6 +301,7 @@ ENV NEMOCLAW_MODEL=${NEMOCLAW_MODEL} \
     NEMOCLAW_INFERENCE_BASE_URL=${NEMOCLAW_INFERENCE_BASE_URL} \
     CHAT_UI_URL=${CHAT_UI_URL} \
     NEMOCLAW_MESSAGING_CHANNELS_B64=${NEMOCLAW_MESSAGING_CHANNELS_B64} \
+    NEMOCLAW_SLACK_RICH_BLOCKS=${NEMOCLAW_SLACK_RICH_BLOCKS} \
     GITHUB_READONLY_REPO=${GITHUB_READONLY_REPO} \
     SOURCE_ETL_GITHUB_REPO=${SOURCE_ETL_GITHUB_REPO} \
     SOURCE_ETL_FORUM_TAG=${SOURCE_ETL_FORUM_TAG} \

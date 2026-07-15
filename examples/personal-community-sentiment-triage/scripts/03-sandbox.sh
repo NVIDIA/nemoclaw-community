@@ -60,12 +60,23 @@ if [[ ! "$GITHUB_READONLY_REPO" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]
 fi
 echo "GitHub read-only repo scope: $GITHUB_READONLY_REPO"
 
+NEMOCLAW_SLACK_RICH_BLOCKS="${NEMOCLAW_SLACK_RICH_BLOCKS:-false}"
+case "$NEMOCLAW_SLACK_RICH_BLOCKS" in
+  true|false) ;;
+  *)
+    echo "Invalid NEMOCLAW_SLACK_RICH_BLOCKS '$NEMOCLAW_SLACK_RICH_BLOCKS' — expected true or false" >&2
+    exit 1
+    ;;
+esac
+echo "Slack rich blocks: $NEMOCLAW_SLACK_RICH_BLOCKS"
+
 # ── Stage the Dockerfile and patch ARG defaults ────────────────────────
 # Build args go through sed substitution because `openshell sandbox create
 # --from <Dockerfile>` doesn't expose --build-arg passthrough. Values must
 # not contain `|` (the sed delimiter).
 declare -A DOCKERFILE_ARGS=(
   [NEMOCLAW_MESSAGING_CHANNELS_B64]="$CHANNELS_B64"
+  [NEMOCLAW_SLACK_RICH_BLOCKS]="$NEMOCLAW_SLACK_RICH_BLOCKS"
   [GITHUB_READONLY_REPO]="$GITHUB_READONLY_REPO"
   [SOURCE_ETL_API_HOST]="$SOURCE_ETL_HOST"
   [SOURCE_ETL_API_PORT]="$SOURCE_ETL_PORT"

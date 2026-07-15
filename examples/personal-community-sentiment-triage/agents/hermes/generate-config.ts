@@ -43,9 +43,26 @@ const SOURCE_ETL_ENV = [
   "SOURCE_ETL_API_PORT",
 ] as const;
 
+function booleanEnv(name: string, defaultValue: boolean): boolean {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") {
+    return defaultValue;
+  }
+
+  if (raw === "true") {
+    return true;
+  }
+  if (raw === "false") {
+    return false;
+  }
+
+  throw new Error(`${name} must be either true or false`);
+}
+
 function main(): void {
   const model = process.env.NEMOCLAW_MODEL!;
   const baseUrl = process.env.NEMOCLAW_INFERENCE_BASE_URL!;
+  const slackRichBlocks = booleanEnv("NEMOCLAW_SLACK_RICH_BLOCKS", false);
 
   const channelsB64 = process.env.NEMOCLAW_MESSAGING_CHANNELS_B64 || "W10=";
 
@@ -54,7 +71,7 @@ function main(): void {
   );
 
   const config: Record<string, unknown> = {
-    _config_version: 12,
+    _config_version: 32,
     model: {
       default: model,
       provider: "custom",
@@ -67,6 +84,10 @@ function main(): void {
     agent: {
       max_turns: 30,
       reasoning_effort: "medium",
+      // Config migration v30 -> v32 disables the previous implicit
+      // verify-on-stop behavior. Generated configs start at v32, so preserve
+      // that migrated value explicitly instead of inheriting "auto".
+      verify_on_stop: false,
     },
     memory: {
       memory_enabled: true,
@@ -120,9 +141,10 @@ function main(): void {
     //
     // pre_api_request / post_api_request and pre_tool_call / post_tool_call
     // are NOT shell-forwarded. The in-process nemo-relay plugin
-    // (plugins/nemo-relay/) owns those events under Hermes v0.14.0: it
-    // receives the real `request_messages` list and the real `response` SDK
-    // object as kwargs for api_request, and synthesizes stable tool_call_ids
+    // (plugins/nemo-relay/) owns those events under Hermes v0.18.0: it
+    // prefers the sanitized `request.body` / `response.assistant_message`
+    // hook payloads, retains the legacy rich-kwargs fallbacks, and synthesizes
+    // stable tool_call_ids
     // for tool_call events to work around NeMo-Relay's adapters/mod.rs
     // synthesizing a fresh UUID per call when Hermes' defensive
     // `tool_call_id or ""` strips the id. The plugin forwards everything to
@@ -159,7 +181,7 @@ function main(): void {
     // Enable in-process Hermes plugins. nemoclaw provides sandbox status
     // tools and the startup banner; nemo-relay owns the pre/post_api_request
     // events (see hooks comment above). Belt-and-suspenders against
-    // config-migration changes — v0.14.0 also auto-discovers plugins under
+    // config-migration changes — v0.18.0 also auto-discovers plugins under
     // $HERMES_HOME/plugins/, but explicit enablement survives schema bumps.
     plugins: {
       enabled: ["nemoclaw", "nemo-relay"],
@@ -178,6 +200,11 @@ function main(): void {
         enabled: true,
         token: tokenPlaceholder,
       };
+      if (ch === "slack") {
+        pCfg.extra = {
+          rich_blocks: slackRichBlocks,
+        };
+      }
       // allowed_users in config.yaml is not read by the gateway; it reads the
       // *_ALLOWED_USERS env vars (injected at sandbox-create, not written here).
       platformsConfig[ch] = pCfg;
