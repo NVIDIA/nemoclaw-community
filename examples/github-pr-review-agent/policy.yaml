@@ -1,21 +1,84 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 munnamihir
 # SPDX-License-Identifier: Apache-2.0
 
-version: "1"
-name: github-pr-review-agent
-description: Allow agent to access GitHub API only
-
-network:
-  egress:
-    - hostname: api.github.com
-      ports: [443]
-      comment: GitHub REST API for PR reads and comment writes
-    - hostname: inference.local
-      ports: [443]
-      comment: Routed inference endpoint (Nemotron via OpenShell)
-
-filesystem:
-  read:
-    - /workspace
-  write:
-    - /workspace/output
+version: 1
+filesystem_policy:
+  include_workdir: true
+  read_only:
+  - /usr
+  - /lib
+  - /opt/hermes
+  - /proc
+  - /dev/urandom
+  - /app
+  - /etc
+  - /var/log
+  - /sandbox/.hermes
+  read_write:
+  - /sandbox
+  - /tmp
+  - /dev/null
+  - /sandbox/.hermes-data
+landlock:
+  compatibility: best_effort
+process:
+  run_as_user: sandbox
+  run_as_group: sandbox
+network_policies:
+  nvidia:
+    name: nvidia
+    endpoints:
+    - host: integrate.api.nvidia.com
+      port: 443
+      protocol: rest
+      tls: terminate
+      enforcement: enforce
+      rules:
+      - allow:
+          method: POST
+          path: /v1/chat/completions
+      - allow:
+          method: GET
+          path: /v1/models
+    binaries:
+    - path: /usr/local/bin/hermes
+    - path: /opt/hermes/.venv/bin/hermes
+    - path: /usr/bin/python3
+    - path: /usr/bin/python3.13
+    - path: /opt/hermes/.venv/bin/python
+  github:
+    name: github
+    endpoints:
+    - host: api.github.com
+      port: 443
+      protocol: rest
+      tls: terminate
+      enforcement: enforce
+      rules:
+      - allow: { method: GET, path: /repos/__GITHUB_REPO__/pulls }
+      - allow: { method: GET, path: /repos/__GITHUB_REPO__/pulls/** }
+      - allow: { method: POST, path: /repos/__GITHUB_REPO__/issues/** }
+      - allow: { method: GET, path: /rate_limit }
+    binaries:
+    - path: /usr/bin/python3
+    - path: /usr/bin/python3.13
+    - path: /opt/hermes/.venv/bin/python
+  phoenix_collector:
+    name: phoenix_collector
+    endpoints:
+    - host: host.openshell.internal
+      port: 6006
+      protocol: rest
+      enforcement: enforce
+      allowed_ips:
+      - 10.0.0.0/8
+      - 172.0.0.0/8
+      - 192.168.0.0/16
+      rules:
+      - allow:
+          method: POST
+          path: /**
+    binaries:
+    - path: /usr/local/bin/nemo-relay
+    - path: /usr/bin/python3
+    - path: /opt/hermes/.venv/bin/python
