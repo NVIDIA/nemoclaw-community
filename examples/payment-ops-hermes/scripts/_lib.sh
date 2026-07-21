@@ -46,6 +46,7 @@ stop_pid_file() {
 sandbox_phase() {
   local name="${1:-$NEMOCLAW_SANDBOX_NAME}"
   openshell sandbox list 2>/dev/null | awk -v wanted="$name" '
+    { gsub(/\033\[[0-9;]*m/, "") }
     NR > 1 && $1 == wanted { print $NF; found = 1; exit }
     END { if (!found) print "Missing" }
   '
