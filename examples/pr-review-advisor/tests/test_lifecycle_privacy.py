@@ -40,7 +40,8 @@ def _installed_lib(tmp_path: Path, env_text: str, mode: int) -> tuple[Path, Path
     scripts = runtime / "scripts"
     copied = scripts / "_lib.sh"
     (install / "config.yaml").write_text(
-        'schema_version: 1\nrepository: "example/project"\n',
+        'schema_version: 1\nrepository: "example/project"\n'
+        f'scope_digest: "{"0" * 64}"\n',
         encoding="utf-8",
     )
     env_file = install / ".env"
@@ -165,9 +166,10 @@ def test_load_env_derives_install_identity_and_ignores_direct_state_overrides(
             "-c",
             (
                 'source "$1"; load_env; '
-                'printf "%s\\n%s\\n%s\\n%s\\n%s\\n" '
+                'printf "%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n" '
                 '"$REVIEW_ADVISOR_INSTALL_ID" "$REVIEW_ADVISOR_REPOSITORY" '
-                '"$STATE_DIR" "$NEMOCLAW_SANDBOX_NAME" "$HERMES_FORWARD_PORT"; '
+                '"$REVIEW_ADVISOR_SCOPE_DIGEST" "$STATE_DIR" '
+                '"$NEMOCLAW_SANDBOX_NAME" "$HERMES_FORWARD_PORT"; '
                 'if env | grep -q "^OPENSHELL_GATEWAY_ENDPOINT="; then exit 9; fi'
             ),
             "bash",
@@ -186,13 +188,73 @@ def test_load_env_derives_install_identity_and_ignores_direct_state_overrides(
     )
 
     assert result.returncode == 0, result.stderr
-    install_id, repository, state_dir, sandbox, port = result.stdout.splitlines()
+    install_id, repository, scope_digest, state_dir, sandbox, port = (
+        result.stdout.splitlines()
+    )
     assert len(install_id) == 16
     assert repository == "example/project"
+    assert scope_digest == "0" * 64
     assert state_dir == str(tmp_path / "state" / install_id / "runtime")
     assert sandbox == f"pr-review-{install_id}"
     assert 20000 <= int(port) < 40000
     assert "ambient-state-override" not in result.stdout
+
+
+def test_load_env_derives_a_distinct_runtime_identity_per_scope(
+    tmp_path: Path,
+) -> None:
+    lib, _env_file = _installed_lib(tmp_path, "", 0o600)
+    command = (
+        'load_env; printf "%s\\n%s\\n" '
+        '"$REVIEW_ADVISOR_INSTALL_ID" "$NEMOCLAW_SANDBOX_NAME"'
+    )
+    first = _source(lib, tmp_path / "home", command)
+    assert first.returncode == 0, first.stderr
+
+    config = lib.parents[2] / "config.yaml"
+    config.write_text(
+        'schema_version: 1\nrepository: "example/project"\n'
+        f'scope_digest: "{"1" * 64}"\n',
+        encoding="utf-8",
+    )
+    second = _source(lib, tmp_path / "home", command)
+    assert second.returncode == 0, second.stderr
+
+    first_id, first_sandbox = first.stdout.splitlines()
+    second_id, second_sandbox = second.stdout.splitlines()
+    assert first_id != second_id
+    assert first_sandbox != second_sandbox
+
+
+def test_load_env_requires_one_canonical_config_scope_digest(
+    tmp_path: Path,
+) -> None:
+    cases = (
+        (
+            'schema_version: 1\nrepository: "example/project"\n',
+            "exactly one scope digest",
+        ),
+        (
+            'schema_version: 1\nrepository: "example/project"\n'
+            f'scope_digest: {"0" * 64}\n',
+            "JSON-quoted YAML scalar",
+        ),
+        (
+            'schema_version: 1\nrepository: "example/project"\n'
+            f'scope_digest: "{"0" * 64}"\n'
+            f'scope_digest: "{"1" * 64}"\n',
+            "exactly one scope digest",
+        ),
+    )
+    for index, (config_text, expected) in enumerate(cases):
+        lib, _env_file = _installed_lib(tmp_path / str(index), "", 0o600)
+        (lib.parents[2] / "config.yaml").write_text(
+            config_text,
+            encoding="utf-8",
+        )
+        result = _source(lib, tmp_path / f"home-{index}", "load_env")
+        assert result.returncode != 0
+        assert expected in result.stderr
 
 
 def test_openshell_preflight_requires_exact_0_0_85(tmp_path: Path) -> None:
@@ -305,7 +367,7 @@ fi
     assert "does not map the exact loopback port" in wrong.stderr
 
 
-def test_hermes_surface_requires_auth_model_and_exact_eight_tools(
+def test_hermes_surface_requires_auth_facade_and_exact_eight_tools(
     tmp_path: Path,
 ) -> None:
     tools = [
@@ -329,7 +391,7 @@ def test_hermes_surface_requires_auth_model_and_exact_eight_tools(
                     {
                         "object": "hermes.api_server.capabilities",
                         "platform": "hermes-agent",
-                        "model": "nvidia/nvidia/nemotron-3-ultra",
+                        "model": "hermes-agent",
                         "auth": {"type": "bearer", "required": True},
                         "runtime": {
                             "mode": "server_agent",
@@ -614,7 +676,7 @@ def test_provider_modes_use_fixed_openshell_profiles_and_env_credentials(
             "NVIDIA_API_KEY",
             "NVIDIA_BASE_URL",
             "https://integrate.api.nvidia.com/v1",
-            "nvidia/nvidia/nemotron-3-ultra",
+            "nvidia/nemotron-3-ultra-550b-a55b",
         ),
         (
             "openai-compatible",

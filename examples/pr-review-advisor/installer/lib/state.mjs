@@ -19,6 +19,11 @@ import {
   sha256,
   stableJson,
 } from "./util.mjs";
+import {
+  normalizeStoredReviewScope,
+  reviewScopeDigest,
+  reviewScopeForJson,
+} from "./scope.mjs";
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const GIT_SHA_PATTERN = /^[0-9a-f]{40,64}$/;
@@ -44,7 +49,12 @@ export function loadState(root) {
   return parsed;
 }
 
-export function buildState(repository, desiredFiles, preserved = []) {
+export function buildState(
+  repository,
+  desiredFiles,
+  reviewScope,
+  preserved = [],
+) {
   const ownedFiles = {};
   for (const [relativePath, file] of [...desiredFiles.entries()].sort(
     ([left], [right]) => compareStrings(left, right),
@@ -67,6 +77,8 @@ export function buildState(repository, desiredFiles, preserved = []) {
       trustedCommit: repository.trustedHead,
       worktreeCommitAtInstall: repository.worktreeHead,
     },
+    reviewScope: reviewScopeForJson(reviewScope),
+    scopeDigest: reviewScopeDigest(reviewScope),
     configRoot: INSTALL_DIR,
     publicationEnabled: false,
     ownedFiles,
@@ -85,24 +97,30 @@ export function stateFile(state) {
 }
 
 function validateState(state) {
-  exactObject(
-    state,
-    "install state",
-    [
-      "configRoot",
-      "ownedFiles",
-      "package",
-      "preservedModifiedFiles",
-      "publicationEnabled",
-      "repository",
-      "schemaVersion",
-    ],
-  );
+  exactObject(state, "install state", [
+    "configRoot",
+    "ownedFiles",
+    "package",
+    "preservedModifiedFiles",
+    "publicationEnabled",
+    "repository",
+    "reviewScope",
+    "scopeDigest",
+    "schemaVersion",
+  ]);
   if (state.schemaVersion !== STATE_SCHEMA_VERSION) {
     throw new CliError(`${STATE_PATH} has an unsupported schema version`);
   }
   if (state.configRoot !== INSTALL_DIR || state.publicationEnabled !== false) {
     throw new CliError(`${STATE_PATH} has unsafe installation metadata`);
+  }
+  const normalizedReviewScope = normalizeStoredReviewScope(state.reviewScope);
+  if (
+    typeof state.scopeDigest !== "string" ||
+    !SHA256_PATTERN.test(state.scopeDigest) ||
+    state.scopeDigest !== reviewScopeDigest(normalizedReviewScope)
+  ) {
+    throw new CliError(`${STATE_PATH} has an invalid scope digest`);
   }
 
   exactObject(state.package, "install state package", ["name", "version"]);
@@ -155,7 +173,9 @@ function validateState(state) {
       owned.source.length > 4_096 ||
       /[\u0000-\u001f\u007f]/u.test(owned.source)
     ) {
-      throw new CliError(`${STATE_PATH} has invalid metadata for ${relativePath}`);
+      throw new CliError(
+        `${STATE_PATH} has invalid metadata for ${relativePath}`,
+      );
     }
   }
 
@@ -169,7 +189,9 @@ function validateState(state) {
   for (const relativePath of state.preservedModifiedFiles) {
     validateOwnedPath(relativePath);
     if (seenPreserved.has(relativePath)) {
-      throw new CliError(`${STATE_PATH} repeats preserved path ${relativePath}`);
+      throw new CliError(
+        `${STATE_PATH} repeats preserved path ${relativePath}`,
+      );
     }
     seenPreserved.add(relativePath);
   }

@@ -25,7 +25,6 @@ scrub_external_secrets
 load_env
 require_command openshell
 require_command python3
-require_command setsid
 validate_name "$NEMOCLAW_SANDBOX_NAME"
 validate_port "$HERMES_FORWARD_PORT"
 

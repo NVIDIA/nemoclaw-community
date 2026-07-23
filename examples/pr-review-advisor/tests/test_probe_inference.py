@@ -57,7 +57,7 @@ def test_probe_is_bounded_sessionless_and_uses_only_proxy_token() -> None:
     response = _Response(b'{"choices":[{"message":{"content":"OK"}}]}')
     opener = _Opener(response)
 
-    _PROBE.probe("nvidia/nvidia/nemotron-3-ultra", opener)
+    _PROBE.probe("nvidia/nemotron-3-ultra-550b-a55b", opener)
 
     assert opener.request.full_url == (
         "https://inference.local/v1/chat/completions"
@@ -70,7 +70,7 @@ def test_probe_is_bounded_sessionless_and_uses_only_proxy_token() -> None:
     assert response.read_size == _PROBE.MAX_RESPONSE_BYTES + 1
     payload = json.loads(opener.request.data)
     assert payload == {
-        "model": "nvidia/nvidia/nemotron-3-ultra",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b",
         "messages": [{"role": "user", "content": "Reply with OK."}],
         "max_tokens": 1,
         "stream": False,
@@ -79,10 +79,30 @@ def test_probe_is_bounded_sessionless_and_uses_only_proxy_token() -> None:
     assert "tools" not in payload
 
 
+def test_default_opener_keeps_openshell_proxy_and_rejects_redirects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response = _Response(b'{"choices":[{"message":{"content":"OK"}}]}')
+    opener = _Opener(response)
+    handlers: tuple[Any, ...] = ()
+
+    def build_opener(*provided: Any) -> _Opener:
+        nonlocal handlers
+        handlers = provided
+        return opener
+
+    monkeypatch.setattr(_PROBE.urllib.request, "build_opener", build_opener)
+
+    _PROBE.probe("owner/model")
+
+    assert len(handlers) == 1
+    assert isinstance(handlers[0], _PROBE.NoRedirect)
+
+
 @pytest.mark.parametrize(
     ("model", "expected_field"),
     (
-        ("nvidia/nvidia/nemotron-3-ultra", "max_tokens"),
+        ("nvidia/nemotron-3-ultra-550b-a55b", "max_tokens"),
         ("openai/gpt-4o", "max_completion_tokens"),
         ("pipeline/openai/gpt-4.1-mini", "max_completion_tokens"),
         ("openai/gpt-5", "max_completion_tokens"),

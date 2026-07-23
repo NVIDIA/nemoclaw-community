@@ -13,6 +13,11 @@
     "head_sha",
     "profile_digest",
     "profile_source_commit",
+    "profile_path",
+    "profile_origin",
+    "profile_object_id",
+    "review_scope",
+    "scope_digest",
     "acceptance_context_digest",
     "acceptance_context",
     "files"
@@ -40,6 +45,24 @@
     "profile_source_commit": {
       "$ref": "#/$defs/gitOid",
       "description": "Calibration provenance validated by the trusted host as an ancestor of base_sha."
+    },
+    "profile_path": {
+      "$ref": "#/$defs/scopePath"
+    },
+    "profile_origin": {
+      "enum": [
+        "target_base",
+        "operator_bootstrap"
+      ]
+    },
+    "profile_object_id": {
+      "$ref": "#/$defs/gitObjectId"
+    },
+    "review_scope": {
+      "$ref": "#/$defs/reviewScope"
+    },
+    "scope_digest": {
+      "$ref": "#/$defs/sha256"
     },
     "pull_request_number": {
       "type": [
@@ -140,6 +163,10 @@
       "type": "string",
       "pattern": "^[0-9a-f]{40,64}$"
     },
+    "gitObjectId": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
     "sha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
@@ -147,6 +174,81 @@
     "repoPath": {
       "type": "string",
       "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//)(?!.*\\\\)[^\\u0000]+$"
+    },
+    "scopePath": {
+      "type": "string",
+      "description": "A literal canonical repository-relative file or directory path, never a glob.",
+      "pattern": "^(?!/)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.git(?:/|$))[^\\u0000-\\u001f\\u007f]+$"
+    },
+    "reviewScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "roots",
+        "support_paths"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "repository",
+            "scoped"
+          ]
+        },
+        "roots": {
+          "type": "array",
+          "maxItems": 10000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/scopePath"
+          }
+        },
+        "support_paths": {
+          "type": "array",
+          "maxItems": 10000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/scopePath"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "repository"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "roots": {
+                "maxItems": 0
+              },
+              "support_paths": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "scoped"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "roots": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
     },
     "acceptanceContext": {
       "type": "object",

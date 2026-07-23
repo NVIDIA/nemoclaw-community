@@ -42,7 +42,7 @@ RUN case "$REVIEW_ADVISOR_RUNTIME_FINGERPRINT" in \
     && chown -R sandbox:sandbox /sandbox/.hermes /sandbox/review-input /sandbox/review-staging \
     && chmod 700 /sandbox/review-input /sandbox/review-staging
 
-ARG NEMOCLAW_MODEL=nvidia/nvidia/nemotron-3-ultra
+ARG NEMOCLAW_MODEL=nvidia/nemotron-3-ultra-550b-a55b
 ENV NEMOCLAW_MODEL=${NEMOCLAW_MODEL} \
     REVIEW_ADVISOR_RUNTIME_FINGERPRINT=${REVIEW_ADVISOR_RUNTIME_FINGERPRINT} \
     NEMOCLAW_INFERENCE_BASE_URL=https://inference.local/v1 \

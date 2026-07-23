@@ -22,7 +22,32 @@ _CANDIDATE = "L-0123456789abcdef"
 _LESSON = "Require an explicit authorization check at the request boundary."
 
 
+def _scope_digest(scope: dict[str, Any]) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            scope,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def _config_text(repository: str, scope_digest: str | None = None) -> str:
+    if scope_digest is None:
+        scope_digest = _artifact(repository)["run"]["scope_digest"]
+    return (
+        f'schema_version: 1\nrepository: "{repository}"\n'
+        f'scope_digest: "{scope_digest}"\n'
+    )
+
+
 def _artifact(repository: str) -> dict[str, Any]:
+    scope = {
+        "mode": "scoped",
+        "roots": ["src"],
+        "support_paths": ["SECURITY.md"],
+    }
     run = {
         "repository": repository,
         "base_sha": "a" * 40,
@@ -30,6 +55,11 @@ def _artifact(repository: str) -> dict[str, Any]:
         "head_sha": "c" * 40,
         "profile_digest": "d" * 64,
         "profile_source_commit": "9" * 40,
+        "review_scope": scope,
+        "scope_digest": _scope_digest(scope),
+        "profile_path": "profiles/review.yaml",
+        "profile_origin": "operator_bootstrap",
+        "profile_object_id": "8" * 40,
         "acceptance_context_digest": None,
         "context_digest": "e" * 64,
         "pull_request_number": 42,
@@ -56,6 +86,10 @@ def _artifact(repository: str) -> dict[str, Any]:
                         "head_sha",
                         "profile_digest",
                         "profile_source_commit",
+                        "scope_digest",
+                        "profile_path",
+                        "profile_origin",
+                        "profile_object_id",
                         "acceptance_context_digest",
                         "context_digest",
                     )
@@ -266,6 +300,59 @@ def test_feedback_rejects_invalid_candidate_evidence_and_source(
         invalid_source.stderr
     )
 
+    artifact = _artifact("example/project")
+    artifact["lesson_candidates"][0]["source"]["profile_object_id"] = "7" * 40
+    _rewrite_verified_artifact(artifact_path, receipt_path, artifact)
+    invalid_profile_source = _invoke(
+        _FEEDBACK,
+        artifact_path,
+        receipt_path,
+        home=tmp_path / "home-profile-source",
+    )
+
+    assert invalid_profile_source.returncode != 0
+    assert (
+        "candidate source does not match artifact run: profile_object_id"
+        in invalid_profile_source.stderr
+    )
+
+
+def test_feedback_rejects_candidate_paths_outside_strict_scope(
+    tmp_path: Path,
+) -> None:
+    artifact_path, receipt_path = _write_verified_artifact(
+        tmp_path,
+        "example/project",
+    )
+    artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+    artifact["lesson_candidates"][0]["paths"] = ["docs/outside.md"]
+    _rewrite_verified_artifact(artifact_path, receipt_path, artifact)
+
+    outside = _invoke(
+        _FEEDBACK,
+        artifact_path,
+        receipt_path,
+        home=tmp_path / "home-outside",
+    )
+
+    assert outside.returncode != 0
+    assert "outside the configured review scope: docs/outside.md" in outside.stderr
+
+    artifact = _artifact("example/project")
+    artifact["lesson_candidates"][0]["paths"] = ["SECURITY.md-sibling/nested"]
+    _rewrite_verified_artifact(artifact_path, receipt_path, artifact)
+    nested_support = _invoke(
+        _FEEDBACK,
+        artifact_path,
+        receipt_path,
+        home=tmp_path / "home-nested-support",
+    )
+
+    assert nested_support.returncode != 0
+    assert "outside the configured review scope: SECURITY.md-sibling/nested" in (
+        nested_support.stderr
+    )
+
 
 def test_feedback_rejects_valid_artifact_from_another_repository(tmp_path: Path) -> None:
     artifact_path, receipt_path = _write_verified_artifact(tmp_path, "other/project")
@@ -275,7 +362,7 @@ def test_feedback_rejects_valid_artifact_from_another_repository(tmp_path: Path)
     shutil.copy2(_FEEDBACK, scripts / "feedback.sh")
     shutil.copy2(_LIB, scripts / "_lib.sh")
     (install / "config.yaml").write_text(
-        'schema_version: 1\nrepository: "expected/project"\n',
+        _config_text("expected/project"),
         encoding="utf-8",
     )
     env_path = install / ".env"
@@ -296,6 +383,38 @@ def test_feedback_rejects_valid_artifact_from_another_repository(tmp_path: Path)
     assert "belongs to other/project, not this installation" in result.stderr
 
 
+def test_feedback_rejects_valid_artifact_from_another_scope(tmp_path: Path) -> None:
+    artifact_path, receipt_path = _write_verified_artifact(
+        tmp_path,
+        "example/project",
+    )
+    install = tmp_path / "repo" / ".nemoclaw" / "review-advisor"
+    scripts = install / "runtime" / "scripts"
+    scripts.mkdir(parents=True)
+    shutil.copy2(_FEEDBACK, scripts / "feedback.sh")
+    shutil.copy2(_LIB, scripts / "_lib.sh")
+    (install / "config.yaml").write_text(
+        _config_text("example/project", "0" * 64),
+        encoding="utf-8",
+    )
+    env_path = install / ".env"
+    env_path.write_text(
+        "OPENSHELL_GATEWAY_ENDPOINT=https://127.0.0.1:17670\n",
+        encoding="utf-8",
+    )
+    env_path.chmod(0o600)
+
+    result = _invoke(
+        scripts / "feedback.sh",
+        artifact_path,
+        receipt_path,
+        home=tmp_path / "home",
+    )
+
+    assert result.returncode != 0
+    assert "belongs to a different configured review scope" in result.stderr
+
+
 def test_feedback_uploads_only_the_curated_lesson_and_candidate_provenance(
     tmp_path: Path,
 ) -> None:
@@ -303,6 +422,11 @@ def test_feedback_uploads_only_the_curated_lesson_and_candidate_provenance(
         tmp_path,
         "example/project",
     )
+    artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+    artifact["lesson_candidates"][0]["paths"] = [
+        "SECURITY.md/controls/authorization.md"
+    ]
+    _rewrite_verified_artifact(artifact_path, receipt_path, artifact)
     install = tmp_path / "repo" / ".nemoclaw" / "review-advisor"
     runtime = install / "runtime"
     shutil.copytree(
@@ -312,7 +436,7 @@ def test_feedback_uploads_only_the_curated_lesson_and_candidate_provenance(
     )
     scripts = runtime / "scripts"
     (install / "config.yaml").write_text(
-        'schema_version: 1\nrepository: "example/project"\n',
+        _config_text("example/project"),
         encoding="utf-8",
     )
     env_path = install / ".env"
@@ -398,7 +522,16 @@ fi
         "Require an explicit authorization check at the boundary."
     )
     assert payload["candidate_id"] == _CANDIDATE
-    assert payload["paths"] == ["src/auth.py"]
+    assert payload["paths"] == ["SECURITY.md/controls/authorization.md"]
+    assert payload["review_scope"] == {
+        "mode": "scoped",
+        "roots": ["src"],
+        "support_paths": ["SECURITY.md"],
+    }
+    assert payload["scope_digest"] == _scope_digest(payload["review_scope"])
+    assert payload["profile_path"] == "profiles/review.yaml"
+    assert payload["profile_origin"] == "operator_bootstrap"
+    assert payload["profile_object_id"] == "8" * 40
     assert payload["evidence_digest"] == hashlib.sha256(
         b'["src/auth.py:10-14"]'
     ).hexdigest()
@@ -411,6 +544,11 @@ fi
 
 
 def _feedback_payload() -> dict[str, Any]:
+    scope = {
+        "mode": "scoped",
+        "roots": ["src"],
+        "support_paths": ["SECURITY.md"],
+    }
     return {
         "repository": "example/project",
         "base_sha": "a" * 40,
@@ -418,6 +556,11 @@ def _feedback_payload() -> dict[str, Any]:
         "head_sha": "c" * 40,
         "profile_digest": "d" * 64,
         "profile_source_commit": "9" * 40,
+        "review_scope": scope,
+        "scope_digest": _scope_digest(scope),
+        "profile_path": "profiles/review.yaml",
+        "profile_origin": "operator_bootstrap",
+        "profile_object_id": "8" * 40,
         "acceptance_context_digest": None,
         "context_digest": "e" * 64,
         "candidate_id": _CANDIDATE,
@@ -478,6 +621,12 @@ class MemoryStore:
     assert stored["content"].startswith(_LESSON)
     assert "candidate=L-0123456789abcdef" in stored["content"]
     assert "candidate_evidence=" + ("f" * 64) in stored["content"]
+    assert "scope=" + _scope_digest(_feedback_payload()["review_scope"]) in stored[
+        "content"
+    ]
+    assert "profile_path=profiles/review.yaml" in stored["content"]
+    assert "profile_origin=operator_bootstrap" in stored["content"]
+    assert "profile_object=" + ("8" * 40) in stored["content"]
     assert "Preserve the authorization boundary." not in stored["content"]
 
     payload = _feedback_payload()
@@ -497,6 +646,56 @@ class MemoryStore:
     assert rejected.returncode != 0
     assert "invalid shape" in rejected.stdout
 
+    payload = _feedback_payload()
+    payload["paths"] = ["docs/outside.md"]
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    outside = subprocess.run(
+        [sys.executable, str(_RECORD_FEEDBACK), str(payload_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "PYTHONPATH": str(stub_root),
+            "MEMORY_CAPTURE": str(capture),
+        },
+    )
+    assert outside.returncode != 0
+    assert "outside the configured review scope" in outside.stdout
+
+    payload = _feedback_payload()
+    payload["paths"] = ["SECURITY.md-sibling/nested"]
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    sibling = subprocess.run(
+        [sys.executable, str(_RECORD_FEEDBACK), str(payload_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "PYTHONPATH": str(stub_root),
+            "MEMORY_CAPTURE": str(capture),
+        },
+    )
+    assert sibling.returncode != 0
+    assert "outside the configured review scope" in sibling.stdout
+
+    payload = _feedback_payload()
+    payload["paths"] = ["SECURITY.md/controls/authorization.md"]
+    payload_path.write_text(json.dumps(payload), encoding="utf-8")
+    support_descendant = subprocess.run(
+        [sys.executable, str(_RECORD_FEEDBACK), str(payload_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "PYTHONPATH": str(stub_root),
+            "MEMORY_CAPTURE": str(capture),
+        },
+    )
+    assert support_descendant.returncode == 0, support_descendant.stdout
+
 
 def test_lifecycle_auth_state_defaults_outside_repository_checkout(
     tmp_path: Path,
@@ -506,7 +705,7 @@ def test_lifecycle_auth_state_defaults_outside_repository_checkout(
     scripts.mkdir(parents=True)
     shutil.copy2(_LIB, scripts / "_lib.sh")
     (install / "config.yaml").write_text(
-        'schema_version: 1\nrepository: "example/project"\n',
+        _config_text("example/project"),
         encoding="utf-8",
     )
     env_path = install / ".env"

@@ -8,9 +8,10 @@ import {
   PACKAGE_VERSION,
   PROFILE_SCHEMA_VERSION,
 } from "./constants.mjs";
+import { reviewScopeDigest } from "./scope.mjs";
 import { sha256, stableJson, yamlString } from "./util.mjs";
 
-export function generateRepositoryFiles(repository, census) {
+export function generateRepositoryFiles(repository, census, reviewScope) {
   const files = new Map();
   const profile = generateProfile(repository, census);
   const discoveryLock = generateDiscoveryLock(repository, census);
@@ -32,19 +33,27 @@ __pycache__/
 *.pyc
 `,
   );
-  addText(files, `${INSTALL_DIR}/config.yaml`, generateConfig(repository));
+  addText(
+    files,
+    `${INSTALL_DIR}/config.yaml`,
+    generateConfig(repository, reviewScope),
+  );
   addText(files, `${INSTALL_DIR}/profile.generated.yaml`, profile);
   addText(
     files,
     `${INSTALL_DIR}/memory-policy.yaml`,
-    generateMemoryPolicy(repository),
+    generateMemoryPolicy(repository, reviewScope),
   );
   addText(
     files,
     `${INSTALL_DIR}/discovery.lock.json`,
     stableJson(discoveryLock),
   );
-  addText(files, GENERATED_WORKFLOW_PATH, generateWorkflow(repository));
+  addText(
+    files,
+    GENERATED_WORKFLOW_PATH,
+    generateWorkflow(repository, reviewScope),
+  );
 
   return files;
 }
@@ -57,13 +66,15 @@ export function generateOverrideProfile(generatedProfile) {
   );
 }
 
-function generateConfig(repository) {
+function generateConfig(repository, reviewScope) {
   return `# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 schema_version: 1
 kind: "nemoclaw-review-advisor-config"
 repository: ${yamlString(repository.repository)}
 trusted_ref: ${yamlString(repository.trustedRef)}
+scope_digest: ${yamlString(reviewScopeDigest(reviewScope))}
+${reviewScopeYaml(reviewScope)}
 review:
   mode: "artifact-only"
   enabled: true
@@ -78,12 +89,27 @@ memory:
 `;
 }
 
-function generateMemoryPolicy(repository) {
+function reviewScopeYaml(reviewScope, key = "review_scope") {
+  return `${key}:
+  mode: ${yamlString(reviewScope.mode)}
+  roots: [${reviewScope.roots.map((value) => yamlString(value)).join(", ")}]
+  support_paths: [${reviewScope.supportPaths
+    .map((value) => yamlString(value))
+    .join(", ")}]`;
+}
+
+function generateMemoryPolicy(repository, reviewScope) {
+  const namespace =
+    reviewScope.mode === "repository"
+      ? `repository:${repository.repository}`
+      : `repository:${repository.repository}:scope:${reviewScopeDigest(
+          reviewScope,
+        )}`;
   return `# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 schema_version: 1
 kind: "review-advisor-memory-policy"
-namespace: ${yamlString(`repository:${repository.repository}`)}
+namespace: ${yamlString(namespace)}
 recall:
   cross_repository: false
   memory_is_evidence: false
@@ -117,6 +143,16 @@ function generateProfile(repository, census) {
     "repository:",
     `  identity: ${yamlString(repository.repository)}`,
     `  default_branch: ${yamlString(repository.defaultBranch || "unknown")}`,
+    ...reviewScopeYaml(
+      {
+        mode: census.reviewScope.mode,
+        roots: census.reviewScope.roots.map((value) => value.path),
+        supportPaths: census.reviewScope.supportPaths.map(
+          (value) => value.path,
+        ),
+      },
+      "review_scope",
+    ).split("\n"),
     "required_stages:",
     '  - "scope"',
     '  - "correctness"',
@@ -128,7 +164,24 @@ function generateProfile(repository, census) {
     "components:",
   ];
 
-  if (census.layoutConcentrations.length === 0) {
+  if (census.reviewScope.mode === "scoped") {
+    for (const [index, root] of census.reviewScope.roots.entries()) {
+      const idStem = slug(root.path).slice(0, 48) || "path";
+      const componentPath =
+        root.kind === "file" ? root.path : `${root.path}/**`;
+      lines.push(
+        `  - id: ${yamlString(
+          `scope-${idStem}-${sha256(root.path).slice(0, 8)}`,
+        )}`,
+        `    paths: [${yamlString(componentPath)}]`,
+        root.kind === "unpopulated"
+          ? "    evidence: []"
+          : `    evidence: [{source: ${yamlString(
+              `discovery.lock.json#/census/reviewScope/roots/${index}`,
+            )}}]`,
+      );
+    }
+  } else if (census.layoutConcentrations.length === 0) {
     lines.push(
       '  - id: "repository-root"',
       '    paths: ["**"]',
@@ -297,6 +350,7 @@ function generateDiscoveryLock(repository, census) {
       sha256: digest,
       size,
       categories,
+      role,
       lineStart,
       lineEnd,
       truncated,
@@ -306,12 +360,14 @@ function generateDiscoveryLock(repository, census) {
       sha256: digest,
       size,
       categories,
+      role,
       lineStart,
       lineEnd,
       truncated,
     }),
   );
   const lockedCensus = {
+    reviewScope: census.reviewScope,
     counts: census.counts,
     categories: census.categories,
     layoutConcentrations: census.layoutConcentrations,
@@ -324,14 +380,31 @@ function generateDiscoveryLock(repository, census) {
     trustedRef: repository.trustedRef,
     trustedCommit: repository.trustedHead,
     worktreeCommitAtInstall: repository.worktreeHead,
+    reviewScope: census.reviewScope,
+    scopeDigest: reviewScopeDigest({
+      mode: census.reviewScope.mode,
+      roots: census.reviewScope.roots.map((value) => value.path),
+      supportPaths: census.reviewScope.supportPaths.map((value) => value.path),
+    }),
     censusSha256: sha256(stableJson(lockedCensus)),
     census: lockedCensus,
   };
 }
 
-function generateWorkflow(repository) {
+function generateWorkflow(repository, reviewScope) {
   const runnerGroup = reviewRunnerGroup(repository.repository);
   const defaultBranch = repository.defaultBranch || "<default-branch>";
+  const scopeGuard = generateWorkflowScopeGuard(reviewScope);
+  const reviewScopeArguments = [
+    ...reviewScope.roots.flatMap((root) => [
+      "            --scope-root",
+      `            ${shellQuote(root)}`,
+    ]),
+    ...reviewScope.supportPaths.flatMap((supportPath) => [
+      "            --support-path",
+      `            ${shellQuote(supportPath)}`,
+    ]),
+  ].join("\n");
   return `# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -462,6 +535,7 @@ jobs:
             "+refs/pull/\${REVIEW_PR_NUMBER}/head:refs/review-advisor/head"
           test "$(git -C "$analysis_repo" rev-parse 'refs/review-advisor/base^{commit}')" = "$REVIEW_BASE_SHA"
           test "$(git -C "$analysis_repo" rev-parse 'refs/review-advisor/head^{commit}')" = "$REVIEW_HEAD_SHA"
+${scopeGuard}
           acceptance_context="$job_tmp/acceptance.json"
           test ! -e "$acceptance_context"
           test ! -L "$acceptance_context"
@@ -484,6 +558,9 @@ jobs:
           REVIEW_ACCEPTANCE_CONTEXT: \${{ runner.temp }}/nemoclaw-review-\${{ github.repository_id }}-\${{ github.run_id }}-\${{ github.run_attempt }}/acceptance.json
         run: |
           set -eu
+          review_scope_args=(
+${reviewScopeArguments}
+          )
           advisor_output="$GITHUB_WORKSPACE/.nemoclaw/review-advisor/output"
           rm -rf -- "$advisor_output"
           test ! -e "$advisor_output"
@@ -494,6 +571,7 @@ jobs:
             --head "$REVIEW_HEAD_SHA" \\
             --repository "$GITHUB_REPOSITORY" \\
             --pr-number "$REVIEW_PR_NUMBER" \\
+            "\${review_scope_args[@]}" \\
             --acceptance-context "$REVIEW_ACCEPTANCE_CONTEXT" \\
             --output "$advisor_output"
 
@@ -548,10 +626,84 @@ jobs:
   `;
 }
 
+function generateWorkflowScopeGuard(reviewScope) {
+  if (reviewScope.mode === "repository") {
+    return "";
+  }
+  return `          python3 - "$analysis_repo" "$REVIEW_BASE_SHA" "$REVIEW_HEAD_SHA" <<'PY'
+          import re
+          import subprocess
+          import sys
+
+          repository, base, head = sys.argv[1:]
+          roots = ${JSON.stringify(reviewScope.roots)}
+
+          def git(*arguments):
+              result = subprocess.run(
+                  [
+                      "git",
+                      "-c",
+                      "core.hooksPath=/dev/null",
+                      "-c",
+                      "diff.external=",
+                      "-c",
+                      "submodule.recurse=false",
+                      "-C",
+                      repository,
+                      *arguments,
+                  ],
+                  check=True,
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.PIPE,
+              )
+              return result.stdout
+
+          merge_bases = [
+              value
+              for value in git("merge-base", "--all", base, head)
+              .decode("ascii", "strict")
+              .splitlines()
+              if value
+          ]
+          if len(merge_bases) != 1 or not re.fullmatch(
+              r"[0-9a-f]{40}", merge_bases[0]
+          ):
+              raise SystemExit("scoped review requires one unambiguous merge base")
+          changed = git(
+              "diff",
+              "--name-only",
+              "--no-renames",
+              "-z",
+              f"{merge_bases[0]}..{head}",
+              "--",
+          ).decode("utf-8", "strict").split("\\0")
+          changed = [value for value in changed if value]
+          outside = [
+              value
+              for value in changed
+              if not any(
+                  value == root or value.startswith(f"{root}/") for root in roots
+              )
+          ]
+          if outside:
+              rendered = ", ".join(repr(value) for value in outside[:20])
+              suffix = "" if len(outside) <= 20 else f" (+{len(outside) - 20} more)"
+              raise SystemExit(
+                  f"pull request changes paths outside configured review roots: "
+                  f"{rendered}{suffix}"
+              )
+          print(f"Scoped review path check passed for {len(changed)} changed path(s).")
+          PY`;
+}
+
 function reviewRunnerGroup(repositoryIdentity) {
   const repositoryName = repositoryIdentity.split("/").at(-1) ?? "repository";
   const safeName = slug(repositoryName).slice(0, 32) || "repository";
   return `nemoclaw-review-advisor-${safeName}-${sha256(repositoryIdentity).slice(0, 12)}`;
+}
+
+function shellQuote(value) {
+  return `'${value.replaceAll("'", `'\"'\"'`)}'`;
 }
 
 function slug(value) {

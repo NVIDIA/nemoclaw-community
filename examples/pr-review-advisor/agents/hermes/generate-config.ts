@@ -5,7 +5,8 @@ import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const home = process.env.HERMES_HOME || "/sandbox/.hermes";
-const model = process.env.NEMOCLAW_MODEL || "nvidia/nvidia/nemotron-3-ultra";
+const model =
+  process.env.NEMOCLAW_MODEL || "nvidia/nemotron-3-ultra-550b-a55b";
 const baseUrl = process.env.NEMOCLAW_INFERENCE_BASE_URL || "https://inference.local/v1";
 
 function quoted(value: string): string {

@@ -38,13 +38,15 @@ curated entry.
 Memory is never evidence. The review skill requires current patch or checkout
 evidence before a remembered pattern can become a finding.
 
-By default the lifecycle derives a repository-install-specific sandbox name.
-Do not configure two repositories with the same `NEMOCLAW_SANDBOX_NAME`, and do
-not restore a snapshot from one repository into another. Snapshot manifest
-schema v2 binds every archive to the exact sandbox name, installation ID, and
-configured repository as well as its archive name and SHA-256 digest. Restore
-validates all of those fields and rejects snapshots copied from another
-repository, sandbox, install path, or installation.
+By default the lifecycle derives a repository-install-and-scope-specific
+sandbox name. The identity includes the configured scope digest, so replacing
+the complete scope derives a new Hermes home and cannot recall the old scope's
+lessons. Do not configure two repositories or scopes with the same
+`NEMOCLAW_SANDBOX_NAME`, and do not restore a snapshot from one identity into
+another. Snapshot manifest schema v2 binds every archive to the exact sandbox
+name, installation ID, and configured repository as well as its archive name
+and SHA-256 digest. Restore validates all of those fields and rejects snapshots
+copied from another repository, scope, sandbox, install path, or installation.
 
 Hermes' built-in store is deliberately bounded. When it fills, consolidate or
 remove old lessons instead of copying raw review history into it. Full review

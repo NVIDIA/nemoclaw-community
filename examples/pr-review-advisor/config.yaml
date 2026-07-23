@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Source-only first-party dogfood configuration. This file is intentionally
+# excluded from the npm package; installed repositories generate their own
+# .nemoclaw/review-advisor/config.yaml.
+
+schema_version: 1
+kind: nemoclaw-review-advisor-config
+repository: "NVIDIA/nemoclaw-community"
+trusted_ref: "refs/heads/main"
+scope_digest: "52d676c83aa2920bdcb59a65adeb8f8b98d6f79e857e59e786317362114d3873"
+review_scope:
+  mode: scoped
+  roots:
+    - .github/workflows/nemoclaw-review-advisor-dogfood.yml
+    - README.md
+    - THIRD-PARTY-NOTICES
+    - examples/pr-review-advisor
+  support_paths:
+    - .github/CODEOWNERS
+    - .github/PULL_REQUEST_TEMPLATE.md
+    - CONTRIBUTING.md
+    - LICENSE
+    - SECURITY.md
+review:
+  mode: artifact-only
+  enabled: true
+  automatic_triggers: false
+  publication_enabled: false
+  profile_candidate: dogfood/profile.yaml
+  profile_active: dogfood/profile.yaml
+memory:
+  policy: dogfood/memory-policy.yaml
+  automatic_extraction: false
+  writes_require_trusted_feedback: true

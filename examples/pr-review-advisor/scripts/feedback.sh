@@ -75,6 +75,81 @@ def bounded_text(value, label, maximum):
     return normalized
 
 
+def canonical_repo_path(value, label, maximum=4_096):
+    if not isinstance(value, str) or not value or len(value) > maximum:
+        raise SystemExit(f"{label} must be a nonempty bounded string")
+    if value.startswith("/") or "\\" in value or "\x00" in value:
+        raise SystemExit(f"{label} must be a checkout-relative POSIX path")
+    parts = value.split("/")
+    if any(part in ("", ".", "..") for part in parts):
+        raise SystemExit(f"{label} must be a canonical checkout-relative path")
+    if any(ord(character) < 0x20 or ord(character) == 0x7F for character in value):
+        raise SystemExit(f"{label} contains a control character")
+    portable = tuple(part.casefold().rstrip(" .") for part in parts)
+    if any(not part for part in portable) or ".git" in portable:
+        raise SystemExit(f"{label} is not a portable review path")
+    return value
+
+
+def validate_review_scope(value):
+    if not isinstance(value, dict) or set(value) != {
+        "mode",
+        "roots",
+        "support_paths",
+    }:
+        raise SystemExit("artifact review scope has an invalid shape")
+    mode = value["mode"]
+    if mode not in ("repository", "scoped"):
+        raise SystemExit("artifact review scope mode is invalid")
+
+    def paths(key):
+        raw = value[key]
+        if not isinstance(raw, list) or len(raw) > 10_000:
+            raise SystemExit(f"artifact review scope {key} is invalid")
+        result = [
+            canonical_repo_path(path, f"artifact review scope {key}[{index}]")
+            for index, path in enumerate(raw)
+        ]
+        portable = [
+            tuple(part.casefold().rstrip(" .") for part in path.split("/"))
+            for path in result
+        ]
+        if result != sorted(result) or len(result) != len(set(result)):
+            raise SystemExit(f"artifact review scope {key} is not canonical")
+        if len(portable) != len(set(portable)):
+            raise SystemExit(f"artifact review scope {key} has portable collisions")
+        return result
+
+    roots = paths("roots")
+    support_paths = paths("support_paths")
+    if mode == "repository":
+        if roots or support_paths:
+            raise SystemExit("repository review scope must have no selected paths")
+    elif not roots:
+        raise SystemExit("scoped review scope must have at least one root")
+    for index, root in enumerate(roots):
+        if any(other.startswith(f"{root}/") for other in roots[index + 1 :]):
+            raise SystemExit("artifact review scope roots overlap")
+    for index, support in enumerate(support_paths):
+        if any(
+            other.startswith(f"{support}/")
+            for other in support_paths[index + 1 :]
+        ):
+            raise SystemExit("artifact review scope support paths overlap")
+        if any(
+            support == root
+            or support.startswith(f"{root}/")
+            or root.startswith(f"{support}/")
+            for root in roots
+        ):
+            raise SystemExit("artifact review scope roots and support paths overlap")
+    return {
+        "mode": mode,
+        "roots": roots,
+        "support_paths": support_paths,
+    }
+
+
 lesson = bounded_text(lesson_value, "--lesson", 700)
 artifact_path = pathlib.Path(artifact_text)
 receipt_path = pathlib.Path(receipt_text)
@@ -131,6 +206,29 @@ if artifact.get("schema_version") != "review-advisor/v1":
 run = artifact.get("run")
 if not isinstance(run, dict):
     raise SystemExit("artifact.run is invalid")
+review_scope = validate_review_scope(run.get("review_scope"))
+scope_digest = run.get("scope_digest")
+if not isinstance(scope_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", scope_digest):
+    raise SystemExit("artifact scope digest is invalid")
+expected_scope_digest = hashlib.sha256(
+    json.dumps(
+        review_scope,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+).hexdigest()
+if not hmac.compare_digest(scope_digest, expected_scope_digest):
+    raise SystemExit("artifact scope digest does not match its review scope")
+canonical_repo_path(run.get("profile_path"), "artifact profile path")
+if run.get("profile_origin") not in ("target_base", "operator_bootstrap"):
+    raise SystemExit("artifact profile origin is invalid")
+profile_object_id = run.get("profile_object_id")
+if not isinstance(profile_object_id, str) or not re.fullmatch(
+    r"(?:[0-9a-f]{40}|[0-9a-f]{64})",
+    profile_object_id,
+):
+    raise SystemExit("artifact profile object ID is invalid")
 if receipt.get("attestation_digest") != artifact.get("attestation", {}).get("digest"):
     raise SystemExit("verification receipt attestation does not match artifact")
 run_keys = (
@@ -140,6 +238,11 @@ run_keys = (
     "head_sha",
     "profile_digest",
     "profile_source_commit",
+    "review_scope",
+    "scope_digest",
+    "profile_path",
+    "profile_origin",
+    "profile_object_id",
     "acceptance_context_digest",
     "context_digest",
     "pull_request_number",
@@ -172,18 +275,29 @@ paths = match.get("paths")
 if (
     not isinstance(paths, list)
     or len(paths) > 20
-    or any(
-        not isinstance(path, str)
-        or not path
-        or len(path) > 256
-        or path.startswith("/")
-        or "\\" in path
-        or "\x00" in path
-        or ".." in pathlib.PurePosixPath(path).parts
-        for path in paths
-    )
 ):
     raise SystemExit("candidate paths are invalid")
+try:
+    paths = [
+        canonical_repo_path(path, f"candidate paths[{index}]", maximum=256)
+        for index, path in enumerate(paths)
+    ]
+except SystemExit as error:
+    raise SystemExit("candidate paths are invalid") from error
+if review_scope["mode"] == "scoped":
+    roots = review_scope["roots"]
+    support_paths = review_scope["support_paths"]
+    for path in paths:
+        if not (
+            any(path == root or path.startswith(f"{root}/") for root in roots)
+            or any(
+                path == support or path.startswith(f"{support}/")
+                for support in support_paths
+            )
+        ):
+            raise SystemExit(
+                f"candidate path is outside the configured review scope: {path}"
+            )
 source = match.get("source")
 if not isinstance(source, dict):
     raise SystemExit("candidate source is invalid")
@@ -194,6 +308,10 @@ for key in (
     "head_sha",
     "profile_digest",
     "profile_source_commit",
+    "scope_digest",
+    "profile_path",
+    "profile_origin",
+    "profile_object_id",
     "acceptance_context_digest",
     "context_digest",
 ):
@@ -209,6 +327,11 @@ payload = {
     "head_sha": run["head_sha"],
     "profile_digest": run["profile_digest"],
     "profile_source_commit": run["profile_source_commit"],
+    "review_scope": review_scope,
+    "scope_digest": run["scope_digest"],
+    "profile_path": run["profile_path"],
+    "profile_origin": run["profile_origin"],
+    "profile_object_id": run["profile_object_id"],
     "acceptance_context_digest": run["acceptance_context_digest"],
     "context_digest": run["context_digest"],
     "candidate_id": candidate_id,
@@ -229,6 +352,11 @@ expected_repository="$REVIEW_ADVISOR_REPOSITORY"
 artifact_repository="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["repository"])' "$work/feedback.json")"
 [[ "$artifact_repository" == "$expected_repository" ]] || {
   echo "Feedback artifact belongs to $artifact_repository, not this installation ($expected_repository)" >&2
+  exit 1
+}
+artifact_scope_digest="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["scope_digest"])' "$work/feedback.json")"
+[[ "$artifact_scope_digest" == "$REVIEW_ADVISOR_SCOPE_DIGEST" ]] || {
+  echo "Feedback artifact belongs to a different configured review scope" >&2
   exit 1
 }
 require_command openshell

@@ -52,21 +52,42 @@ MERGE_BASE_SHA = "e" * 40
 HEAD_SHA = "b" * 40
 SOURCE_OID = "c" * 40
 PROFILE_SOURCE_SHA = "f" * 40
+PROFILE_OBJECT_ID = "d" * 40
+PROFILE_REPO_PATH = ".nemoclaw/review-advisor/profile.yaml"
+REVIEW_SCOPE = {
+    "mode": "repository",
+    "roots": [],
+    "support_paths": [],
+}
+SCOPE_DIGEST = hashlib.sha256(
+    json.dumps(
+        REVIEW_SCOPE,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+).hexdigest()
 
 
-def _profile() -> dict[str, Any]:
+def _profile(
+    review_scope: dict[str, Any] | None = None,
+    source_commit: str = PROFILE_SOURCE_SHA,
+) -> dict[str, Any]:
+    scope = REVIEW_SCOPE if review_scope is None else review_scope
+    test_surface = "tests/**" if scope["mode"] == "repository" else "src/**"
     return {
         "schema_version": 1,
         "kind": "review-advisor-profile",
         "metadata": {
             "name": "fixture-profile",
-            "source_commit": PROFILE_SOURCE_SHA,
+            "source_commit": source_commit,
             "source_ref": "refs/heads/main",
         },
         "repository": {
             "identity": "example/project",
             "default_branch": "main",
         },
+        "review_scope": scope,
         "required_stages": [
             "scope",
             "correctness",
@@ -91,7 +112,7 @@ def _profile() -> dict[str, Any]:
                 "evidence": [{"path": "src/app.py", "oid": SOURCE_OID}],
             }
         ],
-        "test_surfaces": [{"path": "tests/**", "oid": SOURCE_OID}],
+        "test_surfaces": [{"path": test_surface, "oid": SOURCE_OID}],
         "evidence_policy": {
             "memory_is_hint_only": True,
             "require_current_code_evidence": True,
@@ -132,6 +153,12 @@ def _write_runtime_inputs(
     truncated_patch: bool = False,
     checkout_head: str = HEAD_SHA,
     patch_text: str | None = None,
+    review_scope: dict[str, Any] | None = None,
+    profile_scope: dict[str, Any] | None = None,
+    profile_origin: str = "target_base",
+    profile_repo_path: str = PROFILE_REPO_PATH,
+    profile_object_id: str = PROFILE_OBJECT_ID,
+    profile_source_commit: str = PROFILE_SOURCE_SHA,
 ) -> tuple[dict[str, str], Path, Path, Path]:
     repo = tmp_path / "repo"
     inputs = tmp_path / "inputs"
@@ -154,7 +181,14 @@ def _write_runtime_inputs(
     (repo / "README.md").write_text("Fixture project\n", encoding="utf-8")
 
     profile_path = inputs / "profile.yaml"
-    profile_bytes = yaml.safe_dump(_profile(), sort_keys=True).encode("utf-8")
+    scope = REVIEW_SCOPE if review_scope is None else review_scope
+    profile_bytes = yaml.safe_dump(
+        _profile(
+            scope if profile_scope is None else profile_scope,
+            profile_source_commit,
+        ),
+        sort_keys=True,
+    ).encode("utf-8")
     profile_path.write_bytes(profile_bytes)
     profile_digest = hashlib.sha256(profile_bytes).hexdigest()
 
@@ -170,7 +204,12 @@ def _write_runtime_inputs(
         "merge_base_sha": MERGE_BASE_SHA,
         "head_sha": HEAD_SHA,
         "profile_digest": profile_digest,
-        "profile_source_commit": PROFILE_SOURCE_SHA,
+        "profile_source_commit": profile_source_commit,
+        "profile_path": profile_repo_path,
+        "profile_origin": profile_origin,
+        "profile_object_id": profile_object_id,
+        "review_scope": scope,
+        "scope_digest": runtime_module.review_scope_digest(scope),
         "acceptance_context_digest": None,
         "acceptance_context": None,
         "files": [changed],
@@ -311,6 +350,9 @@ def test_runtime_binds_context_checkout_and_profile(
     assert result["merge_base_sha"] == MERGE_BASE_SHA
     assert result["head_sha"] == HEAD_SHA
     assert result["profile_source_commit"] == PROFILE_SOURCE_SHA
+    assert result["profile_path"] == PROFILE_REPO_PATH
+    assert result["profile_origin"] == "target_base"
+    assert result["profile_object_id"] == PROFILE_OBJECT_ID
     assert result["acceptance_context_digest"] is None
     assert result["acceptance_context"] is None
     assert result["profile"]["metadata"]["name"] == "fixture-profile"
@@ -601,7 +643,13 @@ def test_repo_tools_reject_escape_and_symlinks(
     )["result"]
     assert late_read["lines"][0]["text"].startswith("line-19998")
 
-    for path in ("../outside-secret.txt", "/etc/passwd", "escape-file", "escape-dir/secret.py"):
+    for path in (
+        "../outside-secret.txt",
+        "/etc/passwd",
+        ".git/HEAD",
+        "escape-file",
+        "escape-dir/secret.py",
+    ):
         with pytest.raises(ReviewError):
             review.session.repo_read({"path": path})
 
@@ -618,6 +666,242 @@ def test_repo_tools_reject_escape_and_symlinks(
         {"query": HEAD_SHA, "path": ".", "max_results": 20},
     )["result"]
     assert git_search["results"] == []
+
+
+def test_scoped_repo_tools_expose_only_roots_and_support_paths(
+    tmp_path: Path,
+) -> None:
+    scope = {
+        "mode": "scoped",
+        "roots": ["src"],
+        "support_paths": ["README.md", "tests"],
+    }
+    env, repo, _, _ = _write_runtime_inputs(tmp_path, review_scope=scope)
+    (repo / "private").mkdir()
+    (repo / "private/secret.py").write_text(
+        "OUT_OF_SCOPE_SENTINEL = True\n",
+        encoding="utf-8",
+    )
+    review = ReviewRuntime.from_env(env)
+    begin = _begin(review)
+
+    assert begin["review_scope"] == scope
+    assert begin["scope_digest"] == runtime_module.review_scope_digest(scope)
+    assert review.dispatch(
+        "review_repo_read",
+        {"path": "README.md"},
+    )["result"]["lines"][0]["text"] == "Fixture project"
+    assert review.dispatch(
+        "review_repo_read",
+        {"path": "src/app.py"},
+    )["result"]["lines"][0]["text"].startswith("def handle")
+    assert review.dispatch(
+        "review_repo_read",
+        {"path": "tests/test_app.py"},
+    )["result"]["lines"][0]["text"].startswith("def test_handle")
+
+    for path in ("private/secret.py", ".git/HEAD"):
+        with pytest.raises(ReviewError, match="outside the configured review scope"):
+            review.session.repo_read({"path": path})
+
+    listing = review.dispatch("review_repo_list", {})["result"]
+    assert listing["entries"] == [
+        {"path": "README.md", "type": "file"},
+        {"path": "src", "type": "directory"},
+        {"path": "tests", "type": "directory"},
+    ]
+    search = review.dispatch(
+        "review_repo_search",
+        {"query": "OUT_OF_SCOPE_SENTINEL", "path": "."},
+    )["result"]
+    assert search["results"] == []
+
+
+def test_scoped_runtime_rejects_profile_mismatch_and_tampered_digest(
+    tmp_path: Path,
+) -> None:
+    scope = {
+        "mode": "scoped",
+        "roots": ["src"],
+        "support_paths": ["README.md", "tests"],
+    }
+    env, _, _, _ = _write_runtime_inputs(
+        tmp_path / "mismatch",
+        review_scope=scope,
+        profile_scope=REVIEW_SCOPE,
+    )
+    with pytest.raises(ReviewError, match="profile review_scope does not match"):
+        ReviewRuntime.from_env(env)
+
+    env, _, context_path, _ = _write_runtime_inputs(
+        tmp_path / "digest",
+        review_scope=scope,
+    )
+    context = json.loads(context_path.read_text(encoding="utf-8"))
+    context["scope_digest"] = "0" * 64
+    context_path.write_text(json.dumps(context), encoding="utf-8")
+    with pytest.raises(ReviewError, match="scope_digest does not match"):
+        ReviewRuntime.from_env(env)
+
+    env, _, context_path, _ = _write_runtime_inputs(
+        tmp_path / "support-change",
+        review_scope=scope,
+    )
+    context = json.loads(context_path.read_text(encoding="utf-8"))
+    context["files"][0]["path"] = "tests/test_app.py"
+    context_path.write_text(json.dumps(context), encoding="utf-8")
+    with pytest.raises(ReviewError, match="outside the configured scope"):
+        ReviewRuntime.from_env(env)
+
+
+@pytest.mark.parametrize(
+    ("profile_change", "message"),
+    (
+        ("broad-component", "outside review_scope.roots"),
+        ("wildcard-prefix", "outside review_scope.roots"),
+        ("extended-glob", "ambiguous pattern"),
+        ("outside-priority", "outside the configured review scope"),
+        ("outside-test-surface", "outside the configured review scope"),
+    ),
+)
+def test_scoped_runtime_rejects_unconfined_profile_paths(
+    tmp_path: Path,
+    profile_change: str,
+    message: str,
+) -> None:
+    scope = {
+        "mode": "scoped",
+        "roots": ["src"],
+        "support_paths": ["README.md"],
+    }
+    env, _, context_path, profile_path = _write_runtime_inputs(
+        tmp_path,
+        review_scope=scope,
+    )
+    profile = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
+    if profile_change == "broad-component":
+        profile["components"][0]["paths"] = ["**"]
+    elif profile_change == "wildcard-prefix":
+        profile["components"][0]["paths"] = ["s*/**"]
+    elif profile_change == "extended-glob":
+        profile["components"][0]["paths"] = ["src/{safe,../private}/**"]
+    elif profile_change == "outside-priority":
+        profile["priorities"][0]["evidence"][0]["path"] = "private/roadmap.md"
+    elif profile_change == "outside-test-surface":
+        profile["test_surfaces"][0]["path"] = "private/**"
+    else:  # pragma: no cover - parametrization is exhaustive
+        raise AssertionError(profile_change)
+    profile_bytes = yaml.safe_dump(profile, sort_keys=True).encode("utf-8")
+    profile_path.write_bytes(profile_bytes)
+    context = json.loads(context_path.read_text(encoding="utf-8"))
+    context["profile_digest"] = hashlib.sha256(profile_bytes).hexdigest()
+    context_path.write_text(
+        json.dumps(context, sort_keys=True, separators=(",", ":")),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ReviewError, match=message):
+        ReviewRuntime.from_env(env)
+
+
+def test_scoped_runtime_accepts_confined_profile_globs_and_support_evidence(
+    tmp_path: Path,
+) -> None:
+    scope = {
+        "mode": "scoped",
+        "roots": ["src"],
+        "support_paths": ["README.md", "tests"],
+    }
+    env, _, context_path, profile_path = _write_runtime_inputs(
+        tmp_path,
+        review_scope=scope,
+    )
+    profile = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
+    profile["components"][0]["paths"] = ["src/**/*.py"]
+    profile["priorities"][0]["evidence"][0]["path"] = "README.md"
+    profile["test_surfaces"][0]["path"] = "tests/**/*.py"
+    profile_bytes = yaml.safe_dump(profile, sort_keys=True).encode("utf-8")
+    profile_path.write_bytes(profile_bytes)
+    context = json.loads(context_path.read_text(encoding="utf-8"))
+    context["profile_digest"] = hashlib.sha256(profile_bytes).hexdigest()
+    context_path.write_text(
+        json.dumps(context, sort_keys=True, separators=(",", ":")),
+        encoding="utf-8",
+    )
+
+    review = ReviewRuntime.from_env(env)
+    exposed = review.dispatch("review_begin", {})["result"]["profile"]
+    assert exposed["components"][0]["paths"] == ["src/**/*.py"]
+    assert exposed["priorities"][0]["evidence"][0]["path"] == "README.md"
+    assert exposed["test_surfaces"][0]["path"] == "tests/**/*.py"
+
+
+def test_runtime_rejects_bootstrap_profile_not_calibrated_to_exact_base(
+    tmp_path: Path,
+) -> None:
+    env, _, _, _ = _write_runtime_inputs(
+        tmp_path,
+        profile_origin="operator_bootstrap",
+        profile_repo_path="examples/pr-review-advisor/dogfood/profile.yaml",
+    )
+
+    with pytest.raises(
+        ReviewError,
+        match="bootstrap profile_source_commit must equal base_sha",
+    ):
+        ReviewRuntime.from_env(env)
+
+
+def test_bootstrap_origin_is_attested_as_non_authoritative(
+    tmp_path: Path,
+) -> None:
+    env, _, _, _ = _write_runtime_inputs(
+        tmp_path,
+        profile_origin="operator_bootstrap",
+        profile_repo_path="examples/pr-review-advisor/dogfood/profile.yaml",
+        profile_source_commit=BASE_SHA,
+    )
+    review = ReviewRuntime.from_env(env)
+    begin = _begin(review)
+    assert begin["profile_origin"] == "operator_bootstrap"
+    _finish_stages(review)
+    final_input = _finalize_input()
+    final_input["lesson_candidates"] = []
+    artifact = review.dispatch("review_finalize", final_input)["result"]
+
+    assert artifact["run"]["profile_origin"] == "operator_bootstrap"
+    assert artifact["summary"]["recommendation"] == "blocked"
+    assert artifact["summary"]["confidence"] == "low"
+    assert any(
+        "provisional" in limitation["description"]
+        and limitation["requires_human_review"] is True
+        for limitation in artifact["limitations"]
+    )
+
+
+def test_support_path_cannot_anchor_a_head_finding(tmp_path: Path) -> None:
+    scope = {
+        "mode": "scoped",
+        "roots": ["src"],
+        "support_paths": ["tests"],
+    }
+    env, _, _, _ = _write_runtime_inputs(tmp_path, review_scope=scope)
+    review = ReviewRuntime.from_env(env)
+    _begin(review)
+    payload = _no_change("scope")
+    payload["additions"] = [
+        _finding(
+            category="scope",
+            basis_kind="behavior_mismatch",
+            title="Unchanged support evidence",
+            line=1,
+            file="tests/test_app.py",
+        )
+    ]
+    payload["no_changes_reason"] = None
+
+    with pytest.raises(ReviewError, match="not present in the trusted change context"):
+        review.session.commit_stage(payload)
 
 
 def test_diff_is_bound_to_changed_files_and_bounded(
@@ -766,6 +1050,11 @@ def test_finalize_requires_every_stage_and_is_idempotent(
     assert artifact["lesson_candidates"][0]["status"] == "candidate"
     assert artifact["run"]["merge_base_sha"] == MERGE_BASE_SHA
     assert artifact["run"]["profile_source_commit"] == PROFILE_SOURCE_SHA
+    assert artifact["run"]["profile_path"] == PROFILE_REPO_PATH
+    assert artifact["run"]["profile_origin"] == "target_base"
+    assert artifact["run"]["profile_object_id"] == PROFILE_OBJECT_ID
+    assert artifact["run"]["review_scope"] == REVIEW_SCOPE
+    assert artifact["run"]["scope_digest"] == SCOPE_DIGEST
     assert artifact["run"]["acceptance_context_digest"] is None
     assert (
         artifact["lesson_candidates"][0]["source"]["merge_base_sha"]
@@ -776,6 +1065,19 @@ def test_finalize_requires_every_stage_and_is_idempotent(
         artifact["lesson_candidates"][0]["source"]["profile_source_commit"]
         == PROFILE_SOURCE_SHA
     )
+    assert (
+        artifact["lesson_candidates"][0]["source"]["profile_path"]
+        == PROFILE_REPO_PATH
+    )
+    assert (
+        artifact["lesson_candidates"][0]["source"]["profile_origin"]
+        == "target_base"
+    )
+    assert (
+        artifact["lesson_candidates"][0]["source"]["profile_object_id"]
+        == PROFILE_OBJECT_ID
+    )
+    assert artifact["lesson_candidates"][0]["source"]["scope_digest"] == SCOPE_DIGEST
     assert (
         artifact["lesson_candidates"][0]["source"]["acceptance_context_digest"]
         is None

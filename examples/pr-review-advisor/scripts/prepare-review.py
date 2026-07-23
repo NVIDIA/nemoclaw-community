@@ -24,7 +24,7 @@ from urllib.parse import urlparse
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 STATUS_RE = re.compile(r"^(?:[AMDTUXB]|[RC][0-9]{1,3})$")
-PROFILE_REPO_PATH = ".nemoclaw/review-advisor/profile.yaml"
+DEFAULT_PROFILE_REPO_PATH = ".nemoclaw/review-advisor/profile.yaml"
 PROFILE_SOURCE_RE = re.compile(
     r'^ {2}source_commit:\s*["\']?([0-9a-f]{40})["\']?\s*(?:#.*)?$',
     re.MULTILINE,
@@ -37,7 +37,7 @@ MAX_ACCEPTANCE_ISSUE_BODY_BYTES = 64 * 1024
 MAX_ACCEPTANCE_ISSUES = 10
 ACCEPTANCE_SCHEMA_VERSION = "review-advisor/pr-acceptance/v1"
 TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
-OBJECT_ID_RE = re.compile(r"^[0-9a-f]{40,64}$")
+OBJECT_ID_RE = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 DEFAULT_MAX_CHECKOUT_FILES = 50_000
 DEFAULT_MAX_CHECKOUT_BYTES = 512 * 1024 * 1024
 MAX_CHECKOUT_FILES = 1_000_000
@@ -58,6 +58,33 @@ class TreeEntry:
     object_id: str
     size: int
     path: str
+
+
+@dataclass(frozen=True)
+class ReviewScope:
+    """Canonical host-authorized review and evidence boundaries."""
+
+    mode: str
+    roots: tuple[str, ...]
+    support_paths: tuple[str, ...]
+
+    def as_json(self) -> dict[str, Any]:
+        return {
+            "mode": self.mode,
+            "roots": list(self.roots),
+            "support_paths": list(self.support_paths),
+        }
+
+    def allows_change(self, path: str) -> bool:
+        if self.mode == "repository":
+            return True
+        return any(path == root or path.startswith(f"{root}/") for root in self.roots)
+
+    def allows_read(self, path: str) -> bool:
+        return self.allows_change(path) or any(
+            path == support or path.startswith(f"{support}/")
+            for support in self.support_paths
+        )
 
 
 def git_env(*, attr_source: str | None = None) -> dict[str, str]:
@@ -234,7 +261,74 @@ def portable_path_key(path: str) -> tuple[str, ...]:
     )
 
 
-def validate_exact_attribute_source(repo: Path, head: str) -> None:
+def normalize_scope_paths(values: list[str], label: str) -> tuple[str, ...]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    portable: dict[tuple[str, ...], str] = {}
+    for value in values:
+        try:
+            path = safe_path(value.encode("utf-8", "strict"))
+        except (UnicodeEncodeError, PreparationError) as exc:
+            raise PreparationError(f"{label} contains an invalid repository path") from exc
+        if path in seen:
+            raise PreparationError(f"{label} contains duplicate paths")
+        key = portable_path_key(path)
+        prior = portable.get(key)
+        if prior is not None:
+            raise PreparationError(
+                f"{label} contains paths that collide on a portable filesystem"
+            )
+        seen.add(path)
+        portable[key] = path
+        normalized.append(path)
+    return tuple(sorted(normalized))
+
+
+def review_scope_from_args(
+    scope_roots: list[str],
+    support_paths: list[str],
+) -> ReviewScope:
+    roots = normalize_scope_paths(scope_roots, "--scope-root")
+    supports = normalize_scope_paths(support_paths, "--support-path")
+    if not roots:
+        if supports:
+            raise PreparationError("--support-path requires at least one --scope-root")
+        return ReviewScope(mode="repository", roots=(), support_paths=())
+
+    for index, root in enumerate(roots):
+        if any(
+            other.startswith(f"{root}/")
+            for other in roots[index + 1 :]
+        ):
+            raise PreparationError("--scope-root paths must not overlap")
+    for index, support in enumerate(supports):
+        if any(
+            other.startswith(f"{support}/")
+            for other in supports[index + 1 :]
+        ):
+            raise PreparationError("--support-path paths must not overlap")
+        if any(
+            support == root
+            or support.startswith(f"{root}/")
+            or root.startswith(f"{support}/")
+            for root in roots
+        ):
+            raise PreparationError(
+                "--support-path paths must not overlap --scope-root paths"
+            )
+    return ReviewScope(mode="scoped", roots=roots, support_paths=supports)
+
+
+def canonical_scope_bytes(scope: ReviewScope) -> bytes:
+    return json.dumps(
+        scope.as_json(),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
+def validate_exact_attribute_source(repo: Path, head: str, probe_path: str) -> None:
     """Require exact-tree attributes and reject local info/attributes overrides."""
 
     attributes_path_text = str(
@@ -262,7 +356,7 @@ def validate_exact_attribute_source(repo: Path, head: str) -> None:
         f"--source={head}",
         "--all",
         "--",
-        PROFILE_REPO_PATH,
+        probe_path,
         maximum=64 * 1024,
         label="Exact-tree Git attribute probe",
         attr_source=head,
@@ -682,12 +776,27 @@ def parse_tree_record(record: bytes) -> TreeEntry:
     return TreeEntry(mode=mode, object_id=object_id, size=size, path=path)
 
 
+def tree_record_path(record: bytes) -> str:
+    try:
+        metadata, raw_path = record.split(b"\t", 1)
+        mode_raw, type_raw, object_id_raw, _ = metadata.split(b" ", 3)
+        mode_raw.decode("ascii", "strict")
+        type_raw.decode("ascii", "strict")
+        object_id = object_id_raw.decode("ascii", "strict")
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise PreparationError("Git returned malformed tree metadata") from exc
+    if not OBJECT_ID_RE.fullmatch(object_id):
+        raise PreparationError("Git returned an invalid tree object ID")
+    return safe_path(raw_path)
+
+
 def scan_tree(
     repo: Path,
     sha: str,
     *,
     label: str,
     collect: bool,
+    scope: ReviewScope | None = None,
     max_entries: int | None = None,
     max_bytes: int | None = None,
 ) -> tuple[list[TreeEntry], int, int]:
@@ -727,6 +836,9 @@ def scan_tree(
                     del pending[: terminator + 1]
                     if not record:
                         raise PreparationError(f"{label} tree contains an empty Git record")
+                    path = tree_record_path(record)
+                    if scope is not None and not scope.allows_read(path):
+                        continue
                     entry = parse_tree_record(record)
                     entry_count += 1
                     total_bytes += entry.size
@@ -790,8 +902,13 @@ def scan_tree(
     return entries, entry_count, total_bytes
 
 
-def reject_special_tree_entries(repo: Path, sha: str, label: str) -> None:
-    scan_tree(repo, sha, label=label, collect=False)
+def reject_special_tree_entries(
+    repo: Path,
+    sha: str,
+    label: str,
+    scope: ReviewScope | None = None,
+) -> None:
+    scan_tree(repo, sha, label=label, collect=False, scope=scope)
 
 
 def parse_name_status(raw: bytes) -> list[dict[str, Any]]:
@@ -974,34 +1091,47 @@ def prepare_checkout(
     metadata.chmod(0o500)
 
 
-def profile_from_base(repo: Path, base: str) -> tuple[bytes, str, str]:
+def exact_tree_entry(
+    repo: Path,
+    sha: str,
+    path: str,
+) -> tuple[bytes, bytes, str] | None:
     listing = git(
         repo,
         "ls-tree",
         "-z",
         "--full-tree",
-        base,
+        sha,
         "--",
-        PROFILE_REPO_PATH,
+        path,
     )
     assert isinstance(listing, bytes)
     records = [record for record in listing.split(b"\0") if record]
+    if not records:
+        return None
     if len(records) != 1:
-        raise PreparationError(
-            f"Trusted base {base} must contain exactly one {PROFILE_REPO_PATH} blob"
-        )
+        raise PreparationError("Git returned an ambiguous exact tree selector")
     try:
         metadata, raw_path = records[0].split(b"\t", 1)
         mode, object_type, object_id = metadata.split(b" ", 2)
     except ValueError as exc:
-        raise PreparationError("Trusted base profile has malformed Git metadata") from exc
-    if safe_path(raw_path) != PROFILE_REPO_PATH:
-        raise PreparationError("Git returned an unexpected trusted profile path")
-    if mode != b"100644" or object_type != b"blob":
-        raise PreparationError(
-            f"Trusted base profile must be a non-executable regular blob: {PROFILE_REPO_PATH}"
-        )
-    size_text = str(git(repo, "cat-file", "-s", object_id.decode("ascii"), text=True)).strip()
+        raise PreparationError("Git returned malformed exact tree metadata") from exc
+    if safe_path(raw_path) != path:
+        raise PreparationError("Git returned an unexpected exact tree path")
+    try:
+        oid = object_id.decode("ascii", "strict")
+    except UnicodeDecodeError as exc:
+        raise PreparationError("Git returned a non-ASCII object ID") from exc
+    if not OBJECT_ID_RE.fullmatch(oid):
+        raise PreparationError("Git returned an invalid exact tree object ID")
+    return mode, object_type, oid
+
+
+def read_profile_blob(
+    repo: Path,
+    object_id: str,
+) -> bytes:
+    size_text = str(git(repo, "cat-file", "-s", object_id, text=True)).strip()
     try:
         size = int(size_text)
     except ValueError as exc:
@@ -1012,7 +1142,7 @@ def profile_from_base(repo: Path, base: str) -> tuple[bytes, str, str]:
         repo,
         "cat-file",
         "blob",
-        object_id.decode("ascii"),
+        object_id,
         maximum=size,
         label="Trusted base profile",
     )
@@ -1022,6 +1152,60 @@ def profile_from_base(repo: Path, base: str) -> tuple[bytes, str, str]:
         text = data.decode("utf-8", "strict")
     except UnicodeDecodeError as exc:
         raise PreparationError("Profile must be UTF-8") from exc
+    return data
+
+
+def profile_for_review(
+    repo: Path,
+    base: str,
+    head: str,
+    profile_path: str,
+    bootstrap_profile_oid: str | None,
+) -> tuple[bytes, str, str, str, str]:
+    base_entry = exact_tree_entry(repo, base, profile_path)
+    if bootstrap_profile_oid is None:
+        if base_entry is None:
+            raise PreparationError(
+                f"Trusted base {base} must contain exactly one {profile_path} blob"
+            )
+        mode, object_type, object_id = base_entry
+        if mode != b"100644" or object_type != b"blob":
+            raise PreparationError(
+                f"Trusted base profile must be a non-executable regular blob: {profile_path}"
+            )
+        data = read_profile_blob(repo, object_id)
+        profile_origin = "target_base"
+        exposed_object_id = object_id
+    else:
+        if base_entry is not None:
+            raise PreparationError(
+                "--bootstrap-profile-oid is allowed only when the trusted base "
+                "does not contain --profile-path"
+            )
+        if not OBJECT_ID_RE.fullmatch(bootstrap_profile_oid):
+            raise PreparationError(
+                "--bootstrap-profile-oid must be a full lowercase Git object ID"
+            )
+        head_entry = exact_tree_entry(repo, head, profile_path)
+        if head_entry is None:
+            raise PreparationError(
+                "Bootstrap profile must exist at --profile-path in the exact head"
+            )
+        mode, object_type, object_id = head_entry
+        if (
+            mode != b"100644"
+            or object_type != b"blob"
+            or object_id != bootstrap_profile_oid
+        ):
+            raise PreparationError(
+                "Bootstrap profile OID does not match the exact non-executable "
+                "head profile blob"
+            )
+        data = read_profile_blob(repo, object_id)
+        profile_origin = "operator_bootstrap"
+        exposed_object_id = object_id
+
+    text = data.decode("utf-8", "strict")
     matches = list(PROFILE_SOURCE_RE.finditer(text))
     if len(matches) != 1:
         raise PreparationError(
@@ -1029,11 +1213,67 @@ def profile_from_base(repo: Path, base: str) -> tuple[bytes, str, str]:
         )
     source_commit = full_sha(matches[0].group(1), "profile metadata.source_commit")
     require_commit(repo, source_commit, "profile source")
-    if not is_ancestor(repo, source_commit, base):
+    if profile_origin == "operator_bootstrap" and source_commit != base:
+        raise PreparationError(
+            "Bootstrap profile metadata.source_commit must equal the target base_sha"
+        )
+    if profile_origin == "target_base" and not is_ancestor(repo, source_commit, base):
         raise PreparationError(
             "Profile metadata.source_commit must be an ancestor of the target base_sha"
         )
-    return data, hashlib.sha256(data).hexdigest(), source_commit
+    return (
+        data,
+        hashlib.sha256(data).hexdigest(),
+        source_commit,
+        profile_origin,
+        exposed_object_id,
+    )
+
+
+def validate_scope_selectors(
+    repo: Path,
+    base: str,
+    head: str,
+    scope: ReviewScope,
+) -> None:
+    """Require scoped selectors to resolve exactly in the trusted base tree."""
+
+    if scope.mode == "repository":
+        return
+    support_set = set(scope.support_paths)
+    for path in (*scope.roots, *scope.support_paths):
+        base_entry = exact_tree_entry(repo, base, path)
+        head_entry = exact_tree_entry(repo, head, path)
+        if path in support_set:
+            valid = (
+                base_entry is not None
+                and head_entry is not None
+                and base_entry == head_entry
+                and (
+                    (
+                        base_entry[0] in (b"100644", b"100755")
+                        and base_entry[1] == b"blob"
+                    )
+                    or (
+                        base_entry[0] == b"040000"
+                        and base_entry[1] == b"tree"
+                    )
+                )
+            )
+        else:
+            entries = [entry for entry in (base_entry, head_entry) if entry is not None]
+            valid = bool(entries) and all(
+                (
+                    mode in (b"100644", b"100755") and object_type == b"blob"
+                ) or (mode == b"040000" and object_type == b"tree")
+                for mode, object_type, _ in entries
+            )
+        if not valid:
+            raise PreparationError(
+                "Configured review scope must select a regular file or directory "
+                "in the trusted base or exact head; support paths must be unchanged "
+                "regular files or directories in both trees"
+            )
 
 
 def add_tree(archive: tarfile.TarFile, root: Path) -> None:
@@ -1077,6 +1317,10 @@ def main() -> int:
     parser.add_argument("--pr-number", type=int)
     parser.add_argument("--event", type=Path)
     parser.add_argument("--acceptance-context", type=Path)
+    parser.add_argument("--profile-path", default=DEFAULT_PROFILE_REPO_PATH)
+    parser.add_argument("--bootstrap-profile-oid")
+    parser.add_argument("--scope-root", action="append", default=[])
+    parser.add_argument("--support-path", action="append", default=[])
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--max-files", type=int, default=10_000)
     parser.add_argument("--max-context-bytes", type=int, default=32 * 1024 * 1024)
@@ -1091,6 +1335,17 @@ def main() -> int:
         default=DEFAULT_MAX_CHECKOUT_BYTES,
     )
     args = parser.parse_args()
+    try:
+        profile_path = safe_path(args.profile_path.encode("utf-8", "strict"))
+    except (UnicodeEncodeError, PreparationError) as exc:
+        raise PreparationError("--profile-path must be a canonical repository path") from exc
+    bootstrap_profile_oid = (
+        None
+        if args.bootstrap_profile_oid is None
+        else args.bootstrap_profile_oid.strip()
+    )
+    review_scope = review_scope_from_args(args.scope_root, args.support_path)
+    scope_digest = hashlib.sha256(canonical_scope_bytes(review_scope)).hexdigest()
 
     if args.max_files < 1 or args.max_files > 10_000:
         raise PreparationError("--max-files must be between 1 and 10000")
@@ -1142,17 +1397,19 @@ def main() -> int:
     require_commit(root, head, "head")
     merge_base = unique_merge_base(root, base, head)
     require_commit(root, merge_base, "merge base")
+    validate_scope_selectors(root, base, head, review_scope)
     head_entries, checkout_files, checkout_bytes = scan_tree(
         root,
         head,
         label="Head",
         collect=True,
+        scope=review_scope,
         max_entries=args.max_checkout_files,
         max_bytes=args.max_checkout_bytes,
     )
-    reject_special_tree_entries(root, base, "Base")
+    reject_special_tree_entries(root, base, "Base", review_scope)
     if merge_base != base:
-        reject_special_tree_entries(root, merge_base, "Merge-base")
+        reject_special_tree_entries(root, merge_base, "Merge-base", review_scope)
 
     acceptance_context = None
     acceptance_context_digest = None
@@ -1165,8 +1422,20 @@ def main() -> int:
             head_sha=head,
         )
 
-    profile_data, profile_digest, profile_source_commit = profile_from_base(root, base)
-    validate_exact_attribute_source(root, head)
+    (
+        profile_data,
+        profile_digest,
+        profile_source_commit,
+        profile_origin,
+        profile_object_id,
+    ) = profile_for_review(
+        root,
+        base,
+        head,
+        profile_path,
+        bootstrap_profile_oid,
+    )
+    validate_exact_attribute_source(root, head, profile_path)
     name_status = bounded_git_output(
         root,
         "diff",
@@ -1181,6 +1450,15 @@ def main() -> int:
     )
     files = parse_name_status(name_status)
     del name_status
+    if any(
+        not review_scope.allows_change(path)
+        for entry in files
+        for path in (entry["path"], entry["old_path"])
+        if path is not None
+    ):
+        raise PreparationError(
+            "Changed-file inventory is outside the configured review scope"
+        )
     if len(files) > args.max_files:
         raise PreparationError(
             f"Change has {len(files)} files; configured fail-closed limit is {args.max_files}"
@@ -1217,6 +1495,11 @@ def main() -> int:
         "head_sha": head,
         "profile_digest": profile_digest,
         "profile_source_commit": profile_source_commit,
+        "profile_path": profile_path,
+        "profile_origin": profile_origin,
+        "profile_object_id": profile_object_id,
+        "review_scope": review_scope.as_json(),
+        "scope_digest": scope_digest,
         "pull_request_number": pr_number,
         "acceptance_context_digest": acceptance_context_digest,
         "acceptance_context": acceptance_context,
@@ -1289,6 +1572,11 @@ def main() -> int:
                 "pull_request_number": pr_number,
                 "profile_digest": profile_digest,
                 "profile_source_commit": profile_source_commit,
+                "profile_path": profile_path,
+                "profile_origin": profile_origin,
+                "profile_object_id": profile_object_id,
+                "review_scope": review_scope.as_json(),
+                "scope_digest": scope_digest,
                 "acceptance_context_digest": acceptance_context_digest,
                 "acceptance_issue_count": (
                     0

@@ -90,7 +90,8 @@ load_env() {
     REVIEW_ADVISOR_SNAPSHOT_DIR REVIEW_ADVISOR_MAX_FILES \
     REVIEW_ADVISOR_MAX_CONTEXT_BYTES REVIEW_ADVISOR_MAX_CHECKOUT_FILES \
     REVIEW_ADVISOR_MAX_CHECKOUT_BYTES REVIEW_ADVISOR_INSTALL_ID \
-    REVIEW_ADVISOR_REPOSITORY REVIEW_ADVISOR_RUNTIME_FINGERPRINT
+    REVIEW_ADVISOR_REPOSITORY REVIEW_ADVISOR_SCOPE_DIGEST \
+    REVIEW_ADVISOR_RUNTIME_FINGERPRINT
 
   [[ -e "$env_file" || -L "$env_file" ]] || {
     echo "Review advisor requires a private configuration file: $env_file" >&2
@@ -214,18 +215,45 @@ if not isinstance(repository, str) or not re.fullmatch(
     r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository
 ):
     raise SystemExit("Review advisor config contains an invalid repository identity")
+scope_matches = re.findall(
+    r"^scope_digest:[ \t]*(.+?)[ \t]*$", text, re.MULTILINE
+)
+if len(scope_matches) != 1:
+    raise SystemExit("Review advisor config must contain exactly one scope digest")
+try:
+    scope_digest = json.loads(scope_matches[0])
+except json.JSONDecodeError as error:
+    raise SystemExit(
+        "Review advisor scope digest must be a JSON-quoted YAML scalar"
+    ) from error
+if not isinstance(scope_digest, str) or not re.fullmatch(
+    r"[0-9a-f]{64}", scope_digest
+):
+    raise SystemExit("Review advisor config contains an invalid scope digest")
 install_id = hashlib.sha256(
-    os.path.realpath(install).encode("utf-8") + b"\0" + repository.encode("utf-8")
+    os.path.realpath(install).encode("utf-8")
+    + b"\0"
+    + repository.encode("utf-8")
+    + b"\0"
+    + scope_digest.encode("ascii")
 ).hexdigest()[:16]
-print(f"{install_id}\t{repository}")
+print(f"{install_id}\t{repository}\t{scope_digest}")
 PY
   )"
-  IFS=$'\t' read -r REVIEW_ADVISOR_INSTALL_ID REVIEW_ADVISOR_REPOSITORY <<<"$identity"
+  IFS=$'\t' read -r \
+    REVIEW_ADVISOR_INSTALL_ID REVIEW_ADVISOR_REPOSITORY \
+    REVIEW_ADVISOR_SCOPE_DIGEST <<<"$identity"
   [[ "$REVIEW_ADVISOR_INSTALL_ID" =~ ^[0-9a-f]{16}$ ]] || {
     echo "Could not derive the review advisor install identity" >&2
     return 1
   }
-  export REVIEW_ADVISOR_INSTALL_ID REVIEW_ADVISOR_REPOSITORY
+  [[ "$REVIEW_ADVISOR_SCOPE_DIGEST" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "Could not load the review advisor scope identity" >&2
+    return 1
+  }
+  export \
+    REVIEW_ADVISOR_INSTALL_ID REVIEW_ADVISOR_REPOSITORY \
+    REVIEW_ADVISOR_SCOPE_DIGEST
 
   local state_root default_port
   state_root="${REVIEW_ADVISOR_STATE_ROOT:-${XDG_STATE_HOME:-${HOME}/.local/state}/nemoclaw-review-advisor}"
@@ -290,7 +318,7 @@ PY
   case "$REVIEW_ADVISOR_PROVIDER_MODE" in
     nvidia)
       NEMOCLAW_ENDPOINT_URL="${NEMOCLAW_ENDPOINT_URL:-https://integrate.api.nvidia.com/v1}"
-      NEMOCLAW_MODEL="${NEMOCLAW_MODEL:-nvidia/nvidia/nemotron-3-ultra}"
+      NEMOCLAW_MODEL="${NEMOCLAW_MODEL:-nvidia/nemotron-3-ultra-550b-a55b}"
       ;;
     openai-compatible)
       [[ -n "${NEMOCLAW_ENDPOINT_URL:-}" && -n "${NEMOCLAW_MODEL:-}" ]] || {
@@ -414,10 +442,13 @@ run_openshell() {
 run_openshell_detached() {
   openshell_preflight
   local gateway_name="$OPENSHELL_GATEWAY"
-  (
-    unset OPENSHELL_GATEWAY OPENSHELL_GATEWAY_ENDPOINT OPENSHELL_GATEWAY_INSECURE
+  unset OPENSHELL_GATEWAY OPENSHELL_GATEWAY_ENDPOINT OPENSHELL_GATEWAY_INSECURE
+  if command -v setsid >/dev/null 2>&1; then
     exec setsid openshell -g "$gateway_name" "$@"
-  )
+  fi
+  exec python3 -c \
+    'import os,sys; os.setsid(); os.execvp("openshell", ["openshell", "-g", *sys.argv[1:]])' \
+    "$gateway_name" "$@"
 }
 
 gateway_registration_exists() {
@@ -790,7 +821,7 @@ assert_hermes_api_surface() {
   ensure_api_key
   python3 - \
     "http://127.0.0.1:${HERMES_FORWARD_PORT}" \
-    "$STATE_DIR/api-key" "$NEMOCLAW_MODEL" <<'PY'
+    "$STATE_DIR/api-key" <<'PY'
 import json
 import os
 import stat
@@ -799,7 +830,7 @@ import time
 import urllib.error
 import urllib.request
 
-base_url, key_path, expected_model = sys.argv[1:]
+base_url, key_path = sys.argv[1:]
 flags = os.O_RDONLY
 if hasattr(os, "O_NOFOLLOW"):
     flags |= os.O_NOFOLLOW
@@ -875,7 +906,9 @@ if (
     not isinstance(capabilities, dict)
     or capabilities.get("object") != "hermes.api_server.capabilities"
     or capabilities.get("platform") != "hermes-agent"
-    or capabilities.get("model") != expected_model
+    # Hermes exposes its stable API facade here. The configured inference model
+    # is independently verified against the exact OpenShell provider route.
+    or capabilities.get("model") != "hermes-agent"
     or capabilities.get("auth") != {"type": "bearer", "required": True}
     or capabilities.get("runtime", {}).get("mode") != "server_agent"
     or capabilities.get("runtime", {}).get("tool_execution") != "server"

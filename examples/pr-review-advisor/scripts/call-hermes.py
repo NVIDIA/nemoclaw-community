@@ -23,6 +23,22 @@ from typing import Any
 CHAT_RESPONSE_MAX_BYTES = 16 * 1024 * 1024
 CONTROL_RESPONSE_MAX_BYTES = 64 * 1024
 HTTP_ERROR_MAX_BYTES = 16 * 1024
+RUN_IDENTITY_KEYS = (
+    "repository",
+    "base_sha",
+    "merge_base_sha",
+    "head_sha",
+    "profile_digest",
+    "profile_source_commit",
+    "review_scope",
+    "scope_digest",
+    "profile_path",
+    "profile_origin",
+    "profile_object_id",
+    "acceptance_context_digest",
+    "context_digest",
+    "pull_request_number",
+)
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -272,6 +288,126 @@ def unwrap_artifact(value: Any) -> dict[str, Any]:
     raise ValueError("Hermes response did not contain a review-advisor/v1 artifact")
 
 
+def _canonical_repo_path(value: Any, name: str) -> str:
+    if not isinstance(value, str) or not value or len(value) > 4_096:
+        raise ValueError(f"{name} must be a nonempty bounded string")
+    if value.startswith("/") or "\\" in value or "\x00" in value:
+        raise ValueError(f"{name} must be a checkout-relative POSIX path")
+    parts = value.split("/")
+    if any(part in ("", ".", "..") for part in parts):
+        raise ValueError(
+            f"{name} must be canonical and may not contain '.', '..', or empty parts"
+        )
+    if any(
+        ord(character) < 0x20 or ord(character) == 0x7F
+        for character in value
+    ):
+        raise ValueError(f"{name} contains a control character")
+    portable_parts = tuple(part.casefold().rstrip(" .") for part in parts)
+    if any(not part for part in portable_parts):
+        raise ValueError(f"{name} contains an empty portable path component")
+    if ".git" in portable_parts:
+        raise ValueError(f"{name} collides with reserved review metadata")
+    return value
+
+
+def _validate_review_scope(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != {
+        "mode",
+        "roots",
+        "support_paths",
+    }:
+        raise ValueError("artifact.run.review_scope has an invalid shape")
+    mode = value["mode"]
+    if mode not in ("repository", "scoped"):
+        raise ValueError("artifact.run.review_scope.mode is invalid")
+
+    def normalize_paths(key: str) -> list[str]:
+        raw = value[key]
+        if not isinstance(raw, list) or len(raw) > 10_000:
+            raise ValueError(f"artifact.run.review_scope.{key} must be a bounded array")
+        normalized = [
+            _canonical_repo_path(
+                item,
+                f"artifact.run.review_scope.{key}[{index}]",
+            )
+            for index, item in enumerate(raw)
+        ]
+        if normalized != sorted(normalized):
+            raise ValueError(f"artifact.run.review_scope.{key} must be sorted")
+        if len(normalized) != len(set(normalized)):
+            raise ValueError(
+                f"artifact.run.review_scope.{key} must not contain duplicates"
+            )
+        portable = [
+            tuple(part.casefold().rstrip(" .") for part in path.split("/"))
+            for path in normalized
+        ]
+        if len(portable) != len(set(portable)):
+            raise ValueError(
+                f"artifact.run.review_scope.{key} contains portable path collisions"
+            )
+        return normalized
+
+    roots = normalize_paths("roots")
+    support_paths = normalize_paths("support_paths")
+    if mode == "repository":
+        if roots or support_paths:
+            raise ValueError(
+                "artifact.run.review_scope repository mode requires empty paths"
+            )
+    elif not roots:
+        raise ValueError(
+            "artifact.run.review_scope scoped mode requires at least one root"
+        )
+    for index, root in enumerate(roots):
+        if any(other.startswith(f"{root}/") for other in roots[index + 1 :]):
+            raise ValueError("artifact.run.review_scope.roots must not overlap")
+    for index, support in enumerate(support_paths):
+        if any(
+            other.startswith(f"{support}/")
+            for other in support_paths[index + 1 :]
+        ):
+            raise ValueError(
+                "artifact.run.review_scope.support_paths must not overlap"
+            )
+        if any(
+            support == root
+            or support.startswith(f"{root}/")
+            or root.startswith(f"{support}/")
+            for root in roots
+        ):
+            raise ValueError(
+                "artifact.run.review_scope support paths must not overlap roots"
+            )
+    return {
+        "mode": mode,
+        "roots": roots,
+        "support_paths": support_paths,
+    }
+
+
+def _validate_profile_identity(run: dict[str, Any]) -> None:
+    profile_path = _canonical_repo_path(
+        run.get("profile_path"),
+        "artifact.run.profile_path",
+    )
+    if profile_path != run["profile_path"]:
+        raise ValueError("artifact.run.profile_path is not canonical")
+    if run.get("profile_origin") not in ("target_base", "operator_bootstrap"):
+        raise ValueError(
+            "artifact.run.profile_origin must be target_base or operator_bootstrap"
+        )
+    profile_object_id = run.get("profile_object_id")
+    if not isinstance(profile_object_id, str) or not re.fullmatch(
+        r"(?:[0-9a-f]{40}|[0-9a-f]{64})",
+        profile_object_id,
+    ):
+        raise ValueError(
+            "artifact.run.profile_object_id must be a full lowercase Git object ID"
+        )
+
+
 def validate_artifact(artifact: dict[str, Any]) -> None:
     for key in (
         "run",
@@ -309,6 +445,26 @@ def validate_artifact(artifact: dict[str, Any]) -> None:
         raise ValueError(
             "artifact.run.acceptance_context_digest must be null or a SHA-256 digest"
         )
+    review_scope = _validate_review_scope(run.get("review_scope"))
+    scope_digest = run.get("scope_digest")
+    if not isinstance(scope_digest, str) or not re.fullmatch(
+        r"[0-9a-f]{64}",
+        scope_digest,
+    ):
+        raise ValueError("artifact.run.scope_digest must be a SHA-256 digest")
+    expected_scope_digest = hashlib.sha256(
+        json.dumps(
+            review_scope,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    if not hmac.compare_digest(scope_digest, expected_scope_digest):
+        raise ValueError(
+            "artifact.run.scope_digest does not match artifact.run.review_scope"
+        )
+    _validate_profile_identity(run)
     if not isinstance(artifact["findings"], list):
         raise ValueError("artifact.findings must be an array")
 
@@ -320,22 +476,12 @@ def validate_identity(artifact: dict[str, Any], request_path: Path) -> None:
     if "acceptance_context_digest" not in request:
         raise ValueError("trusted request is missing acceptance_context_digest")
     run = artifact["run"]
-    for request_key, run_key in (
-        ("repository", "repository"),
-        ("base_sha", "base_sha"),
-        ("merge_base_sha", "merge_base_sha"),
-        ("head_sha", "head_sha"),
-        ("profile_digest", "profile_digest"),
-        ("profile_source_commit", "profile_source_commit"),
-        ("acceptance_context_digest", "acceptance_context_digest"),
-        ("context_digest", "context_digest"),
-        ("pull_request_number", "pull_request_number"),
-    ):
-        expected = request.get(request_key)
-        actual = run.get(run_key)
+    for identity_key in RUN_IDENTITY_KEYS:
+        expected = request.get(identity_key)
+        actual = run.get(identity_key)
         if expected != actual:
             raise ValueError(
-                f"artifact identity mismatch for {run_key}: "
+                f"artifact identity mismatch for {identity_key}: "
                 f"expected {expected!r}, got {actual!r}"
             )
 
@@ -406,14 +552,56 @@ def markdown(artifact: dict[str, Any]) -> str:
         f"**Confidence:** {code_span(summary.get('confidence', 'unknown'))}  ",
         f"**Exact head:** {code_span(run['head_sha'])}  ",
         f"**Target base:** {code_span(run['base_sha'])}  ",
-        f"**Review merge base:** {code_span(run['merge_base_sha'])}",
-        f"**Profile calibrated through:** {code_span(run['profile_source_commit'])}",
-        "",
-        markdown_text(summary.get("one_line", "")).strip(),
-        "",
-        "## Findings",
-        "",
+        f"**Review merge base:** {code_span(run['merge_base_sha'])}  ",
+        f"**Profile calibrated through:** {code_span(run['profile_source_commit'])}  ",
+        f"**Profile path:** {code_span(run['profile_path'])}  ",
+        f"**Profile origin:** {code_span(run['profile_origin'])}  ",
+        f"**Profile blob:** {code_span(run['profile_object_id'])}",
     ]
+    if run["profile_origin"] == "operator_bootstrap":
+        lines.extend(
+            [
+                "",
+                "> [!WARNING]",
+                (
+                    "> **Provisional operator-bootstrap review.** The target base did "
+                    "not contain this profile, so an operator explicitly selected the "
+                    "profile blob from the proposed head. This is dogfood evidence, "
+                    "not an independent merge gate."
+                ),
+            ]
+        )
+    lines.extend(["", markdown_text(summary.get("one_line", "")).strip(), ""])
+    scope = run["review_scope"]
+    if scope["mode"] == "scoped":
+        lines.extend(
+            [
+                "## Review scope",
+                "",
+                (
+                    "**Changed-path roots:** "
+                    + ", ".join(code_span(path) for path in scope["roots"])
+                ),
+                (
+                    "**Read-only support paths:** "
+                    + (
+                        ", ".join(
+                            code_span(path) for path in scope["support_paths"]
+                        )
+                        or "none"
+                    )
+                ),
+                "",
+                (
+                    "Only changes under the listed roots were eligible for this "
+                    "review. Support paths were available only as unchanged context."
+                ),
+                "",
+            ]
+        )
+    else:
+        lines.extend(["**Review scope:** repository-wide", ""])
+    lines.extend(["## Findings", ""])
     findings = artifact.get("findings", [])
     if not findings:
         lines.append("No open findings.")
@@ -456,6 +644,7 @@ def markdown(artifact: dict[str, Any]) -> str:
             "---",
             (
                 f"Profile {code_span(run.get('profile_digest', ''))} · "
+                f"Scope {code_span(run.get('scope_digest', ''))} · "
                 f"Context {code_span(run.get('context_digest', ''))}"
             ),
             "",
@@ -610,20 +799,7 @@ def main() -> int:
             "hermes-session-deleted",
         ],
         "attestation_digest": artifact["attestation"]["digest"],
-        "run": {
-            key: run.get(key)
-            for key in (
-                "repository",
-                "base_sha",
-                "merge_base_sha",
-                "head_sha",
-                "profile_digest",
-                "profile_source_commit",
-                "acceptance_context_digest",
-                "context_digest",
-                "pull_request_number",
-            )
-        },
+        "run": {key: run.get(key) for key in RUN_IDENTITY_KEYS},
     }
     _write_private(
         args.output / "verification.json",

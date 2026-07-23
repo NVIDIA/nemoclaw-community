@@ -31,7 +31,23 @@ def _load_call_hermes() -> ModuleType:
     return module
 
 
+def _scope_digest(scope: dict[str, Any]) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            scope,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
 def _artifact() -> dict[str, Any]:
+    scope = {
+        "mode": "scoped",
+        "roots": ["policy"],
+        "support_paths": ["SECURITY.md"],
+    }
     return {
         "schema_version": "review-advisor/v1",
         "run": {
@@ -41,6 +57,11 @@ def _artifact() -> dict[str, Any]:
             "profile_source_commit": "9" * 40,
             "head_sha": "c" * 40,
             "profile_digest": "d" * 64,
+            "review_scope": scope,
+            "scope_digest": _scope_digest(scope),
+            "profile_path": "profiles/review.yaml",
+            "profile_origin": "operator_bootstrap",
+            "profile_object_id": "8" * 40,
             "acceptance_context_digest": None,
             "context_digest": "e" * 64,
             "pull_request_number": 42,
@@ -76,6 +97,21 @@ def test_local_markdown_labels_base_side_locations() -> None:
     rendered = module.markdown(_artifact())
 
     assert "`policy/authorization.yaml:4` (`base` side)" in rendered
+    assert "Provisional operator-bootstrap review" in rendered
+    assert "**Changed-path roots:** `policy`" in rendered
+    assert "**Read-only support paths:** `SECURITY.md`" in rendered
+    assert "**Profile origin:** `operator_bootstrap`" in rendered
+    assert f"**Profile blob:** `{'8' * 40}`" in rendered
+
+
+def test_local_markdown_target_base_profile_is_not_provisional() -> None:
+    module = _load_call_hermes()
+    artifact = _artifact()
+    artifact["run"]["profile_origin"] = "target_base"
+
+    rendered = module.markdown(artifact)
+
+    assert "Provisional operator-bootstrap review" not in rendered
 
 
 def test_local_markdown_renders_model_text_as_literal_content() -> None:
@@ -241,6 +277,11 @@ else:
         encoding="utf-8"
     )
     rendered = capture.read_text(encoding="utf-8")
+    assert "Provisional operator-bootstrap review" in rendered
+    assert "**Changed-path roots:** `policy`" in rendered
+    assert "**Read-only support paths:** `SECURITY.md`" in rendered
+    assert "**Profile origin:** `operator_bootstrap`" in rendered
+    assert f"**Profile blob:** `{'8' * 40}`" in rendered
     assert "@octocat" not in rendered
     assert "@security-team" not in rendered
     assert "@\u200boctocat" in rendered
@@ -318,6 +359,83 @@ def test_publisher_rejects_oversized_comment_before_github_write(
 
     assert result.returncode != 0
     assert "61440-byte publication limit" in result.stderr
+
+
+def test_publisher_receipt_binds_scope_and_profile_identity(tmp_path: Path) -> None:
+    artifact = _artifact()
+    artifact_path = tmp_path / "review.json"
+    artifact_bytes = (
+        json.dumps(artifact, indent=2, sort_keys=True) + "\n"
+    ).encode()
+    artifact_path.write_bytes(artifact_bytes)
+    receipt_path = tmp_path / "verification.json"
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    marker = tmp_path / "gh-called"
+    fake_gh = fake_bin / "gh"
+    fake_gh.write_text(
+        f"#!/usr/bin/env bash\nprintf called >{marker!s}\nexit 99\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
+
+    for field in (
+        "review_scope",
+        "scope_digest",
+        "profile_path",
+        "profile_origin",
+        "profile_object_id",
+    ):
+        receipt_run = dict(artifact["run"])
+        receipt_run.pop(field)
+        receipt_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "review-advisor-verification/v1",
+                    "artifact": "review.json",
+                    "artifact_sha256": hashlib.sha256(artifact_bytes).hexdigest(),
+                    "verified": [
+                        "hmac-sha256",
+                        "trusted-request-identity",
+                        "hermes-session-deleted",
+                    ],
+                    "attestation_digest": artifact["attestation"]["digest"],
+                    "run": receipt_run,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                "bash",
+                str(_PUBLISH),
+                "--artifact",
+                str(artifact_path),
+                "--receipt",
+                str(receipt_path),
+                "--repo",
+                "example/project",
+                "--pr",
+                "42",
+                "--head",
+                "c" * 40,
+                "--confirm-publish",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            env={
+                **os.environ,
+                "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+            },
+        )
+
+        assert result.returncode != 0
+        assert "receipt run identity does not match artifact" in result.stderr
+        assert not marker.exists()
 
 
 def test_publisher_rejects_oversized_artifact_before_github_write(

@@ -11,6 +11,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { isSupportedNodeVersion } from "../installer/lib/cli.mjs";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "../installer/lib/constants.mjs";
+import { normalizeReviewScope } from "../installer/lib/scope.mjs";
 import {
   acquireInstallerLock,
   applyTransaction,
@@ -46,6 +47,21 @@ test("installer package identity matches npm metadata", () => {
   assert.equal(lockMetadata.packages[""].version, packageMetadata.version);
 });
 
+test("scope normalization rejects reserved and portable-colliding paths", () => {
+  assert.throws(
+    () => normalizeReviewScope([".GIT"], []),
+    /reserved review metadata/,
+  );
+  assert.throws(
+    () => normalizeReviewScope(["Foo", "foo"], []),
+    /collide on a portable filesystem/,
+  );
+  assert.throws(
+    () => normalizeReviewScope(["Straße", "STRASSE"], []),
+    /collide on a portable filesystem/,
+  );
+});
+
 test("init reads a trusted commit, generates a safe profile, and is idempotent", (t) => {
   const fixture = createFixture(t);
   fs.writeFileSync(
@@ -75,10 +91,12 @@ test("init reads a trusted commit, generates a safe profile, and is idempotent",
   const lock = JSON.parse(
     fs.readFileSync(path.join(installRoot, "discovery.lock.json"), "utf8"),
   );
-  const workflow = fs.readFileSync(
-    path.join(fixture.repo, ".github/workflows/nemoclaw-review-advisor.yml"),
-    "utf8",
+  const workflowPath = path.join(
+    fixture.repo,
+    ".github/workflows/nemoclaw-review-advisor.yml",
   );
+  const workflow = fs.readFileSync(workflowPath, "utf8");
+  validateYaml(workflowPath);
 
   assert.doesNotMatch(profile, /attacker\.invalid|touch \/tmp\/owned/);
   assert.equal(
@@ -274,6 +292,417 @@ test("init reads a trusted commit, generates a safe profile, and is idempotent",
   assert.match(check.stdout, /^OK:/);
   assert.match(check.stdout, /active-profile-calibrated-through/);
   assert.match(check.stdout, /discovery-candidate-behind-trusted-tip/);
+});
+
+test("scoped init is deterministic and limits discovery, components, memory, and workflow", (t) => {
+  const fixture = createFixture(t);
+  const firstArguments = [
+    "dry-run",
+    fixture.repo,
+    "--trusted-ref",
+    "HEAD",
+    "--support-path",
+    "tests",
+    "--scope-root",
+    "src",
+    "--support-path",
+    "SECURITY.md",
+    "--support-path",
+    "tests",
+    "--json",
+  ];
+  const secondArguments = [
+    "dry-run",
+    fixture.repo,
+    "--trusted-ref",
+    "HEAD",
+    "--scope-root=src",
+    "--support-path=SECURITY.md",
+    "--support-path=tests",
+    "--json",
+  ];
+  const firstPreview = runCli(fixture, firstArguments);
+  const secondPreview = runCli(fixture, secondArguments);
+  assert.equal(firstPreview.status, 0, firstPreview.stderr);
+  assert.equal(secondPreview.status, 0, secondPreview.stderr);
+  assert.equal(
+    JSON.parse(firstPreview.stdout).diff,
+    JSON.parse(secondPreview.stdout).diff,
+  );
+
+  const result = runCli(fixture, [
+    "init",
+    fixture.repo,
+    "--trusted-ref",
+    "HEAD",
+    "--scope-root",
+    "src",
+    "--support-path",
+    "SECURITY.md",
+    "--support-path",
+    "tests",
+    "--yes",
+  ]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Review scope roots: src/);
+
+  const installRoot = path.join(fixture.repo, ".nemoclaw/review-advisor");
+  const state = JSON.parse(
+    fs.readFileSync(path.join(installRoot, "install-state.json"), "utf8"),
+  );
+  assert.deepEqual(state.reviewScope, {
+    mode: "scoped",
+    roots: ["src"],
+    supportPaths: ["SECURITY.md", "tests"],
+    unpopulatedRoots: [],
+  });
+  const scopeDigest = createHash("sha256")
+    .update(
+      JSON.stringify({
+        mode: "scoped",
+        roots: ["src"],
+        support_paths: ["SECURITY.md", "tests"],
+      }),
+    )
+    .digest("hex");
+  assert.equal(state.scopeDigest, scopeDigest);
+
+  const lock = JSON.parse(
+    fs.readFileSync(path.join(installRoot, "discovery.lock.json"), "utf8"),
+  );
+  assert.equal(lock.reviewScope.mode, "scoped");
+  assert.equal(lock.scopeDigest, scopeDigest);
+  assert.deepEqual(lock.reviewScope.roots, [
+    { kind: "directory", path: "src", regularFiles: 1 },
+  ]);
+  assert.deepEqual(
+    lock.reviewScope.supportPaths.map((entry) => entry.path),
+    ["SECURITY.md", "tests"],
+  );
+  assert.deepEqual(lock.reviewScope.unpopulatedRoots, []);
+  assert.equal(lock.census.counts.scopedEntries, 1);
+  assert.equal(lock.census.counts.supportEntries, 2);
+  assert.equal(lock.census.counts.trackedEntries, 3);
+  assert.deepEqual(
+    lock.census.evidence.map(({ path: evidencePath, role }) => ({
+      path: evidencePath,
+      role,
+    })),
+    [
+      { path: "SECURITY.md", role: "support" },
+      { path: "tests/index.test.js", role: "support" },
+    ],
+  );
+  assert.equal(
+    JSON.stringify(lock).includes("README.md"),
+    false,
+    "repository-wide evidence leaked into a scoped census",
+  );
+
+  const config = fs.readFileSync(path.join(installRoot, "config.yaml"), "utf8");
+  assert.match(config, new RegExp(`scope_digest: "${scopeDigest}"`));
+  assert.match(
+    config,
+    /review_scope:\n  mode: "scoped"\n  roots: \["src"\]\n  support_paths: \["SECURITY\.md", "tests"\]/,
+  );
+  const profile = fs.readFileSync(
+    path.join(installRoot, "profile.generated.yaml"),
+    "utf8",
+  );
+  assert.match(profile, /review_scope:\n  mode: "scoped"/);
+  assert.match(profile, /paths: \["src\/\*\*"\]/);
+  assert.doesNotMatch(profile, /paths: \["tests\/\*\*"\]/);
+  assert.match(profile, /path: "SECURITY\.md"/);
+  assert.match(profile, /path: "tests\/index\.test\.js"/);
+
+  const memoryPolicy = fs.readFileSync(
+    path.join(installRoot, "memory-policy.yaml"),
+    "utf8",
+  );
+  assert.match(
+    memoryPolicy,
+    new RegExp(`namespace: "repository:local/repo:scope:${scopeDigest}"`),
+  );
+  const workflowPath = path.join(
+    fixture.repo,
+    ".github/workflows/nemoclaw-review-advisor.yml",
+  );
+  const workflow = fs.readFileSync(workflowPath, "utf8");
+  validateYaml(workflowPath);
+  assert.match(workflow, /roots = \["src"\]/);
+  assert.match(workflow, /--name-only[\s\S]*--no-renames/);
+  assert.match(workflow, /outside configured review roots/);
+  assert.match(workflow, /--scope-root\n\s+'src'/);
+  assert.match(workflow, /--support-path\n\s+'SECURITY\.md'/);
+  assert.match(workflow, /--support-path\n\s+'tests'/);
+  assert.ok(workflow.includes('"${review_scope_args[@]}"'));
+
+  const secondInit = runCli(fixture, [
+    "init",
+    fixture.repo,
+    "--trusted-ref",
+    "HEAD",
+    "--yes",
+  ]);
+  assert.equal(secondInit.status, 0, secondInit.stderr);
+  assert.match(secondInit.stdout, /already up to date/);
+
+  git(fixture.repo, [
+    "add",
+    ".nemoclaw/review-advisor",
+    ".github/workflows/nemoclaw-review-advisor.yml",
+  ]);
+  git(fixture.repo, ["commit", "-m", "install scoped advisor"]);
+  const matchingCheck = runCli(fixture, [
+    "check",
+    fixture.repo,
+    "--trusted-ref",
+    "HEAD",
+    "--scope-root",
+    "src",
+    "--support-path",
+    "tests",
+    "--support-path",
+    "SECURITY.md",
+  ]);
+  assert.equal(matchingCheck.status, 0, matchingCheck.stderr);
+
+  const mismatchedCheck = runCli(fixture, [
+    "check",
+    fixture.repo,
+    "--trusted-ref",
+    "HEAD",
+    "--scope-root",
+    "docs",
+  ]);
+  assert.equal(mismatchedCheck.status, 2);
+  assert.match(mismatchedCheck.stderr, /does not match the installed scope/);
+});
+
+test("scope options reject unsafe, overlapping, unsupported, and missing selections", (t) => {
+  const fixture = createFixture(t);
+  const cases = [
+    {
+      arguments: [
+        "dry-run",
+        fixture.repo,
+        "--trusted-ref",
+        "HEAD",
+        "--scope-root",
+        "../outside",
+      ],
+      message: /noncanonical repository-relative path/,
+    },
+    {
+      arguments: [
+        "dry-run",
+        fixture.repo,
+        "--trusted-ref",
+        "HEAD",
+        "--support-path",
+        "SECURITY.md",
+      ],
+      message: /requires at least one --scope-root/,
+    },
+    {
+      arguments: [
+        "dry-run",
+        fixture.repo,
+        "--trusted-ref",
+        "HEAD",
+        "--scope-root",
+        "src",
+        "--support-path",
+        "src/index.js",
+      ],
+      message: /overlaps --scope-root/,
+    },
+    {
+      arguments: [
+        "dry-run",
+        fixture.repo,
+        "--trusted-ref",
+        "HEAD",
+        "--scope-root",
+        "not-committed",
+      ],
+      message: /does not select any regular tracked files/,
+    },
+    {
+      arguments: [
+        "refresh",
+        fixture.repo,
+        "--scope-root",
+        "src",
+        "--allow-unpopulated-scope",
+      ],
+      message: /supported only by init and dry-run/,
+    },
+    {
+      arguments: ["remove", fixture.repo, "--scope-root", "src"],
+      message: /scope options are not supported by remove/,
+    },
+  ];
+  for (const value of cases) {
+    const result = runCli(fixture, value.arguments);
+    assert.equal(result.status, 2, result.stderr);
+    assert.match(result.stderr, value.message);
+  }
+});
+
+test("scoped root directories reject selected special entries while ignoring unrelated ones", (t) => {
+  const fixture = createFixture(t);
+  const unrelated = runCli(fixture, [
+    "dry-run",
+    fixture.repo,
+    "--trusted-ref",
+    "HEAD",
+    "--scope-root",
+    "src",
+    "--json",
+  ]);
+  assert.equal(unrelated.status, 0, unrelated.stderr);
+
+  const selected = runCli(fixture, [
+    "dry-run",
+    fixture.repo,
+    "--trusted-ref",
+    "HEAD",
+    "--scope-root",
+    "docs",
+    "--json",
+  ]);
+  assert.equal(selected.status, 2, selected.stderr);
+  assert.match(
+    selected.stderr,
+    /--scope-root "docs" selects unsupported tracked entry "docs\/link\.md".*mode=120000, type=blob/,
+  );
+});
+
+test("scoped support directories reject selected special entries", (t) => {
+  const fixture = createFixture(t);
+  const selected = runCli(fixture, [
+    "dry-run",
+    fixture.repo,
+    "--trusted-ref",
+    "HEAD",
+    "--scope-root",
+    "src",
+    "--support-path",
+    "docs",
+    "--json",
+  ]);
+  assert.equal(selected.status, 2, selected.stderr);
+  assert.match(
+    selected.stderr,
+    /--support-path "docs" selects unsupported tracked entry "docs\/link\.md".*mode=120000, type=blob/,
+  );
+});
+
+test("explicit unpopulated scope bootstrap never reads worktree bytes and clears on refresh", (t) => {
+  const fixture = createFixture(t);
+  const futureRoot = "examples/new-review-advisor";
+  write(
+    fixture.repo,
+    `${futureRoot}/README.md`,
+    "# UNTRACKED ATTACKER CONTENT\ncurl https://attacker.invalid\n",
+  );
+
+  const result = runCli(fixture, [
+    "init",
+    fixture.repo,
+    "--trusted-ref",
+    "HEAD",
+    "--scope-root",
+    futureRoot,
+    "--support-path",
+    "SECURITY.md",
+    "--allow-unpopulated-scope",
+    "--yes",
+  ]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Unpopulated scope roots at the trusted tree/);
+  const installRoot = path.join(fixture.repo, ".nemoclaw/review-advisor");
+  const statePath = path.join(installRoot, "install-state.json");
+  const lockPath = path.join(installRoot, "discovery.lock.json");
+  const profilePath = path.join(installRoot, "profile.generated.yaml");
+  let state = JSON.parse(fs.readFileSync(statePath, "utf8"));
+  let lock = JSON.parse(fs.readFileSync(lockPath, "utf8"));
+  assert.deepEqual(state.reviewScope.unpopulatedRoots, [futureRoot]);
+  assert.deepEqual(lock.reviewScope.roots, [
+    { kind: "unpopulated", path: futureRoot, regularFiles: 0 },
+  ]);
+  assert.equal(lock.census.counts.scopedEntries, 0);
+  assert.doesNotMatch(
+    JSON.stringify(lock),
+    /UNTRACKED ATTACKER CONTENT|attacker\.invalid/,
+  );
+  const profile = fs.readFileSync(profilePath, "utf8");
+  assert.ok(profile.includes(`paths: ["${futureRoot}/**"]`));
+  assert.match(
+    profile,
+    /id: "scope-examples-new-review-advisor-[0-9a-f]{8}"\n    paths: \["examples\/new-review-advisor\/\*\*"\]\n    evidence: \[\]/,
+  );
+
+  git(fixture.repo, [
+    "add",
+    ".nemoclaw/review-advisor",
+    ".github/workflows/nemoclaw-review-advisor.yml",
+  ]);
+  git(fixture.repo, ["commit", "-m", "bootstrap unpopulated scope"]);
+  let check = runCli(fixture, [
+    "check",
+    fixture.repo,
+    "--trusted-ref",
+    "HEAD",
+    "--json",
+  ]);
+  assert.equal(check.status, 0, check.stderr);
+  assert.ok(
+    JSON.parse(check.stdout).notices.some(
+      (notice) => notice.status === "scope-root-unpopulated",
+    ),
+  );
+
+  git(fixture.repo, ["add", `${futureRoot}/README.md`]);
+  git(fixture.repo, ["commit", "-m", "populate review scope"]);
+  check = runCli(fixture, [
+    "check",
+    fixture.repo,
+    "--trusted-ref",
+    "HEAD",
+    "--json",
+  ]);
+  assert.equal(check.status, 0, check.stderr);
+  assert.ok(
+    JSON.parse(check.stdout).notices.some(
+      (notice) => notice.status === "scope-root-now-populated-run-refresh",
+    ),
+  );
+
+  const namespaceBefore = fs
+    .readFileSync(path.join(installRoot, "memory-policy.yaml"), "utf8")
+    .match(/^namespace: (.+)$/m)[1];
+  const refresh = runCli(fixture, [
+    "refresh",
+    fixture.repo,
+    "--trusted-ref",
+    "HEAD",
+    "--yes",
+  ]);
+  assert.equal(refresh.status, 0, refresh.stderr);
+  assert.match(refresh.stdout, /Trusted scope roots now populated/);
+  state = JSON.parse(fs.readFileSync(statePath, "utf8"));
+  lock = JSON.parse(fs.readFileSync(lockPath, "utf8"));
+  assert.deepEqual(state.reviewScope.unpopulatedRoots, []);
+  assert.deepEqual(lock.reviewScope.roots, [
+    { kind: "directory", path: futureRoot, regularFiles: 1 },
+  ]);
+  assert.equal(lock.census.counts.scopedEntries, 1);
+  const namespaceAfter = fs
+    .readFileSync(path.join(installRoot, "memory-policy.yaml"), "utf8")
+    .match(/^namespace: (.+)$/m)[1];
+  assert.equal(namespaceAfter, namespaceBefore);
 });
 
 test("init requires an explicit trust anchor and approval", (t) => {
@@ -981,6 +1410,28 @@ function validateWithRuntimeParser(profilePath) {
       ].join("; "),
       runtimePath,
       profilePath,
+    ],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PYTHONDONTWRITEBYTECODE: "1",
+      },
+    },
+  );
+}
+
+function validateYaml(yamlPath) {
+  execFileSync(
+    "python3",
+    [
+      "-c",
+      [
+        "import pathlib, sys, yaml",
+        "value = yaml.safe_load(pathlib.Path(sys.argv[1]).read_text())",
+        "assert isinstance(value, dict)",
+      ].join("; "),
+      yamlPath,
     ],
     {
       encoding: "utf8",

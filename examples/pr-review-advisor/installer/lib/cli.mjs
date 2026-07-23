@@ -17,10 +17,19 @@ import {
 } from "./generate.mjs";
 import {
   isAncestor,
+  listCommittedTree,
   readCommittedPathBlob,
   resolveGitRoot,
   resolveRepository,
 } from "./git.mjs";
+import {
+  bindReviewScopeToTree,
+  normalizeReviewScope,
+  repositoryReviewScope,
+  reviewScopeDigest,
+  reviewScopeForJson,
+  reviewScopesEqual,
+} from "./scope.mjs";
 import { buildState, loadState, stateFile } from "./state.mjs";
 import {
   acquireInstallerLock,
@@ -40,6 +49,7 @@ const COMMANDS = new Set([
   "refresh",
   "remove",
 ]);
+const SCOPE_COMMANDS = new Set(["init", "dry-run", "check", "refresh"]);
 
 export async function runCli(argv, io) {
   try {
@@ -86,11 +96,29 @@ async function runInstall(options, io) {
     });
     verifyStateRepository(previousState, repository);
 
-    const census = buildCensus(repository);
-    const generated = generateRepositoryFiles(repository, census);
+    const reviewScope = resolveReviewScope(options, previousState);
+    const previousUnpopulated =
+      previousState && reviewScopesEqual(reviewScope, previousState.reviewScope)
+        ? previousState.reviewScope.unpopulatedRoots
+        : [];
+    const allowedUnpopulatedRoots = options.allowUnpopulatedScope
+      ? reviewScope.roots
+      : previousUnpopulated;
+    const census = buildCensus(repository, reviewScope, {
+      allowedUnpopulatedRoots,
+    });
+    const resolvedReviewScope = {
+      ...reviewScope,
+      unpopulatedRoots: census.reviewScope.unpopulatedRoots,
+    };
+    const generated = generateRepositoryFiles(
+      repository,
+      census,
+      resolvedReviewScope,
+    );
     const { assets } = collectRuntimeAssets(io.assetRoot);
     const desired = new Map([...generated, ...assets]);
-    const nextState = buildState(repository, desired);
+    const nextState = buildState(repository, desired, resolvedReviewScope);
     desired.set(STATE_PATH, stateFile(nextState));
 
     const planningState = previousState
@@ -136,6 +164,8 @@ async function runInstall(options, io) {
         trustedRef: repository.trustedRef,
         trustedCommit: repository.trustedHead,
         worktreeCommit: repository.worktreeHead,
+        reviewScope: reviewScopeForJson(resolvedReviewScope),
+        scopeDigest: reviewScopeDigest(resolvedReviewScope),
         census: census.counts,
         changes: plan.operations.map(summarizeOperation),
         diff,
@@ -150,6 +180,11 @@ async function runInstall(options, io) {
           `${census.counts.evidenceFiles} bounded evidence files, ` +
           `${census.counts.excludedEntries} exclusions\n\n` +
           diff,
+      );
+      reportReviewScope(
+        resolvedReviewScope,
+        previousState?.reviewScope ?? null,
+        io,
       );
     }
 
@@ -206,9 +241,36 @@ function runCheck(options, io) {
     trustedRef: options.trustedRef ?? state.repository.trustedRef,
   });
   verifyStateRepository(state, repository);
+  const reviewScope = resolveReviewScope(options, state);
+  if (!reviewScopesEqual(reviewScope, state.reviewScope)) {
+    throw new CliError(
+      "requested review scope does not match the installed scope; " +
+        "run refresh with the complete desired scope",
+      2,
+    );
+  }
+  const boundScope = bindReviewScopeToTree(
+    reviewScope,
+    listCommittedTree(repository),
+    repository.trustedRef,
+    state.reviewScope.unpopulatedRoots,
+  );
 
   const findings = [];
   const notices = [];
+  for (const root of boundScope.rootDescriptors) {
+    if (root.kind === "unpopulated") {
+      notices.push({
+        path: root.path,
+        status: "scope-root-unpopulated",
+      });
+    } else if (state.reviewScope.unpopulatedRoots.includes(root.path)) {
+      notices.push({
+        path: root.path,
+        status: "scope-root-now-populated-run-refresh",
+      });
+    }
+  }
   for (const [relativePath, owned] of Object.entries(state.ownedFiles).sort(
     ([left], [right]) => compareStrings(left, right),
   )) {
@@ -303,6 +365,8 @@ function runCheck(options, io) {
       command: "check",
       ok: findings.length === 0,
       repository: repository.repository,
+      reviewScope: reviewScopeForJson(state.reviewScope),
+      scopeDigest: state.scopeDigest,
       findings,
       notices,
     });
@@ -319,12 +383,13 @@ function runCheck(options, io) {
       }
     }
     if (notices.length > 0) {
-      io.stdout.write("Calibration provenance notices:\n");
+      io.stdout.write("Installation notices:\n");
       for (const notice of notices) {
-        io.stdout.write(
-          `  ${notice.status}: ${notice.path} ` +
-            `(${notice.installed} -> ${notice.current})\n`,
-        );
+        const transition =
+          notice.installed && notice.current
+            ? ` (${notice.installed} -> ${notice.current})`
+            : "";
+        io.stdout.write(`  ${notice.status}: ${notice.path}${transition}\n`);
       }
     }
   }
@@ -478,8 +543,13 @@ function parseArguments(argv, cwd) {
   }
   const options = {
     command: argv[0],
+    requestedCommand: argv[0],
     target: cwd,
     trustedRef: undefined,
+    scopeRoots: [],
+    supportPaths: [],
+    scopeOptionsProvided: false,
+    allowUnpopulatedScope: false,
     yes: false,
     json: false,
     dryRun: argv[0] === "dry-run",
@@ -504,6 +574,36 @@ function parseArguments(argv, cwd) {
       options.trustedRef = argv[index];
     } else if (argument.startsWith("--trusted-ref=")) {
       options.trustedRef = argument.slice("--trusted-ref=".length);
+    } else if (argument === "--scope-root") {
+      index += 1;
+      if (!argv[index]) {
+        throw new CliError("--scope-root requires a value", 2);
+      }
+      options.scopeRoots.push(argv[index]);
+      options.scopeOptionsProvided = true;
+    } else if (argument.startsWith("--scope-root=")) {
+      const value = argument.slice("--scope-root=".length);
+      if (!value) {
+        throw new CliError("--scope-root requires a value", 2);
+      }
+      options.scopeRoots.push(value);
+      options.scopeOptionsProvided = true;
+    } else if (argument === "--support-path") {
+      index += 1;
+      if (!argv[index]) {
+        throw new CliError("--support-path requires a value", 2);
+      }
+      options.supportPaths.push(argv[index]);
+      options.scopeOptionsProvided = true;
+    } else if (argument.startsWith("--support-path=")) {
+      const value = argument.slice("--support-path=".length);
+      if (!value) {
+        throw new CliError("--support-path requires a value", 2);
+      }
+      options.supportPaths.push(value);
+      options.scopeOptionsProvided = true;
+    } else if (argument === "--allow-unpopulated-scope") {
+      options.allowUnpopulatedScope = true;
     } else if (argument === "--repo") {
       index += 1;
       if (!argv[index]) {
@@ -522,6 +622,39 @@ function parseArguments(argv, cwd) {
     } else {
       throw new CliError(`unexpected argument: ${argument}`, 2);
     }
+  }
+  if (
+    (options.scopeOptionsProvided || options.allowUnpopulatedScope) &&
+    !SCOPE_COMMANDS.has(options.requestedCommand)
+  ) {
+    throw new CliError(
+      `scope options are not supported by ${options.requestedCommand}`,
+      2,
+    );
+  }
+  if (
+    options.allowUnpopulatedScope &&
+    !["init", "dry-run"].includes(options.requestedCommand)
+  ) {
+    throw new CliError(
+      "--allow-unpopulated-scope is supported only by init and dry-run",
+      2,
+    );
+  }
+  if (options.scopeOptionsProvided) {
+    options.reviewScope = normalizeReviewScope(
+      options.scopeRoots,
+      options.supportPaths,
+    );
+  }
+  if (
+    options.allowUnpopulatedScope &&
+    (!options.reviewScope || options.reviewScope.mode !== "scoped")
+  ) {
+    throw new CliError(
+      "--allow-unpopulated-scope requires at least one --scope-root",
+      2,
+    );
   }
   if (options.command === "dry-run") {
     options.command = "init";
@@ -560,6 +693,41 @@ function verifyStateRepository(state, repository) {
   if (state.repository.identity !== repository.repository) {
     throw new CliError(
       "install state belongs to a different repository identity",
+    );
+  }
+}
+
+function resolveReviewScope(options, previousState) {
+  if (options.scopeOptionsProvided) {
+    return options.reviewScope;
+  }
+  return previousState?.reviewScope ?? repositoryReviewScope();
+}
+
+function reportReviewScope(reviewScope, previousScope, io) {
+  if (reviewScope.mode !== "scoped") {
+    return;
+  }
+  io.stdout.write(
+    `Review scope roots: ${reviewScope.roots.join(", ")}\n` +
+      `Support paths: ${
+        reviewScope.supportPaths.length > 0
+          ? reviewScope.supportPaths.join(", ")
+          : "(none)"
+      }\n`,
+  );
+  if (reviewScope.unpopulatedRoots.length > 0) {
+    io.stdout.write(
+      "Unpopulated scope roots at the trusted tree (working-tree bytes were " +
+        `not read): ${reviewScope.unpopulatedRoots.join(", ")}\n`,
+    );
+  }
+  const newlyPopulated = (previousScope?.unpopulatedRoots ?? []).filter(
+    (root) => !reviewScope.unpopulatedRoots.includes(root),
+  );
+  if (newlyPopulated.length > 0) {
+    io.stdout.write(
+      `Trusted scope roots now populated: ${newlyPopulated.join(", ")}\n`,
     );
   }
 }
@@ -624,16 +792,28 @@ export function isSupportedNodeVersion(version) {
 
 function usage() {
   return `Usage:
-  nemoclaw-review-advisor init [path] [--trusted-ref REF] [--yes] [--dry-run]
+  nemoclaw-review-advisor init [path] [--trusted-ref REF] [--scope-root PATH ...]
+                                  [--support-path PATH ...]
+                                  [--allow-unpopulated-scope] [--yes] [--dry-run]
   nemoclaw-review-advisor dry-run [path] [--trusted-ref REF]
-  nemoclaw-review-advisor check [path] [--trusted-ref REF] [--json]
-  nemoclaw-review-advisor refresh [path] [--trusted-ref REF] [--yes] [--dry-run]
+                                     [--scope-root PATH ...]
+                                     [--support-path PATH ...]
+                                     [--allow-unpopulated-scope]
+  nemoclaw-review-advisor check [path] [--trusted-ref REF]
+                                   [--scope-root PATH ...]
+                                   [--support-path PATH ...] [--json]
+  nemoclaw-review-advisor refresh [path] [--trusted-ref REF]
+                                     [--scope-root PATH ...]
+                                     [--support-path PATH ...]
+                                     [--yes] [--dry-run]
   nemoclaw-review-advisor activate-profile [path] [--yes] [--dry-run]
   nemoclaw-review-advisor remove [path] [--yes] [--dry-run]
 
 Discovery reads only regular blobs from the trusted committed tree. If
 refs/remotes/origin/HEAD is unavailable, --trusted-ref is required. Mutating
 commands print a complete proposed diff and require confirmation. Publication
-is disabled in every generated default.
+is disabled in every generated default. Repeated scope options replace the
+complete installed scope; omit them to reuse it. --allow-unpopulated-scope is
+an explicit init/dry-run bootstrap for scope roots absent from the trusted tree.
 `;
 }

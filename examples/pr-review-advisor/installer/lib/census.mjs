@@ -8,6 +8,7 @@ import {
   MAX_EVIDENCE_TOTAL_BYTES,
 } from "./constants.mjs";
 import { listCommittedTree, readCommittedBlob } from "./git.mjs";
+import { bindReviewScopeToTree, reviewScopeRole } from "./scope.mjs";
 import { compareStrings, sha256 } from "./util.mjs";
 
 const SECRET_PATH_PARTS = [
@@ -160,10 +161,18 @@ const SECRET_PATTERNS = [
   /\b(?:password|passwd|secret|token|api[_-]?key)\s*[:=]\s*["']?[^\s"',]{6,}/gi,
 ];
 
-export function buildCensus(repository) {
+export function buildCensus(repository, reviewScope, options = {}) {
   const tree = listCommittedTree(repository);
+  const boundScope = bindReviewScopeToTree(
+    reviewScope,
+    tree,
+    repository.trustedRef,
+    options.allowedUnpopulatedRoots ?? [],
+  );
   const included = [];
   const excluded = [];
+  let scopedEntries = 0;
+  let supportEntries = 0;
   const categoryEntries = {
     architecture: [],
     codeowners: [],
@@ -176,9 +185,18 @@ export function buildCensus(repository) {
   };
 
   for (const entry of tree) {
+    const role = reviewScopeRole(entry.path, reviewScope);
+    if (!role) {
+      continue;
+    }
+    if (role === "scope") {
+      scopedEntries += 1;
+    } else {
+      supportEntries += 1;
+    }
     const reason = exclusionReason(entry);
     if (reason) {
-      excluded.push(compactEntry(entry, reason));
+      excluded.push(compactEntry(entry, reason, role));
       continue;
     }
     const categories = classify(entry.path);
@@ -187,6 +205,7 @@ export function buildCensus(repository) {
       oid: entry.oid,
       size: entry.size,
       categories,
+      role,
     };
     included.push(normalized);
     for (const category of categories) {
@@ -206,16 +225,16 @@ export function buildCensus(repository) {
 
   for (const entry of evidenceCandidates) {
     if (entry.size > MAX_EVIDENCE_FILE_BYTES) {
-      excluded.push(compactEntry(entry, "evidence-size-limit"));
+      excluded.push(compactEntry(entry, "evidence-size-limit", entry.role));
       continue;
     }
     if (evidenceBytes + entry.size > MAX_EVIDENCE_TOTAL_BYTES) {
-      excluded.push(compactEntry(entry, "evidence-total-limit"));
+      excluded.push(compactEntry(entry, "evidence-total-limit", entry.role));
       continue;
     }
     const blob = readCommittedBlob(repository, entry.oid);
     if (isBinary(blob)) {
-      excluded.push(compactEntry(entry, "binary"));
+      excluded.push(compactEntry(entry, "binary", entry.role));
       continue;
     }
     evidenceBytes += blob.byteLength;
@@ -228,6 +247,7 @@ export function buildCensus(repository) {
       sha256: sha256(blob),
       size: entry.size,
       categories: entry.categories,
+      role: entry.role,
       lineStart: 1,
       lineEnd: Math.max(1, excerptLines.length),
       truncated: excerptLines.length < fullText.split(/\r?\n/).length,
@@ -235,12 +255,20 @@ export function buildCensus(repository) {
     });
   }
 
-  const layoutConcentrations = computeLayoutConcentrations(included);
+  const layoutConcentrations = computeLayoutConcentrations(
+    included.filter((entry) => entry.role === "scope"),
+  );
   return {
     source: {
       kind: "git-commit",
       commit: repository.head,
       repository: repository.repository,
+    },
+    reviewScope: {
+      mode: boundScope.mode,
+      roots: boundScope.rootDescriptors,
+      supportPaths: boundScope.supportDescriptors,
+      unpopulatedRoots: boundScope.unpopulatedRoots,
     },
     limits: {
       maxEvidenceFileBytes: MAX_EVIDENCE_FILE_BYTES,
@@ -248,7 +276,10 @@ export function buildCensus(repository) {
       maxEvidenceLines: MAX_EVIDENCE_LINES,
     },
     counts: {
-      trackedEntries: tree.length,
+      trackedEntries: scopedEntries + supportEntries,
+      scopedEntries,
+      supportEntries,
+      unpopulatedRoots: boundScope.unpopulatedRoots.length,
       regularFiles: included.length,
       evidenceFiles: evidence.length,
       excludedEntries: excluded.length,
@@ -256,10 +287,11 @@ export function buildCensus(repository) {
     categories: Object.fromEntries(
       Object.entries(categoryEntries).map(([category, entries]) => [
         category,
-        entries.map(({ path: entryPath, oid, size }) => ({
+        entries.map(({ path: entryPath, oid, size, role }) => ({
           path: entryPath,
           oid,
           size,
+          role,
         })),
       ]),
     ),
@@ -328,7 +360,8 @@ function classify(filePath) {
 
   if (
     DOC_BASENAMES.has(basename) ||
-    (parts.includes("docs") && [".md", ".mdx", ".rst", ".txt"].includes(extension))
+    (parts.includes("docs") &&
+      [".md", ".mdx", ".rst", ".txt"].includes(extension))
   ) {
     categories.push("docs");
   }
@@ -354,7 +387,9 @@ function classify(filePath) {
   }
   if (
     basename === "codeowners" &&
-    (parts.length === 1 || parts.at(-2) === ".github" || parts.at(-2) === "docs")
+    (parts.length === 1 ||
+      parts.at(-2) === ".github" ||
+      parts.at(-2) === "docs")
   ) {
     categories.push("codeowners");
   }
@@ -410,11 +445,12 @@ function computeLayoutConcentrations(entries) {
     .slice(0, 12);
 }
 
-function compactEntry(entry, reason) {
+function compactEntry(entry, reason, role) {
   return {
     path: entry.path,
     size: entry.size,
     reason,
+    role,
   };
 }
 
@@ -425,11 +461,7 @@ function isBinary(buffer) {
   const sample = buffer.subarray(0, Math.min(buffer.length, 8192));
   let suspicious = 0;
   for (const byte of sample) {
-    if (
-      byte < 7 ||
-      (byte > 13 && byte < 32) ||
-      byte === 127
-    ) {
+    if (byte < 7 || (byte > 13 && byte < 32) || byte === 127) {
       suspicious += 1;
     }
   }

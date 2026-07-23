@@ -247,9 +247,14 @@ $ bash .nemoclaw/review-advisor/runtime/scripts/bring-up.sh
 ```
 
 When no sandbox/provider names are configured, the scripts derive names from
-this installation path. That default is intentional: two repositories must not
-share a Hermes home or memory. If names are overridden, they must remain unique
-per repository.
+the real installation path, configured repository, and exact review-scope
+digest. That default is intentional: two repositories or two scopes must not
+share a Hermes home or memory. A `refresh` that deliberately replaces the
+complete scope therefore starts a new runtime and memory identity; the old
+scope's lessons are not recalled. Snapshot or export the old scope first if it
+must be retained. If names are overridden, they must remain unique per
+repository and scope. Reusing an old name fails the runtime-fingerprint check;
+snapshot and explicitly destroy the old sandbox before replacing it.
 
 The scripts bind every OpenShell operation explicitly to `OPENSHELL_GATEWAY`
 and configure the managed-inference route on that gateway without changing the
@@ -532,6 +537,52 @@ NemoClaw tag at preparation time: `v0.0.92`
 (`3ef2ca87b2de80cd4958dc6ed6925657fd692eba`). Installed repositories use their
 generated, maintainer-owned active profile.
 
+### Repository-local dogfood profile
+
+This repository's [`config.yaml`](config.yaml),
+[`dogfood/profile.yaml`](dogfood/profile.yaml), and
+[`dogfood/memory-policy.yaml`](dogfood/memory-policy.yaml) are source-only
+first-party dogfood inputs. They are deliberately excluded from the npm
+package: a normal installation generates repository-specific configuration
+under `.nemoclaw/review-advisor/`.
+
+The profile does not exist at its trusted base, so the first review of this
+directory is a provisional, local trusted-operator bootstrap. Pin the exact PR
+head that contains the profile and bind its Git blob object explicitly:
+
+```bash
+BASE_SHA=fd1794ad8e4beac3efb7c2d87a1c4cffdee53abc
+git fetch --no-tags origin \
+  "+refs/pull/58/head:refs/review-advisor/pr-58"
+HEAD_SHA="$(git rev-parse 'refs/review-advisor/pr-58^{commit}')"
+PROFILE_PATH=examples/pr-review-advisor/dogfood/profile.yaml
+PROFILE_OID="$(git rev-parse "${HEAD_SHA}:${PROFILE_PATH}")"
+
+examples/pr-review-advisor/scripts/review.sh \
+  --repo . \
+  --base "$BASE_SHA" \
+  --head "$HEAD_SHA" \
+  --repository NVIDIA/nemoclaw-community \
+  --pr-number 58 \
+  --profile-path "$PROFILE_PATH" \
+  --bootstrap-profile-oid "$PROFILE_OID" \
+  --scope-root .github/workflows/nemoclaw-review-advisor-dogfood.yml \
+  --scope-root README.md \
+  --scope-root THIRD-PARTY-NOTICES \
+  --scope-root examples/pr-review-advisor \
+  --support-path .github/CODEOWNERS \
+  --support-path .github/PULL_REQUEST_TEMPLATE.md \
+  --support-path CONTRIBUTING.md \
+  --support-path LICENSE \
+  --support-path SECURITY.md \
+  --output .tmp/dogfood-pr-58
+```
+
+That exception is not a GitHub-hosted authorization pattern, and its output
+must not automatically publish a verdict or promote memory. After the profile
+lands on the default branch, the manual repository workflow reads it from the
+trusted base with `--profile-path` and never accepts a bootstrap object ID.
+
 ## NemoClaw adoption path
 
 This example is the replacement target for NemoClaw's current review advisor,
@@ -560,7 +611,9 @@ comments or model-authored lessons as memory.
 - One review lifecycle operation runs per installed sandbox at a time.
 - Built-in Hermes memory is intentionally compact; store durable policy in the
   committed profile and only high-value, maintainer-authored lessons in memory.
-- Symlinked and submodule-containing trees are refused in v0.1.
+- Repository-wide reviews refuse any symlink or submodule. Scoped reviews
+  refuse those entries inside the selected roots while ignoring unrelated
+  special entries outside the configured scope.
 - Exact-head checkout fails closed above 50,000 files or 512 MiB of raw blobs.
 - Change preparation fails closed above the configured complete-context bound
   (512 changed files and 32 MiB by default; 10,000 changed files is the absolute

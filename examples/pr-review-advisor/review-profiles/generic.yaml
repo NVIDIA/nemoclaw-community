@@ -16,6 +16,10 @@ metadata:
 repository:
   identity: example/repository
   default_branch: main
+review_scope:
+  mode: repository
+  roots: []
+  support_paths: []
 required_stages:
   - scope
   - correctness

@@ -74,7 +74,16 @@ def fixture_repository(tmp_path: Path) -> tuple[Path, str, str]:
     return repo, base, git(repo, "rev-parse", "HEAD")
 
 
-def profile(path: Path, base: str) -> None:
+def profile(
+    path: Path,
+    base: str,
+    review_scope: dict[str, object] | None = None,
+) -> None:
+    scope = review_scope or {
+        "mode": "repository",
+        "roots": [],
+        "support_paths": [],
+    }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         f"""\
@@ -87,6 +96,10 @@ metadata:
 repository:
   identity: test/repository
   default_branch: main
+review_scope:
+  mode: {scope["mode"]}
+  roots: {json.dumps(scope["roots"])}
+  support_paths: {json.dumps(scope["support_paths"])}
 required_stages: [scope, correctness, security, tests, operations, reconcile, synthesize]
 components:
   - id: repository
@@ -192,6 +205,17 @@ def test_prepare_review_builds_minimal_attested_exact_head_payload(
     source_commit = git(repo, "rev-parse", f"{base}^")
     assert request["profile_source_commit"] == source_commit
     assert context_value["profile_source_commit"] == source_commit
+    assert request["profile_path"] == ".nemoclaw/review-advisor/profile.yaml"
+    assert request["profile_origin"] == "target_base"
+    profile_oid = git(
+        repo,
+        "rev-parse",
+        f"{base}:.nemoclaw/review-advisor/profile.yaml",
+    )
+    assert request["profile_object_id"] == profile_oid
+    assert context_value["profile_path"] == request["profile_path"]
+    assert context_value["profile_origin"] == request["profile_origin"]
+    assert context_value["profile_object_id"] == profile_oid
     committed_profile = subprocess.run(
         [
             "git",
@@ -226,6 +250,333 @@ def test_prepare_review_builds_minimal_attested_exact_head_payload(
     assert "profile.yaml" in names
     assert "attestation.key" in names
     assert not any(name.startswith("repo/.git/objects/") for name in names)
+
+
+def test_prepare_review_scopes_materialization_and_binds_scope_identity(
+    tmp_path: Path,
+) -> None:
+    repo, _, _ = fixture_repository(tmp_path)
+    (repo / "docs").mkdir()
+    (repo / "docs/CONTEXT.md").write_text("Trusted context\n", encoding="utf-8")
+    (repo / "docs/SECOND.md").write_text("More context\n", encoding="utf-8")
+    (repo / "IGNORED.md").write_text("Must not be exposed\n", encoding="utf-8")
+    git(repo, "add", "docs", "IGNORED.md")
+    git(repo, "commit", "-m", "add review context")
+    base = git(repo, "rev-parse", "HEAD")
+    (repo / "README.md").write_text("# Scoped head\n", encoding="utf-8")
+    git(repo, "commit", "-am", "scoped head")
+    head = git(repo, "rev-parse", "HEAD")
+    output = tmp_path / "prepared"
+
+    result = prepare(
+        repo,
+        base,
+        head,
+        output,
+        extra_args=(
+            "--scope-root",
+            "README.md",
+            "--support-path",
+            "docs",
+            "--max-checkout-files",
+            "3",
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    request = json.loads(result.stdout)
+    context = json.loads(
+        (output / "payload" / "context.json").read_text(encoding="utf-8")
+    )
+    scope = {
+        "mode": "scoped",
+        "roots": ["README.md"],
+        "support_paths": ["docs"],
+    }
+    scope_digest = hashlib.sha256(
+        json.dumps(
+            scope,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    assert request["review_scope"] == scope
+    assert context["review_scope"] == scope
+    assert request["scope_digest"] == scope_digest
+    assert context["scope_digest"] == scope_digest
+    assert request["checkout_files"] == 3
+    checkout = output / "payload" / "repo"
+    assert (checkout / "README.md").is_file()
+    assert (checkout / "docs/CONTEXT.md").is_file()
+    assert (checkout / "docs/SECOND.md").is_file()
+    assert not (checkout / "IGNORED.md").exists()
+    assert not (checkout / ".nemoclaw").exists()
+
+
+def test_prepare_review_rejects_changes_outside_scope_without_disclosure(
+    tmp_path: Path,
+) -> None:
+    repo, base, _ = fixture_repository(tmp_path)
+    excluded = "OUTSIDE-SECRET-NAME.md"
+    (repo / excluded).write_text("outside\n", encoding="utf-8")
+    git(repo, "add", excluded)
+    git(repo, "commit", "-m", "outside scope")
+    head = git(repo, "rev-parse", "HEAD")
+
+    result = prepare(
+        repo,
+        base,
+        head,
+        tmp_path / "prepared",
+        extra_args=("--scope-root", "README.md"),
+    )
+
+    assert result.returncode == 1
+    assert "outside the configured review scope" in result.stderr
+    assert excluded not in result.stderr
+    assert not (tmp_path / "prepared").exists()
+
+
+def test_prepare_review_rejects_changed_support_path_and_boundary_rename(
+    tmp_path: Path,
+) -> None:
+    repo, _, _ = fixture_repository(tmp_path)
+    (repo / "docs").mkdir()
+    (repo / "docs/CONTEXT.md").write_text("base context\n", encoding="utf-8")
+    git(repo, "add", "docs/CONTEXT.md")
+    git(repo, "commit", "-m", "support base")
+    base = git(repo, "rev-parse", "HEAD")
+
+    (repo / "docs/CONTEXT.md").write_text("changed context\n", encoding="utf-8")
+    git(repo, "commit", "-am", "change support")
+    changed_support = prepare(
+        repo,
+        base,
+        git(repo, "rev-parse", "HEAD"),
+        tmp_path / "support-output",
+        extra_args=(
+            "--scope-root",
+            "README.md",
+            "--support-path",
+            "docs",
+        ),
+    )
+    assert changed_support.returncode == 1
+    assert "support paths must be unchanged" in changed_support.stderr
+    assert "docs/CONTEXT.md" not in changed_support.stderr
+
+    git(repo, "reset", "--hard", base)
+    git(repo, "mv", "README.md", "RENAMED.md")
+    git(repo, "commit", "-m", "rename across boundary")
+    renamed = prepare(
+        repo,
+        base,
+        git(repo, "rev-parse", "HEAD"),
+        tmp_path / "rename-output",
+        extra_args=("--scope-root", "README.md"),
+    )
+    assert renamed.returncode == 1
+    assert "outside the configured review scope" in renamed.stderr
+    assert "RENAMED.md" not in renamed.stderr
+
+
+def test_prepare_review_rejects_invalid_scope_configuration(
+    tmp_path: Path,
+) -> None:
+    repo, base, head = fixture_repository(tmp_path)
+
+    support_only = prepare(
+        repo,
+        base,
+        head,
+        tmp_path / "support-only",
+        extra_args=("--support-path", "README.md"),
+    )
+    assert support_only.returncode == 1
+    assert "requires at least one --scope-root" in support_only.stderr
+
+    missing_root = prepare(
+        repo,
+        base,
+        head,
+        tmp_path / "missing-root",
+        extra_args=("--scope-root", "missing"),
+    )
+    assert missing_root.returncode == 1
+    assert "Configured review scope must select" in missing_root.stderr
+
+    prefix_confusion = prepare(
+        repo,
+        base,
+        head,
+        tmp_path / "prefix-confusion",
+        extra_args=("--scope-root", "README"),
+    )
+    assert prefix_confusion.returncode == 1
+    assert "Configured review scope must select" in prefix_confusion.stderr
+
+
+def test_prepare_review_bootstraps_exact_head_profile_for_first_review(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git(repo, "init", "-b", "main")
+    git(repo, "config", "user.email", "review-test@example.invalid")
+    git(repo, "config", "user.name", "Review Test")
+    (repo / "README.md").write_text("# Base\n", encoding="utf-8")
+    git(repo, "add", "README.md")
+    git(repo, "commit", "-m", "base without advisor")
+    base = git(repo, "rev-parse", "HEAD")
+
+    profile_path = "examples/pr-review-advisor/dogfood/profile.yaml"
+    profile(
+        repo / profile_path,
+        base,
+        {
+            "mode": "scoped",
+            "roots": ["examples/pr-review-advisor"],
+            "support_paths": [],
+        },
+    )
+    (repo / "examples/pr-review-advisor/runtime.py").write_text(
+        "print('reviewed')\n",
+        encoding="utf-8",
+    )
+    git(repo, "add", "examples/pr-review-advisor")
+    git(repo, "commit", "-m", "add advisor")
+    head = git(repo, "rev-parse", "HEAD")
+    profile_oid = git(repo, "rev-parse", f"{head}:{profile_path}")
+    output = tmp_path / "prepared"
+
+    result = prepare(
+        repo,
+        base,
+        head,
+        output,
+        extra_args=(
+            "--profile-path",
+            profile_path,
+            "--bootstrap-profile-oid",
+            profile_oid,
+            "--scope-root",
+            "examples/pr-review-advisor",
+        ),
+    )
+
+    assert result.returncode == 0, result.stderr
+    request = json.loads(result.stdout)
+    context = json.loads(
+        (output / "payload" / "context.json").read_text(encoding="utf-8")
+    )
+    assert request["profile_path"] == profile_path
+    assert request["profile_origin"] == "operator_bootstrap"
+    assert request["profile_object_id"] == profile_oid
+    assert context["profile_path"] == profile_path
+    assert context["profile_origin"] == "operator_bootstrap"
+    assert context["profile_object_id"] == profile_oid
+    assert request["profile_source_commit"] == base
+    assert not (output / "payload" / "repo" / "README.md").exists()
+
+    without_oid = prepare(
+        repo,
+        base,
+        head,
+        tmp_path / "without-oid",
+        extra_args=(
+            "--profile-path",
+            profile_path,
+            "--scope-root",
+            "examples/pr-review-advisor",
+        ),
+    )
+    assert without_oid.returncode == 1
+    assert "Trusted base" in without_oid.stderr
+
+    wrong_oid = prepare(
+        repo,
+        base,
+        head,
+        tmp_path / "wrong-oid",
+        extra_args=(
+            "--profile-path",
+            profile_path,
+            "--bootstrap-profile-oid",
+            "0" * 40,
+            "--scope-root",
+            "examples/pr-review-advisor",
+        ),
+    )
+    assert wrong_oid.returncode == 1
+    assert "does not match" in wrong_oid.stderr
+
+
+def test_prepare_review_rejects_bootstrap_when_base_profile_exists(
+    tmp_path: Path,
+) -> None:
+    repo, base, head = fixture_repository(tmp_path)
+    oid = git(
+        repo,
+        "rev-parse",
+        f"{head}:.nemoclaw/review-advisor/profile.yaml",
+    )
+
+    result = prepare(
+        repo,
+        base,
+        head,
+        tmp_path / "prepared",
+        extra_args=("--bootstrap-profile-oid", oid),
+    )
+
+    assert result.returncode == 1
+    assert "allowed only when the trusted base" in result.stderr
+
+
+def test_scoped_review_ignores_unselected_gitlink_but_rejects_selected_one(
+    tmp_path: Path,
+) -> None:
+    repo, _, _ = fixture_repository(tmp_path)
+    target_oid = git(repo, "rev-parse", "HEAD")
+    git(
+        repo,
+        "update-index",
+        "--add",
+        "--cacheinfo",
+        f"160000,{target_oid},external/dependency",
+    )
+    git(repo, "commit", "-m", "add unrelated gitlink")
+    base = git(repo, "rev-parse", "HEAD")
+    (repo / "README.md").write_text("# Head after gitlink\n", encoding="utf-8")
+    git(repo, "add", "README.md")
+    git(repo, "commit", "-m", "head")
+    head = git(repo, "rev-parse", "HEAD")
+
+    ignored = prepare(
+        repo,
+        base,
+        head,
+        tmp_path / "ignored",
+        extra_args=("--scope-root", "README.md"),
+    )
+    assert ignored.returncode == 0, ignored.stderr
+    assert not (tmp_path / "ignored" / "payload" / "repo" / "external").exists()
+
+    selected = prepare(
+        repo,
+        base,
+        head,
+        tmp_path / "selected",
+        extra_args=(
+            "--scope-root",
+            "README.md",
+            "--support-path",
+            "external",
+        ),
+    )
+    assert selected.returncode == 1
+    assert "submodules are not supported" in selected.stderr
 
 
 @pytest.mark.parametrize(

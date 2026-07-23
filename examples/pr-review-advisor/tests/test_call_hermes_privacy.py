@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import http.server
+import importlib.util
 import json
 import os
 import stat
@@ -15,7 +16,10 @@ import subprocess
 import threading
 from contextlib import contextmanager
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Iterator
+
+import pytest
 
 _EXAMPLE_ROOT = Path(__file__).resolve().parents[1]
 _CALL_HERMES = _EXAMPLE_ROOT / "scripts" / "call-hermes.py"
@@ -23,7 +27,27 @@ _SESSION_ID = "review-cccccccccccc-0123456789ab"
 _API_KEY = "a" * 40
 
 
+def _review_scope() -> dict[str, Any]:
+    return {
+        "mode": "scoped",
+        "roots": ["src"],
+        "support_paths": ["SECURITY.md"],
+    }
+
+
+def _scope_digest(scope: dict[str, Any]) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            scope,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
 def _request_identity() -> dict[str, Any]:
+    scope = _review_scope()
     return {
         "repository": "example/project",
         "base_sha": "a" * 40,
@@ -31,6 +55,11 @@ def _request_identity() -> dict[str, Any]:
         "head_sha": "c" * 40,
         "profile_digest": "d" * 64,
         "profile_source_commit": "9" * 40,
+        "review_scope": scope,
+        "scope_digest": _scope_digest(scope),
+        "profile_path": "profiles/review.yaml",
+        "profile_origin": "operator_bootstrap",
+        "profile_object_id": "8" * 40,
         "acceptance_context_digest": None,
         "context_digest": "e" * 64,
         "pull_request_number": 42,
@@ -64,6 +93,17 @@ def _artifact(key: bytes) -> dict[str, Any]:
         "digest": hmac.new(key, canonical, hashlib.sha256).hexdigest(),
     }
     return artifact
+
+
+def _load_call_hermes() -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        "review_advisor_call_hermes_identity_test",
+        _CALL_HERMES,
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 @contextmanager
@@ -215,12 +255,61 @@ def test_success_deletes_authenticated_session_before_private_artifacts(
         "trusted-request-identity",
         "hermes-session-deleted",
     ]
+    receipt = json.loads((output / "verification.json").read_text())
+    assert receipt["run"] == _request_identity()
+    rendered = (output / "review.md").read_text(encoding="utf-8")
+    assert "Provisional operator-bootstrap review" in rendered
+    assert "**Changed-path roots:** `src`" in rendered
+    assert "**Read-only support paths:** `SECURITY.md`" in rendered
     assert json.loads((output / ".session-cleanup.json").read_text())[
         "deleted_session_ids"
     ] == [_SESSION_ID]
     assert stat.S_IMODE(output.stat().st_mode) == 0o700
     for name in ("review.json", "review.md", "verification.json"):
         assert stat.S_IMODE((output / name).stat().st_mode) == 0o600
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        (
+            "review_scope",
+            {"mode": "repository", "roots": [], "support_paths": []},
+        ),
+        ("scope_digest", "0" * 64),
+        ("profile_path", "profiles/other.yaml"),
+        ("profile_origin", "target_base"),
+        ("profile_object_id", "7" * 40),
+    ],
+)
+def test_trusted_request_binds_scope_and_profile_identity(
+    tmp_path: Path,
+    field: str,
+    replacement: object,
+) -> None:
+    module = _load_call_hermes()
+    key = bytes(range(32))
+    artifact = _artifact(key)
+    request = _request_identity()
+    request[field] = replacement
+    request_path = tmp_path / "request.json"
+    request_path.write_text(json.dumps(request), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=f"identity mismatch for {field}"):
+        module.validate_identity(artifact, request_path)
+
+
+def test_artifact_rejects_unbound_scope_and_profile_object() -> None:
+    module = _load_call_hermes()
+    artifact = _artifact(bytes(range(32)))
+    artifact["run"]["scope_digest"] = "0" * 64
+    with pytest.raises(ValueError, match="scope_digest does not match"):
+        module.validate_artifact(artifact)
+
+    artifact = _artifact(bytes(range(32)))
+    artifact["run"]["profile_object_id"] = None
+    with pytest.raises(ValueError, match="full lowercase Git object ID"):
+        module.validate_artifact(artifact)
 
 
 def test_deletion_failure_prevents_canonical_artifacts(tmp_path: Path) -> None:

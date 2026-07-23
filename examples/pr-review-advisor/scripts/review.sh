@@ -6,6 +6,8 @@
 #   review.sh --repo PATH (--event EVENT | --base SHA --head SHA)
 #             [--repository OWNER/REPO] [--pr-number N]
 #             [--acceptance-context PR_CONTEXT_JSON]
+#             [--profile-path PATH] [--bootstrap-profile-oid OID]
+#             [--scope-root PATH ...] [--support-path PATH ...]
 #             [--output DIR]
 #
 # This command is artifact-only. It cannot publish to GitHub.
@@ -24,17 +26,26 @@ repository=""
 pr_number=""
 acceptance_context=""
 output=""
+profile_path=""
+bootstrap_profile_oid=""
+scope_roots=()
+support_paths=()
 
 usage() {
   cat <<'EOF'
 Usage:
   review.sh --repo PATH --event EVENT_JSON
-            [--acceptance-context PR_CONTEXT_JSON] [--output DIR]
+            [--acceptance-context PR_CONTEXT_JSON]
+            [--profile-path PATH] [--bootstrap-profile-oid OID]
+            [--scope-root PATH ...] [--support-path PATH ...] [--output DIR]
   review.sh --repo PATH --base SHA --head SHA [--repository OWNER/REPO]
-            [--pr-number N] [--acceptance-context PR_CONTEXT_JSON] [--output DIR]
+            [--pr-number N] [--acceptance-context PR_CONTEXT_JSON]
+            [--profile-path PATH] [--bootstrap-profile-oid OID]
+            [--scope-root PATH ...] [--support-path PATH ...] [--output DIR]
 
-The trusted profile is always loaded from the exact target base commit at:
-  .nemoclaw/review-advisor/profile.yaml
+The trusted profile defaults to .nemoclaw/review-advisor/profile.yaml at the
+exact target base. An explicit bootstrap OID is accepted only when that path is
+absent from the base and the exact head contains the matching profile blob.
 
 After the Hermes API session and its private working state are removed, the
 command writes review.json, review.md, verification.json, and request.json. It
@@ -51,6 +62,10 @@ while [[ $# -gt 0 ]]; do
     --repository) repository="${2:-}"; shift 2 ;;
     --pr-number) pr_number="${2:-}"; shift 2 ;;
     --acceptance-context) acceptance_context="${2:-}"; shift 2 ;;
+    --profile-path) profile_path="${2:-}"; shift 2 ;;
+    --bootstrap-profile-oid) bootstrap_profile_oid="${2:-}"; shift 2 ;;
+    --scope-root) scope_roots+=("${2:-}"); shift 2 ;;
+    --support-path) support_paths+=("${2:-}"); shift 2 ;;
     --output) output="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -360,10 +375,27 @@ fi
 if [[ -n "$acceptance_context" ]]; then
   prepare_args+=(--acceptance-context "$acceptance_context")
 fi
+if [[ -n "$profile_path" ]]; then
+  prepare_args+=(--profile-path "$profile_path")
+fi
+if [[ -n "$bootstrap_profile_oid" ]]; then
+  prepare_args+=(--bootstrap-profile-oid "$bootstrap_profile_oid")
+fi
+for scope_root in "${scope_roots[@]}"; do
+  prepare_args+=(--scope-root "$scope_root")
+done
+for support_path in "${support_paths[@]}"; do
+  prepare_args+=(--support-path "$support_path")
+done
 
 python3 "$DIR/prepare-review.py" "${prepare_args[@]}" >"$work/request.json"
 python3 -m json.tool "$work/request.json" >/dev/null
 resolved_head="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["head_sha"])' "$work/request.json")"
+request_scope_digest="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["scope_digest"])' "$work/request.json")"
+[[ "$request_scope_digest" == "$REVIEW_ADVISOR_SCOPE_DIGEST" ]] || {
+  echo "Prepared review scope does not match this installation; refresh or reinstall the advisor for the requested scope" >&2
+  exit 1
+}
 session_id="review-${resolved_head:0:12}-$(python3 -c 'import secrets; print(secrets.token_hex(6))')"
 validate_name "$session_id"
 
@@ -432,6 +464,11 @@ for request_key, run_key in (
     ("head_sha", "head_sha"),
     ("profile_digest", "profile_digest"),
     ("profile_source_commit", "profile_source_commit"),
+    ("profile_path", "profile_path"),
+    ("profile_origin", "profile_origin"),
+    ("profile_object_id", "profile_object_id"),
+    ("review_scope", "review_scope"),
+    ("scope_digest", "scope_digest"),
     ("acceptance_context_digest", "acceptance_context_digest"),
     ("pull_request_number", "pull_request_number"),
 ):

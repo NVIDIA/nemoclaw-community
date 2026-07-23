@@ -7,15 +7,25 @@ set -euo pipefail
 export PATH="/usr/local/bin:/opt/hermes/.venv/bin:/usr/bin:/bin"
 export HERMES_HOME="${HERMES_HOME:-/sandbox/.hermes}"
 export HERMES_DISABLE_LAZY_INSTALLS=1
+export REVIEW_ADVISOR_REPO_ROOT=/sandbox/review-input/repo
+export REVIEW_ADVISOR_CONTEXT_FILE=/sandbox/review-input/context.json
+export REVIEW_ADVISOR_PROFILE_FILE=/sandbox/review-input/profile.yaml
+export REVIEW_ADVISOR_ATTESTATION_KEY_FILE=/sandbox/review-input/attestation.key
 
-runtime_fingerprint="${REVIEW_ADVISOR_RUNTIME_FINGERPRINT:-}"
 fingerprint_file=/opt/review-advisor/runtime-fingerprint
-if [[ ! "$runtime_fingerprint" =~ ^[0-9a-f]{64}$ \
-    || ! -f "$fingerprint_file" \
-    || "$(<"$fingerprint_file")" != "$runtime_fingerprint" ]]; then
+if [[ ! -f "$fingerprint_file" ]]; then
   echo "Review advisor runtime fingerprint is missing or inconsistent" >&2
   exit 1
 fi
+baked_runtime_fingerprint="$(<"$fingerprint_file")"
+configured_runtime_fingerprint="${REVIEW_ADVISOR_RUNTIME_FINGERPRINT:-}"
+if [[ ! "$baked_runtime_fingerprint" =~ ^[0-9a-f]{64}$ \
+    || ( -n "$configured_runtime_fingerprint" \
+      && "$configured_runtime_fingerprint" != "$baked_runtime_fingerprint" ) ]]; then
+  echo "Review advisor runtime fingerprint is missing or inconsistent" >&2
+  exit 1
+fi
+export REVIEW_ADVISOR_RUNTIME_FINGERPRINT="$baked_runtime_fingerprint"
 
 api_key="${REVIEW_ADVISOR_API_KEY:-}"
 if [[ ! "$api_key" =~ ^[A-Za-z0-9_-]{32,128}$ ]]; then

@@ -10,6 +10,7 @@
     "kind",
     "metadata",
     "repository",
+    "review_scope",
     "required_stages",
     "components",
     "priorities",
@@ -64,6 +65,9 @@
           "minLength": 1
         }
       }
+    },
+    "review_scope": {
+      "$ref": "#/$defs/reviewScope"
     },
     "required_stages": {
       "type": "array",
@@ -212,6 +216,81 @@
     "pathPattern": {
       "type": "string",
       "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//)(?!.*\\\\)[^\\u0000]+$"
+    },
+    "scopePath": {
+      "type": "string",
+      "description": "A literal canonical repository-relative file or directory path, never a glob.",
+      "pattern": "^(?!/)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.git(?:/|$))[^\\u0000-\\u001f\\u007f]+$"
+    },
+    "reviewScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "roots",
+        "support_paths"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "repository",
+            "scoped"
+          ]
+        },
+        "roots": {
+          "type": "array",
+          "maxItems": 10000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/scopePath"
+          }
+        },
+        "support_paths": {
+          "type": "array",
+          "maxItems": 10000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/scopePath"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "repository"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "roots": {
+                "maxItems": 0
+              },
+              "support_paths": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "scoped"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "roots": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
     },
     "pathEvidence": {
       "type": "object",

@@ -19,8 +19,9 @@ import os
 import re
 import stat
 import threading
+import unicodedata
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Sequence
 
 SCHEMA_VERSION = "review-advisor/v1"
@@ -114,6 +115,7 @@ STAGE_OBJECTIVES: Mapping[str, str] = {
 }
 
 _SHA_RE = re.compile(r"^[0-9a-f]{40,64}$")
+_OBJECT_ID_RE = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 _DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 _REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 _STATUS_RE = re.compile(r"^[ACDMRTUXB][0-9]{0,3}$")
@@ -275,6 +277,148 @@ def normalize_repo_path(value: Any, name: str = "path", *, allow_root: bool = Fa
     return "/".join(parts)
 
 
+def normalize_scope_path(value: Any, name: str) -> str:
+    path = normalize_repo_path(value, name)
+    if any(ord(character) < 0x20 or ord(character) == 0x7F for character in path):
+        raise ReviewError(f"{name} contains a control character")
+    portable = [
+        unicodedata.normalize("NFC", component).casefold().rstrip(" .")
+        for component in PurePosixPath(path).parts
+    ]
+    if any(not component for component in portable):
+        raise ReviewError(f"{name} contains an empty portable path component")
+    if ".git" in portable:
+        raise ReviewError(f"{name} collides with reserved review metadata")
+    return path
+
+
+def normalize_review_scope(value: Any, name: str = "review_scope") -> dict[str, Any]:
+    obj = _exact_object(
+        value,
+        name,
+        required=("mode", "roots", "support_paths"),
+    )
+    mode = _enum(obj["mode"], f"{name}.mode", ("repository", "scoped"))
+
+    def paths(key: str) -> list[str]:
+        raw = _array(obj[key], f"{name}.{key}", maximum=10_000)
+        normalized = [
+            normalize_scope_path(item, f"{name}.{key}[{index}]")
+            for index, item in enumerate(raw)
+        ]
+        if normalized != sorted(normalized):
+            raise ReviewError(f"{name}.{key} must be sorted")
+        if len(set(normalized)) != len(normalized):
+            raise ReviewError(f"{name}.{key} must not contain duplicates")
+        portable: dict[tuple[str, ...], str] = {}
+        for path in normalized:
+            key_value = tuple(
+                unicodedata.normalize("NFC", component).casefold().rstrip(" .")
+                for component in PurePosixPath(path).parts
+            )
+            if key_value in portable:
+                raise ReviewError(
+                    f"{name}.{key} contains paths that collide on a portable filesystem"
+                )
+            portable[key_value] = path
+        return normalized
+
+    roots = paths("roots")
+    support_paths = paths("support_paths")
+    if mode == "repository":
+        if roots or support_paths:
+            raise ReviewError(
+                f"{name} repository mode requires empty roots and support_paths"
+            )
+    elif not roots:
+        raise ReviewError(f"{name} scoped mode requires at least one root")
+
+    for index, root in enumerate(roots):
+        if any(other.startswith(f"{root}/") for other in roots[index + 1 :]):
+            raise ReviewError(f"{name}.roots must not overlap")
+    for index, support in enumerate(support_paths):
+        if any(
+            other.startswith(f"{support}/")
+            for other in support_paths[index + 1 :]
+        ):
+            raise ReviewError(f"{name}.support_paths must not overlap")
+        if any(
+            support == root
+            or support.startswith(f"{root}/")
+            or root.startswith(f"{support}/")
+            for root in roots
+        ):
+            raise ReviewError(
+                f"{name}.support_paths must not overlap {name}.roots"
+            )
+    return {
+        "mode": mode,
+        "roots": roots,
+        "support_paths": support_paths,
+    }
+
+
+def review_scope_digest(scope: Mapping[str, Any]) -> str:
+    return hashlib.sha256(canonical_json_bytes(scope)).hexdigest()
+
+
+def review_scope_allows_change(scope: Mapping[str, Any], path: str) -> bool:
+    if scope["mode"] == "repository":
+        return True
+    return any(
+        path == root or path.startswith(f"{root}/")
+        for root in scope["roots"]
+    )
+
+
+def review_scope_allows_read(scope: Mapping[str, Any], path: str) -> bool:
+    if review_scope_allows_change(scope, path):
+        return True
+    return any(
+        path == support or path.startswith(f"{support}/")
+        for support in scope["support_paths"]
+    )
+
+
+def review_scope_allows_pattern(
+    scope: Mapping[str, Any],
+    pattern: str,
+    *,
+    include_support: bool,
+) -> bool:
+    """Prove that one model-facing glob cannot select outside its scope.
+
+    Scoped patterns must begin with a literal repository path. Globs below that
+    path remain useful (for example ``src/**/*.py``), while a repository-wide
+    glob such as ``**`` or a wildcard in the first selected component is
+    rejected. Extended glob/brace syntax is deliberately unsupported because
+    its expansion rules vary and can make lexical containment ambiguous.
+    """
+
+    if scope["mode"] == "repository":
+        return True
+    if (
+        any(character in pattern for character in ("{", "}", "[", "]", "|"))
+        or any(marker in pattern for marker in ("@(", "!(", "+(", "?(", "*("))
+    ):
+        return False
+    literal_parts: list[str] = []
+    for part in PurePosixPath(pattern).parts:
+        if "*" in part or "?" in part:
+            break
+        literal_parts.append(part)
+    if not literal_parts:
+        return False
+    prefix = "/".join(literal_parts)
+    selectors = list(scope["roots"])
+    if include_support:
+        selectors.extend(scope["support_paths"])
+    return any(
+        prefix == selected or prefix.startswith(f"{selected}/")
+        for selected in selectors
+    )
+
+
 def _validate_sha(value: Any, name: str) -> str:
     sha = _nonempty(value, name, maximum=64)
     if not _SHA_RE.fullmatch(sha):
@@ -287,6 +431,13 @@ def _validate_digest(value: Any, name: str) -> str:
     if not _DIGEST_RE.fullmatch(digest):
         raise ReviewError(f"{name} must be a lowercase SHA-256 digest")
     return digest
+
+
+def _validate_object_id(value: Any, name: str) -> str:
+    object_id = _nonempty(value, name, maximum=64)
+    if not _OBJECT_ID_RE.fullmatch(object_id):
+        raise ReviewError(f"{name} must be a full lowercase Git object ID")
+    return object_id
 
 
 def _read_bounded_regular_file(
@@ -353,6 +504,10 @@ class ReviewBinding:
     head_sha: str
     profile_digest: str
     profile_source_commit: str
+    profile_path: str
+    profile_origin: str
+    profile_object_id: str
+    scope_digest: str
     acceptance_context_digest: str | None
 
     @classmethod
@@ -366,6 +521,10 @@ class ReviewBinding:
         head_sha: str,
         profile_digest: str,
         profile_source_commit: str,
+        profile_path: str,
+        profile_origin: str,
+        profile_object_id: str,
+        scope_digest: str,
         acceptance_context_digest: str | None = None,
     ) -> "ReviewBinding":
         try:
@@ -388,6 +547,17 @@ class ReviewBinding:
                 profile_source_commit,
                 "profile_source_commit",
             ),
+            profile_path=normalize_scope_path(profile_path, "profile_path"),
+            profile_origin=_enum(
+                profile_origin,
+                "profile_origin",
+                ("target_base", "operator_bootstrap"),
+            ),
+            profile_object_id=_validate_object_id(
+                profile_object_id,
+                "profile_object_id",
+            ),
+            scope_digest=_validate_digest(scope_digest, "scope_digest"),
             acceptance_context_digest=(
                 None
                 if acceptance_context_digest is None
@@ -485,6 +655,11 @@ class ReviewContext:
     head_sha: str
     profile_digest: str
     profile_source_commit: str
+    profile_path: str
+    profile_origin: str
+    profile_object_id: str
+    review_scope: Mapping[str, Any]
+    scope_digest: str
     pull_request_number: int | None
     acceptance_context_digest: str | None
     acceptance_context: Mapping[str, Any] | None
@@ -520,6 +695,11 @@ class ReviewContext:
                 "head_sha",
                 "profile_digest",
                 "profile_source_commit",
+                "profile_path",
+                "profile_origin",
+                "profile_object_id",
+                "review_scope",
+                "scope_digest",
                 "acceptance_context_digest",
                 "acceptance_context",
                 "files",
@@ -547,7 +727,39 @@ class ReviewContext:
                 obj["profile_source_commit"],
                 "review context profile_source_commit",
             ),
+            "profile_path": normalize_scope_path(
+                obj["profile_path"],
+                "review context profile_path",
+            ),
+            "profile_origin": _enum(
+                obj["profile_origin"],
+                "review context profile_origin",
+                ("target_base", "operator_bootstrap"),
+            ),
+            "profile_object_id": _validate_object_id(
+                obj["profile_object_id"],
+                "review context profile_object_id",
+            ),
         }
+        if (
+            exact["profile_origin"] == "operator_bootstrap"
+            and exact["profile_source_commit"] != exact["base_sha"]
+        ):
+            raise ReviewError(
+                "operator bootstrap profile_source_commit must equal base_sha"
+            )
+        review_scope = normalize_review_scope(
+            obj["review_scope"],
+            "review context review_scope",
+        )
+        scope_digest = _validate_digest(
+            obj["scope_digest"],
+            "review context scope_digest",
+        )
+        if not hmac.compare_digest(scope_digest, review_scope_digest(review_scope)):
+            raise ReviewError(
+                "review context scope_digest does not match the embedded review_scope"
+            )
         pull_request_number = obj.get("pull_request_number")
         if pull_request_number is not None:
             pull_request_number = _integer(
@@ -594,8 +806,13 @@ class ReviewContext:
                 "head_sha": binding.head_sha,
                 "profile_digest": binding.profile_digest,
                 "profile_source_commit": binding.profile_source_commit,
+                "profile_path": binding.profile_path,
+                "profile_origin": binding.profile_origin,
+                "profile_object_id": binding.profile_object_id,
+                "scope_digest": binding.scope_digest,
                 "acceptance_context_digest": binding.acceptance_context_digest,
             }
+            exact["scope_digest"] = scope_digest
             exact["acceptance_context_digest"] = acceptance_context_digest
             for name, expected in binding_values.items():
                 if exact[name] == expected:
@@ -689,6 +906,15 @@ class ReviewContext:
                     patch_original_lines=original_lines,
                 )
             )
+        if any(
+            not review_scope_allows_change(review_scope, path)
+            for changed in files
+            for path in (changed.path, changed.old_path)
+            if path is not None
+        ):
+            raise ReviewError(
+                "review context changed-file inventory is outside the configured scope"
+            )
 
         return cls(
             version=CONTEXT_VERSION,
@@ -698,6 +924,11 @@ class ReviewContext:
             head_sha=exact["head_sha"],
             profile_digest=exact["profile_digest"],
             profile_source_commit=exact["profile_source_commit"],
+            profile_path=exact["profile_path"],
+            profile_origin=exact["profile_origin"],
+            profile_object_id=exact["profile_object_id"],
+            review_scope=review_scope,
+            scope_digest=scope_digest,
             pull_request_number=pull_request_number,
             acceptance_context_digest=acceptance_context_digest,
             acceptance_context=acceptance_context,
@@ -957,6 +1188,7 @@ class ReviewProfile:
                 "kind",
                 "metadata",
                 "repository",
+                "review_scope",
                 "required_stages",
                 "components",
                 "priorities",
@@ -1006,6 +1238,10 @@ class ReviewProfile:
                 maximum=256,
             ),
         }
+        review_scope = normalize_review_scope(
+            obj["review_scope"],
+            "review profile review_scope",
+        )
         expected_stages = [
             "scope",
             "correctness",
@@ -1034,6 +1270,27 @@ class ReviewProfile:
         ):
             name = f"profile components[{index}]"
             item = _exact_object(value, name, required=("id", "paths", "evidence"))
+            component_paths = [
+                normalize_profile_pattern(
+                    path_value,
+                    f"{name}.paths[{path_index}]",
+                )
+                for path_index, path_value in enumerate(
+                    _array(item["paths"], f"{name}.paths", maximum=500)
+                )
+            ]
+            if any(
+                not review_scope_allows_pattern(
+                    review_scope,
+                    pattern,
+                    include_support=False,
+                )
+                for pattern in component_paths
+            ):
+                raise ReviewError(
+                    f"{name}.paths contains an ambiguous pattern or a path "
+                    "outside review_scope.roots"
+                )
             evidence: list[dict[str, str]] = []
             for evidence_index, evidence_value in enumerate(
                 _array(item["evidence"], f"{name}.evidence", maximum=100)
@@ -1055,12 +1312,7 @@ class ReviewProfile:
             components.append(
                 {
                     "id": _nonempty(item["id"], f"{name}.id", maximum=256),
-                    "paths": [
-                        normalize_profile_pattern(path_value, f"{name}.paths[{path_index}]")
-                        for path_index, path_value in enumerate(
-                            _array(item["paths"], f"{name}.paths", maximum=500)
-                        )
-                    ],
+                    "paths": component_paths,
                     "evidence": evidence,
                 }
             )
@@ -1084,12 +1336,18 @@ class ReviewProfile:
                     f"{name}.evidence[{evidence_index}]",
                     required=("path", "oid"),
                 )
+                evidence_path = normalize_repo_path(
+                    evidence_item["path"],
+                    f"{name}.evidence[{evidence_index}].path",
+                )
+                if not review_scope_allows_read(review_scope, evidence_path):
+                    raise ReviewError(
+                        f"{name}.evidence[{evidence_index}].path is outside "
+                        "the configured review scope"
+                    )
                 evidence.append(
                     {
-                        "path": normalize_repo_path(
-                            evidence_item["path"],
-                            f"{name}.evidence[{evidence_index}].path",
-                        ),
+                        "path": evidence_path,
                         "oid": _validate_sha(
                             evidence_item["oid"],
                             f"{name}.evidence[{evidence_index}].oid",
@@ -1115,9 +1373,19 @@ class ReviewProfile:
         ):
             name = f"profile test_surfaces[{index}]"
             item = _exact_object(value, name, required=("path", "oid"))
+            test_path = normalize_profile_pattern(item["path"], f"{name}.path")
+            if not review_scope_allows_pattern(
+                review_scope,
+                test_path,
+                include_support=True,
+            ):
+                raise ReviewError(
+                    f"{name}.path contains an ambiguous pattern or a path "
+                    "outside the configured review scope"
+                )
             test_surfaces.append(
                 {
-                    "path": normalize_profile_pattern(item["path"], f"{name}.path"),
+                    "path": test_path,
                     "oid": _validate_sha(item["oid"], f"{name}.oid"),
                 }
             )
@@ -1154,6 +1422,7 @@ class ReviewProfile:
                 "kind": "review-advisor-profile",
                 "metadata": metadata,
                 "repository": repository,
+                "review_scope": review_scope,
                 "required_stages": required_stages,
                 "components": components,
                 "priorities": priorities,
@@ -1167,8 +1436,11 @@ class ReviewProfile:
 class SafeRepository:
     """Read a checkout without ever following a repository-owned symlink."""
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, review_scope: Mapping[str, Any]):
         self.root = root
+        self.review_scope = normalize_review_scope(review_scope)
+        self._roots = tuple(self.review_scope["roots"])
+        self._support_paths = frozenset(self.review_scope["support_paths"])
         self._directory_flags = (
             os.O_RDONLY
             | getattr(os, "O_CLOEXEC", 0)
@@ -1191,6 +1463,52 @@ class SafeRepository:
             except OSError:
                 pass
             self._root_fd = None
+
+    def can_read(self, path: str) -> bool:
+        normalized = normalize_repo_path(path)
+        if normalized == ".git" or normalized.startswith(".git/"):
+            return False
+        if self.review_scope["mode"] == "repository":
+            return True
+        return (
+            any(
+                normalized == support
+                or normalized.startswith(f"{support}/")
+                for support in self._support_paths
+            )
+            or any(
+                normalized == root or normalized.startswith(f"{root}/")
+                for root in self._roots
+            )
+        )
+
+    def can_list(self, path: str) -> bool:
+        normalized = normalize_repo_path(path, allow_root=True)
+        if normalized == ".":
+            return True
+        if normalized == ".git" or normalized.startswith(".git/"):
+            return False
+        if self.review_scope["mode"] == "repository":
+            return True
+        return any(
+            normalized == root
+            or normalized.startswith(f"{root}/")
+            or root.startswith(f"{normalized}/")
+            for root in self._roots
+        ) or any(
+            normalized == support
+            or normalized.startswith(f"{support}/")
+            or support.startswith(f"{normalized}/")
+            for support in self._support_paths
+        )
+
+    def _require_readable(self, path: str) -> None:
+        if not self.can_read(path):
+            raise ReviewError("requested path is outside the configured review scope")
+
+    def _require_listable(self, path: str) -> None:
+        if not self.can_list(path):
+            raise ReviewError("requested directory is outside the configured review scope")
 
     def _open_root(self) -> int:
         try:
@@ -1229,7 +1547,7 @@ class SafeRepository:
                 pass
             raise
 
-    def read(self, *, path: str, start_line: int, end_line: int) -> dict[str, Any]:
+    def _read(self, *, path: str, start_line: int, end_line: int) -> dict[str, Any]:
         normalized = normalize_repo_path(path)
         fd = self._open(normalized, directory=False)
         try:
@@ -1299,6 +1617,18 @@ class SafeRepository:
             "lines": selected,
         }
 
+    def read(self, *, path: str, start_line: int, end_line: int) -> dict[str, Any]:
+        normalized = normalize_repo_path(path)
+        self._require_readable(normalized)
+        return self._read(
+            path=normalized,
+            start_line=start_line,
+            end_line=end_line,
+        )
+
+    def read_internal_head(self) -> dict[str, Any]:
+        return self._read(path=".git/HEAD", start_line=1, end_line=2)
+
     def verify_line(self, path: str, line: int) -> None:
         normalized = normalize_repo_path(path)
         result = self.read(path=normalized, start_line=line, end_line=line)
@@ -1307,12 +1637,14 @@ class SafeRepository:
 
     def list(self, *, path: str) -> dict[str, Any]:
         normalized = normalize_repo_path(path, allow_root=True)
+        self._require_listable(normalized)
         fd = self._open(normalized, directory=True)
         try:
             names = sorted(os.listdir(fd))
-            truncated = len(names) > MAX_LIST_ENTRIES
             entries: list[dict[str, str]] = []
-            for name in names[:MAX_LIST_ENTRIES]:
+            for name in names:
+                if name == ".git":
+                    continue
                 try:
                     info = os.stat(name, dir_fd=fd, follow_symlinks=False)
                 except OSError:
@@ -1326,9 +1658,20 @@ class SafeRepository:
                 else:
                     kind = "other"
                 child = name if normalized == "." else f"{normalized}/{name}"
+                if kind == "directory":
+                    if not self.can_list(child):
+                        continue
+                elif kind == "file":
+                    if not self.can_read(child):
+                        continue
+                else:
+                    if not self.can_read(child):
+                        continue
                 entries.append({"path": child, "type": kind})
         finally:
             os.close(fd)
+        truncated = len(entries) > MAX_LIST_ENTRIES
+        entries = entries[:MAX_LIST_ENTRIES]
         return {"path": normalized, "entries": entries, "truncated": truncated}
 
     def _walk_files(self, path: str, state: dict[str, bool]) -> Iterable[str]:
@@ -1461,9 +1804,20 @@ class ReviewSession:
     artifact: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
-        self.repository = SafeRepository(self.binding.repo_root)
         if self.profile.digest != self.binding.profile_digest:
             raise ReviewError("loaded profile digest does not match the review binding")
+        if self.profile.directives["review_scope"] != self.context.review_scope:
+            raise ReviewError(
+                "loaded profile review_scope does not match the trusted review context"
+            )
+        if self.binding.scope_digest != self.context.scope_digest:
+            raise ReviewError(
+                "trusted scope digest does not match the trusted review context"
+            )
+        self.repository = SafeRepository(
+            self.binding.repo_root,
+            self.context.review_scope,
+        )
         if len(self.attestation_key) != ATTESTATION_KEY_BYTES:
             raise ReviewError(
                 f"attestation key must be exactly {ATTESTATION_KEY_BYTES} bytes"
@@ -1496,7 +1850,7 @@ class ReviewSession:
     def assert_checkout_binding(self) -> None:
         """Fail if host-side input replacement moved this session to another head."""
 
-        head = self.repository.read(path=".git/HEAD", start_line=1, end_line=2)
+        head = self.repository.read_internal_head()
         head_lines = head["lines"]
         if len(head_lines) != 1:
             raise ReviewError("trusted checkout must have one detached .git/HEAD object ID")
@@ -1516,6 +1870,10 @@ class ReviewSession:
                 self.binding.head_sha,
                 self.binding.profile_digest,
                 self.binding.profile_source_commit,
+                self.binding.profile_path,
+                self.binding.profile_origin,
+                self.binding.profile_object_id,
+                self.binding.scope_digest,
                 self.binding.acceptance_context_digest or "",
                 self.context.context_digest,
                 (
@@ -1546,12 +1904,17 @@ class ReviewSession:
             "head_sha": self.binding.head_sha,
             "profile_digest": self.binding.profile_digest,
             "profile_source_commit": self.binding.profile_source_commit,
+            "profile_path": self.binding.profile_path,
+            "profile_origin": self.binding.profile_origin,
+            "profile_object_id": self.binding.profile_object_id,
+            "scope_digest": self.binding.scope_digest,
             "acceptance_context_digest": self.binding.acceptance_context_digest,
         }
         self.begun = True
         return {
             "run_id": self.run_id,
             **binding,
+            "review_scope": copy.deepcopy(self.context.review_scope),
             "context_digest": self.context.context_digest,
             "pull_request_number": self.context.pull_request_number,
             "acceptance_context": copy.deepcopy(self.context.acceptance_context),
@@ -1643,6 +2006,11 @@ class ReviewSession:
             "head_sha": self.binding.head_sha,
             "profile_digest": self.binding.profile_digest,
             "profile_source_commit": self.binding.profile_source_commit,
+            "profile_path": self.binding.profile_path,
+            "profile_origin": self.binding.profile_origin,
+            "profile_object_id": self.binding.profile_object_id,
+            "review_scope": copy.deepcopy(self.context.review_scope),
+            "scope_digest": self.binding.scope_digest,
             "acceptance_context_digest": self.binding.acceptance_context_digest,
             "context_digest": self.context.context_digest,
             "diff_coverage": self._diff_coverage_status(),
@@ -2030,6 +2398,10 @@ class ReviewSession:
         name: str,
     ) -> None:
         if side == "head":
+            if not any(changed.path == path for changed in self.context.files):
+                raise ReviewError(
+                    f"{name} head-side file is not present in the trusted change context"
+                )
             self.repository.verify_line(path, line)
             return
         matching = [
@@ -2295,6 +2667,18 @@ class ReviewSession:
                     ),
                 }
             )
+        if self.binding.profile_origin == "operator_bootstrap":
+            limitations.append(
+                {
+                    "description": (
+                        "The trusted operator selected an exact profile blob from the "
+                        "review head because the target base did not contain the profile. "
+                        "This first-run self-review is provisional and requires independent "
+                        "human review before its findings are treated as authoritative."
+                    ),
+                    "requires_human_review": True,
+                }
+            )
         for changed in self.context.files:
             if changed.patch_truncated:
                 limitations.append(
@@ -2347,6 +2731,11 @@ class ReviewSession:
                 "head_sha": self.binding.head_sha,
                 "profile_digest": self.binding.profile_digest,
                 "profile_source_commit": self.binding.profile_source_commit,
+                "profile_path": self.binding.profile_path,
+                "profile_origin": self.binding.profile_origin,
+                "profile_object_id": self.binding.profile_object_id,
+                "review_scope": copy.deepcopy(self.context.review_scope),
+                "scope_digest": self.binding.scope_digest,
                 "acceptance_context_digest": self.binding.acceptance_context_digest,
                 "profile_name": self.profile.directives["metadata"]["name"],
                 "context_digest": self.context.context_digest,
@@ -2408,6 +2797,10 @@ class ReviewSession:
                 )
             ]
             paths = list(dict.fromkeys(paths))
+            if any(not self.repository.can_read(path) for path in paths):
+                raise ReviewError(
+                    f"{name}.paths contains a path outside the configured review scope"
+                )
             finding_ids = _strings(
                 obj["finding_ids"],
                 f"{name}.finding_ids",
@@ -2456,6 +2849,10 @@ class ReviewSession:
                         "head_sha": self.binding.head_sha,
                         "profile_digest": self.binding.profile_digest,
                         "profile_source_commit": self.binding.profile_source_commit,
+                        "profile_path": self.binding.profile_path,
+                        "profile_origin": self.binding.profile_origin,
+                        "profile_object_id": self.binding.profile_object_id,
+                        "scope_digest": self.binding.scope_digest,
                         "acceptance_context_digest": (
                             self.binding.acceptance_context_digest
                         ),
@@ -2532,6 +2929,10 @@ class ReviewRuntime:
             head_sha=context.head_sha,
             profile_digest=context.profile_digest,
             profile_source_commit=context.profile_source_commit,
+            profile_path=context.profile_path,
+            profile_origin=context.profile_origin,
+            profile_object_id=context.profile_object_id,
+            scope_digest=context.scope_digest,
             acceptance_context_digest=context.acceptance_context_digest,
         )
         profile = ReviewProfile.from_file(

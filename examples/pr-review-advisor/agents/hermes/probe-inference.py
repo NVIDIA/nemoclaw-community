@@ -92,10 +92,10 @@ def probe(model: str, opener: Any | None = None) -> None:
         method="POST",
     )
     if opener is None:
-        opener = urllib.request.build_opener(
-            urllib.request.ProxyHandler({}),
-            NoRedirect(),
-        )
+        # OpenShell implements inference.local through the supervisor proxy
+        # injected into the sandbox environment. Keep that proxy active while
+        # rejecting redirects so the rewrite token stays on the fixed route.
+        opener = urllib.request.build_opener(NoRedirect())
     try:
         with opener.open(request, timeout=TIMEOUT_SECONDS) as response:
             status = response.getcode()
