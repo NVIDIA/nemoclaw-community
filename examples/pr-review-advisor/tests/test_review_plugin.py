@@ -908,7 +908,7 @@ def test_diff_is_bound_to_changed_files_and_bounded(
     prepared: tuple[ReviewRuntime, dict[str, str], Path],
 ) -> None:
     review, _, _ = prepared
-    _begin(review)
+    _begin(review, read_diff=False)
     first = review.dispatch(
         "review_diff",
         {"path": "src/app.py", "start_line": 1, "end_line": 3},
@@ -917,14 +917,22 @@ def test_diff_is_bound_to_changed_files_and_bounded(
     assert first["truncated"] is True
     assert first["lines"][0]["text"].startswith("diff --git")
 
-    with pytest.raises(ReviewError, match="not present in the trusted change context"):
+    with pytest.raises(
+        ReviewError,
+        match="next uncovered chunk is src/app.py at line 4",
+    ):
         review.session.diff({"path": "README.md"})
     clamped = review.session.diff(
         {"path": "src/app.py", "start_line": 1, "end_line": 401}
     )
+    assert clamped["start_line"] == 4
     assert clamped["end_line"] == 7
+    assert clamped["requested_start_line"] == 1
     assert clamped["requested_end_line"] == 401
     assert clamped["range_clamped"] is True
+    assert clamped["cursor_advanced"] is True
+    assert clamped["coverage"]["complete"] is True
+    assert clamped["next_uncovered"] is None
 
 
 def test_scope_requires_complete_chunked_diff_coverage(tmp_path: Path) -> None:
@@ -947,18 +955,39 @@ def test_scope_requires_complete_chunked_diff_coverage(tmp_path: Path) -> None:
     assert first["end_line"] == 400
     assert first["requested_end_line"] == 10_000
     assert first["range_clamped"] is True
+    assert first["cursor_advanced"] is False
+    assert first["next_uncovered"] == {
+        "path": "src/app.py",
+        "start_line": 401,
+    }
     second = review.dispatch(
         "review_diff",
-        {"path": "src/app.py", "start_line": 401},
+        {"path": "src/app.py", "start_line": 1, "end_line": 10_000},
     )["result"]
+    assert second["start_line"] == 401
     assert second["end_line"] == 800
+    assert second["cursor_advanced"] is True
     final = review.dispatch(
         "review_diff",
-        {"path": "src/app.py", "start_line": 801},
+        {"path": "src/app.py", "start_line": 1, "end_line": 10_000},
     )["result"]
+    assert final["start_line"] == 801
     assert final["end_line"] == 850
+    assert final["cursor_advanced"] is True
     assert final["coverage"]["covered_lines"] == 850
     assert final["coverage"]["complete"] is True
+    assert final["next_uncovered"] is None
+
+    complete = review.dispatch(
+        "review_diff",
+        {"path": "src/app.py", "start_line": 1, "end_line": 10_000},
+    )["result"]
+    assert complete["start_line"] is None
+    assert complete["end_line"] is None
+    assert complete["lines"] == []
+    assert complete["range_already_covered"] is True
+    assert complete["coverage"]["complete"] is True
+    assert complete["next_uncovered"] is None
 
     review.dispatch("review_commit_stage", _no_change("scope"))
     assert review.session.stage_index == 1
@@ -1248,6 +1277,11 @@ def test_review_begin_returns_trusted_protocol(
 
     assert "untrusted evidence" in protocol["authority"]
     assert "every available patch line" in protocol["patch_coverage"]
+    assert "next_uncovered" in protocol["patch_coverage"]
+    assert result["next_uncovered"] == {
+        "path": "src/app.py",
+        "start_line": 1,
+    }
     assert [item["stage"] for item in protocol["stages"]] == list(STAGES)
     assert protocol["stages"][-1]["stage"] == "reconciliation"
     assert protocol["stages"][-1]["allowed_addition_categories"] == []

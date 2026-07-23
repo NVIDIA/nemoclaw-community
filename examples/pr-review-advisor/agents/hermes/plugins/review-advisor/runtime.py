@@ -1920,6 +1920,7 @@ class ReviewSession:
             "acceptance_context": copy.deepcopy(self.context.acceptance_context),
             "changed_files": self.context.inventory(),
             "diff_coverage": self._diff_coverage_status(),
+            "next_uncovered": self._next_diff_cursor(),
             "review_limits": {
                 "max_changed_files": MAX_REVIEW_CHANGED_FILES,
                 "max_diff_calls": MAX_REVIEW_DIFF_CALLS,
@@ -1942,9 +1943,11 @@ class ReviewSession:
                     "review comments, issue comments, timelines, or prior advisor output."
                 ),
                 "patch_coverage": (
-                    "Read every available patch line with review_diff, in bounded chunks. "
-                    "The scope commit and finalization fail closed on incomplete coverage. "
-                    "Report any host-marked truncated patch as a human-review limitation."
+                    "Read every available patch line with review_diff. Follow each "
+                    "result's next_uncovered cursor; repeated or overlapping requests "
+                    "advance instead of rereading covered lines. The scope commit and "
+                    "finalization fail closed on incomplete coverage. Report any "
+                    "host-marked truncated patch as a human-review limitation."
                 ),
                 "finding_eligibility": [
                     "Identify a concrete defect present at the bound head.",
@@ -2014,6 +2017,7 @@ class ReviewSession:
             "acceptance_context_digest": self.binding.acceptance_context_digest,
             "context_digest": self.context.context_digest,
             "diff_coverage": self._diff_coverage_status(),
+            "next_uncovered": self._next_diff_cursor(),
             "completed_stages": list(STAGES[: self.stage_index]),
             "next_stage": None if self.stage_index == len(STAGES) else STAGES[self.stage_index],
             "ledger_revision": len(self.history),
@@ -2080,16 +2084,85 @@ class ReviewSession:
             required=("path",),
             optional=("start_line", "end_line"),
         )
-        start = _integer(obj.get("start_line", 1), "start_line", minimum=1)
-        requested_end = _integer(
-            obj.get("end_line", min(start + MAX_PATCH_LINES_PER_CALL - 1, 10_000_000)),
-            "end_line",
-            minimum=start,
+        path = normalize_repo_path(obj["path"])
+        changed = next((item for item in self.context.files if item.path == path), None)
+        if changed is None:
+            next_uncovered = self._next_diff_cursor()
+            hint = (
+                ""
+                if next_uncovered is None
+                else (
+                    f"; next uncovered chunk is {next_uncovered['path']} "
+                    f"at line {next_uncovered['start_line']}"
+                )
+            )
+            raise ReviewError(
+                f"{path} is not present in the trusted change context; use an exact "
+                f"path from review_begin.changed_files{hint}"
+            )
+        requested_start = _integer(
+            obj.get("start_line", 1),
+            "start_line",
+            minimum=1,
         )
-        end = min(requested_end, start + MAX_PATCH_LINES_PER_CALL - 1)
-        result = self.context.patch_lines(path=obj["path"], start_line=start, end_line=end)
+        requested_end = _integer(
+            obj.get(
+                "end_line",
+                min(
+                    requested_start + MAX_PATCH_LINES_PER_CALL - 1,
+                    10_000_000,
+                ),
+            ),
+            "end_line",
+            minimum=requested_start,
+        )
+        total_lines = len(changed.patch.splitlines())
+        coverage_before = next(
+            item for item in self._diff_coverage_status() if item["path"] == path
+        )
+        if coverage_before["complete"]:
+            return {
+                **changed.inventory(),
+                "total_lines": total_lines,
+                "start_line": None,
+                "end_line": None,
+                "truncated": False,
+                "output_bytes": 0,
+                "lines": [],
+                "requested_start_line": requested_start,
+                "requested_end_line": requested_end,
+                "range_clamped": (
+                    requested_end - requested_start + 1
+                    > MAX_PATCH_LINES_PER_CALL
+                ),
+                "cursor_advanced": False,
+                "range_already_covered": True,
+                "coverage": coverage_before,
+                "next_uncovered": self._next_diff_cursor(),
+            }
+        start = self._first_uncovered_line(path, total_lines, requested_start)
+        if start is None:
+            start = self._first_uncovered_line(path, total_lines, 1)
+        if start is None:  # pragma: no cover - guarded by coverage_before
+            raise ReviewError("diff coverage state is inconsistent")
+        cursor_advanced = start != requested_start
+        end = min(
+            total_lines,
+            start + MAX_PATCH_LINES_PER_CALL - 1,
+            (
+                max(requested_end, start + MAX_PATCH_LINES_PER_CALL - 1)
+                if cursor_advanced
+                else requested_end
+            ),
+        )
+        result = self.context.patch_lines(path=path, start_line=start, end_line=end)
+        result["requested_start_line"] = requested_start
         result["requested_end_line"] = requested_end
-        result["range_clamped"] = requested_end != end
+        result["range_clamped"] = (
+            requested_end - requested_start + 1 > MAX_PATCH_LINES_PER_CALL
+        )
+        result["cursor_advanced"] = cursor_advanced
+        result["range_already_covered"] = False
         if result["end_line"] >= result["start_line"]:
             self._record_diff_coverage(
                 result["path"],
@@ -2101,7 +2174,34 @@ class ReviewSession:
             for item in self._diff_coverage_status()
             if item["path"] == result["path"]
         )
+        result["next_uncovered"] = self._next_diff_cursor()
         return result
+
+    def _first_uncovered_line(
+        self,
+        path: str,
+        total_lines: int,
+        start_line: int,
+    ) -> int | None:
+        cursor = start_line
+        for range_start, range_end in self.diff_coverage[path]:
+            if range_end < cursor:
+                continue
+            if range_start > cursor:
+                break
+            cursor = range_end + 1
+        return cursor if cursor <= total_lines else None
+
+    def _next_diff_cursor(self) -> dict[str, Any] | None:
+        for changed in self.context.files:
+            total_lines = len(changed.patch.splitlines())
+            start_line = self._first_uncovered_line(changed.path, total_lines, 1)
+            if start_line is not None:
+                return {
+                    "path": changed.path,
+                    "start_line": start_line,
+                }
+        return None
 
     def _record_diff_coverage(self, path: str, start: int, end: int) -> None:
         ranges = sorted([*self.diff_coverage[path], (start, end)])

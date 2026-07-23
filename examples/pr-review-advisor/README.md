@@ -421,7 +421,9 @@ limits.
 The Hermes appliance allows 256 model turns so a one-tool-per-turn execution
 can cover all 128 bounded diff reads plus repository checks and the ordered
 review stages. The host's 30-minute inference deadline remains the hard
-wall-clock bound.
+wall-clock bound. `review_diff` is also a per-path coverage cursor: overlapping
+or repeated requests advance to the next unread chunk, and every result points
+to the next exact uncovered path and line.
 
 The documented durable outputs are `review.json`, `review.md`,
 `verification.json`, and `request.json`. The verification receipt binds the

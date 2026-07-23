@@ -252,9 +252,10 @@ _DESCRIPTIONS = {
         "Search bounded regular checkout files for literal text without following symlinks."
     ),
     "review_diff": (
-        "Read numbered lines from one trusted host-generated patch. Each call may "
-        f"request at most {MAX_PATCH_LINES_PER_CALL} lines; continue with bounded "
-        "non-overlapping ranges until coverage is complete."
+        "Read the next uncovered numbered lines from one trusted host-generated "
+        f"patch. Each call returns at most {MAX_PATCH_LINES_PER_CALL} lines. "
+        "Overlapping or repeated requests advance the per-path coverage cursor; "
+        "follow next_uncovered until it is null."
     ),
     "review_commit_stage": (
         "Atomically commit the next ordered review stage and its canonical ledger mutation. "
