@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# NemoClaw Hermes base from the latest published tag v0.0.92 at
-# 3ef2ca87b2de80cd4958dc6ed6925657fd692eba (Hermes v2026.7.1 / package
+# NemoClaw Hermes base from the latest published tag v0.0.93 at
+# ac5579e99838b4c0437669f347488abba0956eef (Hermes v2026.7.1 / package
 # v0.18.0). Update this digest only after reviewing a newer published tag.
 ARG BASE_IMAGE=ghcr.io/nvidia/nemoclaw/hermes-sandbox-base@sha256:fa05221f5c7bcafea7e263c84e5d06f87e37d1ccb78dc28c113f1a4066aa544c
 FROM ${BASE_IMAGE}

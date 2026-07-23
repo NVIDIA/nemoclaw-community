@@ -20,6 +20,7 @@ _REVIEW = _EXAMPLE_ROOT / "scripts" / "review.sh"
 _MEMORY = _EXAMPLE_ROOT / "scripts" / "memory.sh"
 _BRING_UP = _EXAMPLE_ROOT / "scripts" / "bring-up.sh"
 _SANDBOX = _EXAMPLE_ROOT / "scripts" / "03-sandbox.sh"
+_START = _EXAMPLE_ROOT / "agents" / "hermes" / "start.sh"
 _TEAR_DOWN = _EXAMPLE_ROOT / "scripts" / "tear-down.sh"
 _VERIFY = _EXAMPLE_ROOT / "scripts" / "verify.sh"
 
@@ -914,11 +915,42 @@ def test_review_stages_then_cleans_before_atomic_publication() -> None:
     assert '--max-checkout-bytes "$REVIEW_ADVISOR_MAX_CHECKOUT_BYTES"' in source
     assert source.index("start_forward") < source.index("assert_inference_route")
     assert source.index("assert_inference_route") < source.index("call-hermes.py")
+    assert "--allow-deferred-session-cleanup" in source
+    assert "/sandbox/.hermes/runtime/state.db" in source
+    assert "hermes-session-cleanup-deferred-to-trusted-host" in source
+    assert "private verification receipt lacks session cleanup evidence" in source
+
+
+def test_review_makes_read_only_staging_trees_writable_before_removal() -> None:
+    source = _REVIEW.read_text(encoding="utf-8")
+    writable = 'chmod -R u+w "$stage" 2>/dev/null || true'
+    removal = 'rm -rf -- "$stage"'
+
+    assert source.count(writable) == 3
+    assert source.count(removal) == 3
+    cursor = 0
+    for _ in range(3):
+        writable_index = source.index(writable, cursor)
+        removal_index = source.index(removal, writable_index)
+        assert writable_index < removal_index
+        cursor = removal_index + len(removal)
+
+
+def test_hermes_sqlite_temp_storage_uses_the_policy_writable_directory() -> None:
+    start = _START.read_text(encoding="utf-8")
+    policy = (_EXAMPLE_ROOT / "policy.yaml").read_text(encoding="utf-8")
+    review = _REVIEW.read_text(encoding="utf-8")
+
+    assert "export SQLITE_TMPDIR=/tmp" in start
+    assert "    - /tmp" in policy
+    assert 'connection.execute("PRAGMA temp_store=MEMORY")' in review
 
 
 def test_verify_uses_a_hard_bounded_sessionless_inference_probe() -> None:
     source = _VERIFY.read_text(encoding="utf-8")
 
+    for private_directory in (".snapshots", ".tmp", "memory-export", "output"):
+        assert f'"{private_directory}"' in source
     assert 'sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" --timeout 45 --' in source
     assert "/opt/hermes/.venv/bin/python /opt/review-advisor/probe-inference.py" in source
     assert source.index("assert_inference_route") < source.index("probe-inference.py")

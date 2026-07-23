@@ -14,6 +14,7 @@ from .runtime import (
     BASIS_KINDS,
     CATEGORIES,
     LESSON_KINDS,
+    MAX_PATCH_LINES_PER_CALL,
     SEVERITIES,
     SIDES,
     SIMPLIFICATION_TAGS,
@@ -251,7 +252,9 @@ _DESCRIPTIONS = {
         "Search bounded regular checkout files for literal text without following symlinks."
     ),
     "review_diff": (
-        "Read bounded numbered lines from the trusted host-generated patch for one changed file."
+        "Read numbered lines from one trusted host-generated patch. Each call may "
+        f"request at most {MAX_PATCH_LINES_PER_CALL} lines; continue with bounded "
+        "non-overlapping ranges until coverage is complete."
     ),
     "review_commit_stage": (
         "Atomically commit the next ordered review stage and its canonical ledger mutation. "

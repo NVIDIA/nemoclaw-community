@@ -7,6 +7,9 @@ set -euo pipefail
 export PATH="/usr/local/bin:/opt/hermes/.venv/bin:/usr/bin:/bin"
 export HERMES_HOME="${HERMES_HOME:-/sandbox/.hermes}"
 export HERMES_DISABLE_LAZY_INSTALLS=1
+# SQLite otherwise selects /var/tmp before the policy-writable /tmp and FTS
+# maintenance fails under Landlock with "unable to open database file".
+export SQLITE_TMPDIR=/tmp
 export REVIEW_ADVISOR_REPO_ROOT=/sandbox/review-input/repo
 export REVIEW_ADVISOR_CONTEXT_FILE=/sandbox/review-input/context.json
 export REVIEW_ADVISOR_PROFILE_FILE=/sandbox/review-input/profile.yaml

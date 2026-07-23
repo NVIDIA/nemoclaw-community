@@ -450,7 +450,9 @@ jobs:
     runs-on:
       group: ${runnerGroup}
       labels: [self-hosted, linux, nemoclaw]
-    timeout-minutes: 30
+    # call-hermes allows 30 minutes for one bounded inference request. Reserve
+    # time for trusted preparation, exact privacy cleanup, and artifact upload.
+    timeout-minutes: 45
     steps:
       - name: Check out trusted workflow source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3

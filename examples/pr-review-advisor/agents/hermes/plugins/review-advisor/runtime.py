@@ -2081,14 +2081,15 @@ class ReviewSession:
             optional=("start_line", "end_line"),
         )
         start = _integer(obj.get("start_line", 1), "start_line", minimum=1)
-        end = _integer(
+        requested_end = _integer(
             obj.get("end_line", min(start + MAX_PATCH_LINES_PER_CALL - 1, 10_000_000)),
             "end_line",
             minimum=start,
         )
-        if end - start + 1 > MAX_PATCH_LINES_PER_CALL:
-            raise ReviewError(f"review_diff returns at most {MAX_PATCH_LINES_PER_CALL} lines")
+        end = min(requested_end, start + MAX_PATCH_LINES_PER_CALL - 1)
         result = self.context.patch_lines(path=obj["path"], start_line=start, end_line=end)
+        result["requested_end_line"] = requested_end
+        result["range_clamped"] = requested_end != end
         if result["end_line"] >= result["start_line"]:
             self._record_diff_coverage(
                 result["path"],

@@ -533,8 +533,8 @@ not claims about an arbitrary real repository and not substitutes for current
 code evidence. [`review-profiles/nemoclaw.yaml`](review-profiles/nemoclaw.yaml)
 is the public worked example of the real NemoClaw components, evidence, and
 priorities used by this advisor design, pinned to the latest published
-NemoClaw tag at preparation time: `v0.0.92`
-(`3ef2ca87b2de80cd4958dc6ed6925657fd692eba`). Installed repositories use their
+NemoClaw tag at preparation time: `v0.0.93`
+(`ac5579e99838b4c0437669f347488abba0956eef`). Installed repositories use their
 generated, maintainer-owned active profile.
 
 ### Repository-local dogfood profile

@@ -193,6 +193,8 @@ def _invoke(
     url: str,
     artifact: dict[str, Any],
     key: bytes,
+    *,
+    allow_deferred_cleanup: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     api_key_file = tmp_path / "api-key"
     api_key_file.write_text(_API_KEY, encoding="ascii")
@@ -203,25 +205,28 @@ def _invoke(
     )
     attestation_key = tmp_path / "attestation.key"
     attestation_key.write_bytes(key)
+    command = [
+        "python3",
+        str(_CALL_HERMES),
+        "--url",
+        url,
+        "--api-key-file",
+        str(api_key_file),
+        "--session-id",
+        _SESSION_ID,
+        "--request",
+        str(request_path),
+        "--attestation-key-file",
+        str(attestation_key),
+        "--output",
+        str(tmp_path / "output"),
+        "--timeout",
+        "5",
+    ]
+    if allow_deferred_cleanup:
+        command.append("--allow-deferred-session-cleanup")
     return subprocess.run(
-        [
-            "python3",
-            str(_CALL_HERMES),
-            "--url",
-            url,
-            "--api-key-file",
-            str(api_key_file),
-            "--session-id",
-            _SESSION_ID,
-            "--request",
-            str(request_path),
-            "--attestation-key-file",
-            str(attestation_key),
-            "--output",
-            str(tmp_path / "output"),
-            "--timeout",
-            "5",
-        ],
+        command,
         check=False,
         capture_output=True,
         text=True,
@@ -328,6 +333,38 @@ def test_deletion_failure_prevents_canonical_artifacts(tmp_path: Path) -> None:
     assert not (output / "review.json").exists()
     assert not (output / "verification.json").exists()
     assert not (output / "hermes-response.json").exists()
+
+
+def test_trusted_host_may_defer_failed_api_deletion_before_private_cleanup(
+    tmp_path: Path,
+) -> None:
+    key = bytes(range(32))
+    artifact = _artifact(key)
+    with _server(artifact, delete_confirmed=False) as (url, calls):
+        result = _invoke(
+            tmp_path,
+            url,
+            artifact,
+            key,
+            allow_deferred_cleanup=True,
+        )
+
+    assert result.returncode == 0, result.stderr
+    assert calls == [
+        ("POST", f"Bearer {_API_KEY}"),
+        ("DELETE", f"Bearer {_API_KEY}"),
+    ]
+    assert "requiring exact trusted-host database cleanup" in result.stderr
+    output = tmp_path / "output"
+    assert (output / "review.json").is_file()
+    assert not (output / ".session-cleanup.json").exists()
+    assert json.loads((output / "verification.json").read_text())[
+        "verified"
+    ] == [
+        "hmac-sha256",
+        "trusted-request-identity",
+        "hermes-session-cleanup-deferred-to-trusted-host",
+    ]
 
 
 def test_chat_failure_still_deletes_session_without_artifacts(tmp_path: Path) -> None:

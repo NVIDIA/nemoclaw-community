@@ -74,13 +74,17 @@ for path in root.rglob("*"):
     if any(
         part
         in {
+            ".snapshots",
+            ".tmp",
             ".mypy_cache",
             ".pytest_cache",
             ".ruff_cache",
             ".tox",
             ".venv",
             "__pycache__",
+            "memory-export",
             "node_modules",
+            "output",
         }
         for part in path.parts
     ) or path.suffix in {".png", ".gz", ".pyc"}:

@@ -919,8 +919,12 @@ def test_diff_is_bound_to_changed_files_and_bounded(
 
     with pytest.raises(ReviewError, match="not present in the trusted change context"):
         review.session.diff({"path": "README.md"})
-    with pytest.raises(ReviewError, match="at most"):
-        review.session.diff({"path": "src/app.py", "start_line": 1, "end_line": 401})
+    clamped = review.session.diff(
+        {"path": "src/app.py", "start_line": 1, "end_line": 401}
+    )
+    assert clamped["end_line"] == 7
+    assert clamped["requested_end_line"] == 401
+    assert clamped["range_clamped"] is True
 
 
 def test_scope_requires_complete_chunked_diff_coverage(tmp_path: Path) -> None:
@@ -938,9 +942,11 @@ def test_scope_requires_complete_chunked_diff_coverage(tmp_path: Path) -> None:
 
     first = review.dispatch(
         "review_diff",
-        {"path": "src/app.py", "start_line": 1},
+        {"path": "src/app.py", "start_line": 1, "end_line": 10_000},
     )["result"]
     assert first["end_line"] == 400
+    assert first["requested_end_line"] == 10_000
+    assert first["range_clamped"] is True
     second = review.dispatch(
         "review_diff",
         {"path": "src/app.py", "start_line": 401},

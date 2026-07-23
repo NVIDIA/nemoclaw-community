@@ -38,7 +38,7 @@ in place. The host supplies:
 
 For host sizing, Docker same-account access, loopback exposure, and headless
 setup, follow the tagged NemoClaw
-[headless deployment guide](https://github.com/NVIDIA/NemoClaw/blob/v0.0.92/docs/deployment/deploy-to-headless-server.mdx).
+[headless deployment guide](https://github.com/NVIDIA/NemoClaw/blob/v0.0.93/docs/deployment/deploy-to-headless-server.mdx).
 Its recommended baseline is 4 or more vCPUs, 16 GB RAM, and 40 GB disk
 (minimum 4 vCPUs, 8 GB RAM, and 20 GB disk). Treat
 `runtime/scripts/verify.sh` success as advisor readiness; process presence alone
@@ -84,8 +84,8 @@ provisioning. After a reboot, a trusted operator or provisioning system runs
 `bring-up.sh`, then `scripts/verify.sh`, before dispatching reviews.
 
 Do not install an unofficial NemoClaw, OpenShell, Hermes, or advisor service
-unit as a substitute for this recovery step. The NemoClaw `v0.0.92`
-[headless deployment guide](https://github.com/NVIDIA/NemoClaw/blob/v0.0.92/docs/deployment/deploy-to-headless-server.mdx)
+unit as a substitute for this recovery step. The NemoClaw `v0.0.93`
+[headless deployment guide](https://github.com/NVIDIA/NemoClaw/blob/v0.0.93/docs/deployment/deploy-to-headless-server.mdx)
 documents post-reboot recovery as manual. The generated review workflow
 intentionally assumes the appliance is already healthy and carries no provider
 credential. Do not turn a workflow that processes untrusted review data into a

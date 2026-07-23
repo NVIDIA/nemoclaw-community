@@ -180,7 +180,10 @@ PY
 
       case "$stage" in
         "") ;;
-        /sandbox/review-staging/review-*) rm -rf -- "$stage" ;;
+        /sandbox/review-staging/review-*)
+          chmod -R u+w "$stage" 2>/dev/null || true
+          rm -rf -- "$stage"
+          ;;
         *) echo "Unsafe remote review stage: $stage" >&2; exit 1 ;;
       esac
       case "$archive" in
@@ -208,7 +211,7 @@ PY
 
       if [ "$compact" = 1 ]; then
         /opt/hermes/.venv/bin/python - \
-          /sandbox/.hermes/state.db /sandbox/.hermes/sessions "$@" <<'"'"'PY'"'"'
+          /sandbox/.hermes/runtime/state.db /sandbox/.hermes/sessions "$@" <<'"'"'PY'"'"'
 import os
 from pathlib import Path
 import re
@@ -233,6 +236,9 @@ connection = sqlite3.connect(path, timeout=30, isolation_level=None)
 try:
     connection.execute("PRAGMA busy_timeout=30000")
     connection.execute("PRAGMA foreign_keys=ON")
+    # FTS delete triggers need temporary storage. Keep it in memory so cleanup
+    # cannot select a host path outside the sandbox writable policy.
+    connection.execute("PRAGMA temp_store=MEMORY")
     connection.execute("BEGIN IMMEDIATE")
     resolved = set(ids)
     frontier = list(ids)
@@ -416,6 +422,7 @@ run_openshell sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" -- \
     archive=$1
     stage=$2
     current=/sandbox/review-input
+    chmod -R u+w "$stage" 2>/dev/null || true
     rm -rf -- "$stage"
     mkdir -p -- "$stage"
     tar -xzf "$archive" -C "$stage"
@@ -431,6 +438,7 @@ run_openshell sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" -- \
     chmod -R u+w "$current" 2>/dev/null || true
     find "$current" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
     cp -a "$stage"/. "$current"/
+    chmod -R u+w "$stage" 2>/dev/null || true
     rm -rf -- "$stage"
     find "$current" -type d -exec chmod 500 {} +
     find "$current" -type f -exec chmod 400 {} +
@@ -445,6 +453,7 @@ python3 "$DIR/call-hermes.py" \
   --session-id "$session_id" \
   --request "$work/request.json" \
   --attestation-key-file "$prepared/payload/attestation.key" \
+  --allow-deferred-session-cleanup \
   --output "$work/canonical"
 python3 - "$work/request.json" "$work/canonical/review.json" <<'PY'
 import json
@@ -487,6 +496,7 @@ python3 - \
   "$work/canonical/review.json" \
   "$work/canonical/review.md" \
   "$work/canonical/verification.json" <<'PY'
+import json
 import os
 import secrets
 import stat
@@ -518,9 +528,34 @@ try:
         try:
             with os.fdopen(descriptor, "wb") as target:
                 descriptor = -1
-                with source.open("rb") as stream:
-                    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                        target.write(chunk)
+                if name == "verification.json":
+                    receipt = json.loads(source.read_text(encoding="utf-8"))
+                    verified = receipt.get("verified")
+                    deferred = "hermes-session-cleanup-deferred-to-trusted-host"
+                    deleted = "hermes-session-deleted"
+                    if not isinstance(verified, list):
+                        raise SystemExit("private verification receipt is invalid")
+                    if deferred in verified:
+                        if deleted in verified or verified.count(deferred) != 1:
+                            raise SystemExit(
+                                "private verification receipt has ambiguous cleanup state"
+                            )
+                        receipt["verified"] = [
+                            deleted if item == deferred else item for item in verified
+                        ]
+                    elif verified.count(deleted) != 1:
+                        raise SystemExit(
+                            "private verification receipt lacks session cleanup evidence"
+                        )
+                    target.write(
+                        (json.dumps(receipt, indent=2, sort_keys=True) + "\n").encode(
+                            "utf-8"
+                        )
+                    )
+                else:
+                    with source.open("rb") as stream:
+                        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                            target.write(chunk)
                 target.flush()
                 os.fsync(target.fileno())
         finally:
