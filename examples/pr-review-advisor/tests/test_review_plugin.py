@@ -1268,6 +1268,7 @@ def test_generated_hermes_api_exposes_only_review_advisor(tmp_path: Path) -> Non
 
     config = yaml.safe_load((hermes_home / "config.yaml").read_text(encoding="utf-8"))
     assert config["platform_toolsets"]["api_server"] == ["review-advisor"]
+    assert config["agent"]["max_turns"] == 256
     assert config["compression"]["in_place"] is True
     assert "skills" not in config["platform_toolsets"]["api_server"]
     assert "memory" not in config["platform_toolsets"]["api_server"]

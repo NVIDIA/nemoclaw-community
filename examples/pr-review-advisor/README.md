@@ -418,6 +418,11 @@ complete coverage would require more than 128 bounded diff reads (each at most
 400 lines and 256 KiB). Raising a host bound does not raise those model-review
 limits.
 
+The Hermes appliance allows 256 model turns so a one-tool-per-turn execution
+can cover all 128 bounded diff reads plus repository checks and the ordered
+review stages. The host's 30-minute inference deadline remains the hard
+wall-clock bound.
+
 The documented durable outputs are `review.json`, `review.md`,
 `verification.json`, and `request.json`. The verification receipt binds the
 persisted artifact bytes to the HMAC, request-identity, and Hermes-session

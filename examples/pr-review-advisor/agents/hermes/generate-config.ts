@@ -33,7 +33,7 @@ terminal:
   backend: local
   timeout: 180
 agent:
-  max_turns: 80
+  max_turns: 256
   reasoning_effort: high
   verify_on_stop: false
 compression:
