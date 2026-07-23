@@ -1,0 +1,113 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Public worked example of the profile used to review NemoClaw. This evidence
+# is pinned to the stated published tag; regenerate it before using it against
+# a newer trusted release or default branch.
+
+schema_version: 1
+kind: review-advisor-profile
+metadata:
+  name: NVIDIA NemoClaw
+  source_commit: 3ef2ca87b2de80cd4958dc6ed6925657fd692eba
+  source_ref: refs/tags/v0.0.92
+repository:
+  identity: NVIDIA/NemoClaw
+  default_branch: main
+required_stages:
+  - scope
+  - correctness
+  - security
+  - tests
+  - operations
+  - reconcile
+  - synthesize
+components:
+  - id: host-cli-and-lifecycle
+    paths:
+      - "src/**"
+      - "scripts/**"
+    evidence:
+      - source: package.json and src command layout at the pinned trusted commit
+  - id: sandbox-agents
+    paths:
+      - "agents/**"
+      - "nemoclaw-blueprint/**"
+    evidence:
+      - source: agent manifests, Dockerfiles, policies, and shared blueprint at the pinned trusted commit
+  - id: automation-and-release
+    paths:
+      - ".github/**"
+      - "package.json"
+    evidence:
+      - source: workflow and package metadata at the pinned trusted commit
+  - id: maintainer-policy
+    paths:
+      - ".agents/**"
+      - "SECURITY.md"
+      - "WRITING.md"
+    evidence:
+      - source: maintainer review, security, and writing policy at the pinned trusted commit
+  - id: validation
+    paths:
+      - "test/**"
+      - "tools/e2e/**"
+    evidence:
+      - source: repository test and E2E layout at the pinned trusted commit
+priorities:
+  - id: sandbox-trust-boundary
+    title: Preserve the host, gateway, sandbox, and agent trust boundaries
+    rationale: Changes to policy, credentials, lifecycle, tool exposure, persistence, or publishing can widen authority beyond the reviewed feature.
+    evidence:
+      - path: SECURITY.md
+        oid: 4525724d8a0a0302ac3ff0d28b13e38ac0f07fd9
+  - id: exact-head-and-publisher-separation
+    title: Bind review evidence and publication to the exact PR head
+    rationale: Model-bearing analysis stays read-only; write authority belongs to a separate publisher that rejects stale artifacts.
+    evidence:
+      - path: .github/workflows/pr-review-advisor.yaml
+        oid: 0b6475490610a0a7bc4bbdf14a983045a24c0c6d
+      - path: tools/pr-review-advisor/README.md
+        oid: 4e5446a77a92e7e39ba9cd173ad4299a51fe1786
+  - id: security-review-rubric
+    title: Apply the complete NemoClaw security review rubric
+    rationale: Security review covers credentials, egress, sandbox boundaries, authorization, dependencies, persistence, workflows, and disclosure—not only obvious secret handling.
+    evidence:
+      - path: .agents/skills/nemoclaw-maintainer-security-code-review/SKILL.md
+        oid: cadc44587f295512694ef023a7b9772ab38b4080
+  - id: acceptance-source-of-truth-and-simplification
+    title: Bind acceptance to maintainer decisions and challenge unnecessary workarounds
+    rationale: Observable outcomes, supported contracts, constraints, and explicit maintainer decisions are binding; proposed designs are context, and local workarounds need current consumers plus a smaller-native-path check.
+    evidence:
+      - path: tools/pr-review-advisor/analyze.mts
+        oid: b646622d8269061a36cbfa800f25582d07097dfe
+  - id: deterministic-regression-and-e2e
+    title: Ground regression and E2E guidance in trusted repository inventory
+    rationale: Validation recommendations must preserve deterministic risk-plan requirements and supported E2E selectors instead of relying on model-authored test names.
+    evidence:
+      - path: tools/advisors/risk-plan.mts
+        oid: 1896381315f919cb55a8a962bf2399af806790e2
+      - path: tools/advisors/e2e-recommendations.mts
+        oid: 62bde0712f0bc1e5aa73a4f52d55497f2c2fd744
+  - id: repository-writing-contract
+    title: Keep user-facing behavior and documentation precise
+    rationale: Review public claims, defaults, and examples against the implementation and the repository writing contract.
+    evidence:
+      - path: WRITING.md
+        oid: 731a76acb3c081680eb8eae3240f57846ac94be9
+  - id: dependency-and-release-contract
+    title: Preserve pinned dependency and release behavior
+    rationale: Dependency, image, installer, and workflow changes can affect every supported environment and require explicit verification.
+    evidence:
+      - path: package.json
+        oid: d5e4b60ad462e84ffd4c3fc5c7350e32abc8faa4
+test_surfaces:
+  - path: "test/**"
+    oid: 2916674e0d1ee618a0e9ca79fc4fc98f2c65f7e7
+evidence_policy:
+  memory_is_hint_only: true
+  require_current_code_evidence: true
+unresolved_questions:
+  - Which live provider and sandbox runtime paths require E2E evidence beyond repository tests?
+  - Does the change alter installation, migration, rollback, or release compatibility?
+  - Are security-sensitive exceptions explicitly accepted and narrowly scoped?

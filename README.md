@@ -26,6 +26,7 @@ The table below lists examples maintained in this repository. Additional NemoCla
 | Retail Assistant | Deploys a Telegram-based retail management assistant that maps users to store roles, queries retail data through a FastAPI service, and runs the agent inside an OpenShell sandbox. | [Guide](examples/retail-assistant/README.md) |
 | Watchtower | Runs a scheduled web-monitoring agent that searches watchlist topics with Tavily, extracts source text when needed, dedups against persistent seen-state, and writes cited Markdown digests plus JSON changelogs from an OpenShell sandbox. | [Guide](examples/watchtower/README.md) |
 | Payment Operations Hermes Assistant | Runs a regulated payment-operations workflow in a constrained Hermes sandbox, with NeMo Relay evidence, sanctions screening, and a platform-enforced human release boundary. | [Guide](examples/payment-ops-hermes/README.md) |
+| PR Review Advisor | Runs Nemotron 3 Ultra through a constrained Hermes review workflow, bootstraps a reviewable profile from committed repository evidence, and learns only maintainer-approved lessons across reviews. | [Guide](examples/pr-review-advisor/README.md) |
 
 ## Getting Started
 

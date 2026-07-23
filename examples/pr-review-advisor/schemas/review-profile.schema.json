@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NVIDIA/nemoclaw-community/examples/pr-review-advisor/schemas/review-profile.schema.json",
+  "$comment": "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0",
+  "title": "Calibrated repository review profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "metadata",
+    "repository",
+    "required_stages",
+    "components",
+    "priorities",
+    "test_surfaces",
+    "evidence_policy",
+    "unresolved_questions"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "kind": {
+      "const": "review-advisor-profile"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "source_commit",
+        "source_ref"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_commit": {
+          "$ref": "#/$defs/gitOid",
+          "description": "Commit whose trusted tree was used for calibration; it must be an ancestor of the review base, not the commit containing this profile."
+        },
+        "source_ref": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identity",
+        "default_branch"
+      ],
+      "properties": {
+        "identity": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "default_branch": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "required_stages": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "const": "scope"
+        },
+        {
+          "const": "correctness"
+        },
+        {
+          "const": "security"
+        },
+        {
+          "const": "tests"
+        },
+        {
+          "const": "operations"
+        },
+        {
+          "const": "reconcile"
+        },
+        {
+          "const": "synthesize"
+        }
+      ],
+      "items": false,
+      "minItems": 7,
+      "maxItems": 7
+    },
+    "components": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "paths",
+          "evidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "paths": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "$ref": "#/$defs/pathPattern"
+            }
+          },
+          "evidence": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "source"
+              ],
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "priorities": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "rationale",
+          "evidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/$defs/pathEvidence"
+            }
+          }
+        }
+      }
+    },
+    "test_surfaces": {
+      "type": "array",
+      "maxItems": 500,
+      "items": {
+        "$ref": "#/$defs/pathEvidence"
+      }
+    },
+    "evidence_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "memory_is_hint_only",
+        "require_current_code_evidence"
+      ],
+      "properties": {
+        "memory_is_hint_only": {
+          "const": true
+        },
+        "require_current_code_evidence": {
+          "const": true
+        }
+      }
+    },
+    "unresolved_questions": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$defs": {
+    "gitOid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40,64}$"
+    },
+    "pathPattern": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//)(?!.*\\\\)[^\\u0000]+$"
+    },
+    "pathEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "oid"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/pathPattern"
+        },
+        "oid": {
+          "$ref": "#/$defs/gitOid"
+        }
+      }
+    }
+  }
+}
