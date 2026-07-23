@@ -427,6 +427,14 @@ digest. The target `base_sha` remains distinct so
 publication staleness is checked against the live target-branch tip. It cannot
 publish.
 
+If Hermes' final assistant turn omits the requested JSON envelope, the host
+does not ask the model to repeat the review. It makes one authenticated,
+bounded read through Hermes' advertised session-messages API and accepts only
+an exact `review_finalize` tool result linked to its assistant tool call. The
+same schema, HMAC, and request-identity checks apply. Session history is never
+persisted, and the exact session lineage is still deleted before any artifact
+is written.
+
 ## Teach it from reviewed outcomes
 
 `review.json` contains lesson **candidates**, not durable memory. An authorized

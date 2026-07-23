@@ -917,6 +917,11 @@ if (
        != {"method": "POST", "path": "/v1/chat/completions"}
     or capabilities.get("endpoints", {}).get("session_delete")
        != {"method": "DELETE", "path": "/api/sessions/{session_id}"}
+    or capabilities.get("endpoints", {}).get("session_messages")
+       != {
+           "method": "GET",
+           "path": "/api/sessions/{session_id}/messages",
+       }
 ):
     raise SystemExit("Hermes capabilities do not match the review advisor contract")
 

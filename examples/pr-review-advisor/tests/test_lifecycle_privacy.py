@@ -408,6 +408,10 @@ def test_hermes_surface_requires_auth_facade_and_exact_eight_tools(
                                 "method": "DELETE",
                                 "path": "/api/sessions/{session_id}",
                             },
+                            "session_messages": {
+                                "method": "GET",
+                                "path": "/api/sessions/{session_id}/messages",
+                            },
                         },
                     }
                 ).encode()
@@ -954,6 +958,9 @@ def test_verify_uses_a_hard_bounded_sessionless_inference_probe() -> None:
     assert 'sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" --timeout 45 --' in source
     assert "/opt/hermes/.venv/bin/python /opt/review-advisor/probe-inference.py" in source
     assert source.index("assert_inference_route") < source.index("probe-inference.py")
+    library = _LIB.read_text(encoding="utf-8")
+    assert '"session_messages"' in library
+    assert '"/api/sessions/{session_id}/messages"' in library
     assert source.index("probe-inference.py") < source.index("start_forward")
 
 

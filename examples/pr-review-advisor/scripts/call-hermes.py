@@ -22,6 +22,7 @@ from typing import Any
 
 CHAT_RESPONSE_MAX_BYTES = 16 * 1024 * 1024
 CONTROL_RESPONSE_MAX_BYTES = 64 * 1024
+SESSION_MESSAGES_MAX_BYTES = 64 * 1024 * 1024
 HTTP_ERROR_MAX_BYTES = 16 * 1024
 RUN_IDENTITY_KEYS = (
     "repository",
@@ -100,12 +101,13 @@ def _read_json_response(
     timeout: int,
     operation: str,
     opener: urllib.request.OpenerDirector,
+    maximum: int = CONTROL_RESPONSE_MAX_BYTES,
 ) -> dict[str, Any]:
     try:
         with opener.open(request, timeout=timeout) as response:
             raw = _read_bounded(
                 response,
-                CONTROL_RESPONSE_MAX_BYTES,
+                maximum,
                 f"Hermes {operation} response",
             )
     except urllib.error.HTTPError as exc:
@@ -513,6 +515,137 @@ def verify_attestation(artifact: dict[str, Any], key_path: Path) -> None:
         raise ValueError("artifact attestation did not verify")
 
 
+def _validate_candidate(
+    artifact: dict[str, Any],
+    attestation_key_path: Path,
+    request_path: Path,
+) -> dict[str, Any]:
+    validate_artifact(artifact)
+    verify_attestation(artifact, attestation_key_path)
+    validate_identity(artifact, request_path)
+    return artifact
+
+
+def _chat_artifact_value(raw: bytes) -> Any:
+    payload = json.loads(raw)
+    if not isinstance(payload, dict):
+        raise ValueError("Hermes chat response must be a JSON object")
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        raise ValueError("Hermes chat response did not contain a first choice")
+    message = choices[0].get("message")
+    if not isinstance(message, dict):
+        raise ValueError("Hermes chat response did not contain an assistant message")
+    content = message.get("content")
+    if not isinstance(content, str):
+        raise ValueError("Hermes response did not contain assistant content")
+    return extract_json(content)
+
+
+def finalized_tool_artifact(
+    base_url: str,
+    api_key: str,
+    session_id: str,
+    timeout: int,
+    opener: urllib.request.OpenerDirector,
+    attestation_key_path: Path,
+    request_path: Path,
+) -> dict[str, Any]:
+    """Recover one exact attested review_finalize result from Hermes history."""
+
+    encoded_id = urllib.parse.quote(session_id, safe="")
+    request = urllib.request.Request(
+        f"{base_url.rstrip('/')}/api/sessions/{encoded_id}/messages",
+        method="GET",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/json",
+        },
+    )
+    payload = _read_json_response(
+        request,
+        timeout,
+        "session messages",
+        opener,
+        SESSION_MESSAGES_MAX_BYTES,
+    )
+    if payload.get("object") != "list" or payload.get("session_id") != session_id:
+        raise RuntimeError("Hermes session messages did not bind to the exact session")
+    messages = payload.get("data")
+    if not isinstance(messages, list) or len(messages) > 10_000:
+        raise RuntimeError("Hermes session messages returned an invalid bounded list")
+
+    finalize_call_positions: dict[str, int] = {}
+    for message_index, message in enumerate(messages):
+        if not isinstance(message, dict) or message.get("role") != "assistant":
+            continue
+        tool_calls = message.get("tool_calls")
+        if not isinstance(tool_calls, list):
+            continue
+        for tool_call in tool_calls:
+            if not isinstance(tool_call, dict):
+                continue
+            function = tool_call.get("function")
+            call_id = tool_call.get("id")
+            if (
+                isinstance(function, dict)
+                and function.get("name") == "review_finalize"
+                and isinstance(call_id, str)
+                and call_id
+            ):
+                if call_id in finalize_call_positions:
+                    raise RuntimeError(
+                        "Hermes session messages repeated a review_finalize call ID"
+                    )
+                finalize_call_positions[call_id] = message_index
+
+    candidates: dict[bytes, dict[str, Any]] = {}
+    for message_index in range(len(messages) - 1, -1, -1):
+        message = messages[message_index]
+        call_id = message.get("tool_call_id") if isinstance(message, dict) else None
+        call_position = (
+            finalize_call_positions.get(call_id) if isinstance(call_id, str) else None
+        )
+        if (
+            not isinstance(message, dict)
+            or message.get("role") != "tool"
+            or message.get("tool_name") != "review_finalize"
+            or call_position is None
+            or call_position >= message_index
+        ):
+            continue
+        content = message.get("content")
+        if not isinstance(content, str):
+            continue
+        encoded_content = content.encode("utf-8")
+        if len(encoded_content) > CHAT_RESPONSE_MAX_BYTES:
+            raise RuntimeError("Hermes review_finalize tool result exceeds the size limit")
+        try:
+            value = json.loads(content)
+            artifact = unwrap_artifact(value)
+            _validate_candidate(artifact, attestation_key_path, request_path)
+        except (json.JSONDecodeError, OSError, RuntimeError, ValueError):
+            continue
+        canonical = json.dumps(
+            artifact,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        candidates[canonical] = artifact
+
+    if not candidates:
+        raise RuntimeError(
+            "Hermes session messages did not contain a valid linked "
+            "review_finalize tool result"
+        )
+    if len(candidates) != 1:
+        raise RuntimeError(
+            "Hermes session messages contained ambiguous review_finalize results"
+        )
+    return next(iter(candidates.values()))
+
+
 def markdown(artifact: dict[str, Any]) -> str:
     run = artifact["run"]
     summary = artifact["summary"]
@@ -673,8 +806,11 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    if not 1 <= args.timeout <= 1800:
+        raise ValueError("--timeout must be between 1 and 1800 seconds")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,62}", args.session_id):
         raise ValueError("invalid Hermes session ID")
+    control_timeout = min(args.timeout, 30)
     base_url = validate_loopback_url(args.url)
     opener = urllib.request.build_opener(
         urllib.request.ProxyHandler({}),
@@ -713,6 +849,7 @@ def main() -> int:
         },
     )
     raw: bytes | None = None
+    artifact: dict[str, Any] | None = None
     effective_session_id = args.session_id
     chat_error: Exception | None = None
     try:
@@ -740,6 +877,47 @@ def main() -> int:
     except RuntimeError as exc:
         chat_error = exc
 
+    if chat_error is None and effective_session_id != args.session_id:
+        chat_error = RuntimeError(
+            "Hermes rotated the review session despite compression.in_place=true"
+        )
+    if chat_error is None and raw is None:
+        chat_error = RuntimeError("Hermes request returned no response")
+    if chat_error is None and raw is not None:
+        try:
+            artifact = unwrap_artifact(_chat_artifact_value(raw))
+        except (json.JSONDecodeError, ValueError) as response_error:
+            try:
+                artifact = finalized_tool_artifact(
+                    base_url,
+                    api_key,
+                    effective_session_id,
+                    control_timeout,
+                    opener,
+                    args.attestation_key_file,
+                    args.request,
+                )
+            except (json.JSONDecodeError, OSError, RuntimeError, ValueError) as recovery_error:
+                chat_error = RuntimeError(
+                    f"{response_error}; exact review_finalize recovery failed: "
+                    f"{recovery_error}"
+                )
+            else:
+                print(
+                    "call-hermes: recovered the exact attested review_finalize "
+                    "tool result from Hermes session messages",
+                    file=sys.stderr,
+                )
+        else:
+            try:
+                _validate_candidate(
+                    artifact,
+                    args.attestation_key_file,
+                    args.request,
+                )
+            except (json.JSONDecodeError, OSError, RuntimeError, ValueError) as validation_error:
+                chat_error = validation_error
+
     session_cleanup_deferred = False
     try:
         deleted_sessions = delete_session_lineage(
@@ -747,7 +925,7 @@ def main() -> int:
             api_key,
             args.session_id,
             effective_session_id,
-            args.timeout,
+            control_timeout,
             opener,
         )
     except (OSError, RuntimeError, json.JSONDecodeError) as delete_error:
@@ -782,26 +960,10 @@ def main() -> int:
                 + "\n"
             ).encode("utf-8"),
         )
-    if effective_session_id != args.session_id:
-        rotation_error = RuntimeError(
-            "Hermes rotated the review session despite compression.in_place=true"
-        )
-        if chat_error is not None:
-            raise RuntimeError(f"{chat_error}; {rotation_error}") from chat_error
-        raise rotation_error
     if chat_error is not None:
         raise chat_error
-    if raw is None:
-        raise RuntimeError("Hermes request returned no response")
-
-    payload = json.loads(raw)
-    content = (payload.get("choices") or [{}])[0].get("message", {}).get("content")
-    if not isinstance(content, str):
-        raise ValueError("Hermes response did not contain assistant content")
-    artifact = unwrap_artifact(extract_json(content))
-    validate_artifact(artifact)
-    verify_attestation(artifact, args.attestation_key_file)
-    validate_identity(artifact, args.request)
+    if artifact is None:
+        raise RuntimeError("Hermes request produced no validated review artifact")
 
     artifact_bytes = (
         json.dumps(artifact, indent=2, sort_keys=True) + "\n"

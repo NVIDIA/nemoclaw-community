@@ -95,6 +95,43 @@ def _artifact(key: bytes) -> dict[str, Any]:
     return artifact
 
 
+def _finalize_messages(
+    artifact: dict[str, Any],
+    *,
+    assistant_call_id: str = "call-finalize",
+    tool_call_id: str = "call-finalize",
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "role": "assistant",
+            "content": "Finalizing the normalized review.",
+            "tool_calls": [
+                {
+                    "id": assistant_call_id,
+                    "type": "function",
+                    "function": {
+                        "name": "review_finalize",
+                        "arguments": "{}",
+                    },
+                }
+            ],
+        },
+        {
+            "role": "tool",
+            "tool_name": "review_finalize",
+            "tool_call_id": tool_call_id,
+            "content": json.dumps(
+                {"ok": True, "result": artifact},
+                sort_keys=True,
+            ),
+        },
+        {
+            "role": "assistant",
+            "content": "Review complete.",
+        },
+    ]
+
+
 def _load_call_hermes() -> ModuleType:
     spec = importlib.util.spec_from_file_location(
         "review_advisor_call_hermes_identity_test",
@@ -114,6 +151,9 @@ def _server(
     delete_confirmed: bool = True,
     redirect: str | None = None,
     oversized_chat: bool = False,
+    chat_prose: str | None = None,
+    session_messages: list[dict[str, Any]] | None = None,
+    messages_session_id: str = _SESSION_ID,
 ) -> Iterator[tuple[str, list[tuple[str, str | None]]]]:
     calls: list[tuple[str, str | None]] = []
 
@@ -144,7 +184,11 @@ def _server(
                     "choices": [
                         {
                             "message": {
-                                "content": json.dumps(artifact, sort_keys=True),
+                                "content": (
+                                    chat_prose
+                                    if chat_prose is not None
+                                    else json.dumps(artifact, sort_keys=True)
+                                ),
                             }
                         }
                     ]
@@ -161,6 +205,28 @@ def _server(
             self.send_header("Content-Length", str(len(encoded)))
             self.end_headers()
             self.wfile.write(encoded)
+
+        def do_GET(self) -> None:  # noqa: N802
+            calls.append(("GET", self.headers.get("Authorization")))
+            if session_messages is None:
+                self._json(
+                    404,
+                    {
+                        "error": {
+                            "code": "session_messages_unavailable",
+                            "message": "forced missing session messages",
+                        }
+                    },
+                )
+                return
+            self._json(
+                200,
+                {
+                    "object": "list",
+                    "session_id": messages_session_id,
+                    "data": session_messages,
+                },
+            )
 
         def do_DELETE(self) -> None:  # noqa: N802
             calls.append(("DELETE", self.headers.get("Authorization")))
@@ -272,6 +338,86 @@ def test_success_deletes_authenticated_session_before_private_artifacts(
     assert stat.S_IMODE(output.stat().st_mode) == 0o700
     for name in ("review.json", "review.md", "verification.json"):
         assert stat.S_IMODE((output / name).stat().st_mode) == 0o600
+
+
+def test_no_json_response_recovers_exact_linked_finalize_tool_result(
+    tmp_path: Path,
+) -> None:
+    key = bytes(range(32))
+    artifact = _artifact(key)
+    with _server(
+        artifact,
+        chat_prose="Review complete.",
+        session_messages=_finalize_messages(artifact),
+    ) as (url, calls):
+        result = _invoke(tmp_path, url, artifact, key)
+
+    assert result.returncode == 0, result.stderr
+    assert calls == [
+        ("POST", f"Bearer {_API_KEY}"),
+        ("GET", f"Bearer {_API_KEY}"),
+        ("DELETE", f"Bearer {_API_KEY}"),
+    ]
+    assert "recovered the exact attested review_finalize tool result" in result.stderr
+    output = tmp_path / "output"
+    assert json.loads((output / "review.json").read_text()) == artifact
+    assert json.loads((output / "verification.json").read_text())["verified"] == [
+        "hmac-sha256",
+        "trusted-request-identity",
+        "hermes-session-deleted",
+    ]
+
+
+def test_unlinked_finalize_history_fails_closed_after_session_delete(
+    tmp_path: Path,
+) -> None:
+    key = bytes(range(32))
+    artifact = _artifact(key)
+    with _server(
+        artifact,
+        chat_prose="Review complete.",
+        session_messages=_finalize_messages(
+            artifact,
+            assistant_call_id="call-one",
+            tool_call_id="call-other",
+        ),
+    ) as (url, calls):
+        result = _invoke(tmp_path, url, artifact, key)
+
+    assert result.returncode != 0
+    assert calls == [
+        ("POST", f"Bearer {_API_KEY}"),
+        ("GET", f"Bearer {_API_KEY}"),
+        ("DELETE", f"Bearer {_API_KEY}"),
+    ]
+    assert "did not contain a valid linked review_finalize tool result" in result.stderr
+    output = tmp_path / "output"
+    assert (output / ".session-cleanup.json").is_file()
+    assert not (output / "review.json").exists()
+    assert not (output / "verification.json").exists()
+
+
+def test_invalid_primary_attestation_does_not_fall_back_to_history(
+    tmp_path: Path,
+) -> None:
+    key = bytes(range(32))
+    artifact = _artifact(key)
+    artifact["attestation"]["digest"] = "0" * 64
+    with _server(
+        artifact,
+        session_messages=_finalize_messages(_artifact(key)),
+    ) as (url, calls):
+        result = _invoke(tmp_path, url, artifact, key)
+
+    assert result.returncode != 0
+    assert calls == [
+        ("POST", f"Bearer {_API_KEY}"),
+        ("DELETE", f"Bearer {_API_KEY}"),
+    ]
+    assert "artifact attestation did not verify" in result.stderr
+    output = tmp_path / "output"
+    assert (output / ".session-cleanup.json").is_file()
+    assert not (output / "review.json").exists()
 
 
 @pytest.mark.parametrize(
