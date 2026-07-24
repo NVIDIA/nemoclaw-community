@@ -1,6 +1,6 @@
 ![NVIDIA](assets/nvidia_header.png)
 
-# personal-community-sentiment-triage: Hermes + Outlook
+# Developer Community Chief of Staff: Hermes + Outlook
 
 A personal Hermes agent that surfaces what the developer community is working
 on, struggling with, asking about, and flagging as gaps — and compares it
@@ -196,7 +196,7 @@ itself). The session UUID for Outlook gets produced *between* them, so the order
 ### Phase 1 — Install prerequisites
 
 ```console
-$ git clone https://github.com/NVIDIA/nemoclaw-community.git && cd examples/personal-community-sentiment-triage/
+$ git clone https://github.com/NVIDIA/nemoclaw-community.git && cd examples/recipes/nvidia/developer-community-chief-of-staff/
 $ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION=v0.0.72 sh
 ```
 

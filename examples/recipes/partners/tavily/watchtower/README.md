@@ -34,7 +34,7 @@ process the same candidates again instead of silently losing them.
 
 ```bash
 git clone https://github.com/NVIDIA/nemoclaw-community.git
-cd nemoclaw-community/examples/watchtower
+cd nemoclaw-community/examples/recipes/partners/tavily/watchtower
 
 cp .env.example .env      # add TAVILY_API_KEY + inference credentials
 bash scripts/onboard.sh   # create/configure the NemoClaw sandbox

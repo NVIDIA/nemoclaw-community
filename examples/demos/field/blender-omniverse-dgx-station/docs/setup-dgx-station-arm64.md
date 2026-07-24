@@ -55,7 +55,7 @@ mkdir -p "$HOME/work"
 git clone https://github.com/NVIDIA/nemoclaw-community.git \
   "$HOME/work/nemoclaw-community"
 export COMMUNITY_REPO="$HOME/work/nemoclaw-community"
-export GUIDE_REPO="$COMMUNITY_REPO/examples/blender-omniverse-dgx-station"
+export GUIDE_REPO="$COMMUNITY_REPO/examples/demos/field/blender-omniverse-dgx-station"
 cd "$GUIDE_REPO"
 ./scripts/preflight_dgx_station_arm64.sh
 ```
@@ -114,7 +114,7 @@ mkdir -p "$HOME/work"
 cd "$HOME/work"
 
 export COMMUNITY_REPO="${COMMUNITY_REPO:-$HOME/work/nemoclaw-community}"
-export GUIDE_REPO="$COMMUNITY_REPO/examples/blender-omniverse-dgx-station"
+export GUIDE_REPO="$COMMUNITY_REPO/examples/demos/field/blender-omniverse-dgx-station"
 export DEMO_ROOT="$HOME/work/ov-blender-hermes-demo"
 export OV_MONOREPO="$DEMO_ROOT/omniverse-labs"
 export OV_REPO="$OV_MONOREPO/projects/ov-blender-example"
@@ -496,7 +496,7 @@ list only the five `blender-workflow` tools.
 ### Command
 
 ```bash
-export GUIDE_REPO="$HOME/work/nemoclaw-community/examples/blender-omniverse-dgx-station"
+export GUIDE_REPO="$HOME/work/nemoclaw-community/examples/demos/field/blender-omniverse-dgx-station"
 export DEMO_ROOT="$HOME/work/ov-blender-hermes-demo"
 rm -rf /tmp/ov-blender-example
 

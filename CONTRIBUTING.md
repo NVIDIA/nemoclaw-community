@@ -64,7 +64,8 @@ cd nemoclaw-community
 git checkout -b my-feature
 ```
 
-For the current example, follow [examples/personal-community-sentiment-triage/README.md](examples/personal-community-sentiment-triage/README.md).
+Choose an example from the [example catalog](examples/README.md) and follow its
+README and verification guide.
 
 ## Local Checks
 
@@ -73,8 +74,8 @@ Run the lightweight repository checks before opening a pull request:
 ```bash
 python scripts/check_license_headers.py --check
 git diff --check
-bash -n examples/personal-community-sentiment-triage/scripts/*.sh
-python -m py_compile $(find examples/personal-community-sentiment-triage -name '*.py' -print)
+bash -n examples/recipes/nvidia/developer-community-chief-of-staff/scripts/*.sh
+python -m py_compile $(find examples/recipes/nvidia/developer-community-chief-of-staff -name '*.py' -print)
 ```
 
 ## Pull Request Guidelines
@@ -84,6 +85,10 @@ python -m py_compile $(find examples/personal-community-sentiment-triage -name '
 - Add third-party dependencies only when needed, and update [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES).
 - Do not commit secrets, local `.env` files, generated snapshots, private certificates, or token caches.
 - Do not report security issues in public pull requests or issues. Follow [SECURITY.md](SECURITY.md).
+
+When adding, moving, or renaming an example, follow the
+[example taxonomy and naming policy](.agents/skills/nemoclaw-community-contributor-examples/references/example-taxonomy.md)
+and its linked restructure checklist.
 
 ## License
 

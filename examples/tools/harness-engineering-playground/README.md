@@ -71,7 +71,7 @@ is immediately usable against every existing adapter.
 ## Quickstart
 
 ```bash
-cd examples/harness-engineering-playground
+cd examples/tools/harness-engineering-playground
 git submodule update --init                 # fetches external/deepagents if not already present
 uv sync --extra deepagents
 cp .env.example .env   # fill in proposer creds (RALPH_API_KEY / ANTHROPIC_API_KEY)

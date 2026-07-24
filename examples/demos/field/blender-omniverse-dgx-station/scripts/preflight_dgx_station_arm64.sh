@@ -439,7 +439,7 @@ else
   fail "Blender 5.1.x is not installed"
 fi
 
-guide_repo="${GUIDE_REPO:-$HOME/work/nemoclaw-community/examples/blender-omniverse-dgx-station}"
+guide_repo="${GUIDE_REPO:-$HOME/work/nemoclaw-community/examples/demos/field/blender-omniverse-dgx-station}"
 demo_root="$HOME/work/ov-blender-hermes-demo"
 if [ -f "$guide_repo/README.md" ]; then
   pass "guide repository exists at $guide_repo"

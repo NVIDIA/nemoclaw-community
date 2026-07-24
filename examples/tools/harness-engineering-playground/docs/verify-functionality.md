@@ -3,7 +3,7 @@
 ## 1. Unit tests (no checkout or API key required)
 
 ```bash
-cd examples/harness-engineering-playground
+cd examples/tools/harness-engineering-playground
 uv sync
 uv run pytest
 ```

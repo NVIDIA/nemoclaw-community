@@ -4,7 +4,7 @@ title:
   nav: "Verify Skills"
 description:
   main: "Walk through 10 conversational prompts plus a live GitHub check that prove the core Hermes workflow skills end-to-end across Slack DM, Slack thread, and Outlook email channels."
-  agent: "End-to-end functional verification recipe for the personal-community-sentiment-triage example. Contains 10 copy-pasteable prompts covering outlook-email-search, slack-channel-finder, slack-channel-summarizer, source-etl-query, and cross-source-gap-analysis, plus a live github-readonly-live check. Each prompt has a stated expected behavior and a specific verification cue. Use after running scripts/bring-up.sh and confirming the README's plumbing checks pass — this guide picks up where the README's plumbing verification stops."
+  agent: "End-to-end functional verification recipe for the developer-community-chief-of-staff example. Contains 10 copy-pasteable prompts covering outlook-email-search, slack-channel-finder, slack-channel-summarizer, source-etl-query, and cross-source-gap-analysis, plus a live github-readonly-live check. Each prompt has a stated expected behavior and a specific verification cue. Use after running scripts/bring-up.sh and confirming the README's plumbing checks pass — this guide picks up where the README's plumbing verification stops."
 keywords: ["verify nemoclaw skills", "hermes skill verification", "slack outlook smoke test", "personal community sentiment triage verification"]
 topics: ["generative_ai", "ai_agents"]
 tags: ["hermes", "openshell", "outlook", "slack", "verification", "smoke-test"]

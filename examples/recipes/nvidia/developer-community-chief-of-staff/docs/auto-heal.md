@@ -3,7 +3,7 @@ title:
   page: "Optional Hermes Auto-Heal"
   nav: "Auto-Heal"
 description:
-  main: "Install optional user-level systemd monitoring for the personal-community-sentiment-triage Hermes sandbox after a successful first bring-up."
+  main: "Install optional user-level systemd monitoring for the developer-community-chief-of-staff Hermes sandbox after a successful first bring-up."
   agent: "Explains first-time installation, manual health checks, repair, logs, and removal for the optional host-side Hermes auto-heal services."
 keywords: ["nemoclaw auto-heal", "hermes watchdog", "slack response monitor", "host tls proxy"]
 topics: ["generative_ai", "ai_agents"]

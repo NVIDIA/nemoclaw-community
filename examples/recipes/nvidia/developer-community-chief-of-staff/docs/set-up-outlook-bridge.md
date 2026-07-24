@@ -118,7 +118,7 @@ This ignores the cached token at `.bootstrap/cache/ms-graph-token.json`, prompts
 After the device-code login succeeds, the refresh token lives in two places:
 
 1. **Inside OpenShell's gateway credential store** — encrypted at rest, registered via `provider refresh configure --secret-material-key refresh_token`. This is the *authoritative* copy; OpenShell mints access tokens from it transparently.
-2. **`examples/personal-community-sentiment-triage/.bootstrap/cache/ms-graph-token.json` in the repo working tree** — plaintext, mode 0600, used only to skip device-code re-auth on subsequent `bash scripts/bring-up.sh` runs. The repo `.gitignore` excludes `.bootstrap/` so `git add -A` won't sweep it in; if you'd rather not have any on-disk cache at all, set `OUTLOOK_LOGIN_CACHE=0`. Lose this file and you'll just do one device-code login; nothing else changes.
+2. **`examples/recipes/nvidia/developer-community-chief-of-staff/.bootstrap/cache/ms-graph-token.json` in the repo working tree** — plaintext, mode 0600, used only to skip device-code re-auth on subsequent `bash scripts/bring-up.sh` runs. The repo `.gitignore` excludes `.bootstrap/` so `git add -A` won't sweep it in; if you'd rather not have any on-disk cache at all, set `OUTLOOK_LOGIN_CACHE=0`. Lose this file and you'll just do one device-code login; nothing else changes.
 
 If you'd prefer the refresh token never touch disk on your machine — shared workstation, demo environment, security-sensitive context — set `OUTLOOK_LOGIN_CACHE=0` in your `.env`. Bring-up will run device-code login on every invocation and write nothing locally. The gateway-side encrypted copy still gets refreshed each time, so the sandbox itself is unaffected.
 

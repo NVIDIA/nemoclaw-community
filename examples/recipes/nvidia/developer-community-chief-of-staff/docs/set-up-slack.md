@@ -3,7 +3,7 @@ title:
   page: "Set Up Slack with Hermes"
   nav: "Set Up Slack"
 description:
-  main: "Register a Slack app from the bundled manifest, enable Socket Mode, install to your workspace, and capture the bot/app tokens used by the personal-community-sentiment-triage example."
+  main: "Register a Slack app from the bundled manifest, enable Socket Mode, install to your workspace, and capture the bot/app tokens used by the developer-community-chief-of-staff example."
   agent: "Explains how Slack reaches the Hermes agent via Socket Mode (no public URL required). The Slack bot token (xoxb-) and app-level token (xapp-) are stored in OpenShell providers and resolved by the L7 proxy at request time. Slack is supported as both a messaging channel (DMs and @-mentions) and a read-only data source via skills (slack-channel-finder, slack-channel-summarizer, cross-source-gap-analysis). Use when configuring Slack integration for the agent."
 keywords: ["nemoclaw slack", "slack bot hermes agent", "slack socket mode", "slack app manifest", "slack bolt"]
 topics: ["generative_ai", "ai_agents"]

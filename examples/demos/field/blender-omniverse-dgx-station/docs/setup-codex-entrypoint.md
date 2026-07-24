@@ -32,7 +32,7 @@ This path is designed for NVIDIA DGX Station running Ubuntu 24.04 ARM64.
 ### Command
 
 ```bash
-export GUIDE_REPO="$HOME/work/nemoclaw-community/examples/blender-omniverse-dgx-station"
+export GUIDE_REPO="$HOME/work/nemoclaw-community/examples/demos/field/blender-omniverse-dgx-station"
 export DEMO_ROOT="$HOME/work/ov-blender-hermes-demo"
 export OV_MONOREPO="$DEMO_ROOT/omniverse-labs"
 export OV_REPO="$OV_MONOREPO/projects/ov-blender-example"
