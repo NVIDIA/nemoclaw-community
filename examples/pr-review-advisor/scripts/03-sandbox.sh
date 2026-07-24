@@ -9,12 +9,14 @@ source "$DIR/_lib.sh"
 
 recover_error=0
 lock_held=0
+allow_quarantine=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --recover-error) recover_error=1 ;;
     --lock-held) lock_held=1 ;;
+    --allow-quarantine) allow_quarantine=1 ;;
     *)
-      echo "Usage: $(basename "$0") [--recover-error] [--lock-held]" >&2
+      echo "Usage: $(basename "$0") [--recover-error] [--lock-held] [--allow-quarantine]" >&2
       exit 2
       ;;
   esac
@@ -53,6 +55,15 @@ else
   acquire_review_lock
   owns_lock=1
 fi
+if [[ "$allow_quarantine" == 1 ]]; then
+  [[ "$lock_held" == 1 ]] || {
+    echo "--allow-quarantine requires --lock-held" >&2
+    exit 2
+  }
+  assert_quarantine_recovery_context
+else
+  assert_sandbox_not_quarantined
+fi
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -69,20 +80,21 @@ case "${phase,,}" in
     # A name match is insufficient: never reuse or delete a sandbox whose
     # baked repository/install/model/assets identity differs from this install.
     assert_runtime_fingerprint
-    if run_openshell sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" -- \
+    if [[ "$allow_quarantine" == 0 ]] \
+      && run_openshell sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" -- \
       curl -fsS --max-time 3 http://127.0.0.1:18642/health >/dev/null 2>&1; then
       run_openshell policy set --policy "$EXAMPLE_DIR/policy.yaml" \
         --wait "$NEMOCLAW_SANDBOX_NAME"
       echo "Reusing healthy sandbox: $NEMOCLAW_SANDBOX_NAME"
       exit 0
     fi
-    [[ "$recover_error" == 1 ]] || {
+    [[ "$recover_error" == 1 || "$allow_quarantine" == 1 ]] || {
       echo "Sandbox is Ready but Hermes is unhealthy; inspect it or rerun with --recover-error" >&2
       exit 1
     }
     ;;
   error)
-    [[ "$recover_error" == 1 ]] || {
+    [[ "$recover_error" == 1 || "$allow_quarantine" == 1 ]] || {
       echo "Sandbox is in Error; inspect it or rerun with --recover-error" >&2
       exit 1
     }

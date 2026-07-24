@@ -48,12 +48,12 @@ jobs:
     runs-on:
       group: nemoclaw-review-advisor-nemoclaw-community-af478b4b0480
       labels: [self-hosted, linux, nemoclaw]
-    # call-hermes allows 30 minutes for one bounded inference request. Reserve
-    # time for trusted preparation, exact privacy cleanup, and artifact upload.
-    timeout-minutes: 45
+    # call-hermes enforces a 90-minute monotonic wall deadline. Reserve 35
+    # minutes for trusted preparation, full timeout containment, cleanup, and upload.
+    timeout-minutes: 125
     env:
-      NEMOCLAW_RELEASE_TAG: v0.0.93
-      NEMOCLAW_RELEASE_COMMIT: ac5579e99838b4c0437669f347488abba0956eef
+      NEMOCLAW_RELEASE_TAG: v0.0.94
+      NEMOCLAW_RELEASE_COMMIT: d87acc16b04c065ddc26c294a6c3af6795a43d7b
       NEMOCLAW_HERMES_BASE_DIGEST: sha256:fa05221f5c7bcafea7e263c84e5d06f87e37d1ccb78dc28c113f1a4066aa544c
       REVIEW_PROFILE_PATH: examples/pr-review-advisor/dogfood/profile.yaml
     steps:
@@ -76,7 +76,7 @@ jobs:
             -e examples/pr-review-advisor/.snapshots/ \
             -e examples/pr-review-advisor/memory-export/
 
-      - name: Verify NemoClaw v0.0.93 source pin
+      - name: Verify NemoClaw v0.0.94 source pin
         run: |
           set -eu
           dockerfile=examples/pr-review-advisor/agents/hermes/Dockerfile

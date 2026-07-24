@@ -105,6 +105,7 @@ acquire_review_lock
 trap release_review_lock EXIT INT TERM
 ensure_api_key
 assert_sandbox_ready
+active_runtime_fingerprint="$REVIEW_ADVISOR_RUNTIME_FINGERPRINT"
 work="$(mktemp -d "${TMPDIR:-/tmp}/review-advisor.XXXXXXXX")"
 chmod 700 "$work"
 session_id=""
@@ -112,6 +113,208 @@ remote_archive=""
 remote_stage=""
 api_session_attempted=0
 privacy_cleanup_complete=0
+recovery_snapshot=""
+reset_marker="$work/canonical/.sandbox-reset-required.json"
+quarantine_marker="$(sandbox_quarantine_file)"
+quarantine_owned=0
+
+discard_recovery_snapshot() {
+  local manifest
+  [[ -n "$recovery_snapshot" ]] || return 0
+  case "$recovery_snapshot" in
+    "$SNAPSHOT_DIR"/review-memory-*.tar.gz) ;;
+    *)
+      echo "Refusing unsafe automatic recovery snapshot path" >&2
+      return 1
+      ;;
+  esac
+  manifest="${recovery_snapshot%.tar.gz}.manifest.json"
+  [[ -f "$recovery_snapshot" && ! -L "$recovery_snapshot" \
+      && -f "$manifest" && ! -L "$manifest" ]] || {
+    echo "Automatic recovery snapshot or manifest is missing or unsafe" >&2
+    return 1
+  }
+  rm -f -- "$recovery_snapshot" "$manifest" || {
+    echo "Could not discard the automatic recovery snapshot" >&2
+    return 1
+  }
+  recovery_snapshot=""
+}
+
+create_review_quarantine() {
+  python3 "$DIR/sandbox-quarantine.py" create \
+    --marker "$quarantine_marker" \
+    --requested-session-id "$session_id" \
+    --sandbox-name "$NEMOCLAW_SANDBOX_NAME" \
+    --install-id "$REVIEW_ADVISOR_INSTALL_ID" \
+    --repository "$REVIEW_ADVISOR_REPOSITORY" \
+    --scope-digest "$REVIEW_ADVISOR_SCOPE_DIGEST" \
+    --active-runtime-fingerprint "$active_runtime_fingerprint" \
+    --recovery-snapshot "${recovery_snapshot##*/}"
+  quarantine_owned=1
+}
+
+validate_review_quarantine_record() {
+  python3 "$DIR/sandbox-quarantine.py" validate \
+    --marker "$quarantine_marker" \
+    --requested-session-id "$session_id" \
+    --sandbox-name "$NEMOCLAW_SANDBOX_NAME" \
+    --install-id "$REVIEW_ADVISOR_INSTALL_ID" \
+    --repository "$REVIEW_ADVISOR_REPOSITORY" \
+    --scope-digest "$REVIEW_ADVISOR_SCOPE_DIGEST" \
+    --active-runtime-fingerprint "$active_runtime_fingerprint" \
+    --recovery-snapshot "${recovery_snapshot##*/}"
+}
+
+validate_review_quarantine() {
+  [[ "$quarantine_owned" == 1 ]] || {
+    echo "This review does not own the durable sandbox quarantine" >&2
+    return 1
+  }
+  validate_review_quarantine_record
+}
+
+adopt_review_quarantine() {
+  [[ "$quarantine_owned" == 0 ]] || return 0
+  validate_review_quarantine_record || return $?
+  quarantine_owned=1
+}
+
+clear_review_quarantine() {
+  validate_review_quarantine || return $?
+  python3 "$DIR/sandbox-quarantine.py" clear \
+    --marker "$quarantine_marker" \
+    --requested-session-id "$session_id" \
+    --sandbox-name "$NEMOCLAW_SANDBOX_NAME" \
+    --install-id "$REVIEW_ADVISOR_INSTALL_ID" \
+    --repository "$REVIEW_ADVISOR_REPOSITORY" \
+    --scope-digest "$REVIEW_ADVISOR_SCOPE_DIGEST" \
+    --active-runtime-fingerprint "$active_runtime_fingerprint" \
+    --recovery-snapshot "${recovery_snapshot##*/}" || return $?
+  quarantine_owned=0
+}
+
+contain_unjoined_stream() {
+  local marker="$reset_marker"
+  local observed phase
+
+  validate_review_quarantine || return $?
+  python3 - "$marker" "$session_id" <<'PY' || return $?
+import json
+import os
+import stat
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+expected_session = sys.argv[2]
+info = path.lstat()
+if path.is_symlink() or not stat.S_ISREG(info.st_mode):
+    raise SystemExit("sandbox-reset marker is not a regular file")
+if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o077:
+    raise SystemExit("sandbox-reset marker ownership or mode is unsafe")
+if info.st_size > 32_768:
+    raise SystemExit("sandbox-reset marker is oversized")
+record = json.loads(path.read_text(encoding="utf-8"))
+if record != {
+    "reason": "stream_not_joined",
+    "requested_session_id": expected_session,
+    "schema_version": 1,
+}:
+    raise SystemExit("sandbox-reset marker does not bind the exact review session")
+PY
+
+  [[ -n "$recovery_snapshot" ]] || {
+    echo "Automatic recovery snapshot is unavailable" >&2
+    return 1
+  }
+  python3 "$DIR/snapshot-manifest.py" validate \
+    --archive "$recovery_snapshot" \
+    --manifest "${recovery_snapshot%.tar.gz}.manifest.json" \
+    --sandbox "$NEMOCLAW_SANDBOX_NAME" \
+    --install-id "$REVIEW_ADVISOR_INSTALL_ID" \
+    --repository "$REVIEW_ADVISOR_REPOSITORY" || return $?
+
+  scrub_external_secrets || return $?
+  run_openshell forward stop "$HERMES_FORWARD_PORT" "$NEMOCLAW_SANDBOX_NAME" \
+    >/dev/null 2>&1 || true
+  assert_gateway_identity || return $?
+  compute_runtime_fingerprint || return $?
+  [[ "$REVIEW_ADVISOR_RUNTIME_FINGERPRINT" == "$active_runtime_fingerprint" ]] || {
+    echo "Refusing containment after review runtime source drift" >&2
+    return 1
+  }
+  phase="$(sandbox_phase)" || return $?
+  [[ "${phase,,}" == "ready" ]] || {
+    echo "Cannot contain unjoined Hermes stream from sandbox phase: $phase" >&2
+    return 1
+  }
+  observed="$(
+    run_openshell sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" -- \
+      cat /opt/review-advisor/runtime-fingerprint
+  )" || return $?
+  [[ "$observed" == "$active_runtime_fingerprint" ]] || {
+    echo "Refusing to replace a sandbox with a different runtime fingerprint" >&2
+    return 1
+  }
+
+  run_openshell sandbox delete "$NEMOCLAW_SANDBOX_NAME" || return $?
+  for _ in $(seq 1 60); do
+    phase="$(sandbox_phase)" || return $?
+    [[ "$phase" == "Missing" ]] && break
+    sleep 1 || return $?
+  done
+  phase="$(sandbox_phase)" || return $?
+  [[ "$phase" == "Missing" ]] || {
+    echo "Timed-out review sandbox deletion did not complete" >&2
+    return 1
+  }
+
+  bash "$DIR/03-sandbox.sh" --lock-held --allow-quarantine || return $?
+  observed="$(
+    run_openshell sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" -- \
+      cat /opt/review-advisor/runtime-fingerprint
+  )" || return $?
+  [[ "$observed" == "$active_runtime_fingerprint" ]] || {
+    echo "Replacement sandbox runtime fingerprint does not match the interrupted review" >&2
+    return 1
+  }
+  bash "$DIR/restore.sh" --lock-held --allow-quarantine \
+    "$recovery_snapshot" || return $?
+  # shellcheck disable=SC2016
+  run_openshell sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" -- \
+    bash -c '
+      set -euo pipefail
+      session=$1
+      test -z "$(find /sandbox/review-input -mindepth 1 -maxdepth 1 -print -quit)"
+      test -z "$(find /sandbox/review-staging -mindepth 1 -maxdepth 1 -print -quit)"
+      /opt/hermes/.venv/bin/python - "$session" <<'"'"'PY'"'"'
+import sqlite3
+import sys
+
+session_id = sys.argv[1]
+connection = sqlite3.connect(
+    "file:/sandbox/.hermes/runtime/state.db?mode=ro",
+    uri=True,
+)
+try:
+    sessions = connection.execute(
+        "SELECT COUNT(*) FROM sessions WHERE id = ?",
+        (session_id,),
+    ).fetchone()[0]
+    messages = connection.execute(
+        "SELECT COUNT(*) FROM messages WHERE session_id = ?",
+        (session_id,),
+    ).fetchone()[0]
+finally:
+    connection.close()
+if sessions or messages:
+    raise SystemExit("contained review session survived sandbox replacement")
+PY
+    ' bash "$session_id" || return $?
+  privacy_cleanup_complete=1
+  echo "Unjoined Hermes stream contained by exact sandbox replacement; memory restored."
+}
 
 privacy_cleanup() {
   local failed=0
@@ -328,14 +531,49 @@ PY
 cleanup() {
   local status=$?
   local privacy_status=0
+  local quarantine_status=0
+  local snapshot_status=0
+  local signal_status=0
   trap - EXIT
-  if [[ "$privacy_cleanup_complete" != 1 ]]; then
+  # Cleanup can replace the sandbox and must not recursively exit through the
+  # outer signal traps. Record a signal, let the current guarded step unwind,
+  # then release the lifecycle lock and return the signal status.
+  trap 'signal_status=130' INT
+  trap 'signal_status=143' TERM
+  if [[ "$quarantine_owned" == 0 \
+      && ( -e "$quarantine_marker" || -L "$quarantine_marker" ) ]]; then
+    # The marker helper creates atomically. If a signal arrived after that
+    # subprocess committed the marker but before the shell assignment, reclaim
+    # only the exact record belonging to this review. An invalid or foreign
+    # marker keeps the snapshot and the sandbox fail-closed.
+    adopt_review_quarantine || quarantine_status=$?
+  fi
+  if [[ -e "$reset_marker" || -L "$reset_marker" ]]; then
+    contain_unjoined_stream || privacy_status=$?
+  elif [[ "$privacy_cleanup_complete" != 1 ]]; then
     privacy_cleanup || privacy_status=$?
+  fi
+  if [[ "$privacy_status" == 0 ]]; then
+    if [[ "$quarantine_status" == 0 && "$quarantine_owned" == 1 ]]; then
+      clear_review_quarantine || quarantine_status=$?
+    fi
+    if [[ "$quarantine_status" == 0 ]]; then
+      discard_recovery_snapshot || snapshot_status=$?
+    elif [[ -n "$recovery_snapshot" ]]; then
+      echo "Automatic recovery snapshot retained because quarantine could not be cleared: $recovery_snapshot" >&2
+    fi
+  elif [[ -n "$recovery_snapshot" ]]; then
+    echo "Automatic recovery snapshot retained after failed containment: $recovery_snapshot" >&2
   fi
   release_review_lock
   chmod -R u+w "$work" 2>/dev/null || true
   rm -rf "$work"
-  if [[ "$status" == 0 && "$privacy_status" != 0 ]]; then
+  trap - INT TERM
+  if [[ "$status" == 0 && "$signal_status" != 0 ]]; then
+    status="$signal_status"
+  elif [[ "$status" == 0 \
+      && ( "$privacy_status" != 0 || "$quarantine_status" != 0 \
+        || "$snapshot_status" != 0 ) ]]; then
     status=1
   fi
   exit "$status"
@@ -408,6 +646,28 @@ validate_name "$session_id"
 archive="$prepared/review-input.tar.gz"
 remote_archive="/tmp/${session_id}.tar.gz"
 remote_stage="/sandbox/review-staging/${session_id}"
+
+# A review never writes memory. Capture the exact pre-run memory tree so an
+# unjoined streaming request can be contained by replacing the whole sandbox
+# without losing explicitly accepted lessons.
+recovery_snapshot="$(bash "$DIR/snapshot.sh" --lock-held)"
+case "$recovery_snapshot" in
+  "$SNAPSHOT_DIR"/review-memory-*.tar.gz) ;;
+  *)
+    echo "Automatic recovery snapshot returned an unsafe path" >&2
+    exit 1
+    ;;
+esac
+[[ -f "$recovery_snapshot" && ! -L "$recovery_snapshot" \
+    && -f "${recovery_snapshot%.tar.gz}.manifest.json" \
+    && ! -L "${recovery_snapshot%.tar.gz}.manifest.json" ]] || {
+  echo "Automatic recovery snapshot is missing or unsafe" >&2
+  exit 1
+}
+
+# Quarantine before the first sandbox mutation. A host crash during upload or
+# extraction must leave the sandbox blocked even though no API turn started.
+create_review_quarantine
 
 # Close the host entrypoint while trusted inputs are replaced. The plugin also
 # pins context/profile digests and one detached HEAD marker when the new session

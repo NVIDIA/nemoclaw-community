@@ -22,6 +22,22 @@ Only `scripts/feedback.sh`, invoked by a trusted operator with an explicit
 disposition and a bounded maintainer-authored `--lesson`, can call Hermes'
 native memory store.
 
+Immediately before a review, the host also creates a private automatic snapshot
+of that sandbox's memory. The streamed Hermes response must contain exactly one
+valid terminal chunk followed by `[DONE]` before the host treats the agent turn
+as joined. If the deadline, connection, or stream protocol fails before that
+proof, the host writes no review artifact and performs no publication. It
+replaces the exact sandbox and restores the pre-run memory snapshot, preventing
+a still-unwinding interrupted session from reappearing after row-level cleanup.
+The snapshot is discarded only after normal privacy cleanup or successful
+replacement and restoration. Before the request starts, the host atomically
+creates a private install-scoped quarantine marker bound to the session,
+sandbox, repository, scope, runtime fingerprint, and snapshot. Every normal
+sandbox entrypoint refuses to operate while that marker exists. Cleanup clears
+it only after proving the session is gone; otherwise the marker and snapshot
+survive for `scripts/recover-quarantine.sh` to perform the same exact
+replacement, restoration, and absence proof after a crash or failed cleanup.
+
 The feedback path validates the verified artifact, repository binding,
 candidate linkage, evidence shape, and candidate source. It persists only the
 curated lesson plus compact provenance: disposition, repository, affected

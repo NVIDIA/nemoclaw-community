@@ -755,7 +755,43 @@ assert_runtime_fingerprint() {
   }
 }
 
-assert_sandbox_ready() {
+sandbox_quarantine_file() {
+  printf '%s\n' "${STATE_DIR}/sandbox-quarantine.json"
+}
+
+sandbox_quarantine_present() {
+  local quarantine
+  quarantine="$(sandbox_quarantine_file)"
+  [[ -e "$quarantine" || -L "$quarantine" ]]
+}
+
+validate_sandbox_quarantine_identity() {
+  python3 "$SCRIPT_DIR/sandbox-quarantine.py" inspect \
+    --marker "$(sandbox_quarantine_file)" \
+    --sandbox-name "$NEMOCLAW_SANDBOX_NAME" \
+    --install-id "$REVIEW_ADVISOR_INSTALL_ID" \
+    --repository "$REVIEW_ADVISOR_REPOSITORY" \
+    --scope-digest "$REVIEW_ADVISOR_SCOPE_DIGEST"
+}
+
+assert_sandbox_not_quarantined() {
+  if sandbox_quarantine_present; then
+    echo "Review-advisor sandbox is quarantined after an interrupted review." >&2
+    echo "Recover it with: bash ${SCRIPT_DIR}/recover-quarantine.sh" >&2
+    return 1
+  fi
+}
+
+assert_quarantine_recovery_context() {
+  [[ "${REVIEW_ADVISOR_LOCK_DIR:-}" == "${STATE_DIR}/review.lock" \
+      && -d "$REVIEW_ADVISOR_LOCK_DIR" ]] || {
+    echo "Quarantine recovery requires the inherited lifecycle lock" >&2
+    return 2
+  }
+  validate_sandbox_quarantine_identity >/dev/null
+}
+
+_assert_sandbox_ready_unchecked() {
   local phase
   assert_gateway_identity
   phase="$(sandbox_phase)"
@@ -765,6 +801,16 @@ assert_sandbox_ready() {
     return 1
   }
   assert_runtime_fingerprint
+}
+
+assert_sandbox_ready() {
+  assert_sandbox_not_quarantined
+  _assert_sandbox_ready_unchecked
+}
+
+assert_sandbox_ready_for_quarantine_recovery() {
+  assert_quarantine_recovery_context
+  _assert_sandbox_ready_unchecked
 }
 
 ensure_api_key() {

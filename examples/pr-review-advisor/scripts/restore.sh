@@ -3,29 +3,97 @@
 # SPDX-License-Identifier: Apache-2.0
 
 set -euo pipefail
+umask 077
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$DIR/_lib.sh"
 
+lock_held=0
+allow_quarantine=0
+archive=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --lock-held) lock_held=1 ;;
+    --allow-quarantine) allow_quarantine=1 ;;
+    -h|--help)
+      echo "Usage: restore.sh [--lock-held] [--allow-quarantine] [review-memory-....tar.gz]"
+      exit 0
+      ;;
+    *)
+      [[ -z "$archive" ]] || {
+        echo "Usage: restore.sh [--lock-held] [--allow-quarantine] [review-memory-....tar.gz]" >&2
+        exit 2
+      }
+      archive="$1"
+      ;;
+  esac
+  shift
+done
+
 scrub_external_secrets
 load_env
 scrub_external_secrets
-acquire_review_lock
-trap release_review_lock EXIT INT TERM
-archive="${1:-}"
+owns_lock=0
+if [[ "$lock_held" == 1 ]]; then
+  [[ "${REVIEW_ADVISOR_LOCK_DIR:-}" == "${STATE_DIR}/review.lock" \
+      && -d "$REVIEW_ADVISOR_LOCK_DIR" ]] || {
+    echo "--lock-held requires an inherited active review lock" >&2
+    exit 2
+  }
+else
+  acquire_review_lock
+  owns_lock=1
+fi
+if [[ "$allow_quarantine" == 1 && "$lock_held" != 1 ]]; then
+  echo "--allow-quarantine requires --lock-held" >&2
+  exit 2
+fi
+work=""
+cleanup() {
+  local status=$?
+  trap - EXIT INT TERM
+  [[ -z "$work" ]] || rm -rf "$work"
+  [[ "$owns_lock" == 0 ]] || release_review_lock
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 if [[ -z "$archive" ]]; then
   archive="$(find "$SNAPSHOT_DIR" -maxdepth 1 -type f -name 'review-memory-*.tar.gz' 2>/dev/null | sort | tail -1)"
 fi
 [[ -n "$archive" && -f "$archive" && ! -L "$archive" ]] || {
-  echo "Usage: restore.sh [review-memory-....tar.gz]" >&2
+  echo "Usage: restore.sh [--lock-held] [--allow-quarantine] [review-memory-....tar.gz]" >&2
   exit 2
 }
 
 require_command openshell
 require_command python3
-assert_sandbox_ready
+if [[ "$allow_quarantine" == 1 ]]; then
+  quarantine_record="$(validate_sandbox_quarantine_identity)"
+  quarantine_snapshot="$(
+    python3 -c 'import json,sys; print(json.loads(sys.argv[1])["recovery_snapshot"])' \
+      "$quarantine_record"
+  )"
+  quarantine_fingerprint="$(
+    python3 -c \
+      'import json,sys; print(json.loads(sys.argv[1])["active_runtime_fingerprint"])' \
+      "$quarantine_record"
+  )"
+  [[ "$archive" == "$SNAPSHOT_DIR/$quarantine_snapshot" ]] || {
+    echo "Quarantine recovery archive does not match the durable marker" >&2
+    exit 1
+  }
+  compute_runtime_fingerprint
+  [[ "$REVIEW_ADVISOR_RUNTIME_FINGERPRINT" == "$quarantine_fingerprint" ]] || {
+    echo "Quarantine recovery runtime source fingerprint changed" >&2
+    exit 1
+  }
+  assert_sandbox_ready_for_quarantine_recovery
+else
+  assert_sandbox_ready
+fi
 work="$(mktemp -d "${TMPDIR:-/tmp}/review-restore.XXXXXXXX")"
-trap 'release_review_lock; rm -rf "$work"' EXIT INT TERM
 
 manifest="${archive%.tar.gz}.manifest.json"
 [[ "$manifest" != "$archive" && -f "$manifest" && ! -L "$manifest" ]] || {

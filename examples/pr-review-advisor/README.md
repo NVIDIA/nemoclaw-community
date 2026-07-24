@@ -420,16 +420,41 @@ limits.
 
 The Hermes appliance allows 256 model turns so a one-tool-per-turn execution
 can cover all 128 bounded diff reads plus repository checks and the ordered
-review stages. Each model call uses six Hermes-native, `Retry-After`-aware
-attempts to absorb transient provider throttling; the host never starts a
-second agent turn after an incomplete or failed response. The host's 30-minute
-inference deadline remains the hard wall-clock bound. `review_diff` is also a
-per-path coverage cursor: overlapping or repeated requests advance to the next
-unread chunk, and every result points to the next exact uncovered path and
-line. If the final assistant text omits the artifact, the host performs one
-bounded read of that exact Hermes session and accepts only a linked, attested
-`review_finalize` result. Provider failure metadata is bounded and surfaced
-after that recovery check; no raw response or transcript becomes durable.
+review stages. Each model call uses six Hermes-owned provider attempts to
+absorb transient failures: HTTP 429 responses honor `Retry-After`, while
+provider-overload responses use bounded jitter. The host starts one streamed
+agent turn and never starts a replacement turn after an incomplete or failed
+response. Hermes emits SSE keepalives during that turn and interrupts the
+agent when the client disconnects; the host separately enforces a 90-minute
+monotonic wall-clock deadline.
+
+`review_diff` is also a per-path coverage cursor: overlapping or repeated
+requests advance to the next unread chunk, and every result points to the next
+exact uncovered path and line. A stream is joined only after exactly one valid
+terminal chunk followed by `[DONE]`. If that proof is missing, the host
+publishes nothing and replaces that exact sandbox, restoring its memory from
+the automatic pre-run snapshot so an interrupted session cannot reappear after
+cleanup. A private install-scoped quarantine marker exists before the request
+starts and is cleared only after privacy cleanup, or after exact replacement,
+memory restoration, and an absence proof. A failed cleanup, host crash, or
+failed replacement therefore blocks every later advisor operation instead of
+reusing a possibly active sandbox. Recover it with:
+
+```console
+$ bash .nemoclaw/review-advisor/runtime/scripts/recover-quarantine.sh
+```
+
+Recovery requires the same runtime fingerprint and the bound automatic
+snapshot; it fails closed and leaves both in place after any incomplete step.
+An uncatchable process or host failure can also leave the lifecycle lock
+directory named in the next command's error. After proving that no advisor
+lifecycle process is still running, remove only that exact empty `review.lock`
+directory, then run the recovery command; never break an active lock.
+Only after a joined stream may the host perform one bounded read of that exact
+Hermes session, accepting only a linked, attested
+`review_finalize` result when the final assistant text omitted the artifact.
+Provider failure metadata is bounded and surfaced after that recovery check;
+no raw response or transcript becomes durable.
 
 The documented durable outputs are `review.json`, `review.md`,
 `verification.json`, and `request.json`. The verification receipt binds the
@@ -440,13 +465,14 @@ digest. The target `base_sha` remains distinct so
 publication staleness is checked against the live target-branch tip. It cannot
 publish.
 
-If Hermes' final assistant turn omits the requested JSON envelope, the host
+If a normally joined Hermes stream omits the requested JSON envelope, the host
 does not ask the model to repeat the review. It makes one authenticated,
 bounded read through Hermes' advertised session-messages API and accepts only
 an exact `review_finalize` tool result linked to its assistant tool call. The
-same schema, HMAC, and request-identity checks apply. Session history is never
-persisted, and the exact session lineage is still deleted before any artifact
-is written.
+same schema, HMAC, and request-identity checks apply. This exact-finalize
+recovery is never attempted for a stream missing `[DONE]`. Session history is
+never persisted, and the exact session lineage is still deleted before any
+artifact is written.
 
 ## Teach it from reviewed outcomes
 
@@ -501,6 +527,12 @@ plain digest detects corruption and mixups; it is not an authenticity
 signature, so external custody requires a trusted MAC/signature or
 KMS-controlled integrity layer.
 
+Automatic pre-review snapshots are normally removed after cleanup. If the
+process reports a quarantined sandbox, do not restore or reuse it directly;
+run `scripts/recover-quarantine.sh`. The recovery command validates the durable
+marker and snapshot, replaces the exact sandbox, restores memory, proves the
+interrupted session is absent, and only then removes the marker and snapshot.
+
 ## Optional publication
 
 Publication is deliberately absent from `review.sh`. After inspecting the
@@ -554,8 +586,8 @@ not claims about an arbitrary real repository and not substitutes for current
 code evidence. [`review-profiles/nemoclaw.yaml`](review-profiles/nemoclaw.yaml)
 is the public worked example of the real NemoClaw components, evidence, and
 priorities used by this advisor design, pinned to the latest published
-NemoClaw tag at preparation time: `v0.0.93`
-(`ac5579e99838b4c0437669f347488abba0956eef`). Installed repositories use their
+NemoClaw tag at preparation time: `v0.0.94`
+(`d87acc16b04c065ddc26c294a6c3af6795a43d7b`). Installed repositories use their
 generated, maintainer-owned active profile.
 
 ### Repository-local dogfood profile

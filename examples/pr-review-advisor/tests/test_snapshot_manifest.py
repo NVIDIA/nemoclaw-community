@@ -161,9 +161,7 @@ def test_snapshot_manifest_v2_binds_install_repository_and_sandbox(
         changed = original | {field: replacement}
         staged_manifest = stage / manifest.name
         staged_manifest.write_text(json.dumps(changed) + "\n", encoding="utf-8")
-        rejected = run_manifest(
-            *validate_args(stage / archive.name, staged_manifest)
-        )
+        rejected = run_manifest(*validate_args(stage / archive.name, staged_manifest))
         assert rejected.returncode == 1
         assert f"different {field}" in rejected.stderr
 
@@ -197,9 +195,7 @@ def test_snapshot_rejects_resource_bombs_and_portable_collisions(
     oversized_archive = tmp_path / "review-memory-oversized.tar.gz"
     oversized_manifest = tmp_path / "review-memory-oversized.manifest.json"
     write_sized_snapshot(oversized_archive, [16 * 1024 * 1024 + 1])
-    oversized = run_manifest(
-        *create_args(oversized_archive, oversized_manifest)
-    )
+    oversized = run_manifest(*create_args(oversized_archive, oversized_manifest))
     assert oversized.returncode == 1
     assert "snapshot member exceeds" in oversized.stderr
 
@@ -209,9 +205,7 @@ def test_snapshot_rejects_resource_bombs_and_portable_collisions(
         cumulative_archive,
         [16 * 1024 * 1024] * 8 + [1],
     )
-    cumulative = run_manifest(
-        *create_args(cumulative_archive, cumulative_manifest)
-    )
+    cumulative = run_manifest(*create_args(cumulative_archive, cumulative_manifest))
     assert cumulative.returncode == 1
     assert "uncompressed limit" in cumulative.stderr
 
@@ -235,9 +229,7 @@ def test_snapshot_rejects_resource_bombs_and_portable_collisions(
         archive.addfile(directory)
         archive.addfile(tarfile.TarInfo("memories/Lesson.md"))
         archive.addfile(tarfile.TarInfo("memories/lesson.md"))
-    collision = run_manifest(
-        *create_args(collision_archive, collision_manifest)
-    )
+    collision = run_manifest(*create_args(collision_archive, collision_manifest))
     assert collision.returncode == 1
     assert "collide on a portable filesystem" in collision.stderr
 
@@ -262,9 +254,7 @@ def test_snapshot_rejects_resource_bombs_and_portable_collisions(
     with compressed_archive.open("wb") as stream:
         stream.seek(64 * 1024 * 1024)
         stream.write(b"x")
-    compressed = run_manifest(
-        *create_args(compressed_archive, compressed_manifest)
-    )
+    compressed = run_manifest(*create_args(compressed_archive, compressed_manifest))
     assert compressed.returncode == 1
     assert "compressed limit" in compressed.stderr
 
@@ -274,9 +264,7 @@ def test_snapshot_rejects_resource_bombs_and_portable_collisions(
     with gzip.open(expansion_archive, "wb") as stream:
         for _ in range(193):
             stream.write(zero_chunk)
-    expansion = run_manifest(
-        *create_args(expansion_archive, expansion_manifest)
-    )
+    expansion = run_manifest(*create_args(expansion_archive, expansion_manifest))
     assert expansion.returncode == 1
     assert "expansion limit" in expansion.stderr
 
@@ -302,3 +290,16 @@ def test_snapshot_lifecycle_passes_all_binding_fields_and_retains_rollback() -> 
     assert "trap cleanup EXIT" in snapshot_source
     assert 'rm -f -- "$cleanup_remote"' in snapshot_source
     assert '"$cleanup_local_archive" "$cleanup_local_manifest"' in snapshot_source
+
+    assert "--lock-held) lock_held=1" in restore_source
+    assert (
+        '"${REVIEW_ADVISOR_LOCK_DIR:-}" == "${STATE_DIR}/review.lock"' in restore_source
+    )
+    assert '&& -d "$REVIEW_ADVISOR_LOCK_DIR"' in restore_source
+    assert "--lock-held requires an inherited active review lock" in restore_source
+    acquire_lock = restore_source.index("\n  acquire_review_lock\n")
+    mark_owned = restore_source.index("\n  owns_lock=1\n", acquire_lock)
+    release_owned = restore_source.index(
+        '[[ "$owns_lock" == 0 ]] || release_review_lock'
+    )
+    assert acquire_lock < mark_owned < release_owned

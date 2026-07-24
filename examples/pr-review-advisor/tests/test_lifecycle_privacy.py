@@ -23,6 +23,7 @@ _SANDBOX = _EXAMPLE_ROOT / "scripts" / "03-sandbox.sh"
 _START = _EXAMPLE_ROOT / "agents" / "hermes" / "start.sh"
 _TEAR_DOWN = _EXAMPLE_ROOT / "scripts" / "tear-down.sh"
 _VERIFY = _EXAMPLE_ROOT / "scripts" / "verify.sh"
+_RECOVER_QUARANTINE = _EXAMPLE_ROOT / "scripts" / "recover-quarantine.sh"
 
 
 def _installed_lib(tmp_path: Path, env_text: str, mode: int) -> tuple[Path, Path]:
@@ -129,10 +130,7 @@ def test_default_load_env_never_returns_provider_credential_values(
     provider = _source(
         lib,
         tmp_path / "home",
-        (
-            "load_env --provider-credentials; "
-            'printf "%s\\n" "$NVIDIA_INFERENCE_API_KEY"'
-        ),
+        ('load_env --provider-credentials; printf "%s\\n" "$NVIDIA_INFERENCE_API_KEY"'),
     )
 
     assert default.returncode == 0, default.stderr
@@ -145,6 +143,7 @@ def test_default_load_env_never_returns_provider_credential_values(
         "feedback.sh",
         "snapshot.sh",
         "restore.sh",
+        "recover-quarantine.sh",
         "memory.sh",
         "verify.sh",
         "tear-down.sh",
@@ -237,7 +236,7 @@ def test_load_env_requires_one_canonical_config_scope_digest(
         ),
         (
             'schema_version: 1\nrepository: "example/project"\n'
-            f'scope_digest: {"0" * 64}\n',
+            f"scope_digest: {'0' * 64}\n",
             "JSON-quoted YAML scalar",
         ),
         (
@@ -263,7 +262,9 @@ def test_openshell_preflight_requires_exact_0_0_85(tmp_path: Path) -> None:
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
     fake = fake_bin / "openshell"
-    fake.write_text("#!/usr/bin/env bash\nprintf 'openshell 0.0.84\\n'\n", encoding="utf-8")
+    fake.write_text(
+        "#!/usr/bin/env bash\nprintf 'openshell 0.0.84\\n'\n", encoding="utf-8"
+    )
     fake.chmod(0o755)
 
     result = subprocess.run(
@@ -320,6 +321,52 @@ fi
     assert "runtime fingerprint does not match" in result.stderr
 
 
+def test_quarantine_blocks_readiness_before_any_openshell_call(
+    tmp_path: Path,
+) -> None:
+    lib, _env_file = _installed_lib(
+        tmp_path,
+        f"REVIEW_ADVISOR_STATE_ROOT={tmp_path / 'state'}\n",
+        0o600,
+    )
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    trace = tmp_path / "openshell-called"
+    fake = fake_bin / "openshell"
+    fake.write_text(
+        '#!/usr/bin/env bash\n: >"$FAKE_OPENSHELL_TRACE"\nexit 99\n',
+        encoding="utf-8",
+    )
+    fake.chmod(0o755)
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            (
+                'source "$1"; load_env; mkdir -p "$STATE_DIR"; '
+                'chmod 700 "$STATE_DIR"; : >"$(sandbox_quarantine_file)"; '
+                'chmod 600 "$(sandbox_quarantine_file)"; assert_sandbox_ready'
+            ),
+            "bash",
+            str(lib),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "HOME": str(tmp_path / "home"),
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+            "FAKE_OPENSHELL_TRACE": str(trace),
+        },
+    )
+
+    assert result.returncode != 0
+    assert "sandbox is quarantined" in result.stderr
+    assert "recover-quarantine.sh" in result.stderr
+    assert not trace.exists()
+
+
 def test_forward_mapping_requires_exact_loopback_port_and_sandbox(
     tmp_path: Path,
 ) -> None:
@@ -349,14 +396,26 @@ fi
         "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
     }
     exact = subprocess.run(
-        ["bash", "-c", 'source "$1"; load_env; assert_forward_mapping', "bash", str(lib)],
+        [
+            "bash",
+            "-c",
+            'source "$1"; load_env; assert_forward_mapping',
+            "bash",
+            str(lib),
+        ],
         check=False,
         capture_output=True,
         text=True,
         env={**base_env, "FAKE_FORWARD_SANDBOX": "expected-sandbox"},
     )
     wrong = subprocess.run(
-        ["bash", "-c", 'source "$1"; load_env; assert_forward_mapping', "bash", str(lib)],
+        [
+            "bash",
+            "-c",
+            'source "$1"; load_env; assert_forward_mapping',
+            "bash",
+            str(lib),
+        ],
         check=False,
         capture_output=True,
         text=True,
@@ -487,7 +546,7 @@ def test_api_key_is_private_and_not_exported(tmp_path: Path) -> None:
             "load_env; ensure_api_key; "
             'test -n "$REVIEW_ADVISOR_API_KEY"; '
             'if env | grep -q "^REVIEW_ADVISOR_API_KEY="; then exit 9; fi; '
-            'scrub_external_secrets; '
+            "scrub_external_secrets; "
             'if env | grep -q "^NVIDIA_INFERENCE_API_KEY="; then exit 10; fi; '
             'printf "%s\\n" "$STATE_DIR/api-key"'
         ),
@@ -573,9 +632,9 @@ fi
     assert env_file.stat().st_mode & 0o777 == 0o600
     assert stat.S_IMODE(destination.stat().st_mode) == 0o700
     assert stat.S_IMODE((destination / "memories").stat().st_mode) == 0o700
-    assert stat.S_IMODE(
-        (destination / "memories" / "MEMORY.md").stat().st_mode
-    ) == 0o600
+    assert (
+        stat.S_IMODE((destination / "memories" / "MEMORY.md").stat().st_mode) == 0o600
+    )
 
 
 def test_bring_up_confines_ambient_provider_secret_to_provider_phase(
@@ -901,11 +960,91 @@ def test_review_stages_then_cleans_before_atomic_publication() -> None:
     assert source.index("acquire_review_lock") < source.index(
         'rm -f -- "$artifact_path"'
     )
+    automatic_snapshot = source.index(
+        'recovery_snapshot="$(bash "$DIR/snapshot.sh" --lock-held)"'
+    )
+    quarantine_call = source.rindex("\ncreate_review_quarantine\n")
+    sandbox_upload = source.index(
+        "run_openshell sandbox upload --no-git-ignore",
+        automatic_snapshot,
+    )
+    hermes_call = source.index('python3 "$DIR/call-hermes.py"')
+    assert automatic_snapshot < quarantine_call < sandbox_upload < hermes_call
     assert '--output "$work/canonical"' in source
     assert 'cp "$work/request.json" "$output/request.json"' not in source
     cleanup_call = source.rindex("\nprivacy_cleanup\n")
     publication = source.index('names = ("request.json", "review.json"')
     assert cleanup_call < publication
+
+    containment_start = source.index("\ncontain_unjoined_stream() {")
+    privacy_start = source.index("\nprivacy_cleanup() {", containment_start)
+    containment = source[containment_start:privacy_start]
+    assert "validate_review_quarantine || return $?" in containment
+    assert 'python3 - "$marker" "$session_id"' in containment
+    assert '"schema_version": 1' in containment
+    assert '"requested_session_id": expected_session' in containment
+    assert '"reason": "stream_not_joined"' in containment
+    assert 'python3 - "$marker" "$session_id" <<\'PY\' || return $?' in containment
+    assert '--repository "$REVIEW_ADVISOR_REPOSITORY" || return $?' in containment
+    assert (
+        'run_openshell sandbox delete "$NEMOCLAW_SANDBOX_NAME" || return $?'
+        in containment
+    )
+    assert (
+        'bash "$DIR/03-sandbox.sh" --lock-held --allow-quarantine || return $?'
+        in containment
+    )
+    assert (
+        'bash "$DIR/restore.sh" --lock-held --allow-quarantine \\\n'
+        '    "$recovery_snapshot" || return $?' in containment
+    )
+    assert '\' bash "$session_id" || return $?' in containment
+    source_fingerprint = containment.index("compute_runtime_fingerprint")
+    sandbox_delete = containment.index(
+        'run_openshell sandbox delete "$NEMOCLAW_SANDBOX_NAME"'
+    )
+    sandbox_recreate = containment.index(
+        'bash "$DIR/03-sandbox.sh" --lock-held --allow-quarantine'
+    )
+    memory_restore = containment.index(
+        'bash "$DIR/restore.sh" --lock-held --allow-quarantine'
+    )
+    replacement_fingerprint = containment.rindex(
+        '[[ "$observed" == "$active_runtime_fingerprint" ]]'
+    )
+    assert (
+        source_fingerprint
+        < sandbox_delete
+        < sandbox_recreate
+        < replacement_fingerprint
+        < memory_restore
+    )
+
+    cleanup_start = source.index("\ncleanup() {", privacy_start)
+    cleanup_trap = source.index("\ntrap cleanup EXIT", cleanup_start)
+    cleanup = source[cleanup_start:cleanup_trap]
+    assert "trap 'signal_status=130' INT" in cleanup
+    assert "trap 'signal_status=143' TERM" in cleanup
+    assert "trap - INT TERM" in cleanup
+    adopt_quarantine = cleanup.index("adopt_review_quarantine || quarantine_status=$?")
+    marker_check = cleanup.index(
+        'if [[ -e "$reset_marker" || -L "$reset_marker" ]]; then'
+    )
+    containment_call = cleanup.index("contain_unjoined_stream || privacy_status=$?")
+    normal_cleanup = cleanup.index("privacy_cleanup || privacy_status=$?")
+    successful_cleanup = cleanup.index('if [[ "$privacy_status" == 0 ]]; then')
+    clear_quarantine = cleanup.index("clear_review_quarantine || quarantine_status=$?")
+    discard_snapshot = cleanup.index("discard_recovery_snapshot || snapshot_status=$?")
+    retained_snapshot = cleanup.index('elif [[ -n "$recovery_snapshot" ]]; then')
+    assert adopt_quarantine < marker_check
+    assert marker_check < containment_call < normal_cleanup
+    assert successful_cleanup < clear_quarantine < discard_snapshot < retained_snapshot
+    assert cleanup.count("discard_recovery_snapshot || snapshot_status=$?") == 1
+    discard_start = source.index("\ndiscard_recovery_snapshot() {")
+    discard_end = source.index("\ncontain_unjoined_stream() {", discard_start)
+    discard = source[discard_start:discard_end]
+    assert 'rm -f -- "$recovery_snapshot" "$manifest" || {' in discard
+
     assert "PRAGMA wal_checkpoint(TRUNCATE)" in source
     assert 'connection.execute("VACUUM")' in source
     assert "/sandbox/review-input" in source
@@ -923,6 +1062,170 @@ def test_review_stages_then_cleans_before_atomic_publication() -> None:
     assert "/sandbox/.hermes/runtime/state.db" in source
     assert "hermes-session-cleanup-deferred-to-trusted-host" in source
     assert "private verification receipt lacks session cleanup evidence" in source
+
+
+def _run_containment_failure_harness(
+    tmp_path: Path,
+    *,
+    first_python_status: int,
+    delete_status: int,
+) -> tuple[int, list[str]]:
+    source = _REVIEW.read_text(encoding="utf-8")
+    start = source.index("contain_unjoined_stream() {")
+    end = source.index("\nprivacy_cleanup() {", start)
+    function_source = source[start:end]
+    trace = tmp_path / "trace"
+    harness = (
+        "set -u\n"
+        + function_source
+        + r"""
+TRACE=$1
+FIRST_PYTHON_STATUS=$2
+DELETE_STATUS=$3
+reset_marker=/tmp/reset-marker
+session_id=review-aaaaaaaaaaaa-0123456789ab
+recovery_snapshot=/tmp/review-memory-test.tar.gz
+DIR=/tmp
+SNAPSHOT_DIR=/tmp
+NEMOCLAW_SANDBOX_NAME=pr-review-test
+REVIEW_ADVISOR_INSTALL_ID=0123456789abcdef
+REVIEW_ADVISOR_REPOSITORY=example/project
+REVIEW_ADVISOR_RUNTIME_FINGERPRINT=fingerprint
+active_runtime_fingerprint=fingerprint
+HERMES_FORWARD_PORT=20000
+deleted=0
+python_calls=0
+
+python3() {
+  python_calls=$((python_calls + 1))
+  if [[ "$python_calls" == 1 && "$FIRST_PYTHON_STATUS" != 0 ]]; then
+    return "$FIRST_PYTHON_STATUS"
+  fi
+  return 0
+}
+scrub_external_secrets() { return 0; }
+assert_gateway_identity() { return 0; }
+compute_runtime_fingerprint() {
+  REVIEW_ADVISOR_RUNTIME_FINGERPRINT=fingerprint
+}
+sandbox_phase() {
+  if [[ "$deleted" == 1 ]]; then
+    echo Missing
+  else
+    echo Ready
+  fi
+}
+run_openshell() {
+  if [[ "${1:-} ${2:-}" == "sandbox delete" ]]; then
+    echo delete >>"$TRACE"
+    deleted=1
+    return "$DELETE_STATUS"
+  fi
+  if [[ "$*" == *"cat /opt/review-advisor/runtime-fingerprint"* ]]; then
+    echo fingerprint
+  fi
+  return 0
+}
+validate_review_quarantine() { return 0; }
+bash() {
+  echo "bash $*" >>"$TRACE"
+  return 0
+}
+
+status=0
+contain_unjoined_stream || status=$?
+printf '%s\n' "$status"
+"""
+    )
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            harness,
+            "bash",
+            str(trace),
+            str(first_python_status),
+            str(delete_status),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    trace_lines = (
+        trace.read_text(encoding="utf-8").splitlines() if trace.exists() else []
+    )
+    return int(result.stdout.strip()), trace_lines
+
+
+def test_containment_returns_immediately_when_marker_validation_fails(
+    tmp_path: Path,
+) -> None:
+    status, trace = _run_containment_failure_harness(
+        tmp_path,
+        first_python_status=17,
+        delete_status=0,
+    )
+
+    assert status == 17
+    assert trace == []
+
+
+def test_containment_stops_after_sandbox_delete_failure(tmp_path: Path) -> None:
+    status, trace = _run_containment_failure_harness(
+        tmp_path,
+        first_python_status=0,
+        delete_status=23,
+    )
+
+    assert status == 23
+    assert trace == ["delete"]
+
+
+def test_quarantine_recovery_orders_validation_replacement_restore_and_clear() -> None:
+    source = _RECOVER_QUARANTINE.read_text(encoding="utf-8")
+
+    inspect = source.index('record="$(validate_sandbox_quarantine_identity)"')
+    exact_validation = source.index('python3 "$DIR/sandbox-quarantine.py" validate')
+    manifest = source.index('python3 "$DIR/snapshot-manifest.py" validate')
+    source_fingerprint = source.index("compute_runtime_fingerprint")
+    sandbox_delete = source.index(
+        'run_openshell sandbox delete "$NEMOCLAW_SANDBOX_NAME"'
+    )
+    sandbox_rebuild = source.index(
+        'bash "$DIR/03-sandbox.sh" --lock-held --allow-quarantine'
+    )
+    memory_restore = source.index(
+        'bash "$DIR/restore.sh" --lock-held --allow-quarantine "$snapshot"'
+    )
+    absence_proof = source.index(
+        "interrupted review session survived quarantine recovery"
+    )
+    clear = source.index('python3 "$DIR/sandbox-quarantine.py" clear')
+    discard = source.index('rm -f -- "$snapshot" "$manifest"')
+
+    assert (
+        inspect
+        < exact_validation
+        < manifest
+        < source_fingerprint
+        < sandbox_delete
+        < sandbox_rebuild
+        < memory_restore
+        < absence_proof
+        < clear
+        < discard
+    )
+    sandbox = _SANDBOX.read_text(encoding="utf-8")
+    restore = (_EXAMPLE_ROOT / "scripts" / "restore.sh").read_text(encoding="utf-8")
+    assert "--allow-quarantine requires --lock-held" in sandbox
+    assert "--allow-quarantine requires --lock-held" in restore
+    assert "assert_quarantine_recovery_context" in sandbox
+    assert "assert_sandbox_ready_for_quarantine_recovery" in restore
+    assert "trap cleanup EXIT" in source
+    assert "trap 'exit 130' INT" in source
+    assert "trap 'exit 143' TERM" in source
+    assert "trap release_review_lock EXIT INT TERM" not in source
 
 
 def test_review_makes_read_only_staging_trees_writable_before_removal() -> None:
@@ -956,7 +1259,9 @@ def test_verify_uses_a_hard_bounded_sessionless_inference_probe() -> None:
     for private_directory in (".snapshots", ".tmp", "memory-export", "output"):
         assert f'"{private_directory}"' in source
     assert 'sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" --timeout 45 --' in source
-    assert "/opt/hermes/.venv/bin/python /opt/review-advisor/probe-inference.py" in source
+    assert (
+        "/opt/hermes/.venv/bin/python /opt/review-advisor/probe-inference.py" in source
+    )
     assert source.index("assert_inference_route") < source.index("probe-inference.py")
     library = _LIB.read_text(encoding="utf-8")
     assert '"session_messages"' in library

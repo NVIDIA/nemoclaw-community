@@ -11,6 +11,7 @@ import http.server
 import importlib.util
 import json
 import os
+import socket
 import stat
 import subprocess
 import threading
@@ -156,8 +157,14 @@ def _server(
     chat_hermes: object = _MISSING,
     session_messages: list[dict[str, Any]] | None = None,
     messages_session_id: str = _SESSION_ID,
+    captured_chat_requests: list[dict[str, Any]] | None = None,
+    stall_stream: bool = False,
+    stall_partial_line: bool = False,
+    omit_done: bool = False,
+    terminal_finish_reason: str | None = None,
 ) -> Iterator[tuple[str, list[tuple[str, str | None]]]]:
     calls: list[tuple[str, str | None]] = []
+    stall_release = threading.Event()
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def _json(self, status_code: int, payload: dict[str, Any]) -> None:
@@ -171,7 +178,9 @@ def _server(
         def do_POST(self) -> None:  # noqa: N802
             calls.append(("POST", self.headers.get("Authorization")))
             length = int(self.headers.get("Content-Length", "0"))
-            self.rfile.read(length)
+            request_body = json.loads(self.rfile.read(length))
+            if captured_chat_requests is not None:
+                captured_chat_requests.append(request_body)
             if redirect is not None:
                 self.send_response(307)
                 self.send_header("Location", redirect)
@@ -179,35 +188,126 @@ def _server(
                 self.send_header("Content-Length", "0")
                 self.end_headers()
                 return
-            self.send_response(chat_status)
+            if chat_status != 200:
+                encoded = json.dumps(
+                    {"error": {"message": "forced chat failure"}}
+                ).encode()
+                self.send_response(chat_status)
+                self.send_header("X-Hermes-Session-Id", _SESSION_ID)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
+                return
+
+            self.send_response(200)
             self.send_header("X-Hermes-Session-Id", _SESSION_ID)
-            payload = (
-                {
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            try:
+                if oversized_chat:
+                    self.wfile.write(
+                        b"data: " + (b"x" * (16 * 1024 * 1024 + 1)) + b"\n\n"
+                    )
+                    return
+
+                def send_data(payload: dict[str, Any]) -> None:
+                    self.wfile.write(
+                        b"data: "
+                        + json.dumps(payload, sort_keys=True).encode()
+                        + b"\n\n"
+                    )
+
+                send_data(
+                    {
+                        "id": "chatcmpl-test",
+                        "object": "chat.completion.chunk",
+                        "created": 1,
+                        "model": "review-advisor",
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {"role": "assistant"},
+                                "finish_reason": None,
+                            }
+                        ],
+                    }
+                )
+                self.wfile.write(b": keepalive\n\n")
+                self.wfile.write(
+                    b"event: hermes.tool.progress\n"
+                    b'data: {"status":"running","toolCallId":"call-one"}\n\n'
+                )
+                self.wfile.flush()
+                if stall_partial_line:
+                    self.wfile.write(b"data:")
+                    self.wfile.flush()
+                    while not stall_release.wait(0.05):
+                        self.wfile.write(b" ")
+                        self.wfile.flush()
+                    return
+                if stall_stream:
+                    while not stall_release.wait(0.05):
+                        self.wfile.write(b": keepalive\n\n")
+                        self.wfile.flush()
+                    return
+
+                content = (
+                    chat_prose
+                    if chat_prose is not None
+                    else json.dumps(artifact, sort_keys=True)
+                )
+                split_at = max(1, len(content) // 2)
+                for part in (content[:split_at], content[split_at:]):
+                    if not part:
+                        continue
+                    send_data(
+                        {
+                            "id": "chatcmpl-test",
+                            "object": "chat.completion.chunk",
+                            "created": 1,
+                            "model": "review-advisor",
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "delta": {"content": part},
+                                    "finish_reason": None,
+                                }
+                            ],
+                        }
+                    )
+                finish_reason = terminal_finish_reason
+                if finish_reason is None:
+                    finish_reason = "stop"
+                    if isinstance(chat_hermes, dict) and all(
+                        isinstance(chat_hermes.get(key), bool)
+                        for key in ("completed", "partial", "failed")
+                    ):
+                        if chat_hermes["partial"]:
+                            finish_reason = "length"
+                        elif not chat_hermes["completed"] or chat_hermes["failed"]:
+                            finish_reason = "error"
+                finish_chunk = {
+                    "id": "chatcmpl-test",
+                    "object": "chat.completion.chunk",
+                    "created": 1,
+                    "model": "review-advisor",
                     "choices": [
                         {
-                            "message": {
-                                "content": (
-                                    chat_prose
-                                    if chat_prose is not None
-                                    else json.dumps(artifact, sort_keys=True)
-                                ),
-                            }
+                            "index": 0,
+                            "delta": {},
+                            "finish_reason": finish_reason,
                         }
                     ],
                     **({"hermes": chat_hermes} if chat_hermes is not _MISSING else {}),
                 }
-                if chat_status == 200
-                else {"error": {"message": "forced chat failure"}}
-            )
-            encoded = (
-                b"x" * (16 * 1024 * 1024 + 1)
-                if oversized_chat
-                else json.dumps(payload).encode()
-            )
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(encoded)))
-            self.end_headers()
-            self.wfile.write(encoded)
+                send_data(finish_chunk)
+                if not omit_done:
+                    self.wfile.write(b"data: [DONE]\n\n")
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                return
 
         def do_GET(self) -> None:  # noqa: N802
             calls.append(("GET", self.headers.get("Authorization")))
@@ -252,6 +352,7 @@ def _server(
         host, port = server.server_address
         yield f"http://{host}:{port}", calls
     finally:
+        stall_release.set()
         server.shutdown()
         thread.join(timeout=5)
         server.server_close()
@@ -264,6 +365,7 @@ def _invoke(
     key: bytes,
     *,
     allow_deferred_cleanup: bool = False,
+    timeout: int = 5,
 ) -> subprocess.CompletedProcess[str]:
     api_key_file = tmp_path / "api-key"
     api_key_file.write_text(_API_KEY, encoding="ascii")
@@ -290,7 +392,7 @@ def _invoke(
         "--output",
         str(tmp_path / "output"),
         "--timeout",
-        "5",
+        str(timeout),
     ]
     if allow_deferred_cleanup:
         command.append("--allow-deferred-session-cleanup")
@@ -309,6 +411,16 @@ def _invoke(
     )
 
 
+def _assert_reset_marker(output: Path) -> None:
+    marker = output / ".sandbox-reset-required.json"
+    assert marker.read_bytes() == (
+        b'{"schema_version":1,"requested_session_id":"'
+        + _SESSION_ID.encode()
+        + b'","reason":"stream_not_joined"}'
+    )
+    assert stat.S_IMODE(marker.stat().st_mode) == 0o600
+
+
 def test_success_deletes_authenticated_session_before_private_artifacts(
     tmp_path: Path,
 ) -> None:
@@ -323,6 +435,7 @@ def test_success_deletes_authenticated_session_before_private_artifacts(
         ("DELETE", f"Bearer {_API_KEY}"),
     ]
     output = tmp_path / "output"
+    assert not (output / ".sandbox-reset-required.json").exists()
     assert not (output / "hermes-response.json").exists()
     assert json.loads((output / "verification.json").read_text())["verified"] == [
         "hmac-sha256",
@@ -609,34 +722,32 @@ def test_trusted_host_may_defer_failed_api_deletion_before_private_cleanup(
     output = tmp_path / "output"
     assert (output / "review.json").is_file()
     assert not (output / ".session-cleanup.json").exists()
-    assert json.loads((output / "verification.json").read_text())[
-        "verified"
-    ] == [
+    assert json.loads((output / "verification.json").read_text())["verified"] == [
         "hmac-sha256",
         "trusted-request-identity",
         "hermes-session-cleanup-deferred-to-trusted-host",
     ]
 
 
-def test_chat_failure_still_deletes_session_without_artifacts(tmp_path: Path) -> None:
+def test_chat_http_failure_requires_sandbox_reset_without_session_calls(
+    tmp_path: Path,
+) -> None:
     key = bytes(range(32))
     artifact = _artifact(key)
     with _server(artifact, chat_status=500) as (url, calls):
         result = _invoke(tmp_path, url, artifact, key)
 
     assert result.returncode != 0
-    assert calls == [
-        ("POST", f"Bearer {_API_KEY}"),
-        ("DELETE", f"Bearer {_API_KEY}"),
-    ]
+    assert calls == [("POST", f"Bearer {_API_KEY}")]
     assert "Hermes returned HTTP 500" in result.stderr
     output = tmp_path / "output"
-    assert (output / ".session-cleanup.json").is_file()
+    _assert_reset_marker(output)
+    assert not (output / ".session-cleanup.json").exists()
     assert not (output / "review.json").exists()
     assert not (output / "verification.json").exists()
 
 
-def test_oversized_chat_is_rejected_after_authenticated_session_delete(
+def test_oversized_stream_requires_sandbox_reset_without_session_calls(
     tmp_path: Path,
 ) -> None:
     key = bytes(range(32))
@@ -645,17 +756,127 @@ def test_oversized_chat_is_rejected_after_authenticated_session_delete(
         result = _invoke(tmp_path, url, artifact, key)
 
     assert result.returncode != 0
-    assert calls == [
-        ("POST", f"Bearer {_API_KEY}"),
-        ("DELETE", f"Bearer {_API_KEY}"),
-    ]
-    assert "Hermes chat response exceeds 16777216 bytes" in result.stderr
+    assert calls == [("POST", f"Bearer {_API_KEY}")]
+    assert "Hermes chat stream exceeds 16777216 bytes" in result.stderr
     output = tmp_path / "output"
-    assert (output / ".session-cleanup.json").is_file()
+    _assert_reset_marker(output)
+    assert not (output / ".session-cleanup.json").exists()
     assert not (output / "review.json").exists()
 
 
-def test_redirect_is_not_followed_and_session_is_still_deleted(
+def test_stalled_stream_keeps_reset_marker_and_never_recovers_or_deletes(
+    tmp_path: Path,
+) -> None:
+    key = bytes(range(32))
+    artifact = _artifact(key)
+    captured_requests: list[dict[str, Any]] = []
+    with _server(
+        artifact,
+        captured_chat_requests=captured_requests,
+        stall_stream=True,
+        session_messages=_finalize_messages(artifact),
+    ) as (url, calls):
+        result = _invoke(tmp_path, url, artifact, key, timeout=1)
+
+    assert result.returncode != 0
+    assert "wall deadline" in result.stderr
+    assert calls == [("POST", f"Bearer {_API_KEY}")]
+    assert len(captured_requests) == 1
+    assert captured_requests[0]["stream"] is True
+    output = tmp_path / "output"
+    _assert_reset_marker(output)
+    assert not (output / ".session-cleanup.json").exists()
+    assert not (output / "review.json").exists()
+    assert not (output / "review.md").exists()
+    assert not (output / "verification.json").exists()
+
+
+def test_partial_line_trickle_cannot_extend_the_wall_deadline(
+    tmp_path: Path,
+) -> None:
+    key = bytes(range(32))
+    artifact = _artifact(key)
+    with _server(
+        artifact,
+        stall_partial_line=True,
+        session_messages=_finalize_messages(artifact),
+    ) as (url, calls):
+        result = _invoke(tmp_path, url, artifact, key, timeout=1)
+
+    assert result.returncode != 0
+    assert "wall deadline" in result.stderr
+    assert calls == [("POST", f"Bearer {_API_KEY}")]
+    output = tmp_path / "output"
+    _assert_reset_marker(output)
+    assert not (output / ".session-cleanup.json").exists()
+    assert not (output / "review.json").exists()
+
+
+def test_terminal_chunk_without_done_is_not_a_join_signal(tmp_path: Path) -> None:
+    key = bytes(range(32))
+    artifact = _artifact(key)
+    with _server(
+        artifact,
+        omit_done=True,
+        session_messages=_finalize_messages(artifact),
+    ) as (url, calls):
+        result = _invoke(tmp_path, url, artifact, key)
+
+    assert result.returncode != 0
+    assert "without [DONE]" in result.stderr
+    assert calls == [("POST", f"Bearer {_API_KEY}")]
+    output = tmp_path / "output"
+    _assert_reset_marker(output)
+    assert not (output / ".session-cleanup.json").exists()
+    assert not (output / "review.json").exists()
+
+
+def test_socket_failure_keeps_reset_marker_without_session_calls(
+    tmp_path: Path,
+) -> None:
+    key = bytes(range(32))
+    artifact = _artifact(key)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as unavailable:
+        unavailable.bind(("127.0.0.1", 0))
+        host, port = unavailable.getsockname()
+        result = _invoke(
+            tmp_path,
+            f"http://{host}:{port}",
+            artifact,
+            key,
+            timeout=1,
+        )
+
+    assert result.returncode != 0
+    assert "Hermes request failed" in result.stderr
+    output = tmp_path / "output"
+    _assert_reset_marker(output)
+    assert not (output / ".session-cleanup.json").exists()
+    assert not (output / "review.json").exists()
+
+
+def test_generic_error_done_without_status_is_not_a_join_signal(
+    tmp_path: Path,
+) -> None:
+    key = bytes(range(32))
+    artifact = _artifact(key)
+    with _server(
+        artifact,
+        terminal_finish_reason="error",
+        session_messages=_finalize_messages(artifact),
+    ) as (url, calls):
+        result = _invoke(tmp_path, url, artifact, key)
+
+    assert result.returncode != 0
+    assert "without trusted status metadata" in result.stderr
+    assert calls == [("POST", f"Bearer {_API_KEY}")]
+    output = tmp_path / "output"
+    _assert_reset_marker(output)
+    assert not (output / ".session-cleanup.json").exists()
+    assert not (output / "review.json").exists()
+
+
+def test_redirect_is_not_followed_and_requires_sandbox_reset(
     tmp_path: Path,
 ) -> None:
     key = bytes(range(32))
@@ -685,8 +906,8 @@ def test_redirect_is_not_followed_and_session_is_still_deleted(
 
     assert result.returncode != 0
     assert redirected_calls == []
-    assert calls == [
-        ("POST", f"Bearer {_API_KEY}"),
-        ("DELETE", f"Bearer {_API_KEY}"),
-    ]
+    assert calls == [("POST", f"Bearer {_API_KEY}")]
     assert "HTTP 307" in result.stderr
+    output = tmp_path / "output"
+    _assert_reset_marker(output)
+    assert not (output / ".session-cleanup.json").exists()

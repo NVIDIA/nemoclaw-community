@@ -9,8 +9,8 @@ schema_version: 1
 kind: review-advisor-profile
 metadata:
   name: NVIDIA NemoClaw
-  source_commit: ac5579e99838b4c0437669f347488abba0956eef
-  source_ref: refs/tags/v0.0.93
+  source_commit: d87acc16b04c065ddc26c294a6c3af6795a43d7b
+  source_ref: refs/tags/v0.0.94
 repository:
   identity: NVIDIA/NemoClaw
   default_branch: main
@@ -107,7 +107,7 @@ priorities:
         oid: 59d9c86aba0b8cdcdae0aed3ae926d4624c63856
 test_surfaces:
   - path: "test/**"
-    oid: 88a5b6fca7c6e2512aeecfd08c8ae2f74bedf226
+    oid: a66b0d9634f0f6d4154b31020b6dbc7e345ac32f
 evidence_policy:
   memory_is_hint_only: true
   require_current_code_evidence: true

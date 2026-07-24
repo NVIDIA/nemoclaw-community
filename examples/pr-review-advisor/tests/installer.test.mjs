@@ -429,7 +429,7 @@ test("scoped init is deterministic and limits discovery, components, memory, and
   );
   const workflow = fs.readFileSync(workflowPath, "utf8");
   validateYaml(workflowPath);
-  assert.match(workflow, /timeout-minutes: 45/);
+  assert.match(workflow, /timeout-minutes: 125/);
   assert.match(workflow, /roots = \["src"\]/);
   assert.match(workflow, /--name-only[\s\S]*--no-renames/);
   assert.match(workflow, /outside configured review roots/);

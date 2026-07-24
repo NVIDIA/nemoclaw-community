@@ -9,11 +9,13 @@ import argparse
 import hashlib
 import hmac
 import html
+import http.client
 import ipaddress
 import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -21,6 +23,9 @@ from pathlib import Path
 from typing import Any
 
 CHAT_RESPONSE_MAX_BYTES = 16 * 1024 * 1024
+CHAT_STREAM_READ_CHUNK_BYTES = 64 * 1024
+CHAT_STREAM_READ_TIMEOUT_SECONDS = 45
+CHAT_TIMEOUT_MAX_SECONDS = 5_400
 CONTROL_RESPONSE_MAX_BYTES = 64 * 1024
 SESSION_MESSAGES_MAX_BYTES = 64 * 1024 * 1024
 HTTP_ERROR_MAX_BYTES = 16 * 1024
@@ -89,11 +94,225 @@ def _read_bounded(stream: Any, maximum: int, label: str) -> bytes:
 def _http_error_detail(exc: urllib.error.HTTPError) -> str:
     try:
         raw = exc.read(HTTP_ERROR_MAX_BYTES + 1)
-    except OSError:
+    except (OSError, http.client.HTTPException):
         return ""
     if len(raw) > HTTP_ERROR_MAX_BYTES:
         return f"error response exceeds {HTTP_ERROR_MAX_BYTES} bytes"
     return raw.decode("utf-8", "replace")[:2_000]
+
+
+def _set_stream_read_timeout(response: Any, timeout: float) -> None:
+    """Bound one socket read without replacing the independent wall deadline."""
+
+    buffered = getattr(response, "fp", None)
+    raw = getattr(buffered, "raw", None)
+    sock = getattr(raw, "_sock", None)
+    if sock is None or not hasattr(sock, "settimeout"):
+        raise RuntimeError("Hermes chat stream socket is unavailable")
+    sock.settimeout(timeout)
+
+
+def _joined_chat_payload(response: Any, deadline: float) -> tuple[str | None, bytes]:
+    """Read one bounded OpenAI SSE stream through its joined terminal event."""
+
+    content_type = response.headers.get("Content-Type", "")
+    if content_type.split(";", 1)[0].strip().lower() != "text/event-stream":
+        raise RuntimeError("Hermes chat stream did not return text/event-stream")
+
+    content_parts: list[str] = []
+    terminal_finish_reason: str | None = None
+    terminal_hermes: Any = None
+    terminal_has_hermes = False
+    event_name: str | None = None
+    data_lines: list[str] = []
+    pending = bytearray()
+    total_bytes = 0
+
+    def dispatch_event() -> bytes | None:
+        nonlocal terminal_finish_reason, terminal_hermes, terminal_has_hermes
+        if not data_lines:
+            if event_name not in (None, "message", "hermes.tool.progress"):
+                raise RuntimeError("Hermes chat stream used an unsupported event")
+            return None
+        data = "\n".join(data_lines)
+        if event_name == "hermes.tool.progress":
+            return None
+        if event_name not in (None, "message"):
+            raise RuntimeError("Hermes chat stream used an unsupported event")
+        if data == "[DONE]":
+            if terminal_finish_reason is None:
+                raise RuntimeError(
+                    "Hermes chat stream sent [DONE] without one trusted terminal "
+                    "finish chunk"
+                )
+            payload: dict[str, Any] = {
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": "".join(content_parts),
+                        },
+                        "finish_reason": terminal_finish_reason,
+                    }
+                ]
+            }
+            if terminal_has_hermes:
+                payload["hermes"] = terminal_hermes
+            return json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        if terminal_finish_reason is not None:
+            raise RuntimeError(
+                "Hermes chat stream sent data after its terminal finish chunk"
+            )
+        try:
+            chunk = json.loads(data)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("Hermes chat stream contained invalid JSON") from exc
+        if (
+            not isinstance(chunk, dict)
+            or chunk.get("object") != "chat.completion.chunk"
+        ):
+            raise RuntimeError(
+                "Hermes chat stream did not contain an OpenAI completion chunk"
+            )
+        choices = chunk.get("choices")
+        if (
+            not isinstance(choices, list)
+            or len(choices) != 1
+            or not isinstance(choices[0], dict)
+            or choices[0].get("index") != 0
+        ):
+            raise RuntimeError(
+                "Hermes chat stream did not contain exactly one first choice"
+            )
+        choice = choices[0]
+        delta = choice.get("delta")
+        if not isinstance(delta, dict):
+            raise RuntimeError(
+                "Hermes chat stream choice did not contain an assistant delta"
+            )
+        role = delta.get("role")
+        if role is not None and role != "assistant":
+            raise RuntimeError("Hermes chat stream delta used a non-assistant role")
+        delta_content = delta.get("content")
+        if delta_content is not None:
+            if not isinstance(delta_content, str):
+                raise RuntimeError(
+                    "Hermes chat stream assistant content was not a string"
+                )
+            content_parts.append(delta_content)
+        if "finish_reason" not in choice:
+            raise RuntimeError("Hermes chat stream choice omitted its finish reason")
+        finish_reason = choice["finish_reason"]
+        if finish_reason is None:
+            if "hermes" in chunk:
+                raise RuntimeError(
+                    "Hermes chat stream attached status metadata before termination"
+                )
+            return None
+        if not isinstance(finish_reason, str) or finish_reason not in (
+            "stop",
+            "length",
+            "error",
+        ):
+            raise RuntimeError(
+                "Hermes chat stream used an invalid terminal finish reason"
+            )
+        if terminal_finish_reason is not None:
+            raise RuntimeError(
+                "Hermes chat stream contained more than one terminal finish chunk"
+            )
+        has_hermes = "hermes" in chunk
+        hermes = chunk.get("hermes")
+        if finish_reason != "stop":
+            if not isinstance(hermes, dict):
+                raise RuntimeError(
+                    "Hermes chat stream sent a non-stop terminal without trusted "
+                    "status metadata"
+                )
+            flags = tuple(hermes.get(key) for key in ("completed", "partial", "failed"))
+            if not all(isinstance(value, bool) for value in flags) or (
+                flags[0] and not flags[1] and not flags[2]
+            ):
+                raise RuntimeError(
+                    "Hermes chat stream sent a non-stop terminal without trusted "
+                    "status metadata"
+                )
+        terminal_finish_reason = finish_reason
+        terminal_has_hermes = has_hermes
+        terminal_hermes = hermes
+        return None
+
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError("Hermes chat stream exceeded its wall deadline")
+        _set_stream_read_timeout(
+            response,
+            min(float(CHAT_STREAM_READ_TIMEOUT_SECONDS), remaining),
+        )
+        reader = getattr(response, "read1", None)
+        if reader is None:
+            raise RuntimeError("Hermes chat stream does not support bounded reads")
+        chunk = reader(
+            min(
+                CHAT_STREAM_READ_CHUNK_BYTES,
+                CHAT_RESPONSE_MAX_BYTES - total_bytes + 1,
+            )
+        )
+        total_bytes += len(chunk)
+        if total_bytes > CHAT_RESPONSE_MAX_BYTES:
+            raise RuntimeError(
+                f"Hermes chat stream exceeds {CHAT_RESPONSE_MAX_BYTES} bytes"
+            )
+        if not chunk:
+            if pending:
+                raise RuntimeError(
+                    "Hermes chat stream contained an unterminated SSE line"
+                )
+            raise RuntimeError("Hermes chat stream ended without [DONE]")
+        pending.extend(chunk)
+        while True:
+            newline = pending.find(b"\n")
+            if newline < 0:
+                break
+            line = bytes(pending[:newline])
+            del pending[: newline + 1]
+            if line.endswith(b"\r"):
+                line = line[:-1]
+            if not line:
+                joined_payload = dispatch_event()
+                event_name = None
+                data_lines = []
+                if joined_payload is not None:
+                    if time.monotonic() > deadline:
+                        raise RuntimeError(
+                            "Hermes chat stream exceeded its wall deadline"
+                        )
+                    return (
+                        response.headers.get("X-Hermes-Session-Id"),
+                        joined_payload,
+                    )
+                continue
+            if line.startswith(b":"):
+                continue
+            try:
+                decoded = line.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise RuntimeError(
+                    "Hermes chat stream contained invalid UTF-8"
+                ) from exc
+            field, separator, value = decoded.partition(":")
+            if separator and value.startswith(" "):
+                value = value[1:]
+            if field == "event":
+                if event_name is not None:
+                    raise RuntimeError("Hermes chat stream repeated an SSE event field")
+                event_name = value
+            elif field == "data":
+                data_lines.append(value)
+            else:
+                raise RuntimeError("Hermes chat stream used an unsupported SSE field")
 
 
 def _read_json_response(
@@ -117,6 +336,10 @@ def _read_json_response(
         ) from exc
     except urllib.error.URLError as exc:
         raise RuntimeError(f"Hermes {operation} failed: {exc.reason}") from exc
+    except http.client.HTTPException as exc:
+        raise RuntimeError(f"Hermes {operation} response protocol failed") from exc
+    except OSError as exc:
+        raise RuntimeError(f"Hermes {operation} response failed: {exc}") from exc
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError as exc:
@@ -145,10 +368,7 @@ def _delete_one_session(
         },
     )
     payload = _read_json_response(request, timeout, "session deletion", opener)
-    if (
-        payload.get("deleted") is not True
-        or payload.get("id") != session_id
-    ):
+    if payload.get("deleted") is not True or payload.get("id") != session_id:
         raise RuntimeError(
             "Hermes session deletion was not positively confirmed for the exact session"
         )
@@ -168,7 +388,9 @@ def delete_session_lineage(
     discovery_error: RuntimeError | None = None
     if not session_pattern.fullmatch(effective_session_id):
         lineage = [requested_session_id]
-        discovery_error = RuntimeError("Hermes returned an invalid effective session ID")
+        discovery_error = RuntimeError(
+            "Hermes returned an invalid effective session ID"
+        )
     else:
         lineage = [effective_session_id]
         cursor = effective_session_id
@@ -281,9 +503,16 @@ def extract_json(text: str) -> Any:
 def unwrap_artifact(value: Any) -> dict[str, Any]:
     current = value
     for _ in range(3):
-        if isinstance(current, dict) and current.get("schema_version") == "review-advisor/v1":
+        if (
+            isinstance(current, dict)
+            and current.get("schema_version") == "review-advisor/v1"
+        ):
             return current
-        if isinstance(current, dict) and current.get("ok") is True and "result" in current:
+        if (
+            isinstance(current, dict)
+            and current.get("ok") is True
+            and "result" in current
+        ):
             current = current["result"]
             continue
         break
@@ -300,10 +529,7 @@ def _canonical_repo_path(value: Any, name: str) -> str:
         raise ValueError(
             f"{name} must be canonical and may not contain '.', '..', or empty parts"
         )
-    if any(
-        ord(character) < 0x20 or ord(character) == 0x7F
-        for character in value
-    ):
+    if any(ord(character) < 0x20 or ord(character) == 0x7F for character in value):
         raise ValueError(f"{name} contains a control character")
     portable_parts = tuple(part.casefold().rstrip(" .") for part in parts)
     if any(not part for part in portable_parts):
@@ -366,13 +592,8 @@ def _validate_review_scope(value: Any) -> dict[str, Any]:
         if any(other.startswith(f"{root}/") for other in roots[index + 1 :]):
             raise ValueError("artifact.run.review_scope.roots must not overlap")
     for index, support in enumerate(support_paths):
-        if any(
-            other.startswith(f"{support}/")
-            for other in support_paths[index + 1 :]
-        ):
-            raise ValueError(
-                "artifact.run.review_scope.support_paths must not overlap"
-            )
+        if any(other.startswith(f"{support}/") for other in support_paths[index + 1 :]):
+            raise ValueError("artifact.run.review_scope.support_paths must not overlap")
         if any(
             support == root
             or support.startswith(f"{root}/")
@@ -557,9 +778,7 @@ def _chat_artifact_value(raw: bytes) -> Any:
         error = hermes.get("error")
         if error is not None and not isinstance(error, str):
             raise ValueError("Hermes chat response status metadata has invalid error")
-        did_not_complete = (
-            not flags["completed"] or flags["partial"] or flags["failed"]
-        )
+        did_not_complete = not flags["completed"] or flags["partial"] or flags["failed"]
         if not did_not_complete:
             raise ValueError("Hermes chat response status metadata is inconsistent")
         printable_error = "".join(
@@ -580,7 +799,13 @@ def _chat_artifact_value(raw: bytes) -> Any:
     choices = payload.get("choices")
     if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
         raise ValueError("Hermes chat response did not contain a first choice")
-    message = choices[0].get("message")
+    first_choice = choices[0]
+    finish_reason = first_choice.get("finish_reason")
+    if finish_reason != "stop":
+        raise ValueError(
+            f"Hermes agent did not complete (finish_reason={finish_reason!r})"
+        )
+    message = first_choice.get("message")
     if not isinstance(message, dict):
         raise ValueError("Hermes chat response did not contain an assistant message")
     content = message.get("content")
@@ -666,7 +891,9 @@ def finalized_tool_artifact(
             continue
         encoded_content = content.encode("utf-8")
         if len(encoded_content) > CHAT_RESPONSE_MAX_BYTES:
-            raise RuntimeError("Hermes review_finalize tool result exceeds the size limit")
+            raise RuntimeError(
+                "Hermes review_finalize tool result exceeds the size limit"
+            )
         try:
             value = json.loads(content)
             artifact = unwrap_artifact(value)
@@ -765,9 +992,7 @@ def markdown(artifact: dict[str, Any]) -> str:
                 (
                     "**Read-only support paths:** "
                     + (
-                        ", ".join(
-                            code_span(path) for path in scope["support_paths"]
-                        )
+                        ", ".join(code_span(path) for path in scope["support_paths"])
                         or "none"
                     )
                 ),
@@ -842,7 +1067,7 @@ def main() -> int:
     parser.add_argument("--request", required=True, type=Path)
     parser.add_argument("--attestation-key-file", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--timeout", type=int, default=1800)
+    parser.add_argument("--timeout", type=int, default=CHAT_TIMEOUT_MAX_SECONDS)
     parser.add_argument(
         "--allow-deferred-session-cleanup",
         action="store_true",
@@ -853,8 +1078,10 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if not 1 <= args.timeout <= 1800:
-        raise ValueError("--timeout must be between 1 and 1800 seconds")
+    if not 1 <= args.timeout <= CHAT_TIMEOUT_MAX_SECONDS:
+        raise ValueError(
+            f"--timeout must be between 1 and {CHAT_TIMEOUT_MAX_SECONDS} seconds"
+        )
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,62}", args.session_id):
         raise ValueError("invalid Hermes session ID")
     control_timeout = min(args.timeout, 30)
@@ -882,7 +1109,7 @@ def main() -> int:
         {
             "model": "review-advisor",
             "messages": [{"role": "user", "content": prompt}],
-            "stream": False,
+            "stream": True,
         }
     ).encode("utf-8")
     request = urllib.request.Request(
@@ -895,42 +1122,51 @@ def main() -> int:
             "X-Hermes-Session-Id": args.session_id,
         },
     )
-    raw: bytes | None = None
+    _prepare_private_output(args.output)
+    reset_marker = args.output / ".sandbox-reset-required.json"
+    _write_private(
+        reset_marker,
+        json.dumps(
+            {
+                "schema_version": 1,
+                "requested_session_id": args.session_id,
+                "reason": "stream_not_joined",
+            },
+            separators=(",", ":"),
+        ).encode("utf-8"),
+    )
+
+    raw: bytes
     artifact: dict[str, Any] | None = None
     effective_session_id = args.session_id
     chat_error: Exception | None = None
+    deadline = time.monotonic() + args.timeout
     try:
-        with opener.open(request, timeout=args.timeout) as response:
-            response_session_id = response.headers.get("X-Hermes-Session-Id")
+        with opener.open(
+            request,
+            timeout=min(CHAT_STREAM_READ_TIMEOUT_SECONDS, args.timeout),
+        ) as response:
+            response_session_id, raw = _joined_chat_payload(response, deadline)
             if response_session_id:
                 effective_session_id = response_session_id.strip()
-            raw = _read_bounded(
-                response,
-                CHAT_RESPONSE_MAX_BYTES,
-                "Hermes chat response",
-            )
     except urllib.error.HTTPError as exc:
-        response_session_id = (
-            exc.headers.get("X-Hermes-Session-Id") if exc.headers is not None else None
-        )
-        if response_session_id:
-            effective_session_id = response_session_id.strip()
         detail = _http_error_detail(exc)
-        chat_error = RuntimeError(f"Hermes returned HTTP {exc.code}: {detail}")
+        raise RuntimeError(f"Hermes returned HTTP {exc.code}: {detail}") from exc
     except urllib.error.URLError as exc:
-        chat_error = RuntimeError(f"Hermes request failed: {exc.reason}")
+        raise RuntimeError(f"Hermes request failed: {exc.reason}") from exc
+    except http.client.HTTPException as exc:
+        raise RuntimeError("Hermes chat stream protocol failed") from exc
     except OSError as exc:
-        chat_error = RuntimeError(f"Hermes request failed: {exc}")
-    except RuntimeError as exc:
-        chat_error = exc
+        if time.monotonic() >= deadline:
+            raise RuntimeError("Hermes chat stream exceeded its wall deadline") from exc
+        raise RuntimeError(f"Hermes request failed: {exc}") from exc
+    reset_marker.unlink()
 
-    if chat_error is None and effective_session_id != args.session_id:
+    if effective_session_id != args.session_id:
         chat_error = RuntimeError(
             "Hermes rotated the review session despite compression.in_place=true"
         )
-    if chat_error is None and raw is None:
-        chat_error = RuntimeError("Hermes request returned no response")
-    if chat_error is None and raw is not None:
+    if chat_error is None:
         try:
             artifact = unwrap_artifact(_chat_artifact_value(raw))
         except (json.JSONDecodeError, ValueError) as response_error:
@@ -944,7 +1180,12 @@ def main() -> int:
                     args.attestation_key_file,
                     args.request,
                 )
-            except (json.JSONDecodeError, OSError, RuntimeError, ValueError) as recovery_error:
+            except (
+                json.JSONDecodeError,
+                OSError,
+                RuntimeError,
+                ValueError,
+            ) as recovery_error:
                 chat_error = RuntimeError(
                     f"{response_error}; exact review_finalize recovery failed: "
                     f"{recovery_error}"
@@ -962,7 +1203,12 @@ def main() -> int:
                     args.attestation_key_file,
                     args.request,
                 )
-            except (json.JSONDecodeError, OSError, RuntimeError, ValueError) as validation_error:
+            except (
+                json.JSONDecodeError,
+                OSError,
+                RuntimeError,
+                ValueError,
+            ) as validation_error:
                 chat_error = validation_error
 
     session_cleanup_deferred = False
@@ -991,7 +1237,6 @@ def main() -> int:
             "requiring exact trusted-host database cleanup",
             file=sys.stderr,
         )
-    _prepare_private_output(args.output)
     if not session_cleanup_deferred:
         _write_private(
             args.output / ".session-cleanup.json",
@@ -1012,9 +1257,9 @@ def main() -> int:
     if artifact is None:
         raise RuntimeError("Hermes request produced no validated review artifact")
 
-    artifact_bytes = (
-        json.dumps(artifact, indent=2, sort_keys=True) + "\n"
-    ).encode("utf-8")
+    artifact_bytes = (json.dumps(artifact, indent=2, sort_keys=True) + "\n").encode(
+        "utf-8"
+    )
     _write_private(args.output / "review.json", artifact_bytes)
     run = artifact["run"]
     receipt = {
