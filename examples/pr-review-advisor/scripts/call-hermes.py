@@ -530,6 +530,53 @@ def _chat_artifact_value(raw: bytes) -> Any:
     payload = json.loads(raw)
     if not isinstance(payload, dict):
         raise ValueError("Hermes chat response must be a JSON object")
+    if "hermes" in payload:
+        hermes = payload["hermes"]
+        if not isinstance(hermes, dict):
+            raise ValueError("Hermes chat response status metadata is malformed")
+        flags: dict[str, bool] = {}
+        for key in ("completed", "partial", "failed"):
+            if key not in hermes:
+                raise ValueError(
+                    f"Hermes chat response status metadata is missing {key}"
+                )
+            value = hermes[key]
+            if not isinstance(value, bool):
+                raise ValueError(
+                    f"Hermes chat response status metadata has invalid {key}"
+                )
+            flags[key] = value
+        error_code = hermes.get("error_code")
+        if error_code is not None and (
+            not isinstance(error_code, str)
+            or re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", error_code) is None
+        ):
+            raise ValueError(
+                "Hermes chat response status metadata has invalid error_code"
+            )
+        error = hermes.get("error")
+        if error is not None and not isinstance(error, str):
+            raise ValueError("Hermes chat response status metadata has invalid error")
+        did_not_complete = (
+            not flags["completed"] or flags["partial"] or flags["failed"]
+        )
+        if not did_not_complete:
+            raise ValueError("Hermes chat response status metadata is inconsistent")
+        printable_error = "".join(
+            character if character.isprintable() else "\N{REPLACEMENT CHARACTER}"
+            for character in (error or "")[:2_048]
+        )
+        bounded_error = " ".join(printable_error.split())[:512]
+        detail = ", ".join(
+            [
+                *(f"{key}={str(value).lower()}" for key, value in flags.items()),
+                *((f"error_code={error_code}",) if error_code else ()),
+                *((f"error={bounded_error}",) if bounded_error else ()),
+            ]
+        )
+        raise ValueError(
+            "Hermes agent did not complete" + (f" ({detail})" if detail else "")
+        )
     choices = payload.get("choices")
     if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
         raise ValueError("Hermes chat response did not contain a first choice")

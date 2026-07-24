@@ -420,10 +420,16 @@ limits.
 
 The Hermes appliance allows 256 model turns so a one-tool-per-turn execution
 can cover all 128 bounded diff reads plus repository checks and the ordered
-review stages. The host's 30-minute inference deadline remains the hard
-wall-clock bound. `review_diff` is also a per-path coverage cursor: overlapping
-or repeated requests advance to the next unread chunk, and every result points
-to the next exact uncovered path and line.
+review stages. Each model call uses six Hermes-native, `Retry-After`-aware
+attempts to absorb transient provider throttling; the host never starts a
+second agent turn after an incomplete or failed response. The host's 30-minute
+inference deadline remains the hard wall-clock bound. `review_diff` is also a
+per-path coverage cursor: overlapping or repeated requests advance to the next
+unread chunk, and every result points to the next exact uncovered path and
+line. If the final assistant text omits the artifact, the host performs one
+bounded read of that exact Hermes session and accepts only a linked, attested
+`review_finalize` result. Provider failure metadata is bounded and surfaced
+after that recovery check; no raw response or transcript becomes durable.
 
 The documented durable outputs are `review.json`, `review.md`,
 `verification.json`, and `request.json`. The verification receipt binds the

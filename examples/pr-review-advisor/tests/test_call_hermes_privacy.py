@@ -25,6 +25,7 @@ _EXAMPLE_ROOT = Path(__file__).resolve().parents[1]
 _CALL_HERMES = _EXAMPLE_ROOT / "scripts" / "call-hermes.py"
 _SESSION_ID = "review-cccccccccccc-0123456789ab"
 _API_KEY = "a" * 40
+_MISSING = object()
 
 
 def _review_scope() -> dict[str, Any]:
@@ -152,6 +153,7 @@ def _server(
     redirect: str | None = None,
     oversized_chat: bool = False,
     chat_prose: str | None = None,
+    chat_hermes: object = _MISSING,
     session_messages: list[dict[str, Any]] | None = None,
     messages_session_id: str = _SESSION_ID,
 ) -> Iterator[tuple[str, list[tuple[str, str | None]]]]:
@@ -191,7 +193,8 @@ def _server(
                                 ),
                             }
                         }
-                    ]
+                    ],
+                    **({"hermes": chat_hermes} if chat_hermes is not _MISSING else {}),
                 }
                 if chat_status == 200
                 else {"error": {"message": "forced chat failure"}}
@@ -366,6 +369,108 @@ def test_no_json_response_recovers_exact_linked_finalize_tool_result(
         "trusted-request-identity",
         "hermes-session-deleted",
     ]
+
+
+def test_failed_agent_metadata_recovers_existing_finalize_before_failing(
+    tmp_path: Path,
+) -> None:
+    key = bytes(range(32))
+    artifact = _artifact(key)
+    with _server(
+        artifact,
+        chat_prose="API call failed after provider retries.",
+        chat_hermes={
+            "completed": False,
+            "partial": False,
+            "failed": True,
+            "error_code": "agent_error",
+            "error": "HTTP 429: Too Many Requests",
+        },
+        session_messages=_finalize_messages(artifact),
+    ) as (url, calls):
+        result = _invoke(tmp_path, url, artifact, key)
+
+    assert result.returncode == 0, result.stderr
+    assert calls == [
+        ("POST", f"Bearer {_API_KEY}"),
+        ("GET", f"Bearer {_API_KEY}"),
+        ("DELETE", f"Bearer {_API_KEY}"),
+    ]
+    assert json.loads((tmp_path / "output" / "review.json").read_text()) == artifact
+
+
+def test_failed_agent_metadata_is_bounded_and_never_reposts(
+    tmp_path: Path,
+) -> None:
+    key = bytes(range(32))
+    artifact = _artifact(key)
+    with _server(
+        artifact,
+        chat_prose="API call failed after provider retries.",
+        chat_hermes={
+            "completed": False,
+            "partial": False,
+            "failed": True,
+            "error_code": "agent_error",
+            "error": "HTTP 429: Too Many Requests\x1b[31m" + ("x" * 1_000),
+        },
+    ) as (url, calls):
+        result = _invoke(tmp_path, url, artifact, key)
+
+    assert result.returncode != 0
+    assert calls == [
+        ("POST", f"Bearer {_API_KEY}"),
+        ("GET", f"Bearer {_API_KEY}"),
+        ("DELETE", f"Bearer {_API_KEY}"),
+    ]
+    assert "Hermes agent did not complete" in result.stderr
+    assert "HTTP 429: Too Many Requests" in result.stderr
+    assert "\x1b" not in result.stderr
+    assert "x" * 513 not in result.stderr
+    output = tmp_path / "output"
+    assert (output / ".session-cleanup.json").is_file()
+    assert not (output / "review.json").exists()
+
+
+@pytest.mark.parametrize(
+    ("metadata", "expected_error"),
+    [
+        ("not-an-object", "status metadata is malformed"),
+        (None, "status metadata is malformed"),
+        (
+            {"error_code": "agent_error", "error": "provider failed"},
+            "status metadata is missing completed",
+        ),
+        (
+            {"completed": True, "partial": False, "failed": False},
+            "status metadata is inconsistent",
+        ),
+    ],
+)
+def test_malformed_agent_metadata_fails_closed_without_repost(
+    tmp_path: Path,
+    metadata: object,
+    expected_error: str,
+) -> None:
+    key = bytes(range(32))
+    artifact = _artifact(key)
+    with _server(
+        artifact,
+        chat_prose="Review complete.",
+        chat_hermes=metadata,
+    ) as (url, calls):
+        result = _invoke(tmp_path, url, artifact, key)
+
+    assert result.returncode != 0
+    assert calls == [
+        ("POST", f"Bearer {_API_KEY}"),
+        ("GET", f"Bearer {_API_KEY}"),
+        ("DELETE", f"Bearer {_API_KEY}"),
+    ]
+    assert expected_error in result.stderr
+    output = tmp_path / "output"
+    assert (output / ".session-cleanup.json").is_file()
+    assert not (output / "review.json").exists()
 
 
 def test_unlinked_finalize_history_fails_closed_after_session_delete(

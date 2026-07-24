@@ -34,6 +34,7 @@ terminal:
   timeout: 180
 agent:
   max_turns: 256
+  api_max_retries: 6
   reasoning_effort: high
   verify_on_stop: false
 compression:

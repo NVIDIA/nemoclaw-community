@@ -295,3 +295,10 @@ def test_snapshot_lifecycle_passes_all_binding_fields_and_retains_rollback() -> 
     assert 'tar -czf "$backup" -C "$home" memories' in restore_source
     assert 'tar -xzf "$backup" -C "$home"' in restore_source
     assert "previous memory was restored" in restore_source
+    assert 'remote="/sandbox/review-staging/${name}.tar.gz"' in snapshot_source
+    assert 'remote="/tmp/${name}.tar.gz"' not in snapshot_source
+    assert '"$NEMOCLAW_SANDBOX_NAME" "$remote" "$local_archive"' in snapshot_source
+    assert '[[ -e "$output" || -L "$output" ]]' in snapshot_source
+    assert "trap cleanup EXIT" in snapshot_source
+    assert 'rm -f -- "$cleanup_remote"' in snapshot_source
+    assert '"$cleanup_local_archive" "$cleanup_local_manifest"' in snapshot_source
