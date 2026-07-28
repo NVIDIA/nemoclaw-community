@@ -13,7 +13,7 @@ NemoClaw is the blueprint layer for composing three things into a repeatable age
 
 The examples in this repository demonstrate complete blueprint patterns: they show how a model is wired to a harness, how the harness is packaged with skills and integrations, and how OpenShell constrains and runs the resulting agent.
 
-## Example Catalog
+## Reference Examples
 
 Examples are organized as reusable NVIDIA and partner recipes, NVIDIA field
 demos, environment launchables, and standalone developer tools. Browse the
@@ -25,7 +25,8 @@ Additional NemoClaw examples are available in
 
 ## Getting Started
 
-Choose an example from the table above and follow its guide. To run an example from this repository, clone the repo first:
+Choose an example from the [example catalog](examples/README.md) and follow its
+guide. To run an example from this repository, clone the repo first:
 
 ```bash
 git clone https://github.com/NVIDIA/nemoclaw-community.git
