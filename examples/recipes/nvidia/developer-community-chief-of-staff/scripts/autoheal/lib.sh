@@ -16,6 +16,8 @@ AUTOHEAL_PROXY_UPSTREAM="${NEMOCLAW_HOST_TLS_PROXY_UPSTREAM:-}"
 AUTOHEAL_PROXY_PORT="${NEMOCLAW_HOST_TLS_PROXY_PORT:-18080}"
 AUTOHEAL_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/nemoclaw-autoheal"
 AUTOHEAL_RECREATE_COOLDOWN_SECS="${NEMOCLAW_AUTOHEAL_RECREATE_COOLDOWN_SECS:-900}"
+AUTOHEAL_GATEWAY_HEALTH_ATTEMPTS="${NEMOCLAW_AUTOHEAL_GATEWAY_HEALTH_ATTEMPTS:-3}"
+AUTOHEAL_GATEWAY_HEALTH_RETRY_SECS="${NEMOCLAW_AUTOHEAL_GATEWAY_HEALTH_RETRY_SECS:-2}"
 
 autoheal_log() {
   printf '[nemoclaw-autoheal] %s\n' "$*" >&2
@@ -32,6 +34,19 @@ sandbox_ready() {
 sandbox_gateway_ok() {
   openshell sandbox exec --name "$AUTOHEAL_SANDBOX_NAME" -- bash -lc \
     'curl -fsS --max-time 5 http://127.0.0.1:8642/health >/dev/null' >/dev/null 2>&1
+}
+
+sandbox_gateway_failure_confirmed() {
+  local attempt
+  for ((attempt = 1; attempt <= AUTOHEAL_GATEWAY_HEALTH_ATTEMPTS; attempt += 1)); do
+    if sandbox_gateway_ok; then
+      return 1
+    fi
+    if ((attempt < AUTOHEAL_GATEWAY_HEALTH_ATTEMPTS)); then
+      sleep "$AUTOHEAL_GATEWAY_HEALTH_RETRY_SECS"
+    fi
+  done
+  return 0
 }
 
 host_gateway_ok() {

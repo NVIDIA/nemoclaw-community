@@ -53,19 +53,29 @@ outlook_graph_ok() {
 }
 
 restart_gateway() {
-  local container
+  local container runtime_name runtime_value
+  local -a runtime_env=(env)
   container="$(sandbox_container)"
   [[ -n "$container" ]] || return 1
   autoheal_log "restarting Hermes gateway in ${AUTOHEAL_SANDBOX_NAME}"
-  docker exec "$container" bash -lc '
-    set +e
-    pkill -f "[h]ermes gateway run" 2>/dev/null
-    pkill -f "[s]ocat TCP-LISTEN:8642" 2>/dev/null
-    pkill -f "[n]emo-relay --bind" 2>/dev/null
-    pkill -f "[o]utlook-bridge.py" 2>/dev/null
-    sleep 2
-    nohup /usr/local/bin/nemoclaw-start >/tmp/nemoclaw-autoheal-restart.log 2>&1 < /dev/null &
-  ' >/dev/null
+  for runtime_name in OUTLOOK_TARGET_MAILBOX OUTLOOK_REPLY_TO OUTLOOK_ALLOWED_SENDERS; do
+    runtime_value="${!runtime_name:-}"
+    if [[ -n "$runtime_value" ]]; then
+      runtime_env+=("$runtime_name=$runtime_value")
+    fi
+  done
+  if [[ -n "${SLACK_BOT_TOKEN:-}" ]]; then
+    if [[ -n "${SLACK_ALLOWED_IDS:-}" ]]; then
+      runtime_env+=("SLACK_ALLOWED_USERS=$SLACK_ALLOWED_IDS")
+    else
+      runtime_env+=("SLACK_ALLOW_ALL_USERS=true")
+    fi
+  fi
+  # Older watchdog versions ran the entrypoint as root and could leave these
+  # workload-owned bootstrap files inaccessible to the sandbox user.
+  docker exec "$container" chown sandbox:sandbox \
+    /tmp/nemoclaw-start.log /tmp/nemoclaw-proxy-env.sh 2>/dev/null || true
+  openshell sandbox exec --name "$AUTOHEAL_SANDBOX_NAME" -- "${runtime_env[@]}" bash -lc 'set +e; pkill -f "[h]ermes gateway run" 2>/dev/null; pkill -f "[s]ocat TCP-LISTEN:8642" 2>/dev/null; pkill -f "[n]emo-relay --bind" 2>/dev/null; pkill -f "[o]utlook-bridge.py" 2>/dev/null; sleep 2; nohup /usr/local/bin/nemoclaw-start >/sandbox/.hermes-data/logs/autoheal-restart.log 2>&1 < /dev/null &' >/dev/null
 
   for _ in $(seq 1 45); do
     if sandbox_gateway_ok && gateway_has_allowlist; then
@@ -105,8 +115,8 @@ main() {
     return 0
   fi
 
-  if ! sandbox_gateway_ok; then
-    autoheal_log "sandbox gateway health check failed"
+  if sandbox_gateway_failure_confirmed; then
+    autoheal_log "sandbox gateway health check failed repeatedly"
     needs_gateway_restart=true
   fi
   if ! gateway_has_allowlist; then

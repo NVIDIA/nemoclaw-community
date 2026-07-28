@@ -28,6 +28,10 @@ class SlackResponseMonitorTest(unittest.TestCase):
     def test_does_not_treat_normal_graph_traffic_as_a_failure(self) -> None:
         self.assertEqual(MONITOR.classify_log_text("ALLOWED graph.microsoft.com:443 GET /v1.0/me"), set())
 
+    def test_does_not_treat_functional_slack_api_errors_as_transport_failures(self) -> None:
+        text = "SlackApiError: {'ok': False, 'error': 'missing_scope'}; SlackApiError: not_in_channel"
+        self.assertEqual(MONITOR.classify_log_text(text), set())
+
     def test_cooldown(self) -> None:
         self.assertFalse(MONITOR.should_remediate(100.0, 200.0, 300))
         self.assertTrue(MONITOR.should_remediate(100.0, 400.0, 300))
