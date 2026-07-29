@@ -191,10 +191,6 @@ Action: actions/setup-python@v5
 License: MIT
 URL: https://github.com/actions/setup-python
 
-Action: gsactions/dco-check@v1.1.1
-License: ISC
-URL: https://github.com/gsactions/dco-check
-
 ================================================================================
 External Source Archives And Services
 ================================================================================

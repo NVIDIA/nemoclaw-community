@@ -1,5 +1,5 @@
 # .github/CODEOWNERS
 #
-# Auto-assigns NemoClaw maintainers to all pull requests.
+# Auto-assigns the current NemoClaw Community maintainers to all pull requests.
 
-* @NVIDIA/nemoclaw-maintainer
+* @wscurran @apurvvkumaria @ericksoa @cv
