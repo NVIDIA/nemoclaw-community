@@ -7,6 +7,8 @@ set -euo pipefail
 
 OV_REPO="${1:-${OV_REPO:-$HOME/work/ov-blender-hermes-demo/omniverse-labs/projects/ov-blender-example}}"
 GUIDE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$GUIDE_ROOT/../../../.." && pwd -P)"
+LEGACY_GUIDE_ROOT="$REPO_ROOT/examples/blender-omniverse-dgx-station"
 CODEX_SKILLS_DIR="${CODEX_SKILLS_DIR:-$HOME/.agents/skills}"
 
 usage() {
@@ -36,12 +38,19 @@ mkdir -p "$CODEX_SKILLS_DIR"
 
 link_skill() {
   local source_dir="$1"
+  local legacy_source_dir="${2:-}"
   local skill_name target
   skill_name="$(basename "$source_dir")"
   target="$CODEX_SKILLS_DIR/$skill_name"
 
   if [ ! -f "$source_dir/SKILL.md" ]; then
     return
+  fi
+
+  if [ -n "$legacy_source_dir" ] && [ -L "$target" ] \
+    && [ "$(readlink "$target")" = "$legacy_source_dir" ]; then
+    rm "$target"
+    echo "migrating moved project skill: $skill_name"
   fi
 
   if [ -L "$target" ] && [ "$(readlink -f "$target")" = "$(readlink -f "$source_dir")" ]; then
@@ -61,7 +70,7 @@ link_skill() {
 project_count=0
 for skill_dir in "$GUIDE_ROOT"/codex-skills/*; do
   if [ -f "$skill_dir/SKILL.md" ]; then
-    link_skill "$skill_dir"
+    link_skill "$skill_dir" "$LEGACY_GUIDE_ROOT/codex-skills/$(basename "$skill_dir")"
     project_count=$((project_count + 1))
   fi
 done

@@ -93,6 +93,10 @@ See [docs/verify-functionality.md](docs/verify-functionality.md) to confirm your
 before running a real improvement loop, and the `Extending` section below for how to add a
 new `Optimizer` or a new `HarnessAdapter`.
 
+If this example's submodule was initialized before the catalog path changed,
+follow the guarded [existing-clone migration](docs/path-migration.md). Git does
+not move an initialized submodule worktree automatically.
+
 ## Environment
 
 `hep` does not read `.env` itself — pass `--env-file .env` to `uv run` (as shown above), or export

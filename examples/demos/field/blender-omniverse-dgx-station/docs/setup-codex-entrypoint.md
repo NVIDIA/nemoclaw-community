@@ -114,6 +114,10 @@ git -C "$OV_MONOREPO" pull --ff-only origin main
 ```
 
 The installer refuses to overwrite an unrelated skill with the same name.
+When this example moves from its previous top-level path, the installer updates
+only the two project links that it created:
+`coach-nemoclaw-hermes` and `coordinate-nemoclaw-blender`. It still refuses to
+replace either link when it points to any other location.
 
 ### Validation
 

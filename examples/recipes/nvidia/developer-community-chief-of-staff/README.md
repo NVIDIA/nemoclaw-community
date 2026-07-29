@@ -320,6 +320,12 @@ $ bash scripts/autoheal/install.sh
 $ bash scripts/autoheal/sanity-check.sh
 ```
 
+If you installed auto-heal from the previous
+`examples/personal-community-sentiment-triage` path, run the last two commands
+again from this directory. Restore the ignored `.env` file at this new path
+first, and keep it out of Git. The installer updates its absolute paths and
+restarts only the units that it owns.
+
 For a host TLS proxy, first set the explicit upstream origin in `.env`. For
 example, `NEMOCLAW_ENDPOINT_URL=http://host.openshell.internal:18080/v1` pairs
 with `NEMOCLAW_HOST_TLS_PROXY_UPSTREAM=https://inference-api.nvidia.com`.

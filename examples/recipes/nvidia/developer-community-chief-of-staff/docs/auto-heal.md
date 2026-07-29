@@ -56,6 +56,23 @@ The installer enables a host gateway forward, a watchdog timer, and a Slack
 response-monitor timer. It also enables a TLS proxy service when you configured
 one.
 
+## Upgrade from the previous example path
+
+Earlier versions installed units from
+`examples/personal-community-sentiment-triage`. Those units contain an absolute
+path. Restore the ignored `.env` file at the new path before you continue. Do
+not add that file to Git. Then run the installer from
+`examples/recipes/nvidia/developer-community-chief-of-staff`:
+
+```console
+$ bash scripts/autoheal/install.sh
+$ bash scripts/autoheal/sanity-check.sh
+```
+
+The installer detects the previous path. It replaces the runtime configuration
+and unit files, then restarts only the auto-heal services and timers that this
+example owns.
+
 ## Optional Inference Hub proxy
 
 Use this only when the sandbox endpoint is routed through the host proxy:

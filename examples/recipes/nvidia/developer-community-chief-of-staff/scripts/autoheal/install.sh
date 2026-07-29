@@ -15,6 +15,7 @@ UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 RUNTIME_ENV="$CONFIG_DIR/runtime.env"
 TEMPLATE_DIR="$AUTOHEAL_DIR/systemd"
 CHECK_ONLY=false
+PREVIOUS_EXAMPLE_DIR=""
 
 usage() {
   cat <<'EOF'
@@ -30,8 +31,15 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --check) CHECK_ONLY=true ;;
-    -h|--help) usage; exit 0 ;;
-    *) printf 'Unknown option: %s\n' "$1" >&2; usage >&2; exit 2 ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'Unknown option: %s\n' "$1" >&2
+      usage >&2
+      exit 2
+      ;;
   esac
   shift
 done
@@ -67,7 +75,7 @@ if [[ "${NEMOCLAW_ENDPOINT_URL:-}" == "http://host.openshell.internal:${AUTOHEAL
   fi
 fi
 
-if (( failures > 0 )); then
+if ((failures > 0)); then
   printf '\nFix the failed checks before installing auto-heal.\n' >&2
   exit 1
 fi
@@ -78,21 +86,36 @@ if "$CHECK_ONLY"; then
 fi
 
 mkdir -p "$CONFIG_DIR" "$UNIT_DIR"
+if [[ -f "$RUNTIME_ENV" ]]; then
+  while IFS= read -r line; do
+    case "$line" in
+      EXAMPLE_DIR=*)
+        PREVIOUS_EXAMPLE_DIR="${line#EXAMPLE_DIR=}"
+        break
+        ;;
+    esac
+  done <"$RUNTIME_ENV"
+fi
+
 umask 077
-cat >"$RUNTIME_ENV" <<EOF
+runtime_env_tmp="$(mktemp "$CONFIG_DIR/runtime.env.XXXXXX")"
+cat >"$runtime_env_tmp" <<EOF
 EXAMPLE_DIR=$EXAMPLE_DIR
 SANDBOX_NAME=$AUTOHEAL_SANDBOX_NAME
 NEMOCLAW_HOST_TLS_PROXY_UPSTREAM=$AUTOHEAL_PROXY_UPSTREAM
 NEMOCLAW_HOST_TLS_PROXY_PORT=$AUTOHEAL_PROXY_PORT
 EOF
-chmod 600 "$RUNTIME_ENV"
+chmod 600 "$runtime_env_tmp"
+mv "$runtime_env_tmp" "$RUNTIME_ENV"
 
 render_unit() {
-  local template="$1" destination="$2" escaped_dir escaped_env
+  local template="$1" destination="$2" escaped_dir escaped_env unit_tmp
   escaped_dir="$(printf '%s' "$EXAMPLE_DIR" | sed 's/[&|]/\\&/g')"
   escaped_env="$(printf '%s' "$RUNTIME_ENV" | sed 's/[&|]/\\&/g')"
+  unit_tmp="$(mktemp "$UNIT_DIR/${destination}.XXXXXX")"
   sed -e "s|@EXAMPLE_DIR@|$escaped_dir|g" -e "s|@RUNTIME_ENV@|$escaped_env|g" \
-    "$TEMPLATE_DIR/$template" >"$UNIT_DIR/$destination"
+    "$TEMPLATE_DIR/$template" >"$unit_tmp"
+  mv "$unit_tmp" "$UNIT_DIR/$destination"
 }
 
 render_unit nemoclaw-hermes-gateway-forward.service.in nemoclaw-hermes-gateway-forward.service
@@ -116,6 +139,17 @@ if proxy_is_configured; then
   systemctl --user enable --now nemoclaw-hermes-proxy.service
 fi
 
+if [[ -n "$PREVIOUS_EXAMPLE_DIR" && "$PREVIOUS_EXAMPLE_DIR" != "$EXAMPLE_DIR" ]]; then
+  systemctl --user restart nemoclaw-hermes-gateway-forward.service
+  systemctl --user restart nemoclaw-hermes-watchdog.timer
+  systemctl --user restart nemoclaw-slack-response-monitor.timer
+  if proxy_is_configured; then
+    systemctl --user restart nemoclaw-hermes-proxy.service
+  fi
+  printf 'Migrated auto-heal from %s to %s.\n' "$PREVIOUS_EXAMPLE_DIR" "$EXAMPLE_DIR"
+fi
+
 printf '\nAuto-heal is enabled for sandbox %s.\n' "$AUTOHEAL_SANDBOX_NAME"
 printf 'Run: bash scripts/autoheal/sanity-check.sh\n'
+# shellcheck disable=SC2016
 printf 'For a headless host: sudo loginctl enable-linger "$USER"\n'
