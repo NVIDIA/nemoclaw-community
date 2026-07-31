@@ -34,7 +34,7 @@ echo "Importing v2 provider profiles from $EXAMPLE_DIR/providers/"
 # already registered, just not re-importable while attached). To force a fresh
 # import of an edited profile, delete the sandbox first (then its provider no
 # longer holds the profile) and re-run.
-for profile_id in nemoclaw-outlook-email nemoclaw-slack nemoclaw-github \
+for profile_id in nemoclaw-outlook-email nemoclaw-slack nemoclaw-github nemoclaw-gitlab \
                   nemoclaw-atif-export-relay; do
   openshell provider profile delete "$profile_id" >/dev/null 2>&1 || true
 done
@@ -46,14 +46,20 @@ done
 # atif-export-relay.yaml carries __ATIF_RELAY_HOST/PORT__ placeholders so
 # the endpoint tracks ATIF_RELAY_ENDPOINT — stage through sed before import.
 STAGED_RELAY_PROFILE="$EXAMPLE_DIR/providers/.atif-export-relay.staged.yaml"
-trap 'rm -f "$STAGED_RELAY_PROFILE"' EXIT
-for profile_file in outlook-email.yaml slack.yaml github.yaml atif-export-relay.yaml; do
+STAGED_GITLAB_PROFILE="$EXAMPLE_DIR/providers/.gitlab.staged.yaml"
+trap 'rm -f "$STAGED_RELAY_PROFILE" "$STAGED_GITLAB_PROFILE"' EXIT
+for profile_file in outlook-email.yaml slack.yaml github.yaml gitlab.yaml atif-export-relay.yaml; do
   src="$EXAMPLE_DIR/providers/$profile_file"
   if [[ "$profile_file" == "atif-export-relay.yaml" ]]; then
     sed -e "s|__ATIF_RELAY_HOST__|$ATIF_RELAY_HOST|g" \
         -e "s|__ATIF_RELAY_PORT__|$ATIF_RELAY_PORT|g" \
         "$src" > "$STAGED_RELAY_PROFILE"
     src="$STAGED_RELAY_PROFILE"
+  elif [[ "$profile_file" == "gitlab.yaml" ]]; then
+    sed -e "s|__GITLAB_API_HOST__|$GITLAB_API_HOST|g" \
+        -e "s|__GITLAB_API_PORT__|$GITLAB_API_PORT|g" \
+        "$src" > "$STAGED_GITLAB_PROFILE"
+    src="$STAGED_GITLAB_PROFILE"
   fi
   # Tolerate the in-use case: if the delete above was refused because a live
   # sandbox holds the profile, the profile is still registered and import
@@ -189,6 +195,13 @@ if [[ -n "${GITHUB_TOKEN:-}" ]]; then
   GH_PROVIDER="$SANDBOX_NAME-github"
   echo "Upserting provider $GH_PROVIDER (credential: GITHUB_TOKEN)"
   upsert_cred "$GH_PROVIDER" nemoclaw-github "GITHUB_TOKEN=$GITHUB_TOKEN"
+fi
+
+# ── GitLab provider ─────────────────────────────────────────────────────
+if [[ -n "${GITLAB_TOKEN:-}" ]]; then
+  GL_PROVIDER="$SANDBOX_NAME-gitlab"
+  echo "Upserting provider $GL_PROVIDER (credential: GITLAB_TOKEN)"
+  upsert_cred "$GL_PROVIDER" nemoclaw-gitlab "GITLAB_TOKEN=$GITLAB_TOKEN"
 fi
 
 # ── ATIF object-storage provider (bearer token for atif-export-relay) ───

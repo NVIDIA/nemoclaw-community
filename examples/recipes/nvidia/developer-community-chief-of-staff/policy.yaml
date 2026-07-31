@@ -198,3 +198,31 @@ network_policies:
     - path: /usr/bin/python3
     - path: /usr/bin/python3.13
     - path: /opt/hermes/.venv/bin/python
+  # Load-bearing: GET-only, per-project path scoping for GitLab. The v2
+  # provider profile grants read-only access to the configured API host, but
+  # cannot express these path rules. scripts/03-sandbox.sh replaces the marker
+  # below with one explicit rule set per project in GITLAB_READONLY_PROJECTS.
+  # Sensitive project endpoints such as variables, hooks, tokens, runners,
+  # and members are intentionally absent.
+  gitlab_projects_readonly:
+    name: gitlab-projects-readonly
+    endpoints:
+    - host: __GITLAB_API_HOST__
+      port: __GITLAB_API_PORT__
+      protocol: rest
+      tls: terminate
+      enforcement: enforce
+      # Permit private-address GitLab deployments while retaining exact
+      # hostname, port, method, path, and binary restrictions.
+      allowed_ips:
+      - 10.0.0.0/8
+      - 172.0.0.0/8
+      - 192.168.0.0/16
+      - fc00::/7
+      rules:
+      __GITLAB_READONLY_RULES__
+    binaries:
+    - path: /usr/bin/curl
+    - path: /usr/bin/python3
+    - path: /usr/bin/python3.13
+    - path: /opt/hermes/.venv/bin/python

@@ -17,7 +17,7 @@ This is a personal agent designed to run on a **managed image/VM provisioned by
 enterprise IT** (e.g. Ubuntu) — one you authenticate into, that ships sanctioned
 pre-installed software and can reach only specific resources. The agent rides that
 infrastructure with *delegated* access: its credentials live in OpenShell providers
-(GitHub, Slack, Microsoft Graph), and it acts on your behalf within them.
+(GitHub, GitLab, Slack, Microsoft Graph), and it acts on your behalf within them.
 
 Protection is layered. The managed image provides **coarse** protections (authenticated
 access, a restricted set of reachable resources, host hardening). OpenShell adds
@@ -40,7 +40,9 @@ live to Slack and Outlook for interactions and research. It also has
 authenticated, read-only GitHub REST access to one configured repository
 (`GITHUB_READONLY_REPO`). The GitHub token is attached through an OpenShell
 provider placeholder so GitHub rate limits are practical, while `policy.yaml`
-still limits the sandbox to repo-scoped `GET` requests. GitHub discussions,
+still limits the sandbox to repo-scoped `GET` requests. Optional GitLab access
+uses the same credential-isolation pattern but supports multiple explicitly
+allowlisted projects. GitHub discussions,
 historical mirror data, and NVIDIA forum data come from host-side ETL
 containers that scrape on a schedule, write results into Postgres, and expose
 that mirror through a read-only PostgREST HTTP bridge.
@@ -53,6 +55,7 @@ flowchart LR
     entra["Internal\nMS Entra ID"]
     slack["Internal\nSlack workspace"]
     outlook["Internal\ngraph.microsoft.com\nmailbox"]
+    gitlab["Internal\nGitLab REST API"]
     github["External\nGitHub API"]
     forums["External\nNVIDIA Forums\n(nemoclaw tag)"]
     s3["Internal\nAWS S3 (prod)\nATIF trace storage"]
@@ -78,6 +81,7 @@ flowchart LR
                 subgraph sourceSkills["Source Skills"]
                     direction LR
                     s1["source-etl-query"]
+                    s2["gitlab-readonly-live"]
                     s4["cross-source-gap-analysis"]
                 end
 
@@ -131,6 +135,7 @@ flowchart LR
     l7 <-->|"WSS / HTTPS POST\nSlack messaging"| slack
     l7 -->|"HTTPS GET/POST\nGraph API"| outlook
     l7 -->|"HTTPS GET\nGitHub REST"| github
+    l7 -->|"HTTPS GET\nproject-scoped GitLab REST"| gitlab
     atifRelay -->|"HTTPS PUT\nS3 PutObject"| s3
     gateway <-->|"HTTPS POST\ntoken rotation"| entra
     etls -->|"HTTPS GET\nscheduled scrape"| github
@@ -160,13 +165,14 @@ flowchart LR
 
     classDef internal fill:#eef7e9,stroke:#6aa84f,stroke-width:2px
     classDef external fill:#fce5cd,stroke:#e69138,stroke-width:2px
-    class nvidia,slack,outlook,entra,s3 internal
+    class nvidia,slack,outlook,gitlab,entra,s3 internal
     class github,forums external
 ```
 
 **Key invariants:**
 
 - The agent has authenticated read-only `api.github.com` access for exactly one configured repo. The raw GitHub token stays in an OpenShell provider; the sandbox sees only a placeholder, and policy still blocks writes, non-API GitHub hosts, `git`, and `gh`.
+- The agent can have authenticated read-only access to multiple explicitly configured GitLab projects. Policy permits only selected project-data routes and blocks writes plus sensitive endpoints such as CI/CD variables, hooks, tokens, runners, and members.
 - GitHub discussions, historical mirror data, and NVIDIA forum data come from the Postgres mirror.
 - Slack and Outlook are live connections from the sandbox; the agent can read and write both in real time.
 - Compatible-endpoint inference egress is required for the agent's LLM calls — it's not a research/data-ingestion path.
@@ -180,6 +186,7 @@ Skills are loaded on demand by the agent when relevant to a task. They live in [
 | Skill | Purpose |
 |-------|---------|
 | `github-readonly-live` | Query the configured live GitHub repo via authenticated, policy-scoped REST `GET` requests. |
+| `gitlab-readonly-live` | Query one of the explicitly allowed GitLab projects via authenticated, project-scoped REST `GET` requests. |
 | `source-etl-query` | Query the host-side PostgREST bridge for mirrored GitHub discussions, historical mirror data, and NVIDIA forum data. |
 | `slack-channel-finder` | Discover Slack channels by topic, team, or domain and infer what each channel is for. |
 | `slack-channel-summarizer` | Resolve Slack channels by name or ID and read message history via the Slack Web API. |
@@ -466,6 +473,7 @@ bearer header; the OpenShell L7 proxy substitutes a live token on egress.
 | `<sandbox>-outlook` | `nemoclaw-outlook-email` | `MS_GRAPH_ACCESS_TOKEN` (auto-rotated by the gateway from the registered refresh token). Refresh material: `OUTLOOK_TENANT_ID`, `OUTLOOK_CLIENT_ID`, refresh_token (cached from device-code login). | Optional. Created only when the Outlook block is fully populated; partial config is rejected. At least one of Outlook or Slack must be configured. |
 | `<sandbox>-slack` | `nemoclaw-slack` | `SLACK_BOT_TOKEN` (Web API) + `SLACK_APP_TOKEN` (Socket Mode) | Optional. Both credentials are `required: true` on the profile — partial Slack config fails at provider-create time. At least one of Outlook or Slack must be configured. |
 | `<sandbox>-github` | `nemoclaw-github` | `GITHUB_TOKEN` | Optional but recommended. Enables authenticated live GitHub REST reads. The sandbox receives only the OpenShell placeholder; `policy.yaml` further limits use to repo-scoped `GET` routes from approved binaries. |
+| `<sandbox>-gitlab` | `nemoclaw-gitlab` | `GITLAB_TOKEN` | Optional. Enables authenticated GitLab REST reads. `policy.yaml` expands a separate GET-only path allowlist for every project in `GITLAB_READONLY_PROJECTS`; sensitive project endpoints remain blocked. |
 
 The `compatible-endpoint` provider is **not** prefixed with the sandbox name — it's a
 shared inference provider attached via `--provider compatible-endpoint` on sandbox
@@ -478,7 +486,8 @@ Sandbox network policy ([`policy.yaml`](policy.yaml)) layers on top of the per-p
 endpoint scopes above. For most providers the profile is the sole source of policy;
 `policy.yaml` only carries restrictions that the v2 ProviderProfile schema can't
 express today — specifically per-path allow rules (used to scope the NVIDIA inference
-API to specific `/v1/*` paths and GitHub reads to one repo via `GITHUB_READONLY_REPO`)
+API to specific `/v1/*` paths, GitHub reads to one repo via `GITHUB_READONLY_REPO`,
+and GitLab reads to explicitly listed projects via `GITLAB_READONLY_PROJECTS`)
 and credential-less host-routed services (Phoenix collector, Source-ETL API). Surviving
 `network_policies` blocks in `policy.yaml` carry **load-bearing comments** explaining
 why they can't be folded into provider profiles. Fully-redundant blocks (e.g. the
@@ -524,6 +533,35 @@ discussions/history from a different repo, then rerun
 `bash scripts/00-host-services.sh`. Existing mirror database/state is preserved
 unless you remove the compose volumes.
 
+## Changing the available live GitLab projects
+
+GitLab access is optional and supports one or more explicit project paths; it
+is not limited to a single repository:
+
+1. Create a GitLab personal access token with `read_api` scope and set
+   `GITLAB_TOKEN` in `.env`.
+2. Set a comma-separated allowlist, for example:
+
+```bash
+GITLAB_READONLY_PROJECTS=example-team/project-one,group/subgroup/project-two
+```
+
+3. If necessary, set `GITLAB_API_URL` to the REST v4 base for the GitLab
+   deployment. The value must have the form `https://host[:port]/api/v4`.
+4. Rerun `bash scripts/bring-up.sh`. Changing the allowlist requires sandbox
+   recreation because the exact project paths are compiled into policy.
+
+During sandbox creation, each configured path is resolved to its canonical
+numeric project ID. The staged policy receives GET-only rules for that ID; the
+sandbox itself receives only the friendly path-to-ID mapping and the OpenShell
+credential placeholder. The raw token is never baked into the image.
+
+The helper selects the project automatically when only one is configured. With
+multiple projects, pass `--project group/project`. Project metadata, issues,
+merge requests, repository content and history, labels, milestones, and
+releases are readable. Variables, hooks, tokens, runners, members, writes,
+`glab`, and `git` remain blocked.
+
 ## Configuration knobs (all env vars)
 
 | Var | Default | What it does |
@@ -539,6 +577,9 @@ unless you remove the compose volumes.
 | `COMPATIBLE_API_KEY` | (none) | Inference API key. Mirrors NemoClaw's `REMOTE_PROVIDER_CONFIG.custom`. (`OPENAI_API_KEY` is also accepted.) |
 | `GITHUB_TOKEN` | (none) | Optional GitHub token for authenticated live REST reads. Also feeds the optional host GitHub mirror. |
 | `GITHUB_READONLY_REPO` | `NVIDIA/OpenShell` | The only repo allowed by the live GitHub REST policy, formatted as `owner/repo`. Recreate the sandbox after changing it. |
+| `GITLAB_TOKEN` | (none) | Optional GitLab PAT. Use `read_api` scope; the sandbox receives only the OpenShell credential placeholder. |
+| `GITLAB_READONLY_PROJECTS` | (none) | Comma-separated GitLab project paths (`group/project` or `group/subgroup/project`). Each receives its own GET-only policy rules when the sandbox is created. |
+| `GITLAB_API_URL` | `https://gitlab.example.com/api/v4` | GitLab REST v4 base, formatted as `https://host[:port]/api/v4`. Replace the example hostname for your deployment; the provider and network policy remain scoped to its exact host and port. |
 | `SOURCE_ETL_GITHUB_REPO` | `NVIDIA/NemoClaw` | Host-side GitHub mirror repo for source-etls. This is independent of `GITHUB_READONLY_REPO`. |
 | `OUTLOOK_LOGIN_CACHE` | `1` | Controls the Microsoft refresh-token cache at `.bootstrap/cache/ms-graph-token.json`. `1` = use the cache (auto-refresh on staleness, ~90 days). `0` = skip the cache entirely (device-code every bring-up, nothing on disk; use on shared workstations or security-sensitive contexts). `2` = force device-code login and rewrite the cache. The gateway-side encrypted credential copy is unaffected by this knob. |
 | `PHOENIX_COLLECTOR_ENDPOINT` | (none) | Set to e.g. `http://host.openshell.internal:6006/v1/traces` to stream OpenInference traces to a Phoenix collector. ATIF trace generation does not depend on this — NeMo-Relay is always installed and writes ATIF locally to `/tmp/atif/` regardless. |

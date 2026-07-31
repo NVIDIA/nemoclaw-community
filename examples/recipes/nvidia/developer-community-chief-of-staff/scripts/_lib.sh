@@ -85,6 +85,43 @@ export ATIF_RELAY_ENDPOINT="${ATIF_RELAY_ENDPOINT:-https://host.openshell.intern
   unset _url _scheme _hostport
 }
 
+# Parse the GitLab API base into the exact host and port used by the provider
+# profile and staged path policy.
+export GITLAB_API_URL="${GITLAB_API_URL:-https://gitlab.example.com/api/v4}"
+{
+  _url="${GITLAB_API_URL%/}"
+  _scheme="${_url%%://*}"
+  if [[ "$_scheme" != "https" ]]; then
+    echo "GITLAB_API_URL must be an https:// URL (got: $GITLAB_API_URL)" >&2
+    exit 1
+  fi
+  _rest="${_url#*://}"
+  _hostport="${_rest%%/*}"
+  _path="/${_rest#*/}"
+  if [[ "$_path" != "/api/v4" ]]; then
+    echo "GITLAB_API_URL path must be /api/v4 (got: $_path)" >&2
+    exit 1
+  fi
+  if [[ "$_hostport" == *"@"* ]]; then
+    echo "GITLAB_API_URL must not contain embedded credentials" >&2
+    exit 1
+  fi
+  GITLAB_API_HOST="${_hostport%%:*}"
+  if [[ "$_hostport" == *:* ]]; then
+    GITLAB_API_PORT="${_hostport##*:}"
+  else
+    GITLAB_API_PORT=443
+  fi
+  if [[ ! "$GITLAB_API_HOST" =~ ^[A-Za-z0-9.-]+$ ]] \
+      || [[ ! "$GITLAB_API_PORT" =~ ^[0-9]+$ ]] \
+      || (( GITLAB_API_PORT < 1 || GITLAB_API_PORT > 65535 )); then
+    echo "GITLAB_API_URL has an invalid host or port (got: $GITLAB_API_URL)" >&2
+    exit 1
+  fi
+  export GITLAB_API_HOST GITLAB_API_PORT
+  unset _url _scheme _rest _hostport _path
+}
+
 # Shared, overridable knobs.
 SANDBOX_NAME="${SANDBOX_NAME:-hermes-direct}"
 GATEWAY_NAME="${OPENSHELL_GATEWAY:-openshell}"

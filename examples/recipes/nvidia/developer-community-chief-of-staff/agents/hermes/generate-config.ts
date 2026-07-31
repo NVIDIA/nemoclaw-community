@@ -276,6 +276,20 @@ function main(): void {
       envLines.push(`${key}=${value}`);
     }
   }
+  const gitlabProjects = process.env.GITLAB_READONLY_PROJECTS?.trim();
+  if (gitlabProjects) {
+    const gitlabApiUrl = process.env.GITLAB_API_URL?.trim();
+    const gitlabProjectIds = process.env.GITLAB_READONLY_PROJECT_IDS?.trim();
+    if (!gitlabApiUrl || !gitlabProjectIds) {
+      throw new Error(
+        "GITLAB_API_URL and GITLAB_READONLY_PROJECT_IDS are required when GitLab is enabled",
+      );
+    }
+    envLines.push(`GITLAB_READONLY_PROJECTS=${gitlabProjects}`);
+    envLines.push(`GITLAB_API_URL=${gitlabApiUrl}`);
+    envLines.push(`GITLAB_READONLY_PROJECT_IDS=${gitlabProjectIds}`);
+    envLines.push("GITLAB_TOKEN=openshell:resolve:env:GITLAB_TOKEN");
+  }
 
   const envPath = join(homedir(), ".hermes", ".env");
   writeFileSync(envPath, envLines.length > 0 ? envLines.join("\n") + "\n" : "");

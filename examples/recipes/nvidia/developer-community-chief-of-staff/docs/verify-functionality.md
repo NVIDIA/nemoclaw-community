@@ -3,11 +3,11 @@ title:
   page: "Verify Skill Functionality"
   nav: "Verify Skills"
 description:
-  main: "Walk through 19 conversational prompts plus a live GitHub check that prove the core Hermes workflow skills and all seven NVTeam role lenses end-to-end across Slack DM, Slack thread, and Outlook email channels."
-  agent: "End-to-end functional verification recipe for the developer-community-chief-of-staff example. Contains 19 copy-pasteable prompts covering outlook-email-search, slack-channel-finder, slack-channel-summarizer, source-etl-query, cross-source-gap-analysis, and all seven role-first nemoclaw-enterprise-nvteam lenses, plus a live github-readonly-live check. Each prompt has a stated expected behavior and a specific verification cue. Use after running scripts/bring-up.sh and confirming the README's plumbing checks pass — this guide picks up where the README's plumbing verification stops."
+  main: "Walk through 19 conversational prompts plus live GitHub and optional GitLab checks that prove the core Hermes workflow skills and all seven NVTeam role lenses end-to-end across Slack DM, Slack thread, and Outlook email channels."
+  agent: "End-to-end functional verification recipe for the developer-community-chief-of-staff example. Contains 19 copy-pasteable prompts covering outlook-email-search, slack-channel-finder, slack-channel-summarizer, source-etl-query, cross-source-gap-analysis, and all seven role-first nemoclaw-enterprise-nvteam lenses, plus live github-readonly-live and optional gitlab-readonly-live checks. Each prompt has a stated expected behavior and a specific verification cue. Use after running scripts/bring-up.sh and confirming the README's plumbing checks pass — this guide picks up where the README's plumbing verification stops."
 keywords: ["verify nemoclaw skills", "hermes skill verification", "slack outlook smoke test", "developer community chief of staff verification"]
 topics: ["generative_ai", "ai_agents"]
-tags: ["hermes", "openshell", "outlook", "slack", "verification", "smoke-test"]
+tags: ["hermes", "openshell", "outlook", "slack", "github", "gitlab", "verification", "smoke-test"]
 content:
   type: how_to
   difficulty: intermediate
@@ -24,7 +24,7 @@ status: published
 
 # Verify Skill Functionality
 
-Nineteen copy-pasteable prompts plus a live GitHub check that prove each skill works end-to-end across Slack and Outlook. The README's [§ Verification](../README.md#verification-what-success-looks-like) only checks plumbing (the bridge runs, the sidecar exists, scripts return `ok: true`). This guide picks up where that stops: it checks whether the **agent** can use its skills correctly.
+Nineteen copy-pasteable prompts plus live GitHub and optional GitLab checks that prove each skill works end-to-end across Slack and Outlook. The README's [§ Verification](../README.md#verification-what-success-looks-like) only checks plumbing (the bridge runs, the sidecar exists, scripts return `ok: true`). This guide picks up where that stops: it checks whether the **agent** can use its skills correctly.
 
 Once you've run all 19, head to [collective-wisdom.md](collective-wisdom.md) for the cross-channel skill-learning demo — where one user teaches the agent a new skill, the skill survives a full sandbox rebuild, and a different user invokes it from a different channel and gets the same output format.
 
@@ -192,6 +192,44 @@ Also ask:
 **Expected:** agent uses the generic helper pattern, for example
 `github_readonly.py get pulls --param state=open --paginate --count`; it should
 not estimate from a single `pulls --limit` page.
+
+---
+
+### gitlab-readonly-live
+
+When `GITLAB_TOKEN` and `GITLAB_READONLY_PROJECTS` are configured, verify the
+authenticated identity and initial project from the host shell:
+
+```console
+$ openshell sandbox exec --name hermes-direct -- sh -lc \
+    '/usr/bin/python3 /sandbox/.hermes-data/skills/gitlab-readonly-live/scripts/gitlab_readonly.py identity'
+$ openshell sandbox exec --name hermes-direct -- sh -lc \
+    '/usr/bin/python3 /sandbox/.hermes-data/skills/gitlab-readonly-live/scripts/gitlab_readonly.py get . --fields path_with_namespace,visibility,default_branch'
+```
+
+With multiple projects, add `--project group/project` to the `get` command.
+Expected: the authenticated username and configured project metadata appear;
+the token itself never does. Requests for unlisted projects, sensitive routes,
+and arbitrary URLs must fail without being retried through another tool.
+
+Verify local route validation inside the sandbox. This command must fail before
+making a network request:
+
+```console
+$ openshell sandbox exec --name hermes-direct -- sh -lc \
+    '/usr/bin/python3 /sandbox/.hermes-data/skills/gitlab-readonly-live/scripts/gitlab_readonly.py get variables'
+```
+
+To inspect the enforced network boundary, replace `PROJECT_ID` with one of the
+numeric IDs printed during bring-up. Both calls below must be denied with `403`;
+the value shown in the header is an OpenShell placeholder, not the token:
+
+```console
+$ openshell sandbox exec --name hermes-direct -- sh -lc \
+    'curl -sS -o /dev/null -w "%{http_code}\\n" -H "Authorization: Bearer openshell:resolve:env:GITLAB_TOKEN" "$GITLAB_API_URL/projects/PROJECT_ID/variables"'
+$ openshell sandbox exec --name hermes-direct -- sh -lc \
+    'curl -sS -o /dev/null -w "%{http_code}\\n" -X POST -H "Authorization: Bearer openshell:resolve:env:GITLAB_TOKEN" "$GITLAB_API_URL/projects/PROJECT_ID/issues"'
+```
 
 ---
 

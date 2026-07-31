@@ -125,6 +125,42 @@ class GenerateConfigTest(unittest.TestCase):
         self.assertIn("NEMOCLAW_SLACK_RICH_BLOCKS=false", env_example)
         self.assertIn("verify-rich-block-renderer.py", dockerfile)
 
+    def test_gitlab_config_writes_only_provider_placeholder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            (home / ".hermes").mkdir()
+            env = os.environ.copy()
+            env.update(
+                {
+                    "HOME": str(home),
+                    "NEMOCLAW_MODEL": "test/model",
+                    "NEMOCLAW_INFERENCE_BASE_URL": "https://inference.local/v1",
+                    "NEMOCLAW_MESSAGING_CHANNELS_B64": "W10=",
+                    "GITLAB_READONLY_PROJECTS": "example-team/project-one",
+                    "GITLAB_API_URL": "https://gitlab.example.com/api/v4",
+                    "GITLAB_READONLY_PROJECT_IDS": "example-team/project-one=123",
+                    "GITLAB_TOKEN": "must-not-be-written",
+                }
+            )
+
+            result = subprocess.run(
+                ["node", "--experimental-strip-types", str(GENERATOR)],
+                check=False,
+                capture_output=True,
+                env=env,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            generated_env = (home / ".hermes" / ".env").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn(
+                "GITLAB_TOKEN=openshell:resolve:env:GITLAB_TOKEN",
+                generated_env,
+            )
+            self.assertNotIn("must-not-be-written", generated_env)
+
 
 if __name__ == "__main__":
     unittest.main()
