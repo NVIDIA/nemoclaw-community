@@ -72,6 +72,7 @@ coordination and intelligence outcome rather than one analysis technique.
 
 | Example | Canonical path |
 | --- | --- |
+| Agentic AI Learning Path | `examples/recipes/nvidia/agentic-ai-learning-path/` |
 | Developer Community Chief of Staff | `examples/recipes/nvidia/developer-community-chief-of-staff/` |
 | Payment Operations Hermes Assistant | `examples/recipes/nvidia/payment-ops-hermes/` |
 | HPE Retail Assistant | `examples/recipes/partners/hpe/retail-assistant/` |

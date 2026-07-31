@@ -10,6 +10,7 @@ again by contributor provenance.
 
 | Example | Description |
 | --- | --- |
+| [Agentic AI Learning Path](recipes/nvidia/agentic-ai-learning-path/README.md) | Turns a NemoClaw deployment into a Build-an-Agent workshop learning lab where the sandboxed agent provisions JupyterLab and tutors the seven modules. |
 | [Developer Community Chief of Staff](recipes/nvidia/developer-community-chief-of-staff/README.md) | Synthesizes Slack, Outlook, GitHub, and mirrored community signals into operating briefs, gaps, priorities, and follow-up recommendations. |
 | [NV Tech Assistant](recipes/nvidia/nv-tech-assistant/README.md) | Answers NVIDIA technical questions with cited evidence from allowlisted NVIDIA, GitHub, and arXiv sources. |
 | [Payment Operations Hermes Assistant](recipes/nvidia/payment-ops-hermes/README.md) | Demonstrates constrained payment screening, evidence preparation, and a platform-enforced human release boundary. |
