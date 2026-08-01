@@ -186,7 +186,7 @@ Skills are loaded on demand by the agent when relevant to a task. They live in [
 | `outlook-email-search` | Search the Outlook mailbox via Microsoft Graph to find and read emails relevant to a question. |
 | `cross-source-gap-analysis` | Synthesize findings across Slack, GitHub, and NVIDIA forum sources to identify gaps, alignment issues, and follow-ups. |
 | `nemoclaw-autoheal` | Guide users through sandbox health checks and optional host-side auto-heal setup. |
-| `nemoclaw-nvteam` | Act as a chief of staff with eight evidence-bounded lenses across product, delivery, engineering, data and ML, quality, operations, security, and developer community work. |
+| `nemoclaw-nvteam` | Route work through eight evidence-bounded role lenses added locally by this Community recipe. |
 
 The original contribution reported source revision
 `b87038405fd7d9646dba57c367f54d86ca4d933d`. This repository adapts and hardens
@@ -204,9 +204,11 @@ The eight role lenses are Product Manager (River), Technical Program Manager
 (Quinn), Backend and Systems Engineer (Akira), Data and ML Engineer (Jordan),
 Quality Engineer (Robin), Platform and SRE (Alex), Security Engineer (Morgan),
 and Technical Marketing Engineer (Parker). The chief of staff introduces this
-team once at the start of a conversation and shows the active name and role on
-each routed response. These labels describe task-scoped lenses, not real
-people, separate agents, models, configurations, or decision owners.
+team once at the start of the first NVTeam-routed response and shows the active
+name and role on each routed response. NVTeam is added by this Community recipe;
+it is not a built-in capability of the core NemoClaw product. These labels
+describe task-scoped lenses, not real people, separate agents, models,
+configurations, decision owners, or evidence about core-product behavior.
 
 Substantive NVTeam work applies Mission is the Boss, Speed of Light (SOL),
 Listen, Understand, Answer (LUA), and “As much as needed, as little as

@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Static contracts for the reusable NemoClaw NVTeam skill."""
+"""Static contracts for the reusable NemoClaw Community NVTeam skill."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ class NVTeamSkillContractTest(unittest.TestCase):
         self.assertIn("name: nemoclaw-nvteam", skill)
         self.assertIn("Introduce the Team Once", skill)
         self.assertIn("<Name> (<Role>) active", skill)
-        self.assertIn("## Your NVTeam", response_profile)
+        self.assertIn("## Your Community NVTeam", response_profile)
         for name, role in PERSONAS.items():
             self.assertTrue(
                 (SKILL_DIR / "references" / "personas" / f"{name}.md").is_file()
@@ -46,6 +46,25 @@ class NVTeamSkillContractTest(unittest.TestCase):
             self.assertIn(display_name, normalized_soul)
             self.assertIn(role, normalized_soul)
             self.assertIn(display_name, response_profile)
+
+    def test_product_attribution_boundary_is_visible_at_every_entry_point(
+        self,
+    ) -> None:
+        skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+        soul = (HERMES_DIR / "SOUL.md").read_text(encoding="utf-8")
+        readme = (EXAMPLE_DIR / "README.md").read_text(encoding="utf-8")
+        openai_yaml = (SKILL_DIR / "agents" / "openai.yaml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("## Keep Product Attribution Explicit", skill)
+        for content in (skill, soul, readme):
+            normalized = " ".join(content.split()).lower()
+            self.assertIn("community recipe", normalized)
+            self.assertIn("core nemoclaw", normalized)
+            self.assertIn("not a built-in", normalized)
+        self.assertIn('display_name: "NemoClaw Community NVTeam"', openai_yaml)
+        self.assertIn("Community recipe's local role lenses", openai_yaml)
 
     def test_shared_writing_and_principles_are_not_duplicated(self) -> None:
         references = SKILL_DIR / "references"
@@ -108,6 +127,8 @@ class NVTeamSkillContractTest(unittest.TestCase):
             "nvteam-principles-sol-001",
             "nvteam-principles-lua-001",
             "nvteam-authority-jordan-001",
+            "nvteam-negative-core-product-attribution-001",
+            "nvteam-explicit-product-comparison-001",
         ):
             self.assertIn(required, ids)
         self.assertTrue(

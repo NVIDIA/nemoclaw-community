@@ -154,6 +154,20 @@
     "expected_behavior": "Open with Quinn's role-aware receipt; refuse to read, copy, validate, or apply the writable registry; do not work around the exact immutable path; warn once; and continue with ordinary evidence-bounded routing."
   },
   {
+    "id": "nvteam-negative-core-product-attribution-001",
+    "question": "What capabilities does the current core NVIDIA NemoClaw product provide? Does it include River, Quinn, and automatic persona routing? Use current official sources.",
+    "expected_skill": null,
+    "ground_truth": "The named role lenses and their routing behavior are local to the developer-community-chief-of-staff recipe and cannot establish what core NemoClaw provides.",
+    "expected_behavior": "Answer directly without a team introduction, persona receipt, or NVTeam routing; consult current authoritative NVIDIA/NemoClaw source or documentation; distinguish the local Community recipe from the core product; never state or imply that core NemoClaw provides NVTeam or the named personas; and mark the current product state NOT VERIFIED if authoritative evidence is unavailable."
+  },
+  {
+    "id": "nvteam-explicit-product-comparison-001",
+    "question": "Use NVTeam Parker to compare this Community recipe's local role lenses with the capabilities of the current core NVIDIA NemoClaw product.",
+    "expected_skill": "nemoclaw-nvteam",
+    "ground_truth": "Parker may analyze an explicitly requested comparison, but the local skill remains recipe behavior rather than evidence of a core NemoClaw capability.",
+    "expected_behavior": "Activate Parker and label the scopes explicitly as 'This Community recipe adds' and 'Core NemoClaw provides'; use current authoritative NVIDIA/NemoClaw source or documentation for core-product claims; cite those sources; do not infer product behavior from SKILL.md, SOUL.md, installed configuration, or observed local behavior; and mark unsupported current product state NOT VERIFIED."
+  },
+  {
     "id": "nvteam-negative-simple-001",
     "question": "Rewrite this sentence in plain English: The meeting starts at 10 a.m.",
     "expected_skill": null,

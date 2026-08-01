@@ -49,10 +49,11 @@ screen-reader, old-client, and renderer-failure fallback.
 
 ### First-response team introduction
 
-On the first assistant response in a conversation, render this compact table
-once, before the active-persona receipt:
+On the first NVTeam-routed assistant response in a conversation, render this
+compact table once, before the active-persona receipt. Do not render it for a
+standalone core-product question that does not explicitly request NVTeam:
 
-## Your NVTeam
+## Your Community NVTeam
 
 | Name | Primary role |
 |---|---|
