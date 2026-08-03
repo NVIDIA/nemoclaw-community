@@ -3,18 +3,45 @@
 
 # Agentic AI Learning Path: Build-an-Agent Workshop on NemoClaw
 
-Turns an existing NemoClaw deployment into a self-contained learning lab for
-the seven-module NVIDIA **Build an Agent** workshop. The sandboxed resident
-agent does the heavy lifting: it clones the workshop content, builds the
-environment, launches JupyterLab from inside its own locked-down
-OpenShell/NemoClaw sandbox, and then serves as an AI tutor for the modules —
-explaining concepts, giving graduated hints, and checking progress without
-completing the learner's exercises.
+[NVIDIA's **Build an Agent** workshop](https://github.com/brevdev/workshop-build-an-agent)
+is a hands-on developer course: seven JupyterLab modules that take you from
+your first tool-calling agent (Build an Agent) through Agentic RAG,
+Evaluation, Customization, Deep Agents, Agent Safety, and Harnesses &
+Skills. It is best known as a popular [Brev Launchable](https://brev.nvidia.com)
+— a one-click cloud GPU environment learners spin up on a fresh instance.
 
-This example ships **skills only**. The workshop content (notebooks, lessons,
-code) stays in the upstream
-[workshop repo](https://github.com/brevdev/workshop-build-an-agent) and is
-cloned into the sandbox at setup time through a repo-scoped egress grant.
+This example adapts that workshop to NemoClaw. Instead of a fresh cloud
+machine, the workshop runs **inside the locked-down OpenShell sandbox of an
+existing NemoClaw deployment**, and the sandboxed resident agent does the
+heavy lifting: it clones the workshop content, builds the environment,
+launches JupyterLab from inside its own sandbox, and then serves as an AI
+tutor for the modules — explaining concepts, giving graduated hints, and
+checking progress without completing the learner's exercises. The workshop
+also doubles as a live demonstration of the platform: every install, clone,
+and API call it makes runs under the sandbox's kernel-level enforcement and
+L7 egress policy.
+
+Two things this example is **not**: it is not a getting-started recipe for
+NemoClaw itself (it is a layer you add once a NemoClaw deployment is already
+running — see the prerequisite below), and it does not contain the workshop
+content. It ships **skills only**; the notebooks, lessons, and code stay in
+the upstream [workshop repo](https://github.com/brevdev/workshop-build-an-agent)
+and are cloned into the sandbox at setup time through a repo-scoped egress
+grant.
+
+## How the pieces fit together
+
+Three separately-owned pieces combine, in this order:
+
+| | Piece | What it provides | What you do |
+| --- | --- | --- | --- |
+| 1 | [Developer Community Chief of Staff](../developer-community-chief-of-staff/README.md) recipe | **The prerequisite.** Stands up the foundation this example needs: an OpenShell gateway on a host, running a sandboxed NemoClaw (Hermes) resident agent under Landlock/seccomp enforcement. | Deploy it first — follow its README through `scripts/bring-up.sh`. |
+| 2 | This example | The skills that turn that resident agent into the workshop installer and tutor, plus the host-side operator procedure (egress policy, staging, port-forward). | Run the Quickstart below. |
+| 3 | [Build an Agent workshop content](https://github.com/brevdev/workshop-build-an-agent) | The course itself — notebooks, lessons, code. Origin of the Brev Launchable. | Nothing — the resident agent clones it during setup. |
+
+If you are brand new to this repo: start with the chief-of-staff recipe's
+README, confirm its sandboxed agent is up (`docker ps` shows an
+`openshell-hermes-direct-…` container), then come back here.
 
 ## What is in here
 
@@ -32,12 +59,13 @@ cannot run inside a sandbox and is only relevant for non-NemoClaw installs.
 
 ## Deployment model
 
-The expected deployment is the
+The prerequisite
 [Developer Community Chief of Staff](../developer-community-chief-of-staff/README.md)
-recipe: an OpenShell gateway on a single host, running a Hermes agent inside a
-`hermes-direct` sandbox with L7 egress allowlists, credential placeholders,
-and Landlock/seccomp enforcement. This example layers the learning path onto
-that deployment; it does not create sandboxes itself.
+recipe provides the deployment: an OpenShell gateway on a single host,
+running a Hermes agent inside a `hermes-direct` sandbox with L7 egress
+allowlists, credential placeholders, and Landlock/seccomp enforcement. This
+example layers the learning path onto that deployment; it does not create
+sandboxes itself.
 
 Everything is driven from two sides:
 
@@ -57,9 +85,12 @@ sandbox notes).
 
 ## Prerequisites
 
-- A deployed `developer-community-chief-of-staff` recipe (its
-  `scripts/bring-up.sh` completed; `docker ps` shows the
-  `openshell-hermes-direct-…` container).
+- A deployed
+  [Developer Community Chief of Staff](../developer-community-chief-of-staff/README.md)
+  recipe — the prerequisite example described above. Its
+  `scripts/bring-up.sh` must have completed, and `docker ps` must show the
+  `openshell-hermes-direct-…` container: that container hosts the sandboxed
+  agent this example stages its skills into.
 - The workshop policy blocks applied to the sandbox (`github_git_clone`,
   `pypi_install`, `nvidia_retrieval`, `tavily_search`, `langsmith_api`,
   `npm_install`, `mcp_tavily`, `tiktoken_encodings`, `openclaw_inference`,
