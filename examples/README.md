@@ -10,7 +10,6 @@ again by contributor provenance.
 
 | Example | Description |
 | --- | --- |
-| [Agentic AI Learning Path](recipes/nvidia/agentic-ai-learning-path/README.md) | Adapts the popular Build an Agent Brev Launchable to run inside a NemoClaw sandbox, layered on a deployed Chief of Staff recipe: the sandboxed agent provisions JupyterLab and tutors the seven modules. |
 | [Developer Community Chief of Staff](recipes/nvidia/developer-community-chief-of-staff/README.md) | Synthesizes Slack, Outlook, GitHub, and mirrored community signals into operating briefs, gaps, priorities, and follow-up recommendations. |
 | [NV Tech Assistant](recipes/nvidia/nv-tech-assistant/README.md) | Answers NVIDIA technical questions with cited evidence from allowlisted NVIDIA, GitHub, and arXiv sources. |
 | [Payment Operations Hermes Assistant](recipes/nvidia/payment-ops-hermes/README.md) | Demonstrates constrained payment screening, evidence preparation, and a platform-enforced human release boundary. |
@@ -30,6 +29,15 @@ belong under `recipes/community/`.
 | Example | Description |
 | --- | --- |
 | [DGX Station Blender and Omniverse](demos/field/blender-omniverse-dgx-station/README.md) | Controls visible Blender on DGX Station, renders with OVRTX, and runs native OVPhysX simulations. |
+
+## NVIDIA Workshops
+
+Guided learning experiences a NemoClaw agent sets up and tutors, layered onto
+an existing deployment rather than adapted into one.
+
+| Example | Description |
+| --- | --- |
+| [Agentic AI Learning Path](workshops/agentic-ai-learning-path/README.md) | Adapts the popular Build an Agent Brev Launchable to run inside a NemoClaw sandbox, layered on a deployed Chief of Staff recipe: the sandboxed agent provisions JupyterLab and tutors the seven modules. |
 
 ## Launchables
 

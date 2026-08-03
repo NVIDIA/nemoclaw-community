@@ -35,7 +35,7 @@ Three separately-owned pieces combine, in this order:
 
 | | Piece | What it provides | What you do |
 | --- | --- | --- | --- |
-| 1 | [Developer Community Chief of Staff](../developer-community-chief-of-staff/README.md) recipe | **The prerequisite.** Stands up the foundation this example needs: an OpenShell gateway on a host, running a sandboxed NemoClaw (Hermes) resident agent under Landlock/seccomp enforcement. | Deploy it first — follow its README through `scripts/bring-up.sh`. |
+| 1 | [Developer Community Chief of Staff](../../recipes/nvidia/developer-community-chief-of-staff/README.md) recipe | **The prerequisite.** Stands up the foundation this example needs: an OpenShell gateway on a host, running a sandboxed NemoClaw (Hermes) resident agent under Landlock/seccomp enforcement. | Deploy it first — follow its README through `scripts/bring-up.sh`. |
 | 2 | This example | The skills that turn that resident agent into the workshop installer and tutor, plus the host-side operator procedure (egress policy, staging, port-forward). | Run the Quickstart below. |
 | 3 | [Build an Agent workshop content](https://github.com/brevdev/workshop-build-an-agent) | The course itself — notebooks, lessons, code. Origin of the Brev Launchable. | Nothing — the resident agent clones it during setup. |
 
@@ -60,7 +60,7 @@ cannot run inside a sandbox and is only relevant for non-NemoClaw installs.
 ## Deployment model
 
 The prerequisite
-[Developer Community Chief of Staff](../developer-community-chief-of-staff/README.md)
+[Developer Community Chief of Staff](../../recipes/nvidia/developer-community-chief-of-staff/README.md)
 recipe provides the deployment: an OpenShell gateway on a single host,
 running a Hermes agent inside a `hermes-direct` sandbox with L7 egress
 allowlists, credential placeholders, and Landlock/seccomp enforcement. This
@@ -86,7 +86,7 @@ sandbox notes).
 ## Prerequisites
 
 - A deployed
-  [Developer Community Chief of Staff](../developer-community-chief-of-staff/README.md)
+  [Developer Community Chief of Staff](../../recipes/nvidia/developer-community-chief-of-staff/README.md)
   recipe — the prerequisite example described above. Its
   `scripts/bring-up.sh` must have completed, and `docker ps` must show the
   `openshell-hermes-direct-…` container: that container hosts the sandboxed
@@ -122,7 +122,7 @@ yours differs:
 ```text
 I just started a new openshell sandbox (with a NemoClaw agent) called
 hermes-direct on this host system. I would like to set up the
-agentic-ai-learning-path workshop located under the examples/recipes/nvidia
+agentic-ai-learning-path workshop located under the examples/workshops
 folder to run inside of this sandbox and be able to access the workshop
 environment at a URL. Use the setup-workshop-nemoclaw-operator skill inside
 of the repo to accomplish this, and let me know what I need to do to access
@@ -142,7 +142,7 @@ To follow the same procedure by hand instead, in outline:
 ```bash
 SANDBOX=hermes-direct
 C=$(docker ps --format '{{.Names}}' | grep "openshell-$SANDBOX")
-EXAMPLE=examples/recipes/nvidia/agentic-ai-learning-path
+EXAMPLE=examples/workshops/agentic-ai-learning-path
 
 # 1. Apply the workshop policy blocks (exact YAML + apply semantics in the
 #    operator skill's references/policy-blocks.md). `openshell policy set`
