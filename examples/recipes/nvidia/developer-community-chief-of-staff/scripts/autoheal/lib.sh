@@ -16,8 +16,6 @@ AUTOHEAL_PROXY_UPSTREAM="${NEMOCLAW_HOST_TLS_PROXY_UPSTREAM:-}"
 AUTOHEAL_PROXY_PORT="${NEMOCLAW_HOST_TLS_PROXY_PORT:-18080}"
 AUTOHEAL_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/nemoclaw-autoheal"
 AUTOHEAL_RECREATE_COOLDOWN_SECS="${NEMOCLAW_AUTOHEAL_RECREATE_COOLDOWN_SECS:-900}"
-AUTOHEAL_GATEWAY_HEALTH_ATTEMPTS="${NEMOCLAW_AUTOHEAL_GATEWAY_HEALTH_ATTEMPTS:-3}"
-AUTOHEAL_GATEWAY_HEALTH_RETRY_SECS="${NEMOCLAW_AUTOHEAL_GATEWAY_HEALTH_RETRY_SECS:-2}"
 
 autoheal_log() {
   printf '[nemoclaw-autoheal] %s\n' "$*" >&2
@@ -38,15 +36,20 @@ sandbox_gateway_ok() {
 
 sandbox_gateway_failure_confirmed() {
   local attempt
-  for ((attempt = 1; attempt <= AUTOHEAL_GATEWAY_HEALTH_ATTEMPTS; attempt += 1)); do
+  for attempt in 1 2 3; do
     if sandbox_gateway_ok; then
       return 1
     fi
-    if ((attempt < AUTOHEAL_GATEWAY_HEALTH_ATTEMPTS)); then
-      sleep "$AUTOHEAL_GATEWAY_HEALTH_RETRY_SECS"
+    if ((attempt < 3)); then
+      sleep 2
     fi
   done
   return 0
+}
+
+normalized_slack_allowed_ids() {
+  python3 -c 'import sys; print(",".join(part.strip() for part in sys.argv[1].split(",") if part.strip()))' \
+    "${SLACK_ALLOWED_IDS:-}"
 }
 
 host_gateway_ok() {
@@ -88,5 +91,5 @@ cooldown_elapsed() {
   now="$(date +%s)"
   last="$(state_timestamp "$name")"
   [[ "$last" =~ ^[0-9]+$ ]] || last=0
-  (( now - last >= cooldown ))
+  ((now - last >= cooldown))
 }

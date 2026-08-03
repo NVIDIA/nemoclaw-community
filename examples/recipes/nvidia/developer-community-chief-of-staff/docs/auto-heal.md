@@ -97,9 +97,25 @@ the sandbox endpoint uses port `18080` but the upstream is missing.
 | `nemoclaw-hermes-watchdog.timer` | Runs health checks every minute and performs bounded recovery. |
 | `nemoclaw-slack-response-monitor.timer` | Detects unanswered allowed-user Slack DMs and recent transport errors every minute. |
 
-Recovery first restarts the affected host service or Hermes gateway. It rebuilds
-the sandbox only after a live Slack Socket Mode or Microsoft Graph probe confirms
-that sandbox egress is failing. Locks and cooldowns prevent repeated rebuilds.
+Recovery first restarts the affected host service or Hermes gateway. The
+watchdog confirms a gateway outage with three fixed probes, two seconds apart,
+before it restarts anything. It runs the gateway restart through OpenShell as
+the non-root `sandbox` user and terminates the managed gateway. The Docker-backed
+OpenShell supervisor then restarts the sandbox container, reuses the sandbox's
+persisted creation command and non-secret routing settings, and fetches provider
+credentials again. Credentials are never added to the restart command arguments.
+
+The watchdog does not hot-apply changes from the host `.env` file. After changing
+Outlook routing or Slack authorization values, use the documented
+`tear-down.sh` and `bring-up.sh` flow to recreate the sandbox with those values.
+
+Before recovery, the watchdog repairs files left by older root-run restarts. The
+repair is limited to Hermes writable state and known runtime files, and it does
+not follow symbolic links or modify immutable `/sandbox/.hermes` configuration.
+
+The watchdog rebuilds the sandbox only after a live Slack Socket Mode or
+Microsoft Graph probe confirms that sandbox egress is failing. Locks and
+cooldowns prevent repeated rebuilds.
 
 ## Manual operation
 
