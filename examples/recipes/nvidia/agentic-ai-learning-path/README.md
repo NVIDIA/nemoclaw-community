@@ -67,9 +67,13 @@ sandbox notes).
   filesystem grants). The recipe's stock policy does not include them — the
   operator skill carries the exact YAML and apply workflow in its
   [`references/policy-blocks.md`](skills/setup-workshop-nemoclaw-operator/references/policy-blocks.md).
-  Mirror whatever you apply into your local copies of the recipe's
-  `policy.yaml` template and `policy.hermes-direct.yaml` capture, or a
-  sandbox recreate silently reverts it.
+  Once applied, the sandbox's **live** policy is the sole carrier of these
+  grants — do not edit the recipe's `policy.yaml` template, and treat policy
+  captures as scratch artifacts (regenerate on demand, do not track them).
+  A recreate through the recipe's own scripts re-renders the stock template
+  and silently reverts every workshop grant; recreate from the live policy
+  instead (the operator skill's Phase 1b) or re-run the apply afterwards
+  (idempotent).
 - An **NVIDIA API key** (`nvapi-…` from [build.nvidia.com](https://build.nvidia.com)).
   The learner sets it in the workshop's **Secrets Manager** tile after launch
   — deliberately not staged up front. Optional: `TAVILY_API_KEY` (modules
@@ -78,9 +82,31 @@ sandbox notes).
 ## Quickstart (operator, on the sandbox host)
 
 The authoritative, failure-mode-aware procedure is the
-[operator skill](skills/setup-workshop-nemoclaw-operator/SKILL.md) — run it
-with a host-side agent (it is discovered from this directory by Claude Code)
-or follow it by hand. In outline:
+[operator skill](skills/setup-workshop-nemoclaw-operator/SKILL.md). The
+fastest path is to hand it to a host-side agent: start Claude Code from a
+checkout of this repository on the sandbox host (the skill is discovered
+from this directory) and give it this prompt, adjusting the sandbox name if
+yours differs:
+
+```text
+I just started a new openshell sandbox (with a NemoClaw agent) called
+hermes-direct on this host system. I would like to set up the
+agentic-ai-learning-path workshop located under the examples/recipes/nvidia
+folder to run inside of this sandbox and be able to access the workshop
+environment at a URL. Use the setup-workshop-nemoclaw-operator skill inside
+of the repo to accomplish this, and let me know what I need to do to access
+the sandboxed workshop environment once you are done working.
+```
+
+Stay reachable while it runs: the permission layer will (correctly) stop the
+agent on the actions that need a human — the egress-widening
+`openshell policy set` and, on a fresh sandbox, the delete/recreate that
+boots the `/dev/pts` + `/sys/fs/cgroup` filesystem grants (the skill's
+Phase 1b). Approve them when the prompts name exactly what is being opened.
+The agent finishes by handing you the laptop tunnel command and the
+JupyterLab token URL.
+
+To follow the same procedure by hand instead, in outline:
 
 ```bash
 SANDBOX=hermes-direct
@@ -89,9 +115,11 @@ EXAMPLE=examples/recipes/nvidia/agentic-ai-learning-path
 
 # 1. Apply the workshop policy blocks (exact YAML + apply semantics in the
 #    operator skill's references/policy-blocks.md). `openshell policy set`
-#    REPLACES the whole document — build live policy + additions, and mirror
-#    the additions into your local policy.yaml template afterwards.
-openshell policy get "$SANDBOX" --full > /tmp/live.yaml
+#    REPLACES the whole document — build live policy + additions. The live
+#    policy is thereafter the source of truth: do NOT edit the recipe's
+#    policy.yaml template, and treat captures as regenerable scratch files.
+#    (`--full` prepends a metadata header that must be stripped.)
+openshell policy get "$SANDBOX" --full | sed '1,/^---$/d' > /tmp/live.yaml
 #   ... append the workshop blocks, then (typically run by the human):
 openshell policy set "$SANDBOX" --policy /tmp/apply.yaml --wait
 
