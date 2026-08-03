@@ -19,14 +19,22 @@ differ.
   `developer-community-chief-of-staff` recipe; keep **both** files there in
   sync with any change: `policy.yaml` (template — re-rendered at sandbox
   recreate) and `policy.hermes-direct.yaml` (live capture). Template drift =
-  silent reversion at the next recreate.
+  silent reversion at the next recreate. A fresh deployment ships only the
+  template — when `policy.hermes-direct.yaml` is missing, create it from the
+  header-stripped live capture (workflow below) before hand-editing anything.
 - OpenShell ≥ 0.0.53 also ships `openshell policy update` for incremental
   changes — prefer it for one-block additions if available.
 
 ## Minimal-delta workflow (what an agent should stage for the human)
 
 ```bash
-openshell policy get "$SANDBOX" --full > /tmp/live.yaml
+# `--full` prepends a metadata header (Version/Hash/Status/Active/Created +
+# a `---` separator). Strip it — the raw output is NOT valid apply input:
+openshell policy get "$SANDBOX" --full | sed '1,/^---$/d' > /tmp/live.yaml
+# 0. If the blocks below are ALREADY in /tmp/live.yaml (deployment brought up
+#    from a workshop-laden template), apply nothing — sync the local
+#    template/capture files to the live state instead. And when
+#    policy.hermes-direct.yaml does not exist yet, seed it from /tmp/live.yaml.
 # 1. Copy /tmp/live.yaml -> /tmp/apply.yaml; append ONLY the new blocks below.
 # 2. Structural check (e.g. python+yaml): block names in apply.yaml ==
 #    block names in live.yaml + the additions; nothing else differs.
@@ -41,7 +49,9 @@ avoids re-applying unrelated grants the human didn't ask to restore.
 ## The blocks
 
 Add under `network_policies:`. The chief-of-staff recipe's stock policy does
-NOT include these — you add them, to the live policy AND to your local copies
+NOT include these — but verify against the LIVE policy first (step 0 above /
+SKILL.md Phase 0 drift check): the running deployment may already carry them.
+Add whatever is missing to the live policy AND to your local copies
 of the recipe's `policy.yaml` template / `policy.hermes-direct.yaml` capture.
 Adjust the repo slug if the workshop repo differs. Scope `github_git_clone`
 to the workshop repo literally, as below — do NOT ride the recipe template's
