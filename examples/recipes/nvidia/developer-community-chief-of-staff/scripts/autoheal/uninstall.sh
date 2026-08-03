@@ -19,6 +19,7 @@ CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/nemoclaw-autoheal"
 units=(
   nemoclaw-hermes-proxy.service
   nemoclaw-hermes-gateway-forward.service
+  nemoclaw-hermes-runtime.service
   nemoclaw-hermes-watchdog.service
   nemoclaw-hermes-watchdog.timer
   nemoclaw-slack-response-monitor.service

@@ -57,7 +57,15 @@ host_gateway_ok() {
 }
 
 sandbox_container() {
-  docker ps --format '{{.Names}}' | grep "^openshell-${AUTOHEAL_SANDBOX_NAME}" | head -n1 || true
+  local -a matches=()
+  mapfile -t matches < <(
+    docker ps \
+      --filter 'label=openshell.ai/managed-by=openshell' \
+      --filter "label=openshell.ai/sandbox-name=${AUTOHEAL_SANDBOX_NAME}" \
+      --format '{{.ID}}' 2>/dev/null
+  )
+  ((${#matches[@]} == 1)) || return 1
+  printf '%s\n' "${matches[0]}"
 }
 
 unit_is_installed() {

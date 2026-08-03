@@ -72,6 +72,10 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl --user stop nemoclaw-hermes-runtime.service >/dev/null 2>&1 || true
+fi
+
 echo "Deleting sandbox $SANDBOX_NAME (if present)"
 openshell sandbox delete "$SANDBOX_NAME" 2>/dev/null || true
 

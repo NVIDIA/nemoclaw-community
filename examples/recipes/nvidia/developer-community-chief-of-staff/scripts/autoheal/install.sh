@@ -119,6 +119,7 @@ render_unit() {
 }
 
 render_unit nemoclaw-hermes-gateway-forward.service.in nemoclaw-hermes-gateway-forward.service
+render_unit nemoclaw-hermes-runtime.service.in nemoclaw-hermes-runtime.service
 render_unit nemoclaw-hermes-watchdog.service.in nemoclaw-hermes-watchdog.service
 render_unit nemoclaw-hermes-watchdog.timer.in nemoclaw-hermes-watchdog.timer
 render_unit nemoclaw-slack-response-monitor.service.in nemoclaw-slack-response-monitor.service
