@@ -74,6 +74,7 @@ coordination and intelligence outcome rather than one analysis technique.
 | --- | --- |
 | Developer Community Chief of Staff | `examples/recipes/nvidia/developer-community-chief-of-staff/` |
 | Payment Operations Hermes Assistant | `examples/recipes/nvidia/payment-ops-hermes/` |
+| TAO Toolkit Computer Vision | `examples/recipes/nvidia/tao-computer-vision/` |
 | HPE Retail Assistant | `examples/recipes/partners/hpe/retail-assistant/` |
 | Tavily Watchtower | `examples/recipes/partners/tavily/watchtower/` |
 | DGX Station Blender and Omniverse | `examples/demos/field/blender-omniverse-dgx-station/` |

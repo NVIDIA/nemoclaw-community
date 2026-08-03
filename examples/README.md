@@ -13,6 +13,7 @@ again by contributor provenance.
 | [Developer Community Chief of Staff](recipes/nvidia/developer-community-chief-of-staff/README.md) | Synthesizes Slack, Outlook, GitHub, and mirrored community signals into operating briefs, gaps, priorities, and follow-up recommendations. |
 | [NV Tech Assistant](recipes/nvidia/nv-tech-assistant/README.md) | Answers NVIDIA technical questions with cited evidence from allowlisted NVIDIA, GitHub, and arXiv sources. |
 | [Payment Operations Hermes Assistant](recipes/nvidia/payment-ops-hermes/README.md) | Demonstrates constrained payment screening, evidence preparation, and a platform-enforced human release boundary. |
+| [TAO Toolkit Computer Vision](recipes/nvidia/tao-computer-vision/README.md) | Drives NVIDIA TAO Toolkit from a control-plane agent to train, evaluate, and run inference on computer-vision models on a host GPU, with host-side dataset pre-flight and a Docker/GPU/NGC boundary the agent cannot cross. |
 
 ## Partner Recipes
 
