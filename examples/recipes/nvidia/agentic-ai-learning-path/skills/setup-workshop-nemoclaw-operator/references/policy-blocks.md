@@ -15,13 +15,13 @@ differ.
 - Success output: `✓ Policy version N submitted (hash: …)` then
   `✓ Policy version N loaded (active version: N)`. The hash from
   `openshell policy get <sandbox>` changing is your confirmation it landed.
-- In the NemoClaw community repo the deployment's policy lives in the
-  `developer-community-chief-of-staff` recipe; keep **both** files there in
-  sync with any change: `policy.yaml` (template — re-rendered at sandbox
-  recreate) and `policy.hermes-direct.yaml` (live capture). Template drift =
-  silent reversion at the next recreate. A fresh deployment ships only the
-  template — when `policy.hermes-direct.yaml` is missing, create it from the
-  header-stripped live capture (workflow below) before hand-editing anything.
+- The deployment's `policy.yaml` template belongs to the
+  `developer-community-chief-of-staff` recipe and is NOT edited by this flow;
+  the sandbox's LIVE policy is the source of truth for workshop grants.
+  Captures are scratch artifacts — regenerate via the workflow below, do not
+  track them. Consequence: a recreate through the recipe's own machinery
+  re-renders the stock template and silently reverts every workshop grant —
+  re-run SKILL.md Phase 1 + 1b afterwards.
 - OpenShell ≥ 0.0.53 also ships `openshell policy update` for incremental
   changes — prefer it for one-block additions if available.
 
@@ -31,10 +31,9 @@ differ.
 # `--full` prepends a metadata header (Version/Hash/Status/Active/Created +
 # a `---` separator). Strip it — the raw output is NOT valid apply input:
 openshell policy get "$SANDBOX" --full | sed '1,/^---$/d' > /tmp/live.yaml
-# 0. If the blocks below are ALREADY in /tmp/live.yaml (deployment brought up
-#    from a workshop-laden template), apply nothing — sync the local
-#    template/capture files to the live state instead. And when
-#    policy.hermes-direct.yaml does not exist yet, seed it from /tmp/live.yaml.
+# 0. If the blocks below are ALREADY in /tmp/live.yaml (e.g. Phase 1 ran
+#    before), apply nothing — the live policy is the source of truth and no
+#    repo file needs syncing.
 # 1. Copy /tmp/live.yaml -> /tmp/apply.yaml; append ONLY the new blocks below.
 # 2. Structural check (e.g. python+yaml): block names in apply.yaml ==
 #    block names in live.yaml + the additions; nothing else differs.
@@ -51,8 +50,8 @@ avoids re-applying unrelated grants the human didn't ask to restore.
 Add under `network_policies:`. The chief-of-staff recipe's stock policy does
 NOT include these — but verify against the LIVE policy first (step 0 above /
 SKILL.md Phase 0 drift check): the running deployment may already carry them.
-Add whatever is missing to the live policy AND to your local copies
-of the recipe's `policy.yaml` template / `policy.hermes-direct.yaml` capture.
+Add whatever is missing to the live policy — and to no repo file: the live
+policy is the source of truth.
 Adjust the repo slug if the workshop repo differs. Scope `github_git_clone`
 to the workshop repo literally, as below — do NOT ride the recipe template's
 `__GITHUB_READONLY_REPO__` placeholder, which also scopes the recipe's
@@ -132,9 +131,9 @@ and any mirror host), alongside the chat/completions/embeddings rules:
 ## Workshop integration blocks (audited 2026-07-21)
 
 Four more routes the module content actually exercises. Full-coverage
-sandboxes should carry all four (and mirror them into your local
-`policy.yaml` template so a recreate keeps them). Binaries: same python/curl
-set as `pypi_install` minus uv.
+sandboxes should carry all four (a SKILL.md Phase 1b recreate boots from the
+live policy, so they survive it; a stock-template recreate reverts them —
+re-run Phase 1). Binaries: same python/curl set as `pypi_install` minus uv.
 
 ```yaml
   # tavily-python REST (module-1 docgen tool, module-2 LOCAL MCP server,
@@ -315,8 +314,9 @@ openshell sandbox exec -n "$SANDBOX" --no-tty -- sh -lc 'python3 -c "import os; 
 ⚠️ `filesystem_policy` is parsed ONCE at container boot — a live `policy set`
 does NOT activate new fs grants, even for freshly spawned processes (network
 blocks DO hot-reload; watch the supervisor's `Landlock ruleset built` log
-lines: the rw count won't change on a live apply). Put `/dev/pts` in the
-TEMPLATE and recreate the sandbox; after the recreate, `start-jupyter.sh`
+lines: the rw count won't change on a live apply). Apply the grants with the
+rest of Phase 1 (they ride along dormant), then boot them via the SKILL.md
+Phase 1b recreate-from-live; after the recreate, `start-jupyter.sh`
 auto-detects working PTYs and enables the Terminal tile. No restart shortcut
 exists (`docker restart` = stale-bootstrap-JWT crash loop).
 
