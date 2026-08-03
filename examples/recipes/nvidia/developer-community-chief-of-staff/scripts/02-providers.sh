@@ -178,6 +178,11 @@ fi
 # ── Slack provider (bot token + app token in one v2 provider) ──────────
 if [[ -n "${SLACK_BOT_TOKEN:-}" || -n "${SLACK_APP_TOKEN:-}" ]]; then
   SLACK_PROVIDER="$SANDBOX_NAME-slack"
+  echo "Validating Slack app token and Socket Mode scope before provider creation"
+  env -i HOME="$HOME" PATH="$PATH" \
+    NEMOCLAW_SLACK_PREFLIGHT_TOKEN="${SLACK_APP_TOKEN:-}" \
+    NEMOCLAW_SLACK_PREFLIGHT_TIMEOUT_SECONDS="${NEMOCLAW_SLACK_PREFLIGHT_TIMEOUT_SECONDS:-10}" \
+    python3 "$DIR/slack_socket_preflight.py"
   echo "Upserting provider $SLACK_PROVIDER (credentials: SLACK_BOT_TOKEN + SLACK_APP_TOKEN)"
   upsert_cred "$SLACK_PROVIDER" nemoclaw-slack \
     "SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}" \

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:nemoclaw-enterprise:nvteam:persona-authorities:schema:1",
-  "title": "NemoClaw Enterprise NVTeam persona authority registry",
+  "$id": "urn:nemoclaw:nvteam:persona-authorities:schema:1",
+  "title": "NemoClaw NVTeam persona authority registry",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -123,6 +123,7 @@
       "enum": [
         "akira",
         "alex",
+        "jordan",
         "morgan",
         "parker",
         "quinn",

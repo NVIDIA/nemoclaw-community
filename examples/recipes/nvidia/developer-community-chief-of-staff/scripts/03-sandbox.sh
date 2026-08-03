@@ -60,7 +60,7 @@ if [[ ! "$GITHUB_READONLY_REPO" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]
 fi
 echo "GitHub read-only repo scope: $GITHUB_READONLY_REPO"
 
-NEMOCLAW_SLACK_RICH_BLOCKS="${NEMOCLAW_SLACK_RICH_BLOCKS:-false}"
+NEMOCLAW_SLACK_RICH_BLOCKS="${NEMOCLAW_SLACK_RICH_BLOCKS:-true}"
 case "$NEMOCLAW_SLACK_RICH_BLOCKS" in
   true|false) ;;
   *)

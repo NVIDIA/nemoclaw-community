@@ -65,12 +65,12 @@ class GenerateConfigTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             return result, None
 
-    def test_default_is_schema_32_and_rich_blocks_off(self) -> None:
+    def test_default_is_schema_32_and_rich_blocks_on(self) -> None:
         _, config = self.run_generator(channels=["slack"])
         assert config is not None
         self.assertEqual(config["_config_version"], 32)
         self.assertIs(config["agent"]["verify_on_stop"], False)
-        self.assertIs(config["platforms"]["slack"]["extra"]["rich_blocks"], False)
+        self.assertIs(config["platforms"]["slack"]["extra"]["rich_blocks"], True)
         self.assertIs(config["platforms"]["api_server"]["enabled"], True)
 
     def test_explicit_boolean_values_are_preserved(self) -> None:
@@ -109,7 +109,7 @@ class GenerateConfigTest(unittest.TestCase):
         )
         env_example = (EXAMPLE_DIR / ".env.example").read_text(encoding="utf-8")
 
-        self.assertEqual(dockerfile.count("ARG NEMOCLAW_SLACK_RICH_BLOCKS=false"), 1)
+        self.assertEqual(dockerfile.count("ARG NEMOCLAW_SLACK_RICH_BLOCKS=true"), 1)
         self.assertIn(
             "NEMOCLAW_SLACK_RICH_BLOCKS=${NEMOCLAW_SLACK_RICH_BLOCKS}",
             dockerfile,
@@ -119,11 +119,27 @@ class GenerateConfigTest(unittest.TestCase):
             sandbox_script,
         )
         self.assertIn(
-            'NEMOCLAW_SLACK_RICH_BLOCKS="${NEMOCLAW_SLACK_RICH_BLOCKS:-false}"',
+            'NEMOCLAW_SLACK_RICH_BLOCKS="${NEMOCLAW_SLACK_RICH_BLOCKS:-true}"',
             sandbox_script,
         )
-        self.assertIn("NEMOCLAW_SLACK_RICH_BLOCKS=false", env_example)
+        self.assertIn("NEMOCLAW_SLACK_RICH_BLOCKS=true", env_example)
         self.assertIn("verify-rich-block-renderer.py", dockerfile)
+
+    def test_slack_interactive_clarification_contract_is_baked_in(self) -> None:
+        dockerfile = (HERMES_DIR / "Dockerfile").read_text(encoding="utf-8")
+        patch = (HERMES_DIR / "patches" / "sitecustomize.py").read_text(
+            encoding="utf-8"
+        )
+        verifier = (
+            HERMES_DIR / "tests" / "verify-rich-block-renderer.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("PYTHONPATH=/usr/local/lib/nemoclaw-patches", dockerfile)
+        self.assertIn('"send_clarify" not in SlackAdapter.__dict__', patch)
+        self.assertIn("nemoclaw_clarify_other", patch)
+        self.assertIn("_is_interactive_user_authorized", patch)
+        self.assertIn("resolve_gateway_clarify", patch)
+        self.assertIn('"send_clarify" not in SlackAdapter.__dict__', verifier)
 
 
 if __name__ == "__main__":

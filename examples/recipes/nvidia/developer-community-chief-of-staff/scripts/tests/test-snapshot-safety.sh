@@ -15,16 +15,16 @@ mkdir -p \
   "$STATE/memories" \
   "$STATE/nvteam" \
   "$STATE/sessions" \
-  "$STATE/skills/nemoclaw-enterprise-nvteam/references"
+  "$STATE/skills/nemoclaw-nvteam/references"
 
 printf 'keep\n' > "$STATE/memories/note.md"
 printf 'drop\n' > "$STATE/memories/access-token.txt"
 printf 'drop\n' > "$STATE/nvteam/renamed-private-registry.json"
 printf 'drop\n' > "$STATE/sessions/persona-authorities.backup.json"
 printf 'drop even if overwritten\n' > \
-  "$STATE/skills/nemoclaw-enterprise-nvteam/references/persona-authorities.example.json"
+  "$STATE/skills/nemoclaw-nvteam/references/persona-authorities.example.json"
 printf 'drop even if overwritten\n' > \
-  "$STATE/skills/nemoclaw-enterprise-nvteam/references/persona-authorities.schema.json"
+  "$STATE/skills/nemoclaw-nvteam/references/persona-authorities.schema.json"
 
 filter_credential_files "$STATE" >/dev/null 2>&1
 
@@ -32,15 +32,15 @@ filter_credential_files "$STATE" >/dev/null 2>&1
 [[ ! -e "$STATE/memories/access-token.txt" ]]
 [[ ! -e "$STATE/nvteam/renamed-private-registry.json" ]]
 [[ ! -e "$STATE/sessions/persona-authorities.backup.json" ]]
-[[ ! -e "$STATE/skills/nemoclaw-enterprise-nvteam/references/persona-authorities.example.json" ]]
-[[ ! -e "$STATE/skills/nemoclaw-enterprise-nvteam/references/persona-authorities.schema.json" ]]
+[[ ! -e "$STATE/skills/nemoclaw-nvteam/references/persona-authorities.example.json" ]]
+[[ ! -e "$STATE/skills/nemoclaw-nvteam/references/persona-authorities.schema.json" ]]
 
 for expected in \
   memories/access-token.txt \
   nvteam/renamed-private-registry.json \
   sessions/persona-authorities.backup.json \
-  skills/nemoclaw-enterprise-nvteam/references/persona-authorities.example.json \
-  skills/nemoclaw-enterprise-nvteam/references/persona-authorities.schema.json; do
+  skills/nemoclaw-nvteam/references/persona-authorities.example.json \
+  skills/nemoclaw-nvteam/references/persona-authorities.schema.json; do
   printf '%s\n' "${EXCLUDED_FILES[@]}" | grep -Fxq "$expected"
 done
 

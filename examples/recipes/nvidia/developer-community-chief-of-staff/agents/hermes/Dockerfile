@@ -110,11 +110,11 @@ RUN pip3 install --no-cache-dir --break-system-packages "httpx>=0.27" "markdown-
 # OpenInference traces to Phoenix.
 #
 # agents/hermes/patches/ is example-owned (not in NeMo-Relay upstream). It
-# holds the PYTHONPATH-targeted sitecustomize.py bootstrap that patches
-# Hermes's Slack adapter with a catch-all slash-command handler so workspace-
-# specific commands (e.g. /my-assistant) get a friendly response instead of
-# Slack's "Unhandled request" warning. The OpenShell L7 proxy handles all
-# credential placeholder rewriting natively now — no Python-side facade.
+# holds the PYTHONPATH-targeted sitecustomize.py bootstrap that adds a
+# catch-all slash-command reply and one-tap clarification choices when the
+# pinned Hermes Slack adapter lacks them. The clarification shim is
+# feature-detected and stands down when Hermes provides a native override. The
+# OpenShell L7 proxy handles credential placeholder rewriting natively.
 COPY --from=nemo-relay-builder /out/bin/nemo-relay /usr/local/bin/nemo-relay
 RUN chmod 755 /usr/local/bin/nemo-relay
 
@@ -153,7 +153,8 @@ RUN pip3 install --no-cache-dir --break-system-packages \
        "httpx>=0.27" \
        "slack-bolt>=1.19" \
     && hermes --version \
-    && /opt/hermes/.venv/bin/python /tmp/verify-rich-block-renderer.py \
+    && PYTHONPATH=/usr/local/lib/nemoclaw-patches \
+       /opt/hermes/.venv/bin/python /tmp/verify-rich-block-renderer.py \
     && rm /tmp/verify-rich-block-renderer.py \
     && export PY_SITE_DIR="$(python3 -c 'import site; print(site.getsitepackages()[0])')" \
     && ln -sfn /usr/local/lib/nemoclaw-patches/sitecustomize.py "${PY_SITE_DIR}/sitecustomize.py"
@@ -269,7 +270,7 @@ RUN chmod 644 /usr/local/lib/nemoclaw/sandbox-init.sh
 # The public recipe does not provision a private registry. A trusted runtime
 # may supply one separately at /sandbox/.hermes/nvteam/persona-authorities.json,
 # which remains outside snapshots of /sandbox/.hermes-data.
-COPY agents/hermes/skills/nemoclaw-enterprise-nvteam/scripts/validate_authorities.py \
+COPY agents/hermes/skills/nemoclaw-nvteam/scripts/validate_authorities.py \
      /usr/local/lib/nemoclaw/nvteam/validate-authorities.py
 RUN chmod 555 /usr/local/lib/nemoclaw/nvteam/validate-authorities.py
 
@@ -294,7 +295,7 @@ ARG CHAT_UI_URL=http://127.0.0.1:8642
 # injected at sandbox-create time via `-- env` (scripts/03-sandbox.sh) so the
 # image stays generic and shareable.
 ARG NEMOCLAW_MESSAGING_CHANNELS_B64=W10=
-ARG NEMOCLAW_SLACK_RICH_BLOCKS=false
+ARG NEMOCLAW_SLACK_RICH_BLOCKS=true
 ARG GITHUB_READONLY_REPO=NVIDIA/OpenShell
 ARG SOURCE_ETL_GITHUB_REPO=
 ARG SOURCE_ETL_FORUM_TAG=

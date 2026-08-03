@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Validate a NemoClaw Enterprise NVTeam authority registry."""
+"""Validate a NemoClaw NVTeam authority registry."""
 
 from __future__ import annotations
 
@@ -15,7 +15,16 @@ from pathlib import Path
 from typing import Any
 
 
-PERSONAS = {"akira", "alex", "morgan", "parker", "quinn", "river", "robin"}
+PERSONAS = {
+    "akira",
+    "alex",
+    "jordan",
+    "morgan",
+    "parker",
+    "quinn",
+    "river",
+    "robin",
+}
 IDENTITY_FIELDS = (
     "display_names",
     "nvidia_logins",

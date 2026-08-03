@@ -10,7 +10,7 @@ import unittest
 
 HERMES_DIR = Path(__file__).resolve().parents[1]
 EXAMPLE_DIR = Path(__file__).resolve().parents[3]
-SKILL_DIR = HERMES_DIR / "skills" / "nemoclaw-enterprise-nvteam"
+SKILL_DIR = HERMES_DIR / "skills" / "nemoclaw-nvteam"
 REGISTRY_PATH = "/sandbox/.hermes/nvteam/persona-authorities.json"
 VALIDATOR_PATH = "/usr/local/lib/nemoclaw/nvteam/validate-authorities.py"
 
@@ -25,7 +25,7 @@ class NVTeamRuntimeContractTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertIn(
-            "COPY agents/hermes/skills/nemoclaw-enterprise-nvteam/"
+            "COPY agents/hermes/skills/nemoclaw-nvteam/"
             "scripts/validate_authorities.py",
             dockerfile,
         )

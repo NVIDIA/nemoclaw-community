@@ -85,7 +85,7 @@ class ValidateAuthoritiesTest(unittest.TestCase):
 
         self.assertIn(
             "$.assignments.river-example-lead.persona: expected one of "
-            "akira, alex, morgan, parker, quinn, river, robin",
+            "akira, alex, jordan, morgan, parker, quinn, river, robin",
             errors,
         )
         self.assertIn(
@@ -93,6 +93,15 @@ class ValidateAuthoritiesTest(unittest.TestCase):
             "'supporting'",
             errors,
         )
+        self.assertEqual([], warnings)
+
+    def test_accepts_jordan_persona(self) -> None:
+        registry = valid_registry()
+        registry["assignments"]["river-example-lead"]["persona"] = "jordan"
+
+        errors, warnings = self.validate(registry)
+
+        self.assertEqual([], errors)
         self.assertEqual([], warnings)
 
     def test_rejects_boolean_schema_version(self) -> None:

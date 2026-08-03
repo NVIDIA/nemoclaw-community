@@ -62,7 +62,7 @@ function booleanEnv(name: string, defaultValue: boolean): boolean {
 function main(): void {
   const model = process.env.NEMOCLAW_MODEL!;
   const baseUrl = process.env.NEMOCLAW_INFERENCE_BASE_URL!;
-  const slackRichBlocks = booleanEnv("NEMOCLAW_SLACK_RICH_BLOCKS", false);
+  const slackRichBlocks = booleanEnv("NEMOCLAW_SLACK_RICH_BLOCKS", true);
 
   const channelsB64 = process.env.NEMOCLAW_MESSAGING_CHANNELS_B64 || "W10=";
 

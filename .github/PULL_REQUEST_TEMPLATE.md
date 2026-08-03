@@ -1,10 +1,21 @@
+<!--
+Use a Conventional Commit title:
+feat(scope), fix(scope), docs, chore(scope), refactor(scope), test(scope),
+ci(scope), or perf(scope).
+-->
+
+## Related Issue
+
+Closes #
+
 ## Description
 
 Describe what changed and why.
 
 ## Verification
 
-- [ ] `python scripts/check_license_headers.py --check`
+- [ ] `python3 scripts/check_license_headers.py --check`
+- [ ] `python3 scripts/check_label_taxonomy.py --check` when governance metadata changes
 - [ ] `git diff --check`
 - [ ] Relevant example setup or syntax checks
 
