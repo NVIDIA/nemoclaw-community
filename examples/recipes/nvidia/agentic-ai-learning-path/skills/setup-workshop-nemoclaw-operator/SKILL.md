@@ -161,6 +161,10 @@ unset and `load_dotenv()` stays authoritative, so the key takes effect on the
 next cell run with no restart. This is exactly why the Tavily and LangSmith
 keys never exhibited the problem — they were never injected.
 
+`scripts/verify-sandbox-ready.sh` agrees: an absent key is a PASS in its
+default mode. Set `EXPECT_PRESEEDED=1` only when auditing an image that is
+supposed to carry a baked-in key.
+
 ⚠️ **Never fall back to `COMPATIBLE_API_KEY` / `OPENAI_API_KEY`.** Those name
 the NemoClaw *agent's* inference credential — in the community example an
 `sk-…` key for the host TLS proxy (`NEMOCLAW_ENDPOINT_URL`), not a
@@ -287,6 +291,18 @@ Feed that line back into the policy (right block, right binary — enforcement
 resolves symlinks, so e.g. `git-remote-https` → list `git-remote-http` too),
 re-apply, re-verify. If the in-sandbox agent reports a blocked call, ask it
 for the exact URL/error and match it against the log.
+
+Two verdict patterns that are NOT policy gaps (both observed live):
+
+- **Boot-time noise:** a `/usr/bin/python3.13` DENIED to `github.com:443`
+  ("binary not allowed in policy 'github_git_clone'") right after sandbox
+  start is agent-stack startup traffic. Python is deliberately absent from
+  that block's `binaries` — ignore it; it is not workshop breakage.
+- **First-touch flake:** a probe reports curl `000` while the audit log shows
+  ALLOWED at both engines for that same request — the first request to a host
+  through the L7 proxy can stall past curl's timeout. Retry before editing
+  policy (`verify-sandbox-ready.sh` retries its clone-route probe once for
+  exactly this reason).
 
 ## Lifecycle pitfalls (each caused real breakage)
 
