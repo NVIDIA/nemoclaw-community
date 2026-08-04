@@ -465,4 +465,4 @@ Two verdict patterns that are NOT policy gaps (both observed live):
 - [ ] Laptop tunnel up; browser shows 11 launcher tiles; a module-2 rerank cell returns 200.
 - [ ] Terminal tile opens a shell (`POST /api/terminals` with token → 200) —
       needs the `/dev/pts` grant BOOTED. An auto-hidden tile means the Phase
-      1b recreate was skipped; on a fresh sandbox run it before setup.
+      1b restart was skipped; on a fresh sandbox run it before setup.
