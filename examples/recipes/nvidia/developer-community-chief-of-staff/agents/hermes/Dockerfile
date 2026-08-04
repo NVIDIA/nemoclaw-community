@@ -92,16 +92,11 @@ COPY extras/atif-export-relay/tls/ca.crt \
 
 RUN update-ca-certificates
 
-# Install GitHub CLI (gh) — not in the base image. It is not allowed in the
-# GitHub network policy by default, so live GitHub reads use the bundled
-# curl/Python-safe helper with the OpenShell provider placeholder.
-RUN mkdir -p /etc/apt/keyrings \
-    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-       -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-    && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-       > /etc/apt/sources.list.d/github-cli.list \
-    && apt-get update \
+# Install GitHub CLI (gh). It is not allowed in the GitHub network policy by
+# default, so live GitHub reads use the bundled curl/Python-safe helper with
+# the OpenShell provider placeholder. The pinned Debian 13 base provides gh
+# directly, avoiding a second mutable signing-key endpoint during the build.
+RUN apt-get update \
     && apt-get install -y --no-install-recommends gh postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 

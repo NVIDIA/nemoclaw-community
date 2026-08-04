@@ -13,10 +13,19 @@ The clarification patch is feature-detected. It does not replace a Slack
 from __future__ import annotations
 
 import logging
+import os
 import re
+import sys
 
 
 LOGGER = logging.getLogger("nemoclaw.slack_compat")
+
+
+def _add_hermes_import_root() -> None:
+    """Make bundled Hermes plugins importable during sitecustomize startup."""
+    root = os.environ.get("NEMOCLAW_HERMES_ROOT", "/opt/hermes")
+    if os.path.isdir(os.path.join(root, "plugins")) and root not in sys.path:
+        sys.path.insert(0, root)
 
 
 def _patch_slack_adapter() -> None:
@@ -28,6 +37,9 @@ def _patch_slack_adapter() -> None:
             # Keep compatibility with older NemoClaw Hermes base images.
             from gateway.platforms.slack import SlackAdapter
         from gateway.platforms.base import SendResult
+
+        if SlackAdapter.__dict__.get("_nemoclaw_slack_compat_installed"):
+            return
 
         _orig_connect = SlackAdapter.connect
         _orig_send_clarify = SlackAdapter.send_clarify
@@ -304,8 +316,60 @@ def _patch_slack_adapter() -> None:
         if _needs_clarify_patch:
             SlackAdapter.send_clarify = _send_clarify
             SlackAdapter._nemoclaw_handle_clarify_action = _handle_clarify_action
+        SlackAdapter._nemoclaw_slack_compat_installed = True
     except Exception as exc:
         LOGGER.debug("Slack compatibility patch was not applied: %s", exc)
 
 
+def _patch_slack_registry_factory() -> None:
+    """Patch the adapter class produced by Hermes's namespaced plugin loader.
+
+    Hermes loads bundled plugins under ``hermes_plugins.*`` instead of their
+    source package name.  That creates a second SlackAdapter class, so copying
+    the feature-detected compatibility methods at factory time targets the
+    exact class the gateway will use.
+    """
+    try:
+        from gateway.platform_registry import PlatformRegistry
+        from plugins.platforms.slack.adapter import SlackAdapter as template
+
+        original_create_adapter = PlatformRegistry.create_adapter
+        if getattr(
+            original_create_adapter,
+            "_nemoclaw_slack_registry_compat",
+            False,
+        ):
+            return
+
+        def _create_adapter_with_slack_compat(self, name, config):
+            adapter = original_create_adapter(self, name, config)
+            if name != "slack" or adapter is None:
+                return adapter
+
+            # Ensure the canonical template is patched now that Hermes startup
+            # has completed its import setup, then copy those methods onto the
+            # namespaced class returned by the real plugin factory.
+            _patch_slack_adapter()
+
+            adapter_class = type(adapter)
+            if not adapter_class.__dict__.get(
+                "_nemoclaw_slack_compat_installed"
+            ):
+                adapter_class.connect = template.__dict__["connect"]
+                if hasattr(template, "_nemoclaw_handle_clarify_action"):
+                    adapter_class.send_clarify = template.__dict__["send_clarify"]
+                    adapter_class._nemoclaw_handle_clarify_action = (
+                        template.__dict__["_nemoclaw_handle_clarify_action"]
+                    )
+                adapter_class._nemoclaw_slack_compat_installed = True
+            return adapter
+
+        _create_adapter_with_slack_compat._nemoclaw_slack_registry_compat = True
+        PlatformRegistry.create_adapter = _create_adapter_with_slack_compat
+    except Exception as exc:
+        LOGGER.debug("Slack registry compatibility patch was not applied: %s", exc)
+
+
+_add_hermes_import_root()
 _patch_slack_adapter()
+_patch_slack_registry_factory()

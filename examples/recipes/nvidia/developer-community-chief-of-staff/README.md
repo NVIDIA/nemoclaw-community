@@ -337,6 +337,13 @@ The script auto-sources `.env`, then runs `01-gateway.sh` → `02-providers.sh` 
 `03-sandbox.sh` (select or register the local OpenShell gateway, import v2 provider
 profiles, upsert providers, build and launch the sandbox).
 
+Before the image build, provider setup sends one bounded synthetic tool request
+and requires a valid structured tool call. After selecting the route, it also
+confirms that OpenShell reports the requested provider and model as active. A
+failure stops setup before the expensive build. Set
+`NEMOCLAW_INFERENCE_PREFLIGHT=0` only as an explicit bypass for intentional
+offline setup or an endpoint that cannot support verification.
+
 On the first bring-up with Outlook configured, `02-providers.sh` runs an interactive
 Microsoft device-code login (it prints a URL + code; complete it in a browser as the
 `OUTLOOK_TARGET_MAILBOX` user) and caches the resulting refresh token at
@@ -591,7 +598,7 @@ runners, members, writes, `glab`, and `git` remain blocked.
 | `OPENSHELL_GATEWAY` | `openshell` | Gateway name. The default matches the package-managed OpenShell installer. Use `snap-docker` when following the snap setup. |
 | `OPENSHELL_GATEWAY_ENDPOINT` | auto (`https://127.0.0.1:17670` for `openshell`, `http://127.0.0.1:17670` for `snap-docker`) | Override the local gateway endpoint if you registered it under a different URL. |
 | `NEMOCLAW_MODEL` | `nvidia/nemotron-3-super-120b-a12b` | Inference model passed to `openshell inference set`. |
-| `NEMOCLAW_INFERENCE_PREFLIGHT` | `1` | Validates the inference endpoint, credential, and model with one bounded, one-token completion before sandbox creation. Remote endpoints must use HTTPS; loopback HTTP is allowed for local proxies. Standard proxy and CA environment variables are preserved. Set to `0` only for intentional offline setup or an endpoint that cannot support verification. |
+| `NEMOCLAW_INFERENCE_PREFLIGHT` | `1` | Requires one bounded structured tool call before sandbox creation, then verifies that OpenShell activated the requested provider and model. Remote endpoints must use HTTPS; loopback HTTP is allowed for local proxies. Standard proxy and CA environment variables are preserved. Set to `0` only for intentional offline setup or an endpoint that cannot support verification. |
 | `NEMOCLAW_INFERENCE_PREFLIGHT_TIMEOUT_SECONDS` | `10` | Maximum time allowed for the preflight request. |
 | `NEMOCLAW_SLACK_RICH_BLOCKS` | `true` | Render supported semantic Markdown with Hermes's native Slack Block Kit renderer, including table blocks. Set to `false` for text-only output. Interactive clarification buttons remain available. Only `true` or `false` is accepted. Rebuild the sandbox after changing it. |
 | `NEMOCLAW_ENDPOINT_URL` | `https://integrate.api.nvidia.com/v1` | Upstream base URL for the `compatible-endpoint` provider. (`OPENAI_BASE_URL` is also accepted as a fallback.) |

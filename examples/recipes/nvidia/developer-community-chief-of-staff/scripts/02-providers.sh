@@ -107,7 +107,7 @@ if [[ -n "$INFERENCE_KEY" ]]; then
   INFERENCE_PROVIDER="compatible-endpoint"
   INFERENCE_MODEL="${NEMOCLAW_MODEL:-nvidia/nemotron-3-super-120b-a12b}"
   INFERENCE_BASE_URL="${NEMOCLAW_ENDPOINT_URL:-${OPENAI_BASE_URL:-https://integrate.api.nvidia.com/v1}}"
-  echo "Upserting inference provider $INFERENCE_PROVIDER (model: $INFERENCE_MODEL, base: $INFERENCE_BASE_URL)"
+  echo "Upserting inference provider $INFERENCE_PROVIDER (model: $INFERENCE_MODEL)"
 
   # Recreate if existing provider has the wrong type (e.g. left over from the
   # nemoclaw-compatible-endpoint direct-egress experiment).
@@ -130,7 +130,7 @@ if [[ -n "$INFERENCE_KEY" ]]; then
   fi
 
   if [[ "$INFERENCE_PREFLIGHT" == "1" ]]; then
-    echo "Validating inference endpoint, credential, and model before sandbox creation"
+    echo "Validating inference endpoint, credential, model, and structured tool calls before sandbox creation"
     env -i "${PREFLIGHT_NETWORK_ENV[@]}" \
       NEMOCLAW_INFERENCE_PREFLIGHT_KEY="$INFERENCE_KEY" \
       python3 "$DIR/inference_preflight.py" \
@@ -143,6 +143,16 @@ if [[ -n "$INFERENCE_KEY" ]]; then
 
   echo "Setting cluster inference: provider=$INFERENCE_PROVIDER model=$INFERENCE_MODEL"
   openshell inference set --no-verify --provider "$INFERENCE_PROVIDER" --model "$INFERENCE_MODEL"
+  if [[ "$INFERENCE_PREFLIGHT" == "1" ]]; then
+    if ! active_route="$(openshell inference get 2>/dev/null)"; then
+      echo "Inference preflight failed (active-route): openshell inference get failed" >&2
+      exit 8
+    fi
+    env -i "${PREFLIGHT_NETWORK_ENV[@]}" \
+      python3 "$DIR/inference_preflight.py" \
+      --provider "$INFERENCE_PROVIDER" \
+      --model "$INFERENCE_MODEL" <<<"$active_route"
+  fi
 else
   if [[ "$INFERENCE_PREFLIGHT" == "1" ]]; then
     echo "Inference preflight failed (configuration): neither OPENAI_API_KEY nor COMPATIBLE_API_KEY is set." >&2

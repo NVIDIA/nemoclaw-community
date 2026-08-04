@@ -95,6 +95,7 @@ services:
       POSTGRES_DB: "${SOURCE_ETL_POSTGRES_DB:-source_etls}"
       POSTGRES_USER: "${SOURCE_ETL_POSTGRES_APP_USER:-source_etl_writer}"
       POSTGRES_PASSWORD: "${SOURCE_ETL_POSTGRES_APP_PASSWORD:-source_etl_writer}"
+      SOURCE_ETL_POSTGRES_READER_USER: "${SOURCE_ETL_POSTGRES_READER_USER:-source_etl_reader}"
       # HTTPX reads SSL_CERT_FILE because trust_env is enabled by default.
       # Mount the managed host bundle to keep forum TLS verification enabled.
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
