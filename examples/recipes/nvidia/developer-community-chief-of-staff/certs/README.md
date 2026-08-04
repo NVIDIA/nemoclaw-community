@@ -1,7 +1,8 @@
 # certs/
 
-Optional drop point for additional CA certificates to trust inside the Hermes
-sandbox image. Files placed here are baked in at build time so `curl` and
+Optional drop point for additional CA certificates used by the Hermes image
+build and trusted inside the final sandbox image. Files placed here are
+installed before the NeMo Relay release download and retained so `curl` and
 other TLS clients inside the sandbox trust the corresponding roots.
 
 ## When you need this

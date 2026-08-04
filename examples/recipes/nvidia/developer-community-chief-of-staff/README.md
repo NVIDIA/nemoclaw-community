@@ -597,6 +597,7 @@ runners, members, writes, `glab`, and `git` remain blocked.
 | `NEMOCLAW_ENDPOINT_URL` | `https://integrate.api.nvidia.com/v1` | Upstream base URL for the `compatible-endpoint` provider. (`OPENAI_BASE_URL` is also accepted as a fallback.) |
 | `NEMOCLAW_HOST_TLS_PROXY_UPSTREAM` | (none) | Optional HTTPS origin for the host TLS proxy. Required when `NEMOCLAW_ENDPOINT_URL` uses `host.openshell.internal:18080` and auto-heal should manage that proxy. |
 | `NEMOCLAW_HOST_TLS_PROXY_PORT` | `18080` | Host listener port for the optional TLS proxy. |
+| `NEMOCLAW_HOST_CA_BUNDLE` | `/etc/ssl/certs/ca-certificates.crt` | Absolute path to a readable regular-file host CA bundle mounted read-only into the GitHub/forum ETLs and ATIF relay. Override when the supported Ubuntu host stores its trusted bundle elsewhere. |
 | `COMPATIBLE_API_KEY` | (none) | Inference API key. Mirrors NemoClaw's `REMOTE_PROVIDER_CONFIG.custom`. (`OPENAI_API_KEY` is also accepted.) |
 | `GITHUB_TOKEN` | (none) | Optional GitHub token for authenticated live REST reads. Also feeds the optional host GitHub mirror. |
 | `GITHUB_READONLY_REPO` | `NVIDIA/OpenShell` | The only repo allowed by the live GitHub REST policy, formatted as `owner/repo`. Recreate the sandbox after changing it. |

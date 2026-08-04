@@ -48,7 +48,23 @@ Usage: $(basename "$0") [up|down [--volumes]]
 EOF
 }
 
+assert_host_ca_bundle() {
+  local bundle="${NEMOCLAW_HOST_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}"
+
+  if [[ "$bundle" != /* ]]; then
+    echo "NEMOCLAW_HOST_CA_BUNDLE must be an absolute path: $bundle" >&2
+    return 1
+  fi
+  if [[ ! -f "$bundle" || ! -r "$bundle" ]]; then
+    echo "NEMOCLAW_HOST_CA_BUNDLE must be a readable regular file: $bundle" >&2
+    return 1
+  fi
+
+  export NEMOCLAW_HOST_CA_BUNDLE="$bundle"
+}
+
 cmd_up() {
+  assert_host_ca_bundle
   local profile_args=() backend=""
   case "${SOURCE_ETL_GITHUB_ENABLED:-0}" in
     1)

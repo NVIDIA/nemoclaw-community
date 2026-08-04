@@ -21,11 +21,16 @@ ARG BASE_IMAGE=ghcr.io/nvidia/nemoclaw/hermes-sandbox-base@sha256:fa05221f5c7bca
 # unconditionally via the cli crate's `object-store` feature.
 FROM ${BASE_IMAGE} AS nemo-relay-builder
 ARG NEMO_RELAY_CLI_VERSION=0.3.0
+# The release download runs in this separate stage, so it needs the same
+# optional enterprise inspection CAs as the final sandbox image. Without this
+# copy, hosts that terminate TLS fail before the final stage can install them.
+COPY certs/ /usr/local/share/ca-certificates/
 # If the caller provides a github_token BuildKit secret, use it for the release
 # asset request to avoid anonymous GitHub rate limits on shared egress IPs. The
 # token is not an ARG/ENV and does not persist into the final image.
 RUN --mount=type=secret,id=github_token,required=false \
     mkdir -p /out/bin \
+    && update-ca-certificates \
     && apt-get update -qq \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \
