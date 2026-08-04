@@ -34,7 +34,7 @@ def project_rules(project_spec: str) -> list[str]:
     if not separator or not project or not project_id.isdigit() or int(project_id) < 1:
         raise ValueError(f"invalid GitLab project spec: {project_spec!r}")
     base = f"/api/v4/projects/{project_id}"
-    paths = [base]
+    paths = []
     for route in SAFE_ROUTES:
         paths.extend((f"{base}/{route}", f"{base}/{route}/**"))
     return paths

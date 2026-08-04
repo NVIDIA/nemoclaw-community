@@ -16,6 +16,29 @@ import urllib.parse
 import urllib.request
 
 
+def origin(url: str) -> tuple[str, str, int | None]:
+    parsed = urllib.parse.urlsplit(url)
+    port = parsed.port
+    if port is None:
+        port = 443 if parsed.scheme.casefold() == "https" else 80
+    return parsed.scheme.casefold(), (parsed.hostname or "").casefold(), port
+
+
+class SameOriginRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Prevent a GitLab token from following redirects to another origin."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        target = urllib.parse.urljoin(req.full_url, newurl)
+        if origin(req.full_url) != origin(target):
+            raise urllib.error.URLError("cross-origin GitLab redirect blocked")
+        return super().redirect_request(req, fp, code, msg, headers, target)
+
+
+def open_same_origin(request: urllib.request.Request, timeout: int = 30):
+    opener = urllib.request.build_opener(SameOriginRedirectHandler())
+    return opener.open(request, timeout=timeout)
+
+
 def resolve_project(api_url: str, token: str, project: str) -> tuple[str, int]:
     # Numeric IDs keep the runtime policy canonical and avoid differences in
     # how GitLab front doors normalize encoded namespace separators.
@@ -38,10 +61,10 @@ def resolve_project(api_url: str, token: str, project: str) -> tuple[str, int]:
         method="GET",
     )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with open_same_origin(request, timeout=30) as response:
             results = json.load(response)
     except (urllib.error.HTTPError, urllib.error.URLError) as exc:
-        print(f"failed to resolve GitLab project {project!r}: {exc}", file=sys.stderr)
+        print(f"failed to resolve GitLab project {project!r}", file=sys.stderr)
         raise SystemExit(1) from exc
 
     if not isinstance(results, list):

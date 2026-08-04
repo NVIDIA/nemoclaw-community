@@ -206,13 +206,14 @@ authenticated identity and initial project from the host shell:
 $ openshell sandbox exec --name hermes-direct -- sh -lc \
     '/usr/bin/python3 /sandbox/.hermes-data/skills/gitlab-readonly-live/scripts/gitlab_readonly.py identity'
 $ openshell sandbox exec --name hermes-direct -- sh -lc \
-    '/usr/bin/python3 /sandbox/.hermes-data/skills/gitlab-readonly-live/scripts/gitlab_readonly.py get . --fields path_with_namespace,visibility,default_branch'
+    '/usr/bin/python3 /sandbox/.hermes-data/skills/gitlab-readonly-live/scripts/gitlab_readonly.py get repository/branches --limit 1 --fields name,web_url'
 ```
 
 With multiple projects, add `--project group/project` to the `get` command.
-Expected: the authenticated username and configured project metadata appear;
-the token itself never does. Requests for unlisted projects, sensitive routes,
-and arbitrary URLs must fail without being retried through another tool.
+Expected: the authenticated username and up to one branch from the configured
+project appear; the token itself never does. Requests for bare project metadata,
+unlisted projects, sensitive routes, and arbitrary URLs must fail without being
+retried through another tool.
 
 Verify local route validation inside the sandbox. This command must fail before
 making a network request:

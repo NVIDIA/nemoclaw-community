@@ -577,10 +577,11 @@ sandbox itself receives only the friendly path-to-ID mapping and the OpenShell
 credential placeholder. The raw token is never baked into the image.
 
 The helper selects the project automatically when only one is configured. With
-multiple projects, pass `--project group/project`. Project metadata, issues,
-merge requests, repository content and history, labels, milestones, and
-releases are readable. Variables, hooks, tokens, runners, members, writes,
-`glab`, and `git` remain blocked.
+multiple projects, pass `--project group/project`. Issues, merge requests,
+repository content and history, labels, milestones, and releases are readable.
+The bare project-metadata response is blocked because GitLab may include
+sensitive fields in it for privileged identities. Variables, hooks, tokens,
+runners, members, writes, `glab`, and `git` remain blocked.
 
 ## Configuration knobs (all env vars)
 

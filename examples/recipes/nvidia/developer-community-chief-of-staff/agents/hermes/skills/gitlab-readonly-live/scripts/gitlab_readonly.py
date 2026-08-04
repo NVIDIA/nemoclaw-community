@@ -41,6 +41,29 @@ SAFE_ROUTES = (
 )
 
 
+def origin(url: str) -> tuple[str, str, int | None]:
+    parsed = urllib.parse.urlsplit(url)
+    port = parsed.port
+    if port is None:
+        port = 443 if parsed.scheme.casefold() == "https" else 80
+    return parsed.scheme.casefold(), (parsed.hostname or "").casefold(), port
+
+
+class SameOriginRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Allow redirects only when the credential remains on the same origin."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        target = urllib.parse.urljoin(req.full_url, newurl)
+        if origin(req.full_url) != origin(target):
+            raise urllib.error.URLError("cross-origin GitLab redirect blocked")
+        return super().redirect_request(req, fp, code, msg, headers, target)
+
+
+def open_same_origin(request: urllib.request.Request, timeout: int = 30):
+    opener = urllib.request.build_opener(SameOriginRedirectHandler())
+    return opener.open(request, timeout=timeout)
+
+
 def load_env_defaults() -> None:
     hermes_home = Path(os.environ.get("HERMES_HOME", "/sandbox/.hermes-data"))
     candidates = (
@@ -106,7 +129,9 @@ def project_id(project: str) -> int:
 def clean_route(value: str) -> str:
     route = value.strip()
     if route in {"", ".", "/"}:
-        return ""
+        raise SystemExit(
+            "route is required; bare project metadata is outside the GitLab read policy"
+        )
     if "://" in route or "?" in route or "#" in route or "\\" in route:
         raise SystemExit("route must be a project-relative REST path")
     parts = route.strip("/").split("/")
@@ -186,17 +211,14 @@ def get_json(
         method="GET",
     )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with open_same_origin(request, timeout=30) as response:
             headers = {key.lower(): value for key, value in response.headers.items()}
             return json.load(response), headers
     except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        print(f"GitLab request failed: HTTP {exc.code} {exc.reason}", file=sys.stderr)
-        if body:
-            print(body[:2000], file=sys.stderr)
+        print(f"GitLab request failed: HTTP {exc.code}", file=sys.stderr)
         raise SystemExit(1) from exc
     except urllib.error.URLError as exc:
-        print(f"GitLab request failed: {exc}", file=sys.stderr)
+        print("GitLab request failed before a valid response was received", file=sys.stderr)
         raise SystemExit(1) from exc
 
 
@@ -215,7 +237,7 @@ def project_fields(value: Any, fields: list[str]) -> Any:
 def run_get(args: argparse.Namespace) -> Any:
     project = choose_project(args.project)
     route = clean_route(args.route)
-    path = f"/projects/{project_id(project)}" + (f"/{route}" if route else "")
+    path = f"/projects/{project_id(project)}/{route}"
     params = dict(args.param)
     fields = (
         [item.strip() for item in args.fields.split(",") if item.strip()]

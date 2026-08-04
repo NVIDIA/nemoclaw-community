@@ -44,3 +44,10 @@ def test_gitlab_api_url_rejects_plaintext_and_embedded_credentials():
     assert "must be an https:// URL" in plaintext.stderr
     assert credentials.returncode != 0
     assert "must not contain embedded credentials" in credentials.stderr
+
+
+def test_gitlab_provider_uses_the_private_172_network_only():
+    provider = (RECIPE_DIR / "providers/gitlab.yaml").read_text(encoding="utf-8")
+
+    assert "172.16.0.0/12" in provider
+    assert "172.0.0.0/8" not in provider
