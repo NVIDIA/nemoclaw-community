@@ -200,18 +200,16 @@ not estimate from a single `pulls --limit` page.
 ### gitlab-readonly-live
 
 When `GITLAB_TOKEN` and `GITLAB_READONLY_PROJECTS` are configured, verify the
-authenticated identity and initial project from the host shell:
+initial configured project from the host shell:
 
 ```console
-$ openshell sandbox exec --name hermes-direct -- sh -lc \
-    '/usr/bin/python3 /sandbox/.hermes-data/skills/gitlab-readonly-live/scripts/gitlab_readonly.py identity'
 $ openshell sandbox exec --name hermes-direct -- sh -lc \
     '/usr/bin/python3 /sandbox/.hermes-data/skills/gitlab-readonly-live/scripts/gitlab_readonly.py get repository/branches --limit 1 --fields name,web_url'
 ```
 
 With multiple projects, add `--project group/project` to the `get` command.
-Expected: the authenticated username and up to one branch from the configured
-project appear; the token itself never does. Requests for bare project metadata,
+Expected: up to one branch from the configured project appears; the token itself
+never does. Requests for authenticated-user metadata, bare project metadata,
 unlisted projects, sensitive routes, and arbitrary URLs must fail without being
 retried through another tool.
 
@@ -224,10 +222,12 @@ $ openshell sandbox exec --name hermes-direct -- sh -lc \
 ```
 
 To inspect the enforced network boundary, replace `PROJECT_ID` with one of the
-numeric IDs printed during bring-up. Both calls below must be denied with `403`;
+numeric IDs printed during bring-up. All calls below must be denied with `403`;
 the value shown in the header is an OpenShell placeholder, not the token:
 
 ```console
+$ openshell sandbox exec --name hermes-direct -- sh -lc \
+    'curl -sS -o /dev/null -w "%{http_code}\\n" -H "Authorization: Bearer openshell:resolve:env:GITLAB_TOKEN" "$GITLAB_API_URL/user"'
 $ openshell sandbox exec --name hermes-direct -- sh -lc \
     'curl -sS -o /dev/null -w "%{http_code}\\n" -H "Authorization: Bearer openshell:resolve:env:GITLAB_TOKEN" "$GITLAB_API_URL/projects/PROJECT_ID/variables"'
 $ openshell sandbox exec --name hermes-direct -- sh -lc \

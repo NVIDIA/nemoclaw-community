@@ -6,6 +6,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -99,12 +100,23 @@ def test_policy_rules_are_get_only_and_project_scoped():
     assert 'method: GET, path: "/api/v4/projects/123/issues"' in rendered
     assert 'method: GET, path: "/api/v4/projects/456/merge_requests/**"' in rendered
     assert "POST" not in rendered
+    assert "/api/v4/user" not in rendered
     assert "/variables" not in rendered
     assert "/members" not in rendered
     assert stage.MARKER not in rendered
 
 
-def test_disabled_policy_has_no_project_or_identity_route():
+def test_helper_does_not_expose_identity_command(helper, monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["gitlab_readonly.py", "identity"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        helper.main()
+
+    assert exc_info.value.code == 2
+    assert "invalid choice: 'identity'" in capsys.readouterr().err
+
+
+def test_disabled_policy_has_no_project_route():
     stage = load_module(
         "stage_gitlab_policy_disabled",
         RECIPE_DIR / "scripts/lib/stage-gitlab-policy.py",
@@ -137,10 +149,10 @@ def test_staged_repository_policy_is_valid_yaml_and_get_only():
     assert rules
     assert {rule["allow"]["method"] for rule in rules} == {"GET"}
     assert all(
-        rule["allow"]["path"] == "/api/v4/user"
-        or rule["allow"]["path"].startswith("/api/v4/projects/123/")
+        rule["allow"]["path"].startswith("/api/v4/projects/123/")
         for rule in rules
     )
+    assert "/api/v4/user" not in {rule["allow"]["path"] for rule in rules}
     assert "/api/v4/projects/123" not in {
         rule["allow"]["path"] for rule in rules
     }

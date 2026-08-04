@@ -18,6 +18,8 @@ Use this skill for current live data from the GitLab projects listed in
 - Access is limited to GET requests for issues, merge requests, repository
   content and history, labels, milestones, and releases. Bare project metadata
   is excluded because GitLab may include sensitive fields for privileged users.
+- Authenticated-user metadata is also excluded because GitLab's current-user
+  response can contain private identity, email, sign-in, and network details.
 - Membership, CI/CD variables, hooks, deploy tokens, runners, and every write
   method are outside policy.
 - Do not use `glab`, `git`, alternate GitLab hosts, GraphQL, or custom requests.
@@ -27,7 +29,6 @@ Use this skill for current live data from the GitLab projects listed in
 Always invoke the bundled helper:
 
 ```bash
-/usr/bin/python3 /sandbox/.hermes-data/skills/gitlab-readonly-live/scripts/gitlab_readonly.py identity
 /usr/bin/python3 /sandbox/.hermes-data/skills/gitlab-readonly-live/scripts/gitlab_readonly.py get issues --param state=opened --paginate --count
 /usr/bin/python3 /sandbox/.hermes-data/skills/gitlab-readonly-live/scripts/gitlab_readonly.py get merge_requests --param state=opened --paginate --fields iid,title,state,web_url
 /usr/bin/python3 /sandbox/.hermes-data/skills/gitlab-readonly-live/scripts/gitlab_readonly.py get repository/tree --param recursive=true --paginate --limit 50 --fields name,path,type

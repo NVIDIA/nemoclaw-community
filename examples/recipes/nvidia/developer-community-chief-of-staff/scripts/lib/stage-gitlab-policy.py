@@ -44,7 +44,7 @@ def render_policy(policy: str, project_specs: list[str]) -> str:
     if policy.count(MARKER) != 1:
         raise ValueError(f"expected exactly one {MARKER} marker")
 
-    paths = ["/api/v4/user"]
+    paths: list[str] = []
     for project_spec in project_specs:
         paths.extend(project_rules(project_spec))
     if not project_specs:

@@ -281,7 +281,6 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparsers.add_parser("identity", help="Show the authenticated GitLab identity")
     get_parser = subparsers.add_parser(
         "get", help="GET a project-relative GitLab route"
     )
@@ -294,11 +293,7 @@ def main() -> None:
     get_parser.add_argument("--fields")
     args = parser.parse_args()
 
-    if args.command == "identity":
-        data, _headers = get_json("/user")
-        output = {key: data.get(key) for key in ("id", "username", "name")}
-    else:
-        output = run_get(args)
+    output = run_get(args)
     print(json.dumps(output, indent=2))
 
 
