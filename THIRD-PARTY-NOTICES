@@ -395,6 +395,6 @@ Asset: NVIDIA header image under examples/recipes/nvidia/payment-ops-hermes/asse
 Owner: NVIDIA
 Notes: Reuses the repository's existing NVIDIA-owned header asset.
 
-Asset: devx-jupyterapp-bridge.tar.gz under examples/workshops/agentic-ai-learning-path/skills/setup-workshop-nemoclaw/assets/
+Asset: devx-jupyterapp-bridge/ source directory under examples/workshops/agentic-ai-learning-path/skills/setup-workshop-nemoclaw/assets/
 Owner: NVIDIA
-Notes: First-party JupyterLab federated extension (~2 KB) hand-crafted for this example; sets window.jupyterapp for the workshop's in-lesson buttons. Mirrors only the structure of a prebuilt labextension and contains no third-party code. Provenance documented in the skill's references/sandbox-internals.md.
+Notes: First-party JupyterLab federated extension (~2 KB) hand-crafted for this example; sets window.jupyterapp for the workshop's in-lesson buttons. Distributed as inspectable, SPDX-headed source (package.json + static/remoteEntry.js) — no prebuilt archive. Mirrors only the structure of a prebuilt labextension and contains no third-party code. Provenance documented in the skill's references/sandbox-internals.md.

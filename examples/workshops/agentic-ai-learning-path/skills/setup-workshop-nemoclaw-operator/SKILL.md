@@ -59,7 +59,11 @@ NOT user `sandbox`. **Inside the sandbox** (use the other skill): `whoami` →
 
 ```bash
 SANDBOX=hermes-direct                                    # the sandbox name (adjust)
-C=$(docker ps --format '{{.Names}}' | grep "openshell-$SANDBOX")   # its container
+# Its container — exact, fail-closed selection by OpenShell runtime labels
+# (substring grep can match a similarly named sandbox, e.g. hermes-direct-2):
+C=$(docker ps --filter 'label=openshell.ai/managed-by=openshell' \
+              --filter "label=openshell.ai/sandbox-name=$SANDBOX" --format '{{.Names}}')
+[ "$(printf '%s\n' "$C" | grep -c .)" -eq 1 ] || echo "FATAL: not exactly one container for '$SANDBOX': ${C:-none}"
 # The deployment (policy files + .env) is the chief-of-staff recipe:
 cd <nemoclaw-community>/examples/recipes/nvidia/developer-community-chief-of-staff
 # This example's skills (staged into the sandbox in Phase 2b):
@@ -228,7 +232,7 @@ openshell sandbox create --from "$IMG" --name "$SANDBOX" --policy /tmp/boot.yaml
 # shows Ready, Ctrl-C the stream — the sandbox survives (the recipe's own
 # script detaches the same way, via a pgrp kill).
 openshell policy set "$SANDBOX" --policy /tmp/boot.yaml --wait   # recipe's two-stage pattern
-C=$(docker ps --format '{{.Names}}' | grep "openshell-$SANDBOX")  # container name changed
+C=$(docker ps --filter 'label=openshell.ai/managed-by=openshell' --filter "label=openshell.ai/sandbox-name=$SANDBOX" --format '{{.Names}}')  # name changed; fail-closed re-resolve
 ```
 
 Re-probe PTY (expect `PTY-OK`). On Slack/Outlook deployments also confirm the
@@ -301,13 +305,18 @@ agent's next session, and `setup.sh`'s final step deliberately treats staged
 copies as canonical (it never overwrites them from the clone):
 
 ```bash
+SKX=/sandbox/.hermes-data/skills
 for d in "$EXAMPLE"/skills/*/; do
   name=$(basename "$d")
   [ "$name" = "setup-workshop-nemoclaw-operator" ] && continue  # host-side; would only mislead the in-sandbox agent
-  docker exec "$C" rm -rf "/sandbox/.hermes-data/skills/$name"  # avoid docker-cp nesting on re-stage
-  docker cp "$d" "$C:/sandbox/.hermes-data/skills/$name"
+  # Transactional staging: copy into a hidden temp dir, chown ONLY what we
+  # staged (never the agent's whole library), then swap in a single exec —
+  # a failed copy leaves the existing skill untouched.
+  docker exec "$C" rm -rf "$SKX/.stage-$name"
+  docker cp "$d" "$C:$SKX/.stage-$name"
+  docker exec "$C" chown -R sandbox:sandbox "$SKX/.stage-$name"
+  docker exec "$C" sh -c "rm -rf '$SKX/$name' && mv '$SKX/.stage-$name' '$SKX/$name'"
 done
-docker exec "$C" chown -R sandbox:sandbox /sandbox/.hermes-data/skills
 docker exec "$C" ls /sandbox/.hermes-data/skills                # verify
 ```
 
@@ -326,6 +335,12 @@ sandbox exec` rejects multi-line args — keep the prompt on one line):
 openshell sandbox exec -n "$SANDBOX" --no-tty -- sh -lc \
   'cd /sandbox && hermes --accept-hooks -z "<the message below, one line>"'
 ```
+
+`--accept-hooks` keeps the one-shot session non-interactive: it pre-accepts
+the hook-consent prompt for hooks already configured in the deployed agent
+stack. The workshop repo is not yet cloned when this runs, so no workshop
+content can ride in on the flag (data-handling summary: example README,
+"Security and data-handling considerations").
 
 > Egress policy for the Build-an-Agent workshop is applied: the workshop-repo
 > clone route, PyPI installs, and the NIM/reranking endpoints are open. The
@@ -408,7 +423,10 @@ Two verdict patterns that are NOT policy gaps (both observed live):
   bootstrap JWT (1-hour TTL, not refreshed on disk); a restarted container
   re-reads the stale token and crash-loops (`Policy fetch failed …
   ExpiredSignature`), sticking the sandbox in `Provisioning`. Recovery needs a
-  re-minted token or a delete/recreate/restore cycle.
+  re-minted token or a delete/recreate/restore cycle. (Verified live on
+  OpenShell v0.0.53; newer releases may change bootstrap-token handling —
+  re-verify on your deployed version before relying on restart behavior
+  either way.)
 - **A container restart does NOT relaunch the agent stack** (`nemoclaw-start`:
   agent, relay, bridges — and JupyterLab). Relaunch the stack (e.g. the
   chief-of-staff recipe's autoheal `watchdog.sh`), then have the agent re-run

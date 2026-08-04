@@ -185,8 +185,9 @@ is injected by AI Workbench's DevX layer — absent in plain JupyterLab.
   implementing `init(sharedScope)` + `get('./extension')`) plus a
   `package.json` with the `jupyterlab: {"_build": {"load":
   "static/remoteEntry.js", "extension": "./extension"}}` markers. Shipped as
-  `assets/devx-jupyterapp-bridge.tar.gz`; extract into
-  `$VENV/share/jupyter/labextensions/` — no build step.
+  inspectable, SPDX-headed source under `assets/devx-jupyterapp-bridge/`
+  (no archive, no build step); copy the directory into
+  `$VENV/share/jupyter/labextensions/`.
 - Verify: `jupyter labextension list` shows `devx-jupyterapp-bridge v1.0.0
   enabled OK`, and the lab page's `federated_extensions` config includes it.
 - The docsify lesson pages also load CDN assets (jsdelivr/unpkg) — the

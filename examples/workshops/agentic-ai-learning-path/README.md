@@ -110,6 +110,30 @@ sandbox notes).
   — deliberately not staged up front. Optional: `TAVILY_API_KEY` (modules
   1/2/5 web search) and `LANGSMITH_API_KEY` (module-3 tracing).
 
+## Security and data-handling considerations
+
+Phase 1 of the setup widens the sandbox deliberately; everything stays
+deny-by-default until then, each grant is scoped to the listed hosts, paths,
+and binaries, and no credential is pre-staged — a service receives nothing
+until the learner opts in by setting their own key in the Secrets Manager
+tile.
+
+| Boundary | Allows | What leaves the sandbox | Cost / account |
+| --- | --- | --- | --- |
+| `github.com` clone route | Anonymous read-only smart-HTTP for the one workshop repo | The clone request itself | None |
+| `pypi.org`, `files.pythonhosted.org` (GET) | `uv` install of the pinned workshop deps | Names of requested packages | None |
+| `integrate.api.nvidia.com`, `ai.api.nvidia.com` | NIM chat/embedding/rerank calls from notebooks | Prompt and document content of the cells the learner runs | Learner's `nvapi-…` key ([build.nvidia.com](https://build.nvidia.com) credits) |
+| `api.tavily.com`, `mcp.tavily.com` (optional) | Modules 1/2/5 web search | Search queries and extraction URLs | Learner's `TAVILY_API_KEY` |
+| `api.smith.langchain.com` (optional) | Module-3 eval and tracing. ⚠️ The workshop's `variables.env` enables tracing globally: once `LANGSMITH_API_KEY` is set, traces of executed cells (prompts and outputs) are exported | LangChain run traces | Learner's `LANGSMITH_API_KEY` |
+| `registry.npmjs.org` (GET-only) | Module-5 demo client `npm install` | Names of requested packages | None |
+| `openaipublic.blob.core.windows.net` (GET `/encodings/**`) | tiktoken BPE data download (module 7) | Nothing content-derived | None |
+| `/dev/pts` (rw), `/sys/fs/cgroup` (ro) filesystem grants | JupyterLab Terminal-tile PTYs; duckdb resource probe (modules 3/4) | Nothing (local) | — |
+| `LD_PRELOAD` netlink shim | Stubs `getifaddrs`/`if_nameindex` so Jupyter kernels survive the seccomp netlink block; applied only to the Jupyter process tree | Nothing (local) | — |
+| `hermes --accept-hooks` (setup kick) | Keeps the one-shot setup session non-interactive by pre-accepting hooks already configured in the deployed agent stack — the workshop clone does not yet exist at that point | Nothing (local) | — |
+
+Landlock/seccomp and the L7 audit log remain in force throughout; every
+allow/deny verdict is inspectable (operator skill, Phase 5).
+
 ## Quickstart (operator, on the sandbox host)
 
 The authoritative, failure-mode-aware procedure is the
@@ -141,7 +165,9 @@ To follow the same procedure by hand instead, in outline:
 
 ```bash
 SANDBOX=hermes-direct
-C=$(docker ps --format '{{.Names}}' | grep "openshell-$SANDBOX")
+# Fail-closed container selection by OpenShell labels (not substring grep):
+C=$(docker ps --filter 'label=openshell.ai/managed-by=openshell' \
+              --filter "label=openshell.ai/sandbox-name=$SANDBOX" --format '{{.Names}}')
 EXAMPLE=examples/workshops/agentic-ai-learning-path
 
 # 1. Apply the workshop policy blocks (exact YAML + apply semantics in the
@@ -158,13 +184,16 @@ openshell policy set "$SANDBOX" --policy /tmp/apply.yaml --wait
 bash "$EXAMPLE"/skills/setup-workshop-nemoclaw-operator/scripts/verify-sandbox-ready.sh
 
 # 3. Stage this example's skills into the agent's skill library
+#    (transactional: temp-dir copy, chown scoped to what we staged, one-exec swap)
+SKX=/sandbox/.hermes-data/skills
 for d in "$EXAMPLE"/skills/*/; do
   name=$(basename "$d")
   [ "$name" = "setup-workshop-nemoclaw-operator" ] && continue
-  docker exec "$C" rm -rf "/sandbox/.hermes-data/skills/$name"
-  docker cp "$d" "$C:/sandbox/.hermes-data/skills/$name"
+  docker exec "$C" rm -rf "$SKX/.stage-$name"
+  docker cp "$d" "$C:$SKX/.stage-$name"
+  docker exec "$C" chown -R sandbox:sandbox "$SKX/.stage-$name"
+  docker exec "$C" sh -c "rm -rf '$SKX/$name' && mv '$SKX/.stage-$name' '$SKX/$name'"
 done
-docker exec "$C" chown -R sandbox:sandbox /sandbox/.hermes-data/skills
 
 # 4. Kick the in-sandbox agent (one-shot session; single-line prompt)
 openshell sandbox exec -n "$SANDBOX" --no-tty -- sh -lc \
@@ -203,4 +232,5 @@ resident agent, which now carries the `workshop` and `module-N` tutor skills.
   re-renders policy from the `policy.yaml` template — to run the workshop
   again, repeat the quickstart (all steps are idempotent).
 - Never `docker restart` the sandbox container (stale-bootstrap-JWT crash
-  loop; see the operator skill's lifecycle notes).
+  loop, observed on OpenShell v0.0.53 — re-verify on newer releases; see the
+  operator skill's lifecycle notes).

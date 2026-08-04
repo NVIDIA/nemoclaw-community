@@ -66,7 +66,9 @@ static bootstrap JWT with a 1-hour TTL that is not refreshed on disk. A
 restart re-reads the stale token and the supervisor crash-loops
 (`Policy fetch failed … ExpiredSignature`), leaving the sandbox stuck in
 `Provisioning`. Recovery requires re-minting the bootstrap token or a full
-delete/recreate/restore cycle.
+delete/recreate/restore cycle. (Verified live on OpenShell v0.0.53; newer
+releases may change bootstrap-token handling — re-verify on your deployed
+version.)
 
 **If the container did restart anyway:** the supervisor comes back but the
 agent stack (`nemoclaw-start`: agent, relay, bridges) stays down — and so does

@@ -149,12 +149,13 @@ the hard way (full rationale + diagnostics in `references/sandbox-internals.md`)
    **`python -m ziglang cc`** (no system gcc; npm is 403-blocked). Preload it
    **only on the Jupyter process tree**, never session-wide.
 
-4. **Bridge labextension** (`assets/devx-jupyterapp-bridge.tar.gz`). The
-   in-lesson buttons call `openVoila()` → `window.parent.jupyterapp`, which
-   only AI Workbench's DevX layer normally injects. npm being 403-blocked,
-   this is a hand-crafted federated labextension (Module Federation
-   `remoteEntry.js`, ~2 KB) whose plugin sets `window.jupyterapp = app`.
-   Extract into `$VENV/share/jupyter/labextensions/` — no build step.
+4. **Bridge labextension** (`assets/devx-jupyterapp-bridge/`, checked-in
+   source). The in-lesson buttons call `openVoila()` →
+   `window.parent.jupyterapp`, which only AI Workbench's DevX layer normally
+   injects. npm being 403-blocked, this is a hand-crafted federated
+   labextension (Module Federation `remoteEntry.js`, ~2 KB) whose plugin sets
+   `window.jupyterapp = app`. Copy the directory into
+   `$VENV/share/jupyter/labextensions/` — no archive, no build step.
 
 5. **Launcher config + anti-duplication** (`templates/jp_app_launcher.yaml`,
    11 tiles: 7 modules + Secrets Manager + Simple Agents/Deep Agents/NemoClaw
