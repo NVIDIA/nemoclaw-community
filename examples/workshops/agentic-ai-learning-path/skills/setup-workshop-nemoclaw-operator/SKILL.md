@@ -13,8 +13,9 @@ description: >-
   kicks the in-sandbox agent (which runs the `setup-workshop-nemoclaw` skill:
   clone + venv + JupyterLab), then opens the inbound path (openshell forward
   service + SSH/Teleport port-forward) so the user can open the JupyterLab
-  token URL. Also covers sandbox lifecycle pitfalls (never docker-restart,
-  recreate wipes state) and egress-denial debugging via the OCSF audit log.
+  token URL. Also covers sandbox lifecycle pitfalls (container restarts are
+  only token-window-safe, recreate wipes state) and egress-denial debugging
+  via the OCSF audit log.
   NOT for working inside the sandbox, and NOT for bare-metal/Brev/AI-Workbench
   installs (that installer — `setup-workshop` — ships with the workshop repo
   itself, not with this example).
@@ -156,11 +157,10 @@ Not needed: `build.nvidia.com` (notebook prose only — every model call goes to
 
 ⚠️ The supervisor parses `filesystem_policy` ONCE at container **boot** —
 `openshell policy set` hot-reloads network rules but NOT filesystem grants
-(verified live: after applying a `/dev/pts` grant, new spawns still built
-the old ruleset). Include the fs grants in the Phase 1 apply anyway (they
-ride along dormant), then boot them with the **Phase 1b recreate-from-live**
-below. There is no restart command, and raw `docker restart` hits the
-stale-bootstrap-JWT crash loop.
+(verified live on OpenShell v0.0.53 AND v0.0.96: after applying a `/dev/pts`
+grant, new spawns still built the old ruleset). Include the fs grants in the
+Phase 1 apply anyway (they ride along dormant), then boot them with the
+**Phase 1b token-TTL-guarded restart** below.
 
 Workflow (details + YAML in the reference):
 
@@ -190,7 +190,7 @@ Workflow (details + YAML in the reference):
    ```
    `scripts/verify-sandbox-ready.sh` runs the full probe set.
 
-## Phase 1b — Boot the filesystem grants (fresh sandbox: recreate NOW)
+## Phase 1b — Boot the filesystem grants (token-TTL-guarded restart)
 
 The `/dev/pts` + `/sys/fs/cgroup` grants applied in Phase 1 stay dormant
 until a container boot. Probe under real enforcement:
@@ -199,53 +199,55 @@ until a container boot. Probe under real enforcement:
 openshell sandbox exec -n "$SANDBOX" --no-tty -- sh -lc 'python3 -c "import os; os.openpty()" && echo PTY-OK'
 ```
 
-`PTY-OK` → skip this phase. Denied and the sandbox is still **pristine**
-(Phase 0 found no repo clone, no `secrets.env`) → recreate NOW, before
-Phases 2b/3, while it costs nothing. Denied on a sandbox already carrying
-workshop state → recreating wipes it (venv, clone, server); either accept a
-hidden Terminal tile or redo setup after the recreate — operator's call.
-
-Do NOT recreate via the recipe's scripts (`03-sandbox.sh`/`bring-up.sh` boot
-the STOCK template: every workshop grant reverts). Boot from the live policy
-instead — Phase 1 just made it the full desired state:
+`PTY-OK` → skip this phase. Denied → boot the grants with a container
+restart. A restart is safe ONLY while the sandbox's bootstrap token is
+valid: the token is written once at create
+(`/etc/openshell/auth/sandbox.jwt`) and never refreshed on disk, so the
+supervisor re-reads it on boot — valid token → clean recovery (verified on
+OpenShell v0.0.96: Ready again in ~10 s, fs grants live); expired token →
+Unauthenticated/`ExpiredSignature` crash loop, sandbox stuck in
+`Provisioning` (verified live on v0.0.53-created and v0.0.96-resumed
+sandboxes). Guard on container age and fail closed:
 
 ```bash
-openshell policy get "$SANDBOX" --full | sed '1,/^---$/d' > /tmp/boot.yaml
-IMG=$(docker inspect "$C" --format '{{.Config.Image}}')
-PROVIDERS=$(openshell sandbox provider list "$SANDBOX" | awk 'NR>1 && $1 != "" {printf "--provider %s ", $1}')
-# Runtime env the recipe injected at create (harvest BEFORE the delete).
-# ⚠️ Harvest from the nemoclaw-start PROCESS, not /proc/1: PID 1 is the
-# OpenShell supervisor and carries only image-baked ENV — the `-- env …`
-# wrapper vars ride the exec session running nemoclaw-start. Reading
-# /proc/1/environ silently drops the SLACK_ALLOW*/OUTLOOK_* authorization
-# config; the recreated gateway then answers every Slack user with a
-# pairing code and never starts the outlook-bridge (verified live —
-# recovery WITHOUT another recreate: references/access-and-lifecycle.md
-# § Recovering lost create-time env, also the fallback if the stack is
-# already down and unharvestable). Values here are space-free;
-# quote-handle yours if not:
-NSPID=$(docker exec "$C" sh -c 'pgrep -f "bash /usr/local/bin/[n]emoclaw-start" | head -1')
-ENVS=$(docker exec "$C" sh -c "tr '\0' '\n' < /proc/$NSPID/environ" | grep -E '^(OUTLOOK_|SLACK_ALLOW|GITHUB_READONLY_REPO=|NEMOCLAW_MESSAGING_CHANNELS_B64=|CHAT_UI_URL=|PHOENIX_)')
-openshell sandbox delete "$SANDBOX"
-openshell sandbox create --from "$IMG" --name "$SANDBOX" --policy /tmp/boot.yaml $PROVIDERS -- env $ENVS nemoclaw-start
-# create streams sandbox stdout; once `openshell sandbox list` (other shell)
-# shows Ready, Ctrl-C the stream — the sandbox survives (the recipe's own
-# script detaches the same way, via a pgrp kill).
-openshell policy set "$SANDBOX" --policy /tmp/boot.yaml --wait   # recipe's two-stage pattern
-C=$(docker ps --filter 'label=openshell.ai/managed-by=openshell' --filter "label=openshell.ai/sandbox-name=$SANDBOX" --format '{{.Names}}')  # name changed; fail-closed re-resolve
+CREATED=$(docker inspect "$C" --format '{{.Created}}')
+AGE=$(( $(date +%s) - $(date -d "$CREATED" +%s) ))
+if [ "$AGE" -lt 2700 ]; then    # 45-min guard against the ~1 h token TTL
+  docker restart "$C"
+else
+  echo "sandbox older than the token-safe window — use the recipe-recreate fallback below"
+fi
 ```
 
-Re-probe PTY (expect `PTY-OK`). On Slack/Outlook deployments also confirm the
-authorization env reached the relaunched gateway — 0 here reproduces the
-pairing-code regression; recover per references/access-and-lifecycle.md:
+In the normal quickstart flow the sandbox is minutes old, so the guard
+always passes. After the restart: wait for `openshell sandbox list` to show
+`Ready` (seconds), re-resolve `$C` (label selection, as in Conventions),
+re-probe PTY (expect `PTY-OK`).
+
+A container restart does NOT relaunch the agent stack (`nemoclaw-start`).
+Relaunch it with the create-time authorization env rebuilt **from the
+deployment recipe's `.env`** — the recipe is the source of truth for those
+values; never scrape them from a live process's `/proc` and never expand
+them through create/exec argv. The exact procedure (env file, mode 600,
+sourced inside a supervisor session) is
+references/access-and-lifecycle.md § Recovering lost create-time env — run
+it after the restart, then verify:
 
 ```bash
 docker exec "$C" sh -c 'pid=$(pgrep -f "[h]ermes gateway run" | head -1); tr "\0" "\n" < /proc/$pid/environ' | grep -cE '^(SLACK_ALLOW|OUTLOOK_)'   # expect ≥ 1
 ```
 
-Then continue with Phase 2b. Self-annealing:
-after one 1b recreate, boot policy == live policy, so the grants survive
-subsequent same-flow recreates.
+**Fallback — sandbox older than the token-safe window** (long-running
+deployment, or workshop state you can afford to lose): recreate through the
+deployment recipe's own machinery (`scripts/03-sandbox.sh` /
+`bring-up.sh`), which owns sandbox lifecycle and injects the authorization
+env its supported way. That recreate boots the STOCK policy template and
+wipes the container filesystem, so afterwards re-run Phase 1 (apply the
+workshop blocks), this phase's restart (the fresh sandbox is well inside
+the token window), and Phases 2b/3 — every step is idempotent. Do not
+hand-roll a delete/create in this flow.
+
+Then continue with Phase 2b.
 
 ## Phase 2 — Keys: leave NVIDIA_API_KEY UNSET (default)
 
@@ -419,30 +421,34 @@ Two verdict patterns that are NOT policy gaps (both observed live):
 
 ## Lifecycle pitfalls (each caused real breakage)
 
-- **NEVER `docker restart` the sandbox container.** It boots from a static
-  bootstrap JWT (1-hour TTL, not refreshed on disk); a restarted container
-  re-reads the stale token and crash-loops (`Policy fetch failed …
-  ExpiredSignature`), sticking the sandbox in `Provisioning`. Recovery needs a
-  re-minted token or a delete/recreate/restore cycle. (Verified live on
-  OpenShell v0.0.53; newer releases may change bootstrap-token handling —
-  re-verify on your deployed version before relying on restart behavior
-  either way.)
+- **`docker restart` is safe ONLY inside the bootstrap-token window.** The
+  container boots from a static bootstrap JWT (~1-hour TTL, written once at
+  create to `/etc/openshell/auth/sandbox.jwt` and never refreshed on disk).
+  Within the window a restart recovers cleanly and boots dormant
+  `filesystem_policy` grants (verified on OpenShell v0.0.96: Ready in ~10 s);
+  past it the supervisor re-reads the stale token and crash-loops
+  (`ExpiredSignature`), sticking the sandbox in `Provisioning` (verified on
+  v0.0.53 and v0.0.96) — recovery then needs a recreate. Use the Phase 1b
+  age guard; never restart an aged sandbox.
+- **Gateway upgrades restart sandbox containers.** An upgraded gateway
+  resumes sandboxes by restarting their containers, so every sandbox older
+  than its token window bricks exactly as above (observed live during the
+  0.0.53 → 0.0.96 upgrade). Plan sandbox recreates around gateway upgrades.
 - **A container restart does NOT relaunch the agent stack** (`nemoclaw-start`:
   agent, relay, bridges — and JupyterLab). Relaunch the stack (e.g. the
   chief-of-staff recipe's autoheal `watchdog.sh`), then have the agent re-run
   `start-jupyter.sh`.
 - **A sandbox recreate wipes the container filesystem** (venv, shim,
-  `secrets.env`, the server). What it boots with depends on the path: the
+  `secrets.env`, the server), and the sanctioned recreate path is the
   recipe's own machinery (`bring-up.sh`/`03-sandbox.sh`, autoheal
-  `watchdog.sh`) re-renders the STOCK template — every workshop grant
-  (network AND filesystem) silently reverts; a Phase 1b recreate boots the
-  live policy and keeps them. After a stock recreate: re-run Phase 1 + 1b;
-  after either: redo Phase 2b, then have the agent re-run `setup.sh` +
-  `start-jupyter.sh` (all idempotent). Either way, verify the create-time
-  authorization env survived (Phase 1b check) — a Slack bot that answers
-  everyone with pairing codes plus a missing `outlook-bridge.py` process
-  means it didn't; fix per references/access-and-lifecycle.md, no
-  re-recreate needed.
+  `watchdog.sh`) — it re-renders the STOCK template, so every workshop grant
+  (network AND filesystem) reverts by design. Afterwards re-run Phase 1, the
+  Phase 1b restart (fresh sandbox — inside the token window), and Phase 2b,
+  then have the agent re-run `setup.sh` + `start-jupyter.sh` (all
+  idempotent). Verify the create-time authorization env reached the
+  relaunched gateway (Phase 1b check) — a Slack bot that answers everyone
+  with pairing codes plus a missing `outlook-bridge.py` process means it
+  didn't; fix per references/access-and-lifecycle.md, no re-recreate needed.
 - **`docker exec` proves nothing about the agent's sandbox** (1 seccomp filter
   vs the agent's 4, no Landlock). Egress/syscall tests: `openshell sandbox
   exec` only.

@@ -180,6 +180,10 @@ openshell policy get "$SANDBOX" --full | sed '1,/^---$/d' > /tmp/live.yaml
 #   ... append the workshop blocks, then (typically run by the human):
 openshell policy set "$SANDBOX" --policy /tmp/apply.yaml --wait
 
+# 1b. Boot the filesystem grants: container restart while the sandbox is
+#     still inside its bootstrap-token window, then relaunch the agent stack
+#     (age guard + exact steps: operator skill, Phase 1b)
+
 # 2. Verify the policy is live (probes under real enforcement)
 bash "$EXAMPLE"/skills/setup-workshop-nemoclaw-operator/scripts/verify-sandbox-ready.sh
 
@@ -231,6 +235,9 @@ resident agent, which now carries the `workshop` and `module-N` tutor skills.
   also wipes the staged skills, the clone, the venv, and `secrets.env`, and
   re-renders policy from the `policy.yaml` template — to run the workshop
   again, repeat the quickstart (all steps are idempotent).
-- Never `docker restart` the sandbox container (stale-bootstrap-JWT crash
-  loop, observed on OpenShell v0.0.53 — re-verify on newer releases; see the
-  operator skill's lifecycle notes).
+- `docker restart` of the sandbox container is safe only inside the
+  bootstrap-token window (~1 h from create; the token is never refreshed):
+  within it a restart recovers and boots dormant filesystem grants (verified
+  on OpenShell v0.0.96); past it the sandbox bricks in an `ExpiredSignature`
+  crash loop (verified on v0.0.53 and v0.0.96). See the operator skill's
+  Phase 1b guard and lifecycle notes.

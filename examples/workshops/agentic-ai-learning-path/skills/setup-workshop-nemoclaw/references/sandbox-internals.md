@@ -98,7 +98,8 @@ symlink to `pts/ptmx`, so the one grant covers master and slaves.)
 
 Fix (operator side): apply `- /dev/pts` under `filesystem_policy.read_write`
 with the rest of the workshop policy (operator skill Phase 1), then run that
-skill's Phase 1b recreate-from-live so a fresh boot picks it up. A live `openshell policy
+skill's Phase 1b token-window-guarded container restart so a fresh boot
+picks it up. A live `openshell policy
 set` does NOT activate fs grants: the supervisor parses `filesystem_policy`
 once at container boot and builds every per-spawn Landlock ruleset from that
 boot-time copy (verified: after a live apply added /dev/pts, new spawns
