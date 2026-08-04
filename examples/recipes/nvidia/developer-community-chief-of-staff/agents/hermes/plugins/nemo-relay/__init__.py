@@ -22,6 +22,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import threading
 from collections import deque
 from types import SimpleNamespace
@@ -53,6 +54,10 @@ _DISABLED_LOGGED = False
 _PENDING_MAX_PER_KEY = 512
 _PENDING_PRE: dict[tuple[str, str], deque[str]] = {}
 _PENDING_LOCK = threading.Lock()
+_OPENSHELL_ENV_PLACEHOLDER_RE = re.compile(
+    r"openshell:resolve:env:[A-Za-z_][A-Za-z0-9_]*"
+)
+_OPENSHELL_ENV_PLACEHOLDER_REPLACEMENT = "[openshell env placeholder]"
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +99,38 @@ def _client():
         except Exception as exc:  # pragma: no cover
             logger.debug("nemo-relay: failed to construct httpx client: %s", exc)
             return None
+
+
+# ---------------------------------------------------------------------------
+# Telemetry sanitization
+# ---------------------------------------------------------------------------
+
+
+def _sanitize_open_shell_placeholders(value: Any) -> Any:
+    """Replace canonical OpenShell env placeholders before telemetry export.
+
+    User prompts, tool outputs, and model responses can legitimately contain
+    strings such as ``openshell:resolve:env:FAKE_TOKEN``. These strings are not
+    credentials, but downstream resolution can prevent the containing span from
+    reaching Phoenix. Preserve the hook structure while replacing each marker
+    with a non-resolvable sentinel.
+    """
+    if isinstance(value, str):
+        return _OPENSHELL_ENV_PLACEHOLDER_RE.sub(
+            _OPENSHELL_ENV_PLACEHOLDER_REPLACEMENT, value
+        )
+    if isinstance(value, dict):
+        return {
+            str(_sanitize_open_shell_placeholders(key)): (
+                _sanitize_open_shell_placeholders(item)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_sanitize_open_shell_placeholders(item) for item in value]
+    if isinstance(value, tuple):
+        return [_sanitize_open_shell_placeholders(item) for item in value]
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +271,10 @@ def _forward(payload: dict) -> None:
     if client is None:
         return
     try:
-        client.post(f"{url}/hooks/hermes", json=payload)
+        client.post(
+            f"{url}/hooks/hermes",
+            json=_sanitize_open_shell_placeholders(payload),
+        )
     except Exception as exc:
         logger.debug("nemo-relay: forward to %s failed: %s", url, exc)
 

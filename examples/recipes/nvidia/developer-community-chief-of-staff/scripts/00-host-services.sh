@@ -9,7 +9,7 @@
 #
 #   phoenix      — OpenInference trace collector (UI on :6006)
 #   postgres     — backing store for source ETLs
-#   github-etl   — pulls GitHub issues/comments into postgres
+#   github-etl   — opt-in GitHub issues/comments mirror
 #   forums-etl   — pulls NVIDIA forum posts into postgres
 #   postgrest    — REST API in front of postgres (host port 3100)
 #
@@ -50,13 +50,28 @@ EOF
 
 cmd_up() {
   local profile_args=() backend=""
+  case "${SOURCE_ETL_GITHUB_ENABLED:-0}" in
+    1)
+      profile_args+=(--profile github-etl)
+      echo "GitHub source ETL: enabled (${SOURCE_ETL_GITHUB_REPO:-NVIDIA/NemoClaw})"
+      ;;
+    0)
+      echo "GitHub source ETL: disabled (set SOURCE_ETL_GITHUB_ENABLED=1 to enable)"
+      ;;
+    *)
+      echo "Invalid SOURCE_ETL_GITHUB_ENABLED=${SOURCE_ETL_GITHUB_ENABLED} (expected 0 or 1)" >&2
+      exit 1
+      ;;
+  esac
+
   if atif_remote_enabled; then
     backend="$(atif_relay_backend)"   # validates s3|minio (loud error if unset)
     # Resolve + export the downstream bucket BEFORE `docker compose up`: s3 /
     # s3-compatible fail loud here if ATIF_RELAY_BUCKET is unset, and compose
     # inherits the resolved value.
-    export ATIF_RELAY_BUCKET="$(atif_relay_bucket "$backend")"
-    profile_args=(--profile "$backend")
+    ATIF_RELAY_BUCKET="$(atif_relay_bucket "$backend")"
+    export ATIF_RELAY_BUCKET
+    profile_args+=(--profile "$backend")
     # Generate/read the per-VM bearer from the gitignored cache (not .env) so
     # the relay starts WITH it on the first `up` — no crash-then-recreate.
     export ATIF_RELAY_AUTH_TOKEN="${ATIF_RELAY_AUTH_TOKEN:-$(atif_relay_token)}"
@@ -70,8 +85,14 @@ cmd_up() {
     echo "ATIF export: local (traces written to sandbox /tmp/atif; no host services for ATIF)"
   fi
 
-  echo "Starting host services${profile_args:+ (profile=$backend)}"
-  docker compose -f "$COMPOSE_FILE" "${profile_args[@]}" up -d --build
+  echo "Starting host services"
+  if (( ${#profile_args[@]} > 0 )); then
+    docker compose -f "$COMPOSE_FILE" "${profile_args[@]}" up -d --build
+  else
+    # Bash 3.2 treats expansion of an empty array as an unbound variable
+    # under `set -u`, so keep the no-profile path explicit.
+    docker compose -f "$COMPOSE_FILE" up -d --build
+  fi
 
   # Wait for MinIO healthy + create the bucket (idempotent).
   if [[ "$backend" == "minio" ]]; then
@@ -94,7 +115,11 @@ cmd_up() {
 
   echo
   echo "Status:"
-  docker compose -f "$COMPOSE_FILE" "${profile_args[@]}" ps
+  if (( ${#profile_args[@]} > 0 )); then
+    docker compose -f "$COMPOSE_FILE" "${profile_args[@]}" ps
+  else
+    docker compose -f "$COMPOSE_FILE" ps
+  fi
 }
 
 cmd_down() {

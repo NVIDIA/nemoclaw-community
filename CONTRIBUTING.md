@@ -36,6 +36,28 @@ Discuss each of these changes with maintainers before implementation:
 
 For more information, read [GOVERNANCE.md](GOVERNANCE.md).
 
+## Classify Issues And Pull Requests
+
+Use native GitHub Issue Type for issue classification. Select `Bug` for broken
+behavior, `Enhancement` for a new capability, `Task` for maintainer work, and
+`Documentation` for missing or incorrect documentation. Labels route work; they
+do not replace native Issue Type.
+
+Use a Conventional Commit-style title for issues and pull requests:
+
+```text
+<type>(<optional-scope>): <description>
+```
+
+Allowed types are `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `ci`, and
+`perf`. Examples include `feat(gitlab): add policy-scoped read access`,
+`fix(outlook): reuse the refresh-token cache`, and `docs: clarify setup`.
+
+Read the canonical
+[maintainer taxonomy](.agents/skills/nemoclaw-community-maintainer-policies/references/label-taxonomy.md)
+before suggesting or applying labels. New example proposals and publication
+pull requests also follow the repository's example-kind and provenance labels.
+
 ## Prerequisites
 
 Install these tools before you run repository checks:

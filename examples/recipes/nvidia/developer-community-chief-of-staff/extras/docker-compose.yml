@@ -46,6 +46,7 @@ services:
       retries: 10
 
   github-etl:
+    profiles: ["github-etl"]
     build:
       context: ./source-etls/github-etl
     restart: unless-stopped

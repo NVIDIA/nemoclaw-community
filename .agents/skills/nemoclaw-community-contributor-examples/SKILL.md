@@ -14,6 +14,8 @@ changing an example's runtime or security boundaries accidentally.
 ## Workflow
 
 1. Read [references/example-taxonomy.md](references/example-taxonomy.md).
+   For issue and pull request metadata, also read the canonical
+   [maintainer taxonomy](../nemoclaw-community-maintainer-policies/references/label-taxonomy.md).
 2. Read the target example's README and nearby deployment documentation before
    classifying or naming it.
 3. Select the artifact type first. For recipes, select contributor provenance

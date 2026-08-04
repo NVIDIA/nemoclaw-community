@@ -41,6 +41,20 @@ CYAN = "\033[36m" if sys.stderr.isatty() else ""
 GREEN = "\033[32m" if sys.stderr.isatty() else ""
 DIM = "\033[2m" if sys.stderr.isatty() else ""
 RESET = "\033[0m" if sys.stderr.isatty() else ""
+DEFAULT_REFRESH_TOKEN_LIFETIME_SECONDS = 90 * 24 * 60 * 60
+
+
+def refresh_token_lifetime_seconds(token: dict) -> int:
+    try:
+        lifetime = int(
+            token.get(
+                "refresh_token_expires_in",
+                DEFAULT_REFRESH_TOKEN_LIFETIME_SECONDS,
+            )
+        )
+    except (TypeError, ValueError):
+        lifetime = DEFAULT_REFRESH_TOKEN_LIFETIME_SECONDS
+    return lifetime if lifetime > 0 else DEFAULT_REFRESH_TOKEN_LIFETIME_SECONDS
 
 
 def _print_banner(verification: str, user_code: str, login_hint: str | None) -> None:
@@ -107,10 +121,12 @@ def main() -> int:
         if "access_token" in token:
             now_ms = int(time.time() * 1000)
             expires_in = int(token.get("expires_in", 3600))
+            refresh_expires_in = refresh_token_lifetime_seconds(token)
             result = {
                 "access_token": token["access_token"],
                 "refresh_token": token.get("refresh_token", ""),
                 "expires_at_ms": now_ms + expires_in * 1000,
+                "refresh_expires_at_ms": now_ms + refresh_expires_in * 1000,
                 "scope": token.get("scope", scope),
                 "token_type": token.get("token_type", "Bearer"),
             }

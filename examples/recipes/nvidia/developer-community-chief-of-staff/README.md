@@ -193,7 +193,7 @@ Skills are loaded on demand by the agent when relevant to a task. They live in [
 | `outlook-email-search` | Search the Outlook mailbox via Microsoft Graph to find and read emails relevant to a question. |
 | `cross-source-gap-analysis` | Synthesize findings across Slack, GitHub, and NVIDIA forum sources to identify gaps, alignment issues, and follow-ups. |
 | `nemoclaw-autoheal` | Guide users through sandbox health checks and optional host-side auto-heal setup. |
-| `nemoclaw-enterprise-nvteam` | Route product, delivery, engineering, quality, operations, security, and developer-relations work through seven evidence-bounded role lenses. |
+| `nemoclaw-nvteam` | Route work through eight evidence-bounded role lenses added locally by this Community recipe. |
 
 The original contribution reported source revision
 `b87038405fd7d9646dba57c367f54d86ca4d933d`. This repository adapts and hardens
@@ -207,10 +207,28 @@ workflow. It includes only the schema, synthetic example, and validator for a
 trusted runtime that supplies the registry read-only outside agent-writable
 state.
 
-The seven role lenses are the PM person (River), TPM person (Quinn), backend
-and systems engineering person (Akira), QA person (Robin), SRE person (Alex),
-security person (Morgan), and DevRel/TME person (Parker). These labels describe
-role lenses, not real people, separate agents, models, or configurations.
+The eight role lenses are Product Manager (River), Technical Program Manager
+(Quinn), Backend and Systems Engineer (Akira), Data and ML Engineer (Jordan),
+Quality Engineer (Robin), Platform and SRE (Alex), Security Engineer (Morgan),
+and Technical Marketing Engineer (Parker). The chief of staff introduces this
+team once at the start of the first NVTeam-routed response and shows the active
+name and role on each routed response. NVTeam is added by this Community recipe;
+it is not a built-in capability of the core NemoClaw product. These labels
+describe task-scoped lenses, not real people, separate agents, models,
+configurations, decision owners, or evidence about core-product behavior.
+
+Substantive NVTeam work applies Mission is the Boss, Speed of Light (SOL),
+Listen, Understand, Answer (LUA), and “As much as needed, as little as
+possible” as practical decision tools. The personas apply these principles
+silently by default and name one only when it clarifies a material choice.
+Akira, Jordan, Robin, Alex, Morgan, and Parker share one technical-writing
+reference instead of duplicating the same rules across their cards.
+
+In Slack, every persona uses semantic Markdown shaped for its domain. Hermes
+renders the Markdown as native Rich Blocks and retains a complete text
+fallback. When two to four choices materially block progress, the normal
+Hermes clarification tool appears as one-tap Slack buttons. A click returns
+user input to the normal turn; it does not approve or perform a side effect.
 
 ## Intended user journey
 
@@ -288,7 +306,7 @@ Now edit `.env` and fill in everything you already have:
     - `OUTLOOK_TARGET_MAILBOX`, `OUTLOOK_REPLY_TO` — the agent's mailbox and your personal mailbox
   - **Slack**: `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` (both required) — see [docs/set-up-slack.md](docs/set-up-slack.md). Partial Outlook configuration (some vars set, some empty) is rejected at bring-up.
 - (optional) `SLACK_ALLOWED_IDS` — comma-separated Slack user IDs to restrict who can DM the agent; leave empty to allow anyone in the workspace
-- (optional) `NEMOCLAW_SLACK_RICH_BLOCKS=true` — render supported Markdown, including tables, with native Slack Block Kit. The default is `false`.
+- (optional) `NEMOCLAW_SLACK_RICH_BLOCKS=false` — disable native Slack Rich Block rendering and use the text fallback. The default is `true`.
 - (optional) `OUTLOOK_ALLOWED_SENDERS` — comma-separated allowlist of email senders the agent will respond to; leave empty to fall back to OUTLOOK_REPLY_TO
 - (optional) `GITHUB_TOKEN` for authenticated sandbox read-only
   GitHub REST, `GITHUB_READONLY_REPO`,
@@ -299,8 +317,9 @@ Now edit `.env` and fill in everything you already have:
 [scripts/bring-up.sh](scripts/bring-up.sh) handles host services as its phase 1/4 by
 invoking [scripts/00-host-services.sh](scripts/00-host-services.sh) before the
 sandbox-side phases. The stack from [extras/docker-compose.yml](extras/docker-compose.yml)
-— phoenix (telemetry), postgres (ETL backing store), source ETL workers, PostgREST on
-host port 3100, plus minio + atif-export-relay when `ATIF_EXPORT_MODE=relay` — is
+— phoenix (telemetry), postgres (ETL backing store), the forum ETL, PostgREST on
+host port 3100, plus the opt-in GitHub ETL and minio + atif-export-relay when
+configured — is
 designed to outlive the sandbox, so subsequent `tear-down.sh && bring-up.sh` cycles
 re-touch only the sandbox by default (00-host-services is idempotent).
 
@@ -469,9 +488,9 @@ bearer header; the OpenShell L7 proxy substitutes a live token on egress.
 
 | Provider name | `--type` | Credential env var | Required? |
 |---|---|---|---|
-| `compatible-endpoint` | `nvidia` (built-in v2; consumed via `openshell inference set`, not attached to the sandbox directly) | `NVIDIA_API_KEY` (populated from `OPENAI_API_KEY` / `COMPATIBLE_API_KEY` at provider-create time). URL: `NEMOCLAW_ENDPOINT_URL` → `NVIDIA_BASE_URL` provider config. Routing via `inference.local`. | Required for inference. If omitted, the agent has no LLM. |
+| `compatible-endpoint` | `nvidia` (built-in v2; consumed via `openshell inference set`, not attached to the sandbox directly) | `NVIDIA_API_KEY` (populated from `OPENAI_API_KEY` / `COMPATIBLE_API_KEY` at provider-create time). URL: `NEMOCLAW_ENDPOINT_URL` → `NVIDIA_BASE_URL` provider config. Routing via `inference.local`. | Required for inference. Missing credentials stop setup before the sandbox build unless the explicit offline preflight bypass is selected. |
 | `<sandbox>-outlook` | `nemoclaw-outlook-email` | `MS_GRAPH_ACCESS_TOKEN` (auto-rotated by the gateway from the registered refresh token). Refresh material: `OUTLOOK_TENANT_ID`, `OUTLOOK_CLIENT_ID`, refresh_token (cached from device-code login). | Optional. Created only when the Outlook block is fully populated; partial config is rejected. At least one of Outlook or Slack must be configured. |
-| `<sandbox>-slack` | `nemoclaw-slack` | `SLACK_BOT_TOKEN` (Web API) + `SLACK_APP_TOKEN` (Socket Mode) | Optional. Both credentials are `required: true` on the profile — partial Slack config fails at provider-create time. At least one of Outlook or Slack must be configured. |
+| `<sandbox>-slack` | `nemoclaw-slack` | `SLACK_BOT_TOKEN` (Web API) + `SLACK_APP_TOKEN` (Socket Mode) | Optional. Before provider creation, setup verifies that the app token can call `apps.connections.open` with `connections:write`. At least one of Outlook or Slack must be configured. |
 | `<sandbox>-github` | `nemoclaw-github` | `GITHUB_TOKEN` | Optional but recommended. Enables authenticated live GitHub REST reads. The sandbox receives only the OpenShell placeholder; `policy.yaml` further limits use to repo-scoped `GET` routes from approved binaries. |
 | `<sandbox>-gitlab` | `nemoclaw-gitlab` | `GITLAB_TOKEN` | Optional. Enables authenticated GitLab REST reads. `policy.yaml` expands a separate GET-only path allowlist for every project in `GITLAB_READONLY_PROJECTS`; sensitive project endpoints remain blocked. |
 
@@ -527,9 +546,10 @@ openshell sandbox exec --name "${SANDBOX_NAME:-hermes-direct}" -- sh -lc \
 ```
 
 `GITHUB_READONLY_REPO` controls only live REST reads through
-`github-readonly-live`. The host-side ETL mirror is independent; set
-`SOURCE_ETL_GITHUB_REPO=owner/repo` if you also want mirrored GitHub
-discussions/history from a different repo, then rerun
+`github-readonly-live`. The host-side ETL mirror is independent and disabled by
+default. Set `SOURCE_ETL_GITHUB_ENABLED=1` and optionally
+`SOURCE_ETL_GITHUB_REPO=owner/repo` when you want mirrored GitHub
+discussions/history, then rerun
 `bash scripts/00-host-services.sh`. Existing mirror database/state is preserved
 unless you remove the compose volumes.
 
@@ -570,7 +590,9 @@ releases are readable. Variables, hooks, tokens, runners, members, writes,
 | `OPENSHELL_GATEWAY` | `openshell` | Gateway name. The default matches the package-managed OpenShell installer. Use `snap-docker` when following the snap setup. |
 | `OPENSHELL_GATEWAY_ENDPOINT` | auto (`https://127.0.0.1:17670` for `openshell`, `http://127.0.0.1:17670` for `snap-docker`) | Override the local gateway endpoint if you registered it under a different URL. |
 | `NEMOCLAW_MODEL` | `nvidia/nemotron-3-super-120b-a12b` | Inference model passed to `openshell inference set`. |
-| `NEMOCLAW_SLACK_RICH_BLOCKS` | `false` | Set to `true` to render supported Markdown with Hermes's native Slack Block Kit renderer, including table blocks. Only `true` or `false` is accepted. Rebuild the sandbox after changing it. |
+| `NEMOCLAW_INFERENCE_PREFLIGHT` | `1` | Validates the inference endpoint, credential, and model with one bounded, one-token completion before sandbox creation. Remote endpoints must use HTTPS; loopback HTTP is allowed for local proxies. Standard proxy and CA environment variables are preserved. Set to `0` only for intentional offline setup or an endpoint that cannot support verification. |
+| `NEMOCLAW_INFERENCE_PREFLIGHT_TIMEOUT_SECONDS` | `10` | Maximum time allowed for the preflight request. |
+| `NEMOCLAW_SLACK_RICH_BLOCKS` | `true` | Render supported semantic Markdown with Hermes's native Slack Block Kit renderer, including table blocks. Set to `false` for text-only output. Interactive clarification buttons remain available. Only `true` or `false` is accepted. Rebuild the sandbox after changing it. |
 | `NEMOCLAW_ENDPOINT_URL` | `https://integrate.api.nvidia.com/v1` | Upstream base URL for the `compatible-endpoint` provider. (`OPENAI_BASE_URL` is also accepted as a fallback.) |
 | `NEMOCLAW_HOST_TLS_PROXY_UPSTREAM` | (none) | Optional HTTPS origin for the host TLS proxy. Required when `NEMOCLAW_ENDPOINT_URL` uses `host.openshell.internal:18080` and auto-heal should manage that proxy. |
 | `NEMOCLAW_HOST_TLS_PROXY_PORT` | `18080` | Host listener port for the optional TLS proxy. |
@@ -580,6 +602,7 @@ releases are readable. Variables, hooks, tokens, runners, members, writes,
 | `GITLAB_TOKEN` | (none) | Optional GitLab PAT. Use `read_api` scope; the sandbox receives only the OpenShell credential placeholder. |
 | `GITLAB_READONLY_PROJECTS` | (none) | Comma-separated GitLab project paths (`group/project` or `group/subgroup/project`). Each receives its own GET-only policy rules when the sandbox is created. |
 | `GITLAB_API_URL` | `https://gitlab.example.com/api/v4` | GitLab REST v4 base, formatted as `https://host[:port]/api/v4`. Replace the example hostname for your deployment; the provider and network policy remain scoped to its exact host and port. |
+| `SOURCE_ETL_GITHUB_ENABLED` | `0` | Set to `1` to start the host-side GitHub mirror. A live-read `GITHUB_TOKEN` alone does not enable the ETL. |
 | `SOURCE_ETL_GITHUB_REPO` | `NVIDIA/NemoClaw` | Host-side GitHub mirror repo for source-etls. This is independent of `GITHUB_READONLY_REPO`. |
 | `OUTLOOK_LOGIN_CACHE` | `1` | Controls the Microsoft refresh-token cache at `.bootstrap/cache/ms-graph-token.json`. `1` = use the cache (auto-refresh on staleness, ~90 days). `0` = skip the cache entirely (device-code every bring-up, nothing on disk; use on shared workstations or security-sensitive contexts). `2` = force device-code login and rewrite the cache. The gateway-side encrypted credential copy is unaffected by this knob. |
 | `PHOENIX_COLLECTOR_ENDPOINT` | (none) | Set to e.g. `http://host.openshell.internal:6006/v1/traces` to stream OpenInference traces to a Phoenix collector. ATIF trace generation does not depend on this — NeMo-Relay is always installed and writes ATIF locally to `/tmp/atif/` regardless. |

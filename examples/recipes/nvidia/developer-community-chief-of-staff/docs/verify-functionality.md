@@ -3,8 +3,8 @@ title:
   page: "Verify Skill Functionality"
   nav: "Verify Skills"
 description:
-  main: "Walk through 19 conversational prompts plus live GitHub and optional GitLab checks that prove the core Hermes workflow skills and all seven NVTeam role lenses end-to-end across Slack DM, Slack thread, and Outlook email channels."
-  agent: "End-to-end functional verification recipe for the developer-community-chief-of-staff example. Contains 19 copy-pasteable prompts covering outlook-email-search, slack-channel-finder, slack-channel-summarizer, source-etl-query, cross-source-gap-analysis, and all seven role-first nemoclaw-enterprise-nvteam lenses, plus live github-readonly-live and optional gitlab-readonly-live checks. Each prompt has a stated expected behavior and a specific verification cue. Use after running scripts/bring-up.sh and confirming the README's plumbing checks pass — this guide picks up where the README's plumbing verification stops."
+  main: "Walk through 21 conversational prompts plus live GitHub and optional GitLab checks that prove the core Hermes workflow skills, all eight NVTeam role lenses, Rich Blocks, and interactive clarification end-to-end across Slack DM, Slack thread, and Outlook email channels."
+  agent: "End-to-end functional verification recipe for the developer-community-chief-of-staff example. Contains 21 copy-pasteable prompts covering outlook-email-search, slack-channel-finder, slack-channel-summarizer, source-etl-query, cross-source-gap-analysis, and all eight role-first nemoclaw-nvteam lenses, plus live github-readonly-live and optional gitlab-readonly-live checks. Each prompt has a stated expected behavior and a specific verification cue. Use after running scripts/bring-up.sh and confirming the README's plumbing checks pass."
 keywords: ["verify nemoclaw skills", "hermes skill verification", "slack outlook smoke test", "developer community chief of staff verification"]
 topics: ["generative_ai", "ai_agents"]
 tags: ["hermes", "openshell", "outlook", "slack", "github", "gitlab", "verification", "smoke-test"]
@@ -24,9 +24,9 @@ status: published
 
 # Verify Skill Functionality
 
-Nineteen copy-pasteable prompts plus live GitHub and optional GitLab checks that prove each skill works end-to-end across Slack and Outlook. The README's [§ Verification](../README.md#verification-what-success-looks-like) only checks plumbing (the bridge runs, the sidecar exists, scripts return `ok: true`). This guide picks up where that stops: it checks whether the **agent** can use its skills correctly.
+Twenty-one copy-pasteable prompts plus live GitHub and optional GitLab checks prove each skill works end-to-end across Slack and Outlook. The README's [§ Verification](../README.md#verification-what-success-looks-like) checks plumbing. This guide checks whether the **agent** can use its skills correctly.
 
-Once you've run all 19, head to [collective-wisdom.md](collective-wisdom.md) for the cross-channel skill-learning demo — where one user teaches the agent a new skill, the skill survives a full sandbox rebuild, and a different user invokes it from a different channel and gets the same output format.
+Once you've run all 21, head to [collective-wisdom.md](collective-wisdom.md) for the cross-channel skill-learning demo, where one user teaches the agent a new skill and another user invokes it after a rebuild.
 
 ## Prerequisites
 
@@ -47,7 +47,7 @@ A few constraints to keep in mind:
 
 ---
 
-## The 19 prompts
+## The 21 prompts
 
 For each skill there's a **smoke** test (deterministic, proves the wiring) and a **realistic** test (exercises the full code path, judged by reading the reply). Channels alternate so both bridges get exercised.
 
@@ -65,15 +65,17 @@ For each skill there's a **smoke** test (deterministic, proves the wiring) and a
 | Q8 | source-etl-query            | realistic | Outlook email |
 | Q9 | cross-source-gap-analysis   | smoke     | Slack DM      |
 | Q10| cross-source-gap-analysis   | realistic | Outlook email |
-| Q11| nemoclaw-enterprise-nvteam  | smoke     | Slack DM      |
-| Q12| nemoclaw-enterprise-nvteam  | smoke     | Slack DM      |
-| Q13| nemoclaw-enterprise-nvteam  | realistic | Slack DM      |
-| Q14| nemoclaw-enterprise-nvteam  | realistic | Slack DM      |
-| Q15| nemoclaw-enterprise-nvteam  | realistic | Slack DM      |
-| Q16| nemoclaw-enterprise-nvteam  | realistic | Slack DM      |
-| Q17| nemoclaw-enterprise-nvteam  | realistic | Slack DM      |
-| Q18| nemoclaw-enterprise-nvteam  | realistic | Slack DM      |
-| Q19| nemoclaw-enterprise-nvteam  | realistic | Slack DM      |
+| Q11| nemoclaw-nvteam             | smoke     | Slack DM      |
+| Q12| nemoclaw-nvteam             | smoke     | Slack DM      |
+| Q13| nemoclaw-nvteam             | realistic | Slack DM      |
+| Q14| nemoclaw-nvteam             | realistic | Slack DM      |
+| Q15| nemoclaw-nvteam             | realistic | Slack DM      |
+| Q16| nemoclaw-nvteam             | realistic | Slack DM      |
+| Q17| nemoclaw-nvteam             | realistic | Slack DM      |
+| Q18| nemoclaw-nvteam             | realistic | Slack DM      |
+| Q19| nemoclaw-nvteam             | realistic | Slack DM      |
+| Q20| nemoclaw-nvteam             | realistic | Slack DM      |
+| Q21| nemoclaw-nvteam             | interactive | Slack DM    |
 
 Every question below uses the same shape:
 
@@ -289,12 +291,15 @@ should use the separate `github-readonly-live` skill for `GITHUB_READONLY_REPO`.
 
 ---
 
-### nemoclaw-enterprise-nvteam
+### nemoclaw-nvteam
 
 For every NVTeam prompt below, verify that a newly routed response starts with
-the literal `<Name> active —` receipt for the named role lens and ends with
+the literal `<Name> (<Role>) active —` receipt and ends with
 exactly one execution-status line beginning `RESULT`, `PARTIAL`, or `BLOCKED`.
-For the substantive prompts Q13–Q19, no accepted mission is supplied, so the
+On the first response of each fresh conversation, also verify that the agent
+first renders a compact `Your NVTeam` table with all eight names and roles. The
+table should be a native Rich Block table while remaining readable as text.
+For the substantive prompts Q13–Q20, no accepted mission is supplied, so the
 response must also mark mission alignment `NOT VERIFIED`. Labels such as “PM
 person (River)” identify a role lens; they do not identify a real person or
 grant authority.
@@ -305,10 +310,10 @@ grant authority.
 
 > Is River available?
 
-**Expected:** agent loads `nemoclaw-enterprise-nvteam`, the River persona card,
+**Expected:** agent loads `nemoclaw-nvteam`, the River persona card,
 and the Slack response profile without inspecting or changing model or runtime
 configuration.
-**Verify:** reply begins `River active —`, does not present River as a model,
+**Verify:** after the one-time team table, reply begins `River (Product Manager) active —`, does not present River as a model,
 configuration, or separate agent, and ends `RESULT — River activated.`
 
 #### Q12 — PM person (River), explicit activation smoke
@@ -318,7 +323,7 @@ configuration, or separate agent, and ends `RESULT — River activated.`
 > use nvteam river
 
 **Expected:** same activation behavior as Q11 through the explicit NVTeam form.
-**Verify:** reply begins `River active —`, grants no permission or authority,
+**Verify:** reply begins `River (Product Manager) active —`, grants no permission or authority,
 and ends `RESULT — River activated.`
 
 #### Q13 — PM person (River), sparse-evidence decision
@@ -341,7 +346,7 @@ product decision; and ends with one `RESULT`, `PARTIAL`, or `BLOCKED` line.
 > Run a wear-all-the-hats launch-readiness review for a synthetic candidate. Product scope is accepted. Engineering reports the feature complete but supplies no commit. QA reports 18 of 20 cases passing with two unexplained timeouts. SRE has not exercised rollback. Security reviewed the design but provides no control evidence. The demo requires an undocumented H100 image. Identify what is verified, what is not, what truly must wait, what can safely proceed in parallel, owners or ownership gaps, and a recommendation without inventing approvals.
 
 **Expected:** automatic routing selects the TPM lens (Quinn) and covers the
-PM, engineering, QA, SRE, security, and DevRel/TME lenses.
+product, engineering, data and ML, quality, SRE, security, and TME lenses.
 **Verify:** the reply preserves `18 of 20` as `VERIFIED AS REPORTED`, writes
 `Critical path: NOT VERIFIED`, writes `Owner: NOT VERIFIED` where needed,
 labels any recommended gate or sequence `PROPOSED`, proposes parallel
@@ -407,6 +412,33 @@ credential-free fallback.
 **Verify:** the reply lowers the barrier to first success, replaces latest main
 with an immutable candidate, includes preflight, proof, reset, and next steps,
 and keeps the 3x and availability claims bounded to supplied evidence.
+
+#### Q20 — data and ML engineering person (Jordan)
+
+**Send via:** a fresh Slack DM thread to `@myuser_nemoclaw`
+
+> Design a community-signal pipeline from GitHub, Slack, and forum extracts for evaluating documentation friction. The sources have different schemas and no supplied data owner, classification, baseline, or drift threshold. Preserve provenance, propose the smallest useful evaluation, and state how schema change and silent failure are detected.
+
+**Expected:** automatic routing selects the Data and ML Engineer lens (Jordan).
+**Verify:** after the one-time team table, the reply starts `Jordan (Data and
+ML Engineer) active —`, uses a lineage or evaluation table, keeps each source
+distinct, marks missing ownership and classification `NOT VERIFIED`, labels a
+new threshold `PROPOSED`, checks schema changes and plausible bias, and prefers
+a deterministic baseline before adding ML.
+
+#### Q21 — interactive clarification buttons
+
+**Send via:** a fresh Slack DM thread to `@myuser_nemoclaw`
+
+> Use River. Before planning, I must choose exactly one V0 outcome: reduce setup abandonment, reduce time to first success, or improve recovery completion. No supplied evidence favors one. Ask me to choose before continuing.
+
+**Expected:** River uses Hermes's normal clarification tool with three concise,
+mutually exclusive choices. The recipe's compatibility layer presents the
+choices as Block Kit buttons.
+**Verify:** Slack shows three one-tap outcome buttons plus `Other`. Clicking one
+replaces the controls with the selected answer and the agent continues the
+normal turn. The click does not approve, publish, deploy, or perform another
+side effect. A typed answer remains a valid fallback.
 
 ---
 

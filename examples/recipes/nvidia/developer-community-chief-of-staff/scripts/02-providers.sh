@@ -75,8 +75,34 @@ for profile_file in outlook-email.yaml slack.yaml github.yaml gitlab.yaml atif-e
   fi
 done
 
+# Keep preflight subprocesses isolated from unrelated host state while
+# preserving the standard proxy and CA settings needed on enterprise networks.
+PREFLIGHT_NETWORK_ENV=(
+  "HOME=$HOME"
+  "PATH=$PATH"
+  "HTTP_PROXY=${HTTP_PROXY:-}"
+  "HTTPS_PROXY=${HTTPS_PROXY:-}"
+  "ALL_PROXY=${ALL_PROXY:-}"
+  "NO_PROXY=${NO_PROXY:-}"
+  "http_proxy=${http_proxy:-}"
+  "https_proxy=${https_proxy:-}"
+  "all_proxy=${all_proxy:-}"
+  "no_proxy=${no_proxy:-}"
+  "SSL_CERT_FILE=${SSL_CERT_FILE:-}"
+  "SSL_CERT_DIR=${SSL_CERT_DIR:-}"
+)
+
 # ── Inference provider (built-in nvidia v2 profile via inference.local) ─
 INFERENCE_KEY="${OPENAI_API_KEY:-${COMPATIBLE_API_KEY:-}}"
+INFERENCE_PREFLIGHT="${NEMOCLAW_INFERENCE_PREFLIGHT:-1}"
+case "$INFERENCE_PREFLIGHT" in
+  0|1) ;;
+  *)
+    echo "Invalid NEMOCLAW_INFERENCE_PREFLIGHT=$INFERENCE_PREFLIGHT (expected 0 or 1)" >&2
+    exit 1
+    ;;
+esac
+
 if [[ -n "$INFERENCE_KEY" ]]; then
   INFERENCE_PROVIDER="compatible-endpoint"
   INFERENCE_MODEL="${NEMOCLAW_MODEL:-nvidia/nemotron-3-super-120b-a12b}"
@@ -103,10 +129,27 @@ if [[ -n "$INFERENCE_KEY" ]]; then
         --credential NVIDIA_API_KEY --config "NVIDIA_BASE_URL=$INFERENCE_BASE_URL"
   fi
 
+  if [[ "$INFERENCE_PREFLIGHT" == "1" ]]; then
+    echo "Validating inference endpoint, credential, and model before sandbox creation"
+    env -i "${PREFLIGHT_NETWORK_ENV[@]}" \
+      NEMOCLAW_INFERENCE_PREFLIGHT_KEY="$INFERENCE_KEY" \
+      python3 "$DIR/inference_preflight.py" \
+        --endpoint "$INFERENCE_BASE_URL" \
+        --model "$INFERENCE_MODEL" \
+        --timeout "${NEMOCLAW_INFERENCE_PREFLIGHT_TIMEOUT_SECONDS:-10}"
+  else
+    echo "WARNING: inference preflight bypassed (NEMOCLAW_INFERENCE_PREFLIGHT=0)" >&2
+  fi
+
   echo "Setting cluster inference: provider=$INFERENCE_PROVIDER model=$INFERENCE_MODEL"
   openshell inference set --no-verify --provider "$INFERENCE_PROVIDER" --model "$INFERENCE_MODEL"
 else
-  echo "WARNING: neither OPENAI_API_KEY nor COMPATIBLE_API_KEY is set — skipping inference provider. The agent will have no LLM." >&2
+  if [[ "$INFERENCE_PREFLIGHT" == "1" ]]; then
+    echo "Inference preflight failed (configuration): neither OPENAI_API_KEY nor COMPATIBLE_API_KEY is set." >&2
+    echo "Set a credential, or set NEMOCLAW_INFERENCE_PREFLIGHT=0 for intentional offline setup." >&2
+    exit 1
+  fi
+  echo "WARNING: inference preflight bypassed and no credential is set. The agent will have no LLM." >&2
 fi
 
 # ── Outlook provider with gateway-managed OAuth refresh ─────────────────
@@ -120,21 +163,48 @@ if [[ -n "${OUTLOOK_CLIENT_ID:-}" ]]; then
 
   login_json=""
   mode="${OUTLOOK_LOGIN_CACHE:-1}"
+  reused_outlook_cache=false
+  cache_write_pending=false
 
-  # Mode 1: try the cache, with a freshness check on expires_at_ms.
+  outlook_device_login() {
+    local login_hint_args=()
+    [[ -n "${OUTLOOK_TARGET_MAILBOX:-}" ]] && login_hint_args+=(--login-hint "$OUTLOOK_TARGET_MAILBOX")
+    python3 "$DIR/login-ms-graph.py" \
+      --tenant-id "$OUTLOOK_TENANT_ID" \
+      --client-id "$OUTLOOK_CLIENT_ID" \
+      "${login_hint_args[@]}"
+  }
+
+  write_outlook_login_cache() {
+    local payload="$1" cache_dir cache_tmp
+    cache_dir="$(dirname "$OUTLOOK_LOGIN_CACHE_PATH")"
+    mkdir -p "$cache_dir"
+    umask 077
+    cache_tmp="$(mktemp "$cache_dir/.ms-graph-token.json.XXXXXX")"
+    if ! printf '%s\n' "$payload" > "$cache_tmp"; then
+      rm -f "$cache_tmp"
+      return 1
+    fi
+    if ! chmod 600 "$cache_tmp" || ! mv -f "$cache_tmp" "$OUTLOOK_LOGIN_CACHE_PATH"; then
+      rm -f "$cache_tmp"
+      return 1
+    fi
+  }
+
+  # Mode 1: try the cache, with a freshness check on the refresh-token
+  # horizon. expires_at_ms is the one-hour access-token expiry used by the
+  # gateway and must not decide whether device login is required.
   if [[ "$mode" == "1" && -f "$OUTLOOK_LOGIN_CACHE_PATH" ]]; then
-    cached_expires_at_ms="$(python3 -c '
-import json, sys
-try:
-    print(json.load(open(sys.argv[1]))["expires_at_ms"])
-except Exception:
-    print(0)
-' "$OUTLOOK_LOGIN_CACHE_PATH" 2>/dev/null || echo 0)"
+    cached_expires_at_ms="$(
+      python3 "$DIR/lib/outlook_cache.py" "$OUTLOOK_LOGIN_CACHE_PATH" \
+        2>/dev/null || echo 0
+    )"
     now_ms=$(( $(date +%s) * 1000 ))
     if [[ "$cached_expires_at_ms" -gt "$now_ms" ]]; then
       days_left=$(( (cached_expires_at_ms - now_ms) / 1000 / 86400 ))
       echo "Reusing cached Microsoft refresh token at $OUTLOOK_LOGIN_CACHE_PATH (${days_left}d until expiry)"
       login_json="$(cat "$OUTLOOK_LOGIN_CACHE_PATH")"
+      reused_outlook_cache=true
     else
       echo "Cached refresh token at $OUTLOOK_LOGIN_CACHE_PATH is expired or unreadable; re-running device-code login"
     fi
@@ -146,22 +216,14 @@ except Exception:
       0) echo "OUTLOOK_LOGIN_CACHE=0 — device-code login, no on-disk cache" ;;
       2) echo "OUTLOOK_LOGIN_CACHE=2 — forcing device-code login + cache rewrite" ;;
     esac
-    login_hint_args=()
-    [[ -n "${OUTLOOK_TARGET_MAILBOX:-}" ]] && login_hint_args+=(--login-hint "$OUTLOOK_TARGET_MAILBOX")
-    login_json="$(python3 "$DIR/login-ms-graph.py" \
-      --tenant-id "$OUTLOOK_TENANT_ID" \
-      --client-id "$OUTLOOK_CLIENT_ID" \
-      "${login_hint_args[@]}")"
-    # Modes 1 and 2 write the cache; mode 0 doesn't.
+    login_json="$(outlook_device_login)"
+    # Modes 1 and 2 write only after the gateway successfully rotates the
+    # credential. This keeps a prior cache intact when configuration or
+    # rotation fails.
     if [[ "$mode" != "0" ]]; then
-      mkdir -p "$(dirname "$OUTLOOK_LOGIN_CACHE_PATH")"
-      umask 077
-      printf '%s\n' "$login_json" > "$OUTLOOK_LOGIN_CACHE_PATH"
+      cache_write_pending=true
     fi
   fi
-
-  refresh_token="$(printf '%s' "$login_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["refresh_token"])')"
-  expires_at_ms="$(printf '%s' "$login_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["expires_at_ms"])')"
 
   echo "Upserting provider $OUTLOOK_PROVIDER (OAuth refresh-token strategy)"
   if ! openshell provider get "$OUTLOOK_PROVIDER" >/dev/null 2>&1; then
@@ -169,21 +231,81 @@ except Exception:
       --credential "MS_GRAPH_ACCESS_TOKEN=bootstrap-placeholder"
   fi
 
-  openshell provider refresh configure "$OUTLOOK_PROVIDER" \
-    --credential-key MS_GRAPH_ACCESS_TOKEN \
-    --strategy oauth2-refresh-token \
-    --material "tenant_id=$OUTLOOK_TENANT_ID" \
-    --material "client_id=$OUTLOOK_CLIENT_ID" \
-    --material "refresh_token=$refresh_token" \
-    --secret-material-key refresh_token \
-    --credential-expires-at "$expires_at_ms"
+  configure_outlook_refresh() {
+    local payload="$1" refresh_token expires_at_ms
+    refresh_token="$(printf '%s' "$payload" | python3 -c 'import json,sys; print(json.load(sys.stdin)["refresh_token"])')"
+    expires_at_ms="$(printf '%s' "$payload" | python3 -c 'import json,sys; print(json.load(sys.stdin)["expires_at_ms"])')"
+    openshell provider refresh configure "$OUTLOOK_PROVIDER" \
+      --credential-key MS_GRAPH_ACCESS_TOKEN \
+      --strategy oauth2-refresh-token \
+      --material "tenant_id=$OUTLOOK_TENANT_ID" \
+      --material "client_id=$OUTLOOK_CLIENT_ID" \
+      --material "refresh_token=$refresh_token" \
+      --secret-material-key refresh_token \
+      --credential-expires-at "$expires_at_ms"
+  }
 
-  openshell provider refresh rotate "$OUTLOOK_PROVIDER" --credential-key MS_GRAPH_ACCESS_TOKEN
+  outlook_refresh_status() {
+    NO_COLOR=1 openshell provider refresh status "$OUTLOOK_PROVIDER" \
+      --credential-key MS_GRAPH_ACCESS_TOKEN 2>&1 \
+      | sed $'s/\x1b\\[[0-9;]*m//g'
+  }
+
+  configure_outlook_refresh "$login_json"
+  rotate_output=""
+  if rotate_output="$(
+    openshell provider refresh rotate "$OUTLOOK_PROVIDER" \
+      --credential-key MS_GRAPH_ACCESS_TOKEN 2>&1
+  )"; then
+    [[ -z "$rotate_output" ]] || printf '%s\n' "$rotate_output"
+    if "$cache_write_pending"; then
+      write_outlook_login_cache "$login_json"
+    fi
+  else
+    [[ -z "$rotate_output" ]] || printf '%s\n' "$rotate_output" >&2
+    if ! "$reused_outlook_cache"; then
+      echo "Microsoft refresh-token rotation failed after device-code login; the login cache was not changed" >&2
+      exit 1
+    fi
+
+    refresh_status=""
+    if ! refresh_status="$(outlook_refresh_status)"; then
+      [[ -z "$refresh_status" ]] || printf '%s\n' "$refresh_status" >&2
+      echo "Could not classify the cached-token rotation failure; the existing login cache was preserved" >&2
+      exit 1
+    fi
+    if ! grep -qE 'token endpoint returned HTTP 400([^0-9]|$)' <<<"$refresh_status"; then
+      [[ -z "$refresh_status" ]] || printf '%s\n' "$refresh_status" >&2
+      echo "Cached-token rotation failed without a confirmed HTTP 400 endpoint rejection; the existing login cache was preserved" >&2
+      exit 1
+    fi
+
+    echo "The token endpoint rejected the cached Microsoft credential (HTTP 400); re-running device-code login"
+    fresh_login_json="$(outlook_device_login)"
+    configure_outlook_refresh "$fresh_login_json"
+    retry_output=""
+    if retry_output="$(
+      openshell provider refresh rotate "$OUTLOOK_PROVIDER" \
+        --credential-key MS_GRAPH_ACCESS_TOKEN 2>&1
+    )"; then
+      [[ -z "$retry_output" ]] || printf '%s\n' "$retry_output"
+      write_outlook_login_cache "$fresh_login_json"
+    else
+      [[ -z "$retry_output" ]] || printf '%s\n' "$retry_output" >&2
+      echo "Microsoft refresh-token rotation failed after device-code login; the existing login cache was preserved" >&2
+      exit 1
+    fi
+  fi
 fi
 
 # ── Slack provider (bot token + app token in one v2 provider) ──────────
 if [[ -n "${SLACK_BOT_TOKEN:-}" || -n "${SLACK_APP_TOKEN:-}" ]]; then
   SLACK_PROVIDER="$SANDBOX_NAME-slack"
+  echo "Validating Slack app token and Socket Mode scope before provider creation"
+  env -i "${PREFLIGHT_NETWORK_ENV[@]}" \
+    NEMOCLAW_SLACK_PREFLIGHT_TOKEN="${SLACK_APP_TOKEN:-}" \
+    NEMOCLAW_SLACK_PREFLIGHT_TIMEOUT_SECONDS="${NEMOCLAW_SLACK_PREFLIGHT_TIMEOUT_SECONDS:-10}" \
+    python3 "$DIR/slack_socket_preflight.py"
   echo "Upserting provider $SLACK_PROVIDER (credentials: SLACK_BOT_TOKEN + SLACK_APP_TOKEN)"
   upsert_cred "$SLACK_PROVIDER" nemoclaw-slack \
     "SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}" \

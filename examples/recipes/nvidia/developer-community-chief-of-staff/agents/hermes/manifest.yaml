@@ -7,7 +7,7 @@
 name: hermes
 display_name: "Hermes Agent"
 description: "Self-improving AI agent with learning loop (Nous Research)"
-version_constraint: ">=0.8.0"
+version_constraint: ">=0.18.0"
 language: python
 license: MIT
 homepage: "https://github.com/NousResearch/hermes-agent"
@@ -16,7 +16,7 @@ homepage: "https://github.com/NousResearch/hermes-agent"
 install_method: curl  # curl install.sh | bash
 binary_path: /usr/local/bin/hermes
 version_command: "hermes --version"
-expected_version: "2026.4.8"
+expected_version: "2026.7.1"
 gateway_command: "hermes gateway run"  # start.sh launches this with NEMO_RELAY_GATEWAY_URL in env, pointing at the sidecar
 
 # ── Health probe ────────────────────────────────────────────────

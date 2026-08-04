@@ -9,7 +9,8 @@ directly.
 
 ## Defaults
 
-- GitHub repo: `NVIDIA/NemoClaw`
+- GitHub ETL: disabled until `SOURCE_ETL_GITHUB_ENABLED=1`
+- GitHub repo when enabled: `NVIDIA/NemoClaw`
 - NVIDIA forums tag: `nemoclaw`
 - initial backfill: 72 hours
 - recurring refresh: hourly
@@ -17,7 +18,8 @@ directly.
 The GitHub repo above is the host-side mirror scope, controlled by
 `SOURCE_ETL_GITHUB_REPO`. It is separate from the sandbox's live read-only
 GitHub scope, which is controlled by `GITHUB_READONLY_REPO` and applied through
-OpenShell policy during sandbox creation.
+OpenShell policy during sandbox creation. A live-read `GITHUB_TOKEN` does not
+start the mirror.
 
 ## Services
 
@@ -31,6 +33,7 @@ OpenShell policy during sandbox creation.
 Export the repo root `.env` before running compose. Relevant variables:
 
 - `SOURCE_ETL_GITHUB_REPO`
+- `SOURCE_ETL_GITHUB_ENABLED`
 - `SOURCE_ETL_FORUM_TAG`
 - `SOURCE_ETL_POSTGRES_HOST`
 - `SOURCE_ETL_POSTGRES_PORT`
