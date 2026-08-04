@@ -188,16 +188,8 @@ openshell policy set "$SANDBOX" --policy /tmp/apply.yaml --wait
 bash "$EXAMPLE"/skills/setup-workshop-nemoclaw-operator/scripts/verify-sandbox-ready.sh
 
 # 3. Stage this example's skills into the agent's skill library
-#    (transactional: temp-dir copy, chown scoped to what we staged, one-exec swap)
-SKX=/sandbox/.hermes-data/skills
-for d in "$EXAMPLE"/skills/*/; do
-  name=$(basename "$d")
-  [ "$name" = "setup-workshop-nemoclaw-operator" ] && continue
-  docker exec "$C" rm -rf "$SKX/.stage-$name"
-  docker cp "$d" "$C:$SKX/.stage-$name"
-  docker exec "$C" chown -R sandbox:sandbox "$SKX/.stage-$name"
-  docker exec "$C" sh -c "rm -rf '$SKX/$name' && mv '$SKX/.stage-$name' '$SKX/$name'"
-done
+#    (transactional per skill; excludes the host-side operator skill)
+SANDBOX="$SANDBOX" bash "$EXAMPLE"/skills/setup-workshop-nemoclaw-operator/scripts/stage-skills.sh
 
 # 4. Kick the in-sandbox agent (one-shot session; single-line prompt)
 openshell sandbox exec -n "$SANDBOX" --no-tty -- sh -lc \
@@ -216,6 +208,8 @@ resident agent, which now carries the `workshop` and `module-N` tutor skills.
 
 ## Verification
 
+- Offline (no sandbox, no network): `bash tests/validate-example.sh` — syntax,
+  policy-composition unit tests, and operator-script behavior tests.
 - `verify-sandbox-ready.sh` prints PASS for the policy probes (note: it
   probes with the binaries each policy block actually allows — an exec'd
   `curl` false-negatives against the NIM block).

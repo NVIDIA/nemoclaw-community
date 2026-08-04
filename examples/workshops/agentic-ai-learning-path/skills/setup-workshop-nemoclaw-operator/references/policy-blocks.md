@@ -35,9 +35,8 @@ openshell policy get "$SANDBOX" --full | sed '1,/^---$/d' > /tmp/live.yaml
 # 0. If the blocks below are ALREADY in /tmp/live.yaml (e.g. Phase 1 ran
 #    before), apply nothing — the live policy is the source of truth and no
 #    repo file needs syncing.
-# 1. Copy /tmp/live.yaml -> /tmp/apply.yaml; append ONLY the new blocks below.
-# 2. Structural check (e.g. python+yaml): block names in apply.yaml ==
-#    block names in live.yaml + the additions; nothing else differs.
+# 1+2. Compose + structural self-verify in one step (idempotent):
+#    python3 <operator skill>/scripts/build-workshop-policy.py /tmp/live.yaml /tmp/apply.yaml
 # 3. Hand the human:  openshell policy set "$SANDBOX" --policy /tmp/apply.yaml --wait
 #    with a one-line statement of exactly what it opens.
 ```

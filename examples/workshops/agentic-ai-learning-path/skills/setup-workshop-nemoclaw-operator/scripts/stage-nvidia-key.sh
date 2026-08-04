@@ -42,13 +42,9 @@ DEST="${DEST:-/sandbox/workshop-build-an-agent/secrets.env}"
 ENV_FILE=""
 [ "${1:-}" = "--env-file" ] && ENV_FILE="${2:?usage: stage-nvidia-key.sh [--env-file <path>]}"
 
-# Exact, fail-closed container selection by OpenShell runtime labels —
-# substring matching can silently pick a similarly named sandbox.
-C=$(docker ps --filter 'label=openshell.ai/managed-by=openshell' \
-              --filter "label=openshell.ai/sandbox-name=$SANDBOX" \
-              --format '{{.Names}}')
-{ [ -n "$C" ] && [ "$(printf '%s\n' "$C" | wc -l)" -eq 1 ]; } || {
-  echo "FATAL: expected exactly one container labeled openshell.ai/sandbox-name=$SANDBOX, got: ${C:-none}"; exit 1; }
+# Exact, fail-closed container selection (shared helper).
+. "$(dirname "$0")/lib.sh"
+C=$(resolve_sandbox_container "$SANDBOX") || { echo "FATAL: container selection failed"; exit 1; }
 
 # Resolve keys into vars without echoing them.
 KEY="${NVIDIA_API_KEY:-}"

@@ -168,10 +168,11 @@ Workflow (details + YAML in the reference):
    output is not valid apply input; already done if you ran the Phase 0
    drift check):
    `openshell policy get "$SANDBOX" --full | sed '1,/^---$/d' > /tmp/live.yaml`
-2. Build the apply file = **live policy + the new blocks and nothing else**
-   (minimal delta), and structurally verify it (same block names ± the
-   additions) before applying. Include the `filesystem_policy` additions
-   (`/dev/pts` rw, `/sys/fs/cgroup` ro) — dormant until Phase 1b boots them.
+2. Build the apply file = **live policy + the new blocks and nothing else**:
+   `python3 scripts/build-workshop-policy.py /tmp/live.yaml /tmp/apply.yaml`
+   (composes the additions, structurally self-verifies, idempotent — exits
+   non-zero on any surprise). The `filesystem_policy` additions (`/dev/pts`
+   rw, `/sys/fs/cgroup` ro) ride along dormant until Phase 1b boots them.
    Do NOT edit the deployment recipe's files: the applied live policy is the
    only carrier of workshop state.
 3. Apply (human runs it if the permission layer blocks you):
@@ -307,22 +308,13 @@ agent's next session, and `setup.sh`'s final step deliberately treats staged
 copies as canonical (it never overwrites them from the clone):
 
 ```bash
-SKX=/sandbox/.hermes-data/skills
-for d in "$EXAMPLE"/skills/*/; do
-  name=$(basename "$d")
-  [ "$name" = "setup-workshop-nemoclaw-operator" ] && continue  # host-side; would only mislead the in-sandbox agent
-  # Transactional staging: copy into a hidden temp dir, chown ONLY what we
-  # staged (never the agent's whole library), then swap in a single exec —
-  # a failed copy leaves the existing skill untouched.
-  docker exec "$C" rm -rf "$SKX/.stage-$name"
-  docker cp "$d" "$C:$SKX/.stage-$name"
-  docker exec "$C" chown -R sandbox:sandbox "$SKX/.stage-$name"
-  docker exec "$C" sh -c "rm -rf '$SKX/$name' && mv '$SKX/.stage-$name' '$SKX/$name'"
-done
-docker exec "$C" ls /sandbox/.hermes-data/skills                # verify
+SANDBOX="$SANDBOX" bash "$EXAMPLE"/skills/setup-workshop-nemoclaw-operator/scripts/stage-skills.sh
 ```
 
-`docker cp`/`docker exec` are fine here — this is filesystem staging, not an
+The script stages transactionally (hidden temp dir, chown scoped to what it
+staged, single-exec swap — a failed copy leaves the existing skill intact)
+and excludes this host-side skill, which would only mislead the in-sandbox
+agent. `docker cp`/`docker exec` are fine here — filesystem staging, not an
 egress/syscall probe. Minimum viable staging is `setup-workshop-nemoclaw`
 alone (setup then fills the tutor skills from the clone), but staging the
 full set keeps the library on this example's adjusted copies.

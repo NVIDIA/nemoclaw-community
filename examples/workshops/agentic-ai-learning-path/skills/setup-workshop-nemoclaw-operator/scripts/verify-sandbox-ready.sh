@@ -37,13 +37,11 @@ command -v openshell >/dev/null || { failf "openshell CLI not on PATH — is thi
 command -v docker >/dev/null    || { failf "docker not on PATH — is this the sandbox host?"; echo "VERDICT: BLOCKED"; exit 1; }
 
 # 1. Container
-# Exact, fail-closed container selection by OpenShell runtime labels —
-# substring matching can silently pick a similarly named sandbox.
-C=$(docker ps --filter 'label=openshell.ai/managed-by=openshell' \
-              --filter "label=openshell.ai/sandbox-name=$SANDBOX" \
-              --format '{{.Names}}')
-if [ -n "$C" ] && [ "$(printf '%s\n' "$C" | wc -l)" -eq 1 ]; then pass "container up: $C"; else
-  failf "expected exactly one container labeled openshell.ai/sandbox-name=$SANDBOX, got: ${C:-none}"; echo "VERDICT: BLOCKED"; exit 1
+# Exact, fail-closed container selection (shared helper; labels are the only
+# container identity stable across OpenShell versions).
+. "$(dirname "$0")/lib.sh"
+if C=$(resolve_sandbox_container "$SANDBOX" 2>/dev/null); then pass "container up: $C"; else
+  failf "no unique container labeled openshell.ai/sandbox-name=$SANDBOX (fail-closed)"; echo "VERDICT: BLOCKED"; exit 1
 fi
 
 # 2. Policy revision (informational) + egress probes under enforcement
