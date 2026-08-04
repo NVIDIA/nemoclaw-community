@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+set -euo pipefail
+
+remote_name="${1:-origin}"
+repo_root="$(git rev-parse --show-toplevel)"
+checker="${repo_root}/scripts/check_dco_signoffs.sh"
+zero_sha="0000000000000000000000000000000000000000"
+failed=0
+
+find_main_base() {
+  local candidate
+
+  for candidate in refs/remotes/upstream/main refs/remotes/origin/main; do
+    if git rev-parse --verify --quiet "${candidate}^{commit}" >/dev/null; then
+      git rev-parse "${candidate}^{commit}"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [[ "$local_sha" == "$zero_sha" || "$remote_ref" != refs/heads/* ]]; then
+    continue
+  fi
+
+  base_sha=""
+  if [[ "$remote_sha" != "$zero_sha" ]] \
+    && git rev-parse --verify --quiet "${remote_sha}^{commit}" >/dev/null; then
+    base_sha="$remote_sha"
+  else
+    base_sha="$(find_main_base || true)"
+  fi
+
+  if [[ -z "$base_sha" ]]; then
+    echo "DCO check failed: Cannot find upstream/main or origin/main for ${remote_ref}." >&2
+    echo "Fetch the current main branch, then push again." >&2
+    failed=1
+    continue
+  fi
+
+  if ! "$checker" "$base_sha" "$local_sha"; then
+    echo "Push to ${remote_name}:${remote_ref#refs/heads/} was stopped before data was sent." >&2
+    failed=1
+  fi
+done
+
+exit "$failed"

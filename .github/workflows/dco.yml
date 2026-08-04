@@ -24,27 +24,4 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          commit_count=0
-          missing_signoff=0
-
-          while IFS= read -r sha; do
-            commit_count=$((commit_count + 1))
-
-            if ! git show -s --format=%B "$sha" \
-              | git interpret-trailers --parse \
-              | grep -Eq '^Signed-off-by: .+ <[^<>[:space:]]+@[^<>[:space:]]+>$'; then
-              echo "::error::Commit $sha is missing a valid Signed-off-by trailer."
-              missing_signoff=1
-            fi
-          done < <(git rev-list --reverse "${BASE_SHA}..${HEAD_SHA}")
-
-          if ((commit_count == 0)); then
-            echo "::error::The pull request does not contain a commit to check."
-            exit 1
-          fi
-
-          exit "$missing_signoff"
+        run: scripts/check_dco_signoffs.sh "$BASE_SHA" "$HEAD_SHA"

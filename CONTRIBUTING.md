@@ -273,6 +273,26 @@ Use your own name and email address. If you amend, rebase, squash, or
 cherry-pick commits, confirm that each resulting commit still contains a valid
 `Signed-off-by:` trailer.
 
+Install the repository's local Git hooks after you clone the repository:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Confirm the configuration with this command:
+
+```bash
+git config --get core.hooksPath
+```
+
+The pre-push hook checks every new branch commit before Git sends it to the
+remote repository. The hook stops the push if a commit does not contain a
+valid sign-off. Fetch `upstream/main` before you push a new branch so the hook
+can identify the contribution's commit range.
+
+Local hooks can be skipped or removed. The required GitHub DCO check remains
+the authoritative merge requirement.
+
 DCO sign-off is a declaration in the commit message. It is separate from
 cryptographic commit signing.
 
