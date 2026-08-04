@@ -24,7 +24,6 @@ import glob, sys, yaml
 for f in glob.glob(sys.argv[1] + "/**/*.yaml", recursive=True):
     list(yaml.safe_load_all(open(f)))
 EOF
-find "$ROOT" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null
 echo "  syntax OK"
 
 echo "== unit tests =="
@@ -32,6 +31,8 @@ python3 -m unittest discover -s "$HERE" -p 'test_*.py' -q || fail=1
 
 echo "== operator script behavior =="
 bash "$HERE/test_operator_scripts.sh" || fail=1
+
+find "$ROOT" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null
 
 echo
 [ "$fail" = 0 ] && echo "VALIDATE: PASS" || echo "VALIDATE: FAIL"
