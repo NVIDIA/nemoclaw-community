@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, Shrike Security, Inc. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Agent manifest for the Shrike governance recipe.
+#
+# Shrike governs at the ACTION boundary via the PreToolUse hook (see
+# install.sh), not by removing tools from the agent. The agent keeps its full
+# toolset; every matched call is evaluated by Shrike before it runs and denied
+# when the verdict is block / require_approval. This keeps the recipe a drop-in
+# governance layer over whatever workflow the operator runs.
+main:
+  tools: {}

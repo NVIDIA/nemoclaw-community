@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, Shrike Security, Inc. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# OpenShell v2 provider profile for Shrike's action-governance enforce plane.
+# Imported by scripts/onboard.sh via `openshell provider profile import`.
+#
+# Secret handling: the profile declares SHRIKE_API_KEY as a bearer credential.
+# The real value is supplied ONCE to the gateway at `openshell provider create`
+# time; the sandbox environment carries only the placeholder
+# `openshell:resolve:env:SHRIKE_API_KEY`, and the L7 proxy substitutes the real
+# value on egress to api.shrikesecurity.com. The raw key never enters the
+# sandbox. Egress is scoped to Shrike's host with enforcement: enforce.
+id: nemoclaw-shrike
+display_name: NemoClaw Shrike Security
+description: Shrike action-governance enforce plane; returns allow / warn / require_approval / block for agent tool calls. Sandbox policy further restricts to the enforce, session-status, and health paths.
+category: other
+credentials:
+  - name: api_key
+    description: Shrike API key (free tier available at https://shrikesecurity.com/signup)
+    env_vars: [SHRIKE_API_KEY]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+endpoints:
+  - host: api.shrikesecurity.com
+    port: 443
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+binaries:
+  - /usr/bin/curl
+  - /usr/local/bin/curl
+  - /usr/local/bin/node
+  - /usr/bin/node

@@ -19,6 +19,7 @@ again by contributor provenance.
 | Contributor | Example | Description |
 | --- | --- | --- |
 | HPE | [Retail Assistant](recipes/partners/hpe/retail-assistant/README.md) | Provides role-aware retail operations through Telegram, FastAPI, PostgreSQL, Docker Compose, and Helm. |
+| Shrike Security | [Shrike Security Action Governance](recipes/partners/shrike/shrike-security/README.md) | Governs agent tool calls with a PreToolUse hook that returns allow / warn / require_approval / block from Shrike's enforce plane, with host-side secret handling and scoped egress to Shrike. |
 | Tavily | [Watchtower](recipes/partners/tavily/watchtower/README.md) | Runs scheduled, cited web monitoring with persistent deduplication and auditable outputs. |
 
 Future independent contributions without formal organizational provenance
