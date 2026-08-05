@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Annotated nemoclaw network-policy template.
+# Have the user save a copy on their HOST machine as <domain-name>.yaml (e.g. huggingface.yaml)
+# with the hosts edited, then apply it from the host:
+#   nemoclaw <sbx-name> policy-add --from-file <domain-name>.yaml
+
+preset:
+  # Unique preset id; conventionally matches the file name (kebab-case).
+  name: example-site
+  # One-line human-readable summary shown when the policy is listed.
+  description: "Example site access"
+
+network_policies:
+  # Policy key — one policy block per preset is the common pattern.
+  example-site:
+    name: example-site
+    endpoints:
+      # One entry per hostname the sandbox should be allowed to reach.
+      # Subdomains are NOT implied: list www.example.com, api.example.com, ... separately.
+      - host: example.com
+        port: 443                 # almost always 443 (HTTPS)
+        access: read-only         # allow only GET/HEAD
+        protocol: rest
+        enforcement: enforce
+      - host: api.example.com
+        port: 443
+        access: read-only
+        protocol: rest
+        enforcement: enforce
+    # Binaries inside the sandbox allowed to use these endpoints.
+    # This standard set covers node, python, and curl clients; keep it unless you
+    # need to restrict further.
+    binaries:
+      - { path: /usr/local/bin/node* }
+      - { path: /usr/bin/node* }

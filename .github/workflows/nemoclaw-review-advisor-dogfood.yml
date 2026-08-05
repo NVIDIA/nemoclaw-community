@@ -55,7 +55,7 @@ jobs:
       NEMOCLAW_RELEASE_TAG: v0.0.94
       NEMOCLAW_RELEASE_COMMIT: d87acc16b04c065ddc26c294a6c3af6795a43d7b
       NEMOCLAW_HERMES_BASE_DIGEST: sha256:fa05221f5c7bcafea7e263c84e5d06f87e37d1ccb78dc28c113f1a4066aa544c
-      REVIEW_PROFILE_PATH: examples/pr-review-advisor/dogfood/profile.yaml
+      REVIEW_PROFILE_PATH: examples/recipes/nvidia/pr-review-advisor/dogfood/profile.yaml
     steps:
       - name: Check out trusted dogfood workflow source
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -71,15 +71,15 @@ jobs:
           set -eu
           git reset --hard HEAD
           git clean -ffdx \
-            -e examples/pr-review-advisor/.env \
-            -e examples/pr-review-advisor/.tmp/ \
-            -e examples/pr-review-advisor/.snapshots/ \
-            -e examples/pr-review-advisor/memory-export/
+            -e examples/recipes/nvidia/pr-review-advisor/.env \
+            -e examples/recipes/nvidia/pr-review-advisor/.tmp/ \
+            -e examples/recipes/nvidia/pr-review-advisor/.snapshots/ \
+            -e examples/recipes/nvidia/pr-review-advisor/memory-export/
 
       - name: Verify NemoClaw v0.0.94 source pin
         run: |
           set -eu
-          dockerfile=examples/pr-review-advisor/agents/hermes/Dockerfile
+          dockerfile=examples/recipes/nvidia/pr-review-advisor/agents/hermes/Dockerfile
           grep -F "latest published tag $NEMOCLAW_RELEASE_TAG" "$dockerfile"
           grep -F "$NEMOCLAW_RELEASE_COMMIT" "$dockerfile"
           grep -F "ARG BASE_IMAGE=ghcr.io/nvidia/nemoclaw/hermes-sandbox-base@$NEMOCLAW_HERMES_BASE_DIGEST" "$dockerfile"
@@ -147,7 +147,7 @@ jobs:
           acceptance_context="$job_tmp/acceptance.json"
           test ! -e "$acceptance_context"
           test ! -L "$acceptance_context"
-          examples/pr-review-advisor/scripts/fetch-pr-context.py \
+          examples/recipes/nvidia/pr-review-advisor/scripts/fetch-pr-context.py \
             --repository "$GITHUB_REPOSITORY" \
             --pr-number "$REVIEW_PR_NUMBER" \
             --base "$REVIEW_BASE_SHA" \
@@ -168,7 +168,7 @@ jobs:
             --scope-root .github/workflows/nemoclaw-review-advisor-dogfood.yml
             --scope-root README.md
             --scope-root THIRD-PARTY-NOTICES
-            --scope-root examples/pr-review-advisor
+            --scope-root examples/recipes/nvidia/pr-review-advisor
             --support-path .github/CODEOWNERS
             --support-path .github/PULL_REQUEST_TEMPLATE.md
             --support-path CONTRIBUTING.md
@@ -178,7 +178,7 @@ jobs:
           output="$REVIEW_JOB_TEMP/output"
           test ! -e "$output"
           test ! -L "$output"
-          examples/pr-review-advisor/scripts/review.sh \
+          examples/recipes/nvidia/pr-review-advisor/scripts/review.sh \
             --repo "$REVIEW_JOB_TEMP/repo" \
             --base "$REVIEW_BASE_SHA" \
             --head "$REVIEW_HEAD_SHA" \

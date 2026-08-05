@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+preset:
+  name: github-ext
+  description: "GitHub access"
+
+network_policies:
+  github-ext:
+    name: github
+    endpoints:
+    - host: github.com
+      port: 443
+      access: read-only
+      protocol: rest
+      enforcement: enforce
+    - host: api.github.com
+      port: 443
+      access: read-only
+      protocol: rest
+      enforcement: enforce
+    - host: raw.githubusercontent.com
+      port: 443
+      access: read-only
+      protocol: rest
+      enforcement: enforce
+    binaries:
+      - { path: /usr/local/bin/node* }
+      - { path: /usr/bin/node* }
+      - { path: /usr/local/python* }
+      - { path: /usr/bin/python* }
+      - { path: /usr/local/curl* }
+      - { path: /usr/bin/curl* }

@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: Documentation issue
+description: Report missing, incorrect, or unclear documentation
+type: Documentation
+labels: ["needs: triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use a concise title such as `docs: clarify the Outlook login flow`.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What is missing, incorrect, or unclear?
+    validations:
+      required: true
+  - type: input
+    id: location
+    attributes:
+      label: Affected page or path
+      description: Provide a public URL or repository path when available.
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected documentation
+      description: What should the documentation explain or show?

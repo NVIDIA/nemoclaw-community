@@ -15,22 +15,18 @@ The examples in this repository demonstrate complete blueprint patterns: they sh
 
 ## Reference Examples
 
-The table below lists examples maintained in this repository. Additional NemoClaw examples are available in [brevdev/nemoclaw-demos](https://github.com/brevdev/nemoclaw-demos).
+Examples are organized as reusable NVIDIA and partner recipes, NVIDIA field
+demos, environment launchables, and standalone developer tools. Browse the
+[example catalog](examples/README.md) to choose a workflow and follow its
+independent setup and verification guide.
 
-| Example | Description | Link |
-| ---- | ----------- | ---- |
-| DGX Station Blender and Omniverse | Runs a local Nemotron 3 Ultra model on DGX Station to control visible Blender through NemoClaw and OpenShell, render with OVRTX, and execute native OVPhysX simulations with either direct Hermes or Codex-coached workflows. | [Guide](examples/blender-omniverse-dgx-station/README.md) |
-| Personal Community Sentiment Triage | Pairs a Hermes harness with an OpenShell sandbox and community-signal integrations across Slack, Outlook, live read-only GitHub REST, GitHub discussion mirrors, and NVIDIA forum mirrors. | [Guide](examples/personal-community-sentiment-triage/README.md) |
-| Hermes Brev Launchable | Provides a notebook path from a fresh Brev CPU instance to a working NemoClaw-managed Hermes sandbox, including installation, onboarding, API verification, and terminal access. | [Guide](examples/hermes-launchable/README.md) |
-| Harness Engineering Playground | A CLI dev tool (not an OpenShell blueprint) for automated, eval-driven harness profile improvement, with pluggable target-framework adapters and optimization techniques. | [Guide](examples/harness-engineering-playground/README.md) |
-| Retail Assistant | Deploys a Telegram-based retail management assistant that maps users to store roles, queries retail data through a FastAPI service, and runs the agent inside an OpenShell sandbox. | [Guide](examples/retail-assistant/README.md) |
-| Watchtower | Runs a scheduled web-monitoring agent that searches watchlist topics with Tavily, extracts source text when needed, dedups against persistent seen-state, and writes cited Markdown digests plus JSON changelogs from an OpenShell sandbox. | [Guide](examples/watchtower/README.md) |
-| Payment Operations Hermes Assistant | Runs a regulated payment-operations workflow in a constrained Hermes sandbox, with NeMo Relay evidence, sanctions screening, and a platform-enforced human release boundary. | [Guide](examples/payment-ops-hermes/README.md) |
-| PR Review Advisor | Runs Nemotron 3 Ultra through a constrained Hermes review workflow, bootstraps a reviewable profile from committed repository evidence, and learns only maintainer-approved lessons across reviews. | [Guide](examples/pr-review-advisor/README.md) |
+Additional NemoClaw examples are available in
+[brevdev/nemoclaw-demos](https://github.com/brevdev/nemoclaw-demos).
 
 ## Getting Started
 
-Choose an example from the table above and follow its guide. To run an example from this repository, clone the repo first:
+Choose an example from the [example catalog](examples/README.md) and follow its
+guide. To run an example from this repository, clone the repo first:
 
 ```bash
 git clone https://github.com/NVIDIA/nemoclaw-community.git

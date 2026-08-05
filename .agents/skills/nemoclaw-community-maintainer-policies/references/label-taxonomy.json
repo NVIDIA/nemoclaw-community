@@ -1,0 +1,258 @@
+{
+  "schema_version": 1,
+  "repo": "NVIDIA/nemoclaw-community",
+  "derived_from": {
+    "repository": "NVIDIA/NemoClaw",
+    "path": ".agents/skills/nemoclaw-maintainer-policies/references/label-taxonomy.json",
+    "baseline_commit": "b2e9d1b726441abd57a054e363d86edd2449c4a0",
+    "policy": "Port shared semantics; omit NemoClaw release, Project 199, PRR, and supplemental security-label policy."
+  },
+  "issue_type_source_of_truth": {
+    "field": "GitHub native Issue Type",
+    "values": ["Bug", "Enhancement", "Task", "Documentation", "Epic", "Initiative"]
+  },
+  "title_convention": {
+    "pattern": "^(feat|fix|docs|chore|refactor|test|ci|perf)(\\([a-z0-9][a-z0-9-]*\\))?!?: [a-z0-9].+$",
+    "types": ["feat", "fix", "docs", "chore", "refactor", "test", "ci", "perf"]
+  },
+  "canonical_labels": [
+    {
+      "name": "bug-fix",
+      "family": "pr_type",
+      "item_kinds": ["pull_request"],
+      "color": "d73a4a",
+      "description": "PR primarily fixes broken behavior.",
+      "mutually_exclusive_group": "pr_type"
+    },
+    {
+      "name": "feature",
+      "family": "pr_type",
+      "item_kinds": ["pull_request"],
+      "color": "a2eeef",
+      "description": "PR adds or expands user-visible capability.",
+      "mutually_exclusive_group": "pr_type"
+    },
+    {
+      "name": "refactor",
+      "family": "pr_type",
+      "item_kinds": ["pull_request"],
+      "color": "f9d0c4",
+      "description": "PR restructures code without intended behavior change.",
+      "mutually_exclusive_group": "pr_type"
+    },
+    {
+      "name": "chore",
+      "family": "pr_type",
+      "item_kinds": ["pull_request"],
+      "color": "ededed",
+      "description": "Docs, CI, dependencies, packaging, policy, or maintenance.",
+      "mutually_exclusive_group": "pr_type"
+    },
+    {
+      "name": "needs: triage",
+      "family": "needs",
+      "item_kinds": ["issue", "pull_request"],
+      "color": "ededed",
+      "description": "Awaiting initial maintainer classification.",
+      "mutually_exclusive_group": null
+    },
+    {
+      "name": "needs: info",
+      "family": "needs",
+      "item_kinds": ["issue", "pull_request"],
+      "color": "fef2c0",
+      "description": "Waiting on the author for information required to proceed.",
+      "mutually_exclusive_group": "primary_blocking_need"
+    },
+    {
+      "name": "needs: design",
+      "family": "needs",
+      "item_kinds": ["issue", "pull_request"],
+      "color": "fef2c0",
+      "description": "Requires product or architecture direction.",
+      "mutually_exclusive_group": null
+    },
+    {
+      "name": "needs: rebase",
+      "family": "needs",
+      "item_kinds": ["pull_request"],
+      "color": "fbca04",
+      "description": "PR needs rebase or conflict resolution.",
+      "mutually_exclusive_group": "primary_blocking_need"
+    },
+    {
+      "name": "needs: unblock",
+      "family": "needs",
+      "item_kinds": ["issue", "pull_request"],
+      "color": "fef2c0",
+      "description": "Blocked item needs a dependency or decision resolved.",
+      "mutually_exclusive_group": null
+    },
+    {
+      "name": "needs: cleanup-review",
+      "family": "needs",
+      "item_kinds": ["issue", "pull_request"],
+      "color": "fef2c0",
+      "description": "Stale, superseded, competing, or cleanup-candidate work needs maintainer judgment.",
+      "mutually_exclusive_group": null
+    },
+    {
+      "name": "good first issue",
+      "family": "community",
+      "item_kinds": ["issue"],
+      "color": "7057ff",
+      "description": "Small, clear, safe task for a new contributor.",
+      "mutually_exclusive_group": null
+    },
+    {
+      "name": "help wanted",
+      "family": "community",
+      "item_kinds": ["issue"],
+      "color": "008672",
+      "description": "Maintainers welcome an external contribution.",
+      "mutually_exclusive_group": null
+    },
+    {
+      "name": "example: recipe",
+      "family": "example_kind",
+      "item_kinds": ["issue", "pull_request"],
+      "color": "1d76db",
+      "description": "Complete reusable agent workflow proposed or published under examples/recipes.",
+      "mutually_exclusive_group": "example_kind"
+    },
+    {
+      "name": "example: demo",
+      "family": "example_kind",
+      "item_kinds": ["issue", "pull_request"],
+      "color": "1d76db",
+      "description": "Bounded field demonstration proposed or published under examples/demos.",
+      "mutually_exclusive_group": "example_kind"
+    },
+    {
+      "name": "example: launchable",
+      "family": "example_kind",
+      "item_kinds": ["issue", "pull_request"],
+      "color": "1d76db",
+      "description": "Environment provisioning or onboarding proposed or published under examples/launchables.",
+      "mutually_exclusive_group": "example_kind"
+    },
+    {
+      "name": "example: tool",
+      "family": "example_kind",
+      "item_kinds": ["issue", "pull_request"],
+      "color": "1d76db",
+      "description": "Standalone developer or evaluation utility proposed or published under examples/tools.",
+      "mutually_exclusive_group": "example_kind"
+    },
+    {
+      "name": "provenance: nvidia",
+      "family": "provenance",
+      "item_kinds": ["issue", "pull_request"],
+      "color": "5319e7",
+      "description": "Recipe authored or maintained by NVIDIA.",
+      "mutually_exclusive_group": "provenance"
+    },
+    {
+      "name": "provenance: partner",
+      "family": "provenance",
+      "item_kinds": ["issue", "pull_request"],
+      "color": "5319e7",
+      "description": "Recipe explicitly contributed by a named external organization.",
+      "mutually_exclusive_group": "provenance"
+    },
+    {
+      "name": "provenance: community",
+      "family": "provenance",
+      "item_kinds": ["issue", "pull_request"],
+      "color": "5319e7",
+      "description": "Recipe contributed independently without formal organizational provenance.",
+      "mutually_exclusive_group": "provenance"
+    }
+  ],
+  "label_families": {
+    "area": {
+      "prefix": "area: ",
+      "item_kinds": ["issue", "pull_request"],
+      "entries": [
+        {"name": "area: architecture", "color": "c5def5", "description": "Architecture, design debt, major refactors, or maintainability."},
+        {"name": "area: ci", "color": "c5def5", "description": "CI workflows, checks, automation, or GitHub Actions."},
+        {"name": "area: cli", "color": "c5def5", "description": "Command-line interfaces, flags, terminal UX, or output."},
+        {"name": "area: docs", "color": "c5def5", "description": "Documentation, examples, guides, or docs build."},
+        {"name": "area: e2e", "color": "c5def5", "description": "End-to-end tests or validation infrastructure."},
+        {"name": "area: inference", "color": "c5def5", "description": "Model execution, serving, selection, or generated output."},
+        {"name": "area: install", "color": "c5def5", "description": "Install, setup, prerequisites, teardown, or uninstall."},
+        {"name": "area: integrations", "color": "c5def5", "description": "External apps, tools, bridges, APIs, or source ETLs."},
+        {"name": "area: local-models", "color": "c5def5", "description": "Local model runtimes, downloads, launch, or connectivity."},
+        {"name": "area: messaging", "color": "c5def5", "description": "Message delivery, channels, manifests, or channel lifecycle."},
+        {"name": "area: networking", "color": "c5def5", "description": "DNS, proxy, TLS, ports, host aliases, or connectivity."},
+        {"name": "area: observability", "color": "c5def5", "description": "Logging, metrics, tracing, telemetry, or diagnostics."},
+        {"name": "area: onboarding", "color": "c5def5", "description": "First-run flow, provider setup, or sandbox launch."},
+        {"name": "area: packaging", "color": "c5def5", "description": "Packages, images, registries, installers, or distribution."},
+        {"name": "area: performance", "color": "c5def5", "description": "Latency, throughput, resource use, benchmarks, or scaling."},
+        {"name": "area: policy", "color": "c5def5", "description": "Network policy, egress, permissions, or sandbox policy."},
+        {"name": "area: project-management", "color": "c5def5", "description": "Taxonomy, triage, workflow, roadmap, or project process."},
+        {"name": "area: providers", "color": "c5def5", "description": "Inference-provider integration, configuration, or selection."},
+        {"name": "area: routing", "color": "c5def5", "description": "Request routing, fallback, or model selection."},
+        {"name": "area: sandbox", "color": "c5def5", "description": "OpenShell sandbox lifecycle, runtime, configuration, or recovery."},
+        {"name": "area: security", "color": "c5def5", "description": "Security controls, permissions, secrets, or hardening."},
+        {"name": "area: skills", "color": "c5def5", "description": "Agent skills, prompts, behaviors, or skill packaging."},
+        {"name": "area: ui", "color": "c5def5", "description": "Web UI, terminal display, visual layout, or UX behavior."}
+      ]
+    },
+    "platform": {
+      "prefix": "platform: ",
+      "item_kinds": ["issue", "pull_request"],
+      "entries": [
+        {"name": "platform: arm64", "color": "bfd4f2", "description": "ARM64 or aarch64-specific behavior."},
+        {"name": "platform: brev", "color": "bfd4f2", "description": "Brev-hosted development environments."},
+        {"name": "platform: container", "color": "bfd4f2", "description": "Docker, containerd, Podman, or image behavior."},
+        {"name": "platform: dgx-spark", "color": "bfd4f2", "description": "DGX Spark hardware or workflows."},
+        {"name": "platform: dgx-station", "color": "bfd4f2", "description": "DGX Station hardware or workflows."},
+        {"name": "platform: jetson", "color": "bfd4f2", "description": "Jetson AGX Thor or Orin environments."},
+        {"name": "platform: k8s", "color": "bfd4f2", "description": "Kubernetes-specific behavior."},
+        {"name": "platform: linux", "color": "bfd4f2", "description": "Linux behavior without Ubuntu specificity."},
+        {"name": "platform: macos", "color": "bfd4f2", "description": "macOS, Darwin, Homebrew, or Apple Silicon behavior."},
+        {"name": "platform: ubuntu", "color": "bfd4f2", "description": "Ubuntu-specific behavior."},
+        {"name": "platform: windows", "color": "bfd4f2", "description": "Native Windows or PowerShell behavior."},
+        {"name": "platform: wsl", "color": "bfd4f2", "description": "Windows Subsystem for Linux behavior."}
+      ]
+    },
+    "provider": {
+      "prefix": "provider: ",
+      "item_kinds": ["issue", "pull_request"],
+      "entries": [
+        {"name": "provider: anthropic", "color": "d4c5f9", "description": "Anthropic or Claude provider behavior."},
+        {"name": "provider: nvidia", "color": "d4c5f9", "description": "NVIDIA inference endpoint, NIM, or NVIDIA provider behavior."},
+        {"name": "provider: ollama", "color": "d4c5f9", "description": "Ollama local model provider behavior."},
+        {"name": "provider: openai", "color": "d4c5f9", "description": "OpenAI API or OpenAI-compatible provider behavior."},
+        {"name": "provider: vllm", "color": "d4c5f9", "description": "vLLM local or hosted provider behavior."}
+      ]
+    },
+    "integration": {
+      "prefix": "integration: ",
+      "item_kinds": ["issue", "pull_request"],
+      "entries": [
+        {"name": "integration: dcode", "color": "c2e0c6", "description": "LangChain Deep Code integration behavior."},
+        {"name": "integration: hermes", "color": "c2e0c6", "description": "Hermes integration behavior."},
+        {"name": "integration: openclaw", "color": "c2e0c6", "description": "OpenClaw integration behavior."},
+        {"name": "integration: slack", "color": "c2e0c6", "description": "Slack bridge, manifest, authentication, or delivery behavior."},
+        {"name": "integration: telegram", "color": "c2e0c6", "description": "Telegram bot, bridge, polling, or delivery behavior."}
+      ]
+    }
+  },
+  "mutually_exclusive_groups": {
+    "pr_type": ["bug-fix", "feature", "refactor", "chore"],
+    "primary_blocking_need": ["needs: info", "needs: rebase"],
+    "example_kind": ["example: recipe", "example: demo", "example: launchable", "example: tool"],
+    "provenance": ["provenance: nvidia", "provenance: partner", "provenance: community"]
+  },
+  "legacy_labels": ["bug", "enhancement", "documentation", "question", "duplicate", "invalid", "wontfix"],
+  "quality_rules": {
+    "minimal_labeling": true,
+    "default_mode": "recommendation_only",
+    "unknown_label_allowed": false,
+    "live_label_writes_require_explicit_approval": true,
+    "bulk_closed_item_migration_allowed": false,
+    "supplemental_security_label_allowed": false
+  }
+}

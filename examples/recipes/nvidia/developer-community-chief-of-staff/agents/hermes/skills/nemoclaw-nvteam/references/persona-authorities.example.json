@@ -1,0 +1,90 @@
+{
+  "$schema": "./persona-authorities.schema.json",
+  "schema_version": 1,
+  "registry_kind": "base",
+  "people": {
+    "example-product-lead": {
+      "display_name": "Example Product Lead",
+      "role_snapshot": "Synthetic product decision owner",
+      "designation_basis": "synthetic-test-fixture",
+      "verified_on": "2026-07-02",
+      "review_after_days": 180,
+      "identities": {
+        "display_names": [
+          "Example Product Lead"
+        ],
+        "nvidia_logins": [
+          "example-product-lead"
+        ],
+        "emails": [
+          "product-lead@example.com"
+        ],
+        "slack_user_ids": [
+          "U_EXAMPLE_PRODUCT"
+        ],
+        "github_logins": [
+          "example-product-lead"
+        ]
+      }
+    },
+    "example-engineering-lead": {
+      "display_name": "Example Engineering Lead",
+      "role_snapshot": "Synthetic engineering decision owner",
+      "designation_basis": "synthetic-test-fixture",
+      "verified_on": "2026-07-02",
+      "review_after_days": 180,
+      "identities": {
+        "display_names": [
+          "Example Engineering Lead"
+        ],
+        "nvidia_logins": [
+          "example-engineering-lead"
+        ],
+        "emails": [
+          "engineering-lead@example.com"
+        ],
+        "slack_user_ids": [
+          "U_EXAMPLE_ENGINEERING"
+        ],
+        "github_logins": [
+          "example-engineering-lead"
+        ]
+      }
+    }
+  },
+  "assignments": {
+    "river-example-product-strategy": {
+      "person_id": "example-product-lead",
+      "persona": "river",
+      "level": "primary",
+      "enabled": true,
+      "scope": {
+        "products": [
+          "nemoclaw"
+        ],
+        "topics": [
+          "product strategy",
+          "product prioritization"
+        ],
+        "claim_types": []
+      },
+      "rationale": "Synthetic primary product signal for authority qualification."
+    },
+    "akira-example-architecture": {
+      "person_id": "example-engineering-lead",
+      "persona": "akira",
+      "level": "supporting",
+      "enabled": true,
+      "scope": {
+        "products": [
+          "nemoclaw"
+        ],
+        "topics": [
+          "architecture"
+        ],
+        "claim_types": []
+      },
+      "rationale": "Synthetic supporting engineering signal for authority qualification."
+    }
+  }
+}

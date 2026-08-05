@@ -1,0 +1,90 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Provisional first-party dogfood profile for NVIDIA/nemoclaw-community.
+# Evidence is limited to regular blobs present at metadata.source_commit.
+# The new advisor source directory and dogfood workflow are intentionally
+# evidence-free because neither exists at that trusted base.
+
+schema_version: 1
+kind: review-advisor-profile
+metadata:
+  name: NVIDIA NemoClaw Community review-advisor dogfood
+  source_commit: fd1794ad8e4beac3efb7c2d87a1c4cffdee53abc
+  source_ref: refs/heads/main
+repository:
+  identity: NVIDIA/nemoclaw-community
+  default_branch: main
+review_scope:
+  mode: scoped
+  roots:
+    - .github/workflows/nemoclaw-review-advisor-dogfood.yml
+    - README.md
+    - THIRD-PARTY-NOTICES
+    - examples/recipes/nvidia/pr-review-advisor
+  support_paths:
+    - .github/CODEOWNERS
+    - .github/PULL_REQUEST_TEMPLATE.md
+    - CONTRIBUTING.md
+    - LICENSE
+    - SECURITY.md
+required_stages:
+  - scope
+  - correctness
+  - security
+  - tests
+  - operations
+  - reconcile
+  - synthesize
+components:
+  - id: review-advisor-source
+    paths:
+      - examples/recipes/nvidia/pr-review-advisor/**
+    evidence: []
+  - id: dogfood-workflow
+    paths:
+      - .github/workflows/nemoclaw-review-advisor-dogfood.yml
+    evidence: []
+  - id: community-readme
+    paths:
+      - README.md
+    evidence:
+      - source: git:87d72065fe38b2e2824ea9e52f5618fd62321016:README.md
+  - id: third-party-notices
+    paths:
+      - THIRD-PARTY-NOTICES
+    evidence:
+      - source: git:002827795164baa492a9b33c4b1675c0606b3b78:THIRD-PARTY-NOTICES
+priorities:
+  - id: security-and-disclosure-boundaries
+    title: Preserve security and disclosure boundaries
+    rationale: The advisor handles repository content, model-visible context, provider routing, persistent memory, and optional publication; current code must keep those authorities explicit and least-privileged.
+    evidence:
+      - path: SECURITY.md
+        oid: 9d1a71169c372a5b571c9e4b19acee216a60fe38
+  - id: contribution-and-ownership-contracts
+    title: Respect community contribution and ownership contracts
+    rationale: Public contribution guidance, pull-request expectations, and ownership routing constrain the first-party example and its workflow.
+    evidence:
+      - path: .github/CODEOWNERS
+        oid: 77348968e2bc82d8909f8b09072f6769ad53eb40
+      - path: .github/PULL_REQUEST_TEMPLATE.md
+        oid: df8aaa7671080e4b5ca80126fce52eba8119c89b
+      - path: CONTRIBUTING.md
+        oid: 6629f6afb3a0001847981ca799876e80d2de6818
+  - id: licensing-and-attribution
+    title: Preserve licensing and third-party attribution
+    rationale: New packaged source, dependencies, images, and generated artifacts must remain consistent with the repository license and third-party notices.
+    evidence:
+      - path: LICENSE
+        oid: 261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64
+      - path: THIRD-PARTY-NOTICES
+        oid: 002827795164baa492a9b33c4b1675c0606b3b78
+test_surfaces: []
+evidence_policy:
+  memory_is_hint_only: true
+  require_current_code_evidence: true
+unresolved_questions:
+  - Which first-party maintainer owns the persistent dogfood runner, gateway, provider route, and memory recovery procedure?
+  - Which exact installer, runtime, privacy, and scoped-review tests must gate promotion from provisional dogfood to the default review pipeline?
+  - When should the profile be refreshed after the new advisor directory and dogfood workflow become trusted-base evidence?

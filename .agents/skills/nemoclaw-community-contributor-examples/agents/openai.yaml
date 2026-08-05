@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+interface:
+  display_name: "NemoClaw Community Examples"
+  short_description: "Classify, name, and move repository examples"
+  default_prompt: "Use $nemoclaw-community-contributor-examples to classify and place a NemoClaw Community example."

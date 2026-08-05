@@ -3,9 +3,13 @@
 
 name: Bug report
 description: Report a reproducible problem
-title: "[Bug]: "
-labels: ["bug"]
+type: Bug
+labels: ["needs: triage"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Use a concise title such as `fix(outlook): stop repeated device login`.
   - type: textarea
     id: description
     attributes:

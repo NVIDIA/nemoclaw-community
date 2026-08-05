@@ -6,17 +6,53 @@ name: DCO
 on:
   pull_request:
     branches: [main]
+    types: [opened, edited, synchronize, reopened]
 
 permissions:
   contents: read
-  pull-requests: read
 
 jobs:
   dco:
     name: Check DCO sign-off
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: gsactions/dco-check@v1.1.1
+      - name: Check Dependabot DCO bypass
+        id: dco-bypass
+        env:
+          USERNAME: ${{ github.event.pull_request.user.login }}
+        run: |
+          if [[ "$USERNAME" == "dependabot[bot]" || "$USERNAME" == "app/dependabot" ]]; then
+            echo "bypass=true" >> "$GITHUB_OUTPUT"
+            echo "Dependabot is exempt from the PR-description DCO declaration."
+          else
+            echo "bypass=false" >> "$GITHUB_OUTPUT"
+            echo "The PR-description DCO declaration is required."
+          fi
+
+      - name: Check PR description for Signed-off-by
+        if: ${{ steps.dco-bypass.outputs.bypass != 'true' }}
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          normalized_body="$(printf '%s\n' "$PR_BODY" | tr -d '\r')"
+
+          if ! printf '%s\n' "$normalized_body" \
+            | grep -Eq '^Signed-off-by:[[:space:]]+.+[[:space:]]+<[^<>]+>$'; then
+            echo "::error::PR description must contain a DCO sign-off line."
+            echo "::error::Expected format: Signed-off-by: Your Name <your-email@example.com>"
+            exit 1
+          fi
+
+          if ! printf '%s\n' "$normalized_body" \
+            | grep -E '^Signed-off-by:[[:space:]]+.+[[:space:]]+<[^<>]+>$' \
+            | grep -Eiv '^Signed-off-by:[[:space:]]+Your Name[[:space:]]+<your[.-]email@example\.com>$' \
+            > /dev/null; then
+            echo "::error::Replace the example DCO sign-off with your own name and email address."
+            exit 1
+          fi
+
+          echo "PR description contains a DCO sign-off."
