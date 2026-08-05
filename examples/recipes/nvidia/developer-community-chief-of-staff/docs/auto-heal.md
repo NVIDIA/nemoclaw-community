@@ -101,15 +101,18 @@ the sandbox endpoint uses port `18080` but the upstream is missing.
 Recovery first restarts the affected host service or Hermes gateway. The
 watchdog confirms a gateway outage with three fixed probes, two seconds apart,
 before it restarts anything. It selects exactly one Docker container by the
-OpenShell managed-by and sandbox-name labels, restarts that container to clear
-both current and legacy process trees, and waits for the OpenShell supervisor
-and its non-root `sandbox` exec identity to return. It then starts the recovered
-Hermes entrypoint through `nemoclaw-hermes-runtime.service`, whose launch
-command is `openshell sandbox exec`. OpenShell reapplies the persisted sandbox,
-proxy, CA, and provider environment to that exec session. This preserves the
-sandbox writable layer and keeps the recovered workload inside OpenShell's
-process and network policy boundaries. Credentials are never added to restart
-command arguments.
+OpenShell managed-by and sandbox-name labels, stops the local recovery launcher,
+and terminates only the known Hermes runtime processes in that exact container.
+It does **not** restart the OpenShell container: current OpenShell sandboxes use
+a time-limited bootstrap token that may be expired when a watchdog runs, so a
+raw Docker restart can leave an older sandbox stuck in `Provisioning`. The
+watchdog instead verifies that the existing OpenShell supervisor still accepts
+a non-root `sandbox` exec, then starts the recovered Hermes entrypoint through
+`nemoclaw-hermes-runtime.service`, whose launch command is `openshell sandbox
+exec`. OpenShell reapplies the persisted sandbox, proxy, CA, and provider
+environment to that exec session. This preserves the sandbox writable layer and
+keeps the recovered workload inside OpenShell's process and network policy
+boundaries. Credentials are never added to recovery command arguments.
 The runtime unit is a disabled recovery launcher, not the health authority.
 The watchdog verifies a new gateway process ID and process start time, the
 non-root workload identity, gateway health, and the exact Slack policy after
@@ -120,9 +123,9 @@ Outlook routing or Slack authorization values, use the documented
 `tear-down.sh` and `bring-up.sh` flow to recreate the sandbox with those values.
 Tear-down stops the local recovery launcher before it deletes the sandbox.
 
-After the OpenShell supervisor returns, the watchdog repairs files left by
-older root-run restarts. The repair is limited to Hermes writable state and
-known runtime files. It does not follow symbolic links or modify immutable
+Before the non-root relaunch, the watchdog repairs files left by older root-run
+recovery attempts. The repair is limited to Hermes writable state and known
+runtime files. It does not follow symbolic links or modify immutable
 `/sandbox/.hermes` configuration.
 
 The watchdog rebuilds the sandbox only after a live Slack Socket Mode or

@@ -110,6 +110,34 @@ repair_legacy_gateway_ownership() {
   ' >/dev/null 2>&1
 }
 
+stop_hermes_runtime_processes() {
+  local container="$1"
+  docker exec --user root "$container" bash -c '
+    set -euo pipefail
+    patterns=(
+      "[n]emoclaw-start"
+      "[h]ermes gateway run"
+      "[s]ocat TCP-LISTEN:8642"
+      "[n]emo-relay --bind"
+      "[a]tif-bridge.py"
+      "[o]utlook-bridge.py"
+      "[t]ail -n +1 -F /tmp/gateway.log"
+    )
+    for pattern in "${patterns[@]}"; do
+      pkill -TERM -f "$pattern" 2>/dev/null || true
+    done
+    sleep 2
+    for pattern in "${patterns[@]}"; do
+      pkill -KILL -f "$pattern" 2>/dev/null || true
+    done
+    for pattern in "${patterns[@]}"; do
+      if pgrep -f "$pattern" >/dev/null 2>&1; then
+        exit 1
+      fi
+    done
+  ' >/dev/null 2>&1
+}
+
 gateway_process_marker() {
   local container="$1"
   docker exec --user sandbox "$container" sh -c '
@@ -121,12 +149,6 @@ gateway_process_marker() {
     start_time="$(awk "{print \$22}" "/proc/$pid/stat")" || exit 1
     printf "%s %s\n" "$pid" "$start_time"
   ' 2>/dev/null
-}
-
-container_lifecycle_marker() {
-  local container="$1"
-  docker inspect --format '{{.Id}} {{.RestartCount}} {{.State.StartedAt}}' \
-    "$container" 2>/dev/null
 }
 
 slack_policy_fingerprint() {
@@ -152,12 +174,11 @@ clear_slack_policy_restart_attempt() {
 }
 
 restart_gateway() {
-  local before_container_marker before_gateway_marker container
-  local current_container current_container_marker current_gateway_marker runtime_unit
-  local gateway_healthy=false restart_observed=false
+  local before_gateway_marker container current_container current_gateway_marker runtime_unit
+  local gateway_healthy=false runtime_stopped=false supervisor_ready=false
   runtime_unit=nemoclaw-hermes-runtime.service
   container="$(sandbox_container)" || return 1
-  autoheal_log "requesting an OpenShell-managed restart of ${AUTOHEAL_SANDBOX_NAME}"
+  autoheal_log "requesting a managed Hermes process restart in ${AUTOHEAL_SANDBOX_NAME}"
 
   if ! sandbox_exec_runs_as_sandbox; then
     autoheal_log "refusing gateway restart: OpenShell exec is not the sandbox workload user"
@@ -167,39 +188,32 @@ restart_gateway() {
     autoheal_log "gateway runtime unit is not installed; rerun scripts/autoheal/install.sh"
     return 1
   fi
-  if ! before_container_marker="$(container_lifecycle_marker "$container")"; then
-    autoheal_log "could not read the sandbox container lifecycle marker"
-    return 1
-  fi
   before_gateway_marker="$(gateway_process_marker "$container" || true)"
   if ! systemctl --user stop "$runtime_unit"; then
     autoheal_log "could not stop the local Hermes runtime launcher"
     return 1
   fi
-  if ! docker restart --time 15 "$container" >/dev/null; then
-    autoheal_log "could not restart the exact OpenShell sandbox container"
+  if ! stop_hermes_runtime_processes "$container"; then
+    autoheal_log "could not stop the existing Hermes runtime process tree"
     return 1
   fi
-
-  restart_observed=false
+  runtime_stopped=true
   for _ in $(seq 1 45); do
     if current_container="$(sandbox_container)" \
-      && current_container_marker="$(container_lifecycle_marker "$current_container")" \
-      && [[ "$current_container_marker" != "$before_container_marker" ]] \
       && sandbox_ready \
       && sandbox_exec_runs_as_sandbox; then
-      restart_observed=true
+      supervisor_ready=true
       container="$current_container"
       break
     fi
     sleep 2
   done
-  if [[ "$restart_observed" != true ]]; then
-    autoheal_log "OpenShell sandbox supervisor did not recover within 90 seconds"
+  if [[ "$runtime_stopped" != true || "$supervisor_ready" != true ]]; then
+    autoheal_log "OpenShell sandbox supervisor was not ready for a non-root relaunch within 90 seconds"
     return 1
   fi
   if ! repair_legacy_gateway_ownership "$container"; then
-    autoheal_log "gateway restart ownership repair failed"
+    autoheal_log "gateway recovery ownership repair failed"
     return 1
   fi
   if ! systemctl --user start "$runtime_unit"; then
@@ -207,13 +221,13 @@ restart_gateway() {
     return 1
   fi
 
-  restart_observed=false
+  supervisor_ready=false
   for _ in $(seq 1 45); do
     if current_container="$(sandbox_container)" \
       && current_gateway_marker="$(gateway_process_marker "$current_container")" \
       && [[ -n "$current_gateway_marker" ]] \
-      && [[ "$current_container $current_gateway_marker" != "$container $before_gateway_marker" ]]; then
-      restart_observed=true
+      && [[ "$current_gateway_marker" != "$before_gateway_marker" ]]; then
+      supervisor_ready=true
       if sandbox_ready && sandbox_gateway_ok; then
         gateway_healthy=true
         if gateway_has_allowlist; then
@@ -225,7 +239,7 @@ restart_gateway() {
     fi
     sleep 2
   done
-  if [[ "$restart_observed" == true && "$gateway_healthy" == true ]]; then
+  if [[ "$supervisor_ready" == true && "$gateway_healthy" == true ]]; then
     if mark_slack_policy_restart_attempted; then
       autoheal_log "gateway recovered with its persisted Slack policy; current .env changes require tear-down and bring-up"
     else

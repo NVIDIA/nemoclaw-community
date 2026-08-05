@@ -97,7 +97,6 @@ CAPTURE_DIR="$TEST_ROOT/captures"
 OPEN_COUNT_FILE="$CAPTURE_DIR/openshell.count"
 DOCKER_COUNT_FILE="$CAPTURE_DIR/docker.count"
 SYSTEMCTL_COUNT_FILE="$CAPTURE_DIR/systemctl.count"
-LIFECYCLE_COUNT_FILE="$CAPTURE_DIR/lifecycle.count"
 GATEWAY_MARKER_COUNT_FILE="$CAPTURE_DIR/gateway-marker.count"
 OPEN_FAIL_FIRST=0
 OPEN_FAIL_SECOND=0
@@ -105,8 +104,6 @@ DOCKER_FAIL_AT=0
 SYSTEMCTL_STOP_FAIL=0
 SYSTEMCTL_START_FAIL=0
 UNIT_INSTALLED=1
-LIFECYCLE_FAIL_FIRST=0
-LIFECYCLE_STAYS_SAME=0
 GATEWAY_MARKER_STAYS_SAME=0
 MOCK_GATEWAY_POLICY_ENV=SLACK_ALLOWED_USERS=U1,U2
 MOCK_CONTAINER_MATCHES=container-id
@@ -116,7 +113,6 @@ reset_captures() {
   printf '0\n' >"$OPEN_COUNT_FILE"
   printf '0\n' >"$DOCKER_COUNT_FILE"
   printf '0\n' >"$SYSTEMCTL_COUNT_FILE"
-  printf '0\n' >"$LIFECYCLE_COUNT_FILE"
   printf '0\n' >"$GATEWAY_MARKER_COUNT_FILE"
   OPEN_FAIL_FIRST=0
   OPEN_FAIL_SECOND=0
@@ -124,8 +120,6 @@ reset_captures() {
   SYSTEMCTL_STOP_FAIL=0
   SYSTEMCTL_START_FAIL=0
   UNIT_INSTALLED=1
-  LIFECYCLE_FAIL_FIRST=0
-  LIFECYCLE_STAYS_SAME=0
   GATEWAY_MARKER_STAYS_SAME=0
   MOCK_CONTAINER_MATCHES=container-id
   clear_slack_policy_restart_attempt
@@ -209,21 +203,6 @@ assert_contains "$production_gateway_marker" 'id -u sandbox' \
 
 sandbox_container() {
   printf 'container-id\n'
-}
-
-container_lifecycle_marker() {
-  local count
-  count="$(cat "$LIFECYCLE_COUNT_FILE")"
-  count=$((count + 1))
-  printf '%s\n' "$count" >"$LIFECYCLE_COUNT_FILE"
-  if [[ "$LIFECYCLE_FAIL_FIRST" == 1 && "$count" == 1 ]]; then
-    return 1
-  fi
-  if [[ "$count" == 1 || "$LIFECYCLE_STAYS_SAME" == 1 ]]; then
-    printf 'container-id 0 start-one\n'
-  else
-    printf 'container-id 1 start-two\n'
-  fi
 }
 
 gateway_process_marker() {
@@ -310,9 +289,8 @@ reset_captures
 MOCK_GATEWAY_POLICY_ENV=SLACK_ALLOWED_USERS=U1,U2
 restart_gateway || fail "allowlist restart command failed"
 assert_eq "$(cat "$OPEN_COUNT_FILE")" 2 "OpenShell identity probe count"
-assert_eq "$(cat "$DOCKER_COUNT_FILE")" 3 "container restart, repair, and policy check count"
+assert_eq "$(cat "$DOCKER_COUNT_FILE")" 3 "runtime stop, repair, and policy check count"
 assert_eq "$(cat "$SYSTEMCTL_COUNT_FILE")" 3 "runtime unit check, stop, and start count"
-assert_eq "$(cat "$LIFECYCLE_COUNT_FILE")" 2 "container lifecycle marker call count"
 assert_eq "$(cat "$GATEWAY_MARKER_COUNT_FILE")" 2 "gateway process marker call count"
 
 mapfile -d '' -t preflight_args <"$CAPTURE_DIR/openshell.1"
@@ -328,11 +306,22 @@ assert_eq "${preflight_args[5]}" sh "preflight shell"
 assert_contains "${preflight_args[7]}" 'actual_uid="$(id -u)"' "preflight did not inspect the effective uid"
 assert_contains "${preflight_args[7]}" 'sandbox_uid="$(id -u sandbox)"' "preflight did not resolve the sandbox uid"
 
-mapfile -d '' -t restart_args <"$CAPTURE_DIR/docker.1"
-assert_eq "${restart_args[0]}" restart "container restart command"
-assert_eq "${restart_args[1]}" --time "container restart timeout flag"
-assert_eq "${restart_args[2]}" 15 "container restart timeout"
-assert_eq "${restart_args[3]}" container-id "container restart target"
+mapfile -d '' -t stop_args <"$CAPTURE_DIR/docker.1"
+assert_eq "${stop_args[0]}" exec "runtime stop command"
+assert_eq "${stop_args[1]}" --user "runtime stop user flag"
+assert_eq "${stop_args[2]}" root "runtime stop user"
+assert_eq "${stop_args[3]}" container-id "runtime stop container"
+assert_contains "${stop_args[6]}" 'pkill -TERM -f "$pattern"' \
+  "runtime stop does not request graceful termination"
+assert_contains "${stop_args[6]}" 'pkill -KILL -f "$pattern"' \
+  "runtime stop does not clean up unresponsive legacy processes"
+assert_contains "${stop_args[6]}" '"[n]emoclaw-start"' \
+  "runtime stop omitted the Hermes entrypoint"
+assert_contains "${stop_args[6]}" '"[h]ermes gateway run"' \
+  "runtime stop omitted the Hermes gateway"
+if [[ "${stop_args[0]}" == restart || "${stop_args[*]}" == *'docker restart'* ]]; then
+  fail "recovery still performs a raw Docker restart"
+fi
 
 mapfile -d '' -t repair_args <"$CAPTURE_DIR/docker.2"
 assert_eq "${repair_args[0]}" exec "ownership repair command"
@@ -425,31 +414,12 @@ if slack_policy_restart_was_attempted; then
 fi
 
 reset_captures
-LIFECYCLE_FAIL_FIRST=1
-if restart_gateway; then
-  fail "restart continued without a baseline container lifecycle marker"
-fi
-assert_eq "$(cat "$OPEN_COUNT_FILE")" 1 "lifecycle failure OpenShell call count"
-assert_eq "$(cat "$DOCKER_COUNT_FILE")" 0 "lifecycle marker failure restarted Docker"
-if slack_policy_restart_was_attempted; then
-  fail "lifecycle marker failure consumed the one Slack policy restart attempt"
-fi
-
-reset_captures
-LIFECYCLE_STAYS_SAME=1
-if restart_gateway; then
-  fail "restart succeeded without an observed supervisor lifecycle change"
-fi
-if slack_policy_restart_was_attempted; then
-  fail "missing supervisor restart consumed the one Slack policy restart attempt"
-fi
-
-reset_captures
 DOCKER_FAIL_AT=1
 if restart_gateway; then
-  fail "restart continued after the exact container restart failed"
+  fail "restart continued after the runtime process stop failed"
 fi
-assert_eq "$(cat "$DOCKER_COUNT_FILE")" 1 "container restart failure Docker call count"
+assert_eq "$(cat "$DOCKER_COUNT_FILE")" 1 "runtime stop failure Docker call count"
+assert_eq "$(cat "$SYSTEMCTL_COUNT_FILE")" 2 "runtime stop failure systemctl call count"
 
 reset_captures
 DOCKER_FAIL_AT=2
