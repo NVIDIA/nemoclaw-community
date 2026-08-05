@@ -7,11 +7,14 @@
 set -euo pipefail
 case "${1:-}" in
   "") ;;
-  -h|--help)
+  -h | --help)
     printf 'Usage: bash scripts/autoheal/uninstall.sh\n\nRemoves only the optional NemoClaw auto-heal user services.\n'
     exit 0
     ;;
-  *) printf 'Unknown option: %s\n' "$1" >&2; exit 2 ;;
+  *)
+    printf 'Unknown option: %s\n' "$1" >&2
+    exit 2
+    ;;
 esac
 
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
