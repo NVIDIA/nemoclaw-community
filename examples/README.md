@@ -18,6 +18,7 @@ again by contributor provenance.
 
 | Contributor | Example | Description |
 | --- | --- | --- |
+| BlueTier | [BLACK_WALL Preflight Guardrail](recipes/partners/bluetier/blackwall-guard/README.md) | Screens every OpenClaw tool call through an external pre-action risk forecast (GO / CAUTION / STOP) as defense-in-depth, with proxy-injected credentials and metadata-only forecasts by default. |
 | HPE | [Retail Assistant](recipes/partners/hpe/retail-assistant/README.md) | Provides role-aware retail operations through Telegram, FastAPI, PostgreSQL, Docker Compose, and Helm. |
 | Tavily | [Watchtower](recipes/partners/tavily/watchtower/README.md) | Runs scheduled, cited web monitoring with persistent deduplication and auditable outputs. |
 
