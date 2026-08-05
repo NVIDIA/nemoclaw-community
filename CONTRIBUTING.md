@@ -265,7 +265,8 @@ Signed-off-by: Your Name <your.email@example.com>
 
 Use your own name and email address. Individual commits may also include
 sign-off trailers, but the required check validates the declaration in the pull
-request description.
+request description. The example name and email address do not satisfy the
+required check.
 
 DCO sign-off is separate from cryptographic commit signing.
 

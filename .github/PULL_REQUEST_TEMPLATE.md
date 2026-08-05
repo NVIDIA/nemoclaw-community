@@ -26,4 +26,4 @@ Describe what changed and why.
 - [ ] Public documentation is free of internal-only links or private workspace details.
 - [ ] I added my DCO sign-off declaration to this pull request description.
 
-<!-- Add a line in this format: Signed-off-by: Your Name <your.email@example.com> -->
+<!-- Replace the example values and add an uncommented line in this format: Signed-off-by: Your Name <your.email@example.com> -->
