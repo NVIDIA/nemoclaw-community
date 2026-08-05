@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -125,6 +126,86 @@ class NemoRelayPluginTest(unittest.TestCase):
             self.forwarded[1]["tool_call_id"],
         )
         self.assertEqual(PLUGIN._PENDING_PRE, {})
+
+
+class NemoRelayForwardSanitizationTest(unittest.TestCase):
+    def test_forward_sanitizes_openshell_env_placeholders(self) -> None:
+        class FakeClient:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, dict]] = []
+
+            def post(self, url: str, json: dict) -> None:
+                self.calls.append((url, json))
+
+        client = FakeClient()
+        payload = {
+            "hook_event_name": "pre_api_request",
+            "request": {
+                "body": {
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": (
+                                "keep this text but hide "
+                                "openshell:resolve:env:FAKE_TOKEN"
+                            ),
+                        }
+                    ]
+                }
+            },
+            "metadata": ("openshell:resolve:env:ANOTHER_TOKEN",),
+        }
+
+        with (
+            mock.patch.object(
+                PLUGIN, "_gateway_url", return_value="http://relay.local"
+            ),
+            mock.patch.object(PLUGIN, "_client", return_value=client),
+        ):
+            PLUGIN._forward(payload)
+
+        self.assertEqual(
+            client.calls,
+            [
+                (
+                    "http://relay.local/hooks/hermes",
+                    {
+                        "hook_event_name": "pre_api_request",
+                        "request": {
+                            "body": {
+                                "messages": [
+                                    {
+                                        "role": "user",
+                                        "content": (
+                                            "keep this text but hide "
+                                            "[openshell env placeholder]"
+                                        ),
+                                    }
+                                ]
+                            }
+                        },
+                        "metadata": ["[openshell env placeholder]"],
+                    },
+                )
+            ],
+        )
+        self.assertNotIn("openshell:resolve:env:", json.dumps(client.calls[0][1]))
+        self.assertEqual(
+            payload["metadata"],
+            ("openshell:resolve:env:ANOTHER_TOKEN",),
+        )
+
+    def test_sanitizer_preserves_noncanonical_lookalikes(self) -> None:
+        lookalikes = {
+            "wrong_case": "OpenShell:resolve:env:FAKE_TOKEN",
+            "wrong_kind": "openshell:resolve:file:FAKE_TOKEN",
+            "invalid_name": "openshell:resolve:env:9_FAKE_TOKEN",
+        }
+
+        self.assertEqual(
+            PLUGIN._sanitize_open_shell_placeholders(lookalikes),
+            lookalikes,
+        )
 
 
 if __name__ == "__main__":

@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import os
 from pathlib import Path
 import sys
+import tempfile
 from types import ModuleType, SimpleNamespace
 import unittest
 from unittest import mock
@@ -89,7 +91,7 @@ def make_adapter(*, native_clarify: bool = False):
     return StubSlackAdapter
 
 
-def load_patch(adapter_cls, module_name: str) -> None:
+def load_patch(adapter_cls, module_name: str):
     plugins = ModuleType("plugins")
     platforms = ModuleType("plugins.platforms")
     slack = ModuleType("plugins.platforms.slack")
@@ -100,6 +102,18 @@ def load_patch(adapter_cls, module_name: str) -> None:
     gateway_platforms = ModuleType("gateway.platforms")
     gateway_base = ModuleType("gateway.platforms.base")
     gateway_base.SendResult = FakeSendResult
+    gateway_registry = ModuleType("gateway.platform_registry")
+
+    class FakePlatformRegistry:
+        def __init__(self, runtime_adapter_cls=None) -> None:
+            self.runtime_adapter_cls = runtime_adapter_cls
+
+        def create_adapter(self, name, config):
+            if name != "slack" or self.runtime_adapter_cls is None:
+                return None
+            return self.runtime_adapter_cls()
+
+    gateway_registry.PlatformRegistry = FakePlatformRegistry
 
     fake_modules = {
         "plugins": plugins,
@@ -109,6 +123,7 @@ def load_patch(adapter_cls, module_name: str) -> None:
         "gateway": gateway,
         "gateway.platforms": gateway_platforms,
         "gateway.platforms.base": gateway_base,
+        "gateway.platform_registry": gateway_registry,
     }
     spec = importlib.util.spec_from_file_location(module_name, PATCH_PATH)
     if spec is None or spec.loader is None:
@@ -116,9 +131,59 @@ def load_patch(adapter_cls, module_name: str) -> None:
     module = importlib.util.module_from_spec(spec)
     with mock.patch.dict(sys.modules, fake_modules):
         spec.loader.exec_module(module)
+    return SimpleNamespace(
+        module=module,
+        platform_registry_cls=FakePlatformRegistry,
+    )
 
 
 class SlackInteractiveCompatTest(unittest.TestCase):
+    def test_adds_hermes_root_before_importing_the_adapter(self) -> None:
+        adapter_cls = make_adapter()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            (Path(temp_dir) / "plugins").mkdir()
+            clean_path = [entry for entry in sys.path if entry != temp_dir]
+            with (
+                mock.patch.dict(
+                    os.environ,
+                    {"NEMOCLAW_HERMES_ROOT": temp_dir},
+                ),
+                mock.patch.object(sys, "path", clean_path),
+            ):
+                load_patch(adapter_cls, "_nvteam_sitecustomize_path_test")
+                self.assertEqual(temp_dir, sys.path[0])
+
+    def test_patches_the_namespaced_runtime_adapter_from_the_registry(self) -> None:
+        template_cls = make_adapter()
+        loaded = load_patch(
+            template_cls,
+            "_nvteam_sitecustomize_registry_test",
+        )
+        runtime_cls = make_adapter()
+        registry = loaded.platform_registry_cls(runtime_cls)
+
+        adapter = registry.create_adapter("slack", None)
+        asyncio.run(adapter.connect())
+        result = asyncio.run(
+            adapter.send_clarify(
+                chat_id="D123",
+                question="Which V0?",
+                choices=["Recovery", "First success"],
+                clarify_id="clarify-registry",
+                session_key="session-1",
+            )
+        )
+
+        self.assertTrue(result.success)
+        self.assertEqual(
+            loaded.module.__name__,
+            runtime_cls.__dict__["send_clarify"].__module__,
+        )
+        self.assertEqual(
+            ["section", "actions"],
+            [block["type"] for block in adapter.client.posts[-1]["blocks"]],
+        )
+
     def test_adds_buttons_and_resolves_an_authorized_choice(self) -> None:
         adapter_cls = make_adapter()
         load_patch(adapter_cls, "_nvteam_sitecustomize_choice_test")
@@ -187,6 +252,151 @@ class SlackInteractiveCompatTest(unittest.TestCase):
         update = adapter.client.updates[-1]
         self.assertIn("Ada: First success", update["text"])
         self.assertTrue(all(block["type"] != "actions" for block in update["blocks"]))
+
+    def test_other_waits_for_a_typed_answer(self) -> None:
+        adapter_cls = make_adapter()
+        load_patch(adapter_cls, "_nvteam_sitecustomize_other_test")
+        adapter = adapter_cls()
+        asyncio.run(adapter.connect())
+        result = asyncio.run(
+            adapter.send_clarify(
+                chat_id="D123",
+                question="Which V0?",
+                choices=["Recovery", "First success"],
+                clarify_id="clarify-other",
+                session_key="session-1",
+            )
+        )
+
+        waiting = []
+        clarify_gateway = SimpleNamespace(
+            mark_awaiting_text=lambda clarify_id: (
+                waiting.append(clarify_id) or True
+            ),
+        )
+        tools_module = ModuleType("tools")
+        tools_module.clarify_gateway = clarify_gateway
+
+        async def ack():
+            return None
+
+        body = {
+            "message": {
+                "ts": result.message_id,
+                "blocks": adapter.client.posts[-1]["blocks"],
+            },
+            "channel": {"id": "D123"},
+            "user": {"id": "U123", "name": "Ada"},
+        }
+        action = {
+            "action_id": "nemoclaw_clarify_other",
+            "value": "clarify-other|other",
+        }
+        with mock.patch.dict(sys.modules, {"tools": tools_module}):
+            asyncio.run(adapter._nemoclaw_handle_clarify_action(ack, body, action))
+
+        self.assertEqual(["clarify-other"], waiting)
+        self.assertIn("Awaiting typed answer", adapter.client.updates[-1]["text"])
+
+    def test_expired_and_repeated_clicks_do_not_resolve_twice(self) -> None:
+        adapter_cls = make_adapter()
+        load_patch(adapter_cls, "_nvteam_sitecustomize_repeat_test")
+        adapter = adapter_cls()
+        asyncio.run(adapter.connect())
+        result = asyncio.run(
+            adapter.send_clarify(
+                chat_id="D123",
+                question="Which V0?",
+                choices=["Recovery"],
+                clarify_id="clarify-repeat",
+                session_key="session-1",
+            )
+        )
+
+        resolved = []
+
+        class Entry:
+            choices = ["Recovery"]
+
+        clarify_gateway = SimpleNamespace(
+            _entries={"clarify-repeat": Entry()},
+            resolve_gateway_clarify=lambda clarify_id, choice: (
+                resolved.append((clarify_id, choice)) or True
+            ),
+        )
+        tools_module = ModuleType("tools")
+        tools_module.clarify_gateway = clarify_gateway
+
+        async def ack():
+            return None
+
+        body = {
+            "message": {
+                "ts": result.message_id,
+                "blocks": adapter.client.posts[-1]["blocks"],
+            },
+            "channel": {"id": "D123"},
+            "user": {"id": "U123", "name": "Ada"},
+        }
+        action = {
+            "action_id": "nemoclaw_clarify_choice_0",
+            "value": "clarify-repeat|0",
+        }
+        with mock.patch.dict(sys.modules, {"tools": tools_module}):
+            asyncio.run(adapter._nemoclaw_handle_clarify_action(ack, body, action))
+            asyncio.run(adapter._nemoclaw_handle_clarify_action(ack, body, action))
+
+        self.assertEqual([("clarify-repeat", "Recovery")], resolved)
+        self.assertEqual(1, len(adapter.client.updates))
+
+        expired_result = asyncio.run(
+            adapter.send_clarify(
+                chat_id="D123",
+                question="Which V0 now?",
+                choices=["Recovery"],
+                clarify_id="clarify-expired",
+                session_key="session-1",
+            )
+        )
+        expired_body = {
+            **body,
+            "message": {
+                "ts": expired_result.message_id,
+                "blocks": adapter.client.posts[-1]["blocks"],
+            },
+        }
+        expired_action = {
+            "action_id": "nemoclaw_clarify_choice_0",
+            "value": "clarify-expired|0",
+        }
+        clarify_gateway._entries = {}
+        with mock.patch.dict(sys.modules, {"tools": tools_module}):
+            asyncio.run(
+                adapter._nemoclaw_handle_clarify_action(
+                    ack, expired_body, expired_action
+                )
+            )
+        self.assertIn("expired", adapter.client.updates[-1]["text"])
+
+    def test_open_ended_and_over_limit_prompts_use_text_fallback(self) -> None:
+        adapter_cls = make_adapter()
+        load_patch(adapter_cls, "_nvteam_sitecustomize_fallback_test")
+        adapter = adapter_cls()
+        asyncio.run(adapter.connect())
+
+        for choices in ([], ["One", "Two", "Three", "Four", "Five"]):
+            result = asyncio.run(
+                adapter.send_clarify(
+                    chat_id="D123",
+                    question="Choose",
+                    choices=choices,
+                    clarify_id="clarify-fallback",
+                    session_key="session-1",
+                )
+            )
+            self.assertTrue(result.fallback)
+
+        self.assertEqual([], adapter.client.posts)
 
     def test_rejects_an_unauthorized_click(self) -> None:
         adapter_cls = make_adapter()

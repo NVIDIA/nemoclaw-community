@@ -9,7 +9,8 @@ directly.
 
 ## Defaults
 
-- GitHub repo: `NVIDIA/NemoClaw`
+- GitHub ETL: disabled until `SOURCE_ETL_GITHUB_ENABLED=1`
+- GitHub repo when enabled: `NVIDIA/NemoClaw`
 - NVIDIA forums tag: `nemoclaw`
 - initial backfill: 72 hours
 - recurring refresh: hourly
@@ -17,7 +18,8 @@ directly.
 The GitHub repo above is the host-side mirror scope, controlled by
 `SOURCE_ETL_GITHUB_REPO`. It is separate from the sandbox's live read-only
 GitHub scope, which is controlled by `GITHUB_READONLY_REPO` and applied through
-OpenShell policy during sandbox creation.
+OpenShell policy during sandbox creation. A live-read `GITHUB_TOKEN` does not
+start the mirror.
 
 ## Services
 
@@ -31,6 +33,7 @@ OpenShell policy during sandbox creation.
 Export the repo root `.env` before running compose. Relevant variables:
 
 - `SOURCE_ETL_GITHUB_REPO`
+- `SOURCE_ETL_GITHUB_ENABLED`
 - `SOURCE_ETL_FORUM_TAG`
 - `SOURCE_ETL_POSTGRES_HOST`
 - `SOURCE_ETL_POSTGRES_PORT`
@@ -43,15 +46,16 @@ Export the repo root `.env` before running compose. Relevant variables:
 - `SOURCE_ETL_POSTGRES_READER_PASSWORD`
 - `SOURCE_ETL_API_PORT`
 - `GITHUB_TOKEN`
+- `NEMOCLAW_HOST_CA_BUNDLE`
 
 ## Run
 
-Run this after exporting the example root `.env`.
+Run this from the example root. The lifecycle script loads `.env`, validates
+the host CA bundle before Compose can create a bind-mount source, and starts
+the complete host-service stack.
 
 ```bash
-set -a && source .env && set +a
-cd source-etls
-docker compose up -d --build
+bash scripts/00-host-services.sh up
 ```
 
 The ETL containers run once immediately on startup and then sleep until the next

@@ -158,6 +158,7 @@ fi
                 "OUTLOOK_CLIENT_ID": "test-client",
                 "OUTLOOK_TARGET_MAILBOX": "agent@example.test",
                 "OUTLOOK_REPLY_TO": "owner@example.test",
+                "NEMOCLAW_INFERENCE_PREFLIGHT": "0",
                 "ATIF_EXPORT_MODE": "local",
             }
             for name in (

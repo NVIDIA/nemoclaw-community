@@ -125,6 +125,16 @@ class GenerateConfigTest(unittest.TestCase):
         self.assertIn("NEMOCLAW_SLACK_RICH_BLOCKS=true", env_example)
         self.assertIn("verify-rich-block-renderer.py", dockerfile)
 
+    def test_github_cli_uses_base_distribution_package(self) -> None:
+        dockerfile = (HERMES_DIR / "Dockerfile").read_text(encoding="utf-8")
+
+        self.assertNotIn("cli.github.com", dockerfile)
+        self.assertNotIn("githubcli-archive-keyring", dockerfile)
+        self.assertIn(
+            "apt-get install -y --no-install-recommends gh postgresql-client",
+            dockerfile,
+        )
+
     def test_slack_interactive_clarification_contract_is_baked_in(self) -> None:
         dockerfile = (HERMES_DIR / "Dockerfile").read_text(encoding="utf-8")
         patch = (HERMES_DIR / "patches" / "sitecustomize.py").read_text(

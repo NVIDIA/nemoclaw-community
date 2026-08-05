@@ -310,8 +310,9 @@ Now edit `.env` and fill in everything you already have:
 [scripts/bring-up.sh](scripts/bring-up.sh) handles host services as its phase 1/4 by
 invoking [scripts/00-host-services.sh](scripts/00-host-services.sh) before the
 sandbox-side phases. The stack from [extras/docker-compose.yml](extras/docker-compose.yml)
-— phoenix (telemetry), postgres (ETL backing store), source ETL workers, PostgREST on
-host port 3100, plus minio + atif-export-relay when `ATIF_EXPORT_MODE=relay` — is
+— phoenix (telemetry), postgres (ETL backing store), the forum ETL, PostgREST on
+host port 3100, plus the opt-in GitHub ETL and minio + atif-export-relay when
+configured — is
 designed to outlive the sandbox, so subsequent `tear-down.sh && bring-up.sh` cycles
 re-touch only the sandbox by default (00-host-services is idempotent).
 
@@ -328,6 +329,13 @@ $ bash scripts/bring-up.sh
 The script auto-sources `.env`, then runs `01-gateway.sh` → `02-providers.sh` →
 `03-sandbox.sh` (select or register the local OpenShell gateway, import v2 provider
 profiles, upsert providers, build and launch the sandbox).
+
+Before the image build, provider setup sends one bounded synthetic tool request
+and requires a valid structured tool call. After selecting the route, it also
+confirms that OpenShell reports the requested provider and model as active. A
+failure stops setup before the expensive build. Set
+`NEMOCLAW_INFERENCE_PREFLIGHT=0` only as an explicit bypass for intentional
+offline setup or an endpoint that cannot support verification.
 
 On the first bring-up with Outlook configured, `02-providers.sh` runs an interactive
 Microsoft device-code login (it prints a URL + code; complete it in a browser as the
@@ -480,7 +488,7 @@ bearer header; the OpenShell L7 proxy substitutes a live token on egress.
 
 | Provider name | `--type` | Credential env var | Required? |
 |---|---|---|---|
-| `compatible-endpoint` | `nvidia` (built-in v2; consumed via `openshell inference set`, not attached to the sandbox directly) | `NVIDIA_API_KEY` (populated from `OPENAI_API_KEY` / `COMPATIBLE_API_KEY` at provider-create time). URL: `NEMOCLAW_ENDPOINT_URL` → `NVIDIA_BASE_URL` provider config. Routing via `inference.local`. | Required for inference. If omitted, the agent has no LLM. |
+| `compatible-endpoint` | `nvidia` (built-in v2; consumed via `openshell inference set`, not attached to the sandbox directly) | `NVIDIA_API_KEY` (populated from `OPENAI_API_KEY` / `COMPATIBLE_API_KEY` at provider-create time). URL: `NEMOCLAW_ENDPOINT_URL` → `NVIDIA_BASE_URL` provider config. Routing via `inference.local`. | Required for inference. Missing credentials stop setup before the sandbox build unless the explicit offline preflight bypass is selected. |
 | `<sandbox>-outlook` | `nemoclaw-outlook-email` | `MS_GRAPH_ACCESS_TOKEN` (auto-rotated by the gateway from the registered refresh token). Refresh material: `OUTLOOK_TENANT_ID`, `OUTLOOK_CLIENT_ID`, refresh_token (cached from device-code login). | Optional. Created only when the Outlook block is fully populated; partial config is rejected. At least one of Outlook or Slack must be configured. |
 | `<sandbox>-slack` | `nemoclaw-slack` | `SLACK_BOT_TOKEN` (Web API) + `SLACK_APP_TOKEN` (Socket Mode) | Optional. Before provider creation, setup verifies that the app token can call `apps.connections.open` with `connections:write`. At least one of Outlook or Slack must be configured. |
 | `<sandbox>-github` | `nemoclaw-github` | `GITHUB_TOKEN` | Optional but recommended. Enables authenticated live GitHub REST reads. The sandbox receives only the OpenShell placeholder; `policy.yaml` further limits use to repo-scoped `GET` routes from approved binaries. |
@@ -536,9 +544,10 @@ openshell sandbox exec --name "${SANDBOX_NAME:-hermes-direct}" -- sh -lc \
 ```
 
 `GITHUB_READONLY_REPO` controls only live REST reads through
-`github-readonly-live`. The host-side ETL mirror is independent; set
-`SOURCE_ETL_GITHUB_REPO=owner/repo` if you also want mirrored GitHub
-discussions/history from a different repo, then rerun
+`github-readonly-live`. The host-side ETL mirror is independent and disabled by
+default. Set `SOURCE_ETL_GITHUB_ENABLED=1` and optionally
+`SOURCE_ETL_GITHUB_REPO=owner/repo` when you want mirrored GitHub
+discussions/history, then rerun
 `bash scripts/00-host-services.sh`. Existing mirror database/state is preserved
 unless you remove the compose volumes.
 
@@ -550,13 +559,17 @@ unless you remove the compose volumes.
 | `OPENSHELL_GATEWAY` | `openshell` | Gateway name. The default matches the package-managed OpenShell installer. Use `snap-docker` when following the snap setup. |
 | `OPENSHELL_GATEWAY_ENDPOINT` | auto (`https://127.0.0.1:17670` for `openshell`, `http://127.0.0.1:17670` for `snap-docker`) | Override the local gateway endpoint if you registered it under a different URL. |
 | `NEMOCLAW_MODEL` | `nvidia/nemotron-3-super-120b-a12b` | Inference model passed to `openshell inference set`. |
+| `NEMOCLAW_INFERENCE_PREFLIGHT` | `1` | Requires one bounded structured tool call before sandbox creation, then verifies that OpenShell activated the requested provider and model. Remote endpoints must use HTTPS; loopback HTTP is allowed for local proxies. Standard proxy and CA environment variables are preserved. Set to `0` only for intentional offline setup or an endpoint that cannot support verification. |
+| `NEMOCLAW_INFERENCE_PREFLIGHT_TIMEOUT_SECONDS` | `10` | Maximum time allowed for the preflight request. |
 | `NEMOCLAW_SLACK_RICH_BLOCKS` | `true` | Render supported semantic Markdown with Hermes's native Slack Block Kit renderer, including table blocks. Set to `false` for text-only output. Interactive clarification buttons remain available. Only `true` or `false` is accepted. Rebuild the sandbox after changing it. |
 | `NEMOCLAW_ENDPOINT_URL` | `https://integrate.api.nvidia.com/v1` | Upstream base URL for the `compatible-endpoint` provider. (`OPENAI_BASE_URL` is also accepted as a fallback.) |
 | `NEMOCLAW_HOST_TLS_PROXY_UPSTREAM` | (none) | Optional HTTPS origin for the host TLS proxy. Required when `NEMOCLAW_ENDPOINT_URL` uses `host.openshell.internal:18080` and auto-heal should manage that proxy. |
 | `NEMOCLAW_HOST_TLS_PROXY_PORT` | `18080` | Host listener port for the optional TLS proxy. |
+| `NEMOCLAW_HOST_CA_BUNDLE` | `/etc/ssl/certs/ca-certificates.crt` | Absolute path to a readable regular-file host CA bundle mounted read-only into the GitHub/forum ETLs and ATIF relay. Override when the supported Ubuntu host stores its trusted bundle elsewhere. |
 | `COMPATIBLE_API_KEY` | (none) | Inference API key. Mirrors NemoClaw's `REMOTE_PROVIDER_CONFIG.custom`. (`OPENAI_API_KEY` is also accepted.) |
 | `GITHUB_TOKEN` | (none) | Optional GitHub token for authenticated live REST reads. Also feeds the optional host GitHub mirror. |
 | `GITHUB_READONLY_REPO` | `NVIDIA/OpenShell` | The only repo allowed by the live GitHub REST policy, formatted as `owner/repo`. Recreate the sandbox after changing it. |
+| `SOURCE_ETL_GITHUB_ENABLED` | `0` | Set to `1` to start the host-side GitHub mirror. A live-read `GITHUB_TOKEN` alone does not enable the ETL. |
 | `SOURCE_ETL_GITHUB_REPO` | `NVIDIA/NemoClaw` | Host-side GitHub mirror repo for source-etls. This is independent of `GITHUB_READONLY_REPO`. |
 | `OUTLOOK_LOGIN_CACHE` | `1` | Controls the Microsoft refresh-token cache at `.bootstrap/cache/ms-graph-token.json`. `1` = use the cache (auto-refresh on staleness, ~90 days). `0` = skip the cache entirely (device-code every bring-up, nothing on disk; use on shared workstations or security-sensitive contexts). `2` = force device-code login and rewrite the cache. The gateway-side encrypted credential copy is unaffected by this knob. |
 | `PHOENIX_COLLECTOR_ENDPOINT` | (none) | Set to e.g. `http://host.openshell.internal:6006/v1/traces` to stream OpenInference traces to a Phoenix collector. ATIF trace generation does not depend on this — NeMo-Relay is always installed and writes ATIF locally to `/tmp/atif/` regardless. |
