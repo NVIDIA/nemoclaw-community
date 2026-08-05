@@ -6,6 +6,7 @@ name: DCO
 on:
   pull_request:
     branches: [main]
+    types: [opened, edited, synchronize, reopened]
 
 permissions:
   contents: read
@@ -16,35 +17,34 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check DCO sign-off
+      - name: Check Dependabot DCO bypass
+        id: dco-bypass
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          USERNAME: ${{ github.event.pull_request.user.login }}
+        run: |
+          if [[ "$USERNAME" == "dependabot[bot]" || "$USERNAME" == "app/dependabot" ]]; then
+            echo "bypass=true" >> "$GITHUB_OUTPUT"
+            echo "Dependabot is exempt from the PR-description DCO declaration."
+          else
+            echo "bypass=false" >> "$GITHUB_OUTPUT"
+            echo "The PR-description DCO declaration is required."
+          fi
+
+      - name: Check PR description for Signed-off-by
+        if: ${{ steps.dco-bypass.outputs.bypass != 'true' }}
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
         shell: bash
         run: |
           set -euo pipefail
 
-          commit_count=0
-          missing_signoff=0
+          normalized_body="$(printf '%s\n' "$PR_BODY" | tr -d '\r')"
 
-          while IFS= read -r sha; do
-            commit_count=$((commit_count + 1))
-
-            if ! git show -s --format=%B "$sha" \
-              | git interpret-trailers --parse \
-              | grep -Eq '^Signed-off-by: .+ <[^<>[:space:]]+@[^<>[:space:]]+>$'; then
-              echo "::error::Commit $sha is missing a valid Signed-off-by trailer."
-              missing_signoff=1
-            fi
-          done < <(git rev-list --reverse "${BASE_SHA}..${HEAD_SHA}")
-
-          if ((commit_count == 0)); then
-            echo "::error::The pull request does not contain a commit to check."
+          if ! printf '%s\n' "$normalized_body" \
+            | grep -Eq '^Signed-off-by:[[:space:]]+.+[[:space:]]+<[^<>]+>$'; then
+            echo "::error::PR description must contain a DCO sign-off line."
+            echo "::error::Expected format: Signed-off-by: Your Name <your-email@example.com>"
             exit 1
           fi
 
-          exit "$missing_signoff"
+          echo "PR description contains a DCO sign-off."

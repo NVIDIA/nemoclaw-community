@@ -250,33 +250,26 @@ request branch onto `upstream/main`.
 After each rebase, confirm that the pull request does not restore an obsolete
 path.
 
-## Sign Off Every Commit
+## Sign Off Every Pull Request
 
-Every commit in a pull request must include a
-[`Signed-off-by:` trailer](https://developercertificate.org/) for Developer
-Certificate of Origin (DCO) compliance. A sign-off in the pull request
-description does not satisfy this requirement.
+Every pull request description must include a
+[`Signed-off-by:` declaration](https://developercertificate.org/) for Developer
+Certificate of Origin (DCO) compliance. The pull request author must add the
+declaration before requesting review.
 
-Create a signed-off commit with this command:
-
-```bash
-git commit -s -m "Describe the change"
-```
-
-Git adds a trailer in this form:
+Add this line to the pull request description:
 
 ```text
 Signed-off-by: Your Name <your.email@example.com>
 ```
 
-Use your own name and email address. If you amend, rebase, squash, or
-cherry-pick commits, confirm that each resulting commit still contains a valid
-`Signed-off-by:` trailer.
+Use your own name and email address. Individual commits may also include
+sign-off trailers, but the required check validates the declaration in the pull
+request description.
 
-DCO sign-off is a declaration in the commit message. It is separate from
-cryptographic commit signing.
+DCO sign-off is separate from cryptographic commit signing.
 
-Maintainers do not accept commits without the required sign-off.
+Maintainers do not accept pull requests without the required declaration.
 
 ## Open a Pull Request
 
@@ -290,13 +283,13 @@ Your pull request should include:
 - An explanation for checks that you did not run.
 - The documentation and dependency changes.
 - For a migration, its details and downstream follow-up work.
-- Confirmation that every commit includes DCO sign-off.
+- Your DCO sign-off declaration.
 
 Submit all changes to `main` through a pull request.
 
 Maintainers merge a pull request only when all these conditions are true:
 
-- Every commit satisfies the DCO requirement.
+- The pull request description satisfies the DCO requirement.
 - The pull request satisfies the license-header requirements.
 - The pull request has no unresolved review conversations.
 - A maintainer approves the pull request.
