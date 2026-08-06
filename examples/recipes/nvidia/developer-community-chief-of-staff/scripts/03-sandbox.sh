@@ -70,6 +70,10 @@ case "$NEMOCLAW_SLACK_RICH_BLOCKS" in
 esac
 echo "Slack rich blocks: $NEMOCLAW_SLACK_RICH_BLOCKS"
 
+# Stage locally installed TLS-inspection roots into the ignored certs/ build
+# input before Docker runs so enterprise builds do not fail on HTTPS downloads.
+bash "$DIR/stage-enterprise-cas.sh"
+
 # ── Stage the Dockerfile and patch ARG defaults ────────────────────────
 # Build args go through sed substitution because `openshell sandbox create
 # --from <Dockerfile>` doesn't expose --build-arg passthrough. Values must

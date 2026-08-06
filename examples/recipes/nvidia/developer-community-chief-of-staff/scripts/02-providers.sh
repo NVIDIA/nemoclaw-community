@@ -70,21 +70,23 @@ for profile_file in outlook-email.yaml slack.yaml github.yaml atif-export-relay.
 done
 
 # Keep preflight subprocesses isolated from unrelated host state while
-# preserving the standard proxy and CA settings needed on enterprise networks.
+# preserving non-empty proxy and CA settings needed on enterprise networks.
+# Do not define an unset OpenSSL override as an empty string: under `env -i`,
+# SSL_CERT_FILE= or SSL_CERT_DIR= suppresses the platform's default trust-store
+# discovery and makes every TLS endpoint appear untrusted.
 PREFLIGHT_NETWORK_ENV=(
   "HOME=$HOME"
   "PATH=$PATH"
-  "HTTP_PROXY=${HTTP_PROXY:-}"
-  "HTTPS_PROXY=${HTTPS_PROXY:-}"
-  "ALL_PROXY=${ALL_PROXY:-}"
-  "NO_PROXY=${NO_PROXY:-}"
-  "http_proxy=${http_proxy:-}"
-  "https_proxy=${https_proxy:-}"
-  "all_proxy=${all_proxy:-}"
-  "no_proxy=${no_proxy:-}"
-  "SSL_CERT_FILE=${SSL_CERT_FILE:-}"
-  "SSL_CERT_DIR=${SSL_CERT_DIR:-}"
 )
+for preflight_env_name in \
+  HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY \
+  http_proxy https_proxy all_proxy no_proxy \
+  SSL_CERT_FILE SSL_CERT_DIR CURL_CA_BUNDLE REQUESTS_CA_BUNDLE; do
+  if [[ -n "${!preflight_env_name:-}" ]]; then
+    PREFLIGHT_NETWORK_ENV+=("$preflight_env_name=${!preflight_env_name}")
+  fi
+done
+unset preflight_env_name
 
 # ── Inference provider (built-in nvidia v2 profile via inference.local) ─
 INFERENCE_KEY="${OPENAI_API_KEY:-${COMPATIBLE_API_KEY:-}}"
