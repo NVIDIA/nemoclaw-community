@@ -346,6 +346,17 @@ a fresh login with `OUTLOOK_LOGIN_CACHE=2 bash scripts/bring-up.sh`. Set
 `OUTLOOK_LOGIN_CACHE=0` to skip the cache entirely and do device-code on every
 bring-up — see [docs/set-up-outlook-bridge.md](docs/set-up-outlook-bridge.md#security-note-where-the-refresh-token-lives).
 
+To use Hermes interactively after bring-up, connect to the sandbox and start a
+new TUI session:
+
+```console
+$ openshell sandbox connect hermes-direct
+$ hermes chat --tui
+```
+
+Use `hermes chat --tui --continue` only after a TUI session exists. The image
+contains the TUI bundle and does not need an `npm install` at runtime.
+
 The image always installs NeMo-Relay so the agent writes ATIF traces to `/tmp/atif/`
 regardless of Phoenix config. If `PHOENIX_COLLECTOR_ENDPOINT` is set, `03-sandbox.sh`
 additionally bakes the endpoint into the image so OpenInference traces stream into
