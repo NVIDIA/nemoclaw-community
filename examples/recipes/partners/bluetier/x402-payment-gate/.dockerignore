@@ -1,0 +1,10 @@
+# The sandbox image is built with the RECIPE ROOT as the build context (so the
+# Dockerfile's COPY paths -- agents/, scripts/ -- resolve). Keep that context
+# lean: exclude everything the image never needs.
+.git/
+plugin/
+host/
+.run/
+**/__pycache__/
+*.pyc
+*.pid
