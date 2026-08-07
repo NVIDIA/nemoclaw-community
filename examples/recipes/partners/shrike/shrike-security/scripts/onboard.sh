@@ -82,12 +82,37 @@ export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 export NEMOCLAW_SANDBOX_NAME
 if sandbox_exists "$NEMOCLAW_SANDBOX_NAME"; then
   echo "Sandbox '$NEMOCLAW_SANDBOX_NAME' already exists — profile + provider refreshed above."
+  # Ensure the provider is attached even on a re-run (idempotent).
+  attach_provider
   echo "Inspect it with: nemoclaw $NEMOCLAW_SANDBOX_NAME status"
   exit 0
 fi
 
-echo "Onboarding sandbox '$NEMOCLAW_SANDBOX_NAME' (provider: $NEMOCLAW_PROVIDER)"
-run nemoclaw onboard --non-interactive --agents "$EXAMPLE_DIR/agents.yaml"
+case "$INSTALL_MODE" in
+  runtime)
+    echo "Onboarding sandbox '$NEMOCLAW_SANDBOX_NAME' (provider: $NEMOCLAW_PROVIDER, install mode: runtime)"
+    run nemoclaw onboard --non-interactive --agents "$EXAMPLE_DIR/agents.yaml"
+    ;;
+  image)
+    # Durable path: bake the plugin into a version-matched custom sandbox image.
+    # build-image.sh prepares the build context and runs `nemoclaw onboard --from`.
+    echo "Onboarding sandbox '$NEMOCLAW_SANDBOX_NAME' with a baked plugin image (install mode: image)"
+    run bash "$DIR/build-image.sh"
+    ;;
+  *)
+    echo "error: unknown INSTALL_MODE='$INSTALL_MODE' (expected 'runtime' or 'image')" >&2
+    exit 1
+    ;;
+esac
+
+# 4) Attach the Shrike provider to the sandbox so the L7 proxy resolves the
+#    key placeholder on egress. Without this the plugin's enforce call cannot
+#    authenticate and (being fail-closed) would block every governed action.
+attach_provider
 
 echo
-echo "Onboard complete. Next: bash scripts/install.sh"
+if [[ "$INSTALL_MODE" == "image" ]]; then
+  echo "Onboard complete (plugin baked into the image). Verify with: bash scripts/verify.sh"
+else
+  echo "Onboard complete. Next: bash scripts/install.sh"
+fi

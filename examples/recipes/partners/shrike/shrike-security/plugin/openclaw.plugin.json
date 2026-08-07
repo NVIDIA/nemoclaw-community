@@ -1,0 +1,14 @@
+{
+  "id": "shrike-security",
+  "name": "Shrike Action Governance",
+  "version": "0.1.0",
+  "description": "Governs OpenClaw tool calls through Shrike's enforce plane via a before_tool_call hook (in-sandbox defense-in-depth).",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  }
+}

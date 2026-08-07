@@ -13,7 +13,7 @@
 # sandbox. Egress is scoped to Shrike's host with enforcement: enforce.
 id: nemoclaw-shrike
 display_name: NemoClaw Shrike Security
-description: Shrike action-governance enforce plane; returns allow / warn / require_approval / block for agent tool calls. Sandbox policy further restricts to the enforce, session-status, and health paths.
+description: Shrike action-governance enforce plane; returns allow / warn / require_approval / block for agent tool calls. Egress is scoped to exactly two POST paths (general + specialized enforce); no other method or path on the host is reachable.
 category: other
 credentials:
   - name: api_key
@@ -28,8 +28,17 @@ endpoints:
     protocol: rest
     access: read-write
     enforcement: enforce
+    # Scope egress to the exact enforce-plane methods + paths the plugin uses —
+    # nothing else on the host is reachable. The plugin only ever POSTs a tool
+    # call to these two endpoints (general + specialized); no other verbs or
+    # paths are permitted, so a compromised sandbox cannot use this credential
+    # to reach the rest of api.shrikesecurity.com.
+    rules:
+      - allow: { method: POST, path: "/agent/api/scan/enforce" }
+      - allow: { method: POST, path: "/agent/api/scan/enforce/specialized" }
 binaries:
+  # Only curl makes the egress call (the plugin shells out to it so the request
+  # rides the OpenShell proxy + CA; Node's fetch/https bypass them). No other
+  # binary needs this credential's egress attribution.
   - /usr/bin/curl
   - /usr/local/bin/curl
-  - /usr/local/bin/node
-  - /usr/bin/node
