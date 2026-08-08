@@ -47,4 +47,12 @@ jobs:
             exit 1
           fi
 
+          if ! printf '%s\n' "$normalized_body" \
+            | grep -E '^Signed-off-by:[[:space:]]+.+[[:space:]]+<[^<>]+>$' \
+            | grep -Eiv '^Signed-off-by:[[:space:]]+Your Name[[:space:]]+<your[.-]email@example\.com>$' \
+            > /dev/null; then
+            echo "::error::Replace the example DCO sign-off with your own name and email address."
+            exit 1
+          fi
+
           echo "PR description contains a DCO sign-off."

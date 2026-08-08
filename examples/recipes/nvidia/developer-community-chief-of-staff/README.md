@@ -346,6 +346,17 @@ a fresh login with `OUTLOOK_LOGIN_CACHE=2 bash scripts/bring-up.sh`. Set
 `OUTLOOK_LOGIN_CACHE=0` to skip the cache entirely and do device-code on every
 bring-up — see [docs/set-up-outlook-bridge.md](docs/set-up-outlook-bridge.md#security-note-where-the-refresh-token-lives).
 
+To use Hermes interactively after bring-up, connect to the sandbox and start a
+new TUI session:
+
+```console
+$ openshell sandbox connect hermes-direct
+$ hermes chat --tui
+```
+
+Use `hermes chat --tui --continue` only after a TUI session exists. The image
+contains the TUI bundle and does not need an `npm install` at runtime.
+
 The image always installs NeMo-Relay so the agent writes ATIF traces to `/tmp/atif/`
 regardless of Phoenix config. If `PHOENIX_COLLECTOR_ENDPOINT` is set, `03-sandbox.sh`
 additionally bakes the endpoint into the image so OpenInference traces stream into
@@ -470,8 +481,9 @@ sandbox, e.g. `find /tmp/atif -type f -mtime +7 -delete`.
 - **(Optional)** If your network performs TLS interception (e.g. an
   SSL-inspecting proxy), place the inspection CA certificate(s) as `.crt`
   files in the example-root `certs/` directory before running `bring-up.sh`.
-  Otherwise leave it empty. See [`certs/README.md`](certs/README.md) for
-  details.
+  Additional roots installed in the host's standard local CA directory are
+  staged automatically. Otherwise leave the directory empty. See
+  [`certs/README.md`](certs/README.md) for details.
 
 ## Providers created by `bring-up.sh`
 
@@ -559,7 +571,7 @@ unless you remove the compose volumes.
 | `OPENSHELL_GATEWAY` | `openshell` | Gateway name. The default matches the package-managed OpenShell installer. Use `snap-docker` when following the snap setup. |
 | `OPENSHELL_GATEWAY_ENDPOINT` | auto (`https://127.0.0.1:17670` for `openshell`, `http://127.0.0.1:17670` for `snap-docker`) | Override the local gateway endpoint if you registered it under a different URL. |
 | `NEMOCLAW_MODEL` | `nvidia/nemotron-3-super-120b-a12b` | Inference model passed to `openshell inference set`. |
-| `NEMOCLAW_INFERENCE_PREFLIGHT` | `1` | Requires one bounded structured tool call before sandbox creation, then verifies that OpenShell activated the requested provider and model. Remote endpoints must use HTTPS; loopback HTTP is allowed for local proxies. Standard proxy and CA environment variables are preserved. Set to `0` only for intentional offline setup or an endpoint that cannot support verification. |
+| `NEMOCLAW_INFERENCE_PREFLIGHT` | `1` | Requires one bounded structured tool call before sandbox creation, then verifies that OpenShell activated the requested provider and model. Remote endpoints must use HTTPS. For `http://host.openshell.internal:<port>`, the host-side check safely uses the same listener through `127.0.0.1:<port>`. Non-empty proxy and CA environment variables are preserved; unset CA overrides remain unset so the platform trust store still works. Set to `0` only for intentional offline setup or an endpoint that cannot support verification. |
 | `NEMOCLAW_INFERENCE_PREFLIGHT_TIMEOUT_SECONDS` | `10` | Maximum time allowed for the preflight request. |
 | `NEMOCLAW_SLACK_RICH_BLOCKS` | `true` | Render supported semantic Markdown with Hermes's native Slack Block Kit renderer, including table blocks. Set to `false` for text-only output. Interactive clarification buttons remain available. Only `true` or `false` is accepted. Rebuild the sandbox after changing it. |
 | `NEMOCLAW_ENDPOINT_URL` | `https://integrate.api.nvidia.com/v1` | Upstream base URL for the `compatible-endpoint` provider. (`OPENAI_BASE_URL` is also accepted as a fallback.) |

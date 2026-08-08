@@ -54,6 +54,12 @@ RUN --mount=type=secret,id=github_token,required=false \
 # ── Main sandbox image ────────────────────────────────────────────────────────
 FROM ${BASE_IMAGE}
 
+# The sandbox cannot install npm dependencies at runtime under the enforced
+# OpenShell policy. Keep the prebuilt Hermes TUI bundle as an explicit base
+# image contract so `hermes chat --tui` fails at build time, not on first use,
+# if a future base-image update drops it.
+RUN test -s /opt/hermes/ui-tui/dist/entry.js
+
 # NeMo-Relay Phoenix OTLP endpoint — baked at image build time so start.sh
 # reads it directly from the container ENV without relying on runtime injection.
 # Empty string means no telemetry (standard behavior).
@@ -220,13 +226,14 @@ RUN mkdir -p /etc/nemo-relay \
 # transport when a proxy is present. The OpenShell L7 proxy owns credential
 # placeholder rewriting and hostname-based policy enforcement.
 #
-# Only HERMES_HOME and HERMES_DISABLE_LAZY_INSTALLS reliably reach
-# user processes — OpenShell's exec-session allowlist strips most other
-# HERMES_* vars. PID-1 (start.sh-launched gateway) keeps everything;
-# HERMES_DISABLE_LAZY_INSTALLS is also re-exported from start.sh's
-# _PROXY_ENV_FILE so interactive shells get it.
+# Only HERMES_HOME and HERMES_DISABLE_LAZY_INSTALLS reliably reach user
+# processes — OpenShell's exec-session allowlist strips most other HERMES_*
+# vars. PID-1 (start.sh-launched gateway) keeps everything; start.sh also
+# re-exports HERMES_DISABLE_LAZY_INSTALLS and HERMES_TUI_DIR from its
+# _PROXY_ENV_FILE so interactive shells use the prebuilt bundle.
 ENV HERMES_TELEGRAM_DISABLE_FALLBACK_IPS=1 \
     HERMES_DISABLE_LAZY_INSTALLS=1 \
+    HERMES_TUI_DIR=/opt/hermes/ui-tui \
     HERMES_HOME=/sandbox/.hermes-data
 
 # Copy NemoClaw plugin for Hermes (Python-based)

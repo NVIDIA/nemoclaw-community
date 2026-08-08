@@ -1,0 +1,46 @@
+{
+  "name": "@nvidia/nemoclaw-review-advisor",
+  "version": "0.1.0",
+  "description": "A self-bootstrapping Hermes and Nemotron PR review advisor for NemoClaw",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "nemoclaw-review-advisor": "installer/bin/cli.mjs"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NVIDIA/nemoclaw-community.git",
+    "directory": "examples/recipes/nvidia/pr-review-advisor"
+  },
+  "files": [
+    ".env.example",
+    "agents/hermes/Dockerfile",
+    "agents/hermes/*.md",
+    "agents/hermes/*.py",
+    "agents/hermes/*.sh",
+    "agents/hermes/*.ts",
+    "agents/hermes/plugins/review-advisor/*.py",
+    "agents/hermes/plugins/review-advisor/*.yaml",
+    "docs",
+    "installer",
+    "policy.yaml",
+    "review-profiles",
+    "schemas",
+    "scripts/*.py",
+    "scripts/*.sh",
+    "skills/pr-review",
+    "tests/*.mjs",
+    "tests/*.py"
+  ],
+  "scripts": {
+    "test": "npm run test:installer && npm run test:runtime",
+    "test:installer": "node --test tests/installer.test.mjs",
+    "test:runtime": "python3 -m pytest -q tests"
+  }
+}

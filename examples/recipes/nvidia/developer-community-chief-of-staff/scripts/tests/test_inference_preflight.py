@@ -124,6 +124,39 @@ class InferencePreflightTest(TestCase):
             "http://127.0.0.1:18080/v1/chat/completions",
         )
 
+    def test_sandbox_host_alias_uses_host_loopback_for_preflight(self) -> None:
+        response = MagicMock()
+        response.status = 200
+        response.read.return_value = tool_response_body()
+        response.__enter__.return_value = response
+        with patch.object(
+            PREFLIGHT.urllib.request, "urlopen", return_value=response
+        ) as open_:
+            PREFLIGHT.run_preflight(
+                "http://host.openshell.internal:18080/v1?mode=test",
+                "nvidia/test-model",
+                "secret",
+                4,
+            )
+
+        self.assertEqual(
+            open_.call_args.args[0].full_url,
+            "http://127.0.0.1:18080/v1/chat/completions?mode=test",
+        )
+
+    def test_similar_remote_hostname_is_not_treated_as_host_alias(self) -> None:
+        with patch.object(PREFLIGHT.urllib.request, "urlopen") as open_:
+            with self.assertRaisesRegex(
+                PREFLIGHT.PreflightError, "remote inference endpoints must use HTTPS"
+            ):
+                PREFLIGHT.run_preflight(
+                    "http://host.openshell.internal.example.test:18080/v1",
+                    "nvidia/test-model",
+                    "secret",
+                    4,
+                )
+        open_.assert_not_called()
+
     def test_missing_credential_is_configuration_failure(self) -> None:
         with self.assertRaisesRegex(
             PREFLIGHT.PreflightError, "credential is missing"
@@ -505,3 +538,67 @@ exit 0
                 "http://proxy.example.test:8080|127.0.0.1,localhost|"
                 "/etc/example/ca.pem|/etc/example/certs",
             )
+
+    def test_preflights_leave_unset_ca_overrides_unset(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            fake_openshell = Path(temp_dir) / "openshell"
+            network_log = Path(temp_dir) / "network-env.log"
+            fake_python = Path(temp_dir) / "python3"
+            fake_openshell.write_text(
+                """#!/usr/bin/env bash
+if [[ "$1 $2" == "settings get" ]]; then
+  echo "providers_v2_enabled = true"
+  exit 0
+fi
+if [[ "$1 $2" == "provider get" ]]; then
+  exit 1
+fi
+if [[ "$1 $2" == "inference get" ]]; then
+  printf 'Inference:\n\n  Provider: compatible-endpoint\n  Model: nvidia/test-model\n'
+  exit 0
+fi
+exit 0
+""",
+                encoding="utf-8",
+            )
+            fake_python.write_text(
+                f"""#!/usr/bin/env bash
+if [[ "$1" == *"inference_preflight.py" ]]; then
+  printf '%s|%s\n' "${{SSL_CERT_FILE+x}}" "${{SSL_CERT_DIR+x}}" > "{network_log!s}"
+fi
+exit 0
+""",
+                encoding="utf-8",
+            )
+            fake_openshell.chmod(0o755)
+            fake_python.chmod(0o755)
+            environment = {
+                **os.environ,
+                "PATH": f"{temp_dir}:{os.environ['PATH']}",
+                "COMPATIBLE_API_KEY": "test-inference-key",
+                "NEMOCLAW_MODEL": "nvidia/test-model",
+                "NEMOCLAW_INFERENCE_PREFLIGHT": "1",
+                "NEMOCLAW_ENDPOINT_URL": "https://example.test/v1",
+                "SLACK_BOT_TOKEN": "test-bot-token",
+                "SLACK_APP_TOKEN": "xapp-test-app-token",
+                "ATIF_EXPORT_MODE": "local",
+            }
+            for name in (
+                "OPENAI_API_KEY",
+                "SSL_CERT_FILE",
+                "SSL_CERT_DIR",
+                "CURL_CA_BUNDLE",
+                "REQUESTS_CA_BUNDLE",
+            ):
+                environment.pop(name, None)
+
+            result = subprocess.run(
+                ["bash", str(PROVIDERS_SCRIPT)],
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(network_log.read_text(encoding="utf-8").strip(), "|")

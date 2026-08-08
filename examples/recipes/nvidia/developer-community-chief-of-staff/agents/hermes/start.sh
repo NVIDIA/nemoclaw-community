@@ -488,6 +488,14 @@ export PATH="/usr/local/lib/nemoclaw/bin:\$PATH"
 export HERMES_TUI_THEME=dark
 export HERMES_DISABLE_LAZY_INSTALLS=1
 PROXYEOF
+  # OpenShell strips most HERMES_* variables from interactive exec sessions.
+  # Re-export the trusted prebuilt bundle only when its build-time contract is
+  # still present. This keeps `hermes chat --tui` off the runtime npm path.
+  cat <<'TUIENVEOF'
+if [ -s /opt/hermes/ui-tui/dist/entry.js ]; then
+  export HERMES_TUI_DIR="/opt/hermes/ui-tui"
+fi
+TUIENVEOF
   for _ca_env_name in SSL_CERT_FILE CURL_CA_BUNDLE REQUESTS_CA_BUNDLE GIT_SSL_CAINFO; do
     _ca_env_value="${!_ca_env_name:-}"
     if [ -n "$_ca_env_value" ]; then

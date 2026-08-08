@@ -21,7 +21,7 @@ Use one of these methods to contribute:
 - Contribute a new example.
 - Report a reproducible problem.
 
-For a problem report, identify the example. Give the environment details.
+For a problem report, identify the example. Give sanitized environment details.
 
 Select an example from the [example catalog](examples/README.md). Read the
 example's README. Follow all linked setup and check instructions.
@@ -145,6 +145,38 @@ Apply these requirements to all pull requests:
   details.
 - Do not add internal-only links to public documentation.
 
+## Write for a Public Repository
+
+Write all repository content for a public audience. This rule applies to issues,
+pull requests, review comments, commit messages, code comments, documentation,
+tests, logs, generated artifacts, and uploaded files.
+
+Follow [WRITING.md](WRITING.md) for plain-language guidance. Use the approved
+terms in the
+[controlled-word list](.agents/skills/_shared/controlled-words.md). These rules
+apply to content written by people and coding agents.
+
+Before you publish content, remove or replace all nonpublic information,
+including:
+
+- Internal project, environment, profile, host, service, team, or distribution
+  list names.
+- Private URLs, repository paths, ticket identifiers, and workspace paths.
+- Screenshots, logs, configuration values, or commands that expose nonpublic
+  information.
+- Company-specific shorthand that a public contributor cannot understand.
+
+Use a public, generic description when the exact internal name is not required.
+For example, use `enterprise environment`, `private certificate authority`, or
+`internal tracking system` as appropriate. Do not publish the original value in
+an example, quotation, test fixture, commit history, or pull request discussion.
+
+If public text cannot describe the change safely, coordinate privately with a
+maintainer before submission. Coding agents must inspect their proposed output
+against these rules before they post or commit it. A human contributor remains
+responsible for reviewing agent-generated content before merge. Automated
+checks and controlled words do not replace these reviews.
+
 Use these rules during checks:
 
 - If the change does not require an external system for a check, do not contact
@@ -265,7 +297,8 @@ Signed-off-by: Your Name <your.email@example.com>
 
 Use your own name and email address. Individual commits may also include
 sign-off trailers, but the required check validates the declaration in the pull
-request description.
+request description. The example name and email address do not satisfy the
+required check.
 
 DCO sign-off is separate from cryptographic commit signing.
 
