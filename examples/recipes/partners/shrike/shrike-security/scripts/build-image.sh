@@ -135,11 +135,16 @@ RUN HOME=/sandbox openclaw plugins install /opt/shrike-plugin-stage \
     && HOME=/sandbox openclaw plugins inspect shrike-security --json > /dev/null
 
 # Enabling the plugin changes openclaw.json after the managed runtime hashed it.
+# Regenerate the integrity hash from INSIDE /sandbox/.openclaw so the entry in
+# .config-hash names the file as `openclaw.json` (a bare, relative filename),
+# matching what NemoClaw's config-integrity guard expects. Hashing the absolute
+# path (`sha256sum /sandbox/.openclaw/openclaw.json`) records `.../openclaw.json`
+# in the entry and trips the guard on re-bless.
 # hadolint ignore=DL3002
 USER root
 RUN chown sandbox:sandbox /sandbox/.openclaw/openclaw.json \
     && chmod 660 /sandbox/.openclaw/openclaw.json \
-    && sha256sum /sandbox/.openclaw/openclaw.json > /sandbox/.openclaw/.config-hash \
+    && ( cd /sandbox/.openclaw && sha256sum openclaw.json > .config-hash ) \
     && chown sandbox:sandbox /sandbox/.openclaw/.config-hash \
     && chmod 660 /sandbox/.openclaw/.config-hash
 # <<< shrike-security plugin stages

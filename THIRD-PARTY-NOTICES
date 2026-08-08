@@ -180,6 +180,29 @@ License: MIT
 URL: https://github.com/slackapi/bolt-python
 
 ================================================================================
+Node.js Packages
+================================================================================
+
+Build-time (devDependencies) of the Shrike Security recipe's before_tool_call
+plugin (examples/recipes/partners/shrike/shrike-security/plugin). They compile
+the TypeScript plugin to JavaScript and are not shipped in its distributed dist/.
+
+Package: typescript
+Version: 6.0.3
+License: Apache-2.0
+URL: https://github.com/microsoft/TypeScript
+
+Package: @types/node
+Version: 22.20.1
+License: MIT
+URL: https://github.com/DefinitelyTyped/DefinitelyTyped
+
+Package: undici-types
+Version: 6.21.0
+License: MIT
+URL: https://github.com/nodejs/undici
+
+================================================================================
 GitHub Actions
 ================================================================================
 

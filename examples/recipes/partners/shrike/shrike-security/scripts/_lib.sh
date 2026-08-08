@@ -93,7 +93,9 @@ SHRIKE_PROVIDER_NAME="${SHRIKE_PROVIDER_NAME:-${NEMOCLAW_SANDBOX_NAME}-shrike}"
 #            (scripts/build-image.sh). Survives rebuild; provenance-guarded on
 #            NemoClaw >= v0.0.76. Heavier: needs a matched NemoClaw source
 #            checkout as the Docker build context.
-INSTALL_MODE="${INSTALL_MODE:-runtime}"
+# Default to the supported, durable image path; runtime is an explicit
+# dev-only opt-in (INSTALL_MODE=runtime).
+INSTALL_MODE="${INSTALL_MODE:-image}"
 
 # Plugin identity + on-host source. SHRIKE_PLUGIN_ID must match the `id` field
 # in plugin/openclaw.plugin.json.

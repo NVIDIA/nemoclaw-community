@@ -17,11 +17,13 @@
 # `openshell:resolve:env:SHRIKE_API_KEY` placeholder — the raw key stays on the
 # gateway (see onboard.sh).
 #
-# INSTALL_MODE=runtime (default): build the plugin on the host, stage it into
+# INSTALL_MODE=image (default): the plugin is already baked into the sandbox
+#   image at onboard time (scripts/build-image.sh) — this script only verifies
+#   it loaded. This is the supported, durable path.
+# INSTALL_MODE=runtime (dev-only): build the plugin on the host, stage it into
 #   the sandbox OUTSIDE the managed extensions dir, then `openclaw plugins
-#   install` + `enable` and restart the gateway. Not durable across `rebuild`.
-# INSTALL_MODE=image: the plugin is already baked into the sandbox image at
-#   onboard time (scripts/build-image.sh) — this script only verifies it loaded.
+#   install` + `enable` and restart the gateway. Not durable across `rebuild`
+#   and can contend with the config-integrity guard; use for local iteration.
 #
 # Idempotent: re-running re-stages + re-installs (runtime) or re-verifies (image).
 #
