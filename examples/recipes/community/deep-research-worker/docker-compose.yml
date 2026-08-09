@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+services:
+  deepagents-worker:
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+    container_name: deep-research-worker
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${DEEPAGENTS_SERVICE_PORT:-9050}:9050"
+    environment:
+      DEEPAGENTS_SERVICE_PORT: 9050
+      DEEPAGENTS_WORKER_CONCURRENCY: "${DEEPAGENTS_WORKER_CONCURRENCY:-5}"
+      DEEPAGENTS_TASK_TTL_HOURS: "${DEEPAGENTS_TASK_TTL_HOURS:-168}"
+      DEEPAGENTS_STATE_DIR: /app/state
+      DEEPAGENTS_SERVICE_SECRET: "${DEEPAGENTS_SERVICE_SECRET:-}"
+      DEEPAGENTS_DEFAULT_MODEL: "${DEEPAGENTS_DEFAULT_MODEL:-gpt-5}"
+      OPENAI_API_BASE: "${OPENAI_API_BASE:-http://host.docker.internal:9001/v1}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      WEBSEARCH_ENDPOINT_URL: "${WEBSEARCH_ENDPOINT_URL:-http://host.docker.internal:8190}"
+      WEBSEARCH_SERVICE_SECRET: "${WEBSEARCH_SERVICE_SECRET:-}"
+      DOC_SEARCH_ENDPOINT_URL: "${DOC_SEARCH_ENDPOINT_URL:-http://host.docker.internal:8185}"
+      DOC_SEARCH_SERVICE_SECRET: "${DOC_SEARCH_SERVICE_SECRET:-}"
+      MAILING_SERVICE_URL: "${MAILING_SERVICE_URL:-http://host.docker.internal:8025}"
+      MAILING_SERVICE_SECRET: "${MAILING_SERVICE_SECRET:-}"
+      EMAIL_ACTION_SERVICE_URL: "${EMAIL_ACTION_SERVICE_URL:-http://host.docker.internal:8026}"
+      EMAIL_ACTION_SERVICE_SECRET: "${EMAIL_ACTION_SERVICE_SECRET:-}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      DEEPAGENTS_MCP_SERVERS: "${DEEPAGENTS_MCP_SERVERS:-}"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9050/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ./state:/app/state
