@@ -26,8 +26,11 @@ endpoints:
   - host: api.shrikesecurity.com
     port: 443
     protocol: rest
-    access: read-write
     enforcement: enforce
+    # NOTE: `access:` and `rules:` are mutually exclusive on NemoClaw >= 0.0.103
+    # (L7 policy validation rejects an endpoint that sets both). The per-method
+    # `rules` below are the tighter control, so we omit `access` — the rules
+    # themselves grant exactly the two POST paths and nothing else.
     # Scope egress to the exact enforce-plane methods + paths the plugin uses —
     # nothing else on the host is reachable. The plugin only ever POSTs a tool
     # call to these two endpoints (general + specialized); no other verbs or

@@ -45,7 +45,10 @@ not expose is reported `SKIP` (set `SHRIKE_VERIFY_TOOL` to one it does).
 ## Reference transcript (real runtime, 2026-08-06)
 
 Validated end-to-end on a CPU-only OpenShell gateway (macOS arm64, NemoClaw
-v0.0.97 / OpenClaw 2026.7.1).
+v0.0.103 / OpenShell 0.0.85 / OpenClaw 2026.7.1): all five allowed/denied
+cases match (benign allowed; destructive command, SQL injection, prompt
+injection, and secret exfiltration all blocked with live enforce-plane
+verdicts).
 
 **Plugin loaded in the real runtime** — `openclaw plugins inspect
 shrike-security --runtime --json`:

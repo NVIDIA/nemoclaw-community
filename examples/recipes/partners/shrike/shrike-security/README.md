@@ -60,7 +60,7 @@ lifecycle scripts; the recipe targets the public NemoClaw/OpenShell CLIs.
 - A Shrike API key (free tier available): <https://shrikesecurity.com/signup>
 - On the host: `node` + `npm` (to build the plugin) and `curl`.
 - Verified on macOS (arm64) and Linux hosts with a CPU-only OpenShell gateway,
-  NemoClaw v0.0.97 / OpenClaw 2026.7.1.
+  NemoClaw v0.0.103 / OpenShell 0.0.85 / OpenClaw 2026.7.1.
 
 ## Architecture and major components
 

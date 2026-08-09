@@ -115,8 +115,16 @@ interface EnforceRequest {
 function route(toolName: string, params: ToolParams): EnforceRequest {
   const tool = toolName.toLowerCase();
 
-  const sql = params.sql ?? params.query;
-  if (sql || /sql|query|database|\bdb\b/.test(tool)) {
+  // `query` is overloaded — SQL tools AND web_search both use it. Only treat it
+  // as SQL when there's an explicit `sql` param or a genuinely SQL-ish tool
+  // name; otherwise it falls through to the web_search branch below. The bare
+  // word "query" is deliberately NOT a SQL tool signal: web_search is a "query"
+  // too, and misrouting it to the `sql` content_type drops overarching
+  // detectors (e.g. secrets_exposure), which would let a secret-exfil search
+  // through. Specialized routing must never subtract a universal check.
+  const isSqlTool = /sql|database|\bdb\b/.test(tool);
+  const sql = params.sql ?? (isSqlTool ? params.query : undefined);
+  if (sql || isSqlTool) {
     return {
       path: "/api/scan/enforce/specialized",
       body: { content: asString(sql ?? params.command), content_type: "sql" },
