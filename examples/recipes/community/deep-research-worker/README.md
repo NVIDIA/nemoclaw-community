@@ -12,13 +12,13 @@ stores task state in SQLite, and can call bounded host-side helper services.
 This example is based on the public proposal in issue `#110`. It is an
 independent community contribution, not a supported part of NemoClaw core. Its
 catalog placement supports discovery only; it does not imply NVIDIA support or
-an enterprise readiness guarantee.
+a support or readiness guarantee.
 
 ## Scope
 
 This recipe stands up the host-side research worker, installs the in-sandbox
-skill and CLI wrapper, and applies a narrow policy that lets the sandbox reach
-only that worker on `host.openshell.internal:9050`.
+skill and CLI wrapper, and adds or applies a narrow policy that lets a
+dedicated sandbox reach only that worker on `host.openshell.internal:9050`.
 
 It does not:
 
@@ -26,13 +26,14 @@ It does not:
 - provision an inference provider
 - stand up web-search, doc-search, or email helper services
 - start a dashboard or a general-purpose OpenClaw agent runtime
+- manage unrelated routes on a shared sandbox safely
 
-Those services can already exist on the same host. The worker calls them only
-when you configure their endpoints.
+Use a dedicated sandbox for this recipe. The worker can call helper services on
+the same host when you configure their endpoints.
 
 ## Provenance And Intended Users
 
-- Provenance: independent community contribution proposed by `gvaibhav`
+- Provenance: independent community contribution proposed in public issue `#110`
 - Intended users: operators who already run NemoClaw or OpenShell and want to
   add a background research workflow to one sandbox
 - Support boundary: this repository example documents one public integration
@@ -43,7 +44,7 @@ when you configure their endpoints.
 
 - Docker with Compose support
 - Python 3.10 or newer for local syntax checks
-- One working OpenShell or NemoClaw host with an existing sandbox
+- One working OpenShell or NemoClaw host with a dedicated sandbox for this recipe
 - One OpenAI-compatible inference endpoint reachable from the worker container
 
 Optional host-side services:
@@ -139,10 +140,18 @@ Three boundaries matter:
 1. Loads `.env` when present.
 2. Starts or rebuilds the worker with Docker Compose.
 3. Waits for `GET /healthz` on the worker.
-4. If `openshell` and the named sandbox exist, applies the policy and installs:
+4. If `openshell` and the named sandbox exist, installs the policy and then installs:
    - `SKILL.md` into `/sandbox/.openclaw/skills/deep-research/`
    - `deep_research_client.py` into the same skill directory
    - `/sandbox/bin/deep-research` as the user-facing wrapper
+
+Policy behavior:
+
+- If `nemoclaw` is available, the script adds the recipe policy additively with
+  `policy-add --from-file`.
+- If only `openshell` is available, the script refuses to replace the full
+  sandbox policy unless you set `DEEP_RESEARCH_ALLOW_POLICY_REPLACE=1` for a
+  dedicated sandbox.
 
 The script does not create a sandbox. If the sandbox is missing, it leaves the
 host-side worker running and prints the follow-up action.
@@ -161,6 +170,10 @@ or email services. Only the worker container can call those helper services.
 Inside the worker container, helper-service defaults use
 `host.docker.internal`. The Compose file adds an explicit host-gateway mapping
 so Linux Docker hosts can resolve that name too.
+
+If the worker API uses `DEEPAGENTS_SERVICE_SECRET`, do not copy that secret into
+sandbox files. Provide it to the runtime environment at invocation time or
+through your normal sandbox environment-management path.
 
 ## Verification
 
@@ -195,6 +208,9 @@ PASS: deep-research-worker local verification
   not low-latency chat turns.
 - Operators who leave `DEEPAGENTS_SERVICE_SECRET` empty run an unauthenticated
   local worker API.
+- Operators who use `openshell policy set` without a dedicated sandbox can
+  replace unrelated policy rules; the script blocks that path unless
+  `DEEP_RESEARCH_ALLOW_POLICY_REPLACE=1` is set explicitly.
 
 ## Third-Party Dependencies And License Notes
 

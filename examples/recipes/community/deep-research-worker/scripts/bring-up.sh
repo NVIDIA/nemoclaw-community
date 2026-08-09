@@ -22,6 +22,7 @@ POLICY_PATH="$EXAMPLE_DIR/policies/deep-research-worker.yaml"
 SKILL_DIR="/sandbox/.openclaw/skills/deep-research"
 CLIENT_PATH="$SKILL_DIR/scripts/deep_research_client.py"
 WRAPPER_HOST_PATH="$RUN_DIR/deep-research"
+ALLOW_POLICY_REPLACE="${DEEP_RESEARCH_ALLOW_POLICY_REPLACE:-0}"
 
 echo "== 1/4 start host-side worker =="
 (cd "$EXAMPLE_DIR" && docker compose up -d --build)
@@ -50,7 +51,19 @@ if ! openshell sandbox list 2>/dev/null | grep -qE "^[[:space:]]*${SANDBOX_NAME}
 fi
 
 echo "== 3/4 apply sandbox policy =="
-openshell policy set --policy "$POLICY_PATH" --wait "$SANDBOX_NAME"
+if command -v nemoclaw >/dev/null 2>&1; then
+  nemoclaw "$SANDBOX_NAME" policy-add --from-file "$POLICY_PATH" --yes
+elif [[ "$ALLOW_POLICY_REPLACE" == "1" ]]; then
+  echo "nemoclaw not found; replacing the full sandbox policy with openshell."
+  echo "Only do this for a dedicated sandbox created for this recipe."
+  openshell policy set --policy "$POLICY_PATH" --wait "$SANDBOX_NAME"
+else
+  echo "nemoclaw not found, so this script will not replace the full sandbox"
+  echo "policy by default. Install NemoClaw and re-run for additive policy"
+  echo "installation, or set DEEP_RESEARCH_ALLOW_POLICY_REPLACE=1 for a"
+  echo "dedicated sandbox that this recipe is allowed to reconfigure."
+  exit 1
+fi
 
 echo "== 4/4 install skill and CLI wrapper =="
 openshell sandbox exec --name "$SANDBOX_NAME" -- mkdir -p "$SKILL_DIR/scripts" /sandbox/bin
@@ -60,7 +73,6 @@ openshell sandbox cp "$EXAMPLE_DIR/src/deep_research_client.py" "${SANDBOX_NAME}
 cat >"$WRAPPER_HOST_PATH" <<EOF
 #!/usr/bin/env bash
 export DEEPAGENTS_ENDPOINT_URL="\${DEEPAGENTS_ENDPOINT_URL:-http://host.openshell.internal:${WORKER_PORT}}"
-export DEEPAGENTS_SERVICE_SECRET="\${DEEPAGENTS_SERVICE_SECRET:-${DEEPAGENTS_SERVICE_SECRET:-}}"
 exec python3 "${CLIENT_PATH}" "\$@"
 EOF
 
