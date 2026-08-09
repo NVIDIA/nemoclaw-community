@@ -23,8 +23,11 @@ again by contributor provenance.
 | HPE | [Retail Assistant](recipes/partners/hpe/retail-assistant/README.md) | Provides role-aware retail operations through Telegram, FastAPI, PostgreSQL, Docker Compose, and Helm. |
 | Tavily | [Watchtower](recipes/partners/tavily/watchtower/README.md) | Runs scheduled, cited web monitoring with persistent deduplication and auditable outputs. |
 
-Future independent contributions without formal organizational provenance
-belong under `recipes/community/`.
+## Community Recipes
+
+| Example | Description |
+| --- | --- |
+| [Deep Research Worker](recipes/community/deep-research-worker/README.md) | Queues long-running research tasks from one sandbox to a host-side DeepAgents worker, with a narrow worker-only sandbox policy and optional host-side search and email integrations. |
 
 ## NVIDIA Field Demos
 

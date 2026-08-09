@@ -127,9 +127,17 @@ Package: cryptography
 License: Apache-2.0 OR BSD-3-Clause
 URL: https://github.com/pyca/cryptography
 
+Package: deepagents
+License: MIT
+URL: https://github.com/langchain-ai/deepagents
+
 Package: dlt[postgres]
 License: Apache-2.0
 URL: https://github.com/dlt-hub/dlt
+
+Package: fastapi
+License: MIT
+URL: https://github.com/fastapi/fastapi
 
 Package: hermes-agent
 License: MIT
@@ -139,9 +147,21 @@ Package: httpx
 License: BSD-3-Clause
 URL: https://github.com/encode/httpx
 
+Package: langchain-mcp-adapters
+License: MIT
+URL: https://github.com/langchain-ai/langchain-mcp-adapters
+
+Package: langchain-openai
+License: MIT
+URL: https://github.com/langchain-ai/langchain
+
 Package: markdown-it-py
 License: MIT
 URL: https://github.com/executablebooks/markdown-it-py
+
+Package: mcp
+License: MIT
+URL: https://github.com/modelcontextprotocol/python-sdk
 
 Package: meltanolabs-tap-github
 License: Apache-2.0
@@ -175,6 +195,14 @@ Package: pyyaml
 License: MIT
 URL: https://github.com/yaml/pyyaml
 
+Package: pydantic
+License: MIT
+URL: https://github.com/pydantic/pydantic
+
+Package: requests
+License: Apache-2.0
+URL: https://github.com/psf/requests
+
 Package: mcp-proxy
 License: MIT
 URL: https://github.com/sparfenyuk/mcp-proxy
@@ -182,6 +210,10 @@ URL: https://github.com/sparfenyuk/mcp-proxy
 Package: slack-bolt
 License: MIT
 URL: https://github.com/slackapi/bolt-python
+
+Package: uvicorn
+License: BSD-3-Clause
+URL: https://github.com/Kludex/uvicorn
 
 ================================================================================
 GitHub Actions
