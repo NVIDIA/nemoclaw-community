@@ -45,6 +45,16 @@ class ServiceAuthenticationTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
 
+    def test_task_endpoint_rejects_mock_mode_without_queuing_work(self) -> None:
+        task_count = len(service.task_store.list_tasks())
+        response = self.client.post(
+            "/v1/tasks",
+            headers={"Authorization": "Bearer test-worker-secret"},
+            json={"prompt": "do not run live work", "mode": "mock"},
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(len(service.task_store.list_tasks()), task_count)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -27,7 +27,7 @@ again by contributor provenance.
 
 | Example | Description |
 | --- | --- |
-| [Deep Research Worker](recipes/community/deep-research-worker/README.md) | Queues long-running research tasks from one sandbox to a host-side DeepAgents worker, with a narrow worker-only sandbox policy and optional host-side search and email integrations. |
+| [Deep Research Worker](recipes/community/deep-research-worker/README.md) | Queues long-running research tasks from one sandbox to a host-side DeepAgents worker, with a narrow worker-only sandbox policy and optional read-only host-side search integrations. |
 
 ## NVIDIA Field Demos
 

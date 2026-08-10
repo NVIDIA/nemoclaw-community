@@ -26,7 +26,6 @@ def load_config() -> Dict[str, Any]:
         "port": _int_env("DEEPAGENTS_SERVICE_PORT", 9050),
         "service_secret": (os.getenv("DEEPAGENTS_SERVICE_SECRET") or "").strip(),
         "container_name": os.getenv("DEEPAGENTS_CONTAINER_NAME", "nemoclaw-deepagents-worker"),
-        "mode": os.getenv("DEEPAGENTS_SERVICE_MODE", "live").lower(),
         "worker_concurrency": _int_env("DEEPAGENTS_WORKER_CONCURRENCY", 5),
         "task_ttl_hours": _int_env("DEEPAGENTS_TASK_TTL_HOURS", 168),
         "task_timeout_ms": _int_env("DEEPAGENTS_TASK_TIMEOUT_MS", 600000),
@@ -36,11 +35,6 @@ def load_config() -> Dict[str, Any]:
             os.getenv("LLM_GATEWAY_MODEL", os.getenv("NEMOCLAW_MODEL", "gpt-5")),
         ),
         "default_tool_profile": os.getenv("DEEPAGENTS_TOOL_PROFILE", "research").strip().lower() or "research",
-        "allowed_mcp_tools": {
-            name.strip()
-            for name in os.getenv("DEEPAGENTS_ALLOWED_MCP_TOOLS", "").split(",")
-            if name.strip()
-        },
         "tool_call_budget_shallow": _int_env("DEEPAGENTS_TOOL_CALL_BUDGET_SHALLOW", 25),
         "tool_call_budget_standard": _int_env("DEEPAGENTS_TOOL_CALL_BUDGET_STANDARD", 60),
         "tool_call_budget_deep": _int_env("DEEPAGENTS_TOOL_CALL_BUDGET_DEEP", 120),
@@ -57,7 +51,6 @@ def load_config() -> Dict[str, Any]:
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "state"),
         ),
         "log_level": os.getenv("LOG_LEVEL", "INFO"),
-        "mcp_servers_raw": os.getenv("DEEPAGENTS_MCP_SERVERS", ""),
     }
 
     config_path = os.getenv("RUNTIME_CONFIG_PATH")

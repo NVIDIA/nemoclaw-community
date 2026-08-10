@@ -147,10 +147,6 @@ Package: httpx
 License: BSD-3-Clause
 URL: https://github.com/encode/httpx
 
-Package: langchain-mcp-adapters
-License: MIT
-URL: https://github.com/langchain-ai/langchain-mcp-adapters
-
 Package: langchain-openai
 License: MIT
 URL: https://github.com/langchain-ai/langchain
@@ -158,10 +154,6 @@ URL: https://github.com/langchain-ai/langchain
 Package: markdown-it-py
 License: MIT
 URL: https://github.com/executablebooks/markdown-it-py
-
-Package: mcp
-License: MIT
-URL: https://github.com/modelcontextprotocol/python-sdk
 
 Package: meltanolabs-tap-github
 License: Apache-2.0

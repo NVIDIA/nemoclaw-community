@@ -56,4 +56,4 @@ Do not perform the same long-running task again inline after it has been delegat
 ## Execution Constraints
 - Up to 5 worker threads run in parallel (`DEEPAGENTS_WORKER_CONCURRENCY=5`).
 - Task results are retained for 7 days (`DEEPAGENTS_TASK_TTL_HOURS=168`).
-- Only read-only search tools and explicitly allowlisted read-only MCP tools are available.
+- Only the built-in read-only web-search and document-search tools are available.

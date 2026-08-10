@@ -7,5 +7,3 @@ pydantic>=2.7.0
 requests>=2.31.0
 deepagents==0.7.5
 langchain-openai
-langchain-mcp-adapters>=0.1.9
-mcp>=1.9.0,<2.0

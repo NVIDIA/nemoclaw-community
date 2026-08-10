@@ -67,7 +67,7 @@ class CreateTaskRequest(BaseModel):
 
     prompt: str = Field(..., min_length=1, max_length=32768, description="High-level research prompt")
     model: str = Field(config.get("default_model", "gpt-5"), description="Target LLM model name")
-    mode: Literal["live", "mock"] = Field("live", description="Execution mode")
+    mode: Literal["live"] = Field("live", description="Execution mode")
     timeout_ms: int = Field(600000, ge=30000, le=86400000, description="Task timeout in milliseconds")
     depth: Literal["shallow", "standard", "deep"] = Field("standard", description="Execution depth preset")
     rubric: Optional[str] = Field(None, min_length=1, max_length=8192, description="Optional quality rubric text")

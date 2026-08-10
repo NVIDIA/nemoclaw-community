@@ -52,8 +52,9 @@ Optional host-side services:
 - web search on `WEBSEARCH_ENDPOINT_URL`
 - document search on `DOC_SEARCH_ENDPOINT_URL`
 
-This recipe does not expose email, write, publish, or other action tools. Extra
-MCP tools require an exact-name allowlist and action-like names remain blocked.
+This recipe does not expose arbitrary MCP, email, write, publish, or other
+action tools. Its agent toolset is limited to the built-in read-only web-search
+and document-search adapters.
 
 ## Credentials And Secret Handling
 
@@ -119,10 +120,10 @@ Three boundaries matter:
 
 1. The sandbox can reach only the worker API, not the helper services directly.
 2. The worker keeps its task queue and retry state on the host in SQLite.
-3. The worker exposes only read-only search tools. Additional MCP tools require
-   an operator-provided exact-name allowlist.
-4. Each task runs in a child process that the parent fully stops before a
-   cancellation or timeout changes task state.
+3. The worker exposes only its built-in read-only web-search and document-search
+   adapters; arbitrary MCP tools are not supported by this recipe.
+4. Each task runs in a dedicated process group that the parent fully stops
+   before a cancellation or timeout changes task state.
 
 ## Files
 
@@ -188,8 +189,8 @@ this recipe only into a dedicated sandbox whose policy and workloads you trust.
 The queue uses these lifecycle rules:
 
 - Each claimed task runs in an isolated child process.
-- Cancellation and timeout terminate and join the child before the task becomes
-  cancelled, failed, or eligible for retry.
+- Cancellation, timeout, shutdown, and task completion terminate the entire
+  process group, including descendants, before the task changes state.
 - On service restart, abandoned `running` tasks become failed and abandoned
   `cancelling` tasks become cancelled. They are not replayed automatically.
 - Retention cleanup removes only expired terminal tasks.
@@ -237,5 +238,5 @@ PASS: deep-research-worker local verification
 The worker container installs Python packages listed in `src/requirements.txt`
 and uses the `python:3.11-slim` base image. The repository-level
 `THIRD-PARTY-NOTICES` file records the expected notice inventory for those
-components. Review the terms of any external search, MCP, or inference
-service before production use.
+components. Review the terms of any external search or inference service before
+production use.

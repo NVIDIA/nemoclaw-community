@@ -20,7 +20,6 @@ services:
       DEEPAGENTS_SERVICE_SECRET: "${DEEPAGENTS_SERVICE_SECRET:?DEEPAGENTS_SERVICE_SECRET is required}"
       DEEPAGENTS_DEFAULT_MODEL: "${DEEPAGENTS_DEFAULT_MODEL:-gpt-5}"
       DEEPAGENTS_TOOL_PROFILE: research
-      DEEPAGENTS_ALLOWED_MCP_TOOLS: "${DEEPAGENTS_ALLOWED_MCP_TOOLS:-}"
       OPENAI_API_BASE: "${OPENAI_API_BASE:-http://host.docker.internal:9001/v1}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       WEBSEARCH_ENDPOINT_URL: "${WEBSEARCH_ENDPOINT_URL:-http://host.docker.internal:8190}"
@@ -28,7 +27,6 @@ services:
       DOC_SEARCH_ENDPOINT_URL: "${DOC_SEARCH_ENDPOINT_URL:-http://host.docker.internal:8185}"
       DOC_SEARCH_SERVICE_SECRET: "${DOC_SEARCH_SERVICE_SECRET:-}"
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"
-      DEEPAGENTS_MCP_SERVERS: "${DEEPAGENTS_MCP_SERVERS:-}"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9050/healthz"]
       interval: 30s

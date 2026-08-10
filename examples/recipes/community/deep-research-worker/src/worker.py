@@ -10,7 +10,7 @@ import hashlib
 import json
 import logging
 import os
-import re
+import signal
 import subprocess
 import sys
 import threading
@@ -20,7 +20,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import requests
 
-from mcp_tools import load_mcp_tools
 from task_store import TaskStore
 
 logger = logging.getLogger("deepagents-worker-engine")
@@ -35,7 +34,6 @@ TOOL_TIMEOUTS = {
     "doc_search": 20,
 }
 
-ACTION_TOOL_MARKERS = ("send", "create", "delete", "update", "execute", "email", "mail", "write", "post", "publish", "submit")
 TOOL_PROFILES = {"research", "minimal"}
 
 RUBRIC_GRADER_INSTRUCTIONS = (
@@ -228,7 +226,6 @@ def build_system_prompt(depth: str) -> str:
         "RESEARCH PROTOCOL:\n"
         "- Use web_search and doc_search before drafting.\n"
         "- Cross-check major claims with at least two sources when available.\n"
-        "- Prefer specialized MCP tools when their descriptions are a strong match.\n"
         "- Delegate narrow deep dives to the researcher subagent.\n\n"
         "TOOL ERROR PREFIXES:\n"
         "- [transient_error]: the worker already retried; do not repeat the exact same call immediately.\n"
@@ -271,15 +268,6 @@ def _tool_timeout_config(config: Dict[str, Any], tool_name: str) -> int:
         return int(config.get(key, TOOL_TIMEOUTS[tool_name]))
     except (TypeError, ValueError, KeyError):
         return TOOL_TIMEOUTS[tool_name]
-
-
-def _tool_name_looks_actionable(tool_name: str) -> bool:
-    normalized = re.sub(r"[^a-z0-9]+", "", tool_name.lower())
-    return any(marker in normalized for marker in ACTION_TOOL_MARKERS)
-
-
-def _research_tool_allowed(tool_name: str, allowed_names: set[str]) -> bool:
-    return tool_name in allowed_names and not _tool_name_looks_actionable(tool_name)
 
 
 def build_peripheral_tools(
@@ -496,16 +484,58 @@ def mint_llm_gateway_jwt(api_base: str, default_key: str) -> str:
     return default_key or "dummy"
 
 
+def spawn_isolated_subprocess(command: List[str]) -> subprocess.Popen[Any]:
+    """Start a task as the leader of a dedicated process group."""
+    return subprocess.Popen(
+        command,
+        close_fds=True,
+        start_new_session=True,
+    )
+
+
 def terminate_subprocess(process: subprocess.Popen[Any], grace_seconds: float = 2.0) -> None:
-    """Stop an isolated task and do not return while it can still execute."""
-    if process.poll() is not None:
+    """Stop an isolated task process group, including all descendants."""
+    if os.name != "posix":  # pragma: no cover - the worker image is Linux
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=grace_seconds)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=grace_seconds)
         return
-    process.terminate()
+
+    process_group_id = process.pid
+
+    def group_exists() -> bool:
+        process.poll()
+        try:
+            os.killpg(process_group_id, 0)
+            return True
+        except ProcessLookupError:
+            return False
+
     try:
-        process.wait(timeout=grace_seconds)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait(timeout=grace_seconds)
+        os.killpg(process_group_id, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+
+    deadline = time.monotonic() + grace_seconds
+    while group_exists() and time.monotonic() < deadline:
+        time.sleep(0.02)
+
+    if group_exists():
+        try:
+            os.killpg(process_group_id, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+    if process.poll() is None:
+        try:
+            process.wait(timeout=grace_seconds)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=grace_seconds)
 
 
 def supervise_subprocess(
@@ -528,6 +558,8 @@ def supervise_subprocess(
             terminate_subprocess(process)
             return "timeout"
         time.sleep(poll_seconds)
+    # A completed task parent must not leave helper descendants running.
+    terminate_subprocess(process)
     return "completed"
 
 
@@ -538,7 +570,6 @@ class WorkerPool:
         self.concurrency = config.get("worker_concurrency", 5)
         self.running = False
         self.threads: List[threading.Thread] = []
-        self._mcp_tools: List[Any] = []
         self._cancel_events: Dict[str, threading.Event] = {}
         self._cancel_lock = threading.Lock()
         self._http_session = requests.Session()
@@ -620,9 +651,8 @@ class WorkerPool:
         return timeout_ms / 1000.0
 
     def _spawn_task_subprocess(self, task_id: str) -> subprocess.Popen[Any]:
-        return subprocess.Popen(
+        return spawn_isolated_subprocess(
             [sys.executable, os.path.abspath(__file__), "--execute-task", task_id],
-            close_fds=True,
         )
 
     def _retry_after_timeout(self, task: Dict[str, Any], error: str) -> None:
@@ -696,29 +726,15 @@ class WorkerPool:
             return "permanent"
         return "permanent"
 
-    def _profile_tools(self, task: Dict[str, Any], peripheral_tools: List[Any], mcp_tools: List[Any]) -> Tuple[List[Any], List[Any], str]:
+    def _profile_tools(self, task: Dict[str, Any], peripheral_tools: List[Any]) -> Tuple[List[Any], List[Any], str]:
         profile = (task.get("tool_profile") or self.config.get("default_tool_profile") or "research").strip().lower()
         if profile not in TOOL_PROFILES:
             raise PermanentTaskError(f"Invalid tool profile '{profile}'")
-        allowed_mcp_tools = set(self.config.get("allowed_mcp_tools") or set())
         filtered_peripheral = [
             tool for tool in peripheral_tools
             if getattr(tool, "name", "") in {"web_search", "doc_search"}
         ]
-        if profile == "minimal":
-            return filtered_peripheral, filtered_peripheral, profile
-        filtered_mcp = [
-            tool for tool in mcp_tools
-            if _research_tool_allowed(getattr(tool, "name", ""), allowed_mcp_tools)
-        ]
-        rejected = [
-            getattr(tool, "name", "") for tool in mcp_tools
-            if getattr(tool, "name", "") in allowed_mcp_tools and tool not in filtered_mcp
-        ]
-        if rejected:
-            logger.warning("Rejected action-like MCP tools from the research profile: %s", rejected)
-        main_tools = filtered_peripheral + filtered_mcp
-        return main_tools, main_tools, profile
+        return filtered_peripheral, filtered_peripheral, profile
 
     def _execute_task(self, task: Dict[str, Any], cancel_event: threading.Event):
         task_id = task["task_id"]
@@ -745,17 +761,13 @@ class WorkerPool:
                 task_cache=task_cache,
                 tool_budget=tool_budget,
             )
-            mcp_tools = list(self._mcp_tools)
-            tools, researcher_tools, profile = self._profile_tools(task, peripheral_tools, mcp_tools)
+            tools, researcher_tools, profile = self._profile_tools(task, peripheral_tools)
             logger.info(
                 "Task %s using tool profile %s with tools: %s",
                 task_id,
                 profile,
                 [getattr(tool, "name", "?") for tool in tools],
             )
-            if mcp_tools:
-                logger.info("Task %s: %s MCP tool(s) merged into agent toolset", task_id, len([t for t in tools if t not in peripheral_tools]))
-
             api_base = self.config.get("openai_api_base", "http://host.docker.internal:9001/v1")
             api_key = mint_llm_gateway_jwt(api_base, self.config.get("openai_api_key", "dummy"))
 
@@ -854,7 +866,6 @@ def run_isolated_task(task_id: str) -> int:
 
     pool = WorkerPool(task_store=store, config=child_config)
     try:
-        pool._mcp_tools, _failed_servers = load_mcp_tools(child_config)
         pool._execute_task(task, threading.Event())
     finally:
         pool._http_session.close()
