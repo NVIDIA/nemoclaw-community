@@ -6,10 +6,11 @@
 Deep Agents Worker Service (FastAPI) for NemoClaw.
 """
 import logging
-from typing import Optional
+import secrets
+from typing import Literal, Optional
 
 import uvicorn
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from config import load_config
@@ -36,6 +37,8 @@ worker_pool = WorkerPool(task_store=task_store, config=config)
 
 @app.on_event("startup")
 def on_startup():
+    if not (config.get("service_secret") or "").strip():
+        raise RuntimeError("DEEPAGENTS_SERVICE_SECRET is required")
     logger.info("Starting DeepAgents Worker Service...")
     worker_pool.start()
 
@@ -49,26 +52,28 @@ def on_shutdown():
 async def verify_auth(authorization: Optional[str] = Header(None)):
     expected_secret = (config.get("service_secret") or "").strip()
     if not expected_secret:
-        return
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Worker authentication is not configured")
     if not authorization:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing Authorization header")
-    token = authorization.replace("Bearer ", "").strip()
-    if token != expected_secret:
+    scheme, separator, token = authorization.partition(" ")
+    if separator != " " or scheme.lower() != "bearer" or not token.strip():
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Authorization header")
+    if not secrets.compare_digest(token.strip(), expected_secret):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid authorization token")
 
 
 class CreateTaskRequest(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
 
-    prompt: str = Field(..., description="High-level research or execution prompt")
+    prompt: str = Field(..., min_length=1, max_length=32768, description="High-level research prompt")
     model: str = Field(config.get("default_model", "gpt-5"), description="Target LLM model name")
-    mode: str = Field("live", description="Execution mode: live | mock")
-    timeout_ms: int = Field(600000, description="Task timeout in milliseconds")
-    depth: str = Field("standard", description="Execution depth preset: shallow | standard | deep")
-    rubric: Optional[str] = Field(None, description="Optional quality rubric text")
-    max_retries: int = Field(config.get("default_task_max_retries", 2), description="Task-level retry count for transient failures")
-    tool_profile: Optional[str] = Field(None, description="Tool profile override: full | research | minimal")
-    tool_call_budget: Optional[int] = Field(None, description="Optional per-task tool call budget override")
+    mode: Literal["live", "mock"] = Field("live", description="Execution mode")
+    timeout_ms: int = Field(600000, ge=30000, le=86400000, description="Task timeout in milliseconds")
+    depth: Literal["shallow", "standard", "deep"] = Field("standard", description="Execution depth preset")
+    rubric: Optional[str] = Field(None, min_length=1, max_length=8192, description="Optional quality rubric text")
+    max_retries: int = Field(config.get("default_task_max_retries", 2), ge=0, le=10, description="Task-level retry count")
+    tool_profile: Optional[Literal["research", "minimal"]] = Field(None, description="Read-only tool profile override")
+    tool_call_budget: Optional[int] = Field(None, ge=1, le=1000, description="Optional per-task tool call budget override")
 
 
 @app.get("/health")
@@ -85,10 +90,7 @@ async def health():
 
 @app.post("/v1/tasks", dependencies=[Depends(verify_auth)])
 async def create_task(req: CreateTaskRequest):
-    valid_depths = ("shallow", "standard", "deep")
-    if req.depth not in valid_depths:
-        raise HTTPException(status_code=400, detail=f"Invalid depth '{req.depth}'. Must be one of: {', '.join(valid_depths)}")
-    profile = (req.tool_profile or config.get("default_tool_profile") or "full").strip().lower()
+    profile = (req.tool_profile or config.get("default_tool_profile") or "research").strip().lower()
     if profile not in TOOL_PROFILES:
         raise HTTPException(status_code=400, detail=f"Invalid tool_profile '{profile}'. Must be one of: {', '.join(sorted(TOOL_PROFILES))}")
     try:
@@ -124,7 +126,7 @@ async def get_task(task_id: str):
 
 
 @app.get("/v1/tasks", dependencies=[Depends(verify_auth)])
-async def list_tasks(limit: int = 50):
+async def list_tasks(limit: int = Query(50, ge=1, le=200)):
     return {"tasks": task_store.list_tasks(limit=limit)}
 
 

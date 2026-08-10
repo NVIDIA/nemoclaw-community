@@ -7,7 +7,7 @@ Deep Research Worker is a community recipe for asynchronous, long-horizon
 research with a NemoClaw-managed sandbox. It installs a `deep-research` skill
 and CLI wrapper into one existing sandbox, then routes requests from that
 sandbox to a host-side FastAPI worker that runs a LangChain DeepAgents graph,
-stores task state in SQLite, and can call bounded host-side helper services.
+stores task state in SQLite, and can call bounded read-only host-side services.
 
 This example is based on the public proposal in issue `#110`. It is an
 independent community contribution, not a supported part of NemoClaw core. Its
@@ -24,7 +24,7 @@ It does not:
 
 - create a sandbox for you
 - provision an inference provider
-- stand up web-search, doc-search, or email helper services
+- stand up web-search or doc-search helper services
 - start a dashboard or a general-purpose OpenClaw agent runtime
 - manage unrelated routes on a shared sandbox safely
 
@@ -51,8 +51,9 @@ Optional host-side services:
 
 - web search on `WEBSEARCH_ENDPOINT_URL`
 - document search on `DOC_SEARCH_ENDPOINT_URL`
-- outbound email on `MAILING_SERVICE_URL`
-- inbound email search on `EMAIL_ACTION_SERVICE_URL`
+
+This recipe does not expose email, write, publish, or other action tools. Extra
+MCP tools require an exact-name allowlist and action-like names remain blocked.
 
 ## Credentials And Secret Handling
 
@@ -63,10 +64,11 @@ Required values:
 - `OPENAI_API_KEY`
 - any non-default endpoint overrides your host requires
 
-Recommended values:
-
-- `DEEPAGENTS_SERVICE_SECRET` so the worker API is not left unauthenticated on
-  a shared host
+The worker API always requires `DEEPAGENTS_SERVICE_SECRET`. Leave it empty in
+`.env` to let `scripts/bring-up.sh` generate a strong value in the gitignored
+`.run/worker-token` file. The script installs the same token as a mode-`0600`
+credential file for the authorized sandbox client. It does not place the token
+in the wrapper, source tree, command output, or logs.
 
 Do not commit `.env`, generated state, or sandbox-local token material. The
 local `.gitignore` excludes `.env`, `state/`, and `.run/`.
@@ -105,22 +107,22 @@ flowchart LR
     llm["OpenAI-compatible inference endpoint"]
     web["Optional web-search service"]
     docs["Optional doc-search service"]
-    mail["Optional email services"]
 
     sandbox --> skill
     skill -->|"POST /v1/tasks"| worker
     worker --> llm
     worker -. optional .-> web
     worker -. optional .-> docs
-    worker -. optional .-> mail
 ```
 
 Three boundaries matter:
 
 1. The sandbox can reach only the worker API, not the helper services directly.
 2. The worker keeps its task queue and retry state on the host in SQLite.
-3. The worker can call helper services only when the operator configures their
-   host-side endpoints and credentials.
+3. The worker exposes only read-only search tools. Additional MCP tools require
+   an operator-provided exact-name allowlist.
+4. Each task runs in a child process that the parent fully stops before a
+   cancellation or timeout changes task state.
 
 ## Files
 
@@ -143,6 +145,7 @@ Three boundaries matter:
 4. If `openshell` and the named sandbox exist, installs the policy and then installs:
    - `SKILL.md` into `/sandbox/.openclaw/skills/deep-research/`
    - `deep_research_client.py` into the same skill directory
+   - a mode-`0600` worker credential into the same skill directory
    - `/sandbox/bin/deep-research` as the user-facing wrapper
 
 Policy behavior:
@@ -165,15 +168,31 @@ The sandbox policy is intentionally narrow. It allows only:
 - binaries that invoke the wrapper or Python client
 
 The sandbox does not receive direct routes to host-side web search, doc search,
-or email services. Only the worker container can call those helper services.
+or other helper services. Only the worker container can call configured
+read-only services.
+
+The host port binds to the `openshell-docker` bridge address when that network
+is available and otherwise binds to `127.0.0.1`. It is never intentionally
+published on every host interface.
 
 Inside the worker container, helper-service defaults use
 `host.docker.internal`. The Compose file adds an explicit host-gateway mapping
 so Linux Docker hosts can resolve that name too.
 
-If the worker API uses `DEEPAGENTS_SERVICE_SECRET`, do not copy that secret into
-sandbox files. Provide it to the runtime environment at invocation time or
-through your normal sandbox environment-management path.
+The protected credential file authorizes the selected sandbox to call the
+worker. Code running as that sandbox user can use the credential, so install
+this recipe only into a dedicated sandbox whose policy and workloads you trust.
+
+## Execution And Recovery
+
+The queue uses these lifecycle rules:
+
+- Each claimed task runs in an isolated child process.
+- Cancellation and timeout terminate and join the child before the task becomes
+  cancelled, failed, or eligible for retry.
+- On service restart, abandoned `running` tasks become failed and abandoned
+  `cancelling` tasks become cancelled. They are not replayed automatically.
+- Retention cleanup removes only expired terminal tasks.
 
 ## Verification
 
@@ -188,6 +207,8 @@ inference provider. It validates:
 
 - shell syntax for `scripts/*.sh`
 - Python syntax for `src/*.py`
+- behavioral tests for authentication, rubric revision, tool filtering,
+  cancellation, timeout, restart recovery, and retention cleanup
 - Docker Compose rendering
 - skill frontmatter presence
 - policy file shape
@@ -200,14 +221,13 @@ PASS: deep-research-worker local verification
 
 ## Known Limitations
 
-- The included verification is static. It does not prove that the configured
-  inference endpoint, helper services, or sandbox policy work live.
-- The worker depends on third-party packages and live host-side services that
-  this example does not vendor or pin with a lockfile.
+- The included verification does not contact the configured inference endpoint
+  or prove that helper services and sandbox policy work live.
+- The worker depends on third-party packages and live host-side services. The
+  DeepAgents version is pinned for the tested rubric API, but the example does
+  not include a complete transitive lockfile.
 - The default client and worker timeouts are tuned for long-running research,
   not low-latency chat turns.
-- Operators who leave `DEEPAGENTS_SERVICE_SECRET` empty run an unauthenticated
-  local worker API.
 - Operators who use `openshell policy set` without a dedicated sandbox can
   replace unrelated policy rules; the script blocks that path unless
   `DEEP_RESEARCH_ALLOW_POLICY_REPLACE=1` is set explicitly.
@@ -217,5 +237,5 @@ PASS: deep-research-worker local verification
 The worker container installs Python packages listed in `src/requirements.txt`
 and uses the `python:3.11-slim` base image. The repository-level
 `THIRD-PARTY-NOTICES` file records the expected notice inventory for those
-components. Review the terms of any external search, email, or inference
+components. Review the terms of any external search, MCP, or inference
 service before production use.

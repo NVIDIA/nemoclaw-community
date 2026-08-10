@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional
 LAST_TASK_DIR = os.path.join(os.path.expanduser("~"), ".deep-research")
 LAST_TASK_PATH = os.path.join(LAST_TASK_DIR, "last-task")
 DEPTH_TIMEOUTS = {"shallow": 300, "standard": 900, "deep": 2400}
+DEFAULT_CREDENTIAL_FILE = "/sandbox/.openclaw/skills/deep-research/.worker-token"
 
 
 def _usage(exit_code: int = 1) -> None:
@@ -55,6 +56,24 @@ def _request_json(url: str, *, method: str = "GET", headers: Optional[Dict[str, 
     request = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
+
+
+def _load_service_secret() -> str:
+    secret = os.getenv("DEEPAGENTS_SERVICE_SECRET", "").strip()
+    if secret:
+        return secret
+    credential_file = os.getenv("DEEPAGENTS_CREDENTIAL_FILE", DEFAULT_CREDENTIAL_FILE)
+    try:
+        mode = os.stat(credential_file).st_mode & 0o777
+        if mode & 0o077:
+            raise PermissionError(f"credential file permissions must be 0600, found {mode:04o}")
+        with open(credential_file, "r", encoding="utf-8") as handle:
+            secret = handle.read().strip()
+    except OSError as exc:
+        raise RuntimeError(f"could not read worker credential from {credential_file}: {exc}") from exc
+    if not secret:
+        raise RuntimeError(f"worker credential file is empty: {credential_file}")
+    return secret
 
 
 def _truncate(text: str, limit: int = 48) -> str:
@@ -112,10 +131,15 @@ def main():
         _usage(0 if len(sys.argv) >= 2 else 1)
 
     endpoint_url = os.getenv("DEEPAGENTS_ENDPOINT_URL", "http://host.openshell.internal:9050").rstrip("/")
-    secret = os.getenv("DEEPAGENTS_SERVICE_SECRET", "")
-    headers = {"Content-Type": "application/json"}
-    if secret:
-        headers["Authorization"] = f"Bearer {secret}"
+    try:
+        secret = _load_service_secret()
+    except RuntimeError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(2)
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {secret}",
+    }
 
     depth = "standard"
     rubric: Optional[str] = None

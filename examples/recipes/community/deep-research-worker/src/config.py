@@ -11,9 +11,6 @@ import os
 from typing import Any, Dict
 
 
-DEFAULT_RESEARCH_PATTERN = r"^(tam_|alphaVantage_|search_|fetch_|doc_|market_)"
-
-
 def _int_env(name: str, default: int) -> int:
     try:
         return int(os.getenv(name, str(default)))
@@ -38,28 +35,23 @@ def load_config() -> Dict[str, Any]:
             "DEEPAGENTS_DEFAULT_MODEL",
             os.getenv("LLM_GATEWAY_MODEL", os.getenv("NEMOCLAW_MODEL", "gpt-5")),
         ),
-        "default_tool_profile": os.getenv("DEEPAGENTS_TOOL_PROFILE", "full").strip().lower() or "full",
-        "research_tool_pattern": os.getenv(
-            "DEEPAGENTS_TOOL_PROFILE_RESEARCH_PATTERN",
-            DEFAULT_RESEARCH_PATTERN,
-        ),
+        "default_tool_profile": os.getenv("DEEPAGENTS_TOOL_PROFILE", "research").strip().lower() or "research",
+        "allowed_mcp_tools": {
+            name.strip()
+            for name in os.getenv("DEEPAGENTS_ALLOWED_MCP_TOOLS", "").split(",")
+            if name.strip()
+        },
         "tool_call_budget_shallow": _int_env("DEEPAGENTS_TOOL_CALL_BUDGET_SHALLOW", 25),
         "tool_call_budget_standard": _int_env("DEEPAGENTS_TOOL_CALL_BUDGET_STANDARD", 60),
         "tool_call_budget_deep": _int_env("DEEPAGENTS_TOOL_CALL_BUDGET_DEEP", 120),
         "tool_timeout_web_search": _int_env("DEEPAGENTS_TOOL_TIMEOUT_WEB_SEARCH", 15),
         "tool_timeout_doc_search": _int_env("DEEPAGENTS_TOOL_TIMEOUT_DOC_SEARCH", 20),
-        "tool_timeout_send_email": _int_env("DEEPAGENTS_TOOL_TIMEOUT_SEND_EMAIL", 30),
-        "tool_timeout_read_email": _int_env("DEEPAGENTS_TOOL_TIMEOUT_READ_EMAIL", 20),
         "openai_api_base": os.getenv("OPENAI_API_BASE", "http://host.docker.internal:9001/v1"),
         "openai_api_key": os.getenv("OPENAI_API_KEY", "dummy"),
         "websearch_endpoint_url": os.getenv("WEBSEARCH_ENDPOINT_URL", "http://host.docker.internal:8190"),
         "websearch_service_secret": os.getenv("WEBSEARCH_SERVICE_SECRET", ""),
         "doc_search_endpoint_url": os.getenv("DOC_SEARCH_ENDPOINT_URL", "http://host.docker.internal:8185"),
         "doc_search_service_secret": os.getenv("DOC_SEARCH_SERVICE_SECRET", ""),
-        "mailing_service_url": os.getenv("MAILING_SERVICE_URL", "http://host.docker.internal:8025"),
-        "mailing_service_secret": os.getenv("MAILING_SERVICE_SECRET", ""),
-        "email_action_service_url": os.getenv("EMAIL_ACTION_SERVICE_URL", "http://host.docker.internal:8026"),
-        "email_action_service_secret": os.getenv("EMAIL_ACTION_SERVICE_SECRET", ""),
         "state_dir": os.getenv(
             "DEEPAGENTS_STATE_DIR",
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "state"),

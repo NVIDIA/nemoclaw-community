@@ -15,6 +15,10 @@ if [[ -f "$EXAMPLE_DIR/.env" ]]; then
 fi
 
 SANDBOX_NAME="${SANDBOX_NAME:-deep-research-worker}"
+if [[ -z "${DEEPAGENTS_SERVICE_SECRET:-}" && -s "$EXAMPLE_DIR/.run/worker-token" ]]; then
+  DEEPAGENTS_SERVICE_SECRET="$(cat "$EXAMPLE_DIR/.run/worker-token")"
+  export DEEPAGENTS_SERVICE_SECRET
+fi
 
 echo "== 1/2 stop host-side worker =="
 (cd "$EXAMPLE_DIR" && docker compose down)

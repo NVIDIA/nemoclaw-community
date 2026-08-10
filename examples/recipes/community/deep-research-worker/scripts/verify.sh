@@ -7,16 +7,36 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXAMPLE_DIR="$(dirname "$SCRIPT_DIR")"
 
-echo "== 1/4 shell syntax =="
+echo "== 1/5 shell syntax =="
 bash -n "$EXAMPLE_DIR"/scripts/*.sh
 
-echo "== 2/4 python syntax =="
+echo "== 2/5 python syntax =="
 python3 -m py_compile "$EXAMPLE_DIR"/src/*.py
 
-echo "== 3/4 compose rendering =="
-docker compose -f "$EXAMPLE_DIR/docker-compose.yml" config >/dev/null
+echo "== 3/5 behavioral tests =="
+if python3 -c 'import deepagents, fastapi, httpx' >/dev/null 2>&1; then
+  PYTHONPATH="$EXAMPLE_DIR/src" python3 -m unittest discover \
+    -s "$EXAMPLE_DIR/src/tests" -p 'test_*.py' -v
+else
+  verify_image="deep-research-worker-verify:$$"
+  cleanup_verify_image() {
+    docker image rm "$verify_image" >/dev/null 2>&1 || true
+  }
+  trap cleanup_verify_image EXIT
+  docker build -t "$verify_image" -f "$EXAMPLE_DIR/src/Dockerfile" "$EXAMPLE_DIR/src"
+  docker run --rm \
+    -e DEEPAGENTS_SERVICE_SECRET=verification-only \
+    -e OPENAI_API_KEY=verification-only \
+    "$verify_image" python -m unittest discover -s tests -p 'test_*.py' -v
+  cleanup_verify_image
+  trap - EXIT
+fi
 
-echo "== 4/4 policy and skill metadata =="
+echo "== 4/5 compose rendering =="
+DEEPAGENTS_SERVICE_SECRET=verification-only \
+  docker compose -f "$EXAMPLE_DIR/docker-compose.yml" config >/dev/null
+
+echo "== 5/5 policy and skill metadata =="
 python3 - "$EXAMPLE_DIR" <<'PY'
 import pathlib
 import sys

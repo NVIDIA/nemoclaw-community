@@ -22,20 +22,46 @@ POLICY_PATH="$EXAMPLE_DIR/policies/deep-research-worker.yaml"
 SKILL_DIR="/sandbox/.openclaw/skills/deep-research"
 CLIENT_PATH="$SKILL_DIR/scripts/deep_research_client.py"
 WRAPPER_HOST_PATH="$RUN_DIR/deep-research"
+TOKEN_HOST_PATH="$RUN_DIR/worker-token"
+TOKEN_SANDBOX_PATH="$SKILL_DIR/.worker-token"
 ALLOW_POLICY_REPLACE="${DEEP_RESEARCH_ALLOW_POLICY_REPLACE:-0}"
+
+if [[ -n "${DEEPAGENTS_SERVICE_SECRET:-}" ]]; then
+  (umask 077; printf '%s\n' "$DEEPAGENTS_SERVICE_SECRET" >"$TOKEN_HOST_PATH")
+elif [[ -s "$TOKEN_HOST_PATH" ]]; then
+  DEEPAGENTS_SERVICE_SECRET="$(cat "$TOKEN_HOST_PATH")"
+else
+  command -v python3 >/dev/null 2>&1 || {
+    echo "python3 is required to generate the worker credential." >&2
+    exit 1
+  }
+  DEEPAGENTS_SERVICE_SECRET="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+  (umask 077; printf '%s\n' "$DEEPAGENTS_SERVICE_SECRET" >"$TOKEN_HOST_PATH")
+fi
+export DEEPAGENTS_SERVICE_SECRET
+
+DEEPAGENTS_PUBLISH_HOST="${DEEPAGENTS_PUBLISH_HOST:-127.0.0.1}"
+if command -v openshell >/dev/null 2>&1 && command -v docker >/dev/null 2>&1; then
+  bridge_address="$(docker network inspect openshell-docker -f '{{(index .IPAM.Config 0).Gateway}}' 2>/dev/null || true)"
+  if [[ -n "$bridge_address" ]]; then
+    DEEPAGENTS_PUBLISH_HOST="$bridge_address"
+  fi
+fi
+export DEEPAGENTS_PUBLISH_HOST
+WORKER_URL="http://${DEEPAGENTS_PUBLISH_HOST}:${WORKER_PORT}"
 
 echo "== 1/4 start host-side worker =="
 (cd "$EXAMPLE_DIR" && docker compose up -d --build)
 
 echo "== 2/4 wait for worker health =="
 for _ in $(seq 1 60); do
-  if curl -fsS "http://127.0.0.1:${WORKER_PORT}/healthz" >/dev/null 2>&1; then
-    echo "Worker is healthy on http://127.0.0.1:${WORKER_PORT}"
+  if curl -fsS "${WORKER_URL}/healthz" >/dev/null 2>&1; then
+    echo "Worker is healthy on ${WORKER_URL}"
     break
   fi
   sleep 1
 done
-curl -fsS "http://127.0.0.1:${WORKER_PORT}/healthz" >/dev/null
+curl -fsS "${WORKER_URL}/healthz" >/dev/null
 
 if ! command -v openshell >/dev/null 2>&1; then
   echo "openshell not found; the host-side worker is running, but the sandbox"
@@ -69,15 +95,18 @@ echo "== 4/4 install skill and CLI wrapper =="
 openshell sandbox exec --name "$SANDBOX_NAME" -- mkdir -p "$SKILL_DIR/scripts" /sandbox/bin
 openshell sandbox cp "$EXAMPLE_DIR/src/SKILL.md" "${SANDBOX_NAME}:${SKILL_DIR}/SKILL.md"
 openshell sandbox cp "$EXAMPLE_DIR/src/deep_research_client.py" "${SANDBOX_NAME}:${CLIENT_PATH}"
+openshell sandbox cp "$TOKEN_HOST_PATH" "${SANDBOX_NAME}:${TOKEN_SANDBOX_PATH}"
 
 cat >"$WRAPPER_HOST_PATH" <<EOF
 #!/usr/bin/env bash
 export DEEPAGENTS_ENDPOINT_URL="\${DEEPAGENTS_ENDPOINT_URL:-http://host.openshell.internal:${WORKER_PORT}}"
+export DEEPAGENTS_CREDENTIAL_FILE="\${DEEPAGENTS_CREDENTIAL_FILE:-${TOKEN_SANDBOX_PATH}}"
 exec python3 "${CLIENT_PATH}" "\$@"
 EOF
 
 chmod +x "$WRAPPER_HOST_PATH"
 openshell sandbox cp "$WRAPPER_HOST_PATH" "${SANDBOX_NAME}:/sandbox/bin/deep-research"
+openshell sandbox exec --name "$SANDBOX_NAME" -- chmod 600 "$TOKEN_SANDBOX_PATH"
 openshell sandbox exec --name "$SANDBOX_NAME" -- chmod +x /sandbox/bin/deep-research "$CLIENT_PATH"
 
 echo "Bring-up complete."

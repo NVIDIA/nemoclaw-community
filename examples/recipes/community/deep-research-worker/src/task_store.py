@@ -12,6 +12,8 @@ import json
 import os
 import sqlite3
 import uuid
+from contextlib import closing
+from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
 
@@ -33,7 +35,7 @@ def _parse_iso(value: Optional[str]) -> Optional[datetime.datetime]:
 
 
 class TaskStore:
-    VALID_TOOL_PROFILES = {"full", "research", "minimal"}
+    VALID_TOOL_PROFILES = {"research", "minimal"}
 
     def __init__(self, state_dir: str, ttl_hours: int = 168):
         self.state_dir = state_dir
@@ -54,7 +56,7 @@ class TaskStore:
             pass
 
     def _init_db(self):
-        with self._get_connection() as conn:
+        with closing(self._get_connection()) as conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS tasks (
@@ -76,7 +78,7 @@ class TaskStore:
                     next_attempt_at TEXT,
                     last_error TEXT,
                     last_activity_at TEXT,
-                    tool_profile TEXT NOT NULL DEFAULT 'full',
+                    tool_profile TEXT NOT NULL DEFAULT 'research',
                     tool_call_budget INTEGER,
                     tool_calls TEXT NOT NULL DEFAULT '[]'
                 )
@@ -89,7 +91,7 @@ class TaskStore:
             self._add_column_if_missing(conn, "next_attempt_at TEXT")
             self._add_column_if_missing(conn, "last_error TEXT")
             self._add_column_if_missing(conn, "last_activity_at TEXT")
-            self._add_column_if_missing(conn, "tool_profile TEXT NOT NULL DEFAULT 'full'")
+            self._add_column_if_missing(conn, "tool_profile TEXT NOT NULL DEFAULT 'research'")
             self._add_column_if_missing(conn, "tool_call_budget INTEGER")
             self._add_column_if_missing(conn, "tool_calls TEXT NOT NULL DEFAULT '[]'")
             conn.execute(
@@ -109,7 +111,7 @@ class TaskStore:
         task["max_retries"] = int(task.get("max_retries") or 0)
         task["timeout_ms"] = int(task.get("timeout_ms") or 0)
         if task.get("tool_profile") not in self.VALID_TOOL_PROFILES:
-            task["tool_profile"] = "full"
+            task["tool_profile"] = "research"
         raw_tool_calls = task.get("tool_calls")
         try:
             tool_calls = json.loads(raw_tool_calls) if raw_tool_calls else []
@@ -135,12 +137,12 @@ class TaskStore:
         depth: str = "standard",
         rubric: Optional[str] = None,
         max_retries: int = 2,
-        tool_profile: str = "full",
+        tool_profile: str = "research",
         tool_call_budget: Optional[int] = None,
     ) -> Dict[str, Any]:
         task_id = str(uuid.uuid4())
         now = _iso_now()
-        with self._get_connection() as conn:
+        with closing(self._get_connection()) as conn:
             conn.execute(
                 """
                 INSERT INTO tasks (
@@ -166,9 +168,39 @@ class TaskStore:
             conn.commit()
         return self.get_task(task_id)
 
+    def recover_inflight(self) -> Dict[str, int]:
+        """Resolve tasks that cannot still have a live executor after restart."""
+        now = _iso_now()
+        with closing(self._get_connection()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            cancelled = conn.execute(
+                """
+                UPDATE tasks
+                SET status = 'cancelled',
+                    error = 'cancelled during worker restart',
+                    completed_at = ?,
+                    next_attempt_at = NULL
+                WHERE status = 'cancelling'
+                """,
+                (now,),
+            ).rowcount
+            failed = conn.execute(
+                """
+                UPDATE tasks
+                SET status = 'failed',
+                    error = 'worker restarted before execution completed',
+                    completed_at = ?,
+                    next_attempt_at = NULL
+                WHERE status = 'running'
+                """,
+                (now,),
+            ).rowcount
+            conn.commit()
+        return {"failed": failed, "cancelled": cancelled}
+
     def claim_next(self) -> Optional[Dict[str, Any]]:
         now = _iso_now()
-        with self._get_connection() as conn:
+        with closing(self._get_connection()) as conn:
             cursor = conn.execute(
                 """
                 SELECT task_id
@@ -205,7 +237,7 @@ class TaskStore:
         next_attempt_at: str,
         last_error: str,
     ) -> bool:
-        with self._get_connection() as conn:
+        with closing(self._get_connection()) as conn:
             cursor = conn.execute(
                 """
                 UPDATE tasks
@@ -214,7 +246,7 @@ class TaskStore:
                     next_attempt_at = ?,
                     last_error = ?,
                     claimed_at = NULL
-                WHERE task_id = ?
+                WHERE task_id = ? AND status = 'running'
                 """,
                 (retry_count, next_attempt_at, last_error, task_id),
             )
@@ -222,7 +254,7 @@ class TaskStore:
             return cursor.rowcount > 0
 
     def mark_cancelling(self, task_id: str) -> Optional[str]:
-        with self._get_connection() as conn:
+        with closing(self._get_connection()) as conn:
             row = conn.execute(
                 "SELECT status FROM tasks WHERE task_id = ?",
                 (task_id,),
@@ -262,16 +294,17 @@ class TaskStore:
         now = _iso_now()
         terminal_statuses = {"completed", "failed", "cancelled"}
         completed_at = now if status in terminal_statuses else None
-        with self._get_connection() as conn:
+        status_guard = " AND status = 'running'" if status in {"completed", "failed"} else ""
+        with closing(self._get_connection()) as conn:
             cursor = conn.execute(
-                """
+                f"""
                 UPDATE tasks
                 SET status = ?,
                     result = COALESCE(?, result),
                     error = ?,
                     completed_at = ?,
                     next_attempt_at = CASE WHEN ? IN ('completed', 'failed', 'cancelled') THEN NULL ELSE next_attempt_at END
-                WHERE task_id = ?
+                WHERE task_id = ?{status_guard}
                 """,
                 (status, result, error, completed_at, status, task_id),
             )
@@ -280,7 +313,7 @@ class TaskStore:
 
     def touch_activity(self, task_id: str, when: Optional[str] = None) -> bool:
         when = when or _iso_now()
-        with self._get_connection() as conn:
+        with closing(self._get_connection()) as conn:
             cursor = conn.execute(
                 "UPDATE tasks SET last_activity_at = ? WHERE task_id = ?",
                 (when, task_id),
@@ -289,7 +322,7 @@ class TaskStore:
             return cursor.rowcount > 0
 
     def append_tool_call(self, task_id: str, entry: Dict[str, Any]) -> bool:
-        with self._get_connection() as conn:
+        with closing(self._get_connection()) as conn:
             row = conn.execute(
                 "SELECT tool_calls FROM tasks WHERE task_id = ?",
                 (task_id,),
@@ -312,7 +345,7 @@ class TaskStore:
             return cursor.rowcount > 0
 
     def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
-        with self._get_connection() as conn:
+        with closing(self._get_connection()) as conn:
             cursor = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,))
             row = cursor.fetchone()
             if row:
@@ -320,7 +353,7 @@ class TaskStore:
         return None
 
     def list_tasks(self, limit: int = 50) -> List[Dict[str, Any]]:
-        with self._get_connection() as conn:
+        with closing(self._get_connection()) as conn:
             cursor = conn.execute(
                 "SELECT * FROM tasks ORDER BY created_at DESC LIMIT ?",
                 (limit,),
@@ -329,7 +362,15 @@ class TaskStore:
 
     def cleanup_expired(self) -> int:
         cutoff = (_utcnow() - timedelta(hours=self.ttl_hours)).isoformat()
-        with self._get_connection() as conn:
-            cursor = conn.execute("DELETE FROM tasks WHERE created_at < ?", (cutoff,))
+        with closing(self._get_connection()) as conn:
+            cursor = conn.execute(
+                """
+                DELETE FROM tasks
+                WHERE status IN ('completed', 'failed', 'cancelled')
+                  AND completed_at IS NOT NULL
+                  AND completed_at < ?
+                """,
+                (cutoff,),
+            )
             conn.commit()
             return cursor.rowcount
