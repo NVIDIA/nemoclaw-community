@@ -186,9 +186,9 @@ translation and credentials stay in the host relay.
    headers over HTTPS to `host.openshell.internal:18443/atif`.
 5. OpenShell's L7 proxy replaces the whole credential placeholder in
    `Authorization` with the real token and forwards the request.
-6. `atif-export-relay` accepts only `POST /atif`, validates the standard
-   Bearer token, requires the Relay-generated filename, and writes the JSON
-   body to its configured bucket and prefix through boto3.
+6. The `atif-export-relay` trajectory route accepts only `POST /atif`, validates
+   the standard Bearer token, requires the Relay-generated filename, and writes
+   the JSON body to its configured bucket and prefix through boto3.
 7. The relay returns `204 No Content`; native Relay treats any `2xx` as
    success. On a non-`2xx` response or transport failure, native Relay writes
    the recovery copy locally after all remote targets fail.
@@ -199,8 +199,9 @@ translation and credentials stay in the host relay.
   never the resolved token.
 - The OpenShell L7 proxy and host relay see the bearer. Only the host relay
   sees downstream AWS or MinIO credentials.
-- The host relay accepts one method and path, enforces a request-size limit,
-  requires the ATIF filename header, and chooses the bucket and prefix.
+- The host relay's trajectory route accepts only `POST /atif`, enforces a
+  request-size limit, requires the ATIF filename header, and chooses the bucket
+  and prefix. The separate `GET /healthz` route returns only readiness status.
 - A compromised sandbox cannot choose another bucket or obtain read/delete
   access. The downstream IAM role remains the final `PutObject`-only boundary.
 - The bearer is scoped per VM in this single-tenant deployment. Separate
@@ -288,7 +289,7 @@ Complete a short Hermes session, then trigger a boundary with `/new`, `/reset`,
 or a clean CLI/TUI exit. Do not wait for the gateway's potentially long expiry
 policy during a manual check.
 
-For local mode, verify one new JSON file appears and parses:
+For local mode, verify one new trajectory file appears:
 
 ```bash
 openshell sandbox exec --name hermes-direct -- sh -lc \

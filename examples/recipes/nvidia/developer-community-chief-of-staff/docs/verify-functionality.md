@@ -409,11 +409,11 @@ side effect. A typed answer remains a valid fallback.
 ATIF is produced by Hermes's native NeMo Relay integration when Hermes
 finalizes a session and closes its top-level Agent scope. It is not expected
 after every conversational turn. Complete a short session, then use `/new`,
-`/reset`, or a clean CLI/TUI exit before checking; the gateway's configured
-expiry is usually too long for a manual check.
+`/reset`, or a clean CLI/TUI exit before checking. Do not wait for the gateway's
+potentially long expiry policy during a manual check.
 
-With the default `ATIF_EXPORT_MODE=local`, confirm one new trajectory appears
-in the sandbox and is valid JSON:
+With the default `ATIF_EXPORT_MODE=local`, confirm one new trajectory file
+appears in the sandbox:
 
 ```console
 $ openshell sandbox exec --name hermes-direct -- sh -lc \
