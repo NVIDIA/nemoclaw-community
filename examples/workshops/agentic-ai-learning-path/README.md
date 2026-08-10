@@ -116,8 +116,9 @@ the sandboxed workshop environment once you are done working.
 
 Stay reachable while it runs: the permission layer will (correctly) stop the
 agent on the actions that need a human — the egress-widening
-`openshell policy set` and, on a fresh sandbox, the delete/recreate that
-boots the `/dev/pts` + `/sys/fs/cgroup` filesystem grants (the skill's
+`openshell policy set` and, on a fresh sandbox, the token-window-guarded
+container restart that boots the `/dev/pts` + `/sys/fs/cgroup` filesystem
+grants and the agent-stack relaunch that follows it (the skill's
 Phase 1b). Approve them when the prompts name exactly what is being opened.
 The agent finishes by handing you the laptop tunnel command and the
 JupyterLab token URL.
@@ -131,14 +132,17 @@ C=$(docker ps --filter 'label=openshell.ai/managed-by=openshell' \
               --filter "label=openshell.ai/sandbox-name=$SANDBOX" --format '{{.Names}}')
 EXAMPLE=examples/workshops/agentic-ai-learning-path
 
-# 1. Apply the workshop policy blocks (exact YAML + apply semantics in the
-#    operator skill's references/policy-blocks.md). `openshell policy set`
-#    REPLACES the whole document — build live policy + additions. The live
-#    policy is thereafter the source of truth: do NOT edit the recipe's
-#    policy.yaml template, and treat captures as regenerable scratch files.
-#    (`--full` prepends a metadata header that must be stripped.)
+# 1. Apply the workshop policy blocks (block rationale in the operator
+#    skill's references/policy-blocks.md). `openshell policy set` REPLACES
+#    the whole document, so compose live policy + additions with the builder
+#    (idempotent, self-verifying). The live policy is thereafter the source
+#    of truth: do NOT edit the recipe's policy.yaml template, and treat
+#    captures as regenerable scratch files. (`--full` prepends a metadata
+#    header that must be stripped.)
 openshell policy get "$SANDBOX" --full | sed '1,/^---$/d' > /tmp/live.yaml
-#   ... append the workshop blocks, then (typically run by the human):
+python3 "$EXAMPLE"/skills/setup-workshop-nemoclaw-operator/scripts/build-workshop-policy.py \
+  /tmp/live.yaml /tmp/apply.yaml
+# then (typically run by the human):
 openshell policy set "$SANDBOX" --policy /tmp/apply.yaml --wait
 
 # 1b. Boot the filesystem grants: container restart while the sandbox is
@@ -169,8 +173,10 @@ resident agent, which now carries the `workshop` and `module-N` tutor skills.
 
 ## Verification
 
-- Offline (no sandbox, no network): `bash tests/validate-example.sh` — syntax,
-  policy-composition unit tests, and operator-script behavior tests.
+- Offline (no sandbox, no network; needs python3 with PyYAML):
+  `bash tests/validate-example.sh` — syntax, policy-composition unit tests,
+  and operator-script behavior tests. CI runs it on every change to this
+  example (`.github/workflows/example-validation.yml`).
 - `verify-sandbox-ready.sh` prints PASS for the policy probes (note: it
   probes with the binaries each policy block actually allows — an exec'd
   `curl` false-negatives against the NIM block).
