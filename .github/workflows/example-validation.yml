@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: Example Validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - examples/workshops/agentic-ai-learning-path/**
+      - .github/workflows/example-validation.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - examples/workshops/agentic-ai-learning-path/**
+      - .github/workflows/example-validation.yml
+
+permissions:
+  contents: read
+
+jobs:
+  agentic-ai-learning-path:
+    name: Validate agentic-ai-learning-path
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: python3 -m pip install pyyaml
+
+      - name: Run example validator
+        run: bash examples/workshops/agentic-ai-learning-path/tests/validate-example.sh
