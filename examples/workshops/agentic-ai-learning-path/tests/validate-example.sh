@@ -4,27 +4,33 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # validate-example.sh — every offline check for this example, one command.
-# Stable and teardown-safe: no sandbox, no docker, no network. Live checks
-# (policy probes, Jupyter) remain in scripts/verify-sandbox-ready.sh.
+# Stable and teardown-safe: no sandbox, no docker, no network. Requires
+# python3 with PyYAML (the policy builder reads/writes OpenShell policy
+# YAML). Live checks (policy probes, Jupyter) remain in
+# scripts/verify-sandbox-ready.sh.
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/.." && pwd)
 fail=0
 
+python3 -c 'import yaml' 2>/dev/null \
+  || { echo "FAIL: python3 with PyYAML is required (pip install pyyaml)"; exit 1; }
+
 echo "== syntax =="
+syntax_fail=0
 while IFS= read -r f; do
-  bash -n "$f" || { echo "  FAIL bash -n: $f"; fail=1; }
+  bash -n "$f" || { echo "  FAIL bash -n: $f"; syntax_fail=1; }
 done < <(find "$ROOT" -name '*.sh' -not -path '*/.claude/*')
 while IFS= read -r f; do
-  python3 -m py_compile "$f" || { echo "  FAIL py_compile: $f"; fail=1; }
+  python3 -m py_compile "$f" || { echo "  FAIL py_compile: $f"; syntax_fail=1; }
 done < <(find "$ROOT" -name '*.py' -not -path '*/.claude/*' -not -path '*/__pycache__/*')
-python3 - "$ROOT" <<'EOF' || fail=1
+python3 - "$ROOT" <<'EOF' || syntax_fail=1
 import glob, sys, yaml
 for f in glob.glob(sys.argv[1] + "/**/*.yaml", recursive=True):
     list(yaml.safe_load_all(open(f)))
 EOF
-echo "  syntax OK"
+if [ "$syntax_fail" = 0 ]; then echo "  syntax OK"; else echo "  syntax FAIL"; fail=1; fi
 
 echo "== unit tests =="
 python3 -m unittest discover -s "$HERE" -p 'test_*.py' -q || fail=1

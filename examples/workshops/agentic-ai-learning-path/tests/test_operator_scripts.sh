@@ -16,6 +16,8 @@ PASS=0; FAIL=0
 ok()   { PASS=$((PASS+1)); echo "  PASS  $1"; }
 bad()  { FAIL=$((FAIL+1)); echo "  FAIL  $1"; }
 check(){ if eval "$2"; then ok "$1"; else bad "$1"; fi; }
+# Octal file mode, portable across GNU and BSD/macOS (no stat -c).
+mode_of(){ python3 -c 'import os,sys;print(format(os.stat(sys.argv[1]).st_mode & 0o777, "o"))' "$1"; }
 
 # ---- docker stub: behavior driven by env, calls logged ----------------------
 mkdir -p "$WORK/bin"
@@ -76,7 +78,7 @@ printf 'NVIDIA_API_KEY=nvapi-new\nTAVILY_API_KEY=tvly-x\n' | python3 "$WORK/merg
 check "merge preserves unrelated keys"    'grep -q "^OTHER_KEY=keep-me$" "$DEST"'
 check "merge replaces the staged key"     'grep -q "^NVIDIA_API_KEY=nvapi-new$" "$DEST"'
 check "merge appends new keys"            'grep -q "^TAVILY_API_KEY=tvly-x$" "$DEST"'
-check "merge tightens mode to 600"        '[ "$(stat -c %a "$DEST")" = "600" ]'
+check "merge tightens mode to 600"        '[ "$(mode_of "$DEST")" = "600" ]'
 
 echo
 echo "$PASS passed, $FAIL failed"
