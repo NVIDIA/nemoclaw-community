@@ -92,6 +92,7 @@ _LEAK_NAMES = frozenset({
     "ATIF_RELAY_AUTH_TOKEN",
     "ATIF_RELAY_AUTHORIZATION",
 })
+SESSION_KEY = web.AppKey("atif_bridge_session", aiohttp.ClientSession)
 
 
 def forwardable_headers(headers) -> dict[str, str]:
@@ -115,7 +116,7 @@ async def _init_session(app: web.Application) -> None:
     # Reject any peer that can't do TLS 1.3 — modern peer set, fail loud on degradation.
     ssl_ctx = ssl.create_default_context()
     ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_3
-    app["session"] = aiohttp.ClientSession(
+    app[SESSION_KEY] = aiohttp.ClientSession(
         timeout=aiohttp.ClientTimeout(total=60.0, sock_connect=5.0),
         trust_env=True,
         connector=aiohttp.TCPConnector(ssl=ssl_ctx),
@@ -123,7 +124,7 @@ async def _init_session(app: web.Application) -> None:
 
 
 async def _close_session(app: web.Application) -> None:
-    session: aiohttp.ClientSession = app["session"]
+    session = app[SESSION_KEY]
     await session.close()
 
 
@@ -133,7 +134,7 @@ async def healthz(_req: web.Request) -> web.Response:
 
 
 async def forward(request: web.Request) -> web.Response:
-    session: aiohttp.ClientSession = request.app["session"]
+    session = request.app[SESSION_KEY]
     url = f"{UPSTREAM}{request.path_qs}"
     out_headers = forwardable_headers(request.headers)
 
