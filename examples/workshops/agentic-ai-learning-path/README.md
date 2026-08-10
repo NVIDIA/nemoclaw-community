@@ -91,48 +91,9 @@ sandbox notes).
   `scripts/bring-up.sh` must have completed, and `docker ps` must show the
   `openshell-hermes-direct-…` container: that container hosts the sandboxed
   agent this example stages its skills into.
-- The workshop policy blocks applied to the sandbox (`github_git_clone`,
-  `pypi_install`, `nvidia_retrieval`, `tavily_search`, `langsmith_api`,
-  `npm_install`, `mcp_tavily`, `tiktoken_encodings`, `openclaw_inference`,
-  the NIM `/v1/ranking` rules, and the `/dev/pts` + `/sys/fs/cgroup`
-  filesystem grants). The recipe's stock policy does not include them — the
-  operator skill carries the exact YAML and apply workflow in its
-  [`references/policy-blocks.md`](skills/setup-workshop-nemoclaw-operator/references/policy-blocks.md).
-  Once applied, the sandbox's **live** policy is the sole carrier of these
-  grants — do not edit the recipe's `policy.yaml` template, and treat policy
-  captures as scratch artifacts (regenerate on demand, do not track them).
-  A recreate through the recipe's own scripts re-renders the stock template
-  and silently reverts every workshop grant; recreate from the live policy
-  instead (the operator skill's Phase 1b) or re-run the apply afterwards
-  (idempotent).
-- An **NVIDIA API key** (`nvapi-…` from [build.nvidia.com](https://build.nvidia.com)).
+- An **NVIDIA API key** (`nvapi-…` from [build.nvidia.com](https://build.nvidia.com)) and a **Tavily API Key** (`tvly-…` from [www.tavily.com](https://app.tavily.com/home)).
   The learner sets it in the workshop's **Secrets Manager** tile after launch
-  — deliberately not staged up front. Optional: `TAVILY_API_KEY` (modules
-  1/2/5 web search) and `LANGSMITH_API_KEY` (module-3 tracing).
-
-## Security and data-handling considerations
-
-Phase 1 of the setup widens the sandbox deliberately; everything stays
-deny-by-default until then, each grant is scoped to the listed hosts, paths,
-and binaries, and no credential is pre-staged — a service receives nothing
-until the learner opts in by setting their own key in the Secrets Manager
-tile.
-
-| Boundary | Allows | What leaves the sandbox | Cost / account |
-| --- | --- | --- | --- |
-| `github.com` clone route | Anonymous read-only smart-HTTP for the one workshop repo | The clone request itself | None |
-| `pypi.org`, `files.pythonhosted.org` (GET) | `uv` install of the pinned workshop deps | Names of requested packages | None |
-| `integrate.api.nvidia.com`, `ai.api.nvidia.com` | NIM chat/embedding/rerank calls from notebooks | Prompt and document content of the cells the learner runs | Learner's `nvapi-…` key ([build.nvidia.com](https://build.nvidia.com) credits) |
-| `api.tavily.com`, `mcp.tavily.com` (optional) | Modules 1/2/5 web search | Search queries and extraction URLs | Learner's `TAVILY_API_KEY` |
-| `api.smith.langchain.com` (optional) | Module-3 eval and tracing. ⚠️ The workshop's `variables.env` enables tracing globally: once `LANGSMITH_API_KEY` is set, traces of executed cells (prompts and outputs) are exported | LangChain run traces | Learner's `LANGSMITH_API_KEY` |
-| `registry.npmjs.org` (GET-only) | Module-5 demo client `npm install` | Names of requested packages | None |
-| `openaipublic.blob.core.windows.net` (GET `/encodings/**`) | tiktoken BPE data download (module 7) | Nothing content-derived | None |
-| `/dev/pts` (rw), `/sys/fs/cgroup` (ro) filesystem grants | JupyterLab Terminal-tile PTYs; duckdb resource probe (modules 3/4) | Nothing (local) | — |
-| `LD_PRELOAD` netlink shim | Stubs `getifaddrs`/`if_nameindex` so Jupyter kernels survive the seccomp netlink block; applied only to the Jupyter process tree | Nothing (local) | — |
-| `hermes --accept-hooks` (setup kick) | Keeps the one-shot setup session non-interactive by pre-accepting hooks already configured in the deployed agent stack — the workshop clone does not yet exist at that point | Nothing (local) | — |
-
-Landlock/seccomp and the L7 audit log remain in force throughout; every
-allow/deny verdict is inspectable (operator skill, Phase 5).
+  — deliberately not staged up front. Optional: `LANGSMITH_API_KEY` (module-3 tracing).
 
 ## Quickstart (operator, on the sandbox host)
 
@@ -235,3 +196,27 @@ resident agent, which now carries the `workshop` and `module-N` tutor skills.
   on OpenShell v0.0.96); past it the sandbox bricks in an `ExpiredSignature`
   crash loop (verified on v0.0.53 and v0.0.96). See the operator skill's
   Phase 1b guard and lifecycle notes.
+
+## Security and data-handling considerations
+
+Phase 1 of the setup widens the sandbox deliberately; everything stays
+deny-by-default until then, each grant is scoped to the listed hosts, paths,
+and binaries, and no credential is pre-staged — a service receives nothing
+until the learner opts in by setting their own key in the Secrets Manager
+tile.
+
+| Boundary | Allows | What leaves the sandbox | Cost / account |
+| --- | --- | --- | --- |
+| `github.com` clone route | Anonymous read-only smart-HTTP for the one workshop repo | The clone request itself | None |
+| `pypi.org`, `files.pythonhosted.org` (GET) | `uv` install of the pinned workshop deps | Names of requested packages | None |
+| `integrate.api.nvidia.com`, `ai.api.nvidia.com` | NIM chat/embedding/rerank calls from notebooks | Prompt and document content of the cells the learner runs | Learner's `nvapi-…` key ([build.nvidia.com](https://build.nvidia.com) credits) |
+| `api.tavily.com`, `mcp.tavily.com` (optional) | Modules 1/2/5 web search | Search queries and extraction URLs | Learner's `TAVILY_API_KEY` |
+| `api.smith.langchain.com` (optional) | Module-3 eval and tracing. ⚠️ The workshop's `variables.env` enables tracing globally: once `LANGSMITH_API_KEY` is set, traces of executed cells (prompts and outputs) are exported | LangChain run traces | Learner's `LANGSMITH_API_KEY` |
+| `registry.npmjs.org` (GET-only) | Module-5 demo client `npm install` | Names of requested packages | None |
+| `openaipublic.blob.core.windows.net` (GET `/encodings/**`) | tiktoken BPE data download (module 7) | Nothing content-derived | None |
+| `/dev/pts` (rw), `/sys/fs/cgroup` (ro) filesystem grants | JupyterLab Terminal-tile PTYs; duckdb resource probe (modules 3/4) | Nothing (local) | — |
+| `LD_PRELOAD` netlink shim | Stubs `getifaddrs`/`if_nameindex` so Jupyter kernels survive the seccomp netlink block; applied only to the Jupyter process tree | Nothing (local) | — |
+| `hermes --accept-hooks` (setup kick) | Keeps the one-shot setup session non-interactive by pre-accepting hooks already configured in the deployed agent stack — the workshop clone does not yet exist at that point | Nothing (local) | — |
+
+Landlock/seccomp and the L7 audit log remain in force throughout; every
+allow/deny verdict is inspectable (operator skill, Phase 5).
