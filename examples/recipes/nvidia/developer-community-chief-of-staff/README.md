@@ -70,10 +70,10 @@ flowchart LR
                 direction LR
 
                 agent["Hermes Agent\n+ Slack messaging channel"]
+                relayRuntime["native NeMo Relay\n(in-process Hermes plugin)"]
                 outlookBridge["outlook-bridge\nMS Graph poller"]
-                nemoSidecar["nemo-relay-cli sidecar\n127.0.0.1:4040"]
                 atifBridge["atif-bridge\n127.0.0.1:18444\nHTTP→HTTPS shim"]
-                traceDisk[("/tmp/atif/\n(local-mode fallback)")]
+                traceDisk[("/tmp/atif/\n(local or recovery)")]
 
                 subgraph sourceSkills["Source Skills"]
                     direction LR
@@ -96,11 +96,11 @@ flowchart LR
                 agent -->|"tool call\nskill dispatch"| sourceSkills
                 agent -->|"tool call\nskill dispatch"| slackSkills
                 agent -->|"tool call\nskill dispatch"| outlookSkills
-                agent -->|"HTTP POST\nhook events"| nemoSidecar
-                nemoSidecar -.->|"file write\nlocal fallback"| traceDisk
-                nemoSidecar -->|"HTTP PUT\nS3 trace"| atifBridge
-                nemoSidecar -->|"OTLP HTTP POST\ntelemetry traces"| l7
-                atifBridge -->|"HTTPS PUT\nS3 forward"| l7
+                agent -->|"in-process\nscope events"| relayRuntime
+                relayRuntime -.->|"file write\nlocal or recovery"| traceDisk
+                relayRuntime -->|"HTTP POST /atif\ncompleted trajectory"| atifBridge
+                relayRuntime -->|"OTLP HTTP POST\ntelemetry traces"| l7
+                atifBridge -->|"HTTPS POST /atif\nbearer placeholder"| l7
                 outlookBridge -->|"HTTPS GET/POST\nmail poll · reply"| l7
                 agent <-->|"WSS socket-mode\nmessaging channel"| l7
                 agent -->|"HTTPS POST\nLLM request"| privacyRouter
@@ -120,18 +120,18 @@ flowchart LR
 
         l7 -->|"OTLP HTTP POST\ntrace ingest"| phoenix
         l7 -->|"HTTP GET\nREST queries"| postgrest
-        l7 -->|"HTTPS PUT\nS3 relay"| atifRelay
+        l7 -->|"HTTPS POST /atif\nBearer substituted"| atifRelay
         postgrest -->|"SQL\ndata queries"| postgres
         etls -->|"SQL INSERT\nhourly deltas"| postgres
         gateway <-->|"gRPC stream\ncredential refresh"| l7
-        atifRelay -.->|"HTTP PUT\nS3 PutObject"| minio
+        atifRelay -.->|"boto3 PutObject"| minio
     end
 
     privacyRouter -->|"HTTPS POST\nLLM inference"| nvidia
     l7 <-->|"WSS / HTTPS POST\nSlack messaging"| slack
     l7 -->|"HTTPS GET/POST\nGraph API"| outlook
     l7 -->|"HTTPS GET\nGitHub REST"| github
-    atifRelay -->|"HTTPS PUT\nS3 PutObject"| s3
+    atifRelay -->|"boto3 PutObject"| s3
     gateway <-->|"HTTPS POST\ntoken rotation"| entra
     etls -->|"HTTPS GET\nscheduled scrape"| github
     etls -->|"HTTPS GET\nscheduled scrape"| forums
@@ -145,7 +145,7 @@ flowchart LR
     style outlookSkills fill:#f0f4ff,stroke:#7090cc,stroke-width:1px
 
     style agent         fill:#dbeafe,stroke:#3b82f6,stroke-width:1.5px
-    style nemoSidecar   fill:#fef9e7,stroke:#f39c12,stroke-width:2px
+    style relayRuntime  fill:#fef9e7,stroke:#f39c12,stroke-width:2px
     style atifBridge    fill:#fef0e7,stroke:#e67e22,stroke-width:2px
     style atifRelay     fill:#fef0e7,stroke:#e67e22,stroke-width:2px
     style outlookBridge fill:#fef0e7,stroke:#e67e22,stroke-width:2px
@@ -172,6 +172,7 @@ flowchart LR
 - Compatible-endpoint inference egress is required for the agent's LLM calls — it's not a research/data-ingestion path.
 - The ETL containers are non-agentic — fixed scraper logic on an hourly interval, no LLM involvement.
 - The PostgREST bridge exposes a read-only HTTP API on host port `3100`, and the sandbox reaches it through `host.openshell.internal` without any live forum egress.
+- Hermes runs NeMo Relay in process through its native plugin integration, with no separate Relay installation or process.
 
 ## Agent skills
 
@@ -233,10 +234,10 @@ itself). The session UUID for Outlook gets produced *between* them, so the order
 
 ```console
 $ git clone https://github.com/NVIDIA/nemoclaw-community.git && cd examples/recipes/nvidia/developer-community-chief-of-staff/
-$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION=v0.0.72 sh
+$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION=v0.0.85 sh
 ```
 
-OpenShell `v0.0.72` matches the supported version in the NemoClaw `v0.0.82`
+OpenShell `v0.0.85` matches the supported version in the NemoClaw `v0.0.105`
 release that publishes this example's pinned Hermes sandbox base image.
 
 The package-managed installer starts a local gateway service for you. This
@@ -357,10 +358,11 @@ $ hermes chat --tui
 Use `hermes chat --tui --continue` only after a TUI session exists. The image
 contains the TUI bundle and does not need an `npm install` at runtime.
 
-The image always installs NeMo-Relay so the agent writes ATIF traces to `/tmp/atif/`
-regardless of Phoenix config. If `PHOENIX_COLLECTOR_ENDPOINT` is set, `03-sandbox.sh`
-additionally bakes the endpoint into the image so OpenInference traces stream into
-Phoenix at `http://localhost:6006`.
+Hermes includes NeMo Relay as a normal runtime dependency. In the default local
+export mode, a finalized session is written to `/tmp/atif/`. If
+`PHOENIX_COLLECTOR_ENDPOINT` is set, `03-sandbox.sh` additionally bakes the
+endpoint into the image so OpenInference traces stream into Phoenix at
+`http://localhost:6006`.
 
 ### Optional Phase 5 — Install auto-heal after first bring-up
 
@@ -411,12 +413,12 @@ The example's Dockerfile drops the upstream `COPY nemoclaw-blueprint/` step —
 nothing in the Hermes runtime reads `/sandbox/.nemoclaw/blueprints/`, so this
 example is **fully self-contained** and never needs a NemoClaw checkout.
 
-The Dockerfile inherits Hermes from the pinned NemoClaw Hermes sandbox base
-image, fetches the pinned, prebuilt `nemo-relay-cli` release in a builder stage,
-and runs a sidecar gateway at startup. The pinned base is published by NemoClaw
-and includes a Hermes version with rich plugin hook payloads. That is enough for
-the agent to write ATIF trace records to `/tmp/atif/` — capture them with
-[`scripts/download-traces.sh`](scripts/download-traces.sh).
+The Dockerfile inherits the pinned NemoClaw `v0.0.105` Hermes sandbox base, then
+installs a pinned Hermes source revision
+(`03fa32c92dd445eb64c7f67434dd91b32c40701d`, package `0.20.0`) with NeMo
+Relay `0.7.2`. Hermes's native `observability/nemo_relay` plugin handles scopes
+and export in process, so the image needs no separate Relay installation or
+process.
 
 Setting `PHOENIX_COLLECTOR_ENDPOINT` is a separate opt-in for live
 OpenInference egress: when present, `03-sandbox.sh` bakes the URL into the
@@ -426,21 +428,22 @@ on host port `6006`.
 
 ### Capturing ATIF traces
 
-The agent writes ATIF (Agent Trajectory Format) records to `/tmp/atif/`
-inside the sandbox on every turn. That directory is ephemeral — it lives
-on the sandbox's writable layer and is destroyed by `tear-down.sh` — so
-capture before destroying the sandbox if you want to keep the traces.
+In local mode, NeMo Relay writes an ATIF (Agent Trajectory Format) record to
+`/tmp/atif/` when Hermes finalizes a session and closes its top-level Agent
+scope. Finalization happens on an explicit `/new` or `/reset`, CLI/TUI exit, or
+configured gateway expiry—not after every conversational turn. That directory
+is ephemeral—it lives on the sandbox's writable layer and is destroyed by
+`tear-down.sh`—so capture before destroying the sandbox if you want to keep
+the traces.
 
 For production / always-on capture, set `ATIF_EXPORT_MODE=relay` (with
-`ATIF_RELAY_BACKEND=minio` or `s3`) to have NeMo-Relay upload completed
+`ATIF_RELAY_BACKEND=minio` or `s3`) to have NeMo Relay upload completed
 trajectories to S3-compatible storage via a host-side relay. The sandbox never holds real
 AWS credentials; OpenShell's provider store manages a per-sandbox bearer
-token instead. See [docs/atif-export.md](docs/atif-export.md) for setup,
-IAM template, and the auth model.
-
-The on-disk capture below still works in parallel — it remains useful for
-forensic captures and works regardless of whether the S3 backend is
-configured.
+token instead. A successful remote POST does not also create a local file. If
+all configured remote targets fail, NeMo Relay `0.7.2` writes a recovery copy
+to `/tmp/atif/`. See [docs/atif-export.md](docs/atif-export.md) for setup, IAM
+template, and the auth model.
 
 ```console
 $ bash scripts/download-traces.sh
@@ -462,10 +465,10 @@ overridden at the call site:
 | `SANDBOX_NAME` | `hermes-direct` | Which OpenShell sandbox to pull `/tmp/atif/` from. Shared with the rest of the example's scripts (defined in `_lib.sh`). |
 | `TRACES_DIR` | `$EXAMPLE_DIR/.traces` | Host-side directory the tarball is written to. |
 
-If `/tmp/atif/` is empty when the script runs (e.g. the agent hasn't had
-a turn yet), the script still emits a valid empty tarball whose manifest
-carries an explanatory `note` — downstream tooling never has to
-special-case "no file."
+If `/tmp/atif/` is empty when the script runs (for example, no session has
+finalized, or remote export succeeded), the script still emits a
+valid empty tarball whose manifest carries an explanatory `note` — downstream
+tooling never has to special-case "no file."
 
 **Lifecycle note**: no automatic rotation — files accumulate until
 sandbox teardown. For long-lived sessions, prune manually inside the
@@ -504,6 +507,7 @@ bearer header; the OpenShell L7 proxy substitutes a live token on egress.
 | `<sandbox>-outlook` | `nemoclaw-outlook-email` | `MS_GRAPH_ACCESS_TOKEN` (auto-rotated by the gateway from the registered refresh token). Refresh material: `OUTLOOK_TENANT_ID`, `OUTLOOK_CLIENT_ID`, refresh_token (cached from device-code login). | Optional. Created only when the Outlook block is fully populated; partial config is rejected. At least one of Outlook or Slack must be configured. |
 | `<sandbox>-slack` | `nemoclaw-slack` | `SLACK_BOT_TOKEN` (Web API) + `SLACK_APP_TOKEN` (Socket Mode) | Optional. Before provider creation, setup verifies that the app token can call `apps.connections.open` with `connections:write`. At least one of Outlook or Slack must be configured. |
 | `<sandbox>-github` | `nemoclaw-github` | `GITHUB_TOKEN` | Optional but recommended. Enables authenticated live GitHub REST reads. The sandbox receives only the OpenShell placeholder; `policy.yaml` further limits use to repo-scoped `GET` routes from approved binaries. |
+| `<sandbox>-atif-export-relay` | `nemoclaw-atif-export-relay` | `ATIF_RELAY_AUTH_TOKEN` | Created and attached only when `ATIF_EXPORT_MODE=relay`. Allows the Python ATIF bridge to send `POST /atif` to the configured host relay; the provider owns the endpoint, path, binary, private-IP, and credential restrictions. |
 
 The `compatible-endpoint` provider is **not** prefixed with the sandbox name — it's a
 shared inference provider attached via `--provider compatible-endpoint` on sandbox
@@ -584,7 +588,7 @@ unless you remove the compose volumes.
 | `SOURCE_ETL_GITHUB_ENABLED` | `0` | Set to `1` to start the host-side GitHub mirror. A live-read `GITHUB_TOKEN` alone does not enable the ETL. |
 | `SOURCE_ETL_GITHUB_REPO` | `NVIDIA/NemoClaw` | Host-side GitHub mirror repo for source-etls. This is independent of `GITHUB_READONLY_REPO`. |
 | `OUTLOOK_LOGIN_CACHE` | `1` | Controls the Microsoft refresh-token cache at `.bootstrap/cache/ms-graph-token.json`. `1` = use the cache (auto-refresh on staleness, ~90 days). `0` = skip the cache entirely (device-code every bring-up, nothing on disk; use on shared workstations or security-sensitive contexts). `2` = force device-code login and rewrite the cache. The gateway-side encrypted credential copy is unaffected by this knob. |
-| `PHOENIX_COLLECTOR_ENDPOINT` | (none) | Set to e.g. `http://host.openshell.internal:6006/v1/traces` to stream OpenInference traces to a Phoenix collector. ATIF trace generation does not depend on this — NeMo-Relay is always installed and writes ATIF locally to `/tmp/atif/` regardless. |
+| `PHOENIX_COLLECTOR_ENDPOINT` | (none) | Set to e.g. `http://host.openshell.internal:6006/v1/traces` to stream OpenInference traces to a Phoenix collector. ATIF export is independent: local mode writes completed scopes to `/tmp/atif/`; relay mode sends them remotely and uses `/tmp/atif/` only for recovery after all remote targets fail. |
 | `PHOENIX_PROJECT_NAME` | `default` | Sets `openinference.project.name` on every exported span so Phoenix routes traces to a named project. Override per-build to keep multiple deployments separate in the same Phoenix instance. |
 
 ## Verification (what success looks like)

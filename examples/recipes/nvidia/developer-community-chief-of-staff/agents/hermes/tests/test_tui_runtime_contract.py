@@ -15,7 +15,7 @@ TUI_DIR = "/opt/hermes/ui-tui"
 
 class HermesTuiRuntimeContractTest(TestCase):
     def test_image_requires_the_prebuilt_tui_bundle(self) -> None:
-        self.assertIn(f"RUN test -s {TUI_ENTRY}", DOCKERFILE)
+        self.assertIn(f"test -s {TUI_ENTRY}", DOCKERFILE)
         self.assertIn(f"HERMES_TUI_DIR={TUI_DIR}", DOCKERFILE)
 
     def test_interactive_shell_uses_the_prebuilt_tui_bundle(self) -> None:

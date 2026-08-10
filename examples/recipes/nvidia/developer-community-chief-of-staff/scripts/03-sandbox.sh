@@ -96,14 +96,12 @@ if [[ -n "${PHOENIX_PROJECT_NAME:-}" ]]; then
   echo "Phoenix project: $PHOENIX_PROJECT_NAME"
   DOCKERFILE_ARGS[PHOENIX_PROJECT_NAME]="$PHOENIX_PROJECT_NAME"
 fi
-# ATIF export — the sandbox bakes ONLY the export mode (gates the storage block)
-# and the relay endpoint. It bakes NO bucket, key prefix, region, or creds: the
-# host-side relay owns all of those and rewrites them at egress (the relay
-# backend, s3 vs minio, is a relay concern the sandbox never needs). When
-# ATIF_EXPORT_MODE != relay, no storage block is emitted; start.sh's
-# ATIF_STORAGE_ENABLED probe (greps plugins.toml for the block header) then
-# returns 0, the bridge stays down, AWS_* exports are skipped, and ATIF writes
-# go to /tmp/atif/.
+# ATIF export — the sandbox bakes only the export mode and HTTP relay endpoint.
+# It bakes no bucket, key prefix, region, or downstream credentials: the
+# host-side relay owns all of those (and whether the backend is S3 or MinIO is
+# not a sandbox concern). When ATIF_EXPORT_MODE != relay, the native NeMo Relay
+# configuration writes ATIF trajectories to /tmp/atif and the bridge stays
+# down.
 if atif_remote_enabled; then
   # atif_relay_backend validates ATIF_RELAY_BACKEND is set (loud error if not).
   echo "ATIF export: mode=relay backend=$(atif_relay_backend) (bucket + key prefix owned by the relay)"
@@ -151,8 +149,6 @@ fi
 cp "$EXAMPLE_DIR/policy.yaml" "$STAGED_POLICY"
 sed -i \
   -e "s|__GITHUB_READONLY_REPO__|$GITHUB_READONLY_REPO|g" \
-  -e "s|__ATIF_RELAY_HOST__|$ATIF_RELAY_HOST|g" \
-  -e "s|__ATIF_RELAY_PORT__|$ATIF_RELAY_PORT|g" \
   "$STAGED_POLICY"
 
 # ── Build provider flags from what 02-providers.sh actually created ────
