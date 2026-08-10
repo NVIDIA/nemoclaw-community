@@ -364,7 +364,7 @@ License: GPL-3.0-or-later and included Blender notices
 URL: https://github.com/lfdevs/blender_linux_arm64
 
 Project: brevdev/workshop-build-an-agent (Build an Agent workshop content)
-License: NVIDIA (Brev) workshop content, no standalone license file; cloned into the sandbox at setup time with its own dependency manifests, not distributed in this repository
+License: Apache-2.0 (upstream LICENSE.txt, added 2026-08-10 in commit 37c94cf); the workshop itself is cloned into the sandbox at setup time with its own dependency manifests, not distributed in this repository; the module-1…7 tutor references in examples/workshops/agentic-ai-learning-path are derived from its teaching content under that license
 URL: https://github.com/brevdev/workshop-build-an-agent
 
 Model: NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4
