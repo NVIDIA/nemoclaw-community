@@ -70,21 +70,23 @@ for profile_file in outlook-email.yaml slack.yaml github.yaml atif-export-relay.
 done
 
 # Keep preflight subprocesses isolated from unrelated host state while
-# preserving the standard proxy and CA settings needed on enterprise networks.
+# preserving non-empty proxy and CA settings needed on enterprise networks.
+# Do not define an unset OpenSSL override as an empty string: under `env -i`,
+# SSL_CERT_FILE= or SSL_CERT_DIR= suppresses the platform's default trust-store
+# discovery and makes every TLS endpoint appear untrusted.
 PREFLIGHT_NETWORK_ENV=(
   "HOME=$HOME"
   "PATH=$PATH"
-  "HTTP_PROXY=${HTTP_PROXY:-}"
-  "HTTPS_PROXY=${HTTPS_PROXY:-}"
-  "ALL_PROXY=${ALL_PROXY:-}"
-  "NO_PROXY=${NO_PROXY:-}"
-  "http_proxy=${http_proxy:-}"
-  "https_proxy=${https_proxy:-}"
-  "all_proxy=${all_proxy:-}"
-  "no_proxy=${no_proxy:-}"
-  "SSL_CERT_FILE=${SSL_CERT_FILE:-}"
-  "SSL_CERT_DIR=${SSL_CERT_DIR:-}"
 )
+for preflight_env_name in \
+  HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY \
+  http_proxy https_proxy all_proxy no_proxy \
+  SSL_CERT_FILE SSL_CERT_DIR CURL_CA_BUNDLE REQUESTS_CA_BUNDLE; do
+  if [[ -n "${!preflight_env_name:-}" ]]; then
+    PREFLIGHT_NETWORK_ENV+=("$preflight_env_name=${!preflight_env_name}")
+  fi
+done
+unset preflight_env_name
 
 # ── Inference provider (built-in nvidia v2 profile via inference.local) ─
 INFERENCE_KEY="${OPENAI_API_KEY:-${COMPATIBLE_API_KEY:-}}"
@@ -101,7 +103,7 @@ if [[ -n "$INFERENCE_KEY" ]]; then
   INFERENCE_PROVIDER="compatible-endpoint"
   INFERENCE_MODEL="${NEMOCLAW_MODEL:-nvidia/nemotron-3-super-120b-a12b}"
   INFERENCE_BASE_URL="${NEMOCLAW_ENDPOINT_URL:-${OPENAI_BASE_URL:-https://integrate.api.nvidia.com/v1}}"
-  echo "Upserting inference provider $INFERENCE_PROVIDER (model: $INFERENCE_MODEL, base: $INFERENCE_BASE_URL)"
+  echo "Upserting inference provider $INFERENCE_PROVIDER (model: $INFERENCE_MODEL)"
 
   # Recreate if existing provider has the wrong type (e.g. left over from the
   # nemoclaw-compatible-endpoint direct-egress experiment).
@@ -124,7 +126,7 @@ if [[ -n "$INFERENCE_KEY" ]]; then
   fi
 
   if [[ "$INFERENCE_PREFLIGHT" == "1" ]]; then
-    echo "Validating inference endpoint, credential, and model before sandbox creation"
+    echo "Validating inference endpoint, credential, model, and structured tool calls before sandbox creation"
     env -i "${PREFLIGHT_NETWORK_ENV[@]}" \
       NEMOCLAW_INFERENCE_PREFLIGHT_KEY="$INFERENCE_KEY" \
       python3 "$DIR/inference_preflight.py" \
@@ -137,6 +139,16 @@ if [[ -n "$INFERENCE_KEY" ]]; then
 
   echo "Setting cluster inference: provider=$INFERENCE_PROVIDER model=$INFERENCE_MODEL"
   openshell inference set --no-verify --provider "$INFERENCE_PROVIDER" --model "$INFERENCE_MODEL"
+  if [[ "$INFERENCE_PREFLIGHT" == "1" ]]; then
+    if ! active_route="$(openshell inference get 2>/dev/null)"; then
+      echo "Inference preflight failed (active-route): openshell inference get failed" >&2
+      exit 8
+    fi
+    env -i "${PREFLIGHT_NETWORK_ENV[@]}" \
+      python3 "$DIR/inference_preflight.py" \
+      --provider "$INFERENCE_PROVIDER" \
+      --model "$INFERENCE_MODEL" <<<"$active_route"
+  fi
 else
   if [[ "$INFERENCE_PREFLIGHT" == "1" ]]; then
     echo "Inference preflight failed (configuration): neither OPENAI_API_KEY nor COMPATIBLE_API_KEY is set." >&2

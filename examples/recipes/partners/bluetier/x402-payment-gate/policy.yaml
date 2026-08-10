@@ -1,0 +1,146 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# COMPLETE sandbox policy for the x402-payment-gate recipe (Hermes runtime).
+# Applied whole by scripts/bring-up.sh. Composition: the inference block below
+# mirrors recipes/nvidia/developer-community-chief-of-staff/policy.yaml (the
+# agent's required NemoClaw routes, unbroadened); the blackwall and
+# release-gate blocks are this recipe's additions. All in-sandbox HTTP is
+# made by the Hermes python runtime or curl -- the binary allowlists say
+# exactly that and nothing more.
+#
+# THE DENIED EDGE (deliberate): there is NO route to any x402 facilitator,
+# payment rail, or the host mock rail (127.0.0.1:8780 stays host-only). The
+# sandboxed agent can ASK for verdicts and SUBMIT intents; only the host-side
+# release gate, outside this sandbox, can settle a payment.
+version: 1
+filesystem_policy:
+  include_workdir: true
+  read_only:
+  - /usr
+  - /lib
+  - /opt/hermes
+  - /proc
+  - /dev/urandom
+  - /app
+  - /etc
+  - /var/log
+  - /sandbox/.hermes
+  read_write:
+  - /sandbox
+  - /tmp
+  - /dev/null
+  - /sandbox/.hermes-data
+landlock:
+  compatibility: best_effort
+process:
+  run_as_user: sandbox
+  run_as_group: sandbox
+network_policies:
+  # Load-bearing: per-path allow rules for the NVIDIA inference API — the
+  # agent's required routes, copied unbroadened from the chief-of-staff recipe.
+  nvidia:
+    name: nvidia
+    endpoints:
+    - host: integrate.api.nvidia.com
+      port: 443
+      protocol: rest
+      tls: terminate
+      enforcement: enforce
+      rules:
+      - allow:
+          method: POST
+          path: /v1/chat/completions
+      - allow:
+          method: POST
+          path: /v1/completions
+      - allow:
+          method: POST
+          path: /v1/embeddings
+      - allow:
+          method: GET
+          path: /v1/models
+      - allow:
+          method: GET
+          path: /v1/models/**
+    - host: inference-api.nvidia.com
+      port: 443
+      protocol: rest
+      tls: terminate
+      enforcement: enforce
+      rules:
+      - allow:
+          method: POST
+          path: /v1/chat/completions
+      - allow:
+          method: POST
+          path: /v1/completions
+      - allow:
+          method: POST
+          path: /v1/embeddings
+      - allow:
+          method: GET
+          path: /v1/models
+      - allow:
+          method: GET
+          path: /v1/models/**
+    binaries:
+    - path: /usr/local/bin/hermes
+    - path: /opt/hermes/.venv/bin/hermes
+    - path: /usr/bin/python3
+    - path: /usr/bin/python3.13
+    - path: /opt/hermes/.venv/bin/python
+  # Blackwall verdict service — ADVISORY pre-checks from inside the sandbox
+  # (the skill's stdlib client). The MANDATORY verdict happens host-side in
+  # the release gate; this route existing changes nothing about that.
+  blackwall:
+    name: blackwall
+    endpoints:
+    - host: blackwall-free.onrender.com
+      port: 443
+      protocol: rest
+      tls: terminate
+      enforcement: enforce
+      rules:
+      - allow:
+          method: POST
+          path: /v1/forecast-payment
+      - allow:
+          method: POST
+          path: /v1/report-outcome
+      - allow:
+          method: GET
+          path: /healthz
+      - allow:
+          method: GET
+          path: /.well-known/x402
+    binaries:
+    - path: /usr/bin/python3
+    - path: /usr/bin/python3.13
+    - path: /opt/hermes/.venv/bin/python
+    - path: /usr/bin/curl
+  # Host-side release gate — intent SUBMISSION and status only. Note what is
+  # absent: the mock rail port (8780) and any facilitator. Submitting an
+  # intent is the most a sandboxed prompt can ever do.
+  release-gate:
+    name: release-gate
+    endpoints:
+    - host: host.openshell.internal
+      port: 8790
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          method: POST
+          path: /v1/intents
+      - allow:
+          method: GET
+          path: /v1/intents/**
+      - allow:
+          method: GET
+          path: /healthz
+    binaries:
+    - path: /usr/bin/python3
+    - path: /usr/bin/python3.13
+    - path: /opt/hermes/.venv/bin/python
+    - path: /usr/bin/curl

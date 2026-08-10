@@ -23,6 +23,8 @@ class HostServicesProfilesTest(TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             fake_docker = Path(temp_dir) / "docker"
             docker_log = Path(temp_dir) / "docker.log"
+            ca_bundle = Path(temp_dir) / "ca-certificates.crt"
+            ca_bundle.write_text("test CA bundle\n", encoding="utf-8")
             fake_docker.write_text(
                 """#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$DOCKER_LOG"
@@ -37,6 +39,7 @@ exit 0
                 "PATH": f"{temp_dir}:{os.environ['PATH']}",
                 "DOCKER_LOG": str(docker_log),
                 "ATIF_EXPORT_MODE": "local",
+                "NEMOCLAW_HOST_CA_BUNDLE": str(ca_bundle),
             }
             environment.pop("SOURCE_ETL_GITHUB_ENABLED", None)
             environment.pop("GITHUB_TOKEN", None)

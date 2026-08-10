@@ -21,11 +21,16 @@ ARG BASE_IMAGE=ghcr.io/nvidia/nemoclaw/hermes-sandbox-base@sha256:fa05221f5c7bca
 # unconditionally via the cli crate's `object-store` feature.
 FROM ${BASE_IMAGE} AS nemo-relay-builder
 ARG NEMO_RELAY_CLI_VERSION=0.3.0
+# The release download runs in this separate stage, so it needs the same
+# optional enterprise inspection CAs as the final sandbox image. Without this
+# copy, hosts that terminate TLS fail before the final stage can install them.
+COPY certs/ /usr/local/share/ca-certificates/
 # If the caller provides a github_token BuildKit secret, use it for the release
 # asset request to avoid anonymous GitHub rate limits on shared egress IPs. The
 # token is not an ARG/ENV and does not persist into the final image.
 RUN --mount=type=secret,id=github_token,required=false \
     mkdir -p /out/bin \
+    && update-ca-certificates \
     && apt-get update -qq \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \
@@ -48,6 +53,12 @@ RUN --mount=type=secret,id=github_token,required=false \
 
 # ── Main sandbox image ────────────────────────────────────────────────────────
 FROM ${BASE_IMAGE}
+
+# The sandbox cannot install npm dependencies at runtime under the enforced
+# OpenShell policy. Keep the prebuilt Hermes TUI bundle as an explicit base
+# image contract so `hermes chat --tui` fails at build time, not on first use,
+# if a future base-image update drops it.
+RUN test -s /opt/hermes/ui-tui/dist/entry.js
 
 # NeMo-Relay Phoenix OTLP endpoint — baked at image build time so start.sh
 # reads it directly from the container ENV without relying on runtime injection.
@@ -87,16 +98,11 @@ COPY extras/atif-export-relay/tls/ca.crt \
 
 RUN update-ca-certificates
 
-# Install GitHub CLI (gh) — not in the base image. It is not allowed in the
-# GitHub network policy by default, so live GitHub reads use the bundled
-# curl/Python-safe helper with the OpenShell provider placeholder.
-RUN mkdir -p /etc/apt/keyrings \
-    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-       -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-    && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-       > /etc/apt/sources.list.d/github-cli.list \
-    && apt-get update \
+# Install GitHub CLI (gh). It is not allowed in the GitHub network policy by
+# default, so live GitHub reads use the bundled curl/Python-safe helper with
+# the OpenShell provider placeholder. The pinned Debian 13 base provides gh
+# directly, avoiding a second mutable signing-key endpoint during the build.
+RUN apt-get update \
     && apt-get install -y --no-install-recommends gh postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
@@ -220,13 +226,14 @@ RUN mkdir -p /etc/nemo-relay \
 # transport when a proxy is present. The OpenShell L7 proxy owns credential
 # placeholder rewriting and hostname-based policy enforcement.
 #
-# Only HERMES_HOME and HERMES_DISABLE_LAZY_INSTALLS reliably reach
-# user processes — OpenShell's exec-session allowlist strips most other
-# HERMES_* vars. PID-1 (start.sh-launched gateway) keeps everything;
-# HERMES_DISABLE_LAZY_INSTALLS is also re-exported from start.sh's
-# _PROXY_ENV_FILE so interactive shells get it.
+# Only HERMES_HOME and HERMES_DISABLE_LAZY_INSTALLS reliably reach user
+# processes — OpenShell's exec-session allowlist strips most other HERMES_*
+# vars. PID-1 (start.sh-launched gateway) keeps everything; start.sh also
+# re-exports HERMES_DISABLE_LAZY_INSTALLS and HERMES_TUI_DIR from its
+# _PROXY_ENV_FILE so interactive shells use the prebuilt bundle.
 ENV HERMES_TELEGRAM_DISABLE_FALLBACK_IPS=1 \
     HERMES_DISABLE_LAZY_INSTALLS=1 \
+    HERMES_TUI_DIR=/opt/hermes/ui-tui \
     HERMES_HOME=/sandbox/.hermes-data
 
 # Copy NemoClaw plugin for Hermes (Python-based)

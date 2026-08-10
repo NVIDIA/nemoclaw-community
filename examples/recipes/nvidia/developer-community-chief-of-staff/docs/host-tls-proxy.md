@@ -85,6 +85,12 @@ NEMOCLAW_ENDPOINT_URL=http://host.openshell.internal:18080/v1
 
 `host.openshell.internal` is the stable host-routed address OpenShell exposes inside Docker-backed sandboxes for package-managed and snap-managed gateways.
 
+Provider setup runs its inference preflight on the host before sandbox
+creation. For this special URL, the preflight translates only the hostname to
+`127.0.0.1` and checks the same proxy listener and request path. The provider
+configuration remains `host.openshell.internal`, so the created sandbox uses
+the correct host-routed address.
+
 `COMPATIBLE_API_KEY` (or `OPENAI_API_KEY`) stays unchanged — the proxy passes the `Authorization` header straight through.
 
 ## Smoke test

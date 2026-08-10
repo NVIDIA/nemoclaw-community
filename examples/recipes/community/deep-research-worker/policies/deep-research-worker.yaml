@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+preset:
+  name: deep-research-worker
+  description: "Sandbox route to the host-side deep research worker only"
+
+network_policies:
+  deep-research-worker:
+    name: deep-research-worker
+    endpoints:
+      - host: host.openshell.internal
+        port: 9050
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow:
+              method: GET
+              path: /health
+          - allow:
+              method: GET
+              path: /healthz
+          - allow:
+              method: GET
+              path: /v1/tasks
+          - allow:
+              method: GET
+              path: /v1/tasks/**
+          - allow:
+              method: POST
+              path: /v1/tasks
+          - allow:
+              method: DELETE
+              path: /v1/tasks/**
+    binaries:
+      - { path: /usr/bin/python* }
+      - { path: /usr/local/bin/python* }
+      - { path: /usr/bin/env }
+      - { path: /usr/bin/bash }
+      - { path: /usr/bin/sh }

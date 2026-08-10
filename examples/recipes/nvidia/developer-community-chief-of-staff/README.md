@@ -330,6 +330,13 @@ The script auto-sources `.env`, then runs `01-gateway.sh` → `02-providers.sh` 
 `03-sandbox.sh` (select or register the local OpenShell gateway, import v2 provider
 profiles, upsert providers, build and launch the sandbox).
 
+Before the image build, provider setup sends one bounded synthetic tool request
+and requires a valid structured tool call. After selecting the route, it also
+confirms that OpenShell reports the requested provider and model as active. A
+failure stops setup before the expensive build. Set
+`NEMOCLAW_INFERENCE_PREFLIGHT=0` only as an explicit bypass for intentional
+offline setup or an endpoint that cannot support verification.
+
 On the first bring-up with Outlook configured, `02-providers.sh` runs an interactive
 Microsoft device-code login (it prints a URL + code; complete it in a browser as the
 `OUTLOOK_TARGET_MAILBOX` user) and caches the resulting refresh token at
@@ -338,6 +345,17 @@ bring-ups reuse the cached refresh token (auto-refreshing on staleness ~90 days)
 a fresh login with `OUTLOOK_LOGIN_CACHE=2 bash scripts/bring-up.sh`. Set
 `OUTLOOK_LOGIN_CACHE=0` to skip the cache entirely and do device-code on every
 bring-up — see [docs/set-up-outlook-bridge.md](docs/set-up-outlook-bridge.md#security-note-where-the-refresh-token-lives).
+
+To use Hermes interactively after bring-up, connect to the sandbox and start a
+new TUI session:
+
+```console
+$ openshell sandbox connect hermes-direct
+$ hermes chat --tui
+```
+
+Use `hermes chat --tui --continue` only after a TUI session exists. The image
+contains the TUI bundle and does not need an `npm install` at runtime.
 
 The image always installs NeMo-Relay so the agent writes ATIF traces to `/tmp/atif/`
 regardless of Phoenix config. If `PHOENIX_COLLECTOR_ENDPOINT` is set, `03-sandbox.sh`
@@ -463,8 +481,9 @@ sandbox, e.g. `find /tmp/atif -type f -mtime +7 -delete`.
 - **(Optional)** If your network performs TLS interception (e.g. an
   SSL-inspecting proxy), place the inspection CA certificate(s) as `.crt`
   files in the example-root `certs/` directory before running `bring-up.sh`.
-  Otherwise leave it empty. See [`certs/README.md`](certs/README.md) for
-  details.
+  Additional roots installed in the host's standard local CA directory are
+  staged automatically. Otherwise leave the directory empty. See
+  [`certs/README.md`](certs/README.md) for details.
 
 ## Providers created by `bring-up.sh`
 
@@ -552,12 +571,13 @@ unless you remove the compose volumes.
 | `OPENSHELL_GATEWAY` | `openshell` | Gateway name. The default matches the package-managed OpenShell installer. Use `snap-docker` when following the snap setup. |
 | `OPENSHELL_GATEWAY_ENDPOINT` | auto (`https://127.0.0.1:17670` for `openshell`, `http://127.0.0.1:17670` for `snap-docker`) | Override the local gateway endpoint if you registered it under a different URL. |
 | `NEMOCLAW_MODEL` | `nvidia/nemotron-3-super-120b-a12b` | Inference model passed to `openshell inference set`. |
-| `NEMOCLAW_INFERENCE_PREFLIGHT` | `1` | Validates the inference endpoint, credential, and model with one bounded, one-token completion before sandbox creation. Remote endpoints must use HTTPS; loopback HTTP is allowed for local proxies. Standard proxy and CA environment variables are preserved. Set to `0` only for intentional offline setup or an endpoint that cannot support verification. |
+| `NEMOCLAW_INFERENCE_PREFLIGHT` | `1` | Requires one bounded structured tool call before sandbox creation, then verifies that OpenShell activated the requested provider and model. Remote endpoints must use HTTPS. For `http://host.openshell.internal:<port>`, the host-side check safely uses the same listener through `127.0.0.1:<port>`. Non-empty proxy and CA environment variables are preserved; unset CA overrides remain unset so the platform trust store still works. Set to `0` only for intentional offline setup or an endpoint that cannot support verification. |
 | `NEMOCLAW_INFERENCE_PREFLIGHT_TIMEOUT_SECONDS` | `10` | Maximum time allowed for the preflight request. |
 | `NEMOCLAW_SLACK_RICH_BLOCKS` | `true` | Render supported semantic Markdown with Hermes's native Slack Block Kit renderer, including table blocks. Set to `false` for text-only output. Interactive clarification buttons remain available. Only `true` or `false` is accepted. Rebuild the sandbox after changing it. |
 | `NEMOCLAW_ENDPOINT_URL` | `https://integrate.api.nvidia.com/v1` | Upstream base URL for the `compatible-endpoint` provider. (`OPENAI_BASE_URL` is also accepted as a fallback.) |
 | `NEMOCLAW_HOST_TLS_PROXY_UPSTREAM` | (none) | Optional HTTPS origin for the host TLS proxy. Required when `NEMOCLAW_ENDPOINT_URL` uses `host.openshell.internal:18080` and auto-heal should manage that proxy. |
 | `NEMOCLAW_HOST_TLS_PROXY_PORT` | `18080` | Host listener port for the optional TLS proxy. |
+| `NEMOCLAW_HOST_CA_BUNDLE` | `/etc/ssl/certs/ca-certificates.crt` | Absolute path to a readable regular-file host CA bundle mounted read-only into the GitHub/forum ETLs and ATIF relay. Override when the supported Ubuntu host stores its trusted bundle elsewhere. |
 | `COMPATIBLE_API_KEY` | (none) | Inference API key. Mirrors NemoClaw's `REMOTE_PROVIDER_CONFIG.custom`. (`OPENAI_API_KEY` is also accepted.) |
 | `GITHUB_TOKEN` | (none) | Optional GitHub token for authenticated live REST reads. Also feeds the optional host GitHub mirror. |
 | `GITHUB_READONLY_REPO` | `NVIDIA/OpenShell` | The only repo allowed by the live GitHub REST policy, formatted as `owner/repo`. Recreate the sandbox after changing it. |

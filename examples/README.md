@@ -13,16 +13,21 @@ again by contributor provenance.
 | [Developer Community Chief of Staff](recipes/nvidia/developer-community-chief-of-staff/README.md) | Synthesizes Slack, Outlook, GitHub, and mirrored community signals into operating briefs, gaps, priorities, and follow-up recommendations. |
 | [NV Tech Assistant](recipes/nvidia/nv-tech-assistant/README.md) | Answers NVIDIA technical questions with cited evidence from allowlisted NVIDIA, GitHub, and arXiv sources. |
 | [Payment Operations Hermes Assistant](recipes/nvidia/payment-ops-hermes/README.md) | Demonstrates constrained payment screening, evidence preparation, and a platform-enforced human release boundary. |
+| [PR Review Advisor](recipes/nvidia/pr-review-advisor/README.md) | Reviews exact pull request heads with a constrained Hermes workflow, produces attested artifacts, and publishes only through a separate maintainer action. |
 
 ## Partner Recipes
 
 | Contributor | Example | Description |
 | --- | --- | --- |
+| BlueTier | [x402 Payment Gate](recipes/partners/bluetier/x402-payment-gate/README.md) | Releases an agent's x402 payments through a maker/checker boundary: the sandboxed agent can only submit payment intents, and a host-side gate outside the sandbox re-screens each one with pre-signature GO/HOLD/STOP verdicts (counterparty reputation, price anomaly, OFAC sanctions) before anything is signed or settled. |
 | HPE | [Retail Assistant](recipes/partners/hpe/retail-assistant/README.md) | Provides role-aware retail operations through Telegram, FastAPI, PostgreSQL, Docker Compose, and Helm. |
 | Tavily | [Watchtower](recipes/partners/tavily/watchtower/README.md) | Runs scheduled, cited web monitoring with persistent deduplication and auditable outputs. |
 
-Future independent contributions without formal organizational provenance
-belong under `recipes/community/`.
+## Community Recipes
+
+| Example | Description |
+| --- | --- |
+| [Deep Research Worker](recipes/community/deep-research-worker/README.md) | Queues long-running research tasks from one sandbox to a host-side DeepAgents worker, with a narrow worker-only sandbox policy and optional read-only host-side search integrations. |
 
 ## NVIDIA Field Demos
 

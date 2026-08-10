@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Combined stack: Phoenix telemetry + source ETLs.
-# Usage: docker compose up --build
+# Start through ../scripts/00-host-services.sh up so host CA preflight runs
+# before Compose evaluates bind mounts.
 
 services:
 
@@ -65,8 +66,17 @@ services:
       POSTGRES_PASSWORD: "${SOURCE_ETL_POSTGRES_APP_PASSWORD:-source_etl_writer}"
       POSTGRES_SCHEMA: github_raw
       ETL_STATE_DIR: /var/lib/github-etl/state
+      # Requests/certifi does not automatically inherit the managed host's
+      # inspection CA. Use the host bundle mounted below for outbound GitHub.
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
     volumes:
       - github-etl-state:/var/lib/github-etl/state
+      - type: bind
+        source: "${NEMOCLAW_HOST_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}"
+        target: /etc/ssl/certs/ca-certificates.crt
+        read_only: true
+        bind:
+          create_host_path: false
 
   forums-etl:
     build:
@@ -85,6 +95,17 @@ services:
       POSTGRES_DB: "${SOURCE_ETL_POSTGRES_DB:-source_etls}"
       POSTGRES_USER: "${SOURCE_ETL_POSTGRES_APP_USER:-source_etl_writer}"
       POSTGRES_PASSWORD: "${SOURCE_ETL_POSTGRES_APP_PASSWORD:-source_etl_writer}"
+      SOURCE_ETL_POSTGRES_READER_USER: "${SOURCE_ETL_POSTGRES_READER_USER:-source_etl_reader}"
+      # HTTPX reads SSL_CERT_FILE because trust_env is enabled by default.
+      # Mount the managed host bundle to keep forum TLS verification enabled.
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+    volumes:
+      - type: bind
+        source: "${NEMOCLAW_HOST_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}"
+        target: /etc/ssl/certs/ca-certificates.crt
+        read_only: true
+        bind:
+          create_host_path: false
 
   postgrest:
     image: postgrest/postgrest:v13.0.4
@@ -122,6 +143,12 @@ services:
       # TLS cert + key for the HTTPS listener. Generated on bring-up by
       # scripts/00-host-services.sh via atif-export-relay/generate-tls-cert.sh.
       - ./atif-export-relay/tls:/etc/atif-export-relay/tls:ro
+      - type: bind
+        source: "${NEMOCLAW_HOST_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}"
+        target: /etc/ssl/certs/ca-certificates.crt
+        read_only: true
+        bind:
+          create_host_path: false
     environment:
       ATIF_RELAY_DOWNSTREAM: "${ATIF_RELAY_BACKEND:-minio}"
       ATIF_RELAY_BIND_ADDR: "${ATIF_RELAY_BIND_ADDR:-0.0.0.0:${ATIF_RELAY_PORT:-18443}}"
@@ -166,6 +193,9 @@ services:
       ATIF_RELAY_S3_ENDPOINT: "${ATIF_RELAY_S3_ENDPOINT:-}"
       ATIF_RELAY_S3_ACCESS_KEY: "${ATIF_RELAY_S3_ACCESS_KEY:-}"
       ATIF_RELAY_S3_SECRET_KEY: "${ATIF_RELAY_S3_SECRET_KEY:-}"
+      # boto3/botocore otherwise uses its bundled CA set and does not inherit
+      # enterprise inspection roots from the managed Omnistation host.
+      AWS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
     healthcheck:
       # -k: skip cert verification — the self-signed relay cert isn't in the
       # host's curl trust store; we only need to confirm the listener is up.

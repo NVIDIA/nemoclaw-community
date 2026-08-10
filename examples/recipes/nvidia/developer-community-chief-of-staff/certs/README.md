@@ -1,7 +1,8 @@
 # certs/
 
-Optional drop point for additional CA certificates to trust inside the Hermes
-sandbox image. Files placed here are baked in at build time so `curl` and
+Optional drop point for additional CA certificates used by the Hermes image
+build and trusted inside the final sandbox image. Files placed here are
+installed before the NeMo Relay release download and retained so `curl` and
 other TLS clients inside the sandbox trust the corresponding roots.
 
 ## When you need this
@@ -34,3 +35,15 @@ succeeds as-is.
 The Dockerfile copies everything in this directory into
 `/usr/local/share/ca-certificates/` and runs `update-ca-certificates` to
 register the new trust roots.
+
+### Locally installed enterprise CAs
+
+On Linux hosts, `scripts/03-sandbox.sh` automatically stages readable `*.crt`
+files from `/usr/local/share/ca-certificates/`. This directory conventionally
+contains operator-installed roots rather than distribution-managed roots.
+Override the source with `NEMOCLAW_ENTERPRISE_CA_SOURCE_DIR` when additional
+roots are kept in another dedicated directory.
+
+The copied files remain ignored by Git through the repository-wide `*.crt`
+rule. Other environments can continue to place their public CA certificates in
+this directory before bring-up.
