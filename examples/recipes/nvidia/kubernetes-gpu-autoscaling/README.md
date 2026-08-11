@@ -429,11 +429,15 @@ HPA_VALUES=/path/to/hpa-tls-values.yaml INGRESS_HOST=nemoclaw.example.com \
 ./scripts/hpa-reset.sh
 ```
 
-Example from the validated 4× L40S run — HPA scale-up and per-pod GPU utilization:
+Example from the validated 4× L40S run — HPA scale-up when average per-pod GPU utilization > 40%
 
 <img width="1888" height="826" alt="HPA scaling to four GPU replicas under load" src="docs/assets/hpa-scale-up.png" />
 
-<img width="1450" height="336" alt="Per-pod GPU utilization during the load test" src="docs/assets/per-pod-gpu-utilization.png" />
+
+Example from the validated 4× L40S run — HPA scale-up when average per-pod latency > 3000 ms
+
+<img width="922" height="323" alt="Screenshot 2026-08-10 at 11 37 41 PM" src="https://github.com/user-attachments/assets/a9b3a54c-6134-4a29-8c0d-93181c7b6ee5" />
+
 
 Grafana is optional visualization for workload balancing; see [Grafana: watch workload balancing](#grafana-watch-workload-balancing). The load-test script remains the pass/fail check.
 
