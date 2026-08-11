@@ -78,10 +78,12 @@ Everything is driven from two sides:
    the proxy CA, an `LD_PRELOAD` shim so Jupyter kernels survive the seccomp
    netlink block, and a single JupyterLab server on `127.0.0.1:8888`.
 
-Module coverage is honest about the sandbox: **modules 1–3, 5, and 7 run
-end-to-end on CPU; modules 4 and 6 need a GPU/Docker the sandbox deliberately
-lacks and are read-through here** (the setup marks the affected lessons with
-sandbox notes).
+Module coverage is honest about the sandbox: **modules 1–3 and 5–7 run
+end-to-end on CPU (optional Docker-gated demos are read-through); module 4's
+training notebooks need a GPU the sandbox deliberately lacks and are
+read-through here — its SDG half runs, and module 7's optional cudf exercise
+falls back to CPU** (the setup marks the affected lessons with sandbox
+notes).
 
 ## Prerequisites
 

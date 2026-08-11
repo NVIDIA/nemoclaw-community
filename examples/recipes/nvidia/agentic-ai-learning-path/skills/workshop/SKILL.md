@@ -68,7 +68,10 @@ module the learner hasn't reached. Full policy + rationale in `references/tutor-
 To get the workshop running in this NemoClaw deployment (clone the workshop repo, build the
 venv, launch JupyterLab inside the sandbox), use the **setup-workshop-nemoclaw** skill; the
 host-side half (egress policy, skill staging, port-forward) is
-**setup-workshop-nemoclaw-operator**. Modules 4 & 6 need a GPU/Docker this sandbox
-deliberately lacks — they are read-through here. For "is my hardware compatible with
+**setup-workshop-nemoclaw-operator**. Module 4's training notebooks need a GPU and the
+Docker-based demos (module-2 local NIM, module-5 sandbox backend, module-6 CLI installs)
+need a Docker daemon — the sandbox deliberately lacks both, so those parts are read-through
+here; module 6's safety-eval pipeline and module 7 (cudf exercise falls back to CPU) run
+fully. For "is my hardware compatible with
 module N?", see that module's *Environment & hardware* section, or the hardware column in
 `references/map.md`.
