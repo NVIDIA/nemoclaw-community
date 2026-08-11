@@ -479,20 +479,15 @@ HPA_VALUES=/path/to/hpa-tls-values.yaml INGRESS_HOST=nemoclaw.example.com \
 ./scripts/hpa-reset.sh
 ```
 
-Example validated 4× L40S runs — HPA scale-out when the **Pods `AverageValue`** is above target (Kubernetes averages the metric across Ready pods, then compares that average to the target):
+Example from the validated 4× L40S run — HPA scale-up when average per-pod GPU utilization > 40%
 
-1. **GPU utilization** — scale out when average per-pod GPU util is **above 40%** (`HPA_TARGET_GPU=40`) — `docs/assets/hpa-scale-up.png`.
-2. **LLM latency** — scale out when average per-pod chat proxy latency is **above 3000 ms** (`HPA_TARGET_LATENCY_MS=3000`; values like `46514/3000` are **milliseconds**). Measured on the agent from just before the in-pod inference call until the full response is written to the client.
+<img width="1888" height="826" alt="HPA scaling to four GPU replicas under load" src="docs/assets/hpa-scale-up.png" />
 
-These two are **examples**. Users can choose other metrics or define their own customized metrics for HPA.
+Example from the validated 4× L40S run — HPA scale-up when average per-pod latency > 3000 ms
 
-GPU utilization — average per-pod GPU util above 40%:
+<img width="922" height="323" alt="Screenshot 2026-08-10 at 11 37 41 PM" src="https://github.com/user-attachments/assets/a9b3a54c-6134-4a29-8c0d-93181c7b6ee5" />
 
-<img width="1888" height="826" alt="HPA scale-up when average per-pod GPU utilization exceeds 40%" src="docs/assets/hpa-scale-up.png" />
-
-LLM latency — average per-pod latency above 3000 ms:
-
-<img width="922" height="323" alt="HPA scale-up when average per-pod LLM latency exceeds 3000 ms" src="https://github.com/user-attachments/assets/a9b3a54c-6134-4a29-8c0d-93181c7b6ee5" />
+These two screenshots are **examples** (GPU util and latency). Users can choose other metrics or define their own customized metrics for HPA.
 
 Load balancing without Grafana: `hpa-load-test.sh` (with Envoy enabled) runs a LeastRequest distribution check and logs per-pod success deltas. During or after scale-up, use `./scripts/get-agent-pods.sh -n nemoclaw-gpu` for per-pod GPU util, or scrape each pod’s `/metrics` for `nemoclaw_llm_requests_total{result="success"}`. Optional Grafana views: [Grafana: watch workload balancing](#grafana-watch-workload-balancing).
 
