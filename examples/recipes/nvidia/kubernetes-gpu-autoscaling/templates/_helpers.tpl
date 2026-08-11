@@ -143,8 +143,16 @@ no GPU to schedule onto. Use the lower of the two positive limits in that mode.
 {{- $metric := .Values.autoscaling.metric | default "gpu" -}}
 {{- if eq $metric "gpu" -}}
 gpu_utilization_percent
+{{- else if eq $metric "latency_p50" -}}
+nemoclaw_llm_latency_p50_milliseconds
+{{- else if eq $metric "latency_p95" -}}
+nemoclaw_llm_latency_p95_milliseconds
+{{- else if eq $metric "latency_avg" -}}
+nemoclaw_llm_latency_avg_milliseconds
+{{- else if eq $metric "request_rate" -}}
+nemoclaw_llm_request_rate
 {{- else -}}
-{{- fail (printf "autoscaling.metric %q is unsupported in this recipe; only gpu is supported (latency/request_rate HPA modes are deferred to a follow-up)" $metric) -}}
+{{- fail (printf "autoscaling.metric %q is unsupported; use gpu, latency_p50, latency_p95, latency_avg, or request_rate" $metric) -}}
 {{- end -}}
 {{- end }}
 
@@ -152,6 +160,10 @@ gpu_utilization_percent
 {{- $metric := .Values.autoscaling.metric | default "gpu" -}}
 {{- if eq $metric "gpu" -}}
 {{- .Values.autoscaling.targetGPUUtilizationPercentage | toString -}}
+{{- else if or (eq $metric "latency_p50") (eq $metric "latency_p95") (eq $metric "latency_avg") -}}
+{{- .Values.autoscaling.targetLatencyMilliseconds | toString -}}
+{{- else if eq $metric "request_rate" -}}
+{{- .Values.autoscaling.targetRequestRate | toString -}}
 {{- else -}}
 {{- fail (printf "autoscaling.metric %q is unsupported" $metric) -}}
 {{- end -}}
@@ -161,5 +173,13 @@ gpu_utilization_percent
 {{- $metric := .Values.autoscaling.metric | default "gpu" -}}
 {{- if eq $metric "gpu" -}}
 GPU utilization % (DCGM)
+{{- else if eq $metric "latency_p50" -}}
+LLM end-to-end latency p50 (ms)
+{{- else if eq $metric "latency_p95" -}}
+LLM end-to-end latency p95 (ms)
+{{- else if eq $metric "latency_avg" -}}
+LLM end-to-end latency avg (ms)
+{{- else if eq $metric "request_rate" -}}
+Successful chat completions per second (per pod)
 {{- end -}}
 {{- end }}

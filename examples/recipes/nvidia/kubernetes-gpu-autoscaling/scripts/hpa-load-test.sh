@@ -79,6 +79,7 @@ else
   SCALE_UP_POLL_SEC="${SCALE_UP_POLL_SEC:-10}"
 fi
 
+MAX_REPLICAS_HOLD_SEC="${MAX_REPLICAS_HOLD_SEC:-15}"
 DURATION_SEC="${DURATION_SEC:-720}"
 SCALE_UP_TARGET="${SCALE_UP_TARGET:-${TARGET_PODS}}"
 SCALE_UP_WAIT_LOOPS="${SCALE_UP_WAIT_LOOPS:-60}"
@@ -121,8 +122,10 @@ HPA_HELM_ARGS=(
   --set autoscaling.minReplicas=1
   --set autoscaling.maxReplicas="${TARGET_PODS}"
   --set autoscaling.maxGpus="${TARGET_PODS}"
-  --set "autoscaling.metric=gpu"
+  --set "autoscaling.metric=${HPA_METRIC:-gpu}"
   --set "autoscaling.targetGPUUtilizationPercentage=${HPA_TARGET_GPU}"
+  --set "autoscaling.targetLatencyMilliseconds=${HPA_TARGET_LATENCY_MS:-5000}"
+  --set-string "autoscaling.targetRequestRate=${HPA_TARGET_REQUEST_RATE:-2}"
   --set "ingress.allowInsecureHttp=${ALLOW_INSECURE_VALUE}"
   --set "ingress.gateway.enabled=$(hpa_common_envoy_lb_helm_value)"
   --set "ingress.gateway.serviceType=${INGRESS_SERVICE_TYPE:-ClusterIP}"
@@ -347,6 +350,8 @@ ${LOAD_TEST_NODE_SELECTOR}
               value: "${RAMP_SEC}"
             - name: DURATION_SEC
               value: "${DURATION_SEC}"
+            - name: MAX_REPLICAS_HOLD_SEC
+              value: "${MAX_REPLICAS_HOLD_SEC}"
             - name: MAX_TOKENS
               value: "${MAX_TOKENS}"
             - name: ESCALATE_INTERVAL_SEC
@@ -385,7 +390,7 @@ ${LOAD_TEST_NODE_SELECTOR}
 EOF
 
 PER_POD_PEAK=$((INFLIGHT_PER_GPU * LOAD_MULTIPLIER))
-hpa_common_log "GPU load: ${JOB_PARALLELISM} generators × ${MAX_TOKENS} tokens → each Ready agent pod; base ~${PER_POD_PEAK} in-flight/pod (${LOAD_MULTIPLIER}×), cap ${MAX_INFLIGHT_PER_POD}/pod, warmup ${WARMUP_SEC}s, bootstrap ${BOOTSTRAP_INFLIGHT}; HPA target ${HPA_TARGET_GPU}% → max ${TARGET_PODS} replicas"
+hpa_common_log "Load: ${JOB_PARALLELISM} generators × ${MAX_TOKENS} tokens → each Ready agent pod; base ~${PER_POD_PEAK} in-flight/pod (${LOAD_MULTIPLIER}×), cap ${MAX_INFLIGHT_PER_POD}/pod, warmup ${WARMUP_SEC}s, bootstrap ${BOOTSTRAP_INFLIGHT}; metric=${HPA_METRIC:-gpu} → max ${TARGET_PODS} replicas (stop after ${MAX_REPLICAS_HOLD_SEC}s at max)"
 
 kubectl wait --for=condition=ready pod -l "job-name=${JOB_NAME}" -n "${NAMESPACE}" --timeout=120s >/dev/null 2>&1 || {
   echo "Load-generator pods not ready — check: kubectl get pods -n ${NAMESPACE} -l job-name=${JOB_NAME}" >&2

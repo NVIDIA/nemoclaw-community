@@ -177,11 +177,13 @@ autoscaling:
   maxReplicas: 4
   maxGpus: 4
   # Scripts default maxReplicas/maxGpus to allocatable GPU count (N) unless MAX_REPLICAS is set.
-  # This recipe validates Kubernetes HPA on DCGM GPU utilization only.
-  # Latency / request_rate HPA modes are deferred to a follow-up PR.
+  # Examples: gpu | latency_avg (also latency_p50 | latency_p95 | request_rate).
+  # Or wire a custom Adapter metric and extend nemoclaw-gpu.hpaMetric helpers.
   metric: gpu
-  # Used when metric=gpu (percent).
   targetGPUUtilizationPercentage: 40
+  # Latency targets are milliseconds (e.g. 3000 = 3s).
+  targetLatencyMilliseconds: 3000
+  targetRequestRate: "2"
   behavior:
     # One pod per reconcile — gradual scale-up so load-test / demos show each step
     # instead of jumping straight to ceil(currentReplicas * current/target).

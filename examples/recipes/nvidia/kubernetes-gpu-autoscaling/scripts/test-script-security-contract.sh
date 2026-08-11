@@ -204,6 +204,14 @@ assert_hpa_format \
   'GPU UTIL %' \
   '30.25%/40%'
 
+# Latency HPA targets are AbsoluteValue milliseconds; Kubernetes may serialize
+# 3000 as "3k" and fractional values as "...m" — scripts print plain ms numbers.
+assert_hpa_format \
+  '{"items":[{"metadata":{"name":"latency-hpa"},"spec":{"scaleTargetRef":{"kind":"Deployment","name":"agent"},"metrics":[{"type":"Pods","pods":{"metric":{"name":"nemoclaw_llm_latency_avg_milliseconds"},"target":{"type":"AverageValue","averageValue":"3k"}}}]},"status":{"currentMetrics":[{"type":"Pods","pods":{"current":{"averageValue":"3099666m"}}}]}}]}' \
+  'LLM latency (avg per pod): current / target (ms)' \
+  'LATENCY ms' \
+  '3099.67/3000'
+
 KUBECTL_LOG="${TEST_TMP}/kubectl.log"
 export KUBECTL_LOG
 

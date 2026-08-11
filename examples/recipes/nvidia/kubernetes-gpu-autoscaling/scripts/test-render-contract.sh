@@ -5,8 +5,9 @@
 # Static (no cluster required) Helm render test for the HPA/Deployment/Service/
 # ServiceMonitor label-and-name contract this chart depends on at runtime:
 #   - hpa.yaml's scaleTargetRef.name must match deployment.yaml's Deployment name.
-#   - hpa.yaml defaults to gpu_utilization_percent (GPU utilization HPA only in this recipe).
+#   - hpa.yaml defaults to gpu_utilization_percent (GPU utilization HPA example).
 #     Target must match values.autoscaling.targetGPUUtilizationPercentage.
+#   - autoscaling.metric=latency_* / request_rate must render the matching custom metric.
 #   - A legacy autoscaling.gpu.metricName override must not change the selected metric.
 #   - service.yaml's selector and servicemonitor.yaml's selector must both match
 #     deployment.yaml's pod template labels — otherwise the Service has no
@@ -658,23 +659,47 @@ PYEOF
 
 LATENCY_RENDERED_FILE="$(mktemp)"
 trap 'rm -f "${TLS_RENDERED_FILE}" "${EIGHT_GPU_RENDERED_FILE}" "${TARGET_NODE_RENDERED_FILE}" "${RENDERED_FILE}" "${EXISTING_SECRET_RENDERED_FILE}" "${DOTTED_KEY_RENDERED_FILE}" "${LATENCY_RENDERED_FILE}"' EXIT
-if LATENCY_RENDER_OUTPUT="$(helm template latency-metric-check "${CHART_DIR}" \
+helm template latency-metric-check "${CHART_DIR}" \
   "${AUTH_HELM_SETS[@]}" \
   -f "${CHART_DIR}/values.yaml" \
   --set autoscaling.enabled=true \
-  --set-string autoscaling.metric=latency_p95 \
-  --set autoscaling.targetLatencyMilliseconds=2500 \
+  --set-string autoscaling.metric=latency_avg \
+  --set autoscaling.targetLatencyMilliseconds=3000 \
+  --set ingress.allowInsecureHttp=true >"${LATENCY_RENDERED_FILE}"
+python3 - "${LATENCY_RENDERED_FILE}" <<'PYEOF'
+import sys
+import yaml
+
+docs = [doc for doc in yaml.safe_load_all(open(sys.argv[1])) if doc]
+hpa = next(doc for doc in docs if doc.get("kind") == "HorizontalPodAutoscaler")
+metric = hpa["spec"]["metrics"][0]["pods"]
+name = metric["metric"]["name"]
+target = metric["target"]["averageValue"]
+if name != "nemoclaw_llm_latency_avg_milliseconds":
+    print(f"FAIL: latency_avg HPA metric={name!r}", file=sys.stderr)
+    sys.exit(1)
+if str(target) != "3000":
+    print(f"FAIL: latency_avg target={target!r}, expected '3000'", file=sys.stderr)
+    sys.exit(1)
+PYEOF
+echo "OK: chart renders latency_avg HPA metric mode"
+
+if BAD_METRIC_OUTPUT="$(helm template bad-metric-check "${CHART_DIR}" \
+  "${AUTH_HELM_SETS[@]}" \
+  -f "${CHART_DIR}/values.yaml" \
+  --set autoscaling.enabled=true \
+  --set-string autoscaling.metric=not_a_real_metric \
   --set ingress.allowInsecureHttp=true 2>&1)"; then
-  echo "FAIL: chart rendered unsupported autoscaling.metric=latency_p95" >&2
+  echo "FAIL: chart rendered unsupported autoscaling.metric=not_a_real_metric" >&2
   exit 1
 fi
-if [[ "${LATENCY_RENDER_OUTPUT}" != *"unsupported"* ]] \
-  || [[ "${LATENCY_RENDER_OUTPUT}" != *"latency_p95"* ]]; then
-  echo "FAIL: latency_p95 rejection returned an unexpected error" >&2
-  printf '%s\n' "${LATENCY_RENDER_OUTPUT}" >&2
+if [[ "${BAD_METRIC_OUTPUT}" != *"unsupported"* ]] \
+  || [[ "${BAD_METRIC_OUTPUT}" != *"not_a_real_metric"* ]]; then
+  echo "FAIL: unknown metric rejection returned an unexpected error" >&2
+  printf '%s\n' "${BAD_METRIC_OUTPUT}" >&2
   exit 1
 fi
-echo "OK: chart rejects deferred latency HPA metric modes"
+echo "OK: chart rejects unknown HPA metric modes"
 
 echo "OK: chart rejects cleartext Gateway without explicit opt-in"
 echo "OK: chart requires in-cluster inference authentication"

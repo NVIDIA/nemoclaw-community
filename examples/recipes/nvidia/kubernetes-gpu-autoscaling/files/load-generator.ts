@@ -48,6 +48,9 @@ const CIRCUIT_BREAKER_BACKOFF = Number(process.env.CIRCUIT_BREAKER_BACKOFF || 0.
 const MIN_INFLIGHT_FLOOR = Number(process.env.MIN_INFLIGHT_FLOOR || 8);
 const MIN_RECOVERY_INFLIGHT = Number(process.env.MIN_RECOVERY_INFLIGHT || 4);
 const READYZ_GRACE_SEC = Number(process.env.READYZ_GRACE_SEC || 45);
+// After HPA has held max replicas (and Ready load targets) for this long, stop
+// creating new load so scale-down can begin — applies to GPU util, latency, etc.
+const MAX_REPLICAS_HOLD_SEC = Number(process.env.MAX_REPLICAS_HOLD_SEC || 15);
 const REQUIRE_CHAT_PROBE =
   process.env.REQUIRE_CHAT_PROBE === "1" || process.env.REQUIRE_CHAT_PROBE === "true";
 const PROBE_CHAT_TIMEOUT_MS = Number(process.env.PROBE_CHAT_TIMEOUT_MS || 30_000);
@@ -69,6 +72,7 @@ let hpaReplicas = 1;
 let hpaDesired = 1;
 let loadCompensation = 1;
 let lastTargetPoll = 0;
+let forceStopLoad = false;
 const podFirstSeen = new Map();
 const targetBackoff = new Map();
 const targetChatOk = new Set();
@@ -512,8 +516,8 @@ async function runTargetWorker(target, questions, endAt, stats) {
   const state = { limit: 2, tasks: new Set() };
   targetWorkers.set(target, state);
 
-  while (Date.now() < endAt) {
-    while (state.tasks.size < state.limit && Date.now() < endAt) {
+  while (Date.now() < endAt && !forceStopLoad) {
+    while (state.tasks.size < state.limit && Date.now() < endAt && !forceStopLoad) {
       const p = ask(target, questions, stats)
         .catch((err) => {
           stats.fail += 1;
@@ -537,7 +541,9 @@ function syncTargetWorkers(targets, startedAt, stats) {
   for (const target of active) {
     scheduleWarmTarget(target);
     const inferenceReady = readySet.has(target);
-    const limit = inflightForTarget(target, startedAt, inferenceReady, stats);
+    const limit = forceStopLoad
+      ? 0
+      : inflightForTarget(target, startedAt, inferenceReady, stats);
     const worker = targetWorkers.get(target);
     if (worker) worker.limit = limit;
   }
@@ -556,6 +562,7 @@ async function main() {
   const stats = { chat: 0, fail: 0 };
   let lastLog = startedAt;
   let lastUnevenLog = 0;
+  let atMaxSince = null;
 
   console.log(
     JSON.stringify({
@@ -568,6 +575,7 @@ async function main() {
       maxTokens: MAX_TOKENS,
       rampSec: RAMP_SEC,
       durationSec: DURATION_SEC,
+      maxReplicasHoldSec: MAX_REPLICAS_HOLD_SEC,
       loadModel: "direct-pod-IP saturation (multi-replica floor, per-target backoff, no full idle)",
       maxInflightPerPod: MAX_INFLIGHT_PER_POD,
       escalateMaxMult: ESCALATE_MAX_MULT,
@@ -582,6 +590,34 @@ async function main() {
     if (!targets.length) {
       await sleep(1000);
       continue;
+    }
+
+    const atMax =
+      hpaReplicas >= TARGET_PODS &&
+      hpaDesired >= TARGET_PODS &&
+      podTargets.length >= TARGET_PODS;
+    if (atMax) {
+      if (atMaxSince == null) atMaxSince = Date.now();
+      const heldSec = (Date.now() - atMaxSince) / 1000;
+      if (heldSec >= MAX_REPLICAS_HOLD_SEC) {
+        console.log(
+          JSON.stringify({
+            event: "stopAtMaxReplicas",
+            hpaReplicas,
+            hpaDesired,
+            readyLoadTargets: podTargets.length,
+            targetPods: TARGET_PODS,
+            heldSec: Math.round(heldSec),
+            maxReplicasHoldSec: MAX_REPLICAS_HOLD_SEC,
+            message: "max replicas held — stopping new load so HPA can scale down",
+          }),
+        );
+        forceStopLoad = true;
+        for (const worker of targetWorkers.values()) worker.limit = 0;
+        break;
+      }
+    } else {
+      atMaxSince = null;
     }
 
     if (hpaReplicas > podTargets.length && Date.now() - lastUnevenLog >= 30_000) {
@@ -627,6 +663,7 @@ async function main() {
           chat: stats.chat,
           fail: stats.fail,
           elapsedSec: Math.round((Date.now() - startedAt) / 1000),
+          atMaxReplicasHoldSec: atMaxSince == null ? 0 : Math.round((Date.now() - atMaxSince) / 1000),
         }),
       );
       lastLog = Date.now();
@@ -635,6 +672,8 @@ async function main() {
     await sleep(1000);
   }
 
+  forceStopLoad = true;
+  for (const worker of targetWorkers.values()) worker.limit = 0;
   await Promise.all([...workerPromises.values()]);
 
   console.log(`done chat=${stats.chat} fail=${stats.fail} lastPodCount=${podTargets.length}`);

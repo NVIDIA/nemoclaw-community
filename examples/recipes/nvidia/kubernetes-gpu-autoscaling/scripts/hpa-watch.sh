@@ -2,8 +2,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Live HPA watch (kubectl native streaming).
-# Same as: kubectl get hpa -n nemoclaw-gpu -w
+# Live HPA watch with normalized targets (GPU % or latency ms).
+# Prefer this over: kubectl get hpa -n nemoclaw-gpu -w
+# (kubectl prints Quantity suffixes like 3k / 3099666m).
 
 set -euo pipefail
 

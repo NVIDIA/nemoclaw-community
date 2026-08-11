@@ -25,8 +25,9 @@ print(f"{name}\t{key}")
 ' "${default_name}"
 }
 
-# Kubernetes custom metrics use Quantity milli-units (33500m = 33.5). Format as plain % for scripts.
-# Style: script (GPU UTIL % column + subtitle) | kubectl (matches kubectl get hpa TARGETS column).
+# Kubernetes custom metrics use Quantity (30250m, 3k). Scripts normalize display:
+# GPU util → plain %, latency → plain ms (never kubectl's m/k suffixes).
+# Style: script (metric-aware column + subtitle) | kubectl (TARGETS column, still normalized).
 hpa_common_format_hpa() {
   local ns="${1:?namespace}"
   local headers="${2:-1}"
@@ -39,14 +40,40 @@ ns, headers = sys.argv[1], sys.argv[2] == "1"
 style = sys.argv[3] if len(sys.argv) > 3 else "script"
 
 def qty(raw):
+    """Parse a Kubernetes resource.Quantity (e.g. 40, 30250m, 3k)."""
+    import re
     if raw is None:
         return None
     s = str(raw).strip()
     if not s or s == "<unknown>":
         return None
-    if s.endswith("m"):
-        return float(s[:-1]) / 1000.0
-    return float(s)
+    m = re.fullmatch(
+        r"([+-]?(?:\d+(?:\.\d*)?|\.\d+))(n|u|m|k|Ki|Mi|Gi|Ti|Pi|Ei|[KMGTP])?",
+        s,
+    )
+    if not m:
+        raise ValueError(f"invalid quantity: {raw!r}")
+    n = float(m.group(1))
+    suf = m.group(2) or ""
+    scale = {
+        "n": 1e-9,
+        "u": 1e-6,
+        "m": 1e-3,
+        "": 1.0,
+        "k": 1e3,
+        "M": 1e6,
+        "G": 1e9,
+        "T": 1e12,
+        "P": 1e15,
+        "E": 1e18,
+        "Ki": 1024.0,
+        "Mi": 1024.0 ** 2,
+        "Gi": 1024.0 ** 3,
+        "Ti": 1024.0 ** 4,
+        "Pi": 1024.0 ** 5,
+        "Ei": 1024.0 ** 6,
+    }[suf]
+    return n * scale
 
 def fmt_pct(n):
     if n is None:
@@ -55,6 +82,21 @@ def fmt_pct(n):
         return f"{int(round(n))}%"
     s = f"{n:.2f}".rstrip("0").rstrip(".")
     return f"{s}%"
+
+def fmt_ms(n):
+    """Latency as a plain millisecond number (unit documented in header/README)."""
+    if n is None:
+        return "?"
+    if abs(n - round(n)) < 0.05:
+        return str(int(round(n)))
+    return f"{n:.2f}".rstrip("0").rstrip(".")
+
+def fmt_rate(n):
+    if n is None:
+        return "?"
+    if abs(n - round(n)) < 1e-6:
+        return f"{int(round(n))}/s"
+    return f"{n:.2f}/s"
 
 def age(ts):
     if not ts:
@@ -69,6 +111,21 @@ def age(ts):
         return f"{secs // 3600}h"
     return f"{secs // 86400}d"
 
+def metric_name(h):
+    for sm in h.get("spec", {}).get("metrics") or []:
+        if sm.get("type") == "Pods":
+            return ((sm.get("pods") or {}).get("metric") or {}).get("name") or ""
+    return ""
+
+def metric_kind(name):
+    if name == "gpu_utilization_percent":
+        return "gpu"
+    if "latency" in name and "millisecond" in name:
+        return "latency"
+    if "request_rate" in name:
+        return "rate"
+    return "other"
+
 def targets(h):
     spec_metrics = h.get("spec", {}).get("metrics") or []
     current = h.get("status", {}).get("currentMetrics") or []
@@ -78,12 +135,17 @@ def targets(h):
         cm = current[i] if i < len(current) else {}
         if mtype == "Pods":
             name = sm["pods"]["metric"]["name"]
+            kind = metric_kind(name)
             target = sm["pods"]["target"]
             tgt_raw = target.get("averageValue") or target.get("value")
             cur_raw = (cm.get("pods") or {}).get("current", {})
             cur_raw = cur_raw.get("averageValue") or cur_raw.get("value")
-            if name == "gpu_utilization_percent":
+            if kind == "gpu":
                 parts.append(f"{fmt_pct(qty(cur_raw))}/{fmt_pct(qty(tgt_raw))}")
+            elif kind == "latency":
+                parts.append(f"{fmt_ms(qty(cur_raw))}/{fmt_ms(qty(tgt_raw))}")
+            elif kind == "rate":
+                parts.append(f"{fmt_rate(qty(cur_raw))}/{fmt_rate(qty(tgt_raw))}")
             else:
                 cur_v = qty(cur_raw)
                 tgt_v = qty(tgt_raw)
@@ -92,7 +154,7 @@ def targets(h):
                 parts.append(f"{cur_s}/{tgt_s}")
     return " ".join(parts) if parts else "<unknown>"
 
-def print_row(h):
+def print_row(h, col_w=22):
     meta = h["metadata"]
     spec = h["spec"]
     status = h.get("status") or {}
@@ -103,7 +165,7 @@ def print_row(h):
         print(
             f"{meta['name']:<20} "
             f"{ref_str:<31} "
-            f"{tgt:<11} "
+            f"{tgt:<22} "
             f"{spec.get('minReplicas', ''):<9} "
             f"{spec.get('maxReplicas', ''):<9} "
             f"{status.get('currentReplicas', ''):<10} "
@@ -113,7 +175,7 @@ def print_row(h):
         print(
             f"{meta['name']:<22} "
             f"{ref_str:<31} "
-            f"{tgt:<18} "
+            f"{tgt:<{col_w}} "
             f"{spec.get('minReplicas', ''):<8} "
             f"{spec.get('maxReplicas', ''):<8} "
             f"{status.get('currentReplicas', ''):<10} "
@@ -133,30 +195,63 @@ except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError):
 if not items:
     sys.exit(1)
 
+kind = metric_kind(metric_name(items[0]))
+if kind == "latency":
+    subtitle = "LLM latency (avg per pod): current / target (ms)"
+    col = "LATENCY ms"
+    col_w = 22
+elif kind == "rate":
+    subtitle = "Request rate (avg per pod): current / target"
+    col = "REQ/s"
+    col_w = 18
+else:
+    subtitle = "GPU utilization rate (avg per pod): current / target"
+    col = "GPU UTIL %"
+    col_w = 18
+
 if headers:
     if style == "kubectl":
         print(
-            f"{'NAME':<20} {'REFERENCE':<31} {'TARGETS':<11} "
+            f"{'NAME':<20} {'REFERENCE':<31} {'TARGETS':<22} "
             f"{'MINPODS':<9} {'MAXPODS':<9} {'REPLICAS':<10} AGE"
         )
     else:
-        print("GPU utilization rate (avg per pod): current / target")
+        print(subtitle)
         print(
-            f"{'NAME':<22} {'REFERENCE':<31} {'GPU UTIL %':<18} "
+            f"{'NAME':<22} {'REFERENCE':<31} {col:<{col_w}} "
             f"{'MINPODS':<8} {'MAXPODS':<8} {'REPLICAS':<10} AGE"
         )
 
 for h in items:
-    print_row(h)
+    print_row(h, col_w)
 PY
 }
 
-# Autoscaling-only stdout: GPU utilization as 30.25%/40% (not kubectl milli-units).
+# Autoscaling-only stdout: normalized current/target (GPU %, latency ms) — not kubectl Quantity suffixes.
 hpa_common_print_hpa() {
   local ns="${1:?namespace}"
   if ! hpa_common_format_hpa "${ns}" 1 "script"; then
     kubectl get hpa -n "${ns}" 2>/dev/null || true
   fi
+}
+
+# Live watch with the same normalized TARGETS column (kubectl Quantity m/k suffixes hidden).
+hpa_common_watch_hpa() {
+  local ns="${1:?namespace}"
+  local interval="${HPA_WATCH_INTERVAL_SEC:-2}"
+  local last=""
+  local line=""
+  # Header once
+  hpa_common_format_hpa "${ns}" 1 "script" || true
+  last="$(hpa_common_format_hpa "${ns}" 0 "script" 2>/dev/null | head -1 || true)"
+  while true; do
+    sleep "${interval}"
+    line="$(hpa_common_format_hpa "${ns}" 0 "script" 2>/dev/null | head -1 || true)"
+    if [[ -n "${line}" && "${line}" != "${last}" ]]; then
+      printf '%s\n' "${line}"
+      last="${line}"
+    fi
+  done
 }
 
 # Agent pods + per-pod GPU % (same namespace as HPA).
@@ -168,14 +263,40 @@ import json, subprocess, sys
 ns = sys.argv[1]
 
 def qty(raw):
+    """Parse a Kubernetes resource.Quantity (e.g. 40, 30250m, 3k)."""
+    import re
     if raw is None:
         return None
     s = str(raw).strip()
     if not s or s == "<unknown>":
         return None
-    if s.endswith("m"):
-        return float(s[:-1]) / 1000.0
-    return float(s)
+    m = re.fullmatch(
+        r"([+-]?(?:\d+(?:\.\d*)?|\.\d+))(n|u|m|k|Ki|Mi|Gi|Ti|Pi|Ei|[KMGTP])?",
+        s,
+    )
+    if not m:
+        raise ValueError(f"invalid quantity: {raw!r}")
+    n = float(m.group(1))
+    suf = m.group(2) or ""
+    scale = {
+        "n": 1e-9,
+        "u": 1e-6,
+        "m": 1e-3,
+        "": 1.0,
+        "k": 1e3,
+        "M": 1e6,
+        "G": 1e9,
+        "T": 1e12,
+        "P": 1e15,
+        "E": 1e18,
+        "Ki": 1024.0,
+        "Mi": 1024.0 ** 2,
+        "Gi": 1024.0 ** 3,
+        "Ti": 1024.0 ** 4,
+        "Pi": 1024.0 ** 5,
+        "Ei": 1024.0 ** 6,
+    }[suf]
+    return n * scale
 
 def fmt_pct(n):
     if n is None:
@@ -1046,8 +1167,10 @@ hpa_common_gpu_helm_upgrade() {
     --set autoscaling.minReplicas="${min}"
     --set autoscaling.maxReplicas="${max}"
     --set autoscaling.maxGpus="${max}"
-    --set "autoscaling.metric=gpu"
+    --set "autoscaling.metric=${HPA_METRIC:-gpu}"
     --set "autoscaling.targetGPUUtilizationPercentage=${gpu_target}"
+    --set "autoscaling.targetLatencyMilliseconds=${HPA_TARGET_LATENCY_MS:-5000}"
+    --set-string "autoscaling.targetRequestRate=${HPA_TARGET_REQUEST_RATE:-2}"
     --set "ingress.allowInsecureHttp=${allow_insecure_http}"
     --set "ingress.gateway.enabled=$(hpa_common_envoy_lb_helm_value)"
     --set "ingress.gateway.serviceType=${INGRESS_SERVICE_TYPE:-ClusterIP}"
@@ -1303,12 +1426,16 @@ hpa_common_hpa_metric_display() {
   echo "HPA metric: ${metric:-unknown} target=${spec_target:-?}"
 }
 
-# Default HPA custom metric name (GPU utilization only in this recipe).
+# Default HPA custom metric name for the selected autoscaling.metric / HPA_METRIC.
 hpa_common_gpu_hpa_metric_name() {
   case "${HPA_METRIC:-gpu}" in
     gpu) echo "gpu_utilization_percent" ;;
+    latency_p50) echo "nemoclaw_llm_latency_p50_milliseconds" ;;
+    latency_p95) echo "nemoclaw_llm_latency_p95_milliseconds" ;;
+    latency_avg) echo "nemoclaw_llm_latency_avg_milliseconds" ;;
+    request_rate) echo "nemoclaw_llm_request_rate" ;;
     *)
-      echo "unsupported HPA_METRIC=${HPA_METRIC:-} (this recipe supports gpu only; latency/request_rate deferred)" >&2
+      echo "unsupported HPA_METRIC=${HPA_METRIC:-}" >&2
       return 1
       ;;
   esac
