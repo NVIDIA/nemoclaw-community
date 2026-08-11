@@ -30,7 +30,7 @@ OpenShell CLI → port-forward → OpenShell gateway → CPU-only NemoClaw sandb
 Runtime inference path (HPA scales to **N** Ollama pods, 1 GPU each). Envoy is optional: LeastRequest when enabled; agent ClusterIP Service when `ENABLE_ENVOY_LB=0`. Set `MAX_REPLICAS` / `TARGET_PODS` from allocatable GPUs — not fixed to 4.
 
 ```text
-a OpenShell CPU sandbox (a OpenClaw agent)
+CPU-only OpenShell sandbox (running an OpenClaw agent)
         ↓
 Envoy Gateway — LeastRequest  (or agent Service when ENABLE_ENVOY_LB=0)
         ↓
