@@ -330,7 +330,6 @@ kubectl get --raw \
 ./scripts/get-hpa.sh -n nemoclaw-gpu
 ```
 
-
 ## Verify
 
 ```bash
@@ -490,7 +489,6 @@ These two screenshots are **examples** (GPU util and latency). Users can choose 
 Load balancing without Grafana: `hpa-load-test.sh` (with Envoy enabled) runs a LeastRequest distribution check and logs per-pod success deltas. During or after scale-up, use `./scripts/get-agent-pods.sh -n nemoclaw-gpu` for per-pod GPU util, or scrape each pod’s `/metrics` for `nemoclaw_llm_requests_total{result="success"}`. Optional Grafana views: [Grafana: watch workload balancing](#grafana-watch-workload-balancing).
 
 
-
 ## Grafana: watch workload balancing
 
 Optional. Use Grafana while `./scripts/hpa-load-test.sh` (or other chat load) is running to watch the same two example HPA signals (GPU utilization and LLM latency) and how work spreads across replicas.
@@ -555,7 +553,6 @@ After scale-up you should see multiple pod series. Agent `/metrics` scraping is 
 |--------|---------|
 | `install-hpa.sh` | Monitoring + chart + HPA (+ Envoy if enabled) |
 | `hpa-load-test.sh` / `hpa-reset.sh` | Autoscaling (+ Envoy) test / restore idle |
-| `cluster-recover.sh` | Destructive release recovery |
 | `get-agent-pods.sh` / `get-hpa.sh` / `hpa-watch.sh` | Inspect / watch |
 | `build-nemoclaw-sandbox-image.sh` | Build/push sandbox image |
 | `install-openshell-k8s.sh` | OpenShell gateway |

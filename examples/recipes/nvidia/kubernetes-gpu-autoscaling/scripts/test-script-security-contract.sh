@@ -342,12 +342,6 @@ awk '
   END { exit !found }
 ' "${SCRIPT_DIR}/hpa-load-test.sh" \
   || fail "load test does not run cleanup before disabling its EXIT trap"
-if grep -q -- '--all' "${SCRIPT_DIR}/cluster-recover.sh"; then
-  fail "cluster recovery contains namespace-wide deletion"
-fi
-# shellcheck disable=SC2016 # Match the literal default expression in the target script.
-grep -Fq 'RESTART_MICROK8S="${RESTART_MICROK8S:-0}"' "${SCRIPT_DIR}/cluster-recover.sh" \
-  || fail "cluster recovery enables a MicroK8s restart by default"
 # shellcheck disable=SC2016 # Match the literal default expression in the target script.
 grep -Fq 'INGRESS_SERVICE_TYPE="${INGRESS_SERVICE_TYPE:-ClusterIP}"' "${SCRIPT_DIR}/install-hpa.sh" \
   || fail "installer gateway Service does not default to ClusterIP"
@@ -361,4 +355,4 @@ grep -Fq 'ingress.gateway.serviceType must be ClusterIP while the OpenShell clea
 grep -Fq 'INGRESS_NS="${INGRESS_NS:-envoy-gateway-system}"' "${SCRIPT_DIR}/install-hpa.sh" \
   || fail "installer does not default to the Envoy Gateway namespace"
 
-echo "OK: node targeting, recovery ownership, Envoy Gateway cleartext security, LeastRequest, and Kubernetes HPA formatting contracts hold"
+echo "OK: node targeting, Envoy Gateway cleartext security, LeastRequest, and Kubernetes HPA formatting contracts hold"
