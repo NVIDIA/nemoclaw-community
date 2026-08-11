@@ -71,8 +71,6 @@ Live-tested on [**Brev: AWS Instance**](https://brev.nvidia.com) with a single-n
 
 **4× L40S is an example layout**, not a hard limit. Set `MAX_REPLICAS` / `TARGET_PODS` to your allocatable GPU count (**N** — any number you have); install and load-test default to that N. Covered on the example hardware: chart deploy, optional Envoy LeastRequest, authenticated inference, Kubernetes HPA scale-up/down on GPU utilization, Envoy distribution across Ready GPU pods, and OpenShell sandbox → `https://inference.local/v1`.
 
-**Boundaries (short):** namespaces `nemoclaw-gpu` and `nemoclaw-sandboxes`; only Ollama pods request GPUs; Envoy dataplane must stay **ClusterIP** while the OpenShell cleartext HTTP listener exists (`NodePort`/`LoadBalancer` rejected); chart creates **no NetworkPolicy**; installer may touch shared Prometheus, Adapter, Envoy, DCGM ServiceMonitor, MicroK8s add-ons.
-
 ## Prerequisites
 
 - Kubernetes 1.25+ with `kubectl` (1.28+ preferred with Envoy / Gateway API)
