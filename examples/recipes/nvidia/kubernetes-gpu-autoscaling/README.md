@@ -483,24 +483,13 @@ Example from the validated 4× L40S run — HPA scale-up when average per-pod GP
 
 Example from the validated 4× L40S run — HPA scale-up when average per-pod latency > 3000 ms
 
-<img width="1888" height="826" alt="Screenshot 2026-08-10 at 11 37 41 PM" src="https://github.com/user-attachments/assets/a9b3a54c-6134-4a29-8c0d-93181c7b6ee5" />
+<img width="922" height="323" alt="Screenshot 2026-08-10 at 11 37 41 PM" src="https://github.com/user-attachments/assets/99d5d49a-ca39-4c94-9d73-a461da2c655a" />
 
 These two screenshots are **examples** (GPU util and latency). Users can choose other metrics or define their own customized metrics for HPA.
 
 Load balancing without Grafana: `hpa-load-test.sh` (with Envoy enabled) runs a LeastRequest distribution check and logs per-pod success deltas. During or after scale-up, use `./scripts/get-agent-pods.sh -n nemoclaw-gpu` for per-pod GPU util, or scrape each pod’s `/metrics` for `nemoclaw_llm_requests_total{result="success"}`. Optional Grafana views: [Grafana: watch workload balancing](#grafana-watch-workload-balancing).
 
-## Scripts
 
-| Script | Purpose |
-|--------|---------|
-| `install-hpa.sh` | Monitoring + chart + HPA (+ Envoy if enabled) |
-| `hpa-load-test.sh` / `hpa-reset.sh` | Autoscaling (+ Envoy) test / restore idle |
-| `cluster-recover.sh` | Destructive release recovery |
-| `get-agent-pods.sh` / `get-hpa.sh` / `hpa-watch.sh` | Inspect / watch |
-| `build-nemoclaw-sandbox-image.sh` | Build/push sandbox image |
-| `install-openshell-k8s.sh` | OpenShell gateway |
-| `create-nemoclaw-sandbox.sh` / `verify-nemoclaw-sandbox.sh` / `run-nemoclaw-sandbox.sh` | Sandbox lifecycle |
-| `test-*-contract.*` | Static / local contract checks |
 
 ## Grafana: watch workload balancing
 
@@ -559,6 +548,20 @@ sum by (pod) (
 ```
 
 After scale-up you should see multiple pod series. Agent `/metrics` scraping is on by default (`metrics.serviceMonitor.enabled: true`) after `install-hpa.sh`. If latency graphs stay empty while GPU util still moves, check `kubectl get servicemonitor -n nemoclaw-gpu` and re-run `install-hpa.sh` if the ServiceMonitor was disabled.
+
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `install-hpa.sh` | Monitoring + chart + HPA (+ Envoy if enabled) |
+| `hpa-load-test.sh` / `hpa-reset.sh` | Autoscaling (+ Envoy) test / restore idle |
+| `cluster-recover.sh` | Destructive release recovery |
+| `get-agent-pods.sh` / `get-hpa.sh` / `hpa-watch.sh` | Inspect / watch |
+| `build-nemoclaw-sandbox-image.sh` | Build/push sandbox image |
+| `install-openshell-k8s.sh` | OpenShell gateway |
+| `create-nemoclaw-sandbox.sh` / `verify-nemoclaw-sandbox.sh` / `run-nemoclaw-sandbox.sh` | Sandbox lifecycle |
+| `test-*-contract.*` | Static / local contract checks |
+
 
 ## Uninstall
 
