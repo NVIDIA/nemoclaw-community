@@ -5,9 +5,8 @@
 
 # NemoClaw Kubernetes GPU autoscaling
 
-Experimental community recipe: a CPU-only NemoClaw/OpenClaw sandbox (OpenShell) sends inference to authenticated Ollama pods in the same cluster. An HPA scales only those Ollama pods on per-pod GPU utilization. Unsupported / non-production.
+Experimental community recipe: a CPU-only NemoClaw/OpenClaw sandbox (OpenShell) sends inference to authenticated Ollama pods in the same cluster. An HPA scales only those Ollama pods on per-pod GPU utilization.
 
-Source baseline: [NVIDIA/NemoClaw#7459](https://github.com/NVIDIA/NemoClaw/pull/7459) at commit [`77334cc`](https://github.com/NVIDIA/NemoClaw/commit/77334ccbbadba2c5079fe9e99fe80a3cddc846b5) (`deploy/helm/gpu_autoscaling_k8s/`).
 
 **Envoy Gateway is optional.** When enabled (default), Envoy sits in front of the GPU replicas and load-balances with **LeastRequest**: each new request is sent to a Ready backend that currently has the fewest outstanding requests, so busy GPUs get less new traffic than idle ones. Skip Envoy when the agent ClusterIP Service is enough (round-robin / kube-proxy only — no LeastRequest):
 
@@ -18,7 +17,7 @@ Source baseline: [NVIDIA/NemoClaw#7459](https://github.com/NVIDIA/NemoClaw/pull/
 
 **New here?** Start with [Quick start](#quick-start). Teardown: [Uninstall](#uninstall).
 
-Pins in `versions.env` (keep them; do not float to `latest`): NemoClaw `v0.0.104`, OpenShell `0.0.85`, Agent Sandbox `v0.5.0`. Treat that file as one compatibility contract — NemoClaw’s blueprint only accepts a specific OpenShell range, and OpenShell’s K8s path pins Agent Sandbox. When upstream NemoClaw moves on: bump all three together in `versions.env`, rebuild/push a new sandbox image tag, re-apply Agent Sandbox if needed, reinstall/restart OpenShell, recreate the sandbox, then re-run verify + HPA checks to `MAX_REPLICAS` (allocatable GPUs).
+Keep the versions in `versions.env` align with NemoClaw blueprint: NemoClaw `v0.0.104`, OpenShell `0.0.85`, Agent Sandbox `v0.5.0`. NemoClaw blueprint only accepts a specific OpenShell range, and OpenShell’s K8s path pins Agent Sandbox. When upstream NemoClaw moves on: bump all three together in `versions.env`, rebuild/push a new sandbox image tag, re-apply Agent Sandbox if needed, reinstall/restart OpenShell, recreate the sandbox, then re-run verify + HPA checks to `MAX_REPLICAS` (allocatable GPUs).
 
 ## Architecture
 
@@ -44,7 +43,7 @@ HPA (example: GPU utilization)
 
 **Inference API key.** Chart-generated local Secret for Bearer auth on `/v1/models` and chat completions; users do not supply a cloud key. OpenShell injects it for the sandbox — not for Ollama model pulls, and not OpenAI/`NVIDIA_API_KEY`.
 
-**Kubernetes HPA metrics.** This recipe validates scale-out on GPU utilization (`DCGM_FI_DEV_GPU_UTIL` → Prometheus → Adapter `gpu_utilization_percent` → HPA). Alternate HPA signals (latency, request rate) are deferred to a follow-up PR.
+**Kubernetes HPA metrics.** This recipe validates scale-out on GPU utilization (`DCGM_FI_DEV_GPU_UTIL` → Prometheus → Adapter `gpu_utilization_percent` → HPA), and latency, request rate) are deferred to a follow-up PR.
 
 | Default | Value |
 |---------|-------|
