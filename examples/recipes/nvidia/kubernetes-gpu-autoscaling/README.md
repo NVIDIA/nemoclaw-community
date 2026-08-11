@@ -483,7 +483,7 @@ Example from the validated 4× L40S run — HPA scale-up when average per-pod GP
 
 Example from the validated 4× L40S run — HPA scale-up when average per-pod latency > 3000 ms
 
-<img width="922" height="323" alt="Screenshot 2026-08-10 at 11 37 41 PM" src="https://github.com/user-attachments/assets/a9b3a54c-6134-4a29-8c0d-93181c7b6ee5" />
+<img width="1888" height="826" alt="Screenshot 2026-08-10 at 11 37 41 PM" src="https://github.com/user-attachments/assets/a9b3a54c-6134-4a29-8c0d-93181c7b6ee5" />
 
 These two screenshots are **examples** (GPU util and latency). Users can choose other metrics or define their own customized metrics for HPA.
 
