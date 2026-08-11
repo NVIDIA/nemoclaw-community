@@ -31,6 +31,14 @@ Image: vllm/vllm-openai
 License: Apache-2.0 and included component licenses
 URL: https://github.com/vllm-project/vllm
 
+Image: node:22-bookworm-slim
+License: MIT and included Debian component licenses
+URL: https://hub.docker.com/_/node
+
+Image: ollama/ollama
+License: MIT and included component licenses
+URL: https://github.com/ollama/ollama
+
 ================================================================================
 Docker Compose Images
 ================================================================================
@@ -262,6 +270,46 @@ Project: NVIDIA/OpenShell installer and runtime
 License: Apache-2.0
 URL: https://github.com/NVIDIA/OpenShell
 
+Project: NVIDIA/NemoClaw source and sandbox base image
+License: Apache-2.0 and included component licenses
+URL: https://github.com/NVIDIA/NemoClaw
+
+Project: Kubernetes SIG Agent Sandbox controller and API
+License: Apache-2.0
+URL: https://github.com/kubernetes-sigs/agent-sandbox
+
+Project: Kubernetes and kubectl
+License: Apache-2.0
+URL: https://github.com/kubernetes/kubernetes
+
+Project: Helm
+License: Apache-2.0
+URL: https://github.com/helm/helm
+
+Project: Canonical MicroK8s distribution
+License: See the project and included component notices
+URL: https://github.com/canonical/microk8s
+
+Project: NVIDIA GPU Operator
+License: Apache-2.0
+URL: https://github.com/NVIDIA/gpu-operator
+
+Project: NVIDIA DCGM Exporter
+License: Apache-2.0
+URL: https://github.com/NVIDIA/dcgm-exporter
+
+Project: Kubernetes Metrics Server
+License: Apache-2.0
+URL: https://github.com/kubernetes-sigs/metrics-server
+
+Project: Prometheus Community Helm Charts (kube-prometheus-stack and prometheus-adapter)
+License: Apache-2.0 and included component licenses
+URL: https://github.com/prometheus-community/helm-charts
+
+Project: Kubernetes ingress-nginx
+License: Apache-2.0
+URL: https://github.com/kubernetes/ingress-nginx
+
 Project: Astral uv installer and package manager
 License: Apache-2.0 OR MIT
 URL: https://github.com/astral-sh/uv
@@ -285,6 +333,10 @@ URL: https://github.com/lfdevs/blender_linux_arm64
 Model: NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4
 License: NVIDIA Open Model License
 URL: https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4
+
+Model: Llama 3.2 3B
+License: Llama 3.2 Community License Agreement and Acceptable Use Policy
+URL: https://ollama.com/library/llama3.2
 
 Service: GitHub API
 Terms: See provider terms
