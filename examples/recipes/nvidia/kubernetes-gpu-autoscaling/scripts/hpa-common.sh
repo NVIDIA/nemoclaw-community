@@ -1046,10 +1046,8 @@ hpa_common_gpu_helm_upgrade() {
     --set autoscaling.minReplicas="${min}"
     --set autoscaling.maxReplicas="${max}"
     --set autoscaling.maxGpus="${max}"
-    --set "autoscaling.metric=${HPA_METRIC:-gpu}"
+    --set "autoscaling.metric=gpu"
     --set "autoscaling.targetGPUUtilizationPercentage=${gpu_target}"
-    --set "autoscaling.targetLatencyMilliseconds=${HPA_TARGET_LATENCY_MS:-5000}"
-    --set-string "autoscaling.targetRequestRate=${HPA_TARGET_REQUEST_RATE:-2}"
     --set "ingress.allowInsecureHttp=${allow_insecure_http}"
     --set "ingress.gateway.enabled=$(hpa_common_envoy_lb_helm_value)"
     --set "ingress.gateway.serviceType=${INGRESS_SERVICE_TYPE:-ClusterIP}"
@@ -1305,16 +1303,12 @@ hpa_common_hpa_metric_display() {
   echo "HPA metric: ${metric:-unknown} target=${spec_target:-?}"
 }
 
-# Default HPA custom metric name for the selected autoscaling.metric / HPA_METRIC.
+# Default HPA custom metric name (GPU utilization only in this recipe).
 hpa_common_gpu_hpa_metric_name() {
   case "${HPA_METRIC:-gpu}" in
     gpu) echo "gpu_utilization_percent" ;;
-    latency_p50) echo "nemoclaw_llm_latency_p50_milliseconds" ;;
-    latency_p95) echo "nemoclaw_llm_latency_p95_milliseconds" ;;
-    latency_avg) echo "nemoclaw_llm_latency_avg_milliseconds" ;;
-    request_rate) echo "nemoclaw_llm_request_rate" ;;
     *)
-      echo "unsupported HPA_METRIC=${HPA_METRIC:-}" >&2
+      echo "unsupported HPA_METRIC=${HPA_METRIC:-} (this recipe supports gpu only; latency/request_rate deferred)" >&2
       return 1
       ;;
   esac

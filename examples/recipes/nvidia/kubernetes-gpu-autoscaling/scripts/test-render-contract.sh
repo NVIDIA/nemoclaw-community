@@ -5,9 +5,8 @@
 # Static (no cluster required) Helm render test for the HPA/Deployment/Service/
 # ServiceMonitor label-and-name contract this chart depends on at runtime:
 #   - hpa.yaml's scaleTargetRef.name must match deployment.yaml's Deployment name.
-#   - hpa.yaml defaults to gpu_utilization_percent; autoscaling.metric can select
-#     latency_p50|latency_p95|latency_avg|request_rate. Target must match the
-#     corresponding values.autoscaling target field.
+#   - hpa.yaml defaults to gpu_utilization_percent (GPU utilization HPA only in this recipe).
+#     Target must match values.autoscaling.targetGPUUtilizationPercentage.
 #   - A legacy autoscaling.gpu.metricName override must not change the selected metric.
 #   - service.yaml's selector and servicemonitor.yaml's selector must both match
 #     deployment.yaml's pod template labels — otherwise the Service has no
@@ -178,6 +177,28 @@ if [[ "${EXPOSURE_RENDER_OUTPUT}" != *"${EXPECTED_EXPOSURE_ERROR}"* ]]; then
   exit 1
 fi
 echo "OK: chart rejects NodePort/LoadBalancer while OpenShell cleartext HTTP listener is present"
+
+# ingress.pathType must be Prefix or Exact — never silently coerce other values.
+PATHTYPE_ERROR='ingress.pathType'
+for bad_path_type in ImplementationSpecific Invalid Foo; do
+  PATHTYPE_RENDER_OUTPUT=""
+  if PATHTYPE_RENDER_OUTPUT="$(helm template pathtype-policy-check "${CHART_DIR}" \
+    "${AUTH_HELM_SETS[@]}" \
+    -f "${CHART_DIR}/values.yaml" \
+    --set autoscaling.enabled=true \
+    --set ingress.allowInsecureHttp=true \
+    --set-string "ingress.pathType=${bad_path_type}" 2>&1)"; then
+    echo "FAIL: chart rendered with unsupported ingress.pathType=${bad_path_type}" >&2
+    exit 1
+  fi
+  if [[ "${PATHTYPE_RENDER_OUTPUT}" != *"${PATHTYPE_ERROR}"* ]] \
+    || [[ "${PATHTYPE_RENDER_OUTPUT}" != *"Prefix or Exact"* ]]; then
+    echo "FAIL: unsupported pathType=${bad_path_type} failed for an unexpected reason" >&2
+    printf '%s\n' "${PATHTYPE_RENDER_OUTPUT}" >&2
+    exit 1
+  fi
+done
+echo "OK: chart rejects unsupported ingress.pathType values"
 
 TLS_RENDERED_FILE="$(mktemp)"
 trap 'rm -f "${TLS_RENDERED_FILE}"' EXIT
@@ -637,33 +658,23 @@ PYEOF
 
 LATENCY_RENDERED_FILE="$(mktemp)"
 trap 'rm -f "${TLS_RENDERED_FILE}" "${EIGHT_GPU_RENDERED_FILE}" "${TARGET_NODE_RENDERED_FILE}" "${RENDERED_FILE}" "${EXISTING_SECRET_RENDERED_FILE}" "${DOTTED_KEY_RENDERED_FILE}" "${LATENCY_RENDERED_FILE}"' EXIT
-helm template latency-metric-check "${CHART_DIR}" \
+if LATENCY_RENDER_OUTPUT="$(helm template latency-metric-check "${CHART_DIR}" \
   "${AUTH_HELM_SETS[@]}" \
   -f "${CHART_DIR}/values.yaml" \
   --set autoscaling.enabled=true \
   --set-string autoscaling.metric=latency_p95 \
   --set autoscaling.targetLatencyMilliseconds=2500 \
-  --set ingress.allowInsecureHttp=true \
-  >"${LATENCY_RENDERED_FILE}"
-python3 - "${LATENCY_RENDERED_FILE}" <<'PYEOF'
-import sys
-import yaml
-
-with open(sys.argv[1]) as f:
-    docs = [doc for doc in yaml.safe_load_all(f) if doc]
-hpa = next(doc for doc in docs if doc.get("kind") == "HorizontalPodAutoscaler")
-metric = hpa["spec"]["metrics"][0]["pods"]
-if metric["metric"]["name"] != "nemoclaw_llm_latency_p95_milliseconds":
-    print(f"FAIL: latency_p95 HPA metric={metric['metric']['name']!r}", file=sys.stderr)
-    sys.exit(1)
-if str(metric["target"]["averageValue"]) != "2500":
-    print(f"FAIL: latency_p95 target={metric['target']['averageValue']!r}, expected 2500", file=sys.stderr)
-    sys.exit(1)
-if hpa["metadata"]["annotations"].get("nemoclaw.ai/hpa-mode") != "latency_p95":
-    print("FAIL: HPA mode annotation was not latency_p95", file=sys.stderr)
-    sys.exit(1)
-print("OK: autoscaling.metric=latency_p95 selects LLM latency HPA target")
-PYEOF
+  --set ingress.allowInsecureHttp=true 2>&1)"; then
+  echo "FAIL: chart rendered unsupported autoscaling.metric=latency_p95" >&2
+  exit 1
+fi
+if [[ "${LATENCY_RENDER_OUTPUT}" != *"unsupported"* ]] \
+  || [[ "${LATENCY_RENDER_OUTPUT}" != *"latency_p95"* ]]; then
+  echo "FAIL: latency_p95 rejection returned an unexpected error" >&2
+  printf '%s\n' "${LATENCY_RENDER_OUTPUT}" >&2
+  exit 1
+fi
+echo "OK: chart rejects deferred latency HPA metric modes"
 
 echo "OK: chart rejects cleartext Gateway without explicit opt-in"
 echo "OK: chart requires in-cluster inference authentication"

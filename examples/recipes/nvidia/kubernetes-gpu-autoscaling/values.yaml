@@ -177,20 +177,11 @@ autoscaling:
   maxReplicas: 4
   maxGpus: 4
   # Scripts default maxReplicas/maxGpus to allocatable GPU count (N) unless MAX_REPLICAS is set.
-  # Which Pods custom metric drives the HPA (example signals — pick one):
-  #   gpu          — DCGM GPU utilization % (default; good for "need more GPUs")
-  #   latency_p50  — end-to-end chat latency p50 (ms) from agent /metrics
-  #   latency_p95  — end-to-end chat latency p95 (ms)
-  #   latency_avg  — end-to-end chat latency average (ms)
-  #   request_rate — successful chat completions per second per pod
-  # Scripts: HPA_METRIC=gpu|latency_p50|latency_p95|latency_avg|request_rate
+  # This recipe validates Kubernetes HPA on DCGM GPU utilization only.
+  # Latency / request_rate HPA modes are deferred to a follow-up PR.
   metric: gpu
   # Used when metric=gpu (percent).
   targetGPUUtilizationPercentage: 40
-  # Used when metric=latency_* (milliseconds). Raise replicas when average pod latency exceeds this.
-  targetLatencyMilliseconds: 5000
-  # Used when metric=request_rate (successful completions / second / pod).
-  targetRequestRate: "2"
   behavior:
     # One pod per reconcile — gradual scale-up so load-test / demos show each step
     # instead of jumping straight to ceil(currentReplicas * current/target).

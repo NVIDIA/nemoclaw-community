@@ -168,7 +168,7 @@ ensure_prometheus_stack() {
     sleep 5
   done
   custom_metrics_ready || {
-    echo "custom.metrics.k8s.io not ready — HPA cannot use ${HPA_METRIC:-gpu} metrics" >&2
+    echo "custom.metrics.k8s.io not ready — HPA cannot use gpu_utilization_percent" >&2
     exit 1
   }
 }

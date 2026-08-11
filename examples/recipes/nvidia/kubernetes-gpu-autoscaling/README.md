@@ -5,7 +5,9 @@
 
 # NemoClaw Kubernetes GPU autoscaling
 
-Experimental community recipe: a CPU-only NemoClaw/OpenClaw sandbox (OpenShell) sends inference to authenticated Ollama pods in the same cluster. An HPA scales only those Ollama pods. This recipe’s example signal is per-pod GPU utilization; you can switch the HPA to other or custom metrics. Unsupported / non-production.
+Experimental community recipe: a CPU-only NemoClaw/OpenClaw sandbox (OpenShell) sends inference to authenticated Ollama pods in the same cluster. An HPA scales only those Ollama pods on per-pod GPU utilization. Unsupported / non-production.
+
+Source baseline: [NVIDIA/NemoClaw#7459](https://github.com/NVIDIA/NemoClaw/pull/7459) at commit [`77334cc`](https://github.com/NVIDIA/NemoClaw/commit/77334ccbbadba2c5079fe9e99fe80a3cddc846b5) (`deploy/helm/gpu_autoscaling_k8s/`).
 
 **Envoy Gateway is optional.** When enabled (default), Envoy sits in front of the GPU replicas and load-balances with **LeastRequest**: each new request is sent to a Ready backend that currently has the fewest outstanding requests, so busy GPUs get less new traffic than idle ones. Skip Envoy when the agent ClusterIP Service is enough (round-robin / kube-proxy only — no LeastRequest):
 
@@ -42,13 +44,7 @@ HPA (example: GPU utilization)
 
 **Inference API key.** Chart-generated local Secret for Bearer auth on `/v1/models` and chat completions; users do not supply a cloud key. OpenShell injects it for the sandbox — not for Ollama model pulls, and not OpenAI/`NVIDIA_API_KEY`.
 
-**Kubernetes HPA metrics.** GPU utilization is an example autoscaling signal (`DCGM_FI_DEV_GPU_UTIL` → Prometheus → Adapter → HPA) and is the metric validated on the reference hardware. Alternate Pods metrics are supported — for example `latency_p95`:
-
-```bash
-HPA_METRIC=latency_p95 HPA_TARGET_LATENCY_MS=5000 ./scripts/install-hpa.sh
-```
-
-The same mechanism applies to `latency_p50`, `latency_avg`, and `request_rate`. Validate scale-out with `./scripts/hpa-load-test.sh` before using an alternate metric in production-like runs. See [Kubernetes HPA metrics](#kubernetes-hpa-metrics).
+**Kubernetes HPA metrics.** This recipe validates scale-out on GPU utilization (`DCGM_FI_DEV_GPU_UTIL` → Prometheus → Adapter `gpu_utilization_percent` → HPA). Alternate HPA signals (latency, request rate) are deferred to a follow-up PR.
 
 | Default | Value |
 |---------|-------|
@@ -288,38 +284,14 @@ Helm field: `inference.model` in `values.yaml` / `HPA_VALUES`. Env for scripts: 
 
 ### Kubernetes HPA metrics
 
-`install-hpa.sh` always installs Adapter rules for GPU util, latency (p50/p95/avg), and request rate. Pick **one** signal for the HPA:
+This recipe’s validated HPA signal is GPU utilization. `install-hpa.sh` installs the Adapter rule for `gpu_utilization_percent`. Latency and request-rate HPA modes are deferred to a follow-up PR.
 
 ```bash
-# GPU utilization % (default) — good for “need more GPUs”
 ./scripts/install-hpa.sh
-
-# Latency example (confirm with hpa-load-test.sh before treating as validated)
-HPA_METRIC=latency_p95 HPA_TARGET_LATENCY_MS=5000 ./scripts/install-hpa.sh
-HPA_METRIC=latency_p50 HPA_TARGET_LATENCY_MS=2000 ./scripts/install-hpa.sh
-HPA_METRIC=latency_avg HPA_TARGET_LATENCY_MS=3000 ./scripts/install-hpa.sh
-
-# Traffic — successful completions per second per pod
-HPA_METRIC=request_rate HPA_TARGET_REQUEST_RATE=2 ./scripts/install-hpa.sh
-```
-
-Keep the same `HPA_METRIC` (and targets) on `hpa-reset.sh` and `hpa-load-test.sh`. Load-test GPU saturation still drives DCGM util; for latency/request_rate tests, ensure chat load is high enough for that metric to move, or override load knobs (`INFLIGHT_PER_GPU`, `DURATION_SEC`, …).
-
-Verify the custom metric API after install:
-
-```bash
-# GPU (default)
 kubectl get --raw \
   '/apis/custom.metrics.k8s.io/v1beta1/namespaces/nemoclaw-gpu/pods/*/gpu_utilization_percent'
-
-# Example latency metric
-kubectl get --raw \
-  '/apis/custom.metrics.k8s.io/v1beta1/namespaces/nemoclaw-gpu/pods/*/nemoclaw_llm_latency_p95_milliseconds'
-
 ./scripts/get-hpa.sh -n nemoclaw-gpu
 ```
-
-Or set Helm `autoscaling.metric` / target fields in `HPA_VALUES` instead of env.
 
 ### Recovery
 
