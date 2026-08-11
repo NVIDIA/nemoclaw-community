@@ -364,7 +364,7 @@ License: GPL-3.0-or-later and included Blender notices
 URL: https://github.com/lfdevs/blender_linux_arm64
 
 Project: brevdev/workshop-build-an-agent (Build an Agent workshop content)
-License: Apache-2.0 (upstream LICENSE.txt, added 2026-08-10 in commit 37c94cf); the workshop itself is cloned into the sandbox at setup time with its own dependency manifests, not distributed in this repository; the module-1…7 tutor references in examples/workshops/agentic-ai-learning-path are derived from its teaching content under that license
+License: Apache-2.0 (upstream LICENSE.txt, added 2026-08-10 in commit 37c94cf); the workshop itself is cloned into the sandbox at setup time with its own dependency manifests, not distributed in this repository; the module-1…7 tutor references in examples/recipes/nvidia/agentic-ai-learning-path are derived from its teaching content under that license
 URL: https://github.com/brevdev/workshop-build-an-agent
 
 Model: NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4
@@ -415,6 +415,6 @@ Asset: NVIDIA header image under examples/recipes/nvidia/payment-ops-hermes/asse
 Owner: NVIDIA
 Notes: Reuses the repository's existing NVIDIA-owned header asset.
 
-Asset: devx-jupyterapp-bridge/ source directory under examples/workshops/agentic-ai-learning-path/skills/setup-workshop-nemoclaw/assets/
+Asset: devx-jupyterapp-bridge/ source directory under examples/recipes/nvidia/agentic-ai-learning-path/skills/setup-workshop-nemoclaw/assets/
 Owner: NVIDIA
 Notes: First-party JupyterLab federated extension (~2 KB) hand-crafted for this example; sets window.jupyterapp for the workshop's in-lesson buttons. Distributed as inspectable, SPDX-headed source (package.json + static/remoteEntry.js) — no prebuilt archive. Mirrors only the structure of a prebuilt labextension and contains no third-party code. Provenance documented in the skill's references/sandbox-internals.md.

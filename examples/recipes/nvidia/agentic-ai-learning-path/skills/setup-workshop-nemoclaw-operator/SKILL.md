@@ -68,7 +68,7 @@ C=$(docker ps --filter 'label=openshell.ai/managed-by=openshell' \
 # The deployment (policy files + .env) is the chief-of-staff recipe:
 cd <nemoclaw-community>/examples/recipes/nvidia/developer-community-chief-of-staff
 # This example's skills (staged into the sandbox in Phase 2b):
-EXAMPLE=<nemoclaw-community>/examples/workshops/agentic-ai-learning-path
+EXAMPLE=<nemoclaw-community>/examples/recipes/nvidia/agentic-ai-learning-path
 ```
 
 Policy ownership: the deployment's `policy.yaml` template belongs to the

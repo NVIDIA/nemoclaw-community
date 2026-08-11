@@ -7,12 +7,12 @@ on:
   push:
     branches: [main]
     paths:
-      - examples/workshops/agentic-ai-learning-path/**
+      - examples/recipes/nvidia/agentic-ai-learning-path/**
       - .github/workflows/example-validation.yml
   pull_request:
     branches: [main]
     paths:
-      - examples/workshops/agentic-ai-learning-path/**
+      - examples/recipes/nvidia/agentic-ai-learning-path/**
       - .github/workflows/example-validation.yml
 
 permissions:
@@ -37,4 +37,4 @@ jobs:
         run: python3 -m pip install pyyaml
 
       - name: Run example validator
-        run: bash examples/workshops/agentic-ai-learning-path/tests/validate-example.sh
+        run: bash examples/recipes/nvidia/agentic-ai-learning-path/tests/validate-example.sh
