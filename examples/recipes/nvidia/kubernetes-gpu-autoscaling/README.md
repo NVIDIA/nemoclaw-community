@@ -5,7 +5,13 @@
 
 # NemoClaw Kubernetes GPU autoscaling
 
-Experimental community recipe: a CPU-only NemoClaw/OpenClaw sandbox (OpenShell) sends inference to authenticated Ollama pods in the same cluster. An HPA scales only those Ollama pods (1 GPU each) using a Pods **`AverageValue`** custom metric (average across Ready pods). Documented examples: **GPU utilization** (scale out when average per-pod util is **above 40%**) and **LLM latency** (scale out when average per-pod latency is **above 3000 ms**). Unsupported / non-production.
+Experimental community recipe: 
+
+a CPU-only NemoClaw/OpenClaw sandbox (OpenShell) sends inference to authenticated Ollama pods in the same cluster. 
+
+An HPA scales only those Ollama pods (1 GPU each) using a Pods **`AverageValue`** metric (average across Ready pods). 
+
+Example HPA metrics: **GPU utilization** (scale out when average per-pod util is **above 40%**) and **LLM latency** (scale out when average per-pod latency is **above 3000 ms**). 
 
 
 **Envoy Gateway is optional.** When enabled (default), Envoy sits in front of the GPU replicas and load-balances with **LeastRequest**: each new request is sent to a Ready backend that currently has the fewest outstanding requests, so busy GPUs get less new traffic than idle ones. Skip Envoy when the agent ClusterIP Service is enough (round-robin / kube-proxy only — no LeastRequest):
@@ -50,7 +56,7 @@ HPA (examples: GPU util >40% or latency >3000 ms)
 | **GPU utilization** (`gpu`) | average per-pod GPU util **above 40%** | `HPA_TARGET_GPU=40` |
 | **LLM latency** (`latency_avg`) | average per-pod chat proxy latency **above 3000 ms** | `HPA_TARGET_LATENCY_MS=3000` (**milliseconds**; script output `46514/3000` means 46514 ms / 3000 ms) |
 
-These two are **examples** of metrics you can use for HPA scale-out. Users can choose other metrics (for example `latency_p50`, `latency_p95`, `request_rate`) or define their own customized metrics (expose a Prometheus series, add a prometheus-adapter rule, and point `autoscaling.metric` / the HPA at that custom.metrics name).
+These two are **examples** of metrics you can use for HPA scale-out. Users can choose other metrics or define their own customized metrics.
 
 **What “latency” measures.** `nemoclaw_llm_latency_*_milliseconds` is the agent sidecar’s **chat/completions proxy duration** on that pod:
 
@@ -59,9 +65,6 @@ These two are **examples** of metrics you can use for HPA scale-out. Users can c
 
 It does **not** include earlier client→Envoy/Service hop time or request-body read time. Each pod exposes a rolling average over recent completions (default window 128; `LLM_LATENCY_WINDOW_SIZE`); HPA then takes the **Pods `AverageValue`** of that gauge across Ready pods.
 
-Pipelines: GPU util is `DCGM_FI_DEV_GPU_UTIL` → Prometheus → Adapter `gpu_utilization_percent` → HPA. Latency is agent `/metrics` (`nemoclaw_llm_latency_avg_milliseconds`) → Prometheus → Adapter → HPA.
-
-`install-hpa.sh` only installs/configures the stack (it does **not** generate traffic). If replicas grow right after install, the chosen metric was already above target (for example residual latency samples). Use `./scripts/hpa-load-test.sh` to drive scale-up/down deliberately.
 
 ### Validated hardware
 
@@ -77,7 +80,7 @@ Live-tested on [**Brev: AWS Instance**](https://brev.nvidia.com) with a single-n
 
 <img width="1334" height="920" alt="Reference 4× L40S MicroK8s node used for validation" src="docs/assets/reference-4x-l40s.png" />
 
-**4× L40S is an example layout**, not a hard limit. Set `MAX_REPLICAS` / `TARGET_PODS` to your allocatable GPU count (**N** — any number you have); install and load-test default to that N. Covered on the example hardware: chart deploy, optional Envoy LeastRequest, authenticated inference, Kubernetes HPA scale-up when average per-pod **GPU util > 40%** or average per-pod **latency > 3000 ms** (and scale-down after load stops), Envoy distribution across Ready GPU pods, and OpenShell sandbox → `https://inference.local/v1`.
+**4× L40S is an example platform**, not a hard limit. Set `MAX_REPLICAS` / `TARGET_PODS` to your allocatable GPU count (**N** — any number you have); install and load-test default to that N. Covered on the example hardware: chart deploy, optional Envoy LeastRequest, authenticated inference, Kubernetes HPA scale-up when average per-pod **GPU util > 40%** or average per-pod **latency > 3000 ms** (and scale-down after load stops), Envoy distribution across Ready GPU pods, and OpenShell sandbox → `https://inference.local/v1`.
 
 ## Prerequisites
 
@@ -302,7 +305,7 @@ Helm field: `inference.model` in `values.yaml` / `HPA_VALUES`. Env for scripts: 
 
 ### Kubernetes HPA metrics
 
-Two example scaling signals are wired in this recipe. Both use Pods **`AverageValue`** (average across Ready pods). Default install uses **GPU utilization**; pass `HPA_METRIC` to use **latency** instead.
+Two example HPA metrics for autoscaling are tested in this recipe. Both use Pods **`AverageValue`** (average across Ready pods). Default install uses **GPU utilization**; pass `HPA_METRIC` to use **latency** instead.
 
 These two are **examples** of metrics you can use for HPA scale-out. Users can choose other metrics or define their own customized metrics for HPA (expose a Prometheus series, add a prometheus-adapter rule in `monitoring/prometheus-adapter-gpu-values.yaml`, and point `autoscaling.metric` / the HPA at that custom.metrics name).
 
@@ -317,7 +320,7 @@ kubectl get --raw \
 
 **Example 2 — latency (milliseconds).** Scale out when average per-pod chat latency is **above 3000 ms** (`HPA_TARGET_LATENCY_MS=3000`; `3000` = 3 s).
 
-Latency is the agent sidecar **proxy duration** for `/v1/chat/completions`: from just before the in-pod inference `fetch` until the full upstream response has been written to the client (includes streaming). It excludes client→Gateway/Service network time. Each pod reports a rolling average of recent requests; HPA averages that gauge across Ready pods. `./scripts/get-hpa.sh` / `hpa-watch.sh` print plain millisecond numbers (for example `46514/3000` means 46514 ms current / 3000 ms target) — not Kubernetes Quantity suffixes like `3k` or `3099666m`.
+Latency is the agent sidecar **proxy duration** for `/v1/chat/completions`: from just before the in-pod inference `fetch` until the full upstream response has been written to the client (includes streaming). It excludes client→Gateway/Service network time. Each pod reports a rolling average of recent requests; HPA averages that gauge across Ready pods. `./scripts/get-hpa.sh` / `hpa-watch.sh` print plain millisecond numbers (for example `46514/3000` means 46514 ms current / 3000 ms target).
 
 ```bash
 # 3000 ms (3 seconds) average latency target
@@ -327,11 +330,6 @@ kubectl get --raw \
 ./scripts/get-hpa.sh -n nemoclaw-gpu
 ```
 
-Also available in the chart/adapter: `latency_p50`, `latency_p95`, and `request_rate`. Again, these two documented examples are not the only options — users can choose other metrics or define their own customized metrics for HPA as described above.
-
-### Recovery
-
-Destructive recovery for the selected release only: `./scripts/cluster-recover.sh` (optional `RESTART_MICROK8S=1`). See script comments before use.
 
 ## Verify
 
