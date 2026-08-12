@@ -101,6 +101,12 @@ cmd_up() {
     echo "ATIF export: local (traces written to sandbox /tmp/atif; no host services for ATIF)"
   fi
 
+  # The sandbox image build unconditionally bakes the relay CA into its trust
+  # store (agents/hermes/Dockerfile COPY), so the cert pair must exist even
+  # when ATIF export is local — a fresh checkout otherwise fails the build.
+  [[ -f "$EXAMPLE_DIR/extras/atif-export-relay/tls/ca.crt" ]] || \
+    bash "$EXAMPLE_DIR/extras/atif-export-relay/generate-tls-cert.sh"
+
   echo "Starting host services"
   if (( ${#profile_args[@]} > 0 )); then
     docker compose -f "$COMPOSE_FILE" "${profile_args[@]}" up -d --build
