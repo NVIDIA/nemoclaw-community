@@ -6,8 +6,8 @@ description: >-
   is the PRIMARY workshop-setup entry point: use it for "set up / run the
   Build-an-Agent workshop" requests when YOU are on the sandbox HOST (outside
   the sandbox — the machine running the OpenShell gateway + docker, e.g. via
-  Claude Code) against a NemoClaw deployment such as the
-  developer-community-chief-of-staff recipe. It stages/applies the egress
+  Claude Code) against this example's own vendored NemoClaw deployment
+  (brought up by its scripts/bring-up.sh). It stages/applies the egress
   policy (PyPI, NIM /v1/ranking, scoped GitHub clone), stages this example's
   skills into the agent's skill library, optionally stages the NVIDIA API key,
   kicks the in-sandbox agent (which runs the `setup-workshop-nemoclaw` skill:
@@ -37,12 +37,13 @@ to the resulting JupyterLab. This is one half of a two-skill pair:
 ## Should this skill run at all?
 
 In the NemoClaw community repo, **yes — this is the default setup path.**
-This example exists to run the workshop on a NemoClaw deployment (the
-`developer-community-chief-of-staff` recipe), so a generic "set up the
-build-an-agent workshop" request lands here. The prerequisite is a deployed
-sandbox: if `docker ps` shows no `openshell-<sandbox>-…` container, deploy the
-recipe first (its `scripts/bring-up.sh`) — this skill configures an existing
-deployment, it does not create one.
+This example exists to run the workshop on its own NemoClaw deployment
+(vendored from the `developer-community-chief-of-staff` recipe), so a
+generic "set up the build-an-agent workshop" request lands here. The
+prerequisite is a deployed sandbox: if `docker ps` shows no
+`openshell-<sandbox>-…` container, deploy first (this example's
+`scripts/bring-up.sh`, after filling `.env` per the README) — this skill
+configures an existing deployment, it does not create one.
 
 Not this skill's territory: installing the workshop OUTSIDE a sandbox (bare
 metal on Brev, local install via AI Workbench, GPU hosts). That installer —
@@ -65,21 +66,21 @@ SANDBOX=hermes-direct                                    # the sandbox name (adj
 C=$(docker ps --filter 'label=openshell.ai/managed-by=openshell' \
               --filter "label=openshell.ai/sandbox-name=$SANDBOX" --format '{{.Names}}')
 [ "$(printf '%s\n' "$C" | grep -c .)" -eq 1 ] || echo "FATAL: not exactly one container for '$SANDBOX': ${C:-none}"
-# The deployment (policy files + .env) is the chief-of-staff recipe:
-cd <nemoclaw-community>/examples/recipes/nvidia/developer-community-chief-of-staff
-# This example's skills (staged into the sandbox in Phase 2b):
+# The deployment (scripts + policy.yaml + .env) and the workshop skills both
+# live in THIS example:
 EXAMPLE=<nemoclaw-community>/examples/recipes/nvidia/agentic-ai-learning-path
+cd "$EXAMPLE"
 ```
 
-Policy ownership: the deployment's `policy.yaml` template belongs to the
-chief-of-staff recipe — this flow does NOT edit it (or any other file of
-that example). The workshop policy lives in the sandbox's **live** policy:
-Phase 1 applies live + the additions from `references/policy-blocks.md`, and
-the live policy is thereafter the source of truth. Captures
+Policy ownership: the deployment's `policy.yaml` template (this example's
+root) is the sandbox-create input — this flow does NOT edit it. The workshop
+policy lives in the sandbox's **live** policy: Phase 1 applies live + the
+additions from `references/policy-blocks.md`, and the live policy is
+thereafter the source of truth. Captures
 (`openshell policy get "$SANDBOX" --full | sed '1,/^---$/d'`) are scratch
 artifacts — regenerate on demand, do not track them. Consequence: a recreate
-through the recipe's own machinery (`bring-up.sh`/`03-sandbox.sh`, the
-autoheal `watchdog.sh`) re-renders the STOCK template, silently reverting
+through the deployment's own machinery (`scripts/bring-up.sh` /
+`scripts/03-sandbox.sh`) re-renders the STOCK template, silently reverting
 every workshop grant (network AND filesystem) and wiping the workshop
 filesystem — after such a recreate, re-run Phase 1, then 1b, then 2b/3 (all
 idempotent).
@@ -133,8 +134,8 @@ multi-line args).
 
 ## Phase 1 — Egress policy (one-time)
 
-The sandbox denies all egress by default, and the chief-of-staff recipe's
-stock policy does not include any workshop route — but do not assume stock is
+The sandbox denies all egress by default, and the deployment's stock policy
+(this example's `policy.yaml`) does not include any workshop route — but do not assume stock is
 what is live: go by the Phase 0 drift check. Blocks missing from live → apply
 the additions below (live capture + additions). Blocks already live → skip
 the apply; the live policy is the source of truth and no repo file needs
@@ -404,6 +405,14 @@ laptop tunnel + token URL, hand the user something like:
 > reload the page. Re-read the token URL any time with:
 > `docker exec <container> cat /sandbox/workshop-url.txt`.
 
+If the deployment's `.env` configured Slack (or Outlook), append an optional
+pointer — the resident agent now carries the workshop tutor skills on every
+channel it serves:
+
+> Optional: your deployment's Slack bot is the same sandboxed agent — DM it
+> a workshop question (e.g. "quiz me on module 1") to meet your tutor
+> outside JupyterLab.
+
 ## Phase 5 — When something is denied
 
 The L7 proxy/OCSF audit log names the exact process path and rule for every
@@ -446,13 +455,13 @@ Two verdict patterns that are NOT policy gaps (both observed live):
   than its token window bricks exactly as above (observed live during the
   0.0.53 → 0.0.96 upgrade). Plan sandbox recreates around gateway upgrades.
 - **A container restart does NOT relaunch the agent stack** (`nemoclaw-start`:
-  agent, relay, bridges — and JupyterLab). Relaunch the stack (e.g. the
-  chief-of-staff recipe's autoheal `watchdog.sh`), then have the agent re-run
-  `start-jupyter.sh`.
+  agent, relay, bridges — and JupyterLab). Relaunch the stack per
+  references/access-and-lifecycle.md § Recovering lost create-time env, then
+  have the agent re-run `start-jupyter.sh`.
 - **A sandbox recreate wipes the container filesystem** (venv, shim,
   `secrets.env`, the server), and the sanctioned recreate path is the
-  recipe's own machinery (`bring-up.sh`/`03-sandbox.sh`, autoheal
-  `watchdog.sh`) — it re-renders the STOCK template, so every workshop grant
+  deployment's own machinery (`scripts/bring-up.sh` /
+  `scripts/03-sandbox.sh`) — it re-renders the STOCK template, so every workshop grant
   (network AND filesystem) reverts by design. Afterwards re-run Phase 1, the
   Phase 1b restart (fresh sandbox — inside the token window), and Phase 2b,
   then have the agent re-run `setup.sh` + `start-jupyter.sh` (all
@@ -485,3 +494,6 @@ Two verdict patterns that are NOT policy gaps (both observed live):
 - [ ] Terminal tile opens a shell (`POST /api/terminals` with token → 200) —
       needs the `/dev/pts` grant BOOTED. An auto-hidden tile means the Phase
       1b restart was skipped; on a fresh sandbox run it before setup.
+- [ ] (if a Slack/Outlook channel is configured) a DM to the deployment's bot
+      with a workshop question routes to the tutor skills — surface this
+      option to the user alongside the JupyterLab URL (Phase 4).

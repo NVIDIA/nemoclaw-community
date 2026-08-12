@@ -16,9 +16,9 @@ differ.
 - Success output: `✓ Policy version N submitted (hash: …)` then
   `✓ Policy version N loaded (active version: N)`. The hash from
   `openshell policy get <sandbox>` changing is your confirmation it landed.
-- The deployment's `policy.yaml` template belongs to the
-  `developer-community-chief-of-staff` recipe and is NOT edited by this flow;
-  the sandbox's LIVE policy is the source of truth for workshop grants.
+- The deployment's `policy.yaml` template (this example's root, vendored
+  from the `developer-community-chief-of-staff` recipe) is NOT edited by this
+  flow; the sandbox's LIVE policy is the source of truth for workshop grants.
   Captures are scratch artifacts — regenerate via the workflow below, do not
   track them. Consequence: a recreate through the recipe's own machinery
   re-renders the stock template and silently reverts every workshop grant —
@@ -47,16 +47,17 @@ avoids re-applying unrelated grants the human didn't ask to restore.
 
 ## The blocks
 
-Add under `network_policies:`. The chief-of-staff recipe's stock policy does
+Add under `network_policies:`. The deployment's stock policy does
 NOT include these — but verify against the LIVE policy first (step 0 above /
 SKILL.md Phase 0 drift check): the running deployment may already carry them.
 Add whatever is missing to the live policy — and to no repo file: the live
 policy is the source of truth.
-Adjust the repo slug if the workshop repo differs. Scope `github_git_clone`
-to the workshop repo literally, as below — do NOT ride the recipe template's
-`__GITHUB_READONLY_REPO__` placeholder, which also scopes the recipe's
-api.github.com REST monitoring (coupling the two would repoint what the
-chief-of-staff agent monitors).
+Adjust the repo slug if the workshop repo differs. This example's
+`.env.example` defaults `GITHUB_READONLY_REPO` to the workshop repo, so the
+stock `github_repo_readonly` block (which rides that placeholder) already
+scopes to it at sandbox create. Keep the explicit `github_git_clone` block
+below anyway — it is idempotent and covers deployments whose operators
+repointed the placeholder.
 
 ```yaml
   # Git smart-HTTP (clone/fetch) for the scoped workshop repo. git clone

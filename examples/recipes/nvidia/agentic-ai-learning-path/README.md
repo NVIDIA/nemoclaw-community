@@ -31,17 +31,17 @@ grant.
 
 ## How the pieces fit together
 
-Three separately-owned pieces combine, in this order:
+Three pieces combine, in this order:
 
 | | Piece | What it provides | What you do |
 | --- | --- | --- | --- |
-| 1 | [Developer Community Chief of Staff](../developer-community-chief-of-staff/README.md) recipe | **The prerequisite.** Stands up the foundation this example needs: an OpenShell gateway on a host, running a sandboxed NemoClaw (Hermes) resident agent under Landlock/seccomp enforcement. | Deploy it first — follow its README through `scripts/bring-up.sh`. |
-| 2 | This example | The skills that turn that resident agent into the workshop installer and tutor, plus the host-side operator procedure (egress policy, staging, port-forward). | Run the Quickstart below. |
+| 1 | The included deployment (`scripts/`, `agents/`, `providers/`, `extras/`, `policy.yaml`) | **The foundation.** An OpenShell gateway on this host, running a sandboxed NemoClaw (Hermes) resident agent under Landlock/seccomp enforcement, with enterprise messaging channels (Slack/Outlook). | Deploy it first — Prerequisites below, then `bash scripts/bring-up.sh`. |
+| 2 | This example's skills | The skills that turn that resident agent into the workshop installer and tutor, plus the host-side operator procedure (egress policy, staging, port-forward). | Run the Quickstart below. |
 | 3 | [Build an Agent workshop content](https://github.com/brevdev/workshop-build-an-agent) | The course itself — notebooks, lessons, code. Origin of the Brev Launchable. | Nothing — the resident agent clones it during setup. |
 
-If you are brand new to this repo: start with the chief-of-staff recipe's
-README, confirm its sandboxed agent is up (`docker ps` shows an
-`openshell-hermes-direct-…` container), then come back here.
+If you are brand new to this repo: fill in `.env` (Prerequisites below), run
+`bash scripts/bring-up.sh`, confirm the sandboxed agent is up (`docker ps`
+shows an `openshell-hermes-direct-…` container), then run the Quickstart.
 
 ## What is in here
 
@@ -59,13 +59,15 @@ cannot run inside a sandbox and is only relevant for non-NemoClaw installs.
 
 ## Deployment model
 
-The prerequisite
+This example is self-contained. Its deployment — vendored verbatim from the
 [Developer Community Chief of Staff](../developer-community-chief-of-staff/README.md)
-recipe provides the deployment: an OpenShell gateway on a single host,
-running a Hermes agent inside a `hermes-direct` sandbox with L7 egress
-allowlists, credential placeholders, and Landlock/seccomp enforcement. This
-example layers the learning path onto that deployment; it does not create
-sandboxes itself.
+recipe at `c4ed316` (minus that example's autoheal machinery, its script
+tests, and its product docs) — stands up an OpenShell gateway on a single
+host, running a Hermes agent inside a `hermes-direct` sandbox with L7 egress
+allowlists, credential placeholders, Landlock/seccomp enforcement, and
+enterprise messaging channels. `bash scripts/bring-up.sh` creates the
+sandbox; the vendored copies may diverge deliberately from the
+chief-of-staff recipe over time.
 
 Everything is driven from two sides:
 
@@ -87,10 +89,15 @@ notes).
 
 ## Prerequisites
 
-- A deployed
-  [Developer Community Chief of Staff](../developer-community-chief-of-staff/README.md)
-  recipe — the prerequisite example described above. Its
-  `scripts/bring-up.sh` must have completed, and `docker ps` must show the
+- A Linux host with Docker and the OpenShell CLI, v2 providers enabled:
+  `openshell settings set --global --key providers_v2_enabled --value true --yes`.
+- `cp .env.example .env`, then fill in an inference key (`COMPATIBLE_API_KEY`)
+  and at least one messaging channel — Slack (`SLACK_BOT_TOKEN` +
+  `SLACK_APP_TOKEN`; the lightest — [docs/set-up-slack.md](docs/set-up-slack.md))
+  or Outlook ([docs/set-up-outlook-bridge.md](docs/set-up-outlook-bridge.md)).
+  On corporate VPNs, route inference through `scripts/host-tls-proxy.py`
+  ([docs/host-tls-proxy.md](docs/host-tls-proxy.md)).
+- Run `bash scripts/bring-up.sh`. When it finishes, `docker ps` shows the
   `openshell-hermes-direct-…` container: that container hosts the sandboxed
   agent this example stages its skills into.
 - An **NVIDIA API key** (`nvapi-…` from [build.nvidia.com](https://build.nvidia.com)) and a **Tavily API Key** (`tvly-…` from [www.tavily.com](https://app.tavily.com/home)).
@@ -172,6 +179,8 @@ Teleport equivalent) and open the token URL. The launcher shows 11 tiles
 (7 modules, Secrets Manager, and three client apps); set the NVIDIA key in
 the **Secrets Manager** tile and start with Module 1 — or just ask the
 resident agent, which now carries the `workshop` and `module-N` tutor skills.
+If Slack is configured in your `.env`, you can also DM the deployment's
+Slack bot — the same sandboxed agent — for tutoring help from anywhere.
 
 ## Verification
 
@@ -194,7 +203,7 @@ resident agent, which now carries the `workshop` and `module-N` tutor skills.
 - Stop the forward (`pkill -f "forward service $SANDBOX"` — it is not tracked
   by `openshell forward list`).
 - The workshop lives entirely inside the sandbox filesystem; a sandbox
-  **recreate** (or the recipe's `tear-down.sh`) removes it. Note a recreate
+  **recreate** (or this example's `scripts/tear-down.sh`) removes it. Note a recreate
   also wipes the staged skills, the clone, the venv, and `secrets.env`, and
   re-renders policy from the `policy.yaml` template — to run the workshop
   again, repeat the quickstart (all steps are idempotent).
@@ -206,6 +215,11 @@ resident agent, which now carries the `workshop` and `module-N` tutor skills.
   Phase 1b guard and lifecycle notes.
 
 ## Security and data-handling considerations
+
+The vendored deployment carries its own boundary set (Slack/Outlook
+channels, GitHub read-only REST, host-side mirror services), unchanged from
+the chief-of-staff recipe it was copied from; the table below covers what
+the **workshop** adds on top.
 
 Phase 1 of the setup widens the sandbox deliberately; everything stays
 deny-by-default until then, each grant is scoped to the listed hosts, paths,
