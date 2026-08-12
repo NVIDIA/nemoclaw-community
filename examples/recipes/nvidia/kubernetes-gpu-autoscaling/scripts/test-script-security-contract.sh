@@ -14,7 +14,7 @@ fail() {
 }
 
 TEST_TMP="$(mktemp -d)"
-trap 'rm -f "${TEST_TMP}/kubectl" "${TEST_TMP}/kubectl.log" "${TEST_TMP}/helm.log"; rmdir "${TEST_TMP}"' EXIT
+trap 'rm -rf "${TEST_TMP}"' EXIT
 
 cat >"${TEST_TMP}/kubectl" <<'MOCK'
 #!/usr/bin/env bash
@@ -366,6 +366,25 @@ grep -Fq 'hpa_common_migrate_pre_metrics_proxy_resources' "${SCRIPT_DIR}/hpa-loa
   || fail "hpa-load-test.sh must migrate pre-metrics-proxy leftovers"
 grep -Fq 'hpa_common_migrate_pre_metrics_proxy_resources' "${SCRIPT_DIR}/hpa-reset.sh" \
   || fail "hpa-reset.sh must migrate pre-metrics-proxy leftovers"
+
+# Migration must run before ensure/helm so historical *-agent pods cannot pin all GPUs.
+assert_migrate_before_ensure() {
+  local script="${1:?script}"
+  awk '
+    /hpa_common_migrate_pre_metrics_proxy_resources/ && !migrate { migrate = NR }
+    /hpa_common_ensure_metrics_proxy_ready/ && !ensure { ensure = NR }
+    END { exit !(migrate && ensure && migrate < ensure) }
+  ' "${script}" \
+    || fail "${script##*/} must call migrate before hpa_common_ensure_metrics_proxy_ready"
+}
+assert_migrate_before_ensure "${SCRIPT_DIR}/hpa-load-test.sh"
+assert_migrate_before_ensure "${SCRIPT_DIR}/hpa-reset.sh"
+awk '
+  /hpa_common_migrate_pre_metrics_proxy_resources/ && !migrate { migrate = NR }
+  /^helm_install$/ && !helm { helm = NR }
+  END { exit !(migrate && helm && migrate < helm) }
+' "${SCRIPT_DIR}/install-hpa.sh" \
+  || fail "install-hpa.sh must call migrate before helm_install"
 
 # Migration must target the historical basename (…-agent), not only the new …-metrics-proxy name.
 KUBECTL_LOG="${TEST_TMP}/kubectl-migrate.log"

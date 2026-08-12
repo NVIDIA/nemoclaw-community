@@ -116,6 +116,9 @@ if [[ ! "${MAX_REPLICAS}" =~ ^[1-9][0-9]*$ ]]; then
 fi
 hpa_common_verify_gpu_capacity "${MAX_REPLICAS}" || exit 1
 
+# Free GPUs held by historical *-agent leftovers before any Helm upgrade / rollout wait.
+hpa_common_migrate_pre_metrics_proxy_resources "${NAMESPACE}" "${RELEASE}"
+
 if [[ "${DELETE_HPA}" == "1" ]]; then
   if ! hpa_common_ensure_metrics_proxy_ready "${NAMESPACE}" "${RELEASE}" "${CHART_DIR}" \
     "${HPA_VALUES}" "${ROLLOUT_TIMEOUT}"; then
@@ -123,8 +126,6 @@ if [[ "${DELETE_HPA}" == "1" ]]; then
     exit 1
   fi
 fi
-
-hpa_common_migrate_pre_metrics_proxy_resources "${NAMESPACE}" "${RELEASE}"
 
 hpa_common_gpu_helm_upgrade "${RELEASE}" "${CHART_DIR}" "${NAMESPACE}" "${HPA_VALUES}" \
   "${MIN_REPLICAS}" "${MAX_REPLICAS}" "${GPU_TARGET}" "${INFERENCE_MODEL}" "${INGRESS_HOST}"

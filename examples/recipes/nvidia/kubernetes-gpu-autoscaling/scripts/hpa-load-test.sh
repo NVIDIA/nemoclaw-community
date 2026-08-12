@@ -102,13 +102,14 @@ kubectl get apiservice v1beta1.metrics.k8s.io 2>/dev/null | grep -q True || {
 hpa_common_verify_gpu_capacity "${TARGET_PODS}" || exit 1
 hpa_common_verify_gpu_hpa_metric "${NAMESPACE}" || exit 1
 
+# Free GPUs held by historical *-agent leftovers before any Helm upgrade / rollout wait.
+hpa_common_migrate_pre_metrics_proxy_resources "${NAMESPACE}" "${RELEASE}"
+
 if ! hpa_common_ensure_metrics_proxy_ready "${NAMESPACE}" "${RELEASE}" "${CHART_DIR}" \
   "${HPA_VALUES}" "${ROLLOUT_TIMEOUT}"; then
   echo "Baseline pod not ready — HPA test cannot start" >&2
   exit 1
 fi
-
-hpa_common_migrate_pre_metrics_proxy_resources "${NAMESPACE}" "${RELEASE}"
 
 INFERENCE_MODEL="${INFERENCE_MODEL:-llama3.2:3b}"
 HPA_HELM_ARGS=(
