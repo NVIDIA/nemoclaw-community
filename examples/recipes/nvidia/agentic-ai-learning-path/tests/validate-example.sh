@@ -21,7 +21,19 @@ echo "== syntax =="
 syntax_fail=0
 while IFS= read -r f; do
   bash -n "$f" || { echo "  FAIL bash -n: $f"; syntax_fail=1; }
-done < <(find "$ROOT" -name '*.sh' -not -path '*/.claude/*')
+done < <(find "$ROOT" -name '*.sh' -not -path '*/.claude/*' \
+  -not \( -path "$ROOT/scripts/*" -o -path "$ROOT/agents/*" -o -path "$ROOT/extras/*" \))
+# The vendored deployment scripts (scripts/, agents/, extras/ — verbatim from
+# the chief-of-staff recipe) target bash >= 4 (associative arrays); macOS's
+# bash 3.2 false-positives on them, so sweep them only under bash >= 4.
+if [ "${BASH_VERSINFO[0]}" -ge 4 ]; then
+  while IFS= read -r f; do
+    bash -n "$f" || { echo "  FAIL bash -n: $f"; syntax_fail=1; }
+  done < <(find "$ROOT" -name '*.sh' \
+    \( -path "$ROOT/scripts/*" -o -path "$ROOT/agents/*" -o -path "$ROOT/extras/*" \))
+else
+  echo "  note: vendored deployment scripts skipped (bash ${BASH_VERSINFO[0]} < 4)"
+fi
 while IFS= read -r f; do
   python3 -m py_compile "$f" || { echo "  FAIL py_compile: $f"; syntax_fail=1; }
 done < <(find "$ROOT" -name '*.py' -not -path '*/.claude/*' -not -path '*/__pycache__/*')

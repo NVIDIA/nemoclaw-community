@@ -1,0 +1,6 @@
+{
+  "repositories": ["NVIDIA/NemoClaw"],
+  "auth_token": "set-via-env",
+  "start_date": "2026-04-26T00:00:00Z",
+  "metrics_log_level": "INFO"
+}

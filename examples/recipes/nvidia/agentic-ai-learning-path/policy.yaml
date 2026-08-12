@@ -1,0 +1,200 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+version: 1
+filesystem_policy:
+  include_workdir: true
+  read_only:
+  - /usr
+  - /lib
+  - /opt/hermes
+  - /proc
+  - /dev/urandom
+  - /app
+  - /etc
+  - /var/log
+  - /sandbox/.hermes
+  read_write:
+  - /sandbox
+  - /tmp
+  - /dev/null
+  - /sandbox/.hermes-data
+landlock:
+  compatibility: best_effort
+process:
+  run_as_user: sandbox
+  run_as_group: sandbox
+network_policies:
+  # Load-bearing: per-path allow rules for the NVIDIA inference API.
+  # providers/compatible-endpoint.yaml grants read-write over these hosts but
+  # cannot express path scoping (v2 ProviderProfile schema has no rules[]).
+  # Removing this block widens egress to all /v1/* paths.
+  nvidia:
+    name: nvidia
+    endpoints:
+    - host: integrate.api.nvidia.com
+      port: 443
+      protocol: rest
+      tls: terminate
+      enforcement: enforce
+      rules:
+      - allow:
+          method: POST
+          path: /v1/chat/completions
+      - allow:
+          method: POST
+          path: /v1/completions
+      - allow:
+          method: POST
+          path: /v1/embeddings
+      - allow:
+          method: GET
+          path: /v1/models
+      - allow:
+          method: GET
+          path: /v1/models/**
+    - host: inference-api.nvidia.com
+      port: 443
+      protocol: rest
+      tls: terminate
+      enforcement: enforce
+      rules:
+      - allow:
+          method: POST
+          path: /v1/chat/completions
+      - allow:
+          method: POST
+          path: /v1/completions
+      - allow:
+          method: POST
+          path: /v1/embeddings
+      - allow:
+          method: GET
+          path: /v1/models
+      - allow:
+          method: GET
+          path: /v1/models/**
+    binaries:
+    - path: /usr/local/bin/hermes
+    - path: /opt/hermes/.venv/bin/hermes
+    - path: /usr/bin/python3
+    - path: /usr/bin/python3.13
+    - path: /opt/hermes/.venv/bin/python
+  # ATIF object-storage export — sandbox uploads completed trajectories to
+  # the host-side atif-export-relay (which then forwards to MinIO or real S3).
+  # Auth: per-sandbox bearer token carried in the SigV4 Credential= slot via
+  # OpenShell L7 placeholder substitution (provider: nemoclaw-atif-export-relay).
+  atif_export_relay:
+    name: atif_export_relay
+    endpoints:
+    - host: __ATIF_RELAY_HOST__
+      port: __ATIF_RELAY_PORT__
+      protocol: rest
+      enforcement: enforce
+      allowed_ips:
+      - 10.0.0.0/8
+      - 172.0.0.0/8
+      - 192.168.0.0/16
+      - fc00::/7
+      rules:
+      - allow:
+          method: PUT
+          path: /**
+      - allow:
+          method: GET
+          path: /healthz
+    binaries:
+    # nemo-relay-cli is kept for the post-EKU-fix sunset path (when the
+    # bridge is removed, nemo-relay will talk to this endpoint directly).
+    - path: /usr/local/bin/nemo-relay
+    # atif-bridge sidecar at /usr/local/lib/nemoclaw-bridges/atif/atif-bridge.py
+    # — Python ssl/OpenSSL accepts the L7 MITM cert despite missing
+    # serverAuth EKU; this is the live data path until OpenShell ships the
+    # EKU fix. See docs/atif-export.md.
+    - path: /usr/bin/python3
+    - path: /usr/bin/python3.13
+  # Credential-less host-routed service — no v2 provider profile equivalent.
+  # Sandbox policy is the sole authorization gate.
+  phoenix_collector:
+    name: phoenix_collector
+    endpoints:
+    - host: host.openshell.internal
+      port: 6006
+      protocol: rest
+      enforcement: enforce
+      allowed_ips:
+      - 10.0.0.0/8
+      - 172.0.0.0/8
+      - 192.168.0.0/16
+      - fc00::/7
+      rules:
+      - allow:
+          method: POST
+          path: /**
+    binaries:
+    - path: /usr/local/bin/nemo-relay
+    - path: /usr/bin/python3
+    - path: /usr/bin/python3.13
+    - path: /opt/hermes/.venv/bin/python
+  # Credential-less host-routed service — see phoenix_collector above.
+  source_etl_api:
+    name: source_etl_api
+    endpoints:
+    - host: host.openshell.internal
+      port: 3100
+      protocol: rest
+      enforcement: enforce
+      allowed_ips:
+      - 10.0.0.0/8
+      - 172.0.0.0/8
+      - 192.168.0.0/16
+      - fc00::/7
+      rules:
+      - allow:
+          method: GET
+          path: /**
+    binaries:
+    - path: /usr/bin/python3
+    - path: /usr/bin/python3.13
+    - path: /opt/hermes/.venv/bin/python
+    - path: /usr/local/bin/hermes
+    - path: /opt/hermes/.venv/bin/hermes
+    - path: /usr/bin/curl
+  # Load-bearing: per-repo path scoping for live GitHub REST reads.
+  # providers/github.yaml grants read-only over all of api.github.com.
+  # This block is the sole gate preventing reads from repos other than
+  # $GITHUB_READONLY_REPO. Do not delete without an upstream OpenShell
+  # change that adds per-path rules to the v2 ProviderProfile schema.
+  github_repo_readonly:
+    name: github-repo-readonly
+    # scripts/03-sandbox.sh replaces __GITHUB_READONLY_REPO__ with
+    # GITHUB_READONLY_REPO from .env before applying this policy.
+    endpoints:
+    - host: api.github.com
+      port: 443
+      protocol: rest
+      tls: terminate
+      enforcement: enforce
+      rules:
+      - allow: { method: GET, path: /rate_limit }
+      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__ }
+      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/issues }
+      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/issues/** }
+      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/labels }
+      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/labels/** }
+      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/milestones }
+      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/milestones/** }
+      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/pulls }
+      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/pulls/** }
+      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/commits }
+      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/commits/** }
+      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/branches }
+      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/branches/** }
+      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/contents }
+      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/contents/** }
+      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/readme }
+    binaries:
+    - path: /usr/bin/curl
+    - path: /usr/bin/python3
+    - path: /usr/bin/python3.13
+    - path: /opt/hermes/.venv/bin/python

@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Provider profile for the host-side atif-export-relay. The sandbox holds
+# an OpenShell placeholder for the bearer token; the L7 proxy substitutes
+# the real value on egress. atif-export-relay validates the token, then
+# re-signs the outbound leg with real downstream credentials (real STS
+# for AWS S3, or MinIO admin). The relay's pluggable backend layer (see
+# extras/atif-export-relay/backends/) abstracts which object store is
+# actually targeted.
+#
+# Transport: the sandbox sets AWS_SESSION_TOKEN to a placeholder embedding
+# this credential name (`openshell:resolve:env:ATIF_RELAY_AUTH_TOKEN`).
+# Nemo Relay's `object_store` SDK emits AWS_SESSION_TOKEN verbatim as a
+# standalone `x-amz-security-token` HTTP header — a whole-header-value
+# placeholder, which OpenShell's L7 proxy substitutes at egress. The
+# relay reads the bearer from that header and validates it. (The SDK
+# also builds a SigV4 Authorization envelope using literal junk values
+# in AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY; that envelope is vestigial.
+# Neither the L7 proxy nor the relay verifies SigV4.)
+
+id: nemoclaw-atif-export-relay
+display_name: NemoClaw ATIF Export Relay
+description: Bearer-token egress to the host-side atif-export-relay for ATIF trace upload
+# `data` is the closest match in OpenShell's category enum (no `storage` variant);
+# valid values: other, inference, agent, source_control, messaging, data, knowledge.
+category: data
+credentials:
+  # No `auth_style` / `header_name` is declared. OpenShell validates these
+  # fields but never acts on them at egress — credential injection happens
+  # in-band on the request the SDK already built (via env-var placeholder
+  # substitution), not by proxy-side header injection. An empty auth_style
+  # is the truthful signal that this credential is consumed out-of-band.
+  - name: auth_token
+    description: >-
+      Per-sandbox bearer token. Sandbox env carries an OpenShell placeholder
+      under ATIF_RELAY_AUTH_TOKEN; the value rides outbound on
+      AWS_SESSION_TOKEN → x-amz-security-token; the L7 proxy substitutes at
+      egress; atif-export-relay validates against ATIF_RELAY_AUTH_TOKEN.
+    env_vars: [ATIF_RELAY_AUTH_TOKEN]
+    required: true
+endpoints:
+  - host: __ATIF_RELAY_HOST__
+    port: __ATIF_RELAY_PORT__
+    protocol: rest
+    enforcement: enforce
+    # host.openshell.internal resolves to a private internal address
+    # (typically 172.18.0.1 — the docker bridge). OpenShell's SSRF engine
+    # blocks egress to private ranges by default; this allowlist mirrors
+    # the policy.yaml phoenix_collector entry so the relay endpoint is
+    # explicitly approved.
+    allowed_ips:
+      - 10.0.0.0/8
+      - 172.0.0.0/8
+      - 192.168.0.0/16
+      - fc00::/7
+    # `rules` and `access` are mutually exclusive — choose one. Using
+    # `rules` for tighter scoping (PUT-only on object paths, GET on healthz).
+    rules:
+      - allow:
+          method: PUT
+          path: /**
+      - allow:
+          method: GET
+          path: /healthz
+binaries:
+  - /usr/local/bin/nemo-relay
