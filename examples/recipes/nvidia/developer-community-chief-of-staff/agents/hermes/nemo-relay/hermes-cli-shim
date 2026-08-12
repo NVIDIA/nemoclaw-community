@@ -10,7 +10,7 @@
 # lifecycle (writes go to /sandbox/.hermes-data and are reset on next
 # bring-up unless captured via scripts/snapshot.sh + scripts/restore.sh),
 # then execs the upstream binary. All other subcommands are pure passthrough.
-# Telemetry flows via NEMO_RELAY_GATEWAY_URL in env.
+# Telemetry flows through Hermes's bundled native NeMo Relay plugin.
 
 set -euo pipefail
 

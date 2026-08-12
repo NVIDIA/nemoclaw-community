@@ -404,6 +404,37 @@ side effect. A typed answer remains a valid fallback.
 
 ---
 
+## ATIF export check
+
+ATIF is produced by Hermes's native NeMo Relay integration when Hermes
+finalizes a session and closes its top-level Agent scope. It is not expected
+after every conversational turn. Complete a short session, then use `/new`,
+`/reset`, or a clean CLI/TUI exit before checking. Do not wait for the gateway's
+potentially long expiry policy during a manual check.
+
+With the default `ATIF_EXPORT_MODE=local`, confirm one new trajectory file
+appears in the sandbox:
+
+```console
+$ openshell sandbox exec --name hermes-direct -- sh -lc \
+    'find /tmp/atif -maxdepth 1 -type f -name "hermes-atif-*.json" -print'
+```
+
+With `ATIF_EXPORT_MODE=relay` and the MinIO backend, confirm one new object
+appears remotely:
+
+```console
+$ docker run --rm --network=host \
+    -e "MC_HOST_local=http://minioadmin:minioadmin@localhost:9000" \
+    minio/mc ls --recursive local/nemo-relay-traces/
+```
+
+A successful remote delivery does not create a duplicate local file. If the
+remote POST fails, NeMo Relay `0.7.2` writes a recovery copy to `/tmp/atif/`.
+See [atif-export.md](atif-export.md) for the request contract and diagnostics.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Cause / fix |

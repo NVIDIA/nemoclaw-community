@@ -22,6 +22,7 @@ again by contributor provenance.
 | --- | --- | --- |
 | BlueTier | [x402 Payment Gate](recipes/partners/bluetier/x402-payment-gate/README.md) | Releases an agent's x402 payments through a maker/checker boundary: the sandboxed agent can only submit payment intents, and a host-side gate outside the sandbox re-screens each one with pre-signature GO/HOLD/STOP verdicts (counterparty reputation, price anomaly, OFAC sanctions) before anything is signed or settled. |
 | HPE | [Retail Assistant](recipes/partners/hpe/retail-assistant/README.md) | Provides role-aware retail operations through Telegram, FastAPI, PostgreSQL, Docker Compose, and Helm. |
+| Shrike Security | [Shrike Security Action Governance](recipes/partners/shrike/shrike-security/README.md) | Governs agent tool calls with a `before_tool_call` plugin that returns allow / warn / require_approval / block from Shrike's enforce plane, with host-side secret handling and scoped egress to Shrike. |
 | Tavily | [Watchtower](recipes/partners/tavily/watchtower/README.md) | Runs scheduled, cited web monitoring with persistent deduplication and auditable outputs. |
 
 ## Community Recipes
