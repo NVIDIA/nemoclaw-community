@@ -1052,7 +1052,17 @@ hpa_common_ingress_allow_insecure_value() {
   esac
 }
 
-# Old releases used component=agent or gpu-agent; chart now uses gpu-metrics-proxy + workload-type (immutable selector).
+# Pre-rename chart releases used Deployment/Service/HPA/Gateway names ending in
+# `-agent` and labels component=agent|gpu-agent. The chart now uses
+# `-metrics-proxy` / component=gpu-metrics-proxy. Helm usually GCs renamed
+# objects, but a failed mid-upgrade or partial install can leave both workloads
+# competing for GPUs. Detect legacy objects by name and by label, then delete
+# them before the new topology is rolled out.
+hpa_common_legacy_agent_basename() {
+  echo "$(hpa_common_release_fullname)-agent"
+}
+
+# True when a Deployment still carries the pre-rename component selector.
 hpa_common_gpu_stale_workload() {
   local ns="${1:?namespace}"
   local deploy="${2:?deploy}"
@@ -1062,15 +1072,112 @@ hpa_common_gpu_stale_workload() {
   [[ "${comp}" == "agent" || "${comp}" == "gpu-agent" ]]
 }
 
+# Print space-separated legacy resource names that still exist (deployments first).
+hpa_common_list_legacy_agent_deployments() {
+  local ns="${1:?namespace}"
+  local release="${2:-${RELEASE:-nemoclaw-gpu}}"
+  local legacy
+  RELEASE="${release}" legacy="$(hpa_common_legacy_agent_basename)"
+  local -a found=()
+  local name comp
+
+  if kubectl get "deployment/${legacy}" -n "${ns}" >/dev/null 2>&1; then
+    found+=("${legacy}")
+  fi
+
+  while IFS=$'\t' read -r name comp; do
+    [[ -n "${name}" ]] || continue
+    [[ "${name}" == "${legacy}" ]] && continue
+    if [[ "${comp}" == "agent" || "${comp}" == "gpu-agent" ]]; then
+      found+=("${name}")
+    fi
+  done < <(
+    kubectl get deploy -n "${ns}" \
+      -l "app.kubernetes.io/instance=${release},app.kubernetes.io/name=nemoclaw-gpu" \
+      -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.labels.component}{"\n"}{end}' \
+      2>/dev/null || true
+  )
+
+  # Also catch immutable-selector leftovers still named *-metrics-proxy but labeled agent.
+  if hpa_common_gpu_stale_workload "${ns}" "$(RELEASE="${release}" hpa_common_metrics_proxy_deployment)"; then
+    found+=("$(RELEASE="${release}" hpa_common_metrics_proxy_deployment)")
+  fi
+
+  # Deduplicate
+  if ((${#found[@]} > 0)); then
+    printf '%s\n' "${found[@]}" | awk 'NF && !seen[$0]++' | paste -sd' ' -
+  fi
+}
+
+# Delete legacy *-agent chart objects (and orphan keep-policy Secrets) so they
+# cannot race the renamed *-metrics-proxy workload for GPUs.
+hpa_common_migrate_legacy_agent_resources() {
+  local ns="${1:?namespace}"
+  local release="${2:-${RELEASE:-nemoclaw-gpu}}"
+  local legacy
+  RELEASE="${release}" legacy="$(hpa_common_legacy_agent_basename)"
+  local deployments
+  deployments="$(hpa_common_list_legacy_agent_deployments "${ns}" "${release}")"
+
+  local has_named_legacy=0
+  if kubectl get "deployment/${legacy}" -n "${ns}" >/dev/null 2>&1 \
+    || kubectl get "service/${legacy}" -n "${ns}" >/dev/null 2>&1 \
+    || kubectl get "hpa/${legacy}" -n "${ns}" >/dev/null 2>&1 \
+    || kubectl get "gateway/${legacy}" -n "${ns}" >/dev/null 2>&1; then
+    has_named_legacy=1
+  fi
+
+  if [[ -z "${deployments}" && "${has_named_legacy}" -eq 0 ]]; then
+    if kubectl get "secret/${legacy}-inference-api" -n "${ns}" >/dev/null 2>&1 \
+      || kubectl get "secret/${legacy}-ingress-auth" -n "${ns}" >/dev/null 2>&1; then
+      hpa_common_log "Removing orphaned legacy Secrets for ${legacy}..."
+      kubectl delete secret -n "${ns}" \
+        "${legacy}-inference-api" "${legacy}-ingress-auth" \
+        --ignore-not-found >/dev/null 2>&1 || true
+    fi
+    return 0
+  fi
+
+  hpa_common_log "Migrating legacy GPU chart resources (${legacy} → *-metrics-proxy)"
+
+  # Core workload / HPA / Gateway under the old basename.
+  kubectl delete deployment,service,hpa,gateway \
+    -n "${ns}" "${legacy}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+
+  # Any other deployments still carrying agent/gpu-agent labels for this release.
+  local d
+  for d in ${deployments}; do
+    [[ "${d}" == "${legacy}" ]] && continue
+    kubectl delete "deployment/${d}" -n "${ns}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  done
+
+  # Gateway API / monitoring companions whose names use the legacy basename prefix only.
+  local obj
+  while IFS= read -r obj; do
+    [[ -n "${obj}" ]] || continue
+    kubectl delete -n "${ns}" "${obj}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  done < <(
+    kubectl get httproute,referencegrant,securitypolicy,backendtrafficpolicy,envoyproxy,configmap,servicemonitor \
+      -n "${ns}" -o name 2>/dev/null | grep -E "/${legacy}(-|$)" || true
+  )
+
+  kubectl delete secret -n "${ns}" \
+    "${legacy}-inference-api" "${legacy}-ingress-auth" \
+    --ignore-not-found >/dev/null 2>&1 || true
+
+  for d in ${deployments} ${legacy}; do
+    [[ -n "${d}" ]] || continue
+    kubectl wait --for=delete "deployment/${d}" -n "${ns}" --timeout=120s >/dev/null 2>&1 || true
+  done
+}
+
+# Backward-compatible wrapper used by older script call sites.
 hpa_common_gpu_recreate_stale_workload() {
   local ns="${1:?namespace}"
-  local deploy="${2:?deploy}"
-  local svc="${3:-${deploy}}"
-  if hpa_common_gpu_stale_workload "${ns}" "${deploy}"; then
-    kubectl delete "deployment/${deploy}" "service/${svc}" -n "${ns}" \
-      --ignore-not-found --wait=false 2>/dev/null || true
-    sleep 2
-  fi
+  local _deploy="${2:-}"
+  local _svc="${3:-}"
+  local release="${RELEASE:-nemoclaw-gpu}"
+  hpa_common_migrate_legacy_agent_resources "${ns}" "${release}"
 }
 
 hpa_common_validate_node_name() {

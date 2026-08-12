@@ -124,7 +124,7 @@ if [[ "${DELETE_HPA}" == "1" ]]; then
   fi
 fi
 
-hpa_common_gpu_recreate_stale_workload "${NAMESPACE}" "${DEPLOYMENT}" "${SERVICE}"
+hpa_common_migrate_legacy_agent_resources "${NAMESPACE}" "${RELEASE}"
 
 hpa_common_gpu_helm_upgrade "${RELEASE}" "${CHART_DIR}" "${NAMESPACE}" "${HPA_VALUES}" \
   "${MIN_REPLICAS}" "${MAX_REPLICAS}" "${GPU_TARGET}" "${INFERENCE_MODEL}" "${INGRESS_HOST}"

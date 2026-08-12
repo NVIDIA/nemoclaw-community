@@ -594,6 +594,12 @@ After scale-up you should see multiple pod series. metrics-proxy `/metrics` scra
 | `test-*-contract.*` | Static / local contract checks |
 
 
+### Upgrade from pre-rename `*-agent` releases
+
+Older chart revisions named the GPU Deployment/Service/HPA/Gateway `…-agent` (labels `component=agent` or `gpu-agent`). Current revisions use `…-metrics-proxy` / `component=gpu-metrics-proxy`.
+
+`install-hpa.sh`, `hpa-reset.sh`, and `hpa-load-test.sh` call `hpa_common_migrate_legacy_agent_resources` **before** Helm upgrade: they detect leftover `…-agent` objects (by name and by label) and delete them—including orphaned keep-policy Secrets—so an upgrade cannot leave both workloads competing for GPUs. A fresh install of this head only creates `…-metrics-proxy` names.
+
 ## Uninstall
 
 Stop `run-nemoclaw-sandbox.sh`. With OpenShell port-forward still up:
