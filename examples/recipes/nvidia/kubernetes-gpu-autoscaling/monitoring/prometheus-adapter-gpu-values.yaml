@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # prometheus-adapter: expose HPA custom metrics.
-# Default recipe signal: DCGM GPU utilization.
-# Optional LLM signals from the agent ServiceMonitor (/metrics): latency gauges and
-# successful request rate. Select one via autoscaling.metric / HPA_METRIC.
+# Built-in recipe signals (live-validated): DCGM GPU utilization and metrics-proxy
+# rolling average LLM latency. Select one via autoscaling.metric / HPA_METRIC.
+# Additional custom series can be added here for operator-defined HPA metrics.
 
 prometheus:
   url: http://REPLACE_PROMETHEUS_SERVICE.monitoring.svc
@@ -26,31 +26,7 @@ rules:
         as: "gpu_utilization_percent"
       metricsQuery: 'avg(<<.Series>>{<<.LabelMatchers>>}) by (<<.GroupBy>>)'
 
-    # Agent /metrics gauges (namespace/pod from Kubernetes service discovery).
-    - seriesQuery: 'nemoclaw_llm_latency_p50_milliseconds{namespace!="",pod!=""}'
-      resources:
-        overrides:
-          namespace:
-            resource: namespace
-          pod:
-            resource: pod
-      name:
-        matches: "^(.*)$"
-        as: "nemoclaw_llm_latency_p50_milliseconds"
-      metricsQuery: 'avg(<<.Series>>{<<.LabelMatchers>>}) by (<<.GroupBy>>)'
-
-    - seriesQuery: 'nemoclaw_llm_latency_p95_milliseconds{namespace!="",pod!=""}'
-      resources:
-        overrides:
-          namespace:
-            resource: namespace
-          pod:
-            resource: pod
-      name:
-        matches: "^(.*)$"
-        as: "nemoclaw_llm_latency_p95_milliseconds"
-      metricsQuery: 'avg(<<.Series>>{<<.LabelMatchers>>}) by (<<.GroupBy>>)'
-
+    # metrics-proxy /metrics rolling avg latency (idle-expires when traffic stops).
     - seriesQuery: 'nemoclaw_llm_latency_avg_milliseconds{namespace!="",pod!=""}'
       resources:
         overrides:
@@ -62,15 +38,3 @@ rules:
         matches: "^(.*)$"
         as: "nemoclaw_llm_latency_avg_milliseconds"
       metricsQuery: 'avg(<<.Series>>{<<.LabelMatchers>>}) by (<<.GroupBy>>)'
-
-    - seriesQuery: 'nemoclaw_llm_requests_total{result="success",namespace!="",pod!=""}'
-      resources:
-        overrides:
-          namespace:
-            resource: namespace
-          pod:
-            resource: pod
-      name:
-        matches: "^(.*)$"
-        as: "nemoclaw_llm_request_rate"
-      metricsQuery: 'sum(rate(<<.Series>>{<<.LabelMatchers>>}[1m])) by (<<.GroupBy>>)'

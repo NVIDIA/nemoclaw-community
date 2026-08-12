@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Tear down the configured load-test Job and this release's GPU agent pods, then
+# Tear down the configured load-test Job and this release's GPU metrics-proxy pods, then
 # helm upgrade the idle baseline.
 #
 # Usage:
@@ -15,10 +15,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=hpa-common.sh
 source "${SCRIPT_DIR}/hpa-common.sh"
+hpa_common_load_local_env "${CHART_DIR}"
 NAMESPACE="${NAMESPACE:-nemoclaw-gpu}"
 RELEASE="${RELEASE:-nemoclaw-gpu}"
 JOB_NAME="${JOB_NAME:-nemoclaw-gpu-hpa-load-test}"
-DEPLOYMENT="${DEPLOYMENT:-$(RELEASE="${RELEASE}" CHART_NAME=nemoclaw-gpu hpa_common_agent_deployment)}"
+DEPLOYMENT="${DEPLOYMENT:-$(RELEASE="${RELEASE}" CHART_NAME=nemoclaw-gpu hpa_common_metrics_proxy_deployment)}"
 HPA_NAME="${HPA_NAME:-${DEPLOYMENT}}"
 REINSTALL_HELM="${REINSTALL_HELM:-1}"
 SKIP_HELM="${SKIP_HELM:-0}"
@@ -35,9 +36,9 @@ GPU_TARGET="${GPU_TARGET:-40}"
 INFERENCE_MODEL="${INFERENCE_MODEL:-llama3.2:3b}"
 # Preserve a previously configured Ingress host across reset — without this, the helm
 # upgrade below leaves ingress.host unset and Helm falls back to values.yaml's default,
-# silently changing the route clients use to reach the agent.
+# silently changing the route clients use to reach the metrics-proxy.
 INGRESS_HOST="${INGRESS_HOST:-}"
-SERVICE="${SERVICE:-$(RELEASE="${RELEASE}" CHART_NAME=nemoclaw-gpu hpa_common_agent_service)}"
+SERVICE="${SERVICE:-$(RELEASE="${RELEASE}" CHART_NAME=nemoclaw-gpu hpa_common_metrics_proxy_service)}"
 RELEASE_SELECTOR="$(RELEASE="${RELEASE}" CHART_NAME=nemoclaw-gpu hpa_common_release_selector)"
 
 require_cmd kubectl
@@ -116,7 +117,7 @@ fi
 hpa_common_verify_gpu_capacity "${MAX_REPLICAS}" || exit 1
 
 if [[ "${DELETE_HPA}" == "1" ]]; then
-  if ! hpa_common_ensure_agent_ready "${NAMESPACE}" "${RELEASE}" "${CHART_DIR}" \
+  if ! hpa_common_ensure_metrics_proxy_ready "${NAMESPACE}" "${RELEASE}" "${CHART_DIR}" \
     "${HPA_VALUES}" "${ROLLOUT_TIMEOUT}"; then
     echo "HPA reset failed — baseline pod not ready" >&2
     exit 1

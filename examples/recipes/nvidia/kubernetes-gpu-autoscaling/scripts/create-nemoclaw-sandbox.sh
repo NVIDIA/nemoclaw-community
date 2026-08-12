@@ -4,7 +4,7 @@
 
 # Configure OpenShell's gateway-scoped inference route through Envoy Gateway
 # (LeastRequest) when ENABLE_ENVOY_LB=1 / a Gateway exists, otherwise through the
-# agent Service, then create a NemoClaw/OpenClaw sandbox without assigning it a GPU.
+# metrics-proxy Service, then create a NemoClaw/OpenClaw sandbox without assigning it a GPU.
 
 set -euo pipefail
 
@@ -34,7 +34,7 @@ SANDBOX_IMAGE="${NEMOCLAW_SANDBOX_IMAGE:-}"
 SANDBOX_NAME="${NEMOCLAW_SANDBOX_NAME:-nemoclaw-onprem}"
 INFERENCE_NAMESPACE="${NAMESPACE:-nemoclaw-gpu}"
 INFERENCE_RELEASE="${RELEASE:-nemoclaw-gpu}"
-INFERENCE_SERVICE="${INFERENCE_SERVICE:-${INFERENCE_RELEASE}-agent}"
+INFERENCE_SERVICE="${INFERENCE_SERVICE:-${INFERENCE_RELEASE}-metrics-proxy}"
 INFERENCE_PORT="${SERVICE_PORT:-8081}"
 MODEL="${INFERENCE_MODEL:-llama3.2:3b}"
 PROVIDER_NAME="${OPENSHELL_PROVIDER_NAME:-onprem-ollama}"
@@ -101,7 +101,7 @@ API_KEY="$(
 BASE_URL="$(
   hpa_common_openshell_inference_base_url \
     "${INFERENCE_NAMESPACE}" \
-    "${INFERENCE_RELEASE}-agent" \
+    "${INFERENCE_RELEASE}-metrics-proxy" \
     "${INFERENCE_SERVICE}" \
     "${INFERENCE_PORT}"
 )"
@@ -177,18 +177,18 @@ openshell sandbox exec -n "${SANDBOX_NAME}" --no-tty -- \
   openclaw plugins inspect nemoclaw --json >/dev/null
 openshell sandbox exec -n "${SANDBOX_NAME}" --no-tty -- \
   curl -fsS https://inference.local/v1/models >/dev/null
-# Example: ask a real question through OpenShell → Envoy (or agent Service) → Ollama.
+# Example: ask a real question through OpenShell → Envoy (or metrics-proxy Service) → Ollama.
 openshell sandbox exec -n "${SANDBOX_NAME}" --no-tty -- \
   curl -fsS https://inference.local/v1/chat/completions \
     -H 'Content-Type: application/json' \
-    -d "{\"model\":\"${MODEL}\",\"messages\":[{\"role\":\"user\",\"content\":\"What is NVIDIA NemoClaw?\"}],\"max_tokens\":256,\"stream\":false}" \
+    -d "{\"model\":\"${MODEL}\",\"messages\":[{\"role\":\"user\",\"content\":\"In one sentence, what is an AI agent sandbox?\"}],\"max_tokens\":256,\"stream\":false}" \
   >/dev/null
 
 echo "NemoClaw sandbox ${SANDBOX_NAME} is ready without a GPU."
-if kubectl get gateway "${INFERENCE_RELEASE}-agent" -n "${INFERENCE_NAMESPACE}" >/dev/null 2>&1; then
+if kubectl get gateway "${INFERENCE_RELEASE}-metrics-proxy" -n "${INFERENCE_NAMESPACE}" >/dev/null 2>&1; then
   echo "Inference routes through OpenShell → Envoy Gateway (LeastRequest) → ${BASE_URL}; only the Ollama HPA pods request GPUs."
 else
-  echo "Inference routes through OpenShell → agent Service → ${BASE_URL} (Envoy LB disabled); only the Ollama HPA pods request GPUs."
+  echo "Inference routes through OpenShell → metrics-proxy Service → ${BASE_URL} (Envoy LB disabled); only the Ollama HPA pods request GPUs."
 fi
 echo "Verify anytime: ./scripts/verify-nemoclaw-sandbox.sh"
 echo "Start the NemoClaw/OpenClaw runtime in a dedicated terminal: ./scripts/run-nemoclaw-sandbox.sh"

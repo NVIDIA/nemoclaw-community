@@ -81,7 +81,7 @@ helm() {
 }
 SECRET_CONTRACT="$(
   hpa_common_inference_secret_contract \
-    test-namespace test-release test-release-agent-inference-api
+    test-namespace test-release test-release-metrics-proxy-inference-api
 )"
 if [[ "${SECRET_CONTRACT}" != $'operator-inference-api.gpu-platform.production.cluster.example.internal\ttrue' ]]; then
   echo "FAIL: scripts do not resolve the operator-managed inference Secret contract" >&2

@@ -33,7 +33,7 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- define "nemoclaw-gpu.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "nemoclaw-gpu.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
-component: gpu-agent
+component: gpu-metrics-proxy
 nemoclaw.ai/workload-type: gpu
 {{- end }}
 
@@ -42,15 +42,15 @@ nemoclaw.ai/workload-type: gpu
 {{- end }}
 
 {{- define "nemoclaw-gpu.ingressAuthSecretName" -}}
-{{- printf "%s-agent-ingress-auth" (include "nemoclaw-gpu.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- printf "%s-metrics-proxy-ingress-auth" (include "nemoclaw-gpu.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{- define "nemoclaw-gpu.gatewayName" -}}
-{{- printf "%s-agent" (include "nemoclaw-gpu.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- printf "%s-metrics-proxy" (include "nemoclaw-gpu.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{- define "nemoclaw-gpu.httpRouteName" -}}
-{{- printf "%s-agent" (include "nemoclaw-gpu.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- printf "%s-metrics-proxy" (include "nemoclaw-gpu.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{- define "nemoclaw-gpu.openShellHttpRouteName" -}}
@@ -73,7 +73,7 @@ PathPrefix
 {{- if .Values.inference.auth.existingSecret -}}
 {{- .Values.inference.auth.existingSecret -}}
 {{- else -}}
-{{- printf "%s-agent-inference-api" (include "nemoclaw-gpu.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- printf "%s-metrics-proxy-inference-api" (include "nemoclaw-gpu.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 {{- end }}
 
@@ -96,13 +96,13 @@ limits:
   nvidia.com/gpu: {{ .Values.gpuScaling.perPodGpu | quote }}
 {{- end }}
 
-{{- define "nemoclaw-gpu.agentResources" -}}
+{{- define "nemoclaw-gpu.metricsProxyResources" -}}
 requests:
-  cpu: {{ .Values.gpuScaling.agentCpuRequest | quote }}
-  memory: {{ .Values.gpuScaling.agentMemory | quote }}
+  cpu: {{ .Values.gpuScaling.metricsProxyCpuRequest | quote }}
+  memory: {{ .Values.gpuScaling.metricsProxyMemory | quote }}
 limits:
-  cpu: {{ .Values.gpuScaling.agentCpuLimit | quote }}
-  memory: {{ .Values.gpuScaling.agentMemoryLimit | quote }}
+  cpu: {{ .Values.gpuScaling.metricsProxyCpuLimit | quote }}
+  memory: {{ .Values.gpuScaling.metricsProxyMemoryLimit | quote }}
 {{- end }}
 
 {{- /*
@@ -140,46 +140,32 @@ no GPU to schedule onto. Use the lower of the two positive limits in that mode.
 {{- end }}
 
 {{- define "nemoclaw-gpu.hpaMetric" -}}
-{{- $metric := .Values.autoscaling.metric | default "gpu" -}}
-{{- if eq $metric "gpu" -}}
+{{- $metric := .Values.autoscaling.metric | default "gpu_utilization" -}}
+{{- if or (eq $metric "gpu_utilization") (eq $metric "gpu") -}}
 gpu_utilization_percent
-{{- else if eq $metric "latency_p50" -}}
-nemoclaw_llm_latency_p50_milliseconds
-{{- else if eq $metric "latency_p95" -}}
-nemoclaw_llm_latency_p95_milliseconds
 {{- else if eq $metric "latency_avg" -}}
 nemoclaw_llm_latency_avg_milliseconds
-{{- else if eq $metric "request_rate" -}}
-nemoclaw_llm_request_rate
 {{- else -}}
-{{- fail (printf "autoscaling.metric %q is unsupported; use gpu, latency_p50, latency_p95, latency_avg, or request_rate" $metric) -}}
+{{- fail (printf "autoscaling.metric %q is unsupported; use gpu_utilization or latency_avg" $metric) -}}
 {{- end -}}
 {{- end }}
 
 {{- define "nemoclaw-gpu.hpaMetricTarget" -}}
-{{- $metric := .Values.autoscaling.metric | default "gpu" -}}
-{{- if eq $metric "gpu" -}}
+{{- $metric := .Values.autoscaling.metric | default "gpu_utilization" -}}
+{{- if or (eq $metric "gpu_utilization") (eq $metric "gpu") -}}
 {{- .Values.autoscaling.targetGPUUtilizationPercentage | toString -}}
-{{- else if or (eq $metric "latency_p50") (eq $metric "latency_p95") (eq $metric "latency_avg") -}}
+{{- else if eq $metric "latency_avg" -}}
 {{- .Values.autoscaling.targetLatencyMilliseconds | toString -}}
-{{- else if eq $metric "request_rate" -}}
-{{- .Values.autoscaling.targetRequestRate | toString -}}
 {{- else -}}
-{{- fail (printf "autoscaling.metric %q is unsupported" $metric) -}}
+{{- fail (printf "autoscaling.metric %q is unsupported; use gpu_utilization or latency_avg" $metric) -}}
 {{- end -}}
 {{- end }}
 
 {{- define "nemoclaw-gpu.hpaMetricDisplay" -}}
-{{- $metric := .Values.autoscaling.metric | default "gpu" -}}
-{{- if eq $metric "gpu" -}}
+{{- $metric := .Values.autoscaling.metric | default "gpu_utilization" -}}
+{{- if or (eq $metric "gpu_utilization") (eq $metric "gpu") -}}
 GPU utilization % (DCGM)
-{{- else if eq $metric "latency_p50" -}}
-LLM end-to-end latency p50 (ms)
-{{- else if eq $metric "latency_p95" -}}
-LLM end-to-end latency p95 (ms)
 {{- else if eq $metric "latency_avg" -}}
-LLM end-to-end latency avg (ms)
-{{- else if eq $metric "request_rate" -}}
-Successful chat completions per second (per pod)
+LLM chat proxy latency avg (ms)
 {{- end -}}
 {{- end }}

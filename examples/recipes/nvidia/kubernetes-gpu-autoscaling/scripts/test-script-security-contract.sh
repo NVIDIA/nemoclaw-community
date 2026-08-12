@@ -34,10 +34,10 @@ elif [[ "$*" == "get nodes -o json" ]]; then
 elif [[ "$*" == get\ services\ -n\ envoy-gateway-system* ]]; then
   case "${MOCK_SERVICE_MODE:-missing}" in
     internal)
-      printf '%s' '{"items":[{"metadata":{"name":"envoy-nemoclaw-gpu-agent"},"spec":{"type":"ClusterIP"},"status":{}}]}'
+      printf '%s' '{"items":[{"metadata":{"name":"envoy-nemoclaw-gpu-metrics-proxy"},"spec":{"type":"ClusterIP"},"status":{}}]}'
       ;;
     external)
-      printf '%s' '{"items":[{"metadata":{"name":"envoy-nemoclaw-gpu-agent"},"spec":{"type":"LoadBalancer"},"status":{"loadBalancer":{"ingress":[{"ip":"203.0.113.20"}]}}}]}'
+      printf '%s' '{"items":[{"metadata":{"name":"envoy-nemoclaw-gpu-metrics-proxy"},"spec":{"type":"LoadBalancer"},"status":{"loadBalancer":{"ingress":[{"ip":"203.0.113.20"}]}}}]}'
       ;;
     missing)
       printf '%s' '{"items":[]}'
@@ -199,25 +199,22 @@ assert_hpa_format() {
 }
 
 assert_hpa_format \
-  '{"items":[{"metadata":{"name":"gpu-hpa"},"spec":{"scaleTargetRef":{"kind":"Deployment","name":"agent"},"metrics":[{"type":"Pods","pods":{"metric":{"name":"gpu_utilization_percent"},"target":{"type":"AverageValue","averageValue":"40"}}}]},"status":{"currentMetrics":[{"type":"Pods","pods":{"current":{"averageValue":"30250m"}}}]}}]}' \
+  '{"items":[{"metadata":{"name":"gpu-hpa"},"spec":{"scaleTargetRef":{"kind":"Deployment","name":"metrics-proxy"},"metrics":[{"type":"Pods","pods":{"metric":{"name":"gpu_utilization_percent"},"target":{"type":"AverageValue","averageValue":"40"}}}]},"status":{"currentMetrics":[{"type":"Pods","pods":{"current":{"averageValue":"30250m"}}}]}}]}' \
   'GPU utilization rate (avg per pod): current / target' \
   'GPU UTIL %' \
   '30.25%/40%'
 
-# Latency HPA targets are AbsoluteValue milliseconds; Kubernetes may serialize
-# 3000 as "3k" and fractional values as "...m" — scripts print plain ms numbers.
+# Latency HPA targets are AbsoluteValue milliseconds; Kubernetes serializes 3000 as "3k".
 assert_hpa_format \
-  '{"items":[{"metadata":{"name":"latency-hpa"},"spec":{"scaleTargetRef":{"kind":"Deployment","name":"agent"},"metrics":[{"type":"Pods","pods":{"metric":{"name":"nemoclaw_llm_latency_avg_milliseconds"},"target":{"type":"AverageValue","averageValue":"3k"}}}]},"status":{"currentMetrics":[{"type":"Pods","pods":{"current":{"averageValue":"3099666m"}}}]}}]}' \
-  'LLM latency (avg per pod): current / target (ms)' \
-  'LATENCY ms' \
-  '3099.67/3000'
+  '{"items":[{"metadata":{"name":"latency-hpa"},"spec":{"scaleTargetRef":{"kind":"Deployment","name":"metrics-proxy"},"metrics":[{"type":"Pods","pods":{"metric":{"name":"nemoclaw_llm_latency_avg_milliseconds"},"target":{"type":"AverageValue","averageValue":"3k"}}}]},"status":{"currentMetrics":[{"type":"Pods","pods":{"current":{"averageValue":"1836"}}}]}}]}' \
+  '1836/3000'
 
 KUBECTL_LOG="${TEST_TMP}/kubectl.log"
 export KUBECTL_LOG
 
 kubectl() {
   printf '%s\n' "$*" >>"${KUBECTL_LOG}"
-  if [[ "$*" == *"get deployment/test-agent"* ]]; then
+  if [[ "$*" == *"get deployment/test-metrics-proxy"* ]]; then
     printf '%s' "${MOCK_DEPLOYMENT_REPLICAS:-}"
   elif [[ "$*" == get\ node\ test-gpu* ]]; then
     case "${MOCK_NODE_INVENTORY_MODE:-target-ready}" in
@@ -230,7 +227,7 @@ kubectl() {
   elif [[ "$*" == get\ nodes* ]]; then
     printf 'gpu-a\tTrue\t4\ttrue\ngpu-b\tFalse\t8\ttrue\ngpu-c\tTrue\t2\ttrue\ngpu-unlabeled\tTrue\t9\t\n'
   elif [[ "$*" == *"get pods"*"app.kubernetes.io/instance=test-release"* ]]; then
-    printf 'agent-pod'
+    printf 'metrics-proxy-pod'
   elif [[ "$*" == *"get pods"*"job-name=test-load-job"* ]]; then
     printf 'load-pod'
   fi
@@ -295,21 +292,21 @@ grep -Fq -- '--set ingress.gateway.enabled=false' "${HELM_LOG}" \
   || fail "ENABLE_ENVOY_LB=1 did not map to helm true"
 [[ "$(ENABLE_ENVOY_LB=0 hpa_common_ingress_allow_insecure_value)" == "false" ]] \
   || fail "ENABLE_ENVOY_LB=0 should force allowInsecureHttp=false"
-AGENT_URL="$(ENABLE_ENVOY_LB=0 NAMESPACE=test-namespace RELEASE=test-release \
-  hpa_common_agent_service_base_url test-namespace test-release-agent 8081)"
-[[ "${AGENT_URL}" == "http://test-release-agent.test-namespace.svc.cluster.local:8081/v1" ]] \
-  || fail "agent Service base URL helper is wrong: ${AGENT_URL}"
+METRICS_PROXY_URL="$(ENABLE_ENVOY_LB=0 NAMESPACE=test-namespace RELEASE=test-release \
+  hpa_common_metrics_proxy_service_base_url test-namespace test-release-metrics-proxy 8081)"
+[[ "${METRICS_PROXY_URL}" == "http://test-release-metrics-proxy.test-namespace.svc.cluster.local:8081/v1" ]] \
+  || fail "metrics-proxy Service base URL helper is wrong: ${METRICS_PROXY_URL}"
 
 : >"${KUBECTL_LOG}"
 MOCK_DEPLOYMENT_REPLICAS=not-a-number \
-  hpa_common_enforce_replica_floor test-namespace test-agent 2
-grep -Fq 'patch deployment/test-agent -n test-namespace --type=merge -p {"spec":{"replicas":2}}' \
+  hpa_common_enforce_replica_floor test-namespace test-metrics-proxy 2
+grep -Fq 'patch deployment/test-metrics-proxy -n test-namespace --type=merge -p {"spec":{"replicas":2}}' \
   "${KUBECTL_LOG}" || fail "malformed Deployment replica count did not trigger the replica floor"
 
 : >"${KUBECTL_LOG}"
 MOCK_DEPLOYMENT_REPLICAS=3 \
-  hpa_common_enforce_replica_floor test-namespace test-agent 2
-if grep -Fq 'patch deployment/test-agent' "${KUBECTL_LOG}"; then
+  hpa_common_enforce_replica_floor test-namespace test-metrics-proxy 2
+if grep -Fq 'patch deployment/test-metrics-proxy' "${KUBECTL_LOG}"; then
   fail "valid Deployment replica count above the floor triggered a patch"
 fi
 
@@ -342,6 +339,12 @@ awk '
   END { exit !found }
 ' "${SCRIPT_DIR}/hpa-load-test.sh" \
   || fail "load test does not run cleanup before disabling its EXIT trap"
+if grep -q -- '--all' "${SCRIPT_DIR}/cluster-recover.sh"; then
+  fail "cluster recovery contains namespace-wide deletion"
+fi
+# shellcheck disable=SC2016 # Match the literal default expression in the target script.
+grep -Fq 'RESTART_MICROK8S="${RESTART_MICROK8S:-0}"' "${SCRIPT_DIR}/cluster-recover.sh" \
+  || fail "cluster recovery enables a MicroK8s restart by default"
 # shellcheck disable=SC2016 # Match the literal default expression in the target script.
 grep -Fq 'INGRESS_SERVICE_TYPE="${INGRESS_SERVICE_TYPE:-ClusterIP}"' "${SCRIPT_DIR}/install-hpa.sh" \
   || fail "installer gateway Service does not default to ClusterIP"
@@ -355,4 +358,4 @@ grep -Fq 'ingress.gateway.serviceType must be ClusterIP while the OpenShell clea
 grep -Fq 'INGRESS_NS="${INGRESS_NS:-envoy-gateway-system}"' "${SCRIPT_DIR}/install-hpa.sh" \
   || fail "installer does not default to the Envoy Gateway namespace"
 
-echo "OK: node targeting, Envoy Gateway cleartext security, LeastRequest, and Kubernetes HPA formatting contracts hold"
+echo "OK: node targeting, recovery ownership, Envoy Gateway cleartext security, LeastRequest, and Kubernetes HPA formatting contracts hold"

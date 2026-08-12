@@ -3,7 +3,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "nemoclaw-gpu.fullname" . }}-agent
+  name: {{ include "nemoclaw-gpu.fullname" . }}-metrics-proxy
   namespace: {{ include "nemoclaw-gpu.namespace" . }}
   labels:
     {{- include "nemoclaw-gpu.labels" . | nindent 4 }}
@@ -21,7 +21,7 @@ spec:
       labels:
         {{- include "nemoclaw-gpu.selectorLabels" . | nindent 8 }}
       annotations:
-        checksum/agent-config: {{ printf "%s%s%s%s" (.Files.Get "files/agent-server.ts") (.Files.Get "files/agent-metrics.ts") (.Files.Get "files/package.json") (.Files.Get "files/ollama-start.sh") | sha256sum }}
+        checksum/metrics-proxy-config: {{ printf "%s%s%s%s" (.Files.Get "files/metrics-proxy-server.ts") (.Files.Get "files/metrics-proxy-metrics.ts") (.Files.Get "files/package.json") (.Files.Get "files/ollama-start.sh") | sha256sum }}
       {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -64,7 +64,7 @@ spec:
             - name: OLLAMA_MODEL
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "nemoclaw-gpu.fullname" . }}-agent
+                  name: {{ include "nemoclaw-gpu.fullname" . }}-metrics-proxy
                   key: INFERENCE_MODEL
             - name: OLLAMA_NUM_PARALLEL
               value: {{ .Values.ollama.numParallel | default 4 | quote }}
@@ -92,14 +92,14 @@ spec:
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 12
-        - name: agent
-          image: "{{ .Values.agent.image.repository }}:{{ .Values.agent.image.tag }}{{ with .Values.agent.image.digest }}@{{ . }}{{ end }}"
-          imagePullPolicy: {{ .Values.agent.image.pullPolicy }}
-          {{- with .Values.agentSecurityContext }}
+        - name: metrics-proxy
+          image: "{{ .Values.metricsProxy.image.repository }}:{{ .Values.metricsProxy.image.tag }}{{ with .Values.metricsProxy.image.digest }}@{{ . }}{{ end }}"
+          imagePullPolicy: {{ .Values.metricsProxy.image.pullPolicy }}
+          {{- with .Values.metricsProxySecurityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          command: ["node", "/app/agent-server.ts"]
+          command: ["node", "/app/metrics-proxy-server.ts"]
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
@@ -110,12 +110,12 @@ spec:
             - name: INFERENCE_BASE_URL
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "nemoclaw-gpu.fullname" . }}-agent
+                  name: {{ include "nemoclaw-gpu.fullname" . }}-metrics-proxy
                   key: INFERENCE_BASE_URL
             - name: INFERENCE_MODEL
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "nemoclaw-gpu.fullname" . }}-agent
+                  name: {{ include "nemoclaw-gpu.fullname" . }}-metrics-proxy
                   key: INFERENCE_MODEL
             - name: OLLAMA_BASE_URL
               value: "http://127.0.0.1:{{ .Values.ollama.port }}"
@@ -126,6 +126,8 @@ spec:
                 secretKeyRef:
                   name: {{ include "nemoclaw-gpu.inferenceApiSecretName" . | quote }}
                   key: {{ .Values.inference.auth.key | quote }}
+            - name: LLM_LATENCY_IDLE_EXPIRE_MS
+              value: {{ .Values.metrics.llmLatencyIdleExpireMs | default 60000 | quote }}
           volumeMounts:
             - name: app
               mountPath: /app
@@ -133,7 +135,7 @@ spec:
             - name: tmp
               mountPath: /tmp
           resources:
-            {{- include "nemoclaw-gpu.agentResources" . | nindent 12 }}
+            {{- include "nemoclaw-gpu.metricsProxyResources" . | nindent 12 }}
           startupProbe:
             httpGet:
               path: {{ if .Values.probes.readinessChecksInference }}/readyz{{ else }}/healthz{{ end }}
@@ -160,17 +162,17 @@ spec:
       volumes:
         - name: app
           configMap:
-            name: {{ include "nemoclaw-gpu.fullname" . }}-agent
+            name: {{ include "nemoclaw-gpu.fullname" . }}-metrics-proxy
             items:
-              - key: agent-server.ts
-                path: agent-server.ts
-              - key: agent-metrics.ts
-                path: agent-metrics.ts
+              - key: metrics-proxy-server.ts
+                path: metrics-proxy-server.ts
+              - key: metrics-proxy-metrics.ts
+                path: metrics-proxy-metrics.ts
               - key: package.json
                 path: package.json
         - name: scripts
           configMap:
-            name: {{ include "nemoclaw-gpu.fullname" . }}-agent
+            name: {{ include "nemoclaw-gpu.fullname" . }}-metrics-proxy
             items:
               - key: ollama-start.sh
                 path: ollama-start.sh

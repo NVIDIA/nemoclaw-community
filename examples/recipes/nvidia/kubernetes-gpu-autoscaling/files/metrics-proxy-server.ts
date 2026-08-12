@@ -2,13 +2,13 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 //
-// GPU agent pod: health + Prometheus metrics + OpenAI-compatible proxy to local Ollama.
+// GPU metrics-proxy pod: health + Prometheus metrics + OpenAI-compatible proxy to local Ollama.
 
 import { timingSafeEqual } from "node:crypto";
 import http from "node:http";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { llmMetricsLines, recordLlmLatency } from "./agent-metrics.ts";
+import { llmMetricsLines, recordLlmLatency } from "./metrics-proxy-metrics.ts";
 
 const PORT = Number(process.env.PORT || 8081);
 const BASE_URL = (process.env.INFERENCE_BASE_URL || "http://127.0.0.1:11434/v1").replace(/\/$/, "");
@@ -210,7 +210,7 @@ async function checkInference() {
 
 function metricsText() {
   return [
-    "# HELP nemoclaw_http_requests_total Total HTTP requests to agent pod",
+    "# HELP nemoclaw_http_requests_total Total HTTP requests to metrics-proxy pod",
     "# TYPE nemoclaw_http_requests_total counter",
     `nemoclaw_http_requests_total ${totalRequests}`,
     "# HELP nemoclaw_http_inflight_requests In-flight HTTP requests",
@@ -279,7 +279,7 @@ const server = http.createServer(
         res.writeHead(200, { "content-type": "application/json" });
         res.end(
           JSON.stringify({
-            service: "nemoclaw-gpu-agent",
+            service: "nemoclaw-gpu-metrics-proxy",
             model: MODEL,
             inferenceBaseUrl: BASE_URL,
             ollamaBaseUrl: OLLAMA_BASE,
@@ -307,5 +307,5 @@ const server = http.createServer(
 server.listen(PORT, () => {
   const address = server.address();
   const listeningPort = typeof address === "object" && address ? address.port : PORT;
-  console.log(`nemoclaw-gpu-agent listening on :${listeningPort} model=${MODEL}`);
+  console.log(`nemoclaw-gpu-metrics-proxy listening on :${listeningPort} model=${MODEL}`);
 });

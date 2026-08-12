@@ -2,10 +2,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Install Kubernetes HPA for GPU autoscaling (DCGM → prometheus-adapter → gpu_utilization_percent) and, when
+# Install GPU HPA (DCGM → prometheus-adapter → gpu_utilization_percent) and, when
 # ENABLE_ENVOY_LB=1 (default), the Envoy Gateway control plane that load-balances
 # traffic across HPA replicas with LeastRequest. Set ENABLE_ENVOY_LB=0 to skip Envoy
-# and use the agent Service only.
+# and use the metrics-proxy Service only.
 # Script output is HPA-focused only; see ../README.md for full operations.
 #
 # Usage:
@@ -19,6 +19,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=hpa-common.sh
 source "${SCRIPT_DIR}/hpa-common.sh"
+hpa_common_load_local_env "${CHART_DIR}"
 
 NAMESPACE="${NAMESPACE:-nemoclaw-gpu}"
 RELEASE="${RELEASE:-nemoclaw-gpu}"
@@ -39,7 +40,7 @@ ADAPTER_CHART_VERSION="${ADAPTER_CHART_VERSION:-5.3.0}"
 # shellcheck disable=SC1091
 source "${CHART_DIR}/versions.env"
 ENVOY_GATEWAY_CHART_VERSION="${ENVOY_GATEWAY_CHART_VERSION:-v1.8.3}"
-DEPLOYMENT="${DEPLOYMENT:-$(RELEASE="${RELEASE}" CHART_NAME=nemoclaw-gpu hpa_common_agent_deployment)}"
+DEPLOYMENT="${DEPLOYMENT:-$(RELEASE="${RELEASE}" CHART_NAME=nemoclaw-gpu hpa_common_metrics_proxy_deployment)}"
 HPA_NAME="${HPA_NAME:-${DEPLOYMENT}}"
 HPA_VALUES="${HPA_VALUES:-${CHART_DIR}/values.yaml}"
 MIN_REPLICAS="${MIN_REPLICAS:-1}"
@@ -150,7 +151,7 @@ ensure_prometheus_stack() {
   kubectl apply -f "${CHART_DIR}/monitoring/dcgm-servicemonitor.yaml" >/dev/null
 
   PROM_SVC="$(prometheus_service_name)" || {
-    echo "Prometheus not found — Kubernetes HPA GPU-autoscaling metric pipeline unavailable" >&2
+    echo "Prometheus not found — GPU HPA metric pipeline unavailable" >&2
     exit 1
   }
   PROM_URL="http://${PROM_SVC}.${MONITORING_NS}.svc"
@@ -168,7 +169,7 @@ ensure_prometheus_stack() {
     sleep 5
   done
   custom_metrics_ready || {
-    echo "custom.metrics.k8s.io not ready — HPA cannot use gpu_utilization_percent" >&2
+    echo "custom.metrics.k8s.io not ready — HPA cannot use ${HPA_METRIC:-gpu_utilization} metrics" >&2
     exit 1
   }
 }
@@ -249,7 +250,7 @@ fi
 hpa_common_verify_gpu_capacity "${MAX_REPLICAS}" || exit 1
 echo "HPA maxReplicas=${MAX_REPLICAS} (allocatable GPUs / MAX_REPLICAS)"
 kubectl get pods -n gpu-operator-resources -l app=nvidia-dcgm-exporter 2>/dev/null | grep -q Running || {
-  echo "nvidia-dcgm-exporter not running — Kubernetes HPA GPU metric unavailable" >&2
+  echo "nvidia-dcgm-exporter not running — GPU HPA metric unavailable" >&2
   exit 1
 }
 
@@ -257,7 +258,7 @@ ensure_prometheus_stack
 if hpa_common_envoy_lb_enabled; then
   ensure_envoy_gateway
 else
-  echo "ENABLE_ENVOY_LB=0: skipping Envoy Gateway install; inference uses the agent Service only." >&2
+  echo "ENABLE_ENVOY_LB=0: skipping Envoy Gateway install; inference uses the metrics-proxy Service only." >&2
 fi
 
 hpa_common_gpu_recreate_stale_workload "${NAMESPACE}" "${DEPLOYMENT}" "${DEPLOYMENT}"

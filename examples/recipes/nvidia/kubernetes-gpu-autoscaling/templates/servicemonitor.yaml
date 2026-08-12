@@ -4,7 +4,7 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "nemoclaw-gpu.fullname" . }}-agent
+  name: {{ include "nemoclaw-gpu.fullname" . }}-metrics-proxy
   namespace: {{ include "nemoclaw-gpu.namespace" . }}
   labels:
     {{- include "nemoclaw-gpu.labels" . | nindent 4 }}

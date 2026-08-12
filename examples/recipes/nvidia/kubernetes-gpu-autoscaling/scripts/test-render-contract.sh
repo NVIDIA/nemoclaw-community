@@ -7,7 +7,8 @@
 #   - hpa.yaml's scaleTargetRef.name must match deployment.yaml's Deployment name.
 #   - hpa.yaml defaults to gpu_utilization_percent (GPU utilization HPA example).
 #     Target must match values.autoscaling.targetGPUUtilizationPercentage.
-#   - autoscaling.metric=latency_* / request_rate must render the matching custom metric.
+#   - autoscaling.metric=latency_avg must render the matching custom metric.
+#   - autoscaling.metric values other than gpu_utilization|latency_avg must fail to render.
 #   - A legacy autoscaling.gpu.metricName override must not change the selected metric.
 #   - service.yaml's selector and servicemonitor.yaml's selector must both match
 #     deployment.yaml's pod template labels — otherwise the Service has no
@@ -464,23 +465,23 @@ if deploy:
     deploy_selector = deploy["spec"]["selector"]["matchLabels"]
 
     agent_containers = [
-        c for c in deploy["spec"]["template"]["spec"]["containers"] if c.get("name") == "agent"
+        c for c in deploy["spec"]["template"]["spec"]["containers"] if c.get("name") == "metrics-proxy"
     ]
     if len(agent_containers) != 1:
-        failures.append(f"expected exactly one agent container, found {len(agent_containers)}")
-    elif agent_containers[0].get("command") != ["node", "/app/agent-server.ts"]:
-        failures.append("agent container does not execute the mounted TypeScript entry point")
+        failures.append(f"expected exactly one metrics-proxy container, found {len(agent_containers)}")
+    elif agent_containers[0].get("command") != ["node", "/app/metrics-proxy-server.ts"]:
+        failures.append("metrics-proxy container does not execute the mounted TypeScript entry point")
     else:
         env = {item["name"]: item for item in agent_containers[0].get("env", [])}
         if env.get("INFERENCE_AUTH_REQUIRED", {}).get("value") != "true":
-            failures.append("agent container does not require inference authentication")
+            failures.append("metrics-proxy container does not require inference authentication")
         api_key_ref = (
             env.get("INFERENCE_API_KEY", {})
             .get("valueFrom", {})
             .get("secretKeyRef", {})
         )
         if api_key_ref != {"name": f"{deploy_name}-inference-api", "key": "api-key"}:
-            failures.append(f"agent inference API Secret reference is incorrect: {api_key_ref!r}")
+            failures.append(f"metrics-proxy inference API Secret reference is incorrect: {api_key_ref!r}")
 
     app_volumes = [
         v for v in deploy["spec"]["template"]["spec"]["volumes"] if v.get("name") == "app"
@@ -495,7 +496,7 @@ if deploy:
             if item.get("key") == "package.json" and item.get("path") == "package.json"
         ]
         if len(package_items) != 1:
-            failures.append("app volume does not mount package.json next to agent-server.ts")
+            failures.append("app volume does not mount package.json next to metrics-proxy-server.ts")
 
     if hpa:
         target_name = hpa["spec"]["scaleTargetRef"]["name"]
@@ -513,7 +514,7 @@ if deploy:
             metric_name = gpu_metric["metric"]["name"]
             if metric_name != "gpu_utilization_percent":
                 failures.append(
-                    f"HPA Pods metric={metric_name!r}, expected 'gpu_utilization_percent' for default metric=gpu"
+                    f"HPA Pods metric={metric_name!r}, expected 'gpu_utilization_percent' for default metric=gpu_utilization"
                 )
             target_value = gpu_metric["target"]["averageValue"]
             if str(target_value) != "40":
@@ -522,8 +523,8 @@ if deploy:
                     "(values.yaml default targetGPUUtilizationPercentage)"
                 )
         hpa_mode = hpa.get("metadata", {}).get("annotations", {}).get("nemoclaw.ai/hpa-mode")
-        if hpa_mode != "gpu":
-            failures.append(f"HPA mode annotation={hpa_mode!r}, expected 'gpu'")
+        if hpa_mode != "gpu_utilization":
+            failures.append(f"HPA mode annotation={hpa_mode!r}, expected 'gpu_utilization'")
 
     for kind, obj in (("Service", svc), ("ServiceMonitor", svcmon)):
         if not obj:
@@ -552,11 +553,11 @@ if config:
     try:
         package_metadata = json.loads(package_json or "")
     except json.JSONDecodeError:
-        failures.append("agent ConfigMap package.json is not valid JSON")
+        failures.append("metrics-proxy ConfigMap package.json is not valid JSON")
     else:
         if package_metadata != {"type": "module"}:
             failures.append(
-                f"agent ConfigMap package.json={package_metadata!r}, expected ESM metadata"
+                f"metrics-proxy ConfigMap package.json={package_metadata!r}, expected ESM metadata"
             )
 
 expected_inference_secret_name = (
@@ -619,12 +620,12 @@ if generated:
     sys.exit(1)
 
 deployment = next(doc for doc in docs if doc.get("kind") == "Deployment")
-agent = next(
+proxy = next(
     container
     for container in deployment["spec"]["template"]["spec"]["containers"]
-    if container["name"] == "agent"
+    if container["name"] == "metrics-proxy"
 )
-env = {item["name"]: item for item in agent["env"]}
+env = {item["name"]: item for item in proxy["env"]}
 secret_ref = env["INFERENCE_API_KEY"]["valueFrom"]["secretKeyRef"]
 if secret_ref != {"name": operator_secret_name, "key": "true"}:
     print(f"FAIL: operator-managed inference Secret reference is incorrect: {secret_ref!r}", file=sys.stderr)
@@ -649,8 +650,8 @@ if "api.key" not in secret.get("data", {}):
     sys.exit(1)
 
 deployment = next(doc for doc in docs if doc.get("kind") == "Deployment")
-agent = next(container for container in deployment["spec"]["template"]["spec"]["containers"] if container["name"] == "agent")
-env = {item["name"]: item for item in agent["env"]}
+proxy = next(container for container in deployment["spec"]["template"]["spec"]["containers"] if container["name"] == "metrics-proxy")
+env = {item["name"]: item for item in proxy["env"]}
 key = env["INFERENCE_API_KEY"]["valueFrom"]["secretKeyRef"]["key"]
 if key != "api.key":
     print(f"FAIL: Deployment does not preserve dotted inference Secret key: {key!r}", file=sys.stderr)
@@ -700,6 +701,31 @@ if [[ "${BAD_METRIC_OUTPUT}" != *"unsupported"* ]] \
   exit 1
 fi
 echo "OK: chart rejects unknown HPA metric modes"
+
+for RETIRED_METRIC in latency_p50 latency_p95 request_rate; do
+  case "${RETIRED_METRIC}" in
+    latency_p50) RETIRED_RELEASE="retired-latency-p50" ;;
+    latency_p95) RETIRED_RELEASE="retired-latency-p95" ;;
+    request_rate) RETIRED_RELEASE="retired-request-rate" ;;
+    *) RETIRED_RELEASE="retired-metric" ;;
+  esac
+  if RETIRED_OUTPUT="$(helm template "${RETIRED_RELEASE}" "${CHART_DIR}" \
+    "${AUTH_HELM_SETS[@]}" \
+    -f "${CHART_DIR}/values.yaml" \
+    --set autoscaling.enabled=true \
+    --set-string "autoscaling.metric=${RETIRED_METRIC}" \
+    --set ingress.allowInsecureHttp=true 2>&1)"; then
+    echo "FAIL: chart rendered retired autoscaling.metric=${RETIRED_METRIC}" >&2
+    exit 1
+  fi
+  if [[ "${RETIRED_OUTPUT}" != *"unsupported"* ]] \
+    || [[ "${RETIRED_OUTPUT}" != *"${RETIRED_METRIC}"* ]]; then
+    echo "FAIL: retired metric ${RETIRED_METRIC} rejection returned an unexpected error" >&2
+    printf '%s\n' "${RETIRED_OUTPUT}" >&2
+    exit 1
+  fi
+done
+echo "OK: chart rejects retired HPA metric modes (latency_p50, latency_p95, request_rate)"
 
 echo "OK: chart rejects cleartext Gateway without explicit opt-in"
 echo "OK: chart requires in-cluster inference authentication"

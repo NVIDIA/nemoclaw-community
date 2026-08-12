@@ -2,14 +2,13 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# One-shot / watch Kubernetes HPA with normalized current/target values:
-#   GPU util → 30.25%/40%   (not 30250m/40)
-#   latency  → 46514ms/3000ms (not 46514/3k or 3099666m/3k)
+# One-shot or live GPU HPA with readable percentage current/target values
+# (30.25%/40%, not Kubernetes Quantity milli-units such as 30250m/40).
 #
 # Usage:
 #   ./scripts/get-hpa.sh -n nemoclaw-gpu
 #   ./scripts/get-hpa.sh -n nemoclaw-gpu -w
-#   ./scripts/hpa-watch.sh
+#   HPA_WATCH_INTERVAL_SEC=5 ./scripts/get-hpa.sh -w
 
 set -euo pipefail
 
@@ -34,16 +33,20 @@ while [[ $# -gt 0 ]]; do
       cat <<EOF
 Usage: $(basename "$0") [-n NAMESPACE] [-w]
 
-Formats HPA targets without Kubernetes Quantity suffixes (m/k):
-  GPU util  → 30.25%/40%
-  latency   → 46514/3000   (milliseconds; see README)
+One-shot or live watch with a normalized GPU utilization column
+(30.25%/40%, not kubectl's 30250m/40 Quantity form).
 
-Live watch (recommended over raw kubectl get hpa -w):
-  $(basename "$0") -n nemoclaw-gpu -w
-  ./scripts/hpa-watch.sh
+  HPA_WATCH_INTERVAL_SEC   poll interval for -w (default 2)
+
+Raw kubectl stream (unnormalized):
+  kubectl get hpa -n nemoclaw-gpu -w
 
 Per-pod GPU breakdown (second terminal):
-  ./scripts/get-agent-pods.sh -n nemoclaw-gpu -w
+  ./scripts/get-metrics-proxy-pods.sh -n nemoclaw-gpu -w
+
+Examples:
+  $(basename "$0") -n nemoclaw-gpu
+  $(basename "$0") -n nemoclaw-gpu -w
 EOF
       exit 0
       ;;
@@ -58,6 +61,7 @@ require_cmd kubectl
 
 if [[ "${WATCH}" -eq 1 ]]; then
   hpa_common_watch_hpa "${NAMESPACE}"
+  exit 0
 fi
 
 hpa_common_print_hpa "${NAMESPACE}"

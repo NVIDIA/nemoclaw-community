@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Drive GPU utilization for HPA: chat completions directly to each agent pod IP.
-// Each Running agent pod gets PER_POD_PEAK × compensation concurrent requests.
+// Drive GPU utilization for HPA: chat completions directly to each metrics-proxy pod IP.
+// Each Running metrics-proxy pod gets PER_POD_PEAK × compensation concurrent requests.
 // Compensation = HPA currentReplicas / loadTargetCount so cold pods at 0% GPU
 // do not drag the average to ~42% while a new replica is starting.
 
@@ -15,7 +15,7 @@ const DURATION_SEC = Number(process.env.DURATION_SEC || 720);
 const TARGET_PODS = Number(process.env.TARGET_PODS || 4);
 const HPA_TARGET_GPU = Number(process.env.HPA_TARGET_GPU || 40);
 const JOB_PARALLELISM = Number(process.env.JOB_PARALLELISM || 1);
-const AGENT_PORT = Number(process.env.AGENT_PORT || 8081);
+const METRICS_PROXY_PORT = Number(process.env.METRICS_PROXY_PORT || 8081);
 const INFLIGHT_PER_GPU = Number(process.env.INFLIGHT_PER_GPU || 384);
 const LOAD_MULTIPLIER = Number(process.env.LOAD_MULTIPLIER || 1);
 const PER_POD_PEAK = INFLIGHT_PER_GPU * LOAD_MULTIPLIER;
@@ -25,10 +25,10 @@ const MAX_TOKENS = Number(process.env.MAX_TOKENS || 512);
 const LOG_EVERY_SEC = Number(process.env.LOG_EVERY_SEC || 15);
 const TARGET_POLL_SEC = Number(process.env.TARGET_POLL_SEC || 1);
 const K8S_NAMESPACE = process.env.K8S_NAMESPACE || "nemoclaw-gpu";
-const AGENT_SERVICE = process.env.AGENT_SERVICE || "nemoclaw-gpu-agent";
-const HPA_NAME = process.env.HPA_NAME || AGENT_SERVICE;
-const AGENT_LABEL_SELECTOR =
-  process.env.AGENT_LABEL_SELECTOR || "app.kubernetes.io/name=nemoclaw-gpu,component=gpu-agent";
+const METRICS_PROXY_SERVICE = process.env.METRICS_PROXY_SERVICE || "nemoclaw-gpu-metrics-proxy";
+const HPA_NAME = process.env.HPA_NAME || METRICS_PROXY_SERVICE;
+const METRICS_PROXY_LABEL_SELECTOR =
+  process.env.METRICS_PROXY_LABEL_SELECTOR || "app.kubernetes.io/name=nemoclaw-gpu,component=gpu-metrics-proxy";
 const ESCALATE_INTERVAL_SEC = Number(process.env.ESCALATE_INTERVAL_SEC || 10);
 const ESCALATE_FACTOR = Number(process.env.ESCALATE_FACTOR || 0.5);
 const ESCALATE_MAX_MULT = Number(process.env.ESCALATE_MAX_MULT || 3);
@@ -201,7 +201,7 @@ async function probeInferenceReady(target) {
   return false;
 }
 
-async function pollAgentPodTargets() {
+async function pollMetricsProxyPodTargets() {
   const now = Date.now();
   if (now - lastTargetPoll < TARGET_POLL_SEC * 1000) {
     return podTargets;
@@ -213,12 +213,12 @@ async function pollAgentPodTargets() {
   const ips = new Set();
 
   const sliceList = await k8sGet(
-    `/apis/discovery.k8s.io/v1/namespaces/${K8S_NAMESPACE}/endpointslices?labelSelector=${encodeURIComponent(`kubernetes.io/service-name=${AGENT_SERVICE}`)}`,
+    `/apis/discovery.k8s.io/v1/namespaces/${K8S_NAMESPACE}/endpointslices?labelSelector=${encodeURIComponent(`kubernetes.io/service-name=${METRICS_PROXY_SERVICE}`)}`,
   );
   for (const ip of ipsFromEndpointSliceList(sliceList)) ips.add(ip);
 
   const podList = await k8sGet(
-    `/api/v1/namespaces/${K8S_NAMESPACE}/pods?labelSelector=${encodeURIComponent(AGENT_LABEL_SELECTOR)}`,
+    `/api/v1/namespaces/${K8S_NAMESPACE}/pods?labelSelector=${encodeURIComponent(METRICS_PROXY_LABEL_SELECTOR)}`,
   );
   for (const ip of ipsFromRunningPods(podList)) ips.add(ip);
 
@@ -230,7 +230,7 @@ async function pollAgentPodTargets() {
         console.log(JSON.stringify({ event: "newPodDiscovered", ip }));
       }
     }
-    const candidates = [...ips].map((ip) => `http://${ip}:${AGENT_PORT}`);
+    const candidates = [...ips].map((ip) => `http://${ip}:${METRICS_PROXY_PORT}`);
     podCandidates = candidates;
     const ready = [];
     await Promise.all(
@@ -334,7 +334,7 @@ async function probeChatWorks(target) {
 
 async function requirePodTargets(deadlineMs) {
   while (Date.now() < deadlineMs) {
-    await pollAgentPodTargets();
+    await pollMetricsProxyPodTargets();
     const targets = podCandidates.length ? podCandidates : podTargets;
     if (targets.length === 0) {
       await sleep(1000);
@@ -363,8 +363,8 @@ async function requirePodTargets(deadlineMs) {
   }
   console.error(
     REQUIRE_CHAT_PROBE
-      ? "FATAL: agent pod(s) found but chat probe never succeeded — wait for Ollama model pull"
-      : "FATAL: no ready agent pod IPs — check RBAC (pods/endpointslices) and agent pods",
+      ? "FATAL: metrics-proxy pod(s) found but chat probe never succeeded — wait for Ollama model pull"
+      : "FATAL: no ready metrics-proxy pod IPs — check RBAC (pods/endpointslices) and metrics-proxy pods",
   );
   process.exit(1);
 }
@@ -585,7 +585,7 @@ async function main() {
   await requirePodTargets(startedAt + 90_000);
 
   while (Date.now() < endAt) {
-    await pollAgentPodTargets();
+    await pollMetricsProxyPodTargets();
     const targets = podCandidates.length ? podCandidates : podTargets;
     if (!targets.length) {
       await sleep(1000);

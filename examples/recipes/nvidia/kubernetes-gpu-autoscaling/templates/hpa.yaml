@@ -9,11 +9,14 @@
 {{- $metricName := include "nemoclaw-gpu.hpaMetric" . }}
 {{- $metricTarget := include "nemoclaw-gpu.hpaMetricTarget" . }}
 {{- $metricDisplay := include "nemoclaw-gpu.hpaMetricDisplay" . }}
-{{- $metricMode := .Values.autoscaling.metric | default "gpu" }}
+{{- $metricMode := .Values.autoscaling.metric | default "gpu_utilization" }}
+{{- if eq $metricMode "gpu" }}
+{{- $metricMode = "gpu_utilization" }}
+{{- end }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "nemoclaw-gpu.fullname" . }}-agent
+  name: {{ include "nemoclaw-gpu.fullname" . }}-metrics-proxy
   namespace: {{ include "nemoclaw-gpu.namespace" . }}
   labels:
     {{- include "nemoclaw-gpu.labels" . | nindent 4 }}
@@ -27,7 +30,7 @@ spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "nemoclaw-gpu.fullname" . }}-agent
+    name: {{ include "nemoclaw-gpu.fullname" . }}-metrics-proxy
   minReplicas: {{ $hpaMin }}
   maxReplicas: {{ $hpaMax }}
   metrics:

@@ -3,12 +3,12 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "nemoclaw-gpu.fullname" . }}-agent
+  name: {{ include "nemoclaw-gpu.fullname" . }}-metrics-proxy
   namespace: {{ include "nemoclaw-gpu.namespace" . }}
   labels:
     {{- include "nemoclaw-gpu.labels" . | nindent 4 }}
   annotations:
-    nemoclaw.ai/agent-port: {{ .Values.service.port | quote }}
+    nemoclaw.ai/metrics-proxy-port: {{ .Values.service.port | quote }}
 spec:
   type: {{ .Values.service.type }}
   ports:

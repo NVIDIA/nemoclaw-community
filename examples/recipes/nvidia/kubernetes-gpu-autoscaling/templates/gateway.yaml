@@ -123,7 +123,7 @@ spec:
             type: {{ include "nemoclaw-gpu.httpPathMatchType" . }}
             value: {{ .Values.ingress.path | quote }}
       backendRefs:
-        - name: {{ $fullname }}-agent
+        - name: {{ $fullname }}-metrics-proxy
           port: {{ .Values.service.port }}
 ---
 apiVersion: gateway.envoyproxy.io/v1alpha1
@@ -172,7 +172,7 @@ spec:
             type: {{ include "nemoclaw-gpu.httpPathMatchType" . }}
             value: {{ .Values.ingress.path | quote }}
       backendRefs:
-        - name: {{ $fullname }}-agent
+        - name: {{ $fullname }}-metrics-proxy
           port: {{ .Values.service.port }}
 ---
 apiVersion: gateway.envoyproxy.io/v1alpha1

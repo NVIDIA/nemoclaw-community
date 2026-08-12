@@ -2,12 +2,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Per-pod GPU agent status (READY, GPU UTIL %, load-test generators).
+# Per-pod GPU metrics-proxy status (READY, GPU UTIL %, load-test generators).
 # Use alongside: kubectl get hpa -n nemoclaw-gpu -w
 #
 # Usage:
-#   ./scripts/get-agent-pods.sh -n nemoclaw-gpu
-#   ./scripts/get-agent-pods.sh -n nemoclaw-gpu -w
+#   ./scripts/get-metrics-proxy-pods.sh -n nemoclaw-gpu
+#   ./scripts/get-metrics-proxy-pods.sh -n nemoclaw-gpu -w
 
 set -euo pipefail
 
@@ -33,7 +33,7 @@ while [[ $# -gt 0 ]]; do
       cat <<EOF
 Usage: $(basename "$0") [-n NAMESPACE] [-w]
 
-Agent pods with per-pod GPU utilization (not HPA average).
+metrics-proxy pods with per-pod GPU utilization (not HPA average).
 
 Watch HPA in another terminal:
   kubectl get hpa -n nemoclaw-gpu -w
@@ -58,9 +58,9 @@ require_cmd kubectl
 if [[ "${WATCH}" -eq 1 ]]; then
   while true; do
     clear 2>/dev/null || true
-    hpa_common_print_agent_pods "${NAMESPACE}"
+    hpa_common_print_metrics_proxy_pods "${NAMESPACE}"
     sleep "${INTERVAL}"
   done
 fi
 
-hpa_common_print_agent_pods "${NAMESPACE}"
+hpa_common_print_metrics_proxy_pods "${NAMESPACE}"

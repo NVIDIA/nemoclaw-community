@@ -73,7 +73,7 @@ assert expected in ids, f"inference.local /v1/models missing {expected!r}; got {
 print("models:", ", ".join(ids))' \
   "${MODEL}" "${MODELS_JSON}"
 
-QUERY='What is NVIDIA NemoClaw?'
+QUERY='In one sentence, what is an AI agent sandbox?'
 log "POST https://inference.local/v1/chat/completions"
 log "Example query: ${QUERY}"
 CHAT_JSON="$(

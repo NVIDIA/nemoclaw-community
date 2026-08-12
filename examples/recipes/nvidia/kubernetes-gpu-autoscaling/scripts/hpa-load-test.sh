@@ -18,6 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=hpa-common.sh
 source "${SCRIPT_DIR}/hpa-common.sh"
+hpa_common_load_local_env "${CHART_DIR}"
 NAMESPACE="${NAMESPACE:-nemoclaw-gpu}"
 RELEASE="${RELEASE:-nemoclaw-gpu}"
 JOB_NAME="${JOB_NAME:-nemoclaw-gpu-hpa-load-test}"
@@ -86,8 +87,8 @@ SCALE_UP_WAIT_LOOPS="${SCALE_UP_WAIT_LOOPS:-60}"
 HPA_VALUES="${HPA_VALUES:-${CHART_DIR}/values.yaml}"
 SCALE_DOWN_WAIT_LOOPS="${SCALE_DOWN_WAIT_LOOPS:-40}"
 ROLLOUT_TIMEOUT="${ROLLOUT_TIMEOUT:-900}"
-DEPLOYMENT="${DEPLOYMENT:-$(RELEASE="${RELEASE}" CHART_NAME=nemoclaw-gpu hpa_common_agent_deployment)}"
-SERVICE="${SERVICE:-$(RELEASE="${RELEASE}" CHART_NAME=nemoclaw-gpu hpa_common_agent_service)}"
+DEPLOYMENT="${DEPLOYMENT:-$(RELEASE="${RELEASE}" CHART_NAME=nemoclaw-gpu hpa_common_metrics_proxy_deployment)}"
+SERVICE="${SERVICE:-$(RELEASE="${RELEASE}" CHART_NAME=nemoclaw-gpu hpa_common_metrics_proxy_service)}"
 SERVICE_PORT="${SERVICE_PORT:-8081}"
 # shellcheck disable=SC2034 # passed by name to hpa_common_log_hpa_if_changed
 LAST_HPA_LINE=""
@@ -101,7 +102,7 @@ kubectl get apiservice v1beta1.metrics.k8s.io 2>/dev/null | grep -q True || {
 hpa_common_verify_gpu_capacity "${TARGET_PODS}" || exit 1
 hpa_common_verify_gpu_hpa_metric "${NAMESPACE}" || exit 1
 
-if ! hpa_common_ensure_agent_ready "${NAMESPACE}" "${RELEASE}" "${CHART_DIR}" \
+if ! hpa_common_ensure_metrics_proxy_ready "${NAMESPACE}" "${RELEASE}" "${CHART_DIR}" \
   "${HPA_VALUES}" "${ROLLOUT_TIMEOUT}"; then
   echo "Baseline pod not ready — HPA test cannot start" >&2
   exit 1
@@ -122,10 +123,9 @@ HPA_HELM_ARGS=(
   --set autoscaling.minReplicas=1
   --set autoscaling.maxReplicas="${TARGET_PODS}"
   --set autoscaling.maxGpus="${TARGET_PODS}"
-  --set "autoscaling.metric=${HPA_METRIC:-gpu}"
+  --set "autoscaling.metric=${HPA_METRIC:-gpu_utilization}"
   --set "autoscaling.targetGPUUtilizationPercentage=${HPA_TARGET_GPU}"
   --set "autoscaling.targetLatencyMilliseconds=${HPA_TARGET_LATENCY_MS:-5000}"
-  --set-string "autoscaling.targetRequestRate=${HPA_TARGET_REQUEST_RATE:-2}"
   --set "ingress.allowInsecureHttp=${ALLOW_INSECURE_VALUE}"
   --set "ingress.gateway.enabled=$(hpa_common_envoy_lb_helm_value)"
   --set "ingress.gateway.serviceType=${INGRESS_SERVICE_TYPE:-ClusterIP}"
@@ -154,20 +154,20 @@ hpa_common_verify_hpa_bounds "${NAMESPACE}" "${DEPLOYMENT}" "${DEPLOYMENT}" 1 "$
 hpa_common_wait_rollout "${DEPLOYMENT}" "${NAMESPACE}" "${ROLLOUT_TIMEOUT}"
 hpa_common_print_hpa "${NAMESPACE}"
 
-# Ensure agent pods are Ready (Ollama loaded) before load starts.
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=nemoclaw-gpu,component=gpu-agent \
+# Ensure metrics-proxy pods are Ready (Ollama loaded) before load starts.
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=nemoclaw-gpu,component=gpu-metrics-proxy \
   -n "${NAMESPACE}" --timeout=600s >/dev/null 2>&1 || {
-  echo "Agent pods not Ready — run ./scripts/hpa-reset.sh then retry" >&2
+  echo "metrics-proxy pods not Ready — run ./scripts/hpa-reset.sh then retry" >&2
   exit 1
 }
 
 # Wait for inference ready (Ollama model loaded) before starting load Job.
-hpa_common_log "Waiting for agent /readyz (model loaded)..."
+hpa_common_log "Waiting for metrics-proxy /readyz (model loaded)..."
 READY_OK=0
 for _ in $(seq 1 60); do
-  AGENT_POD="$(kubectl get pods -n "${NAMESPACE}" -l app.kubernetes.io/name=nemoclaw-gpu,component=gpu-agent \
+  METRICS_PROXY_POD="$(kubectl get pods -n "${NAMESPACE}" -l app.kubernetes.io/name=nemoclaw-gpu,component=gpu-metrics-proxy \
     --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
-  if [[ -n "${AGENT_POD}" ]] && kubectl exec -n "${NAMESPACE}" "${AGENT_POD}" -c agent -- \
+  if [[ -n "${METRICS_PROXY_POD}" ]] && kubectl exec -n "${NAMESPACE}" "${METRICS_PROXY_POD}" -c metrics-proxy -- \
     node -e "fetch('http://127.0.0.1:${SERVICE_PORT}/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" \
     >/dev/null 2>&1; then
     READY_OK=1
@@ -176,17 +176,17 @@ for _ in $(seq 1 60); do
   sleep 3
 done
 if [[ "${READY_OK}" -ne 1 ]]; then
-  echo "Agent /readyz not stable — Ollama may still be pulling the model. Run ./scripts/hpa-reset.sh then retry" >&2
+  echo "metrics-proxy /readyz not stable — Ollama may still be pulling the model. Run ./scripts/hpa-reset.sh then retry" >&2
   exit 1
 fi
 
 # Smoke-test one chat completion before load Job starts.
-hpa_common_log "Smoke test: chat completion on agent pod..."
+hpa_common_log "Smoke test: chat completion on metrics-proxy pod..."
 SMOKE_OK=0
 for _ in $(seq 1 60); do
-  AGENT_POD="$(kubectl get pods -n "${NAMESPACE}" -l app.kubernetes.io/name=nemoclaw-gpu,component=gpu-agent \
+  METRICS_PROXY_POD="$(kubectl get pods -n "${NAMESPACE}" -l app.kubernetes.io/name=nemoclaw-gpu,component=gpu-metrics-proxy \
     --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
-  if [[ -n "${AGENT_POD}" ]] && kubectl exec -n "${NAMESPACE}" "${AGENT_POD}" -c agent -- \
+  if [[ -n "${METRICS_PROXY_POD}" ]] && kubectl exec -n "${NAMESPACE}" "${METRICS_PROXY_POD}" -c metrics-proxy -- \
     node -e "fetch('http://127.0.0.1:${SERVICE_PORT}/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+process.env.INFERENCE_API_KEY},body:JSON.stringify({messages:[{role:'user',content:'Say OK.'}],max_tokens:8,stream:false})}).then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1));" \
     >/dev/null 2>&1; then
     SMOKE_OK=1
@@ -340,11 +340,11 @@ ${LOAD_TEST_NODE_SELECTOR}
               value: "${TARGET_POLL_SEC:-1}"
             - name: K8S_NAMESPACE
               value: "${NAMESPACE}"
-            - name: AGENT_SERVICE
+            - name: METRICS_PROXY_SERVICE
               value: "${SERVICE}"
             - name: HPA_NAME
               value: "${DEPLOYMENT}"
-            - name: AGENT_PORT
+            - name: METRICS_PROXY_PORT
               value: "${SERVICE_PORT}"
             - name: RAMP_SEC
               value: "${RAMP_SEC}"
@@ -390,7 +390,7 @@ ${LOAD_TEST_NODE_SELECTOR}
 EOF
 
 PER_POD_PEAK=$((INFLIGHT_PER_GPU * LOAD_MULTIPLIER))
-hpa_common_log "Load: ${JOB_PARALLELISM} generators × ${MAX_TOKENS} tokens → each Ready agent pod; base ~${PER_POD_PEAK} in-flight/pod (${LOAD_MULTIPLIER}×), cap ${MAX_INFLIGHT_PER_POD}/pod, warmup ${WARMUP_SEC}s, bootstrap ${BOOTSTRAP_INFLIGHT}; metric=${HPA_METRIC:-gpu} → max ${TARGET_PODS} replicas (stop after ${MAX_REPLICAS_HOLD_SEC}s at max)"
+hpa_common_log "Load: ${JOB_PARALLELISM} generators × ${MAX_TOKENS} tokens → each Ready metrics-proxy pod; base ~${PER_POD_PEAK} in-flight/pod (${LOAD_MULTIPLIER}×), cap ${MAX_INFLIGHT_PER_POD}/pod, warmup ${WARMUP_SEC}s, bootstrap ${BOOTSTRAP_INFLIGHT}; metric=${HPA_METRIC:-gpu_utilization} → max ${TARGET_PODS} replicas (stop after ${MAX_REPLICAS_HOLD_SEC}s at max)"
 
 kubectl wait --for=condition=ready pod -l "job-name=${JOB_NAME}" -n "${NAMESPACE}" --timeout=120s >/dev/null 2>&1 || {
   echo "Load-generator pods not ready — check: kubectl get pods -n ${NAMESPACE} -l job-name=${JOB_NAME}" >&2
@@ -398,7 +398,7 @@ kubectl wait --for=condition=ready pod -l "job-name=${JOB_NAME}" -n "${NAMESPACE
 
 if ! kubectl logs -n "${NAMESPACE}" -l "job-name=${JOB_NAME}" --tail=200 2>/dev/null \
   | grep -q 'targetsReady'; then
-  hpa_common_log "Waiting for load generators to discover agent pods..."
+  hpa_common_log "Waiting for load generators to discover metrics-proxy pods..."
   for _ in $(seq 1 15); do
     kubectl logs -n "${NAMESPACE}" -l "job-name=${JOB_NAME}" --tail=200 2>/dev/null \
       | grep -q 'targetsReady' && break
@@ -438,7 +438,7 @@ fi
 if [[ "${RUN_ENVOY_LB_TEST}" -eq 1 ]]; then
   # Wait until the scaled replicas are Ready before probing Envoy.
   if kubectl wait --for=condition=ready pod \
-    -l 'app.kubernetes.io/name=nemoclaw-gpu,component=gpu-agent' \
+    -l 'app.kubernetes.io/name=nemoclaw-gpu,component=gpu-metrics-proxy' \
     -n "${NAMESPACE}" --timeout=600s >/dev/null 2>&1 \
     && hpa_common_verify_envoy_least_request_distribution \
       "${NAMESPACE}" \

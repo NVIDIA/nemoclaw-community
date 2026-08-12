@@ -12,11 +12,11 @@ gpuScaling:
   perPodCpuLimit: "4"
   perPodMemory: "16Gi"
   perPodMemoryLimit: "24Gi"
-  # Agent sidecar (no GPU) — metrics + OpenAI-compatible proxy to local Ollama
-  agentCpuRequest: "250m"
-  agentCpuLimit: "1"
-  agentMemory: "512Mi"
-  agentMemoryLimit: "1Gi"
+  # metrics-proxy (no GPU) — to local Ollama
+  metricsProxyCpuRequest: "250m"
+  metricsProxyCpuLimit: "1"
+  metricsProxyMemory: "512Mi"
+  metricsProxyMemoryLimit: "1Gi"
 
 replicaCount: 1
 
@@ -46,7 +46,7 @@ ollama:
     # Single-node development: host directory shared by all replicas. Overrides PVC.
     hostPath: /var/lib/nemoclaw-gpu/ollama
 
-agent:
+metricsProxy:
   image:
     repository: node
     # Same digest-pinning rationale as ollama.image above.
@@ -63,13 +63,13 @@ namespace:
 
 service:
   type: ClusterIP
-  # Agent HTTP port (CPU chart uses 8080 — keep charts on different ports)
+  # metrics-proxy HTTP port (CPU chart uses 8080 — keep charts on different ports)
   port: 8081
 
 # Optional Envoy Gateway LeastRequest load balancer (Gateway API). When
 # ingress.gateway.enabled is true (default), install-hpa.sh installs Envoy Gateway if the
 # `eg` GatewayClass is missing and the chart creates Gateway/HTTPRoute/BackendTrafficPolicy
-# objects. Set enabled to false (or ENABLE_ENVOY_LB=0) to skip Envoy: traffic uses the agent
+# objects. Set enabled to false (or ENABLE_ENVOY_LB=0) to skip Envoy: traffic uses the metrics-proxy
 # Service only (not LeastRequest). See README Architecture / Install details.
 ingress:
   host: nemoclaw.local
@@ -99,7 +99,7 @@ ingress:
   # not an accidentally-blank credential) auto-generates a random one on first install and
   # reuses it across `helm upgrade` re-runs (install-hpa.sh/hpa-load-test.sh/hpa-reset.sh
   # never pass --reuse-values) so the credential doesn't rotate underneath you. Retrieve it
-  # with `kubectl get secret <fullname>-agent-ingress-auth -o jsonpath='{.data.password}' |
+  # with `kubectl get secret <fullname>-metrics-proxy-ingress-auth -o jsonpath='{.data.password}' |
   # base64 -d` (see README "Ingress security").
   # Envoy Gateway SecurityPolicy expects an Opaque Secret with key ".htpasswd" in
   # Apache `{SHA}` form (bcrypt is rejected by Envoy). The install scripts generate
@@ -142,10 +142,10 @@ ollamaSecurityContext:
   capabilities:
     drop: ["ALL"]
 
-# The agent sidecar is a plain Node.js HTTP proxy with no device or host access, so it can
+# The metrics-proxy is a plain Node.js HTTP proxy with no device or host access, so it can
 # be fully locked down: non-root, no capabilities, read-only rootfs (it writes nothing; see
 # the "tmp" emptyDir mount below for any incidental scratch space Node itself may want).
-agentSecurityContext:
+metricsProxySecurityContext:
   allowPrivilegeEscalation: false
   runAsNonRoot: true
   runAsUser: 1000
@@ -177,13 +177,12 @@ autoscaling:
   maxReplicas: 4
   maxGpus: 4
   # Scripts default maxReplicas/maxGpus to allocatable GPU count (N) unless MAX_REPLICAS is set.
-  # Examples: gpu | latency_avg (also latency_p50 | latency_p95 | request_rate).
+  # Built-in (live-validated): gpu_utilization | latency_avg.
   # Or wire a custom Adapter metric and extend nemoclaw-gpu.hpaMetric helpers.
-  metric: gpu
+  metric: gpu_utilization
   targetGPUUtilizationPercentage: 40
   # Latency targets are milliseconds (e.g. 3000 = 3s).
   targetLatencyMilliseconds: 3000
-  targetRequestRate: "2"
   behavior:
     # One pod per reconcile — gradual scale-up so load-test / demos show each step
     # instead of jumping straight to ceil(currentReplicas * current/target).
@@ -195,14 +194,13 @@ autoscaling:
           periodSeconds: 10
       selectPolicy: Max
     scaleDown:
-      stabilizationWindowSeconds: 180
+      # One pod per step (N→…→1); shorter window so idle demos scale down faster.
+      # Avoid Percent policies with selectPolicy Max — e.g. 50% jumps 4→2.
+      stabilizationWindowSeconds: 60
       policies:
-        - type: Percent
-          value: 50
-          periodSeconds: 60
         - type: Pods
           value: 1
-          periodSeconds: 60
+          periodSeconds: 30
       selectPolicy: Max
 
 metrics:
@@ -211,6 +209,8 @@ metrics:
   # Scraped by Prometheus so per-pod request/latency metrics (nemoclaw_llm_*) show up
   # in Grafana out of the box. Default true so install/load-test/reset re-runs (plain
   # `helm upgrade`, not --reuse-values) don't silently disable this on every re-apply.
+  # Clear rolling latency_avg after this idle period so latency HPA can scale down.
+  llmLatencyIdleExpireMs: 60000
   serviceMonitor:
     enabled: true
     interval: 30s

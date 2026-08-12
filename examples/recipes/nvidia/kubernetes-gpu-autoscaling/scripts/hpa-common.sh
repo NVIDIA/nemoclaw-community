@@ -5,6 +5,19 @@
 
 hpa_common_log() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
+# Load recipe-local defaults from ${chart_dir}/local.env when present (gitignored).
+# Does not override variables already set in the environment. Safe to call from any cwd —
+# local.env should resolve paths via BASH_SOURCE (see local.env.example).
+hpa_common_load_local_env() {
+  local chart_dir="${1:-${CHART_DIR:-}}"
+  local env_file
+  [[ -n "${chart_dir}" ]] || return 0
+  env_file="${chart_dir}/local.env"
+  [[ -f "${env_file}" ]] || return 0
+  # shellcheck disable=SC1090
+  source "${env_file}"
+}
+
 # Print the effective inference Secret name and key as a tab-separated pair.
 # Reading Helm's computed values keeps operational scripts aligned with either
 # the chart-generated Secret or an operator-managed Secret configured in values.
@@ -119,11 +132,9 @@ def metric_name(h):
 
 def metric_kind(name):
     if name == "gpu_utilization_percent":
-        return "gpu"
-    if "latency" in name and "millisecond" in name:
+        return "gpu_utilization"
+    if name == "nemoclaw_llm_latency_avg_milliseconds":
         return "latency"
-    if "request_rate" in name:
-        return "rate"
     return "other"
 
 def targets(h):
@@ -140,7 +151,7 @@ def targets(h):
             tgt_raw = target.get("averageValue") or target.get("value")
             cur_raw = (cm.get("pods") or {}).get("current", {})
             cur_raw = cur_raw.get("averageValue") or cur_raw.get("value")
-            if kind == "gpu":
+            if kind == "gpu_utilization":
                 parts.append(f"{fmt_pct(qty(cur_raw))}/{fmt_pct(qty(tgt_raw))}")
             elif kind == "latency":
                 parts.append(f"{fmt_ms(qty(cur_raw))}/{fmt_ms(qty(tgt_raw))}")
@@ -254,8 +265,8 @@ hpa_common_watch_hpa() {
   done
 }
 
-# Agent pods + per-pod GPU % (same namespace as HPA).
-hpa_common_print_agent_pods() {
+# GPU metrics-proxy pods + per-pod GPU % (same namespace as HPA).
+hpa_common_print_metrics_proxy_pods() {
   local ns="${1:?namespace}"
   python3 - "${ns}" <<'PY'
 import json, subprocess, sys
@@ -340,7 +351,7 @@ try:
     raw = subprocess.check_output(
         [
             "kubectl", "get", "pods", "-n", ns,
-            "-l", "app.kubernetes.io/name=nemoclaw-gpu,component=gpu-agent",
+            "-l", "app.kubernetes.io/name=nemoclaw-gpu,component=gpu-metrics-proxy",
             "-o", "json",
         ],
         stderr=subprocess.DEVNULL,
@@ -351,9 +362,9 @@ except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError):
     items = []
 
 print()
-print("Agent pods (avg GPU util per pod):")
+print("metrics-proxy pods (avg GPU util per pod):")
 if not items:
-    print("  (no gpu-agent pods)")
+    print("  (no gpu-metrics-proxy pods)")
 else:
     print(
         f"{'NAME':<42} {'READY':<7} {'STATUS':<11} {'RESTARTS':<9} "
@@ -452,12 +463,12 @@ hpa_common_release_fullname() {
   fi
 }
 
-hpa_common_agent_deployment() {
-  echo "$(hpa_common_release_fullname)-agent"
+hpa_common_metrics_proxy_deployment() {
+  echo "$(hpa_common_release_fullname)-metrics-proxy"
 }
 
-hpa_common_agent_service() {
-  echo "$(hpa_common_release_fullname)-agent"
+hpa_common_metrics_proxy_service() {
+  echo "$(hpa_common_release_fullname)-metrics-proxy"
 }
 
 hpa_common_release_selector() {
@@ -632,7 +643,7 @@ hpa_common_ingress_basic_auth_credentials() {
   local ns="${1:?namespace}"
   local release="${2:?release}"
   local username="${3:-admin}"
-  local secret_name="${4:-${release}-agent-ingress-auth}"
+  local secret_name="${4:-${release}-metrics-proxy-ingress-auth}"
 
   require_cmd kubectl
   require_cmd python3
@@ -653,7 +664,7 @@ PY
 }
 
 # ENABLE_ENVOY_LB=1 (default) installs/renders Envoy Gateway LeastRequest.
-# ENABLE_ENVOY_LB=0 skips Envoy; clients use the agent Service only.
+# ENABLE_ENVOY_LB=0 skips Envoy; clients use the metrics-proxy Service only.
 hpa_common_envoy_lb_enabled() {
   case "${ENABLE_ENVOY_LB:-1}" in
     1) return 0 ;;
@@ -673,25 +684,25 @@ hpa_common_envoy_lb_helm_value() {
   fi
 }
 
-hpa_common_agent_service_base_url() {
+hpa_common_metrics_proxy_service_base_url() {
   local ns="${1:-${NAMESPACE:-nemoclaw-gpu}}"
   local service="${2:-}"
   local port="${3:-${SERVICE_PORT:-8081}}"
   if [[ -z "${service}" ]]; then
-    service="$(RELEASE="${RELEASE:-nemoclaw-gpu}" hpa_common_agent_deployment)"
+    service="$(RELEASE="${RELEASE:-nemoclaw-gpu}" hpa_common_metrics_proxy_deployment)"
   fi
   [[ "${ns}" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]] \
-    || { echo "invalid namespace for agent Service URL: ${ns}" >&2; return 1; }
+    || { echo "invalid namespace for metrics-proxy Service URL: ${ns}" >&2; return 1; }
   [[ "${service}" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]] \
-    || { echo "invalid Service name for agent Service URL: ${service}" >&2; return 1; }
+    || { echo "invalid Service name for metrics-proxy Service URL: ${service}" >&2; return 1; }
   if [[ ! "${port}" =~ ^[0-9]+$ ]] || ((10#${port} < 1 || 10#${port} > 65535)); then
-    echo "invalid Service port for agent Service URL: ${port}" >&2
+    echo "invalid Service port for metrics-proxy Service URL: ${port}" >&2
     return 1
   fi
   printf 'http://%s.%s.svc.cluster.local:%s/v1' "${service}" "${ns}" "${port}"
 }
 
-# OpenShell / in-cluster inference base URL: Envoy dataplane when LB is on, else agent Service.
+# OpenShell / in-cluster inference base URL: Envoy dataplane when LB is on, else metrics-proxy Service.
 # When ENABLE_ENVOY_LB is unset at runtime, auto-detect from an existing Gateway object.
 hpa_common_openshell_inference_base_url() {
   local gateway_ns="${1:-${NAMESPACE:-nemoclaw-gpu}}"
@@ -699,7 +710,7 @@ hpa_common_openshell_inference_base_url() {
   local service="${3:-}"
   local port="${4:-${SERVICE_PORT:-8081}}"
   if [[ -z "${gateway_name}" ]]; then
-    gateway_name="$(RELEASE="${RELEASE:-nemoclaw-gpu}" hpa_common_agent_deployment)"
+    gateway_name="$(RELEASE="${RELEASE:-nemoclaw-gpu}" hpa_common_metrics_proxy_deployment)"
   fi
   if [[ -z "${service}" ]]; then
     service="${gateway_name}"
@@ -711,14 +722,14 @@ hpa_common_openshell_inference_base_url() {
       return
       ;;
     0)
-      hpa_common_agent_service_base_url "${gateway_ns}" "${service}" "${port}"
+      hpa_common_metrics_proxy_service_base_url "${gateway_ns}" "${service}" "${port}"
       return
       ;;
     "")
       if kubectl get gateway "${gateway_name}" -n "${gateway_ns}" >/dev/null 2>&1; then
         hpa_common_envoy_dataplane_base_url "${gateway_ns}" "${gateway_name}"
       else
-        hpa_common_agent_service_base_url "${gateway_ns}" "${service}" "${port}"
+        hpa_common_metrics_proxy_service_base_url "${gateway_ns}" "${service}" "${port}"
       fi
       return
       ;;
@@ -793,7 +804,7 @@ hpa_common_verify_envoy_least_request_distribution() {
   local secret_key="${4:?inferenceSecretKey}"
   local min_ready="${5:?minReadyReplicas}"
   local model="${6:-${INFERENCE_MODEL:-llama3.2:3b}}"
-  local gateway_name="${7:-${release}-agent}"
+  local gateway_name="${7:-${release}-metrics-proxy}"
   local probe_pod="${LB_TEST_PROBE_POD:-nemoclaw-gpu-envoy-lb-probe}"
   local requests="${LB_TEST_REQUESTS:-48}"
   local concurrency="${LB_TEST_CONCURRENCY:-12}"
@@ -842,7 +853,7 @@ if types != {"LeastRequest"}:
   fi
 
   ready_count="$(kubectl get pods -n "${ns}" \
-    -l 'app.kubernetes.io/name=nemoclaw-gpu,component=gpu-agent' \
+    -l 'app.kubernetes.io/name=nemoclaw-gpu,component=gpu-metrics-proxy' \
     -o json \
     | python3 -c '
 import json, sys
@@ -855,7 +866,7 @@ for pod in items:
 print(ready)
 ')"
   if [[ "${ready_count}" -lt "${min_ready}" ]]; then
-    echo "Envoy LB check needs ${min_ready} Ready agent pods; found ${ready_count}" >&2
+    echo "Envoy LB check needs ${min_ready} Ready metrics-proxy pods; found ${ready_count}" >&2
     return 1
   fi
 
@@ -872,7 +883,7 @@ print(ready)
   envoy_base="$(hpa_common_envoy_dataplane_base_url "${ns}" "${gateway_name}")"
   envoy_base="${envoy_base%/v1}"
   pod_ips="$(kubectl get pods -n "${ns}" \
-    -l 'app.kubernetes.io/name=nemoclaw-gpu,component=gpu-agent' \
+    -l 'app.kubernetes.io/name=nemoclaw-gpu,component=gpu-metrics-proxy' \
     -o json \
     | python3 -c '
 import json, sys
@@ -886,7 +897,7 @@ for pod in items:
 print(" ".join(ips))
 ')"
   [[ -n "${pod_ips}" ]] || {
-    echo "no agent pod IPs for Envoy LB check" >&2
+    echo "no metrics-proxy pod IPs for Envoy LB check" >&2
     return 1
   }
 
@@ -1041,14 +1052,14 @@ hpa_common_ingress_allow_insecure_value() {
   esac
 }
 
-# Old releases used component=agent; chart now uses gpu-agent + workload-type (immutable selector).
+# Old releases used component=agent or gpu-agent; chart now uses gpu-metrics-proxy + workload-type (immutable selector).
 hpa_common_gpu_stale_workload() {
   local ns="${1:?namespace}"
   local deploy="${2:?deploy}"
   local comp
   comp="$(kubectl get "deployment/${deploy}" -n "${ns}" \
     -o jsonpath='{.spec.selector.matchLabels.component}' 2>/dev/null || true)"
-  [[ "${comp}" == "agent" ]]
+  [[ "${comp}" == "agent" || "${comp}" == "gpu-agent" ]]
 }
 
 hpa_common_gpu_recreate_stale_workload() {
@@ -1167,10 +1178,9 @@ hpa_common_gpu_helm_upgrade() {
     --set autoscaling.minReplicas="${min}"
     --set autoscaling.maxReplicas="${max}"
     --set autoscaling.maxGpus="${max}"
-    --set "autoscaling.metric=${HPA_METRIC:-gpu}"
+    --set "autoscaling.metric=${HPA_METRIC:-gpu_utilization}"
     --set "autoscaling.targetGPUUtilizationPercentage=${gpu_target}"
     --set "autoscaling.targetLatencyMilliseconds=${HPA_TARGET_LATENCY_MS:-5000}"
-    --set-string "autoscaling.targetRequestRate=${HPA_TARGET_REQUEST_RATE:-2}"
     --set "ingress.allowInsecureHttp=${allow_insecure_http}"
     --set "ingress.gateway.enabled=$(hpa_common_envoy_lb_helm_value)"
     --set "ingress.gateway.serviceType=${INGRESS_SERVICE_TYPE:-ClusterIP}"
@@ -1226,14 +1236,14 @@ hpa_common_clear_stuck_pods() {
     --force --grace-period=0 >/dev/null 2>&1 || true
 }
 
-hpa_common_ensure_agent_ready() {
+hpa_common_ensure_metrics_proxy_ready() {
   local ns="${1:?namespace}"
   local release="${2:?release}"
   local chart_dir="${3:?chartDir}"
   local values_file="${4:-}"
   local rollout_timeout="${5:-600}"
   local deploy
-  deploy="$(RELEASE="${release}" hpa_common_agent_deployment)"
+  deploy="$(RELEASE="${release}" hpa_common_metrics_proxy_deployment)"
 
   local allow_insecure_http
   allow_insecure_http="$(hpa_common_ingress_allow_insecure_value)"
@@ -1290,14 +1300,14 @@ hpa_common_kick_deployment() {
   local ns="${1:?namespace}"
   local deploy="${2:?deploy}"
   local rs
-  rs="$(kubectl get rs -n "${ns}" -l "app.kubernetes.io/name=nemoclaw-gpu,component=gpu-agent" \
+  rs="$(kubectl get rs -n "${ns}" -l "app.kubernetes.io/name=nemoclaw-gpu,component=gpu-metrics-proxy" \
     -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || true)"
   if [[ -n "${rs}" ]]; then
     return 0
   fi
   kubectl rollout restart "deployment/${deploy}" -n "${ns}" >/dev/null 2>&1 || true
   sleep 8
-  rs="$(kubectl get rs -n "${ns}" -l "app.kubernetes.io/name=nemoclaw-gpu,component=gpu-agent" \
+  rs="$(kubectl get rs -n "${ns}" -l "app.kubernetes.io/name=nemoclaw-gpu,component=gpu-metrics-proxy" \
     -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
   [[ -n "${rs}" ]] && return 0
   kubectl delete "deployment/${deploy}" -n "${ns}" --ignore-not-found --wait=false 2>/dev/null || true
@@ -1393,7 +1403,7 @@ hpa_common_verify_gpu_hpa_metric() {
     | grep -q "\"metricName\":\"${metric_name}\""; then
     return 0
   fi
-  echo "${metric_name} not available — HPA cannot scale on autoscaling.metric=${HPA_METRIC:-gpu}" >&2
+  echo "${metric_name} not available — HPA cannot scale on autoscaling.metric=${HPA_METRIC:-gpu_utilization}" >&2
   return 1
 }
 
@@ -1428,14 +1438,11 @@ hpa_common_hpa_metric_display() {
 
 # Default HPA custom metric name for the selected autoscaling.metric / HPA_METRIC.
 hpa_common_gpu_hpa_metric_name() {
-  case "${HPA_METRIC:-gpu}" in
-    gpu) echo "gpu_utilization_percent" ;;
-    latency_p50) echo "nemoclaw_llm_latency_p50_milliseconds" ;;
-    latency_p95) echo "nemoclaw_llm_latency_p95_milliseconds" ;;
+  case "${HPA_METRIC:-gpu_utilization}" in
+    gpu|gpu_utilization) echo "gpu_utilization_percent" ;;
     latency_avg) echo "nemoclaw_llm_latency_avg_milliseconds" ;;
-    request_rate) echo "nemoclaw_llm_request_rate" ;;
     *)
-      echo "unsupported HPA_METRIC=${HPA_METRIC:-}" >&2
+      echo "unsupported HPA_METRIC=${HPA_METRIC:-} (use gpu_utilization or latency_avg)" >&2
       return 1
       ;;
   esac

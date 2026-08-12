@@ -10,7 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const serverPath = path.resolve(scriptDir, "../files/agent-server.ts");
+const serverPath = path.resolve(scriptDir, "../files/metrics-proxy-server.ts");
 const loadGeneratorPath = path.resolve(scriptDir, "../files/load-generator.ts");
 const model = "test-model:1";
 const apiKey = "test-only-inference-key";
@@ -77,10 +77,10 @@ child.stderr.on("data", (chunk) => {
 
 try {
   const listeningPort = await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`agent startup timeout: ${stderr}`)), 10_000);
+    const timer = setTimeout(() => reject(new Error(`metrics-proxy startup timeout: ${stderr}`)), 10_000);
     child.once("exit", (code) => {
       clearTimeout(timer);
-      reject(new Error(`agent exited before startup (${code}): ${stderr}`));
+      reject(new Error(`metrics-proxy exited before startup (${code}): ${stderr}`));
     });
     child.stdout.on("data", (chunk) => {
       const match = chunk.toString().match(/listening on :(\d+)/u);
