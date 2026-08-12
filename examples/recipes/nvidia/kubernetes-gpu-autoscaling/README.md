@@ -26,7 +26,7 @@ Keep the versions in `versions.env` align with NemoClaw blueprint: NemoClaw `v0.
 OpenShell CLI → port-forward → OpenShell gateway → CPU-only NemoClaw sandbox
 ```
 
-Runtime inference path (HPA scales to **N** Ollama pods, 1 GPU each). Envoy is optional: LeastRequest when enabled; metrics-proxy ClusterIP Service when `ENABLE_ENVOY_LB=0`. Set `MAX_REPLICAS` / `TARGET_PODS` from allocatable GPUs — not fixed to 4.
+Runtime inference path (HPA scales to **N** Ollama pods, 1 GPU each). Envoy is optional: LeastRequest when enabled; metrics-proxy ClusterIP Service when `ENABLE_ENVOY_LB=0`. Set both `MAX_REPLICAS` and `TARGET_PODS` to your allocatable GPU count (**N**) — not fixed to 4.
 
 Each GPU pod is **2/2 Ready** when healthy: container `ollama` (model on GPU) + container `metrics-proxy` (auth, `/v1` proxy, health, Prometheus `/metrics`). The metrics-proxy is **not** the OpenClaw/NemoClaw AI agent — that runs only in the CPU OpenShell sandbox.
 
@@ -71,13 +71,13 @@ Live-tested on [**Brev: AWS Instance**](https://brev.nvidia.com) with a single-n
 |------|-------|
 | Platform | [Brev: AWS Instance](https://brev.nvidia.com) |
 | GPUs | **4× NVIDIA L40S** (48 GB GDDR6 each) |
-| Scheduling | One node; one Ollama pod per GPU (`MAX_REPLICAS` / `TARGET_PODS` = allocatable **N**) |
+| Scheduling | One node; one Ollama pod per GPU (both `MAX_REPLICAS` and `TARGET_PODS` default to allocatable **N**) |
 | Model used in validation | `llama3.2:3b` |
 | Sandbox image registry | MicroK8s local registry `localhost:32000` (also any registry nodes can pull) |
 
 <img width="647" height="463" alt="Reference 4× L40S MicroK8s node used for validation" src="https://github.com/user-attachments/assets/80cb397b-d2e3-4b0d-933e-3b8dd1dfdb80" />
 
-**4× L40S is an example platform**, not a hard limit. Set `MAX_REPLICAS` / `TARGET_PODS` to your allocatable GPU count (**N** — any number you have); install and load-test default to that N. Covered on the example hardware: chart deploy, optional Envoy LeastRequest, authenticated inference, Kubernetes HPA scale-up when average per-pod **GPU util > 40%** or average per-pod **latency > 3000 ms** (and scale-down after load stops), Envoy distribution across Ready GPU pods, and OpenShell sandbox → `https://inference.local/v1`.
+**4× L40S is an example platform**, not a hard limit. Set both `MAX_REPLICAS` and `TARGET_PODS` to your allocatable GPU count (**N** — any number you have); install and load-test default to that same N. Covered on the example hardware: chart deploy, optional Envoy LeastRequest, authenticated inference, Kubernetes HPA scale-up when average per-pod **GPU util > 40%** or average per-pod **latency > 3000 ms** (and scale-down after load stops), Envoy distribution across Ready GPU pods, and OpenShell sandbox → `https://inference.local/v1`.
 
 ## Prerequisites
 
@@ -189,7 +189,7 @@ Users do not paste an inference API key; the chart generates it and OpenShell in
 
 ### 6. HPA and Envoy check
 
-Scales to **all** allocatable GPUs (`TARGET_PODS` / `SCALE_UP_TARGET` default to **N**), then back to 1. Default metric is GPU utilization (scale out when average per-pod util is **above 40%**). Pass `HPA_METRIC=latency_avg HPA_TARGET_LATENCY_MS=3000` to exercise latency instead (scale out when average per-pod latency is **above 3000 ms**). When Envoy is enabled, the script also checks that LeastRequest spreads chat traffic across Ready replicas.
+Scales to **all** allocatable GPUs (both `TARGET_PODS` and `SCALE_UP_TARGET` default to **N**), then back to 1. Default metric is GPU utilization (scale out when average per-pod util is **above 40%**). Pass `HPA_METRIC=latency_avg HPA_TARGET_LATENCY_MS=3000` to exercise latency instead (scale out when average per-pod latency is **above 3000 ms**). When Envoy is enabled, the script also checks that LeastRequest spreads chat traffic across Ready replicas.
 
 Reuse the **same** `local.env` / TLS overlay you used for install (no re-export needed if `local.env` exists):
 
@@ -202,7 +202,7 @@ Reuse the **same** `local.env` / TLS overlay you used for install (no re-export 
 
 # Latency: average per-pod latency > 3000 ms
 HPA_METRIC=latency_avg HPA_TARGET_LATENCY_MS=3000 ./scripts/hpa-load-test.sh
-# Same ceiling as install: MAX_REPLICAS / TARGET_PODS = N
+# Same ceiling as install: both MAX_REPLICAS and TARGET_PODS default to N
 ```
 
 While it runs, watch HPA with `./scripts/hpa-watch.sh` or `./scripts/get-metrics-proxy-pods.sh -n nemoclaw-gpu`. For load balancing without Grafana: with Envoy enabled, `hpa-load-test.sh` prints an **Envoy LeastRequest** check (`Envoy LeastRequest OK: <pod>:+<delta>, …`) showing chat completions landed on multiple Ready pods. You can also compare per-pod success counters:
@@ -279,7 +279,7 @@ The chart does not create, rotate, or delete the TLS Secret.
 
 - Unset `NEMOCLAW_TARGET_NODE` for portable scheduling. Multi-node needs RWX (or disable Ollama persistence); default `values.yaml` hostPath is single-node only.
 - Pin with `export NEMOCLAW_TARGET_NODE=<exact-node-name>` after confirming Ready + GPU label + allocatable GPUs ≥ `MAX_REPLICAS`.
-- `MAX_REPLICAS` / `TARGET_PODS` must not exceed allocatable GPUs in scope. Host `nvidia-smi` processes outside Kubernetes are not reserved by the chart.
+- Both `MAX_REPLICAS` and `TARGET_PODS` must not exceed allocatable GPUs in scope. Host `nvidia-smi` processes outside Kubernetes are not reserved by the chart.
 - Keep `HPA_VALUES`, `INGRESS_HOST`, `ENABLE_ENVOY_LB`, and `NEMOCLAW_TARGET_NODE` consistent across `install-hpa.sh`, `hpa-reset.sh`, and `hpa-load-test.sh`.
 
 ### Ingress security
@@ -336,7 +336,7 @@ Two built-in HPA metrics are live-validated in this recipe: **`gpu_utilization`*
 
 Operators can add other Prometheus → Adapter metrics by extending `monitoring/prometheus-adapter-gpu-values.yaml` and the `nemoclaw-gpu.hpaMetric` helpers (built-in chart modes remain only `gpu_utilization` and `latency_avg`).
 
-**Example 1 — GPU utilization (default).** Scale out when average per-pod GPU util is **above 40%** (`HPA_TARGET_GPU=40`), up to `MAX_REPLICAS` / **N**.
+**Example 1 — GPU utilization (default).** Scale out when average per-pod GPU util is **above 40%** (`HPA_TARGET_GPU=40`), up to `MAX_REPLICAS` (defaults to allocatable **N**).
 
 ```bash
 ./scripts/install-hpa.sh
@@ -492,7 +492,7 @@ openshell status
 
 `install-hpa.sh` only installs/configures monitoring, the chart, and HPA (and optional Envoy). It does **not** generate load. `hpa-load-test.sh` starts chat load generators to drive the selected HPA metric above target, verifies scale-up (and Envoy LeastRequest when enabled), then stops load so the cluster can scale back to 1.
 
-`hpa-load-test.sh` defaults to a full-**N** run: `TARGET_PODS` / `SCALE_UP_TARGET` match allocatable GPUs (same as install `MAX_REPLICAS`). Override those only if you intentionally want a lower ceiling. Once HPA holds max replicas for a few seconds, generators stop creating new load so replicas can return to 1 (GPU util drops with traffic; `latency_avg` idle-expires to 0 after `LLM_LATENCY_IDLE_EXPIRE_MS`).
+`hpa-load-test.sh` defaults to a full-**N** run: both `TARGET_PODS` and `SCALE_UP_TARGET` match allocatable GPUs (same ceiling as install `MAX_REPLICAS`). Override those only if you intentionally want a lower ceiling. Once HPA holds max replicas for a few seconds, generators stop creating new load so replicas can return to 1 (GPU util drops with traffic; `latency_avg` idle-expires to 0 after `LLM_LATENCY_IDLE_EXPIRE_MS`).
 
 Always use the **same** TLS overlay as install. Prefer `local.env` (auto-sourced). Or export with `$PWD` from the recipe directory:
 
