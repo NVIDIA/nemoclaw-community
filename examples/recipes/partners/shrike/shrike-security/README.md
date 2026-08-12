@@ -22,6 +22,8 @@ sandbox could tamper with it. The independent controls remain the OpenShell
 egress policy + credential provider (`providers/shrike.yaml`), which hold even
 if the in-sandbox plugin is subverted.
 
+Background and design walkthrough: [Securing NemoClaw Agents with Shrike](https://shrikesecurity.com/blog/securing-nemoclaw-agents).
+
 ## Intended users and support boundary
 
 For operators running OpenClaw agents inside NemoClaw who want an action-level
