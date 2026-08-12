@@ -75,9 +75,7 @@ Live-tested on [**Brev: AWS Instance**](https://brev.nvidia.com) with a single-n
 | Model used in validation | `llama3.2:3b` |
 | Sandbox image registry | MicroK8s local registry `localhost:32000` (also any registry nodes can pull) |
 
-
-<img width="647" height="463" alt="Screenshot 2026-08-12 at 2 42 38 PM" src="https://github.com/user-attachments/assets/80cb397b-d2e3-4b0d-933e-3b8dd1dfdb80" />
-
+<img width="1334" height="920" alt="Reference 4× L40S MicroK8s node used for validation" src="docs/assets/reference-4x-l40s.png" />
 
 **4× L40S is an example platform**, not a hard limit. Set `MAX_REPLICAS` / `TARGET_PODS` to your allocatable GPU count (**N** — any number you have); install and load-test default to that N. Covered on the example hardware: chart deploy, optional Envoy LeastRequest, authenticated inference, Kubernetes HPA scale-up when average per-pod **GPU util > 40%** or average per-pod **latency > 3000 ms** (and scale-down after load stops), Envoy distribution across Ready GPU pods, and OpenShell sandbox → `https://inference.local/v1`.
 
@@ -514,13 +512,11 @@ HPA_METRIC=latency_avg HPA_TARGET_LATENCY_MS=3000 ./scripts/hpa-load-test.sh
 
 Example from the validated 4× L40S run — HPA scale-up when average per-pod GPU utilization > 40%
 
-<img width="1480" height="569" alt="Screenshot 2026-08-12 at 2 43 41 PM" src="https://github.com/user-attachments/assets/6c37e52e-48fa-44a1-8ab6-878d90347bb9" />
-
+<img width="1888" height="826" alt="HPA scaling to four GPU replicas under load" src="docs/assets/hpa-scale-up.png" />
 
 Example from the validated 4× L40S run — HPA scale-up when average per-pod latency > 3000 ms
 
-<img width="1484" height="557" alt="Screenshot 2026-08-12 at 2 41 35 PM" src="https://github.com/user-attachments/assets/c8cc50cd-455f-4348-9347-f45acc2e264b" />
-
+<img width="922" height="323" alt="Screenshot 2026-08-10 at 11 37 41 PM" src="https://github.com/user-attachments/assets/99d5d49a-ca39-4c94-9d73-a461da2c655a" />
 
 These two screenshots are the built-in HPA examples (`gpu_utilization` and `latency_avg`).
 
@@ -598,11 +594,11 @@ After scale-up you should see multiple pod series. metrics-proxy `/metrics` scra
 | `test-*-contract.*` | Static / local contract checks |
 
 
-### Upgrade from pre-rename `*-agent` releases
+### Upgrade from pre-metrics-proxy releases
 
-Older chart revisions named the GPU Deployment/Service/HPA/Gateway `…-agent` (labels `component=agent` or `gpu-agent`). Current revisions use `…-metrics-proxy` / `component=gpu-metrics-proxy`.
+Older chart revisions misnamed the GPU front door Deployment/Service/HPA/Gateway with a `…-agent` suffix (labels `component=agent` or `gpu-agent`). That object was **never** the OpenClaw/NemoClaw AI agent. Current revisions use `…-metrics-proxy` / `component=gpu-metrics-proxy` only.
 
-`install-hpa.sh`, `hpa-reset.sh`, and `hpa-load-test.sh` call `hpa_common_migrate_legacy_agent_resources` **before** Helm upgrade: they detect leftover `…-agent` objects (by name and by label) and delete them—including orphaned keep-policy Secrets—so an upgrade cannot leave both workloads competing for GPUs. A fresh install of this head only creates `…-metrics-proxy` names.
+`install-hpa.sh`, `hpa-reset.sh`, and `hpa-load-test.sh` call `hpa_common_migrate_pre_metrics_proxy_resources` **before** Helm upgrade: they detect those historical leftovers (by old basename and label) and delete them—including orphaned keep-policy Secrets—so an upgrade cannot leave both workloads competing for GPUs. A fresh install of this head only creates `…-metrics-proxy` names.
 
 ## Uninstall
 

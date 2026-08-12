@@ -108,7 +108,7 @@ if ! hpa_common_ensure_metrics_proxy_ready "${NAMESPACE}" "${RELEASE}" "${CHART_
   exit 1
 fi
 
-hpa_common_migrate_legacy_agent_resources "${NAMESPACE}" "${RELEASE}"
+hpa_common_migrate_pre_metrics_proxy_resources "${NAMESPACE}" "${RELEASE}"
 
 INFERENCE_MODEL="${INFERENCE_MODEL:-llama3.2:3b}"
 HPA_HELM_ARGS=(

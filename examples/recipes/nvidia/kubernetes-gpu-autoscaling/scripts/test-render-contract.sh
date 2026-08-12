@@ -464,15 +464,15 @@ if deploy:
     pod_labels = deploy["spec"]["template"]["metadata"]["labels"]
     deploy_selector = deploy["spec"]["selector"]["matchLabels"]
 
-    agent_containers = [
+    metrics_proxy_containers = [
         c for c in deploy["spec"]["template"]["spec"]["containers"] if c.get("name") == "metrics-proxy"
     ]
-    if len(agent_containers) != 1:
-        failures.append(f"expected exactly one metrics-proxy container, found {len(agent_containers)}")
-    elif agent_containers[0].get("command") != ["node", "/app/metrics-proxy-server.ts"]:
+    if len(metrics_proxy_containers) != 1:
+        failures.append(f"expected exactly one metrics-proxy container, found {len(metrics_proxy_containers)}")
+    elif metrics_proxy_containers[0].get("command") != ["node", "/app/metrics-proxy-server.ts"]:
         failures.append("metrics-proxy container does not execute the mounted TypeScript entry point")
     else:
-        env = {item["name"]: item for item in agent_containers[0].get("env", [])}
+        env = {item["name"]: item for item in metrics_proxy_containers[0].get("env", [])}
         if env.get("INFERENCE_AUTH_REQUIRED", {}).get("value") != "true":
             failures.append("metrics-proxy container does not require inference authentication")
         api_key_ref = (

@@ -358,16 +358,16 @@ grep -Fq 'ingress.gateway.serviceType must be ClusterIP while the OpenShell clea
 grep -Fq 'INGRESS_NS="${INGRESS_NS:-envoy-gateway-system}"' "${SCRIPT_DIR}/install-hpa.sh" \
   || fail "installer does not default to the Envoy Gateway namespace"
 
-grep -Fq 'hpa_common_migrate_legacy_agent_resources' "${SCRIPT_DIR}/hpa-common.sh" \
-  || fail "hpa-common.sh must define legacy *-agent → *-metrics-proxy migration"
-grep -Fq 'hpa_common_migrate_legacy_agent_resources' "${SCRIPT_DIR}/install-hpa.sh" \
-  || fail "install-hpa.sh must migrate legacy *-agent resources before helm upgrade"
-grep -Fq 'hpa_common_migrate_legacy_agent_resources' "${SCRIPT_DIR}/hpa-load-test.sh" \
-  || fail "hpa-load-test.sh must migrate legacy *-agent resources"
-grep -Fq 'hpa_common_migrate_legacy_agent_resources' "${SCRIPT_DIR}/hpa-reset.sh" \
-  || fail "hpa-reset.sh must migrate legacy *-agent resources"
+grep -Fq 'hpa_common_migrate_pre_metrics_proxy_resources' "${SCRIPT_DIR}/hpa-common.sh" \
+  || fail "hpa-common.sh must define pre-metrics-proxy migration"
+grep -Fq 'hpa_common_migrate_pre_metrics_proxy_resources' "${SCRIPT_DIR}/install-hpa.sh" \
+  || fail "install-hpa.sh must migrate pre-metrics-proxy leftovers before helm upgrade"
+grep -Fq 'hpa_common_migrate_pre_metrics_proxy_resources' "${SCRIPT_DIR}/hpa-load-test.sh" \
+  || fail "hpa-load-test.sh must migrate pre-metrics-proxy leftovers"
+grep -Fq 'hpa_common_migrate_pre_metrics_proxy_resources' "${SCRIPT_DIR}/hpa-reset.sh" \
+  || fail "hpa-reset.sh must migrate pre-metrics-proxy leftovers"
 
-# Migration must target the old basename (…-agent), not probe labels on the new …-metrics-proxy name only.
+# Migration must target the historical basename (…-agent), not only the new …-metrics-proxy name.
 KUBECTL_LOG="${TEST_TMP}/kubectl-migrate.log"
 export KUBECTL_LOG
 kubectl() {
@@ -380,7 +380,6 @@ kubectl() {
     return 0
   fi
   if [[ "$*" == *"get deployment/nemoclaw-gpu-metrics-proxy"* ]]; then
-    # New deploy has the new selector — not stale.
     printf 'gpu-metrics-proxy'
     return 0
   fi
@@ -395,21 +394,20 @@ kubectl() {
   return 0
 }
 : >"${KUBECTL_LOG}"
-RELEASE=nemoclaw-gpu hpa_common_migrate_legacy_agent_resources nemoclaw-gpu nemoclaw-gpu \
-  || fail "legacy agent migration failed"
+RELEASE=nemoclaw-gpu hpa_common_migrate_pre_metrics_proxy_resources nemoclaw-gpu nemoclaw-gpu \
+  || fail "pre-metrics-proxy migration failed"
 grep -Fq 'delete deployment,service,hpa,gateway -n nemoclaw-gpu nemoclaw-gpu-agent' "${KUBECTL_LOG}" \
-  || fail "migration did not delete the legacy *-agent Deployment/Service/HPA/Gateway"
+  || fail "migration did not delete historical pre-metrics-proxy Deployment/Service/HPA/Gateway"
 grep -Fq 'httproute.gateway.networking.k8s.io/nemoclaw-gpu-agent' "${KUBECTL_LOG}" \
-  || fail "migration did not delete legacy Gateway API objects prefixed with *-agent"
+  || fail "migration did not delete historical Gateway API objects with the old basename"
 if grep -Fq 'delete -n nemoclaw-gpu httproute.gateway.networking.k8s.io/nemoclaw-gpu-metrics-proxy' "${KUBECTL_LOG}"; then
-  fail "migration must not delete the renamed *-metrics-proxy Gateway API objects"
+  fail "migration must not delete the current *-metrics-proxy Gateway API objects"
 fi
 grep -Fq 'secret -n nemoclaw-gpu nemoclaw-gpu-agent-inference-api nemoclaw-gpu-agent-ingress-auth' \
   "${KUBECTL_LOG}" \
-  || fail "migration did not remove orphaned legacy keep-policy Secrets"
-# Must not only look at the new Deployment name for stale labels.
+  || fail "migration did not remove orphaned historical keep-policy Secrets"
 if ! grep -E -q 'get deployment/nemoclaw-gpu-agent' "${KUBECTL_LOG}"; then
-  fail "migration did not probe the legacy *-agent Deployment name"
+  fail "migration did not probe the historical pre-metrics-proxy Deployment basename"
 fi
 
 echo "OK: node targeting, recovery ownership, Envoy Gateway cleartext security, LeastRequest, and Kubernetes HPA formatting contracts hold"

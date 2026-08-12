@@ -261,7 +261,7 @@ else
   echo "ENABLE_ENVOY_LB=0: skipping Envoy Gateway install; inference uses the metrics-proxy Service only." >&2
 fi
 
-hpa_common_migrate_legacy_agent_resources "${NAMESPACE}" "${RELEASE}"
+hpa_common_migrate_pre_metrics_proxy_resources "${NAMESPACE}" "${RELEASE}"
 
 helm_install
 # hpa_common_kick_deployment returns 0 when the Deployment is already healthy (or a

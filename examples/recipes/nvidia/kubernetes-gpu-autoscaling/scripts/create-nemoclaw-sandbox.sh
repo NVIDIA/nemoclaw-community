@@ -161,8 +161,8 @@ fi
 openshell sandbox create "${SANDBOX_CREATE_ARGS[@]}" --no-tty -- /bin/true
 
 # The upstream NemoClaw base policy includes NVIDIA-hosted inference as a default
-# endpoint. This recipe is on-premises-only, so remove that endpoint before any
-# agent process starts and verify the effective policy.
+# endpoint. This recipe is on-premises-only, so remove that endpoint before the
+# sandbox NemoClaw/OpenClaw AI agent starts, then verify the effective policy.
 openshell policy update "${SANDBOX_NAME}" \
   --remove-endpoint integrate.api.nvidia.com:443 \
   --wait \
