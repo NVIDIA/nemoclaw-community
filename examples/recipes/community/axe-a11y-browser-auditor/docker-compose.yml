@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+services:
+  axe-a11y-mcp-server:
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+    container_name: ${AXE_A11Y_SERVICE_CONTAINER_NAME:-axe-a11y-mcp-server}
+    restart: unless-stopped
+    platform: linux/amd64
+    ports:
+      - "${AXE_A11Y_SERVICE_PORT:-9010}:9010"
+      - "${AXE_A11Y_VNC_PORT:-5900}:5900"
+    environment:
+      - NODE_ENV=production
+      - PORT=9010
+      - PLAYWRIGHT_HEADLESS=${AXE_A11Y_SERVICE_HEADLESS:-true}
+      - AXE_A11Y_PROFILE_ENABLED=${AXE_A11Y_PROFILE_ENABLED:-false}
+      - AXE_A11Y_PROFILE_DIR=/app/state/profile
+      - AXE_A11Y_ARTIFACTS_DIR=/app/state/artifacts
+      - AXE_A11Y_VNC_PASSWORD=${AXE_A11Y_VNC_PASSWORD:-}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:9010/healthz').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ./state/profile:/app/state/profile
+      - ./state/artifacts:/app/state/artifacts

@@ -23,8 +23,11 @@ again by contributor provenance.
 | HPE | [Retail Assistant](recipes/partners/hpe/retail-assistant/README.md) | Provides role-aware retail operations through Telegram, FastAPI, PostgreSQL, Docker Compose, and Helm. |
 | Tavily | [Watchtower](recipes/partners/tavily/watchtower/README.md) | Runs scheduled, cited web monitoring with persistent deduplication and auditable outputs. |
 
-Future independent contributions without formal organizational provenance
-belong under `recipes/community/`.
+## Community Recipes
+
+| Example | Description |
+| --- | --- |
+| [Axe A11y Browser Auditor](recipes/community/axe-a11y-browser-auditor/README.md) | Performs automated WCAG accessibility audits, visual screenshots, PDF exports, and network tracing via a sidecar MCP server using axe-core and Patchright with real Google Chrome. |
 
 ## NVIDIA Field Demos
 

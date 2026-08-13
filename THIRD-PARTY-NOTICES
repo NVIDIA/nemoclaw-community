@@ -183,6 +183,22 @@ Package: slack-bolt
 License: MIT
 URL: https://github.com/slackapi/bolt-python
 
+Package: @axe-core/playwright
+License: MPL-2.0
+URL: https://github.com/dequelabs/axe-core-npm
+
+Package: patchright
+License: Apache-2.0
+URL: https://github.com/kaliiiiiiiiii/patchright
+
+Package: @modelcontextprotocol/sdk
+License: MIT
+URL: https://github.com/modelcontextprotocol/typescript-sdk
+
+Package: express
+License: MIT
+URL: https://github.com/expressjs/express
+
 ================================================================================
 GitHub Actions
 ================================================================================
