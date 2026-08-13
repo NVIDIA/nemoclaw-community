@@ -24,7 +24,7 @@ Pins in `versions.env`: NemoClaw `v0.0.104`, OpenShell `0.0.85`, Agent Sandbox `
 OpenShell CLI → port-forward → OpenShell gateway → CPU-only NemoClaw sandbox
 ```
 
-Runtime inference path (HPA scales to **N** Ollama pods, 1 GPU each). Envoy is optional: LeastRequest when enabled; metrics-proxy ClusterIP Service when `ENABLE_ENVOY_LB=0`. Set `MAX_REPLICAS` / `TARGET_PODS` from allocatable GPUs — not fixed to 4.
+Runtime inference path (HPA scales to **N** Ollama pods, 1 GPU each). Envoy is optional: LeastRequest when enabled; metrics-proxy ClusterIP Service when `ENABLE_ENVOY_LB=0`. Set both `MAX_REPLICAS` and `TARGET_PODS` to your allocatable GPU count (**N**) — not fixed to 4.
 
 ```text
 OpenShell CPU sandbox
@@ -231,7 +231,7 @@ The chart does not create, rotate, or delete the TLS Secret.
 
 - Unset `NEMOCLAW_TARGET_NODE` for portable scheduling. Multi-node needs RWX (or disable Ollama persistence); default `values.yaml` hostPath is single-node only.
 - Pin with `export NEMOCLAW_TARGET_NODE=<exact-node-name>` after confirming Ready + GPU label + allocatable GPUs ≥ `MAX_REPLICAS`.
-- `MAX_REPLICAS` / `TARGET_PODS` must not exceed allocatable GPUs in scope. Host `nvidia-smi` processes outside Kubernetes are not reserved by the chart.
+- Both `MAX_REPLICAS` and `TARGET_PODS` must not exceed allocatable GPUs in scope. Host `nvidia-smi` processes outside Kubernetes are not reserved by the chart.
 - Keep `HPA_VALUES`, `INGRESS_HOST`, `ENABLE_ENVOY_LB`, and `NEMOCLAW_TARGET_NODE` consistent across `install-hpa.sh`, `hpa-reset.sh`, and `hpa-load-test.sh`.
 
 ### Ingress security
@@ -336,7 +336,7 @@ TARGET_PODS=2 SCALE_UP_TARGET=2 ./scripts/hpa-load-test.sh
 | `SKIP_ENVOY_LB_TEST` | `0` | Skip Envoy distribution phase |
 | `ENABLE_ENVOY_LB` | `1` | Keep consistent with install |
 | `LB_TEST_REQUESTS` / `LB_TEST_CONCURRENCY` | `48` / `12` | Envoy check load |
-| `TARGET_PODS` / `SCALE_UP_TARGET` | allocatable GPUs | HPA test ceiling |
+| `TARGET_PODS` and `SCALE_UP_TARGET` | allocatable GPUs | HPA test ceiling |
 | `DURATION_SEC` / `HPA_TARGET_GPU` | `720` / `40` | Load duration / util target |
 
 Grafana is optional visualization; the script is the pass/fail check.
