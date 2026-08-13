@@ -567,6 +567,8 @@ avg by (pod) (
   }
 )
 ```
+<img width="1505" height="847" alt="Screenshot 2026-08-12 at 5 01 21 PM" src="https://github.com/user-attachments/assets/7b20b03f-fe4a-4d9c-8c04-722dd8863c70" />
+
 
 Optional — **successful inference requests by pod** (Envoy LeastRequest / Service distribution, not an HPA scale metric in the two examples above):
 
@@ -578,6 +580,8 @@ sum by (pod) (
   }[5m])
 )
 ```
+<img width="1502" height="852" alt="Screenshot 2026-08-12 at 4 48 41 PM" src="https://github.com/user-attachments/assets/9858911e-73cf-4d60-87b6-70972df6d90c" />
+
 
 After scale-up you should see multiple pod series. metrics-proxy `/metrics` scraping is on by default (`metrics.serviceMonitor.enabled: true`) after `install-hpa.sh`. If latency graphs stay empty while GPU util still moves, check `kubectl get servicemonitor -n nemoclaw-gpu` and re-run `install-hpa.sh` if the ServiceMonitor was disabled.
 
