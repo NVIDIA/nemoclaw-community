@@ -12,6 +12,7 @@ again by contributor provenance.
 | --- | --- |
 | [Agentic AI Learning Path](recipes/nvidia/agentic-ai-learning-path/README.md) | Adapts the popular Build an Agent Brev Launchable to run inside a NemoClaw sandbox with a self-contained deployment (vendored from the Chief of Staff recipe): the sandboxed agent provisions JupyterLab and tutors the seven modules. |
 | [Developer Community Chief of Staff](recipes/nvidia/developer-community-chief-of-staff/README.md) | Synthesizes Slack, Outlook, GitHub, and mirrored community signals into operating briefs, gaps, priorities, and follow-up recommendations. |
+| [Kubernetes GPU Autoscaling](recipes/nvidia/kubernetes-gpu-autoscaling/README.md) | Runs a CPU-only NemoClaw/OpenClaw sandbox through OpenShell on Kubernetes and autoscales authenticated, GPU-backed Ollama inference pods from DCGM utilization. |
 | [NV Tech Assistant](recipes/nvidia/nv-tech-assistant/README.md) | Answers NVIDIA technical questions with cited evidence from allowlisted NVIDIA, GitHub, and arXiv sources. |
 | [Payment Operations Hermes Assistant](recipes/nvidia/payment-ops-hermes/README.md) | Demonstrates constrained payment screening, evidence preparation, and a platform-enforced human release boundary. |
 | [PR Review Advisor](recipes/nvidia/pr-review-advisor/README.md) | Reviews exact pull request heads with a constrained Hermes workflow, produces attested artifacts, and publishes only through a separate maintainer action. |
