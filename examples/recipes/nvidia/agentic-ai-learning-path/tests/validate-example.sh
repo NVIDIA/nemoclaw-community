@@ -47,6 +47,25 @@ if [ "$syntax_fail" = 0 ]; then echo "  syntax OK"; else echo "  syntax FAIL"; f
 echo "== unit tests =="
 python3 -m unittest discover -s "$HERE" -p 'test_*.py' -q || fail=1
 
+echo "== vendored deployment tests =="
+dep_fail=0
+# test_generate_config.py drives generate-config.ts via
+# `node --experimental-strip-types` (node >= 22); skip only that file on
+# older hosts — CI installs node 22, so drift is always caught there.
+if node -e 'process.exit(parseInt(process.versions.node) >= 22 ? 0 : 1)' 2>/dev/null; then
+  python3 -m unittest discover -s "$ROOT/agents/hermes/tests" -p 'test_*.py' -q || dep_fail=1
+else
+  echo "  note: node >= 22 not found — skipping test_generate_config.py"
+  for f in "$ROOT"/agents/hermes/tests/test_*.py; do
+    [ "$(basename "$f")" = "test_generate_config.py" ] && continue
+    python3 -m unittest discover -s "$ROOT/agents/hermes/tests" -p "$(basename "$f")" -q || dep_fail=1
+  done
+fi
+# The NVTeam in-image skill ships its own validator tests (relative imports —
+# discover from its directory).
+(cd "$ROOT/agents/hermes/skills/nemoclaw-nvteam/scripts/tests" && python3 -m unittest discover -s . -q) || dep_fail=1
+if [ "$dep_fail" = 0 ]; then echo "  deployment tests OK"; else echo "  deployment tests FAIL"; fail=1; fi
+
 echo "== operator script behavior =="
 bash "$HERE/test_operator_scripts.sh" || fail=1
 

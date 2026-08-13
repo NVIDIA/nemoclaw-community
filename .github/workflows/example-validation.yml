@@ -33,6 +33,10 @@ jobs:
         with:
           python-version: "3.12"
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Install PyYAML
         run: python3 -m pip install pyyaml
 
