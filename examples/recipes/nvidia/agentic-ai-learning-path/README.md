@@ -11,21 +11,22 @@ Skills. It is best known as a popular [Brev Launchable](https://brev.nvidia.com)
 — a one-click cloud GPU environment learners spin up on a fresh instance.
 
 This example adapts that workshop to NemoClaw. Instead of a fresh cloud
-machine, the workshop runs **inside the locked-down OpenShell sandbox of an
-existing NemoClaw deployment**, and the sandboxed resident agent does the
-heavy lifting: it clones the workshop content, builds the environment,
-launches JupyterLab from inside its own sandbox, and then serves as an AI
-tutor for the modules — explaining concepts, giving graduated hints, and
-checking progress without completing the learner's exercises. The workshop
-also doubles as a live demonstration of the platform: every install, clone,
-and API call it makes runs under the sandbox's kernel-level enforcement and
-L7 egress policy.
+machine, the workshop runs **inside a locked-down OpenShell sandbox that
+this example deploys itself** (`bash scripts/bring-up.sh`), and the
+sandboxed resident agent does the heavy lifting: it clones the workshop
+content, builds the environment, launches JupyterLab from inside its own
+sandbox, and then serves as an AI tutor for the modules — explaining
+concepts, giving graduated hints, and checking progress without completing
+the learner's exercises. The workshop also doubles as a live demonstration
+of the platform: every install, clone, and API call it makes runs under the
+sandbox's kernel-level enforcement and L7 egress policy.
 
-Two things this example is **not**: it is not a getting-started recipe for
-NemoClaw itself (it is a layer you add once a NemoClaw deployment is already
-running — see the prerequisite below), and it does not contain the workshop
-content. It ships **skills only**; the notebooks, lessons, and code stay in
-the upstream [workshop repo](https://github.com/brevdev/workshop-build-an-agent)
+Two things this example is **not**: it is not a general getting-started
+guide for NemoClaw itself (its deployment is one opinionated, enterprise-
+flavored stack), and it does not contain the workshop content. It ships
+**the deployment plus the workshop skills**; the notebooks, lessons, and
+code stay in the upstream
+[workshop repo](https://github.com/brevdev/workshop-build-an-agent)
 and are cloned into the sandbox at setup time through a repo-scoped egress
 grant.
 
@@ -61,13 +62,20 @@ cannot run inside a sandbox and is only relevant for non-NemoClaw installs.
 
 This example is self-contained. Its deployment — vendored verbatim from the
 [Developer Community Chief of Staff](../developer-community-chief-of-staff/README.md)
-recipe at `c4ed316` (minus that example's autoheal machinery, its script
+recipe at `21bd3cb` (NemoClaw v0.0.105 base, Hermes 0.20.0, native NeMo
+Relay integration; minus that example's autoheal machinery, its script
 tests, and its product docs) — stands up an OpenShell gateway on a single
 host, running a Hermes agent inside a `hermes-direct` sandbox with L7 egress
 allowlists, credential placeholders, Landlock/seccomp enforcement, and
 enterprise messaging channels. `bash scripts/bring-up.sh` creates the
 sandbox; the vendored copies may diverge deliberately from the
 chief-of-staff recipe over time.
+
+The vendored agent image also carries the source recipe's in-image skills,
+including the NVTeam role-lens personas: those are added by that Community
+recipe and are not a built-in capability of the core NemoClaw product —
+their labels describe task-scoped lenses, not real people or core-product
+behavior.
 
 Everything is driven from two sides:
 
