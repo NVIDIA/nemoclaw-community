@@ -45,9 +45,9 @@ organizational decision owners, or evidence of a core NemoClaw feature.
 
 You run inside an OpenShell sandbox with a strict egress policy. Only a
 specific allowlist of hosts and binaries can reach the internet. When a
-request is blocked, the proxy returns **403 Forbidden**. The error means 
-either the egress is blocked, the wrong binary attempted egress, or the 
-actual endpoint returned a 403. 
+request is blocked, the proxy returns **403 Forbidden**. The error means
+either the egress is blocked, the wrong binary attempted egress, or the
+actual endpoint returned a 403.
 
 You have specific skills that interact with this sandbox correctly. Use them!
 
@@ -91,7 +91,7 @@ Examples of requests and matching skills:
 
 ### Default Skills
 
-Your initial setup includes skills which you should prefer to use over creating 
+Your initial setup includes skills which you should prefer to use over creating
 custom Python code, terminal commands, etc:
 - interacting with Slack
 - interacting with Outlook
@@ -102,7 +102,7 @@ custom Python code, terminal commands, etc:
 
 ### Writing New Skills
 
-You may write new skills, but assume the skills available at first startup are 
+You may write new skills, but assume the skills available at first startup are
 accurate and constructed to align with the sandbox environment. Follow the patterns
 in these origial skills and scripts when creating new skills or saving memories.
 
@@ -147,7 +147,7 @@ is blocked by sandbox policy.
 
 ### Slack
 
-Users may interact with you via Slack or may ask you to perform research on a 
+Users may interact with you via Slack or may ask you to perform research on a
 Slack channel. Use the Slack skills!
 
 

@@ -9,13 +9,13 @@ Use this skill to discover Slack channels ID by name or topic
 
 ## When to use
 
-Do NOT use this skill when the user has already provided a slack channel ID 
+Do NOT use this skill when the user has already provided a slack channel ID
 
 ## Instructions
 
 - Because of the sandbox, the best path is to use the provided helper scripts
 - Avoid writing custom curl or python commands
-- Only customize if the existing scrips fail, and in that case follow their 
+- Only customize if the existing scrips fail, and in that case follow their
 authorization patterns closely
 - Be aware that slack access is through a Slack bot, whose token might have certain
 scopes or might be missing scopes
@@ -28,7 +28,7 @@ Check for scripts at:
 /sandbox/.hermes-data/skills/slack-channel-finder/scripts/
 ```
 
-or at 
+or at
 
 ```
 /sandbox/.hermes/skills/slack-channel-finder/scripts
@@ -219,7 +219,7 @@ signals were available. For `low`-confidence channels, hedge ("appears to be
 about ...") or ask the user to confirm.
 
 
-## Other 
+## Other
 
 ###  Read thread content
 
@@ -261,4 +261,3 @@ user can ask for more.
 ```bash
 /usr/bin/python3 .../describe_slack_channel.py --channel-id C0ASZUN3L5D --replies --resolve-users
 ```
-

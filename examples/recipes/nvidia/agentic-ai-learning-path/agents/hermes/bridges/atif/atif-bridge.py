@@ -3,8 +3,8 @@
 
 """ATIF protocol-bridge sidecar.
 
-Tiny HTTP→HTTPS forwarder that sits between nemo-relay-cli and OpenShell's
-L7 proxy. nemo-relay's rustls (via object_store/reqwest) cannot validate the
+Tiny HTTP→HTTPS forwarder that sits between NeMo Relay's native HTTP ATIF
+storage and OpenShell's L7 proxy. NeMo Relay's rustls client cannot validate the
 L7 proxy's MITM cert because the cert lacks the `id-kp-serverAuth`
 ExtendedKeyUsage extension (OpenShell
 `crates/openshell-sandbox/src/l7/tls.rs:115-135` omits it) and rustls 0.23+
@@ -14,23 +14,22 @@ certs without serverAuth EKU — the same property that lets curl, requests,
 git, and every other Hermes outbound work fine through the same L7 proxy
 today.
 
-The bridge is a pure protocol shim. It MUST NOT read ATIF_RELAY_AUTH_TOKEN
-or any other credential. The bearer continues to ride as the placeholder
-`openshell:resolve:env:ATIF_RELAY_AUTH_TOKEN` in the request from
-nemo-relay; the L7 proxy substitutes it during MITM after this bridge
-forwards. That preserves the credential-opacity property of the original
-design — real bearer never enters nemo-relay or bridge process memory; only
-the L7 proxy ever sees the resolved value.
+The bridge is a pure protocol shim. It MUST NOT read ATIF_RELAY_AUTH_TOKEN,
+ATIF_RELAY_AUTHORIZATION, or any other credential. The bearer continues to
+ride as a placeholder in NeMo Relay's ``Authorization`` header; the L7 proxy
+substitutes it during MITM after this bridge forwards. That preserves the
+credential-opacity property of the original design — the real bearer never
+enters NeMo Relay or bridge process memory; only the L7 proxy sees the resolved
+value.
 
 Implementation note: uses aiohttp.web for the server side and
 aiohttp.ClientSession for the outbound side. Both sides of the ATIF wire
 (this bridge and extras/atif-export-relay/relay.py) share the same async
 framework. The request body is buffered in memory and forwarded with an
 explicit Content-Length; chunked Transfer-Encoding does not survive
-OpenShell's L7 MITM proxy on PUTs (observed: outbound hangs until the
-SDK times out ~30s in, with no traffic ever reaching the relay). At ATIF
-blob sizes (~1MB per PUT, ~1 PUT/agent-turn) the buffer is cheap, and
-matching the old bridge's wire shape is what keeps the proxy happy.
+OpenShell's L7 MITM proxy on these POSTs. At ATIF trajectory sizes (typically
+around 1 MB per completed trajectory) the buffer is cheap, and the explicit
+Content-Length keeps the proxy path deterministic.
 
 When the OpenShell EKU bug is fixed (one-line patch: add
 `params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth]`),
@@ -91,10 +90,9 @@ HOP_BY_HOP = frozenset(
 # bearer if exported by mistake.
 _LEAK_NAMES = frozenset({
     "ATIF_RELAY_AUTH_TOKEN",
-    "AWS_SESSION_TOKEN",
-    "AWS_ACCESS_KEY_ID",
-    "AWS_SECRET_ACCESS_KEY",
+    "ATIF_RELAY_AUTHORIZATION",
 })
+SESSION_KEY = web.AppKey("atif_bridge_session", aiohttp.ClientSession)
 
 
 def forwardable_headers(headers) -> dict[str, str]:
@@ -105,7 +103,7 @@ def forwardable_headers(headers) -> dict[str, str]:
 async def _init_session(app: web.Application) -> None:
     # Single ClientSession shared across requests so the HTTPS connection
     # pool to UPSTREAM is reused. aiohttp's default connector keeps up to
-    # 100 connections; for the ATIF workload (~1 PUT/turn) one is enough,
+    # 100 connections; completed-trajectory POSTs need far less concurrency,
     # but the default is fine and matches relay.py's posture.
     #
     # trust_env=True is load-bearing: OpenShell injects HTTPS_PROXY (pointing
@@ -118,7 +116,7 @@ async def _init_session(app: web.Application) -> None:
     # Reject any peer that can't do TLS 1.3 — modern peer set, fail loud on degradation.
     ssl_ctx = ssl.create_default_context()
     ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_3
-    app["session"] = aiohttp.ClientSession(
+    app[SESSION_KEY] = aiohttp.ClientSession(
         timeout=aiohttp.ClientTimeout(total=60.0, sock_connect=5.0),
         trust_env=True,
         connector=aiohttp.TCPConnector(ssl=ssl_ctx),
@@ -126,7 +124,7 @@ async def _init_session(app: web.Application) -> None:
 
 
 async def _close_session(app: web.Application) -> None:
-    session: aiohttp.ClientSession = app["session"]
+    session = app[SESSION_KEY]
     await session.close()
 
 
@@ -136,18 +134,15 @@ async def healthz(_req: web.Request) -> web.Response:
 
 
 async def forward(request: web.Request) -> web.Response:
-    session: aiohttp.ClientSession = request.app["session"]
+    session = request.app[SESSION_KEY]
     url = f"{UPSTREAM}{request.path_qs}"
     out_headers = forwardable_headers(request.headers)
 
     # Buffer the request body and forward with explicit Content-Length.
     # Passing `data=request.content` (a StreamReader) makes aiohttp's client
     # switch to Transfer-Encoding: chunked, which OpenShell's L7 MITM proxy
-    # does not forward cleanly on PUTs — observed symptom: requests hang
-    # until the in-sandbox SDK times out at ~30s, retry, and eventually
-    # fail with no traffic ever reaching the relay. At ATIF blob sizes
-    # (~1MB per PUT, ~1 PUT/agent-turn) the buffer is cheap; matching the
-    # old bridge's Content-Length-based wire is what makes the proxy happy.
+    # does not forward cleanly on these POSTs. Completed ATIF trajectories are
+    # small enough that buffering is inexpensive.
     body = await request.read()
 
     log.info(
@@ -182,7 +177,7 @@ async def forward(request: web.Request) -> web.Response:
 # ── App factory + entrypoint ───────────────────────────────────────────────
 def make_app() -> web.Application:
     # client_max_size=0 disables aiohttp's request-body cap so the bridge
-    # can forward arbitrary-sized PUTs. The real size cap is enforced by
+    # can forward arbitrary-sized POSTs. The real size cap is enforced by
     # the relay (relay.py sets 128MB via its own client_max_size).
     app = web.Application(client_max_size=0)
     app.router.add_get("/healthz", healthz)
