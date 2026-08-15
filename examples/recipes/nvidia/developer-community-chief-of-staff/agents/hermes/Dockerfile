@@ -165,6 +165,11 @@ RUN chmod 755 /usr/local/lib/nemoclaw/bin/hermes
 COPY agents/hermes/refresh-placeholders.py /usr/local/lib/nemoclaw/refresh-placeholders.py
 RUN chmod 755 /usr/local/lib/nemoclaw/refresh-placeholders.py
 
+# The same script runs on the host and inside the sandbox. The host performs
+# the guided Slack API check; the sandbox reads only sanitized stage markers.
+COPY scripts/slack_delivery_diagnostic.py /usr/local/lib/nemoclaw/slack-delivery-diagnostic.py
+RUN chmod 755 /usr/local/lib/nemoclaw/slack-delivery-diagnostic.py
+
 COPY agents/hermes/patches/ /usr/local/lib/nemoclaw-patches/
 COPY agents/hermes/tests/verify-rich-block-renderer.py /tmp/verify-rich-block-renderer.py
 

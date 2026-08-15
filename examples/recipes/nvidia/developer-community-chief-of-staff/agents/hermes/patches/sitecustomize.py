@@ -18,6 +18,18 @@ import re
 import sys
 
 
+_PATCH_ROOT = os.path.dirname(os.path.abspath(__file__))
+if _PATCH_ROOT not in sys.path:
+    sys.path.insert(0, _PATCH_ROOT)
+
+from slack_diagnostic import (
+    copy_adapter_instrumentation,
+    diagnostic_id,
+    install_adapter_instrumentation,
+    record_stage,
+)
+
+
 LOGGER = logging.getLogger("nemoclaw.slack_compat")
 
 
@@ -38,6 +50,7 @@ def _patch_slack_adapter() -> None:
             from gateway.platforms.slack import SlackAdapter
         from gateway.platforms.base import SendResult
 
+        diagnostic_installed = install_adapter_instrumentation(SlackAdapter)
         if SlackAdapter.__dict__.get("_nemoclaw_slack_compat_installed"):
             return
 
@@ -282,6 +295,13 @@ def _patch_slack_adapter() -> None:
 
         async def _patched_connect(self, *args, **kwargs):
             result = await _orig_connect(self, *args, **kwargs)
+            if diagnostic_installed:
+                record_stage(
+                    "",
+                    "socket_mode_connection",
+                    status="confirmed" if result else "failed",
+                    error_type="" if result else "ConnectFailure",
+                )
             app = getattr(self, "_app", None)
             if app is not None and getattr(
                 self, "_nemoclaw_unknown_command_app", None
@@ -289,6 +309,18 @@ def _patch_slack_adapter() -> None:
 
                 @app.command(re.compile(".+"))
                 async def _handle_unknown_command(ack, command, respond):
+                    test_id = diagnostic_id(command.get("text", ""))
+                    if test_id and callable(
+                        getattr(self, "_handle_slash_command", None)
+                    ):
+                        await ack(
+                            response_type="ephemeral",
+                            text="Slack delivery diagnostic received.",
+                        )
+                        diagnostic_command = dict(command)
+                        diagnostic_command["command"] = "/hermes"
+                        await self._handle_slash_command(diagnostic_command)
+                        return
                     await ack()
                     command_name = command.get("command", "this command")
                     await respond(
@@ -362,6 +394,7 @@ def _patch_slack_registry_factory() -> None:
                         template.__dict__["_nemoclaw_handle_clarify_action"]
                     )
                 adapter_class._nemoclaw_slack_compat_installed = True
+            copy_adapter_instrumentation(template, adapter_class)
             return adapter
 
         _create_adapter_with_slack_compat._nemoclaw_slack_registry_compat = True
