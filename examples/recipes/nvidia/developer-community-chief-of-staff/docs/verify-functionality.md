@@ -151,8 +151,15 @@ In either case, the agent may **loop trying to satisfy "from my inbox"** rather 
 
 > Pick any channel the bot is a member of and summarize the most recent 10 messages.
 
-**Expected:** agent uses `users.conversations` to pick a member channel, then `conversations.history` with `limit=10`, then a short summary.
-**Verify:** reply names the chosen channel by ID (`C…`) and gives a bulleted summary covering ≤10 messages. **If the bot isn't in any channels yet**, the skill correctly reports `not_in_channel` and asks to be invited — that's also a valid pass; invite `@myuser_nemoclaw` to a channel and retry.
+**Expected:** agent uses `users.conversations` to pick a member channel, then
+`fetch_slack_history.py --message-limit 10`. The helper can make more than one
+`conversations.history` request when bot or system messages consume a page.
+
+**Verify:** reply names the chosen channel by ID (`C…`), states the number of
+messages and pages inspected, and gives a bulleted summary covering at most 10
+human messages. Each factual bullet ends with a Slack source link. If the bot is
+not a member, the skill reports `not_in_channel` and asks to be invited. Invite
+`@myuser_nemoclaw` to a channel and retry.
 
 #### Q6 — realistic
 
@@ -160,8 +167,29 @@ In either case, the agent may **loop trying to satisfy "from my inbox"** rather 
 
 > Summarize the last 7 days of this channel — main topics, who's most active, and any unresolved questions.
 
-**Expected:** agent uses the thread's channel ID directly, pulls history with `oldest=` set to 7 days ago, replies in-thread.
-**Verify:** reply has sections for time range, main topics, active participants, and decisions/action items — the documented summary structure. Bonus credibility: a participant name you recognize.
+**Expected:** agent uses the thread's channel ID directly and runs
+`fetch_slack_history.py` with `--oldest` set to seven days ago, `--latest` set
+to the current time, and bounded pagination. The agent uses `--replies` when
+thread context is required and replies in-thread.
+
+**Verify:** reply starts with the requested and retrieved ranges, messages and
+pages inspected, and any history or thread truncation. It has sections for main
+topics, active participants, decisions and action items, and unresolved
+questions. Every factual bullet about a theme, decision, action item, or
+unresolved question links to a representative Slack message. Open at least two
+links and confirm that they support the associated statements.
+
+#### Q6b — fail-closed
+
+Remove the bot from a test channel or use a channel ID that the bot cannot
+read. Then ask the agent to summarize that channel.
+
+**Expected:** the helper returns `ok: false` with an error such as
+`not_in_channel` or `channel_not_found`.
+
+**Verify:** the agent reports the retrieval failure and remediation. It does
+not produce a summary, infer channel activity, or describe the failure as an
+empty successful range.
 
 ---
 

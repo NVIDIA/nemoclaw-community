@@ -1,0 +1,492 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+from __future__ import annotations
+
+import importlib.util
+import sys
+from pathlib import Path
+from unittest import TestCase
+
+
+HERMES_DIR = Path(__file__).resolve().parents[1]
+SKILL_DIR = HERMES_DIR / "skills/slack-channel-summarizer"
+SCRIPT = SKILL_DIR / "scripts/fetch_slack_history.py"
+sys.path.insert(0, str(SCRIPT.parent))
+SPEC = importlib.util.spec_from_file_location("fetch_slack_history", SCRIPT)
+assert SPEC and SPEC.loader
+HISTORY = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = HISTORY
+SPEC.loader.exec_module(HISTORY)
+
+
+def message(
+    timestamp: str,
+    text: str,
+    *,
+    user: str = "U12345678",
+    **extra,
+):
+    return {"ts": timestamp, "text": text, "user": user, **extra}
+
+
+def permalink(timestamp: str):
+    return {
+        "ok": True,
+        "permalink": f"https://example.slack.com/archives/C12345678/p{timestamp.replace('.', '')}",
+    }
+
+
+class ScriptedApi:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    def __call__(self, token, method, params):
+        self.calls.append((token, method, dict(params)))
+        if not self.responses:
+            raise AssertionError(f"unexpected Slack API call: {method}")
+        expected_method, response = self.responses.pop(0)
+        if method != expected_method:
+            raise AssertionError(f"expected {expected_method}, got {method}")
+        return response
+
+    def assert_complete(self, test):
+        test.assertEqual([], self.responses)
+
+
+class SlackSummaryHistoryTest(TestCase):
+    def test_paginates_across_filtered_messages_and_applies_time_range(self) -> None:
+        api = ScriptedApi(
+            [
+                (
+                    "conversations.history",
+                    {
+                        "ok": True,
+                        "messages": [
+                            message("1700000300.000001", "bot", bot_id="B123"),
+                            message("1700000200.000001", "Second"),
+                        ],
+                        "response_metadata": {"next_cursor": "next-page"},
+                    },
+                ),
+                (
+                    "conversations.history",
+                    {
+                        "ok": True,
+                        "messages": [message("1700000100.000001", "First")],
+                        "response_metadata": {"next_cursor": ""},
+                    },
+                ),
+                ("chat.getPermalink", permalink("1700000100.000001")),
+                ("chat.getPermalink", permalink("1700000200.000001")),
+            ]
+        )
+
+        result = HISTORY.collect_channel_history(
+            "token-placeholder",
+            "C12345678",
+            oldest="1700000000",
+            latest="1700000400",
+            message_limit=2,
+            page_cap=3,
+            api_call=api,
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(["First", "Second"], [item["text"] for item in result["messages"]])
+        self.assertEqual(2, result["coverage"]["pages"])
+        self.assertEqual(3, result["coverage"]["inspected_messages"])
+        self.assertEqual(2, result["coverage"]["human_messages"])
+        self.assertTrue(result["coverage"]["complete"])
+        self.assertEqual(
+            "1700000000",
+            result["coverage"]["requested_range"]["oldest"],
+        )
+        self.assertEqual(
+            "1700000300.000001",
+            result["coverage"]["retrieved_range"]["latest"],
+        )
+        first_params = api.calls[0][2]
+        second_params = api.calls[1][2]
+        self.assertEqual("1700000000", first_params["oldest"])
+        self.assertEqual("1700000400", first_params["latest"])
+        self.assertEqual("2", first_params["limit"])
+        self.assertEqual("next-page", second_params["cursor"])
+        api.assert_complete(self)
+
+    def test_message_limit_reports_truncation(self) -> None:
+        api = ScriptedApi(
+            [
+                (
+                    "conversations.history",
+                    {
+                        "ok": True,
+                        "messages": [
+                            message("1700000100.000001", "One"),
+                            message("1700000200.000001", "Two"),
+                            message("1700000300.000001", "Three"),
+                        ],
+                        "response_metadata": {"next_cursor": ""},
+                    },
+                ),
+                ("chat.getPermalink", permalink("1700000100.000001")),
+                ("chat.getPermalink", permalink("1700000200.000001")),
+            ]
+        )
+
+        result = HISTORY.collect_channel_history(
+            "token-placeholder",
+            "C12345678",
+            message_limit=2,
+            page_cap=2,
+            api_call=api,
+        )
+
+        self.assertEqual(2, len(result["messages"]))
+        self.assertTrue(result["coverage"]["truncated"])
+        self.assertEqual(["message_limit"], result["coverage"]["truncation_reasons"])
+        api.assert_complete(self)
+
+    def test_time_pagination_is_used_when_cursor_is_unavailable(self) -> None:
+        api = ScriptedApi(
+            [
+                (
+                    "conversations.history",
+                    {
+                        "ok": True,
+                        "messages": [
+                            message("1700000300.000001", "Newest"),
+                            message("1700000200.000001", "bot", bot_id="B123"),
+                        ],
+                        "has_more": True,
+                        "response_metadata": {"next_cursor": ""},
+                    },
+                ),
+                (
+                    "conversations.history",
+                    {
+                        "ok": True,
+                        "messages": [message("1700000100.000001", "Oldest")],
+                        "has_more": False,
+                        "response_metadata": {"next_cursor": ""},
+                    },
+                ),
+                ("chat.getPermalink", permalink("1700000100.000001")),
+                ("chat.getPermalink", permalink("1700000300.000001")),
+            ]
+        )
+
+        result = HISTORY.collect_channel_history(
+            "token-placeholder",
+            "C12345678",
+            oldest="1700000000",
+            latest="1700000400",
+            message_limit=3,
+            page_cap=3,
+            api_call=api,
+        )
+
+        self.assertTrue(result["coverage"]["complete"])
+        self.assertEqual(2, result["coverage"]["pages"])
+        self.assertEqual("1700000200.000001", api.calls[1][2]["latest"])
+        self.assertEqual("false", api.calls[1][2]["inclusive"])
+        self.assertEqual(
+            ["Oldest", "Newest"],
+            [item["text"] for item in result["messages"]],
+        )
+        api.assert_complete(self)
+
+    def test_page_cap_reports_incomplete_empty_coverage(self) -> None:
+        api = ScriptedApi(
+            [
+                (
+                    "conversations.history",
+                    {
+                        "ok": True,
+                        "messages": [message("1700000100.000001", "bot", bot_id="B123")],
+                        "response_metadata": {"next_cursor": "more"},
+                    },
+                )
+            ]
+        )
+
+        result = HISTORY.collect_channel_history(
+            "token-placeholder",
+            "C12345678",
+            message_limit=2,
+            page_cap=1,
+            api_call=api,
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["empty"])
+        self.assertFalse(result["coverage"]["complete"])
+        self.assertEqual(["page_cap"], result["coverage"]["truncation_reasons"])
+
+    def test_workspace_history_limit_reports_incomplete_coverage(self) -> None:
+        api = ScriptedApi(
+            [
+                (
+                    "conversations.history",
+                    {
+                        "ok": True,
+                        "messages": [],
+                        "is_limited": True,
+                        "response_metadata": {"next_cursor": ""},
+                    },
+                )
+            ]
+        )
+
+        result = HISTORY.collect_channel_history(
+            "token-placeholder",
+            "C12345678",
+            api_call=api,
+        )
+
+        self.assertFalse(result["coverage"]["complete"])
+        self.assertEqual(
+            ["workspace_history_limit"],
+            result["coverage"]["truncation_reasons"],
+        )
+
+    def test_empty_history_is_distinct_from_failure(self) -> None:
+        api = ScriptedApi(
+            [
+                (
+                    "conversations.history",
+                    {
+                        "ok": True,
+                        "messages": [],
+                        "response_metadata": {"next_cursor": ""},
+                    },
+                )
+            ]
+        )
+
+        result = HISTORY.collect_channel_history(
+            "token-placeholder",
+            "C12345678",
+            api_call=api,
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["empty"])
+        self.assertTrue(result["coverage"]["complete"])
+        self.assertEqual([], result["messages"])
+
+    def test_slack_failures_are_fail_closed_and_classified(self) -> None:
+        cases = [
+            ("invalid_auth", {}),
+            ("missing_scope", {"needed": "channels:history", "provided": "channels:read"}),
+            ("not_in_channel", {}),
+            ("ratelimited", {"retry_after": "30", "http_status": 429}),
+            ("internal_error", {}),
+        ]
+        for error, details in cases:
+            with self.subTest(error=error):
+                api = ScriptedApi(
+                    [("conversations.history", {"ok": False, "error": error, **details})]
+                )
+                result = HISTORY.collect_channel_history(
+                    "token-placeholder",
+                    "C12345678",
+                    api_call=api,
+                )
+                self.assertFalse(result["ok"])
+                self.assertEqual("history", result["stage"])
+                expected_error = "rate_limited" if error == "ratelimited" else error
+                self.assertEqual(expected_error, result["error"])
+                self.assertNotIn("messages", result)
+                self.assertNotIn("token-placeholder", repr(result))
+
+    def test_thread_replies_paginate_and_keep_root_relationship(self) -> None:
+        root = message(
+            "1700000100.000001",
+            "Root",
+            reply_count=3,
+            thread_ts="1700000100.000001",
+        )
+        api = ScriptedApi(
+            [
+                (
+                    "conversations.history",
+                    {
+                        "ok": True,
+                        "messages": [root],
+                        "response_metadata": {"next_cursor": ""},
+                    },
+                ),
+                ("chat.getPermalink", permalink("1700000100.000001")),
+                (
+                    "conversations.replies",
+                    {
+                        "ok": True,
+                        "messages": [
+                            root,
+                            message("1700000110.000001", "bot", bot_id="B123"),
+                            message("1700000120.000001", "Reply one", user="U22222222"),
+                        ],
+                        "response_metadata": {"next_cursor": "reply-page"},
+                    },
+                ),
+                (
+                    "conversations.replies",
+                    {
+                        "ok": True,
+                        "messages": [
+                            message("1700000130.000001", "Reply two", user="U33333333")
+                        ],
+                        "response_metadata": {"next_cursor": ""},
+                    },
+                ),
+                ("chat.getPermalink", permalink("1700000120.000001")),
+                ("chat.getPermalink", permalink("1700000130.000001")),
+            ]
+        )
+
+        result = HISTORY.collect_channel_history(
+            "token-placeholder",
+            "C12345678",
+            include_replies=True,
+            reply_limit=2,
+            thread_page_cap=3,
+            api_call=api,
+        )
+
+        replies = result["messages"][0]["thread_replies"]
+        self.assertEqual(["Reply one", "Reply two"], [item["text"] for item in replies])
+        self.assertEqual(
+            ["1700000100.000001", "1700000100.000001"],
+            [item["thread_root_ts"] for item in replies],
+        )
+        self.assertEqual(2, result["threads"]["items"][0]["pages"])
+        self.assertEqual(3, result["threads"]["items"][0]["inspected_messages"])
+        self.assertTrue(result["threads"]["complete"])
+        api.assert_complete(self)
+
+    def test_thread_cap_is_reported(self) -> None:
+        first = message("1700000100.000001", "First root", reply_count=1)
+        second = message("1700000200.000001", "Second root", reply_count=1)
+        reply = message("1700000110.000001", "Reply")
+        api = ScriptedApi(
+            [
+                (
+                    "conversations.history",
+                    {
+                        "ok": True,
+                        "messages": [first, second],
+                        "response_metadata": {"next_cursor": ""},
+                    },
+                ),
+                ("chat.getPermalink", permalink("1700000100.000001")),
+                ("chat.getPermalink", permalink("1700000200.000001")),
+                (
+                    "conversations.replies",
+                    {
+                        "ok": True,
+                        "messages": [first, reply],
+                        "response_metadata": {"next_cursor": ""},
+                    },
+                ),
+                ("chat.getPermalink", permalink("1700000110.000001")),
+            ]
+        )
+
+        result = HISTORY.collect_channel_history(
+            "token-placeholder",
+            "C12345678",
+            include_replies=True,
+            thread_cap=1,
+            api_call=api,
+        )
+
+        self.assertEqual(2, result["threads"]["roots_available"])
+        self.assertEqual(1, result["threads"]["roots_expanded"])
+        self.assertTrue(result["threads"]["truncated"])
+        self.assertIn("thread_cap", result["threads"]["truncation_reasons"])
+        self.assertNotIn("thread_replies", result["messages"][1])
+
+    def test_permalink_failure_is_fail_closed(self) -> None:
+        api = ScriptedApi(
+            [
+                (
+                    "conversations.history",
+                    {
+                        "ok": True,
+                        "messages": [message("1700000100.000001", "Evidence")],
+                        "response_metadata": {"next_cursor": ""},
+                    },
+                ),
+                ("chat.getPermalink", {"ok": False, "error": "missing_scope"}),
+            ]
+        )
+
+        result = HISTORY.collect_channel_history(
+            "token-placeholder",
+            "C12345678",
+            api_call=api,
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertEqual("permalink", result["stage"])
+        self.assertEqual("missing_scope", result["error"])
+        self.assertNotIn("messages", result)
+
+    def test_message_text_truncation_is_explicit(self) -> None:
+        long_text = "x" * (HISTORY.MAX_TEXT_CHARS + 1)
+        api = ScriptedApi(
+            [
+                (
+                    "conversations.history",
+                    {
+                        "ok": True,
+                        "messages": [message("1700000100.000001", long_text)],
+                        "response_metadata": {"next_cursor": ""},
+                    },
+                ),
+                ("chat.getPermalink", permalink("1700000100.000001")),
+            ]
+        )
+
+        result = HISTORY.collect_channel_history(
+            "token-placeholder",
+            "C12345678",
+            api_call=api,
+        )
+
+        rendered = result["messages"][0]
+        self.assertEqual(HISTORY.MAX_TEXT_CHARS, len(rendered["text"]))
+        self.assertTrue(rendered["text_truncated"])
+
+    def test_citation_format_uses_timestamp_user_and_permalink(self) -> None:
+        citation = HISTORY.citation_for(
+            "0",
+            "U12345678",
+            "https://example.slack.com/archives/C12345678/p0",
+        )
+        self.assertEqual(
+            "[1970-01-01 00:00 UTC — U12345678]"
+            "(https://example.slack.com/archives/C12345678/p0)",
+            citation,
+        )
+
+    def test_time_boundaries_accept_slack_and_iso_formats(self) -> None:
+        self.assertEqual("1700000000", HISTORY.normalize_time_boundary("1700000000"))
+        self.assertEqual("1700000000.25", HISTORY.normalize_time_boundary("1700000000.250000"))
+        self.assertEqual("0", HISTORY.normalize_time_boundary("1970-01-01T00:00:00Z"))
+
+    def test_skill_requires_coverage_and_source_citations(self) -> None:
+        skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("fetch_slack_history.py", skill)
+        self.assertIn("Copy the `citation` value", skill)
+        self.assertIn("Do not summarize when `ok` is `false`", skill)
+        self.assertIn("coverage.complete", skill)
+        self.assertIn("threads.complete", skill)
+
+
+if __name__ == "__main__":
+    import unittest
+
+    unittest.main()
