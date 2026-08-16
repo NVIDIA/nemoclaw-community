@@ -595,6 +595,20 @@ unless you remove the compose volumes.
 
 The plumbing checks below confirm the bridge and skill scripts are wired correctly. For an end-to-end walkthrough that exercises each skill via Slack DM and Outlook email, see [docs/verify-functionality.md](docs/verify-functionality.md). For a cross-channel, multi-user demo where one user teaches the agent a new skill and a different user invokes it from a different channel after a full sandbox rebuild, see [docs/collective-wisdom.md](docs/collective-wisdom.md).
 
+For a bounded Slack transport check that identifies the last confirmed delivery
+stage, run the guided diagnostic after sandbox creation:
+
+```console
+$ python3 scripts/slack_delivery_diagnostic.py --mode dm
+$ python3 scripts/slack_delivery_diagnostic.py \
+    --mode slash --slash-command /alice-nemoclaw
+```
+
+The command asks the operator to send the generated test value. It does not
+send a Slack message as the operator. See
+[Set Up Slack — Verify End-to-End Delivery](docs/set-up-slack.md#verify-end-to-end-delivery)
+for the stage definitions, privacy boundary, and failure guidance.
+
 ```console
 $ set -a; . ./.env; set +a
 

@@ -150,9 +150,68 @@ The script (auto-sources `.env` if needed) does the following for Slack:
 
 If you change Slack credentials after a sandbox already exists, run `bash scripts/tear-down.sh && bash scripts/bring-up.sh` so the providers and image are rebuilt with the new values.
 
-## Confirm Delivery
+## Verify End-to-End Delivery
 
-After the sandbox is running, send a direct message to your bot in Slack from your allowlisted account. It should respond within a few seconds.
+The setup preflight calls `apps.connections.open`. That check proves that the
+app-level token can reach Slack and create a Socket Mode URL. It does not prove
+that Slack can deliver an event to the running Hermes gateway.
+
+After the sandbox is running, start the guided direct-message diagnostic from
+the example root:
+
+```console
+$ python3 scripts/slack_delivery_diagnostic.py --mode dm
+```
+
+The command prints a unique test value and asks you to send one direct message
+to the bot. It does not send a message as you. The delivery wait is 90 seconds
+by default, and the command reports the last confirmed stage:
+
+| Stage | What it confirms |
+| --- | --- |
+| Slack API access | The bot access token can call `auth.test`. |
+| Socket Mode connection | The running Hermes process completed a Socket Mode connection. |
+| Inbound event receipt | The adapter received the test event from Slack. |
+| Hermes dispatch | The event passed adapter filtering and entered the Hermes message path. |
+| Inference | The Hermes message handler completed without an exception. |
+| Outbound response | The Slack adapter confirmed a send. |
+
+When `SLACK_ALLOWED_IDS` contains members, send the direct message from an
+allowlisted member. When the value is empty, the documented allow-all mode is
+supported. The command reports the authorization mode and member count, but it
+does not print member IDs.
+
+To verify the custom slash command from your app manifest, run a separate test.
+Replace the command name with the value that you configured:
+
+```console
+$ python3 scripts/slack_delivery_diagnostic.py \
+    --mode slash --slash-command /alice-nemoclaw
+```
+
+Then run the printed slash command in Slack. The compatibility shim forwards
+only a message that contains the generated diagnostic value through the normal
+Hermes inference path. Other unknown slash commands keep their existing help
+response.
+
+The sandbox records only the diagnostic value, stage, status, timestamp,
+process ID, and exception class in a mode-0600 bounded log. It does not record
+the message body, Slack credentials, workspace name, or unrelated history. The
+diagnostic uses the existing Slack permissions. It does not restart the gateway
+or rebuild the sandbox. Use `--timeout <seconds>` to change the bounded wait.
+
+Rebuild the sandbox before the first diagnostic after you update this recipe.
+The sandbox image contains the stage instrumentation and the sandbox-side
+reader.
+
+The optional response monitor serves a different purpose. It detects some
+unanswered direct messages after delivery and can request host-side recovery.
+It does not prove the slash-command path or identify the last completed stage.
+
+## Manual Inspection
+
+You can also send a direct message to the bot from an allowlisted account. It
+should respond within a few seconds.
 
 To inspect Hermes activity inside the sandbox:
 
