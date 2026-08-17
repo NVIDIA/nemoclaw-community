@@ -208,19 +208,22 @@ in output.
 
 Ask the agent:
 
-> How many issues does the configured GitHub repo have? Use live GitHub, not the ETL mirror.
+The prompts below use the default `NVIDIA/OpenShell` repository. If you changed
+the allowlist, substitute one of its repositories.
+
+> How many issues does NVIDIA/OpenShell have? Use live GitHub, not the ETL mirror.
 
 **Expected:** agent uses the generic helper pattern, for example
-`github_readonly.py get issues --param state=all --paginate --count --exclude-pulls`.
+`github_readonly.py --repo NVIDIA/OpenShell get issues --param state=all --paginate --count --exclude-pulls`.
 It should not use `gh`, `git`, GitHub search, GraphQL, or the source ETL
 mirror for this live count.
 
 Also ask:
 
-> How many pull requests are currently open in the configured GitHub repo? Use live GitHub, not the ETL mirror.
+> How many pull requests are currently open in NVIDIA/OpenShell? Use live GitHub, not the ETL mirror.
 
 **Expected:** agent uses the generic helper pattern, for example
-`github_readonly.py get pulls --param state=open --paginate --count`; it should
+`github_readonly.py --repo NVIDIA/OpenShell get pulls --param state=open --paginate --count`; it should
 not estimate from a single `pulls --limit` page.
 
 ---
@@ -245,6 +248,7 @@ Empty array `[]` is fine — bridge is up but ETL hasn't finished first sync. A 
 **Verify:** response contains 3 numbered items. The agent should identify this
 as mirrored PostgREST data, not live GitHub data. Current GitHub issues and PRs
 should use the separate `github-readonly-live` skill for `GITHUB_READONLY_REPO`.
+The plural `GITHUB_READONLY_REPOS` setting takes precedence when configured.
 
 #### Q8 — realistic
 

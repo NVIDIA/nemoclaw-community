@@ -43,10 +43,10 @@ not a Kubernetes/cluster deployment.
 
 The Hermes sandbox operates with a deliberately narrow egress policy. It connects
 live to Slack and Outlook for interactions and research. It also has
-authenticated, read-only GitHub REST access to one configured repository
-(`GITHUB_READONLY_REPO`). The GitHub token is attached through an OpenShell
-provider placeholder so GitHub rate limits are practical, while `policy.yaml`
-still limits the sandbox to repo-scoped `GET` requests. GitHub discussions,
+authenticated, read-only GitHub REST access to an exact repository allowlist
+(`GITHUB_READONLY_REPOS`). The GitHub access token is attached through an
+OpenShell provider placeholder so GitHub rate limits are practical, while
+`policy.yaml` still limits the sandbox to repository-scoped `GET` requests. GitHub discussions,
 historical mirror data, and NVIDIA forum data come from host-side ETL
 containers that scrape on a schedule, write results into Postgres, and expose
 that mirror through a read-only PostgREST HTTP bridge.
@@ -172,7 +172,7 @@ flowchart LR
 
 **Key invariants:**
 
-- The agent has authenticated read-only `api.github.com` access for exactly one configured repo. The raw GitHub token stays in an OpenShell provider; the sandbox sees only a placeholder, and policy still blocks writes, non-API GitHub hosts, `git`, and `gh`.
+- The agent has authenticated read-only `api.github.com` access for an exact repository allowlist. The raw GitHub access token stays in an OpenShell provider; the sandbox sees only a placeholder, and policy still blocks writes, non-API GitHub hosts, `git`, and `gh`.
 - GitHub discussions, historical mirror data, and NVIDIA forum data come from the Postgres mirror.
 - Slack and Outlook are live connections from the sandbox; the agent can read and write both in real time.
 - Compatible-endpoint inference egress is required for the agent's LLM calls — it's not a research/data-ingestion path.
@@ -346,7 +346,7 @@ Edit `.env` and fill in everything you need:
 - (optional) `NEMOCLAW_SLACK_RICH_BLOCKS=false` — disable native Slack Rich Block rendering and use the text fallback. The default is `true`.
 - (optional) `OUTLOOK_ALLOWED_SENDERS` — comma-separated allowlist of email senders the agent will respond to; leave empty to fall back to OUTLOOK_REPLY_TO
 - (optional) `GITHUB_TOKEN` for authenticated sandbox read-only
-  GitHub REST, `GITHUB_READONLY_REPO`,
+  GitHub REST, `GITHUB_READONLY_REPOS`,
   `PHOENIX_COLLECTOR_ENDPOINT`, `PHOENIX_PROJECT_NAME`
 
 ### Phase 3 — Host services (handled by bring-up.sh, no manual step)
@@ -549,7 +549,7 @@ bearer header; the OpenShell L7 proxy substitutes a live token on egress.
 | `compatible-endpoint` | `nvidia` (built-in v2; consumed via `openshell inference set`, not attached to the sandbox directly) | `NVIDIA_API_KEY` (populated from `OPENAI_API_KEY` / `COMPATIBLE_API_KEY` at provider-create time). URL: `NEMOCLAW_ENDPOINT_URL` → `NVIDIA_BASE_URL` provider config. Routing via `inference.local`. | Required for inference. Missing credentials stop setup before the sandbox build unless the explicit offline preflight bypass is selected. |
 | `<sandbox>-outlook` | `nemoclaw-outlook-email` | `MS_GRAPH_ACCESS_TOKEN` (auto-rotated by the gateway from the registered refresh token). Refresh material: `OUTLOOK_TENANT_ID`, `OUTLOOK_CLIENT_ID`, refresh_token (cached from device-code login). | Optional. Created only when the Outlook block is fully populated; partial config is rejected. At least one of Outlook or Slack must be configured. |
 | `<sandbox>-slack` | `nemoclaw-slack` | `SLACK_BOT_TOKEN` (Web API) + `SLACK_APP_TOKEN` (Socket Mode) | Optional. Before provider creation, setup verifies that the app token can call `apps.connections.open` with `connections:write`. At least one of Outlook or Slack must be configured. |
-| `<sandbox>-github` | `nemoclaw-github` | `GITHUB_TOKEN` | Optional but recommended. Enables authenticated live GitHub REST reads. The sandbox receives only the OpenShell placeholder; `policy.yaml` further limits use to repo-scoped `GET` routes from approved binaries. |
+| `<sandbox>-github` | `nemoclaw-github` | `GITHUB_TOKEN` | Optional but recommended. Enables authenticated live GitHub REST reads. The sandbox receives only the OpenShell placeholder; `policy.yaml` further limits use to repository-scoped `GET` routes from approved binaries. |
 | `<sandbox>-atif-export-relay` | `nemoclaw-atif-export-relay` | `ATIF_RELAY_AUTH_TOKEN` | Created and attached only when `ATIF_EXPORT_MODE=relay`. Allows the Python ATIF bridge to send `POST /atif` to the configured host relay; the provider owns the endpoint, path, binary, private-IP, and credential restrictions. |
 
 The `compatible-endpoint` provider is **not** prefixed with the sandbox name — it's a
@@ -563,7 +563,7 @@ Sandbox network policy ([`policy.yaml`](policy.yaml)) layers on top of the per-p
 endpoint scopes above. For most providers the profile is the sole source of policy;
 `policy.yaml` only carries restrictions that the v2 ProviderProfile schema can't
 express today — specifically per-path allow rules (used to scope the NVIDIA inference
-API to specific `/v1/*` paths and GitHub reads to one repo via `GITHUB_READONLY_REPO`)
+API to specific `/v1/*` paths and GitHub reads to an exact repository allowlist)
 and credential-less host-routed services (Phoenix collector, Source-ETL API). Surviving
 `network_policies` blocks in `policy.yaml` carry **load-bearing comments** explaining
 why they can't be folded into provider profiles. Fully-redundant blocks (e.g. the
@@ -571,40 +571,58 @@ former `slack` block) have been removed.
 
 `GITHUB_TOKEN` is attached as `<sandbox>-github` for live sandbox GitHub reads.
 The sandbox sees only an OpenShell placeholder;
-the raw token is resolved by the proxy on egress. GitHub write attempts are
+the raw access token is resolved by the proxy on egress. GitHub write attempts are
 still blocked by the applied policy, which allows only selected `GET` paths
-under `api.github.com/repos/$GITHUB_READONLY_REPO`. If you keep the optional
+under `api.github.com/repos/` for the configured allowlist. If you keep the optional
 host GitHub mirror enabled, it also reads `GITHUB_TOKEN` for API rate limits.
 
-## Changing the available live GitHub repo
+## Changing the available live GitHub repositories
 
-The live GitHub policy is repo-scoped. To change the repo the sandbox can read:
+The live GitHub policy is repository-scoped. To change the repositories that
+the sandbox can read:
 
-1. Set `GITHUB_READONLY_REPO=owner/repo` in `.env`.
-2. For practical API rate limits, set `GITHUB_TOKEN`. Private
-   repos require a token with access to the target repo; public repos can be
-   read without a token but use GitHub's lower unauthenticated API limits.
-3. Recreate the sandbox so `scripts/03-sandbox.sh` can stage the Dockerfile env
-   and apply a policy for the new repo:
+1. Set a comma-separated allowlist in `.env`, for example
+   `GITHUB_READONLY_REPOS=owner/skills,owner/blueprint`. Each item must use
+   `owner/repository`. Existing configurations can continue to use the single
+   `GITHUB_READONLY_REPO` setting. When both are set, the plural setting takes
+   precedence.
+2. For practical API rate limits, set `GITHUB_TOKEN`. Each private repository
+   requires the access token to have access to it. Public repositories can be
+   read without an access token but use GitHub's lower unauthenticated API
+   limits.
+3. If you need to preserve memories, sessions, or learned skills, run
+   `bash scripts/snapshot.sh` while the existing sandbox is running.
+4. Recreate the sandbox so `scripts/03-sandbox.sh` can stage the Dockerfile
+   environment and apply exact `GET` rules for the new allowlist:
 
 ```bash
 bash scripts/tear-down.sh
 bash scripts/bring-up.sh
 ```
 
-For normal repo changes, do not edit `policy.yaml` by hand; `03-sandbox.sh`
-patches the `__GITHUB_READONLY_REPO__` placeholder before applying the staged
-policy. After bring-up, verify the live repo path from the host shell:
+5. If you made a snapshot, run `bash scripts/restore.sh` after bring-up. The
+   [persistence section](#persistence-collective-wisdom-across-restarts)
+   describes the snapshot contents and handling requirements.
+
+For normal repository changes, do not edit `policy.yaml` by hand.
+`03-sandbox.sh` validates the list and replaces the fail-closed marker with
+exact repository paths before it applies the staged policy. After bring-up,
+verify each allowed repository from the host shell:
 
 ```bash
 set -a; . ./.env; set +a
 openshell sandbox exec --name "${SANDBOX_NAME:-hermes-direct}" -- sh -lc \
-  '/usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py get . --fields full_name,default_branch,open_issues_count'
+  '/usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py --repo owner/skills get . --fields full_name,default_branch,open_issues_count'
 ```
 
-`GITHUB_READONLY_REPO` controls only live REST reads through
-`github-readonly-live`. The host-side ETL mirror is independent and disabled by
-default. Set `SOURCE_ETL_GITHUB_ENABLED=1` and optionally
+When more than one repository is allowed, `--repo owner/repository` is
+required. The helper rejects an unlisted repository before it sends a request.
+The policy permits only `GET`; write methods remain denied. With one allowed
+repository, omitting `--repo` retains the previous helper behavior.
+
+`GITHUB_READONLY_REPOS` and its singular fallback control only live REST reads
+through `github-readonly-live`. The host-side ETL mirror is independent and
+disabled by default. Set `SOURCE_ETL_GITHUB_ENABLED=1` and optionally
 `SOURCE_ETL_GITHUB_REPO=owner/repo` when you want mirrored GitHub
 discussions/history, then rerun
 `bash scripts/00-host-services.sh`. Existing mirror database/state is preserved
@@ -626,10 +644,11 @@ unless you remove the compose volumes.
 | `NEMOCLAW_HOST_TLS_PROXY_PORT` | `18080` | Host listener port for the optional TLS proxy. |
 | `NEMOCLAW_HOST_CA_BUNDLE` | `/etc/ssl/certs/ca-certificates.crt` | Absolute path to a readable regular-file host CA bundle mounted read-only into the GitHub/forum ETLs and ATIF relay. Override when the supported Ubuntu host stores its trusted bundle elsewhere. |
 | `COMPATIBLE_API_KEY` | (none) | Inference API key. Mirrors NemoClaw's `REMOTE_PROVIDER_CONFIG.custom`. (`OPENAI_API_KEY` is also accepted.) |
-| `GITHUB_TOKEN` | (none) | Optional GitHub token for authenticated live REST reads. Also feeds the optional host GitHub mirror. |
-| `GITHUB_READONLY_REPO` | `NVIDIA/OpenShell` | The only repo allowed by the live GitHub REST policy, formatted as `owner/repo`. Recreate the sandbox after changing it. |
+| `GITHUB_TOKEN` | (none) | Optional GitHub access token for authenticated live REST reads. Also feeds the optional host GitHub mirror. |
+| `GITHUB_READONLY_REPOS` | `NVIDIA/OpenShell` | Comma-separated exact allowlist for the live GitHub REST policy. Each item uses `owner/repository`. Recreate the sandbox after changing it. |
+| `GITHUB_READONLY_REPO` | `NVIDIA/OpenShell` | Backward-compatible single-repository setting. It is used only when `GITHUB_READONLY_REPOS` is empty or absent. |
 | `SOURCE_ETL_GITHUB_ENABLED` | `0` | Set to `1` to start the host-side GitHub mirror. A live-read `GITHUB_TOKEN` alone does not enable the ETL. |
-| `SOURCE_ETL_GITHUB_REPO` | `NVIDIA/NemoClaw` | Host-side GitHub mirror repo for source-etls. This is independent of `GITHUB_READONLY_REPO`. |
+| `SOURCE_ETL_GITHUB_REPO` | `NVIDIA/NemoClaw` | Host-side GitHub mirror repository for source-etls. This is independent of the live GitHub allowlist. |
 | `OUTLOOK_LOGIN_CACHE` | `1` | Controls the Microsoft refresh-token cache at `.bootstrap/cache/ms-graph-token.json`. `1` = use the cache (auto-refresh on staleness, ~90 days). `0` = skip the cache entirely (device-code every bring-up, nothing on disk; use on shared workstations or security-sensitive contexts). `2` = force device-code login and rewrite the cache. The gateway-side encrypted credential copy is unaffected by this knob. |
 | `PHOENIX_COLLECTOR_ENDPOINT` | (none) | Set to e.g. `http://host.openshell.internal:6006/v1/traces` to stream OpenInference traces to a Phoenix collector. ATIF export is independent: local mode writes completed scopes to `/tmp/atif/`; relay mode sends them remotely and uses `/tmp/atif/` only for recovery after all remote targets fail. |
 | `PHOENIX_PROJECT_NAME` | `default` | Sets `openinference.project.name` on every exported span so Phoenix routes traces to a named project. Override per-build to keep multiple deployments separate in the same Phoenix instance. |

@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b"
+DEFAULT_GITHUB_READONLY_REPOSITORY = "NVIDIA/OpenShell"
 DEFAULTS = {
     "SANDBOX_NAME": "hermes-direct",
     "OPENSHELL_GATEWAY": "openshell",
@@ -22,7 +23,7 @@ DEFAULTS = {
     "NEMOCLAW_INFERENCE_PREFLIGHT": "1",
     "OUTLOOK_LOGIN_CACHE": "1",
     "NEMOCLAW_SLACK_RICH_BLOCKS": "true",
-    "GITHUB_READONLY_REPO": "NVIDIA/OpenShell",
+    "GITHUB_READONLY_REPO": DEFAULT_GITHUB_READONLY_REPOSITORY,
 }
 GATEWAY_ENDPOINTS = {
     "openshell": "https://127.0.0.1:17670",
@@ -57,10 +58,48 @@ ATIF_RELAY_HOSTNAME_RE = re.compile(
     r"^([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?\.)*"
     r"[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$"
 )
+GITHUB_REPOSITORY_RE = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]+$"
+)
 
 
 class ConfigurationError(ValueError):
     """A configuration file cannot be parsed or validated safely."""
+
+
+def github_readonly_repositories(values: Mapping[str, str]) -> tuple[str, ...]:
+    """Resolve and validate the plural setting with the singular fallback."""
+    plural = values.get("GITHUB_READONLY_REPOS", "").strip()
+    raw_repositories = plural or values.get(
+        "GITHUB_READONLY_REPO", DEFAULT_GITHUB_READONLY_REPOSITORY
+    ).strip()
+    if not raw_repositories:
+        raw_repositories = DEFAULT_GITHUB_READONLY_REPOSITORY
+
+    repositories = tuple(item.strip() for item in raw_repositories.split(","))
+    if any(not item for item in repositories):
+        raise ConfigurationError(
+            "GitHub read-only repository list contains an empty item"
+        )
+    invalid_indexes = [
+        str(index)
+        for index, repository in enumerate(repositories, start=1)
+        if not GITHUB_REPOSITORY_RE.fullmatch(repository)
+        or repository.rsplit("/", 1)[-1] in {".", ".."}
+    ]
+    if invalid_indexes:
+        raise ConfigurationError(
+            "GitHub read-only repository item(s) "
+            + ", ".join(invalid_indexes)
+            + " must use owner/repository"
+        )
+
+    normalized = [repository.casefold() for repository in repositories]
+    if len(normalized) != len(set(normalized)):
+        raise ConfigurationError(
+            "GitHub read-only repository list contains a duplicate item"
+        )
+    return repositories
 
 
 @dataclass(frozen=True)

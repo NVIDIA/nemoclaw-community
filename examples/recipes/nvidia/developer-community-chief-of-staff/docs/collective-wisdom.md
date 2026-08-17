@@ -346,14 +346,15 @@ entire reason this skill exists.
 
 ## Access model
 
-- Use `github-readonly-live` for current issues from `$GITHUB_READONLY_REPO`.
+- Use `github-readonly-live` for current issues from an allowed repository.
 - Use `source-etl-query` for mirrored GitHub discussions and NVIDIA forum topics.
 - Do not invent new ETL endpoints or direct GitHub requests; use the helpers
   documented by those skills.
 
 ## Required Environment
 
-- `GITHUB_READONLY_REPO` for the live issue source.
+- `GITHUB_READONLY_REPOS`, or the legacy `GITHUB_READONLY_REPO` fallback, for
+  the live issue source.
 - `SOURCE_ETL_API_URL`, or `SOURCE_ETL_API_HOST` plus `SOURCE_ETL_API_PORT`
   for discussion/forum mirror data.
 
@@ -362,10 +363,11 @@ entire reason this skill exists.
 ### 1. Pull recent activity from each source
 
 Default window is 7 days. If the user gave a different window (e.g. "last 3 days"),
-request enough rows to filter caller-side.
+request enough rows to filter caller-side. Replace `NVIDIA/OpenShell` below
+with the allowed repository selected for the digest.
 
 ```bash
-/usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py get issues --param state=all --param sort=updated --param direction=desc --limit 30 --exclude-pulls --fields number,title,state,updated_at,html_url
+/usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py --repo NVIDIA/OpenShell get issues --param state=all --param sort=updated --param direction=desc --limit 30 --exclude-pulls --fields number,title,state,updated_at,html_url
 /usr/bin/python3 /sandbox/.hermes-data/skills/source-etl-query/scripts/query_source_etl.py github-discussions --limit 20
 /usr/bin/python3 /sandbox/.hermes-data/skills/source-etl-query/scripts/query_source_etl.py forum-topics --limit 20
 ```

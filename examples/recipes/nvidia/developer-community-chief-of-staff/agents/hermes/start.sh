@@ -380,8 +380,9 @@ export no_proxy="$_NO_PROXY_VAL"
 export PYTHONPATH="${PATCHES_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
 
 # GitHub credentials reach the sandbox only as OpenShell provider placeholders.
-# policy.yaml still limits GitHub egress to repo-scoped REST GET requests.
-export GITHUB_READONLY_REPO="${GITHUB_READONLY_REPO:-NVIDIA/OpenShell}"
+# policy.yaml still limits GitHub egress to repository-scoped REST GET requests.
+export GITHUB_READONLY_REPOS="${GITHUB_READONLY_REPOS:-${GITHUB_READONLY_REPO:-NVIDIA/OpenShell}}"
+export GITHUB_READONLY_REPO="${GITHUB_READONLY_REPO:-${GITHUB_READONLY_REPOS%%,*}}"
 
 # OpenShell injects SSL_CERT_FILE/CURL_CA_BUNDLE for its L7 proxy CA. Persist
 # them into connect-session shells so Python Slack probes and Hermes tools trust
@@ -424,7 +425,8 @@ export HERMES_NEMO_RELAY_PLUGINS_TOML="/etc/nemo-relay/config/plugins.toml"
 export XDG_CONFIG_HOME="/etc/nemo-relay/xdg"
 export TERMINAL_CWD="/sandbox"
 export SLACK_BOT_TOKEN="${SLACK_BOT_TOKEN:-openshell:resolve:env:SLACK_BOT_TOKEN}"
-export GITHUB_READONLY_REPO="${GITHUB_READONLY_REPO:-NVIDIA/OpenShell}"
+export GITHUB_READONLY_REPOS="${GITHUB_READONLY_REPOS}"
+export GITHUB_READONLY_REPO="${GITHUB_READONLY_REPO}"
 export MS_GRAPH_ACCESS_TOKEN="${MS_GRAPH_ACCESS_TOKEN:-openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN}"
 export PATH="/usr/local/lib/nemoclaw/bin:\$PATH"
 export HERMES_TUI_THEME=dark

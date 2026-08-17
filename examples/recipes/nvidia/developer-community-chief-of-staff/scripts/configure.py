@@ -101,6 +101,19 @@ def infer_profile(document: EnvDocument) -> str:
     return "slack"
 
 
+def github_repository_update(
+    values: Mapping[str, str], *, prefer_plural: bool
+) -> dict[str, str]:
+    plural = values.get("GITHUB_READONLY_REPOS", "").strip()
+    if plural:
+        return {"GITHUB_READONLY_REPOS": plural}
+    repository = values.get(
+        "GITHUB_READONLY_REPO", DEFAULTS["GITHUB_READONLY_REPO"]
+    )
+    key = "GITHUB_READONLY_REPOS" if prefer_plural else "GITHUB_READONLY_REPO"
+    return {key: repository}
+
+
 def collect_interactive_updates(
     document: EnvDocument,
     environment: Mapping[str, str],
@@ -159,10 +172,16 @@ def collect_interactive_updates(
         "NEMOCLAW_INFERENCE_PREFLIGHT": current.get(
             "NEMOCLAW_INFERENCE_PREFLIGHT", "1"
         ),
-        "GITHUB_READONLY_REPO": current.get(
-            "GITHUB_READONLY_REPO", DEFAULTS["GITHUB_READONLY_REPO"]
-        ),
     }
+    updates.update(
+        github_repository_update(
+            current,
+            prefer_plural=not (
+                document.values.get("GITHUB_READONLY_REPO")
+                or environment.get("GITHUB_READONLY_REPO")
+            ),
+        )
+    )
     inference_key_name = "COMPATIBLE_API_KEY"
     inference_key = current.get(inference_key_name, "")
     if not inference_key and current.get("OPENAI_API_KEY"):
@@ -214,10 +233,16 @@ def collect_non_interactive_updates(
         "NEMOCLAW_INFERENCE_PREFLIGHT": current.get(
             "NEMOCLAW_INFERENCE_PREFLIGHT", "1"
         ),
-        "GITHUB_READONLY_REPO": current.get(
-            "GITHUB_READONLY_REPO", DEFAULTS["GITHUB_READONLY_REPO"]
-        ),
     }
+    updates.update(
+        github_repository_update(
+            current,
+            prefer_plural=not (
+                existing.get("GITHUB_READONLY_REPO")
+                or environment.get("GITHUB_READONLY_REPO")
+            ),
+        )
+    )
     explicit_endpoint = existing.get("OPENSHELL_GATEWAY_ENDPOINT") or environment.get(
         "OPENSHELL_GATEWAY_ENDPOINT", ""
     )

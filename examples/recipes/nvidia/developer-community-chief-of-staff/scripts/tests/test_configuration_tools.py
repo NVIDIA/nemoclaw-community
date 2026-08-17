@@ -225,6 +225,9 @@ class GuidedConfigurationTest(TestCase):
                 values = CONFIGURATION.read_env(path).values
                 self.assertEqual(0, exit_code)
                 self.assertTrue(all(values.get(key) for key in required))
+                self.assertEqual(
+                    "NVIDIA/OpenShell", values["GITHUB_READONLY_REPOS"]
+                )
                 self.assertEqual([], CONFIGURATION.profile_errors(values))
                 if profile == "slack":
                     self.assertNotIn("OUTLOOK_LOGIN_CACHE", values)
@@ -323,6 +326,39 @@ class GuidedConfigurationTest(TestCase):
 
         self.assertNotIn("ADVANCED_SETTING", rendered)
         self.assertIn("SLACK_BOT_TOKEN", rendered)
+
+    def test_configurator_preserves_plural_github_repository_scope(self) -> None:
+        document = CONFIGURATION.parse_env_text(
+            "GITHUB_READONLY_REPOS=example/skills,example/blueprint\n"
+        )
+        updates = CONFIGURE.collect_non_interactive_updates(
+            document,
+            SLACK_ENV,
+            profile="slack",
+            replacements={},
+            replace=False,
+        )
+
+        self.assertEqual(
+            "example/skills,example/blueprint",
+            updates["GITHUB_READONLY_REPOS"],
+        )
+        self.assertNotIn("GITHUB_READONLY_REPO", updates)
+
+    def test_configurator_preserves_legacy_github_repository_scope(self) -> None:
+        document = CONFIGURATION.parse_env_text(
+            "GITHUB_READONLY_REPO=example/legacy\n"
+        )
+        updates = CONFIGURE.collect_non_interactive_updates(
+            document,
+            SLACK_ENV,
+            profile="slack",
+            replacements={},
+            replace=False,
+        )
+
+        self.assertEqual("example/legacy", updates["GITHUB_READONLY_REPO"])
+        self.assertNotIn("GITHUB_READONLY_REPOS", updates)
 
 
 def successful_runner(
@@ -504,6 +540,26 @@ class ConsolidatedPreflightTest(TestCase):
         self.assertIn("Slack rich blocks", failures)
         self.assertIn("GitHub read-only repository", failures)
         self.assertNotIn(secret, failures)
+
+    def test_plural_github_repository_scope_is_reported_without_token(self) -> None:
+        secret = "test-github-secret-value"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = self.make_env(
+                temp_dir,
+                {
+                    "GITHUB_READONLY_REPOS": "example/skills,example/blueprint",
+                    "GITHUB_TOKEN": secret,
+                },
+            )
+            values = CONFIGURATION.resolved_values(CONFIGURATION.read_env(path), {})
+            checks = PREFLIGHT.configuration_checks(path, values)
+
+        github = next(
+            item for item in checks if item.name == "GitHub read-only repositories"
+        )
+        self.assertEqual("PASS", github.status)
+        self.assertIn("2 configured", github.detail)
+        self.assertNotIn(secret, github.detail)
 
     def test_missing_tools_and_gateway_are_reported_before_bring_up(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

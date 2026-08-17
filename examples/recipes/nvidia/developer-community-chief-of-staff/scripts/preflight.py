@@ -30,11 +30,13 @@ import slack_socket_preflight  # noqa: E402
 from lib.configuration import (  # noqa: E402
     DEFAULTS,
     GATEWAY_ENDPOINTS,
+    GITHUB_REPOSITORY_RE,
     OUTLOOK_REQUIRED,
     SECRET_KEYS,
     SLACK_REQUIRED,
     ConfigurationError,
     enabled_profiles,
+    github_readonly_repositories,
     parse_atif_relay_endpoint,
     profile_errors,
     read_env,
@@ -42,7 +44,6 @@ from lib.configuration import (  # noqa: E402
 )
 
 EXPECTED_OPENSHELL_VERSION = "0.0.85"
-REPOSITORY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]+$")
 SLACK_ID_RE = re.compile(r"^[UW][A-Z0-9]{8,}$")
 
 
@@ -293,18 +294,24 @@ def configuration_checks(env_file: Path, values: Mapping[str, str]) -> list[Chec
                 "OUTLOOK_LOGIN_CACHE must be 0, 1, or 2",
             )
         )
-    repository = values.get("GITHUB_READONLY_REPO", DEFAULTS["GITHUB_READONLY_REPO"])
+    try:
+        repositories = github_readonly_repositories(values)
+        repository_error = ""
+    except ConfigurationError as error:
+        repositories = ()
+        repository_error = str(error)
     checks.append(
         Check(
-            "GitHub read-only repository",
+            "GitHub read-only repositories",
             "configuration",
-            "PASS" if REPOSITORY_RE.fullmatch(repository) else "FAIL",
-            repository
-            if REPOSITORY_RE.fullmatch(repository)
-            else "expected owner/repository",
-            "Set GITHUB_READONLY_REPO to owner/repository"
-            if not REPOSITORY_RE.fullmatch(repository)
-            else "",
+            "FAIL" if repository_error else "PASS",
+            repository_error
+            or f"{len(repositories)} configured: {', '.join(repositories)}",
+            (
+                "Set GITHUB_READONLY_REPOS to a comma-separated owner/repository list"
+                if repository_error
+                else ""
+            ),
         )
     )
 
@@ -565,7 +572,7 @@ def optional_component_checks(values: Mapping[str, str]) -> list[Check]:
     )
     github_etl = values.get("SOURCE_ETL_GITHUB_ENABLED", "0")
     github_etl_repository = values.get("SOURCE_ETL_GITHUB_REPO", "NVIDIA/NemoClaw")
-    github_etl_valid = bool(REPOSITORY_RE.fullmatch(github_etl_repository))
+    github_etl_valid = bool(GITHUB_REPOSITORY_RE.fullmatch(github_etl_repository))
     checks.append(
         Check(
             "GitHub source ETL",

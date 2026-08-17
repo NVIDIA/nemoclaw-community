@@ -53,12 +53,12 @@ fi
 ALLOWED_SENDERS="${OUTLOOK_ALLOWED_SENDERS:-}"
 SOURCE_ETL_HOST="${SOURCE_ETL_API_HOST:-host.openshell.internal}"
 SOURCE_ETL_PORT="${SOURCE_ETL_API_PORT:-3100}"
-GITHUB_READONLY_REPO="${GITHUB_READONLY_REPO:-NVIDIA/OpenShell}"
-if [[ ! "$GITHUB_READONLY_REPO" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]+$ ]]; then
-  echo "Invalid GITHUB_READONLY_REPO '$GITHUB_READONLY_REPO' — expected owner/repo" >&2
+if ! GITHUB_READONLY_REPOS="$(python3 "$DIR/lib/github_repositories.py" resolve)"; then
   exit 1
 fi
-echo "GitHub read-only repo scope: $GITHUB_READONLY_REPO"
+GITHUB_READONLY_REPO="${GITHUB_READONLY_REPOS%%,*}"
+export GITHUB_READONLY_REPOS GITHUB_READONLY_REPO
+echo "GitHub read-only repository scope: $GITHUB_READONLY_REPOS"
 
 NEMOCLAW_SLACK_RICH_BLOCKS="${NEMOCLAW_SLACK_RICH_BLOCKS:-true}"
 case "$NEMOCLAW_SLACK_RICH_BLOCKS" in
@@ -81,6 +81,7 @@ bash "$DIR/stage-enterprise-cas.sh"
 declare -A DOCKERFILE_ARGS=(
   [NEMOCLAW_MESSAGING_CHANNELS_B64]="$CHANNELS_B64"
   [NEMOCLAW_SLACK_RICH_BLOCKS]="$NEMOCLAW_SLACK_RICH_BLOCKS"
+  [GITHUB_READONLY_REPOS]="$GITHUB_READONLY_REPOS"
   [GITHUB_READONLY_REPO]="$GITHUB_READONLY_REPO"
   [SOURCE_ETL_API_HOST]="$SOURCE_ETL_HOST"
   [SOURCE_ETL_API_PORT]="$SOURCE_ETL_PORT"
@@ -145,11 +146,10 @@ if [[ -n "${GITHUB_TOKEN:-}" ]] || grep -q -- "--mount=type=secret" "$STAGED_DOC
   fi
 fi
 
-# ── Stage policy and patch per-run repo scope ───────────────────────────
-cp "$EXAMPLE_DIR/policy.yaml" "$STAGED_POLICY"
-sed -i \
-  -e "s|__GITHUB_READONLY_REPO__|$GITHUB_READONLY_REPO|g" \
-  "$STAGED_POLICY"
+# ── Stage policy with exact per-repository GET rules ────────────────────
+python3 "$DIR/lib/github_repositories.py" stage-policy \
+  --template "$EXAMPLE_DIR/policy.yaml" \
+  --output "$STAGED_POLICY"
 
 # ── Build provider flags from what 02-providers.sh actually created ────
 PROVIDER_FLAGS=()
@@ -182,6 +182,7 @@ setsid openshell sandbox create \
     OUTLOOK_TARGET_MAILBOX="${OUTLOOK_TARGET_MAILBOX:-}" \
     OUTLOOK_REPLY_TO="${OUTLOOK_REPLY_TO:-}" \
     OUTLOOK_ALLOWED_SENDERS="$ALLOWED_SENDERS" \
+    GITHUB_READONLY_REPOS="$GITHUB_READONLY_REPOS" \
     GITHUB_READONLY_REPO="$GITHUB_READONLY_REPO" \
     NEMOCLAW_MESSAGING_CHANNELS_B64="$CHANNELS_B64" \
     CHAT_UI_URL="http://127.0.0.1:8642" \
