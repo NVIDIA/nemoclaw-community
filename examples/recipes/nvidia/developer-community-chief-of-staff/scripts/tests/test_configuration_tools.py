@@ -145,6 +145,14 @@ class ConfigurationDocumentTest(TestCase):
             "https://127.0.0.1:17670", values["OPENSHELL_GATEWAY_ENDPOINT"]
         )
 
+    def test_atif_relay_endpoint_matches_lifecycle_origin_contract(self) -> None:
+        self.assertEqual(
+            ("https://host.openshell.internal:8443", "host.openshell.internal", 8443),
+            CONFIGURATION.parse_atif_relay_endpoint(
+                "https://host.openshell.internal:08443/"
+            ),
+        )
+
 
 class GuidedConfigurationTest(TestCase):
     def test_non_interactive_slack_profile_preserves_existing_file(self) -> None:
@@ -556,6 +564,41 @@ class ConsolidatedPreflightTest(TestCase):
         self.assertIn(3200, observed)
         self.assertIn(5544, observed)
         self.assertIn(19443, observed)
+
+    def test_invalid_atif_relay_origins_fail_before_port_check(self) -> None:
+        invalid_endpoints = {
+            "path": "https://host.openshell.internal:18443/unexpected",
+            "query": "https://host.openshell.internal:18443?mode=test",
+            "fragment": "https://host.openshell.internal:18443#relay",
+            "user information": "https://operator:private@host.example:18443",
+            "missing explicit port": "https://host.openshell.internal",
+            "invalid hostname": "https://-invalid.example:18443",
+            "port below range": "https://host.openshell.internal:0",
+            "port above range": "https://host.openshell.internal:65536",
+        }
+
+        for case, endpoint in invalid_endpoints.items():
+            with self.subTest(case=case):
+                values = CONFIGURATION.resolved_values(
+                    CONFIGURATION.parse_env_text(
+                        f"ATIF_EXPORT_MODE=relay\nATIF_RELAY_ENDPOINT={endpoint}\n"
+                    ),
+                    {},
+                )
+                observed: list[int] = []
+
+                checks = PREFLIGHT.local_port_checks(
+                    values,
+                    port_available=lambda port: observed.append(port) or True,
+                )
+
+                failure = next(
+                    item for item in checks if item.name == "ATIF relay endpoint"
+                )
+                self.assertEqual("FAIL", failure.status)
+                self.assertNotIn(endpoint, failure.detail)
+                self.assertNotIn(18443, observed)
+                self.assertNotIn(65536, observed)
 
     def test_missing_configuration_points_to_configurator(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

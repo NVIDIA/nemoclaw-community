@@ -53,6 +53,10 @@ SECRET_KEYS = frozenset(
 ASSIGNMENT_RE = re.compile(
     r"^(?P<prefix>\s*(?:export\s+)?)(?P<key>[A-Za-z_][A-Za-z0-9_]*)=(?P<value>.*)$"
 )
+ATIF_RELAY_HOSTNAME_RE = re.compile(
+    r"^([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?\.)*"
+    r"[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$"
+)
 
 
 class ConfigurationError(ValueError):
@@ -66,6 +70,38 @@ class EnvDocument:
     lines: tuple[str, ...]
     values: dict[str, str]
     line_indexes: dict[str, int]
+
+
+def parse_atif_relay_endpoint(endpoint: str) -> tuple[str, str, int]:
+    """Validate and canonicalize the HTTPS origin contract from ``_lib.sh``."""
+    prefix = "https://"
+    if not endpoint.startswith(prefix):
+        raise ConfigurationError("ATIF_RELAY_ENDPOINT must be an https:// URL")
+
+    host_port = endpoint[len(prefix) :]
+    if host_port.endswith("/"):
+        host_port = host_port[:-1]
+    if any(character in host_port for character in "/?#@"):
+        raise ConfigurationError(
+            "ATIF_RELAY_ENDPOINT must be an origin with no path, query, "
+            "fragment, or user information"
+        )
+    if host_port.count(":") != 1:
+        raise ConfigurationError(
+            "ATIF_RELAY_ENDPOINT must use a hostname and one explicit port; "
+            "IPv6 literals are not supported"
+        )
+
+    host, raw_port = host_port.split(":", 1)
+    if not ATIF_RELAY_HOSTNAME_RE.fullmatch(host):
+        raise ConfigurationError("ATIF_RELAY_ENDPOINT hostname is invalid")
+    if not re.fullmatch(r"[0-9]{1,5}", raw_port):
+        raise ConfigurationError("ATIF_RELAY_ENDPOINT port must be numeric")
+
+    port = int(raw_port, 10)
+    if not 1 <= port <= 65535:
+        raise ConfigurationError("ATIF_RELAY_ENDPOINT port must be between 1 and 65535")
+    return f"{prefix}{host}:{port}", host, port
 
 
 def split_inline_comment(raw: str) -> tuple[str, str]:

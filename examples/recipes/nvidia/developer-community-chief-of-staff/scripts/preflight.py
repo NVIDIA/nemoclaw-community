@@ -35,6 +35,7 @@ from lib.configuration import (  # noqa: E402
     SLACK_REQUIRED,
     ConfigurationError,
     enabled_profiles,
+    parse_atif_relay_endpoint,
     profile_errors,
     read_env,
     resolved_values,
@@ -493,22 +494,17 @@ def local_port_checks(
         relay_endpoint = values.get(
             "ATIF_RELAY_ENDPOINT", "https://host.openshell.internal:18443"
         )
-        parsed_relay = urllib.parse.urlsplit(relay_endpoint)
         try:
-            relay_port = parsed_relay.port or 443
-        except ValueError:
-            relay_port = 0
-        if (
-            parsed_relay.scheme != "https"
-            or not parsed_relay.hostname
-            or not relay_port
-        ):
+            _canonical_endpoint, _relay_host, relay_port = parse_atif_relay_endpoint(
+                relay_endpoint
+            )
+        except ConfigurationError as error:
             checks.append(
                 Check(
                     "ATIF relay endpoint",
                     "configuration",
                     "FAIL",
-                    "ATIF_RELAY_ENDPOINT must be a valid HTTPS URL",
+                    str(error),
                 )
             )
         else:
