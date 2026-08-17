@@ -19,7 +19,6 @@ from typing import Any
 
 from slack_api_common import get_slack_bot_token
 
-
 API_BASE = "https://slack.com/api"
 CHANNEL_ID_RE = re.compile(r"^[CGD][A-Z0-9]{8,}$")
 MAX_MESSAGE_LIMIT = 200
@@ -114,7 +113,7 @@ def slack_get(token: str, method: str, params: dict[str, str]) -> dict[str, Any]
             "error": "http_error",
             "http_status": error.code,
         }
-    except urllib.error.URLError:
+    except OSError:
         return {"ok": False, "error": "network_error"}
     except (UnicodeDecodeError, json.JSONDecodeError):
         return {"ok": False, "error": "invalid_json"}
@@ -157,7 +156,9 @@ def normalize_time_boundary(value: str) -> str:
         try:
             instant = dt.datetime.fromisoformat(iso_value)
         except ValueError as error:
-            raise ValueError("expected a Slack timestamp or ISO 8601 timestamp") from error
+            raise ValueError(
+                "expected a Slack timestamp or ISO 8601 timestamp"
+            ) from error
         if instant.tzinfo is None:
             instant = instant.replace(tzinfo=dt.timezone.utc)
         parsed = Decimal(str(instant.timestamp()))
@@ -341,7 +342,9 @@ def fetch_history_pages(
             "history",
         )
         raw_messages = data.get("messages", [])
-        if not isinstance(raw_messages, list):
+        if not isinstance(raw_messages, list) or not all(
+            isinstance(message, dict) for message in raw_messages
+        ):
             raise SlackApiFailure("history", "invalid_messages")
 
         pages += 1
@@ -689,7 +692,11 @@ def main() -> int:
 
     token = get_slack_bot_token()
     if not token:
-        print(json.dumps({"ok": False, "stage": "authentication", "error": "missing_token"}))
+        print(
+            json.dumps(
+                {"ok": False, "stage": "authentication", "error": "missing_token"}
+            )
+        )
         return 1
 
     result = collect_channel_history(

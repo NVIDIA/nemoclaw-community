@@ -15,7 +15,6 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import patch
 
-
 HERMES_DIR = Path(__file__).resolve().parents[1]
 SKILL_DIR = HERMES_DIR / "skills/slack-channel-summarizer"
 SCRIPT = SKILL_DIR / "scripts/fetch_slack_history.py"
@@ -110,9 +109,7 @@ class SlackSummaryHistoryTest(TestCase):
                                         thread_ts="1700000200.000001",
                                     ),
                                 ],
-                                "response_metadata": {
-                                    "next_cursor": "history-page-2"
-                                },
+                                "response_metadata": {"next_cursor": "history-page-2"},
                             }
                         )
                     return
@@ -172,7 +169,9 @@ class SlackSummaryHistoryTest(TestCase):
         ]
         try:
             with (
-                patch.object(HISTORY, "API_BASE", f"http://127.0.0.1:{server.server_port}/api"),
+                patch.object(
+                    HISTORY, "API_BASE", f"http://127.0.0.1:{server.server_port}/api"
+                ),
                 patch.object(HISTORY, "get_slack_bot_token", return_value="test-token"),
                 patch.object(sys, "argv", arguments),
                 contextlib.redirect_stdout(output),
@@ -189,7 +188,9 @@ class SlackSummaryHistoryTest(TestCase):
         self.assertEqual(2, result["coverage"]["pages"])
         self.assertEqual(3, result["coverage"]["inspected_messages"])
         self.assertTrue(result["coverage"]["complete"])
-        self.assertEqual(["Oldest", "Root"], [item["text"] for item in result["messages"]])
+        self.assertEqual(
+            ["Oldest", "Root"], [item["text"] for item in result["messages"]]
+        )
         self.assertEqual(
             ["Reply"],
             [item["text"] for item in result["messages"][1]["thread_replies"]],
@@ -254,7 +255,9 @@ class SlackSummaryHistoryTest(TestCase):
         )
 
         self.assertTrue(result["ok"])
-        self.assertEqual(["First", "Second"], [item["text"] for item in result["messages"]])
+        self.assertEqual(
+            ["First", "Second"], [item["text"] for item in result["messages"]]
+        )
         self.assertEqual(2, result["coverage"]["pages"])
         self.assertEqual(3, result["coverage"]["inspected_messages"])
         self.assertEqual(2, result["coverage"]["human_messages"])
@@ -364,7 +367,9 @@ class SlackSummaryHistoryTest(TestCase):
                     "conversations.history",
                     {
                         "ok": True,
-                        "messages": [message("1700000100.000001", "bot", bot_id="B123")],
+                        "messages": [
+                            message("1700000100.000001", "bot", bot_id="B123")
+                        ],
                         "response_metadata": {"next_cursor": "more"},
                     },
                 )
@@ -439,7 +444,10 @@ class SlackSummaryHistoryTest(TestCase):
     def test_slack_failures_are_fail_closed_and_classified(self) -> None:
         cases = [
             ("invalid_auth", {}),
-            ("missing_scope", {"needed": "channels:history", "provided": "channels:read"}),
+            (
+                "missing_scope",
+                {"needed": "channels:history", "provided": "channels:read"},
+            ),
             ("not_in_channel", {}),
             ("ratelimited", {"retry_after": "30", "http_status": 429}),
             ("internal_error", {}),
@@ -447,7 +455,12 @@ class SlackSummaryHistoryTest(TestCase):
         for error, details in cases:
             with self.subTest(error=error):
                 api = ScriptedApi(
-                    [("conversations.history", {"ok": False, "error": error, **details})]
+                    [
+                        (
+                            "conversations.history",
+                            {"ok": False, "error": error, **details},
+                        )
+                    ]
                 )
                 result = HISTORY.collect_channel_history(
                     "token-placeholder",
@@ -460,6 +473,70 @@ class SlackSummaryHistoryTest(TestCase):
                 self.assertEqual(expected_error, result["error"])
                 self.assertNotIn("messages", result)
                 self.assertNotIn("token-placeholder", repr(result))
+
+    def test_transport_errors_return_sanitized_failure(self) -> None:
+        for transport_error in (
+            TimeoutError("private timeout detail"),
+            OSError("private transport detail"),
+        ):
+            with (
+                self.subTest(error=transport_error.__class__.__name__),
+                patch.object(
+                    HISTORY.urllib.request,
+                    "urlopen",
+                    side_effect=transport_error,
+                ),
+            ):
+                result = HISTORY.collect_channel_history(
+                    "token-placeholder",
+                    "C12345678",
+                )
+
+            self.assertEqual(
+                {
+                    "ok": False,
+                    "channel_id": "C12345678",
+                    "stage": "history",
+                    "error": "network_error",
+                },
+                result,
+            )
+            self.assertNotIn("token-placeholder", repr(result))
+            self.assertNotIn(str(transport_error), repr(result))
+
+    def test_malformed_history_message_returns_sanitized_failure(self) -> None:
+        malformed_value = "private malformed message"
+        api = ScriptedApi(
+            [
+                (
+                    "conversations.history",
+                    {
+                        "ok": True,
+                        "messages": [malformed_value],
+                        "response_metadata": {"next_cursor": ""},
+                    },
+                )
+            ]
+        )
+
+        result = HISTORY.collect_channel_history(
+            "token-placeholder",
+            "C12345678",
+            api_call=api,
+        )
+
+        self.assertEqual(
+            {
+                "ok": False,
+                "channel_id": "C12345678",
+                "stage": "history",
+                "error": "invalid_messages",
+            },
+            result,
+        )
+        self.assertNotIn("token-placeholder", repr(result))
+        self.assertNotIn(malformed_value, repr(result))
+        api.assert_complete(self)
 
     def test_thread_replies_paginate_and_keep_root_relationship(self) -> None:
         root = message(
@@ -634,7 +711,9 @@ class SlackSummaryHistoryTest(TestCase):
 
     def test_time_boundaries_accept_slack_and_iso_formats(self) -> None:
         self.assertEqual("1700000000", HISTORY.normalize_time_boundary("1700000000"))
-        self.assertEqual("1700000000.25", HISTORY.normalize_time_boundary("1700000000.250000"))
+        self.assertEqual(
+            "1700000000.25", HISTORY.normalize_time_boundary("1700000000.250000")
+        )
         self.assertEqual("0", HISTORY.normalize_time_boundary("1970-01-01T00:00:00Z"))
 
     def test_skill_requires_coverage_and_source_citations(self) -> None:
