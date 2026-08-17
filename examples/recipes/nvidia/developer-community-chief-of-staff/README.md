@@ -7,7 +7,9 @@ on, struggling with, asking about, and flagging as gaps — and compares it
 against what internal developer/product teams are prioritizing, so resources
 can be aligned against actual community demand. The agent draws on signal
 from live GitHub repository state, mirrored GitHub discussions, NVIDIA forums,
-and Slack channels; you interact with it via Outlook email and/or Slack.
+and Slack channels. An optional, search-only Tavily integration adds current
+public-web discovery. You interact with the agent through Outlook email and/or
+Slack.
 Outlook is the recommended primary channel, but either is enough on its own —
 at least one of the two must be configured.
 
@@ -50,6 +52,11 @@ OpenShell provider placeholder so GitHub rate limits are practical, while
 historical mirror data, and NVIDIA forum data come from host-side ETL
 containers that scrape on a schedule, write results into Postgres, and expose
 that mirror through a read-only PostgREST HTTP bridge.
+When `TAVILY_API_KEY` is configured, Hermes can also search the public web
+through `POST https://api.tavily.com/search`. OpenShell keeps the raw API key
+outside the sandbox and permits only that host, route, method, and the pinned
+Hermes Python runtime. The disabled configuration attaches neither the Tavily
+provider nor its network policy.
 
 ```mermaid
 %%{init: {'theme': 'default', 'flowchart': {'nodeSpacing': 50, 'rankSpacing': 100, 'curve': 'basis', 'padding': 20}, 'themeVariables': {'fontSize': '13px'}}}%%
@@ -60,6 +67,7 @@ flowchart LR
     slack["Internal\nSlack workspace"]
     outlook["Internal\ngraph.microsoft.com\nmailbox"]
     github["External\nGitHub API"]
+    tavily["External\nTavily Search API"]
     forums["External\nNVIDIA Forums\n(nemoclaw tag)"]
     s3["Internal\nAWS S3 (prod)\nATIF trace storage"]
 
@@ -98,10 +106,16 @@ flowchart LR
                     o1["outlook-email-search"]
                 end
 
+                subgraph webSkills["Optional Public Web Skill"]
+                    direction LR
+                    w1["public-web-search"]
+                end
+
                 outlookBridge <-->|"HTTP POST\ndeliver · reply"| agent
                 agent -->|"tool call\nskill dispatch"| sourceSkills
                 agent -->|"tool call\nskill dispatch"| slackSkills
                 agent -->|"tool call\nskill dispatch"| outlookSkills
+                agent -->|"tool call\nskill dispatch"| webSkills
                 agent -->|"in-process\nscope events"| relayRuntime
                 relayRuntime -.->|"file write\nlocal or recovery"| traceDisk
                 relayRuntime -->|"HTTP POST /atif\ncompleted trajectory"| atifBridge
@@ -113,6 +127,7 @@ flowchart LR
                 sourceSkills -->|"HTTP GET\nsource queries"| l7
                 slackSkills -->|"HTTPS POST\nSlack API"| l7
                 outlookSkills -->|"HTTPS GET\nGraph API"| l7
+                webSkills -->|"HTTPS POST /search\nAPI key placeholder"| l7
             end
         end
 
@@ -137,6 +152,7 @@ flowchart LR
     l7 <-->|"WSS / HTTPS POST\nSlack messaging"| slack
     l7 -->|"HTTPS GET/POST\nGraph API"| outlook
     l7 -->|"HTTPS GET\nGitHub REST"| github
+    l7 -->|"HTTPS POST /search\nAPI key substituted"| tavily
     atifRelay -->|"boto3 PutObject"| s3
     gateway <-->|"HTTPS POST\ntoken rotation"| entra
     etls -->|"HTTPS GET\nscheduled scrape"| github
@@ -149,6 +165,7 @@ flowchart LR
     style sourceSkills  fill:#f0f4ff,stroke:#7090cc,stroke-width:1px
     style slackSkills   fill:#f0f4ff,stroke:#7090cc,stroke-width:1px
     style outlookSkills fill:#f0f4ff,stroke:#7090cc,stroke-width:1px
+    style webSkills     fill:#f0f4ff,stroke:#7090cc,stroke-width:1px
 
     style agent         fill:#dbeafe,stroke:#3b82f6,stroke-width:1.5px
     style relayRuntime  fill:#fef9e7,stroke:#f39c12,stroke-width:2px
@@ -167,12 +184,17 @@ flowchart LR
     classDef internal fill:#eef7e9,stroke:#6aa84f,stroke-width:2px
     classDef external fill:#fce5cd,stroke:#e69138,stroke-width:2px
     class nvidia,slack,outlook,entra,s3 internal
-    class github,forums external
+    class github,forums,tavily external
 ```
 
 **Key invariants:**
 
 - The agent has authenticated read-only `api.github.com` access for an exact repository allowlist. The raw GitHub access token stays in an OpenShell provider; the sandbox sees only a placeholder, and policy still blocks writes, non-API GitHub hosts, `git`, and `gh`.
+- Public web search is disabled by default. When configured, the raw Tavily API
+  key stays in an OpenShell provider and the sandbox can call only
+  `POST api.tavily.com/search` from Hermes's pinned Python runtime. Page
+  extraction, direct URL fetching, browser automation, and other internet
+  egress remain blocked.
 - GitHub discussions, historical mirror data, and NVIDIA forum data come from the Postgres mirror.
 - Slack and Outlook are live connections from the sandbox; the agent can read and write both in real time.
 - Compatible-endpoint inference egress is required for the agent's LLM calls — it's not a research/data-ingestion path.
@@ -194,6 +216,7 @@ Skills are loaded on demand by the agent when relevant to a task. They live in [
 | `cross-source-gap-analysis` | Synthesize findings across Slack, GitHub, and NVIDIA forum sources to identify gaps, alignment issues, and follow-ups. |
 | `nemoclaw-autoheal` | Guide users through sandbox health checks and optional host-side auto-heal setup. |
 | `nemoclaw-nvteam` | Route work through eight evidence-bounded role lenses added locally by this Community recipe. |
+| `public-web-search` | Search current public information through the optional, policy-scoped Tavily `web_search` path and cite returned URLs. |
 
 The original contribution reported source revision
 `b87038405fd7d9646dba57c367f54d86ca4d933d`. This repository adapts and hardens
@@ -348,6 +371,8 @@ Edit `.env` and fill in everything you need:
 - (optional) `GITHUB_TOKEN` for authenticated sandbox read-only
   GitHub REST, `GITHUB_READONLY_REPOS`,
   `PHOENIX_COLLECTOR_ENDPOINT`, `PHOENIX_PROJECT_NAME`
+- (optional) `TAVILY_API_KEY` for policy-scoped public web search. See
+  [Policy-Scoped Public Web Search](docs/public-web-search.md).
 
 ### Phase 3 — Host services (handled by bring-up.sh, no manual step)
 
@@ -533,7 +558,7 @@ sandbox, e.g. `find /tmp/atif -type f -mtime +7 -delete`.
 
 ## Providers created by `bring-up.sh`
 
-Four of the five providers use custom v2 profiles in [providers/](providers/)
+Five of the six providers use custom v2 profiles in [providers/](providers/)
 and are attached to the sandbox directly. Inference goes through OpenShell's
 built-in `nvidia` v2 profile + `openshell inference set` + `inference.local`
 routing for gateway-side hardening (streaming timeout, header sanitization,
@@ -550,6 +575,7 @@ bearer header; the OpenShell L7 proxy substitutes a live token on egress.
 | `<sandbox>-outlook` | `nemoclaw-outlook-email` | `MS_GRAPH_ACCESS_TOKEN` (auto-rotated by the gateway from the registered refresh token). Refresh material: `OUTLOOK_TENANT_ID`, `OUTLOOK_CLIENT_ID`, refresh_token (cached from device-code login). | Optional. Created only when the Outlook block is fully populated; partial config is rejected. At least one of Outlook or Slack must be configured. |
 | `<sandbox>-slack` | `nemoclaw-slack` | `SLACK_BOT_TOKEN` (Web API) + `SLACK_APP_TOKEN` (Socket Mode) | Optional. Before provider creation, setup verifies that the app token can call `apps.connections.open` with `connections:write`. At least one of Outlook or Slack must be configured. |
 | `<sandbox>-github` | `nemoclaw-github` | `GITHUB_TOKEN` | Optional but recommended. Enables authenticated live GitHub REST reads. The sandbox receives only the OpenShell placeholder; `policy.yaml` further limits use to repository-scoped `GET` routes from approved binaries. |
+| `<sandbox>-tavily-search` | `nemoclaw-tavily-search` | `TAVILY_API_KEY` | Optional and disabled when the key is absent. Setup validates the key before provider creation. Request-body placeholder rewriting supports Hermes's native `web_search`; provider and sandbox policies allow only `POST /search` from `/opt/hermes/.venv/bin/python`. |
 | `<sandbox>-atif-export-relay` | `nemoclaw-atif-export-relay` | `ATIF_RELAY_AUTH_TOKEN` | Created and attached only when `ATIF_EXPORT_MODE=relay`. Allows the Python ATIF bridge to send `POST /atif` to the configured host relay; the provider owns the endpoint, path, binary, private-IP, and credential restrictions. |
 
 The `compatible-endpoint` provider is **not** prefixed with the sandbox name — it's a
@@ -568,6 +594,13 @@ and credential-less host-routed services (Phoenix collector, Source-ETL API). Su
 `network_policies` blocks in `policy.yaml` carry **load-bearing comments** explaining
 why they can't be folded into provider profiles. Fully-redundant blocks (e.g. the
 former `slack` block) have been removed.
+
+Tavily is intentionally enforced twice. Its provider profile carries the fixed
+search endpoint and request-body credential rewrite. The staged sandbox policy
+adds the same `POST /search` and Hermes-Python boundary only when
+`TAVILY_API_KEY` exists. With no key, `web_search` is not advertised to Slack,
+the policy marker is removed without replacement, and no Tavily provider is
+attached.
 
 `GITHUB_TOKEN` is attached as `<sandbox>-github` for live sandbox GitHub reads.
 The sandbox sees only an OpenShell placeholder;
@@ -647,6 +680,8 @@ unless you remove the compose volumes.
 | `GITHUB_TOKEN` | (none) | Optional GitHub access token for authenticated live REST reads. Also feeds the optional host GitHub mirror. |
 | `GITHUB_READONLY_REPOS` | `NVIDIA/OpenShell` | Comma-separated exact allowlist for the live GitHub REST policy. Each item uses `owner/repository`. Recreate the sandbox after changing it. |
 | `GITHUB_READONLY_REPO` | `NVIDIA/OpenShell` | Backward-compatible single-repository setting. It is used only when `GITHUB_READONLY_REPOS` is empty or absent. |
+| `TAVILY_API_KEY` | (none) | Enables search-only public-web discovery. The host holds the raw API key; the sandbox receives an OpenShell placeholder. Recreate the sandbox after adding, changing, or removing it. |
+| `NEMOCLAW_TAVILY_PREFLIGHT_TIMEOUT_SECONDS` | `10` | Maximum time for the bounded Tavily key-validation request during provider setup. |
 | `SOURCE_ETL_GITHUB_ENABLED` | `0` | Set to `1` to start the host-side GitHub mirror. A live-read `GITHUB_TOKEN` alone does not enable the ETL. |
 | `SOURCE_ETL_GITHUB_REPO` | `NVIDIA/NemoClaw` | Host-side GitHub mirror repository for source-etls. This is independent of the live GitHub allowlist. |
 | `OUTLOOK_LOGIN_CACHE` | `1` | Controls the Microsoft refresh-token cache at `.bootstrap/cache/ms-graph-token.json`. `1` = use the cache (auto-refresh on staleness, ~90 days). `0` = skip the cache entirely (device-code every bring-up, nothing on disk; use on shared workstations or security-sensitive contexts). `2` = force device-code login and rewrite the cache. The gateway-side encrypted credential copy is unaffected by this knob. |
@@ -655,7 +690,15 @@ unless you remove the compose volumes.
 
 ## Verification (what success looks like)
 
-The plumbing checks below confirm the bridge and skill scripts are wired correctly. For an end-to-end walkthrough that exercises each skill via Slack DM and Outlook email, see [docs/verify-functionality.md](docs/verify-functionality.md). For a cross-channel, multi-user demo where one user teaches the agent a new skill and a different user invokes it from a different channel after a full sandbox rebuild, see [docs/collective-wisdom.md](docs/collective-wisdom.md).
+The plumbing checks below confirm that the bridge and skill scripts are wired
+correctly. For an end-to-end walkthrough that exercises each skill through
+Slack DM and Outlook email, see
+[docs/verify-functionality.md](docs/verify-functionality.md). The optional
+web-search setup, positive check, and blocked-route checks are in
+[docs/public-web-search.md](docs/public-web-search.md). For a cross-channel,
+multi-user example where one user teaches the agent a new skill and a different
+user invokes it after a full sandbox rebuild, see
+[docs/collective-wisdom.md](docs/collective-wisdom.md).
 
 For a bounded Slack transport check that identifies the last confirmed delivery
 stage, run the guided diagnostic after sandbox creation:
@@ -702,7 +745,7 @@ $ openshell sandbox exec --name hermes-direct -- env \
 $ bash scripts/tear-down.sh
 ```
 
-Removes the sandbox, the Outlook/GitHub/Slack providers, and any leftover
+Removes the sandbox, the Outlook/GitHub/Slack/Tavily providers, and any leftover
 staged Dockerfile/policy files. **Does not** destroy the gateway or stop host services
 (phoenix, postgres, ETLs, postgrest) by default — those are
 typically long-lived. Opt-in flags (mutually exclusive):

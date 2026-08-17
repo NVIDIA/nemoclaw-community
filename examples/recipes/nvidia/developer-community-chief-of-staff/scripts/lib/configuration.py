@@ -48,6 +48,7 @@ SECRET_KEYS = frozenset(
         "OPENAI_API_KEY",
         "SLACK_APP_TOKEN",
         "SLACK_BOT_TOKEN",
+        "TAVILY_API_KEY",
         "TELEGRAM_BOT_TOKEN",
     }
 )

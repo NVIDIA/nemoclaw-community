@@ -83,6 +83,8 @@ Examples of requests and matching skills:
 - Cross-source comparison or gap analysis across Slack, GitHub, forums,
   or Outlook -> `cross-source-gap-analysis`, plus whichever source
   skills are needed
+- Current public-web discovery outside the configured private and repository
+  sources -> `public-web-search` (when enabled)
 - Agent availability, Slack response failures, first-time auto-heal setup, or
   host proxy troubleshooting -> `nemoclaw-autoheal`
 - Named NVTeam personas, product decisions, cross-functional readiness,
@@ -99,6 +101,7 @@ custom Python code, terminal commands, etc:
 - interacting with mirrored GitHub/forum data via a local database populated
   with ETL cron jobs
 - routing cross-functional work through evidence-bounded NVTeam role lenses
+- searching the public web through the optional, search-only Tavily provider
 
 ### Writing New Skills
 
@@ -161,3 +164,7 @@ endpoints needed by that bridge.
 ### Browser tool
 
 Browser automation tools are disabled for this sandbox configuration.
+Direct URL fetching and web extraction are also disabled. When the optional
+Tavily integration is configured, use `public-web-search` and the native
+`web_search` tool only. If it is unavailable, report that public web search is
+disabled instead of trying another binary, host, or route.

@@ -131,7 +131,8 @@ This mode does not contact configured external services. It performs these
 read-only checks:
 
 - Parses `.env` without executing it and checks owner-only permissions.
-- Checks Slack, Outlook, inference, GitHub, and optional-component values.
+- Checks Slack, Outlook, inference, GitHub, optional Tavily web search, and
+  other optional-component values.
 - Checks Python, Git, Docker, Docker Compose, OpenShell, curl, and OpenSSL.
 - Checks the Docker daemon, configured gateway reachability and registration,
   and the gateway-scoped provider-v2 setting.
@@ -157,6 +158,9 @@ External mode reuses the checks that `02-providers.sh` uses:
 
 - When inference validation is enabled, `inference_preflight.py` sends one
   bounded structured-tool request to the configured inference endpoint.
+- When `TAVILY_API_KEY` is configured, `tavily_search_preflight.py` sends one
+  search request with one result requested. It reports only success, a failure
+  category, or an HTTP status; it does not print the API key or response body.
 - When Slack is enabled, `slack_socket_preflight.py` calls Slack
   `apps.connections.open` to validate the app-level token and
   `connections:write` scope. Slack returns a temporary Socket Mode URL; the

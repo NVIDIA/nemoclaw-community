@@ -226,6 +226,27 @@ Also ask:
 `github_readonly.py --repo NVIDIA/OpenShell get pulls --param state=open --paginate --count`; it should
 not estimate from a single `pulls --limit` page.
 
+### public-web-search (optional)
+
+This check applies only when `TAVILY_API_KEY` was configured before sandbox
+creation. Send through Slack or Outlook:
+
+> Search the public web for the latest official NVIDIA NemoClaw announcement.
+> Return the top three titles, source URLs, snippets, and search metadata. Do
+> not open or extract any result page.
+
+**Expected:** the agent loads `public-web-search` and calls native
+`web_search`. It does not use `web_extract`, `web_fetch`, a browser, `curl`, or
+custom HTTP code.
+
+**Verify:** every result includes a returned source URL, snippet-derived claims
+are identified as such, and the response does not claim to have read a result
+page. Use [Policy-Scoped Public Web Search](public-web-search.md) for the
+positive plumbing check and the blocked-host and blocked-`/extract` probes.
+
+With no `TAVILY_API_KEY`, the same prompt must report that public web search is
+disabled and must not try a fallback network path.
+
 ---
 
 ### source-etl-query

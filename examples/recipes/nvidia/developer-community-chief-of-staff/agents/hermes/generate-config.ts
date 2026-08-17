@@ -19,6 +19,7 @@
 //   - Messaging platform tokens (if configured during onboard)
 //   - Agent defaults (terminal, memory, skills, display)
 //   - Slack-facing UX tweaks (less mid-turn chatter, no browser tool exposure)
+//   - Optional search-only Tavily backend with an OpenShell placeholder
 
 import { writeFileSync, chmodSync } from "node:fs";
 import { join } from "node:path";
@@ -63,12 +64,37 @@ function main(): void {
   const model = process.env.NEMOCLAW_MODEL!;
   const baseUrl = process.env.NEMOCLAW_INFERENCE_BASE_URL!;
   const slackRichBlocks = booleanEnv("NEMOCLAW_SLACK_RICH_BLOCKS", true);
+  const webSearchProvider = (
+    process.env.NEMOCLAW_WEB_SEARCH_PROVIDER || ""
+  ).trim();
+  if (webSearchProvider !== "" && webSearchProvider !== "tavily") {
+    throw new Error('NEMOCLAW_WEB_SEARCH_PROVIDER must be empty or "tavily"');
+  }
 
   const channelsB64 = process.env.NEMOCLAW_MESSAGING_CHANNELS_B64 || "W10=";
 
   const msgChannels: string[] = JSON.parse(
     Buffer.from(channelsB64, "base64").toString("utf-8"),
   );
+
+  const agentToolsets = [
+    "terminal",
+    "file",
+    "code_execution",
+    "vision",
+    "skills",
+    "todo",
+    "memory",
+    "session_search",
+    "clarify",
+    "delegation",
+    "cronjob",
+    "tts",
+  ];
+  if (webSearchProvider === "tavily") {
+    // Hermes's `search` toolset exposes web_search without web_extract.
+    agentToolsets.unshift("search");
+  }
 
   const config: Record<string, unknown> = {
     _config_version: 34,
@@ -98,23 +124,14 @@ function main(): void {
       creation_nudge_interval: 15,
     },
     // Explicit Slack toolset list so the session does not advertise browser
-    // automation tools that are not intended for this sandbox workflow.
+    // automation tools that are not intended for this sandbox workflow. When
+    // search is enabled, apply the same search-only surface to the API server
+    // used by the Outlook bridge.
     platform_toolsets: {
-      slack: [
-        "web",
-        "terminal",
-        "file",
-        "code_execution",
-        "vision",
-        "skills",
-        "todo",
-        "memory",
-        "session_search",
-        "clarify",
-        "delegation",
-        "cronjob",
-        "tts",
-      ],
+      slack: agentToolsets,
+      ...(webSearchProvider === "tavily"
+        ? { api_server: agentToolsets }
+        : {}),
     },
     display: {
       compact: false,
@@ -137,6 +154,10 @@ function main(): void {
       enabled: ["nemoclaw", "observability/nemo_relay"],
     },
   };
+
+  if (webSearchProvider === "tavily") {
+    config.web = { backend: "tavily" };
+  }
 
   // Messaging platforms (if configured during onboard)
   const platformsConfig: Record<string, Record<string, unknown>> = {};
@@ -194,6 +215,9 @@ function main(): void {
     // requests and support X-Hermes-Session-Id continuation.
     "API_SERVER_KEY=nemoclaw-internal",
   ];
+  if (webSearchProvider === "tavily") {
+    envLines.push("TAVILY_API_KEY=openshell:resolve:env:TAVILY_API_KEY");
+  }
   for (const ch of msgChannels) {
     if (ch in TOKEN_ENV) {
       if (ch === "slack" && TOKEN_ENV[ch] === "SLACK_BOT_TOKEN") {
