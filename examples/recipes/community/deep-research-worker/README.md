@@ -134,14 +134,14 @@ sequenceDiagram
     participant Queue as SQLite Queue
     participant Engine as DeepAgents Engine
     participant LLM as LLM Provider
-
+    
     User ->> CLI: /sandbox/bin/deep-research<br/>"Research topic"
     CLI ->> Client: parse args & init
-    Client ->> API: POST /v1/tasks<br/>{query, depth, rubric}
+    Client ->> API: POST /v1/tasks<br/>{prompt, depth, rubric}
     API ->> Queue: enqueue task
     API -->> Client: {task_id, status: queued}
     Client -->> User: Task ID returned<br/>(--task-id-only)
-
+    
     activate Engine
     API ->> Engine: [Worker thread picks up]
     Engine ->> Engine: Phase 1: Planning<br/>Phase 2: Research
@@ -150,7 +150,7 @@ sequenceDiagram
     Engine ->> Engine: Phase 3: Cross-validation<br/>Phase 4: Finalization
     Engine ->> Queue: update task result
     deactivate Engine
-
+    
     User ->> Client: /sandbox/bin/deep-research<br/>--resume task_id
     Client ->> API: GET /v1/tasks/{task_id}
     API ->> Queue: fetch task
@@ -322,54 +322,64 @@ A research task progresses through the following states:
 | --- | --- |
 | `queued` | Task received, waiting for a worker thread |
 | `running` | DeepAgents graph is executing research steps |
+| `cancelling` | DELETE received; process group is being stopped |
+| `cancelled` | Task stopped by caller request |
 | `completed` | Research finished successfully; results are ready |
-| `failed` | Task failed after all retries; error message available |
-| `cancelled` | Task was cancelled before completion |
-
-Terminal tasks (completed, failed, cancelled) are automatically deleted after 7
-days (TTL) via the `cleanup_expired` background job. Deleted tasks cannot be
-retrieved.
-
-### Task Retry Behavior
-
-The worker uses **task-level retries** distinct from **tool-call retries**:
-
-#### Task Retries
-
-- **Scope**: The entire task execution restarts if it fails
-- **Trigger**: Permanent errors (400, 403, auth failure) or step budget exhaustion
-  without completion
-- **Configuration**: `DEEPAGENTS_TASK_MAX_RETRIES` (default: 2 retries)
-- **Behavior**: On failure, the worker marks the task as failed and moves to the
-  next queued task; abandoned running tasks are not replayed automatically on
-  service restart
-
-#### Tool-Call Retries
-
-- **Scope**: Individual tool invocations (`web_search`, `doc_search`) within a
-  running task
-- **Trigger**: Transient errors (HTTP 429, 500, 502, 503, 504 and timeouts)
-- **Behavior**: Up to 2 in-line retries per tool call with exponential backoff
-  (delays 1s, 2s starting from `base_delay=1.0`)
-- **Configuration**: Per-tool timeout settings
-  (`DEEPAGENTS_TOOL_TIMEOUT_WEB_SEARCH` default 15s,
-  `DEEPAGENTS_TOOL_TIMEOUT_DOC_SEARCH` default 20s)
-- **Circuit breaker**: A per-tool circuit opens after 5 failures within 60
-  seconds and stays open for 60 seconds before transitioning to half-open;
-  while open, calls short-circuit with `[circuit_open]` so the agent can pivot
-  to alternative tools.
-- **Failure**: If all retries exhaust, the tool call returns a structured
-  error (`[transient_error]`, `[permanent_error]`, or `[circuit_open]`); the
-  agent loop continues and may pivot to alternative research strategies.
+| `failed` | Task failed; error message available |
+| `expired` | Task results deleted after 7-day TTL |
 
 ### Task State Transitions
 
+```mermaid
+stateDiagram-v2
+    [*] --> queued: POST /v1/tasks
+    queued --> running: worker process acquired
+    queued --> cancelled: DELETE while queued
+    running --> cancelling: DELETE while running
+    cancelling --> cancelled: process group stopped
+    running --> completed: research finished successfully
+    running --> failed: permanent error or retries exhausted
+    running --> queued: transient timeout retry
+    failed --> [*]
+    cancelled --> [*]
+    completed --> expired: 7 days elapsed
+    expired --> [*]
 ```
-queued --> running --> completed
-           --> failed (after max retries or permanent error)
-           --> cancelled (user request)
 
-completed/failed/cancelled --> [deleted after 7 days by cleanup_expired]
+### Retry Behavior
+
+Task-level retries occur only when the worker process exceeds its execution
+timeout (`timeout_ms`). All other failure modes are permanent and go directly
+to `failed`:
+
+- **Task timeout** (`timeout_ms` exceeded): Re-queued with exponential backoff
+  (`2^retry_count` seconds, capped at 60 s). Default max retries: **2**
+  (configurable per task via `max_retries`).
+- **Permanent errors** (import failures, graph recursion limit, auth errors,
+  unhandled exceptions): Fail immediately; no retry.
+- **Budget exhaustion** (tool-call budget reached mid-task): Permanent failure;
+  no retry.
+- **Cancelled tasks**: Never retried.
+
+Tool-call retries (inside a single task execution) are a separate concern:
+transient HTTP errors (429, 5xx, network timeout) are retried up to 2 times
+with exponential backoff before the tool returns a structured error token to
+the agent. Tool-call retries do not affect task-level retry counts.
+
+```mermaid
+graph TD
+    A["Task subprocess exits"] --> B{Exit reason?}
+    B -->|"Completed
+result written"| C["Task: completed"]
+    B -->|"Cancelled"| D["Task: cancelled"]
+    B -->|"Timeout
+(timeout_ms exceeded)"| E{"retry_count
+< max_retries?"}
+    B -->|"Permanent error
+or budget exhausted"| F["Task: failed"]
+    E -->|Yes| G["Re-queue with backoff
+retry_count += 1"]
+    E -->|No| F
 ```
 
 ## Setup And Configuration
@@ -414,28 +424,28 @@ graph TB
         CLI["deep-research CLI"]
         Client["DeepResearchClient"]
     end
-
+    
     subgraph Host ["Host (Trusted)"]
         API["Worker API<br/>host.openshell.internal:9050"]
         Engine["DeepAgents Engine"]
         Web["Web Search Service<br/>WEBSEARCH_ENDPOINT_URL"]
         Docs["Doc Search Service<br/>DOC_SEARCH_ENDPOINT_URL"]
     end
-
+    
     subgraph External ["External LLM"]
         LLM["OpenAI-compatible<br/>Inference Endpoint"]
     end
-
+    
     CLI -->|"POST /v1/tasks<br/>GET /v1/tasks/{id}<br/>POLICY ENFORCED"| API
     Client -->|"Same Routes"| API
-
+    
     Sandbox -.->|"No Direct Access"| Web
     Sandbox -.->|"No Direct Access"| Docs
-
+    
     Engine -->|"tool_call"| Web
     Engine -->|"tool_call"| Docs
     Engine -->|"API Call"| LLM
-
+    
     style Sandbox fill:#ffcccc
     style Host fill:#ccffcc
     style External fill:#ccccff
@@ -539,8 +549,13 @@ For very long research outputs:
 - The worker depends on third-party packages and live host-side services. The
   DeepAgents version is pinned for the tested rubric API, but the example does
   not include a complete transitive lockfile.
-- The default client and worker timeouts are tuned for long-running research,
-  not low-latency chat turns.
+- There are two distinct timeout settings. `--timeout <seconds>` (or the
+  depth-based default: shallow=300 s, standard=900 s, deep=2400 s) controls
+  how long the **client** polls before printing a resume hint and exiting.
+  `timeout_ms` in the API body (default 600 000 ms, env
+  `DEEPAGENTS_TASK_TIMEOUT_MS`) controls how long the **server-side task
+  process** runs before it is killed and the task is retried or failed. A
+  client polling timeout does not stop the server task.
 - Operators who use `openshell policy set` without a dedicated sandbox can
   replace unrelated policy rules; the script blocks that path unless
   `DEEP_RESEARCH_ALLOW_POLICY_REPLACE=1` is set explicitly.
