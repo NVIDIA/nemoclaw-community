@@ -3,10 +3,17 @@
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
+import json
 import sys
+import threading
+import urllib.parse
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import TestCase
+from unittest.mock import patch
 
 
 HERMES_DIR = Path(__file__).resolve().parents[1]
@@ -56,6 +63,159 @@ class ScriptedApi:
 
 
 class SlackSummaryHistoryTest(TestCase):
+    def test_cli_uses_real_http_for_history_permalinks_and_threads(self) -> None:
+        class SlackHandler(BaseHTTPRequestHandler):
+            requests = []
+
+            def log_message(self, _format, *args) -> None:
+                pass
+
+            def respond(self, payload) -> None:
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_GET(self) -> None:
+                parsed = urllib.parse.urlparse(self.path)
+                query = {
+                    key: values[-1]
+                    for key, values in urllib.parse.parse_qs(parsed.query).items()
+                }
+                type(self).requests.append(
+                    (parsed.path, query, self.headers.get("Authorization"))
+                )
+
+                if parsed.path == "/api/conversations.history":
+                    if query.get("cursor") == "history-page-2":
+                        self.respond(
+                            {
+                                "ok": True,
+                                "messages": [message("1700000100.000001", "Oldest")],
+                                "response_metadata": {"next_cursor": ""},
+                            }
+                        )
+                    else:
+                        self.respond(
+                            {
+                                "ok": True,
+                                "messages": [
+                                    message("1700000300.000001", "bot", bot_id="B123"),
+                                    message(
+                                        "1700000200.000001",
+                                        "Root",
+                                        reply_count=1,
+                                        thread_ts="1700000200.000001",
+                                    ),
+                                ],
+                                "response_metadata": {
+                                    "next_cursor": "history-page-2"
+                                },
+                            }
+                        )
+                    return
+
+                if parsed.path == "/api/conversations.replies":
+                    self.respond(
+                        {
+                            "ok": True,
+                            "messages": [
+                                message(
+                                    "1700000200.000001",
+                                    "Root",
+                                    reply_count=1,
+                                    thread_ts="1700000200.000001",
+                                ),
+                                message(
+                                    "1700000210.000001",
+                                    "Reply",
+                                    user="U22222222",
+                                    thread_ts="1700000200.000001",
+                                ),
+                            ],
+                            "response_metadata": {"next_cursor": ""},
+                        }
+                    )
+                    return
+
+                if parsed.path == "/api/chat.getPermalink":
+                    self.respond(permalink(query["message_ts"]))
+                    return
+
+                self.respond({"ok": False, "error": "unexpected_method"})
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), SlackHandler)
+        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+        server_thread.start()
+        output = io.StringIO()
+        arguments = [
+            str(SCRIPT),
+            "--channel-id",
+            "C12345678",
+            "--oldest",
+            "1700000000",
+            "--latest",
+            "1700000400",
+            "--message-limit",
+            "2",
+            "--page-cap",
+            "3",
+            "--replies",
+            "--thread-cap",
+            "1",
+            "--reply-limit",
+            "2",
+            "--thread-page-cap",
+            "2",
+        ]
+        try:
+            with (
+                patch.object(HISTORY, "API_BASE", f"http://127.0.0.1:{server.server_port}/api"),
+                patch.object(HISTORY, "get_slack_bot_token", return_value="test-token"),
+                patch.object(sys, "argv", arguments),
+                contextlib.redirect_stdout(output),
+            ):
+                exit_code = HISTORY.main()
+        finally:
+            server.shutdown()
+            server.server_close()
+            server_thread.join(timeout=5)
+
+        result = json.loads(output.getvalue())
+        self.assertEqual(0, exit_code)
+        self.assertTrue(result["ok"])
+        self.assertEqual(2, result["coverage"]["pages"])
+        self.assertEqual(3, result["coverage"]["inspected_messages"])
+        self.assertTrue(result["coverage"]["complete"])
+        self.assertEqual(["Oldest", "Root"], [item["text"] for item in result["messages"]])
+        self.assertEqual(
+            ["Reply"],
+            [item["text"] for item in result["messages"][1]["thread_replies"]],
+        )
+        self.assertTrue(result["threads"]["complete"])
+        self.assertNotIn("test-token", output.getvalue())
+        self.assertEqual(
+            [
+                "/api/conversations.history",
+                "/api/conversations.history",
+                "/api/chat.getPermalink",
+                "/api/chat.getPermalink",
+                "/api/conversations.replies",
+                "/api/chat.getPermalink",
+            ],
+            [request[0] for request in SlackHandler.requests],
+        )
+        self.assertEqual(
+            "history-page-2",
+            SlackHandler.requests[1][1]["cursor"],
+        )
+        self.assertEqual(
+            {"Bearer test-token"},
+            {request[2] for request in SlackHandler.requests},
+        )
+
     def test_paginates_across_filtered_messages_and_applies_time_range(self) -> None:
         api = ScriptedApi(
             [
