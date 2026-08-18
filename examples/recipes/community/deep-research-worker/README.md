@@ -134,14 +134,14 @@ sequenceDiagram
     participant Queue as SQLite Queue
     participant Engine as DeepAgents Engine
     participant LLM as LLM Provider
-    
+
     User ->> CLI: /sandbox/bin/deep-research<br/>"Research topic"
     CLI ->> Client: parse args & init
     Client ->> API: POST /v1/tasks<br/>{prompt, depth, rubric}
     API ->> Queue: enqueue task
     API -->> Client: {task_id, status: queued}
     Client -->> User: Task ID returned<br/>(--task-id-only)
-    
+
     activate Engine
     API ->> Engine: [Worker thread picks up]
     Engine ->> Engine: Phase 1: Planning<br/>Phase 2: Research
@@ -150,7 +150,7 @@ sequenceDiagram
     Engine ->> Engine: Phase 3: Cross-validation<br/>Phase 4: Finalization
     Engine ->> Queue: update task result
     deactivate Engine
-    
+
     User ->> Client: /sandbox/bin/deep-research<br/>--resume task_id
     Client ->> API: GET /v1/tasks/{task_id}
     API ->> Queue: fetch task
@@ -219,7 +219,7 @@ graph LR
 These are **effort budgets**, not completion guarantees. Actual execution time
 depends on tool latency, LLM inference time, and network availability. The
 client polling loop will stop waiting for results when the configured
-`timeout_ms` is exceeded.
+`--timeout` (or depth-based default) is exceeded.
 
 ### Custom Rubrics
 
@@ -326,7 +326,10 @@ A research task progresses through the following states:
 | `cancelled` | Task stopped by caller request |
 | `completed` | Research finished successfully; results are ready |
 | `failed` | Task failed; error message available |
-| `expired` | Task results deleted after 7-day TTL |
+
+Terminal tasks (completed, failed, cancelled) are automatically deleted after 7
+days (TTL) via the `cleanup_expired` background job. Deleted tasks cannot be
+retrieved.
 
 ### Task State Transitions
 
@@ -339,32 +342,38 @@ stateDiagram-v2
     cancelling --> cancelled: process group stopped
     running --> completed: research finished successfully
     running --> failed: permanent error or retries exhausted
-    running --> queued: transient timeout retry
+    running --> queued: transient failure retry
     failed --> [*]
     cancelled --> [*]
-    completed --> expired: 7 days elapsed
-    expired --> [*]
+    completed --> [*]
 ```
 
 ### Retry Behavior
 
-Task-level retries occur only when the worker process exceeds its execution
-timeout (`timeout_ms`). All other failure modes are permanent and go directly
-to `failed`:
+The worker uses **task-level retries** distinct from **tool-call retries**:
 
-- **Task timeout** (`timeout_ms` exceeded): Re-queued with exponential backoff
-  (`2^retry_count` seconds, capped at 60 s). Default max retries: **2**
-  (configurable per task via `max_retries`).
-- **Permanent errors** (import failures, graph recursion limit, auth errors,
-  unhandled exceptions): Fail immediately; no retry.
-- **Budget exhaustion** (tool-call budget reached mid-task): Permanent failure;
-  no retry.
-- **Cancelled tasks**: Never retried.
+#### Task Retries
 
-Tool-call retries (inside a single task execution) are a separate concern:
-transient HTTP errors (429, 5xx, network timeout) are retried up to 2 times
-with exponential backoff before the tool returns a structured error token to
-the agent. Tool-call retries do not affect task-level retry counts.
+- **Scope**: The entire task execution restarts if it fails
+- **Trigger**: Transient failures including task execution timeouts (`timeout_ms`
+  exceeded), connection errors, request timeouts, and classified `TransientTaskError`
+- **Configuration**: `DEEPAGENTS_TASK_MAX_RETRIES` (default: 2 retries)
+- **Behavior**: Re-queued with exponential backoff (`2^retry_count` seconds,
+  capped at 60 s)
+- **Permanent failures**: Import failures, graph recursion limit, auth errors,
+  budget exhaustion, and unhandled exceptions fail immediately with no retry
+- **Cancelled tasks**: Never retried
+
+#### Tool-Call Retries
+
+- **Scope**: Individual tool invocations (`web_search`, `doc_search`) within a
+  running task
+- **Trigger**: Transient HTTP errors (429, 5xx) and network timeouts
+- **Behavior**: Up to 2 in-line retries per tool call with exponential backoff
+- **Failure**: If all retries exhaust, the tool call returns a structured
+  error; the agent loop continues and may pivot to alternative research strategies
+
+Tool-call retries do not affect task-level retry counts.
 
 ```mermaid
 graph TD
@@ -372,8 +381,8 @@ graph TD
     B -->|"Completed
 result written"| C["Task: completed"]
     B -->|"Cancelled"| D["Task: cancelled"]
-    B -->|"Timeout
-(timeout_ms exceeded)"| E{"retry_count
+    B -->|"Transient failure
+(timeout, connection, etc.)"| E{"retry_count
 < max_retries?"}
     B -->|"Permanent error
 or budget exhausted"| F["Task: failed"]
@@ -424,28 +433,28 @@ graph TB
         CLI["deep-research CLI"]
         Client["DeepResearchClient"]
     end
-    
+
     subgraph Host ["Host (Trusted)"]
         API["Worker API<br/>host.openshell.internal:9050"]
         Engine["DeepAgents Engine"]
         Web["Web Search Service<br/>WEBSEARCH_ENDPOINT_URL"]
         Docs["Doc Search Service<br/>DOC_SEARCH_ENDPOINT_URL"]
     end
-    
+
     subgraph External ["External LLM"]
         LLM["OpenAI-compatible<br/>Inference Endpoint"]
     end
-    
+
     CLI -->|"POST /v1/tasks<br/>GET /v1/tasks/{id}<br/>POLICY ENFORCED"| API
     Client -->|"Same Routes"| API
-    
+
     Sandbox -.->|"No Direct Access"| Web
     Sandbox -.->|"No Direct Access"| Docs
-    
+
     Engine -->|"tool_call"| Web
     Engine -->|"tool_call"| Docs
     Engine -->|"API Call"| LLM
-    
+
     style Sandbox fill:#ffcccc
     style Host fill:#ccffcc
     style External fill:#ccccff
@@ -495,43 +504,41 @@ PASS: deep-research-worker local verification
 
 ## Output Formats And Result Handling
 
-### Response Format
+### Default Output Format (Plain Text)
 
-The worker returns task data with these fields:
+By default, the client prints the task `result` field from the server response
+directly to stdout. The format of that text is determined by the agent's
+output; no wrapper or header is added by the client:
+
+```
+[Full research text from the worker]
+```
+
+### JSON Output Format
+
+Use `--json` to write a structured envelope to stdout (or `--output <path>` to
+write to a file instead). The client emits exactly these six fields:
+
+```bash
+openshell sandbox exec --name deep-research-worker -- \
+  /sandbox/bin/deep-research --json --output /tmp/result.json \
+  "Research AI safety frameworks"
+```
 
 ```json
 {
-  "task_id": "f7e2a1b3-c9d4-e5f6...",
+  "task_id": "f7e2a1b3c9d4e5f6",
   "status": "completed",
-  "prompt": "Research topic...",
   "depth": "standard",
-  "rubric": "custom rubric or default",
-  "result": "full research text output",
-  "duration_seconds": 754.23,
-  "retry_count": 0,
-  "max_retries": 2,
-  "created_at": "2026-08-14T12:00:00Z",
-  "completed_at": "2026-08-14T12:13:00Z",
-  "tool_calls": [{"tool": "web_search", "query": "...", "timestamp": "..."}],
-  "tool_call_count": {"web_search": 5, "doc_search": 3}
+  "result": "<agent-generated markdown>",
+  "duration_seconds": 743,
+  "retry_count": 0
 }
 ```
 
-### Plain Text Output
-
-By default, results are printed to stdout:
-
-```
-=== Deep Research Report ===
-
-Query: Compare vector database performance in 2026
-Depth: standard
-Result:
-[Full research text from the worker]
-
-Duration: 12m 34s
-Tool Calls: web_search (5), doc_search (3)
-```
+The `--json` flag prints the raw task record returned by the worker API. The
+`--output` flag writes the same record to the given file. See the
+[Response Format](#response-format) section for the exact fields returned.
 
 ### Handling Large Results
 
@@ -539,8 +546,6 @@ For very long research outputs:
 
 1. **Save to file**: Capture stdout to a file instead of printing to console
 2. **Check result field**: Parse `result` from the JSON response programmatically
-3. **Use tool_call_count**: Inspect how many tool calls were made to gauge result
-   quality
 
 ## Known Limitations
 
