@@ -308,9 +308,9 @@ openshell sandbox exec --name deep-research-worker -- \
   "Compare open-source model serving frameworks"
 ```
 
-The `--json` flag prints the raw task record returned by the worker API. The
-`--output` flag writes the same record to the given file. See the
-[Response Format](#response-format) section for the exact fields returned.
+The `--json` flag emits the six-field client envelope described in
+[JSON Output Format](#json-output-format). The `--output` flag writes that
+envelope to the given file.
 
 ## Task Lifecycle And State Management
 
@@ -535,10 +535,6 @@ openshell sandbox exec --name deep-research-worker -- \
   "retry_count": 0
 }
 ```
-
-The `--json` flag prints the raw task record returned by the worker API. The
-`--output` flag writes the same record to the given file. See the
-[Response Format](#response-format) section for the exact fields returned.
 
 ### Handling Large Results
 
