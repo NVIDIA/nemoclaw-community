@@ -41,7 +41,7 @@ import uuid
 from typing import Any
 
 from _db import ensure_store, write_txn
-from ranking import RankedRow, assign_priorities
+from ranking import rank_population
 
 VALID_DECISIONS = {"CREATE", "KEEP_OPEN", "MARK_DONE", "SKIP"}
 VALID_KIND = {"response", "action", None}
@@ -101,16 +101,13 @@ def apply(env: dict[str, Any]) -> dict[str, int]:
     ranked_input = [d for d in decisions if d["decision"] in {"CREATE", "KEEP_OPEN"}]
     ranked_input.sort(key=lambda d: d["rank"])
 
-    # Tier assignment is arithmetic, so it happens here rather than in the prompt.
-    tiers = {
-        r.source_id: r
-        for r in assign_priorities(
-            RankedRow(source_id=d["source_id"], intent_gated=d["intent_gated"])
-            for d in ranked_input
-        )
-    }
+    # The envelope's ranks are this batch's relative order, nothing more. Tiers
+    # are assigned afterwards across every open row, because a cap that only
+    # holds inside one batch is not a cap.
+    batch_rank = {d["source_id"]: d["rank"] for d in ranked_input}
 
     counts = {"created": 0, "updated": 0, "done": 0, "skipped": 0}
+    prior: dict[str, tuple] = {}
 
     with write_txn() as conn:
         for d in decisions:
@@ -145,7 +142,6 @@ def apply(env: dict[str, Any]) -> dict[str, int]:
                     counts["done"] += 1
                 continue
 
-            t = tiers[sid]
             conn.execute(
                 "UPDATE items SET state='judged',"
                 " state_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE source_id=?",
@@ -159,13 +155,12 @@ def apply(env: dict[str, Any]) -> dict[str, int]:
                 oid = uuid.uuid4().hex[:12]
                 conn.execute(
                     "INSERT INTO obligations(id, source_id, title, context, urgency_reason,"
-                    " kind, est_effort, priority, global_rank, intent_gated, reviewed_at)"
-                    " VALUES (?,?,?,?,?,?,?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
+                    " kind, est_effort, priority, batch_rank, intent_gated, reviewed_at)"
+                    " VALUES (?,?,?,?,?,?,?,'low',?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))",
                     (oid, sid, d["title"], d.get("context"), d.get("urgency_reason"),
-                     d.get("kind"), d.get("est_effort"), t.priority, t.global_rank,
+                     d.get("kind"), d.get("est_effort"), batch_rank[sid],
                      int(d["intent_gated"])))
-                _log(conn, oid, "created", None,
-                     {"priority": t.priority, "rank": t.global_rank})
+                _log(conn, oid, "created", None, {"batch_rank": batch_rank[sid]})
                 counts["created"] += 1
             else:
                 oid, old_priority, old_rank = existing
@@ -173,16 +168,17 @@ def apply(env: dict[str, Any]) -> dict[str, int]:
                 # `priority`, and never cleared by an agent pass.
                 conn.execute(
                     "UPDATE obligations SET title=?, context=?, urgency_reason=?, kind=?,"
-                    " est_effort=?, priority=?, global_rank=?, intent_gated=?,"
+                    " est_effort=?, batch_rank=?, intent_gated=?,"
                     " reviewed_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
                     (d["title"], d.get("context"), d.get("urgency_reason"), d.get("kind"),
-                     d.get("est_effort"), t.priority, t.global_rank,
+                     d.get("est_effort"), batch_rank[sid],
                      int(d["intent_gated"]), oid))
-                if (old_priority, old_rank) != (t.priority, t.global_rank):
-                    _log(conn, oid, "reranked",
-                         {"priority": old_priority, "rank": old_rank},
-                         {"priority": t.priority, "rank": t.global_rank})
                 counts["updated"] += 1
+                prior[oid] = (old_priority, old_rank)
+
+        # Rank the whole open population, not just this envelope. Same
+        # transaction, so a reader never sees two rows sharing a position.
+        _rerank_all(conn, prior)
 
         cur = env.get("cursor")
         if cur:
@@ -194,6 +190,33 @@ def apply(env: dict[str, Any]) -> dict[str, int]:
                 (cur["source"], cur["scope"], cur["value"]))
 
     return counts
+
+
+def _rerank_all(conn, prior: dict[str, tuple]) -> None:
+    """Recompute tier and position over every open obligation."""
+    rows = [
+        {"id": r[0], "source_id": r[1], "intent_gated": bool(r[2]),
+         "manual_priority": r[3], "batch_rank": r[4],
+         "was": (r[5], r[6])}
+        for r in conn.execute(
+            "SELECT id, source_id, intent_gated, manual_priority, batch_rank,"
+            "       priority, global_rank FROM obligations WHERE status='open'")
+    ]
+    # Positions are cleared before they are reassigned. The uniqueness index is
+    # enforced per statement, so moving one row onto a position another row
+    # still holds trips it partway through an otherwise valid reordering.
+    conn.execute("UPDATE obligations SET global_rank=NULL WHERE status='open'")
+    for row in rank_population(rows):
+        conn.execute("UPDATE obligations SET priority=?, global_rank=? WHERE id=?",
+                     (row["priority"], row["global_rank"], row["id"]))
+        was = prior.get(row["id"])
+        # A row this envelope created is already covered by its `created`
+        # event. Only a row that existed beforehand and moved is a rerank.
+        if was is None or (row["priority"], row["global_rank"]) == was:
+            continue
+        _log(conn, row["id"], "reranked",
+             {"priority": was[0], "rank": was[1]},
+             {"priority": row["priority"], "rank": row["global_rank"]})
 
 
 def main() -> int:

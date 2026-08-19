@@ -67,6 +67,7 @@ def candidates(corrections: list[dict], threshold: int = THRESHOLD) -> list[Cand
     counters: dict[str, Counter] = {"sender": Counter(), "domain": Counter(),
                                     "source_kind": Counter()}
     types: dict[tuple[str, str], Counter] = {}
+    domain_senders: dict[str, set[str]] = {}
 
     for c in corrections:
         keys = []
@@ -75,6 +76,7 @@ def candidates(corrections: list[dict], threshold: int = THRESHOLD) -> list[Cand
         d = _domain(c.get("sender"))
         if d:
             keys.append(("domain", d))
+            domain_senders.setdefault(d, set()).add(c["sender"])
         if c.get("source"):
             keys.append(("source_kind", f"{c['source']}/{c.get('kind') or 'any'}"))
         for dim, val in keys:
@@ -84,9 +86,17 @@ def candidates(corrections: list[dict], threshold: int = THRESHOLD) -> list[Cand
     out: list[Candidate] = []
     for dim in ("sender", "domain", "source_kind"):
         for value, count in counters[dim].items():
-            if count >= threshold:
-                dominant = types[(dim, value)].most_common(1)[0][0]
-                out.append(Candidate(dim, value, count, dominant))
+            if count < threshold:
+                continue
+            # One sender ignored three times is a fact about that sender. It
+            # is not evidence about everyone who shares their mail domain —
+            # and colleagues share the user's own domain, so promoting it
+            # would suppress exactly the people who matter most. A domain rule
+            # needs corroboration from more than one sender.
+            if dim == "domain" and len(domain_senders.get(value, ())) < 2:
+                continue
+            dominant = types[(dim, value)].most_common(1)[0][0]
+            out.append(Candidate(dim, value, count, dominant))
     return sorted(out, key=lambda c: (-c.count, c.dimension, c.value))
 
 

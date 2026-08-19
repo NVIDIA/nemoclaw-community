@@ -1,0 +1,77 @@
+{
+  "_comment": "A stand-in for one model turn. The judgments here — what to track, in what order, and which rows the memory says the user chose — are written by hand so the walkthrough is deterministic. Everything downstream of this file is the real code: the tier caps, the intent gate, the ranking, and the writer.",
+  "_source": "Hand-written for this example against fixtures/graph_messages.json and fixtures/slack_messages.json",
+  "version": 1,
+  "pass": "intake",
+  "decisions": [
+    {
+      "source_id": "msg-priorities-match",
+      "decision": "CREATE",
+      "rank": 1,
+      "intent_gated": true,
+      "title": "Give Dana the billing-migration cutover window",
+      "context": "Vendor offered two windows and needs one chosen to book the freeze.",
+      "urgency_reason": "First item in current_priorities, and the vendor freeze is blocked on it.",
+      "kind": "response",
+      "est_effort": "minutes"
+    },
+    {
+      "source_id": "C0TEAM0001:1787056200.000200",
+      "decision": "CREATE",
+      "rank": 2,
+      "intent_gated": true,
+      "title": "Sanity-check the rollback plan in the migration doc",
+      "context": "Sam asked directly, before Thursday.",
+      "urgency_reason": "Same migration the user named as this week's first priority.",
+      "kind": "action",
+      "est_effort": "hours"
+    },
+    {
+      "source_id": "msg-quiet-decay",
+      "decision": "CREATE",
+      "rank": 3,
+      "intent_gated": true,
+      "title": "Reply to Sam on the onboarding revamp doc",
+      "context": "Asked seven days ago, no follow-up since.",
+      "urgency_reason": "Named in current_priorities, but explicitly second to the migration.",
+      "kind": "response",
+      "est_effort": "minutes"
+    },
+    {
+      "source_id": "msg-urgent-not-chosen",
+      "decision": "CREATE",
+      "rank": 4,
+      "intent_gated": false,
+      "title": "Complete the expense policy attestation",
+      "context": "Closes Friday. Mandatory, and genuinely dated.",
+      "urgency_reason": "Real deadline, but it matches nothing the user chose this week.",
+      "kind": "action",
+      "est_effort": "minutes"
+    },
+    {
+      "source_id": "D0DIRECT01:1787055600.000100",
+      "decision": "CREATE",
+      "rank": 5,
+      "intent_gated": false,
+      "title": "Find out whether finance sent the Q3 headcount sheet",
+      "context": "Dana needs it for the same deadline.",
+      "urgency_reason": "Direct ask, but a lookup rather than a decision.",
+      "kind": "response",
+      "est_effort": "minutes"
+    },
+    {
+      "source_id": "msg-cc-only",
+      "decision": "CREATE",
+      "rank": 6,
+      "intent_gated": false,
+      "title": "Read the vendor contract redlines thread",
+      "context": "User is on Cc, not To.",
+      "urgency_reason": "Being copied is not being asked.",
+      "kind": null,
+      "est_effort": "minutes"
+    },
+    {"source_id": "msg-automated-noise", "decision": "SKIP"},
+    {"source_id": "C0TEAM0001:1787056800.000300", "decision": "SKIP"}
+  ],
+  "cursor": {"source": "email", "scope": "inbox", "value": "fixture-delta-1"}
+}

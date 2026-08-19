@@ -27,6 +27,10 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Iterable, List
 
+# Where a user-pinned row sorts relative to the rest. A pin is an instruction,
+# so it outranks anything the memory inferred.
+_MANUAL_WEIGHT = {"high": 0, "medium": 1, "low": 2, None: 1}
+
 HIGH_CAP = 10
 MEDIUM_CAP = 10
 
@@ -70,3 +74,31 @@ def assign_priorities(ranked: Iterable[RankedRow]) -> List[RankedRow]:
             tier = "low"
         out.append(replace(row, priority=tier, global_rank=position))
     return out
+
+
+def rank_population(rows: Iterable[dict]) -> List[dict]:
+    """Order every open obligation, then apply the caps across all of them.
+
+    The caps bound the whole open list, not whichever batch happened to be
+    judged last. Ranking only within an envelope lets two twenty-row batches
+    leave twenty rows at the top tier and two rows claiming every position,
+    which is what this function exists to prevent.
+
+    A row the user pinned is set aside before the caps are computed. Its tier
+    is the one the user gave it, so letting it compete would both override the
+    instruction and spend a capped slot on a row that is leaving the tier
+    anyway.
+    """
+    ordered = sorted(rows, key=lambda r: (
+        _MANUAL_WEIGHT.get(r.get("manual_priority"), 1),
+        0 if r.get("intent_gated") else 1,
+        r.get("batch_rank") if r.get("batch_rank") is not None else 1_000_000,
+        r.get("source_id") or "",
+    ))
+    unpinned = [r for r in ordered if not r.get("manual_priority")]
+    tiers = {a.source_id: a.priority for a in assign_priorities(
+        RankedRow(source_id=r["source_id"], intent_gated=bool(r.get("intent_gated")))
+        for r in unpinned)}
+    return [{**r, "priority": r.get("manual_priority") or tiers[r["source_id"]],
+             "global_rank": position}
+            for position, r in enumerate(ordered, start=1)]

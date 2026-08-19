@@ -42,14 +42,35 @@ def ledger_path() -> Path:
 
 
 def ensure_store(schema_sql: Path | None = None) -> Path:
-    """Create the directory (0700 — it holds message content) and apply schema."""
+    """Open the store, creating or migrating it, and refuse one from the future.
+
+    This is the only initialisation path. Every executable goes through it, so
+    the version check cannot be bypassed by reaching for a lower-level helper:
+    a store written by a newer version of this recipe is rejected before any
+    write rather than being quietly populated with tables it does not expect.
+    """
+    from migrate import migrate           # imported here to avoid a cycle
+
     path = ledger_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     os.chmod(path.parent, 0o700)
     if schema_sql is None:
         schema_sql = Path(__file__).with_name("schema.sql")
-    with contextlib.closing(sqlite3.connect(path)) as conn:
+
+    with contextlib.closing(sqlite3.connect(path, isolation_level=None)) as conn:
+        conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
+        # Creating tables is idempotent, so this is safe on an existing store;
+        # it is what brings a brand new one up to the baseline. executescript
+        # commits implicitly, so it runs before the transaction rather than
+        # inside one.
         conn.executescript(schema_sql.read_text(encoding="utf-8"))
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            migrate(conn)
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
     return path
 
 

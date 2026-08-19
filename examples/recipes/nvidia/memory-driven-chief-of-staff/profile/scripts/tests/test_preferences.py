@@ -79,3 +79,34 @@ class TestPreferences(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestDomainRulesNeedCorroboration(unittest.TestCase):
+    """A domain rule is a claim about strangers, so one sender cannot make it.
+
+    Colleagues share the user's own mail domain. Promoting one repeatedly
+    ignored sender into a domain-wide rule would suppress the people the
+    memory ranks highest, which is the opposite of what the corrections meant.
+    """
+
+    def _ignores(self, sender, n):
+        return [{"event_type": "ignored", "sender": sender,
+                 "source": "email", "kind": "ack"}] * n
+
+    def test_one_sender_yields_a_sender_rule_but_not_a_domain_rule(self):
+        got = candidates(self._ignores("finance-ops@example.com", 3))
+        dims = {c.dimension for c in got}
+        self.assertIn("sender", dims)
+        self.assertNotIn("domain", dims)
+
+    def test_two_senders_in_one_domain_yield_the_domain_rule(self):
+        got = candidates(self._ignores("finance-ops@example.com", 2)
+                         + self._ignores("hr-notices@example.com", 2))
+        domain = [c for c in got if c.dimension == "domain"]
+        self.assertEqual([(c.value, c.count) for c in domain], [("example.com", 4)])
+
+    def test_neither_sender_alone_reaches_the_threshold_but_the_domain_does(self):
+        """The domain dimension still aggregates; it just needs two sources."""
+        got = candidates(self._ignores("a@example.com", 2) + self._ignores("b@example.com", 2))
+        self.assertEqual([c.dimension for c in got if c.dimension == "sender"], [])
+        self.assertTrue(any(c.dimension == "domain" for c in got))

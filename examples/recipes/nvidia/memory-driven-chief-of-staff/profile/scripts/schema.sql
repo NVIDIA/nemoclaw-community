@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
-INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '1');
+INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '3');
 
 
 -- ---------------------------------------------------------------------------
@@ -52,6 +52,10 @@ CREATE TABLE IF NOT EXISTS items (
     addressing  TEXT CHECK (addressing IN ('direct','mentioned','broadcast')),
     -- Email only; Slack tracks read state per channel, not per message.
     unread      INTEGER CHECK (unread IN (0,1)),
+    -- Set when the source reports the message gone. The row survives because
+    -- an obligation may reference it and the completed view has to stay
+    -- readable; the body does not.
+    deleted_at  TEXT,
     state       TEXT NOT NULL
                 CHECK (state IN ('pending','judged','skipped'))
                 DEFAULT 'pending',
@@ -62,6 +66,7 @@ CREATE TABLE IF NOT EXISTS items (
 CREATE INDEX IF NOT EXISTS idx_items_pending ON items(state, event_at);
 -- Body pruning reads this.
 CREATE INDEX IF NOT EXISTS idx_items_event_at ON items(event_at) WHERE body IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_items_deleted ON items(deleted_at) WHERE deleted_at IS NOT NULL;
 
 
 -- ---------------------------------------------------------------------------
@@ -83,6 +88,10 @@ CREATE TABLE IF NOT EXISTS obligations (
     priority        TEXT NOT NULL CHECK (priority IN ('high','medium','low')),
     manual_priority TEXT CHECK (manual_priority IN ('high','medium','low')),
     global_rank     INTEGER,
+    -- The position the model gave this row when it was last judged, within
+    -- that batch only. Tier and global_rank are derived from the whole open
+    -- population afterwards; a batch cannot see its siblings.
+    batch_rank      INTEGER,
     -- Did this row pass the intent gate on its last ranking pass?
     -- Recorded so the shortlist can explain WHY a row is capped at medium:
     -- "urgent, but not something you chose to work on" is a different answer
@@ -105,6 +114,11 @@ CREATE TABLE IF NOT EXISTS obligations (
 CREATE INDEX IF NOT EXISTS idx_obl_review ON obligations(status, reviewed_at);
 -- Shortlist read path.
 CREATE INDEX IF NOT EXISTS idx_obl_rank ON obligations(status, global_rank);
+-- Two open rows must never claim the same position. Enforced here as well as
+-- in code, because a duplicate rank is the visible symptom of ranking a batch
+-- instead of the population.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_obl_rank_unique
+    ON obligations(global_rank) WHERE status='open' AND global_rank IS NOT NULL;
 -- Wake-up scan for expiring snoozes.
 CREATE INDEX IF NOT EXISTS idx_obl_snooze ON obligations(status, snoozed_until)
     WHERE snoozed_until IS NOT NULL;

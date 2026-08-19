@@ -7,7 +7,7 @@ import sys, unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from ranking import HIGH_CAP, MEDIUM_CAP, RankedRow, assign_priorities  # noqa: E402
+from ranking import HIGH_CAP, MEDIUM_CAP, RankedRow, assign_priorities, rank_population  # noqa: E402
 
 
 def rows(spec):
@@ -74,3 +74,35 @@ class TestCapsAndCascade(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestPinsBeatTheGate(unittest.TestCase):
+    """A pin is an instruction; the gate is an inference. The instruction wins."""
+
+    def _rows(self, n, gated, pinned=None):
+        return [{"source_id": f"m{i}", "intent_gated": i < gated, "batch_rank": i + 1,
+                 "manual_priority": (pinned or {}).get(f"m{i}")} for i in range(n)]
+
+    def test_a_pinned_row_takes_the_users_tier_not_the_gates(self):
+        got = {r["source_id"]: r["priority"]
+               for r in rank_population(self._rows(4, gated=4, pinned={"m0": "low"}))}
+        self.assertEqual(got["m0"], "low")
+        self.assertEqual(got["m1"], "high")
+
+    def test_a_pinned_row_sorts_by_its_pin(self):
+        got = [r["source_id"]
+               for r in rank_population(self._rows(3, gated=3, pinned={"m0": "low"}))]
+        self.assertEqual(got[-1], "m0")
+
+    def test_a_demoted_row_does_not_consume_a_capped_slot(self):
+        """Otherwise a pin costs the tier a place while leaving it."""
+        pinned = {f"m{i}": "low" for i in range(5)}
+        got = rank_population(self._rows(20, gated=20, pinned=pinned))
+        high = [r["source_id"] for r in got if r["priority"] == "high"]
+        self.assertEqual(len(high), HIGH_CAP)
+        self.assertFalse(set(high) & set(pinned), "a pinned row is holding a high slot")
+
+    def test_a_pin_upward_beats_an_ungated_rows_cascade(self):
+        got = {r["source_id"]: r["priority"]
+               for r in rank_population(self._rows(3, gated=0, pinned={"m2": "high"}))}
+        self.assertEqual(got["m2"], "high")

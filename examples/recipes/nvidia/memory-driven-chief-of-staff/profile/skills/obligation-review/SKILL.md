@@ -20,9 +20,15 @@ You never write to the database. Return one envelope; the writer commits it.
 
 ## Read first
 
-`$HERMES_HOME/workspace/memory/index.md`, then the pages that bear on this batch:
-`attention/current_priorities.md` always, plus the `projects/` and `people/`
-pages the rows touch. Load them once for the whole batch rather than per row.
+- `$HERMES_HOME/workspace/memory/index.md`, then the pages that bear on this
+  batch: `attention/current_priorities.md` always, plus the `projects/` and
+  `people/` pages the rows touch. Load them once for the whole batch rather
+  than per row.
+- `$HERMES_HOME/workspace/policy/preferences.md` if it exists. It records what
+  this user has repeatedly ignored or re-ranked. Treat it as a strong prior,
+  not a rule, exactly as intake does. This pass re-ranks, so skipping it is how
+  a correction gets undone: a row the user demoted twice would climb back on
+  the next review, and the user would have to correct it again.
 
 ## Step 1 — has the user already dealt with it?
 

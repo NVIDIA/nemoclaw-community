@@ -3,13 +3,13 @@
 
 """Acceptance: invariant detection and its idempotency, on synthetic pages."""
 
-import shutil, sys, tempfile, unittest
+import re, shutil, sys, tempfile, unittest
 from datetime import date
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(HERE))
-from memory_check import check_all, check_ceilings, check_decay, check_index, check_links, check_provenance  # noqa: E402
+from memory_check import check_all, check_ceilings, check_decay, check_frontmatter, check_index, check_links, check_provenance  # noqa: E402
 
 FIXTURES = HERE.parents[1] / "fixtures" / "memory"
 
@@ -123,3 +123,70 @@ class TestInvariants(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestFrontmatter(unittest.TestCase):
+    """Required keys and constrained values, per page type.
+
+    The schema states what each page type must carry. Until these checks
+    existed a person page could lose its `name` and still be reported clean,
+    which made "the memory is verified" a weaker claim than it sounded.
+    """
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp()) / "memory"
+        shutil.copytree(FIXTURES, self.root)
+        self.person = self.root / "people" / "sam_ruiz.md"
+
+    def kinds(self, findings):
+        return sorted({f.kind for f in findings})
+
+    def _drop_line(self, page, key):
+        page.write_text(re.sub(rf"^{key}:.*\n", "", page.read_text(), count=1, flags=re.M))
+
+    def _set(self, page, key, value):
+        page.write_text(re.sub(rf"^{key}:.*$", f"{key}: {value}",
+                               page.read_text(), count=1, flags=re.M))
+
+    def test_the_shipped_fixture_pages_are_complete(self):
+        self.assertEqual(check_frontmatter(self.root), [])
+
+    def test_a_person_page_missing_its_name_is_reported(self):
+        self._drop_line(self.person, "name")
+        findings = check_frontmatter(self.root)
+        self.assertEqual(self.kinds(findings), ["missing-field"])
+        self.assertIn("name", findings[0].detail)
+        self.assertEqual(findings[0].path, "people/sam_ruiz.md")
+
+    def test_every_required_person_field_is_checked(self):
+        # Each field is dropped on its own so a check cannot pass by way of
+        # another field's finding.
+        for key in ("role", "relationship", "importance",
+                    "last_interaction", "interaction_frequency"):
+            with self.subTest(field=key):
+                shutil.rmtree(self.root)
+                shutil.copytree(FIXTURES, self.root)
+                self._drop_line(self.root / "people" / "sam_ruiz.md", key)
+                details = [f.detail for f in check_frontmatter(self.root)]
+                self.assertTrue(any(key in d for d in details), details)
+
+    def test_a_value_outside_the_schemas_range_is_reported(self):
+        self._set(self.person, "importance", "URGENT!!")
+        findings = check_frontmatter(self.root)
+        self.assertEqual(self.kinds(findings), ["bad-value"])
+        self.assertIn("URGENT!!", findings[0].detail)
+
+    def test_a_page_with_no_frontmatter_at_all_is_reported(self):
+        self.person.write_text("Just prose, no block.\n")
+        self.assertEqual(self.kinds(check_frontmatter(self.root)), ["missing-frontmatter"])
+
+    def test_a_project_page_is_checked_against_its_own_required_fields(self):
+        project = next((self.root / "projects").rglob("*.md"))
+        self._drop_line(project, "priority")
+        details = [f.detail for f in check_frontmatter(self.root)]
+        self.assertTrue(any("priority" in d for d in details), details)
+
+    def test_the_incomplete_page_reaches_the_top_level_report(self):
+        """check_all runs it, so the scheduled repair job sees it too."""
+        self._drop_line(self.person, "name")
+        self.assertIn("missing-field", self.kinds(check_all(self.root, date(2026, 8, 18))))

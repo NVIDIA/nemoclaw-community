@@ -27,6 +27,29 @@ INFERRED = re.compile(r"\(inferred\)", re.I)
 
 DECAY_DAYS = {"daily": 1, "weekly": 7, "monthly": 30, "quarterly": 90}
 
+# Required frontmatter per page type, from schema.md. The directory a page
+# lives in determines its type; `index.md` is checked separately because it is
+# the entry point rather than a page.
+REQUIRED_FIELDS = {
+    "people": ("name", "role", "relationship", "importance",
+               "last_interaction", "interaction_frequency"),
+    "projects": ("name", "priority", "role", "updated"),
+    "patterns": ("type", "updated", "decay"),
+    "concepts": ("type", "updated"),
+    "goals": ("type", "timeframe", "updated", "decay"),
+    "attention": ("type", "updated", "decay"),
+}
+INDEX_REQUIRED = ("type", "updated")
+
+# Fields whose value must come from a fixed set, again from schema.md.
+ENUMS = {
+    "importance": {"high", "medium", "low"},
+    "interaction_frequency": {"daily", "weekly", "monthly", "rare"},
+    "priority": {"high", "medium", "low"},
+    "decay": set(DECAY_DAYS),
+    "timeframe": {"monthly", "quarterly", "long-term"},
+}
+
 # From the growth-control table in schema.md. Detection only: exceeding a
 # ceiling is a finding for the consolidation job, not a defect in itself.
 CEILINGS = {"recent_interactions": 30}
@@ -146,6 +169,59 @@ def check_decay(root: Path, today: date | None = None) -> list[Finding]:
     return findings
 
 
+def _page_type(page: Path, root: Path) -> str | None:
+    """A page's type is the directory it sits under, relative to the root."""
+    rel = page.relative_to(root).parts
+    return rel[0] if len(rel) > 1 else None
+
+
+def check_frontmatter(root: Path) -> list[Finding]:
+    """Required keys are present, and constrained values are in range.
+
+    The repair skill calls this a mechanical finding, so it has to actually be
+    one. A person page missing `name` used to pass every check.
+    """
+    findings: list[Finding] = []
+
+    index = root / "index.md"
+    if index.exists():
+        text = _read(index)
+        fm = _frontmatter(text) if text else {}
+        for key in INDEX_REQUIRED:
+            if not fm.get(key):
+                findings.append(Finding("missing-field", "index.md",
+                                        f"frontmatter has no {key}"))
+
+    for page in _pages(root):
+        kind = _page_type(page, root)
+        required = REQUIRED_FIELDS.get(kind)
+        if not required:
+            continue
+        text = _read(page)
+        if text is None:
+            continue
+        rel = str(page.relative_to(root))
+        fm = _frontmatter(text)
+        if not fm:
+            findings.append(Finding("missing-frontmatter", rel,
+                                    "page has no frontmatter block"))
+            continue
+        for key in required:
+            if not fm.get(key):
+                findings.append(Finding("missing-field", rel,
+                                        f"{kind} page has no {key}"))
+        for key, allowed in ENUMS.items():
+            value = fm.get(key)
+            # Strip trailing comments, which the schema's examples carry.
+            if value:
+                value = value.split("#")[0].strip()
+            if value and value not in allowed:
+                findings.append(Finding("bad-value", rel,
+                                        f"{key}={value!r} is not one of "
+                                        f"{sorted(allowed)}"))
+    return findings
+
+
 def check_provenance(root: Path) -> list[Finding]:
     """Claims on patterns pages carry a footnote or an inferred marker."""
     findings: list[Finding] = []
@@ -194,8 +270,9 @@ def check_ceilings(root: Path) -> list[Finding]:
 
 def check_all(root: Path, today: date | None = None) -> list[Finding]:
     """Cheap and mechanical first, so a clean run finishes quickly."""
-    return (check_index(root) + check_links(root) + check_decay(root, today)
-            + check_provenance(root) + check_ceilings(root))
+    return (check_index(root) + check_frontmatter(root) + check_links(root)
+            + check_decay(root, today) + check_provenance(root)
+            + check_ceilings(root))
 
 
 def main() -> int:
