@@ -24,6 +24,7 @@ KEY_ENV = "NEMOCLAW_INFERENCE_PREFLIGHT_KEY"
 TOOL_NAME = "nemoclaw_preflight"
 TOOL_ARGUMENTS = {"value": "ready"}
 TOOL_MARKERS = ("<|call|>", "<|tool_call|>", "<tool_call>", "</tool_call>")
+SANDBOX_HOST_ALIAS = "host.openshell.internal"
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
@@ -46,6 +47,27 @@ def is_loopback_host(hostname: str | None) -> bool:
         return ipaddress.ip_address(hostname).is_loopback
     except ValueError:
         return False
+
+
+def endpoint_for_host_preflight(endpoint: str) -> str:
+    """Translate the sandbox-only host alias to the host's loopback address.
+
+    The host TLS proxy listens on the host and is configured inside the sandbox
+    as ``http://host.openshell.internal:<port>``. That name intentionally does
+    not resolve on the host, where this preflight runs. Using loopback here
+    exercises the same proxy listener without weakening the HTTP safety rule for
+    arbitrary remote hosts.
+    """
+
+    parsed = urllib.parse.urlsplit(endpoint)
+    if parsed.scheme != "http" or parsed.hostname != SANDBOX_HOST_ALIAS:
+        return endpoint
+    if parsed.username or parsed.password:
+        raise PreflightError("endpoint", "endpoint must not contain user info", 3)
+    port = f":{parsed.port}" if parsed.port else ""
+    return urllib.parse.urlunsplit(
+        (parsed.scheme, f"127.0.0.1{port}", parsed.path, parsed.query, parsed.fragment)
+    )
 
 
 def completion_url(endpoint: str) -> str:
@@ -230,6 +252,7 @@ def run_preflight(endpoint: str, model: str, key: str, timeout: float) -> None:
     if timeout <= 0:
         raise PreflightError("configuration", "timeout must be greater than zero", 2)
 
+    endpoint = endpoint_for_host_preflight(endpoint)
     payload = json.dumps(
         {
             "model": model,

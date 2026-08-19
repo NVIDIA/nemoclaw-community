@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Source-only policy for the first-party scoped dogfood installation.
+
+schema_version: 1
+kind: review-advisor-memory-policy
+namespace: repository:NVIDIA/nemoclaw-community:scope:52d676c83aa2920bdcb59a65adeb8f8b98d6f79e857e59e786317362114d3873
+recall:
+  cross_repository: false
+  memory_is_evidence: false
+  require_current_code_verification: true
+writes:
+  automatic_extraction: false
+  require_trusted_feedback: true
+  persist_raw_pull_request_content: false
+  persist_raw_review_comments: false
+retention:
+  allow_inspect: true
+  allow_export: true
+  allow_remove: true

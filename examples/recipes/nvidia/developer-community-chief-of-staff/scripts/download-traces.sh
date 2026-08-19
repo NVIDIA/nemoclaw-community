@@ -2,10 +2,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Pull ATIF traces (per-turn trajectory records written by NeMo-Relay) off the
-# running sandbox into a host-side tarball. /tmp/atif is ephemeral — capture
-# before tear-down to keep traces. Empty case (no agent turns yet) still
-# produces a tarball; the manifest's `note` explains why it's empty.
+# Pull locally stored ATIF trajectories written by NeMo Relay off the running
+# sandbox into a host-side tarball. /tmp/atif is ephemeral — capture before
+# tear-down to keep local exports or remote-delivery recovery copies. An empty
+# directory still produces a tarball; the manifest explains why it may be empty.
 # Output: $EXAMPLE_DIR/.traces/atif-{ts}.tar.gz + .manifest.json. Tarball path
 # is echoed on stdout: TRACE=$(bash scripts/download-traces.sh)
 
@@ -35,7 +35,7 @@ filter_credential_files "$TRACE_ROOT"
 # want when /tmp/atif had no traces. The manifest's empty-note explains it.
 tar czf "$TARBALL" -C "$TRACE_ROOT" .
 
-EMPTY_NOTE="ATIF directory was empty. The agent has likely not had a turn yet since bring-up — interact with it (DM, email, etc.) and re-run. See agents/hermes/start.sh for the trace write path."
+EMPTY_NOTE="ATIF directory was empty. In local mode, finish and cleanly exit a top-level Agent session before retrying. In relay mode, this is expected after successful remote delivery; local files are recovery copies only. See agents/hermes/start.sh for the trace write path."
 write_snapshot_manifest "$TARBALL" "$MANIFEST" "$TS" "$SANDBOX_NAME" \
   /tmp/atif "$EMPTY_NOTE" "${EXCLUDED_FILES[@]:-}"
 

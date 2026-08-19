@@ -1,0 +1,240 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# First-party, source-only dogfood lane. Keep the organization runner group
+# restricted to this exact default-branch workflow:
+# NVIDIA/nemoclaw-community/.github/workflows/nemoclaw-review-advisor-dogfood.yml@refs/heads/main
+#
+# This workflow intentionally has no bootstrap-profile input. The one-time
+# pre-merge bootstrap is a local trusted-operator action documented with the
+# source profile; normal workflow dispatch always reads that profile from base.
+
+name: NemoClaw Review Advisor Dogfood
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_sha:
+        description: Exact current main commit SHA
+        required: true
+        type: string
+      head_sha:
+        description: Exact pull request head commit SHA
+        required: true
+        type: string
+      pr_number:
+        description: Pull request number
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
+concurrency:
+  group: nemoclaw-review-advisor-dogfood-${{ github.repository_id }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: .nemoclaw-review-advisor-dogfood
+
+jobs:
+  review:
+    if: >-
+      ${{ github.ref == 'refs/heads/main' &&
+          github.ref_name == github.event.repository.default_branch }}
+    runs-on:
+      group: nemoclaw-review-advisor-nemoclaw-community-af478b4b0480
+      labels: [self-hosted, linux, nemoclaw]
+    # call-hermes enforces a 90-minute monotonic wall deadline. Reserve 35
+    # minutes for trusted preparation, full timeout containment, cleanup, and upload.
+    timeout-minutes: 125
+    env:
+      NEMOCLAW_RELEASE_TAG: v0.0.94
+      NEMOCLAW_RELEASE_COMMIT: d87acc16b04c065ddc26c294a6c3af6795a43d7b
+      NEMOCLAW_HERMES_BASE_DIGEST: sha256:fa05221f5c7bcafea7e263c84e5d06f87e37d1ccb78dc28c113f1a4066aa544c
+      REVIEW_PROFILE_PATH: examples/recipes/nvidia/pr-review-advisor/dogfood/profile.yaml
+    steps:
+      - name: Check out trusted dogfood workflow source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: main
+          clean: false
+          path: .nemoclaw-review-advisor-dogfood
+
+      - name: Clean trusted workspace without deleting private appliance config
+        run: |
+          set -eu
+          git reset --hard HEAD
+          git clean -ffdx \
+            -e examples/recipes/nvidia/pr-review-advisor/.env \
+            -e examples/recipes/nvidia/pr-review-advisor/.tmp/ \
+            -e examples/recipes/nvidia/pr-review-advisor/.snapshots/ \
+            -e examples/recipes/nvidia/pr-review-advisor/memory-export/
+
+      - name: Verify NemoClaw v0.0.94 source pin
+        run: |
+          set -eu
+          dockerfile=examples/recipes/nvidia/pr-review-advisor/agents/hermes/Dockerfile
+          grep -F "latest published tag $NEMOCLAW_RELEASE_TAG" "$dockerfile"
+          grep -F "$NEMOCLAW_RELEASE_COMMIT" "$dockerfile"
+          grep -F "ARG BASE_IMAGE=ghcr.io/nvidia/nemoclaw/hermes-sandbox-base@$NEMOCLAW_HERMES_BASE_DIGEST" "$dockerfile"
+
+      - name: Fetch and bind exact pull request inputs
+        env:
+          REVIEW_BASE_SHA: ${{ inputs.base_sha }}
+          REVIEW_HEAD_SHA: ${{ inputs.head_sha }}
+          REVIEW_PR_NUMBER: ${{ inputs.pr_number }}
+          REVIEW_REPOSITORY_ID: ${{ github.repository_id }}
+          NEMOCLAW_GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          for git_variable in "${!GIT_@}"; do
+            unset "$git_variable"
+          done
+          export GIT_CONFIG_NOSYSTEM=1
+          export GIT_CONFIG_GLOBAL=/dev/null
+          export GIT_TERMINAL_PROMPT=0
+          case "$REVIEW_BASE_SHA" in
+            *[!0-9a-f]*|'') echo "base_sha must be a lowercase full SHA" >&2; exit 2 ;;
+          esac
+          case "$REVIEW_HEAD_SHA" in
+            *[!0-9a-f]*|'') echo "head_sha must be a lowercase full SHA" >&2; exit 2 ;;
+          esac
+          test "${#REVIEW_BASE_SHA}" -eq 40
+          test "${#REVIEW_HEAD_SHA}" -eq 40
+          case "$REVIEW_PR_NUMBER" in
+            *[!0-9]*|'0'|'') echo "pr_number must be a positive integer" >&2; exit 2 ;;
+          esac
+          case "$REVIEW_REPOSITORY_ID" in
+            *[!0-9]*|'0'|'') echo "repository_id must be a positive integer" >&2; exit 2 ;;
+          esac
+          test "$(git rev-parse HEAD)" = "$REVIEW_BASE_SHA"
+          job_tmp="$RUNNER_TEMP/nemoclaw-dogfood-${REVIEW_REPOSITORY_ID}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          test ! -e "$job_tmp"
+          test ! -L "$job_tmp"
+          mkdir -m 700 "$job_tmp"
+          analysis_repo="$job_tmp/repo"
+          mkdir -m 700 "$analysis_repo"
+          git -C "$analysis_repo" init --quiet
+          askpass="$job_tmp/git-askpass"
+          (
+            set -C
+            umask 077
+            printf '%s\n' \
+              '#!/bin/sh' \
+              'case "$1" in' \
+              '  *Username*) printf "%s\n" "x-access-token" ;;' \
+              '  *Password*) printf "%s\n" "$NEMOCLAW_GITHUB_TOKEN" ;;' \
+              '  *) exit 1 ;;' \
+              'esac' >"$askpass"
+          )
+          chmod 700 "$askpass"
+          trap 'rm -f -- "$askpass"' EXIT
+          GIT_ASKPASS="$askpass" \
+          git -C "$analysis_repo" \
+            -c protocol.allow=never -c protocol.https.allow=always \
+            fetch --no-tags --no-recurse-submodules \
+            "https://github.com/${GITHUB_REPOSITORY}.git" \
+            "+refs/heads/main:refs/review-advisor/base" \
+            "+refs/pull/${REVIEW_PR_NUMBER}/head:refs/review-advisor/head"
+          test "$(git -C "$analysis_repo" rev-parse 'refs/review-advisor/base^{commit}')" = "$REVIEW_BASE_SHA"
+          test "$(git -C "$analysis_repo" rev-parse 'refs/review-advisor/head^{commit}')" = "$REVIEW_HEAD_SHA"
+          acceptance_context="$job_tmp/acceptance.json"
+          test ! -e "$acceptance_context"
+          test ! -L "$acceptance_context"
+          examples/recipes/nvidia/pr-review-advisor/scripts/fetch-pr-context.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --pr-number "$REVIEW_PR_NUMBER" \
+            --base "$REVIEW_BASE_SHA" \
+            --head "$REVIEW_HEAD_SHA" \
+            --output "$acceptance_context"
+          unset NEMOCLAW_GITHUB_TOKEN
+
+      - name: Run scoped artifact-only dogfood review
+        id: review
+        env:
+          REVIEW_BASE_SHA: ${{ inputs.base_sha }}
+          REVIEW_HEAD_SHA: ${{ inputs.head_sha }}
+          REVIEW_PR_NUMBER: ${{ inputs.pr_number }}
+          REVIEW_JOB_TEMP: ${{ runner.temp }}/nemoclaw-dogfood-${{ github.repository_id }}-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -eu
+          review_scope_args=(
+            --scope-root .github/workflows/nemoclaw-review-advisor-dogfood.yml
+            --scope-root README.md
+            --scope-root THIRD-PARTY-NOTICES
+            --scope-root examples/recipes/nvidia/pr-review-advisor
+            --support-path .github/CODEOWNERS
+            --support-path .github/PULL_REQUEST_TEMPLATE.md
+            --support-path CONTRIBUTING.md
+            --support-path LICENSE
+            --support-path SECURITY.md
+          )
+          output="$REVIEW_JOB_TEMP/output"
+          test ! -e "$output"
+          test ! -L "$output"
+          examples/recipes/nvidia/pr-review-advisor/scripts/review.sh \
+            --repo "$REVIEW_JOB_TEMP/repo" \
+            --base "$REVIEW_BASE_SHA" \
+            --head "$REVIEW_HEAD_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --pr-number "$REVIEW_PR_NUMBER" \
+            --profile-path "$REVIEW_PROFILE_PATH" \
+            "${review_scope_args[@]}" \
+            --acceptance-context "$REVIEW_JOB_TEMP/acceptance.json" \
+            --output "$output"
+
+      - name: Validate complete review artifact set
+        id: artifacts
+        if: ${{ steps.review.outcome == 'success' }}
+        env:
+          REVIEW_JOB_TEMP: ${{ runner.temp }}/nemoclaw-dogfood-${{ github.repository_id }}-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -eu
+          python3 - "$REVIEW_JOB_TEMP/output" <<'PY'
+          import os
+          import stat
+          import sys
+          from pathlib import Path
+
+          output = Path(sys.argv[1])
+          info = output.lstat()
+          if output.is_symlink() or not stat.S_ISDIR(info.st_mode):
+              raise SystemExit("review output is not a regular directory")
+          if info.st_uid != os.geteuid():
+              raise SystemExit("review output is not owned by the runner uid")
+          expected = {"request.json", "review.json", "review.md", "verification.json"}
+          entries = {entry.name: entry for entry in output.iterdir()}
+          if set(entries) != expected:
+              raise SystemExit("review output does not contain the exact artifact set")
+          for name, entry in entries.items():
+              entry_info = entry.lstat()
+              if entry.is_symlink() or not stat.S_ISREG(entry_info.st_mode):
+                  raise SystemExit(f"unsafe review artifact: {name}")
+              if entry_info.st_uid != os.geteuid() or entry_info.st_size == 0:
+                  raise SystemExit(f"invalid review artifact: {name}")
+          PY
+
+      - name: Upload dogfood review artifacts
+        if: ${{ steps.review.outcome == 'success' && steps.artifacts.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nemoclaw-dogfood-${{ inputs.head_sha }}
+          path: ${{ runner.temp }}/nemoclaw-dogfood-${{ github.repository_id }}-${{ github.run_id }}-${{ github.run_attempt }}/output/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Remove dogfood review data from self-hosted runner
+        if: ${{ always() }}
+        working-directory: ${{ github.workspace }}
+        env:
+          REVIEW_REPOSITORY_ID: ${{ github.repository_id }}
+        run: |
+          set -eu
+          job_tmp="$RUNNER_TEMP/nemoclaw-dogfood-${REVIEW_REPOSITORY_ID}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          rm -rf -- "$job_tmp"

@@ -25,12 +25,9 @@ from dataclasses import dataclass
 class PutResult:
     """Backend result for a successful PutObject.
 
-    `etag` is required by nemo-relay's object_store S3 client — a missing
-    ETag header in the relay's 200 response causes object_store to record
-    `Error::MissingEtag`, which then permanently disables the sink for the
-    rest of the process lifetime. Backends that don't natively produce an
-    ETag should synthesize one (e.g. MD5 of the body) rather than returning
-    "".
+    `etag` retains downstream object-store metadata for operator diagnostics;
+    it is not part of the native NeMo Relay HTTP response contract. Backends
+    that do not produce an ETag may return "".
 
     `key` is the effective object key the backend actually wrote (after any
     prefixing). The relay logs it on success so the operator sees the real
@@ -92,7 +89,7 @@ class StorageBackend(ABC):
         body: bytes,
         content_type: str | None,
     ) -> PutResult:
-        """Upload `body` to `bucket/key`. Returns the ETag (or equivalent).
+        """Upload `body` to `bucket/key`. Returns downstream write metadata.
 
         Raise `BackendError(status, code, message)` for application errors,
         `BackendTransportError(str(e))` for transport failures. Anything
