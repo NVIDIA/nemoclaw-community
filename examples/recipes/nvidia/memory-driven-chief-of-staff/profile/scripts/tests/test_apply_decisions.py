@@ -128,10 +128,6 @@ class TestApply(unittest.TestCase):
         self.assertEqual(self.q("SELECT count(*) FROM cursors"), [(0,)])
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
-
 class TestCapsAcrossBatches(unittest.TestCase):
     """The caps bound the open population, not one envelope.
 
@@ -221,4 +217,4 @@ class TestCapsAcrossBatches(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    unittest.main(verbosity=2)

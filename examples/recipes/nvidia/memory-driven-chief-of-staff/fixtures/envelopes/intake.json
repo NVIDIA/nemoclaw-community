@@ -1,6 +1,8 @@
 {
-  "_comment": "A stand-in for one model turn. The judgments here — what to track, in what order, and which rows the memory says the user chose — are written by hand so the walkthrough is deterministic. Everything downstream of this file is the real code: the tier caps, the intent gate, the ranking, and the writer.",
-  "_source": "Hand-written for this example against fixtures/graph_messages.json and fixtures/slack_messages.json",
+  "source": "Hand-written for this example against fixtures/graph_messages.json and fixtures/slack_messages.json",
+  "created": "2026-08-19",
+  "license": "Apache-2.0",
+  "note": "One decision envelope, standing in for a single model turn so the walkthrough is deterministic and needs no inference endpoint. The judgments here \u2014 what to track, in what order, and which rows the memory says the user chose \u2014 are written by hand. Everything downstream of this file is the shipped code: the intent gate, the tier caps, the population ranking and the transactional writer.",
   "version": 1,
   "pass": "intake",
   "decisions": [
@@ -70,8 +72,18 @@
       "kind": null,
       "est_effort": "minutes"
     },
-    {"source_id": "msg-automated-noise", "decision": "SKIP"},
-    {"source_id": "C0TEAM0001:1787056800.000300", "decision": "SKIP"}
+    {
+      "source_id": "msg-automated-noise",
+      "decision": "SKIP"
+    },
+    {
+      "source_id": "C0TEAM0001:1787056800.000300",
+      "decision": "SKIP"
+    }
   ],
-  "cursor": {"source": "email", "scope": "inbox", "value": "fixture-delta-1"}
+  "cursor": {
+    "source": "email",
+    "scope": "inbox",
+    "value": "fixture-delta-1"
+  }
 }

@@ -72,10 +72,6 @@ class TestCapsAndCascade(unittest.TestCase):
         self.assertEqual(t.count("low"), 0)
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
-
 class TestPinsBeatTheGate(unittest.TestCase):
     """A pin is an instruction; the gate is an inference. The instruction wins."""
 
@@ -106,3 +102,7 @@ class TestPinsBeatTheGate(unittest.TestCase):
         got = {r["source_id"]: r["priority"]
                for r in rank_population(self._rows(3, gated=0, pinned={"m2": "high"}))}
         self.assertEqual(got["m2"], "high")
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

@@ -77,10 +77,6 @@ class TestPreferences(unittest.TestCase):
         self.assertEqual([c.dimension for c in got], ["source_kind"])
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
-
 class TestDomainRulesNeedCorroboration(unittest.TestCase):
     """A domain rule is a claim about strangers, so one sender cannot make it.
 
@@ -110,3 +106,7 @@ class TestDomainRulesNeedCorroboration(unittest.TestCase):
         got = candidates(self._ignores("a@example.com", 2) + self._ignores("b@example.com", 2))
         self.assertEqual([c.dimension for c in got if c.dimension == "sender"], [])
         self.assertTrue(any(c.dimension == "domain" for c in got))
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

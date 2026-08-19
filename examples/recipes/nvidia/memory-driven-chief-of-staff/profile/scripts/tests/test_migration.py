@@ -81,10 +81,6 @@ class TestMigration(unittest.TestCase):
             self.assertEqual(current_version(c), SCHEMA_VERSION)
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
-
 class TestVersionGuardOnTheRealPath(unittest.TestCase):
     """A store from the future is refused before anything writes to it.
 
@@ -139,3 +135,7 @@ class TestVersionGuardOnTheRealPath(unittest.TestCase):
             version = c.execute(
                 "SELECT value FROM meta WHERE key='schema_version'").fetchone()[0]
         self.assertEqual(int(version), migrate.SCHEMA_VERSION)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

@@ -121,10 +121,6 @@ class TestInvariants(unittest.TestCase):
         self.assertTrue(first, "the fixture was supposed to be dirty")
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
-
 class TestFrontmatter(unittest.TestCase):
     """Required keys and constrained values, per page type.
 
@@ -190,3 +186,7 @@ class TestFrontmatter(unittest.TestCase):
         """check_all runs it, so the scheduled repair job sees it too."""
         self._drop_line(self.person, "name")
         self.assertIn("missing-field", self.kinds(check_all(self.root, date(2026, 8, 18))))
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
