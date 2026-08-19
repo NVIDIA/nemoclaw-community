@@ -12,10 +12,51 @@ sys.path.insert(0, str(HERE))
 
 SCHEMA = (HERE / "schema.sql").read_text(encoding="utf-8")
 
-# The distribution manifest is the real source of what an install replaces.
-# Reading it here rather than restating it means this test tracks the shipped
-# artifact instead of a copy that can drift away from it.
-DIST_OWNED = {"SOUL.md", "schema.md", "skills", "scripts"}
+PROFILE = HERE.parent
+MANIFEST = PROFILE / "distribution.yaml"
+
+
+def read_manifest(path: Path = MANIFEST) -> dict:
+    """Parse the manifest without a YAML dependency.
+
+    The recipe imports nothing outside the standard library, and this file is a
+    flat mapping with one list and one folded block, so a general parser is not
+    needed. It is deliberately strict: an unreadable manifest raises here rather
+    than yielding an empty mapping that would make every assertion below vacuous.
+    """
+    data: dict = {}
+    key = None
+    mode = None                                # "list", "block", or None
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        if raw.lstrip().startswith("#"):
+            continue
+        if not raw.strip():
+            continue
+        if raw.startswith((" ", "\t")):        # a continuation of the current key
+            item = raw.strip()
+            if mode == "list" and item.startswith("- "):
+                data.setdefault(key, []).append(item[2:].strip().strip("'\""))
+            elif mode == "block":
+                data[key] = (data[key] + " " + item).strip()
+            continue
+        name, _, value = raw.split("#", 1)[0].partition(":")
+        key = name.strip()
+        value = value.strip().strip("'\"")
+        if value in (">", ">-", "|", "|-"):
+            data[key], mode = "", "block"
+        elif value:
+            data[key], mode = value, None
+        else:
+            data[key], mode = [], "list"
+    return data
+
+
+MANIFEST_DATA = read_manifest()
+
+# What an install replaces, read from the shipped manifest rather than
+# restated. A copy here would drift: it already had, omitting
+# `distribution.yaml` itself while claiming to be the manifest's contents.
+DIST_OWNED = set(MANIFEST_DATA["distribution_owned"])
 
 # Paths the runtime treats as user-owned. This is a claim about Hermes, not
 # about this repository, so the test cannot prove it — it pins the assumption
@@ -206,6 +247,196 @@ class TestNoSourceMutation(unittest.TestCase):
             self.assertNotRegex(
                 text, r"isRead[\"']?\s*:",
                 f"{path.name} appears to build a payload carrying isRead")
+
+
+class TestProfileHomeResolution(unittest.TestCase):
+    """Both supported profile layouts resolve; a non-profile does not.
+
+    Hermes serves the default profile from the runtime root itself and named
+    profiles from `<root>/profiles/<name>`, so the two are indistinguishable by
+    path name. An earlier version of this guard rejected any home whose last
+    component was `.hermes`, which refused the default profile — every default
+    installation, on the destructive path, with no test covering it.
+    """
+
+    def setUp(self):
+        for m in ("_db",):
+            sys.modules.pop(m, None)
+        import _db                             # noqa: E402
+        self._db = _db
+        self.root = Path(tempfile.mkdtemp())
+
+    def _profile(self, path: Path) -> Path:
+        path.mkdir(parents=True, exist_ok=True)
+        (path / "SOUL.md").write_text("persona\n", encoding="utf-8")
+        (path / "skills").mkdir(exist_ok=True)
+        return path
+
+    def _resolve(self, home: Path) -> Path:
+        os.environ["HERMES_HOME"] = str(home)
+        return self._db.ledger_path()
+
+    def test_the_default_profile_is_the_runtime_root_itself(self):
+        home = self._profile(self.root)
+        (home / "profiles").mkdir()            # named profiles live alongside
+        (home / "hermes-agent").mkdir()        # so does the runtime checkout
+        self.assertEqual(self._resolve(home),
+                         home / "workspace" / "ledger" / "state.db")
+
+    def test_a_named_profile_resolves(self):
+        home = self._profile(self.root / "profiles" / "work")
+        self.assertEqual(self._resolve(home),
+                         home / "workspace" / "ledger" / "state.db")
+
+    def test_a_home_named_dot_hermes_is_not_rejected_for_its_name(self):
+        """The name carries no information; only a marker does."""
+        home = self._profile(self.root / ".hermes")
+        self.assertEqual(self._resolve(home),
+                         home / "workspace" / "ledger" / "state.db")
+
+    def test_each_marker_alone_identifies_a_profile(self):
+        for marker in self._db.PROFILE_MARKERS:
+            with self.subTest(marker=marker):
+                home = Path(tempfile.mkdtemp()) / "p"
+                home.mkdir()
+                (home / "unrelated.txt").write_text("x", encoding="utf-8")
+                target = home / marker
+                target.mkdir() if "." not in marker else target.write_text("x", encoding="utf-8")
+                self.assertEqual(self._resolve(home).parent.parent.parent, home)
+
+    def test_a_fresh_directory_is_accepted_so_a_first_run_can_create_the_store(self):
+        home = self.root / "brand-new"
+        home.mkdir()
+        self.assertEqual(self._resolve(home),
+                         home / "workspace" / "ledger" / "state.db")
+
+    def test_a_directory_that_is_not_a_profile_is_refused(self):
+        home = self.root / "not-a-profile"
+        home.mkdir()
+        (home / "Documents").mkdir()
+        (home / "notes.txt").write_text("x", encoding="utf-8")
+        with self.assertRaises(RuntimeError) as caught:
+            self._resolve(home)
+        self.assertIn("profile home", str(caught.exception))
+
+    def test_an_unset_home_is_refused_rather_than_guessed(self):
+        os.environ.pop("HERMES_HOME", None)
+        with self.assertRaises(RuntimeError) as caught:
+            self._db.ledger_path()
+        self.assertIn("HERMES_HOME", str(caught.exception))
+
+    def test_a_file_is_not_a_profile_home(self):
+        home = self.root / "afile"
+        home.write_text("x", encoding="utf-8")
+        with self.assertRaises(RuntimeError):
+            self._resolve(home)
+
+
+class TestShippedProfileInstalls(unittest.TestCase):
+    """A deterministic stand-in for `hermes profile install`.
+
+    The manifest and the persona were both missing from an earlier revision and
+    no test noticed, because every test drives the scripts directly and none of
+    them installs anything. These assertions are about the artifact rather than
+    the code: what the manifest declares, what the directory actually holds, and
+    whether copying one onto a profile home produces something that runs.
+    """
+
+    REQUIRED_KEYS = ("name", "version", "description", "hermes_requires",
+                     "author", "license", "distribution_owned")
+
+    def test_the_manifest_declares_everything_hermes_reads(self):
+        for key in self.REQUIRED_KEYS:
+            with self.subTest(key=key):
+                self.assertTrue(MANIFEST_DATA.get(key), f"manifest has no {key}")
+
+    def test_every_declared_owned_path_is_actually_shipped(self):
+        for name in DIST_OWNED:
+            with self.subTest(path=name):
+                self.assertTrue((PROFILE / name).exists(),
+                                f"manifest declares {name} but the profile has no such path")
+
+    def test_the_manifest_declares_itself(self):
+        """It is replaced on update like anything else the distribution owns."""
+        self.assertIn("distribution.yaml", DIST_OWNED)
+
+    def test_nothing_shipped_at_the_profile_root_is_undeclared(self):
+        """An undeclared file is not installed, so it may as well not exist."""
+        shipped = {entry.name for entry in PROFILE.iterdir()
+                   if not entry.name.startswith(".")}
+        self.assertEqual(shipped - DIST_OWNED, set())
+
+    def test_the_persona_and_schema_are_present_and_not_empty(self):
+        for name in ("SOUL.md", "schema.md"):
+            with self.subTest(file=name):
+                self.assertGreater(len((PROFILE / name).read_text(encoding="utf-8").strip()),
+                                   0, f"{name} is empty")
+
+    def test_every_skill_has_a_skill_file_with_frontmatter(self):
+        skills = sorted(p for p in (PROFILE / "skills").iterdir() if p.is_dir())
+        self.assertTrue(skills, "the profile ships no skills")
+        for skill in skills:
+            with self.subTest(skill=skill.name):
+                doc = skill / "SKILL.md"
+                self.assertTrue(doc.is_file(), f"{skill.name} has no SKILL.md")
+                self.assertTrue(doc.read_text(encoding="utf-8").startswith("---"),
+                                f"{skill.name}/SKILL.md has no frontmatter")
+
+    def test_installing_onto_a_profile_home_yields_a_working_store(self):
+        """Copy what the manifest owns, then use the result the way a job would."""
+        home = Path(tempfile.mkdtemp()) / "profile"
+        home.mkdir()
+        for name in DIST_OWNED:
+            src = PROFILE / name
+            if src.is_dir():
+                shutil.copytree(src, home / name)
+            else:
+                shutil.copy2(src, home / name)
+
+        os.environ["HERMES_HOME"] = str(home)
+        for module in ("_db", "migrate", "ranking", "apply_decisions"):
+            sys.modules.pop(module, None)
+        sys.path.insert(0, str(home / "scripts"))
+        try:
+            import _db                          # noqa: E402
+            self.assertTrue(_db.ensure_store().is_file())
+        finally:
+            sys.path.remove(str(home / "scripts"))
+            for module in ("_db", "migrate", "ranking", "apply_decisions"):
+                sys.modules.pop(module, None)
+
+    def test_the_installed_profile_is_recognised_as_a_profile_home(self):
+        """Which is what `ledger_path` requires before it will resolve."""
+        home = Path(tempfile.mkdtemp()) / "profile"
+        home.mkdir()
+        shutil.copy2(MANIFEST, home / "distribution.yaml")
+        sys.modules.pop("_db", None)
+        import _db                              # noqa: E402
+        os.environ["HERMES_HOME"] = str(home)
+        self.assertEqual(_db.ledger_path().parent.parent.parent, home)
+
+
+class TestTheSuiteRunsTheWayItIsDocumented(unittest.TestCase):
+    """Every test class must sit above its file's `__main__` guard.
+
+    A class defined after it is not yet defined when `unittest.main()` runs, so
+    running the file directly — which is how the README documents it — silently
+    skips the class. Discovery still finds it, so the two counts diverge and the
+    file reports a smaller number that still says OK. This has now happened
+    twice while addressing review feedback, each time hiding the very tests
+    that were added.
+    """
+
+    def test_no_test_class_is_defined_after_the_main_guard(self):
+        for path in sorted(Path(__file__).parent.glob("test_*.py")):
+            with self.subTest(file=path.name):
+                text = path.read_text(encoding="utf-8")
+                guard_at = text.find('if __name__ == "__main__":')
+                self.assertNotEqual(guard_at, -1, f"{path.name} has no main guard")
+                after = text[guard_at:]
+                self.assertNotIn("\nclass ", after,
+                                 f"{path.name} defines a class after its main guard, "
+                                 "so running the file directly skips it")
 
 
 if __name__ == "__main__":

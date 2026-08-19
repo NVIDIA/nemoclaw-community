@@ -127,7 +127,7 @@ cd profile/scripts
 for t in tests/*.py; do python3 "$t" || break; done
 ```
 
-Ninety-three tests, no network and no credentials. They cover the ten
+One hundred and ten tests, no network and no credentials. They cover the ten
 acceptance criteria agreed on the proposal issue, plus three areas the issue
 does not
 enumerate:
@@ -136,7 +136,7 @@ enumerate:
 | --- | --- |
 | Schema migration | `tests/test_migration.py` |
 | Invariant repair, idempotency, compaction detection | `tests/test_memory_check.py` |
-| Concurrency, crash recovery, reinstall survival, no source mutation | `tests/test_durability.py` |
+| Concurrency, crash recovery, reinstall survival, no source mutation, profile-home resolution, installation | `tests/test_durability.py` |
 | Bounded ranking | `tests/test_ranking.py` |
 | Preference updates | `tests/test_preferences.py` |
 | Source normalization | `tests/test_normalize.py` |
@@ -163,8 +163,14 @@ distribution install and update leave alone — measured, not assumed: a row
 written there survived both `hermes profile install --force` and
 `hermes profile update` on Hermes 0.19.0.
 
-Both directories are created private to their owner. The ledger holds
-message subjects, senders, and bodies once a real source is connected.
+Both directories are created with owner-only permissions (`0700`). That is a
+filesystem access control, not encryption: it stops another account on the same
+machine from reading the store, and it does nothing against anyone who can read
+the disk. The ledger holds message subjects, senders, and bodies once a real
+source is connected, so before a connector stores real messages this recipe
+requires either an encrypted volume underneath `$HERMES_HOME` or an
+application-level encryption design. That requirement is separate from
+credential custody, which is the gateway's job and never the store's.
 
 ## Privacy
 
@@ -178,7 +184,14 @@ because it shapes the schema you are reviewing.
 - Message bodies are cleared on a schedule; metadata and the audit trail are
   kept, so history stays inspectable without content sitting on disk.
 - An item deleted at the source is tombstoned locally and its body cleared
-  immediately.
+  immediately — **for Microsoft Graph only**, whose delta query reports
+  deletions explicitly. Slack has no equivalent on the surface this recipe
+  reads: a deleted message simply stops appearing in `conversations.history`,
+  and its absence from a bounded, paginated read is indistinguishable from it
+  being outside the window. Reliable deletion notice needs the Events API or
+  RTM, which this design does not use. So for Slack the guarantee is the weaker
+  one it can actually keep: content ages out on the scheduled body-clearing
+  pass, rather than at the moment of deletion.
 - Senders, domains, and channels can be excluded at ingest, before anything is
   written.
 

@@ -22,22 +22,57 @@ from pathlib import Path
 BUSY_TIMEOUT_MS = 5000
 
 
+# Entries Hermes puts in a profile home. `distribution.yaml` is the one Hermes
+# itself reads to identify an installed distribution, and this recipe ships it;
+# the rest are what a profile carries whether or not a distribution is
+# installed. Any single one is enough — a profile part-way through setup is
+# still a profile.
+PROFILE_MARKERS = ("distribution.yaml", "SOUL.md", ".env",
+                   "memories", "sessions", "skills", "cron")
+
+# What this recipe itself creates. A directory holding only these has not been
+# identified as a profile yet, but it is one we made, so it is not evidence of
+# a wrong target.
+OURS = {"workspace"}
+
+
+def _is_profile_home(root: Path) -> bool:
+    """Whether `root` looks like a Hermes profile home.
+
+    The default profile is `~/.hermes` itself and named profiles live at
+    `~/.hermes/profiles/<name>`, so the runtime root and a valid profile home
+    can be the same directory. The name therefore cannot decide this — an
+    earlier version rejected any path ending in `.hermes` and refused the
+    default profile outright. A marker can decide it, and applies equally to
+    both layouts.
+    """
+    if any((root / marker).exists() for marker in PROFILE_MARKERS):
+        return True
+    # A fresh directory is accepted: `hermes profile create` makes the home
+    # before anything populates it, and refusing that would mean the store
+    # could never be created on a first run.
+    return not (set(entry.name for entry in root.iterdir()) - OURS)
+
+
 def ledger_path() -> Path:
     """`workspace/` is user-owned, so the store survives profile reinstall.
 
-    HERMES_HOME must be set and must not be the runtime root. Falling back to
-    a default would point destructive commands at whichever profile happens to
-    be active — during development this module reported deleting a ledger
-    belonging to a different profile entirely.
+    HERMES_HOME must be set: falling back to a default points every command at
+    whichever profile happens to be active, and during development that made a
+    reset report deleting a ledger belonging to a different profile entirely.
     """
     home = os.environ.get("HERMES_HOME", "").strip()
     if not home:
         raise RuntimeError("HERMES_HOME is not set; refusing to guess the profile home")
     root = Path(home)
-    if root.name == ".hermes":
+    if root.exists() and not root.is_dir():
+        raise RuntimeError(f"HERMES_HOME is not a directory: {root}")
+    if root.is_dir() and not _is_profile_home(root):
         raise RuntimeError(
-            f"HERMES_HOME points at the runtime root ({root}), not a profile. "
-            "Set it to the profile home, e.g. <root>/profiles/<name>.")
+            f"HERMES_HOME does not look like a Hermes profile home: {root}. "
+            f"Expected one of {', '.join(PROFILE_MARKERS)} there. The default "
+            "profile is the Hermes root itself; named profiles live under "
+            "<root>/profiles/<name>.")
     return root / "workspace" / "ledger" / "state.db"
 
 
