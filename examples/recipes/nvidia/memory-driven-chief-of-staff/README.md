@@ -32,6 +32,7 @@ These terms appear throughout this document and in the code.
 | Obligation | One message that needs an action, with a tier, a position, and its own history. |
 | Tier | The priority band an obligation sits in: `high`, `medium`, or `low`. |
 | Envelope | The JSON document a model turn returns: a list of decisions for the writer to apply. The recipe's recorded turns are envelopes. |
+| Gate verdict | The recorded per-message answer to the intent gate: whether the memory shows the user chose this work. Stored as `intent_gated`. |
 | Intent gate | The rule that admits an obligation to the `high` tier only if the memory shows the user chose that work. External urgency alone does not qualify. |
 
 ## Why it exists
@@ -121,7 +122,8 @@ The seven steps:
    The step ends by re-running the shipped ranking over the same rows with the
    gate verdicts withheld: the `high` tier then holds none, which is what the
    reservation buys.
-3. **Correct.** The user pins a gate-passing row down. It leaves the `high`
+3. **Correct.** The user pins a gate-passing row to the bottom tier. It leaves
+   the `high`
    tier, because a pin outranks what the memory inferred, and the whole open
    list is re-ranked around it.
 4. **Correct again.** A row is ignored outright and leaves the open list.
@@ -161,22 +163,34 @@ The first run reports `"added": 8` and the second reports `"added": 0`, because
 intake is keyed on the source's own identifier. Both runs must use the same
 profile home, or the second run has nothing to recognize.
 
-The individual pieces are callable on their own, from the recipe root. Each
-requires `HERMES_HOME` to name an existing profile home; none of them creates
-the profile home itself. `correct.py` does create or migrate the store if it is
-absent, then exits `3` because no obligation matches. `memory_check.py` reads
-only `workspace/memory/` and needs no store at all.
-
-With `HERMES_HOME` unset, `correct.py` exits `1` with an unhandled
-`RuntimeError` naming the variable, and `memory_check.py` exits `2` reporting
-that it found no memory at `workspace/memory` relative to the current
-directory.
+The individual pieces are callable on their own, from the recipe root:
 
 ```bash
-python3 profile/scripts/memory_check.py                          # invariants
-python3 profile/scripts/correct.py priority <source_id> low      # pin a tier
-python3 profile/scripts/correct.py ignore <source_id>            # stop tracking
+python3 profile/scripts/memory_check.py                     # invariants
+python3 profile/scripts/correct.py priority <source_id> low # pin a tier
+python3 profile/scripts/correct.py ignore <source_id>       # stop tracking
+python3 profile/scripts/correct.py unignore <source_id>     # track it again
 ```
+
+`correct.py` needs `HERMES_HOME` to name an existing profile home, and creates
+or migrates the store there if it is absent. `memory_check.py` is the
+exception: with no `HERMES_HOME` it falls back to `workspace/memory` under the
+current directory, and it needs no store at all. Neither creates the profile
+home itself.
+
+A correction applies only where it means something, so on a populated store:
+
+- All three refuse an obligation that is `done` and exit `3`. A completed
+  obligation is history, and rewriting it would turn finished work into a
+  standing instruction.
+- `priority` also refuses an ignored row and exits `3`, naming `unignore` as
+  the way back. This is easy to hit right after the walkthrough, which ignores
+  `msg-cc-only` in step 4.
+- Repeating a correction that is already in force changes nothing. It prints
+  `"changed": false` and exits `0`.
+- With no matching obligation, `correct.py` exits `3`. With `HERMES_HOME`
+  unset it exits `1` with an unhandled `RuntimeError` naming the variable, and
+  `memory_check.py` exits `2` reporting that it found no memory.
 
 ## Verify
 
@@ -191,7 +205,7 @@ echo "failed=$fail"
 cd ../..
 ```
 
-Expected result: every file ends with `OK`, the eight files report 140 tests in
+Expected result: every file ends with `OK`, the eight files report 150 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a broken build would still
 exit `0`.
@@ -204,11 +218,10 @@ exit `0`.
 | Bounded ranking, including user pins | `tests/test_ranking.py` |
 | Preference counting | `tests/test_preferences.py` |
 | Source normalization | `tests/test_normalize.py` |
-| Writer behavior, audit trail, caps across batches, correction idempotency | `tests/test_apply_decisions.py` |
+| Writer behavior, audit trail, caps across batches, correction idempotency, correction state transitions, displaced-row audit | `tests/test_apply_decisions.py` |
 | The walkthrough, and its central claims | `tests/test_walkthrough.py` |
 
-Three of these are worth calling out, because they assert constraints rather
-than observations.
+Four of these are worth calling out.
 
 - `TestNoSourceMutation` in `tests/test_durability.py` scans every module for
   write verbs and source-mutating calls, so "never writes back to the source"
@@ -221,11 +234,13 @@ than observations.
   claims against the store the run produced: the gate bounding the top tier,
   loud urgency staying out of it, the pin deciding the tier and surviving a
   later pass, and both corrections being attributed to the user.
-- Five of its tests assert against the printed output instead, because what is
-  printed is itself a claim: that the run discloses both recorded turns, that
-  it says the gate verdict is recorded, that it shows the top tier emptying
-  without the gate, and that the memory check is seen to fail as well as pass.
-  It does not assert every line the script prints.
+- Several of its tests assert against the printed output instead, because what
+  is printed is itself a claim. They check that the run names which part is
+  recorded, that it discloses both recorded turns, that it says the gate
+  verdict is recorded, that it scopes the seed-memory claim to the tiers, that
+  it shows the top tier emptying without the gate, and that the memory check is
+  seen to fail as well as pass. It does not assert every line the script
+  prints.
 
 ## Where state lives
 
@@ -267,7 +282,7 @@ Once a connector is attached:
   cannot be told apart from it lying outside the window. Reliable notice
   requires the Slack Events API or the Real Time Messaging (RTM) API, neither
   of which this design uses. Slack content
-  therefore ages out on the scheduled body-clearing pass rather than at the
+  will therefore age out on the scheduled body-clearing pass rather than at the
   moment of deletion.
 - Senders, domains, and channels will be excludable at ingest, before anything
   is written.

@@ -27,7 +27,7 @@ against the fixtures and against live sources.
 | --- | --- |
 | `msg-priorities-match` | Matches an entry in `memory/attention/current_priorities.md`, so a judging turn gives it a gate verdict and it can reach the `high` tier. |
 | `msg-urgent-not-chosen` | Loud external urgency that matches nothing the user chose: a mandatory deadline, with "URGENT" in the subject. Capped at `medium`. |
-| `msg-quiet-decay` | Dated seven days before the rest of the batch, with no follow-up in it. It is named in `memory/attention/current_priorities.md`, so it carries a gate verdict too. The walkthrough pins it down by hand to show a correction outranking the memory. |
+| `msg-quiet-decay` | Dated seven days before the rest of the batch, and nothing later in the corpus follows up on it. It is named in `memory/attention/current_priorities.md`, so it carries a gate verdict too. The walkthrough pins it to the bottom tier by hand, to show a correction outranking the memory. |
 | `msg-automated-noise` | A build notification from a `noreply@` address. Skipped, and skipping is terminal, so it is never judged again. |
 | `msg-cc-only` | The user is on Cc rather than To. Being copied is not being asked, so `addressing` is `broadcast`. |
 | `D0DIRECT01` message | A direct message. `addressing` is `direct`, with no mention needed. |

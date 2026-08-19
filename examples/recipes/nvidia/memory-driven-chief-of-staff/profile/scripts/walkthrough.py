@@ -103,8 +103,14 @@ def run(fixtures: Path) -> int:
 
     _heading(1, "Collect — fixture messages through the real normalizer")
     loaded = load_fixtures.load(fixtures)
-    _say(f"  {loaded['added']} messages written to items, seed memory at "
-         f"{Path(loaded['memory']).name}/")
+    if loaded.get("seeded"):
+        _say(f"  {loaded['added']} messages written to items, seed memory at "
+             f"{Path(loaded['memory']).name}/")
+    else:
+        # This walkthrough is documentation that executes, so it must not
+        # announce a seed memory that a fixture set did not ship.
+        _say(f"  {loaded['added']} messages written to items. This fixture set "
+             "ships no seed memory.")
     _say("  Nothing is judged yet. This is what ingestion alone produces.")
 
     _heading(2, "Judge — the first canned model turn, then the real writer")

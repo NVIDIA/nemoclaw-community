@@ -67,7 +67,8 @@ def load(fixtures: Path) -> dict[str, int]:
                        text, count=1, flags=re.M),
                 encoding="utf-8")
 
-    return {"seen": len(items), "added": added, "memory": str(memory_dst)}
+    return {"seen": len(items), "added": added, "memory": str(memory_dst),
+            "seeded": memory_dst.is_dir()}
 
 
 def main() -> int:
