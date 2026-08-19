@@ -205,7 +205,7 @@ echo "failed=$fail"
 cd ../..
 ```
 
-Expected result: every file ends with `OK`, the eight files report 150 tests in
+Expected result: every file ends with `OK`, the eight files report 152 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a broken build would still
 exit `0`.
@@ -321,6 +321,12 @@ it as well if you want the checkout byte-for-byte as you found it.
   testable. Deciding what to compact needs the skill, which needs a model.
 - The memory ships with a seed that passes its own checks. It illustrates the
   schema; it is not a starting point for real use.
+- The audit trail records one row per obligation a correction displaces, and
+  `events` is append-only. That is deliberate — the store has to be able to
+  explain why a row moved — but the cost scales with the open list: on a
+  200-row list one ignore writes about 100 audit rows. A long-lived store with
+  a large open list will need a compaction path for `reranked` events, which
+  this phase does not provide.
 - Paths in the skills are written against `$HERMES_HOME` rather than relative
   to a working directory. This is not a style choice. The agent's working
   directory is not the profile home, so a relative path resolves to nothing.

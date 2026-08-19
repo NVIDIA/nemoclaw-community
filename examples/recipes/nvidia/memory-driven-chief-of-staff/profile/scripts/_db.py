@@ -133,7 +133,11 @@ def ensure_store(schema_sql: Path | None = None) -> Path:
             migrate(conn)
             conn.execute("COMMIT")
         except Exception:
-            conn.execute("ROLLBACK")
+            if conn.in_transaction:
+                try:
+                    conn.execute("ROLLBACK")
+                except Exception:
+                    pass
             raise
     return path
 
@@ -154,7 +158,17 @@ def write_txn(path: Path | None = None):
         yield conn
         conn.execute("COMMIT")
     except Exception:
-        conn.execute("ROLLBACK")
+        # Roll back only if a transaction actually opened, and never let the
+        # rollback's own failure replace the original one. `BEGIN IMMEDIATE`
+        # fails on a busy database, at which point there is nothing to roll
+        # back — and an unconditional ROLLBACK then raises "cannot rollback -
+        # no transaction is active", which is what the caller sees instead of
+        # "database is locked". The cleanup would be reported as the fault.
+        if conn.in_transaction:
+            try:
+                conn.execute("ROLLBACK")
+            except Exception:
+                pass
         raise
     finally:
         conn.close()

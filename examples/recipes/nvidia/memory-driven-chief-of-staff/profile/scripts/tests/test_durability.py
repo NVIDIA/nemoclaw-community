@@ -4,7 +4,7 @@
 """Acceptance: concurrency, crash recovery, reinstall survival, and the
 promise that no source system is ever written to."""
 
-import os, re, shutil, sqlite3, sys, tempfile, threading, unittest
+import ast, os, re, shutil, sqlite3, sys, tempfile, threading, unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parents[1]
@@ -469,15 +469,66 @@ class TestTheSuiteRunsTheWayItIsDocumented(unittest.TestCase):
     """
 
     def test_no_test_class_is_defined_after_the_main_guard(self):
+        # Parsed rather than string-matched: this very file contains the guard
+        # as a string literal, and searching for it found that literal first,
+        # which made every class below look misplaced.
         for path in sorted(Path(__file__).parent.glob("test_*.py")):
             with self.subTest(file=path.name):
-                text = path.read_text(encoding="utf-8")
-                guard_at = text.find('if __name__ == "__main__":')
-                self.assertNotEqual(guard_at, -1, f"{path.name} has no main guard")
-                after = text[guard_at:]
-                self.assertNotIn("\nclass ", after,
-                                 f"{path.name} defines a class after its main guard, "
-                                 "so running the file directly skips it")
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+                guards = [n.lineno for n in tree.body
+                          if isinstance(n, ast.If)
+                          and ast.dump(n.test).find("__main__") != -1]
+                self.assertTrue(guards, f"{path.name} has no main guard")
+                classes = [n.lineno for n in tree.body
+                           if isinstance(n, ast.ClassDef)]
+                late = [line for line in classes if line > min(guards)]
+                self.assertEqual(late, [],
+                                 f"{path.name} defines a class after its main guard "
+                                 f"at line(s) {late}, so running the file directly "
+                                 "skips it")
+
+
+class TestAFailedWriteReportsItsOwnCause(unittest.TestCase):
+    """The error a caller sees must be the one that stopped the write.
+
+    `BEGIN IMMEDIATE` fails on a busy database, so no transaction opens. An
+    unconditional rollback then fails too, with "cannot rollback - no
+    transaction is active" — and that was what the caller saw, instead of
+    "database is locked". The cleanup was reported as the fault.
+    """
+
+    def setUp(self):
+        os.environ["HERMES_HOME"] = self.tmp = tempfile.mkdtemp()
+        sys.modules.pop("_db", None)
+        import _db                              # noqa: E402
+        self._db = _db
+        self.path = _db.ensure_store()
+
+    def test_contention_surfaces_the_lock_error_not_the_rollback_error(self):
+        holder = sqlite3.connect(self.path, isolation_level=None)
+        holder.execute("BEGIN IMMEDIATE")       # hold the write lock
+        try:
+            with self.assertRaises(sqlite3.OperationalError) as caught:
+                with self._db.write_txn() as conn:
+                    conn.execute("SELECT 1")
+            message = str(caught.exception)
+            self.assertIn("locked", message)
+            self.assertNotIn("cannot rollback", message)
+        finally:
+            holder.execute("ROLLBACK")
+            holder.close()
+
+    def test_a_failure_inside_the_transaction_still_rolls_back(self):
+        """The guard must not stop a real rollback from happening."""
+        with self.assertRaises(ValueError):
+            with self._db.write_txn() as conn:
+                conn.execute(
+                    "INSERT INTO items(source_id, source, scope, event_at)"
+                    " VALUES ('rolled-back','email','inbox','2026-08-18T00:00:00Z')")
+                raise ValueError("boom")
+        with sqlite3.connect(self.path) as c:
+            self.assertEqual(
+                c.execute("SELECT COUNT(*) FROM items").fetchone()[0], 0)
 
 
 if __name__ == "__main__":

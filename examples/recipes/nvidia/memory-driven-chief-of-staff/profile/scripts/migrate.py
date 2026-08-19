@@ -91,7 +91,11 @@ def open_store(path: Path) -> sqlite3.Connection:
         migrate(conn)
         conn.execute("COMMIT")
     except Exception:
-        conn.execute("ROLLBACK")
+        if conn.in_transaction:
+            try:
+                conn.execute("ROLLBACK")
+            except Exception:
+                pass
         conn.close()
         raise
     return conn
