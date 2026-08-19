@@ -7,11 +7,14 @@
 set -euo pipefail
 case "${1:-}" in
   "") ;;
-  -h|--help)
+  -h | --help)
     printf 'Usage: bash scripts/autoheal/uninstall.sh\n\nRemoves only the optional NemoClaw auto-heal user services.\n'
     exit 0
     ;;
-  *) printf 'Unknown option: %s\n' "$1" >&2; exit 2 ;;
+  *)
+    printf 'Unknown option: %s\n' "$1" >&2
+    exit 2
+    ;;
 esac
 
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
@@ -19,6 +22,7 @@ CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/nemoclaw-autoheal"
 units=(
   nemoclaw-hermes-proxy.service
   nemoclaw-hermes-gateway-forward.service
+  nemoclaw-hermes-runtime.service
   nemoclaw-hermes-watchdog.service
   nemoclaw-hermes-watchdog.timer
   nemoclaw-slack-response-monitor.service

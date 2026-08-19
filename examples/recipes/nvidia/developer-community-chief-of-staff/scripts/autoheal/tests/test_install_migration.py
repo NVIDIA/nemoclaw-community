@@ -99,6 +99,16 @@ exit 0
         ).read_text(encoding="utf-8")
         self.assertIn(str(installed_example_dir), gateway_unit)
         self.assertNotIn(OLD_EXAMPLE_DIR, gateway_unit)
+        runtime_unit = (unit_dir / "nemoclaw-hermes-runtime.service").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(str(installed_example_dir), runtime_unit)
+        self.assertIn(
+            "openshell sandbox exec --name ${SANDBOX_NAME} -- "
+            "/usr/local/bin/nemoclaw-start",
+            runtime_unit,
+        )
+        self.assertNotIn("/tmp/nemoclaw-proxy-env.sh", runtime_unit)
 
         systemctl_calls = self.systemctl_log.read_text(encoding="utf-8")
         for unit in (
@@ -119,6 +129,8 @@ exit 0
         result = self.run_installer()
 
         self.assertEqual(result.returncode, 0, result.stderr)
+        unit_dir = self.config_home / "systemd" / "user"
+        self.assertTrue((unit_dir / "nemoclaw-hermes-runtime.service").is_file())
         systemctl_calls = self.systemctl_log.read_text(encoding="utf-8")
         self.assertNotIn("--user restart ", systemctl_calls)
         self.assertNotIn("Migrated auto-heal from", result.stdout)

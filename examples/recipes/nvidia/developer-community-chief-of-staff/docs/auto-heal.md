@@ -94,12 +94,43 @@ the sandbox endpoint uses port `18080` but the upstream is missing.
 |---|---|
 | `nemoclaw-hermes-proxy.service` | Keeps the optional host TLS inference proxy running. |
 | `nemoclaw-hermes-gateway-forward.service` | Keeps `127.0.0.1:8642` forwarded to the sandbox Hermes gateway. |
+| `nemoclaw-hermes-runtime.service` | Launches recovered Hermes through OpenShell after watchdog recovery. |
 | `nemoclaw-hermes-watchdog.timer` | Runs health checks every minute and performs bounded recovery. |
 | `nemoclaw-slack-response-monitor.timer` | Detects unanswered allowed-user Slack DMs and recent transport errors every minute. |
 
-Recovery first restarts the affected host service or Hermes gateway. It rebuilds
-the sandbox only after a live Slack Socket Mode or Microsoft Graph probe confirms
-that sandbox egress is failing. Locks and cooldowns prevent repeated rebuilds.
+Recovery first restarts the affected host service or Hermes gateway. The
+watchdog confirms a gateway outage with three fixed probes, two seconds apart,
+before it restarts anything. It selects exactly one Docker container by the
+OpenShell managed-by and sandbox-name labels, stops the local recovery launcher,
+and terminates only the known Hermes runtime processes in that exact container.
+It does **not** restart the OpenShell container: current OpenShell sandboxes use
+a time-limited bootstrap token that may be expired when a watchdog runs, so a
+raw Docker restart can leave an older sandbox stuck in `Provisioning`. The
+watchdog instead verifies that the existing OpenShell supervisor still accepts
+a non-root `sandbox` exec, then starts the recovered Hermes entrypoint through
+`nemoclaw-hermes-runtime.service`, whose launch command is `openshell sandbox
+exec`. OpenShell reapplies the persisted sandbox, proxy, CA, and provider
+environment to that exec session. This preserves the sandbox writable layer and
+keeps the recovered workload inside OpenShell's process and network policy
+boundaries. Credentials are never added to recovery command arguments.
+The runtime unit is a disabled recovery launcher, not the health authority.
+The watchdog verifies a new gateway process ID and process start time, the
+non-root workload identity, gateway health, and the exact Slack policy after
+every launch.
+
+The watchdog does not hot-apply changes from the host `.env` file. After changing
+Outlook routing or Slack authorization values, use the documented
+`tear-down.sh` and `bring-up.sh` flow to recreate the sandbox with those values.
+Tear-down stops the local recovery launcher before it deletes the sandbox.
+
+Before the non-root relaunch, the watchdog repairs files left by older root-run
+recovery attempts. The repair is limited to Hermes writable state and known
+runtime files. It does not follow symbolic links or modify immutable
+`/sandbox/.hermes` configuration.
+
+The watchdog rebuilds the sandbox only after a live Slack Socket Mode or
+Microsoft Graph probe confirms that sandbox egress is failing. Locks and
+cooldowns prevent repeated rebuilds.
 
 ## Manual operation
 
@@ -107,6 +138,7 @@ that sandbox egress is failing. Locks and cooldowns prevent repeated rebuilds.
 $ bash scripts/autoheal/sanity-check.sh
 $ bash scripts/autoheal/sanity-check.sh --repair
 $ systemctl --user status nemoclaw-hermes-gateway-forward.service
+$ systemctl --user status nemoclaw-hermes-runtime.service
 $ systemctl --user list-timers 'nemoclaw-*'
 $ journalctl --user -u nemoclaw-hermes-watchdog.service -n 80 --no-pager
 $ journalctl --user -u nemoclaw-slack-response-monitor.service -n 80 --no-pager

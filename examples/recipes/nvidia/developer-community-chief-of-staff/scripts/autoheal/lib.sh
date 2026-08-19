@@ -34,12 +34,38 @@ sandbox_gateway_ok() {
     'curl -fsS --max-time 5 http://127.0.0.1:8642/health >/dev/null' >/dev/null 2>&1
 }
 
+sandbox_gateway_failure_confirmed() {
+  local attempt
+  for attempt in 1 2 3; do
+    if sandbox_gateway_ok; then
+      return 1
+    fi
+    if ((attempt < 3)); then
+      sleep 2
+    fi
+  done
+  return 0
+}
+
+normalized_slack_allowed_ids() {
+  python3 -c 'import sys; print(",".join(part.strip() for part in sys.argv[1].split(",") if part.strip()))' \
+    "${SLACK_ALLOWED_IDS:-}"
+}
+
 host_gateway_ok() {
   curl -fsS --max-time 5 http://127.0.0.1:8642/health >/dev/null 2>&1
 }
 
 sandbox_container() {
-  docker ps --format '{{.Names}}' | grep "^openshell-${AUTOHEAL_SANDBOX_NAME}" | head -n1 || true
+  local -a matches=()
+  mapfile -t matches < <(
+    docker ps \
+      --filter 'label=openshell.ai/managed-by=openshell' \
+      --filter "label=openshell.ai/sandbox-name=${AUTOHEAL_SANDBOX_NAME}" \
+      --format '{{.ID}}' 2>/dev/null
+  )
+  ((${#matches[@]} == 1)) || return 1
+  printf '%s\n' "${matches[0]}"
 }
 
 unit_is_installed() {
@@ -73,5 +99,5 @@ cooldown_elapsed() {
   now="$(date +%s)"
   last="$(state_timestamp "$name")"
   [[ "$last" =~ ^[0-9]+$ ]] || last=0
-  (( now - last >= cooldown ))
+  ((now - last >= cooldown))
 }

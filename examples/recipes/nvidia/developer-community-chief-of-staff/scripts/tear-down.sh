@@ -51,34 +51,49 @@ To remove the shared compatible-endpoint inference provider, run
 EOF
 }
 
-stop_mode=""   # "" | "stop" | "purge"
+stop_mode="" # "" | "stop" | "purge"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --stop-host-services)
-      [[ -n "$stop_mode" ]] && { echo "Error: --stop-host-services and --purge-host-services are mutually exclusive" >&2; usage >&2; exit 2; }
+      [[ -n "$stop_mode" ]] && {
+        echo "Error: --stop-host-services and --purge-host-services are mutually exclusive" >&2
+        usage >&2
+        exit 2
+      }
       stop_mode="stop"
       ;;
     --purge-host-services)
-      [[ -n "$stop_mode" ]] && { echo "Error: --stop-host-services and --purge-host-services are mutually exclusive" >&2; usage >&2; exit 2; }
+      [[ -n "$stop_mode" ]] && {
+        echo "Error: --stop-host-services and --purge-host-services are mutually exclusive" >&2
+        usage >&2
+        exit 2
+      }
       stop_mode="purge"
       ;;
-    -h|--help)
-      usage; exit 0
+    -h | --help)
+      usage
+      exit 0
       ;;
     *)
-      echo "Unknown argument: $1" >&2; usage >&2; exit 2
+      echo "Unknown argument: $1" >&2
+      usage >&2
+      exit 2
       ;;
   esac
   shift
 done
 
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl --user stop nemoclaw-hermes-runtime.service >/dev/null 2>&1 || true
+fi
+
 echo "Deleting sandbox $SANDBOX_NAME (if present)"
 openshell sandbox delete "$SANDBOX_NAME" 2>/dev/null || true
 
 echo "Deleting per-sandbox providers"
-openshell provider delete "$SANDBOX_NAME-outlook"           2>/dev/null || true
-openshell provider delete "$SANDBOX_NAME-github"            2>/dev/null || true
-openshell provider delete "$SANDBOX_NAME-slack"             2>/dev/null || true
+openshell provider delete "$SANDBOX_NAME-outlook" 2>/dev/null || true
+openshell provider delete "$SANDBOX_NAME-github" 2>/dev/null || true
+openshell provider delete "$SANDBOX_NAME-slack" 2>/dev/null || true
 openshell provider delete "$SANDBOX_NAME-atif-export-relay" 2>/dev/null || true
 
 case "$stop_mode" in

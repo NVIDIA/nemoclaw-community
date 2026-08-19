@@ -9,72 +9,245 @@ AUTOHEAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$AUTOHEAL_DIR/lib.sh"
 
-mkdir -p "$AUTOHEAL_STATE_DIR"
-exec 9>"$AUTOHEAL_STATE_DIR/watchdog.lock"
-flock -n 9 || exit 0
+slack_is_configured() {
+  [[ -n "${SLACK_BOT_TOKEN:-}" || -n "${SLACK_APP_TOKEN:-}" ]]
+}
+
+expected_slack_policy() {
+  local allowed_ids
+  allowed_ids="$(normalized_slack_allowed_ids)"
+  if [[ -n "$allowed_ids" ]]; then
+    printf 'SLACK_ALLOWED_USERS=%s\n' "$allowed_ids"
+  else
+    printf 'SLACK_ALLOW_ALL_USERS=true\n'
+  fi
+}
+
+slack_policy_environment_is_exact() {
+  local expected="$1" policy_environment="$2"
+  local expected_key opposite_key line
+  local exact_count=0 expected_key_count=0 opposite_key_count=0
+  expected_key="${expected%%=*}"
+  case "$expected_key" in
+    SLACK_ALLOWED_USERS) opposite_key=SLACK_ALLOW_ALL_USERS ;;
+    SLACK_ALLOW_ALL_USERS) opposite_key=SLACK_ALLOWED_USERS ;;
+    *) return 1 ;;
+  esac
+
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    [[ "$line" == "$expected" ]] && exact_count=$((exact_count + 1))
+    [[ "$line" == "${expected_key}="* ]] && expected_key_count=$((expected_key_count + 1))
+    [[ "$line" == "${opposite_key}="* ]] && opposite_key_count=$((opposite_key_count + 1))
+  done <<<"$policy_environment"
+
+  ((exact_count == 1 && expected_key_count == 1 && opposite_key_count == 0))
+}
 
 gateway_has_allowlist() {
-  local container expected
-  container="$(sandbox_container)"
-  expected="${SLACK_ALLOWED_IDS:-}"
-  [[ -z "${SLACK_BOT_TOKEN:-}" ]] && return 0
-  # An empty configured allowlist intentionally enables Slack's allow-all mode.
-  [[ -z "$expected" ]] && return 0
-  [[ -n "$container" ]] || return 1
-  docker exec "$container" bash -lc '
-    pid="$(pgrep -f "hermes gateway run" | head -n1 || true)"
+  local container expected policy_environment
+  slack_is_configured || return 0
+  container="$(sandbox_container)" || return 1
+  expected="$(expected_slack_policy)"
+  policy_environment="$(docker exec "$container" bash -c '
+    pid="$(pgrep -f "[h]ermes gateway run" | head -n1 || true)"
     [ -n "$pid" ] || exit 1
-    tr "\0" "\n" < "/proc/$pid/environ" | grep -Fx "SLACK_ALLOWED_USERS='"$expected"'"
-  ' >/dev/null 2>&1
+    tr "\0" "\n" < "/proc/$pid/environ" \
+      | grep -E "^SLACK_(ALLOWED_USERS|ALLOW_ALL_USERS)=" || true
+  ' 2>/dev/null)" || return 1
+  slack_policy_environment_is_exact "$expected" "$policy_environment"
 }
 
 recent_log_match() {
   local pattern="$1" container logs
-  container="$(sandbox_container)"
-  [[ -n "$container" ]] || return 1
+  container="$(sandbox_container)" || return 1
   logs="$(docker logs --since=15m --tail=5000 "$container" 2>&1 || true)"
   grep -Eiq "$pattern" <<<"$logs"
 }
 
 slack_socket_ok() {
+  local probe_script
   [[ -n "${SLACK_APP_TOKEN:-}" ]] || return 0
-  openshell sandbox exec --name "$AUTOHEAL_SANDBOX_NAME" -- bash -lc '
-    source /sandbox/.hermes-data/.env >/dev/null 2>&1 || source /sandbox/.hermes/.env >/dev/null 2>&1
-    body="$(curl -sS --max-time 12 -X POST -H "Authorization: Bearer ${SLACK_APP_TOKEN}" https://slack.com/api/apps.connections.open)" || exit 1
-    python3 -c "import json,sys; raise SystemExit(0 if json.loads(sys.argv[1]).get(\"ok\") else 1)" "$body"
-  ' >/dev/null 2>&1
+  probe_script='source /sandbox/.hermes-data/.env >/dev/null 2>&1 || source /sandbox/.hermes/.env >/dev/null 2>&1; body="$(curl -sS --max-time 12 -X POST -H "Authorization: Bearer ${SLACK_APP_TOKEN}" https://slack.com/api/apps.connections.open)" || exit 1; printf "%s" "$body" | python3 -c "import json,sys; raise SystemExit(0 if json.load(sys.stdin).get(\"ok\") else 1)"'
+  openshell sandbox exec --name "$AUTOHEAL_SANDBOX_NAME" -- \
+    bash -c "$probe_script" >/dev/null 2>&1
 }
 
 outlook_graph_ok() {
   [[ -n "${OUTLOOK_CLIENT_ID:-}" ]] || return 0
-  openshell sandbox exec --name "$AUTOHEAL_SANDBOX_NAME" -- bash -lc \
+  openshell sandbox exec --name "$AUTOHEAL_SANDBOX_NAME" -- bash -c \
     '/usr/bin/python3 /sandbox/.hermes-data/skills/outlook-email-search/scripts/search_emails.py --since 1d --top 1 >/dev/null' \
     >/dev/null 2>&1
 }
 
-restart_gateway() {
-  local container
-  container="$(sandbox_container)"
-  [[ -n "$container" ]] || return 1
-  autoheal_log "restarting Hermes gateway in ${AUTOHEAL_SANDBOX_NAME}"
-  docker exec "$container" bash -lc '
-    set +e
-    pkill -f "[h]ermes gateway run" 2>/dev/null
-    pkill -f "[s]ocat TCP-LISTEN:8642" 2>/dev/null
-    pkill -f "[n]emo-relay --bind" 2>/dev/null
-    pkill -f "[o]utlook-bridge.py" 2>/dev/null
-    sleep 2
-    nohup /usr/local/bin/nemoclaw-start >/tmp/nemoclaw-autoheal-restart.log 2>&1 < /dev/null &
-  ' >/dev/null
+sandbox_exec_runs_as_sandbox() {
+  local identity_script
+  identity_script='actual_uid="$(id -u)"; sandbox_uid="$(id -u sandbox)"; [ "$actual_uid" -ne 0 ] && [ "$actual_uid" = "$sandbox_uid" ]'
+  openshell sandbox exec --name "$AUTOHEAL_SANDBOX_NAME" -- \
+    sh -c "$identity_script" >/dev/null 2>&1
+}
 
+repair_legacy_gateway_ownership() {
+  local container="$1"
+  docker exec --user root "$container" bash -c '
+    set -euo pipefail
+    paths=(
+      /sandbox/.hermes-data
+      /tmp/nemoclaw-start.log
+      /tmp/nemoclaw-proxy-env.sh
+      /tmp/nemoclaw-autoheal-restart.log
+      /tmp/gateway.log
+      /tmp/nemo-relay.log
+      /tmp/atif-bridge.log
+      /tmp/outlook-bridge.log
+      /tmp/atif
+    )
+    for path in "${paths[@]}"; do
+      if [[ -e "$path" || -L "$path" ]]; then
+        chown --no-dereference --recursive sandbox:sandbox -- "$path"
+      fi
+    done
+  ' >/dev/null 2>&1
+}
+
+stop_hermes_runtime_processes() {
+  local container="$1"
+  docker exec --user root "$container" bash -c '
+    set -euo pipefail
+    patterns=(
+      "[n]emoclaw-start"
+      "[h]ermes gateway run"
+      "[s]ocat TCP-LISTEN:8642"
+      "[n]emo-relay --bind"
+      "[a]tif-bridge.py"
+      "[o]utlook-bridge.py"
+      "[t]ail -n +1 -F /tmp/gateway.log"
+    )
+    for pattern in "${patterns[@]}"; do
+      pkill -TERM -f "$pattern" 2>/dev/null || true
+    done
+    sleep 2
+    for pattern in "${patterns[@]}"; do
+      pkill -KILL -f "$pattern" 2>/dev/null || true
+    done
+    for pattern in "${patterns[@]}"; do
+      if pgrep -f "$pattern" >/dev/null 2>&1; then
+        exit 1
+      fi
+    done
+  ' >/dev/null 2>&1
+}
+
+gateway_process_marker() {
+  local container="$1"
+  docker exec --user sandbox "$container" sh -c '
+    pid="$(pgrep -f "[h]ermes gateway run" | head -n1 || true)"
+    [ -n "$pid" ] || exit 1
+    gateway_uid="$(awk "/^Uid:/ {print \$2}" "/proc/$pid/status")" || exit 1
+    sandbox_uid="$(id -u sandbox)" || exit 1
+    [ "$gateway_uid" = "$sandbox_uid" ] || exit 1
+    start_time="$(awk "{print \$22}" "/proc/$pid/stat")" || exit 1
+    printf "%s %s\n" "$pid" "$start_time"
+  ' 2>/dev/null
+}
+
+slack_policy_fingerprint() {
+  local expected
+  expected="$(expected_slack_policy)"
+  python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.argv[1].encode()).hexdigest())' \
+    "$expected"
+}
+
+slack_policy_restart_was_attempted() {
+  local file="$AUTOHEAL_STATE_DIR/slack-policy-restart"
+  [[ -f "$file" ]] || return 1
+  [[ "$(cat "$file")" == "$(slack_policy_fingerprint)" ]]
+}
+
+mark_slack_policy_restart_attempted() {
+  mkdir -p "$AUTOHEAL_STATE_DIR"
+  slack_policy_fingerprint >"$AUTOHEAL_STATE_DIR/slack-policy-restart"
+}
+
+clear_slack_policy_restart_attempt() {
+  rm -f "$AUTOHEAL_STATE_DIR/slack-policy-restart"
+}
+
+restart_gateway() {
+  local before_gateway_marker container current_container current_gateway_marker runtime_unit
+  local gateway_healthy=false runtime_stopped=false supervisor_ready=false
+  runtime_unit=nemoclaw-hermes-runtime.service
+  container="$(sandbox_container)" || return 1
+  autoheal_log "requesting a managed Hermes process restart in ${AUTOHEAL_SANDBOX_NAME}"
+
+  if ! sandbox_exec_runs_as_sandbox; then
+    autoheal_log "refusing gateway restart: OpenShell exec is not the sandbox workload user"
+    return 1
+  fi
+  if ! unit_is_installed "$runtime_unit"; then
+    autoheal_log "gateway runtime unit is not installed; rerun scripts/autoheal/install.sh"
+    return 1
+  fi
+  before_gateway_marker="$(gateway_process_marker "$container" || true)"
+  if ! systemctl --user stop "$runtime_unit"; then
+    autoheal_log "could not stop the local Hermes runtime launcher"
+    return 1
+  fi
+  if ! stop_hermes_runtime_processes "$container"; then
+    autoheal_log "could not stop the existing Hermes runtime process tree"
+    return 1
+  fi
+  runtime_stopped=true
   for _ in $(seq 1 45); do
-    if sandbox_gateway_ok && gateway_has_allowlist; then
-      autoheal_log "Hermes gateway recovered"
-      return 0
+    if current_container="$(sandbox_container)" \
+      && sandbox_ready \
+      && sandbox_exec_runs_as_sandbox; then
+      supervisor_ready=true
+      container="$current_container"
+      break
     fi
     sleep 2
   done
-  autoheal_log "Hermes gateway did not recover within 90 seconds"
+  if [[ "$runtime_stopped" != true || "$supervisor_ready" != true ]]; then
+    autoheal_log "OpenShell sandbox supervisor was not ready for a non-root relaunch within 90 seconds"
+    return 1
+  fi
+  if ! repair_legacy_gateway_ownership "$container"; then
+    autoheal_log "gateway recovery ownership repair failed"
+    return 1
+  fi
+  if ! systemctl --user start "$runtime_unit"; then
+    autoheal_log "could not start the OpenShell-managed Hermes runtime unit"
+    return 1
+  fi
+
+  supervisor_ready=false
+  for _ in $(seq 1 45); do
+    if current_container="$(sandbox_container)" \
+      && current_gateway_marker="$(gateway_process_marker "$current_container")" \
+      && [[ -n "$current_gateway_marker" ]] \
+      && [[ "$current_gateway_marker" != "$before_gateway_marker" ]]; then
+      supervisor_ready=true
+      if sandbox_ready && sandbox_gateway_ok; then
+        gateway_healthy=true
+        if gateway_has_allowlist; then
+          clear_slack_policy_restart_attempt
+          autoheal_log "Hermes gateway recovered under the OpenShell runtime unit"
+          return 0
+        fi
+      fi
+    fi
+    sleep 2
+  done
+  if [[ "$supervisor_ready" == true && "$gateway_healthy" == true ]]; then
+    if mark_slack_policy_restart_attempted; then
+      autoheal_log "gateway recovered with its persisted Slack policy; current .env changes require tear-down and bring-up"
+    else
+      autoheal_log "gateway recovered, but the stale Slack policy restart could not be recorded"
+    fi
+    return 1
+  fi
+  autoheal_log "Hermes gateway did not recover under the OpenShell runtime unit within 90 seconds"
   return 1
 }
 
@@ -94,6 +267,9 @@ recreate_sandbox() {
 
 main() {
   local needs_gateway_restart=false
+  mkdir -p "$AUTOHEAL_STATE_DIR"
+  exec 9>"$AUTOHEAL_STATE_DIR/watchdog.lock"
+  flock -n 9 || return 0
 
   if proxy_is_configured && ! systemctl --user is-active --quiet nemoclaw-hermes-proxy.service; then
     autoheal_log "starting configured host TLS proxy"
@@ -105,13 +281,19 @@ main() {
     return 0
   fi
 
-  if ! sandbox_gateway_ok; then
-    autoheal_log "sandbox gateway health check failed"
+  if sandbox_gateway_failure_confirmed; then
+    autoheal_log "sandbox gateway health check failed repeatedly"
     needs_gateway_restart=true
   fi
-  if ! gateway_has_allowlist; then
+  if gateway_has_allowlist; then
+    clear_slack_policy_restart_attempt
+  else
     autoheal_log "Slack gateway allowlist is missing or incorrect"
-    needs_gateway_restart=true
+    if slack_policy_restart_was_attempted; then
+      autoheal_log "the managed restart did not restore the current .env Slack policy; run tear-down and bring-up"
+    else
+      needs_gateway_restart=true
+    fi
   fi
 
   if recent_log_match 'ServerDisconnectedError|Server disconnected|NET:FAIL.*(slack\.com:443|apps\.connections\.open)|(slack\.com:443|apps\.connections\.open).*NET:FAIL'; then
@@ -144,4 +326,6 @@ main() {
   fi
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

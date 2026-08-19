@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+[Unit]
+Description=NemoClaw Hermes recovered runtime
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=@RUNTIME_ENV@
+WorkingDirectory=@EXAMPLE_DIR@
+ExecStartPre=/usr/bin/openshell sandbox exec --name ${SANDBOX_NAME} -- sh -c "! pgrep -f '[n]emoclaw-start|[h]ermes gateway run' >/dev/null"
+ExecStart=/usr/bin/openshell sandbox exec --name ${SANDBOX_NAME} -- /usr/local/bin/nemoclaw-start
+TimeoutStopSec=15

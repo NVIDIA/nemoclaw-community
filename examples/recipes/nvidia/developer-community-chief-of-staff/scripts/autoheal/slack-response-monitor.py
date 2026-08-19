@@ -59,7 +59,7 @@ def classify_log_text(text: str) -> set[str]:
     failures: set[str] = set()
     if any(marker in lower for marker in ("http 503", "http 504", "gateway time-out", "inference service unavailable")):
         failures.add("inference_proxy")
-    if any(marker in lower for marker in ("serverdisconnectederror", "server disconnected", "slackapierror")):
+    if any(marker in lower for marker in ("serverdisconnectederror", "server disconnected")):
         failures.add("slack_gateway")
     graph_net_failure = re.search(r"net:fail.*graph\.microsoft\.com:443|graph\.microsoft\.com:443.*net:fail", lower)
     if graph_net_failure or any(marker in lower for marker in ("remote end closed connection without response", "microsoft graph api")):
