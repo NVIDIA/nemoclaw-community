@@ -4,6 +4,7 @@
 """Edge cases for the cap-and-cascade arithmetic. No model, no tokens."""
 
 import sys, unittest
+from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -102,6 +103,64 @@ class TestPinsBeatTheGate(unittest.TestCase):
         got = {r["source_id"]: r["priority"]
                for r in rank_population(self._rows(3, gated=0, pinned={"m2": "high"}))}
         self.assertEqual(got["m2"], "high")
+
+
+class TestPinsAreCappedToo(unittest.TestCase):
+    """A pin decides the order rows claim a tier, not whether the tier has a size.
+
+    "The ranked list is short by construction" is the property this recipe
+    sells. A tier that any number of pins can grow is short only by
+    instruction, which is the thing the caps exist to replace.
+    """
+
+    def _pinned(self, n, tier="high", prefix="m"):
+        return [{"source_id": f"{prefix}{i}", "intent_gated": False,
+                 "batch_rank": i + 1, "manual_priority": tier} for i in range(n)]
+
+    def test_more_pins_than_the_tier_holds_overflow_rather_than_widen_it(self):
+        got = rank_population(self._pinned(HIGH_CAP + 1))
+        tiers = Counter(r["priority"] for r in got)
+        self.assertEqual(tiers["high"], HIGH_CAP)
+        self.assertEqual(tiers["medium"], 1)
+
+    def test_the_overflowing_pin_is_the_last_one_by_position(self):
+        got = rank_population(self._pinned(HIGH_CAP + 1))
+        overflowed = [r for r in got if r["priority"] != "high"]
+        self.assertEqual([r["source_id"] for r in overflowed], [f"m{HIGH_CAP}"])
+
+    def test_a_repeated_source_id_cannot_widen_a_tier(self):
+        """The cap counts places, not names."""
+        rows = self._pinned(HIGH_CAP + 4)
+        for row in rows[HIGH_CAP:]:
+            row["source_id"] = "m0"            # malformed input, same id repeated
+        tiers = Counter(r["priority"] for r in rank_population(rows))
+        self.assertEqual(tiers["high"], HIGH_CAP)
+
+    def test_pins_take_the_tier_ahead_of_gated_rows(self):
+        rows = self._pinned(3) + [
+            {"source_id": f"g{i}", "intent_gated": True, "batch_rank": i + 1,
+             "manual_priority": None} for i in range(HIGH_CAP)]
+        got = {r["source_id"]: r["priority"] for r in rank_population(rows)}
+        self.assertTrue(all(got[f"m{i}"] == "high" for i in range(3)))
+        # Three pins displaced three gated rows rather than adding to the tier.
+        self.assertEqual(sum(1 for v in got.values() if v == "high"), HIGH_CAP)
+
+    def test_a_pin_down_never_claims_a_capped_slot(self):
+        rows = ([{"source_id": "down", "intent_gated": True, "batch_rank": 1,
+                  "manual_priority": "low"}]
+                + [{"source_id": f"g{i}", "intent_gated": True, "batch_rank": i + 2,
+                    "manual_priority": None} for i in range(3)])
+        got = {r["source_id"]: r["priority"] for r in rank_population(rows)}
+        self.assertEqual(got["down"], "low")
+        self.assertEqual(sum(1 for v in got.values() if v == "high"), 3)
+
+    def test_the_caps_hold_with_pins_and_gated_rows_mixed_beyond_both(self):
+        rows = self._pinned(6) + self._pinned(6, "medium", prefix="q") + [
+            {"source_id": f"g{i}", "intent_gated": True, "batch_rank": i + 1,
+             "manual_priority": None} for i in range(20)]
+        tiers = Counter(r["priority"] for r in rank_population(rows))
+        self.assertEqual(tiers["high"], HIGH_CAP)
+        self.assertEqual(tiers["medium"], MEDIUM_CAP)
 
 
 if __name__ == "__main__":

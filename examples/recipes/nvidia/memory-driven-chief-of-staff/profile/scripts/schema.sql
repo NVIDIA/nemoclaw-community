@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
-INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '2');
+INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '1');
 
 
 -- ---------------------------------------------------------------------------
@@ -52,10 +52,6 @@ CREATE TABLE IF NOT EXISTS items (
     addressing  TEXT CHECK (addressing IN ('direct','mentioned','broadcast')),
     -- Email only; Slack tracks read state per channel, not per message.
     unread      INTEGER CHECK (unread IN (0,1)),
-    -- Set when the source reports the message gone. The row survives because
-    -- an obligation may reference it and the completed view has to stay
-    -- readable; the body does not.
-    deleted_at  TEXT,
     state       TEXT NOT NULL
                 CHECK (state IN ('pending','judged','skipped'))
                 DEFAULT 'pending',
@@ -66,7 +62,6 @@ CREATE TABLE IF NOT EXISTS items (
 CREATE INDEX IF NOT EXISTS idx_items_pending ON items(state, event_at);
 -- Body pruning reads this.
 CREATE INDEX IF NOT EXISTS idx_items_event_at ON items(event_at) WHERE body IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_items_deleted ON items(deleted_at) WHERE deleted_at IS NOT NULL;
 
 
 -- ---------------------------------------------------------------------------

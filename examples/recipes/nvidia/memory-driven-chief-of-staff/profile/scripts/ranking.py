@@ -15,6 +15,9 @@ Rules mirror the production system this recipe is adapted from:
     (a deadline, an important sender, a broadcast mention) is not enough.
   * un-gated rows that ranked inside the top 10 cascade down and re-enter
     the medium competition rather than being dropped
+  * a user pin outranks the gate but is still counted against the caps: it
+    decides the order in which rows claim a tier, not whether the tier has a
+    size, so an eleventh row pinned `high` cascades like any other overflow
   * everything past the two caps is `low`
 
 Rationale for the gate, worth keeping in view while reading the code: the top
@@ -76,6 +79,19 @@ def assign_priorities(ranked: Iterable[RankedRow]) -> List[RankedRow]:
     return out
 
 
+def _desired(row: dict) -> str | None:
+    """The tier a row is asking for, before the caps are applied.
+
+    A pin is the user's answer and outranks the gate. An un-pinned row that
+    passes the gate asks for the top tier; anything else asks for nothing and
+    competes for the middle by position.
+    """
+    manual = row.get("manual_priority")
+    if manual:
+        return manual
+    return "high" if row.get("intent_gated") else None
+
+
 def rank_population(rows: Iterable[dict]) -> List[dict]:
     """Order every open obligation, then apply the caps across all of them.
 
@@ -84,10 +100,12 @@ def rank_population(rows: Iterable[dict]) -> List[dict]:
     leave twenty rows at the top tier and two rows claiming every position,
     which is what this function exists to prevent.
 
-    A row the user pinned is set aside before the caps are computed. Its tier
-    is the one the user gave it, so letting it compete would both override the
-    instruction and spend a capped slot on a row that is leaving the tier
-    anyway.
+    Pinned rows are ranked first but are still counted against the caps. They
+    have to be: "the ranked list is short by construction" is the property this
+    recipe sells, and a tier that any number of pins can grow is short only by
+    instruction. Eleven rows pinned high therefore produce ten high rows and
+    one that cascades — the pin decides the order in which rows claim the tier,
+    not whether the tier has a size.
     """
     ordered = sorted(rows, key=lambda r: (
         _MANUAL_WEIGHT.get(r.get("manual_priority"), 1),
@@ -95,10 +113,27 @@ def rank_population(rows: Iterable[dict]) -> List[dict]:
         r.get("batch_rank") if r.get("batch_rank") is not None else 1_000_000,
         r.get("source_id") or "",
     ))
-    unpinned = [r for r in ordered if not r.get("manual_priority")]
-    tiers = {a.source_id: a.priority for a in assign_priorities(
-        RankedRow(source_id=r["source_id"], intent_gated=bool(r.get("intent_gated")))
-        for r in unpinned)}
-    return [{**r, "priority": r.get("manual_priority") or tiers[r["source_id"]],
-             "global_rank": position}
-            for position, r in enumerate(ordered, start=1)]
+
+    # Tiers are tracked by position rather than by source_id. The store makes
+    # source_id unique, but keying a cap on a value the caller supplies means a
+    # repeated one quietly admits two rows into a ten-row tier, and a cap that
+    # can be widened by malformed input is not much of a cap.
+    high = set([i for i, r in enumerate(ordered) if _desired(r) == "high"][:HIGH_CAP])
+
+    # Everything else competes for the middle tier by position, except rows the
+    # user pinned to the bottom: a pin down is an instruction too, and it would
+    # be a strange reading of it to hand the row a better tier than it had.
+    remainder = [i for i, r in enumerate(ordered)
+                 if i not in high and _desired(r) != "low"]
+    medium = set(remainder[:MEDIUM_CAP])
+
+    out: List[dict] = []
+    for index, row in enumerate(ordered):
+        if index in high:
+            tier = "high"
+        elif index in medium:
+            tier = "medium"
+        else:
+            tier = "low"
+        out.append({**row, "priority": tier, "global_rank": index + 1})
+    return out

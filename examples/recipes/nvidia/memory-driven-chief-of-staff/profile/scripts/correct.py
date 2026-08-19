@@ -70,33 +70,53 @@ def _rerank_open(conn) -> None:
 
 
 def ignore(source_id: str, reason: str | None = None) -> dict:
-    """Close a row as unwanted and record that the user is the one who said so."""
+    """Close a row as unwanted and record that the user is the one who said so.
+
+    Repeating it is a no-op. Only a state transition is evidence: a retried
+    command, a double-click, or a re-run script is one decision, and counting
+    it three times is how three identical rows reach the preference threshold
+    and mint a rule the user never asked for.
+    """
     with write_txn() as conn:
         oid, status, priority, _, rank = _row(conn, source_id)
+        if status == "ignored":
+            return {"source_id": source_id, "status": "ignored", "changed": False}
         conn.execute("UPDATE obligations SET status='ignored' WHERE id=?", (oid,))
         _log(conn, oid, "ignored",
              {"status": status, "priority": priority, "rank": rank},
              {"status": "ignored", "reason": reason})
         _rerank_open(conn)
-    return {"source_id": source_id, "status": "ignored"}
+    return {"source_id": source_id, "status": "ignored", "changed": True}
 
 
 def unignore(source_id: str) -> dict:
-    """Reopen a row. The original correction stays in the log."""
+    """Reopen a row. The original correction stays in the log.
+
+    A no-op on a row that is already open, for the same reason `ignore` is.
+    """
     with write_txn() as conn:
         oid, status, priority, _, rank = _row(conn, source_id)
+        if status == "open":
+            return {"source_id": source_id, "status": "open", "changed": False}
         conn.execute("UPDATE obligations SET status='open' WHERE id=?", (oid,))
-        _log(conn, oid, "unignored", {"status": status}, {"status": "open"})
+        _log(conn, oid, "restored", {"status": status}, {"status": "open"})
         _rerank_open(conn)
-    return {"source_id": source_id, "status": "open"}
+    return {"source_id": source_id, "status": "open", "changed": True}
 
 
 def set_priority(source_id: str, tier: str) -> dict:
-    """Pin a tier. The agent may re-rank around it but never clears it."""
+    """Pin a tier. The agent may re-rank around it but never clears it.
+
+    Re-pinning the tier a row already carries is a no-op, so a repeated command
+    cannot turn one preference into several pieces of evidence.
+    """
     if tier not in TIERS:
         raise ValueError(f"priority must be one of {TIERS}, got {tier!r}")
     with write_txn() as conn:
         oid, _, priority, manual, rank = _row(conn, source_id)
+        if manual == tier:
+            return {"source_id": source_id, "manual_priority": tier,
+                    "priority": priority, "global_rank": rank, "changed": False}
         conn.execute("UPDATE obligations SET manual_priority=? WHERE id=?", (tier, oid))
         _log(conn, oid, "priority_override",
              {"priority": priority, "manual_priority": manual, "rank": rank},
@@ -105,7 +125,7 @@ def set_priority(source_id: str, tier: str) -> dict:
         new = conn.execute(
             "SELECT priority, global_rank FROM obligations WHERE id=?", (oid,)).fetchone()
     return {"source_id": source_id, "manual_priority": tier,
-            "priority": new[0], "global_rank": new[1]}
+            "priority": new[0], "global_rank": new[1], "changed": True}
 
 
 def main(argv: list[str] | None = None) -> int:

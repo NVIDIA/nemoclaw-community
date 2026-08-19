@@ -107,7 +107,10 @@ def apply(env: dict[str, Any]) -> dict[str, int]:
     batch_rank = {d["source_id"]: d["rank"] for d in ranked_input}
 
     counts = {"created": 0, "updated": 0, "done": 0, "skipped": 0}
-    prior: dict[str, tuple] = {}
+    # Rows this envelope inserted. They are excluded from the rerank audit
+    # because their `created` event already records where they landed; every
+    # other open row is audited whether or not this envelope mentioned it.
+    created: set[str] = set()
 
     with write_txn() as conn:
         for d in decisions:
@@ -161,9 +164,10 @@ def apply(env: dict[str, Any]) -> dict[str, int]:
                      d.get("kind"), d.get("est_effort"), batch_rank[sid],
                      int(d["intent_gated"])))
                 _log(conn, oid, "created", None, {"batch_rank": batch_rank[sid]})
+                created.add(oid)
                 counts["created"] += 1
             else:
-                oid, old_priority, old_rank = existing
+                oid = existing[0]
                 # manual_priority is user feedback: never copied blindly into
                 # `priority`, and never cleared by an agent pass.
                 conn.execute(
@@ -174,11 +178,10 @@ def apply(env: dict[str, Any]) -> dict[str, int]:
                      d.get("est_effort"), batch_rank[sid],
                      int(d["intent_gated"]), oid))
                 counts["updated"] += 1
-                prior[oid] = (old_priority, old_rank)
 
         # Rank the whole open population, not just this envelope. Same
         # transaction, so a reader never sees two rows sharing a position.
-        _rerank_all(conn, prior)
+        _rerank_all(conn, created)
 
         cur = env.get("cursor")
         if cur:
@@ -192,8 +195,16 @@ def apply(env: dict[str, Any]) -> dict[str, int]:
     return counts
 
 
-def _rerank_all(conn, prior: dict[str, tuple]) -> None:
-    """Recompute tier and position over every open obligation."""
+def _rerank_all(conn, created: set[str]) -> None:
+    """Recompute tier and position over every open obligation, and audit it.
+
+    The prior state is read from the store rather than from the envelope, so
+    the audit covers rows this pass never mentioned. It has to: re-ranking is
+    population-wide, and the row most likely to move is one nobody judged this
+    time — a new arrival at the top pushes the tenth row out of the tier
+    without the envelope naming it. Auditing only the envelope's own rows left
+    exactly those movements unrecorded.
+    """
     rows = [
         {"id": r[0], "source_id": r[1], "intent_gated": bool(r[2]),
          "manual_priority": r[3], "batch_rank": r[4],
@@ -209,10 +220,8 @@ def _rerank_all(conn, prior: dict[str, tuple]) -> None:
     for row in rank_population(rows):
         conn.execute("UPDATE obligations SET priority=?, global_rank=? WHERE id=?",
                      (row["priority"], row["global_rank"], row["id"]))
-        was = prior.get(row["id"])
-        # A row this envelope created is already covered by its `created`
-        # event. Only a row that existed beforehand and moved is a rerank.
-        if was is None or (row["priority"], row["global_rank"]) == was:
+        was = row["was"]
+        if row["id"] in created or (row["priority"], row["global_rank"]) == was:
             continue
         _log(conn, row["id"], "reranked",
              {"priority": was[0], "rank": was[1]},

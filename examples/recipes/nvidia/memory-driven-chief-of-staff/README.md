@@ -45,7 +45,7 @@ two apart.
 | `profile/scripts/memory_check.py` | Invariant detection over the memory, deterministic |
 | `profile/scripts/preferences.py` | Correction counting against a fixed threshold |
 | `profile/scripts/apply_decisions.py` | Applies model decisions; the model never emits SQL |
-| `profile/scripts/migrate.py` | Schema versioning, forward-only |
+| `profile/scripts/migrate.py` | Schema versioning, forward-only. This recipe ships at v1, so there is nothing to upgrade from yet |
 | `profile/scripts/normalize.py` | Source payloads to store rows, kept separate from any I/O |
 | `profile/scripts/_db.py` | Connection and transaction boundary |
 | `profile/scripts/correct.py` | The user's writer: pins, ignores, and the only source of `actor='user'` events |
@@ -127,7 +127,7 @@ cd profile/scripts
 for t in tests/*.py; do python3 "$t" || break; done
 ```
 
-One hundred and seventeen tests, no network and no credentials. They cover the ten
+One hundred and thirty-four tests, no network and no credentials. They cover the ten
 acceptance criteria agreed on the proposal issue, plus three areas the issue
 does not
 enumerate:
@@ -140,7 +140,7 @@ enumerate:
 | Bounded ranking | `tests/test_ranking.py` |
 | Preference updates | `tests/test_preferences.py` |
 | Source normalization | `tests/test_normalize.py` |
-| Writer behaviour, audit trail, caps across batches | `tests/test_apply_decisions.py` |
+| Writer behaviour, audit trail, caps across batches, correction idempotency | `tests/test_apply_decisions.py` |
 | The walkthrough, and every claim it prints | `tests/test_walkthrough.py` |
 
 Two of the three are constraints rather than observations. One scans every

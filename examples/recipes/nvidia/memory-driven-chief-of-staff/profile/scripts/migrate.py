@@ -20,41 +20,18 @@ import sqlite3
 from pathlib import Path
 from typing import Callable
 
-SCHEMA_VERSION = 2
-
-
-def _has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
-    return any(r[1] == column for r in conn.execute(f"PRAGMA table_info({table})"))
-
-
-def _v2_batch_rank(conn: sqlite3.Connection) -> None:
-    """Separate the batch position from the global one.
-
-    Before v2 the model's within-batch rank was written straight into
-    global_rank, so two batches could each claim positions 1..20 and the caps
-    held only inside whichever batch ran last.
-
-    Guarded rather than a bare ALTER, because a store created by the current
-    baseline schema already has the column, and a migration that cannot be
-    replayed safely is a migration that fails the first time it matters.
-    """
-    if not _has_column(conn, "obligations", "batch_rank"):
-        conn.execute("ALTER TABLE obligations ADD COLUMN batch_rank INTEGER")
-        conn.execute("UPDATE obligations SET batch_rank = global_rank"
-                     " WHERE batch_rank IS NULL")
-    # Clear positions before adding the unique index: pre-v2 data may already
-    # contain duplicates, and they are re-derived on the next write anyway.
-    conn.execute("UPDATE obligations SET global_rank = NULL WHERE status='open'")
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_obl_rank_unique"
-                 " ON obligations(global_rank)"
-                 " WHERE status='open' AND global_rank IS NOT NULL")
-
+SCHEMA_VERSION = 1
 
 # version -> callable applied to reach it. Forward only; there is no down path,
 # because a downgrade that drops a column loses data no backup can infer.
-MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
-    2: _v2_batch_rank,
-}
+#
+# Empty, and correctly so: this recipe has not shipped, so no store exists at
+# an earlier version and there is nothing to upgrade from. The machinery stays
+# because the properties it provides are the ones that matter on day one — a
+# store carries its version, a versionless store is brought up, and a store
+# from a later version is refused rather than opened. The first shipped change
+# to the schema adds an entry here and bumps the constant.
+MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {}
 
 
 class SchemaFromTheFuture(RuntimeError):

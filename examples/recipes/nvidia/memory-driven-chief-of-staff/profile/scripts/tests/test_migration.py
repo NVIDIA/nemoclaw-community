@@ -8,7 +8,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(HERE))
-from migrate import SCHEMA_VERSION, SchemaFromTheFuture, current_version, migrate, open_store  # noqa: E402
+from migrate import MIGRATIONS, SCHEMA_VERSION, SchemaFromTheFuture, current_version, migrate, open_store  # noqa: E402
 
 SCHEMA = (HERE / "schema.sql").read_text(encoding="utf-8")
 
@@ -43,33 +43,32 @@ class TestMigration(unittest.TestCase):
         with self.assertRaises(SchemaFromTheFuture):
             open_store(p)
 
-    def test_an_older_store_gains_the_position_column(self):
-        """v1 wrote the batch position straight into global_rank."""
+    def test_this_recipe_ships_at_the_baseline_with_nothing_to_upgrade_from(self):
+        """No store exists at an earlier version, so there is no upgrade path.
+
+        There used to be a v1-to-v2 step here, written against a v1 that never
+        shipped. The test built its "old" store by taking the current schema
+        and removing one column, which is not the same artifact: it kept every
+        other column the real v1 lacked, so a genuine v1 database still failed
+        to open while the test passed.
+        """
+        self.assertEqual(SCHEMA_VERSION, 1)
+        self.assertEqual(MIGRATIONS, {})
         p = self.fresh()
         with sqlite3.connect(p) as c:
-            c.executescript(
-                "DROP INDEX IF EXISTS idx_obl_rank_unique;"
-                "ALTER TABLE obligations DROP COLUMN batch_rank;")
-            c.execute("UPDATE meta SET value='1' WHERE key='schema_version'")
-            c.execute("INSERT INTO items(source_id, source, scope, event_at)"
-                      " VALUES ('keep','email','inbox','2026-08-18T00:00:00Z')")
-            c.execute("INSERT INTO obligations(id, source_id, title, priority, global_rank)"
-                      " VALUES ('o1','keep','t','high',1)")
-        with sqlite3.connect(p) as c:
-            # Every step above v1 runs, in order, and lands on the current
-            # version. Spelling the list out here would make each new
-            # migration look like a regression in an unrelated test.
-            self.assertEqual(migrate(c), list(range(2, SCHEMA_VERSION + 1)))
-            self.assertEqual(current_version(c), SCHEMA_VERSION)
-            cols = {r[1] for r in c.execute("PRAGMA table_info(obligations)")}
-            self.assertIn("batch_rank", cols)
-            # The old position is preserved as the batch position, and the
-            # global one is cleared for the next write to re-derive.
-            self.assertEqual(
-                c.execute("SELECT batch_rank, global_rank FROM obligations").fetchone(),
-                (1, None))
-            self.assertEqual(c.execute("SELECT count(*) FROM items").fetchone()[0], 1)
+            self.assertEqual(current_version(c), 1)
+            self.assertEqual(migrate(c), [])           # already current
 
+    def test_the_shipped_schema_opens_a_store_that_the_shipped_schema_made(self):
+        """The artifact under test is the one the recipe installs."""
+        p = self.fresh()
+        with sqlite3.connect(p) as c:
+            columns = {r[1] for r in c.execute("PRAGMA table_info(items)")}
+        # Columns belonging to phases that have not shipped must not be here:
+        # one of them arrived by a bad merge and broke opening a real store.
+        self.assertNotIn("deleted_at", columns)
+        with sqlite3.connect(p) as c:
+            self.assertEqual(migrate(c), [])
 
     def test_a_versionless_store_migrates_up_from_zero(self):
         p = self.fresh()

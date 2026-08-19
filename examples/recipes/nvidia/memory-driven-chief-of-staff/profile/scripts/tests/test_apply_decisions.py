@@ -216,5 +216,170 @@ class TestCapsAcrossBatches(unittest.TestCase):
                 c.execute("UPDATE obligations SET global_rank=1 WHERE source_id='a5'")
 
 
+class TestCorrectionsAreIdempotent(unittest.TestCase):
+    """Only a state transition is evidence.
+
+    A retried command, a double-click, or a re-run script is one decision. The
+    preference policy counts corrections, so recording a retry three times is
+    how three copies of one decision reach the threshold and mint a rule the
+    user never asked for.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.environ["HERMES_HOME"] = self.tmp
+        for m in ("_db", "ranking", "apply_decisions", "correct", "preferences"):
+            sys.modules.pop(m, None)
+        import _db, apply_decisions, correct, preferences   # noqa: E402
+        self._db, self.correct, self.preferences = _db, correct, preferences
+        _db.ensure_store()
+        self.db = _db.ledger_path()
+        with sqlite3.connect(self.db) as c:
+            c.execute(
+                "INSERT INTO items(source_id, source, scope, event_at, sender)"
+                " VALUES ('m1','email','inbox','2026-08-18T00:00:00Z',"
+                "'news@vendor.example')")
+        apply_decisions.apply({"version": 1, "decisions": [
+            {"source_id": "m1", "decision": "CREATE", "rank": 1,
+             "intent_gated": False, "title": "t"}]})
+
+    def events(self, event_type):
+        with sqlite3.connect(self.db) as c:
+            return c.execute("SELECT COUNT(*) FROM events"
+                             " WHERE actor='user' AND event_type=?",
+                             (event_type,)).fetchone()[0]
+
+    def test_repeating_ignore_records_one_correction(self):
+        first = self.correct.ignore("m1")
+        again = self.correct.ignore("m1")
+        self.assertTrue(first["changed"])
+        self.assertFalse(again["changed"])
+        self.correct.ignore("m1")
+        self.assertEqual(self.events("ignored"), 1)
+
+    def test_repeating_unignore_records_one_correction(self):
+        self.correct.ignore("m1")
+        self.assertTrue(self.correct.unignore("m1")["changed"])
+        self.assertFalse(self.correct.unignore("m1")["changed"])
+        self.assertEqual(self.events("restored"), 1)
+
+    def test_repinning_the_same_tier_records_one_correction(self):
+        self.assertTrue(self.correct.set_priority("m1", "low")["changed"])
+        self.assertFalse(self.correct.set_priority("m1", "low")["changed"])
+        self.assertEqual(self.events("priority_override"), 1)
+
+    def test_changing_the_pin_to_a_different_tier_does_record_one(self):
+        """Idempotency must not swallow a real change of mind."""
+        self.correct.set_priority("m1", "low")
+        self.assertTrue(self.correct.set_priority("m1", "high")["changed"])
+        self.assertEqual(self.events("priority_override"), 2)
+
+    def test_retries_alone_cannot_reach_the_preference_threshold(self):
+        for _ in range(self.preferences.THRESHOLD + 2):
+            self.correct.ignore("m1")
+        with sqlite3.connect(self.db) as c:
+            corrections = self.preferences.collect(c)
+        self.assertEqual(len(corrections), 1)
+        self.assertEqual(self.preferences.candidates(corrections), [])
+
+    def test_unignore_writes_an_event_type_the_schema_accepts(self):
+        """It did not, and nothing caught it because nothing called it."""
+        self.correct.ignore("m1")
+        self.correct.unignore("m1")           # would raise IntegrityError
+        with sqlite3.connect(self.db) as c:
+            self.assertEqual(
+                c.execute("SELECT status FROM obligations").fetchone()[0], "open")
+
+
+class TestRerankAuditCoversThePopulation(unittest.TestCase):
+    """A row can move without this pass mentioning it, and that is the common case.
+
+    A new arrival at the top pushes the tenth row out of the tier. The envelope
+    never names that row, so an audit built from the envelope records nothing —
+    leaving the store's own history unable to explain why the row moved.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.environ["HERMES_HOME"] = self.tmp
+        for m in ("_db", "ranking", "apply_decisions"):
+            sys.modules.pop(m, None)
+        import _db, apply_decisions             # noqa: E402
+        self._db, self.mod = _db, apply_decisions
+        _db.ensure_store()
+        self.db = _db.ledger_path()
+
+    def _items(self, ids):
+        with sqlite3.connect(self.db) as c:
+            for sid in ids:
+                c.execute("INSERT INTO items(source_id, source, scope, event_at)"
+                          " VALUES (?,'email','inbox','2026-08-18T00:00:00Z')", (sid,))
+
+    def _snapshot(self):
+        with sqlite3.connect(self.db) as c:
+            return {r[0]: (r[1], r[2]) for r in c.execute(
+                "SELECT source_id, priority, global_rank FROM obligations"
+                " WHERE status='open'")}
+
+    def _reranked(self):
+        with sqlite3.connect(self.db) as c:
+            return c.execute("SELECT COUNT(*) FROM events"
+                             " WHERE event_type='reranked'").fetchone()[0]
+
+    def test_every_displaced_row_is_audited_even_when_unmentioned(self):
+        self._items([f"a{i}" for i in range(10)])
+        self.mod.apply({"version": 1, "decisions": [
+            {"source_id": f"a{i}", "decision": "CREATE", "rank": i + 1,
+             "intent_gated": True, "title": f"a{i}"} for i in range(10)]})
+        before, base = self._snapshot(), self._reranked()
+
+        self._items(["b0"])
+        self.mod.apply({"version": 1, "decisions": [
+            {"source_id": "b0", "decision": "CREATE", "rank": 1,
+             "intent_gated": True, "title": "b0"}]})
+        after = self._snapshot()
+
+        moved = {k for k in before if before[k] != after[k]}
+        self.assertTrue(moved, "the fixture failed to displace anything")
+        self.assertEqual(self._reranked() - base, len(moved))
+
+    def test_the_row_pushed_out_of_the_tier_is_among_them(self):
+        self._items([f"a{i}" for i in range(10)])
+        self.mod.apply({"version": 1, "decisions": [
+            {"source_id": f"a{i}", "decision": "CREATE", "rank": i + 1,
+             "intent_gated": True, "title": f"a{i}"} for i in range(10)]})
+        self._items(["b0"])
+        self.mod.apply({"version": 1, "decisions": [
+            {"source_id": "b0", "decision": "CREATE", "rank": 1,
+             "intent_gated": True, "title": "b0"}]})
+        self.assertEqual(self._snapshot()["a9"], ("medium", 11))
+        with sqlite3.connect(self.db) as c:
+            row = c.execute(
+                "SELECT e.before_json, e.after_json FROM events e"
+                " JOIN obligations o ON o.id = e.obligation_id"
+                " WHERE o.source_id='a9' AND e.event_type='reranked'").fetchone()
+        self.assertIsNotNone(row, "the displaced row has no rerank event")
+        self.assertEqual(json.loads(row[0]), {"priority": "high", "rank": 10})
+        self.assertEqual(json.loads(row[1]), {"priority": "medium", "rank": 11})
+
+    def test_a_row_created_by_this_envelope_is_not_also_audited_as_reranked(self):
+        self._items(["a0"])
+        self.mod.apply({"version": 1, "decisions": [
+            {"source_id": "a0", "decision": "CREATE", "rank": 1,
+             "intent_gated": True, "title": "a0"}]})
+        self.assertEqual(self._reranked(), 0)
+
+    def test_an_unchanged_population_writes_no_events(self):
+        self._items(["a0"])
+        self.mod.apply({"version": 1, "decisions": [
+            {"source_id": "a0", "decision": "CREATE", "rank": 1,
+             "intent_gated": True, "title": "a0"}]})
+        base = self._reranked()
+        self.mod.apply({"version": 1, "decisions": [
+            {"source_id": "a0", "decision": "KEEP_OPEN", "rank": 1,
+             "intent_gated": True, "title": "a0"}]})
+        self.assertEqual(self._reranked(), base)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
