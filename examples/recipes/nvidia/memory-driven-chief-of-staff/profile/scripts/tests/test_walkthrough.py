@@ -89,5 +89,25 @@ class TestWalkthrough(unittest.TestCase):
         self.assertIn("people page has no name", self.output)
 
 
+    def test_it_shows_the_top_tier_emptying_without_the_gate(self):
+        """The reservation is the claim; the contrast is the only place it shows.
+
+        The gate verdicts are part of the recorded turn, so this run cannot
+        show the memory producing them. It can show what they buy, by ranking
+        the same rows again with the verdicts withheld.
+        """
+        self.assertIn("tiers without the gate: high=0", self.output)
+
+    def test_it_discloses_that_the_gate_verdict_is_recorded(self):
+        """Not disclosing it would let a reader think the memory was read."""
+        self.assertIn("Deleting the seed memory does not change the tiers",
+                      self.output)
+
+    def test_it_discloses_both_recorded_turns(self):
+        """The walkthrough records two, and said for a while that it recorded one."""
+        self.assertIn("intake.json", self.output)
+        self.assertIn("the other recorded turn", self.output)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

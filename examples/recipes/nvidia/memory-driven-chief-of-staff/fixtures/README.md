@@ -3,68 +3,106 @@
 
 # Fixtures
 
-Eight messages, a small seed memory, and one recorded model turn — enough to
-run the example end to end without connecting a mailbox or a Slack workspace.
+Eight messages, a small seed memory, and one of the two recorded model turns.
+Together they run the recipe from end to end without a mailbox, a Slack
+workspace, or an inference endpoint. See the
+[recipe README](../README.md) for what the recipe does and for the terms used
+below.
 
 ## Provenance
 
-Written from scratch for this example. The people, the company, the projects
-and every message body are invented. Nothing here is derived from a real
-mailbox, a real workspace, or an anonymized copy of either. The response
-shapes match what Microsoft Graph's delta query and Slack's
-`conversations.history` actually return for the fields this recipe selects, so
-the same normalization code runs against the fixtures and against live
-sources.
+These fixtures were written from scratch. The people, the company, the
+projects, and every message body are invented. Nothing is derived from a real
+mailbox, a real workspace, or an anonymized copy of either. The response shapes
+match what
+[Microsoft Graph's delta query](https://learn.microsoft.com/en-us/graph/api/message-delta)
+and
+[Slack's `conversations.history`](https://docs.slack.dev/reference/methods/conversations.history)
+return for the fields this recipe selects, so the same normalization code runs
+against the fixtures and against live sources.
 
 ## What each record is a control for
 
-| Record | Demonstrates |
+| Record | What it controls for |
 | --- | --- |
-| `msg-priorities-match` | Matches an entry in `attention/current_priorities.md`, so it passes the intent gate and can reach the top tier. |
-| `msg-urgent-not-chosen` | Loud external urgency — a mandatory deadline, "URGENT" in the subject — matching nothing the user chose. **Capped at the middle tier.** This is the one worth watching: it is the behaviour a ranking without a memory cannot produce. |
-| `msg-quiet-decay` | Seven days old with no follow-up anywhere in the batch. The walkthrough pins it down by hand, to show a correction outranking the memory. |
+| `msg-priorities-match` | Matches an entry in `memory/attention/current_priorities.md`, so a judging turn gives it a gate verdict and it can reach the `high` tier. |
+| `msg-urgent-not-chosen` | Loud external urgency that matches nothing the user chose: a mandatory deadline, with "URGENT" in the subject. Capped at `medium`. |
+| `msg-quiet-decay` | Dated seven days before the rest of the batch, with no follow-up in it. It is named in `memory/attention/current_priorities.md`, so it carries a gate verdict too. The walkthrough pins it down by hand to show a correction outranking the memory. |
 | `msg-automated-noise` | A build notification from a `noreply@` address. Skipped, and skipping is terminal, so it is never judged again. |
-| `msg-cc-only` | The user is on Cc, not To. Being copied is not being asked; `addressing` is `broadcast`. |
-| `D0DIRECT01` message | A direct message. `addressing` is `direct` with no mention needed. |
-| `C0TEAM0001` mention | A channel message naming the user, about the migration doc — so it passes the gate too. `addressing` is `mentioned`. |
-| `C0TEAM0001` notice | A channel announcement naming nobody. `addressing` is `broadcast`. |
+| `msg-cc-only` | The user is on Cc rather than To. Being copied is not being asked, so `addressing` is `broadcast`. |
+| `D0DIRECT01` message | A direct message. `addressing` is `direct`, with no mention needed. |
+| `C0TEAM0001` mention | A channel message that names the user, about the migration document, so it carries a gate verdict too. `addressing` is `mentioned`. |
+| `C0TEAM0001` notice | A channel announcement that names nobody. `addressing` is `broadcast`. |
+
+Two of the eight are skipped rather than tracked: `msg-automated-noise` and the
+`C0TEAM0001` notice. That is why the walkthrough reports `"skipped": 2` and
+carries six obligations rather than eight.
+
+Three of the eight carry a gate verdict: `msg-priorities-match`, the
+`C0TEAM0001` mention, and `msg-quiet-decay`. That is why the walkthrough prints
+`high=3`.
+
+`msg-urgent-not-chosen` is the record to watch. It is a real, dated, mandatory
+deadline, and the model ranks it fourth. It still cannot reach the `high` tier,
+because the recorded verdict says the user never chose that work. This is the
+behavior a ranking without a memory behind it cannot produce.
 
 ## The seed memory
 
-`fixtures/memory/` holds the pages the intent gate reads. Without them every
-row fails the gate and the top tier is empty — which is itself the point being
-made: the ranking is only as good as the memory behind it.
+`memory/` holds the pages a live judging turn reads before it decides, for each
+message, whether the user chose that work. In this fixture path that decision
+is already recorded in `envelopes/intake.json`, so removing `memory/` does not
+change the tiers the walkthrough prints. The pages are here because the memory
+is what a live run reads, and because the memory self-check in step 7 runs
+against them.
 
-## The recorded model turn
+What the ranking does with a gate verdict is shipped code, and the walkthrough
+shows it directly: step 2 re-runs the ranking over the same rows with the
+verdicts withheld, and the `high` tier empties.
+`tests/test_ranking.py::TestCapsAndCascade::test_no_row_passes_the_gate_high_is_empty_and_all_cascade`
+and `tests/test_apply_decisions.py::TestCapsAcrossBatches::test_an_ungated_population_leaves_the_high_tier_empty`
+assert the same property.
 
-`fixtures/envelopes/intake.json` is one decision envelope, written by hand,
-standing in for what the model returns after reading the batch and the memory.
-It exists so the walkthrough is deterministic and needs no inference endpoint.
+## The recorded model turns
 
-It is the only part that is canned. Everything downstream of it — the intent
-gate, the tier caps, the population ranking, the transactional writer, the
-correction path and the re-ranking — is the shipped code, running for real.
+The walkthrough records two turns, so that it is deterministic and needs no
+inference endpoint:
+
+- `envelopes/intake.json`, the intake judgment. It stands in for what a model
+  returns after reading the batch and the memory.
+- A shorter review envelope for step 5, written inline in
+  `profile/scripts/walkthrough.py` rather than stored here.
+
+Those two are the only recorded parts. Everything downstream of them is the
+shipped code, running for real: the tier caps, the ranking across the whole
+open population, the transactional writer, the correction path, and the
+re-ranking. The gate verdict on each row sits inside the intake envelope,
+because deciding it needs a model reading the memory.
 
 ## Running it
+
+Run from the recipe root, not from this directory:
 
 ```bash
 export HERMES_HOME=$(mktemp -d)
 python3 profile/scripts/walkthrough.py --fixtures fixtures
 ```
 
-Run from the recipe root. Neither script will guess a profile home, so
-`HERMES_HOME` has to be set.
+`HERMES_HOME` must be set. `walkthrough.py` and `load_fixtures.py` both refuse
+to guess a profile home.
 
 The walkthrough prints seven steps: ingestion, judgment, two corrections, a
 re-judgment that cannot undo them, the state of the preference threshold, and
-the memory self-check — including one deliberate break, so you can see the
-check fail as well as pass.
+the memory self-check. The self-check breaks one page on purpose, so the check
+is seen to fail as well as pass.
 
-To load the messages without any of the judgment, use the loader on its own:
+To load the messages without any of the judgment, use the loader on its own in
+a profile home the walkthrough has not already filled:
 
 ```bash
+export HERMES_HOME=$(mktemp -d)
 python3 profile/scripts/load_fixtures.py --fixtures fixtures
 ```
 
-Both are idempotent. Running either twice adds nothing, because intake is
-keyed on `source_id`.
+Both scripts are idempotent. A second run against the same profile home adds
+nothing, because intake is keyed on the source's own identifier.

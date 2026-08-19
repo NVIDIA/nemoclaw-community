@@ -9,12 +9,18 @@ that the top tier is reserved for what the user chose, that loud external
 urgency cannot buy its way in, and that a correction outranks the memory — all
 live downstream of a model turn.
 
-So this script supplies that one turn from a file and runs everything after it
-for real: `fixtures/envelopes/intake.json` stands in for what the model would
-return, and the caps, the gate, the ranking, the writer, the correction path
-and the re-ranking are the shipped code paths. What is canned is stated on
-screen, because a walkthrough that blurs the two is worth less than no
-walkthrough at all.
+So this script supplies those turns and runs everything after them for real.
+Two turns are recorded: the intake judgment in
+`fixtures/envelopes/intake.json`, and the scheduled re-judgment written inline
+in step 5. The caps, the ranking, the writer, the correction path and the
+re-ranking are the shipped code paths.
+
+The gate verdict on each row is part of the recorded intake turn, because
+deciding it means reading the memory, which needs a model. So this run does not
+show the memory producing those verdicts; it shows everything they feed into,
+and prints the same batch with the verdicts withheld so the reservation the
+gate buys is visible. What is recorded is stated on screen, because a
+walkthrough that blurs the two is worth less than no walkthrough at all.
 
     export HERMES_HOME=$(mktemp -d)
     python3 profile/scripts/walkthrough.py --fixtures fixtures
@@ -34,6 +40,7 @@ import load_fixtures
 from _db import ensure_store, ledger_path
 from apply_decisions import apply
 from memory_check import check_all
+from ranking import rank_population
 from preferences import THRESHOLD, candidates, collect
 
 RULE = "─" * 78
@@ -84,10 +91,17 @@ def run(fixtures: Path) -> int:
          f"{Path(loaded['memory']).name}/")
     _say("  Nothing is judged yet. This is what ingestion alone produces.")
 
-    _heading(2, "Judge — one canned model turn, then the real writer")
+    _heading(2, "Judge — the first canned model turn, then the real writer")
     envelope = json.loads((fixtures / "envelopes" / "intake.json").read_text())
     _say("  Envelope: fixtures/envelopes/intake.json (hand-written, stands in")
     _say("  for the model). Everything below it is the shipped code.")
+    _say()
+    _say("  Note what is recorded here and what is not. The gate verdict on")
+    _say("  each row — whether the memory shows the user chose this work — is")
+    _say("  part of the envelope, because deciding it needs a model reading")
+    _say("  the memory. Deleting the seed memory does not change the tiers")
+    _say("  below. What the tiers below do show is everything the verdicts")
+    _say("  feed into: the caps, the reservation, the cascade and the writer.")
     counts = apply(envelope)
     _say(f"  {json.dumps(counts)}")
 
@@ -101,6 +115,25 @@ def run(fixtures: Path) -> int:
         _say("  dated, mandatory deadline, and the model ranked it fourth. It")
         _say("  still cannot reach the top tier, because the user did not")
         _say("  choose it. A ranking without a memory cannot make that call.")
+        _say()
+        _say("  Here is the same batch with the gate verdicts withheld — what")
+        _say("  this run would produce if the memory held nothing the user had")
+        _say("  chosen. Same rows, same shipped ranking code, one input less:")
+        rows = [
+            {"source_id": r[0], "intent_gated": bool(r[1]),
+             "manual_priority": r[2], "batch_rank": r[3]}
+            for r in conn.execute(
+                "SELECT source_id, intent_gated, manual_priority, batch_rank"
+                "  FROM obligations WHERE status='open'")
+        ]
+        ungated = rank_population([{**r, "intent_gated": False} for r in rows])
+        tally = {tier: sum(1 for x in ungated if x["priority"] == tier)
+                 for tier in ("high", "medium", "low")}
+        _say(f"      tiers without the gate: " +
+             ", ".join(f"{k}={v}" for k, v in tally.items()))
+        _say("  The top tier empties. It is reserved rather than filled, so")
+        _say("  with nothing to reserve it for it stays empty instead of")
+        _say("  handing the place to whatever ranked next.")
 
     _heading(3, "Correct — the user outranks the memory")
     _say("  The user decides the onboarding reply can wait, and drops it:")
@@ -122,9 +155,11 @@ def run(fixtures: Path) -> int:
     with sqlite3.connect(db) as conn:
         _show_list(conn)
 
-    _heading(5, "Re-judge — a later pass cannot undo the correction")
-    _say("  The scheduled review runs and the model, not knowing better, tries")
-    _say("  to restore the onboarding reply to the top tier:")
+    _heading(5, "Re-judge — the second canned turn cannot undo the correction")
+    _say("  The scheduled review runs. This is the other recorded turn: a")
+    _say("  review envelope, written inline below rather than in fixtures/,")
+    _say("  in which the model does not know about the pin and tries to")
+    _say("  restore the onboarding reply to the top tier.")
     apply({"version": 1, "pass": "review", "decisions": [
         {"source_id": "msg-quiet-decay", "decision": "KEEP_OPEN", "rank": 1,
          "intent_gated": True, "title": "Reply to Sam on the onboarding revamp doc"}]})

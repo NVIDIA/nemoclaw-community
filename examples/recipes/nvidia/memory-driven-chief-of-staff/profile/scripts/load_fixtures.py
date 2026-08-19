@@ -7,9 +7,11 @@ This deliberately reuses `normalize` and `_db` rather than inserting rows
 directly. A walkthrough that takes a shortcut around the code it is
 demonstrating proves nothing, and normalization is the layer most likely to be wrong.
 
-Also copies the seed memory into the profile workspace, because without
-`attention/current_priorities.md` every row fails the intent gate and the
-ranking has nothing to show.
+Also copies the seed memory into the profile workspace. A live judging turn
+reads those pages before it decides whether the user chose a given piece of
+work; the fixture path has that decision recorded already, so the pages are
+here for the live path and for the memory self-check rather than to change what
+the walkthrough prints.
 """
 
 from __future__ import annotations
