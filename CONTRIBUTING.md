@@ -98,6 +98,33 @@ Before you open or update a pull request, refresh the upstream reference:
 git fetch upstream main
 ```
 
+### Update a Published Branch
+
+NemoClaw Community does not allow force pushes. After you publish a branch or
+use it for a pull request, do not run `git push --force` or
+`git push --force-with-lease`.
+
+Merge the current `main` branch into your published branch, then push the new
+commits normally:
+
+```bash
+git checkout <short-branch-name>
+git fetch upstream main
+git merge upstream/main
+git push origin <short-branch-name>
+```
+
+Resolve merge conflicts in the merge commit. Do not rebase a published branch
+when pushing the result would rewrite remote history.
+
+If a published branch contains a commit that must be removed or replaced,
+create a new branch from the current `main` branch. Apply only the intended
+changes to the new branch, push it, and open a new pull request. Close the old
+pull request with a comment that identifies the replacement pull request.
+
+Use the same process for branches in forks, even when the fork does not enforce
+the repository rule.
+
 If the example uses a Git submodule, initialize the submodule as specified in
 the example's README. You do not need to initialize submodules for unrelated
 examples.
@@ -263,7 +290,7 @@ Before you move or rename an example, complete these steps:
 - Search open pull requests for the old path and name.
 - Identify affected pull requests and downstream documentation.
 - Record the merge order.
-- Coordinate the rebase sequence with owners of dependent pull requests.
+- Coordinate the update sequence with owners of dependent pull requests.
 - Keep path changes separate from unrelated runtime or dependency changes.
 
 In the pull request for the move, complete these steps:
@@ -276,11 +303,11 @@ In the pull request for the move, complete these steps:
 - Remove obsolete paths.
 
 After the migration merges, owners of dependent pull requests must fetch the
-updated `main` branch from `upstream`. Then, each owner must rebase the pull
-request branch onto `upstream/main`.
+updated `main` branch from `upstream`. Then, each owner must merge
+`upstream/main` into the pull request branch and push normally.
 
-After each rebase, confirm that the pull request does not restore an obsolete
-path.
+After each branch update, confirm that the pull request does not restore an
+obsolete path.
 
 ## Sign Off Every Pull Request
 
@@ -319,6 +346,11 @@ Your pull request should include:
 - Your DCO sign-off declaration.
 
 Submit all changes to `main` through a pull request.
+
+Do not rewrite the history of a published pull request branch. If a branch
+cannot be corrected with new commits or a merge from `main`, replace it with a
+new branch and pull request as described in
+[Update a Published Branch](#update-a-published-branch).
 
 Maintainers merge a pull request only when all these conditions are true:
 
