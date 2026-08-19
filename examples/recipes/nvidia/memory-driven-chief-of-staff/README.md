@@ -127,7 +127,7 @@ cd profile/scripts
 for t in tests/*.py; do python3 "$t" || break; done
 ```
 
-TEST_COUNT_PLACEHOLDER tests, no network and no credentials. They cover the ten
+Ninety-three tests, no network and no credentials. They cover the ten
 acceptance criteria agreed on the proposal issue, plus three areas the issue
 does not
 enumerate:
