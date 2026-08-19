@@ -167,7 +167,7 @@ def set_priority(source_id: str, tier: str) -> dict:
         if status != "open":
             raise InvalidTransition(
                 f"{source_id} is {status}; a priority override applies to the "
-                "open list. Restore it first.")
+                f"open list. Restore it first: correct.py unignore {source_id}")
         if manual == tier:
             return {"source_id": source_id, "manual_priority": tier,
                     "priority": priority, "global_rank": rank, "changed": False}

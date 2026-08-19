@@ -5,13 +5,13 @@
 
 Memory-Driven Chief of Staff is a recipe that keeps a local, revisable record
 for each inbound email and Slack message. It re-judges those records on a
-schedule and re-ranks them under fixed caps once the scheduler integration in
-the next phase registers the jobs. The user's own ignores and priority
-overrides change the ranking. The recipe never writes back to the source
-system.
+schedule and re-ranks them under fixed caps. Once the next phase registers the
+scheduler jobs, that re-judging runs on its own. The user's own ignores and
+priority overrides change the ranking. The recipe never writes back to the
+source system.
 
-This first phase contains the store, its tests, and a walkthrough that runs the
-whole mechanism from end to end. It needs no email account, no Slack workspace,
+This first phase contains the store, its tests, and a walkthrough that runs it
+from end to end. It needs no email account, no Slack workspace,
 no network, and no inference endpoint. A fixture corpus exercises the same code
 a live source would. Two recorded model turns stand in for the two steps that
 would otherwise need a model: the intake judgment, in
@@ -32,6 +32,8 @@ These terms appear throughout this document and in the code.
 | Obligation | One message that needs an action, with a tier, a position, and its own history. |
 | Tier | The priority band an obligation sits in: `high`, `medium`, or `low`. |
 | Envelope | The JSON document a model turn returns: a list of decisions for the writer to apply. The recipe's recorded turns are envelopes. |
+| Cascade | What happens to an un-gated row that ranked inside the top ten: it drops into the competition for `medium` rather than out of the list. |
+| Reservation | The rule that keeps `high` for gate-passing rows. If fewer pass than the cap allows, the tier stays smaller rather than being filled from the remainder. |
 | Gate verdict | The recorded per-message answer to the intent gate: whether the memory shows the user chose this work. Stored as `intent_gated`. |
 | Intent gate | The rule that admits an obligation to the `high` tier only if the memory shows the user chose that work. External urgency alone does not qualify. |
 
@@ -39,10 +41,12 @@ These terms appear throughout this document and in the code.
 
 A personal assistant is only useful if it remembers one person accurately: who
 they work with, what they are accountable for, and what they have already
-decided. The runtime this recipe targets stores that as free-form notes.
-Nothing validates a note, indexes it, links it to related notes, ages it, or
-repairs it. Over weeks the notes either grow without bound or drift out of
-date, and nothing detects either.
+decided. Hermes's built-in memory holds that as free-form notes in `MEMORY.md`
+and `USER.md`. Nothing validates a note, indexes it, links it to related notes,
+ages it, or repairs it, so over weeks the notes either grow without bound or
+drift out of date, and nothing detects either. Hermes also ships optional
+external memory providers; this recipe requires none of them and keeps its own
+record local, under a schema it can check.
 
 A second kind of record is not a fact but a judgment about a message that
 another system owns. Examples: this message needs a reply, it ranks third this
@@ -115,7 +119,7 @@ The seven steps:
    a live collector uses. Nothing is judged yet. This is what ingestion alone
    produces.
 2. **Judge.** The first recorded turn (`fixtures/envelopes/intake.json`) is
-   applied by the real writer. Three rows carry a gate verdict, so the `high`
+   applied by the real writer. Three rows pass the intent gate, so the `high`
    tier holds three rather than its maximum of ten. The tier is never padded.
    The mandatory expense-attestation deadline ranks fourth and is capped at
    `medium`, because the recorded verdict says the user never chose that work.
@@ -183,9 +187,9 @@ A correction applies only where it means something, so on a populated store:
 - All three refuse an obligation that is `done` and exit `3`. A completed
   obligation is history, and rewriting it would turn finished work into a
   standing instruction.
-- `priority` also refuses an ignored row and exits `3`, naming `unignore` as
-  the way back. This is easy to hit right after the walkthrough, which ignores
-  `msg-cc-only` in step 4.
+- `priority` also refuses an ignored row and exits `3`, printing the `unignore`
+  command that restores it. The walkthrough ignores `msg-cc-only` in step 4, so
+  a `priority` command against that row right afterwards reaches this.
 - Repeating a correction that is already in force changes nothing. It prints
   `"changed": false` and exits `0`.
 - With no matching obligation, `correct.py` exits `3`. With `HERMES_HOME`
@@ -207,40 +211,44 @@ cd ../..
 
 Expected result: every file ends with `OK`, the eight files report 152 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
-loop reports the status of its last command, so a broken build would still
-exit `0`.
+loop reports the status of its last command, so a failing test would still
+leave the loop exiting `0`.
 
 | What it covers | Where |
 | --- | --- |
 | Schema versioning | `tests/test_migration.py` |
 | Invariant detection, idempotency, compaction detection | `tests/test_memory_check.py` |
-| Concurrency, crash recovery, reinstall survival, profile-home resolution, installation | `tests/test_durability.py` |
+| Concurrency, crash recovery, reinstall survival, profile-home resolution, installation, failed-write cause reporting | `tests/test_durability.py` |
 | Bounded ranking, including user pins | `tests/test_ranking.py` |
 | Preference counting | `tests/test_preferences.py` |
 | Source normalization | `tests/test_normalize.py` |
 | Writer behavior, audit trail, caps across batches, correction idempotency, correction state transitions, displaced-row audit | `tests/test_apply_decisions.py` |
 | The walkthrough, and its central claims | `tests/test_walkthrough.py` |
 
-Four of these are worth calling out.
+Four points are worth calling out.
 
 - `TestNoSourceMutation` in `tests/test_durability.py` scans every module for
   write verbs and source-mutating calls, so "never writes back to the source"
   stays true as the code grows.
 - `test_nothing_this_example_ships_lands_on_a_user_owned_path`, also in
-  `tests/test_durability.py`, asserts that no path is both user-owned and
-  distribution-owned. A name in both sets would be destroyed silently on every
-  update.
+  `tests/test_durability.py`, asserts that nothing this recipe ships occupies a
+  user-owned name, and that the user-owned and distribution-owned sets stay
+  disjoint. A shipped directory called `workspace` would be destroyed on every
+  update, taking the store with it.
 - `tests/test_walkthrough.py` runs the walkthrough and asserts its central
   claims against the store the run produced: the gate bounding the top tier,
   loud urgency staying out of it, the pin deciding the tier and surviving a
   later pass, and both corrections being attributed to the user.
 - Several of its tests assert against the printed output instead, because what
-  is printed is itself a claim. They check that the run names which part is
-  recorded, that it discloses both recorded turns, that it says the gate
-  verdict is recorded, that it scopes the seed-memory claim to the tiers, that
-  it shows the top tier emptying without the gate, and that the memory check is
-  seen to fail as well as pass. It does not assert every line the script
-  prints.
+  is printed is itself a claim. They check six of them:
+  - the run names which part is recorded;
+  - it discloses both recorded turns;
+  - it says the gate verdict is recorded;
+  - it scopes the seed-memory claim to the tiers;
+  - it shows the top tier emptying without the gate;
+  - the memory check is seen to fail as well as pass.
+
+  It does not assert every line the script prints.
 
 ## Where state lives
 
@@ -263,15 +271,20 @@ credential gateway and never to the store.
 
 ## Privacy
 
-Nothing in this phase reaches a network or reads a real account. None of the
-handling below is implemented yet; it describes what the optional connectors
-will do, and is stated here because it shapes the schema under review.
+Nothing in this phase reaches a network or reads a real account.
+
+One reduction already ships, because it is part of the schema under review:
+recipient lists are never stored. Ingest reduces them to a single `addressing`
+value — `direct`, `mentioned`, or `broadcast` — so the store never holds a
+copy of who else was on a thread. `normalize.py` does this today, and
+`tests/test_normalize.py` asserts it.
+
+The rest of the handling below is not implemented yet. It describes what the
+optional connectors will do, and is stated here because it shapes the schema.
 
 Once a connector is attached:
 
 - Attachments will not be fetched.
-- Recipient lists will be reduced at ingest to a single `addressing` value
-  rather than retained: `direct`, `mentioned`, or `broadcast`.
 - Message bodies will be cleared on a schedule. Metadata and the audit trail
   will be kept, so history stays inspectable without content sitting on disk.
 - For Microsoft Graph, an item deleted at the source will be tombstoned locally
@@ -302,6 +315,9 @@ to it:
 ```bash
 rm -rf "$HERMES_HOME"
 ```
+
+Each `mktemp -d` in this document creates a separate profile home. Remove each
+one you made, not only the last.
 
 Running the scripts also leaves a Python bytecode cache at
 `profile/scripts/__pycache__/` in the checkout, unless the interpreter is
@@ -348,8 +364,10 @@ package, so nothing is added to the repository's third-party notices.
 ## Sandbox and policy
 
 This phase reaches no network and requires no policy grant. It ships five skill
-files that a runtime loads, and scripts that read and write only inside the
-profile home. Network egress and provider permissions arrive with the
+files that a runtime loads, and scripts that read the recipe's own files from
+the checkout and write application state only inside the profile home. They
+also leave a Python bytecode cache beside the scripts — see
+[Cleanup](#cleanup). Network egress and provider permissions arrive with the
 connectors in a later phase and will be documented there.
 
 ## Startup

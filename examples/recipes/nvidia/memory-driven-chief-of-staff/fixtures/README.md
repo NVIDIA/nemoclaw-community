@@ -25,27 +25,27 @@ against the fixtures and against live sources.
 
 | Record | What it controls for |
 | --- | --- |
-| `msg-priorities-match` | Matches an entry in `memory/attention/current_priorities.md`, so a judging turn gives it a gate verdict and it can reach the `high` tier. |
+| `msg-priorities-match` | Matches an entry in `memory/attention/current_priorities.md`, so a judging turn admits it through the intent gate and it can reach the `high` tier. |
 | `msg-urgent-not-chosen` | Loud external urgency that matches nothing the user chose: a mandatory deadline, with "URGENT" in the subject. Capped at `medium`. |
-| `msg-quiet-decay` | Dated seven days before the rest of the batch, and nothing later in the corpus follows up on it. It is named in `memory/attention/current_priorities.md`, so it carries a gate verdict too. The walkthrough pins it to the bottom tier by hand, to show a correction outranking the memory. |
+| `msg-quiet-decay` | Dated seven days before the rest of the batch, and nothing later in the corpus follows up on it. It is named in `memory/attention/current_priorities.md`, so it passes the gate too. The walkthrough pins it to the bottom tier by hand, to show a correction outranking the memory. |
 | `msg-automated-noise` | A build notification from a `noreply@` address. Skipped, and skipping is terminal, so it is never judged again. |
 | `msg-cc-only` | The user is on Cc rather than To. Being copied is not being asked, so `addressing` is `broadcast`. |
 | `D0DIRECT01` message | A direct message. `addressing` is `direct`, with no mention needed. |
-| `C0TEAM0001` mention | A channel message that names the user, about the migration document, so it carries a gate verdict too. `addressing` is `mentioned`. |
+| `C0TEAM0001` mention | A channel message that names the user, about the migration document, so it passes the gate too. `addressing` is `mentioned`. |
 | `C0TEAM0001` notice | A channel announcement that names nobody. `addressing` is `broadcast`. |
 
 Two of the eight are skipped rather than tracked: `msg-automated-noise` and the
 `C0TEAM0001` notice. That is why the walkthrough reports `"skipped": 2` and
 carries six obligations rather than eight.
 
-Three of the eight carry a gate verdict: `msg-priorities-match`, the
+Three of the eight pass the intent gate: `msg-priorities-match`, the
 `C0TEAM0001` mention, and `msg-quiet-decay`. That is why the walkthrough prints
 `high=3`.
 
 `msg-urgent-not-chosen` is the record to watch. It is a real, dated, mandatory
-deadline, and the model ranks it fourth. It still cannot reach the `high` tier,
-because the recorded verdict says the user never chose that work. This is the
-behavior a ranking without a memory behind it cannot produce.
+deadline, and the recorded turn ranks it fourth. It still cannot reach the
+`high` tier, because the recorded verdict says the user never chose that work.
+This is the behavior a ranking without a memory behind it cannot produce.
 
 ## The seed memory
 
@@ -95,8 +95,8 @@ to guess a profile home.
 
 The walkthrough prints seven steps: ingestion, judgment, two corrections, a
 re-judgment that cannot undo them, the state of the preference threshold, and
-the memory self-check. The self-check breaks one page on purpose, so the check
-is seen to fail as well as pass.
+the memory self-check. Step 7 breaks one page on purpose, so the check is seen
+to fail as well as pass.
 
 To load the messages without any of the judgment, use the loader on its own in
 a profile home the walkthrough has not already filled:
