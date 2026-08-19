@@ -127,7 +127,7 @@ cd profile/scripts
 for t in tests/*.py; do python3 "$t" || break; done
 ```
 
-One hundred and ten tests, no network and no credentials. They cover the ten
+One hundred and seventeen tests, no network and no credentials. They cover the ten
 acceptance criteria agreed on the proposal issue, plus three areas the issue
 does not
 enumerate:

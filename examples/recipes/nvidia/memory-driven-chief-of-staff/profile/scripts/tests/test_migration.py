@@ -124,6 +124,54 @@ class TestVersionGuardOnTheRealPath(unittest.TestCase):
         with sqlite3.connect(self.db) as c:
             self.assertEqual(c.execute("SELECT COUNT(*) FROM obligations").fetchone()[0], 0)
 
+    def _fake_a_future_store(self):
+        """A v99 store that dropped a table we ship and added one we do not."""
+        with sqlite3.connect(self.db) as c:
+            c.execute("UPDATE meta SET value='99' WHERE key='schema_version'")
+            c.execute("DROP TABLE events")
+            c.execute("CREATE TABLE v99_notes (id TEXT)")
+
+    def _tables(self):
+        with sqlite3.connect(self.db) as c:
+            return sorted(r[0] for r in c.execute(
+                "SELECT name FROM sqlite_master"
+                " WHERE type='table' AND name NOT LIKE 'sqlite_%'"))
+
+    def test_the_schema_is_not_touched_before_the_refusal(self):
+        """"Refused before any write" has to include the baseline DDL.
+
+        `CREATE TABLE IF NOT EXISTS` is idempotent against our own schema and
+        not against a later version's. Running it first silently recreated a
+        table that version had dropped, and the store was left carrying a
+        table from a schema the refusing code does not understand. Asserting
+        only that no rows were written missed it, because the damage is DDL.
+        """
+        import migrate                        # noqa: E402
+        self._fake_a_future_store()
+        before = self._tables()
+        self.assertNotIn("events", before)     # the future version dropped it
+        with self.assertRaises(migrate.SchemaFromTheFuture):
+            self._db.ensure_store()
+        self.assertEqual(self._tables(), before)
+
+    def test_the_version_is_not_rewritten_by_the_refusal(self):
+        self._fake_a_future_store()
+        with self.assertRaises(Exception):
+            self._db.ensure_store()
+        with sqlite3.connect(self.db) as c:
+            version = c.execute(
+                "SELECT value FROM meta WHERE key='schema_version'").fetchone()[0]
+        self.assertEqual(int(version), 99)
+
+    def test_a_store_with_no_meta_table_is_not_mistaken_for_the_future(self):
+        """The pre-check runs before the baseline exists, so it must tolerate that."""
+        import migrate                        # noqa: E402
+        with sqlite3.connect(self.db) as c:
+            c.execute("DROP TABLE meta")
+        with sqlite3.connect(self.db) as c:
+            migrate.refuse_if_from_the_future(c)      # must not raise
+        self.assertTrue(self._db.ensure_store().is_file())
+
     def test_an_older_store_is_migrated_rather_than_refused(self):
         """The guard is one-sided: behind is upgraded, ahead is refused."""
         import migrate                        # noqa: E402

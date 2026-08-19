@@ -310,6 +310,47 @@ class TestProfileHomeResolution(unittest.TestCase):
         self.assertEqual(self._resolve(home),
                          home / "workspace" / "ledger" / "state.db")
 
+    def test_a_home_that_does_not_exist_is_refused_rather_than_created(self):
+        """A mistyped path is the ordinary way of naming the wrong directory.
+
+        It was also the one case that got through: the profile check only ran
+        on a directory that already existed, so a typo skipped it entirely and
+        materialised a store under the misspelled name — the inverse of the
+        rule, where a wrong directory that exists is caught and a wrong path
+        that does not is obeyed.
+        """
+        home = self.root / ".hermes-typoo"
+        with self.assertRaises(RuntimeError) as caught:
+            self._resolve(home)
+        self.assertIn("does not exist", str(caught.exception))
+        self.assertFalse(home.exists(), "the refused path was created anyway")
+
+    def test_a_missing_home_is_not_created_by_opening_the_store(self):
+        """The refusal has to hold on the path that creates directories."""
+        import _db                             # noqa: E402
+        home = self.root / "absent"
+        os.environ["HERMES_HOME"] = str(home)
+        with self.assertRaises(RuntimeError):
+            _db.ensure_store()
+        self.assertFalse(home.exists())
+
+    def test_a_dotfile_does_not_make_a_fresh_directory_look_occupied(self):
+        """Opening a folder in a file browser should not change what it is."""
+        home = self.root / "browsed"
+        home.mkdir()
+        (home / ".DS_Store").write_bytes(b"\x00\x01")
+        self.assertEqual(self._resolve(home),
+                         home / "workspace" / "ledger" / "state.db")
+
+    def test_a_dotfile_does_not_make_a_non_profile_look_like_one(self):
+        """Ignoring dotfiles must not weaken the check on real content."""
+        home = self.root / "not-a-profile-either"
+        home.mkdir()
+        (home / ".DS_Store").write_bytes(b"\x00")
+        (home / "Documents").mkdir()
+        with self.assertRaises(RuntimeError):
+            self._resolve(home)
+
     def test_a_directory_that_is_not_a_profile_is_refused(self):
         home = self.root / "not-a-profile"
         home.mkdir()

@@ -66,6 +66,26 @@ def current_version(conn: sqlite3.Connection) -> int:
     return int(row[0]) if row else 0
 
 
+def refuse_if_from_the_future(conn: sqlite3.Connection) -> None:
+    """Raise if the store is newer than this code, without touching it.
+
+    Callable before the baseline schema runs, which is the point: `migrate`
+    can only check after `meta` exists, so a caller that creates tables first
+    has already written to a store it does not understand by the time the
+    check fires. A store with no `meta` table has no version to be ahead of,
+    so it is left for the baseline to create.
+    """
+    has_meta = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='meta'").fetchone()
+    if not has_meta:
+        return
+    version = current_version(conn)
+    if version > SCHEMA_VERSION:
+        raise SchemaFromTheFuture(
+            f"store is at schema {version}, this code understands {SCHEMA_VERSION}. "
+            "Upgrade the recipe rather than downgrading the store.")
+
+
 def migrate(conn: sqlite3.Connection) -> list[int]:
     """Apply pending migrations. Returns the versions applied, oldest first."""
     version = current_version(conn)

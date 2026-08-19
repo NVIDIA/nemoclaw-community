@@ -36,6 +36,18 @@ PROFILE_MARKERS = ("distribution.yaml", "SOUL.md", ".env",
 OURS = {"workspace"}
 
 
+def _significant(root: Path) -> set[str]:
+    """Directory entries that say something about what this directory is.
+
+    Dotfiles do not. A profile home that someone opened in a file browser picks
+    up a `.DS_Store`, and treating that as content made an otherwise empty
+    directory look occupied. The markers that *are* dotfiles, `.env` among
+    them, are matched before this is reached.
+    """
+    return {entry.name for entry in root.iterdir()
+            if not entry.name.startswith(".")} - OURS
+
+
 def _is_profile_home(root: Path) -> bool:
     """Whether `root` looks like a Hermes profile home.
 
@@ -51,7 +63,7 @@ def _is_profile_home(root: Path) -> bool:
     # A fresh directory is accepted: `hermes profile create` makes the home
     # before anything populates it, and refusing that would mean the store
     # could never be created on a first run.
-    return not (set(entry.name for entry in root.iterdir()) - OURS)
+    return not _significant(root)
 
 
 def ledger_path() -> Path:
@@ -65,9 +77,20 @@ def ledger_path() -> Path:
     if not home:
         raise RuntimeError("HERMES_HOME is not set; refusing to guess the profile home")
     root = Path(home)
-    if root.exists() and not root.is_dir():
+    if not root.exists():
+        # A path that is merely mistyped is the ordinary way of pointing at the
+        # wrong place, and it used to be the one case that got through: the
+        # check below only ran on a directory that existed, so a typo skipped
+        # it and materialised a whole store under the misspelled name. Refusing
+        # is safe because nothing creates a profile home except Hermes.
+        raise RuntimeError(
+            f"HERMES_HOME does not exist: {root}. Create the profile first "
+            "(`hermes profile create <name>`), or point at an existing one — "
+            "the default profile is the Hermes root itself and named profiles "
+            "live under <root>/profiles/<name>.")
+    if not root.is_dir():
         raise RuntimeError(f"HERMES_HOME is not a directory: {root}")
-    if root.is_dir() and not _is_profile_home(root):
+    if not _is_profile_home(root):
         raise RuntimeError(
             f"HERMES_HOME does not look like a Hermes profile home: {root}. "
             f"Expected one of {', '.join(PROFILE_MARKERS)} there. The default "
@@ -84,7 +107,7 @@ def ensure_store(schema_sql: Path | None = None) -> Path:
     a store written by a newer version of this recipe is rejected before any
     write rather than being quietly populated with tables it does not expect.
     """
-    from migrate import migrate           # imported here to avoid a cycle
+    from migrate import migrate, refuse_if_from_the_future   # avoids a cycle
 
     path = ledger_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -94,6 +117,12 @@ def ensure_store(schema_sql: Path | None = None) -> Path:
 
     with contextlib.closing(sqlite3.connect(path, isolation_level=None)) as conn:
         conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
+        # Check the version before the baseline DDL, not after. `CREATE TABLE
+        # IF NOT EXISTS` is idempotent against our own schema but not against
+        # someone else's: a store from a later version that dropped a table we
+        # still ship would have it silently recreated, so "refused before any
+        # write" has to mean before the DDL too.
+        refuse_if_from_the_future(conn)
         # Creating tables is idempotent, so this is safe on an existing store;
         # it is what brings a brand new one up to the baseline. executescript
         # commits implicitly, so it runs before the transaction rather than
