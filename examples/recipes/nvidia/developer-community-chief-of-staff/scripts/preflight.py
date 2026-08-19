@@ -27,6 +27,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 import inference_preflight  # noqa: E402
 import slack_socket_preflight  # noqa: E402
+import tavily_search_preflight  # noqa: E402
 from lib.configuration import (  # noqa: E402
     DEFAULTS,
     GATEWAY_ENDPOINTS,
@@ -130,6 +131,7 @@ def credential_status(values: Mapping[str, str]) -> dict[str, str]:
         "Slack bot access token": bool(values.get("SLACK_BOT_TOKEN")),
         "Slack app-level token": bool(values.get("SLACK_APP_TOKEN")),
         "GitHub access token": bool(values.get("GITHUB_TOKEN")),
+        "Tavily API key": bool(values.get("TAVILY_API_KEY")),
         "ATIF relay access token": bool(values.get("ATIF_RELAY_AUTH_TOKEN")),
     }
     return {
@@ -314,6 +316,34 @@ def configuration_checks(env_file: Path, values: Mapping[str, str]) -> list[Chec
             ),
         )
     )
+
+    tavily_key = values.get("TAVILY_API_KEY", "")
+    if tavily_key:
+        try:
+            tavily_search_preflight.validate_host_key(tavily_key)
+            tavily_error = ""
+        except tavily_search_preflight.TavilyPreflightError as error:
+            tavily_error = str(error)
+        checks.append(
+            Check(
+                "public web search",
+                "configuration",
+                "FAIL" if tavily_error else "PASS",
+                tavily_error or "Tavily Search enabled; API key value redacted",
+                "Set TAVILY_API_KEY to the host-held Tavily API key"
+                if tavily_error
+                else "",
+            )
+        )
+    else:
+        checks.append(
+            Check(
+                "public web search",
+                "optional",
+                "SKIP",
+                "disabled; no Tavily provider or network policy will be attached",
+            )
+        )
 
     slack_ids = [
         item.strip()
@@ -681,6 +711,25 @@ def external_checks(values: Mapping[str, str], timeout: float) -> list[Check]:
             )
         )
 
+    tavily_key = values.get("TAVILY_API_KEY", "")
+    if tavily_key:
+        try:
+            tavily_search_preflight.run_preflight(tavily_key, timeout)
+            checks.append(
+                Check(
+                    "Tavily Search",
+                    "external",
+                    "PASS",
+                    "one bounded search request succeeded; API key value redacted",
+                )
+            )
+        except tavily_search_preflight.TavilyPreflightError as error:
+            checks.append(Check("Tavily Search", "external", "FAIL", str(error)))
+    else:
+        checks.append(
+            Check("Tavily Search", "external", "SKIP", "public web search is disabled")
+        )
+
     if all(values.get(key) for key in SLACK_REQUIRED):
         try:
             slack_socket_preflight.run_preflight(values["SLACK_APP_TOKEN"], timeout)
@@ -724,6 +773,12 @@ def skipped_external_checks(values: Mapping[str, str]) -> list[Check]:
             "not contacted; rerun with --external",
         )
     ]
+    tavily_detail = (
+        "not contacted; rerun with --external"
+        if values.get("TAVILY_API_KEY")
+        else "public web search is disabled"
+    )
+    checks.append(Check("Tavily Search", "external", "SKIP", tavily_detail))
     slack_detail = (
         "not contacted; rerun with --external"
         if all(values.get(key) for key in SLACK_REQUIRED)
@@ -758,7 +813,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--external",
         action="store_true",
-        help="Contact the configured inference and Slack services with bounded checks",
+        help="Contact the configured inference, Tavily, and Slack services with bounded checks",
     )
     parser.add_argument("--timeout", type=float, default=10.0)
     parser.add_argument("--json", action="store_true", help="Print redacted JSON")

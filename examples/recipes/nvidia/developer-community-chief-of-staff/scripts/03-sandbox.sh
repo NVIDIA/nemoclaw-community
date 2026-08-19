@@ -60,6 +60,14 @@ GITHUB_READONLY_REPO="${GITHUB_READONLY_REPOS%%,*}"
 export GITHUB_READONLY_REPOS GITHUB_READONLY_REPO
 echo "GitHub read-only repository scope: $GITHUB_READONLY_REPOS"
 
+NEMOCLAW_WEB_SEARCH_PROVIDER=""
+if [[ -n "${TAVILY_API_KEY:-}" ]]; then
+  NEMOCLAW_WEB_SEARCH_PROVIDER="tavily"
+  echo "Public web search: Tavily (search-only)"
+else
+  echo "Public web search: disabled"
+fi
+
 NEMOCLAW_SLACK_RICH_BLOCKS="${NEMOCLAW_SLACK_RICH_BLOCKS:-true}"
 case "$NEMOCLAW_SLACK_RICH_BLOCKS" in
   true|false) ;;
@@ -81,6 +89,7 @@ bash "$DIR/stage-enterprise-cas.sh"
 declare -A DOCKERFILE_ARGS=(
   [NEMOCLAW_MESSAGING_CHANNELS_B64]="$CHANNELS_B64"
   [NEMOCLAW_SLACK_RICH_BLOCKS]="$NEMOCLAW_SLACK_RICH_BLOCKS"
+  [NEMOCLAW_WEB_SEARCH_PROVIDER]="$NEMOCLAW_WEB_SEARCH_PROVIDER"
   [GITHUB_READONLY_REPOS]="$GITHUB_READONLY_REPOS"
   [GITHUB_READONLY_REPO]="$GITHUB_READONLY_REPO"
   [SOURCE_ETL_API_HOST]="$SOURCE_ETL_HOST"
@@ -150,6 +159,9 @@ fi
 python3 "$DIR/lib/github_repositories.py" stage-policy \
   --template "$EXAMPLE_DIR/policy.yaml" \
   --output "$STAGED_POLICY"
+python3 "$DIR/lib/web_search_policy.py" \
+  --template "$STAGED_POLICY" \
+  --output "$STAGED_POLICY"
 
 # ── Build provider flags from what 02-providers.sh actually created ────
 PROVIDER_FLAGS=()
@@ -158,6 +170,7 @@ PROVIDER_FLAGS=()
 [[ -n "${OUTLOOK_CLIENT_ID:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-outlook")
 [[ -n "${SLACK_BOT_TOKEN:-}" || -n "${SLACK_APP_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-slack")
 [[ -n "${GITHUB_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-github")
+[[ -n "${TAVILY_API_KEY:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-tavily-search")
 atif_remote_enabled && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-atif-export-relay")
 
 # ── Create the sandbox ─────────────────────────────────────────────────

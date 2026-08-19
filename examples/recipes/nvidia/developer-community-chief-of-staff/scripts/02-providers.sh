@@ -35,7 +35,7 @@ echo "Importing v2 provider profiles from $EXAMPLE_DIR/providers/"
 # import of an edited profile, delete the sandbox first (then its provider no
 # longer holds the profile) and re-run.
 for profile_id in nemoclaw-outlook-email nemoclaw-slack nemoclaw-github \
-                  nemoclaw-atif-export-relay; do
+                  nemoclaw-tavily-search nemoclaw-atif-export-relay; do
   openshell provider profile delete "$profile_id" >/dev/null 2>&1 || true
 done
 # Import each active profile by name. nemoclaw-compatible-endpoint is a
@@ -47,7 +47,8 @@ done
 # the endpoint tracks ATIF_RELAY_ENDPOINT — stage through sed before import.
 STAGED_RELAY_PROFILE="$EXAMPLE_DIR/providers/.atif-export-relay.staged.yaml"
 trap 'rm -f "$STAGED_RELAY_PROFILE"' EXIT
-for profile_file in outlook-email.yaml slack.yaml github.yaml atif-export-relay.yaml; do
+for profile_file in outlook-email.yaml slack.yaml github.yaml tavily-search.yaml \
+                    atif-export-relay.yaml; do
   src="$EXAMPLE_DIR/providers/$profile_file"
   if [[ "$profile_file" == "atif-export-relay.yaml" ]]; then
     sed -e "s|__ATIF_RELAY_HOST__|$ATIF_RELAY_HOST|g" \
@@ -323,6 +324,24 @@ if [[ -n "${GITHUB_TOKEN:-}" ]]; then
   GH_PROVIDER="$SANDBOX_NAME-github"
   echo "Upserting provider $GH_PROVIDER (credential: GITHUB_TOKEN)"
   upsert_cred "$GH_PROVIDER" nemoclaw-github "GITHUB_TOKEN=$GITHUB_TOKEN"
+fi
+
+# ── Optional Tavily web-search provider ────────────────────────────────
+# Validate the host-held key before registering it. The sandbox receives only
+# an OpenShell placeholder. Both the provider profile and staged sandbox policy
+# permit the Hermes Python runtime to call POST /search; /extract is not allowed.
+if [[ -n "${TAVILY_API_KEY:-}" ]]; then
+  TAVILY_PROVIDER="$SANDBOX_NAME-tavily-search"
+  echo "Validating Tavily Search API key before provider creation"
+  env -i "${PREFLIGHT_NETWORK_ENV[@]}" \
+    NEMOCLAW_TAVILY_PREFLIGHT_KEY="$TAVILY_API_KEY" \
+    python3 "$DIR/tavily_search_preflight.py" \
+      --timeout "${NEMOCLAW_TAVILY_PREFLIGHT_TIMEOUT_SECONDS:-10}"
+  echo "Upserting provider $TAVILY_PROVIDER (credential: TAVILY_API_KEY)"
+  upsert_cred "$TAVILY_PROVIDER" nemoclaw-tavily-search \
+    "TAVILY_API_KEY=$TAVILY_API_KEY"
+else
+  echo "Tavily web search: disabled (TAVILY_API_KEY is not configured)"
 fi
 
 # ── ATIF object-storage provider (bearer token for atif-export-relay) ───

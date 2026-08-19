@@ -25,6 +25,10 @@ process:
   run_as_user: sandbox
   run_as_group: sandbox
 network_policies:
+  # Optional Tavily search is staged only when TAVILY_API_KEY is configured.
+  # The static template grants no Tavily egress. scripts/03-sandbox.sh replaces
+  # this marker with one POST /search rule for Hermes's pinned Python runtime.
+  # __TAVILY_WEB_SEARCH_POLICY__
   # Load-bearing: per-path allow rules for the NVIDIA inference API.
   # providers/compatible-endpoint.yaml grants read-write over these hosts but
   # cannot express path scoping (v2 ProviderProfile schema has no rules[]).

@@ -478,6 +478,37 @@ class ConsolidatedPreflightTest(TestCase):
         self.assertNotIn(SLACK_ENV["SLACK_APP_TOKEN"], serialized)
         self.assertNotIn(SLACK_ENV["COMPATIBLE_API_KEY"], serialized)
 
+    def test_tavily_external_preflight_is_optional_and_redacted(self) -> None:
+        secret = "example-tavily-key-not-valid"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = self.make_env(temp_dir, {"TAVILY_API_KEY": secret})
+            with (
+                patch.object(PREFLIGHT.shutil, "which", return_value="/test/tool"),
+                patch.object(PREFLIGHT.inference_preflight, "run_preflight"),
+                patch.object(PREFLIGHT.slack_socket_preflight, "run_preflight"),
+                patch.object(
+                    PREFLIGHT.tavily_search_preflight, "run_preflight"
+                ) as tavily,
+            ):
+                result, exit_code = PREFLIGHT.run_preflight(
+                    path,
+                    environment={},
+                    external=True,
+                    command_runner=successful_runner,
+                    port_available=lambda _port: True,
+                    endpoint_reachable=lambda _endpoint, _timeout: True,
+                )
+
+        self.assertEqual(0, exit_code)
+        tavily.assert_called_once_with(secret, 10.0)
+        serialized = json.dumps(result)
+        self.assertNotIn(secret, serialized)
+        self.assertIn('"Tavily API key": "configured"', serialized)
+        tavily_check = next(
+            item for item in result["checks"] if item["name"] == "Tavily Search"
+        )
+        self.assertEqual("PASS", tavily_check["status"])
+
     def test_failed_external_check_recommends_the_external_preflight(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             path = self.make_env(temp_dir)

@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Search-only Tavily access for Hermes. The native Hermes provider places the
+# OpenShell resolver placeholder in the JSON api_key field. Request-body
+# rewriting keeps the raw API key in the gateway and substitutes it only after
+# the request passes the host, route, method, and binary checks below.
+id: nemoclaw-tavily-search
+display_name: NemoClaw Tavily Search
+description: Search-only Tavily access for the developer community chief-of-staff recipe
+category: agent
+credentials:
+  - name: api_key
+    description: Tavily Search API key
+    env_vars: [TAVILY_API_KEY]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+    query_param: ""
+endpoints:
+  - host: api.tavily.com
+    port: 443
+    protocol: rest
+    enforcement: enforce
+    request_body_credential_rewrite: true
+    rules:
+      - allow: { method: POST, path: "/search" }
+binaries:
+  - /opt/hermes/.venv/bin/python
+inference_capable: false
