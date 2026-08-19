@@ -35,6 +35,8 @@ two apart.
 
 | Path | What it is |
 | --- | --- |
+| `profile/distribution.yaml` | The manifest: what an install replaces, and what it leaves alone |
+| `profile/SOUL.md` | The persona, including the rule that answers come from the memory or not at all |
 | `profile/schema.md` | The memory contract: six page types, index rules, provenance, decay, growth ceilings |
 | `profile/scripts/schema.sql` | The ledger: items, obligations, an append-only audit trail, and source cursors |
 | `profile/scripts/ranking.py` | Cap-and-cascade tier assignment, deterministic |
@@ -88,7 +90,7 @@ cd profile/scripts
 for t in tests/*.py; do python3 "$t" || break; done
 ```
 
-Fifty-nine tests, no network and no credentials. They cover the ten acceptance
+Sixty-one tests, no network and no credentials. They cover the ten acceptance
 criteria agreed on the proposal issue, plus two areas the issue does not
 enumerate:
 
@@ -154,6 +156,12 @@ directory and nothing remains.
   testable; deciding what to compact needs the skill, which needs a model.
 - The memory ships with a seed that passes its own checks. It is a
   demonstration, not a starting point for real use.
+- Paths in the skills are written against `$HERMES_HOME` rather than relative
+  to a working directory. This is not stylistic: the agent's working directory
+  is not the profile home, and a relative path resolves to nothing. An
+  unreadable memory is indistinguishable from an empty one, so the failure is
+  silent — the agent answers confidently from nothing rather than reporting an
+  error.
 
 ## Intended users and support boundary
 

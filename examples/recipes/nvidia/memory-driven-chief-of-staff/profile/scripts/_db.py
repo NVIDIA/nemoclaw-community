@@ -23,11 +23,22 @@ BUSY_TIMEOUT_MS = 5000
 
 
 def ledger_path() -> Path:
-    """`workspace/` is user-owned, so the store survives profile reinstall."""
-    home = os.environ.get("HERMES_HOME")
+    """`workspace/` is user-owned, so the store survives profile reinstall.
+
+    HERMES_HOME must be set and must not be the runtime root. Falling back to
+    a default would point destructive commands at whichever profile happens to
+    be active — during development this module reported deleting a ledger
+    belonging to a different profile entirely.
+    """
+    home = os.environ.get("HERMES_HOME", "").strip()
     if not home:
         raise RuntimeError("HERMES_HOME is not set; refusing to guess the profile home")
-    return Path(home) / "workspace" / "ledger" / "state.db"
+    root = Path(home)
+    if root.name == ".hermes":
+        raise RuntimeError(
+            f"HERMES_HOME points at the runtime root ({root}), not a profile. "
+            "Set it to the profile home, e.g. <root>/profiles/<name>.")
+    return root / "workspace" / "ledger" / "state.db"
 
 
 def ensure_store(schema_sql: Path | None = None) -> Path:

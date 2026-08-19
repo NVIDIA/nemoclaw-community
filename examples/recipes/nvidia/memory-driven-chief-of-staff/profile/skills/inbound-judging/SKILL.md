@@ -18,9 +18,9 @@ row for each, and return one JSON envelope. You never write to the database —
 
 ## Read first
 
-- `workspace/memory/index.md`, then only the pages it names that bear on this
+- `$HERMES_HOME/workspace/memory/index.md`, then only the pages it names that bear on this
   slice — typically `people/` for the senders and the relevant `projects/`.
-- `workspace/policy/preferences.md` if it exists. It records what this user
+- `$HERMES_HOME/workspace/policy/preferences.md` if it exists. It records what this user
   has repeatedly ignored or re-ranked. Treat it as a strong prior, not a rule:
   a pattern ignored eight times is probably noise, but an unmistakably urgent
   instance of it is still an obligation.
@@ -146,3 +146,16 @@ Emit exactly one envelope, nothing else:
 
 Every message in the slice appears exactly once. A message you neither create
 nor skip is a bug — the item stays `pending` and will be re-judged forever.
+
+## Then write it
+
+The envelope is not the deliverable; the stored rows are. Save it and run the
+writer:
+
+```bash
+python3 "$HERMES_HOME/scripts/apply_decisions.py" < envelope.json
+```
+
+It prints how many rows it created, updated, closed, and skipped. Report those
+counts. A run that printed an envelope and never invoked the writer changed
+nothing, however good the judgment in it was.

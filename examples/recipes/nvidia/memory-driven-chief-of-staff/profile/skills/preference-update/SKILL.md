@@ -29,7 +29,7 @@ obligation.
 `status`. The user's overrides are theirs; this skill only reads them.
 A run that changes a row has failed, however good its reasoning was.
 
-The policy lands in `workspace/policy/preferences.md`, which
+The policy lands in `$HERMES_HOME/workspace/policy/preferences.md`, which
 `inbound-judging` reads as a prior and `obligation-review` reads as context.
 
 ## Step 1 — collect
@@ -74,7 +74,7 @@ for what counts as a preference eventually accepts everything.
 
 ## Step 4 — write
 
-Read `workspace/policy/preferences.md`, creating it with an empty
+Read `$HERMES_HOME/workspace/policy/preferences.md`, creating it with an empty
 `## Observed Preferences` section if absent.
 
 If an existing entry already says the same thing — the same pattern in other
@@ -101,7 +101,7 @@ that the cap held.
 
 ## Step 5 — log
 
-Append one entry to `workspace/memory/log.md`, including runs that changed
+Append one entry to `$HERMES_HOME/workspace/memory/log.md`, including runs that changed
 nothing:
 
 ```markdown

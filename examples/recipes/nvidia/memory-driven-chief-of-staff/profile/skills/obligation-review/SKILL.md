@@ -20,7 +20,7 @@ You never write to the database. Return one envelope; the writer commits it.
 
 ## Read first
 
-`workspace/memory/index.md`, then the pages that bear on this batch:
+`$HERMES_HOME/workspace/memory/index.md`, then the pages that bear on this batch:
 `attention/current_priorities.md` always, plus the `projects/` and `people/`
 pages the rows touch. Load them once for the whole batch rather than per row.
 
@@ -112,3 +112,14 @@ dropped — are applied afterwards in code. Do not assign tiers.
 
 Refresh `title` and `context` when the world moved — a title that was accurate
 last week can be stale now. Every row you were given appears exactly once.
+
+## Then write it
+
+Save the envelope and run the writer:
+
+```bash
+python3 "$HERMES_HOME/scripts/apply_decisions.py" < envelope.json
+```
+
+Report the counts it prints. An envelope that was printed but never written is
+a run that did nothing.

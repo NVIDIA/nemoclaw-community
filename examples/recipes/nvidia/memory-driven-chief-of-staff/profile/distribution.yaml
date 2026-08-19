@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: memory-driven-chief-of-staff
+version: 0.1.0
+description: >-
+  Keeps a locally-authoritative, revisable record per inbound email and Slack
+  message, re-judged on a schedule and re-ranked under fixed caps, without
+  writing back to the source.
+hermes_requires: ">=0.19.0"
+author: NVIDIA
+license: Apache-2.0
+
+# What an install replaces. Everything else in the profile home is the user's
+# and is left alone — in particular `workspace`, which holds the store and the
+# memory. `cron` is deliberately absent: jobs are registered through the cron
+# interface by the installer, so an update cannot replace the live job store
+# along with its run history.
+distribution_owned:
+  - SOUL.md
+  - schema.md
+  - skills
+  - scripts
+  - distribution.yaml

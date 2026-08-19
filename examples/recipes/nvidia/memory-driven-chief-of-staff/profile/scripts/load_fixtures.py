@@ -49,7 +49,10 @@ def load(fixtures: Path) -> dict[str, int]:
     memory_src = fixtures / "memory"
     memory_dst = ledger_path().parent.parent / "memory"
     if memory_src.is_dir() and not memory_dst.exists():
-        shutil.copytree(memory_src, memory_dst)
+        # Skip editor and archive debris; an AppleDouble sidecar is binary
+        # and would land beside a page with the same .md suffix.
+        shutil.copytree(memory_src, memory_dst,
+                        ignore=shutil.ignore_patterns('._*', '.DS_Store'))
         memory_dst.chmod(0o700)
         # The seed represents "now". Without restamping, a fixture committed
         # with a fixed date starts failing its own decay check a day or two

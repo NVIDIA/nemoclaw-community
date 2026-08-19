@@ -81,6 +81,18 @@ class TestInvariants(unittest.TestCase):
         self.assertIn("over-ceiling", self.kinds(findings))
         self.assertIn("31 items", str(findings[0]))
 
+    def test_a_binary_sidecar_named_like_a_page_does_not_break_the_pass(self):
+        # macOS archives carry AppleDouble files named `._thing.md`. They end
+        # in .md, they are binary, and reading one as text used to kill the
+        # whole check on a real runtime.
+        (self.root / "people" / "._dana_okoro.md").write_bytes(b"\x00\xa3\xff binary")
+        self.assertEqual(check_all(self.root, self.today), [])
+
+    def test_an_unreadable_page_is_reported_rather_than_fatal(self):
+        (self.root / "people" / "corrupt.md").write_bytes(b"\xa3\xa3 not utf-8")
+        kinds = self.kinds(check_all(self.root, self.today))
+        self.assertIn("unreadable", kinds)
+
     def test_a_dangling_index_entry_is_found(self):
         # The index naming a page that does not exist is the mirror image of an
         # unindexed page, and until now only one of the two had a test.

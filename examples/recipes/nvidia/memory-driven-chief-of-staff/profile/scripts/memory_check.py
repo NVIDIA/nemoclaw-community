@@ -42,6 +42,18 @@ class Finding:
         return f"{self.kind}: {self.path} — {self.detail}"
 
 
+def _read(path: Path) -> str | None:
+    """Return a page's text, or None when it is not text at all.
+
+    A check that dies on one unreadable file reports nothing about the other
+    fifty, which is the opposite of what a health check is for.
+    """
+    try:
+        return path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        return None
+
+
 def _frontmatter(text: str) -> dict[str, str]:
     m = FRONTMATTER.match(text)
     if not m:
@@ -55,8 +67,15 @@ def _frontmatter(text: str) -> dict[str, str]:
 
 
 def _pages(root: Path) -> list[Path]:
+    """Every memory page, skipping the entry points and editor debris.
+
+    Names beginning with a dot or `._` are not pages. The second form is an
+    AppleDouble sidecar, which a macOS archive carries along and which is
+    binary despite ending in `.md` — reading it as text is how this was found.
+    """
     return sorted(p for p in root.rglob("*.md")
-                  if p.name not in {"schema.md", "log.md", "index.md"})
+                  if p.name not in {"schema.md", "log.md", "index.md"}
+                  and not p.name.startswith("."))
 
 
 def check_index(root: Path) -> list[Finding]:
@@ -66,7 +85,10 @@ def check_index(root: Path) -> list[Finding]:
     if not index.exists():
         return [Finding("index-missing", "index.md", "the entry point does not exist")]
 
-    listed = {(index.parent / t).resolve() for t in LINK.findall(index.read_text("utf-8"))}
+    index_text = _read(index)
+    if index_text is None:
+        return [Finding("unreadable", "index.md", "not valid UTF-8 text")]
+    listed = {(index.parent / t).resolve() for t in LINK.findall(index_text)}
     for page in _pages(root):
         if page.resolve() not in listed:
             findings.append(Finding("unindexed", str(page.relative_to(root)),
@@ -84,7 +106,12 @@ def check_links(root: Path) -> list[Finding]:
     for page in _pages(root) + [root / "index.md"]:
         if not page.exists():
             continue
-        for target in LINK.findall(page.read_text("utf-8")):
+        text = _read(page)
+        if text is None:
+            findings.append(Finding("unreadable", str(page.relative_to(root)),
+                                    "not valid UTF-8 text"))
+            continue
+        for target in LINK.findall(text):
             if not (page.parent / target).resolve().exists():
                 findings.append(Finding("broken-link", str(page.relative_to(root)),
                                         f"link to {target} does not resolve"))
@@ -100,7 +127,10 @@ def check_decay(root: Path, today: date | None = None) -> list[Finding]:
     today = today or date.today()
     findings: list[Finding] = []
     for page in _pages(root):
-        fm = _frontmatter(page.read_text("utf-8"))
+        text = _read(page)
+        if text is None:
+            continue
+        fm = _frontmatter(text)
         decay, updated = fm.get("decay"), fm.get("updated")
         if not decay or decay not in DECAY_DAYS or not updated:
             continue
@@ -122,7 +152,10 @@ def check_provenance(root: Path) -> list[Finding]:
     for page in _pages(root):
         if page.parent.name != "patterns":
             continue
-        body = FRONTMATTER.sub("", page.read_text("utf-8"))
+        text = _read(page)
+        if text is None:
+            continue
+        body = FRONTMATTER.sub("", text)
         prose = [ln for ln in body.splitlines()
                  if ln.strip() and not ln.startswith("#")]
         if prose and not FOOTNOTE.search(body) and not INFERRED.search(body):
@@ -138,7 +171,10 @@ def check_ceilings(root: Path) -> list[Finding]:
     for page in _pages(root):
         if page.parent.name != "people":
             continue
-        lines = page.read_text("utf-8").splitlines()
+        text = _read(page)
+        if text is None:
+            continue
+        lines = text.splitlines()
         try:
             start = next(i for i, ln in enumerate(lines)
                          if ln.strip().lower().startswith("## recent interactions"))
