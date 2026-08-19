@@ -1,11 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Replay the demo fixtures through the real ingest path.
+"""Replay the fixtures through the real ingest path.
 
 This deliberately reuses `normalize` and `_db` rather than inserting rows
-directly. A demo that takes a shortcut around the code it is demonstrating
-proves nothing, and normalization is the layer most likely to be wrong.
+directly. A walkthrough that takes a shortcut around the code it is
+demonstrating proves nothing, and normalization is the layer most likely to be wrong.
 
 Also copies the seed memory into the profile workspace, because without
 `attention/current_priorities.md` every row fails the intent gate and the
@@ -56,7 +56,7 @@ def load(fixtures: Path) -> dict[str, int]:
         memory_dst.chmod(0o700)
         # The seed represents "now". Without restamping, a fixture committed
         # with a fixed date starts failing its own decay check a day or two
-        # after it ships, and the demo opens by reporting itself stale.
+        # after it ships, and the walkthrough opens by reporting itself stale.
         today = datetime.now(timezone.utc).date().isoformat()
         for page in memory_dst.rglob("*.md"):
             text = page.read_text(encoding="utf-8")

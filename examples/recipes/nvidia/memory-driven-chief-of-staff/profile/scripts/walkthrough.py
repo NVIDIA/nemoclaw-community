@@ -26,12 +26,14 @@ import argparse
 import json
 import sqlite3
 import sys
+from datetime import date
 from pathlib import Path
 
 import correct
 import load_fixtures
 from _db import ensure_store, ledger_path
 from apply_decisions import apply
+from memory_check import check_all
 from preferences import THRESHOLD, candidates, collect
 
 RULE = "─" * 78
@@ -154,9 +156,38 @@ def run(fixtures: Path) -> int:
 
     _heading(7, "Verify — the memory checks itself")
     _say("      python3 profile/scripts/memory_check.py")
-    _say("  Runs the same invariants the scheduled repair job uses: index")
+    _say("  The same invariants the scheduled repair job uses: index")
     _say("  consistency, resolvable links, required frontmatter, provenance,")
     _say("  decay and page-size ceilings.")
+    _say()
+    root = Path(loaded["memory"])
+    findings = check_all(root, date.today())
+    _say(f"  clean: {not findings}   findings: {len(findings)}")
+    for f in findings:
+        _say(f"    · {f.kind:<20} {f.path}: {f.detail}")
+    if findings and all(f.kind == "stale" for f in findings):
+        _say()
+        _say("  That is the decay rule firing, not a broken fixture. The loader")
+        _say("  stamps the seed memory as of the day it ran, and the attention")
+        _say("  page is marked `decay: daily`, so it ages out one day later —")
+        _say("  which is the point: a priority nobody has confirmed since should")
+        _say("  stop being treated as current. On a live system the repair job")
+        _say("  refreshes the page or retires it.")
+    _say()
+    _say("  Break one on purpose — the check has to be able to fail, or it is")
+    _say("  telling you nothing:")
+    person = next((root / "people").glob("*.md"))
+    original = person.read_text()
+    try:
+        person.write_text(original.replace("name:", "nome:", 1))
+        broken = check_all(root, date.today())
+    finally:
+        person.write_text(original)
+    _say(f"      after removing `name` from people/{person.name}: "
+         f"{len(broken)} finding(s)")
+    for f in broken:
+        _say(f"    · {f.kind:<20} {f.path}: {f.detail}")
+    _say("  (restored)")
     _say()
     _say(RULE)
     _say(f"  Store: {db}")

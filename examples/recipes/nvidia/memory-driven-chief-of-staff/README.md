@@ -8,9 +8,11 @@ message — re-judged on a schedule, re-ranked under fixed caps, and updated by
 the user's own ignores and priority overrides — without ever writing back to
 the source.
 
-This first contribution is the store and its tests. It runs with no email
-account, no Slack workspace, and no network: a fixture corpus exercises the
-same code path a live source would.
+This first contribution is the store, its tests, and a walkthrough that runs
+the whole mechanism end to end. It needs no email account, no Slack workspace,
+no network, and no inference endpoint: a fixture corpus exercises the same code
+path a live source would, and one recorded model turn stands in for the one
+step that would otherwise need a model.
 
 ## Why it exists
 
@@ -46,7 +48,9 @@ two apart.
 | `profile/scripts/migrate.py` | Schema versioning, forward-only |
 | `profile/scripts/normalize.py` | Source payloads to store rows, kept separate from any I/O |
 | `profile/scripts/_db.py` | Connection and transaction boundary |
+| `profile/scripts/correct.py` | The user's writer: pins, ignores, and the only source of `actor='user'` events |
 | `profile/scripts/load_fixtures.py` | Replays the fixtures through the real ingest path |
+| `profile/scripts/walkthrough.py` | The fixture walkthrough, end to end, with no credentials and no model |
 | `profile/skills/` | Five skills: judging, review, repair, consolidation, preference update |
 | `fixtures/` | Eight synthetic messages and a seed memory |
 
@@ -67,20 +71,53 @@ No credentials of any kind are required to run everything below.
 ```bash
 cd examples/recipes/nvidia/memory-driven-chief-of-staff
 export HERMES_HOME=$(mktemp -d)
+python3 profile/scripts/walkthrough.py --fixtures fixtures
+```
+
+Seven steps, about a screen and a half of output:
+
+1. **Collect.** The fixtures go through the same normalization and writer path
+   a live collector uses. Nothing is judged yet — this is what ingestion alone
+   produces.
+2. **Judge.** One recorded model turn (`fixtures/envelopes/intake.json`) is
+   applied by the real writer. Three rows pass the intent gate, so the top tier
+   holds three, not ten; it is never padded. The mandatory expense-attestation
+   deadline ranks fourth and is capped at the middle tier, because the user
+   never chose it. That is the behaviour a ranking without a memory cannot
+   produce.
+3. **Correct.** The user pins a gate-passing row down. It leaves the top tier,
+   because a pin outranks what the memory inferred, and the whole open list is
+   re-ranked around it.
+4. **Correct again.** A row is ignored outright and leaves the open list.
+5. **Re-judge.** A later pass tries to restore the pinned row and cannot. An
+   agent pass never clears `manual_priority`.
+6. **Learn.** The corrections on record are counted against the threshold a
+   policy rule needs. Two do not reach it, and the walkthrough says so rather
+   than manufacturing a third.
+7. **Verify.** The memory is checked against its own schema — then a field is
+   removed on purpose so you can watch the check fail, and restored.
+
+The one recorded model turn is the only thing standing in for inference.
+Everything downstream of it is the shipped code. The walkthrough says which is
+which on screen, and `fixtures/README.md` says it again.
+
+To watch ingestion on its own, or to confirm it is idempotent:
+
+```bash
 python3 profile/scripts/load_fixtures.py --fixtures fixtures
 python3 profile/scripts/load_fixtures.py --fixtures fixtures
 ```
 
-The loader replays the fixtures through the same normalization and writer path
-a live collector uses, and prints how many records it stored. The second run
-adds nothing, because intake is keyed on the source's own id. Keeping
-`HERMES_HOME` in the environment across both runs is what makes that
-observable; a fresh directory each time would simply load the fixtures twice.
+The second run adds nothing, because intake is keyed on the source's own id.
+Keeping `HERMES_HOME` across both runs is what makes that observable; a fresh
+directory each time would simply load the fixtures twice.
 
-Check the seeded memory against its own schema:
+The individual pieces are callable on their own:
 
 ```bash
-python3 profile/scripts/memory_check.py
+python3 profile/scripts/memory_check.py                          # invariants
+python3 profile/scripts/correct.py priority <source_id> low      # pin a tier
+python3 profile/scripts/correct.py ignore <source_id>            # stop tracking
 ```
 
 ## Verify
@@ -90,8 +127,9 @@ cd profile/scripts
 for t in tests/*.py; do python3 "$t" || break; done
 ```
 
-Sixty-one tests, no network and no credentials. They cover the ten acceptance
-criteria agreed on the proposal issue, plus two areas the issue does not
+TEST_COUNT_PLACEHOLDER tests, no network and no credentials. They cover the ten
+acceptance criteria agreed on the proposal issue, plus three areas the issue
+does not
 enumerate:
 
 | Criterion | Where |
@@ -102,13 +140,20 @@ enumerate:
 | Bounded ranking | `tests/test_ranking.py` |
 | Preference updates | `tests/test_preferences.py` |
 | Source normalization | `tests/test_normalize.py` |
-| Writer behaviour and audit trail | `tests/test_apply_decisions.py` |
+| Writer behaviour, audit trail, caps across batches | `tests/test_apply_decisions.py` |
+| The walkthrough, and every claim it prints | `tests/test_walkthrough.py` |
 
-Two of these are constraints rather than observations. One scans every module
-for write verbs and source-mutating calls, so "never writes back to the source"
-stays true as the code grows. The other asserts that no path is both user-owned
-and distribution-owned, since a name in both sets would be destroyed silently
-on every update.
+Two of the three are constraints rather than observations. One scans every
+module for write verbs and source-mutating calls, so "never writes back to the
+source" stays true as the code grows. The other asserts that no path is both
+user-owned and distribution-owned, since a name in both sets would be destroyed
+silently on every update.
+
+The third runs the walkthrough and asserts what it printed. Documentation that
+executes is worth shipping only while its narration is still true, so each
+claim it makes on screen — the gate bounding the top tier, loud urgency staying
+out of it, the pin surviving a later pass — is an assertion against the store it
+produced.
 
 ## Where state lives
 
@@ -151,11 +196,14 @@ directory and nothing remains.
 ## Known limitations
 
 - Scheduled jobs are not part of this contribution. The store is exercised by
-  the loader and the tests; job registration arrives with the installer.
+  the walkthrough and the tests; job registration arrives with the installer.
+- The walkthrough's judgment step is a recorded envelope, not a live model
+  turn. It is the honest limit of a fixture corpus: everything downstream of
+  that one file is the shipped code, and nothing upstream of it is.
 - Compaction is detected but not performed here. Detection is mechanical and
   testable; deciding what to compact needs the skill, which needs a model.
-- The memory ships with a seed that passes its own checks. It is a
-  demonstration, not a starting point for real use.
+- The memory ships with a seed that passes its own checks. It illustrates the
+  schema; it is not a starting point for real use.
 - Paths in the skills are written against `$HERMES_HOME` rather than relative
   to a working directory. This is not stylistic: the agent's working directory
   is not the profile home, and a relative path resolves to nothing. An
