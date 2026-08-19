@@ -3,7 +3,7 @@
 
 """End-to-end: envelope in, rows and audit events out, one transaction."""
 
-import json, os, sqlite3, sys, tempfile, unittest
+import json, os, sqlite3, subprocess, sys, tempfile, unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parents[1]
@@ -379,6 +379,168 @@ class TestRerankAuditCoversThePopulation(unittest.TestCase):
             {"source_id": "a0", "decision": "KEEP_OPEN", "rank": 1,
              "intent_gated": True, "title": "a0"}]})
         self.assertEqual(self._reranked(), base)
+
+
+class TestCorrectionTransitions(unittest.TestCase):
+    """Corrections apply to states where they mean something, and nowhere else.
+
+    Every command here writes evidence that later shapes the ranking, so a
+    command that rewrote a completed obligation would turn finished work into
+    a standing instruction and destroy the completed record on the way.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.environ["HERMES_HOME"] = self.tmp
+        for m in ("_db", "ranking", "apply_decisions", "correct", "preferences"):
+            sys.modules.pop(m, None)
+        import _db, apply_decisions, correct        # noqa: E402
+        self._db, self.mod, self.correct = _db, apply_decisions, correct
+        _db.ensure_store()
+        self.db = _db.ledger_path()
+
+    def _obligation(self, sid, status="open"):
+        with sqlite3.connect(self.db) as c:
+            c.execute("INSERT INTO items(source_id, source, scope, event_at)"
+                      " VALUES (?,'email','inbox','2026-08-18T00:00:00Z')", (sid,))
+        self.mod.apply({"version": 1, "decisions": [
+            {"source_id": sid, "decision": "CREATE", "rank": 1,
+             "intent_gated": True, "title": sid}]})
+        if status != "open":
+            with sqlite3.connect(self.db) as c:
+                c.execute("UPDATE obligations SET status=? WHERE source_id=?",
+                          (status, sid))
+        return sid
+
+    def _status(self, sid):
+        with sqlite3.connect(self.db) as c:
+            return c.execute("SELECT status FROM obligations WHERE source_id=?",
+                             (sid,)).fetchone()[0]
+
+    def test_a_completed_obligation_is_refused_by_every_command(self):
+        for name, call in (
+                ("ignore", lambda s: self.correct.ignore(s)),
+                ("restore", lambda s: self.correct.unignore(s)),
+                ("priority", lambda s: self.correct.set_priority(s, "high"))):
+            with self.subTest(command=name):
+                sid = self._obligation(f"done-{name}", status="done")
+                with self.assertRaises(self.correct.InvalidTransition):
+                    call(sid)
+                self.assertEqual(self._status(sid), "done",
+                                 "a refused command still changed the row")
+
+    def test_a_completed_obligation_leaves_no_user_evidence(self):
+        """Otherwise finished work becomes a standing preference."""
+        sid = self._obligation("done-evidence", status="done")
+        for call in (lambda: self.correct.ignore(sid),
+                     lambda: self.correct.set_priority(sid, "high")):
+            with self.assertRaises(self.correct.InvalidTransition):
+                call()
+        with sqlite3.connect(self.db) as c:
+            self.assertEqual(
+                c.execute("SELECT COUNT(*) FROM events WHERE actor='user'").fetchone()[0], 0)
+
+    def test_restore_applies_only_to_an_ignored_row(self):
+        sid = self._obligation("restore-me")
+        self.assertFalse(self.correct.unignore(sid)["changed"])   # already open
+        self.correct.ignore(sid)
+        self.assertTrue(self.correct.unignore(sid)["changed"])
+        self.assertEqual(self._status(sid), "open")
+
+    def test_a_pin_applies_only_to_the_open_list(self):
+        sid = self._obligation("pin-me")
+        self.correct.ignore(sid)
+        with self.assertRaises(self.correct.InvalidTransition):
+            self.correct.set_priority(sid, "high")
+
+    def test_the_command_line_reports_a_refused_transition(self):
+        sid = self._obligation("cli-done", status="done")
+        proc = subprocess.run(
+            [sys.executable, str(HERE / "correct.py"), "ignore", sid],
+            capture_output=True, text=True,
+            env={**os.environ, "HERMES_HOME": self.tmp})
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("done", proc.stderr)
+
+
+class TestCorrectionsAuditWhatTheyDisplace(unittest.TestCase):
+    """Correcting one row moves others, and the store has to be able to say so.
+
+    Ignoring the row at position one pulls every row below it up. The command
+    never names those rows, so an audit built from the command alone records
+    nothing — the same defect the agent's writer had, in the user's path.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.environ["HERMES_HOME"] = self.tmp
+        for m in ("_db", "ranking", "apply_decisions", "correct", "preferences"):
+            sys.modules.pop(m, None)
+        import _db, apply_decisions, correct        # noqa: E402
+        self._db, self.mod, self.correct = _db, apply_decisions, correct
+        _db.ensure_store()
+        self.db = _db.ledger_path()
+        with sqlite3.connect(self.db) as c:
+            for i in range(3):
+                c.execute("INSERT INTO items(source_id, source, scope, event_at)"
+                          " VALUES (?,'email','inbox','2026-08-18T00:00:00Z')", (f"m{i}",))
+        self.mod.apply({"version": 1, "decisions": [
+            {"source_id": f"m{i}", "decision": "CREATE", "rank": i + 1,
+             "intent_gated": True, "title": f"t{i}"} for i in range(3)]})
+
+    def _snapshot(self):
+        with sqlite3.connect(self.db) as c:
+            return {r[0]: (r[1], r[2]) for r in c.execute(
+                "SELECT source_id, priority, global_rank FROM obligations"
+                " WHERE status='open'")}
+
+    def _reranked(self):
+        with sqlite3.connect(self.db) as c:
+            return c.execute("SELECT COUNT(*) FROM events"
+                             " WHERE event_type='reranked'").fetchone()[0]
+
+    def _assert_displacement_is_audited(self, correction, corrected):
+        """Every row that moved gets an event, except the one the user named.
+
+        The corrected row already carries its own correction event; auditing it
+        again would count one decision twice.
+        """
+        before, base = self._snapshot(), self._reranked()
+        correction()
+        after = self._snapshot()
+        moved = {k for k in set(before) | set(after)
+                 if before.get(k) != after.get(k)} - {corrected}
+        self.assertTrue(moved, "the fixture failed to displace anything")
+        self.assertEqual(self._reranked() - base, len(moved))
+
+    def test_ignore_audits_the_rows_it_pulls_up(self):
+        self._assert_displacement_is_audited(lambda: self.correct.ignore("m0"), "m0")
+
+    def test_a_priority_override_audits_the_rows_it_moves(self):
+        self._assert_displacement_is_audited(
+            lambda: self.correct.set_priority("m0", "low"), "m0")
+
+    def test_restore_audits_the_rows_it_pushes_down(self):
+        self.correct.ignore("m0")
+        self._assert_displacement_is_audited(lambda: self.correct.unignore("m0"), "m0")
+
+    def test_the_corrected_row_is_not_audited_twice(self):
+        self.correct.set_priority("m0", "low")
+        with sqlite3.connect(self.db) as c:
+            rows = c.execute(
+                "SELECT e.event_type FROM events e JOIN obligations o"
+                "  ON o.id = e.obligation_id"
+                " WHERE o.source_id='m0' AND e.event_type IN"
+                "       ('priority_override','reranked')").fetchall()
+        self.assertEqual([r[0] for r in rows], ["priority_override"])
+
+    def test_a_displacement_is_not_counted_as_user_evidence(self):
+        """The user chose one row, not the reshuffle underneath it."""
+        import preferences                          # noqa: E402
+        self.correct.ignore("m0")
+        with sqlite3.connect(self.db) as c:
+            corrections = preferences.collect(c)
+        self.assertEqual([c["event_type"] for c in corrections], ["ignored"])
 
 
 if __name__ == "__main__":
