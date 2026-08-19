@@ -11,6 +11,12 @@ and Slack channels; you interact with it via Outlook email and/or Slack.
 Outlook is the recommended primary channel, but either is enough on its own —
 at least one of the two must be configured.
 
+For first-time setup, use the
+[guided configuration and preflight](docs/guided-setup.md). The commands ask
+only for credentials required by the selected messaging profile, preserve
+unselected existing `.env` content, redact credentials, and detect missing
+prerequisites before bring-up.
+
 ## Deployment model
 
 This is a personal agent designed to run on a **managed image/VM provisioned by
@@ -285,13 +291,50 @@ application and a dedicated agent mailbox per [docs/set-up-outlook-bridge.md](do
 
 This example will download and install additional third-party open source software projects. Review the license terms of these open source projects before use. The repository-level `THIRD-PARTY-NOTICES` file tracks the expected inventory.
 
-### Phase 2 — Pre-populate `.env` with what you know upfront
+### Phase 2 — Configure and check the recipe
+
+```console
+$ python3 scripts/configure.py
+$ python3 scripts/preflight.py
+```
+
+The configurator guides you through a Slack-only, Outlook-only, or combined
+profile. It hides credential input and writes `.env` with owner-only
+permissions. If `.env` exists, the command changes only the selected keys and
+preserves comments, advanced settings, and other values. Use `--replace` only
+when you intend to replace the file with a minimal configuration.
+
+The default preflight performs configuration and local host checks. It does
+not create services, providers, or sandboxes, and it does not contact the
+configured inference or Slack services. When the local checks pass, run the
+optional bounded external checks:
+
+```console
+$ python3 scripts/preflight.py --external
+```
+
+The external mode reuses `inference_preflight.py` and
+`slack_socket_preflight.py`. It sends the same bounded validation requests that
+provider setup uses. Each preflight result prints the exact next command.
+
+For deterministic automation, supply the required values through the process
+environment or an existing `.env`, then select a profile:
+
+```console
+$ python3 scripts/configure.py --non-interactive --profile slack
+```
+
+Do not place credential values in command arguments. See
+[Guided Configuration and Preflight](docs/guided-setup.md) for profile inputs,
+automation, replacement behavior, JSON output, and the external-check boundary.
+
+Advanced manual configuration remains supported:
 
 ```console
 $ cp .env.example .env
 ```
 
-Now edit `.env` and fill in everything you already have:
+Edit `.env` and fill in everything you need:
 
 - `COMPATIBLE_API_KEY` — your inference key
 - **At least one messaging channel** — Outlook or Slack (or both):
