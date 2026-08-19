@@ -109,5 +109,47 @@ class TestWalkthrough(unittest.TestCase):
         self.assertIn("the other recorded turn", self.output)
 
 
+    def test_it_scopes_the_seed_memory_claim_to_the_tiers(self):
+        """Deleting the memory does change step 7; only the tiers are unaffected."""
+        self.assertIn("does not change the tiers", self.output)
+
+
+class TestWalkthroughRefusesASecondRun(unittest.TestCase):
+    """A second run inherits the first run's corrections.
+
+    The commentary is written for a first run, so re-running against the same
+    profile home printed "the top tier holds three" directly above a table
+    showing two. Refusing is better than narrating numbers that are not there.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.environ["HERMES_HOME"] = self.tmp
+        for m in ("_db", "ranking", "apply_decisions", "correct",
+                  "load_fixtures", "walkthrough", "preferences", "memory_check"):
+            sys.modules.pop(m, None)
+        import walkthrough                      # noqa: E402
+        self.mod = walkthrough
+
+    def _run(self):
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            code = self.mod.main(["--fixtures", str(FIXTURES)])
+        return code, buffer.getvalue()
+
+    def test_the_first_run_succeeds_and_the_second_refuses(self):
+        first, _ = self._run()
+        self.assertEqual(first, 0)
+        second, output = self._run()
+        self.assertEqual(second, 2)
+        self.assertIn("already holds", output)
+        self.assertIn("HERMES_HOME", output)
+
+    def test_the_refusal_does_not_narrate_a_first_run(self):
+        self._run()
+        _, output = self._run()
+        self.assertNotIn("the top tier holds three", output)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

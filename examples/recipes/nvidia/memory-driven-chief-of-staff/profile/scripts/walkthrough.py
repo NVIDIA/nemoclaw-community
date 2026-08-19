@@ -85,6 +85,22 @@ def run(fixtures: Path) -> int:
     ensure_store()
     db = ledger_path()
 
+    # A second run against the same profile home inherits the first run's
+    # corrections, so the narration below — written for a first run — would
+    # describe numbers the tables no longer show. Refuse rather than print a
+    # commentary that contradicts its own output.
+    with sqlite3.connect(db) as conn:
+        already = conn.execute("SELECT COUNT(*) FROM obligations").fetchone()[0]
+    if already:
+        _say(f"This profile home already holds {already} obligations from an")
+        _say("earlier run, whose corrections would still be in force. The")
+        _say("walkthrough narrates a first run, so it would describe numbers")
+        _say("its own tables no longer show. Point HERMES_HOME at a fresh")
+        _say("directory and run it again:")
+        _say()
+        _say("    export HERMES_HOME=$(mktemp -d)")
+        return 2
+
     _heading(1, "Collect — fixture messages through the real normalizer")
     loaded = load_fixtures.load(fixtures)
     _say(f"  {loaded['added']} messages written to items, seed memory at "
@@ -211,22 +227,31 @@ def run(fixtures: Path) -> int:
     _say()
     _say("  Break one on purpose — the check has to be able to fail, or it is")
     _say("  telling you nothing:")
-    person = next((root / "people").glob("*.md"))
-    original = person.read_text()
-    try:
-        person.write_text(original.replace("name:", "nome:", 1))
-        broken = check_all(root, date.today())
-    finally:
-        person.write_text(original)
-    _say(f"      after removing `name` from people/{person.name}: "
-         f"{len(broken)} finding(s)")
-    for f in broken:
-        _say(f"    · {f.kind:<20} {f.path}: {f.detail}")
-    _say("  (restored)")
+    # Reachable with a fixture directory that ships no seed memory; say so
+    # rather than raising StopIteration out of a demonstration step.
+    person = next((root / "people").glob("*.md"), None)
+    if person is None:
+        _say("      no person page to break — this fixture set ships no seed")
+        _say("      memory, so this demonstration is skipped.")
+    else:
+        original = person.read_text()
+        try:
+            person.write_text(original.replace("name:", "nome:", 1))
+            broken = check_all(root, date.today())
+        finally:
+            person.write_text(original)
+        _say(f"      after removing `name` from people/{person.name}: "
+             f"{len(broken)} finding(s)")
+        for f in broken:
+            _say(f"    · {f.kind:<20} {f.path}: {f.detail}")
+        _say("  (restored)")
+
     _say()
     _say(RULE)
     _say(f"  Store: {db}")
-    _say("  Re-run any step; the writer is keyed on source_id and is idempotent.")
+    _say("  Each script is idempotent on its own inputs, but this walkthrough")
+    _say("  is not: a second run inherits the corrections the first one made.")
+    _say("  Use a fresh HERMES_HOME to see it from the start again.")
     _say(RULE)
     return 0
 

@@ -59,9 +59,11 @@ against them.
 What the ranking does with a gate verdict is shipped code, and the walkthrough
 shows it directly: step 2 re-runs the ranking over the same rows with the
 verdicts withheld, and the `high` tier empties.
-`tests/test_ranking.py::TestCapsAndCascade::test_no_row_passes_the_gate_high_is_empty_and_all_cascade`
-and `tests/test_apply_decisions.py::TestCapsAcrossBatches::test_an_ungated_population_leaves_the_high_tier_empty`
-assert the same property.
+Two tests assert the same property directly:
+`test_no_row_passes_the_gate_high_is_empty_and_all_cascade`, in
+`profile/scripts/tests/test_ranking.py`, and
+`test_an_ungated_population_leaves_the_high_tier_empty`, in
+`profile/scripts/tests/test_apply_decisions.py`.
 
 ## The recorded model turns
 
@@ -104,5 +106,11 @@ export HERMES_HOME=$(mktemp -d)
 python3 profile/scripts/load_fixtures.py --fixtures fixtures
 ```
 
-Both scripts are idempotent. A second run against the same profile home adds
-nothing, because intake is keyed on the source's own identifier.
+Ingestion is idempotent: a second `load_fixtures.py` run against the same
+profile home adds nothing, because intake is keyed on the source's own
+identifier.
+
+The walkthrough is not. It narrates a first run, and a second run against the
+same profile home would inherit the first run's corrections, so the commentary
+would no longer match the tables beneath it. It detects that and stops, telling
+you to point `HERMES_HOME` at a fresh directory.

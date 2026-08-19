@@ -5,7 +5,7 @@
 
 Memory-Driven Chief of Staff is a recipe that keeps a local, revisable record
 for each inbound email and Slack message. It re-judges those records on a
-schedule and re-ranks them under fixed caps, once the scheduler integration in
+schedule and re-ranks them under fixed caps once the scheduler integration in
 the next phase registers the jobs. The user's own ignores and priority
 overrides change the ranking. The recipe never writes back to the source
 system.
@@ -13,8 +13,8 @@ system.
 This first phase contains the store, its tests, and a walkthrough that runs the
 whole mechanism from end to end. It needs no email account, no Slack workspace,
 no network, and no inference endpoint. A fixture corpus exercises the same code
-a live source would, and two recorded model turns stand in for the two steps
-that would otherwise need a model: the intake judgment, in
+a live source would. Two recorded model turns stand in for the two steps that
+would otherwise need a model: the intake judgment, in
 `fixtures/envelopes/intake.json`, and the scheduled re-judgment, recorded
 inline in `profile/scripts/walkthrough.py`.
 
@@ -31,6 +31,7 @@ These terms appear throughout this document and in the code.
 | Memory | The Markdown pages describing the person, at `$HERMES_HOME/workspace/memory/`. |
 | Obligation | One message that needs an action, with a tier, a position, and its own history. |
 | Tier | The priority band an obligation sits in: `high`, `medium`, or `low`. |
+| Envelope | The JSON document a model turn returns: a list of decisions for the writer to apply. The recipe's recorded turns are envelopes. |
 | Intent gate | The rule that admits an obligation to the `high` tier only if the memory shows the user chose that work. External urgency alone does not qualify. |
 
 ## Why it exists
@@ -83,10 +84,10 @@ optional Microsoft Graph and Slack connectors.
 ## Requirements
 
 - Python 3.10 or newer. Nothing else is needed for the fixture path.
-- Linux or macOS. Every command below is written for a POSIX shell. On Windows,
-  use Windows Subsystem for Linux or an equivalent shell. The fixture path runs
-  on all three. The shipped skill files declare `platforms: [linux]`, which
-  applies from the installer phase onward, not here.
+- Linux, macOS, or Windows under Windows Subsystem for Linux. Every command
+  below is written for a POSIX shell. The shipped skill files declare
+  `platforms: [linux]`, which applies from the installer phase onward rather
+  than to the fixture path.
 - No credentials of any kind.
 
 Installing the profile into a Hermes runtime is out of scope for this phase;
@@ -138,7 +139,8 @@ The two recorded turns are the only parts standing in for inference.
 Everything downstream of them is the shipped code. One consequence is worth
 being explicit about: the gate verdict on each row is part of the recorded
 intake turn, because deciding it means reading the memory, which needs a model.
-Deleting the seed memory therefore does not change what this run prints. What
+Deleting the seed memory therefore does not change the tiers this run
+prints. It does change step 7, which checks the memory itself. What
 the run does show is everything those verdicts feed into — the caps, the
 reservation, the cascade, the writer, the correction path and the re-ranking —
 and the contrast printed in step 2. For the ranking behavior itself, the
@@ -189,7 +191,7 @@ echo "failed=$fail"
 cd ../..
 ```
 
-Expected result: every file ends with `OK`, the eight files report 137 tests in
+Expected result: every file ends with `OK`, the eight files report 140 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a broken build would still
 exit `0`.
@@ -218,8 +220,12 @@ than observations.
 - `tests/test_walkthrough.py` runs the walkthrough and asserts its central
   claims against the store the run produced: the gate bounding the top tier,
   loud urgency staying out of it, the pin deciding the tier and surviving a
-  later pass, and both corrections being attributed to the user. It does not
-  assert every line the script prints.
+  later pass, and both corrections being attributed to the user.
+- Five of its tests assert against the printed output instead, because what is
+  printed is itself a claim: that the run discloses both recorded turns, that
+  it says the gate verdict is recorded, that it shows the top tier emptying
+  without the gate, and that the memory check is seen to fail as well as pass.
+  It does not assert every line the script prints.
 
 ## Where state lives
 
@@ -242,17 +248,19 @@ credential gateway and never to the store.
 
 ## Privacy
 
-Nothing in this phase reaches a network or reads a real account. The handling
-below applies once the optional connectors land. It is stated here because it
-shapes the schema under review.
+Nothing in this phase reaches a network or reads a real account. None of the
+handling below is implemented yet; it describes what the optional connectors
+will do, and is stated here because it shapes the schema under review.
 
-- Attachments are never fetched.
-- Recipient lists are reduced at ingest to a single value rather than retained:
-  addressed, mentioned, or merely copied.
-- Message bodies are cleared on a schedule. Metadata and the audit trail are
-  kept, so history stays inspectable without content sitting on disk.
-- For Microsoft Graph, an item deleted at the source is tombstoned locally and
-  its body cleared at once, because the delta query reports deletions
+Once a connector is attached:
+
+- Attachments will not be fetched.
+- Recipient lists will be reduced at ingest to a single `addressing` value
+  rather than retained: `direct`, `mentioned`, or `broadcast`.
+- Message bodies will be cleared on a schedule. Metadata and the audit trail
+  will be kept, so history stays inspectable without content sitting on disk.
+- For Microsoft Graph, an item deleted at the source will be tombstoned locally
+  and its body cleared at once, because the delta query reports deletions
   explicitly.
 - For Slack, that guarantee is not available. A deleted message stops appearing
   in `conversations.history`, and its absence from a bounded, paginated read
@@ -261,8 +269,8 @@ shapes the schema under review.
   of which this design uses. Slack content
   therefore ages out on the scheduled body-clearing pass rather than at the
   moment of deletion.
-- Senders, domains, and channels can be excluded at ingest, before anything is
-  written.
+- Senders, domains, and channels will be excludable at ingest, before anything
+  is written.
 
 ## Fixtures
 
@@ -281,7 +289,8 @@ rm -rf "$HERMES_HOME"
 ```
 
 Running the scripts also leaves a Python bytecode cache at
-`profile/scripts/__pycache__/` in the checkout on some Python versions. The
+`profile/scripts/__pycache__/` in the checkout, unless the interpreter is
+configured not to write one (`python3 -B`, or `PYTHONPYCACHEPREFIX`). The
 repository `.gitignore` covers it, so it never appears in `git status`. Remove
 it as well if you want the checkout byte-for-byte as you found it.
 
