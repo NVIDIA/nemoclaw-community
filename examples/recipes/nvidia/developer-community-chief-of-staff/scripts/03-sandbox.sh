@@ -53,12 +53,20 @@ fi
 ALLOWED_SENDERS="${OUTLOOK_ALLOWED_SENDERS:-}"
 SOURCE_ETL_HOST="${SOURCE_ETL_API_HOST:-host.openshell.internal}"
 SOURCE_ETL_PORT="${SOURCE_ETL_API_PORT:-3100}"
-GITHUB_READONLY_REPO="${GITHUB_READONLY_REPO:-NVIDIA/OpenShell}"
-if [[ ! "$GITHUB_READONLY_REPO" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]+$ ]]; then
-  echo "Invalid GITHUB_READONLY_REPO '$GITHUB_READONLY_REPO' — expected owner/repo" >&2
+if ! GITHUB_READONLY_REPOS="$(python3 "$DIR/lib/github_repositories.py" resolve)"; then
   exit 1
 fi
-echo "GitHub read-only repo scope: $GITHUB_READONLY_REPO"
+GITHUB_READONLY_REPO="${GITHUB_READONLY_REPOS%%,*}"
+export GITHUB_READONLY_REPOS GITHUB_READONLY_REPO
+echo "GitHub read-only repository scope: $GITHUB_READONLY_REPOS"
+
+NEMOCLAW_WEB_SEARCH_PROVIDER=""
+if [[ -n "${TAVILY_API_KEY:-}" ]]; then
+  NEMOCLAW_WEB_SEARCH_PROVIDER="tavily"
+  echo "Public web search: Tavily (search-only)"
+else
+  echo "Public web search: disabled"
+fi
 
 GITLAB_READONLY_PROJECTS="${GITLAB_READONLY_PROJECTS:-}"
 GITLAB_PROJECTS=()
@@ -116,6 +124,10 @@ case "$NEMOCLAW_SLACK_RICH_BLOCKS" in
 esac
 echo "Slack rich blocks: $NEMOCLAW_SLACK_RICH_BLOCKS"
 
+# Stage locally installed TLS-inspection roots into the ignored certs/ build
+# input before Docker runs so enterprise builds do not fail on HTTPS downloads.
+bash "$DIR/stage-enterprise-cas.sh"
+
 # ── Stage the Dockerfile and patch ARG defaults ────────────────────────
 # Build args go through sed substitution because `openshell sandbox create
 # --from <Dockerfile>` doesn't expose --build-arg passthrough. Values must
@@ -123,6 +135,8 @@ echo "Slack rich blocks: $NEMOCLAW_SLACK_RICH_BLOCKS"
 declare -A DOCKERFILE_ARGS=(
   [NEMOCLAW_MESSAGING_CHANNELS_B64]="$CHANNELS_B64"
   [NEMOCLAW_SLACK_RICH_BLOCKS]="$NEMOCLAW_SLACK_RICH_BLOCKS"
+  [NEMOCLAW_WEB_SEARCH_PROVIDER]="$NEMOCLAW_WEB_SEARCH_PROVIDER"
+  [GITHUB_READONLY_REPOS]="$GITHUB_READONLY_REPOS"
   [GITHUB_READONLY_REPO]="$GITHUB_READONLY_REPO"
   [GITLAB_READONLY_PROJECTS]="$GITLAB_READONLY_PROJECTS"
   [GITLAB_API_URL]="$GITLAB_API_URL"
@@ -141,14 +155,12 @@ if [[ -n "${PHOENIX_PROJECT_NAME:-}" ]]; then
   echo "Phoenix project: $PHOENIX_PROJECT_NAME"
   DOCKERFILE_ARGS[PHOENIX_PROJECT_NAME]="$PHOENIX_PROJECT_NAME"
 fi
-# ATIF export — the sandbox bakes ONLY the export mode (gates the storage block)
-# and the relay endpoint. It bakes NO bucket, key prefix, region, or creds: the
-# host-side relay owns all of those and rewrites them at egress (the relay
-# backend, s3 vs minio, is a relay concern the sandbox never needs). When
-# ATIF_EXPORT_MODE != relay, no storage block is emitted; start.sh's
-# ATIF_STORAGE_ENABLED probe (greps plugins.toml for the block header) then
-# returns 0, the bridge stays down, AWS_* exports are skipped, and ATIF writes
-# go to /tmp/atif/.
+# ATIF export — the sandbox bakes only the export mode and HTTP relay endpoint.
+# It bakes no bucket, key prefix, region, or downstream credentials: the
+# host-side relay owns all of those (and whether the backend is S3 or MinIO is
+# not a sandbox concern). When ATIF_EXPORT_MODE != relay, the native NeMo Relay
+# configuration writes ATIF trajectories to /tmp/atif and the bridge stays
+# down.
 if atif_remote_enabled; then
   # atif_relay_backend validates ATIF_RELAY_BACKEND is set (loud error if not).
   echo "ATIF export: mode=relay backend=$(atif_relay_backend) (bucket + key prefix owned by the relay)"
@@ -192,16 +204,18 @@ if [[ -n "${GITHUB_TOKEN:-}" ]] || grep -q -- "--mount=type=secret" "$STAGED_DOC
   fi
 fi
 
-# ── Stage policy and patch per-run repo scope ───────────────────────────
-cp "$EXAMPLE_DIR/policy.yaml" "$STAGED_POLICY"
+# ── Stage policy with exact GitHub, GitLab, and web-search rules ────────
+python3 "$DIR/lib/github_repositories.py" stage-policy \
+  --template "$EXAMPLE_DIR/policy.yaml" \
+  --output "$STAGED_POLICY"
+python3 "$DIR/lib/web_search_policy.py" \
+  --template "$STAGED_POLICY" \
+  --output "$STAGED_POLICY"
 python3 "$DIR/lib/stage-gitlab-policy.py" \
   "$STAGED_POLICY" "${GITLAB_PROJECT_SPECS[@]}"
 sed -i \
-  -e "s|__GITHUB_READONLY_REPO__|$GITHUB_READONLY_REPO|g" \
   -e "s|__GITLAB_API_HOST__|$GITLAB_API_HOST|g" \
   -e "s|__GITLAB_API_PORT__|$GITLAB_API_PORT|g" \
-  -e "s|__ATIF_RELAY_HOST__|$ATIF_RELAY_HOST|g" \
-  -e "s|__ATIF_RELAY_PORT__|$ATIF_RELAY_PORT|g" \
   "$STAGED_POLICY"
 
 # ── Build provider flags from what 02-providers.sh actually created ────
@@ -212,6 +226,7 @@ PROVIDER_FLAGS=()
 [[ -n "${SLACK_BOT_TOKEN:-}" || -n "${SLACK_APP_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-slack")
 [[ -n "${GITHUB_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-github")
 [[ -n "${GITLAB_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-gitlab")
+[[ -n "${TAVILY_API_KEY:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-tavily-search")
 atif_remote_enabled && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-atif-export-relay")
 
 # ── Create the sandbox ─────────────────────────────────────────────────
@@ -236,6 +251,7 @@ setsid openshell sandbox create \
     OUTLOOK_TARGET_MAILBOX="${OUTLOOK_TARGET_MAILBOX:-}" \
     OUTLOOK_REPLY_TO="${OUTLOOK_REPLY_TO:-}" \
     OUTLOOK_ALLOWED_SENDERS="$ALLOWED_SENDERS" \
+    GITHUB_READONLY_REPOS="$GITHUB_READONLY_REPOS" \
     GITHUB_READONLY_REPO="$GITHUB_READONLY_REPO" \
     GITLAB_READONLY_PROJECTS="$GITLAB_READONLY_PROJECTS" \
     GITLAB_API_URL="$GITLAB_API_URL" \

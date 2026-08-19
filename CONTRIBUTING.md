@@ -21,7 +21,7 @@ Use one of these methods to contribute:
 - Contribute a new example.
 - Report a reproducible problem.
 
-For a problem report, identify the example. Give the environment details.
+For a problem report, identify the example. Give sanitized environment details.
 
 Select an example from the [example catalog](examples/README.md). Read the
 example's README. Follow all linked setup and check instructions.
@@ -98,6 +98,33 @@ Before you open or update a pull request, refresh the upstream reference:
 git fetch upstream main
 ```
 
+### Update a Published Branch
+
+NemoClaw Community does not allow force pushes. After you publish a branch or
+use it for a pull request, do not run `git push --force` or
+`git push --force-with-lease`.
+
+Merge the current `main` branch into your published branch, then push the new
+commits normally:
+
+```bash
+git checkout <short-branch-name>
+git fetch upstream main
+git merge upstream/main
+git push origin <short-branch-name>
+```
+
+Resolve merge conflicts in the merge commit. Do not rebase a published branch
+when pushing the result would rewrite remote history.
+
+If a published branch contains a commit that must be removed or replaced,
+create a new branch from the current `main` branch. Apply only the intended
+changes to the new branch, push it, and open a new pull request. Close the old
+pull request with a comment that identifies the replacement pull request.
+
+Use the same process for branches in forks, even when the fork does not enforce
+the repository rule.
+
 If the example uses a Git submodule, initialize the submodule as specified in
 the example's README. You do not need to initialize submodules for unrelated
 examples.
@@ -144,6 +171,38 @@ Apply these requirements to all pull requests:
   caches, generated snapshots, generated runtime state, or private workspace
   details.
 - Do not add internal-only links to public documentation.
+
+## Write for a Public Repository
+
+Write all repository content for a public audience. This rule applies to issues,
+pull requests, review comments, commit messages, code comments, documentation,
+tests, logs, generated artifacts, and uploaded files.
+
+Follow [WRITING.md](WRITING.md) for plain-language guidance. Use the approved
+terms in the
+[controlled-word list](.agents/skills/_shared/controlled-words.md). These rules
+apply to content written by people and coding agents.
+
+Before you publish content, remove or replace all nonpublic information,
+including:
+
+- Internal project, environment, profile, host, service, team, or distribution
+  list names.
+- Private URLs, repository paths, ticket identifiers, and workspace paths.
+- Screenshots, logs, configuration values, or commands that expose nonpublic
+  information.
+- Company-specific shorthand that a public contributor cannot understand.
+
+Use a public, generic description when the exact internal name is not required.
+For example, use `enterprise environment`, `private certificate authority`, or
+`internal tracking system` as appropriate. Do not publish the original value in
+an example, quotation, test fixture, commit history, or pull request discussion.
+
+If public text cannot describe the change safely, coordinate privately with a
+maintainer before submission. Coding agents must inspect their proposed output
+against these rules before they post or commit it. A human contributor remains
+responsible for reviewing agent-generated content before merge. Automated
+checks and controlled words do not replace these reviews.
 
 Use these rules during checks:
 
@@ -231,7 +290,7 @@ Before you move or rename an example, complete these steps:
 - Search open pull requests for the old path and name.
 - Identify affected pull requests and downstream documentation.
 - Record the merge order.
-- Coordinate the rebase sequence with owners of dependent pull requests.
+- Coordinate the update sequence with owners of dependent pull requests.
 - Keep path changes separate from unrelated runtime or dependency changes.
 
 In the pull request for the move, complete these steps:
@@ -244,39 +303,33 @@ In the pull request for the move, complete these steps:
 - Remove obsolete paths.
 
 After the migration merges, owners of dependent pull requests must fetch the
-updated `main` branch from `upstream`. Then, each owner must rebase the pull
-request branch onto `upstream/main`.
+updated `main` branch from `upstream`. Then, each owner must merge
+`upstream/main` into the pull request branch and push normally.
 
-After each rebase, confirm that the pull request does not restore an obsolete
-path.
+After each branch update, confirm that the pull request does not restore an
+obsolete path.
 
-## Sign Off Every Commit
+## Sign Off Every Pull Request
 
-Every commit in a pull request must include a
-[`Signed-off-by:` trailer](https://developercertificate.org/) for Developer
-Certificate of Origin (DCO) compliance. A sign-off in the pull request
-description does not satisfy this requirement.
+Every pull request description must include a
+[`Signed-off-by:` declaration](https://developercertificate.org/) for Developer
+Certificate of Origin (DCO) compliance. The pull request author must add the
+declaration before requesting review.
 
-Create a signed-off commit with this command:
-
-```bash
-git commit -s -m "Describe the change"
-```
-
-Git adds a trailer in this form:
+Add this line to the pull request description:
 
 ```text
 Signed-off-by: Your Name <your.email@example.com>
 ```
 
-Use your own name and email address. If you amend, rebase, squash, or
-cherry-pick commits, confirm that each resulting commit still contains a valid
-`Signed-off-by:` trailer.
+Use your own name and email address. Individual commits may also include
+sign-off trailers, but the required check validates the declaration in the pull
+request description. The example name and email address do not satisfy the
+required check.
 
-DCO sign-off is a declaration in the commit message. It is separate from
-cryptographic commit signing.
+DCO sign-off is separate from cryptographic commit signing.
 
-Maintainers do not accept commits without the required sign-off.
+Maintainers do not accept pull requests without the required declaration.
 
 ## Open a Pull Request
 
@@ -290,13 +343,18 @@ Your pull request should include:
 - An explanation for checks that you did not run.
 - The documentation and dependency changes.
 - For a migration, its details and downstream follow-up work.
-- Confirmation that every commit includes DCO sign-off.
+- Your DCO sign-off declaration.
 
 Submit all changes to `main` through a pull request.
 
+Do not rewrite the history of a published pull request branch. If a branch
+cannot be corrected with new commits or a merge from `main`, replace it with a
+new branch and pull request as described in
+[Update a Published Branch](#update-a-published-branch).
+
 Maintainers merge a pull request only when all these conditions are true:
 
-- Every commit satisfies the DCO requirement.
+- The pull request description satisfies the DCO requirement.
 - The pull request satisfies the license-header requirements.
 - The pull request has no unresolved review conversations.
 - A maintainer approves the pull request.

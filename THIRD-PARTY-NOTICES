@@ -31,6 +31,14 @@ Image: vllm/vllm-openai
 License: Apache-2.0 and included component licenses
 URL: https://github.com/vllm-project/vllm
 
+Image: node:22-bookworm-slim
+License: MIT and included Debian component licenses
+URL: https://hub.docker.com/_/node
+
+Image: ollama/ollama
+License: MIT and included component licenses
+URL: https://github.com/ollama/ollama
+
 ================================================================================
 Docker Compose Images
 ================================================================================
@@ -91,6 +99,10 @@ Package: libpython
 License: Python Software Foundation License
 URL: https://packages.debian.org/
 
+Package: Node.js
+License: MIT and included third-party notices
+URL: https://github.com/nodejs/node
+
 Package: postgresql-client
 License: PostgreSQL License
 URL: https://packages.debian.org/
@@ -123,9 +135,17 @@ Package: cryptography
 License: Apache-2.0 OR BSD-3-Clause
 URL: https://github.com/pyca/cryptography
 
+Package: deepagents
+License: MIT
+URL: https://github.com/langchain-ai/deepagents
+
 Package: dlt[postgres]
 License: Apache-2.0
 URL: https://github.com/dlt-hub/dlt
+
+Package: fastapi
+License: MIT
+URL: https://github.com/fastapi/fastapi
 
 Package: hermes-agent
 License: MIT
@@ -134,6 +154,10 @@ URL: https://github.com/NousResearch/hermes-agent
 Package: httpx
 License: BSD-3-Clause
 URL: https://github.com/encode/httpx
+
+Package: langchain-openai
+License: MIT
+URL: https://github.com/langchain-ai/langchain
 
 Package: markdown-it-py
 License: MIT
@@ -171,6 +195,14 @@ Package: pyyaml
 License: MIT
 URL: https://github.com/yaml/pyyaml
 
+Package: pydantic
+License: MIT
+URL: https://github.com/pydantic/pydantic
+
+Package: requests
+License: Apache-2.0
+URL: https://github.com/psf/requests
+
 Package: mcp-proxy
 License: MIT
 URL: https://github.com/sparfenyuk/mcp-proxy
@@ -179,13 +211,44 @@ Package: slack-bolt
 License: MIT
 URL: https://github.com/slackapi/bolt-python
 
+Package: uvicorn
+License: BSD-3-Clause
+URL: https://github.com/Kludex/uvicorn
+
+================================================================================
+Node.js Packages
+================================================================================
+
+Build-time (devDependencies) of the Shrike Security recipe's before_tool_call
+plugin (examples/recipes/partners/shrike/shrike-security/plugin). They compile
+the TypeScript plugin to JavaScript and are not shipped in its distributed dist/.
+
+Package: typescript
+Version: 6.0.3
+License: Apache-2.0
+URL: https://github.com/microsoft/TypeScript
+
+Package: @types/node
+Version: 22.20.1
+License: MIT
+URL: https://github.com/DefinitelyTyped/DefinitelyTyped
+
+Package: undici-types
+Version: 6.21.0
+License: MIT
+URL: https://github.com/nodejs/undici
+
 ================================================================================
 GitHub Actions
 ================================================================================
 
-Action: actions/checkout@v4
+Action: actions/checkout@v4 and v6
 License: MIT
 URL: https://github.com/actions/checkout
+
+Action: actions/upload-artifact@v7
+License: MIT
+URL: https://github.com/actions/upload-artifact
 
 Action: actions/setup-python@v5
 License: MIT
@@ -199,13 +262,53 @@ Project: NousResearch/hermes-agent source archive
 License: MIT
 URL: https://github.com/NousResearch/hermes-agent
 
-Project: NVIDIA/NeMo-Relay release binary
+Project: NVIDIA/NeMo-Relay Python package
 License: Apache-2.0
 URL: https://github.com/NVIDIA/NeMo-Relay
 
 Project: NVIDIA/OpenShell installer and runtime
 License: Apache-2.0
 URL: https://github.com/NVIDIA/OpenShell
+
+Project: NVIDIA/NemoClaw source and sandbox base image
+License: Apache-2.0 and included component licenses
+URL: https://github.com/NVIDIA/NemoClaw
+
+Project: Kubernetes SIG Agent Sandbox controller and API
+License: Apache-2.0
+URL: https://github.com/kubernetes-sigs/agent-sandbox
+
+Project: Kubernetes and kubectl
+License: Apache-2.0
+URL: https://github.com/kubernetes/kubernetes
+
+Project: Helm
+License: Apache-2.0
+URL: https://github.com/helm/helm
+
+Project: Canonical MicroK8s distribution
+License: See the project and included component notices
+URL: https://github.com/canonical/microk8s
+
+Project: NVIDIA GPU Operator
+License: Apache-2.0
+URL: https://github.com/NVIDIA/gpu-operator
+
+Project: NVIDIA DCGM Exporter
+License: Apache-2.0
+URL: https://github.com/NVIDIA/dcgm-exporter
+
+Project: Kubernetes Metrics Server
+License: Apache-2.0
+URL: https://github.com/kubernetes-sigs/metrics-server
+
+Project: Prometheus Community Helm Charts (kube-prometheus-stack and prometheus-adapter)
+License: Apache-2.0 and included component licenses
+URL: https://github.com/prometheus-community/helm-charts
+
+Project: Kubernetes ingress-nginx
+License: Apache-2.0
+URL: https://github.com/kubernetes/ingress-nginx
 
 Project: Astral uv installer and package manager
 License: Apache-2.0 OR MIT
@@ -230,6 +333,10 @@ URL: https://github.com/lfdevs/blender_linux_arm64
 Model: NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4
 License: NVIDIA Open Model License
 URL: https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4
+
+Model: Llama 3.2 3B
+License: Llama 3.2 Community License Agreement and Acceptable Use Policy
+URL: https://ollama.com/library/llama3.2
 
 Service: GitHub API
 Terms: See provider terms

@@ -10,7 +10,10 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-MARKER = "__GITLAB_READONLY_RULES__"
+MARKER = (
+    '      - allow: { method: GET, path: "/api/v4/__gitlab_disabled__" } '
+    "# __GITLAB_READONLY_RULES__"
+)
 SAFE_ROUTES = (
     "issues",
     "merge_requests",
@@ -50,11 +53,10 @@ def render_policy(policy: str, project_specs: list[str]) -> str:
     if not project_specs:
         paths = ["/api/v4/__gitlab_disabled__"]
 
-    indent = "      "
     rendered = "\n".join(
-        f'{indent}- allow: {{ method: GET, path: "{path}" }}' for path in paths
+        f'      - allow: {{ method: GET, path: "{path}" }}' for path in paths
     )
-    return policy.replace(f"{indent}{MARKER}", rendered)
+    return policy.replace(MARKER, rendered)
 
 
 def main() -> None:

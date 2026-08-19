@@ -89,7 +89,7 @@ def test_policy_rules_are_get_only_and_project_scoped():
         "stage_gitlab_policy",
         RECIPE_DIR / "scripts/lib/stage-gitlab-policy.py",
     )
-    template = "rules:\n      __GITLAB_READONLY_RULES__\n"
+    template = f"rules:\n{stage.MARKER}\n"
 
     rendered = stage.render_policy(
         template,
@@ -121,7 +121,7 @@ def test_disabled_policy_has_no_project_route():
         "stage_gitlab_policy_disabled",
         RECIPE_DIR / "scripts/lib/stage-gitlab-policy.py",
     )
-    template = "rules:\n      __GITLAB_READONLY_RULES__\n"
+    template = f"rules:\n{stage.MARKER}\n"
 
     rendered = stage.render_policy(template, [])
 

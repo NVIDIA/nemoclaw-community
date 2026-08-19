@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: review-advisor
+version: "0.1.0"
+description: "Stateful exact-head PR review tools with a canonical finding ledger"
+author: "NVIDIA Corporation"
+manifest_version: 1
+
+provides_tools:
+  - review_begin
+  - review_status
+  - review_repo_read
+  - review_repo_list
+  - review_repo_search
+  - review_diff
+  - review_commit_stage
+  - review_finalize
+
+provides_hooks:
+  - on_session_start
+  - on_session_end

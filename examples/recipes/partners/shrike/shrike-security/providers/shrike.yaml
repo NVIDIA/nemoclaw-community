@@ -1,0 +1,47 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, Shrike Security, Inc. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# OpenShell v2 provider profile for Shrike's action-governance enforce plane.
+# Imported by scripts/onboard.sh via `openshell provider profile import`.
+#
+# Secret handling: the profile declares SHRIKE_API_KEY as a bearer credential.
+# The real value is supplied ONCE to the gateway at `openshell provider create`
+# time; the sandbox environment carries only the placeholder
+# `openshell:resolve:env:SHRIKE_API_KEY`, and the L7 proxy substitutes the real
+# value on egress to api.shrikesecurity.com. The raw key never enters the
+# sandbox. Egress is scoped to Shrike's host with enforcement: enforce.
+id: nemoclaw-shrike
+display_name: NemoClaw Shrike Security
+description: Shrike action-governance enforce plane; returns allow / warn / require_approval / block for agent tool calls. Egress is scoped to exactly two POST paths (general + specialized enforce); no other method or path on the host is reachable.
+category: other
+credentials:
+  - name: api_key
+    description: Shrike API key (free tier available at https://shrikesecurity.com/signup)
+    env_vars: [SHRIKE_API_KEY]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+endpoints:
+  - host: api.shrikesecurity.com
+    port: 443
+    protocol: rest
+    enforcement: enforce
+    # NOTE: `access:` and `rules:` are mutually exclusive on NemoClaw >= 0.0.103
+    # (L7 policy validation rejects an endpoint that sets both). The per-method
+    # `rules` below are the tighter control, so we omit `access` — the rules
+    # themselves grant exactly the two POST paths and nothing else.
+    # Scope egress to the exact enforce-plane methods + paths the plugin uses —
+    # nothing else on the host is reachable. The plugin only ever POSTs a tool
+    # call to these two endpoints (general + specialized); no other verbs or
+    # paths are permitted, so a compromised sandbox cannot use this credential
+    # to reach the rest of api.shrikesecurity.com.
+    rules:
+      - allow: { method: POST, path: "/agent/api/scan/enforce" }
+      - allow: { method: POST, path: "/agent/api/scan/enforce/specialized" }
+binaries:
+  # Only curl makes the egress call (the plugin shells out to it so the request
+  # rides the OpenShell proxy + CA; Node's fetch/https bypass them). No other
+  # binary needs this credential's egress attribution.
+  - /usr/bin/curl
+  - /usr/local/bin/curl

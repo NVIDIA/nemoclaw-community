@@ -79,6 +79,7 @@ echo "Deleting per-sandbox providers"
 openshell provider delete "$SANDBOX_NAME-outlook"           2>/dev/null || true
 openshell provider delete "$SANDBOX_NAME-github"            2>/dev/null || true
 openshell provider delete "$SANDBOX_NAME-gitlab"            2>/dev/null || true
+openshell provider delete "$SANDBOX_NAME-tavily-search"     2>/dev/null || true
 openshell provider delete "$SANDBOX_NAME-slack"             2>/dev/null || true
 openshell provider delete "$SANDBOX_NAME-atif-export-relay" 2>/dev/null || true
 

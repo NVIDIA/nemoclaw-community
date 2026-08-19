@@ -68,6 +68,7 @@ def make_adapter(*, native_clarify: bool = False):
             self.client = FakeClient()
             self.config = SimpleNamespace(extra={})
             self.authorized = True
+            self.slash_commands = []
 
         async def connect(self, *args, **kwargs):
             self._app = FakeApp()
@@ -81,6 +82,9 @@ def make_adapter(*, native_clarify: bool = False):
 
         def _is_interactive_user_authorized(self, user_id, **kwargs):
             return self.authorized and user_id == "U123"
+
+        async def _handle_slash_command(self, command):
+            self.slash_commands.append(command)
 
     if native_clarify:
         async def native_send_clarify(self, **kwargs):
@@ -183,6 +187,64 @@ class SlackInteractiveCompatTest(unittest.TestCase):
             ["section", "actions"],
             [block["type"] for block in adapter.client.posts[-1]["blocks"]],
         )
+
+    def test_custom_slash_diagnostic_enters_the_hermes_message_path(self) -> None:
+        adapter_cls = make_adapter()
+        load_patch(adapter_cls, "_nvteam_sitecustomize_diagnostic_slash_test")
+        adapter = adapter_cls()
+        asyncio.run(adapter.connect())
+        callback = adapter._app.commands[-1][1]
+        acknowledgements = []
+        responses = []
+
+        async def ack(**kwargs):
+            acknowledgements.append(kwargs)
+
+        async def respond(message):
+            responses.append(message)
+
+        asyncio.run(
+            callback(
+                ack,
+                {
+                    "command": "/alice-nemoclaw",
+                    "text": "NemoClaw delivery diagnostic NC-1234ABCD",
+                },
+                respond,
+            )
+        )
+
+        self.assertEqual(
+            acknowledgements,
+            [{"response_type": "ephemeral", "text": "Slack delivery diagnostic received."}],
+        )
+        self.assertEqual(adapter.slash_commands[0]["command"], "/hermes")
+        self.assertEqual(responses, [])
+
+    def test_other_custom_slash_commands_keep_the_help_response(self) -> None:
+        adapter_cls = make_adapter()
+        load_patch(adapter_cls, "_nvteam_sitecustomize_unknown_slash_test")
+        adapter = adapter_cls()
+        asyncio.run(adapter.connect())
+        callback = adapter._app.commands[-1][1]
+        responses = []
+
+        async def ack(**kwargs):
+            self.assertEqual(kwargs, {})
+
+        async def respond(message):
+            responses.append(message)
+
+        asyncio.run(
+            callback(
+                ack,
+                {"command": "/alice-nemoclaw", "text": "ordinary request"},
+                respond,
+            )
+        )
+
+        self.assertEqual(adapter.slash_commands, [])
+        self.assertIn("don't recognize", responses[0])
 
     def test_adds_buttons_and_resolves_an_authorized_choice(self) -> None:
         adapter_cls = make_adapter()

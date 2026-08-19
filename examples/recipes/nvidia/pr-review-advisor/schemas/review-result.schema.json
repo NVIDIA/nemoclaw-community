@@ -1,0 +1,968 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NVIDIA/nemoclaw-community/examples/recipes/nvidia/pr-review-advisor/schemas/review-result.schema.json",
+  "$comment": "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0",
+  "title": "Normalized Hermes PR review artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run",
+    "summary",
+    "findings",
+    "ledger",
+    "stage_receipts",
+    "positives",
+    "limitations",
+    "lesson_candidates",
+    "attestation"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "review-advisor/v1"
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "repository",
+        "pull_request_number",
+        "base_sha",
+        "merge_base_sha",
+        "head_sha",
+        "profile_digest",
+        "profile_source_commit",
+        "profile_path",
+        "profile_origin",
+        "profile_object_id",
+        "review_scope",
+        "scope_digest",
+        "acceptance_context_digest",
+        "profile_name",
+        "context_digest",
+        "changed_files",
+        "diff_coverage"
+      ],
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{24}$"
+        },
+        "repository": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "pull_request_number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "base_sha": {
+          "$ref": "#/$defs/gitOid"
+        },
+        "merge_base_sha": {
+          "$ref": "#/$defs/gitOid"
+        },
+        "head_sha": {
+          "$ref": "#/$defs/gitOid"
+        },
+        "profile_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "profile_source_commit": {
+          "$ref": "#/$defs/gitOid"
+        },
+        "profile_path": {
+          "$ref": "#/$defs/scopePath"
+        },
+        "profile_origin": {
+          "enum": [
+            "target_base",
+            "operator_bootstrap"
+          ]
+        },
+        "profile_object_id": {
+          "$ref": "#/$defs/gitObjectId"
+        },
+        "review_scope": {
+          "$ref": "#/$defs/reviewScope"
+        },
+        "scope_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "acceptance_context_digest": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "profile_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "context_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "changed_files": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": {
+            "$ref": "#/$defs/changedFile"
+          }
+        },
+        "diff_coverage": {
+          "type": "array",
+          "maxItems": 512,
+          "items": {
+            "$ref": "#/$defs/diffCoverage"
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recommendation",
+        "confidence",
+        "one_line"
+      ],
+      "properties": {
+        "recommendation": {
+          "enum": [
+            "merge_after_fixes",
+            "needs_rework",
+            "blocked",
+            "info_only"
+          ]
+        },
+        "confidence": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "one_line": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "ledger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "revision",
+        "findings",
+        "history"
+      ],
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 6
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/finding"
+          }
+        },
+        "history": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/history"
+          }
+        }
+      }
+    },
+    "stage_receipts": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/scopeReceipt"
+        },
+        {
+          "$ref": "#/$defs/correctnessReceipt"
+        },
+        {
+          "$ref": "#/$defs/securityReceipt"
+        },
+        {
+          "$ref": "#/$defs/testsReceipt"
+        },
+        {
+          "$ref": "#/$defs/operationsReceipt"
+        },
+        {
+          "$ref": "#/$defs/reconciliationReceipt"
+        }
+      ],
+      "items": false,
+      "minItems": 6,
+      "maxItems": 6
+    },
+    "positives": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/limitation"
+      }
+    },
+    "lesson_candidates": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "$ref": "#/$defs/lessonCandidate"
+      }
+    },
+    "attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "digest"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "hmac-sha256"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "gitOid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40,64}$"
+    },
+    "gitObjectId": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "repoPath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//)(?!.*\\\\)[^\\u0000]+$"
+    },
+    "scopePath": {
+      "type": "string",
+      "description": "A literal canonical repository-relative file or directory path, never a glob.",
+      "pattern": "^(?!/)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.git(?:/|$))[^\\u0000-\\u001f\\u007f]+$"
+    },
+    "reviewScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "roots",
+        "support_paths"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "repository",
+            "scoped"
+          ]
+        },
+        "roots": {
+          "type": "array",
+          "maxItems": 10000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/scopePath"
+          }
+        },
+        "support_paths": {
+          "type": "array",
+          "maxItems": 10000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/scopePath"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "repository"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "roots": {
+                "maxItems": 0
+              },
+              "support_paths": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "scoped"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "roots": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "changedFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "old_path",
+        "status",
+        "additions",
+        "deletions",
+        "patch_truncated",
+        "patch_available_bytes",
+        "patch_original_bytes",
+        "patch_available_lines",
+        "patch_original_lines"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/repoPath"
+        },
+        "old_path": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/repoPath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "type": "string",
+          "pattern": "^[ACDMRTUXB][0-9]{0,3}$"
+        },
+        "additions": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "deletions": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "patch_truncated": {
+          "type": "boolean"
+        },
+        "patch_available_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "patch_original_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "patch_available_lines": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "patch_original_lines": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "diffCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "available_lines",
+        "covered_lines",
+        "complete",
+        "ranges"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/repoPath"
+        },
+        "available_lines": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "covered_lines": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "complete": {
+          "const": true
+        },
+        "ranges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "start_line",
+              "end_line"
+            ],
+            "properties": {
+              "start_line": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "end_line": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "basis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "observed",
+        "expected"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "behavior_mismatch",
+            "unmet_acceptance",
+            "security_violation",
+            "missing_regression",
+            "unnecessary_complexity",
+            "documentation_mismatch"
+          ]
+        },
+        "observed": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "simplification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tag",
+        "cut",
+        "replacement",
+        "estimated_net_lines",
+        "safety_boundary"
+      ],
+      "properties": {
+        "tag": {
+          "enum": [
+            "delete",
+            "stdlib",
+            "native",
+            "yagni",
+            "shrink"
+          ]
+        },
+        "cut": {
+          "type": "string",
+          "minLength": 1
+        },
+        "replacement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "estimated_net_lines": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "safety_boundary": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "superseded_by",
+        "severity",
+        "category",
+        "file",
+        "line",
+        "side",
+        "title",
+        "description",
+        "impact",
+        "recommendation",
+        "verification_hint",
+        "missing_regression_test",
+        "evidence",
+        "basis"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^F-[0-9]{3,}$"
+        },
+        "status": {
+          "enum": [
+            "open",
+            "resolved",
+            "superseded"
+          ]
+        },
+        "superseded_by": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^F-[0-9]{3,}$"
+        },
+        "severity": {
+          "enum": [
+            "blocker",
+            "warning",
+            "suggestion"
+          ]
+        },
+        "category": {
+          "enum": [
+            "security",
+            "correctness",
+            "tests",
+            "architecture",
+            "workflow",
+            "docs",
+            "scope",
+            "acceptance"
+          ]
+        },
+        "file": {
+          "$ref": "#/$defs/repoPath"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "side": {
+          "enum": [
+            "head",
+            "base"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "impact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recommendation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "verification_hint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "missing_regression_test": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "basis": {
+          "$ref": "#/$defs/basis"
+        },
+        "simplification": {
+          "$ref": "#/$defs/simplification"
+        }
+      }
+    },
+    "history": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revision",
+        "operation",
+        "finding_id",
+        "stage",
+        "reason",
+        "added_evidence",
+        "change"
+      ],
+      "properties": {
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operation": {
+          "enum": [
+            "none",
+            "add",
+            "update",
+            "resolve",
+            "supersede"
+          ]
+        },
+        "finding_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^F-[0-9]{3,}$"
+        },
+        "stage": {
+          "enum": [
+            "scope",
+            "correctness",
+            "security",
+            "tests",
+            "operations",
+            "reconciliation"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "added_evidence": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "change": {}
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stage",
+        "summary",
+        "evidence",
+        "ledger_revision"
+      ],
+      "properties": {
+        "stage": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "ledger_revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "scopeReceipt": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/receipt"
+        },
+        {
+          "properties": {
+            "stage": {
+              "const": "scope"
+            }
+          }
+        }
+      ]
+    },
+    "correctnessReceipt": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/receipt"
+        },
+        {
+          "properties": {
+            "stage": {
+              "const": "correctness"
+            }
+          }
+        }
+      ]
+    },
+    "securityReceipt": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/receipt"
+        },
+        {
+          "properties": {
+            "stage": {
+              "const": "security"
+            }
+          }
+        }
+      ]
+    },
+    "testsReceipt": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/receipt"
+        },
+        {
+          "properties": {
+            "stage": {
+              "const": "tests"
+            }
+          }
+        }
+      ]
+    },
+    "operationsReceipt": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/receipt"
+        },
+        {
+          "properties": {
+            "stage": {
+              "const": "operations"
+            }
+          }
+        }
+      ]
+    },
+    "reconciliationReceipt": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/receipt"
+        },
+        {
+          "properties": {
+            "stage": {
+              "const": "reconciliation"
+            }
+          }
+        }
+      ]
+    },
+    "limitation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "description",
+        "requires_human_review"
+      ],
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requires_human_review": {
+          "type": "boolean"
+        }
+      }
+    },
+    "lessonCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "status",
+        "kind",
+        "statement",
+        "rationale",
+        "evidence",
+        "paths",
+        "finding_ids",
+        "source"
+      ],
+      "properties": {
+        "candidate_id": {
+          "type": "string",
+          "pattern": "^L-[0-9a-f]{16}$"
+        },
+        "status": {
+          "const": "candidate"
+        },
+        "kind": {
+          "enum": [
+            "finding_pattern",
+            "repository_convention",
+            "validation_pattern",
+            "dismissal_candidate"
+          ]
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/repoPath"
+          }
+        },
+        "finding_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^F-[0-9]{3,}$"
+          }
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "repository",
+            "base_sha",
+            "merge_base_sha",
+            "head_sha",
+            "profile_digest",
+            "profile_source_commit",
+            "profile_path",
+            "profile_origin",
+            "profile_object_id",
+            "scope_digest",
+            "acceptance_context_digest",
+            "context_digest"
+          ],
+          "properties": {
+            "repository": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+            },
+            "base_sha": {
+              "$ref": "#/$defs/gitOid"
+            },
+            "merge_base_sha": {
+              "$ref": "#/$defs/gitOid"
+            },
+            "head_sha": {
+              "$ref": "#/$defs/gitOid"
+            },
+            "profile_digest": {
+              "$ref": "#/$defs/sha256"
+            },
+            "profile_source_commit": {
+              "$ref": "#/$defs/gitOid"
+            },
+            "profile_path": {
+              "$ref": "#/$defs/scopePath"
+            },
+            "profile_origin": {
+              "enum": [
+                "target_base",
+                "operator_bootstrap"
+              ]
+            },
+            "profile_object_id": {
+              "$ref": "#/$defs/gitObjectId"
+            },
+            "scope_digest": {
+              "$ref": "#/$defs/sha256"
+            },
+            "acceptance_context_digest": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/sha256"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "context_digest": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      }
+    }
+  }
+}

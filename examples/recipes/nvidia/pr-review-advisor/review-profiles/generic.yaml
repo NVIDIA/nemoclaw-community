@@ -1,0 +1,53 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Evidence-free portable shape example only. Its priorities are checklist
+# prompts, not claims about an arbitrary real repository. The one-command
+# initializer replaces identity, source evidence, components, and priorities
+# with a trusted-tree census for the repository being installed; maintainers
+# must customize any fallback that still lacks repository-specific evidence.
+
+schema_version: 1
+kind: review-advisor-profile
+metadata:
+  name: Portable repository baseline
+  source_commit: "0000000000000000000000000000000000000000"
+  source_ref: refs/heads/main
+repository:
+  identity: example/repository
+  default_branch: main
+review_scope:
+  mode: repository
+  roots: []
+  support_paths: []
+required_stages:
+  - scope
+  - correctness
+  - security
+  - tests
+  - operations
+  - reconcile
+  - synthesize
+components:
+  - id: repository
+    paths:
+      - "**"
+    evidence:
+      - source: deterministic trusted-tree census
+priorities:
+  - id: portable-correctness
+    title: Correctness, compatibility, and regression safety
+    rationale: Evidence-free checklist prompt only; establish intended behavior from current code and tests, and do not assume a framework or repository layout.
+    evidence: []
+  - id: portable-security
+    title: Trust boundaries and least privilege
+    rationale: Evidence-free checklist prompt only; use current code to identify data crossing privilege, credential, network, parser, persistence, and publication boundaries.
+    evidence: []
+test_surfaces: []
+evidence_policy:
+  memory_is_hint_only: true
+  require_current_code_evidence: true
+unresolved_questions:
+  - Which paths require specialist or security-owner review?
+  - Which test suites and runtime validations cover each component?
+  - Which generated, vendored, migration, deployment, and compatibility paths need special handling?

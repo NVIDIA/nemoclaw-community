@@ -35,7 +35,7 @@ echo "Importing v2 provider profiles from $EXAMPLE_DIR/providers/"
 # import of an edited profile, delete the sandbox first (then its provider no
 # longer holds the profile) and re-run.
 for profile_id in nemoclaw-outlook-email nemoclaw-slack nemoclaw-github nemoclaw-gitlab \
-                  nemoclaw-atif-export-relay; do
+                  nemoclaw-tavily-search nemoclaw-atif-export-relay; do
   openshell provider profile delete "$profile_id" >/dev/null 2>&1 || true
 done
 # Import each active profile by name. nemoclaw-compatible-endpoint is a
@@ -48,7 +48,8 @@ done
 STAGED_RELAY_PROFILE="$EXAMPLE_DIR/providers/.atif-export-relay.staged.yaml"
 STAGED_GITLAB_PROFILE="$EXAMPLE_DIR/providers/.gitlab.staged.yaml"
 trap 'rm -f "$STAGED_RELAY_PROFILE" "$STAGED_GITLAB_PROFILE"' EXIT
-for profile_file in outlook-email.yaml slack.yaml github.yaml gitlab.yaml atif-export-relay.yaml; do
+for profile_file in outlook-email.yaml slack.yaml github.yaml gitlab.yaml tavily-search.yaml \
+                    atif-export-relay.yaml; do
   src="$EXAMPLE_DIR/providers/$profile_file"
   if [[ "$profile_file" == "atif-export-relay.yaml" ]]; then
     sed -e "s|__ATIF_RELAY_HOST__|$ATIF_RELAY_HOST|g" \
@@ -76,21 +77,23 @@ for profile_file in outlook-email.yaml slack.yaml github.yaml gitlab.yaml atif-e
 done
 
 # Keep preflight subprocesses isolated from unrelated host state while
-# preserving the standard proxy and CA settings needed on enterprise networks.
+# preserving non-empty proxy and CA settings needed on enterprise networks.
+# Do not define an unset OpenSSL override as an empty string: under `env -i`,
+# SSL_CERT_FILE= or SSL_CERT_DIR= suppresses the platform's default trust-store
+# discovery and makes every TLS endpoint appear untrusted.
 PREFLIGHT_NETWORK_ENV=(
   "HOME=$HOME"
   "PATH=$PATH"
-  "HTTP_PROXY=${HTTP_PROXY:-}"
-  "HTTPS_PROXY=${HTTPS_PROXY:-}"
-  "ALL_PROXY=${ALL_PROXY:-}"
-  "NO_PROXY=${NO_PROXY:-}"
-  "http_proxy=${http_proxy:-}"
-  "https_proxy=${https_proxy:-}"
-  "all_proxy=${all_proxy:-}"
-  "no_proxy=${no_proxy:-}"
-  "SSL_CERT_FILE=${SSL_CERT_FILE:-}"
-  "SSL_CERT_DIR=${SSL_CERT_DIR:-}"
 )
+for preflight_env_name in \
+  HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY \
+  http_proxy https_proxy all_proxy no_proxy \
+  SSL_CERT_FILE SSL_CERT_DIR CURL_CA_BUNDLE REQUESTS_CA_BUNDLE; do
+  if [[ -n "${!preflight_env_name:-}" ]]; then
+    PREFLIGHT_NETWORK_ENV+=("$preflight_env_name=${!preflight_env_name}")
+  fi
+done
+unset preflight_env_name
 
 # ── Inference provider (built-in nvidia v2 profile via inference.local) ─
 INFERENCE_KEY="${OPENAI_API_KEY:-${COMPATIBLE_API_KEY:-}}"
@@ -334,6 +337,24 @@ if [[ -n "${GITLAB_TOKEN:-}" ]]; then
   GL_PROVIDER="$SANDBOX_NAME-gitlab"
   echo "Upserting provider $GL_PROVIDER (credential: GITLAB_TOKEN)"
   upsert_cred "$GL_PROVIDER" nemoclaw-gitlab "GITLAB_TOKEN=$GITLAB_TOKEN"
+fi
+
+# ── Optional Tavily web-search provider ────────────────────────────────
+# Validate the host-held key before registering it. The sandbox receives only
+# an OpenShell placeholder. Both the provider profile and staged sandbox policy
+# permit the Hermes Python runtime to call POST /search; /extract is not allowed.
+if [[ -n "${TAVILY_API_KEY:-}" ]]; then
+  TAVILY_PROVIDER="$SANDBOX_NAME-tavily-search"
+  echo "Validating Tavily Search API key before provider creation"
+  env -i "${PREFLIGHT_NETWORK_ENV[@]}" \
+    NEMOCLAW_TAVILY_PREFLIGHT_KEY="$TAVILY_API_KEY" \
+    python3 "$DIR/tavily_search_preflight.py" \
+      --timeout "${NEMOCLAW_TAVILY_PREFLIGHT_TIMEOUT_SECONDS:-10}"
+  echo "Upserting provider $TAVILY_PROVIDER (credential: TAVILY_API_KEY)"
+  upsert_cred "$TAVILY_PROVIDER" nemoclaw-tavily-search \
+    "TAVILY_API_KEY=$TAVILY_API_KEY"
+else
+  echo "Tavily web search: disabled (TAVILY_API_KEY is not configured)"
 fi
 
 # ── ATIF object-storage provider (bearer token for atif-export-relay) ───

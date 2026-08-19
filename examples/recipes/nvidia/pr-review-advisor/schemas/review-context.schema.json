@@ -1,0 +1,371 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NVIDIA/nemoclaw-community/examples/recipes/nvidia/pr-review-advisor/schemas/review-context.schema.json",
+  "$comment": "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0",
+  "title": "Trusted PR review context",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "repository",
+    "base_sha",
+    "merge_base_sha",
+    "head_sha",
+    "profile_digest",
+    "profile_source_commit",
+    "profile_path",
+    "profile_origin",
+    "profile_object_id",
+    "review_scope",
+    "scope_digest",
+    "acceptance_context_digest",
+    "acceptance_context",
+    "files"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "repository": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+    },
+    "base_sha": {
+      "$ref": "#/$defs/gitOid"
+    },
+    "merge_base_sha": {
+      "$ref": "#/$defs/gitOid"
+    },
+    "head_sha": {
+      "$ref": "#/$defs/gitOid"
+    },
+    "profile_digest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "profile_source_commit": {
+      "$ref": "#/$defs/gitOid",
+      "description": "Calibration provenance validated by the trusted host as an ancestor of base_sha."
+    },
+    "profile_path": {
+      "$ref": "#/$defs/scopePath"
+    },
+    "profile_origin": {
+      "enum": [
+        "target_base",
+        "operator_bootstrap"
+      ]
+    },
+    "profile_object_id": {
+      "$ref": "#/$defs/gitObjectId"
+    },
+    "review_scope": {
+      "$ref": "#/$defs/reviewScope"
+    },
+    "scope_digest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "pull_request_number": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "acceptance_context_digest": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "acceptance_context": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/acceptanceContext"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "files": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "old_path",
+          "status",
+          "additions",
+          "deletions",
+          "patch",
+          "patch_truncated",
+          "patch_original_bytes",
+          "patch_original_lines"
+        ],
+        "properties": {
+          "path": {
+            "$ref": "#/$defs/repoPath"
+          },
+          "old_path": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/repoPath"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "pattern": "^[ACDMRTUXB][0-9]{0,3}$"
+          },
+          "additions": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "deletions": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "patch": {
+            "type": "string"
+          },
+          "patch_truncated": {
+            "type": "boolean"
+          },
+          "patch_original_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "patch_original_lines": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "gitOid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40,64}$"
+    },
+    "gitObjectId": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "repoPath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//)(?!.*\\\\)[^\\u0000]+$"
+    },
+    "scopePath": {
+      "type": "string",
+      "description": "A literal canonical repository-relative file or directory path, never a glob.",
+      "pattern": "^(?!/)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.git(?:/|$))[^\\u0000-\\u001f\\u007f]+$"
+    },
+    "reviewScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "roots",
+        "support_paths"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "repository",
+            "scoped"
+          ]
+        },
+        "roots": {
+          "type": "array",
+          "maxItems": 10000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/scopePath"
+          }
+        },
+        "support_paths": {
+          "type": "array",
+          "maxItems": 10000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/scopePath"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "repository"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "roots": {
+                "maxItems": 0
+              },
+              "support_paths": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "scoped"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "roots": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "acceptanceContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "source",
+        "repository",
+        "pull_request_number",
+        "base_sha",
+        "head_sha",
+        "pull_request",
+        "closing_issues"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "review-advisor/pr-acceptance/v1"
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "mutable_review_comments_included",
+            "closing_link_detection"
+          ],
+          "properties": {
+            "kind": {
+              "const": "github-rest-current-pr"
+            },
+            "mutable_review_comments_included": {
+              "const": false
+            },
+            "closing_link_detection": {
+              "const": "explicit-body-keywords"
+            }
+          }
+        },
+        "repository": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "pull_request_number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "base_sha": {
+          "$ref": "#/$defs/gitOid"
+        },
+        "head_sha": {
+          "$ref": "#/$defs/gitOid"
+        },
+        "pull_request": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "title",
+            "body",
+            "updated_at"
+          ],
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1
+            },
+            "body": {
+              "type": "string"
+            },
+            "updated_at": {
+              "$ref": "#/$defs/timestamp"
+            }
+          }
+        },
+        "closing_issues": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "number",
+              "title",
+              "body",
+              "state",
+              "updated_at"
+            ],
+            "properties": {
+              "number": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "body": {
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "open",
+                  "closed"
+                ]
+              },
+              "updated_at": {
+                "$ref": "#/$defs/timestamp"
+              }
+            }
+          }
+        }
+      }
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    }
+  }
+}
