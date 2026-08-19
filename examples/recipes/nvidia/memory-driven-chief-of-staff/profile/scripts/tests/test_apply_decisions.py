@@ -85,6 +85,17 @@ class TestApply(unittest.TestCase):
         after = self.q("SELECT after_json FROM events WHERE event_type='completed'")[0][0]
         self.assertIn("replied on the thread", after)
 
+    def test_two_rows_claiming_the_same_rank_are_rejected(self):
+        # The caps make position consequential, so resolving a tie by input
+        # order would silently pick a winner the model never chose.
+        with self.assertRaises(ValueError):
+            self.mod.apply({"version": 1, "decisions": [
+                {"source_id": "m1", "decision": "CREATE", "rank": 1,
+                 "intent_gated": True, "title": "a"},
+                {"source_id": "m2", "decision": "CREATE", "rank": 1,
+                 "intent_gated": True, "title": "b"}]})
+        self.assertEqual(self.q("SELECT count(*) FROM obligations"), [(0,)])
+
     def test_bad_envelope_is_rejected_and_writes_nothing(self):
         for bad in (
             {"version": 2, "decisions": []},

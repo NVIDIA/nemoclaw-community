@@ -42,8 +42,12 @@ The demo loader replays these through the same normalization and writer path
 the live collectors use:
 
 ```bash
+export HERMES_HOME=$(mktemp -d)
 python3 profile/scripts/load_fixtures.py --fixtures fixtures
 ```
+
+Run from the recipe root. The loader refuses to guess a profile home, so
+`HERMES_HOME` has to be set.
 
 It is idempotent. Running it twice adds nothing, because intake is keyed on
 `source_id`.

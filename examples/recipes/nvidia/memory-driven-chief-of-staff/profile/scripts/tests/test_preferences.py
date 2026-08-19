@@ -26,12 +26,26 @@ class TestPreferences(unittest.TestCase):
         self.assertTrue(got)
         self.assertEqual(got[0].count, THRESHOLD)
 
-    def test_the_threshold_is_not_adjustable_downward_by_the_data(self):
-        # Volume alone must not lower the bar; a hundred corrections from two
-        # distinct senders is still two senders.
+    def test_counts_do_not_merge_across_distinct_senders(self):
+        # Two senders with two corrections each must not add up to one sender
+        # with four. They do still aggregate at the coarser source/kind
+        # dimension, which is intended and asserted separately below — the
+        # earlier version of this test filtered that result out and read as a
+        # stronger guarantee than it was.
         mixed = corr(2, sender="a@x.example.com") + corr(2, sender="b@y.example.com")
-        by_sender = [c for c in candidates(mixed) if c.dimension == "sender"]
-        self.assertEqual(by_sender, [])
+        self.assertEqual([c for c in candidates(mixed) if c.dimension == "sender"], [])
+
+    def test_volume_across_senders_does_aggregate_at_the_coarser_dimension(self):
+        # Stated plainly because it is a real property of the design: four
+        # corrections over two sub-threshold senders qualify as a source/kind
+        # preference. That is deliberate — "everything from email that asks for
+        # an action gets ignored" is a real preference — but it means volume
+        # alone can clear the bar at that dimension, and the policy sentence
+        # the skill writes has to say which dimension it is about.
+        mixed = corr(2, sender="a@x.example.com") + corr(2, sender="b@y.example.com")
+        coarse = [c for c in candidates(mixed) if c.dimension == "source_kind"]
+        self.assertEqual(len(coarse), 1)
+        self.assertEqual(coarse[0].count, 4)
 
     def test_a_shared_domain_qualifies_even_when_no_single_sender_does(self):
         mixed = (corr(2, sender="build1@ci.example.com")

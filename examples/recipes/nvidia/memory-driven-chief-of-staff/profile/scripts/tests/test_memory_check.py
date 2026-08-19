@@ -81,6 +81,23 @@ class TestInvariants(unittest.TestCase):
         self.assertIn("over-ceiling", self.kinds(findings))
         self.assertIn("31 items", str(findings[0]))
 
+    def test_a_dangling_index_entry_is_found(self):
+        # The index naming a page that does not exist is the mirror image of an
+        # unindexed page, and until now only one of the two had a test.
+        idx = self.root / "index.md"
+        idx.write_text(idx.read_text("utf-8")
+                       + "\n- [Gone](people/gone.md) — removed page.\n", encoding="utf-8")
+        self.assertIn("index-dangling", self.kinds(check_index(self.root)))
+
+    def test_detection_leaves_the_tree_byte_identical(self):
+        # Idempotent findings are not the same as a read-only pass. Snapshot
+        # every file and compare after, so a check that quietly rewrote a page
+        # could not hide behind stable output.
+        before = {p: p.read_bytes() for p in sorted(self.root.rglob("*.md"))}
+        check_all(self.root, self.today)
+        after = {p: p.read_bytes() for p in sorted(self.root.rglob("*.md"))}
+        self.assertEqual(before, after)
+
     def test_detection_is_idempotent(self):
         # Running the checks twice must produce the same findings and must not
         # have changed anything in between — repair reruns constantly.

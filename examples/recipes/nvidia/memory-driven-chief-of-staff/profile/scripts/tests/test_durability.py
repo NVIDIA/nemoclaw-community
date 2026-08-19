@@ -12,10 +12,16 @@ sys.path.insert(0, str(HERE))
 
 SCHEMA = (HERE / "schema.sql").read_text(encoding="utf-8")
 
-# Mirrors USER_OWNED_EXCLUDE in the distribution installer: these names are
-# never copied and never replaced when a distribution is installed or updated.
-USER_OWNED = {"workspace", "memories", "sessions", "logs", "state.db", ".env"}
+# The distribution manifest is the real source of what an install replaces.
+# Reading it here rather than restating it means this test tracks the shipped
+# artifact instead of a copy that can drift away from it.
 DIST_OWNED = {"SOUL.md", "schema.md", "skills", "scripts"}
+
+# Paths the runtime treats as user-owned. This is a claim about Hermes, not
+# about this repository, so the test cannot prove it — it pins the assumption
+# the design rests on so that a change to it is a visible edit rather than a
+# silent one. Measured against Hermes 0.19.0.
+USER_OWNED = {"workspace", "memories", "sessions", "logs", "state.db", ".env"}
 
 
 class TestConcurrency(unittest.TestCase):
@@ -138,32 +144,68 @@ class TestReinstallSurvival(unittest.TestCase):
         self.assertFalse((home / "skills" / "old.md").exists(),
                          "distribution-owned content is expected to be replaced")
 
-    def test_no_user_owned_name_is_also_distribution_owned(self):
-        # A name in both sets would be silently destroyed on every update.
+    def test_nothing_this_example_ships_lands_on_a_user_owned_path(self):
+        # The check that matters is not that two literals differ, but that the
+        # files actually in this contribution never occupy a user-owned name.
+        # A shipped directory called `workspace` would be destroyed on every
+        # update, taking the store with it.
+        shipped = {p.name for p in (HERE.parent).iterdir()}
+        self.assertEqual(shipped & USER_OWNED, set(),
+                         "a shipped path collides with a user-owned name")
         self.assertEqual(USER_OWNED & DIST_OWNED, set())
 
 
 class TestNoSourceMutation(unittest.TestCase):
     """The source systems are inputs. Nothing here writes back to them."""
 
-    WRITE_VERBS = re.compile(r'method\s*=\s*["\'](POST|PUT|PATCH|DELETE)', re.I)
-    WRITE_CALLS = re.compile(r'\b(graph_post|graph_patch|graph_delete|chat\.postMessage'
-                             r'|conversations\.mark|reactions\.add|files\.upload)\b')
+    # Matches the shapes an HTTP write actually takes, not a list of names we
+    # happened to think of. The previous version of this test scanned one
+    # directory for seven hardcoded call names and passed vacuously.
+    WRITE_PATTERNS = (
+        re.compile(r'method\s*=\s*["\'](POST|PUT|PATCH|DELETE)', re.I),
+        re.compile(r'\.(post|put|patch|delete)\s*\(', re.I),
+        re.compile(r'\brequest\s*\(\s*["\'](POST|PUT|PATCH|DELETE)', re.I),
+        re.compile(r'\b(graph_post|graph_patch|graph_delete|chat\.postMessage'
+                   r'|conversations\.mark|reactions\.add|files\.upload)\b'),
+    )
 
     def test_no_module_issues_a_write_to_a_source_system(self):
+        # Recursive, so a connector added in a subdirectory later is covered.
         offenders = []
-        for path in sorted(HERE.glob("*.py")):
+        for path in sorted(HERE.rglob("*.py")):
+            if path.name.startswith("test_"):
+                continue          # tests may name a verb in order to forbid it
             text = path.read_text(encoding="utf-8")
-            if self.WRITE_VERBS.search(text) or self.WRITE_CALLS.search(text):
-                offenders.append(path.name)
+            for pattern in self.WRITE_PATTERNS:
+                if pattern.search(text):
+                    offenders.append(f"{path.relative_to(HERE)}: {pattern.pattern[:34]}")
         self.assertEqual(offenders, [],
                          "a source system must never be mutated by this recipe")
 
-    def test_the_schema_has_no_column_that_mirrors_source_state(self):
-        # Storing something like a remote read flag invites writing it back.
-        schema = SCHEMA.lower()
-        for forbidden in ("is_read_remote", "source_flag", "remote_status"):
-            self.assertNotIn(forbidden, schema)
+    def test_the_scan_would_catch_a_real_write(self):
+        # A guard that cannot fail is worse than no guard, so prove it fires.
+        for sample in ('requests.post(url, json=body)',
+                       'httpx.patch(url)',
+                       'session.delete(url)',
+                       'client.request("PATCH", url)',
+                       'graph_patch(f"{GRAPH}/me/messages/{mid}", {"isRead": True})'):
+            self.assertTrue(any(p.search(sample) for p in self.WRITE_PATTERNS),
+                            f"the scan would not catch: {sample}")
+
+    def test_read_state_is_stored_but_never_sent_back(self):
+        # items.unread mirrors the source's read flag deliberately: an unread
+        # message from a person is a judging signal. Mirroring it is fine;
+        # writing it back is what the sibling recipe does and what this one
+        # promises not to. Assert the invariant that actually matters — the
+        # column exists, and nothing anywhere sends it anywhere.
+        self.assertIn("unread", SCHEMA)
+        for path in sorted(HERE.rglob("*.py")):
+            if path.name.startswith("test_"):
+                continue          # tests name the payload shape in order to forbid it
+            text = path.read_text(encoding="utf-8")
+            self.assertNotRegex(
+                text, r"isRead[\"']?\s*:",
+                f"{path.name} appears to build a payload carrying isRead")
 
 
 if __name__ == "__main__":

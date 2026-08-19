@@ -56,6 +56,7 @@ def _validate(env: dict[str, Any]) -> list[dict[str, Any]]:
         raise ValueError("envelope.decisions must be a list")
 
     seen: set[str] = set()
+    ranks: set[int] = set()
     for d in decisions:
         sid = d.get("source_id")
         if not sid:
@@ -72,6 +73,12 @@ def _validate(env: dict[str, Any]) -> list[dict[str, Any]]:
         if d["decision"] in {"CREATE", "KEEP_OPEN"}:
             if not isinstance(d.get("rank"), int):
                 raise ValueError(f"{sid}: {d['decision']} needs an integer rank")
+            if d["rank"] in ranks:
+                # Two rows claiming the same position is a malformed ranking.
+                # Resolving it by input order would silently pick a winner the
+                # model never chose, and the caps make that choice consequential.
+                raise ValueError(f"duplicate rank {d['rank']} at {sid}")
+            ranks.add(d["rank"])
             if not isinstance(d.get("intent_gated"), bool):
                 raise ValueError(f"{sid}: {d['decision']} needs a boolean intent_gated")
             if not d.get("title"):

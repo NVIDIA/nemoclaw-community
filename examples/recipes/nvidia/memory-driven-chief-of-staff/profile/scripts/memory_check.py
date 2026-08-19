@@ -160,3 +160,32 @@ def check_all(root: Path, today: date | None = None) -> list[Finding]:
     """Cheap and mechanical first, so a clean run finishes quickly."""
     return (check_index(root) + check_links(root) + check_decay(root, today)
             + check_provenance(root) + check_ceilings(root))
+
+
+def main() -> int:
+    """Report findings as JSON so the repair skill has something to act on."""
+    import argparse
+    import json
+    import os
+
+    ap = argparse.ArgumentParser(description="Check the memory against its schema.")
+    ap.add_argument("--memory", type=Path,
+                    default=Path(os.environ.get("HERMES_HOME", ".")) / "workspace" / "memory")
+    args = ap.parse_args()
+
+    if not args.memory.is_dir():
+        print(json.dumps({"error": f"no memory at {args.memory}"}))
+        return 2
+
+    findings = check_all(args.memory)
+    print(json.dumps({
+        "memory": str(args.memory),
+        "findings": [{"kind": f.kind, "path": f.path, "detail": f.detail} for f in findings],
+        "clean": not findings,
+    }, indent=2))
+    # A clean memory is not an error; the caller reads `clean`.
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -18,7 +18,20 @@ does it.
 Read `workspace/memory/schema.md` first. It is the contract; everything below
 is how to enforce it.
 
-## What to check, in this order
+## Start with the mechanical pass
+
+Run the deterministic checker first and work from its output:
+
+```bash
+python3 scripts/memory_check.py
+```
+
+It returns JSON: every finding with a kind, a path, and a detail, plus a
+`clean` flag. It never writes. Deciding what to do about each finding is your
+job; detecting them is not, and a check you perform by reading is a check that
+drifts.
+
+## What the findings mean, in this order
 
 Cheap and mechanical first, so a run that is going to find nothing finds it
 quickly.

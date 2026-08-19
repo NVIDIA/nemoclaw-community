@@ -40,8 +40,11 @@ two apart.
 | `profile/scripts/ranking.py` | Cap-and-cascade tier assignment, deterministic |
 | `profile/scripts/memory_check.py` | Invariant detection over the memory, deterministic |
 | `profile/scripts/preferences.py` | Correction counting against a fixed threshold |
-| `profile/scripts/apply_decisions.py` | The only writer; the model never emits SQL |
+| `profile/scripts/apply_decisions.py` | Applies model decisions; the model never emits SQL |
 | `profile/scripts/migrate.py` | Schema versioning, forward-only |
+| `profile/scripts/normalize.py` | Source payloads to store rows, kept separate from any I/O |
+| `profile/scripts/_db.py` | Connection and transaction boundary |
+| `profile/scripts/load_fixtures.py` | Replays the fixtures through the real ingest path |
 | `profile/skills/` | Five skills: judging, review, repair, consolidation, preference update |
 | `fixtures/` | Eight synthetic messages and a seed memory |
 
@@ -60,23 +63,34 @@ No credentials of any kind are required to run everything below.
 ## Try it
 
 ```bash
-cd examples/recipes/nvidia/memory-driven-chief-of-staff/profile/scripts
-HERMES_HOME=$(mktemp -d) python3 load_fixtures.py --fixtures ../../fixtures
+cd examples/recipes/nvidia/memory-driven-chief-of-staff
+export HERMES_HOME=$(mktemp -d)
+python3 profile/scripts/load_fixtures.py --fixtures fixtures
+python3 profile/scripts/load_fixtures.py --fixtures fixtures
 ```
 
 The loader replays the fixtures through the same normalization and writer path
-a live collector uses, and prints how many records it stored. Run it twice: the
-second run adds nothing, because intake is keyed on the source's own id.
+a live collector uses, and prints how many records it stored. The second run
+adds nothing, because intake is keyed on the source's own id. Keeping
+`HERMES_HOME` in the environment across both runs is what makes that
+observable; a fresh directory each time would simply load the fixtures twice.
+
+Check the seeded memory against its own schema:
+
+```bash
+python3 profile/scripts/memory_check.py
+```
 
 ## Verify
 
 ```bash
 cd profile/scripts
-for t in tests/*.py; do python3 "$t"; done
+for t in tests/*.py; do python3 "$t" || break; done
 ```
 
-Fifty-four tests, no network and no credentials. They cover the ten acceptance
-criteria agreed on the proposal issue:
+Fifty-nine tests, no network and no credentials. They cover the ten acceptance
+criteria agreed on the proposal issue, plus two areas the issue does not
+enumerate:
 
 | Criterion | Where |
 | --- | --- |
@@ -102,8 +116,8 @@ distribution install and update leave alone — measured, not assumed: a row
 written there survived both `hermes profile install --force` and
 `hermes profile update` on Hermes 0.19.0.
 
-The directory is created private to its owner. It holds message subjects,
-senders, and bodies once a real source is connected.
+Both directories are created private to their owner. The ledger holds
+message subjects, senders, and bodies once a real source is connected.
 
 ## Privacy
 
@@ -140,6 +154,30 @@ directory and nothing remains.
   testable; deciding what to compact needs the skill, which needs a model.
 - The memory ships with a seed that passes its own checks. It is a
   demonstration, not a starting point for real use.
+
+## Intended users and support boundary
+
+One person's own work stream, on a machine they control. It is an example
+rather than a product: there is no support commitment, and catalog placement
+is for discovery rather than a maturity claim.
+
+## Dependencies
+
+Standard library only. No third-party Python package is imported by any module
+in this contribution, so nothing is added to the repository's third-party
+notices.
+
+## Sandbox and policy
+
+This contribution reaches no network and requires no policy grant. It ships
+five skill files that a runtime loads, and scripts that read and write only
+inside `HERMES_HOME`. Network egress and provider permissions arrive with the
+connectors in a later phase and will be documented there.
+
+## Startup
+
+Nothing to start. The scripts run on demand; scheduled jobs arrive with the
+installer in a later phase.
 
 ## Provenance
 

@@ -9,10 +9,10 @@
 -- Writer         : scripts/apply_decisions.py is the ONLY writer. The model
 --                  never emits SQL; it returns a decision envelope as JSON.
 --
--- Privacy note   : `items` retains message subjects, senders and bodies. The
---                  containing directory is created 0700. `prune_bodies.py`
---                  clears bodies past the retention window while keeping the
---                  metadata and the audit trail intact.
+-- Privacy note   : `items` retains message subjects, senders and bodies once a
+--                  source is connected. The containing directory is created
+--                  0700. Body retention is not implemented in this phase; it
+--                  arrives with the connectors that produce bodies.
 
 PRAGMA journal_mode = WAL;
 PRAGMA busy_timeout = 5000;
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS items (
     event_at    TEXT NOT NULL,
     sender      TEXT,                       -- display name or address
     subject     TEXT,                       -- NULL for slack
-    body        TEXT,                       -- cleared by prune_bodies.py
+    body        TEXT,
     permalink   TEXT,                       -- link back to the source system
 
     -- Normalized across sources, because the judging rules ask the same

@@ -16,7 +16,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 
 from _db import ensure_store, ledger_path, write_txn
@@ -48,6 +50,17 @@ def load(fixtures: Path) -> dict[str, int]:
     memory_dst = ledger_path().parent.parent / "memory"
     if memory_src.is_dir() and not memory_dst.exists():
         shutil.copytree(memory_src, memory_dst)
+        memory_dst.chmod(0o700)
+        # The seed represents "now". Without restamping, a fixture committed
+        # with a fixed date starts failing its own decay check a day or two
+        # after it ships, and the demo opens by reporting itself stale.
+        today = datetime.now(timezone.utc).date().isoformat()
+        for page in memory_dst.rglob("*.md"):
+            text = page.read_text(encoding="utf-8")
+            page.write_text(
+                re.sub(r"^updated: \d{4}-\d{2}-\d{2}$", f"updated: {today}",
+                       text, count=1, flags=re.M),
+                encoding="utf-8")
 
     return {"seen": len(items), "added": added, "memory": str(memory_dst)}
 
