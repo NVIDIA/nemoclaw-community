@@ -23,7 +23,7 @@ is how to enforce it.
 Run the deterministic checker first and work from its output:
 
 ```bash
-python3 scripts/memory_check.py
+python3 "$HERMES_HOME/scripts/memory_check.py"
 ```
 
 It returns JSON: every finding with a kind, a path, and a detail, plus a

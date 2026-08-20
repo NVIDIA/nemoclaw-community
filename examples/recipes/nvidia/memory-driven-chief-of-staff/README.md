@@ -32,21 +32,22 @@ These terms appear throughout this document and in the code.
 | Obligation | One message that needs an action, with a tier, a position, and its own history. |
 | Tier | The priority band an obligation sits in: `high`, `medium`, or `low`. |
 | Envelope | The JSON document a model turn returns: a list of decisions for the writer to apply. The recipe's recorded turns are envelopes. |
+| Intent gate | The rule that admits an obligation to the `high` tier only if the memory shows the user chose that work. External urgency alone does not qualify. |
 | Cascade | What happens to an un-gated row that ranked inside the top ten: it drops into the competition for `medium` rather than out of the list. |
 | Reservation | The rule that keeps `high` for gate-passing rows. If fewer pass than the cap allows, the tier stays smaller rather than being filled from the remainder. |
 | Gate verdict | The recorded per-message answer to the intent gate: whether the memory shows the user chose this work. Stored as `intent_gated`. |
-| Intent gate | The rule that admits an obligation to the `high` tier only if the memory shows the user chose that work. External urgency alone does not qualify. |
 
 ## Why it exists
 
 A personal assistant is only useful if it remembers one person accurately: who
 they work with, what they are accountable for, and what they have already
 decided. Hermes's built-in memory holds that as free-form notes in `MEMORY.md`
-and `USER.md`. Nothing validates a note, indexes it, links it to related notes,
-ages it, or repairs it, so over weeks the notes either grow without bound or
-drift out of date, and nothing detects either. Hermes also ships optional
-external memory providers; this recipe requires none of them and keeps its own
-record local, under a schema it can check.
+and `USER.md`, under a fixed character budget. Nothing indexes a note, links it
+to related notes, ages it, or repairs it. As the budget fills, the agent is
+asked to consolidate by hand, and nothing detects a note that has quietly
+drifted out of date. Hermes also ships optional external memory providers; this
+recipe requires none of them, and keeps its own record local under a schema it
+can check.
 
 A second kind of record is not a fact but a judgment about a message that
 another system owns. Examples: this message needs a reply, it ranks third this
@@ -73,7 +74,7 @@ those two apart.
 | `profile/scripts/ranking.py` | Cap-and-cascade tier assignment, deterministic |
 | `profile/scripts/memory_check.py` | Invariant detection over the memory, deterministic |
 | `profile/scripts/preferences.py` | Correction counting against a fixed threshold |
-| `profile/scripts/apply_decisions.py` | Applies model decisions; the model never emits SQL |
+| `profile/scripts/apply_decisions.py` | Applies model decisions; the model returns an envelope and never writes SQL |
 | `profile/scripts/migrate.py` | Schema versioning, forward-only. This recipe ships at v1, so there is nothing to upgrade from yet |
 | `profile/scripts/normalize.py` | Source payloads to store rows, kept separate from any I/O |
 | `profile/scripts/_db.py` | Connection and transaction boundary |
@@ -187,8 +188,8 @@ A correction applies only where it means something, so on a populated store:
 - All three refuse an obligation that is `done` and exit `3`. A completed
   obligation is history, and rewriting it would turn finished work into a
   standing instruction.
-- `priority` also refuses an ignored row and exits `3`, printing the `unignore`
-  command that restores it. The walkthrough ignores `msg-cc-only` in step 4, so
+- `priority` also refuses an ignored row and exits `3`, printing the exact
+  `unignore` command that restores it, ready to copy. The walkthrough ignores `msg-cc-only` in step 4, so
   a `priority` command against that row right afterwards reaches this.
 - Repeating a correction that is already in force changes nothing. It prints
   `"changed": false` and exits `0`.
@@ -209,7 +210,7 @@ echo "failed=$fail"
 cd ../..
 ```
 
-Expected result: every file ends with `OK`, the eight files report 152 tests in
+Expected result: every file ends with `OK`, the eight files report 154 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -340,7 +341,8 @@ it as well if you want the checkout byte-for-byte as you found it.
 - The audit trail records one row per obligation a correction displaces, and
   `events` is append-only. That is deliberate — the store has to be able to
   explain why a row moved — but the cost scales with the open list: on a
-  200-row list one ignore writes about 100 audit rows. A long-lived store with
+  200-row list one ignore writes between 100 and 200 audit rows, depending on
+  how far up the list the corrected row sat. A long-lived store with
   a large open list will need a compaction path for `reranked` events, which
   this phase does not provide.
 - Paths in the skills are written against `$HERMES_HOME` rather than relative

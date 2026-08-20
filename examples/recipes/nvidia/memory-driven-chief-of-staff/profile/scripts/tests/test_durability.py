@@ -531,5 +531,47 @@ class TestAFailedWriteReportsItsOwnCause(unittest.TestCase):
                 c.execute("SELECT COUNT(*) FROM items").fetchone()[0], 0)
 
 
+class TestSkillsNameFilesAbsolutely(unittest.TestCase):
+    """Every path a skill hands to a shell must resolve from any directory.
+
+    The agent's working directory is not the profile home, so a relative path
+    resolves to nothing — and an unreadable file is indistinguishable from an
+    empty one, which is why this failure is silent rather than loud. Ten paths
+    were fixed for that reason once; one shipped skill was still invoking a
+    script relatively when a reviewer found it, so the class is checked here
+    rather than by reading.
+    """
+
+    SHELL_BLOCK = re.compile(r"```(?:bash|sh)\n(.*?)```", re.S)
+    INVOCATION = re.compile(r"^\s*(?:python3|sqlite3|cat|\.)\s+(\S+)", re.M)
+
+    def _skills(self):
+        root = HERE.parent / "skills"
+        self.assertTrue(root.is_dir(), "the profile ships no skills")
+        return sorted(root.glob("*/SKILL.md"))
+
+    def test_every_scripted_path_is_anchored(self):
+        for doc in self._skills():
+            text = doc.read_text(encoding="utf-8")
+            for block in self.SHELL_BLOCK.findall(text):
+                for target in self.INVOCATION.findall(block):
+                    cleaned = target.strip('"\'')
+                    if not cleaned.endswith((".py", ".db", ".json", ".md")):
+                        continue
+                    with self.subTest(skill=doc.parent.name, path=target):
+                        self.assertTrue(
+                            cleaned.startswith("$HERMES_HOME")
+                            or cleaned.startswith("/"),
+                            f"{doc.parent.name} runs {target} relative to the "
+                            "working directory, which is not the profile home")
+
+    def test_the_scan_would_catch_a_relative_invocation(self):
+        """The check has to be able to fail, or it is telling us nothing."""
+        block = 'python3 scripts/memory_check.py\n'
+        found = self.INVOCATION.findall(block)
+        self.assertEqual(found, ["scripts/memory_check.py"])
+        self.assertFalse(found[0].startswith("$HERMES_HOME"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

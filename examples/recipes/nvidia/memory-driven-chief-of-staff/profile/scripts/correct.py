@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from _db import ensure_store, write_txn
 from ranking import rank_population
@@ -167,7 +168,9 @@ def set_priority(source_id: str, tier: str) -> dict:
         if status != "open":
             raise InvalidTransition(
                 f"{source_id} is {status}; a priority override applies to the "
-                f"open list. Restore it first: correct.py unignore {source_id}")
+                f"open list. Restore it first:\n"
+                f"    {sys.executable} {Path(__file__).resolve()} "
+                f"unignore {source_id}")
         if manual == tier:
             return {"source_id": source_id, "manual_priority": tier,
                     "priority": priority, "global_rank": rank, "changed": False}
