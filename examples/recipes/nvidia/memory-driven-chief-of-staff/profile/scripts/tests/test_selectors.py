@@ -642,6 +642,12 @@ class TestTheInstallerCarriesSettingsNotSecrets(unittest.TestCase):
         # below and hide a regression in the code they describe.
         self.code = "\n".join(line for line in self.text.splitlines()
                                if not line.lstrip().startswith("#"))
+        # The remediation text tells the reader to run `config set
+        # model.api_key`, which is an instruction rather than a transfer. A
+        # test that cannot tell printing from doing fails on its own advice.
+        self.commands = "\n".join(
+            line for line in self.code.splitlines()
+            if not line.lstrip().startswith("echo "))
 
     def test_no_config_file_is_copied_into_the_profile(self):
         self.assertIsNone(
@@ -658,7 +664,8 @@ class TestTheInstallerCarriesSettingsNotSecrets(unittest.TestCase):
     def test_nothing_named_like_a_credential_is_transferred(self):
         for secret in ("api_key", "sudo_password", "auth.json", ".env"):
             self.assertIsNone(
-                re.search(rf"config set[^\n]*{re.escape(secret)}", self.code),
+                re.search(rf"config set[^\n]*{re.escape(secret)}",
+                          self.commands),
                 f"installer transfers {secret} into the new profile")
 
     def test_the_runnability_check_runs_before_any_job_is_registered(self):
@@ -676,6 +683,34 @@ class TestTheInstallerCarriesSettingsNotSecrets(unittest.TestCase):
         window = after[:after.find("register-jobs.sh")]
         self.assertIn("exit 1", window,
                       "an unresolvable model must abort, not warn and continue")
+
+    def test_a_missing_credential_aborts_before_registration(self):
+        """A model name alone does not make a profile runnable.
+
+        The credential is not inherited. A profile carrying only the three
+        settings sends the literal placeholder `no-key-required`, so every
+        scheduled job fails to authenticate — silently, in the logs, four times
+        an hour. The check belongs where a person is watching.
+        """
+        check = self.code.find("config get model.api_key")
+        register = self.code.find("register-jobs.sh")
+        self.assertNotEqual(check, -1, "no credential check")
+        self.assertLess(check, register,
+                        "the credential check must precede registration")
+        window = self.code[check:register]
+        self.assertIn("exit 1", window,
+                      "a missing credential must abort, not warn and continue")
+
+    def test_the_no_credential_case_has_a_deliberate_opt_out(self):
+        """Endpoints that need no key are real; they just have to say so."""
+        self.assertIn("ALLOW_NO_API_KEY", self.code,
+                      "no way to install against a keyless endpoint")
+
+    def test_the_credential_is_never_printed(self):
+        """Reading a key is fine; echoing it into a terminal is not."""
+        for line in self.code.splitlines():
+            if "echo" in line and "$credential" in line:
+                self.fail(f"installer echoes the credential: {line.strip()}")
 
 
 class TestTheReadmeDescribesTheInstallerItShips(unittest.TestCase):

@@ -11,10 +11,9 @@
 # reader to configure it twice.
 #
 # No file is copied. The model settings are carried over key by key through
-# `hermes config set`, and no credential is: a profile with no `model.api_key`
-# of its own still authenticates, because Hermes resolves the credential from
-# the config it inherits. The installer stops before registering jobs if the
-# profile cannot resolve a model.
+# `hermes config set`; the credential is not, because a credential is not a
+# thing to copy. It is also not inherited, so the target profile needs its own
+# and this script refuses to register jobs until it has one.
 
 set -euo pipefail
 
@@ -73,11 +72,8 @@ echo "2/3  Carrying over the model settings"
 # checked against, `model:` carries `default`, `provider`, `base_url` and
 # `api_key` together. A wholesale copy writes that key into a second file.
 #
-# Carrying nothing but the three settings loses nothing: a profile whose own
-# `model.api_key` is unset still sends an authenticated request, because the
-# credential resolves from the config the profile inherits. Verified on Hermes
-# 0.19.0 by reading the request dump of a cron-driven turn — `model.api_key`
-# unset on the profile, `Authorization` present on the wire.
+# What the three settings do not carry is a credential, and nothing else
+# supplies one either — see the check below.
 for key in model.default model.provider model.base_url; do
   value="$(hermes config get "$key" 2>/dev/null | head -1 || true)"
   [[ -z "$value" || "$value" == *"not set"* ]] && continue
@@ -96,9 +92,40 @@ if [[ -z "$resolved" || "$resolved" == *"not set"* ]]; then
   exit 1
 fi
 
-echo "     credentials are not copied. Hermes keeps them in .env and auth.json,"
-echo "     and this profile needs its own. Check with:"
-echo "       hermes -p $PROFILE info"
+# A model name is not enough to make a profile runnable. The credential is not
+# inherited: a profile carrying only the three settings above sends the literal
+# placeholder `no-key-required` in its Authorization header, not the key from
+# the config it was installed alongside. Measured on Hermes 0.20.0 by pointing
+# a scratch profile at a local endpoint and reading what arrived — the token was
+# 15 bytes of placeholder while the configured key was 26 bytes, and the two
+# hashes differ. Against a real endpoint that is a failed request per job, four
+# times an hour, discoverable only in the logs.
+#
+# So require the credential here, where a person is watching, rather than at
+# 03:00 on the first scheduled run. Endpoints that genuinely need no key are
+# real, so there is an opt-out, but it has to be asked for.
+credential="$(hermes -p "$PROFILE" config get model.api_key 2>/dev/null | head -1 || true)"
+if [[ -z "$credential" || "$credential" == *"not set"* ]]; then
+  if [[ "${ALLOW_NO_API_KEY:-0}" != "1" ]]; then
+    echo "" >&2
+    echo "Profile '$PROFILE' has no model credential of its own." >&2
+    echo "" >&2
+    echo "Credentials are deliberately not copied, and they are not inherited:" >&2
+    echo "a profile without one sends 'no-key-required' rather than the key" >&2
+    echo "belonging to the profile it was installed alongside. Every scheduled" >&2
+    echo "job would fail to authenticate." >&2
+    echo "" >&2
+    echo "Set one, then re-run this script:" >&2
+    echo "  hermes -p $PROFILE config set model.api_key <key>" >&2
+    echo "" >&2
+    echo "If your endpoint needs no key, say so explicitly:" >&2
+    echo "  ALLOW_NO_API_KEY=1 bash scripts/install.sh" >&2
+    exit 1
+  fi
+  echo "     no credential set; continuing because ALLOW_NO_API_KEY=1"
+else
+  echo "     model.api_key is set on this profile"
+fi
 
 echo "3/3  Registering scheduled jobs"
 PROFILE_NAME="$PROFILE" bash "$HERE/register-jobs.sh"

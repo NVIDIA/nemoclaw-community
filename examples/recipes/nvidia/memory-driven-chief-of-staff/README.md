@@ -109,14 +109,14 @@ then the scheduled jobs judge and re-judge whatever the store already holds.
   its prompt. Registering them there buys a scheduled expense and no
   assistant.
 - No credentials for the fixture path. The scheduled path is different: a
-  woken job runs an agent turn, so the Hermes runtime it fires under has to be
-  able to reach an inference provider. That is the credential you already
-  configured for Hermes itself — the installer carries over the model settings
-  and never a key. On the runtime this recipe was checked against, a profile
-  that holds no key of its own still sent an authenticated request, because
-  the credential resolved from the config it inherits; if yours does not,
-  set one on the profile. The installer stops before registering jobs if the
-  profile cannot resolve a model.
+  woken job runs an agent turn, so the profile it fires under needs a model it
+  can reach and a credential of its own. The installer carries over the model
+  settings and never a key, because a key is not a thing to copy — you set one
+  on the new profile with `hermes -p <profile> config set model.api_key`. It is
+  not inherited: a profile without one sends the literal placeholder
+  `no-key-required`, so every scheduled job would fail to authenticate. The
+  installer stops before registering any job when either the model or the
+  credential is missing.
 
 Nothing in the fixture path needs Hermes. Installing the profile and running
 it on a schedule does: `profile/distribution.yaml` declares
@@ -236,7 +236,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the nine files report 210 tests in
+Expected result: every file ends with `OK`, the nine files report 213 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -303,12 +303,11 @@ overrides the profile it installs into.
 The carry-over is three named settings — `model.default`, `model.provider` and
 `model.base_url` — transferred through `hermes config set`. No file is copied
 and no key is: the `model:` block is documented to hold an inline `api_key`,
-and a copy would write that key into a second file. It buys nothing — on the
-runtime this was checked against, a profile holding no key of its own still
-sent an authenticated request, the credential resolving from the config it
-inherits. If the profile cannot resolve a model afterwards, the installer says
-so and exits before registering any job, rather than scheduling five jobs that
-would each wake a model that isn't there.
+and a copy would write that key into a second file. Set the key on the new
+profile instead. The installer then checks both — that a model resolves and
+that a credential is present — and exits before registering any job if either
+is missing, rather than scheduling five jobs that would each fail. If your
+endpoint genuinely needs no key, pass `ALLOW_NO_API_KEY=1` to say so.
 
 Re-running it is safe: the registration looks each job up by name and edits it
 rather than adding another copy.
@@ -462,12 +461,11 @@ it as well if you want the checkout byte-for-byte as you found it.
 - The scheduled path is Linux only, including WSL, because every shipped skill
   declares `platforms: [linux]`. See [Requirements](#requirements).
 - The installer transfers three named model settings and no file, so nothing
-  it writes can carry a secret. What it cannot do is prove the target profile
-  will authenticate: the credential resolves from the config the profile
-  inherits, and that is the runtime's arrangement rather than this recipe's.
-  The installer checks that a model resolves and stops if none does, which
-  catches a profile with no model at all — not one whose model resolves and
-  whose credential is missing.
+  it writes can carry a secret. It checks that a model resolves and that a
+  credential is present, and stops before registering anything if either is
+  missing. What it cannot do is prove the credential is *valid*: that is one
+  request to your provider away, and the installer does not make it. A wrong
+  key still installs cleanly and fails at the first scheduled run.
 - The walkthrough's two judgment steps are recorded envelopes rather than live
   model turns. That is the limit of a fixture corpus, and the limit falls in a
   specific place: the gate verdict is recorded, so this run cannot show the
