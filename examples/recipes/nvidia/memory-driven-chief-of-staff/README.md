@@ -215,6 +215,7 @@ fail=0
 for t in tests/*.py; do python3 "$t" || fail=1; done
 echo "failed=$fail"
 cd ../..
+test "$fail" -eq 0
 ```
 
 Expected result: every file ends with `OK`, the eight files report 157 tests in
