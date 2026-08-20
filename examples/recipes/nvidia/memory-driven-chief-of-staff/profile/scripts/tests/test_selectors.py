@@ -244,7 +244,12 @@ class TestScriptsNameRealHermesCommands(unittest.TestCase):
         r"hermes(?:\s+-{1,2}[A-Za-z-]+(?:\s+\S+)?)*\s+(model)\s+([^\s|`]+)")
 
     def sources(self):
-        yield from sorted((self.RECIPE / "scripts").glob("*.sh"))
+        # Skip dotfiles. A macOS archive carries an AppleDouble sidecar beside
+        # each file — `._install.sh` ends in `.sh`, is binary, and made this
+        # scan raise UnicodeDecodeError the first time the recipe was unpacked
+        # on Linux. `load_fixtures` learned the same lesson for `.md` pages.
+        yield from sorted(f for f in (self.RECIPE / "scripts").glob("*.sh")
+                          if not f.name.startswith("."))
         yield self.RECIPE / "README.md"
 
     def test_every_named_subcommand_is_real(self):
