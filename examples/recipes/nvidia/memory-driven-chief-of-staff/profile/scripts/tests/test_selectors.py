@@ -549,6 +549,11 @@ class TestTheSliceBoundCannotBeDefeated(unittest.TestCase):
     message could name the variable.
     """
 
+
+    # Both selectors read their bound through the same helper, so every case
+    # below runs against both — `REVIEW_BATCH` was named in the finding too.
+    SELECTORS = (("select_intake.py", "INTAKE_SLICE"),
+                 ("select_review.py", "REVIEW_BATCH"))
     def setUp(self):
         self.home = tempfile.mkdtemp()
         self.db = Path(self.home) / "workspace" / "ledger" / "state.db"
@@ -579,8 +584,7 @@ class TestTheSliceBoundCannotBeDefeated(unittest.TestCase):
             self._slice_size(self._run("select_review.py"), "batch"), 15)
 
     def test_a_negative_override_is_refused_rather_than_unbounded(self):
-        for script, var in (("select_intake.py", "INTAKE_SLICE"),
-                            ("select_review.py", "REVIEW_BATCH")):
+        for script, var in self.SELECTORS:
             with self.subTest(script=script):
                 proc = self._run(script, **{var: "-1"})
                 self.assertNotEqual(proc.returncode, 0)
@@ -588,19 +592,25 @@ class TestTheSliceBoundCannotBeDefeated(unittest.TestCase):
                 self.assertNotIn('"slice"', proc.stdout)
 
     def test_zero_is_refused(self):
-        proc = self._run("select_intake.py", INTAKE_SLICE="0")
-        self.assertNotEqual(proc.returncode, 0)
-        self.assertIn("between 1 and", proc.stderr)
+        for script, var in self.SELECTORS:
+            with self.subTest(script=script):
+                proc = self._run(script, **{var: "0"})
+                self.assertNotEqual(proc.returncode, 0)
+                self.assertIn("between 1 and", proc.stderr)
 
     def test_malformed_text_names_the_variable_instead_of_raising(self):
-        proc = self._run("select_intake.py", INTAKE_SLICE="abc")
-        self.assertNotEqual(proc.returncode, 0)
-        self.assertIn("INTAKE_SLICE", proc.stderr)
-        self.assertNotIn("Traceback", proc.stderr)
+        for script, var in self.SELECTORS:
+            with self.subTest(script=script):
+                proc = self._run(script, **{var: "abc"})
+                self.assertNotEqual(proc.returncode, 0)
+                self.assertIn(var, proc.stderr)
+                self.assertNotIn("Traceback", proc.stderr)
 
     def test_an_override_above_the_ceiling_is_refused(self):
-        proc = self._run("select_intake.py", INTAKE_SLICE="9999")
-        self.assertNotEqual(proc.returncode, 0)
+        for script, var in self.SELECTORS:
+            with self.subTest(script=script):
+                proc = self._run(script, **{var: "9999"})
+                self.assertNotEqual(proc.returncode, 0)
 
     def test_a_valid_override_still_works(self):
         """The guard must not remove the knob, only bound it."""
