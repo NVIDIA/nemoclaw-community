@@ -240,9 +240,9 @@ Four points are worth calling out.
   their siblings — and a companion test proves the scan fires on real
   examples, including `urlopen(url, data=…)` and a `subprocess` call to
   `curl`. Read it as a tripwire rather than a proof: it matches call shapes, so
-  a write spelled in some further way could still pass it. What actually holds the
-  property in this phase is that the recipe reaches no network at all; policy
-  takes over once the connectors land.
+  a write spelled in some further way could still pass it. What actually holds
+  the property in this phase is that the recipe reaches no network at all;
+  policy takes over once the connectors land.
 - `test_nothing_this_example_ships_lands_on_a_user_owned_path`, also in
   `tests/test_durability.py`, asserts that nothing this recipe ships occupies a
   user-owned name, and that the user-owned and distribution-owned sets stay
