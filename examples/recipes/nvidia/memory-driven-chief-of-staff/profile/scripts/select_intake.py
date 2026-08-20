@@ -19,18 +19,54 @@ from pathlib import Path
 
 from _db import ensure_store, write_txn
 
+def bounded_int(name: str, default: int, *, maximum: int) -> int:
+    """Read a positive, bounded integer from the environment.
+
+    `LIMIT` takes whatever it is given, and SQLite reads a negative one as no
+    limit at all — so `INTAKE_SLICE=-1` handed the model every pending row in
+    the store, silently defeating the bound this recipe is built on. Zero is
+    just as wrong in the other direction: the job wakes, reports work, and
+    offers nothing. Malformed text used to raise during import, before any
+    error message could explain which variable was at fault.
+    """
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        raise SystemExit(
+            f"{name} must be a whole number between 1 and {maximum}; got {raw!r}")
+    if value < 1 or value > maximum:
+        raise SystemExit(
+            f"{name} must be between 1 and {maximum}; got {value}")
+    return value
+
+
 HERE = Path(__file__).resolve().parent
-SLICE = int(os.environ.get("INTAKE_SLICE", "25"))
+MAX_SLICE = 200
+SLICE = None  # resolved in main(); see bounded_int
 
 
-def collect() -> dict[str, object]:
-    """Run whichever collectors are present and configured.
+def collect() -> tuple[dict[str, object], bool]:
+    """Run whichever collectors are present, and report whether any failed.
 
     A collector that is absent is not an error. The store and the schedule ship
     before the connectors do, and a reader who never connects a source still
     gets a working intake pass over whatever is already in the store.
+
+    A collector that *fails* is a different thing, and it must be visible. The
+    exit code is what says so: a connector whose credential expired writes to
+    stderr and exits non-zero while printing nothing, and `json.loads("" or
+    "{}")` turns that into an empty success. Combined with the idle gate below
+    it produced the worst failure this design can have — a token that stopped
+    working, a tick that skipped the agent, and nothing anywhere saying so,
+    every half hour.
+
+    Returns the per-collector results and a flag: true if any of them failed.
     """
     results: dict[str, object] = {}
+    failed = False
     for script in ("ingest_graph.py", "ingest_slack.py"):
         path = HERE / script
         if not path.exists():
@@ -38,18 +74,26 @@ def collect() -> dict[str, object]:
             continue
         proc = subprocess.run([sys.executable, str(path)],
                               capture_output=True, text=True)
+        detail = (proc.stderr or "").strip()[:200]
+        if proc.returncode != 0:
+            failed = True
+            results[script] = {"failed": True, "exit_code": proc.returncode,
+                               "stderr": detail}
+            continue
         try:
             results[script] = json.loads(proc.stdout or "{}")
-        except json.JSONDecodeError:
-            # A collector that fails must not take the whole tick down; the
-            # slice below still has yesterday's unjudged items to work on.
-            results[script] = {"error": (proc.stderr or "").strip()[:200]}
-    return results
+        except json.JSONDecodeError as exc:
+            failed = True
+            results[script] = {"failed": True, "error": f"unreadable output: {exc}",
+                               "stderr": detail}
+    return results, failed
 
 
 def main() -> int:
+    global SLICE
+    SLICE = bounded_int("INTAKE_SLICE", 25, maximum=MAX_SLICE)
     ensure_store()
-    collected = collect()
+    collected, collector_failed = collect()
 
     with write_txn() as conn:
         rows = conn.execute(
@@ -75,7 +119,9 @@ def main() -> int:
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2))
 
-    if not rows:
+    # Wake on a collector failure even with nothing to judge. The gate exists
+    # to make an idle tick free, not to make a broken one quiet.
+    if not rows and not collector_failed:
         print(json.dumps({"wakeAgent": False}))
     return 0
 

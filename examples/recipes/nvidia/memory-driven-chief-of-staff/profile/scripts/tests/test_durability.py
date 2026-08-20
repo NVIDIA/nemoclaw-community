@@ -670,5 +670,44 @@ class TestScansSurviveAMacOsArchive(unittest.TestCase):
                 p.read_text(encoding="utf-8")
 
 
+class TestTheDocumentedTestCountIsTheRealOne(unittest.TestCase):
+    """The README tells the reader what a clean run prints.
+
+    That sentence names two numbers — how many files the suite is in, and how
+    many tests they add up to — and both go stale the moment anyone adds a
+    test. Nothing was checking them, and the count in the README drifted three
+    separate times before this test existed, each time announcing a total that
+    no run had produced. A number a reader can compare against their own
+    terminal is a claim, so it gets an assertion like any other.
+    """
+
+    WORDS = {"nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
+
+    def _documented(self):
+        readme = (HERE.parents[1] / "README.md").read_text(encoding="utf-8")
+        match = re.search(r"the (\w+) files report (\d+) tests", readme)
+        self.assertIsNotNone(
+            match, "README no longer states the file and test counts")
+        word, total = match.group(1), int(match.group(2))
+        self.assertIn(word, self.WORDS, f"unhandled number word {word!r}")
+        return self.WORDS[word], total
+
+    def test_the_readme_states_the_number_of_files_the_suite_is_in(self):
+        files, _ = self._documented()
+        actual = [p for p in Path(__file__).resolve().parent.glob("test_*.py")
+                  if not p.name.startswith("._")]
+        self.assertEqual(files, len(actual),
+                         f"README says {files} files; found {len(actual)}: "
+                         + ", ".join(sorted(p.name for p in actual)))
+
+    def test_the_readme_states_the_number_of_tests_a_clean_run_prints(self):
+        _, total = self._documented()
+        here = str(Path(__file__).resolve().parent)
+        suite = unittest.defaultTestLoader.discover(here, pattern="test_*.py")
+        self.assertEqual(total, suite.countTestCases(),
+                         f"README says {total} tests; the suite holds "
+                         f"{suite.countTestCases()}")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

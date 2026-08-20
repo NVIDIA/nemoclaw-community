@@ -4,7 +4,7 @@
 """Acceptance: what the cron pre-steps hand the agent, and when they decline to
 wake it at all."""
 
-import json, os, re, sqlite3, subprocess, sys, tempfile, unittest
+import json, os, re, shutil, sqlite3, subprocess, sys, tempfile, unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parents[1]
@@ -392,6 +392,309 @@ class TestTheRebootStoryIsWhatTheReadmeSays(unittest.TestCase):
         self.assertIn('register intake "*/30 * * * *"', script)
         per_day = 24 * 60 // 30
         self.assertEqual(per_day * 2, 96)
+
+
+class TestACollectorFailureIsVisible(unittest.TestCase):
+    """A connector that stops working must not be silent.
+
+    This is the worst failure this design can have, and it was the shipped
+    behaviour: a collector whose credential expired wrote to stderr and exited
+    non-zero while printing nothing, `json.loads("" or "{}")` turned that into
+    an empty success, and the idle gate then skipped the agent entirely. Every
+    half hour, forever, with nothing anywhere saying so. Slack's rotating user
+    tokens make an expired credential an ordinary event rather than an
+    exceptional one, so this path is the one that matters most.
+    """
+
+    def setUp(self):
+        self.home = tempfile.mkdtemp()
+        self.recipe = Path(tempfile.mkdtemp())
+        shutil.copytree(HERE, self.recipe / "scripts")
+        self.db = Path(self.home) / "workspace" / "ledger" / "state.db"
+        self.db.parent.mkdir(parents=True)
+        with sqlite3.connect(self.db) as c:
+            c.executescript(SCHEMA)
+
+    def _collector(self, body):
+        (self.recipe / "scripts" / "ingest_graph.py").write_text(
+            "import sys\n" + body + "\n", encoding="utf-8")
+
+    def _add_pending(self, sid):
+        with sqlite3.connect(self.db) as c:
+            c.execute("INSERT INTO items(source_id, source, scope, event_at, state)"
+                      " VALUES (?,'email','inbox','2026-08-18T00:00:00Z','pending')",
+                      (sid,))
+
+    def _run(self):
+        proc = subprocess.run(
+            [sys.executable, str(self.recipe / "scripts" / "select_intake.py")],
+            capture_output=True, text=True,
+            env={**os.environ, "HERMES_HOME": self.home})
+        body = proc.stdout.split('{"wakeAgent"')[0]
+        return json.loads(body), proc.stdout
+
+    def _graph(self, payload):
+        return payload["collected"]["ingest_graph.py"]
+
+    def test_a_nonzero_exit_with_no_output_is_recorded_as_a_failure(self):
+        self._collector('print("", end=""); print("token expired", file=sys.stderr); sys.exit(1)')
+        payload, _ = self._run()
+        entry = self._graph(payload)
+        self.assertTrue(entry["failed"])
+        self.assertEqual(entry["exit_code"], 1)
+        self.assertIn("token expired", entry["stderr"])
+
+    def test_a_nonzero_exit_with_valid_json_is_still_a_failure(self):
+        """Readable output does not mean the run succeeded."""
+        self._collector('print(\'{"seen": 3}\'); sys.exit(2)')
+        payload, _ = self._run()
+        self.assertTrue(self._graph(payload)["failed"])
+        self.assertEqual(self._graph(payload)["exit_code"], 2)
+
+    def test_unreadable_output_from_a_clean_exit_is_a_failure(self):
+        self._collector('print("not json"); sys.exit(0)')
+        payload, _ = self._run()
+        self.assertTrue(self._graph(payload)["failed"])
+        self.assertIn("unreadable output", self._graph(payload)["error"])
+
+    def test_a_failure_with_no_pending_rows_still_wakes_the_agent(self):
+        """The gate makes an idle tick free; it must not make a broken one quiet."""
+        self._collector('print("", end=""); print("boom", file=sys.stderr); sys.exit(1)')
+        payload, stdout = self._run()
+        self.assertEqual(payload["slice"], [])
+        lines = [line for line in stdout.splitlines() if line.strip()]
+        self.assertNotEqual(lines[-1].strip(), '{"wakeAgent": false}')
+
+    def test_a_healthy_collector_with_no_rows_still_gates(self):
+        """The fix must not cost the saving the gate exists for."""
+        self._collector('print(\'{"seen": 0}\'); sys.exit(0)')
+        _, stdout = self._run()
+        lines = [line for line in stdout.splitlines() if line.strip()]
+        self.assertEqual(lines[-1].strip(), '{"wakeAgent": false}')
+
+    def test_a_failure_does_not_stop_pending_rows_being_offered(self):
+        self._collector('print("", end=""); print("boom", file=sys.stderr); sys.exit(1)')
+        self._add_pending("m1")
+        payload, _ = self._run()
+        self.assertEqual(len(payload["slice"]), 1)
+        self.assertTrue(self._graph(payload)["failed"])
+
+
+class TestTheInstallerRefusesTheWrongPlatform(unittest.TestCase):
+    """Documentation that says "Linux only" and code that installs anywhere.
+
+    The README states the scheduled path does not work on macOS, and the
+    scripts installed and registered five jobs there regardless — producing
+    exactly the model-without-skill calls the same document warns about. A
+    warning nothing enforces is not a warning.
+    """
+
+    RECIPE = HERE.parents[1]
+    SCRIPTS = ("install.sh", "register-jobs.sh")
+
+    def _with_uname(self, kernel):
+        """Run each script with `uname` reporting a chosen kernel."""
+        fake = Path(tempfile.mkdtemp())
+        (fake / "uname").write_text(f"#!/bin/sh\necho {kernel}\n", encoding="utf-8")
+        (fake / "uname").chmod(0o755)
+        return fake
+
+    def _run(self, script, kernel):
+        fake = self._with_uname(kernel)
+        return subprocess.run(
+            ["bash", str(self.RECIPE / "scripts" / script)],
+            capture_output=True, text=True, cwd=str(self.RECIPE),
+            env={**os.environ, "PATH": f"{fake}:{os.environ['PATH']}",
+                 "PROFILE_NAME": "does-not-exist-under-test"})
+
+    def test_darwin_is_refused_by_both_scripts(self):
+        for script in self.SCRIPTS:
+            with self.subTest(script=script):
+                proc = self._run(script, "Darwin")
+                self.assertEqual(proc.returncode, 1)
+                self.assertIn("only works on Linux", proc.stderr)
+                self.assertIn("Darwin", proc.stderr)
+
+    def test_the_refusal_names_the_path_that_does_work(self):
+        proc = self._run("install.sh", "Darwin")
+        self.assertIn("walkthrough.py", proc.stderr)
+
+    def test_linux_is_accepted_and_reaches_the_next_check(self):
+        """The guard must gate on the platform and nothing else."""
+        for script in self.SCRIPTS:
+            with self.subTest(script=script):
+                proc = self._run(script, "Linux")
+                combined = proc.stdout + proc.stderr
+                self.assertNotIn("only works on Linux", combined)
+
+    def test_the_guard_runs_before_anything_is_installed(self):
+        """Position matters: a guard after the first mutation is not a guard."""
+        for script in self.SCRIPTS:
+            with self.subTest(script=script):
+                text = (self.RECIPE / "scripts" / script).read_text(encoding="utf-8")
+                guard_at = text.index("require_linux\n")
+                for verb in ("hermes profile install", "cron create", "cp \""):
+                    if verb in text:
+                        self.assertLess(guard_at, text.index(verb),
+                                        f"{script} runs `{verb}` before the guard")
+
+
+class TestTheSliceBoundCannotBeDefeated(unittest.TestCase):
+    """The bound is the product, so an override must not be able to remove it.
+
+    SQLite reads a negative `LIMIT` as no limit, so `INTAKE_SLICE=-1` handed
+    the model every pending row in the store — silently, and past the cap this
+    recipe is built on. Zero fails the other way: the job wakes, says it has
+    work, and offers none. Malformed text raised during import, before any
+    message could name the variable.
+    """
+
+    def setUp(self):
+        self.home = tempfile.mkdtemp()
+        self.db = Path(self.home) / "workspace" / "ledger" / "state.db"
+        self.db.parent.mkdir(parents=True)
+        with sqlite3.connect(self.db) as c:
+            c.executescript(SCHEMA)
+            for n in range(60):
+                c.execute(
+                    "INSERT INTO items(source_id, source, scope, event_at, state)"
+                    " VALUES (?,'email','inbox','2026-08-18T00:00:00Z','pending')",
+                    (f"m{n}",))
+            for n in range(60):
+                c.execute(
+                    "INSERT INTO obligations(id, source_id, title, priority, status)"
+                    " VALUES (?,?,?,'high','open')", (f"o{n}", f"m{n}", f"t{n}"))
+
+    def _run(self, script, **env):
+        return subprocess.run(
+            [sys.executable, str(HERE / script)], capture_output=True, text=True,
+            env={**os.environ, "HERMES_HOME": self.home, **env})
+
+    def _slice_size(self, proc, key):
+        return len(json.loads(proc.stdout.split('{"wakeAgent"')[0])[key])
+
+    def test_the_default_bound_holds(self):
+        self.assertEqual(self._slice_size(self._run("select_intake.py"), "slice"), 25)
+        self.assertEqual(
+            self._slice_size(self._run("select_review.py"), "batch"), 15)
+
+    def test_a_negative_override_is_refused_rather_than_unbounded(self):
+        for script, var in (("select_intake.py", "INTAKE_SLICE"),
+                            ("select_review.py", "REVIEW_BATCH")):
+            with self.subTest(script=script):
+                proc = self._run(script, **{var: "-1"})
+                self.assertNotEqual(proc.returncode, 0)
+                self.assertIn(var, proc.stderr)
+                self.assertNotIn('"slice"', proc.stdout)
+
+    def test_zero_is_refused(self):
+        proc = self._run("select_intake.py", INTAKE_SLICE="0")
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("between 1 and", proc.stderr)
+
+    def test_malformed_text_names_the_variable_instead_of_raising(self):
+        proc = self._run("select_intake.py", INTAKE_SLICE="abc")
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("INTAKE_SLICE", proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+
+    def test_an_override_above_the_ceiling_is_refused(self):
+        proc = self._run("select_intake.py", INTAKE_SLICE="9999")
+        self.assertNotEqual(proc.returncode, 0)
+
+    def test_a_valid_override_still_works(self):
+        """The guard must not remove the knob, only bound it."""
+        proc = self._run("select_intake.py", INTAKE_SLICE="40")
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(self._slice_size(proc, "slice"), 40)
+
+
+class TestTheInstallerCarriesSettingsNotSecrets(unittest.TestCase):
+    """The installer used to copy `~/.hermes/config.yaml` into the new profile.
+
+    That file's own `model:` block is documented to hold an inline `api_key`,
+    and a generated config really does put one there, so the copy duplicated a
+    credential into a second file while the README told the reader no
+    credentials were involved. It also bought nothing: a profile with no key of
+    its own authenticates through the config it inherits.
+
+    These assertions pin the shape the fix depends on — named settings through
+    the CLI, no file copy, and a runnability check that lands before anything
+    is scheduled.
+    """
+
+    INSTALL = HERE.parents[1] / "scripts" / "install.sh"
+    CARRIED = ("model.default", "model.provider", "model.base_url")
+
+    def setUp(self):
+        self.text = self.INSTALL.read_text(encoding="utf-8")
+        # Comments explain the old behavior, so they would match every pattern
+        # below and hide a regression in the code they describe.
+        self.code = "\n".join(line for line in self.text.splitlines()
+                               if not line.lstrip().startswith("#"))
+
+    def test_no_config_file_is_copied_into_the_profile(self):
+        self.assertIsNone(
+            re.search(r"\bcp\b[^\n]*config\.yaml", self.code),
+            "installer copies config.yaml again; that carries an inline "
+            "api_key into the new profile")
+
+    def test_each_model_setting_is_transferred_through_the_cli(self):
+        for key in self.CARRIED:
+            self.assertIn(key, self.code, f"{key} is no longer carried over")
+        self.assertIn("config set", self.code,
+                      "settings must move through `hermes config set`")
+
+    def test_nothing_named_like_a_credential_is_transferred(self):
+        for secret in ("api_key", "sudo_password", "auth.json", ".env"):
+            self.assertIsNone(
+                re.search(rf"config set[^\n]*{re.escape(secret)}", self.code),
+                f"installer transfers {secret} into the new profile")
+
+    def test_the_runnability_check_runs_before_any_job_is_registered(self):
+        check = self.code.find("config get model.default")
+        register = self.code.find("register-jobs.sh")
+        self.assertNotEqual(check, -1, "no model-resolution check remains")
+        self.assertNotEqual(register, -1, "installer no longer registers jobs")
+        self.assertLess(check, register,
+                        "the check must precede registration, or the exit "
+                        "leaves five jobs scheduled against a dead profile")
+
+    def test_an_unresolvable_model_exits_non_zero(self):
+        """The check has to end the run, not merely print a complaint."""
+        after = self.code[self.code.find("config get model.default"):]
+        window = after[:after.find("register-jobs.sh")]
+        self.assertIn("exit 1", window,
+                      "an unresolvable model must abort, not warn and continue")
+
+
+class TestTheReadmeDescribesTheInstallerItShips(unittest.TestCase):
+    """The README documented a copy and an override that no longer exist.
+
+    `SOURCE_PROFILE_CONFIG` was removed with the file copy, and a reader
+    following the old paragraph would set a variable nothing reads.
+    """
+
+    RECIPE = HERE.parents[1]
+
+    def setUp(self):
+        self.readme = (self.RECIPE / "README.md").read_text(encoding="utf-8")
+        self.install = (self.RECIPE / "scripts" / "install.sh").read_text(
+            encoding="utf-8")
+
+    def test_the_readme_names_no_environment_variable_the_script_ignores(self):
+        for name in re.findall(r"`([A-Z][A-Z0-9_]{3,})`", self.readme):
+            if name in ("HERMES_HOME", "PROFILE_NAME", "INTAKE_SLICE",
+                        "REVIEW_BATCH"):
+                continue
+            if name.startswith("NEMOCLAW") or name.startswith("SOURCE_"):
+                self.assertIn(name, self.install,
+                              f"README documents {name}; install.sh never "
+                              "reads it")
+
+    def test_the_readme_does_not_promise_a_config_copy(self):
+        self.assertNotIn("copy of `~/.hermes/config.yaml`", self.readme,
+                         "README still describes the removed file copy")
 
 
 if __name__ == "__main__":

@@ -15,11 +15,15 @@ import json
 import os
 
 from _db import ensure_store, write_txn
+from select_intake import bounded_int
 
-BATCH = int(os.environ.get("REVIEW_BATCH", "15"))
+MAX_BATCH = 200
+BATCH = None  # resolved in main(); see select_intake.bounded_int
 
 
 def main() -> int:
+    global BATCH
+    BATCH = bounded_int("REVIEW_BATCH", 15, maximum=MAX_BATCH)
     ensure_store()
 
     with write_txn() as conn:

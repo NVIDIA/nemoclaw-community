@@ -14,6 +14,29 @@
 
 set -euo pipefail
 
+# The scheduled path is Linux only. Every shipped skill declares
+# `platforms: [linux]`, and Hermes refuses to load a skill outside its declared
+# platforms — so on macOS the jobs fire, the model is called, and no skill
+# loads. Registering them there buys a scheduled expense and no assistant.
+# Refuse before anything is installed or registered rather than after.
+require_linux() {
+  local kernel
+  kernel="$(uname -s)"
+  if [[ "$kernel" != "Linux" ]]; then
+    echo "This installs a scheduled path that only works on Linux." >&2
+    echo "  detected: $kernel" >&2
+    echo "" >&2
+    echo "Every shipped skill declares 'platforms: [linux]'. On $kernel the" >&2
+    echo "jobs would fire and the model would be called with no skill loaded." >&2
+    echo "Windows Subsystem for Linux reports Linux and is supported." >&2
+    echo "" >&2
+    echo "The fixture path needs none of this and runs anywhere:" >&2
+    echo "  python3 profile/scripts/walkthrough.py --fixtures fixtures" >&2
+    exit 1
+  fi
+}
+require_linux
+
 PROFILE="${PROFILE_NAME:-memory-driven-chief-of-staff}"
 
 # `|| true` matters: `hermes profile show` exits 1 for a profile that does not

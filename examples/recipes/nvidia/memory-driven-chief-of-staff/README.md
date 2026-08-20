@@ -108,7 +108,15 @@ then the scheduled jobs judge and re-judge whatever the store already holds.
   still be called — with no skill attached and a "skill not found" notice in
   its prompt. Registering them there buys a scheduled expense and no
   assistant.
-- No credentials of any kind.
+- No credentials for the fixture path. The scheduled path is different: a
+  woken job runs an agent turn, so the Hermes runtime it fires under has to be
+  able to reach an inference provider. That is the credential you already
+  configured for Hermes itself — the installer carries over the model settings
+  and never a key. On the runtime this recipe was checked against, a profile
+  that holds no key of its own still sent an authenticated request, because
+  the credential resolved from the config it inherits; if yours does not,
+  set one on the profile. The installer stops before registering jobs if the
+  profile cannot resolve a model.
 
 Nothing in the fixture path needs Hermes. Installing the profile and running
 it on a schedule does: `profile/distribution.yaml` declares
@@ -228,7 +236,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the nine files report 185 tests in
+Expected result: every file ends with `OK`, the nine files report 210 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -288,11 +296,19 @@ scripts/install.sh
 ```
 
 From the recipe root. It does three things: `hermes profile install` for the
-distribution, a copy of `~/.hermes/config.yaml` so the new profile inherits a
-model, and `scripts/register-jobs.sh` for the schedule. Two environment
-variables override the defaults: `PROFILE_NAME` for the profile it installs
-into, and `SOURCE_PROFILE_CONFIG` for the config it copies. The source path is
-the default profile's, not whatever `HERMES_HOME` currently points at.
+distribution, a carry-over of the model settings so the new profile inherits a
+model, and `scripts/register-jobs.sh` for the schedule. `PROFILE_NAME`
+overrides the profile it installs into.
+
+The carry-over is three named settings — `model.default`, `model.provider` and
+`model.base_url` — transferred through `hermes config set`. No file is copied
+and no key is: the `model:` block is documented to hold an inline `api_key`,
+and a copy would write that key into a second file. It buys nothing — on the
+runtime this was checked against, a profile holding no key of its own still
+sent an authenticated request, the credential resolving from the config it
+inherits. If the profile cannot resolve a model afterwards, the installer says
+so and exits before registering any job, rather than scheduling five jobs that
+would each wake a model that isn't there.
 
 Re-running it is safe: the registration looks each job up by name and edits it
 rather than adding another copy.
@@ -445,12 +461,13 @@ it as well if you want the checkout byte-for-byte as you found it.
   in-process ticker entirely.
 - The scheduled path is Linux only, including WSL, because every shipped skill
   declares `platforms: [linux]`. See [Requirements](#requirements).
-- The installer copies the source profile's `config.yaml` so the new profile
-  inherits a model. It never copies `.env` or `auth.json`, which is where
-  Hermes keeps secrets and provider credentials. It cannot promise more than
-  that: `config.yaml` is your file, and two of its documented keys hold secrets
-  if you have set them there — `api_key`, which Hermes's own example marks as
-  an alternative to `.env`, and `sudo_password`, which it marks as plaintext.
+- The installer transfers three named model settings and no file, so nothing
+  it writes can carry a secret. What it cannot do is prove the target profile
+  will authenticate: the credential resolves from the config the profile
+  inherits, and that is the runtime's arrangement rather than this recipe's.
+  The installer checks that a model resolves and stops if none does, which
+  catches a profile with no model at all — not one whose model resolves and
+  whose credential is missing.
 - The walkthrough's two judgment steps are recorded envelopes rather than live
   model turns. That is the limit of a fixture corpus, and the limit falls in a
   specific place: the gate verdict is recorded, so this run cannot show the
