@@ -38,6 +38,13 @@ def collect(conn: sqlite3.Connection, since: str | None = None) -> list[dict]:
 
     Rows this agent changed are not corrections. Reading your own output back
     as evidence is how a system talks itself into a belief.
+
+    The three-table join is a deliberate fit to this recipe's scale: the open
+    list is tens of rows, and one statement reads better here than three
+    queries stitched together in Python. It is not a pattern to carry into a
+    store where the tables are independent silos linked by id columns rather
+    than a relational graph — there, this belongs as separate id-keyed selects
+    composed by the caller.
     """
     sql = ("SELECT e.event_type, i.sender, i.source, o.kind"
            "  FROM events e"

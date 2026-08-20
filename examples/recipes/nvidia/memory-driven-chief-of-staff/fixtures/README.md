@@ -18,8 +18,15 @@ match what
 [Microsoft Graph's delta query](https://learn.microsoft.com/en-us/graph/api/message-delta)
 and
 [Slack's `conversations.history`](https://docs.slack.dev/reference/methods/conversations.history)
-return for the fields this recipe selects, so the same normalization code runs
-against the fixtures and against live sources.
+return for the fields this recipe selects, so the same normalization code will
+run against the fixtures and against a live source.
+
+The files themselves are local wrappers rather than captured responses. The
+Graph file keeps the API's own `value` array and `@odata.deltaLink`; the Slack
+file keys its histories by channel, because a real `conversations.history` call
+returns one `{"ok": true, "messages": [...]}` response per channel and the
+loader would otherwise need one file each. What the normalizer reads — the
+message objects inside — matches what each API returns.
 
 ## What each record is a control for
 
@@ -105,6 +112,10 @@ a profile home the walkthrough has not already filled:
 export HERMES_HOME=$(mktemp -d)
 python3 profile/scripts/load_fixtures.py --fixtures fixtures
 ```
+
+
+Each `mktemp -d` above makes a profile home that is not removed for you. See
+[Cleanup](../README.md#cleanup) in the recipe README.
 
 Ingestion is idempotent: a second `load_fixtures.py` run against the same
 profile home adds nothing, because intake is keyed on the source's own

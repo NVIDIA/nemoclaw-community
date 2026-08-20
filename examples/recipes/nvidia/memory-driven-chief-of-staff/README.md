@@ -77,7 +77,7 @@ those two apart.
 | `profile/scripts/preferences.py` | Correction counting against a fixed threshold |
 | `profile/scripts/apply_decisions.py` | Applies model decisions; the model returns an envelope and never writes SQL |
 | `profile/scripts/migrate.py` | Schema versioning, forward-only. This recipe ships at v1, so there is nothing to upgrade from yet |
-| `profile/scripts/normalize.py` | Source payloads to store rows, kept separate from any I/O |
+| `profile/scripts/normalize.py` | Source payloads to store rows, kept separate from the network calls |
 | `profile/scripts/_db.py` | Connection and transaction boundary |
 | `profile/scripts/correct.py` | The user's writer: pins, ignores, and the only source of `actor='user'` events |
 | `profile/scripts/load_fixtures.py` | Replays the fixtures through the real ingest path |
@@ -100,9 +100,14 @@ optional Microsoft Graph and Slack connectors.
 Installing the profile into a Hermes runtime is out of scope for this phase;
 the installer arrives with the next one. When that phase lands, installing will
 require Hermes 0.19.0 or newer: `profile/distribution.yaml` declares
-`hermes_requires: ">=0.19.0"`. Nothing in the fixture path needs Hermes, and
-the same 0.19.0 figure under [Where state lives](#where-state-lives) records
-the version the persistence claim was measured against.
+`hermes_requires: ">=0.19.0"`. On 0.19.x the manifest's `distribution_owned`
+list is validated but not yet honoured by the copy — the path-aware allowlist
+first shipped in 0.20.0 — which changes nothing for this recipe, because what
+it ships and what it declares are the same set, and a test keeps them so.
+
+Nothing in the fixture path needs Hermes. The same 0.19.0 figure under
+[Where state lives](#where-state-lives) records the version the persistence
+claim was measured against.
 
 ## Try it
 
@@ -118,7 +123,7 @@ python3 profile/scripts/walkthrough.py --fixtures fixtures
 The seven steps:
 
 1. **Collect.** The fixtures go through the same normalization and writer path
-   a live collector uses. Nothing is judged yet. This is what ingestion alone
+   a connector will use. Nothing is judged yet. This is what ingestion alone
    produces.
 2. **Judge.** The first recorded turn (`fixtures/envelopes/intake.json`) is
    applied by the real writer. Three rows pass the intent gate, so the `high`
@@ -212,7 +217,7 @@ echo "failed=$fail"
 cd ../..
 ```
 
-Expected result: every file ends with `OK`, the eight files report 156 tests in
+Expected result: every file ends with `OK`, the eight files report 157 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -221,7 +226,7 @@ leave the loop exiting `0`.
 | --- | --- |
 | Schema versioning | `tests/test_migration.py` |
 | Invariant detection, idempotency, compaction detection | `tests/test_memory_check.py` |
-| Concurrency, crash recovery, reinstall survival, profile-home resolution, installation, failed-write cause reporting, skill-path anchoring | `tests/test_durability.py` |
+| Concurrency, crash recovery, reinstall survival, profile-home resolution, installation, failed-write cause reporting, skill-path anchoring and existence | `tests/test_durability.py` |
 | Bounded ranking, including user pins | `tests/test_ranking.py` |
 | Preference counting | `tests/test_preferences.py` |
 | Source normalization | `tests/test_normalize.py` |
@@ -231,13 +236,21 @@ leave the loop exiting `0`.
 Four points are worth calling out.
 
 - `TestNoSourceMutation` in `tests/test_durability.py` scans every module for
-  write verbs and source-mutating calls, so "never writes back to the source"
-  stays true as the code grows.
+  the common shapes of an HTTP write — `requests.post`, a `.patch(` call, and
+  their siblings — and a companion test proves the scan fires on real
+  examples, including `urlopen(url, data=…)` and a `subprocess` call to
+  `curl`. Read it as a tripwire rather than a proof: it matches call shapes, so a write
+  spelled in some further way could still pass it. What actually holds the
+  property in this phase is that the recipe reaches no network at all; policy
+  takes over once the connectors land.
 - `test_nothing_this_example_ships_lands_on_a_user_owned_path`, also in
   `tests/test_durability.py`, asserts that nothing this recipe ships occupies a
   user-owned name, and that the user-owned and distribution-owned sets stay
-  disjoint. A shipped directory called `workspace` would be destroyed on every
-  update, taking the store with it.
+  disjoint. Both directions fail, and neither is loud. Hermes never installs a
+  shipped path whose top-level name is user-owned, so a shipped `workspace`
+  would simply never land; and a store placed under a distribution-owned path
+  is removed and replaced on every update, because that is what installing a
+  distribution means.
 - `tests/test_walkthrough.py` runs the walkthrough and asserts its central
   claims against the store the run produced: the gate bounding the top tier,
   loud urgency staying out of it, the pin deciding the tier and surviving a

@@ -188,8 +188,10 @@ class TestReinstallSurvival(unittest.TestCase):
     def test_nothing_this_example_ships_lands_on_a_user_owned_path(self):
         # The check that matters is not that two literals differ, but that the
         # files actually in this contribution never occupy a user-owned name.
-        # A shipped directory called `workspace` would be destroyed on every
-        # update, taking the store with it.
+        # Hermes skips any shipped path whose top-level name is user-owned, so
+        # a shipped `workspace` would never be installed at all — silently. The
+        # destructive case runs the other way: a store under a
+        # distribution-owned path is removed and replaced on every update.
         shipped = {p.name for p in (HERE.parent).iterdir()}
         self.assertEqual(shipped & USER_OWNED, set(),
                          "a shipped path collides with a user-owned name")
@@ -208,6 +210,11 @@ class TestNoSourceMutation(unittest.TestCase):
         re.compile(r'\brequest\s*\(\s*["\'](POST|PUT|PATCH|DELETE)', re.I),
         re.compile(r'\b(graph_post|graph_patch|graph_delete|chat\.postMessage'
                    r'|conversations\.mark|reactions\.add|files\.upload)\b'),
+        # `urlopen(url, data=...)` is a POST — the stdlib spelling of a write,
+        # and one an earlier version of this scan did not see.
+        re.compile(r'urlopen\s*\([^)]*\bdata\s*='),
+        # Shelling out is the other way past a call-shape scan.
+        re.compile(r'\b(subprocess|os)\.\w+\s*\([^)]*\b(curl|wget)\b'),
     )
 
     def test_no_module_issues_a_write_to_a_source_system(self):
@@ -226,6 +233,8 @@ class TestNoSourceMutation(unittest.TestCase):
     def test_the_scan_would_catch_a_real_write(self):
         # A guard that cannot fail is worse than no guard, so prove it fires.
         for sample in ('requests.post(url, json=body)',
+                       'urllib.request.urlopen(url, data=body)',
+                       'subprocess.run(["curl", "-X", "POST", url])',
                        'httpx.patch(url)',
                        'session.delete(url)',
                        'client.request("PATCH", url)',

@@ -8,69 +8,93 @@ from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from ranking import HIGH_CAP, MEDIUM_CAP, RankedRow, assign_priorities, rank_population  # noqa: E402
+from ranking import HIGH_CAP, MEDIUM_CAP, rank_population  # noqa: E402
 
 
 def rows(spec):
-    """spec is a string of g/u — g = passes the intent gate, u = does not."""
-    return [RankedRow(source_id=f"i{n}", intent_gated=(c == "g"))
+    """spec is a string of g/u — g = passes the intent gate, u = does not.
+
+    `batch_rank` carries the order the model returned, which is what the
+    population sort falls back to within a gate class.
+    """
+    return [{"source_id": f"i{n}", "intent_gated": (c == "g"),
+             "manual_priority": None, "batch_rank": n}
             for n, c in enumerate(spec, start=1)]
 
 
 def tiers(result):
-    return [r.priority for r in result]
+    return [r["priority"] for r in result]
+
+
+def by_id(result):
+    return {r["source_id"]: r for r in result}
 
 
 class TestCapsAndCascade(unittest.TestCase):
+    """The cap arithmetic, driven through the function the writers call.
+
+    These cases were written against an earlier `assign_priorities`, which the
+    caps refactor left behind: the production paths moved to
+    `rank_population` and nothing called the old function again, so seven
+    passing tests were guarding a copy of the rule rather than the rule. The
+    tier counts are unchanged; the positions are not, because the population
+    sort puts gate-passing rows first rather than preserving the model's order.
+    """
 
     def test_fewer_than_cap_pass_the_gate_tier_is_smaller_never_padded(self):
-        # 3 gated rows sit at positions 1-3, then 7 un-gated.
-        out = assign_priorities(rows("ggguuuuuuu"))
-        self.assertEqual(tiers(out)[:3], ["high"] * 3)
+        out = tiers(rank_population(rows("ggguuuuuuu")))
+        self.assertEqual(out[:3], ["high"] * 3)
         # The remaining 7 must NOT be promoted to fill the tier.
-        self.assertNotIn("high", tiers(out)[3:])
-        self.assertEqual(tiers(out).count("high"), 3)
+        self.assertNotIn("high", out[3:])
+        self.assertEqual(out.count("high"), 3)
 
     def test_no_row_passes_the_gate_high_is_empty_and_all_cascade(self):
-        out = assign_priorities(rows("u" * 15))
-        self.assertEqual(tiers(out).count("high"), 0)
+        out = tiers(rank_population(rows("u" * 15)))
+        self.assertEqual(out.count("high"), 0)
         # Top 10 cascade into medium; the rest fall to low.
-        self.assertEqual(tiers(out).count("medium"), MEDIUM_CAP)
-        self.assertEqual(tiers(out).count("low"), 5)
+        self.assertEqual(out.count("medium"), MEDIUM_CAP)
+        self.assertEqual(out.count("low"), 5)
 
-    def test_cascade_overflow_crowds_genuine_medium_candidates_out(self):
-        # 10 un-gated rows rank ahead of 15 others. They cascade into the
-        # medium pool and consume it entirely, pushing the rest to low.
-        out = assign_priorities(rows("u" * 10 + "g" * 15))
-        t = tiers(out)
-        # The 15 gated rows start at position 11, so only 10 reach high.
-        self.assertEqual(t.count("high"), HIGH_CAP)
-        self.assertEqual(t[10:20], ["high"] * 10)
-        # The 10 un-gated leaders take the whole medium tier.
-        self.assertEqual(t[:10], ["medium"] * 10)
-        # Gated rows that ranked below the high cap get nothing left.
-        self.assertEqual(t[20:], ["low"] * 5)
+    def test_gated_rows_past_the_cap_cascade_and_crowd_out_the_rest(self):
+        # 15 gated rows and 10 un-gated. Ten gated take the top tier; the
+        # five that overflow cascade into medium alongside the un-gated
+        # leaders, and the tail gets nothing left.
+        result = rank_population(rows("u" * 10 + "g" * 15))
+        out = tiers(result)
+        self.assertEqual(out.count("high"), HIGH_CAP)
+        self.assertEqual(out.count("medium"), MEDIUM_CAP)
+        self.assertEqual(out.count("low"), 5)
+        # Gate-passing rows sort first, so the top tier is entirely gated.
+        self.assertTrue(all(r["intent_gated"] for r in result[:HIGH_CAP]))
 
-    def test_gate_beats_rank_order_for_the_high_tier(self):
-        # An un-gated row ranked first still loses the top tier to a gated
-        # row ranked second — that is the whole point of the gate.
-        out = assign_priorities(rows("ug"))
-        self.assertEqual(tiers(out), ["medium", "high"])
+    def test_the_gate_outranks_the_models_order(self):
+        # An un-gated row the model ranked first still loses the top tier to
+        # a gated row it ranked second — that is the whole point of the gate.
+        result = rank_population(rows("ug"))
+        self.assertEqual(tiers(result), ["high", "medium"])
+        self.assertEqual([r["source_id"] for r in result], ["i2", "i1"])
 
-    def test_global_rank_records_the_models_order_not_the_tier(self):
-        out = assign_priorities(rows("ugg"))
-        self.assertEqual([r.global_rank for r in out], [1, 2, 3])
-        self.assertEqual(tiers(out), ["medium", "high", "high"])
+    def test_positions_are_contiguous_and_follow_the_population_order(self):
+        result = rank_population(rows("ugg"))
+        self.assertEqual([r["global_rank"] for r in result], [1, 2, 3])
+        # Gated first, then the un-gated row — not the model's order.
+        self.assertEqual([r["source_id"] for r in result], ["i2", "i3", "i1"])
+        self.assertEqual(tiers(result), ["high", "high", "medium"])
+
+    def test_the_models_order_breaks_ties_within_a_gate_class(self):
+        """batch_rank is the tiebreaker, not the primary key."""
+        result = rank_population(rows("gg" + "u" * 3))
+        self.assertEqual([r["source_id"] for r in result],
+                         ["i1", "i2", "i3", "i4", "i5"])
 
     def test_empty_input(self):
-        self.assertEqual(assign_priorities([]), [])
+        self.assertEqual(rank_population([]), [])
 
     def test_exactly_at_both_caps(self):
-        out = assign_priorities(rows("g" * 10 + "u" * 10))
-        t = tiers(out)
-        self.assertEqual(t.count("high"), 10)
-        self.assertEqual(t.count("medium"), 10)
-        self.assertEqual(t.count("low"), 0)
+        out = tiers(rank_population(rows("g" * 10 + "u" * 10)))
+        self.assertEqual(out.count("high"), 10)
+        self.assertEqual(out.count("medium"), 10)
+        self.assertEqual(out.count("low"), 0)
 
 
 class TestPinsBeatTheGate(unittest.TestCase):
