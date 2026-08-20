@@ -3,6 +3,17 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue)](LICENSE)
 [![Security Policy](https://img.shields.io/badge/Security-Report%20a%20Vulnerability-red)](SECURITY.md)
 
+## Table of Contents
+
+- [Reference Examples](#reference-examples)
+- [Getting Started](#getting-started)
+- [Requirements](#requirements)
+- [Contributing](#contributing)
+- [Security](#security)
+- [Support](#support)
+- [Governance And Maintainers](#governance-and-maintainers)
+- [License](#license)
+
 NemoClaw Community is a collection of examples that showcase NemoClaw blueprints for constrained, inspectable agent workflows.
 
 NemoClaw is the blueprint layer for composing three things into a repeatable agent system:
