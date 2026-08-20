@@ -5,8 +5,8 @@
 
 Memory-Driven Chief of Staff is a recipe that keeps a local, revisable record
 for each inbound email and Slack message. It re-judges those records on a
-schedule and re-ranks them under fixed caps. Once the next phase registers the
-scheduler jobs, that re-judging runs on its own. The user's own ignores and
+schedule and re-ranks them under fixed caps. That re-judging runs on its own
+once the next phase registers the scheduler jobs. The user's own ignores and
 priority overrides change the ranking. The recipe never writes back to the
 source system.
 
@@ -32,6 +32,7 @@ These terms appear throughout this document and in the code.
 | Obligation | One message that needs an action, with a tier, a position, and its own history. |
 | Tier | The priority band an obligation sits in: `high`, `medium`, or `low`. |
 | Envelope | The JSON document a model turn returns: a list of decisions for the writer to apply. The recipe's recorded turns are envelopes. |
+| Addressing | Whether a message was aimed at the user: `direct`, `mentioned`, or `broadcast`. Ingest derives it from the recipient list, which is not stored. |
 | Intent gate | The rule that admits an obligation to the `high` tier only if the memory shows the user chose that work. External urgency alone does not qualify. |
 | Cascade | What happens to an un-gated row that ranked inside the top ten: it drops into the competition for `medium` rather than out of the list. |
 | Reservation | The rule that keeps `high` for gate-passing rows. If fewer pass than the cap allows, the tier stays smaller rather than being filled from the remainder. |
@@ -189,8 +190,9 @@ A correction applies only where it means something, so on a populated store:
   obligation is history, and rewriting it would turn finished work into a
   standing instruction.
 - `priority` also refuses an ignored row and exits `3`, printing the exact
-  `unignore` command that restores it, ready to copy. The walkthrough ignores `msg-cc-only` in step 4, so
-  a `priority` command against that row right afterwards reaches this.
+  `unignore` command that restores it, ready to copy. The walkthrough ignores
+  `msg-cc-only` in step 4, so a `priority` command against that row right
+  afterwards reaches this.
 - Repeating a correction that is already in force changes nothing. It prints
   `"changed": false` and exits `0`.
 - With no matching obligation, `correct.py` exits `3`. With `HERMES_HOME`
@@ -200,7 +202,7 @@ A correction applies only where it means something, so on a populated store:
 ## Verify
 
 Run the test suite from `profile/scripts`. It needs no network and no
-credentials.
+credentials. From the recipe root:
 
 ```bash
 cd profile/scripts
@@ -210,7 +212,7 @@ echo "failed=$fail"
 cd ../..
 ```
 
-Expected result: every file ends with `OK`, the eight files report 154 tests in
+Expected result: every file ends with `OK`, the eight files report 156 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -219,7 +221,7 @@ leave the loop exiting `0`.
 | --- | --- |
 | Schema versioning | `tests/test_migration.py` |
 | Invariant detection, idempotency, compaction detection | `tests/test_memory_check.py` |
-| Concurrency, crash recovery, reinstall survival, profile-home resolution, installation, failed-write cause reporting | `tests/test_durability.py` |
+| Concurrency, crash recovery, reinstall survival, profile-home resolution, installation, failed-write cause reporting, skill-path anchoring | `tests/test_durability.py` |
 | Bounded ranking, including user pins | `tests/test_ranking.py` |
 | Preference counting | `tests/test_preferences.py` |
 | Source normalization | `tests/test_normalize.py` |
@@ -268,7 +270,8 @@ Once a connector is attached, the store holds message subjects, senders, and
 bodies. Before that happens, this recipe requires either an encrypted volume
 underneath `$HERMES_HOME` or an application-level encryption design. That
 requirement is separate from credential custody, which belongs to the runtime's
-credential gateway and never to the store.
+own credential handling — Hermes keeps provider credentials outside
+`workspace` — and never to the store.
 
 ## Privacy
 
@@ -294,8 +297,10 @@ Once a connector is attached:
 - For Slack, that guarantee is not available. A deleted message stops appearing
   in `conversations.history`, and its absence from a bounded, paginated read
   cannot be told apart from it lying outside the window. Reliable notice
-  requires the Slack Events API or the Real Time Messaging (RTM) API, neither
-  of which this design uses. Slack content
+  requires the Slack Events API, which this design does not use. Slack's legacy
+  Real Time Messaging (RTM) API carries the event too, but Slack states that
+  granular-permission apps cannot use it and that classic apps can no longer be
+  created, so it is not an option a connector could take today. Slack content
   will therefore age out on the scheduled body-clearing pass rather than at the
   moment of deletion.
 - Senders, domains, and channels will be excludable at ingest, before anything
@@ -341,8 +346,9 @@ it as well if you want the checkout byte-for-byte as you found it.
 - The audit trail records one row per obligation a correction displaces, and
   `events` is append-only. That is deliberate — the store has to be able to
   explain why a row moved — but the cost scales with the open list: on a
-  200-row list one ignore writes between 100 and 200 audit rows, depending on
-  how far up the list the corrected row sat. A long-lived store with
+  200-row list, one ignore writes a row for every obligation below the
+  corrected one: 199 when it sat at the top, none when it sat at the bottom.
+  A long-lived store with
   a large open list will need a compaction path for `reranked` events, which
   this phase does not provide.
 - Paths in the skills are written against `$HERMES_HOME` rather than relative

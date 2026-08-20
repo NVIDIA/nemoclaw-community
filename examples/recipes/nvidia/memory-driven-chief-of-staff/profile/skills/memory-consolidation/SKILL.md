@@ -13,7 +13,7 @@ metadata:
 
 Memory that only grows stops being read, and a memory nobody reads is worse
 than none — it looks like the system knows things it can no longer surface.
-This job keeps pages inside the ceilings in `$HERMES_HOME/workspace/memory/schema.md`.
+This job keeps pages inside the ceilings in `$HERMES_HOME/schema.md`.
 
 Read the schema's growth-control table first. Work only on pages the repair
 job reported as over their ceiling, or that you can see are over.

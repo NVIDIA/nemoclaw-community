@@ -573,5 +573,45 @@ class TestSkillsNameFilesAbsolutely(unittest.TestCase):
         self.assertFalse(found[0].startswith("$HERMES_HOME"))
 
 
+class TestSkillsNameFilesThatWillExist(unittest.TestCase):
+    """A `$HERMES_HOME` path is only anchored if something puts a file there.
+
+    Anchoring the path was the fix for one silent failure; naming a path that
+    nothing creates is the same failure with a longer prefix. Two skills read
+    `$HERMES_HOME/workspace/memory/schema.md`, which the manifest installs at
+    the profile root instead, so the job whose premise is "this memory has a
+    contract" opened by reading a file that was never there.
+    """
+
+    HOME_PATH = re.compile(r"\$HERMES_HOME/([A-Za-z0-9_./-]+)")
+
+    def _installed_roots(self):
+        """Top-level names an install lays down, from the shipped manifest."""
+        return set(MANIFEST_DATA["distribution_owned"])
+
+    def test_every_referenced_path_is_installed_or_runtime_state(self):
+        # `workspace/` is user-owned: the recipe's own code creates the store
+        # and the memory there at run time, so those are legitimate.
+        runtime = {"workspace"}
+        for doc in sorted((HERE.parent / "skills").glob("*/SKILL.md")):
+            text = doc.read_text(encoding="utf-8")
+            for rel in self.HOME_PATH.findall(text):
+                head = rel.split("/", 1)[0]
+                with self.subTest(skill=doc.parent.name, path=rel):
+                    self.assertIn(
+                        head, self._installed_roots() | runtime,
+                        f"{doc.parent.name} reads $HERMES_HOME/{rel}, and "
+                        f"nothing installs or creates {head!r}")
+
+    def test_a_shipped_file_is_referenced_where_it_lands(self):
+        """`schema.md` installs at the profile root, so that is where it is read."""
+        for doc in sorted((HERE.parent / "skills").glob("*/SKILL.md")):
+            text = doc.read_text(encoding="utf-8")
+            for rel in self.HOME_PATH.findall(text):
+                if rel.endswith("schema.md"):
+                    with self.subTest(skill=doc.parent.name):
+                        self.assertEqual(rel, "schema.md")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

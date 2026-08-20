@@ -113,7 +113,7 @@ def run(fixtures: Path) -> int:
              "ships no seed memory.")
     _say("  Nothing is judged yet. This is what ingestion alone produces.")
 
-    _heading(2, "Judge — the first canned model turn, then the real writer")
+    _heading(2, "Judge — the first recorded model turn, then the real writer")
     envelope = json.loads((fixtures / "envelopes" / "intake.json").read_text())
     _say("  Envelope: fixtures/envelopes/intake.json (hand-written, stands in")
     _say("  for the model). Everything below it is the shipped code.")
@@ -177,7 +177,7 @@ def run(fixtures: Path) -> int:
     with sqlite3.connect(db) as conn:
         _show_list(conn)
 
-    _heading(5, "Re-judge — the second canned turn cannot undo the correction")
+    _heading(5, "Re-judge — the second recorded turn cannot undo the correction")
     _say("  The scheduled review runs. This is the other recorded turn: a")
     _say("  review envelope, written inline below rather than in fixtures/,")
     _say("  in which the model does not know about the pin and tries to")

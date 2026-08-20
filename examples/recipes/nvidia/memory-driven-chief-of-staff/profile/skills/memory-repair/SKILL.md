@@ -15,7 +15,7 @@ An append-only note store cannot be checked, because there is nothing to check
 it against. This memory has a schema, so it can be — and this is the job that
 does it.
 
-Read `$HERMES_HOME/workspace/memory/schema.md` first. It is the contract; everything below
+Read `$HERMES_HOME/schema.md` first. It is the contract; everything below
 is how to enforce it.
 
 ## Start with the mechanical pass
