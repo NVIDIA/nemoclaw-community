@@ -246,9 +246,25 @@ Configuration parameters:
 git clone https://github.com/NVIDIA/nemoclaw-community.git
 cd nemoclaw-community/examples/recipes/community/axe-a11y-browser-auditor
 
-cp .env.example .env          # copy config template
-./scripts/bring-up.sh         # build + start sidecar
-./scripts/verify.sh           # health check + MCP tool list
+# 1. Start the host-side sidecar
+cp .env.example .env
+./scripts/bring-up.sh
+
+# 2. Verify sidecar health
+./scripts/verify.sh
+
+# 3. Setup the sandbox (requires a running OpenClaw instance)
+# Assuming OPENCLAW_ROOT is the path to your OpenClaw repository
+cp src/SKILL.md ${OPENCLAW_ROOT}/skills/axe-a11y.md
+cp policy.yaml ${OPENCLAW_ROOT}/policies/axe-a11y-policy.yaml
+
+# 4. In OpenClaw, register the MCP server in your configuration:
+# "mcpServers": {
+#   "axe-a11y": {
+#     "command": "http://host.openshell.internal:9010/mcp",
+#     "transport": "http"
+#   }
+# }
 ```
 
 ## Directory Structure

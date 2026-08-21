@@ -10,8 +10,10 @@ services:
     restart: unless-stopped
     platform: linux/amd64
     ports:
-      - "${AXE_A11Y_SERVICE_PORT:-9010}:9010"
-      - "${AXE_A11Y_VNC_PORT:-5900}:5900"
+      - "127.0.0.1:${AXE_A11Y_SERVICE_PORT:-9010}:9010"
+      - "127.0.0.1:${AXE_A11Y_VNC_PORT:-5900}:5900"
+    security_opt:
+      - seccomp=unconfined
     environment:
       - NODE_ENV=production
       - PORT=9010

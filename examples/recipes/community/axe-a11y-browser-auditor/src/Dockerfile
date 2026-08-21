@@ -50,6 +50,11 @@ COPY . .
 # Make server executable
 RUN chmod +x server.js
 
+RUN groupadd -r pptruser && useradd -r -g pptruser -G audio,video pptruser \
+    && mkdir -p /home/pptruser \
+    && chown -R pptruser:pptruser /home/pptruser \
+    && chown -R pptruser:pptruser /app
+
 ENV PORT=9010
 ENV DISPLAY=:99
 ENV PLAYWRIGHT_HEADLESS=false
@@ -60,5 +65,7 @@ EXPOSE 9010 5900
 # Start script that launches Xvfb, VNC, and the server
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
+
+USER pptruser
 
 CMD ["/start.sh"]

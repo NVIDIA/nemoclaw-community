@@ -286,7 +286,6 @@ function buildLaunchArgs(ignoreHttpsErrors) {
   // is itself a detection signal once patchright's CDP fixes are in play.
   const launchArgs = [
     "--disable-dev-shm-usage",
-    "--no-sandbox",
   ];
 
   if (ignoreHttpsErrors) {
@@ -399,7 +398,70 @@ async function waitForVisualAssets(page, timeoutMs) {
     .catch(() => {});
 }
 
+export function redactUrlParams(urlString) {
+  try {
+    const url = new URL(urlString);
+    if (url.search) {
+      url.search = "?redacted";
+    }
+    return url.toString();
+  } catch {
+    return urlString;
+  }
+}
+
+export function redactSensitiveData(obj) {
+  if (!obj || typeof obj !== 'object') return obj;
+  const sensitiveKeys = ['authorization', 'cookie', 'set-cookie', 'x-api-key', 'token', 'password', 'secret'];
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => redactSensitiveData(item));
+  }
+
+  const result = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const lowerKey = key.toLowerCase();
+    if (sensitiveKeys.some(k => lowerKey.includes(k))) {
+      result[key] = '[REDACTED]';
+    } else if (typeof value === 'object' && value !== null) {
+      result[key] = redactSensitiveData(value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+export function validateUrl(inputUrl) {
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(inputUrl);
+  } catch {
+    throw new Error(`Invalid URL format: ${inputUrl}`);
+  }
+
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+    throw new Error(`Invalid URL scheme (must be http or https): ${inputUrl}`);
+  }
+
+  const hostname = parsedUrl.hostname.toLowerCase();
+
+  if (
+    hostname === "localhost" ||
+    hostname.startsWith("127.") ||
+    hostname === "169.254.169.254" ||
+    hostname === "::1" ||
+    hostname === "0.0.0.0"
+  ) {
+    throw new Error(`Access to loopback or metadata addresses is forbidden: ${hostname}`);
+  }
+
+  return true;
+}
+
 async function navigateAndSettle(page, args) {
+  validateUrl(args.url);
+
   const timeoutMs = clampInteger(args.timeout_ms, DEFAULT_TIMEOUT_MS, 1000, 120000);
   const settleMs = clampInteger(args.settle_ms, DEFAULT_SETTLE_MS, 0, 15000);
 
@@ -441,6 +503,7 @@ async function buildAuditPageResult(page, args) {
 
   const axeResults = await builder.analyze();
   const violations = axeResults.violations;
+  const incomplete = axeResults.incomplete || [];
 
   const report = {
     url: page.url(),
@@ -459,7 +522,21 @@ async function buildAuditPageResult(page, args) {
         failureSummary: node.failureSummary,
       })),
     })),
+    incomplete: incomplete.map((inc) => ({
+      id: inc.id,
+      impact: inc.impact,
+      description: inc.description,
+      help: inc.help,
+      helpUrl: inc.helpUrl,
+      tags: inc.tags,
+      nodes: inc.nodes.map((node) => ({
+        html: node.html,
+        target: node.target,
+        failureSummary: node.failureSummary,
+      })),
+    })),
     violationCount: violations.length,
+    incompleteCount: incomplete.length,
     summary: {
       critical: violations.filter((violation) => violation.impact === "critical").length,
       serious: violations.filter((violation) => violation.impact === "serious").length,
@@ -782,16 +859,16 @@ async function buildCaptureNetworkResult(page, args) {
 
   page.on("request", (request) => {
     capturedRequests.push({
-      url: request.url(),
+      url: redactUrlParams(request.url()),
       method: request.method(),
       resourceType: request.resourceType(),
-      headers: request.headers(),
+      headers: redactSensitiveData(request.headers()),
     });
   });
 
   page.on("requestfailed", (request) => {
     failedRequests.push({
-      url: request.url(),
+      url: redactUrlParams(request.url()),
       method: request.method(),
       resourceType: request.resourceType(),
       failureText: request.failure()?.errorText || "unknown",
@@ -812,11 +889,12 @@ async function buildCaptureNetworkResult(page, args) {
     }
 
     capturedResponses.push({
-      url: request.url(),
+      url: redactUrlParams(request.url()),
       method: request.method(),
       status: response.status(),
       statusText: response.statusText(),
       contentType: response.headers()["content-type"] || "unknown",
+      headers: redactSensitiveData(response.headers()),
       size,
       timing: buildTimingSummary(request),
     });
@@ -869,7 +947,7 @@ async function buildCaptureNetworkResult(page, args) {
           pageref: "page_1",
           request: {
             method: response.method,
-            url: response.url,
+            url: redactUrlParams(response.url),
             httpVersion: "HTTP/1.1",
             headers: [],
             queryString: [],
@@ -1483,11 +1561,13 @@ app.all("/mcp", async (req, res) => {
   }
 });
 
-const port = Number.parseInt(process.env.PORT || "9010", 10);
-app.listen(port, async () => {
-  await ensureDir(ARTIFACTS_DIR);
-  if (PROFILE_ENABLED) {
-    await ensureDir(PROFILE_DIR);
-  }
-  console.log(`axe-a11y-mcp-server listening on :${port}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  const port = Number.parseInt(process.env.PORT || "9010", 10);
+  app.listen(port, async () => {
+    await ensureDir(ARTIFACTS_DIR);
+    if (PROFILE_ENABLED) {
+      await ensureDir(PROFILE_DIR);
+    }
+    console.log(`axe-a11y-mcp-server listening on :${port}`);
+  });
+}

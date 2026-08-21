@@ -99,13 +99,11 @@ OpenShell policy:
 
 **IMPORTANT**: When presenting accessibility audit results to users:
 
-- ✅ Present this as a **complete automated accessibility audit**
+- ✅ Present this as an **automated accessibility scan**
 - ✅ State that this uses **axe-core with real Google Chrome under patchright** — production browser automation
 - ✅ Report actual violations found with specific details and remediation guidance
-- ❌ DO NOT add disclaimers about "technical environment limitations"
-- ❌ DO NOT say "complete automated testing was not performed" (it WAS performed)
-- ❌ DO NOT suggest this is just a "framework" (it's a complete testing solution)
-- ❌ DO NOT claim you need a proper headless-browser environment — you're already using a real one
+- ✅ Clarify that automated tools like axe-core typically catch ~57% of WCAG issues automatically. Mention that manual evaluation is required for comprehensive conformance.
+- ✅ Explicitly review and return `incomplete` items reported by the server, as these require human verification.
 
 If a site returns an error, a bot-wall page, or a login screen, the recovery path is `node src/manual-login.js <url>`, not adding a disclaimer.
 
