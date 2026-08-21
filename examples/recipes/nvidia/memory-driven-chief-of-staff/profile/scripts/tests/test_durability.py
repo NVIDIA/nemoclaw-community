@@ -4,7 +4,7 @@
 """Acceptance: concurrency, crash recovery, reinstall survival, and the
 promise that no source system is ever written to."""
 
-import ast, os, re, shutil, sqlite3, sys, tempfile, threading, unittest
+import ast, os, re, shutil, sqlite3, subprocess, sys, tempfile, threading, unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parents[1]
@@ -699,6 +699,34 @@ class TestTheDocumentedTestCountIsTheRealOne(unittest.TestCase):
         self.assertEqual(files, len(actual),
                          f"README says {files} files; found {len(actual)}: "
                          + ", ".join(sorted(p.name for p in actual)))
+
+    def test_a_test_file_still_ends_with_the_word_the_readme_promises(self):
+        """The README tells the reader to look for `OK` on the last line.
+
+        A module that prints its own result to stdout while under test puts a
+        line after that one, and the instruction stops being true. That is
+        exactly what happened when the Slack collector arrived: every direct
+        call to its `main()` wrote a JSON line into the test report, and the
+        documented expectation quietly became false.
+
+        Only the class that drives the collector is run here — it is the one
+        that can violate this — because running every file inside a test would
+        double the suite's runtime to prove a property of one of them.
+        """
+        here = Path(__file__).resolve().parent
+        target = here / "test_ingest_slack.py"
+        if not target.exists():
+            self.skipTest("no collector test file in this checkout")
+        proc = subprocess.run(
+            [sys.executable, str(target),
+             "TestAFetchWritesRowsTheNormalizerMade"],
+            capture_output=True, text=True, cwd=str(here))
+        tail = [line for line in
+                (proc.stdout + proc.stderr).splitlines() if line.strip()]
+        self.assertTrue(tail, "the run produced no output at all")
+        self.assertEqual(tail[-1].strip(), "OK",
+                         "the last line is not `OK`; the README's expected "
+                         f"result is no longer what a reader sees: {tail[-1]!r}")
 
     def test_the_readme_states_the_number_of_tests_a_clean_run_prints(self):
         _, total = self._documented()

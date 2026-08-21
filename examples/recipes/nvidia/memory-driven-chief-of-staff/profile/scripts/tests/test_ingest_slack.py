@@ -12,6 +12,8 @@ invisible to a test that only reads the file.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -114,6 +116,20 @@ class CollectorCase(unittest.TestCase):
         ingest_slack.API = self.slack.url
         return self.slack
 
+    def run_main(self, args=None):
+        """Call the collector without its stdout landing in the test report.
+
+        The README tells the reader every test file ends with `OK`. A module
+        that prints its result to stdout while under test puts a line after
+        that one, and the documented expectation stops being true — which is
+        the same class of drift these tests exist to catch.
+        """
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            code = ingest_slack.main(args or [])
+        self.stdout = buffer.getvalue()
+        return code
+
     def rows(self):
         with sqlite3.connect(self.db) as conn:
             return conn.execute(
@@ -182,7 +198,7 @@ class TestTheWrongTokenNeverReachesSlack(CollectorCase):
     def _run(self, token):
         os.environ["SLACK_USER_TOKEN"] = token
         self.serve(self.working_slack())
-        return ingest_slack.main([])
+        return self.run_main()
 
     def test_a_bot_token_exits_as_a_credential_problem(self):
         self.assertEqual(self._run("xoxb-1-2"), ingest_slack.EXIT_CREDENTIAL)
@@ -205,7 +221,7 @@ class TestTheWrongTokenNeverReachesSlack(CollectorCase):
         """
         os.environ.pop("SLACK_USER_TOKEN", None)
         self.serve(self.working_slack())
-        self.assertEqual(ingest_slack.main([]), ingest_slack.EXIT_OK)
+        self.assertEqual(self.run_main(), ingest_slack.EXIT_OK)
 
     def test_never_configured_says_so_on_stdout(self):
         os.environ.pop("SLACK_USER_TOKEN", None)
@@ -227,11 +243,11 @@ class TestTheWrongTokenNeverReachesSlack(CollectorCase):
         """
         os.environ["SLACK_USER_TOKEN"] = "xoxp-test"
         self.serve(self.working_slack())
-        self.assertEqual(ingest_slack.main([]), ingest_slack.EXIT_OK)
+        self.assertEqual(self.run_main(), ingest_slack.EXIT_OK)
         self.assertTrue(ingest_slack.capabilities_path().exists())
 
         os.environ.pop("SLACK_USER_TOKEN", None)
-        self.assertEqual(ingest_slack.main([]), ingest_slack.EXIT_CREDENTIAL)
+        self.assertEqual(self.run_main(), ingest_slack.EXIT_CREDENTIAL)
 
 
 class TestAFetchWritesRowsTheNormalizerMade(CollectorCase):
@@ -241,7 +257,7 @@ class TestAFetchWritesRowsTheNormalizerMade(CollectorCase):
 
     def test_a_direct_message_becomes_a_direct_row(self):
         self.serve(self.working_slack())
-        self.assertEqual(ingest_slack.main([]), ingest_slack.EXIT_OK)
+        self.assertEqual(self.run_main(), ingest_slack.EXIT_OK)
         rows = self.rows()
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0][0], "D01:1787000000.0001")
@@ -249,7 +265,7 @@ class TestAFetchWritesRowsTheNormalizerMade(CollectorCase):
 
     def test_the_sender_is_resolved_to_a_name(self):
         self.serve(self.working_slack())
-        ingest_slack.main([])
+        self.run_main()
         self.assertEqual(self.rows()[0][2], "dana")
 
     def test_the_users_own_messages_are_not_collected(self):
@@ -257,21 +273,21 @@ class TestAFetchWritesRowsTheNormalizerMade(CollectorCase):
         self.serve(self.working_slack(history={
             "ok": True, "has_more": False,
             "messages": [message("1787000000.0001", user=USER)]}))
-        ingest_slack.main([])
+        self.run_main()
         self.assertEqual(self.rows(), [])
 
     def test_the_workspace_member_list_is_never_enumerated(self):
         """`users.list` rate-limits a large workspace; names go one at a time."""
         self.serve(self.working_slack())
-        ingest_slack.main([])
+        self.run_main()
         self.assertNotIn("users.list", [c[0] for c in self.slack.calls])
 
     def test_a_second_run_adds_nothing_and_asks_from_the_watermark(self):
         self.serve(self.working_slack())
-        ingest_slack.main([])
+        self.run_main()
         self.assertEqual(self.cursors(), {"D01": "1787000000.0001"})
         before = len(self.slack.calls)
-        ingest_slack.main([])
+        self.run_main()
         self.assertEqual(len(self.rows()), 1, "the second run duplicated rows")
         asked = [p for m, p in self.slack.calls[before:] if m == "conversations.history"]
         self.assertTrue(asked, "the second run never asked for history")
@@ -329,16 +345,16 @@ class TestFailuresCarryTheirDiagnosisInTheExitCode(CollectorCase):
 
     def test_a_rejected_token_is_a_credential_failure(self):
         self.serve({"auth.test": {"ok": False, "error": "invalid_auth"}})
-        self.assertEqual(ingest_slack.main([]), ingest_slack.EXIT_CREDENTIAL)
+        self.assertEqual(self.run_main(), ingest_slack.EXIT_CREDENTIAL)
 
     def test_a_rate_limit_has_its_own_code(self):
         self.serve({"auth.test": "RATELIMIT"})
-        self.assertEqual(ingest_slack.main([]), ingest_slack.EXIT_RATE_LIMIT)
+        self.assertEqual(self.run_main(), ingest_slack.EXIT_RATE_LIMIT)
 
     def test_an_unreachable_slack_reads_as_a_credential_problem(self):
         """A blocked egress policy and a missing provider look the same here."""
         ingest_slack.API = "http://127.0.0.1:9/api/"
-        self.assertEqual(ingest_slack.main([]), ingest_slack.EXIT_CREDENTIAL)
+        self.assertEqual(self.run_main(), ingest_slack.EXIT_CREDENTIAL)
 
     def test_losing_direct_messages_is_fatal_rather_than_degraded(self):
         """Without `im:history` the recipe is not doing what it claims."""
@@ -346,7 +362,7 @@ class TestFailuresCarryTheirDiagnosisInTheExitCode(CollectorCase):
             "auth.test": {"ok": True, "user_id": USER, "team_id": "T1"},
             "users.conversations": {"ok": False, "error": "missing_scope"},
         })
-        self.assertEqual(ingest_slack.main([]), ingest_slack.EXIT_SCOPE)
+        self.assertEqual(self.run_main(), ingest_slack.EXIT_SCOPE)
 
 
 class TestAPartlyGrantedAppStillWorks(CollectorCase):
@@ -379,7 +395,7 @@ class TestAPartlyGrantedAppStillWorks(CollectorCase):
 
     def test_the_run_succeeds_on_the_families_that_were_granted(self):
         self.serve(self._partial())
-        self.assertEqual(ingest_slack.main([]), ingest_slack.EXIT_OK)
+        self.assertEqual(self.run_main(), ingest_slack.EXIT_OK)
         self.assertEqual(len(self.rows()), 1)
 
     def test_the_refused_family_is_reported_rather_than_hidden(self):
@@ -390,24 +406,24 @@ class TestAPartlyGrantedAppStillWorks(CollectorCase):
 
     def test_the_probe_is_cached_so_every_tick_does_not_re_ask(self):
         self.serve(self._partial())
-        ingest_slack.main([])
+        self.run_main()
         probes = sum(1 for m, p in self.slack.calls
                      if m == "users.conversations" and p.get("limit") == "1")
-        ingest_slack.main([])
+        self.run_main()
         again = sum(1 for m, p in self.slack.calls
                     if m == "users.conversations" and p.get("limit") == "1")
         self.assertEqual(probes, again, "the second tick re-probed the scopes")
 
     def test_recheck_asks_again(self):
         self.serve(self._partial())
-        ingest_slack.main([])
+        self.run_main()
         before = len(self.slack.calls)
-        ingest_slack.main(["--recheck"])
+        self.run_main(["--recheck"])
         self.assertGreater(len(self.slack.calls), before)
 
     def test_the_cached_answer_is_not_world_readable(self):
         self.serve(self._partial())
-        ingest_slack.main([])
+        self.run_main()
         path = Path(self.home) / "workspace" / "slack_capabilities.json"
         self.assertTrue(path.exists())
         self.assertEqual(path.stat().st_mode & 0o077, 0,

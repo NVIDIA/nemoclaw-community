@@ -37,14 +37,35 @@ SANDBOX="${OPENSHELL_SANDBOX_NAME:-${SANDBOX_NAME:-hermes}}"
 PROVIDER="${SLACK_PROVIDER_NAME:-memory-driven-cos-slack-user}"
 USABLE_KEY="SLACK_USER_TOKEN"
 
-command -v openshell >/dev/null 2>&1 || {
-  echo "openshell is not on PATH." >&2
+# This script runs on the HOST, not inside the sandbox — unlike install.sh.
+#
+# The two CLIs live in different places and neither can see the other's: a
+# NemoClaw sandbox has `hermes` and no `openshell`, and the host has
+# `openshell` and no `hermes`. Running this where install.sh belongs finds no
+# `openshell`, and a naive fallback would quietly write the token into the
+# profile's .env — abandoning the gateway-held credential the user asked for,
+# with no error and no sign anything was skipped.
+#
+# `OPENSHELL_SANDBOX` is set inside a sandbox and unset on the host, which is
+# what tells the two situations apart from the identical symptom.
+if ! command -v openshell >/dev/null 2>&1; then
+  if [[ -n "${OPENSHELL_SANDBOX:-}" ]]; then
+    echo "This is running inside the sandbox, where openshell is not." >&2
+    echo "" >&2
+    echo "Unlike install.sh, this step belongs on the host. From there:" >&2
+    echo "  cd <this recipe> && bash scripts/setup-slack.sh" >&2
+    echo "" >&2
+    echo "The credential is held by the OpenShell gateway and substituted at" >&2
+    echo "egress, so it is configured from outside the sandbox by design." >&2
+    exit 1
+  fi
+  echo "openshell is not on PATH, and this is not a NemoClaw sandbox." >&2
   echo "" >&2
-  echo "Without it, set the token in the profile's .env instead:" >&2
+  echo "On a plain Hermes install, put the token in the profile's .env:" >&2
   echo "  SLACK_USER_TOKEN=xoxp-..." >&2
   echo "See docs/set-up-slack.md." >&2
   exit 1
-}
+fi
 
 echo "1/3  Looking for a Slack credential this sandbox can already read"
 

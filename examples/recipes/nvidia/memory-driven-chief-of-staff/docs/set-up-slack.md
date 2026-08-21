@@ -32,10 +32,29 @@ prefix and refuses a `xoxb-` by name.
   before the token exists.
 - Linux, including WSL. See [Requirements](../README.md#requirements).
 
+## Where each step runs
+
+These two steps run in different places, and the CLIs they need do not exist in
+each other's:
+
+| Step | Runs | Needs |
+| --- | --- | --- |
+| `scripts/install.sh` | **inside the sandbox** | `hermes` |
+| `scripts/setup-slack.sh` | **on the host** | `openshell` |
+
+A NemoClaw sandbox has `hermes` and no `openshell`; the host has `openshell`
+and no `hermes`. The credential is held by the OpenShell gateway rather than
+by the sandbox, so configuring it from outside is the design and not a
+workaround. `setup-slack.sh` detects being run in the wrong place and says so
+rather than falling back and quietly leaving the gateway out of it.
+
+On a plain Hermes install with no OpenShell at all, there is only one place and
+the token goes in the profile's `.env` — see step 4.
+
 ## 1. Check whether you already have one
 
 If this machine has run another NemoClaw recipe, a Slack credential may already
-be attached to the sandbox:
+be attached to the sandbox. **From the host:**
 
 ```bash
 bash scripts/setup-slack.sh
@@ -92,7 +111,7 @@ That page shows the bot token too, lower down. You want the one above it.
 
 ## 4. Hand it over
 
-Re-run the setup script and paste the token when it asks:
+Re-run the setup script **on the host** and paste the token when it asks:
 
 ```bash
 bash scripts/setup-slack.sh
@@ -156,8 +175,9 @@ Two failures worth naming:
 
 Nothing extra to configure. `select_intake.py` runs this collector before every
 intake tick, and `scripts/register-jobs.sh` already scheduled that. Until this
-setup is done the collector is simply absent, and the schedule runs over
-whatever is already in the store.
+setup is done the collector reports itself unconfigured and exits zero, so the
+schedule runs over whatever is already in the store and an idle tick still
+costs nothing.
 
 Once it is connected, a failure here is *not* silent: a collector that exits
 non-zero wakes the agent even when nothing is pending, so a token that stops

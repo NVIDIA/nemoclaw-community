@@ -988,5 +988,56 @@ class TestAnUnconfiguredConnectorDoesNotCostATick(CollectorCase):
                          "empty store with no credential configured")
 
 
+class TestTheSlackSetupKnowsWhichMachineItIsOn(unittest.TestCase):
+    """`install.sh` and `setup-slack.sh` run in different places.
+
+    A NemoClaw sandbox has `hermes` and no `openshell`; the host has
+    `openshell` and no `hermes`. Both scripts sit in the same directory, so
+    running the second where the first belongs is the obvious mistake — and
+    the obvious fallback, writing the token into the profile's `.env`, would
+    silently abandon the gateway-held credential the user chose. Verified on a
+    real sandbox: `command -v openshell` is empty there and `command -v hermes`
+    is empty on the host.
+    """
+
+    SCRIPT = HERE.parents[1] / "scripts" / "setup-slack.sh"
+
+    def _run(self, env):
+        fake = Path(tempfile.mkdtemp())
+        (fake / "uname").write_text("#!/bin/sh\necho Linux\n", encoding="utf-8")
+        (fake / "uname").chmod(0o755)
+        # System paths for `bash` and `uname`'s neighbours, but deliberately
+        # not `~/.local/bin`, which is where a real host keeps `openshell`.
+        return subprocess.run(
+            ["bash", str(self.SCRIPT)], capture_output=True, text=True,
+            env={"PATH": f"{fake}:/bin:/usr/bin",
+                 "HOME": os.environ.get("HOME", "/tmp"), **env})
+
+    def test_inside_a_sandbox_it_says_to_run_it_on_the_host(self):
+        proc = self._run({"OPENSHELL_SANDBOX": "hermes"})
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("host", proc.stderr.lower())
+
+    def test_inside_a_sandbox_it_does_not_offer_the_dotenv_fallback(self):
+        """That fallback is right for a plain Hermes install and wrong here."""
+        proc = self._run({"OPENSHELL_SANDBOX": "hermes"})
+        self.assertNotIn("SLACK_USER_TOKEN=xoxp-", proc.stderr,
+                         "it offered the .env fallback inside a sandbox, "
+                         "which drops the gateway-held credential silently")
+
+    def test_off_a_sandbox_it_does_offer_the_dotenv_fallback(self):
+        proc = self._run({})
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("SLACK_USER_TOKEN=xoxp-", proc.stderr)
+
+    def test_the_two_scripts_do_not_claim_to_need_the_same_cli(self):
+        install = (HERE.parents[1] / "scripts" / "install.sh").read_text()
+        setup = self.SCRIPT.read_text()
+        self.assertIn("command -v hermes", install)
+        self.assertIn("command -v openshell", setup)
+        self.assertNotIn("command -v openshell", install,
+                         "install.sh now needs a CLI the sandbox does not have")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
