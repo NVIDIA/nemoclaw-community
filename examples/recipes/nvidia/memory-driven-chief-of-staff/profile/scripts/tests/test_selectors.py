@@ -955,5 +955,38 @@ exit 0
 """
 
 
+class TestAnUnconfiguredConnectorDoesNotCostATick(CollectorCase):
+    """Shipping a collector must not make every idle tick wake the model.
+
+    Adding `ingest_slack.py` did exactly that for one commit: the selector runs
+    whatever collectors are present, an unconfigured one exited non-zero, that
+    counted as a failure, and the failure suppressed the idle gate. Every user
+    who had not connected Slack would have woken the model every half hour,
+    forever, to be told there was nothing to do — the scheduled expense with
+    none of the assistant.
+
+    A collector that has never been configured now reports that state and exits
+    zero. One that *was* configured and lost its credential still fails loudly.
+    """
+
+    def test_a_collector_reporting_unconfigured_still_gates(self):
+        self._collector('print(\'{"unconfigured": true}\')')
+        _, stdout = self._run()
+        lines = [line for line in stdout.splitlines() if line.strip()]
+        self.assertEqual(lines[-1].strip(), '{"wakeAgent": false}',
+                         "an unconfigured connector suppressed the idle gate")
+
+    def test_the_shipped_slack_collector_gates_when_unconfigured(self):
+        """Not a stand-in: the real file, with no token in the environment."""
+        env = {k: v for k, v in os.environ.items() if k != "SLACK_USER_TOKEN"}
+        proc = subprocess.run(
+            [sys.executable, str(self.recipe / "scripts" / "select_intake.py")],
+            capture_output=True, text=True, env={**env, "HERMES_HOME": self.home})
+        lines = [line for line in proc.stdout.splitlines() if line.strip()]
+        self.assertEqual(lines[-1].strip(), '{"wakeAgent": false}',
+                         "the shipped Slack collector woke the agent on an "
+                         "empty store with no credential configured")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

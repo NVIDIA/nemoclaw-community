@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# The credential key is `SLACK_USER_TOKEN` and that name is load-bearing.
+# Hermes strips a fixed list of names from every subprocess it spawns, cron
+# pre-steps included, and `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` /
+# `SLACK_SIGNING_SECRET` are on it — a provider that used those names would
+# attach cleanly, inject nothing this collector can see, and fail silently.
+# `SLACK_USER_TOKEN` is not on the list. Verified against the running
+# blocklist on Hermes 0.20.0; treat it as a name that must be re-checked if a
+# future Hermes grows its own Slack-user integration.
+id: memory-driven-cos-slack-user
+display_name: Memory-Driven CoS — Slack user read
+description: >-
+  Read-only Slack access as the user, for the scheduled intake collector.
+  Static user token; this recipe does not refresh rotating ones.
+category: generic
+credentials:
+  - name: slack_user_token
+    description: Slack User OAuth Token (xoxp-), static
+    env_vars: [SLACK_USER_TOKEN]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+endpoints:
+  - host: slack.com
+    port: 443
+    protocol: rest
