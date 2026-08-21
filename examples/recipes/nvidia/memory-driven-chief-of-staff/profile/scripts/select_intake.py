@@ -63,18 +63,24 @@ def collect() -> tuple[dict[str, object], bool]:
     working, a tick that skipped the agent, and nothing anywhere saying so,
     every half hour.
 
-    What a failure reports is deliberately narrow. This function's stdout is
-    the scheduled agent's prompt, and a collector's stderr is arbitrary text
-    from a subprocess that talks to a mail or chat API: a traceback carrying a
-    bearer token, a request URL with a signature in the query string, a
-    response body full of someone's messages. Truncating that to a couple of
-    hundred characters bounds its length, not its content — the first two
-    hundred characters of a traceback are exactly where the request line is.
+    A failing collector's own output is never repeated anywhere. It is
+    arbitrary text from a subprocess that talks to a mail or chat API: a
+    traceback carrying a bearer token, a request URL with a signature in the
+    query string, a response body full of someone's messages.
 
-    So the prompt gets a stable error class and an exit code, which is all the
-    agent can act on anyway, and the operator gets the detail on this
-    process's own stderr, where cron writes it to a local log instead of
-    sending it to an inference provider.
+    Two places wanted it and neither may have it. This function's stdout is
+    the scheduled agent's prompt, so putting it there sends it to an inference
+    provider. This process's stderr is captured by the scheduler into the job
+    log, so putting it there turns something transient into something stored —
+    a log that outlives the token in it, on disk, for as long as logs are kept.
+    Truncating bounds length rather than content; the first two hundred
+    characters of a traceback are exactly where the request line is.
+
+    So both get the same sanitized triple — collector name, exit code, stable
+    error class — which is what the agent can act on and what tells an operator
+    which collector to go and run by hand. Running it directly is how you read
+    what it actually said, and that output goes to a terminal rather than a
+    file.
 
     Returns the per-collector results and a flag: true if any of them failed.
     """
@@ -91,7 +97,7 @@ def collect() -> tuple[dict[str, object], bool]:
             failed = True
             results[script] = {"failed": True, "exit_code": proc.returncode,
                                "error_class": "nonzero_exit"}
-            _report(script, proc.stderr)
+            _report(script, proc.returncode, "nonzero_exit")
             continue
         try:
             results[script] = json.loads(proc.stdout or "{}")
@@ -99,19 +105,21 @@ def collect() -> tuple[dict[str, object], bool]:
             failed = True
             results[script] = {"failed": True, "exit_code": proc.returncode,
                                "error_class": "unreadable_output"}
-            _report(script, proc.stderr)
+            _report(script, proc.returncode, "unreadable_output")
     return results, failed
 
 
-def _report(script: str, stderr: str | None) -> None:
-    """Put a failing collector's own output where an operator can read it.
+def _report(script: str, exit_code: int, error_class: str) -> None:
+    """Say which collector failed and how, without quoting it.
 
-    Not on stdout: that is the agent's prompt. This goes to stderr, which the
-    scheduler captures into the job's local log.
+    This goes to stderr, which the scheduler stores in the job log — so it
+    carries only what is safe to keep: the collector's name, its exit code, and
+    a stable class. The collector's own text is deliberately dropped rather
+    than redacted, because a pattern-matching redactor cannot promise it caught
+    everything and a log is the wrong place to find out.
     """
-    detail = (stderr or "").strip()
-    if detail:
-        print(f"{script}: {detail}", file=sys.stderr)
+    print(f"{script}: failed (exit {exit_code}, {error_class}). "
+          f"Run it directly to see its output.", file=sys.stderr)
 
 
 def main() -> int:

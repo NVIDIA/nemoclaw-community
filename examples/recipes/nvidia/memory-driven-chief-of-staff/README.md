@@ -236,7 +236,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the nine files report 222 tests in
+Expected result: every file ends with `OK`, the nine files report 223 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -445,12 +445,23 @@ is recorded in the batch as a failure with its exit code and a stable error
 class, and the tick wakes the agent even when nothing is pending. An idle tick
 is free; a broken one must not be quiet.
 
-What the batch does *not* carry is the collector's own output. That batch is
-the agent's prompt, and a collector is a subprocess talking to a mail or chat
-API: its stderr can hold a bearer token, a signed URL, or someone's message
-body. The detail goes to the selector's stderr instead, which the scheduler
-writes to the job's local log, so an operator can read it without it having
-been sent anywhere.
+What nothing carries is the collector's own output. A collector is a
+subprocess talking to a mail or chat API, so its stderr can hold a bearer
+token, a signed URL, or someone's message body, and both of the places that
+wanted it are wrong: the batch is the agent's prompt, and the selector's own
+stderr is captured by the scheduler into the job log, where something
+transient becomes a file that outlives the token in it.
+
+So both get the same sanitized triple — which collector, what exit code, which
+error class. To read what the collector actually said, run it directly:
+
+```bash
+HERMES_HOME=<profile home> python3 profile/scripts/ingest_graph.py
+```
+
+That prints to your terminal rather than to a file. The text is dropped rather
+than redacted on purpose: a pattern-matching redactor cannot promise it caught
+everything, and a stored log is the wrong place to discover that it did not.
 
 ## Cleanup
 

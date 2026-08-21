@@ -796,12 +796,29 @@ class TestCollectorDiagnosticsStayOutOfThePrompt(CollectorCase):
         self.assertNotIn('"stderr"', proc.stdout,
                          "the payload still carries a raw stderr field")
 
-    def test_the_operator_still_gets_the_detail_on_stderr(self):
-        """Withholding it from the prompt must not mean discarding it."""
+    def test_the_secret_is_absent_from_stderr_as_well(self):
+        """Moving it out of the prompt only moved the problem.
+
+        The scheduler captures this process's stderr into the job log, so text
+        that was transient in a subprocess becomes a file that outlives the
+        token in it. Neither stream may carry it.
+        """
         self._failing_collector_leaking()
         proc = self._run_full()
-        self.assertIn(self.SECRET, proc.stderr,
-                      "the detail is gone from the local log as well")
+        for leaked in (self.SECRET, "xoxp-", "SECRET-TOKEN-VALUE", self.URL,
+                       "sig=AAAABBBBCCCC"):
+            self.assertNotIn(leaked, proc.stderr,
+                             f"{leaked!r} was written to the job log")
+
+    def test_stderr_still_says_which_collector_failed_and_how(self):
+        """Dropping the text must not mean dropping the signal."""
+        self._collector('sys.stderr.write("boom\\n")\nsys.exit(3)')
+        proc = self._run_full()
+        self.assertIn("ingest_graph.py", proc.stderr)
+        self.assertIn("3", proc.stderr)
+        self.assertIn("nonzero_exit", proc.stderr)
+        self.assertNotIn("boom", proc.stderr,
+                         "the collector's own text is still being quoted")
 
     def test_the_payload_says_what_class_of_failure_it_was(self):
         """The agent still needs enough to act on, just nothing quotable."""
