@@ -13,10 +13,17 @@ if [ ! -f .env ] && [ -f .env.example ]; then
   cp .env.example .env
 fi
 
+if [ -f .env ]; then
+  # shellcheck disable=SC1091
+  source .env
+fi
+SERVICE_PORT="${AXE_A11Y_SERVICE_PORT:-9010}"
+VNC_PORT="${AXE_A11Y_VNC_PORT:-5900}"
+
 echo "🚀 Starting axe-a11y-browser-auditor service via Docker Compose..."
 docker compose up -d --build
 
-HEALTH_URL="http://127.0.0.1:9010/healthz"
+HEALTH_URL="http://127.0.0.1:${SERVICE_PORT}/healthz"
 MAX_RETRIES=30
 RETRY_COUNT=0
 
@@ -33,5 +40,5 @@ until curl -fsS "${HEALTH_URL}" > /dev/null 2>&1; do
 done
 
 echo "✅ axe-a11y-browser-auditor service is healthy and ready!"
-echo "   MCP Endpoint: http://127.0.0.1:9010/mcp"
-echo "   VNC Stream:   vnc://localhost:5900"
+echo "   MCP Endpoint: http://127.0.0.1:${SERVICE_PORT}/mcp"
+echo "   VNC Stream:   vnc://localhost:${VNC_PORT}"

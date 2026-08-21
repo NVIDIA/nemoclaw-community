@@ -3,8 +3,17 @@
 # SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
-HEALTH_URL="http://127.0.0.1:9010/healthz"
-MCP_URL="http://127.0.0.1:9010/mcp"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RECIPE_DIR="$(dirname "${SCRIPT_DIR}")"
+cd "${RECIPE_DIR}"
+
+if [ -f .env ]; then
+  # shellcheck disable=SC1091
+  source .env
+fi
+SERVICE_PORT="${AXE_A11Y_SERVICE_PORT:-9010}"
+HEALTH_URL="http://127.0.0.1:${SERVICE_PORT}/healthz"
+MCP_URL="http://127.0.0.1:${SERVICE_PORT}/mcp"
 
 echo "🔍 Verifying axe-a11y MCP server health check..."
 if curl -fsS "${HEALTH_URL}" > /dev/null 2>&1; then

@@ -41,7 +41,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
 # Patchright uses the system-installed Chrome via channel:'chrome' — no browser download step needed.
 
