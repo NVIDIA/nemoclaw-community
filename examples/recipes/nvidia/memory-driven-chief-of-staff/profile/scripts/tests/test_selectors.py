@@ -447,7 +447,8 @@ class TestACollectorFailureIsVisible(CollectorCase):
         self.assertTrue(entry["failed"])
         self.assertEqual(entry["exit_code"], 1)
         self.assertEqual(entry["error_class"], "nonzero_exit")
-        # The message itself belongs in the local log, not the prompt.
+        # The collector's own text belongs in neither the prompt nor the local
+        # log; only the sanitized failure metadata is retained.
         self.assertNotIn("token expired", json.dumps(payload))
 
     def test_a_nonzero_exit_with_valid_json_is_still_a_failure(self):
@@ -762,8 +763,8 @@ class TestCollectorDiagnosticsStayOutOfThePrompt(CollectorCase):
     length and not the content; the first two hundred characters of a traceback
     are where the request line is.
 
-    The payload now carries a stable error class and an exit code. The detail
-    goes to this process's own stderr, which cron writes to a local log.
+    The payload and local log carry only a stable error class and an exit code.
+    The collector's own text is dropped from both streams.
     """
 
     SECRET = "Bearer xoxp-9999-SECRET-TOKEN-VALUE"

@@ -453,10 +453,12 @@ stderr is captured by the scheduler into the job log, where something
 transient becomes a file that outlives the token in it.
 
 So both get the same sanitized triple — which collector, what exit code, which
-error class. To read what the collector actually said, run it directly:
+error class. After the connector phase supplies a collector, run that collector
+directly to read what it actually said. For example, once `ingest_graph.py` is
+installed:
 
 ```bash
-HERMES_HOME=<profile home> python3 profile/scripts/ingest_graph.py
+HERMES_HOME="/path/to/profile" python3 profile/scripts/ingest_graph.py
 ```
 
 That prints to your terminal rather than to a file. The text is dropped rather
