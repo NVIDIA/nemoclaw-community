@@ -224,6 +224,9 @@ class TestNoSourceMutation(unittest.TestCase):
         # `urlopen(url, data=...)` is a POST — the stdlib spelling of a write,
         # and one an earlier version of this scan did not see.
         re.compile(r'urlopen\s*\([^)]*\bdata\s*='),
+        # `Request(url, data=...)` defaults to POST too, and `Request(...)` is
+        # now this codebase's HTTP idiom, so the scan has to know that shape.
+        re.compile(r'Request\s*\([^)]*\bdata\s*='),
         # Shelling out is the other way past a call-shape scan.
         re.compile(r'\b(subprocess|os)\.\w+\s*\([^)]*\b(curl|wget)\b'),
     )
@@ -249,7 +252,8 @@ class TestNoSourceMutation(unittest.TestCase):
                        'httpx.patch(url)',
                        'session.delete(url)',
                        'client.request("PATCH", url)',
-                       'graph_patch(f"{GRAPH}/me/messages/{mid}", {"isRead": True})'):
+                       'graph_patch(f"{GRAPH}/me/messages/{mid}", {"isRead": True})',
+                       'urllib.request.Request(url, data=payload)'):
             self.assertTrue(any(p.search(sample) for p in self.WRITE_PATTERNS),
                             f"the scan would not catch: {sample}")
 

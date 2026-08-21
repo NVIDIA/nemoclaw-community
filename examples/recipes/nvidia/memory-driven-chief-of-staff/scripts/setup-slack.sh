@@ -11,10 +11,12 @@
 # and only creates when it finds nothing usable.
 #
 # What it will not reuse is a provider whose credential key is one of the names
-# Hermes strips from every subprocess it spawns. `SLACK_BOT_TOKEN` and
-# `SLACK_APP_TOKEN` are on that list, so a bot-shaped Slack provider attaches
+# Hermes removes from the environment of the subprocesses it spawns, so that a
+# shell command an agent wrote cannot read them. `SLACK_BOT_TOKEN` and
+# `SLACK_APP_TOKEN` are among them, so a bot-shaped Slack provider attaches
 # cleanly and delivers nothing a cron pre-step can read. That is a silent
 # failure, and the whole point of looking is to not walk into it.
+# `providers/slack-user.yaml` carries the command to check the list yourself.
 
 set -euo pipefail
 
@@ -35,6 +37,8 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RECIPE_ROOT="$(dirname "$HERE")"
 SANDBOX="${OPENSHELL_SANDBOX_NAME:-${SANDBOX_NAME:-hermes}}"
 PROVIDER="${SLACK_PROVIDER_NAME:-memory-driven-cos-slack-user}"
+PROFILE_ID="memory-driven-cos-slack-user"
+PROFILE_YAML="$RECIPE_ROOT/providers/slack-user.yaml"
 USABLE_KEY="SLACK_USER_TOKEN"
 
 # This script runs on the HOST, not inside the sandbox — unlike install.sh.
@@ -69,7 +73,19 @@ fi
 
 echo "1/3  Looking for a Slack credential this sandbox can already read"
 
-attached="$(openshell sandbox provider list "$SANDBOX" 2>/dev/null || true)"
+# `|| true` here would turn every failure into "nothing attached" — a mistyped
+# sandbox name, an unauthenticated gateway, a stopped one — and the script
+# would answer by creating a provider that duplicates one already there. Ask,
+# then check.
+if ! attached="$(openshell sandbox provider list "$SANDBOX" 2>&1)"; then
+  echo "Could not list providers on sandbox '$SANDBOX'." >&2
+  echo "Check the name with: openshell sandbox list" >&2
+  exit 1
+fi
+
+# The output is a table whose first column is the provider name, with a header
+# row. Take field one from every line after the first, and do not transform it
+# — a name is what gets passed back to the same CLI.
 reusable=""
 while read -r name; do
   [[ -z "$name" ]] && continue
@@ -83,7 +99,9 @@ while read -r name; do
     echo "     skipping '$name' — its credential key ($keys) is stripped"
     echo "     from cron subprocesses, so the collector would never see it"
   fi
-done < <(printf '%s\n' "$attached" | sed -n 's/^[[:space:]]*_provider_//p' | tr '_' '-')
+done < <(printf '%s\n' "$attached" \
+         | sed 's/\x1b\[[0-9;]*m//g' \
+         | awk 'NR > 1 && NF { print $1 }')
 
 if [[ -n "$reusable" ]]; then
   echo "     reusing attached provider '$reusable'"
@@ -130,12 +148,56 @@ case "$TOKEN" in
     exit 1 ;;
 esac
 
+# Keep the token out of the process table.
+#
+# `--credential KEY=VALUE` puts the secret in argv, where `ps -o args=` and
+# /proc/<pid>/cmdline show it in full. Reading it with `read -s` to keep it
+# out of the terminal and out of shell history, and then handing it over on
+# the command line, would undo that in the last step.
+#
+# `--credential KEY` — the key alone, no value — tells openshell to look the
+# value up in the environment instead. Confirmed against
+# `openshell provider create --help`: "Provider credential pair (`KEY=VALUE`)
+# or env lookup key (`KEY`)". The variable is scoped to the one command.
+#
+# Both streams are captured rather than only stdout, so a CLI that echoes a
+# failing invocation cannot print the credential to the terminal.
+# Register the provider profile before creating a provider from it.
+#
+# The profile is what carries `endpoints: slack.com`, and that scoping is the
+# reason the credential can be a placeholder the collector cannot spend: the
+# egress proxy substitutes the real token only on the way to that host. A
+# provider created with `--type generic` gets no such scoping, and the doc's
+# claim about substitution would be describing something that was never set up.
+#
+# Delete-then-import, following the sibling recipe: `provider profile import`
+# rejects an existing id rather than upserting. A profile in use by a live
+# sandbox cannot be deleted, so on a re-run the delete is a no-op and the
+# import collides — which is fine, the profile is already registered.
+openshell provider profile delete "$PROFILE_ID" >/dev/null 2>&1 || true
+openshell provider profile import "$PROFILE_YAML" >/dev/null 2>&1 || true
+if ! openshell provider list-profiles 2>/dev/null | grep -q "$PROFILE_ID"; then
+  echo "Provider profile '$PROFILE_ID' is not registered." >&2
+  echo "Import it by hand and re-run:" >&2
+  echo "  openshell provider profile import $PROFILE_YAML" >&2
+  exit 1
+fi
+
 if openshell provider get "$PROVIDER" >/dev/null 2>&1; then
-  openshell provider update "$PROVIDER" --credential "$USABLE_KEY=$TOKEN" >/dev/null
+  if ! SLACK_USER_TOKEN="$TOKEN" openshell provider update "$PROVIDER" \
+        --credential "$USABLE_KEY" >/dev/null 2>&1; then
+    unset TOKEN
+    echo "Could not update provider '$PROVIDER'." >&2
+    exit 1
+  fi
   echo "     updated provider '$PROVIDER'"
 else
-  openshell provider create --name "$PROVIDER" --type generic \
-    --credential "$USABLE_KEY=$TOKEN" >/dev/null
+  if ! SLACK_USER_TOKEN="$TOKEN" openshell provider create --name "$PROVIDER" \
+        --type "$PROFILE_ID" --credential "$USABLE_KEY" >/dev/null 2>&1; then
+    unset TOKEN
+    echo "Could not create provider '$PROVIDER'." >&2
+    exit 1
+  fi
   echo "     created provider '$PROVIDER'"
 fi
 unset TOKEN

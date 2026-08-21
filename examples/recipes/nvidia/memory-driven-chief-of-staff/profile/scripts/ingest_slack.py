@@ -24,18 +24,22 @@ Exit codes carry the diagnosis, because the text cannot: a failing collector's
 output is deliberately dropped by the selector rather than written to a job
 log (see `select_intake.collect`). The code is what survives.
 
-    0  fetched (possibly nothing new)
+    0  fetched, possibly nothing new — or never configured, which is a
+       state rather than a fault, and must not cost a scheduled wake
     1  something else went wrong
-    2  credential problem — absent, wrong type, or rejected
+    2  configured before and the credential has gone, or is the wrong type,
+       or was rejected, or slack.com could not be reached
     3  Slack asked us to slow down
     4  the token works but lacks a scope this recipe cannot do without
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -63,10 +67,27 @@ FAMILIES = {
     "public_channel": "channels:history",
 }
 
-# Slack's own guidance for a large workspace, learned the expensive way on one:
-# never enumerate the member list. Senders are resolved one at a time, cached
-# for the run, and a failure to resolve one is cosmetic rather than fatal.
-PAGE = 200
+PAGE = 200  # Slack's maximum for conversations.history.
+
+# How far back the first run reaches, per conversation.
+#
+# The alternative — no lower bound, page until Slack stops — drains a channel's
+# entire history in one tick. On an account in a dozen channels with years of
+# backlog that is tens of thousands of requests, which rate-limits, which
+# throws away the run, which starts again from the top on the next tick. The
+# first run would never finish.
+#
+# A window is a better bound than a page cap, because it keeps every crawl
+# *complete*: paging always reaches the end of the window, so the watermark can
+# be advanced safely. A page cap would leave a gap above the watermark that
+# nothing would ever come back for.
+BACKFILL_DAYS = 7
+
+# Message subtypes worth judging. Everything else — joins, leaves, topic
+# changes, pinned notices — is Slack talking about the channel rather than a
+# person talking to the user, and in a DM it would arrive as `direct`, this
+# recipe's highest-priority class.
+KEPT_SUBTYPES = {None, "thread_broadcast", "file_share"}
 
 
 class SlackError(Exception):
@@ -166,32 +187,66 @@ def probe(token: str) -> dict[str, Any]:
 
     Granted scopes are not a property of the manifest — an admin can approve an
     app with less than it asked for, and organisations differ in what they
-    allow at all. So the families are probed rather than assumed, once, and the
-    answer is cached: re-probing every half hour is a rate limit waiting to
-    happen.
+    allow at all.
 
-    `im:history` is the floor. A recipe that cannot read the user's direct
-    messages is not doing the job it claims to, so that one is fatal; the rest
-    degrade to "skipped" and are reported.
+    Each family is probed with the call the collector will really make. Probing
+    `users.conversations` alone was wrong: it needs `im:read`, and an install
+    that granted `im:read` while withholding `im:history` — the plausible
+    split, since history is the sensitive half — passed the probe and then
+    failed on the first fetch. That produced exit 4 on every tick, waking the
+    model every half hour, and `--recheck` could not clear it because the probe
+    itself was the thing that was wrong.
+
+    `im` is the floor. A recipe that cannot read the user's direct messages is
+    not doing the job it claims to, so that one is fatal; the rest degrade to
+    "skipped" and are reported.
     """
     identity = call("auth.test", token)
     available: list[str] = []
     missing: list[str] = []
     for family in FAMILIES:
         try:
-            call("users.conversations", token, types=family, limit=1)
-            available.append(family)
+            listing = call("users.conversations", token, types=family, limit=1)
         except SlackError as exc:
             if exc.error in ("missing_scope", "not_allowed_token_type"):
                 missing.append(family)
-            else:
-                raise
+                continue
+            raise
+        channels = listing.get("channels") or []
+        if not channels:
+            # Nothing to read in this family, so history access cannot be
+            # tested and does not matter. Treat it as available rather than
+            # inventing a failure out of an empty account.
+            available.append(family)
+            continue
+        try:
+            call("conversations.history", token,
+                 channel=channels[0]["id"], limit=1)
+        except SlackError as exc:
+            if exc.error in ("missing_scope", "not_allowed_token_type"):
+                missing.append(family)
+                continue
+            raise
+        available.append(family)
     return {
         "user_id": identity.get("user_id"),
         "team_id": identity.get("team_id"),
+        "credential": fingerprint(token),
         "available": available,
         "missing": missing,
     }
+
+
+def fingerprint(token: str) -> str:
+    """Identify a credential without storing it.
+
+    The cache holds a `user_id` that the collector compares every message
+    against. If the token is replaced with one belonging to somebody else and
+    the cache is not invalidated, that comparison is made against the previous
+    owner — and the new owner's own outgoing messages are ingested as messages
+    they received.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
 
 
 def load_capabilities(token: str, *, refresh: bool = False) -> dict[str, Any]:
@@ -199,7 +254,7 @@ def load_capabilities(token: str, *, refresh: bool = False) -> dict[str, Any]:
     if not refresh and path.exists():
         try:
             cached = json.loads(path.read_text(encoding="utf-8"))
-            if cached.get("user_id"):
+            if cached.get("user_id") and cached.get("credential") == fingerprint(token):
                 return cached
         except (OSError, json.JSONDecodeError):
             pass
@@ -245,20 +300,26 @@ def family_of(channel: dict[str, Any], requested: str) -> str:
     return "channel" if requested == "public_channel" else requested
 
 
-def read_cursors(conn) -> dict[str, str]:
-    return {row[0]: row[1] for row in conn.execute(
-        "SELECT scope, cursor FROM cursors WHERE source='slack'")}
+def history(token: str, channel_id: str,
+            oldest: str | None) -> tuple[list[dict[str, Any]], bool]:
+    """Messages since the watermark, oldest first, and whether the crawl finished.
 
+    Completeness is returned rather than assumed, because the watermark depends
+    on it. `conversations.history` pages from newest backwards, so a crawl that
+    stops early holds the *newest* messages and is missing older ones — and the
+    gap sits above the watermark, where `oldest=` will never look again.
+    Advancing the cursor after an incomplete crawl loses those messages
+    permanently, silently, on a run that exits zero.
 
-def history(token: str, channel_id: str, oldest: str | None) -> list[dict[str, Any]]:
-    """Messages since the watermark, oldest first.
-
-    `oldest` is exclusive on Slack's side, so a repeated run re-reads nothing;
-    `insert_items` is idempotent on `source_id` regardless, which is what makes
-    a crash between the fetch and the commit harmless.
+    Under a `BACKFILL_DAYS` window this should not happen: paging always
+    reaches the end of the window. `has_more` with no cursor to follow is the
+    case that would, so it is reported rather than smoothed over.
     """
+    if oldest is None:
+        oldest = f"{time.time() - BACKFILL_DAYS * 86400:.6f}"
     messages: list[dict[str, Any]] = []
     cursor = None
+    complete = True
     while True:
         page = call("conversations.history", token, channel=channel_id,
                     oldest=oldest, inclusive="false", limit=PAGE, cursor=cursor)
@@ -267,15 +328,34 @@ def history(token: str, channel_id: str, oldest: str | None) -> list[dict[str, A
             break
         cursor = (page.get("response_metadata") or {}).get("next_cursor") or None
         if not cursor:
+            complete = False
             break
     messages.sort(key=lambda m: float(m.get("ts", "0")))
-    return messages
+    return messages, complete
+
+
+def worth_judging(message: dict[str, Any], user_id: str | None) -> bool:
+    """Is this a person saying something to the user?
+
+    A message the user sent is not one they received. Neither is Slack
+    announcing that somebody joined, and neither is a CI app posting a build
+    result — both of which arrive in a DM as `direct`, the highest-priority
+    class this recipe has, and the second with no `user` field at all, so the
+    sender lands NULL.
+    """
+    if message.get("subtype") not in KEPT_SUBTYPES:
+        return False
+    if message.get("bot_id"):
+        return False
+    return message.get("user") != user_id
 
 
 def sender_name(token: str, user_id: str | None, cache: dict[str, str | None]) -> str | None:
     """Resolve one display name, or give up quietly.
 
-    A raw `U0…` id in a subject line is useless to a reader, but failing the
+    Slack's own guidance for a large workspace, learned the expensive way on
+    one: never enumerate the member list. Names are resolved one at a time and
+    cached for the run. A raw `U0…` id is useless to a reader, but failing the
     whole collection because one lookup was rate-limited would be worse.
     """
     if not user_id:
@@ -290,44 +370,89 @@ def sender_name(token: str, user_id: str | None, cache: dict[str, str | None]) -
     return cache[user_id]
 
 
-def collect(token: str, caps: dict[str, Any]) -> dict[str, Any]:
-    ensure_store()
-    channels = conversations(token, caps["available"])
-    names: dict[str, str | None] = {}
-    fetched = 0
-    added = 0
-
+def read_cursors() -> dict[str, str]:
     with write_txn() as conn:
-        watermarks = read_cursors(conn)
-        for channel in channels:
-            messages = history(token, channel["id"], watermarks.get(channel["id"]))
-            if not messages:
-                continue
-            items = [
-                slack_message_to_item(
-                    message, channel, caps["user_id"],
-                    sender_name(token, message.get("user"), names))
-                for message in messages
-                # A message the user wrote is not a message they received.
-                if message.get("user") != caps["user_id"]
-            ]
-            fetched += len(items)
-            if items:
-                added += insert_items(conn, items)
-            # Advance past everything seen, including our own messages, so the
-            # window never re-opens on them.
+        return {row[0]: row[1] for row in conn.execute(
+            "SELECT scope, cursor FROM cursors WHERE source='slack'")}
+
+
+def commit_channel(channel: dict[str, Any], items: list[dict[str, Any]],
+                   watermark: str | None) -> int:
+    """Rows and their watermark, together or not at all.
+
+    One short transaction per conversation. The fetch happens outside it: a
+    connection held open across a network call is a write lock held for the
+    length of that call, which `_db.py` says in as many words, and on a first
+    run that would be minutes during which the user's own corrections cannot
+    be written.
+    """
+    with write_txn() as conn:
+        added = insert_items(conn, items) if items else 0
+        if watermark is not None:
             conn.execute(
                 "INSERT INTO cursors(source, scope, cursor) VALUES ('slack',?,?)"
                 " ON CONFLICT(source, scope) DO UPDATE SET cursor=excluded.cursor,"
                 " updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')",
-                (channel["id"], messages[-1]["ts"]))
+                (channel["id"], watermark))
+    return added
 
-    return {
+
+def collect(token: str, caps: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    """Fetch every granted family, one conversation at a time.
+
+    A failure in one conversation used to abort the run and roll back every
+    conversation already fetched — so a single rate-limited channel meant zero
+    rows stored and zero progress, and the next tick reproduced it exactly.
+    Progress has to be monotonic under partial failure, or the schedule is a
+    livelock that wakes the model every half hour to redo work it will discard.
+    """
+    ensure_store()
+    channels = conversations(token, caps["available"])
+    watermarks = read_cursors()
+    names: dict[str, str | None] = {}
+    fetched = added = 0
+    partial: list[dict[str, str]] = []
+    incomplete: list[str] = []
+
+    for channel in channels:
+        try:
+            messages, complete = history(token, channel["id"],
+                                         watermarks.get(channel["id"]))
+        except SlackError as exc:
+            # The conversation id is not repeated: a DM id names who the user
+            # talks to, and this summary is the agent's prompt.
+            partial.append({"family": channel["type"], "error": exc.error})
+            continue
+        if not messages:
+            continue
+        items = [
+            slack_message_to_item(message, channel, caps["user_id"],
+                                  sender_name(token, message.get("user"), names))
+            for message in messages
+            if worth_judging(message, caps["user_id"])
+        ]
+        fetched += len(items)
+        # Only a complete crawl may move the watermark; the rows are idempotent
+        # on `source_id`, so re-reading an unmoved window costs nothing.
+        watermark = messages[-1]["ts"] if complete else None
+        if not complete:
+            incomplete.append(channel["type"])
+        added += commit_channel(channel, items, watermark)
+
+    result: dict[str, Any] = {
         "conversations": len(channels),
         "fetched": fetched,
         "added": added,
         "skipped_families": caps["missing"],
     }
+    if partial:
+        result["partial"] = partial
+    if incomplete:
+        result["incomplete"] = incomplete
+    # A run in which every conversation failed is a failed run; one in which
+    # some succeeded made progress and must not throw it away.
+    total_failed = bool(partial) and len(partial) == len(channels)
+    return result, total_failed
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -378,11 +503,16 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_SCOPE
 
     try:
-        result = collect(token, caps)
+        result, everything_failed = collect(token, caps)
     except SlackError as exc:
         return _report_failure(exc)
 
     print(json.dumps(result))
+    if everything_failed:
+        errors = sorted({entry["error"] for entry in result["partial"]})
+        print(f"Every conversation failed ({', '.join(errors)}).",
+              file=sys.stderr)
+        return (EXIT_RATE_LIMIT if errors == ["ratelimited"] else EXIT_OTHER)
     return EXIT_OK
 
 

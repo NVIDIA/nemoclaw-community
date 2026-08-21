@@ -1,14 +1,26 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# The credential key is `SLACK_USER_TOKEN` and that name is load-bearing.
-# Hermes strips a fixed list of names from every subprocess it spawns, cron
-# pre-steps included, and `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` /
-# `SLACK_SIGNING_SECRET` are on it — a provider that used those names would
-# attach cleanly, inject nothing this collector can see, and fail silently.
-# `SLACK_USER_TOKEN` is not on the list. Verified against the running
-# blocklist on Hermes 0.20.0; treat it as a name that must be re-checked if a
-# future Hermes grows its own Slack-user integration.
+# The credential key is `SLACK_USER_TOKEN`, and the name matters.
+#
+# Hermes removes a set of credential names from the environment of the
+# subprocesses it spawns — cron pre-steps included — so that a shell command an
+# agent wrote cannot read them. The set is name-based and includes the names
+# Hermes's own Slack integration uses. A provider whose key collided with one
+# of those would attach cleanly and deliver nothing this collector can see:
+# a silent failure, which is the worst kind this recipe can have.
+#
+# Check it on your own install rather than taking this on trust:
+#
+#   python3 -c "from tools.environments import local as l; \
+#     print(sorted(l._ALWAYS_STRIP_KEYS | l._HERMES_PROVIDER_ENV_BLOCKLIST))"
+#
+# run from the Hermes install directory with its interpreter. On Hermes 0.20.0
+# that set contains SLACK_BOT_TOKEN, SLACK_APP_TOKEN and SLACK_SIGNING_SECRET,
+# and does not contain SLACK_USER_TOKEN. It is a list in a file, so a future
+# Hermes could add this name; `ingest_slack.py` fails loudly rather than
+# quietly when the variable is missing, which is the part that does not depend
+# on the list staying as it is.
 id: memory-driven-cos-slack-user
 display_name: Memory-Driven CoS — Slack user read
 description: >-

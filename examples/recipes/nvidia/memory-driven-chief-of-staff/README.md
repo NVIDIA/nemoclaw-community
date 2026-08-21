@@ -256,6 +256,7 @@ leave the loop exiting `0`.
 | Writer behavior, audit trail, caps across batches, correction idempotency, correction state transitions, displaced-row audit | `tests/test_apply_decisions.py` |
 | The walkthrough, and its central claims | `tests/test_walkthrough.py` |
 | Selector output, the wake gate, and the scheduler contract | `tests/test_selectors.py` |
+| The Slack collector: watermarks, partial failure, scope probing, and the credential never reaching a stream | `tests/test_ingest_slack.py` |
 
 Four points are worth calling out.
 
@@ -494,8 +495,10 @@ rotation on a Slack app cannot be undone, and nothing here refreshes an
 expiring one, so a rotating token is refused rather than working for an
 afternoon.
 
-Until this is set up the collector is simply absent and the schedule runs over
-whatever is already in the store. That is a supported state, not a broken one.
+Until this is set up the collector still runs — it ships with the recipe — but
+reports `{"unconfigured": true}` and exits zero, so the schedule runs over
+whatever is already in the store and an idle tick still costs nothing. That is
+a supported state, not a broken one.
 
 ### When a collector fails
 

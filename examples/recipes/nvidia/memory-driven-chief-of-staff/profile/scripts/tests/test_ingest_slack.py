@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -470,6 +471,274 @@ class TestPrivateChannelsAreLeftOutOnPurpose(unittest.TestCase):
             self.assertIn(scope, user,
                           f"the collector reads {family} but the manifest "
                           f"never asks for {scope}")
+
+
+class TestAnIncompleteCrawlDoesNotMoveTheWatermark(CollectorCase):
+    """`has_more` with no cursor to follow used to commit anyway.
+
+    `conversations.history` pages from newest backwards, so a crawl that stops
+    early holds the newest messages and is missing older ones — and the gap
+    sits above the watermark, where `oldest=` will never look again. Advancing
+    the cursor there loses those messages permanently, on a run that exits
+    zero and reports success.
+    """
+
+    def setUp(self):
+        super().setUp()
+        os.environ["SLACK_USER_TOKEN"] = "xoxp-test"
+
+    def _truncated(self):
+        return {
+            "auth.test": {"ok": True, "user_id": USER, "team_id": "T1"},
+            "users.conversations": lambda p: (
+                {"ok": True, "channels": [channel("D01")]} if p.get("types") == "im"
+                else {"ok": True, "channels": []}),
+            "conversations.history": lambda p: (
+                {"ok": True, "messages": [message("1787000009.0001")],
+                 "has_more": True, "response_metadata": {}}
+                if p.get("limit") != "1" else {"ok": True, "messages": []}),
+            "users.info": {"ok": True, "user": {"real_name": "Dana", "profile": {}}},
+        }
+
+    def test_the_cursor_stays_put(self):
+        self.serve(self._truncated())
+        self.assertEqual(self.run_main(), ingest_slack.EXIT_OK)
+        self.assertEqual(self.cursors(), {},
+                         "a truncated crawl advanced the watermark past "
+                         "messages it never fetched")
+
+    def test_the_rows_it_did_get_are_still_kept(self):
+        """Not advancing must not mean discarding."""
+        self.serve(self._truncated())
+        self.run_main()
+        self.assertEqual(len(self.rows()), 1)
+
+    def test_the_run_says_the_crawl_was_incomplete(self):
+        self.serve(self._truncated())
+        self.run_main()
+        self.assertIn("incomplete", json.loads(self.stdout))
+
+
+class TestOneBadConversationDoesNotDiscardTheRest(CollectorCase):
+    """A single rate-limited channel used to roll the whole run back.
+
+    Zero rows, zero cursors, and the next tick enumerating the same channels in
+    the same order to reproduce it exactly — a livelock that wakes the model
+    every half hour to redo work it will throw away.
+    """
+
+    def setUp(self):
+        super().setUp()
+        os.environ["SLACK_USER_TOKEN"] = "xoxp-test"
+
+    def _three_with_one_broken(self, broken="D02"):
+        def history(params):
+            if params.get("limit") == "1":
+                return {"ok": True, "messages": []}
+            if params.get("channel") == broken:
+                return {"ok": False, "error": "ratelimited"}
+            return {"ok": True, "has_more": False,
+                    "messages": [message("1787000000.0001")]}
+        return {
+            "auth.test": {"ok": True, "user_id": USER, "team_id": "T1"},
+            "users.conversations": lambda p: (
+                {"ok": True, "channels": [channel("D01"), channel("D02"),
+                                          channel("D03")]}
+                if p.get("types") == "im" else {"ok": True, "channels": []}),
+            "conversations.history": history,
+            "users.info": {"ok": True, "user": {"real_name": "Dana", "profile": {}}},
+        }
+
+    def test_the_healthy_conversations_are_still_stored(self):
+        self.serve(self._three_with_one_broken())
+        self.run_main()
+        stored = {row[0].split(":")[0] for row in self.rows()}
+        self.assertEqual(stored, {"D01", "D03"},
+                         "a failure in one conversation discarded the others")
+
+    def test_their_watermarks_advanced(self):
+        """Progress has to be monotonic, or the next tick repeats the run."""
+        self.serve(self._three_with_one_broken())
+        self.run_main()
+        self.assertEqual(set(self.cursors()), {"D01", "D03"})
+
+    def test_the_failure_is_reported_without_naming_the_conversation(self):
+        """A DM id names who the user talks to, and this becomes a prompt."""
+        self.serve(self._three_with_one_broken())
+        self.run_main()
+        payload = json.loads(self.stdout)
+        self.assertEqual(payload["partial"], [{"family": "im",
+                                               "error": "ratelimited"}])
+        self.assertNotIn("D02", self.stdout)
+
+    def test_a_partial_failure_still_exits_zero(self):
+        self.serve(self._three_with_one_broken())
+        self.assertEqual(self.run_main(), ingest_slack.EXIT_OK)
+
+    def test_every_conversation_failing_is_a_failed_run(self):
+        def history(params):
+            if params.get("limit") == "1":
+                return {"ok": True, "messages": []}
+            return {"ok": False, "error": "ratelimited"}
+        responses = self._three_with_one_broken()
+        responses["conversations.history"] = history
+        self.serve(responses)
+        self.assertEqual(self.run_main(), ingest_slack.EXIT_RATE_LIMIT)
+
+
+class TestTheFirstRunIsBounded(CollectorCase):
+    """No lower bound meant draining a channel's entire history in one tick.
+
+    On a real account that is tens of thousands of requests, which rate-limits,
+    which throws the run away, which starts from the top again — a first run
+    that can never finish. A time window bounds it while keeping every crawl
+    complete, which a page cap would not.
+    """
+
+    def setUp(self):
+        super().setUp()
+        os.environ["SLACK_USER_TOKEN"] = "xoxp-test"
+
+    def test_the_first_fetch_asks_for_a_window_not_everything(self):
+        self.serve(self.working_slack())
+        self.run_main()
+        fetches = [p for m, p in self.slack.calls
+                   if m == "conversations.history" and p.get("limit") != "1"]
+        self.assertTrue(fetches)
+        self.assertIn("oldest", fetches[0],
+                      "the first run asked for a channel's whole history")
+        age = time.time() - float(fetches[0]["oldest"])
+        self.assertLess(abs(age - ingest_slack.BACKFILL_DAYS * 86400), 600)
+
+    def test_a_later_run_uses_the_watermark_not_the_window(self):
+        self.serve(self.working_slack())
+        self.run_main()
+        before = len(self.slack.calls)
+        self.run_main()
+        fetches = [p for m, p in self.slack.calls[before:]
+                   if m == "conversations.history" and p.get("limit") != "1"]
+        self.assertEqual(fetches[0]["oldest"], "1787000000.0001")
+
+
+class TestOnlyPeopleTalkingCount(CollectorCase):
+    """Joins, leaves, topic changes and bot posts are not messages to the user.
+
+    In a DM they all arrive as `direct`, this recipe's highest-priority class,
+    and a bot message carries no `user` field so it also slipped the
+    "not my own message" filter and landed with a NULL sender.
+    """
+
+    def setUp(self):
+        super().setUp()
+        os.environ["SLACK_USER_TOKEN"] = "xoxp-test"
+
+    def _noisy(self):
+        return {
+            "auth.test": {"ok": True, "user_id": USER, "team_id": "T1"},
+            "users.conversations": lambda p: (
+                {"ok": True, "channels": [channel("D01")]} if p.get("types") == "im"
+                else {"ok": True, "channels": []}),
+            "conversations.history": lambda p: (
+                {"ok": True, "messages": []} if p.get("limit") == "1" else
+                {"ok": True, "has_more": False, "messages": [
+                    {"ts": "1787000000.0001", "user": OTHER,
+                     "subtype": "channel_join", "text": "has joined"},
+                    {"ts": "1787000000.0002", "bot_id": "B1",
+                     "text": "PR #42 opened"},
+                    {"ts": "1787000000.0003", "user": OTHER,
+                     "subtype": "channel_topic", "text": "set the topic"},
+                    {"ts": "1787000000.0004", "user": OTHER,
+                     "text": "can you review this by Friday"},
+                ]}),
+            "users.info": {"ok": True, "user": {"real_name": "Dana", "profile": {}}},
+        }
+
+    def test_only_the_real_message_is_stored(self):
+        self.serve(self._noisy())
+        self.run_main()
+        self.assertEqual([row[0] for row in self.rows()],
+                         ["D01:1787000000.0004"])
+
+    def test_a_bot_post_never_arrives_with_a_null_sender(self):
+        self.serve(self._noisy())
+        self.run_main()
+        self.assertTrue(all(row[2] for row in self.rows()),
+                        "a row was stored with no sender at all")
+
+    def test_the_watermark_still_passes_the_skipped_ones(self):
+        """Skipping must not mean re-reading them forever."""
+        self.serve(self._noisy())
+        self.run_main()
+        self.assertEqual(self.cursors(), {"D01": "1787000000.0004"})
+
+
+class TestTheProbeChecksTheCallItWillActuallyMake(CollectorCase):
+    """`users.conversations` needs `im:read`; the fetch needs `im:history`.
+
+    An install granting the first and withholding the second — the plausible
+    split, since history is the sensitive half — passed the old probe and then
+    failed on every fetch, producing exit 4 on every tick with no way for
+    `--recheck` to clear it, because the probe itself was what was wrong.
+    """
+
+    def setUp(self):
+        super().setUp()
+        os.environ["SLACK_USER_TOKEN"] = "xoxp-test"
+
+    def test_read_without_history_is_caught_at_probe_time(self):
+        self.serve({
+            "auth.test": {"ok": True, "user_id": USER, "team_id": "T1"},
+            "users.conversations": {"ok": True, "channels": [channel("D01")]},
+            "conversations.history": {"ok": False, "error": "missing_scope"},
+        })
+        self.assertEqual(self.run_main(), ingest_slack.EXIT_SCOPE)
+
+    def test_the_probe_calls_history_and_not_only_the_listing(self):
+        self.serve(self.working_slack())
+        self.run_main()
+        probes = [p for m, p in self.slack.calls
+                  if m == "conversations.history" and p.get("limit") == "1"]
+        self.assertTrue(probes, "the probe never tried the call it needs")
+
+    def test_an_empty_family_is_not_invented_into_a_failure(self):
+        """Nothing to read means history access cannot be tested, not refused."""
+        self.serve({
+            "auth.test": {"ok": True, "user_id": USER, "team_id": "T1"},
+            "users.conversations": {"ok": True, "channels": []},
+        })
+        self.assertEqual(self.run_main(), ingest_slack.EXIT_OK)
+
+
+class TestReplacingTheTokenReplacesTheIdentity(CollectorCase):
+    """The cache holds the `user_id` every message is compared against.
+
+    Left un-invalidated across a token change it identifies the previous owner,
+    so the new owner's own outgoing messages are ingested as messages they
+    received — and the setup doc tells people to rotate exactly this way.
+    """
+
+    def test_a_different_token_re_probes(self):
+        os.environ["SLACK_USER_TOKEN"] = "xoxp-first"
+        self.serve(self.working_slack())
+        self.run_main()
+        first = json.loads(ingest_slack.capabilities_path().read_text())
+
+        os.environ["SLACK_USER_TOKEN"] = "xoxp-second"
+        self.slack.responses["auth.test"] = {"ok": True, "user_id": "U0NEWME",
+                                             "team_id": "T1"}
+        self.run_main()
+        second = json.loads(ingest_slack.capabilities_path().read_text())
+        self.assertEqual(second["user_id"], "U0NEWME",
+                         "the cache still identifies the previous owner")
+        self.assertNotEqual(first["credential"], second["credential"])
+
+    def test_the_cache_stores_a_fingerprint_and_not_the_token(self):
+        os.environ["SLACK_USER_TOKEN"] = "xoxp-secret-value"
+        self.serve(self.working_slack())
+        self.run_main()
+        raw = ingest_slack.capabilities_path().read_text()
+        self.assertNotIn("xoxp-secret-value", raw)
+        self.assertIn("credential", json.loads(raw))
 
 
 if __name__ == "__main__":

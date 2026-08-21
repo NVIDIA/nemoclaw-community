@@ -64,10 +64,17 @@ It looks first and exits without changing anything if it finds a provider that
 exposes `SLACK_USER_TOKEN`. Only if it finds none does it ask you for a token.
 
 It deliberately does **not** reuse a provider whose credential key is
-`SLACK_BOT_TOKEN` or `SLACK_APP_TOKEN`. Hermes strips those two names from
-every subprocess it spawns, cron pre-steps included, so such a provider
-attaches cleanly and delivers nothing the collector can read. The script says
-so when it skips one rather than leaving you to debug an empty result.
+`SLACK_BOT_TOKEN` or `SLACK_APP_TOKEN`. Hermes removes those names from the
+environment of the subprocesses it spawns — cron pre-steps included — so that
+a shell command an agent wrote cannot read them. A provider using one of those
+keys therefore attaches cleanly and delivers nothing the collector can read.
+The script says so when it skips one rather than leaving you to debug an empty
+result.
+
+You can check the list on your own install; `providers/slack-user.yaml` gives
+the one-line command. That it is a *list* is the point: this recipe does not
+depend on it staying as it is, because the collector fails loudly when the
+variable is missing rather than reporting an empty inbox.
 
 ## 2. Create the app from the bundled manifest
 
@@ -125,14 +132,27 @@ handles a string it cannot spend.
 Attaching works on a sandbox that already exists; you do not have to rebuild
 it.
 
-**No OpenShell on this machine?** Put the token in the profile's `.env`
-instead:
+**No OpenShell on this machine?** Put the token in the profile's `.env`.
+Resolve the path first and check it — an unguarded `$(…)` that comes back
+empty makes the target `/.env`, which as root writes a live token to the
+filesystem root. `install.sh` guards the same pipeline for the same reason.
 
 ```bash
-echo 'SLACK_USER_TOKEN=xoxp-...' >> "$(hermes profile show memory-driven-chief-of-staff | sed -n 's/^Path:[[:space:]]*//p')/.env"
+PROFILE_HOME="$(hermes profile show memory-driven-chief-of-staff 2>/dev/null \
+  | sed -n 's/^Path:[[:space:]]*//p' || true)"
+if [ -z "$PROFILE_HOME" ]; then
+  echo "Could not resolve the profile home." >&2
+  exit 1
+fi
+read -r -s -p "Token: " T
+printf 'SLACK_USER_TOKEN=%s\n' "$T" >> "$PROFILE_HOME/.env"
+unset T
+chmod 600 "$PROFILE_HOME/.env"
 ```
 
-That file is never copied by the installer and never travels with the profile.
+`read -s` rather than typing the token into the command line keeps it out of
+your shell history. That file is never copied by the installer and never
+travels with the profile.
 
 ## 5. Verify
 
@@ -157,7 +177,8 @@ by hand to read the explanation.
 
 | Exit | Meaning |
 | --- | --- |
-| `2` | Credential: absent, wrong type, rejected, or `slack.com` unreachable. |
+| `0` | Fetched — or never configured, which is a state rather than a fault. |
+| `2` | Configured before and the credential is now gone, wrong type, rejected, or `slack.com` unreachable. |
 | `3` | Rate-limited. The next tick resumes from the same watermark. |
 | `4` | The token works but lacks a scope the recipe needs. |
 | `1` | Anything else. |
