@@ -16,21 +16,24 @@ echo "Starting Fluxbox window manager..."
 fluxbox &
 FLUXBOX_PID=$!
 
-# Start x11vnc server on port 5900
-echo "Starting VNC server on port 5900..."
-if [ -n "${AXE_A11Y_VNC_PASSWORD:-}" ]; then
+# Start x11vnc server on port 5900 if enabled
+if [ "${AXE_A11Y_VNC_ENABLED:-false}" = "true" ]; then
+  echo "Starting VNC server on port 5900..."
+  if [ -z "${AXE_A11Y_VNC_PASSWORD:-}" ]; then
+    echo "❌ VNC is enabled but AXE_A11Y_VNC_PASSWORD is not set. Refusing to start VNC without authentication."
+    exit 1
+  fi
+
   echo "   Using password authentication"
   x11vnc -display ${DISPLAY} -forever -shared -rfbport 5900 \
     -passwd "${AXE_A11Y_VNC_PASSWORD}" &
+  VNC_PID=$!
+  echo "✅ VNC server started on port 5900"
+  echo "   Connect with: vnc://localhost:5900"
+  echo ""
 else
-  echo "   Using no-password mode"
-  x11vnc -display ${DISPLAY} -forever -shared -rfbport 5900 -nopw &
+  echo "ℹ️  VNC server is disabled (AXE_A11Y_VNC_ENABLED is not true)."
 fi
-VNC_PID=$!
-
-echo "✅ VNC server started on port 5900"
-echo "   Connect with: vnc://localhost:5900"
-echo ""
 
 # Start the MCP server
 echo "Starting Axe A11y MCP Server on port ${PORT}..."

@@ -12,8 +12,6 @@ services:
     ports:
       - "127.0.0.1:${AXE_A11Y_SERVICE_PORT:-9010}:9010"
       - "127.0.0.1:${AXE_A11Y_VNC_PORT:-5900}:5900"
-    security_opt:
-      - seccomp=unconfined
     environment:
       - NODE_ENV=production
       - PORT=9010
@@ -21,6 +19,7 @@ services:
       - AXE_A11Y_PROFILE_ENABLED=${AXE_A11Y_PROFILE_ENABLED:-false}
       - AXE_A11Y_PROFILE_DIR=/app/state/profile
       - AXE_A11Y_ARTIFACTS_DIR=/app/state/artifacts
+      - AXE_A11Y_VNC_ENABLED=${AXE_A11Y_VNC_ENABLED:-false}
       - AXE_A11Y_VNC_PASSWORD=${AXE_A11Y_VNC_PASSWORD:-}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:9010/healthz').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))"]

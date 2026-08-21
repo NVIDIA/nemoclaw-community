@@ -233,7 +233,8 @@ Configuration parameters:
 |---|---|---|
 | `AXE_A11Y_SERVICE_PORT` | `9010` | MCP server HTTP port |
 | `AXE_A11Y_VNC_PORT` | `5900` | VNC remote view port |
-| `AXE_A11Y_VNC_PASSWORD` | _(empty)_ | Optional VNC password; empty = no auth |
+| `AXE_A11Y_VNC_ENABLED` | `false` | Enable VNC |
+| `AXE_A11Y_VNC_PASSWORD` | _(empty)_ | Required VNC password if VNC is enabled |
 | `AXE_A11Y_PROFILE_ENABLED` | `false` | Enable persistent Chrome profile |
 | `AXE_A11Y_SERVICE_HEADLESS` | `true` | Run Chrome in headless mode |
 
@@ -258,13 +259,20 @@ cp .env.example .env
 cp src/SKILL.md ${OPENCLAW_ROOT}/skills/axe-a11y.md
 cp policy.yaml ${OPENCLAW_ROOT}/policies/axe-a11y-policy.yaml
 
-# 4. In OpenClaw, register the MCP server in your configuration:
+# 4. Apply the policy
+cd ${OPENCLAW_ROOT}
+openshell policy set axe-a11y-policy.yaml --wait
+
+# 5. In OpenClaw, register the MCP server in your configuration:
 # "mcpServers": {
 #   "axe-a11y": {
-#     "command": "http://host.openshell.internal:9010/mcp",
+#     "url": "http://host.openshell.internal:9010/mcp",
 #     "transport": "http"
 #   }
 # }
+
+# 6. Verify via an agent tool call from the sandbox
+openshell run --skill axe-a11y -- 'Audit https://example.com'
 ```
 
 ## Directory Structure
@@ -343,12 +351,17 @@ The script checks:
 ./scripts/teardown.sh
 ```
 
-Stops the container, removes volumes, and removes the Docker network.
+Stops the container, removes volumes, and removes the Docker network. Note that the persistent `state/` directory is kept by default.
+
+If you want to completely purge the persistent state and saved artifacts, run:
+
+```bash
+./scripts/teardown.sh --purge
+```
 
 ## Known Limitations
 
 - The container runs as `linux/amd64`. Apple Silicon (M-series) hosts require Docker Desktop with Rosetta emulation — performance may be reduced.
-- VNC streaming operates in unencrypted mode unless `AXE_A11Y_VNC_PASSWORD` is configured.
 - High-resolution video recording (`record_page_session`) requires at least 2 GB of container memory.
 - `state/profile/` stores Chrome session cookies unencrypted. Use a dedicated, low-privilege browser account.
 

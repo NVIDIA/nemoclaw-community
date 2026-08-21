@@ -1,6 +1,6 @@
 ---
 name: axe-a11y
-description: Complete automated web accessibility testing (axe-core) driven by patchright + real Google Chrome with a persistent login profile — audits sites behind bot walls and behind auth
+description: Automated web accessibility scanning (axe-core) driven by patchright + real Google Chrome — audits sites behind bot walls and behind auth
 ---
 
 <!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
@@ -8,7 +8,7 @@ description: Complete automated web accessibility testing (axe-core) driven by p
 
 # Axe Accessibility Testing Skill
 
-Production-ready automated testing via the `axe-a11y` MCP server. Not a framework, not a manual-testing helper — the server executes real audits and returns real WCAG violation JSON.
+Automated testing via the `axe-a11y` MCP server. Not a framework, not a manual-testing helper — the server executes automated scans and returns actual WCAG violation JSON.
 
 ## What This Skill Runs Under the Hood
 
