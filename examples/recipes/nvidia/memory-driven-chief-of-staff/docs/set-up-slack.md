@@ -186,8 +186,23 @@ by hand to read the explanation.
 Two failures worth naming:
 
 - **`slack.com` unreachable.** The sandbox's egress policy has to allow it.
-  `nemohermes <sandbox> policy list` shows what is allowed;
-  `nemohermes <sandbox> policy add <preset>` adds one.
+  `nemohermes <sandbox> policy list` shows what is applied — look for a `●`
+  beside `slack`. If it is `○`, add it:
+
+  ```bash
+  nemohermes <sandbox> policy add slack
+  ```
+
+  **Do not check this with `curl`.** On the sandbox measured for this recipe,
+  `curl https://slack.com/api/api.test` returns
+  `CONNECT tunnel failed, response 403` while the collector's own request to
+  the same URL returns HTTP 200 — the egress proxy treats the two clients
+  differently, and not by `User-Agent` (swapping them changes nothing). A curl
+  probe will tell you Slack is blocked when it is not. Use the collector:
+
+  ```bash
+  python3 profile/scripts/ingest_slack.py --recheck
+  ```
 - **Exit `4` naming `im:history`.** The app installed with fewer scopes than it
   asked for, which an admin can do. Add them, reinstall the app, and re-run
   with `--recheck`.
