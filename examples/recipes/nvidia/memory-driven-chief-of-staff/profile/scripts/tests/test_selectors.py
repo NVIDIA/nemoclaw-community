@@ -394,17 +394,8 @@ class TestTheRebootStoryIsWhatTheReadmeSays(unittest.TestCase):
         self.assertEqual(per_day * 2, 96)
 
 
-class TestACollectorFailureIsVisible(unittest.TestCase):
-    """A connector that stops working must not be silent.
-
-    This is the worst failure this design can have, and it was the shipped
-    behaviour: a collector whose credential expired wrote to stderr and exited
-    non-zero while printing nothing, `json.loads("" or "{}")` turned that into
-    an empty success, and the idle gate then skipped the agent entirely. Every
-    half hour, forever, with nothing anywhere saying so. Slack's rotating user
-    tokens make an expired credential an ordinary event rather than an
-    exceptional one, so this path is the one that matters most.
-    """
+class CollectorCase(unittest.TestCase):
+    """Fixture shared by the collector-behaviour classes below."""
 
     def setUp(self):
         self.home = tempfile.mkdtemp()
@@ -436,13 +427,28 @@ class TestACollectorFailureIsVisible(unittest.TestCase):
     def _graph(self, payload):
         return payload["collected"]["ingest_graph.py"]
 
+
+class TestACollectorFailureIsVisible(CollectorCase):
+    """A connector that stops working must not be silent.
+
+    This is the worst failure this design can have, and it was the shipped
+    behaviour: a collector whose credential expired wrote to stderr and exited
+    non-zero while printing nothing, `json.loads("" or "{}")` turned that into
+    an empty success, and the idle gate then skipped the agent entirely. Every
+    half hour, forever, with nothing anywhere saying so. Slack's rotating user
+    tokens make an expired credential an ordinary event rather than an
+    exceptional one, so this path is the one that matters most.
+    """
+
     def test_a_nonzero_exit_with_no_output_is_recorded_as_a_failure(self):
         self._collector('print("", end=""); print("token expired", file=sys.stderr); sys.exit(1)')
         payload, _ = self._run()
         entry = self._graph(payload)
         self.assertTrue(entry["failed"])
         self.assertEqual(entry["exit_code"], 1)
-        self.assertIn("token expired", entry["stderr"])
+        self.assertEqual(entry["error_class"], "nonzero_exit")
+        # The message itself belongs in the local log, not the prompt.
+        self.assertNotIn("token expired", json.dumps(payload))
 
     def test_a_nonzero_exit_with_valid_json_is_still_a_failure(self):
         """Readable output does not mean the run succeeded."""
@@ -455,7 +461,7 @@ class TestACollectorFailureIsVisible(unittest.TestCase):
         self._collector('print("not json"); sys.exit(0)')
         payload, _ = self._run()
         self.assertTrue(self._graph(payload)["failed"])
-        self.assertIn("unreadable output", self._graph(payload)["error"])
+        self.assertEqual(self._graph(payload)["error_class"], "unreadable_output")
 
     def test_a_failure_with_no_pending_rows_still_wakes_the_agent(self):
         """The gate makes an idle tick free; it must not make a broken one quiet."""
@@ -625,12 +631,15 @@ class TestTheInstallerCarriesSettingsNotSecrets(unittest.TestCase):
     That file's own `model:` block is documented to hold an inline `api_key`,
     and a generated config really does put one there, so the copy duplicated a
     credential into a second file while the README told the reader no
-    credentials were involved. It also bought nothing: a profile with no key of
-    its own authenticates through the config it inherits.
+    credentials were involved. It bought nothing either, though not for the
+    reason first given here: a profile with no key of its own does not
+    authenticate through the config it inherits — it sends the placeholder
+    `no-key-required` — so the fix is to require a key on the target profile
+    rather than to copy one.
 
-    These assertions pin the shape the fix depends on — named settings through
-    the CLI, no file copy, and a runnability check that lands before anything
-    is scheduled.
+    These assertions pin the shape that depends on — named settings through the
+    CLI, no file copy, every transfer failing closed and read back, and both
+    runnability checks landing before anything is scheduled.
     """
 
     INSTALL = HERE.parents[1] / "scripts" / "install.sh"
@@ -740,6 +749,182 @@ class TestTheReadmeDescribesTheInstallerItShips(unittest.TestCase):
     def test_the_readme_does_not_promise_a_config_copy(self):
         self.assertNotIn("copy of `~/.hermes/config.yaml`", self.readme,
                          "README still describes the removed file copy")
+
+
+class TestCollectorDiagnosticsStayOutOfThePrompt(CollectorCase):
+    """A failing collector's own output is untrusted text, and stdout is a prompt.
+
+    Making the failure visible was right; carrying the collector's stderr into
+    the payload to do it was not. That stdout becomes the scheduled agent's
+    prompt, and a collector is a subprocess talking to a mail or chat API — its
+    stderr is a traceback that can hold a bearer token, a signed URL, or a
+    stranger's message body. Truncating to two hundred characters bounds the
+    length and not the content; the first two hundred characters of a traceback
+    are where the request line is.
+
+    The payload now carries a stable error class and an exit code. The detail
+    goes to this process's own stderr, which cron writes to a local log.
+    """
+
+    SECRET = "Bearer xoxp-9999-SECRET-TOKEN-VALUE"
+    URL = "https://graph.example.com/v1/me?sig=AAAABBBBCCCC"
+
+    def _run_full(self):
+        return subprocess.run(
+            [sys.executable, str(self.recipe / "scripts" / "select_intake.py")],
+            capture_output=True, text=True,
+            env={**os.environ, "HERMES_HOME": self.home})
+
+    def _failing_collector_leaking(self):
+        self._collector(
+            f'sys.stderr.write("Traceback: auth failed\\n'
+            f'  headers={{\'Authorization\': \'{self.SECRET}\'}}\\n'
+            f'  url={self.URL}\\n")\nsys.exit(1)')
+
+    def test_secret_shaped_stderr_never_reaches_stdout(self):
+        self._failing_collector_leaking()
+        proc = self._run_full()
+        for leaked in (self.SECRET, "xoxp-", "SECRET-TOKEN-VALUE", self.URL,
+                       "sig=AAAABBBBCCCC"):
+            self.assertNotIn(leaked, proc.stdout,
+                             f"{leaked!r} reached the agent prompt")
+
+    def test_no_raw_stderr_field_survives_in_the_payload(self):
+        """The field itself is the hazard, whatever a given run puts in it."""
+        self._failing_collector_leaking()
+        proc = self._run_full()
+        self.assertNotIn('"stderr"', proc.stdout,
+                         "the payload still carries a raw stderr field")
+
+    def test_the_operator_still_gets_the_detail_on_stderr(self):
+        """Withholding it from the prompt must not mean discarding it."""
+        self._failing_collector_leaking()
+        proc = self._run_full()
+        self.assertIn(self.SECRET, proc.stderr,
+                      "the detail is gone from the local log as well")
+
+    def test_the_payload_says_what_class_of_failure_it_was(self):
+        """The agent still needs enough to act on, just nothing quotable."""
+        self._collector('sys.stderr.write("boom\\n")\nsys.exit(3)')
+        payload, _ = self._run()
+        graph = self._graph(payload)
+        self.assertTrue(graph["failed"])
+        self.assertEqual(graph["exit_code"], 3)
+        self.assertEqual(graph["error_class"], "nonzero_exit")
+
+    def test_unreadable_output_is_classed_without_quoting_the_output(self):
+        self._collector('print("{not json")\nsys.exit(0)')
+        payload, stdout = self._run()
+        graph = self._graph(payload)
+        self.assertEqual(graph["error_class"], "unreadable_output")
+        self.assertNotIn("not json", stdout,
+                         "the unparsable text was quoted back into the prompt")
+
+
+class TestAFailedTransferStopsTheInstall(unittest.TestCase):
+    """`set -e` does not abort on the left operand of `&&`.
+
+    The carry loop was written `config set … && echo …`, on the assumption that
+    `set -euo pipefail` would end the run if the set failed. It does not:
+    `false && echo` is a no-op, not an abort. So a profile could take
+    `model.default`, silently drop `model.provider` and `model.base_url`, pass
+    the model check — which only asks about `model.default` — pass the
+    credential check, and get all five jobs registered against whatever route
+    it had left.
+
+    Exit status alone is also not proof the value landed, so each carried
+    setting is read back off the target profile and compared.
+
+    These tests stub `hermes` on PATH and assert on what the installer does,
+    not on what the script says. The earlier installer tests all read the file
+    and matched patterns in it, which is why none of them could see this.
+    """
+
+    RECIPE = HERE.parents[1]
+
+    def setUp(self):
+        self.bin = Path(tempfile.mkdtemp())
+        self.state = Path(tempfile.mkdtemp())
+        self.profile_home = Path(tempfile.mkdtemp())
+        self.log = self.state / "calls.log"
+        (self.bin / "uname").write_text("#!/bin/sh\necho Linux\n", encoding="utf-8")
+        (self.bin / "uname").chmod(0o755)
+        (self.bin / "hermes").write_text(HERMES_STUB, encoding="utf-8")
+        (self.bin / "hermes").chmod(0o755)
+        for key, value in (("model.default", "some/model"),
+                           ("model.provider", "custom"),
+                           ("model.base_url", "https://example.invalid/v1")):
+            (self.state / f"source.{key}").write_text(value, encoding="utf-8")
+
+    def _install(self, **env):
+        return subprocess.run(
+            ["bash", str(self.RECIPE / "scripts" / "install.sh")],
+            capture_output=True, text=True, cwd=str(self.RECIPE),
+            env={**os.environ,
+                 "PATH": f"{self.bin}:{os.environ['PATH']}",
+                 "PROFILE_NAME": "under-test",
+                 "STUB_STATE": str(self.state),
+                 "STUB_PROFILE_HOME": str(self.profile_home),
+                 "STUB_LOG": str(self.log),
+                 **env})
+
+    def _registered(self):
+        """Did anything reach the scheduler?"""
+        if not self.log.exists():
+            return False
+        return "cron" in self.log.read_text(encoding="utf-8")
+
+    # These pass `ALLOW_NO_API_KEY` so the credential gate cannot be what stops
+    # the run. Without it the first draft of `schedules_nothing` passed against
+    # the broken installer, because a later check happened to abort first.
+    def test_a_failing_transfer_aborts_instead_of_being_skipped(self):
+        proc = self._install(STUB_FAIL_SET="model.provider", ALLOW_NO_API_KEY="1")
+        self.assertNotEqual(proc.returncode, 0,
+                            "installer exited 0 after a transfer failed")
+        self.assertIn("model.provider", proc.stderr)
+
+    def test_a_failing_transfer_schedules_nothing(self):
+        self._install(STUB_FAIL_SET="model.provider", ALLOW_NO_API_KEY="1")
+        self.assertFalse(self._registered(),
+                         "jobs were registered on a half-configured profile")
+
+    def test_a_setting_that_does_not_stick_is_caught_by_read_back(self):
+        """A `config set` can exit 0 and still not be there afterwards."""
+        proc = self._install(STUB_ACCEPT_WITHOUT_WRITING="model.base_url",
+                             ALLOW_NO_API_KEY="1")
+        self.assertNotEqual(proc.returncode, 0,
+                            "a silently dropped setting installed cleanly")
+        self.assertIn("did not keep", proc.stderr)
+        self.assertFalse(self._registered())
+
+    def test_a_clean_transfer_reaches_registration(self):
+        """The guard must not block the path it exists to protect."""
+        proc = self._install(ALLOW_NO_API_KEY="1")
+        self.assertEqual(proc.returncode, 0, proc.stderr[-400:])
+        self.assertTrue(self._registered(),
+                        "a fully configured profile never reached the scheduler")
+
+
+HERMES_STUB = r"""#!/bin/sh
+# A stand-in for the parts of `hermes` the installer touches. Records every
+# invocation so a test can ask whether the scheduler was ever reached.
+printf '%s\n' "$*" >> "$STUB_LOG"
+prof=""
+if [ "$1" = "-p" ]; then prof="$2"; shift 2; fi
+case "$1 $2" in
+  "profile install") exit 0 ;;
+  "profile show") echo "Path: $STUB_PROFILE_HOME"; exit 0 ;;
+  "config get")
+      if [ -n "$prof" ]; then f="$STUB_STATE/target.$3"; else f="$STUB_STATE/source.$3"; fi
+      if [ -f "$f" ]; then cat "$f"; exit 0; fi
+      echo "Config key not set: $3"; exit 1 ;;
+  "config set")
+      [ "$3" = "$STUB_FAIL_SET" ] && exit 1
+      [ "$3" = "$STUB_ACCEPT_WITHOUT_WRITING" ] && exit 0
+      printf '%s' "$4" > "$STUB_STATE/target.$3"; exit 0 ;;
+esac
+exit 0
+"""
 
 
 if __name__ == "__main__":

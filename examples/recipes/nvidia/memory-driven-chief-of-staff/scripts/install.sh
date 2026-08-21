@@ -74,11 +74,43 @@ echo "2/3  Carrying over the model settings"
 #
 # What the three settings do not carry is a credential, and nothing else
 # supplies one either — see the check below.
+# Fail closed on every one of them. `set -e` does not exit when a command fails
+# as the left operand of `&&` — `false && echo` is a no-op, not an abort — so
+# writing this as `config set … && echo …` swallowed the failure. A profile
+# that took `model.default` and silently dropped `provider` and `base_url`
+# passed both checks below and got all five jobs registered, pointed at
+# whatever route it had left.
+carried=()
 for key in model.default model.provider model.base_url; do
   value="$(hermes config get "$key" 2>/dev/null | head -1 || true)"
-  [[ -z "$value" || "$value" == *"not set"* ]] && continue
-  hermes -p "$PROFILE" config set "$key" "$value" >/dev/null 2>&1 \
-    && echo "     $key = $value"
+  if [[ -z "$value" || "$value" == *"not set"* ]]; then
+    continue
+  fi
+  if ! hermes -p "$PROFILE" config set "$key" "$value" >/dev/null 2>&1; then
+    echo "" >&2
+    echo "Could not set $key on profile '$PROFILE'." >&2
+    echo "Nothing has been scheduled. Fix that and re-run this script." >&2
+    exit 1
+  fi
+  carried+=("$key=$value")
+  echo "     $key = $value"
+done
+
+# Exit status is not proof the value landed. Read each one back off the target
+# profile and compare, so a `config set` that succeeds without writing — or
+# writes somewhere else — is caught here rather than at 03:00 on the first run.
+for entry in "${carried[@]}"; do
+  key="${entry%%=*}"
+  want="${entry#*=}"
+  got="$(hermes -p "$PROFILE" config get "$key" 2>/dev/null | head -1 || true)"
+  if [[ "$got" != "$want" ]]; then
+    echo "" >&2
+    echo "Profile '$PROFILE' did not keep $key." >&2
+    echo "  expected: $want" >&2
+    echo "  found:    ${got:-<unset>}" >&2
+    echo "Nothing has been scheduled." >&2
+    exit 1
+  fi
 done
 
 # A profile that cannot resolve a model is not runnable, and registering jobs

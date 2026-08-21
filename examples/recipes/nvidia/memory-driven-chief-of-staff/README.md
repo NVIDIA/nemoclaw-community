@@ -236,7 +236,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the nine files report 213 tests in
+Expected result: every file ends with `OK`, the nine files report 222 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -304,10 +304,14 @@ The carry-over is three named settings — `model.default`, `model.provider` and
 `model.base_url` — transferred through `hermes config set`. No file is copied
 and no key is: the `model:` block is documented to hold an inline `api_key`,
 and a copy would write that key into a second file. Set the key on the new
-profile instead. The installer then checks both — that a model resolves and
-that a credential is present — and exits before registering any job if either
-is missing, rather than scheduling five jobs that would each fail. If your
-endpoint genuinely needs no key, pass `ALLOW_NO_API_KEY=1` to say so.
+profile instead. Each transfer fails closed and is read back off the target
+profile afterwards, so a setting that could not be written — or that reports
+success without sticking — ends the run rather than leaving a profile that
+took some of its configuration. The installer then checks both — that a model
+resolves and that a credential is present — and exits before registering any
+job if either is missing, rather than scheduling five jobs that would each
+fail. If your endpoint genuinely needs no key, pass `ALLOW_NO_API_KEY=1` to
+say so.
 
 Re-running it is safe: the registration looks each job up by name and edits it
 rather than adding another copy.
@@ -433,6 +437,20 @@ The fixtures were written from scratch. The people, the company, the projects,
 and every message body are invented. Nothing is derived from a real mailbox or
 from an anonymized copy of one. See [`fixtures/README.md`](fixtures/README.md)
 for what each record is a control for.
+
+### When a collector fails
+
+A collector that exits non-zero, or prints something the selector cannot read,
+is recorded in the batch as a failure with its exit code and a stable error
+class, and the tick wakes the agent even when nothing is pending. An idle tick
+is free; a broken one must not be quiet.
+
+What the batch does *not* carry is the collector's own output. That batch is
+the agent's prompt, and a collector is a subprocess talking to a mail or chat
+API: its stderr can hold a bearer token, a signed URL, or someone's message
+body. The detail goes to the selector's stderr instead, which the scheduler
+writes to the job's local log, so an operator can read it without it having
+been sent anywhere.
 
 ## Cleanup
 

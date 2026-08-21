@@ -63,6 +63,19 @@ def collect() -> tuple[dict[str, object], bool]:
     working, a tick that skipped the agent, and nothing anywhere saying so,
     every half hour.
 
+    What a failure reports is deliberately narrow. This function's stdout is
+    the scheduled agent's prompt, and a collector's stderr is arbitrary text
+    from a subprocess that talks to a mail or chat API: a traceback carrying a
+    bearer token, a request URL with a signature in the query string, a
+    response body full of someone's messages. Truncating that to a couple of
+    hundred characters bounds its length, not its content — the first two
+    hundred characters of a traceback are exactly where the request line is.
+
+    So the prompt gets a stable error class and an exit code, which is all the
+    agent can act on anyway, and the operator gets the detail on this
+    process's own stderr, where cron writes it to a local log instead of
+    sending it to an inference provider.
+
     Returns the per-collector results and a flag: true if any of them failed.
     """
     results: dict[str, object] = {}
@@ -74,19 +87,31 @@ def collect() -> tuple[dict[str, object], bool]:
             continue
         proc = subprocess.run([sys.executable, str(path)],
                               capture_output=True, text=True)
-        detail = (proc.stderr or "").strip()[:200]
         if proc.returncode != 0:
             failed = True
             results[script] = {"failed": True, "exit_code": proc.returncode,
-                               "stderr": detail}
+                               "error_class": "nonzero_exit"}
+            _report(script, proc.stderr)
             continue
         try:
             results[script] = json.loads(proc.stdout or "{}")
-        except json.JSONDecodeError as exc:
+        except json.JSONDecodeError:
             failed = True
-            results[script] = {"failed": True, "error": f"unreadable output: {exc}",
-                               "stderr": detail}
+            results[script] = {"failed": True, "exit_code": proc.returncode,
+                               "error_class": "unreadable_output"}
+            _report(script, proc.stderr)
     return results, failed
+
+
+def _report(script: str, stderr: str | None) -> None:
+    """Put a failing collector's own output where an operator can read it.
+
+    Not on stdout: that is the agent's prompt. This goes to stderr, which the
+    scheduler captures into the job's local log.
+    """
+    detail = (stderr or "").strip()
+    if detail:
+        print(f"{script}: {detail}", file=sys.stderr)
 
 
 def main() -> int:
