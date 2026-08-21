@@ -11,4 +11,13 @@ cd "${RECIPE_DIR}"
 echo "🛑 Stopping axe-a11y-browser-auditor service..."
 docker compose down -v
 
+if [ "${1:-}" == "--purge" ]; then
+  echo "🧹 Purging persistent state and artifacts..."
+  rm -rf state/profile state/artifacts
+  echo "✅ Purge complete."
+else
+  echo "ℹ️  Note: Persistent profile and artifacts in state/ were not removed."
+  echo "   Run './scripts/teardown.sh --purge' to delete them."
+fi
+
 echo "✅ Teardown complete."
