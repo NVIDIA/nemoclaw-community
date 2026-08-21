@@ -5,15 +5,17 @@
 
 Memory-Driven Chief of Staff is a recipe that keeps a local, revisable record
 for each inbound email and Slack message. It re-judges those records on a
-schedule and re-ranks them under fixed caps. That re-judging runs on its own
-once the next phase registers the scheduler jobs. The user's own ignores and
-priority overrides change the ranking. The recipe never writes back to the
+schedule and re-ranks them under fixed caps, on jobs it registers with the
+runtime's scheduler. The user's own ignores and priority overrides change the
+ranking. The recipe never writes back to the
 source system.
 
-This first phase contains the store, its tests, and a walkthrough that runs it
-from end to end. It needs no email account, no Slack workspace,
-no network, and no inference endpoint. A fixture corpus exercises the same code
-a live source would. Two recorded model turns stand in for the two steps that
+Two phases are here: the store with its tests and an offline walkthrough, and
+the installer and scheduled jobs that run it without a person present. Neither
+needs an email account, a Slack workspace, or a network. Only the scheduled
+path needs an inference endpoint, and only when a job finds work; the
+walkthrough and the tests need none. A fixture corpus exercises the same code a
+live source would. Two recorded model turns stand in for the two steps that
 would otherwise need a model: the intake judgment, in
 `fixtures/envelopes/intake.json`, and the scheduled re-judgment, recorded
 inline in `profile/scripts/walkthrough.py`.
@@ -33,6 +35,8 @@ These terms appear throughout this document and in the code.
 | Tier | The priority band an obligation sits in: `high`, `medium`, or `low`. |
 | Envelope | The JSON document a model turn returns: a list of decisions for the writer to apply. The recipe's recorded turns are envelopes. |
 | Addressing | Whether a message was aimed at the user: `direct`, `mentioned`, or `broadcast`. Ingest derives it from the recipient list, which is not stored. |
+| Pre-step | The script a scheduled job runs before its agent turn. Hermes calls it the `--script`; it decides what the turn sees, and whether there is one. |
+| Wake gate | The `{"wakeAgent": false}` line a pre-step prints when it found no work. Hermes reads only the last non-empty line, and skips the agent turn when that line is the gate. |
 | Intent gate | The rule that admits an obligation to the `high` tier only if the memory shows the user chose that work. External urgency alone does not qualify. |
 | Cascade | What happens to an un-gated row that ranked inside the top ten: it drops into the competition for `medium` rather than out of the list. |
 | Reservation | The rule that keeps `high` for gate-passing rows. If fewer pass than the cap allows, the tier stays smaller rather than being filled from the remainder. |
@@ -82,32 +86,46 @@ those two apart.
 | `profile/scripts/correct.py` | The user's writer: pins, ignores, and the only source of `actor='user'` events |
 | `profile/scripts/load_fixtures.py` | Replays the fixtures through the real ingest path |
 | `profile/scripts/walkthrough.py` | The fixture walkthrough, end to end, with no credentials and no model |
+| `profile/scripts/select_intake.py` | The intake job's pre-step: what to judge, and whether to wake the model at all |
+| `profile/scripts/select_review.py` | The review job's pre-step: the stalest open obligations, oldest review first |
+| `scripts/install.sh` | Installs the profile, inherits the runtime's model config, registers the jobs |
+| `scripts/register-jobs.sh` | Registers the five scheduled jobs through the cron CLI. Re-runnable |
 | `profile/skills/` | Five skills: judging, review, repair, consolidation, preference update |
 | `fixtures/` | Eight synthetic messages, a seed memory, and one recorded model turn |
 
-Later phases add the host-side installer and scheduler integration, then the
-optional Microsoft Graph and Slack connectors.
+A later phase adds the optional Microsoft Graph and Slack connectors. Until
+then the scheduled jobs judge and re-judge whatever the store already holds.
 
 ## Requirements
 
 - Python 3.10 or newer. Nothing else is needed for the fixture path.
-- Linux, macOS, or Windows under Windows Subsystem for Linux. Every command
-  below is written for a POSIX shell. The shipped skill files declare
-  `platforms: [linux]`, which applies from the installer phase onward rather
-  than to the fixture path.
-- No credentials of any kind.
+- The fixture path — everything under [Try it](#try-it) and
+  [Verify](#verify) — runs on Linux, macOS, or Windows under Windows Subsystem
+  for Linux. Every command is written for a POSIX shell.
+- **The scheduled path is Linux only**, including WSL. All five shipped skills
+  declare `platforms: [linux]`, and Hermes refuses to load a skill outside its
+  declared platforms. On macOS the jobs would still fire and the model would
+  still be called — with no skill attached and a "skill not found" notice in
+  its prompt. Registering them there buys a scheduled expense and no
+  assistant.
+- No credentials for the fixture path. The scheduled path is different: a
+  woken job runs an agent turn, so the profile it fires under needs a model it
+  can reach and a credential of its own. The installer carries over the model
+  settings and never a key, because a key is not a thing to copy — you set one
+  on the new profile with `hermes -p <profile> config set model.api_key`. It is
+  not inherited: a profile without one sends the literal placeholder
+  `no-key-required`, so every scheduled job would fail to authenticate. The
+  installer stops before registering any job when either the model or the
+  credential is missing.
 
-Installing the profile into a Hermes runtime is out of scope for this phase;
-the installer arrives with the next one. When that phase lands, installing will
-require Hermes 0.19.0 or newer: `profile/distribution.yaml` declares
+Nothing in the fixture path needs Hermes. Installing the profile and running
+it on a schedule does: `profile/distribution.yaml` declares
 `hermes_requires: ">=0.19.0"`. On 0.19.x the manifest's `distribution_owned`
-list is validated but not yet honoured by the copy — the path-aware allowlist
+list is validated but not yet honored by the copy — the path-aware allowlist
 first shipped in 0.20.0 — which changes nothing for this recipe, because what
-it ships and what it declares are the same set, and a test keeps them so.
-
-Nothing in the fixture path needs Hermes. The same 0.19.0 figure under
-[Where state lives](#where-state-lives) records the version the persistence
-claim was measured against.
+it ships and what it declares are the same set, and a test keeps them so. The
+same 0.19.0 figure under [Where state lives](#where-state-lives) records the
+version the persistence claim was measured against.
 
 ## Try it
 
@@ -218,7 +236,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the eight files report 157 tests in
+Expected result: every file ends with `OK`, the nine files report 223 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -233,6 +251,7 @@ leave the loop exiting `0`.
 | Source normalization | `tests/test_normalize.py` |
 | Writer behavior, audit trail, caps across batches, correction idempotency, correction state transitions, displaced-row audit | `tests/test_apply_decisions.py` |
 | The walkthrough, and its central claims | `tests/test_walkthrough.py` |
+| Selector output, the wake gate, and the scheduler contract | `tests/test_selectors.py` |
 
 Four points are worth calling out.
 
@@ -249,7 +268,7 @@ Four points are worth calling out.
   user-owned name, and that the user-owned and distribution-owned sets stay
   disjoint. Both directions fail, and neither is loud. Hermes never installs a
   shipped path whose top-level name is user-owned, so a shipped `workspace`
-  would simply never land; and a store placed under a distribution-owned path
+  would never land at all; and a store placed under a distribution-owned path
   is removed and replaced on every update, because that is what installing a
   distribution means.
 - `tests/test_walkthrough.py` runs the walkthrough and asserts its central
@@ -266,6 +285,98 @@ Four points are worth calling out.
   - the memory check is seen to fail as well as pass.
 
   It does not assert every line the script prints.
+
+## Running it on a schedule
+
+Everything above runs by hand. To have it run on its own, install the profile
+into a Hermes runtime and register the jobs:
+
+```bash
+scripts/install.sh
+```
+
+From the recipe root. It does three things: `hermes profile install` for the
+distribution, a carry-over of the model settings so the new profile inherits a
+model, and `scripts/register-jobs.sh` for the schedule. `PROFILE_NAME`
+overrides the profile it installs into.
+
+The carry-over is three named settings — `model.default`, `model.provider` and
+`model.base_url` — transferred through `hermes config set`. No file is copied
+and no key is: the `model:` block is documented to hold an inline `api_key`,
+and a copy would write that key into a second file. Set the key on the new
+profile instead. Each transfer fails closed and is read back off the target
+profile afterwards, so a setting that could not be written — or that reports
+success without sticking — ends the run rather than leaving a profile that
+took some of its configuration. The installer then checks both — that a model
+resolves and that a credential is present — and exits before registering any
+job if either is missing, rather than scheduling five jobs that would each
+fail. If your endpoint genuinely needs no key, pass `ALLOW_NO_API_KEY=1` to
+say so.
+
+Re-running it is safe: the registration looks each job up by name and edits it
+rather than adding another copy.
+
+Five jobs are registered:
+
+| Job | Schedule | Pre-step | Skill |
+| --- | --- | --- | --- |
+| intake | every 30 minutes | `select_intake.py` | `inbound-judging` |
+| review | every 6 hours | `select_review.py` | `obligation-review` |
+| memory repair | daily 03:00 | — | `memory-repair` |
+| memory consolidation | daily 04:00 | — | `memory-consolidation` |
+| preference update | daily 04:30 | — | `preference-update` |
+
+**An idle tick costs nothing.** Each of the first two jobs runs its pre-step
+script first, then one agent turn over that script's output. When the script
+finds no work it prints `{"wakeAgent": false}` as its last line, and Hermes
+skips the agent entirely — no model call, no delivery. That last-line detail
+is the whole mechanism: Hermes reads only the final non-empty line of the
+script's output, so a gate printed anywhere else is ignored and the model
+wakes. A test asserts the gate exactly the way the scheduler parses it, rather
+than looking for the string somewhere in the output.
+
+The intake pre-step also looks for the connectors that arrive with the next
+phase. They are not here, so its output reports each as `"absent": true` and it
+carries on with whatever the store already holds. That is the intended reading:
+this phase schedules the judging, and there is nothing yet to collect.
+
+**Registering is not starting.** Under the builtin scheduler the jobs fire
+only while a gateway is serving the profile, and starting one takes two steps
+on Linux:
+
+```bash
+hermes -p memory-driven-chief-of-staff gateway install  # once
+hermes -p memory-driven-chief-of-staff gateway start
+hermes -p memory-driven-chief-of-staff cron status
+```
+
+`gateway start` fails with "Gateway service is not installed" until `gateway
+install` has run. Where no service manager is available — WSL without
+systemd — run it in the foreground instead: `hermes -p
+memory-driven-chief-of-staff gateway run`.
+
+`cron status` says plainly whether the scheduler is running, and lists the
+active jobs and the next run. A registered job on a profile with no running
+gateway does not tick and reports nothing. Two paths do fire without one:
+`hermes cron tick` runs anything due once and exits, and an external cron
+provider takes over from the in-process ticker.
+
+**The job store is not part of the distribution.** `distribution.yaml` does not
+declare `cron`. An update replaces what it does declare — `SOUL.md`,
+`schema.md`, `skills`, `scripts` and the manifest — and leaves the jobs and
+their run history alone. Measured, not assumed: five jobs
+registered, `hermes profile update` run on Hermes 0.20.0, five jobs still
+there with the same ids. A test asserts
+the manifest never claims `cron` or `workspace`.
+
+To undo, remove the jobs individually. Deleting the profile removes its
+`workspace` too, which is where the store and the memory live; removing the
+jobs does not. `profile delete` prompts unless given `-y`:
+
+```bash
+hermes -p memory-driven-chief-of-staff cron remove <job-id>
+hermes profile delete memory-driven-chief-of-staff
+```
 
 ## Where state lives
 
@@ -327,6 +438,33 @@ and every message body are invented. Nothing is derived from a real mailbox or
 from an anonymized copy of one. See [`fixtures/README.md`](fixtures/README.md)
 for what each record is a control for.
 
+### When a collector fails
+
+A collector that exits non-zero, or prints something the selector cannot read,
+is recorded in the batch as a failure with its exit code and a stable error
+class, and the tick wakes the agent even when nothing is pending. An idle tick
+is free; a broken one must not be quiet.
+
+What nothing carries is the collector's own output. A collector is a
+subprocess talking to a mail or chat API, so its stderr can hold a bearer
+token, a signed URL, or someone's message body, and both of the places that
+wanted it are wrong: the batch is the agent's prompt, and the selector's own
+stderr is captured by the scheduler into the job log, where something
+transient becomes a file that outlives the token in it.
+
+So both get the same sanitized triple — which collector, what exit code, which
+error class. After the connector phase supplies a collector, run that collector
+directly to read what it actually said. For example, once `ingest_graph.py` is
+installed:
+
+```bash
+HERMES_HOME="/path/to/profile" python3 profile/scripts/ingest_graph.py
+```
+
+That prints to your terminal rather than to a file. The text is dropped rather
+than redacted on purpose: a pattern-matching redactor cannot promise it caught
+everything, and a stored log is the wrong place to discover that it did not.
+
 ## Cleanup
 
 The fixture path writes application state only inside the profile home passed
@@ -347,8 +485,18 @@ it as well if you want the checkout byte-for-byte as you found it.
 
 ## Known limitations
 
-- Scheduled jobs are not part of this phase. The store is exercised by the
-  walkthrough and the tests; job registration arrives with the installer.
+- Under the builtin scheduler the jobs fire only while a gateway is serving
+  this profile, and registering them starts nothing. `hermes cron tick` runs
+  what is due once without one, and an external cron provider replaces the
+  in-process ticker entirely.
+- The scheduled path is Linux only, including WSL, because every shipped skill
+  declares `platforms: [linux]`. See [Requirements](#requirements).
+- The installer transfers three named model settings and no file, so nothing
+  it writes can carry a secret. It checks that a model resolves and that a
+  credential is present, and stops before registering anything if either is
+  missing. What it cannot do is prove the credential is *valid*: that is one
+  request to your provider away, and the installer does not make it. A wrong
+  key still installs cleanly and fails at the first scheduled run.
 - The walkthrough's two judgment steps are recorded envelopes rather than live
   model turns. That is the limit of a fixture corpus, and the limit falls in a
   specific place: the gate verdict is recorded, so this run cannot show the
@@ -385,17 +533,50 @@ package, so nothing is added to the repository's third-party notices.
 
 ## Sandbox and policy
 
-This phase reaches no network and requires no policy grant. It ships five skill
-files that a runtime loads, and scripts that read the recipe's own files from
-the checkout and write application state only inside the profile home. They
+The recipe's own scripts reach no network. They read the recipe's files from
+the checkout and write application state only inside the profile home, and they
 also leave a Python bytecode cache beside the scripts — see
-[Cleanup](#cleanup). Network egress and provider permissions arrive with the
-connectors in a later phase and will be documented there.
+[Cleanup](#cleanup). The five skill files a runtime loads add nothing to that.
+
+The scheduled path does reach one. A job that wakes runs an agent turn, and the
+runtime calls whichever inference provider it is configured for, over its own
+egress path — the recipe holds no credential and opens no connection itself.
+A job that does not wake makes no call at all. Egress to a message source, and
+the provider permissions that needs, arrive with the connectors in a later
+phase and will be documented there.
 
 ## Startup
 
-Nothing to start. The scripts run on demand. Scheduled jobs arrive with the
-installer in a later phase.
+The scripts run on demand and need nothing started.
+
+The scheduled jobs need a gateway. Registration and firing are separate: a
+registered job on a profile with no running gateway does not run and reports
+nothing.
+
+### After a reboot
+
+Three separate questions, with three different answers.
+
+**Do the jobs survive?** Yes. They live in `$HERMES_HOME/cron/jobs.json`, which
+is ordinary disk state — not part of the distribution, so a profile update
+leaves it alone, and not tied to any process, so shutting everything down and
+starting again finds the same five jobs with the same ids.
+
+**Do they start firing again on their own?** Only if the gateway was installed
+as a service. `hermes -p <profile> gateway install` registers one — a launchd
+agent on macOS, a systemd unit on Linux — and both are configured to come back
+after a reboot. `hermes -p <profile> gateway run` is a foreground process and
+is not: after a restart you run it again yourself. `cron status` tells you
+which situation you are in.
+
+**What about the runs that were missed while it was down?** One of them
+happens, not all of them. Hermes collapses a backlog rather than replaying it:
+when a recurring job's scheduled time is more than one period in the past, it
+fast-forwards to the next future occurrence and fires once now. A machine that
+was off for two days does not wake to ninety-six intake runs; it wakes to one,
+which judges whatever accumulated, and then resumes its half-hourly rhythm.
+That suits this recipe, whose jobs act on the current state of the store rather
+than on a history of events.
 
 ## Provenance
 

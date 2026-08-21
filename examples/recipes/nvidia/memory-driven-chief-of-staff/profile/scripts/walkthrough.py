@@ -234,8 +234,12 @@ def run(fixtures: Path) -> int:
     _say("  Break one on purpose — the check has to be able to fail, or it is")
     _say("  telling you nothing:")
     # Reachable with a fixture directory that ships no seed memory; say so
-    # rather than raising StopIteration out of a demonstration step.
-    person = next((root / "people").glob("*.md"), None)
+    # rather than raising StopIteration out of a demonstration step. Dotfiles
+    # are skipped for the same reason `memory_check` skips them: a macOS
+    # archive leaves a binary `._page.md` beside the real one, and `glob`
+    # returns it in whatever order the filesystem gives.
+    person = next((page for page in sorted((root / "people").glob("*.md"))
+                   if not page.name.startswith(".")), None)
     if person is None:
         _say("      no person page to break — this fixture set ships no seed")
         _say("      memory, so this demonstration is skipped.")

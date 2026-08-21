@@ -12,6 +12,17 @@ sys.path.insert(0, str(HERE))
 
 SCHEMA = (HERE / "schema.sql").read_text(encoding="utf-8")
 
+
+def visible(paths):
+    """Drop dotfiles from a glob.
+
+    A macOS archive carries an AppleDouble sidecar beside each file, and
+    `._install.sh` / `._SKILL.md` match the same globs their originals do while
+    being binary. Unpacking this recipe on Linux made three scans raise
+    UnicodeDecodeError before this existed.
+    """
+    return sorted(p for p in paths if not p.name.startswith("."))
+
 PROFILE = HERE.parent
 MANIFEST = PROFILE / "distribution.yaml"
 
@@ -220,7 +231,7 @@ class TestNoSourceMutation(unittest.TestCase):
     def test_no_module_issues_a_write_to_a_source_system(self):
         # Recursive, so a connector added in a subdirectory later is covered.
         offenders = []
-        for path in sorted(HERE.rglob("*.py")):
+        for path in visible(HERE.rglob("*.py")):
             if path.name.startswith("test_"):
                 continue          # tests may name a verb in order to forbid it
             text = path.read_text(encoding="utf-8")
@@ -249,7 +260,7 @@ class TestNoSourceMutation(unittest.TestCase):
         # promises not to. Assert the invariant that actually matters — the
         # column exists, and nothing anywhere sends it anywhere.
         self.assertIn("unread", SCHEMA)
-        for path in sorted(HERE.rglob("*.py")):
+        for path in visible(HERE.rglob("*.py")):
             if path.name.startswith("test_"):
                 continue          # tests name the payload shape in order to forbid it
             text = path.read_text(encoding="utf-8")
@@ -557,7 +568,7 @@ class TestSkillsNameFilesAbsolutely(unittest.TestCase):
     def _skills(self):
         root = HERE.parent / "skills"
         self.assertTrue(root.is_dir(), "the profile ships no skills")
-        return sorted(root.glob("*/SKILL.md"))
+        return visible(root.glob("*/SKILL.md"))
 
     def test_every_scripted_path_is_anchored(self):
         for doc in self._skills():
@@ -602,7 +613,7 @@ class TestSkillsNameFilesThatWillExist(unittest.TestCase):
         # `workspace/` is user-owned: the recipe's own code creates the store
         # and the memory there at run time, so those are legitimate.
         runtime = {"workspace"}
-        for doc in sorted((HERE.parent / "skills").glob("*/SKILL.md")):
+        for doc in visible((HERE.parent / "skills").glob("*/SKILL.md")):
             text = doc.read_text(encoding="utf-8")
             for rel in self.HOME_PATH.findall(text):
                 head = rel.split("/", 1)[0]
@@ -614,12 +625,88 @@ class TestSkillsNameFilesThatWillExist(unittest.TestCase):
 
     def test_a_shipped_file_is_referenced_where_it_lands(self):
         """`schema.md` installs at the profile root, so that is where it is read."""
-        for doc in sorted((HERE.parent / "skills").glob("*/SKILL.md")):
+        for doc in visible((HERE.parent / "skills").glob("*/SKILL.md")):
             text = doc.read_text(encoding="utf-8")
             for rel in self.HOME_PATH.findall(text):
                 if rel.endswith("schema.md"):
                     with self.subTest(skill=doc.parent.name):
                         self.assertEqual(rel, "schema.md")
+
+
+class TestScansSurviveAMacOsArchive(unittest.TestCase):
+    """A sidecar must not crash a scan that globs by suffix.
+
+    Packaging this recipe on macOS and unpacking it on Linux puts a binary
+    `._install.sh` beside `install.sh`, and `._SKILL.md` beside each skill.
+    They match the same globs. Three scans raised UnicodeDecodeError the first
+    time that happened on a real Linux host — after Phase 1 had already fixed
+    the identical problem for memory pages, which is why the guard is one
+    shared helper now rather than a fix at each call site.
+    """
+
+    def test_the_helper_drops_sidecars_and_keeps_the_originals(self):
+        home = Path(tempfile.mkdtemp())
+        (home / "install.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+        (home / "._install.sh").write_bytes(b"\x00\x05\x16\x07\xa3binary")
+        (home / ".DS_Store").write_bytes(b"\x00\x01")
+        kept = visible(home.glob("*.sh"))
+        self.assertEqual([p.name for p in kept], ["install.sh"])
+
+    def test_every_scan_reads_its_files_without_raising(self):
+        """The real files, read the way the scans read them."""
+        for path in visible(HERE.rglob("*.py")):
+            with self.subTest(path=path.name):
+                path.read_text(encoding="utf-8")
+        for doc in visible((HERE.parent / "skills").glob("*/SKILL.md")):
+            with self.subTest(skill=doc.parent.name):
+                doc.read_text(encoding="utf-8")
+
+    def test_a_sidecar_would_break_an_unguarded_glob(self):
+        """The check has to be able to fail, or it is telling us nothing."""
+        home = Path(tempfile.mkdtemp())
+        (home / "._x.sh").write_bytes(b"\x00\x05\x16\x07\xa3binary")
+        with self.assertRaises(UnicodeDecodeError):
+            for p in sorted(home.glob("*.sh")):
+                p.read_text(encoding="utf-8")
+
+
+class TestTheDocumentedTestCountIsTheRealOne(unittest.TestCase):
+    """The README tells the reader what a clean run prints.
+
+    That sentence names two numbers — how many files the suite is in, and how
+    many tests they add up to — and both go stale the moment anyone adds a
+    test. Nothing was checking them, and the count in the README drifted three
+    separate times before this test existed, each time announcing a total that
+    no run had produced. A number a reader can compare against their own
+    terminal is a claim, so it gets an assertion like any other.
+    """
+
+    WORDS = {"nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
+
+    def _documented(self):
+        readme = (HERE.parents[1] / "README.md").read_text(encoding="utf-8")
+        match = re.search(r"the (\w+) files report (\d+) tests", readme)
+        self.assertIsNotNone(
+            match, "README no longer states the file and test counts")
+        word, total = match.group(1), int(match.group(2))
+        self.assertIn(word, self.WORDS, f"unhandled number word {word!r}")
+        return self.WORDS[word], total
+
+    def test_the_readme_states_the_number_of_files_the_suite_is_in(self):
+        files, _ = self._documented()
+        actual = [p for p in Path(__file__).resolve().parent.glob("test_*.py")
+                  if not p.name.startswith("._")]
+        self.assertEqual(files, len(actual),
+                         f"README says {files} files; found {len(actual)}: "
+                         + ", ".join(sorted(p.name for p in actual)))
+
+    def test_the_readme_states_the_number_of_tests_a_clean_run_prints(self):
+        _, total = self._documented()
+        here = str(Path(__file__).resolve().parent)
+        suite = unittest.defaultTestLoader.discover(here, pattern="test_*.py")
+        self.assertEqual(total, suite.countTestCases(),
+                         f"README says {total} tests; the suite holds "
+                         f"{suite.countTestCases()}")
 
 
 if __name__ == "__main__":
