@@ -254,16 +254,17 @@ cp .env.example .env
 # 2. Verify sidecar health
 ./scripts/verify.sh
 
-# 3. Setup the sandbox (requires a running OpenClaw instance)
-# Assuming OPENCLAW_ROOT is the path to your OpenClaw repository
-cp src/SKILL.md ${OPENCLAW_ROOT}/skills/axe-a11y.md
-cp policy.yaml ${OPENCLAW_ROOT}/policies/axe-a11y-policy.yaml
+# 3. Install the skill into the running sandbox
+SANDBOX_NAME="<your-sandbox-name>"
+openshell sandbox exec --name "$SANDBOX_NAME" -- \
+  mkdir -p /sandbox/.openclaw/skills/axe-a11y
+openshell sandbox cp src/SKILL.md \
+  "${SANDBOX_NAME}:/sandbox/.openclaw/skills/axe-a11y/SKILL.md"
 
-# 4. Apply the policy
-cd ${OPENCLAW_ROOT}
-openshell policy set axe-a11y-policy.yaml --wait
+# 4. Apply the network policy
+openshell policy set --policy policy.yaml --wait "$SANDBOX_NAME"
 
-# 5. In OpenClaw, register the MCP server in your configuration:
+# 5. Register the MCP server in your OpenClaw agent configuration:
 # "mcpServers": {
 #   "axe-a11y": {
 #     "url": "http://host.openshell.internal:9010/mcp",
@@ -271,8 +272,9 @@ openshell policy set axe-a11y-policy.yaml --wait
 #   }
 # }
 
-# 6. Verify via an agent tool call from the sandbox
-openshell run --skill axe-a11y -- 'Audit https://example.com'
+# 6. Verify from inside the sandbox
+openshell sandbox exec --name "$SANDBOX_NAME" --no-tty -- \
+  curl -s http://host.openshell.internal:9010/healthz
 ```
 
 ## Directory Structure
@@ -318,10 +320,14 @@ All other outbound traffic from the sandbox is denied.
 For sites behind login, run the one-time interactive setup:
 
 ```bash
-# 1. Enable persistent profile in .env
-echo "AXE_A11Y_PROFILE_ENABLED=true" >> .env
+# 1. Enable persistent profile and VNC in .env
+cat >> .env <<'EOF'
+AXE_A11Y_PROFILE_ENABLED=true
+AXE_A11Y_VNC_ENABLED=true
+AXE_A11Y_VNC_PASSWORD=changeme
+EOF
 
-# 2. Restart with profile enabled
+# 2. Restart with profile + VNC enabled
 ./scripts/teardown.sh && ./scripts/bring-up.sh
 
 # 3. Exec into container and start manual-login helper
@@ -329,10 +335,15 @@ docker exec -it axe-a11y-mcp-server \
   node /app/manual-login.js https://yoursite.example/login
 
 # 4. Connect via VNC and complete login
-open vnc://localhost:5900
+#    (uses the configured port from AXE_A11Y_VNC_PORT, default 5900)
+open vnc://localhost:${AXE_A11Y_VNC_PORT:-5900}
 
 # 5. Press Ctrl+C in step 3 once login is complete
 # Profile is now saved and all subsequent audits reuse it automatically
+
+# 6. (Recommended) Disable VNC after login for security
+sed -i '' '/AXE_A11Y_VNC_ENABLED/d; /AXE_A11Y_VNC_PASSWORD/d' .env
+./scripts/teardown.sh && ./scripts/bring-up.sh
 ```
 
 ## Verification

@@ -282,7 +282,7 @@ async function withProfileSerialization(operation) {
   }
 }
 
-function buildLaunchArgs(ignoreHttpsErrors) {
+function buildLaunchArgs(ignoreHttpsErrors, hostResolverRules) {
   // Patchright handles the CDP/Runtime detection patches internally.
   // We intentionally do NOT pass --disable-blink-features=AutomationControlled — that flag
   // is itself a detection signal once patchright's CDP fixes are in play.
@@ -292,6 +292,10 @@ function buildLaunchArgs(ignoreHttpsErrors) {
 
   if (ignoreHttpsErrors) {
     launchArgs.push("--ignore-certificate-errors");
+  }
+
+  if (hostResolverRules) {
+    launchArgs.push(`--host-resolver-rules=${hostResolverRules}`);
   }
 
   return launchArgs;
@@ -319,8 +323,20 @@ function buildContextOptions(ignoreHttpsErrors, recordVideo = false) {
 async function openSession(args, options = {}) {
   const ignoreHttpsErrors = asBoolean(args.ignore_https_errors, false);
   const headless = options.forceHeaded ? false : process.env.PLAYWRIGHT_HEADLESS !== "false";
-  const launchArgs = buildLaunchArgs(ignoreHttpsErrors);
+
+  let hostResolverRules = null;
+  if (args.url) {
+    const { hostname, resolvedAddresses } = await validateUrl(args.url);
+    if (resolvedAddresses.length > 0 && !ipaddr.isValid(hostname)) {
+      hostResolverRules = `MAP ${hostname} ${resolvedAddresses[0]}`;
+    }
+  }
+
+  const launchArgs = buildLaunchArgs(ignoreHttpsErrors, hostResolverRules);
   const contextOptions = buildContextOptions(ignoreHttpsErrors, options.recordVideo === true);
+
+  // Block Service Workers to ensure all traffic goes through route handlers
+  contextOptions.serviceWorkers = "block";
 
   await ensureDir(ARTIFACTS_DIR);
   if (options.recordVideo) {
@@ -457,42 +473,51 @@ export async function validateUrl(inputUrl) {
     throw new Error(`Access to private, loopback, or internal TLDs is forbidden: ${hostname}`);
   }
 
+  // If hostname is already an IP literal, validate it directly
+  if (ipaddr.isValid(hostname)) {
+    assertPublicIp(hostname);
+    return { hostname, resolvedAddresses: [hostname] };
+  }
+
   try {
-    // Resolve DNS
     const addresses = await dns.lookup(hostname, { all: true });
+    const resolvedIps = [];
 
     for (const addressInfo of addresses) {
-      let addr;
-      try {
-        addr = ipaddr.parse(addressInfo.address);
-      } catch {
-        continue;
-      }
-
-      const range = addr.range();
-      if (
-        range === "private" ||
-        range === "loopback" ||
-        range === "linkLocal" ||
-        range === "uniqueLocal" ||
-        range === "unspecified" ||
-        range === "multicast" ||
-        range === "broadcast" ||
-        // Check for common metadata IP in AWS/GCP/Azure
-        (addr.kind() === "ipv4" && addr.octets.join(".") === "169.254.169.254")
-      ) {
-        throw new Error(`Resolved IP is within a blocked range (${range}): ${addressInfo.address}`);
-      }
+      assertPublicIp(addressInfo.address);
+      resolvedIps.push(addressInfo.address);
     }
+
+    return { hostname, resolvedAddresses: resolvedIps };
   } catch (err) {
     if (err.code === "ENOTFOUND" || err.code === "ESERVFAIL") {
-       // Domain doesn't exist, fine to fail later or throw here
-       throw new Error(`Could not resolve hostname: ${hostname}`);
+      throw new Error(`Could not resolve hostname: ${hostname}`);
     }
     throw err;
   }
+}
 
-  return true;
+function assertPublicIp(address) {
+  let addr;
+  try {
+    addr = ipaddr.parse(address);
+  } catch {
+    return; // non-parseable → let it fail later
+  }
+
+  const range = addr.range();
+  if (
+    range === "private" ||
+    range === "loopback" ||
+    range === "linkLocal" ||
+    range === "uniqueLocal" ||
+    range === "unspecified" ||
+    range === "multicast" ||
+    range === "broadcast" ||
+    (addr.kind() === "ipv4" && addr.octets.join(".") === "169.254.169.254")
+  ) {
+    throw new Error(`Resolved IP is within a blocked range (${range}): ${address}`);
+  }
 }
 
 async function navigateAndSettle(page, args) {
@@ -501,7 +526,7 @@ async function navigateAndSettle(page, args) {
   const timeoutMs = clampInteger(args.timeout_ms, DEFAULT_TIMEOUT_MS, 1000, 120000);
   const settleMs = clampInteger(args.settle_ms, DEFAULT_SETTLE_MS, 0, 15000);
 
-  // Intercept and validate all subresource requests
+  // Intercept and validate all HTTP subresource requests with redirect protection
   await page.route('**/*', async (route) => {
     const request = route.request();
     const url = request.url();
@@ -509,9 +534,29 @@ async function navigateAndSettle(page, args) {
       if (!url.startsWith("data:") && !url.startsWith("blob:")) {
         await validateUrl(url);
       }
-      await route.continue();
+      // Fetch without following redirects to validate Location headers
+      const response = await route.fetch({ maxRedirects: 0 });
+      const status = response.status();
+      if ([301, 302, 303, 307, 308].includes(status)) {
+        const location = response.headers()['location'];
+        if (location) {
+          const resolvedRedirectUrl = new URL(location, url).toString();
+          await validateUrl(resolvedRedirectUrl);
+        }
+      }
+      await route.fulfill({ response });
     } catch (e) {
       await route.abort('accessdenied');
+    }
+  });
+
+  // Intercept and validate WebSocket connections
+  await page.routeWebSocket('**/*', async (ws) => {
+    try {
+      await validateUrl(ws.url());
+      ws.connectToServer();
+    } catch {
+      ws.close({ code: 1008, reason: 'Destination blocked by SSRF policy' });
     }
   });
 
@@ -1631,3 +1676,5 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`axe-a11y-mcp-server listening on :${port}`);
   });
 }
+
+export { app };
