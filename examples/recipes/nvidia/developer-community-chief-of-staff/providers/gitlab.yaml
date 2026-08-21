@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+id: nemoclaw-gitlab
+display_name: NemoClaw GitLab
+description: GitLab REST read-only access; sandbox policy further restricts paths to GITLAB_READONLY_PROJECTS
+category: source_control
+credentials:
+  - name: api_token
+    description: GitLab personal access token with read_api scope
+    env_vars: [GITLAB_TOKEN]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+endpoints:
+  - host: __GITLAB_API_HOST__
+    port: __GITLAB_API_PORT__
+    protocol: rest
+    access: read-only
+    enforcement: enforce
+    # Permit exact-host GitLab deployments on private address space without
+    # granting generic private-network egress.
+    allowed_ips:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+      - fc00::/7
+binaries:
+  - /opt/hermes/.venv/bin/python
+  - /usr/bin/python3
+  - /usr/bin/python3.13
+  - /usr/bin/curl

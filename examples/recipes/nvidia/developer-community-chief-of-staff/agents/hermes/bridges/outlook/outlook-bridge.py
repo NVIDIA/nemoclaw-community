@@ -102,8 +102,8 @@ log = logging.getLogger(__name__)
 # documented canonical/stable form (OpenShell docs: reference/policy-schema.mdx,
 # sandboxes/policies.mdx) and the proxy resolves it to the CURRENT refreshed
 # token every request (kept fresh on each sandbox poll). It's the same floating
-# form this repo already uses for the ATIF bearer (AWS_SESSION_TOKEN, see
-# agents/hermes/start.sh).
+# form this repo already uses for the ATIF bearer
+# (ATIF_RELAY_AUTHORIZATION, see agents/hermes/start.sh).
 #
 # Do NOT change this back to os.environ.get("MS_GRAPH_ACCESS_TOKEN", ...).
 MS_GRAPH_ACCESS_TOKEN = "openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN"

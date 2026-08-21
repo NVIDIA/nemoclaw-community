@@ -70,13 +70,18 @@ def fetch_thread(conversation_id: str, top: int) -> list[dict]:
     params = urllib.parse.urlencode({
         "$filter": f"conversationId eq '{safe_id}'",
         "$select": "id,subject,from,receivedDateTime,body,conversationId",
-        "$orderby": "receivedDateTime asc",
         "$top": str(min(top, 50)),
     })
     path = f"{mailbox}/messages?{params}"
 
     data = _graph_get(path)
-    messages = data.get("value", [])
+    # Microsoft Graph rejects $filter on conversationId combined with $orderby
+    # as an InefficientFilter query. Thread responses are small and capped at 50,
+    # so sort them locally after the compatible filtered request succeeds.
+    messages = sorted(
+        data.get("value", []),
+        key=lambda msg: msg.get("receivedDateTime", ""),
+    )
 
     results = []
     for msg in messages:

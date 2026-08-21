@@ -42,7 +42,7 @@ The README's [§ Persistence: collective wisdom across restarts](../README.md#pe
 | Outlook bridge works | Send `ping` to `OUTLOOK_TARGET_MAILBOX` from an address in `OUTLOOK_ALLOWED_SENDERS` (or from `OUTLOOK_REPLY_TO` if that var is empty); reply within ~30s. |
 | Live GitHub works | `openshell sandbox exec --name hermes-direct -- sh -lc '/usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py rate-limit'` returns JSON without printing a token |
 | Discussion/forum mirror has data | `curl -sf http://localhost:3100/github_discussions?limit=1 \| head -c 200` or `curl -sf http://localhost:3100/forum_topics?limit=1 \| head -c 200` returns a non-empty array |
-| Skills dir is writable | `openshell sandbox exec --name hermes-direct -- ls -la /sandbox/.hermes-data/skills/` lists 8 baked-in skills, all owned by `sandbox` |
+| Skills dir is writable | `openshell sandbox exec --name hermes-direct -- ls -la /sandbox/.hermes-data/skills/` lists 9 baked-in skills, all owned by `sandbox` |
 
 A few notes:
 
@@ -76,14 +76,14 @@ $ openshell sandbox exec --name hermes-direct -- ls /sandbox/.hermes-data/skills
 $ grep SLACK_ALLOWED_IDS .env
 ```
 
-Expected: sandbox `Ready`; skills dir contains the 8 baked-in skills (`cross-source-gap-analysis`, `github-readonly-live`, `nemoclaw-autoheal`, `nemoclaw-nvteam`, `outlook-email-search`, `slack-channel-finder`, `slack-channel-summarizer`, `source-etl-query`); `SLACK_ALLOWED_IDS` lists at least one ID.
+Expected: sandbox `Ready`; skills dir contains the 9 baked-in skills (`cross-source-gap-analysis`, `github-readonly-live`, `gitlab-readonly-live`, `nemoclaw-autoheal`, `nemoclaw-nvteam`, `outlook-email-search`, `slack-channel-finder`, `slack-channel-summarizer`, `source-etl-query`); `SLACK_ALLOWED_IDS` lists at least one ID.
 
-If an extra user-authored skill from a previous run is sitting in the skills directory, wipe anything that isn't one of the eight baked-in names so the demo starts on a clean slate:
+If an extra user-authored skill from a previous run is sitting in the skills directory, wipe anything that isn't one of the nine baked-in names so the example starts on a clean slate:
 
 The command must be on a single line — `openshell sandbox exec` rejects literal newlines in the command argument (gRPC `InvalidArgument: command argument 2 contains newline or carriage return characters`). Use `;` separators instead of multi-line scripts.
 
 ```console
-$ openshell sandbox exec --name hermes-direct -- bash -c 'cd /sandbox/.hermes-data/skills/ && for d in */; do case "${d%/}" in cross-source-gap-analysis|github-readonly-live|nemoclaw-autoheal|nemoclaw-nvteam|outlook-email-search|slack-channel-finder|slack-channel-summarizer|source-etl-query) ;; *) echo "removing ${d%/}"; rm -rf "$d" ;; esac; done'
+$ openshell sandbox exec --name hermes-direct -- bash -c 'cd /sandbox/.hermes-data/skills/ && for d in */; do case "${d%/}" in cross-source-gap-analysis|github-readonly-live|gitlab-readonly-live|nemoclaw-autoheal|nemoclaw-nvteam|outlook-email-search|slack-channel-finder|slack-channel-summarizer|source-etl-query) ;; *) echo "removing ${d%/}"; rm -rf "$d" ;; esac; done'
 ```
 
 ### Step 1 — User A iterates on a format via Slack DM
@@ -127,12 +127,12 @@ The agent picked its own name and its own organizational layout — for example,
 
 #### 2a — Find the new SKILL.md
 
-Look for any SKILL.md under `skills/`, then exclude the eight baked-in skills. Capture the full path:
+Look for any SKILL.md under `skills/`, then exclude the nine baked-in skills. Capture the full path:
 
 ```console
 $ NEW_SKILL_PATH=$(openshell sandbox exec --name hermes-direct -- bash -c \
     'find /sandbox/.hermes-data/skills -name SKILL.md' \
-    | grep -vE "/(cross-source-gap-analysis|github-readonly-live|nemoclaw-autoheal|nemoclaw-nvteam|outlook-email-search|slack-channel-finder|slack-channel-summarizer|source-etl-query)/SKILL.md$")
+    | grep -vE "/(cross-source-gap-analysis|github-readonly-live|gitlab-readonly-live|nemoclaw-autoheal|nemoclaw-nvteam|outlook-email-search|slack-channel-finder|slack-channel-summarizer|source-etl-query)/SKILL.md$")
 $ echo "Path: $NEW_SKILL_PATH"
 ```
 
@@ -168,7 +168,7 @@ Two ways to check:
 
   > Can you list your skills you have now.
 
-  The reply lists `$NEW_SKILL` alongside the other eight baked-in skills.
+  The reply lists `$NEW_SKILL` alongside the other nine baked-in skills.
 - Or look at the `nemoclaw_reload_skills` output the agent printed in step 1.3 — the tool returns the full registry inline.
 
 If the skill is on disk (2a) but not yet visible in the registry (2c), tell the agent `Reload skills using nemoclaw_reload_skills`. The plugin's `on_session_start` hook also auto-rescans on the next message in any new session, so the skill becomes visible automatically there.
@@ -203,12 +203,12 @@ Wait until `openshell sandbox list` shows `hermes-direct` as `Ready` again. The 
 
 ### Step 5 — Confirm the fresh sandbox has no trace of the new skill
 
-Re-run the same `find` from step 2a — it should return empty (no SKILL.md outside the eight baked-in ones):
+Re-run the same `find` from step 2a — it should return empty (no SKILL.md outside the nine baked-in ones):
 
 ```console
 $ openshell sandbox exec --name hermes-direct -- bash -c \
     'find /sandbox/.hermes-data/skills -name SKILL.md' \
-    | grep -vE "/(cross-source-gap-analysis|github-readonly-live|nemoclaw-autoheal|nemoclaw-nvteam|outlook-email-search|slack-channel-finder|slack-channel-summarizer|source-etl-query)/SKILL.md$"
+    | grep -vE "/(cross-source-gap-analysis|github-readonly-live|gitlab-readonly-live|nemoclaw-autoheal|nemoclaw-nvteam|outlook-email-search|slack-channel-finder|slack-channel-summarizer|source-etl-query)/SKILL.md$"
 $ echo "(empty output = clean slate)"
 ```
 
@@ -222,7 +222,7 @@ Expected: zero non-baked-in SKILL.md files. The category dir the agent created (
 $ bash scripts/restore.sh
 $ openshell sandbox exec --name hermes-direct -- bash -c \
     'find /sandbox/.hermes-data/skills -name SKILL.md' \
-    | grep -vE "/(cross-source-gap-analysis|github-readonly-live|nemoclaw-autoheal|nemoclaw-nvteam|outlook-email-search|slack-channel-finder|slack-channel-summarizer|source-etl-query)/SKILL.md$"
+    | grep -vE "/(cross-source-gap-analysis|github-readonly-live|gitlab-readonly-live|nemoclaw-autoheal|nemoclaw-nvteam|outlook-email-search|slack-channel-finder|slack-channel-summarizer|source-etl-query)/SKILL.md$"
 $ openshell sandbox exec --name hermes-direct -- cat "$NEW_SKILL_PATH" | head -10
 ```
 
@@ -346,14 +346,15 @@ entire reason this skill exists.
 
 ## Access model
 
-- Use `github-readonly-live` for current issues from `$GITHUB_READONLY_REPO`.
+- Use `github-readonly-live` for current issues from an allowed repository.
 - Use `source-etl-query` for mirrored GitHub discussions and NVIDIA forum topics.
 - Do not invent new ETL endpoints or direct GitHub requests; use the helpers
   documented by those skills.
 
 ## Required Environment
 
-- `GITHUB_READONLY_REPO` for the live issue source.
+- `GITHUB_READONLY_REPOS`, or the legacy `GITHUB_READONLY_REPO` fallback, for
+  the live issue source.
 - `SOURCE_ETL_API_URL`, or `SOURCE_ETL_API_HOST` plus `SOURCE_ETL_API_PORT`
   for discussion/forum mirror data.
 
@@ -362,10 +363,11 @@ entire reason this skill exists.
 ### 1. Pull recent activity from each source
 
 Default window is 7 days. If the user gave a different window (e.g. "last 3 days"),
-request enough rows to filter caller-side.
+request enough rows to filter caller-side. Replace `NVIDIA/OpenShell` below
+with the allowed repository selected for the digest.
 
 ```bash
-/usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py get issues --param state=all --param sort=updated --param direction=desc --limit 30 --exclude-pulls --fields number,title,state,updated_at,html_url
+/usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py --repo NVIDIA/OpenShell get issues --param state=all --param sort=updated --param direction=desc --limit 30 --exclude-pulls --fields number,title,state,updated_at,html_url
 /usr/bin/python3 /sandbox/.hermes-data/skills/source-etl-query/scripts/query_source_etl.py github-discussions --limit 20
 /usr/bin/python3 /sandbox/.hermes-data/skills/source-etl-query/scripts/query_source_etl.py forum-topics --limit 20
 ```

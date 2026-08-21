@@ -1,0 +1,217 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Chart defaults for local Ollama on GPU + optional Kubernetes HPA for GPU autoscaling (see README).
+# Scripts enable HPA with --set; plain helm install leaves autoscaling.enabled=false.
+#   helm install nemoclaw-gpu . -n nemoclaw-gpu --create-namespace --set gpuScaling.count=2
+gpuScaling:
+  oneReplicaPerGpu: true
+  count: 1
+  perPodGpu: 1
+  perPodCpuRequest: "2"
+  perPodCpuLimit: "4"
+  perPodMemory: "16Gi"
+  perPodMemoryLimit: "24Gi"
+  # metrics-proxy (no GPU) — to local Ollama
+  metricsProxyCpuRequest: "250m"
+  metricsProxyCpuLimit: "1"
+  metricsProxyMemory: "512Mi"
+  metricsProxyMemoryLimit: "1Gi"
+
+replicaCount: 1
+
+ollama:
+  image:
+    repository: ollama/ollama
+    # Pinned by digest so `helm install/upgrade` always pulls the exact image reviewed with
+    # this chart, not whatever `latest` currently resolves to. `tag` stays human-readable;
+    # the digest (not the tag) is what containerd actually resolves. To intentionally pick
+    # up a newer Ollama release, re-pin both: `docker manifest inspect ollama/ollama:latest`
+    # (or the registry API) for the new linux/amd64 digest, then bump `tag` to match.
+    tag: latest
+    digest: "sha256:f040603c11a11f125660eaf848170780e43b68973fc270e26f168536031ac258"
+    pullPolicy: IfNotPresent
+  port: 11434
+  # Concurrent GPU batches per model (raise with care — VRAM limited).
+  numParallel: 4
+  # Single-node default: hostPath cache shared by HPA replicas (pull once, reuse).
+  # Multi-node: clear hostPath and set a RWX storageClass, or disable persistence (emptyDir
+  # per pod → re-pull on replace). PVC mode requires ReadWriteMany.
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: ""
+    # Every scalable replica mounts the same claim, so other access modes are rejected.
+    accessMode: ReadWriteMany
+    # Single-node development: host directory shared by all replicas. Overrides PVC.
+    hostPath: /var/lib/nemoclaw-gpu/ollama
+
+metricsProxy:
+  image:
+    repository: node
+    # Same digest-pinning rationale as ollama.image above.
+    tag: "22-bookworm-slim"
+    digest: "sha256:8607a9064d4a571140998ae9e52a3b3fcf9cff361d04642d5971e6cd76d39e27"
+    pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+namespace:
+  create: false
+  name: nemoclaw-gpu
+
+service:
+  type: ClusterIP
+  # metrics-proxy HTTP port (CPU chart uses 8080 — keep charts on different ports)
+  port: 8081
+
+# Optional Envoy Gateway LeastRequest load balancer (Gateway API). When
+# ingress.gateway.enabled is true (default), install-hpa.sh installs Envoy Gateway if the
+# `eg` GatewayClass is missing and the chart creates Gateway/HTTPRoute/BackendTrafficPolicy
+# objects. Set enabled to false (or ENABLE_ENVOY_LB=0) to skip Envoy: traffic uses the metrics-proxy
+# Service only (not LeastRequest). See README Architecture / Install details.
+ingress:
+  host: nemoclaw.local
+  path: /
+  pathType: Prefix
+  tls: []
+  # The chart refuses to render a routable Gateway unless ingress.tls is configured or this
+  # value is explicitly true. The scripts keep this false unless ALLOW_INSECURE_HTTP=1 passes
+  # their Kubernetes exposure preflight. Ignored when ingress.gateway.enabled is false.
+  # See README "Ingress security".
+  allowInsecureHttp: false
+  gateway:
+    # Optional user choice: Envoy Gateway + LeastRequest. Default on.
+    # Scripts: ENABLE_ENVOY_LB=0|1. See README Architecture.
+    enabled: true
+    # Envoy Gateway's default GatewayClass name.
+    className: eg
+    # Dataplane Service type for the EnvoyProxy attached to this chart's Gateway.
+    # Must remain ClusterIP while the OpenShell cleartext HTTP listener exists
+    # (chart fails on NodePort/LoadBalancer). install-hpa.sh defaults
+    # INGRESS_SERVICE_TYPE=ClusterIP and rejects other types when Envoy LB is on.
+    serviceType: ClusterIP
+    connectionIdleTimeout: "60s"
+    requestTimeout: "600s"
+  # Basic auth in front of the completion proxy, which has no authentication of its own.
+  # On by default. Leaving password unset (null, not an empty string — this is intentional,
+  # not an accidentally-blank credential) auto-generates a random one on first install and
+  # reuses it across `helm upgrade` re-runs (install-hpa.sh/hpa-load-test.sh/hpa-reset.sh
+  # never pass --reuse-values) so the credential doesn't rotate underneath you. Retrieve it
+  # with `kubectl get secret <fullname>-metrics-proxy-ingress-auth -o jsonpath='{.data.password}' |
+  # base64 -d` (see README "Ingress security").
+  # Envoy Gateway SecurityPolicy expects an Opaque Secret with key ".htpasswd" in
+  # Apache `{SHA}` form (bcrypt is rejected by Envoy). The install scripts generate
+  # this automatically; for a manual helm install pass ingress.auth.htpasswd.
+  auth:
+    enabled: true
+    username: admin
+    password: null
+    htpasswd: null
+    existingSecret: ""
+
+# Local GPU inference via the pod-local Ollama container.
+# The proxy does not add upstream authentication headers. Keep baseUrl on pod-local Ollama
+# unless an external endpoint is independently protected and does not require proxy-added auth.
+inference:
+  baseUrl: "http://127.0.0.1:11434/v1"
+  model: "llama3.2:3b"
+  # Protect the in-cluster OpenAI-compatible endpoint as well as the Gateway path.
+  # OpenShell stores this key in its provider record and does not expose the real value
+  # inside the NemoClaw sandbox. The chart generates and retains a random key unless
+  # existingSecret names an operator-managed Secret.
+  auth:
+    enabled: true
+    existingSecret: ""
+    key: api-key
+
+podAnnotations: {}
+
+podSecurityContext:
+  seccompProfile:
+    type: RuntimeDefault
+
+# The ollama container needs GPU device access via the NVIDIA device plugin; forcing
+# non-root/read-only-rootfs here is untested against every driver/container-toolkit
+# combination and risks silently breaking GPU access, so this stays minimal (no privilege
+# escalation, no extra Linux capabilities) rather than fully locked down. Override via
+# --set ollamaSecurityContext.<field>=... once you've validated non-root on your cluster.
+ollamaSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+
+# The metrics-proxy is a plain Node.js HTTP proxy with no device or host access, so it can
+# be fully locked down: non-root, no capabilities, read-only rootfs (it writes nothing; see
+# the "tmp" emptyDir mount below for any incidental scratch space Node itself may want).
+metricsProxySecurityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# Readiness checks local Ollama (/readyz). First model pull can take several minutes.
+probes:
+  readinessChecksInference: true
+  startupProbeSeconds: 600
+
+runtimeClassName: ""
+
+nodeSelector:
+  nvidia.com/gpu.present: "true"
+
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+
+affinity: {}
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 4
+  maxGpus: 4
+  # Scripts default maxReplicas/maxGpus to allocatable GPU count (N) unless MAX_REPLICAS is set.
+  # Built-in (live-validated): gpu_utilization | latency_avg.
+  # Or wire a custom Adapter metric and extend nemoclaw-gpu.hpaMetric helpers.
+  metric: gpu_utilization
+  targetGPUUtilizationPercentage: 40
+  # Latency targets are milliseconds (e.g. 3000 = 3s).
+  targetLatencyMilliseconds: 3000
+  behavior:
+    # One pod per reconcile — gradual scale-up so load-test / demos show each step
+    # instead of jumping straight to ceil(currentReplicas * current/target).
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 10
+      selectPolicy: Max
+    scaleDown:
+      # One pod per step (N→…→1); shorter window so idle demos scale down faster.
+      # Avoid Percent policies with selectPolicy Max — e.g. 50% jumps 4→2.
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 30
+      selectPolicy: Max
+
+metrics:
+  enabled: true
+  path: /metrics
+  # Scraped by Prometheus so per-pod request/latency metrics (nemoclaw_llm_*) show up
+  # in Grafana out of the box. Default true so install/load-test/reset re-runs (plain
+  # `helm upgrade`, not --reuse-values) don't silently disable this on every re-apply.
+  # Clear rolling latency_avg after this idle period so latency HPA can scale down.
+  llmLatencyIdleExpireMs: 60000
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    labels: {}

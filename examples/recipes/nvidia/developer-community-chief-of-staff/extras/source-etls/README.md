@@ -18,7 +18,8 @@ directly.
 The GitHub repo above is the host-side mirror scope, controlled by
 `SOURCE_ETL_GITHUB_REPO`. It is separate from the sandbox's live read-only
 GitHub scope, which is controlled by `GITHUB_READONLY_REPO` and applied through
-OpenShell policy during sandbox creation. A live-read `GITHUB_TOKEN` does not
+OpenShell policy during sandbox creation. `GITHUB_READONLY_REPOS` takes
+precedence when configured. A live-read `GITHUB_TOKEN` does not
 start the mirror.
 
 ## Services

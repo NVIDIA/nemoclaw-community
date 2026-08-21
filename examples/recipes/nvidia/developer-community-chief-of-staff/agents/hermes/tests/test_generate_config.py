@@ -65,11 +65,17 @@ class GenerateConfigTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             return result, None
 
-    def test_default_is_schema_32_and_rich_blocks_on(self) -> None:
+    def test_default_is_schema_34_with_native_relay_and_rich_blocks_on(self) -> None:
         _, config = self.run_generator(channels=["slack"])
         assert config is not None
-        self.assertEqual(config["_config_version"], 32)
+        self.assertEqual(config["_config_version"], 34)
         self.assertIs(config["agent"]["verify_on_stop"], False)
+        self.assertEqual(config["terminal"]["cwd"], "/sandbox")
+        self.assertEqual(
+            config["plugins"]["enabled"],
+            ["nemoclaw", "observability/nemo_relay"],
+        )
+        self.assertNotIn("hooks", config)
         self.assertIs(config["platforms"]["slack"]["extra"]["rich_blocks"], True)
         self.assertIs(config["platforms"]["api_server"]["enabled"], True)
 
@@ -124,6 +130,42 @@ class GenerateConfigTest(unittest.TestCase):
         )
         self.assertIn("NEMOCLAW_SLACK_RICH_BLOCKS=true", env_example)
         self.assertIn("verify-rich-block-renderer.py", dockerfile)
+
+    def test_gitlab_config_writes_only_provider_placeholder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            (home / ".hermes").mkdir()
+            env = os.environ.copy()
+            env.update(
+                {
+                    "HOME": str(home),
+                    "NEMOCLAW_MODEL": "test/model",
+                    "NEMOCLAW_INFERENCE_BASE_URL": "https://inference.local/v1",
+                    "NEMOCLAW_MESSAGING_CHANNELS_B64": "W10=",
+                    "GITLAB_READONLY_PROJECTS": "example-team/project-one",
+                    "GITLAB_API_URL": "https://gitlab.example.com/api/v4",
+                    "GITLAB_READONLY_PROJECT_IDS": "example-team/project-one=123",
+                    "GITLAB_TOKEN": "must-not-be-written",
+                }
+            )
+
+            result = subprocess.run(
+                ["node", "--experimental-strip-types", str(GENERATOR)],
+                check=False,
+                capture_output=True,
+                env=env,
+                text=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            generated_env = (home / ".hermes" / ".env").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn(
+                "GITLAB_TOKEN=openshell:resolve:env:GITLAB_TOKEN",
+                generated_env,
+            )
+            self.assertNotIn("must-not-be-written", generated_env)
 
     def test_github_cli_uses_base_distribution_package(self) -> None:
         dockerfile = (HERMES_DIR / "Dockerfile").read_text(encoding="utf-8")
