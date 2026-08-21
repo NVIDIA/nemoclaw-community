@@ -16,6 +16,8 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { chromium } from "patchright";
 import AxeBuilder from "@axe-core/playwright";
+import ipaddr from "ipaddr.js";
+import dns from "node:dns/promises";
 
 const DEFAULT_TIMEOUT_MS = 30000;
 const DEFAULT_SETTLE_MS = 1500;
@@ -432,7 +434,7 @@ export function redactSensitiveData(obj) {
   return result;
 }
 
-export function validateUrl(inputUrl) {
+export async function validateUrl(inputUrl) {
   let parsedUrl;
   try {
     parsedUrl = new URL(inputUrl);
@@ -448,22 +450,70 @@ export function validateUrl(inputUrl) {
 
   if (
     hostname === "localhost" ||
-    hostname.startsWith("127.") ||
-    hostname === "169.254.169.254" ||
-    hostname === "::1" ||
-    hostname === "0.0.0.0"
+    hostname.endsWith(".internal") ||
+    hostname.endsWith(".local") ||
+    hostname.endsWith(".nip.io")
   ) {
-    throw new Error(`Access to loopback or metadata addresses is forbidden: ${hostname}`);
+    throw new Error(`Access to private, loopback, or internal TLDs is forbidden: ${hostname}`);
+  }
+
+  try {
+    // Resolve DNS
+    const addresses = await dns.lookup(hostname, { all: true });
+
+    for (const addressInfo of addresses) {
+      let addr;
+      try {
+        addr = ipaddr.parse(addressInfo.address);
+      } catch {
+        continue;
+      }
+
+      const range = addr.range();
+      if (
+        range === "private" ||
+        range === "loopback" ||
+        range === "linkLocal" ||
+        range === "uniqueLocal" ||
+        range === "unspecified" ||
+        range === "multicast" ||
+        range === "broadcast" ||
+        // Check for common metadata IP in AWS/GCP/Azure
+        (addr.kind() === "ipv4" && addr.octets.join(".") === "169.254.169.254")
+      ) {
+        throw new Error(`Resolved IP is within a blocked range (${range}): ${addressInfo.address}`);
+      }
+    }
+  } catch (err) {
+    if (err.code === "ENOTFOUND" || err.code === "ESERVFAIL") {
+       // Domain doesn't exist, fine to fail later or throw here
+       throw new Error(`Could not resolve hostname: ${hostname}`);
+    }
+    throw err;
   }
 
   return true;
 }
 
 async function navigateAndSettle(page, args) {
-  validateUrl(args.url);
+  await validateUrl(args.url);
 
   const timeoutMs = clampInteger(args.timeout_ms, DEFAULT_TIMEOUT_MS, 1000, 120000);
   const settleMs = clampInteger(args.settle_ms, DEFAULT_SETTLE_MS, 0, 15000);
+
+  // Intercept and validate all subresource requests
+  await page.route('**/*', async (route) => {
+    const request = route.request();
+    const url = request.url();
+    try {
+      if (!url.startsWith("data:") && !url.startsWith("blob:")) {
+        await validateUrl(url);
+      }
+      await route.continue();
+    } catch (e) {
+      await route.abort('accessdenied');
+    }
+  });
 
   await page.goto(args.url, {
     waitUntil: "load",
@@ -594,6 +644,7 @@ async function buildAuditElementResult(page, args) {
 async function buildSummaryResult(page) {
   const axeResults = await new AxeBuilder({ page }).analyze();
   const violations = axeResults.violations;
+  const incomplete = axeResults.incomplete || [];
   const wcagLevels = {
     A: [],
     AA: [],
@@ -614,24 +665,28 @@ async function buildSummaryResult(page) {
     });
   });
 
+  const getCompliance = (count) => count === 0 ? "NO_AUTOMATED_VIOLATIONS_FOUND" : "FAIL";
+
   return {
     content: [
       toolText({
         url: page.url(),
         title: await page.title(),
+        note: "Automated scans only catch a portion of WCAG issues. 'NO_AUTOMATED_VIOLATIONS_FOUND' is not a complete conformance PASS. Manual evaluation is required, especially for 'incomplete' items.",
         summary: {
           total_violations: violations.length,
+          total_incomplete: incomplete.length,
           wcag_level_a: {
             count: wcagLevels.A.length,
-            compliance: wcagLevels.A.length === 0 ? "PASS" : "FAIL",
+            compliance: getCompliance(wcagLevels.A.length),
           },
           wcag_level_aa: {
             count: wcagLevels.AA.length,
-            compliance: wcagLevels.AA.length === 0 ? "PASS" : "FAIL",
+            compliance: getCompliance(wcagLevels.AA.length),
           },
           wcag_level_aaa: {
             count: wcagLevels.AAA.length,
-            compliance: wcagLevels.AAA.length === 0 ? "PASS" : "FAIL",
+            compliance: getCompliance(wcagLevels.AAA.length),
           },
         },
         by_severity: {
@@ -640,6 +695,11 @@ async function buildSummaryResult(page) {
           moderate: violations.filter((violation) => violation.impact === "moderate").length,
           minor: violations.filter((violation) => violation.impact === "minor").length,
         },
+        incomplete_items: incomplete.map((inc) => ({
+          id: inc.id,
+          impact: inc.impact,
+          description: inc.description,
+        })),
       }),
     ],
   };

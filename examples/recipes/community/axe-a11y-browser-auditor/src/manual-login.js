@@ -34,7 +34,6 @@ const context = await chromium.launchPersistentContext(PROFILE_DIR, {
   timezoneId: "America/New_York",
   args: [
     "--disable-dev-shm-usage",
-    "--no-sandbox",
   ],
 });
 

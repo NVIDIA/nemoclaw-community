@@ -1,6 +1,6 @@
 ---
 name: axe-a11y
-description: Complete automated web accessibility testing (axe-core) driven by patchright + real Google Chrome with a persistent login profile — audits sites behind bot walls and behind auth
+description: Automated web accessibility scanning (axe-core) driven by patchright + real Google Chrome — audits sites behind bot walls and behind auth
 ---
 
 <!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
@@ -8,7 +8,7 @@ description: Complete automated web accessibility testing (axe-core) driven by p
 
 # Axe Accessibility Testing Skill
 
-Production-ready automated testing via the `axe-a11y` MCP server. Not a framework, not a manual-testing helper — the server executes real audits and returns real WCAG violation JSON.
+Automated testing via the `axe-a11y` MCP server. Not a framework, not a manual-testing helper — the server executes automated scans and returns actual WCAG violation JSON.
 
 ## What This Skill Runs Under the Hood
 
@@ -112,5 +112,5 @@ If a site returns an error, a bot-wall page, or a login screen, the recovery pat
 1. **Certificate errors**: If a site has certificate issues, use `ignore_https_errors: true`.
 2. **Wait for dynamic portals**: The server navigates with `load`, then waits for visible images and optional selectors/text. For dynamic pages, provide `wait_for_selector` or `wait_for_text`.
 3. **Start broad, then zoom in**: Use `get_wcag_summary` first, then `audit_page` or `check_specific_rules` for detail.
-4. **Authenticated sites**: The persistent profile is always on. If a site needs login, the operator runs `node src/manual-login.js <url>` once via VNC — subsequent audits reuse that session automatically. The profile is a dedicated bot account; cookies and Login Data live on disk unencrypted.
+4. **Authenticated sites**: The persistent profile is disabled by default. When testing sites behind login, enable it via `AXE_A11Y_PROFILE_ENABLED=true` in `.env` and run `node src/manual-login.js <url>` once via VNC — subsequent audits reuse that session automatically.
 5. **Use returned artifact URLs as-is**: Do not replace the host with `localhost` or `host.docker.internal` unless you are intentionally changing where the request originates.
