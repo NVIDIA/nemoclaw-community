@@ -4,20 +4,13 @@
  */
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
   --nvidia-green: #76b900;
-  --green-light: #a8e348;
-  --green-text: #365d00;
-  --ink: #1e1e1e;
-  --ink-soft: #4c514d;
-  --hero: #080c0a;
-  --hero-border: #293029;
-  --paper: #f5f5f2;
-  --surface: #ffffff;
-  --line: #c8c8c3;
-  --text-on-dark: #f6f8f4;
-  --text-on-dark-soft: #b8c0ba;
-  --radius-small: 0.45rem;
+  --ink: #f5f5f5;
+  --ink-soft: #bfbfbf;
+  --page: #121212;
+  --line: #353535;
+  --tile-line: #4d692e;
   --shell: 74rem;
 }
 
@@ -33,12 +26,12 @@ html {
 
 body {
   margin: 0;
-  background: var(--paper);
+  background: var(--page);
   color: var(--ink);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
   font-size: 1rem;
-  line-height: 1.6;
+  line-height: 1.5;
   text-rendering: optimizeLegibility;
 }
 
@@ -69,15 +62,9 @@ a:hover {
 }
 
 :focus-visible {
-  outline: 3px solid var(--ink);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 6px #ffffff;
-}
-
-.site-header :focus-visible,
-.hero :focus-visible {
-  outline-color: #ffffff;
-  box-shadow: 0 0 0 6px var(--ink);
+  outline: 3px solid var(--nvidia-green);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 2px var(--page);
 }
 
 .shell {
@@ -92,10 +79,10 @@ a:hover {
   left: 0.75rem;
   padding: 0.7rem 1rem;
   transform: translateY(-180%);
-  border-radius: var(--radius-small);
+  border-radius: 0.3rem;
   background: var(--nvidia-green);
-  color: #10140d;
-  font-weight: 750;
+  color: #111111;
+  font-weight: 700;
 }
 
 .skip-link:focus {
@@ -103,9 +90,8 @@ a:hover {
 }
 
 .site-header {
-  border-bottom: 1px solid var(--hero-border);
-  background: var(--hero);
-  color: var(--text-on-dark);
+  background: var(--page);
+  color: var(--ink);
 }
 
 .masthead {
@@ -115,6 +101,7 @@ a:hover {
   justify-content: space-between;
   gap: 1.5rem;
   padding-block: 0.5rem;
+  border-bottom: 3px solid var(--nvidia-green);
 }
 
 .brand-lockup {
@@ -144,9 +131,9 @@ a:hover {
 
 .product-name {
   overflow: hidden;
-  color: var(--text-on-dark-soft);
+  color: #dedede;
   font-size: 0.82rem;
-  font-weight: 650;
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -155,40 +142,37 @@ a:hover {
   display: inline-flex;
   min-height: 2.75rem;
   align-items: center;
-  gap: 0.3rem;
-  color: var(--text-on-dark-soft);
+  gap: 0.25rem;
+  color: #dedede;
   font-size: 0.88rem;
-  font-weight: 650;
+  font-weight: 500;
   text-decoration: none;
 }
 
 .repository-link:hover {
-  color: var(--text-on-dark);
+  color: #ffffff;
 }
 
 .hero {
   overflow: hidden;
-  border-bottom: 1px solid var(--hero-border);
-  background:
-    radial-gradient(circle at 12% 20%, rgb(118 185 0 / 8%), transparent 28rem),
-    linear-gradient(135deg, #080c0a 0%, #0b110d 100%);
-  color: var(--text-on-dark);
+  background: var(--page);
+  color: var(--ink);
 }
 
 .hero-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(19rem, 0.85fr);
+  grid-template-columns: minmax(0, 1.05fr) minmax(19rem, 0.95fr);
   gap: 2.875rem;
-  align-items: center;
-  padding-block: 4.125rem 2.125rem;
+  align-items: end;
+  padding-block: 4rem 2.5rem;
 }
 
 .eyebrow {
-  margin: 0 0 0.7rem;
-  color: var(--green-light);
-  font-size: 0.76rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
+  margin: 0 0 1.25rem;
+  color: #c7c7c7;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -208,253 +192,222 @@ h3 {
 }
 
 h1 {
-  margin-bottom: 1rem;
-  font-size: clamp(2.1rem, 5vw, 4rem);
-  font-weight: 780;
+  max-width: 19.5rem;
+  margin-bottom: 1.25rem;
+  font-size: clamp(2.1rem, 7vw, 4.1rem);
+  font-weight: 500;
+  letter-spacing: -0.04em;
 }
 
 .hero-summary {
-  max-width: 43rem;
+  max-width: 35rem;
   margin: 0;
-  color: var(--text-on-dark-soft);
+  color: #c7c7c7;
   font-size: 1rem;
 }
 
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.8rem;
+  gap: 0.75rem;
   margin-top: 1.625rem;
 }
 
 .button {
   display: inline-flex;
-  min-height: 2.85rem;
+  min-height: 2.75rem;
   align-items: center;
   justify-content: center;
-  padding: 0.7rem 1rem;
+  padding: 0.625rem 1rem;
   border: 1px solid transparent;
-  border-radius: var(--radius-small);
+  border-radius: 0.3rem;
   font-size: 0.92rem;
-  font-weight: 760;
+  font-weight: 500;
   text-decoration: none;
 }
 
 .button-primary {
-  gap: 0.35rem;
+  gap: 0.25rem;
+  border-color: var(--nvidia-green);
   background: var(--nvidia-green);
-  color: #0b1008;
+  color: #111111;
 }
 
 .button-primary:hover {
+  border-color: #8acb1b;
   background: #8acb1b;
 }
 
 .button-secondary {
-  border-color: #495148;
-  background: #171c18;
-  color: var(--text-on-dark);
+  border-color: #e2e2e2;
+  background: transparent;
+  color: var(--ink);
 }
 
 .button-secondary:hover {
-  border-color: #70796f;
-  background: #202621;
+  border-color: #ffffff;
+  background: rgb(255 255 255 / 5%);
 }
 
-.category-nav {
+.taxonomy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.625rem;
+}
+
+.category-tile {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  padding-block: 0.875rem 2.375rem;
-}
-
-.category-nav a {
-  display: inline-flex;
-  min-height: 2.5rem;
-  align-items: center;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--hero-border);
-  border-radius: 999px;
-  background: transparent;
-  color: #dfe5df;
-  font-size: 0.79rem;
-  font-weight: 660;
-  line-height: 1.25;
+  min-width: 0;
+  min-height: 7.25rem;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1rem;
+  border: 1px solid var(--tile-line);
+  color: var(--ink);
   text-decoration: none;
 }
 
-.category-nav a:hover {
-  border-color: #5a6659;
-  background: rgb(255 255 255 / 5%);
-  color: #ffffff;
+.category-tile:hover {
+  border-color: var(--nvidia-green);
+  background: rgb(118 185 0 / 4%);
 }
 
-.blueprint {
-  margin: 0;
+.category-name {
+  font-size: 0.94rem;
+  font-weight: 400;
 }
 
-.blueprint-flow {
-  display: grid;
-  gap: 0.75rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.blueprint-step {
-  position: relative;
-  display: grid;
-  gap: 0.25rem;
-  min-width: 0;
-  padding: 1.125rem;
-  border: 1px solid #4a5c42;
-  background: #141a15;
-}
-
-.blueprint-step:not(:last-child)::before {
-  display: none;
-}
-
-.blueprint-step:not(:last-child)::after {
-  position: absolute;
-  z-index: 1;
-  bottom: -1.05rem;
-  left: 50%;
+.category-count {
   color: var(--nvidia-green);
-  content: "↓";
-  line-height: 1;
-}
-
-.step-label {
-  color: #ffffff;
-  font-size: 1rem;
-  font-weight: 760;
-}
-
-.step-detail {
-  color: var(--text-on-dark-soft);
-  font-size: 0.78rem;
-  line-height: 1.4;
+  font-size: 0.84rem;
+  font-weight: 500;
 }
 
 .catalog {
-  background: var(--paper);
-  padding-top: 2.5rem;
+  padding-block: 2.125rem 3rem;
+  background: var(--page);
 }
 
 .catalog-group {
   padding: 0;
-  background: var(--paper);
+  background: var(--page);
+  scroll-margin-top: 1.5rem;
 }
 
 .group-layout {
   display: grid;
-  grid-template-columns: 13.125rem minmax(0, 1fr);
-  gap: 2.125rem;
-  align-items: start;
-  padding-block: 1.875rem;
+  gap: 0;
+  padding-block: 1.75rem;
   border-top: 1px solid var(--line);
 }
 
+.catalog-group:target .group-layout {
+  border-top-color: var(--nvidia-green);
+}
+
 .group-heading {
-  position: static;
+  max-width: 70rem;
 }
 
 .group-heading h2 {
-  margin-bottom: 0.45rem;
-  font-size: clamp(1.3rem, 2vw, 1.6rem);
+  margin-bottom: 0.35rem;
+  font-size: 1.3rem;
+  font-weight: 500;
+  letter-spacing: -0.015em;
 }
 
 .group-heading > p:last-child {
   margin: 0;
   color: var(--ink-soft);
-  font-size: 0.85rem;
-  line-height: 1.45;
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 
 .card-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.875rem;
+  gap: 0.625rem 1.375rem;
+  margin-top: 0.5rem;
 }
 
 .example-card {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  padding: 1.125rem;
-  border: 0;
-  border-left: 3px solid var(--nvidia-green);
-  background: var(--surface);
+  padding-block: 1rem;
+  background: transparent;
+  scroll-margin-top: 1.5rem;
 }
 
 .example-card:target {
-  outline: 4px solid var(--green-text);
-  outline-offset: 5px;
+  outline: 3px solid var(--nvidia-green);
+  outline-offset: 0.35rem;
 }
 
 .provenance {
   align-self: flex-start;
   margin: 0 0 0.65rem;
-  color: var(--green-text);
-  font-size: 0.67rem;
-  font-weight: 780;
-  letter-spacing: 0.065em;
+  color: var(--nvidia-green);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
   line-height: 1.25;
-  text-transform: uppercase;
 }
 
 .example-card h3 {
   margin-bottom: 0.5rem;
-  font-size: clamp(1.15rem, 1.8vw, 1.35rem);
+  font-size: 1.18rem;
+  font-weight: 500;
+  letter-spacing: -0.015em;
 }
 
 .outcome {
-  margin: 0 0 1rem;
-  color: #303530;
+  margin: 0 0 0.65rem;
+  color: var(--ink-soft);
   font-size: 0.88rem;
   line-height: 1.5;
 }
 
 .example-card dl {
   display: grid;
-  gap: 0.6rem;
-  margin: 0 0 1rem;
+  gap: 0.35rem;
+  margin: 0 0 0.75rem;
 }
 
 .example-card dl div {
-  display: grid;
-  grid-template-columns: 6.6rem minmax(0, 1fr);
-  gap: 0.55rem;
-  padding-top: 0.6rem;
-  border-top: 1px solid #e1e5df;
+  display: block;
+}
+
+.example-card dt,
+.example-card dd {
+  display: inline;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  line-height: 1.45;
 }
 
 .example-card dt {
-  color: #515951;
-  font-size: 0.7rem;
-  font-weight: 790;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.example-card dt::after {
+  content: ":";
 }
 
 .example-card dd {
   margin: 0;
-  color: #454b45;
-  font-size: 0.78rem;
-  line-height: 1.45;
 }
 
 .example-card code {
-  padding: 0.08rem 0.25rem;
-  border-radius: 0.2rem;
-  background: #edf0eb;
-  color: #252a25;
+  padding: 0.05rem 0.2rem;
+  border-radius: 0.15rem;
+  background: #252525;
+  color: #f1f1f1;
   font-size: 0.88em;
 }
 
 .example-card abbr {
-  text-decoration-color: #7e897c;
+  text-decoration-color: #8c8c8c;
   text-underline-offset: 0.14em;
 }
 
@@ -464,13 +417,13 @@ h1 {
   align-items: center;
   align-self: flex-start;
   margin-top: auto;
-  color: var(--green-text);
+  color: var(--nvidia-green);
   font-size: 0.84rem;
-  font-weight: 780;
+  font-weight: 500;
 }
 
 .site-footer {
-  background: var(--paper);
+  background: var(--page);
   color: var(--ink);
 }
 
@@ -500,19 +453,24 @@ h1 {
   display: inline-flex;
   min-height: 2.75rem;
   align-items: center;
-  color: var(--green-text);
+  color: var(--nvidia-green);
   font-size: 0.8rem;
-  font-weight: 680;
+  font-weight: 500;
 }
 
-@media (max-width: 50rem) {
-  .group-layout {
+@media (max-width: 45rem) {
+  .hero-grid {
     grid-template-columns: 1fr;
+    gap: 2rem;
+    padding-block: 2.875rem 2.5rem;
   }
 
-  .group-heading {
-    position: static;
-    max-width: 42rem;
+  .hero-copy {
+    max-width: 50rem;
+  }
+
+  h1 {
+    max-width: 13ch;
   }
 
   .card-grid {
@@ -520,90 +478,41 @@ h1 {
   }
 }
 
-@media (max-width: 45rem) {
-  .hero-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .hero-copy {
-    max-width: 50rem;
-  }
-
-  .blueprint {
-    max-width: 43rem;
-  }
-}
-
-@media (max-width: 44rem) {
+@media (max-width: 29.375rem) {
   .shell {
     width: min(calc(100% - 2rem), var(--shell));
   }
 
   .masthead {
-    align-items: center;
+    gap: 0.75rem;
   }
 
   .nvidia-brand img {
     width: 5.2rem;
   }
 
-  .repository-link {
-    max-width: 10rem;
-    text-align: right;
+  .product-name {
+    font-size: 0.75rem;
   }
 
-  .hero-grid {
-    gap: 2rem;
-    padding-block: 2.875rem 2.125rem;
+  .repository-link {
+    display: none;
   }
 
   h1 {
-    font-size: clamp(2.1rem, 10vw, 3rem);
-  }
-
-  .category-nav {
-    padding-block: 0.75rem 2rem;
-  }
-
-  .example-card dl div {
-    grid-template-columns: 1fr;
-    gap: 0.28rem;
-  }
-
-  .footer-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .footer-links {
-    justify-content: flex-start;
-  }
-}
-
-@media (max-width: 29.375rem) {
-  .masthead {
-    align-items: flex-start;
-    gap: 0.5rem;
-  }
-
-  .brand-lockup {
-    flex-wrap: wrap;
-    gap: 0.2rem 0.6rem;
-  }
-
-  .brand-divider {
-    display: none;
-  }
-
-  .product-name {
-    flex-basis: 100%;
-  }
-
-  .repository-link {
-    display: none;
+    font-size: clamp(2.1rem, 11vw, 3rem);
   }
 
   .hero-actions {
     display: grid;
+  }
+
+  .taxonomy-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .category-tile {
+    min-height: 6rem;
   }
 }
 

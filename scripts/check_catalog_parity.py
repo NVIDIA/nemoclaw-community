@@ -653,18 +653,25 @@ def check_catalog_parity(root: Path) -> list[str]:
     if missing_category_ids:
         errors.append(f"Missing category anchors: {', '.join(missing_category_ids)}")
 
-    expected_category_links = [
-        CategoryNavLink(href=f"#{category_id}", text=category.casefold())
-        for category, category_id in CATEGORY_IDS.items()
-    ]
+    expected_category_counts = Counter(entry.category for entry in expected)
+    expected_category_links = []
+    for category, category_id in CATEGORY_IDS.items():
+        count = expected_category_counts[category]
+        noun = "example" if count == 1 else "examples"
+        expected_category_links.append(
+            CategoryNavLink(
+                href=f"#{category_id}",
+                text=f"{category} {count} {noun} →".casefold(),
+            )
+        )
     actual_category_links = [
         CategoryNavLink(href=link.href, text=link.text.casefold())
         for link in parser.category_nav_links
     ]
     if actual_category_links != expected_category_links:
         errors.append(
-            "The first-screen category navigation must visibly name and link once to all "
-            "categories in "
+            "The first-screen category navigation must visibly name, count, and link "
+            "once to all categories in "
             f"canonical order. Expected {expected_category_links}; "
             f"found {actual_category_links}."
         )
