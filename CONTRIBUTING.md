@@ -310,6 +310,20 @@ Remove secrets and nonpublic information, and use obvious placeholders for
 private values. A human contributor must review and correct the draft before
 submission.
 
+### Evidence Levels
+
+Choose the lowest level that fully matches the completed verification:
+
+- `live end-to-end`: The intended user workflow completed in the documented
+  target environment, including its required live services or hardware.
+- `integration`: Multiple connected components were exercised, but the full
+  intended workflow or target environment was not.
+- `local/static`: Verification was limited to local, unit, syntax,
+  configuration, documentation, or other non-live checks.
+
+Do not infer a higher evidence level from intended architecture, partial
+results, or unverified contributor claims.
+
 ### Copyable Template
 
 ````markdown
@@ -343,7 +357,7 @@ also preserve the essential expected output as searchable text.
 
 | Question | Answer |
 | --- | --- |
-| Category | [Choose one: NVIDIA Recipe, Partner Recipe, Community Recipe, NVIDIA Field Demo, Launchable, or Developer Tool] |
+| Category | [Choose one: NVIDIA Recipe, Partner Recipe, Community Recipe, Field Demo, Launchable, or Developer Tool] |
 | Contributor or provenance | [Name the person or organization responsible for the example.] |
 | Use this when | [Name the specific user, scenario, or operational need.] |
 | You will get | [Name the observable workflow, output, artifact, or result.] |
@@ -363,7 +377,8 @@ provenance.
 Use "verified on" only when completed evidence supports the exact environment.
 Do not substitute "supported on" unless there is an actual support commitment.
 Evidence level describes completed verification; it does not establish support
-or maturity.
+or maturity. Use the definitions in CONTRIBUTING.md and choose the lowest level
+that fully matches the completed verification.
 -->
 
 ## [Choose: Start Here, Quickstart, Or Setup]
@@ -403,7 +418,7 @@ remaining validation.]
 - Preserve partner and community attribution.
 - Distinguish `required`, `designed for`, `verified on`, and `supported`. These
   terms are not interchangeable.
-- State the evidence level for verification.
+- Use the lowest evidence level that fully matches the completed verification.
 - Include expected results as text even when a screenshot shows them.
 - Use obvious placeholders for credentials and private values.
 - Do not include secrets, internal links, tenant details, private paths, or
