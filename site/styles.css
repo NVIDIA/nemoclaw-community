@@ -81,7 +81,6 @@ a:hover {
 
 .site-header :focus-visible,
 .hero :focus-visible,
-.pinned-section :focus-visible,
 .site-footer :focus-visible {
   outline-color: #ffffff;
   box-shadow: 0 0 0 6px var(--ink);
@@ -358,84 +357,6 @@ h1 {
   line-height: 1.5;
 }
 
-.pinned-section {
-  border-bottom: 1px solid var(--hero-border);
-  background: #0d120f;
-  color: var(--text-on-dark);
-}
-
-.pinned-layout {
-  display: grid;
-  grid-template-columns: minmax(13rem, 0.75fr) minmax(0, 1.6fr);
-  gap: 1rem 2.5rem;
-  align-items: end;
-  padding-block: 2.5rem 3rem;
-}
-
-.pinned-heading h2 {
-  margin-bottom: 0.7rem;
-  font-size: clamp(1.55rem, 3vw, 2.15rem);
-}
-
-.pinned-heading p:last-child {
-  margin: 0;
-  color: var(--text-on-dark-soft);
-  font-size: 0.88rem;
-}
-
-.pinned-nav {
-  min-width: 0;
-}
-
-.pinned-links {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.7rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.pinned-links a {
-  display: block;
-  min-height: 100%;
-  padding: 0.95rem;
-  border: 1px solid #353d35;
-  border-radius: var(--radius-small);
-  background: #151a16;
-  color: #f5f7f4;
-  font-size: 0.9rem;
-  font-weight: 710;
-  line-height: 1.35;
-  text-decoration: none;
-}
-
-.pinned-links a:hover {
-  border-color: #657062;
-  background: #1b211c;
-}
-
-.pinned-links span {
-  display: block;
-  margin-bottom: 0.42rem;
-  color: var(--text-on-dark-soft);
-  font-size: 0.68rem;
-  font-weight: 760;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.pinned-all-link {
-  display: inline-flex;
-  min-height: 2.75rem;
-  align-items: center;
-  grid-column: 2;
-  justify-self: end;
-  color: var(--green-light);
-  font-size: 0.82rem;
-  font-weight: 720;
-}
-
 .catalog {
   background: var(--paper);
 }
@@ -660,18 +581,6 @@ h1 {
     position: static;
     max-width: 42rem;
   }
-
-  .pinned-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .pinned-heading {
-    max-width: 44rem;
-  }
-
-  .pinned-all-link {
-    grid-column: 1;
-  }
 }
 
 @media (max-width: 44rem) {
@@ -705,7 +614,6 @@ h1 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .pinned-links,
   .card-grid {
     grid-template-columns: 1fr;
   }

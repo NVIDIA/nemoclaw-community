@@ -35,12 +35,6 @@ CATEGORY_HEADERS: dict[str, tuple[str, ...]] = {
     "Developer Tools": ("Example", "Description"),
 }
 
-PINNED_CATEGORIES: tuple[str, ...] = (
-    "NVIDIA Recipes",
-    "Partner Recipes",
-    "Community Recipes",
-)
-
 REQUIRED_CARD_FIELDS: set[str] = {"Requires", "External access", "Boundary"}
 REQUIRED_POLICY_LINKS: set[str] = {
     "https://github.com/NVIDIA/nemoclaw-community",
@@ -105,14 +99,6 @@ class SiteEntry:
     @property
     def provenance(self) -> str:
         return normalize_text(" ".join(self.provenance_chunks))
-
-
-@dataclass(frozen=True)
-class PinnedLink:
-    """A pinned shortcut to one canonical card."""
-
-    href: str
-    text: str
 
 
 @dataclass(frozen=True)
@@ -293,9 +279,6 @@ class SiteParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.entries: list[SiteEntry] = []
-        self.pinned_links: list[PinnedLink] = []
-        self.current_pinned_href: str | None = None
-        self.current_pinned_chunks: list[str] = []
         self.ids: list[str] = []
         self.element_tabindexes: dict[str, str] = {}
         self.fragment_links: list[str] = []
@@ -417,10 +400,6 @@ class SiteParser(HTMLParser):
                 self.current_guide = True
                 self.current_guide_chunks = []
 
-        if tag == "a" and "data-pinned-link" in values:
-            self.current_pinned_href = values.get("href") or ""
-            self.current_pinned_chunks = []
-
         for attribute in ("data", "href", "poster", "src", "srcset"):
             url = values.get(attribute)
             if not url:
@@ -450,16 +429,6 @@ class SiteParser(HTMLParser):
             self.resource_paths.append(url)
 
     def handle_endtag(self, tag: str) -> None:
-        if tag == "a" and self.current_pinned_href is not None:
-            self.pinned_links.append(
-                PinnedLink(
-                    href=self.current_pinned_href,
-                    text=normalize_text(" ".join(self.current_pinned_chunks)),
-                )
-            )
-            self.current_pinned_href = None
-            self.current_pinned_chunks = []
-
         if tag == "a" and self.current_category_nav_href is not None:
             self.category_nav_links.append(
                 CategoryNavLink(
@@ -526,8 +495,6 @@ class SiteParser(HTMLParser):
 
     def handle_data(self, data: str) -> None:
         self.document_text_chunks.append(data)
-        if self.current_pinned_href is not None:
-            self.current_pinned_chunks.append(data)
         if self.current_category_nav_href is not None:
             self.current_category_nav_chunks.append(data)
         if self.current_group_heading:
@@ -649,7 +616,7 @@ def check_catalog_parity(root: Path) -> list[str]:
             )
         if not site_entry.element_id:
             errors.append(
-                f"{source_entry.name} card needs an id for pinned navigation."
+                f"{source_entry.name} card needs an id for direct navigation."
             )
         if site_entry.tabindex != "-1":
             errors.append(
@@ -670,39 +637,6 @@ def check_catalog_parity(root: Path) -> list[str]:
 
     if actual_readmes != expected_readmes:
         errors.append("Static catalog card order does not match examples/README.md.")
-
-    expected_pinned_entries = [
-        next(entry for entry in expected if entry.category == category)
-        for category in PINNED_CATEGORIES
-    ]
-    expected_pins = [entry.readme for entry in expected_pinned_entries]
-    readme_by_card_id = {entry.element_id: entry.readme for entry in parser.entries}
-    actual_pins = [
-        readme_by_card_id.get(link.href.removeprefix("#"), "")
-        for link in parser.pinned_links
-    ]
-    if actual_pins != expected_pins:
-        errors.append(
-            "Pinned links must target the first NVIDIA, partner, and community recipe "
-            f"in canonical order. Expected {expected_pins}; found {actual_pins}."
-        )
-
-    expected_pin_texts = [
-        f"{entry.provenance} {entry.name}" for entry in expected_pinned_entries
-    ]
-    actual_pin_texts = [link.text for link in parser.pinned_links]
-    if actual_pin_texts != expected_pin_texts:
-        errors.append(
-            "Pinned links must visibly preserve exact provenance and name. "
-            f"Expected {expected_pin_texts}; found {actual_pin_texts}."
-        )
-
-    for pinned in parser.pinned_links:
-        target_id = pinned.href.removeprefix("#")
-        if not pinned.href.startswith("#") or target_id not in readme_by_card_id:
-            errors.append(
-                f"Pinned link does not target a canonical card: {pinned.href!r}"
-            )
 
     duplicate_ids = sorted(
         element_id for element_id, count in Counter(parser.ids).items() if count > 1
@@ -882,8 +816,7 @@ def main() -> int:
     entries = parse_catalog(root / "examples" / "README.md")
     print(
         "Catalog parity check passed: "
-        f"{len(entries)} entries across {len(CATEGORY_IDS)} categories, "
-        f"with {len(PINNED_CATEGORIES)} deterministic pinned links."
+        f"{len(entries)} entries across {len(CATEGORY_IDS)} categories."
     )
     return 0
 
