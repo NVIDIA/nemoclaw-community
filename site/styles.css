@@ -362,20 +362,20 @@ h1 {
 }
 
 .catalog-intro {
-  padding-block: clamp(4rem, 8vw, 6.5rem);
+  padding-block: clamp(1.25rem, 2vw, 2rem);
 }
 
 .catalog-intro h2 {
-  max-width: 19ch;
-  margin-bottom: 1rem;
-  font-size: clamp(2rem, 4.7vw, 3.75rem);
+  max-width: 40ch;
+  margin-bottom: 0.4rem;
+  font-size: clamp(1.65rem, 2.6vw, 2.35rem);
 }
 
 .catalog-intro > p:last-child {
-  max-width: 48rem;
+  max-width: 70rem;
   margin: 0;
   color: var(--ink-soft);
-  font-size: 1.06rem;
+  font-size: 0.96rem;
 }
 
 .catalog-group {
