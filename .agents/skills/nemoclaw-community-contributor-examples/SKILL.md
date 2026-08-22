@@ -16,19 +16,23 @@ changing an example's runtime or security boundaries accidentally.
 1. Read [references/example-taxonomy.md](references/example-taxonomy.md).
    For issue and pull request metadata, also read the canonical
    [maintainer taxonomy](../nemoclaw-community-maintainer-policies/references/label-taxonomy.md).
-2. Read the target example's README and nearby deployment documentation before
+2. Before drafting or reviewing a new top-level example README, follow the
+   canonical [Example README Template](../../../CONTRIBUTING.md#example-readme-template).
+   Treat it as the required information contract instead of copying the
+   template into this skill.
+3. Read the target example's README and nearby deployment documentation before
    classifying or naming it.
-3. Select the artifact type first. For recipes, select contributor provenance
+4. Select the artifact type first. For recipes, select contributor provenance
    second. Use an outcome-oriented leaf name.
-4. When moving or renaming an existing example, also read
+5. When moving or renaming an existing example, also read
    [references/restructure-checklist.md](references/restructure-checklist.md)
    and inventory every repository reference before editing.
-5. Preserve contributor attribution, deployment behavior, security policy,
+6. Preserve contributor attribution, deployment behavior, security policy,
    credential handling, teardown behavior, and Compose/Helm parity.
-6. Update the public catalog, repository links, contribution commands, notices,
+7. Update the public catalog, repository links, contribution commands, notices,
    submodule configuration, and external-document follow-ups in the same
    change.
-7. Run the smallest relevant example checks, then the repository-wide checks
+8. Run the smallest relevant example checks, then the repository-wide checks
    required by `CONTRIBUTING.md`.
 
 ## Boundaries
@@ -40,5 +44,12 @@ changing an example's runtime or security boundaries accidentally.
   agent authority as part of a catalog change.
 - Do not retain duplicate compatibility directories. Document path migrations
   and update callers.
+- Base README commands, results, compatibility, support, security, and
+  performance claims on repository evidence. Do not draft from an issue alone.
+- Keep public drafts sanitized. Do not include secrets, internal links, tenant
+  details, private paths, or nonpublic environment names. Use obvious
+  placeholders for private values.
+- Require a human contributor to review and correct coding-agent drafts before
+  submission.
 - Ask maintainers when ownership or artifact type remains ambiguous after
   inspecting the example.

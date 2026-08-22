@@ -265,6 +265,10 @@ Before implementation, discuss the example's location, name, and provenance
 with the maintainers. Provenance identifies the example's origin, history,
 contributors, and contributor organizations.
 
+Use the canonical [example README template](#example-readme-template) for the
+top-level README. The template defines the required opening information. Keep
+the expanded sections appropriate for the example and its deployment paths.
+
 Document this information for a new example:
 
 - Its purpose, intended users, and support boundary.
@@ -281,6 +285,174 @@ Document this information for a new example:
 - Its third-party dependencies and license obligations.
 
 Add the example to the [example catalog](examples/README.md).
+
+## Example README Template
+
+Use this template as the required information contract for each new example.
+The opening gives a reader the information needed to decide whether to run or
+adapt the example. The expanded headings are flexible, but applicable
+credential, external-data, permission, cost, destructive-action, and security
+disclosures are required.
+
+### Before You Draft
+
+Before drafting, read this entire template, this contributor guide, the
+[writing guide](WRITING.md), the [support policy](SUPPORT.md), the
+[example taxonomy](.agents/skills/nemoclaw-community-contributor-examples/references/example-taxonomy.md),
+and the complete example directory. Inspect its implementation, scripts,
+configuration, tests, and existing documentation. Also read one strong README
+for a similar example type.
+
+Have your coding agent read the same sources. Ask it to draft from that
+evidence, not from an issue description alone. The agent must not invent
+commands, results, compatibility, support, security, or performance claims.
+Remove secrets and nonpublic information, and use obvious placeholders for
+private values. A human contributor must review and correct the draft before
+submission.
+
+### Evidence Levels
+
+Choose the lowest level that fully matches the completed verification:
+
+- `live end-to-end`: The intended user workflow completed in the documented
+  target environment, including its required live services or hardware.
+- `integration`: Multiple connected components were exercised, but the full
+  intended workflow or target environment was not.
+- `local/static`: Verification was limited to local, unit, syntax,
+  configuration, documentation, or other non-live checks.
+
+Do not infer a higher evidence level from intended architecture, partial
+results, or unverified contributor claims.
+
+### Copyable Template
+
+````markdown
+<!--
+Before drafting, read CONTRIBUTING.md, WRITING.md, the example taxonomy, and
+the complete example directory. Replace every placeholder and remove all
+authoring comments before submission.
+-->
+
+# [Replace with a recognizable example name]
+
+[For an intended user, this example performs a concrete job so they can obtain
+an observable result.]
+
+## Screenshot
+
+![Describe the visible workflow or result and its relevant context](path-to-current-sanitized-screenshot-or-gif)
+
+[Explain what the screenshot demonstrates and what the reader should notice.]
+
+<!--
+The screenshot or GIF must show the actual workflow, generated artifact, or
+observable result. A logo, branding banner, or architecture diagram alone does
+not satisfy this requirement.
+
+For a command-line example, show representative terminal-result evidence and
+also preserve the essential expected output as searchable text.
+-->
+
+## At A Glance
+
+| Question | Answer |
+| --- | --- |
+| Category | [Choose one: NVIDIA Recipe, Partner Recipe, Community Recipe, Field Demo, Launchable, or Developer Tool] |
+| Contributor or provenance | [Name the person or organization responsible for the example.] |
+| Use this when | [Name the specific user, scenario, or operational need.] |
+| You will get | [Name the observable workflow, output, artifact, or result.] |
+| Runs on | [Name the required host, platform, operating system, or hardware.] |
+| Requires | [List the software, services, credentials, and prerequisite state.] |
+| Verified on | [Give the exact environment and versions covered by completed evidence, or state "Not yet verified."] |
+| Evidence level | [Choose one: live end-to-end, integration, or local/static.] |
+| Support and maturity | [State the documented maturity and support boundary; otherwise state "Best-effort community support" and link to the repository support policy.] |
+| External access, data, and actions | [Name external destinations, data transmitted, write actions, costs, or state "None."] |
+| Start here | [Link to the recommended or lowest-risk start path.] |
+| Confirm success | [Link to verification instructions and expected results.] |
+
+<!--
+Use the canonical category exactly. Keep category separate from contributor
+provenance.
+
+Use "verified on" only when completed evidence supports the exact environment.
+Do not substitute "supported on" unless there is an actual support commitment.
+Evidence level describes completed verification; it does not establish support
+or maturity. Use the definitions in CONTRIBUTING.md and choose the lowest level
+that fully matches the completed verification.
+-->
+
+## [Choose: Start Here, Quickstart, Or Setup]
+
+[Provide the shortest verified path to the first useful result, or link to the
+canonical deployment-specific instructions.]
+
+[When multiple paths exist, identify the recommended or lowest-risk path first,
+then link the alternatives.]
+
+## [Choose: Verification Or Confirm Success]
+
+**Evidence level:** [Choose: live end-to-end, integration, or local/static.]
+
+[Give the exact command or action used to verify the example.]
+
+**Expected result:**
+
+```text
+[Show the observable success result.]
+```
+
+**This verifies:** [State exactly what the check proves.]
+
+**This does not verify:** [State material boundaries, skipped live systems, or
+remaining validation.]
+````
+
+### Required Authoring Rules
+
+- Put material credential, data-sharing, permission, cost, write, or
+  destructive-action warnings before the command that triggers them.
+- Keep the example name recognizable. Put the audience, job, and result in the
+  sentence immediately below it.
+- Use the canonical category independently from contributor or organizational
+  provenance.
+- Preserve partner and community attribution.
+- Distinguish `required`, `designed for`, `verified on`, and `supported`. These
+  terms are not interchangeable.
+- Use the lowest evidence level that fully matches the completed verification.
+- Include expected results as text even when a screenshot shows them.
+- Use obvious placeholders for credentials and private values.
+- Do not include secrets, internal links, tenant details, private paths, or
+  nonpublic environment names.
+- Do not use unqualified claims such as "secure," "safe," "production-ready,"
+  "easy," or "fast."
+- A logo, header graphic, or architecture diagram does not replace the required
+  result screenshot.
+- Quickstart and verification may link to deployment-specific guides instead of
+  duplicating them.
+- Remove unused placeholders, authoring comments, and optional sections before
+  submission.
+
+### Optional Expanded Sections
+
+Add these sections when they improve the example:
+
+- What this example does.
+- Architecture and major components.
+- Prerequisites and supported or verified environments.
+- Credentials and secret handling.
+- Security, data, permissions, network policy, and external side effects.
+- Setup and configuration.
+- Startup and operation.
+- Verification and expected results.
+- Teardown and cleanup.
+- Troubleshooting.
+- Known limitations.
+- Provenance, attribution, and support.
+- Third-party dependencies and license obligations.
+
+The headings are optional. Applicable credentials, external-data, permissions,
+cost, destructive-action, and security disclosures are not optional and must
+appear before the relevant action.
 
 ## Move or Rename an Example
 
