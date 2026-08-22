@@ -8,6 +8,8 @@ import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import http from "node:http";
+import https from "node:https";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import express from "express";
 import {
@@ -502,22 +504,61 @@ function assertPublicIp(address) {
   try {
     addr = ipaddr.parse(address);
   } catch {
-    return; // non-parseable → let it fail later
+    throw new Error(`Invalid IP address format: ${address}`);
+  }
+
+  // Normalize IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1 → 127.0.0.1)
+  if (addr.kind() === "ipv6" && addr.isIPv4MappedAddress()) {
+    addr = addr.toIPv4Address();
   }
 
   const range = addr.range();
-  if (
-    range === "private" ||
-    range === "loopback" ||
-    range === "linkLocal" ||
-    range === "uniqueLocal" ||
-    range === "unspecified" ||
-    range === "multicast" ||
-    range === "broadcast" ||
-    (addr.kind() === "ipv4" && addr.octets.join(".") === "169.254.169.254")
-  ) {
-    throw new Error(`Resolved IP is within a blocked range (${range}): ${address}`);
+  // Fail closed: only public unicast addresses are permitted
+  if (range !== "unicast") {
+    throw new Error(
+      `Resolved IP is within a blocked non-public range (${range}): ${address}`
+    );
   }
+}
+
+/**
+ * Fetch a URL while pinning the TCP connection to a pre-validated IP.
+ * Prevents DNS rebinding between validation and connection.
+ */
+async function pinnedFetch(targetUrl, validatedIp, method = "GET") {
+  const parsed = new URL(targetUrl);
+  const isHttps = parsed.protocol === "https:";
+  const client = isHttps ? https : http;
+  const addrObj = ipaddr.parse(validatedIp);
+  const family = addrObj.kind() === "ipv6" && !addrObj.isIPv4MappedAddress() ? 6 : 4;
+
+  return new Promise((resolve, reject) => {
+    const req = client.request(parsed, {
+      method,
+      lookup: (_host, _opts, cb) => {
+        if (typeof _opts === "function") {
+          cb = _opts;
+        }
+        cb(null, validatedIp, family);
+      },
+      timeout: 15000,
+      ...(isHttps ? { servername: parsed.hostname } : {}),
+    }, (res) => {
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => {
+        resolve({
+          status: res.statusCode,
+          headers: res.headers,
+          body: Buffer.concat(chunks),
+        });
+      });
+    });
+
+    req.on("error", reject);
+    req.on("timeout", () => req.destroy(new Error("Pinned fetch timeout")));
+    req.end();
+  });
 }
 
 async function navigateAndSettle(page, args) {
@@ -526,25 +567,39 @@ async function navigateAndSettle(page, args) {
   const timeoutMs = clampInteger(args.timeout_ms, DEFAULT_TIMEOUT_MS, 1000, 120000);
   const settleMs = clampInteger(args.settle_ms, DEFAULT_SETTLE_MS, 0, 15000);
 
-  // Intercept and validate all HTTP subresource requests with redirect protection
+  // Intercept and validate all HTTP subresource requests with connection-pinned DNS
   await page.route('**/*', async (route) => {
     const request = route.request();
     const url = request.url();
     try {
-      if (!url.startsWith("data:") && !url.startsWith("blob:")) {
-        await validateUrl(url);
+      if (url.startsWith("data:") || url.startsWith("blob:")) {
+        await route.continue();
+        return;
       }
-      // Fetch without following redirects to validate Location headers
-      const response = await route.fetch({ maxRedirects: 0 });
-      const status = response.status();
+
+      // Validate and get the resolved IP
+      const { resolvedAddresses } = await validateUrl(url);
+      const pinnedIp = resolvedAddresses[0];
+
+      // Fetch through a socket pinned to the validated IP
+      const response = await pinnedFetch(url, pinnedIp, request.method());
+
+      // Check for redirects — validate the Location before allowing
+      const status = response.status;
       if ([301, 302, 303, 307, 308].includes(status)) {
-        const location = response.headers()['location'];
+        const location = response.headers['location'];
         if (location) {
-          const resolvedRedirectUrl = new URL(location, url).toString();
-          await validateUrl(resolvedRedirectUrl);
+          const redirectUrl = new URL(location, url).toString();
+          await validateUrl(redirectUrl);
         }
       }
-      await route.fulfill({ response });
+
+      // Fulfill with the pinned response
+      await route.fulfill({
+        status: response.status,
+        headers: response.headers,
+        body: response.body,
+      });
     } catch (e) {
       await route.abort('accessdenied');
     }

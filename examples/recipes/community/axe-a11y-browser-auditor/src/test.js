@@ -57,6 +57,20 @@ describe('Security Features', () => {
       assert.strictEqual(result.hostname, '172.32.0.1');
     });
 
+    test('should block CGNAT, benchmarking, reserved, and IPv4-mapped IPv6', async () => {
+      // Carrier-Grade NAT (RFC 6598)
+      await assert.rejects(async () => validateUrl('http://100.64.0.1'));
+      // Benchmarking (RFC 2544)
+      await assert.rejects(async () => validateUrl('http://198.18.0.1'));
+      // Reserved / TEST-NET
+      await assert.rejects(async () => validateUrl('http://192.0.2.1'));
+      await assert.rejects(async () => validateUrl('http://240.0.0.1'));
+      // IPv4-mapped IPv6 (must normalize before checking)
+      await assert.rejects(async () => validateUrl('http://[::ffff:127.0.0.1]'));
+      await assert.rejects(async () => validateUrl('http://[::ffff:10.0.0.1]'));
+      await assert.rejects(async () => validateUrl('http://[::ffff:169.254.169.254]'));
+    });
+
     test('should block redirect destinations to private IPs', async () => {
       // Simulates what navigateAndSettle does when it finds a Location header
       // pointing to a private address after route.fetch({ maxRedirects: 0 })
