@@ -19,11 +19,15 @@
 
     <header class="site-header">
       <div class="shell masthead">
-        <a class="nvidia-brand" href="https://www.nvidia.com/" aria-label="NVIDIA home">
-          <img src="assets/nvidia-logo.png" alt="NVIDIA" width="400" height="138">
-        </a>
+        <div class="brand-lockup">
+          <a class="nvidia-brand" href="https://www.nvidia.com/" aria-label="NVIDIA home">
+            <img src="assets/nvidia-logo.png" alt="NVIDIA" width="400" height="138">
+          </a>
+          <span class="brand-divider" aria-hidden="true"></span>
+          <span class="product-name">NemoClaw Community</span>
+        </div>
         <a class="repository-link" href="https://github.com/NVIDIA/nemoclaw-community">
-          NemoClaw Community on GitHub
+          GitHub repository
           <span aria-hidden="true">↗</span>
         </a>
       </div>
@@ -31,56 +35,54 @@
 
     <main>
       <section class="hero" aria-labelledby="hero-title">
-        <div class="shell hero-grid">
-          <div class="hero-copy">
-            <p class="eyebrow">NemoClaw Community</p>
-            <h1 id="hero-title">See how a NemoClaw agent system comes together.</h1>
-            <p class="hero-summary">
-              Explore blueprint examples that connect a model, a harness, and OpenShell,
-              plus a standalone developer tool.
-            </p>
+        <div class="shell hero-shell">
+          <div class="hero-grid">
+            <div class="hero-copy">
+              <p class="eyebrow">Example catalog</p>
+              <h1 id="hero-title">See how a NemoClaw agent system comes together.</h1>
+              <p class="hero-summary">
+                Explore blueprint examples that connect a model, a harness, and OpenShell,
+                plus a standalone developer tool.
+              </p>
 
-            <nav class="hero-actions" aria-label="Catalog actions">
-              <a class="button button-primary" href="#catalog">Browse examples</a>
-              <a
-                class="button button-secondary"
-                href="https://github.com/NVIDIA/nemoclaw-community/blob/main/CONTRIBUTING.md"
-              >
-                Contribute an example
-              </a>
-            </nav>
+              <nav class="hero-actions" aria-label="Catalog actions">
+                <a class="button button-primary" href="#catalog">Browse examples <span aria-hidden="true">↓</span></a>
+                <a
+                  class="button button-secondary"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/CONTRIBUTING.md"
+                >
+                  Contribute an example
+                </a>
+              </nav>
+            </div>
 
-            <nav class="category-nav" aria-label="Example categories">
-              <a href="#nvidia-recipes">NVIDIA recipes</a>
-              <a href="#partner-recipes">Partner recipes</a>
-              <a href="#community-recipes">Community recipes</a>
-              <a href="#nvidia-field-demos">NVIDIA field demos</a>
-              <a href="#launchables">Launchables</a>
-              <a href="#developer-tools">Developer tools</a>
-            </nav>
+            <figure class="blueprint" aria-labelledby="blueprint-title">
+              <figcaption class="sr-only" id="blueprint-title">NemoClaw blueprint components</figcaption>
+              <ol class="blueprint-flow" role="list">
+                <li class="blueprint-step">
+                  <span class="step-label">Model</span>
+                  <span class="step-detail">Inference endpoint and model selection</span>
+                </li>
+                <li class="blueprint-step">
+                  <span class="step-label">Harness</span>
+                  <span class="step-detail">Runtime, skills, state, and workflow behavior</span>
+                </li>
+                <li class="blueprint-step">
+                  <span class="step-label">OpenShell</span>
+                  <span class="step-detail">Sandbox, policy, providers, and networking</span>
+                </li>
+              </ol>
+            </figure>
           </div>
 
-          <figure class="blueprint" aria-labelledby="blueprint-title">
-            <figcaption id="blueprint-title">Blueprint anatomy</figcaption>
-            <ol class="blueprint-flow" role="list">
-              <li class="blueprint-step">
-                <span class="step-label">Model</span>
-                <span class="step-detail">Inference endpoint and provider configuration</span>
-              </li>
-              <li class="blueprint-step">
-                <span class="step-label">Harness</span>
-                <span class="step-detail">Agent runtime, skills, state, and integrations</span>
-              </li>
-              <li class="blueprint-step">
-                <span class="step-label">OpenShell</span>
-                <span class="step-detail">Sandbox, gateway, policy, and networking boundaries</span>
-              </li>
-            </ol>
-            <p class="blueprint-note">
-              Harness Engineering Playground is a standalone developer tool, not an
-              OpenShell blueprint.
-            </p>
-          </figure>
+          <nav class="category-nav" aria-label="Example categories">
+            <a href="#nvidia-recipes">NVIDIA recipes</a>
+            <a href="#partner-recipes">Partner recipes</a>
+            <a href="#community-recipes">Community recipes</a>
+            <a href="#nvidia-field-demos">NVIDIA field demos</a>
+            <a href="#launchables">Launchables</a>
+            <a href="#developer-tools">Developer tools</a>
+          </nav>
         </div>
       </section>
 
@@ -90,14 +92,7 @@
         tabindex="-1"
         aria-labelledby="catalog-title"
       >
-        <div class="shell catalog-intro">
-          <p class="eyebrow eyebrow-dark">Example catalog</p>
-          <h2 id="catalog-title">Choose with the operating facts in view.</h2>
-          <p>
-            Each card states the outcome, material requirements, external access, and
-            documented support or maturity boundary. Open the source guide before setup.
-          </p>
-        </div>
+        <h2 class="sr-only" id="catalog-title">Example catalog</h2>
 
         <section
           class="catalog-group"
@@ -108,7 +103,6 @@
         >
           <div class="shell group-layout">
             <header class="group-heading">
-              <p class="group-number" aria-hidden="true">01</p>
               <h2 id="nvidia-recipes-title">NVIDIA recipes</h2>
               <p>
                 Reusable agent recipes authored or maintained by NVIDIA. Placement does not
@@ -384,7 +378,7 @@
         </section>
 
         <section
-          class="catalog-group catalog-group-alt"
+          class="catalog-group"
           id="partner-recipes"
           tabindex="-1"
           data-catalog-category="Partner Recipes"
@@ -392,7 +386,6 @@
         >
           <div class="shell group-layout">
             <header class="group-heading">
-              <p class="group-number" aria-hidden="true">02</p>
               <h2 id="partner-recipes-title">Partner recipes</h2>
               <p>
                 Reusable agent recipes contributed by named partner organizations. Partner
@@ -588,7 +581,6 @@
         >
           <div class="shell group-layout">
             <header class="group-heading">
-              <p class="group-number" aria-hidden="true">03</p>
               <h2 id="community-recipes-title">Community recipes</h2>
               <p>
                 Reusable agent recipes contributed independently without formal
@@ -645,7 +637,7 @@
         </section>
 
         <section
-          class="catalog-group catalog-group-alt"
+          class="catalog-group"
           id="nvidia-field-demos"
           tabindex="-1"
           data-catalog-category="NVIDIA Field Demos"
@@ -653,7 +645,6 @@
         >
           <div class="shell group-layout">
             <header class="group-heading">
-              <p class="group-number" aria-hidden="true">04</p>
               <h2 id="nvidia-field-demos-title">NVIDIA field demos</h2>
               <p>Bounded NVIDIA demonstrations for named hardware and software environments.</p>
             </header>
@@ -716,7 +707,6 @@
         >
           <div class="shell group-layout">
             <header class="group-heading">
-              <p class="group-number" aria-hidden="true">05</p>
               <h2 id="launchables-title">Launchables</h2>
               <p>Provisioning and onboarding paths for a specific environment.</p>
             </header>
@@ -763,7 +753,7 @@
         </section>
 
         <section
-          class="catalog-group catalog-group-alt"
+          class="catalog-group"
           id="developer-tools"
           tabindex="-1"
           data-catalog-category="Developer Tools"
@@ -771,7 +761,6 @@
         >
           <div class="shell group-layout">
             <header class="group-heading">
-              <p class="group-number" aria-hidden="true">06</p>
               <h2 id="developer-tools-title">Developer tools</h2>
               <p>
                 Standalone development and evaluation utilities, separate from deployed
@@ -831,7 +820,6 @@
     <footer class="site-footer">
       <div class="shell footer-layout">
         <div>
-          <p class="footer-title">NemoClaw Community</p>
           <p>
             NemoClaw Community support is best-effort unless a specific NVIDIA product
             agreement says otherwise.
@@ -839,7 +827,6 @@
         </div>
         <nav class="footer-links" aria-label="Repository policies and resources">
           <a href="https://github.com/NVIDIA/nemoclaw-community">Repository</a>
-          <a href="https://github.com/NVIDIA/nemoclaw-community/blob/main/CONTRIBUTING.md">Contribute</a>
           <a href="https://github.com/NVIDIA/nemoclaw-community/blob/main/SUPPORT.md">Support</a>
           <a href="https://github.com/NVIDIA/nemoclaw-community/blob/main/SECURITY.md">Security</a>
           <a href="https://github.com/brevdev/nemoclaw-demos">Additional examples</a>
