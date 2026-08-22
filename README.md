@@ -8,6 +8,7 @@
 - [Reference Examples](#reference-examples)
 - [Getting Started](#getting-started)
 - [Requirements](#requirements)
+- [Catalog Deployment](#catalog-deployment)
 - [Contributing](#contributing)
 - [Security](#security)
 - [Support](#support)
@@ -26,10 +27,12 @@ The examples in this repository demonstrate complete blueprint patterns: they sh
 
 ## Reference Examples
 
+**[Browse examples on the web](https://nvidia.github.io/nemoclaw-community/)**
+
 Examples are organized as reusable NVIDIA and partner recipes, NVIDIA field
 demos, environment launchables, and standalone developer tools. Browse the
-[example catalog](examples/README.md) to choose a workflow and follow its
-independent setup and verification guide.
+[source example catalog](examples/README.md) to choose an example and follow
+its independent setup and verification guide.
 
 Additional NemoClaw examples are available in
 [brevdev/nemoclaw-demos](https://github.com/brevdev/nemoclaw-demos).
@@ -54,6 +57,30 @@ For examples maintained outside this repository, see [brevdev/nemoclaw-demos](ht
 - Optional integration credentials for Slack, Microsoft Graph/Outlook, GitHub live reads, and source ETL mirrors
 
 This project will download and install additional third-party open source software projects. Review the license terms of these open source projects before use. See [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES) for the repository inventory.
+
+## Catalog Deployment
+
+The [Pages workflow](.github/workflows/pages.yml) validates the static catalog
+and local links. Pull requests attach an `example-catalog-preview` artifact and
+do not deploy. A push to `main`, or a manual run from `main`, packages `site/`
+and deploys it with the `github-pages` environment.
+
+Before the first deployment, a repository administrator must complete these
+GitHub settings:
+
+1. In **Settings > Pages**, select **GitHub Actions** as the source.
+2. Create or open the **github-pages** environment in **Settings > Environments**.
+3. Restrict its deployment branches and tags to `main`.
+
+Do not add a personal access token to enable Pages. After the settings are in
+place, merge the catalog change or run **Example catalog Pages** from `main` in
+the Actions tab. If an earlier deployment failed because Pages was disabled,
+rerun that workflow from `main`.
+
+After deployment, verify the HTTPS page, the stylesheet and logo under the
+`/nemoclaw-community/` project path, the category links, and the example README
+links. Then set the repository website field to
+`https://nvidia.github.io/nemoclaw-community/`.
 
 ## Contributing
 

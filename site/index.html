@@ -1,0 +1,890 @@
+<!doctype html>
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="Browse NemoClaw Community examples by outcome, requirements, external access, and documented boundary."
+    >
+    <title>NemoClaw Community Example Catalog | NVIDIA</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#catalog">Skip to examples</a>
+
+    <header class="site-header">
+      <div class="shell masthead">
+        <a class="nvidia-brand" href="https://www.nvidia.com/" aria-label="NVIDIA home">
+          <img src="assets/nvidia-logo.png" alt="NVIDIA" width="400" height="138">
+        </a>
+        <a class="repository-link" href="https://github.com/NVIDIA/nemoclaw-community">
+          NemoClaw Community on GitHub
+          <span aria-hidden="true">↗</span>
+        </a>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="shell hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow">NemoClaw Community</p>
+            <h1 id="hero-title">See how a NemoClaw agent system comes together.</h1>
+            <p class="hero-summary">
+              Explore blueprint examples that connect a model, a harness, and OpenShell,
+              plus a standalone developer tool.
+            </p>
+
+            <nav class="hero-actions" aria-label="Catalog actions">
+              <a class="button button-primary" href="#catalog">Browse examples</a>
+              <a
+                class="button button-secondary"
+                href="https://github.com/NVIDIA/nemoclaw-community/blob/main/CONTRIBUTING.md"
+              >
+                Contribute an example
+              </a>
+            </nav>
+
+            <nav class="category-nav" aria-label="Example categories">
+              <a href="#nvidia-recipes">NVIDIA recipes</a>
+              <a href="#partner-recipes">Partner recipes</a>
+              <a href="#community-recipes">Community recipes</a>
+              <a href="#nvidia-field-demos">NVIDIA field demos</a>
+              <a href="#launchables">Launchables</a>
+              <a href="#developer-tools">Developer tools</a>
+            </nav>
+          </div>
+
+          <figure class="blueprint" aria-labelledby="blueprint-title">
+            <figcaption id="blueprint-title">Blueprint anatomy</figcaption>
+            <ol class="blueprint-flow" role="list">
+              <li class="blueprint-step">
+                <span class="step-label">Model</span>
+                <span class="step-detail">Inference endpoint and provider configuration</span>
+              </li>
+              <li class="blueprint-step">
+                <span class="step-label">Harness</span>
+                <span class="step-detail">Agent runtime, skills, state, and integrations</span>
+              </li>
+              <li class="blueprint-step">
+                <span class="step-label">OpenShell</span>
+                <span class="step-detail">Sandbox, gateway, policy, and networking boundaries</span>
+              </li>
+            </ol>
+            <p class="blueprint-note">
+              Harness Engineering Playground is a standalone developer tool, not an
+              OpenShell blueprint.
+            </p>
+          </figure>
+        </div>
+      </section>
+
+      <section class="pinned-section" aria-labelledby="pinned-title">
+        <div class="shell pinned-layout">
+          <div class="pinned-heading">
+            <p class="eyebrow">Pinned examples</p>
+            <h2 id="pinned-title">A cross-section of the catalog</h2>
+            <p>
+              Quick links across contributor categories. Pinning is for orientation;
+              it does not indicate rank, support, maturity, certification, or endorsement.
+            </p>
+          </div>
+          <!--
+            Pin the first entry in each recipe provenance section. The parity check
+            enforces this deterministic navigation rule against examples/README.md.
+          -->
+          <nav class="pinned-nav" aria-labelledby="pinned-title">
+            <ul class="pinned-links" role="list">
+              <li>
+                <a data-pinned-link href="#example-developer-community-chief-of-staff">
+                  <span>NVIDIA recipe</span>
+                  Developer Community Chief of Staff
+                </a>
+              </li>
+              <li>
+                <a data-pinned-link href="#example-x402-payment-gate">
+                  <span>Partner recipe · BlueTier</span>
+                  x402 Payment Gate
+                </a>
+              </li>
+              <li>
+                <a data-pinned-link href="#example-deep-research-worker">
+                  <span>Community recipe</span>
+                  Deep Research Worker
+                </a>
+              </li>
+            </ul>
+          </nav>
+          <a class="pinned-all-link" href="#catalog">Browse all examples <span aria-hidden="true">↓</span></a>
+        </div>
+      </section>
+
+      <section
+        class="catalog"
+        id="catalog"
+        tabindex="-1"
+        aria-labelledby="catalog-title"
+      >
+        <div class="shell catalog-intro">
+          <p class="eyebrow eyebrow-dark">Example catalog</p>
+          <h2 id="catalog-title">Choose with the operating facts in view.</h2>
+          <p>
+            Each card states the outcome, material requirements, external access, and
+            documented support or maturity boundary. Open the source guide before setup.
+          </p>
+        </div>
+
+        <section
+          class="catalog-group"
+          id="nvidia-recipes"
+          tabindex="-1"
+          data-catalog-category="NVIDIA Recipes"
+          aria-labelledby="nvidia-recipes-title"
+        >
+          <div class="shell group-layout">
+            <header class="group-heading">
+              <p class="group-number" aria-hidden="true">01</p>
+              <h2 id="nvidia-recipes-title">NVIDIA recipes</h2>
+              <p>
+                Reusable agent recipes authored or maintained by NVIDIA. Placement does not
+                state a support or maturity level.
+              </p>
+            </header>
+            <div class="card-grid">
+              <article
+                class="example-card"
+                id="example-developer-community-chief-of-staff"
+                aria-labelledby="example-developer-community-chief-of-staff-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Developer Community Chief of Staff"
+                data-readme="examples/recipes/nvidia/developer-community-chief-of-staff/README.md"
+              >
+                <p class="provenance">NVIDIA recipe</p>
+                <h3 id="example-developer-community-chief-of-staff-title">Developer Community Chief of Staff</h3>
+                <p class="outcome">
+                  Synthesizes Slack, Outlook, GitHub, and mirrored community signals into
+                  operating briefs, gaps, priorities, and follow-up recommendations.
+                </p>
+                <dl>
+                  <div>
+                    <dt>Requires</dt>
+                    <dd>Docker, OpenShell 0.0.85, an inference key, and Slack or Outlook credentials.</dd>
+                  </div>
+                  <div>
+                    <dt>External access</dt>
+                    <dd>
+                      Inference and the selected messaging channel; exact read-only GitHub
+                      repositories; optional GitLab and Tavily; host-mirrored forum and history data.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Boundary</dt>
+                    <dd>
+                      Personal, single-host managed virtual machine recipe; not a Kubernetes
+                      deployment. Repository support is best-effort.
+                    </dd>
+                  </div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/nvidia/developer-community-chief-of-staff/README.md"
+                >Open setup and verification guide<span class="sr-only"> for Developer Community Chief of Staff</span></a>
+              </article>
+
+              <article
+                class="example-card"
+                id="example-kubernetes-gpu-autoscaling"
+                aria-labelledby="example-kubernetes-gpu-autoscaling-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Kubernetes GPU Autoscaling"
+                data-readme="examples/recipes/nvidia/kubernetes-gpu-autoscaling/README.md"
+              >
+                <p class="provenance">NVIDIA recipe</p>
+                <h3 id="example-kubernetes-gpu-autoscaling-title">Kubernetes GPU Autoscaling</h3>
+                <p class="outcome">
+                  Runs a CPU-only NemoClaw/OpenClaw sandbox through OpenShell on Kubernetes
+                  and autoscales authenticated, GPU-backed Ollama inference pods from
+                  <abbr title="NVIDIA Data Center GPU Manager">DCGM</abbr> utilization.
+                </p>
+                <dl>
+                  <div>
+                    <dt>Requires</dt>
+                    <dd>
+                      Kubernetes 1.25+ with kubectl, Helm 3, allocatable NVIDIA GPUs, GPU
+                      Operator/DCGM, and Metrics Server. The OpenShell path also needs Docker
+                      Buildx, a pullable registry, a version-matched OpenShell command-line
+                      interface (CLI), Agent Sandbox custom resource definitions, and OpenID
+                      Connect or the documented
+                      unauthenticated evaluation exception.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>External access</dt>
+                    <dd>
+                      Cluster-local authenticated inference, registry and model downloads,
+                      and TLS through Envoy by default.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Boundary</dt>
+                    <dd>
+                      Experimental. Validated on single-node MicroK8s on Brev AWS with four
+                      L40S GPUs; four GPUs is not a hard limit.
+                    </dd>
+                  </div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/nvidia/kubernetes-gpu-autoscaling/README.md"
+                >Open setup and verification guide<span class="sr-only"> for Kubernetes GPU Autoscaling</span></a>
+              </article>
+
+              <article
+                class="example-card"
+                id="example-memory-driven-chief-of-staff"
+                aria-labelledby="example-memory-driven-chief-of-staff-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Memory-Driven Chief of Staff"
+                data-readme="examples/recipes/nvidia/memory-driven-chief-of-staff/README.md"
+              >
+                <p class="provenance">NVIDIA recipe</p>
+                <h3 id="example-memory-driven-chief-of-staff-title">Memory-Driven Chief of Staff</h3>
+                <p class="outcome">
+                  Keeps a locally-authoritative, revisable record per inbound email and Slack
+                  message, re-judged on a schedule and re-ranked under fixed caps, without
+                  writing back to the source.
+                </p>
+                <dl>
+                  <div>
+                    <dt>Requires</dt>
+                    <dd>
+                      Python 3.10+ for offline fixtures; Linux, Hermes 0.19+, and a model
+                      credential for scheduled operation.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>External access</dt>
+                    <dd>
+                      Fixtures use no network. Scheduled jobs reach only the configured
+                      inference provider. Email and Slack connectors are not included yet.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Boundary</dt>
+                    <dd>
+                      Designed for one person’s work stream. It is a recipe, not a product,
+                      and has no support commitment.
+                    </dd>
+                  </div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/nvidia/memory-driven-chief-of-staff/README.md"
+                >Open setup and verification guide<span class="sr-only"> for Memory-Driven Chief of Staff</span></a>
+              </article>
+
+              <article
+                class="example-card"
+                id="example-nv-tech-assistant"
+                aria-labelledby="example-nv-tech-assistant-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="NV Tech Assistant"
+                data-readme="examples/recipes/nvidia/nv-tech-assistant/README.md"
+              >
+                <p class="provenance">NVIDIA recipe</p>
+                <h3 id="example-nv-tech-assistant-title">NV Tech Assistant</h3>
+                <p class="outcome">
+                  Answers NVIDIA technical questions with cited evidence from allowlisted
+                  NVIDIA, GitHub, and arXiv sources.
+                </p>
+                <dl>
+                  <div>
+                    <dt>Requires</dt>
+                    <dd>
+                      Docker, NemoClaw, and an NVIDIA Endpoints API key. Brave Search is optional.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>External access</dt>
+                    <dd>
+                      Read-only allowlisted NVIDIA, GitHub, Hugging Face, and arXiv sources;
+                      optional Brave Search.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Boundary</dt>
+                    <dd>No offline corpus is included. NemoClaw Community support is best-effort.</dd>
+                  </div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/nvidia/nv-tech-assistant/README.md"
+                >Open setup and verification guide<span class="sr-only"> for NV Tech Assistant</span></a>
+              </article>
+
+              <article
+                class="example-card"
+                id="example-payment-operations-hermes-assistant"
+                aria-labelledby="example-payment-operations-hermes-assistant-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Payment Operations Hermes Assistant"
+                data-readme="examples/recipes/nvidia/payment-ops-hermes/README.md"
+              >
+                <p class="provenance">NVIDIA recipe</p>
+                <h3 id="example-payment-operations-hermes-assistant-title">Payment Operations Hermes Assistant</h3>
+                <p class="outcome">
+                  Demonstrates constrained payment screening, evidence preparation, and a
+                  platform-enforced human release boundary.
+                </p>
+                <dl>
+                  <div>
+                    <dt>Requires</dt>
+                    <dd>
+                      Linux x86_64 or arm64, Docker Compose, OpenShell 0.0.53, and an
+                      OpenAI-compatible inference key.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>External access</dt>
+                    <dd>
+                      Inference and observability. The payment rail remains host-only and is
+                      absent from sandbox policy.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Boundary</dt>
+                    <dd>
+                      Educational single-host deployment with synthetic data; not a production
+                      payment system. A human remains accountable for release.
+                    </dd>
+                  </div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/nvidia/payment-ops-hermes/README.md"
+                >Open setup and verification guide<span class="sr-only"> for Payment Operations Hermes Assistant</span></a>
+              </article>
+
+              <article
+                class="example-card"
+                id="example-pr-review-advisor"
+                aria-labelledby="example-pr-review-advisor-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="PR Review Advisor"
+                data-readme="examples/recipes/nvidia/pr-review-advisor/README.md"
+              >
+                <p class="provenance">NVIDIA recipe</p>
+                <h3 id="example-pr-review-advisor-title">PR Review Advisor</h3>
+                <p class="outcome">
+                  Reviews exact pull request heads with a constrained Hermes workflow,
+                  produces attested artifacts, and publishes only through a separate maintainer action.
+                </p>
+                <dl>
+                  <div>
+                    <dt>Requires</dt>
+                    <dd>
+                      Linux, Docker, OpenShell 0.0.85, Git, Node.js 22.19+, Python 3, curl,
+                      and an inference provider. The workflow also needs GitHub.com and a
+                      dedicated self-hosted runner.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>External access</dt>
+                    <dd>
+                      The inference endpoint receives repository and pull request context.
+                      GitHub credentials are removed before model work; publication is a separate host action.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Boundary</dt>
+                    <dd>
+                      Hermes-only educational blueprint, not a hosted service. Version 0.1
+                      does not support GitHub Enterprise Server.
+                    </dd>
+                  </div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/nvidia/pr-review-advisor/README.md"
+                >Open setup and verification guide<span class="sr-only"> for PR Review Advisor</span></a>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section
+          class="catalog-group catalog-group-alt"
+          id="partner-recipes"
+          tabindex="-1"
+          data-catalog-category="Partner Recipes"
+          aria-labelledby="partner-recipes-title"
+        >
+          <div class="shell group-layout">
+            <header class="group-heading">
+              <p class="group-number" aria-hidden="true">02</p>
+              <h2 id="partner-recipes-title">Partner recipes</h2>
+              <p>
+                Reusable agent recipes contributed by named partner organizations. Partner
+                attribution remains visible on each card.
+              </p>
+            </header>
+            <div class="card-grid">
+              <article
+                class="example-card"
+                id="example-x402-payment-gate"
+                aria-labelledby="example-x402-payment-gate-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="x402 Payment Gate"
+                data-readme="examples/recipes/partners/bluetier/x402-payment-gate/README.md"
+              >
+                <p class="provenance">Partner recipe · BlueTier</p>
+                <h3 id="example-x402-payment-gate-title">x402 Payment Gate</h3>
+                <p class="outcome">
+                  Releases an agent's x402 payments through a maker/checker boundary: the
+                  sandboxed agent can only submit payment intents, and a host-side gate outside
+                  the sandbox re-screens each one with pre-signature GO/HOLD/STOP verdicts
+                  (counterparty reputation, price anomaly,
+                  <abbr title="Office of Foreign Assets Control">OFAC</abbr> sanctions)
+                  before anything is signed or settled.
+                </p>
+                <dl>
+                  <div>
+                    <dt>Requires</dt>
+                    <dd>
+                      Python 3 for the host boundary, Docker and OpenShell for sandbox
+                      verification, and access to the Blackwall verdict service.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>External access</dt>
+                    <dd>
+                      Only the payment claim is sent to Blackwall. The sandbox has neither a
+                      signing key nor a payment-rail route.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Boundary</dt>
+                    <dd>
+                      BlueTier-supported boundary demonstration, not an interactive Hermes
+                      runtime. It uses no real money; the public verdict service has no
+                      service-level agreement.
+                    </dd>
+                  </div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/partners/bluetier/x402-payment-gate/README.md"
+                >Open setup and verification guide<span class="sr-only"> for x402 Payment Gate</span></a>
+              </article>
+
+              <article
+                class="example-card"
+                id="example-retail-assistant"
+                aria-labelledby="example-retail-assistant-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Retail Assistant"
+                data-readme="examples/recipes/partners/hpe/retail-assistant/README.md"
+              >
+                <p class="provenance">Partner recipe · HPE</p>
+                <h3 id="example-retail-assistant-title">Retail Assistant</h3>
+                <p class="outcome">
+                  Provides role-aware retail operations through Telegram, FastAPI, PostgreSQL,
+                  Docker Compose, and Helm.
+                </p>
+                <dl>
+                  <div>
+                    <dt>Requires</dt>
+                    <dd>
+                      A Telegram bot token and user IDs, a tool-calling large language model,
+                      and either Docker or Kubernetes with Helm. Docker Compose requires access
+                      to <code>/var/run/docker.sock</code>.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>External access</dt>
+                    <dd>
+                      Telegram and the inference endpoint. FastAPI and PostgreSQL remain
+                      deployment components.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Boundary</dt>
+                    <dd>
+                      HPE-contributed demonstration presented as-is. Telegram-ID identity
+                      mapping is a demonstration workaround; deployments should use an external identity provider.
+                    </dd>
+                  </div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/partners/hpe/retail-assistant/README.md"
+                >Open setup and verification guide<span class="sr-only"> for Retail Assistant</span></a>
+              </article>
+
+              <article
+                class="example-card"
+                id="example-shrike-security-action-governance"
+                aria-labelledby="example-shrike-security-action-governance-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Shrike Security Action Governance"
+                data-readme="examples/recipes/partners/shrike/shrike-security/README.md"
+              >
+                <p class="provenance">Partner recipe · Shrike Security</p>
+                <h3 id="example-shrike-security-action-governance-title">Shrike Security Action Governance</h3>
+                <p class="outcome">
+                  Governs agent tool calls with a <code>before_tool_call</code> plugin that
+                  returns allow / warn / require_approval / block from Shrike's enforce plane,
+                  with host-side secret handling and scoped egress to Shrike.
+                </p>
+                <dl>
+                  <div>
+                    <dt>Requires</dt>
+                    <dd>
+                      NemoClaw/OpenShell, an inference provider, a Shrike API key, Node.js/npm,
+                      and curl.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>External access</dt>
+                    <dd>
+                      Tool-call action content is sent to Shrike over TLS on two scoped POST
+                      routes. Without a key, nothing is sent and default behavior blocks fail-closed.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Boundary</dt>
+                    <dd>
+                      Provided as-is and outside NVIDIA support. It is in-sandbox defense-in-depth,
+                      not an independent security boundary; runtime installation is best-effort.
+                    </dd>
+                  </div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/partners/shrike/shrike-security/README.md"
+                >Open setup and verification guide<span class="sr-only"> for Shrike Security Action Governance</span></a>
+              </article>
+
+              <article
+                class="example-card"
+                id="example-watchtower"
+                aria-labelledby="example-watchtower-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Watchtower"
+                data-readme="examples/recipes/partners/tavily/watchtower/README.md"
+              >
+                <p class="provenance">Partner recipe · Tavily</p>
+                <h3 id="example-watchtower-title">Watchtower</h3>
+                <p class="outcome">
+                  Runs scheduled, cited web monitoring with persistent deduplication and auditable outputs.
+                </p>
+                <dl>
+                  <div>
+                    <dt>Requires</dt>
+                    <dd>Docker, NemoClaw, a Tavily API key, and inference credentials.</dd>
+                  </div>
+                  <div>
+                    <dt>External access</dt>
+                    <dd>Tavily search and extraction plus inference. Generic web fetch is denied.</dd>
+                  </div>
+                  <div>
+                    <dt>Boundary</dt>
+                    <dd>
+                      Contributed and supported by Tavily. Creating scheduled jobs requires
+                      explicit <code>operator.admin</code> approval.
+                    </dd>
+                  </div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/partners/tavily/watchtower/README.md"
+                >Open setup and verification guide<span class="sr-only"> for Watchtower</span></a>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section
+          class="catalog-group"
+          id="community-recipes"
+          tabindex="-1"
+          data-catalog-category="Community Recipes"
+          aria-labelledby="community-recipes-title"
+        >
+          <div class="shell group-layout">
+            <header class="group-heading">
+              <p class="group-number" aria-hidden="true">03</p>
+              <h2 id="community-recipes-title">Community recipes</h2>
+              <p>
+                Reusable agent recipes contributed independently without formal
+                organizational provenance.
+              </p>
+            </header>
+            <div class="card-grid">
+              <article
+                class="example-card"
+                id="example-deep-research-worker"
+                aria-labelledby="example-deep-research-worker-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Deep Research Worker"
+                data-readme="examples/recipes/community/deep-research-worker/README.md"
+              >
+                <p class="provenance">Community recipe</p>
+                <h3 id="example-deep-research-worker-title">Deep Research Worker</h3>
+                <p class="outcome">
+                  Queues long-running research tasks from one sandbox to a host-side
+                  DeepAgents worker, with a narrow worker-only sandbox policy and optional
+                  read-only host-side search integrations.
+                </p>
+                <dl>
+                  <div>
+                    <dt>Requires</dt>
+                    <dd>
+                      Docker Compose, Python 3.10+ for local checks, an existing dedicated
+                      sandbox, and an OpenAI-compatible inference endpoint.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>External access</dt>
+                    <dd>
+                      The sandbox reaches only the host worker on port 9050. The worker reaches
+                      inference and optional host-side search helpers.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Boundary</dt>
+                    <dd>
+                      Independent community contribution, not NemoClaw core. It has no NVIDIA
+                      support or readiness guarantee; operators own production hardening.
+                    </dd>
+                  </div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/community/deep-research-worker/README.md"
+                >Open setup and verification guide<span class="sr-only"> for Deep Research Worker</span></a>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section
+          class="catalog-group catalog-group-alt"
+          id="nvidia-field-demos"
+          tabindex="-1"
+          data-catalog-category="NVIDIA Field Demos"
+          aria-labelledby="nvidia-field-demos-title"
+        >
+          <div class="shell group-layout">
+            <header class="group-heading">
+              <p class="group-number" aria-hidden="true">04</p>
+              <h2 id="nvidia-field-demos-title">NVIDIA field demos</h2>
+              <p>Bounded NVIDIA demonstrations for named hardware and software environments.</p>
+            </header>
+            <div class="card-grid">
+              <article
+                class="example-card"
+                id="example-dgx-station-blender-and-omniverse"
+                aria-labelledby="example-dgx-station-blender-and-omniverse-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="DGX Station Blender and Omniverse"
+                data-readme="examples/demos/field/blender-omniverse-dgx-station/README.md"
+              >
+                <p class="provenance">NVIDIA field demo</p>
+                <h3 id="example-dgx-station-blender-and-omniverse-title">DGX Station Blender and Omniverse</h3>
+                <p class="outcome">
+                  Controls visible Blender on DGX Station, renders with OVRTX, and runs native
+                  OVPhysX simulations.
+                </p>
+                <dl>
+                  <div>
+                    <dt>Requires</dt>
+                    <dd>
+                      DGX Station with Ubuntu 24.04 ARM64, GB300, an RTX-capable GPU, Blender
+                      5.1.x, OVRTX/OVPhysX, local Nemotron 3 Ultra, NemoClaw/OpenShell,
+                      Docker/NVIDIA Container Toolkit, and a Hugging Face read token.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>External access</dt>
+                    <dd>
+                      Local inference and the host Blender Model Context Protocol bridge, with
+                      public release and model downloads during setup.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Boundary</dt>
+                    <dd>
+                      Validated on the documented DGX Station, GB300, and RTX PRO 6000
+                      configuration. It is an additive upstream extension with temporary
+                      compatibility patches.
+                    </dd>
+                  </div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/demos/field/blender-omniverse-dgx-station/README.md"
+                >Open setup and verification guide<span class="sr-only"> for DGX Station Blender and Omniverse</span></a>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section
+          class="catalog-group"
+          id="launchables"
+          tabindex="-1"
+          data-catalog-category="Launchables"
+          aria-labelledby="launchables-title"
+        >
+          <div class="shell group-layout">
+            <header class="group-heading">
+              <p class="group-number" aria-hidden="true">05</p>
+              <h2 id="launchables-title">Launchables</h2>
+              <p>Provisioning and onboarding paths for a specific environment.</p>
+            </header>
+            <div class="card-grid">
+              <article
+                class="example-card"
+                id="example-hermes"
+                aria-labelledby="example-hermes-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Hermes"
+                data-readme="examples/launchables/brev/hermes/README.md"
+              >
+                <p class="provenance">Launchable · Brev</p>
+                <h3 id="example-hermes-title">Hermes</h3>
+                <p class="outcome">
+                  Provides a notebook path from a fresh Brev CPU instance to a
+                  NemoClaw-managed Hermes sandbox.
+                </p>
+                <dl>
+                  <div>
+                    <dt>Requires</dt>
+                    <dd>A Brev CPU instance and NVIDIA Build API key.</dd>
+                  </div>
+                  <div>
+                    <dt>External access</dt>
+                    <dd>Brev and the NVIDIA Build inference API.</dd>
+                  </div>
+                  <div>
+                    <dt>Boundary</dt>
+                    <dd>
+                      NemoClaw Community support is best-effort. No example-specific maturity
+                      or support claim is documented.
+                    </dd>
+                  </div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/launchables/brev/hermes/README.md"
+                >Open example README<span class="sr-only"> for Hermes</span></a>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section
+          class="catalog-group catalog-group-alt"
+          id="developer-tools"
+          tabindex="-1"
+          data-catalog-category="Developer Tools"
+          aria-labelledby="developer-tools-title"
+        >
+          <div class="shell group-layout">
+            <header class="group-heading">
+              <p class="group-number" aria-hidden="true">06</p>
+              <h2 id="developer-tools-title">Developer tools</h2>
+              <p>
+                Standalone development and evaluation utilities, separate from deployed
+                agent blueprints.
+              </p>
+            </header>
+            <div class="card-grid">
+              <article
+                class="example-card"
+                id="example-harness-engineering-playground"
+                aria-labelledby="example-harness-engineering-playground-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Harness Engineering Playground"
+                data-readme="examples/tools/harness-engineering-playground/README.md"
+              >
+                <p class="provenance">Developer tool</p>
+                <h3 id="example-harness-engineering-playground-title">Harness Engineering Playground</h3>
+                <p class="outcome">
+                  Provides an experimental <abbr title="command-line interface">CLI</abbr> for
+                  eval-driven harness profile optimization. It is not an OpenShell blueprint.
+                </p>
+                <dl>
+                  <div>
+                    <dt>Requires</dt>
+                    <dd>
+                      Python 3.11+, uv, proposer-model credentials, model-under-test
+                      credentials, the initialized DeepAgents submodule, and the DeepAgents extra.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>External access</dt>
+                    <dd>
+                      Proposer and target-model endpoints. LangSmith is optional and can be
+                      disabled for offline test tracking.
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Boundary</dt>
+                    <dd>
+                      Experimental and evolving, with breaking changes expected. It is not
+                      intended for production use.
+                    </dd>
+                  </div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/tools/harness-engineering-playground/README.md"
+                >Open setup and verification guide<span class="sr-only"> for Harness Engineering Playground</span></a>
+              </article>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="shell footer-layout">
+        <div>
+          <p class="footer-title">NemoClaw Community</p>
+          <p>
+            NemoClaw Community support is best-effort unless a specific NVIDIA product
+            agreement says otherwise.
+          </p>
+        </div>
+        <nav class="footer-links" aria-label="Repository policies and resources">
+          <a href="https://github.com/NVIDIA/nemoclaw-community">Repository</a>
+          <a href="https://github.com/NVIDIA/nemoclaw-community/blob/main/CONTRIBUTING.md">Contribute</a>
+          <a href="https://github.com/NVIDIA/nemoclaw-community/blob/main/SUPPORT.md">Support</a>
+          <a href="https://github.com/NVIDIA/nemoclaw-community/blob/main/SECURITY.md">Security</a>
+          <a href="https://github.com/brevdev/nemoclaw-demos">Additional examples</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

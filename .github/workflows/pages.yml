@@ -1,0 +1,94 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: Example catalog Pages
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/pages.yml"
+      - "README.md"
+      - "SUPPORT.md"
+      - ".agents/skills/nemoclaw-community-contributor-examples/references/example-taxonomy.md"
+      - "examples/README.md"
+      - "examples/**/README.md"
+      - "scripts/check_catalog_parity.py"
+      - "site/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/pages.yml"
+      - "README.md"
+      - "SUPPORT.md"
+      - ".agents/skills/nemoclaw-community-contributor-examples/references/example-taxonomy.md"
+      - "examples/README.md"
+      - "examples/**/README.md"
+      - "scripts/check_catalog_parity.py"
+      - "site/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate catalog
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check catalog parity and local links
+        run: python3 scripts/check_catalog_parity.py --check
+
+      - name: Check license headers
+        run: python3 scripts/check_license_headers.py --check
+
+  build:
+    name: Package catalog
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Upload pull request preview
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: example-catalog-preview
+          path: site
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload GitHub Pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+  deploy:
+    name: Deploy catalog
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
