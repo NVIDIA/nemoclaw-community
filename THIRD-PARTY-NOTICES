@@ -55,6 +55,19 @@ URL: https://github.com/PostgREST/postgrest
 System Packages
 ================================================================================
 
+Package: xvfb
+License: MIT
+URL: https://www.x.org/
+
+Package: x11vnc
+License: GPL-2.0
+URL: https://github.com/LibVNC/x11vnc
+
+Package: fluxbox
+License: MIT
+URL: http://fluxbox.org/
+
+
 Package: bash
 License: GPL-3.0+
 URL: https://packages.debian.org/
@@ -219,6 +232,26 @@ URL: https://github.com/Kludex/uvicorn
 Node.js Packages
 ================================================================================
 
+Package: @axe-core/playwright
+License: MPL-2.0
+URL: https://github.com/dequelabs/axe-core-npm
+
+Package: patchright
+License: Apache-2.0
+URL: https://github.com/kaliiiiiiiiii/patchright
+
+Package: @modelcontextprotocol/sdk
+License: MIT
+URL: https://github.com/modelcontextprotocol/typescript-sdk
+
+Package: express
+License: MIT
+URL: https://github.com/expressjs/express
+
+Package: ipaddr.js
+License: MIT
+URL: https://github.com/whitequark/ipaddr.js
+
 Build-time (devDependencies) of the Shrike Security recipe's before_tool_call
 plugin (examples/recipes/partners/shrike/shrike-security/plugin). They compile
 the TypeScript plugin to JavaScript and are not shipped in its distributed dist/.
@@ -257,6 +290,11 @@ URL: https://github.com/actions/setup-python
 ================================================================================
 External Source Archives And Services
 ================================================================================
+
+Service: google-chrome-stable
+License: Freeware / Proprietary (Google Terms of Service)
+URL: https://policies.google.com/terms
+
 
 Project: NousResearch/hermes-agent source archive
 License: MIT

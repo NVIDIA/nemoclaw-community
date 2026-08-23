@@ -1,0 +1,13 @@
+# Environment & secrets
+.env
+*.env
+
+# Runtime & persistent state
+state/
+.run/
+node_modules/
+src/node_modules/
+
+# Logs & temp files
+*.log
+.DS_Store
