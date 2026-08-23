@@ -1,109 +1,157 @@
 <!-- SPDX-FileCopyrightText: Copyright (c) 2026 Linespotting AB -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# Build Remote Agent pairing (host tool)
+# Build Remote Agent pairing
 
-Pair a phone running **Build Remote Agent** to the **host** that runs NemoClaw /
-OpenShell. The phone spectates (and can inject into) a desktop agent session
-through free MIT `gbr-agent`. Protocol `gbr/1`.
+For an operator who already runs NemoClaw or OpenShell on a host, this recipe
+pairs a phone running Build Remote Agent to host-side `gbr-agent` so the phone
+can spectate that desktop agent session.
 
-This is an independent community recipe, not a supported NemoClaw product
-surface. Catalog placement is for discovery only.
+Build Remote Agent is an independent product by Linespotting AB. It is not
+affiliated with NVIDIA, xAI, or SpaceX. Catalog placement is for discovery
+only.
 
-Independent product by Linespotting AB. Not affiliated with NVIDIA, xAI, or SpaceX.
+## Screenshot
 
-Website: https://grokbuildremote.com/
-Agent: https://github.com/LinespottingOrg/GrokBuildRemote-Agents (MIT)
+This is a host command-line recipe. The block below is representative
+terminal-result evidence after `gbr-agent` **v0.6.0** is installed from
+https://grokbuildremote.com/ and `gbr-agent run` is listening on host
+loopback. This repository change did not live-verify a NemoClaw sandbox.
 
-## Scope
+```text
+$ gbr-agent version
+gbr-agent v0.6.0
 
-- Install and run `gbr-agent` **on the host** (Mac/PC), not inside the OpenShell sandbox.
-- Pair the phone with `gbr-agent pair` (browser QR **and** printed 8-char code).
-- Attach only `http://127.0.0.1:8788` (after `gbr-agent run`) or stdio `gbr-mcp`.
-- Phone is spectator + veto, not orchestrator.
-
-It does not:
-
-- copy `gbr-agent` into the sandbox image
-- invent a second pair protocol
-- replace NemoClaw / OpenClaw / Hermes device or chat pairing
-- require mailbox keys, `X-GBR-Key`, or `~/.gbr/` in this repository
-
-## Provenance And Intended Users
-
-- Provenance: independent community contribution
-- Intended users: operators who already run NemoClaw or OpenShell on a host and want a phone spectator on that host's agent session
-- Support boundary: operators remain responsible for installing `gbr-agent`, keeping it on loopback, and not committing relay keys
-
-## Requirements
-
-- Host with NemoClaw / OpenShell already working (this recipe does not create a sandbox)
-- `gbr-agent` **v0.6.0+** on the same host
-- Optional: Node.js, to run stdio `gbr-mcp`
-
-## Credentials And Secret Handling
-
-Do not put mailbox keys, `X-GBR-Key`, or `device.json` in this recipe, in sandbox env, or in git.
-
-If a remote bot must use the relay, copy the key on the phone under **Settings → Bot API** and keep it on the operator machine only.
-
-## Startup
-
-On the **host** (not in `openshell sandbox exec`):
-
-```bash
-# macOS / Linux
-curl -fsSL https://grokbuildremote.com/install.sh | bash
-gbr-agent version          # must print v0.6.0 or newer
-gbr-agent pair             # QR in browser + printed 8-char code
-gbr-agent run              # leave running
+$ curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8788/health
+200
 ```
 
-```powershell
-# Windows
-irm https://grokbuildremote.com/install.ps1 | iex
-gbr-agent version
-gbr-agent pair
-gbr-agent run
-```
+The version line confirms the pinned host agent. HTTP `200` on
+`http://127.0.0.1:8788/health` confirms the host Bot API is listening on
+loopback. The phone pair UI is not shown here.
 
-Phone: Build Remote Agent → **Scan QR from computer** (or type the 8-char code).
-Unpair in Settings before changing PCs. Force-close is not enough.
+## At A Glance
 
-## Attach
+| Question | Answer |
+| --- | --- |
+| Category | Community Recipe |
+| Contributor or provenance | Linespotting AB |
+| Use this when | You already run NemoClaw or OpenShell on a host and want a phone spectator for that host's agent session. |
+| You will get | A phone paired with host-side `gbr-agent` that can spectate the desktop session through loopback `127.0.0.1:8788` or optional host-side `gbr-mcp`. |
+| Runs on | The same macOS, Windows, or Linux host that already runs NemoClaw or OpenShell. The phone runs Build Remote Agent. |
+| Requires | A working NemoClaw or OpenShell host session; Build Remote Agent on the phone; MIT-licensed `gbr-agent` **v0.6.0** installed from https://grokbuildremote.com/. This recipe does not create a sandbox. |
+| Verified on | Not yet verified. |
+| Evidence level | local/static |
+| Support and maturity | Best-effort community support. See the repository [support policy](../../../../SUPPORT.md). |
+| External access, data, and actions | Host `gbr-agent pair` and `gbr-agent run` use the product's published pair flow and host loopback Bot API. This recipe does not copy `gbr-agent` into the OpenShell sandbox and does not add sandbox egress. Do not commit pairing secrets. No repository-documented usage cost. |
+| Start here | [Start Here](#start-here) |
+| Confirm success | [Verification](#verification) |
 
-After `gbr-agent run` on the host:
+## Start Here
 
-```bash
-curl -sS http://127.0.0.1:8788/health
-curl -sS http://127.0.0.1:8788/v1/sessions
-```
+Install the MIT-licensed host agent **v0.6.0** from
+https://grokbuildremote.com/ (the site's current install default). Confirm
+that published pin before you run the site's OS-specific installer. Do not
+pipe an unpinned live installer.
 
-Optional MCP stdio (host-side, never a sandbox binary):
+Run every command below on the **host**, not inside
+`openshell sandbox exec`. Do not copy `gbr-agent` into the sandbox image.
 
-```bash
-git clone https://github.com/LinespottingOrg/GrokBuildRemote-Agents.git
-cd GrokBuildRemote-Agents/mcp/gbr-mcp && npm install
-node bin/gbr-mcp.js --diagnose
-```
+1. Confirm the pinned host agent:
 
-Point the sandboxed agent at **host** loopback only if your OpenShell policy already allows it. Default: keep GBR entirely on the host; the sandbox does not need `gbr-agent`.
+   ```bash
+   gbr-agent version
+   ```
+
+   The output must include `v0.6.0` or newer.
+
+2. Pair the phone with the existing product command. Use both the browser QR
+   and the printed 8-character code. Do not add another pair protocol.
+
+   ```bash
+   gbr-agent pair
+   ```
+
+3. On the phone, open Build Remote Agent and choose **Scan QR from computer**,
+   or type the 8-character code.
+
+4. Leave the host agent running:
+
+   ```bash
+   gbr-agent run
+   ```
+
+5. Attach only host loopback or host-side `gbr-mcp`. After `gbr-agent run`:
+
+   ```bash
+   curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8788/health
+   ```
+
+   Optional: run host-side `gbr-mcp` as documented on
+   https://grokbuildremote.com/. Do not install `gbr-mcp` inside the OpenShell
+   sandbox.
+
+Keep Build Remote Agent on the host by default. The sandbox does not need
+`gbr-agent`. Do not add sandbox egress to `127.0.0.1:8788` unless an existing
+OpenShell policy already allows that host loopback path.
+
+The phone is a spectator with veto. It is not the orchestrator. This recipe
+does not replace NemoClaw, OpenClaw, or Hermes device or chat pairing.
 
 ## Verification
 
-1. `gbr-agent version` prints v0.6.0 or newer.
-2. `curl -sS http://127.0.0.1:8788/health` succeeds on the host.
-3. Phone shows the paired session after scan/code.
-4. Confirm `gbr-agent` is **not** present inside the sandbox image / `openshell sandbox exec`.
+**Evidence level:** local/static
 
-## Teardown
+This contribution did not live-verify a NemoClaw sandbox. The commands below
+are the documented host checks.
 
-1. Unpair in the phone app Settings.
-2. Stop `gbr-agent run` on the host (Ctrl-C, or stop the LaunchAgent/service).
-3. No sandbox files to remove; this recipe does not install in-sandbox skills.
+On the host, after [Start Here](#start-here):
 
-## Loop
+```bash
+gbr-agent version
+curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8788/health
+```
 
-diagnose → open/attach → lock → inject → wait idle → harvest excerpt → iterate or close
+Confirm `gbr-agent` is not present inside the sandbox image or
+`openshell sandbox exec`. After a live pair, the phone shows the paired host
+session.
 
-Docs: https://github.com/LinespottingOrg/GrokBuildRemote-Agents/blob/main/docs/BOT-API.md
+**Expected result:**
+
+```text
+gbr-agent v0.6.0
+200
+```
+
+**This verifies:** The host agent pin and loopback Bot API listener, when those
+commands are run on a host that already has `gbr-agent` v0.6.0 and
+`gbr-agent run` active.
+
+**This does not verify:** A live NemoClaw or OpenShell sandbox, phone QR or
+8-character pairing, `gbr-mcp`, sandbox policy, or any inject or veto path.
+
+## Credentials And Secret Handling
+
+Do not put mailbox keys, `X-GBR-Key`, `device.json`, or other pairing secrets
+in this recipe, in sandbox environment variables, or in git.
+
+Pairing material stays on the phone and the host. This recipe does not require
+those files in the repository.
+
+## Teardown And Cleanup
+
+1. Unpair in the phone app Settings. Force-close is not enough before you
+   change hosts.
+2. Stop `gbr-agent run` on the host.
+3. No in-sandbox skill files to remove. This recipe does not install any.
+
+## Known Limitations
+
+- Evidence level is `local/static`. This contribution did not live-verify
+  NemoClaw, OpenShell, or the phone pair UI.
+- The host agent is an independent MIT-licensed tool. NVIDIA does not maintain
+  it.
+- Default attach is host loopback `127.0.0.1:8788`. Optional `gbr-mcp` is
+  host-side only.
+- This recipe does not vendor `gbr-agent` or `gbr-mcp` and does not change
+  sandbox policy.
