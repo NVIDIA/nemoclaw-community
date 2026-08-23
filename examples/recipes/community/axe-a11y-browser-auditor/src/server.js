@@ -525,16 +525,24 @@ function assertPublicIp(address) {
  * Fetch a URL while pinning the TCP connection to a pre-validated IP.
  * Prevents DNS rebinding between validation and connection.
  */
-async function pinnedFetch(targetUrl, validatedIp, method = "GET") {
+async function pinnedFetch(targetUrl, validatedIp, method = "GET", headers = {}, postData = null) {
   const parsed = new URL(targetUrl);
   const isHttps = parsed.protocol === "https:";
   const client = isHttps ? https : http;
   const addrObj = ipaddr.parse(validatedIp);
   const family = addrObj.kind() === "ipv6" && !addrObj.isIPv4MappedAddress() ? 6 : 4;
 
+  // Forward request headers safely without overriding host/connection
+  const fetchHeaders = { ...headers };
+  delete fetchHeaders['host'];
+  delete fetchHeaders['connection'];
+  delete fetchHeaders['keep-alive'];
+  delete fetchHeaders['transfer-encoding'];
+
   return new Promise((resolve, reject) => {
     const req = client.request(parsed, {
       method,
+      headers: fetchHeaders,
       lookup: (_host, _opts, cb) => {
         if (typeof _opts === "function") {
           cb = _opts;
@@ -557,6 +565,9 @@ async function pinnedFetch(targetUrl, validatedIp, method = "GET") {
 
     req.on("error", reject);
     req.on("timeout", () => req.destroy(new Error("Pinned fetch timeout")));
+    if (postData) {
+      req.write(postData);
+    }
     req.end();
   });
 }
@@ -581,8 +592,9 @@ async function navigateAndSettle(page, args) {
       const { resolvedAddresses } = await validateUrl(url);
       const pinnedIp = resolvedAddresses[0];
 
-      // Fetch through a socket pinned to the validated IP
-      const response = await pinnedFetch(url, pinnedIp, request.method());
+      // Fetch through a socket pinned to the validated IP, preserving headers and body
+      const headers = await request.allHeaders();
+      const response = await pinnedFetch(url, pinnedIp, request.method(), headers, request.postDataBuffer());
 
       // Check for redirects — validate the Location before allowing
       const status = response.status;
@@ -605,14 +617,9 @@ async function navigateAndSettle(page, args) {
     }
   });
 
-  // Intercept and validate WebSocket connections
-  await page.routeWebSocket('**/*', async (ws) => {
-    try {
-      await validateUrl(ws.url());
-      ws.connectToServer();
-    } catch {
-      ws.close({ code: 1008, reason: 'Destination blocked by SSRF policy' });
-    }
+  // Intercept and reject all WebSocket connections to prevent DNS rebinding SSRF
+  await page.routeWebSocket('**/*', (ws) => {
+    ws.close({ code: 1008, reason: 'WebSockets are blocked by SSRF policy' });
   });
 
   await page.goto(args.url, {

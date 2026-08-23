@@ -265,24 +265,12 @@ openshell sandbox upload "$SANDBOX_NAME" src/SKILL.md \
 openshell policy set --policy policy.yaml --wait "$SANDBOX_NAME"
 
 # 5. Register the MCP server in the sandbox agent configuration
-#    Add the following to the sandbox's openclaw.json mcpServers section
-#    (the exact registration mechanism depends on your OpenClaw version):
-#
-#    "mcpServers": {
-#      "axe-a11y": {
-#        "url": "http://host.openshell.internal:9010/mcp",
-#        "transport": "streamable-http"
-#      }
-#    }
+openshell sandbox exec --name "$SANDBOX_NAME" -- \
+  openclaw mcp add axe-a11y --url "http://host.openshell.internal:9010/mcp" --transport streamable-http
 
 # 6. Verify MCP connectivity and tool discovery from inside the sandbox
-openshell sandbox exec --name "$SANDBOX_NAME" --no-tty -- \
-  curl -s http://host.openshell.internal:9010/healthz
-openshell sandbox exec --name "$SANDBOX_NAME" --no-tty -- \
-  curl -s -X POST http://host.openshell.internal:9010/mcp \
-    -H "Content-Type: application/json" \
-    -H "Accept: application/json, text/event-stream" \
-    -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"verify","version":"1.0.0"}}}'
+openshell sandbox exec --name "$SANDBOX_NAME" -- \
+  openclaw mcp probe axe-a11y
 ```
 
 ## Directory Structure
