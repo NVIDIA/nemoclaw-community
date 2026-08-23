@@ -31,6 +31,7 @@ again by contributor provenance.
 | Example | Description |
 | --- | --- |
 | [Deep Research Worker](recipes/community/deep-research-worker/README.md) | Queues long-running research tasks from one sandbox to a host-side DeepAgents worker, with a narrow worker-only sandbox policy and optional read-only host-side search integrations. |
+| [Build Remote Agent pairing](recipes/community/gbr-pair/README.md) | Keeps `gbr-agent` on the host (not in the OpenShell sandbox) so a phone can spectate the desktop session via loopback `:8788` or stdio `gbr-mcp`. |
 
 ## NVIDIA Field Demos
 
