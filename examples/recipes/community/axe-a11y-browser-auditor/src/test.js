@@ -3,7 +3,14 @@
 
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert';
-import { validateUrl, redactSensitiveData, redactUrlParams } from './server.js';
+import { createServer } from 'node:http';
+import {
+  blockWebSockets,
+  pinnedFetch,
+  redactSensitiveData,
+  redactUrlParams,
+  validateUrl,
+} from './server.js';
 
 describe('Security Features', () => {
   describe('validateUrl', () => {
@@ -235,130 +242,68 @@ describe('Integration - HTTP Server', () => {
   });
 
   test('pinnedFetch preserves original browser request headers (cookies/auth) and POST body', async () => {
-    // Test that pinnedFetch forwards the request properly, verifying we don't drop context.
-    const { app: localApp } = await import('./server.js');
     let capturedHeaders = {};
     let capturedBody = '';
 
-    // Create a temporary endpoint to capture the incoming request
-    localApp.post('/test-pinned-fetch', (req, res) => {
+    const targetServer = createServer(async (req, res) => {
       capturedHeaders = req.headers;
-      let bodyData = '';
-      req.on('data', chunk => bodyData += chunk.toString());
-      req.on('end', () => {
-        capturedBody = bodyData;
-        res.status(200).json({ ok: true });
-      });
-    });
-
-    const tempServer = localApp.listen(0, '127.0.0.1');
-    await new Promise(resolve => tempServer.on('listening', resolve));
-    const port = tempServer.address().port;
-
-    // Use a browser to make a POST request with headers
-    const { chromium } = await import('patchright');
-    const browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext();
-    const page = await context.newPage();
-
-    // Call navigateAndSettle which sets up the interceptors
-    // We mock validateUrl to allow the localhost for this test only by using page.route directly
-    await page.route('**/*', async (route) => {
-      const req = route.request();
-      if (req.url().includes('/dummy-page')) {
-        route.fulfill({ status: 200, contentType: 'text/html', body: '<html></html>' });
-      } else if (req.url().includes('/test-pinned-fetch')) {
-        // Our updated logic in server.js would normally do this:
-        const { app: localApp } = await import('./server.js');
-        // We simulate the pinnedFetch here directly for testing the fetch behavior
-        // Using http.request to verify we forward headers and body correctly
-        const headers = await req.allHeaders();
-        const fetchHeaders = { ...headers };
-        delete fetchHeaders['host'];
-        delete fetchHeaders['connection'];
-        delete fetchHeaders['keep-alive'];
-        delete fetchHeaders['transfer-encoding'];
-
-        const http = await import('node:http');
-        const parsed = new URL(req.url());
-        
-        await new Promise((resolve) => {
-          const clientReq = http.request(parsed, {
-            method: req.method(),
-            headers: fetchHeaders
-          }, (res) => {
-            res.resume();
-            res.on('end', () => {
-              route.fulfill({ status: 200, body: 'ok' });
-              resolve();
-            });
-          });
-          const postData = req.postDataBuffer();
-          if (postData) clientReq.write(postData);
-          clientReq.end();
-        });
-      } else {
-        await route.continue();
+      for await (const chunk of req) {
+        capturedBody += chunk.toString();
       }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end('{"ok":true}');
     });
+    await new Promise((resolve) => targetServer.listen(0, '127.0.0.1', resolve));
 
-    await page.goto(`http://127.0.0.1:${port}/dummy-page`);
-
-    // Set a real cookie in the browser context so it gets sent naturally
-    await context.addCookies([{
-      name: 'session_id',
-      value: '12345',
-      domain: '127.0.0.1',
-      path: '/'
-    }]);
-
-    // Make the request from the browser context
-    await page.evaluate(async (url) => {
-      await fetch(url, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Authorization': 'Bearer test-token'
+    try {
+      const { port } = targetServer.address();
+      const payload = Buffer.from('{"test_payload":true}');
+      const response = await pinnedFetch(
+        `http://audit.example:${port}/test-pinned-fetch`,
+        '127.0.0.1',
+        'POST',
+        {
+          authorization: 'Bearer test-token',
+          cookie: 'session_id=12345',
+          'content-type': 'application/json',
+          'content-length': String(payload.length),
         },
-        body: '{"test_payload":true}'
-      });
-    }, `http://127.0.0.1:${port}/test-pinned-fetch`);
+        payload,
+      );
 
-    await browser.close();
-    await new Promise(resolve => tempServer.close(resolve));
-
-    console.log("Captured headers:", capturedHeaders);
-
-    assert.strictEqual(capturedHeaders['authorization'], 'Bearer test-token');
-    assert.ok(capturedHeaders['cookie'] && capturedHeaders['cookie'].includes('session_id=12345'), 'Cookie should be forwarded');
-    assert.strictEqual(capturedBody, '{"test_payload":true}');
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(capturedHeaders.authorization, 'Bearer test-token');
+      assert.strictEqual(capturedHeaders.cookie, 'session_id=12345');
+      assert.strictEqual(capturedBody, '{"test_payload":true}');
+    } finally {
+      await new Promise((resolve) => targetServer.close(resolve));
+    }
   });
 
   test('WebSocket connections are completely rejected to prevent DNS rebinding', async () => {
-    const { chromium } = await import('patchright');
-    const browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext();
-    const page = await context.newPage();
+    let registeredPattern;
+    let registeredHandler;
+    const page = {
+      async routeWebSocket(pattern, handler) {
+        registeredPattern = pattern;
+        registeredHandler = handler;
+      },
+    };
 
-    // Replicate the routeWebSocket logic from server.js
-    await page.routeWebSocket('**/*', (ws) => {
-      ws.close({ code: 1008, reason: 'WebSockets are blocked by SSRF policy' });
+    await blockWebSockets(page);
+
+    let closeOptions;
+    registeredHandler({
+      close(options) {
+        closeOptions = options;
+      },
     });
 
-    // Try to open a WebSocket
-    const wsError = await page.evaluate(() => {
-      return new Promise((resolve) => {
-        const ws = new WebSocket('ws://localhost:9010');
-        ws.onopen = () => resolve('connected');
-        ws.onerror = () => resolve('error');
-        ws.onclose = () => resolve('closed');
-      });
+    assert.strictEqual(registeredPattern, '**/*');
+    assert.deepStrictEqual(closeOptions, {
+      code: 1008,
+      reason: 'WebSockets are blocked by SSRF policy',
     });
-
-    await browser.close();
-    
-    // It should fail to connect due to the rejection
-    assert.ok(wsError === 'error' || wsError === 'closed', 'WebSocket should be blocked');
   });
 
   test('GET /artifacts/nonexistent should return 404', async () => {
@@ -380,14 +325,7 @@ describe('Integration - HTTP Server', () => {
 // NOTE: The following contracts are verified at the container/Docker level
 // and cannot be exercised in this unit/integration test environment:
 //
-// - DNS rebinding prevention: Enforced by --host-resolver-rules in openSession()
-//   which pins the validated IP. Tested indirectly via the DNS-pinning return
-//   contract test above.
-//
 // - Service Worker blocking: Enforced by serviceWorkers:'block' in context options.
-//
-// - WebSocket SSRF: Enforced by page.routeWebSocket() + validateUrl() in
-//   navigateAndSettle().
 //
 // - Lifecycle cleanup (bring-up/teardown): Tested via bash -n syntax checks
 //   and manual Docker verification. See scripts/teardown.sh --purge.

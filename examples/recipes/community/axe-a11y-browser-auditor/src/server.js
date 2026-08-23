@@ -525,7 +525,7 @@ function assertPublicIp(address) {
  * Fetch a URL while pinning the TCP connection to a pre-validated IP.
  * Prevents DNS rebinding between validation and connection.
  */
-async function pinnedFetch(targetUrl, validatedIp, method = "GET", headers = {}, postData = null) {
+export async function pinnedFetch(targetUrl, validatedIp, method = "GET", headers = {}, postData = null) {
   const parsed = new URL(targetUrl);
   const isHttps = parsed.protocol === "https:";
   const client = isHttps ? https : http;
@@ -546,6 +546,11 @@ async function pinnedFetch(targetUrl, validatedIp, method = "GET", headers = {},
       lookup: (_host, _opts, cb) => {
         if (typeof _opts === "function") {
           cb = _opts;
+          _opts = {};
+        }
+        if (_opts?.all) {
+          cb(null, [{ address: validatedIp, family }]);
+          return;
         }
         cb(null, validatedIp, family);
       },
@@ -569,6 +574,12 @@ async function pinnedFetch(targetUrl, validatedIp, method = "GET", headers = {},
       req.write(postData);
     }
     req.end();
+  });
+}
+
+export async function blockWebSockets(page) {
+  await page.routeWebSocket('**/*', (ws) => {
+    ws.close({ code: 1008, reason: 'WebSockets are blocked by SSRF policy' });
   });
 }
 
@@ -618,9 +629,7 @@ async function navigateAndSettle(page, args) {
   });
 
   // Intercept and reject all WebSocket connections to prevent DNS rebinding SSRF
-  await page.routeWebSocket('**/*', (ws) => {
-    ws.close({ code: 1008, reason: 'WebSockets are blocked by SSRF policy' });
-  });
+  await blockWebSockets(page);
 
   await page.goto(args.url, {
     waitUntil: "load",

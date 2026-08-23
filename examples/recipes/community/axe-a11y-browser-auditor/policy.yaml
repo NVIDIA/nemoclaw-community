@@ -37,5 +37,8 @@ network_policies:
           method: GET
           path: /artifacts/**
     binaries:
+    - path: /usr/local/bin/openclaw
+    - path: /usr/local/bin/node
+    - path: /usr/bin/node
     - path: /usr/bin/curl
     - path: /usr/bin/python3
