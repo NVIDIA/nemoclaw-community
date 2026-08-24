@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Linespotting AB
+# SPDX-License-Identifier: Apache-2.0
+#
+# Leave the default OpenClaw toolset in place. The OpenShell policy in
+# policy.yaml is the network boundary: the sandbox can reach only the host
+# Bot API, and only with GET. Do not add a vendor-relay route here.
+
+main:
+  tools: {}
