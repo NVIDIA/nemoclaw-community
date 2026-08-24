@@ -244,7 +244,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the ten files report 299 tests in
+Expected result: every file ends with `OK`, the ten files report 303 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -478,6 +478,21 @@ The fixtures were written from scratch. The people, the company, the projects,
 and every message body are invented. Nothing is derived from a real mailbox or
 from an anonymized copy of one. See [`fixtures/README.md`](fixtures/README.md)
 for what each record is a control for.
+
+### Before a connector: encrypted storage
+
+The fixture path stores invented messages. A connector changes that — the store
+then holds real subjects, senders and bodies — so the profile home must sit on
+an encrypted volume before one is attached. Owner-only permissions are not
+encryption: they stop another account reading the file on a running system and
+do nothing for a disk that is lost, imaged, or backed up.
+
+`scripts/setup-slack.sh` checks what it can and refuses to attach a provider
+until the rest is confirmed. What it inspects is the **host** filesystem under
+the sandbox's storage, because `HERMES_HOME` inside a sandbox is an overlay
+with no block device behind it — encryption is not observable from in there.
+[`docs/encrypted-storage.md`](docs/encrypted-storage.md) has the verification
+commands per platform, and what to do when the answer is no.
 
 ### Connecting Slack
 

@@ -1046,5 +1046,48 @@ class TestTheSlackSetupKnowsWhichMachineItIsOn(unittest.TestCase):
                          "install.sh now needs a CLI the sandbox does not have")
 
 
+class TestTheEncryptionPrerequisiteIsEstablishedNotMentioned(unittest.TestCase):
+    """Decision 5 on #122 gates real message bodies on encryption at rest.
+
+    A prerequisite that only appears in prose is the finding class this review
+    has raised repeatedly, so the setup flow refuses to attach a provider until
+    the operator has answered — and it says what it could and could not check,
+    rather than implying it verified something it cannot see.
+    """
+
+    RECIPE = HERE.parents[1]
+    SCRIPT = RECIPE / "scripts" / "setup-slack.sh"
+
+    def test_the_prerequisite_has_its_own_page(self):
+        page = self.RECIPE / "docs" / "encrypted-storage.md"
+        self.assertTrue(page.exists())
+        text = page.read_text(encoding="utf-8")
+        self.assertIn("not encryption", text)
+
+    def test_the_setup_script_gates_on_it_before_attaching(self):
+        code = "\n".join(line for line in self.SCRIPT.read_text().splitlines()
+                         if not line.lstrip().startswith("#"))
+        gate = code.find("STORE_ENCRYPTION_ACKNOWLEDGED")
+        attach = code.find("sandbox provider attach")
+        self.assertNotEqual(gate, -1, "no encryption gate in the setup flow")
+        self.assertLess(gate, attach,
+                        "the gate must precede attaching, or bodies can land "
+                        "before the question is asked")
+
+    def test_an_unconfirmed_prerequisite_aborts(self):
+        code = "\n".join(line for line in self.SCRIPT.read_text().splitlines()
+                         if not line.lstrip().startswith("#"))
+        window = code[code.find("STORE_ENCRYPTION_ACKNOWLEDGED"):
+                      code.find("sandbox provider attach")]
+        self.assertIn("exit 1", window,
+                      "an unconfirmed prerequisite must abort, not warn")
+
+    def test_the_docs_point_at_the_page(self):
+        for name in ("README.md", "docs/set-up-slack.md"):
+            self.assertIn("encrypted-storage.md",
+                          (self.RECIPE / name).read_text(encoding="utf-8"),
+                          f"{name} never mentions the prerequisite")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

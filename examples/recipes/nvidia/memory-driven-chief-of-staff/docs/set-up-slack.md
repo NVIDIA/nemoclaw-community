@@ -54,6 +54,14 @@ and no `hermes`. Because the gateway holds the credential, configuring it from
 outside the sandbox is the design rather than a workaround.
 `setup-slack.sh` detects being run in the wrong place and says so.
 
+## 0. Encrypted storage
+
+Attaching this connector is the moment real message bodies start landing in the
+store, and the prerequisite is that the profile home sits on an encrypted
+volume. The setup script checks what it can and asks you to confirm the rest.
+See [`encrypted-storage.md`](encrypted-storage.md) for how to verify it and
+what to do if the answer is no.
+
 ## 1. Create the app
 
 Go to <https://api.slack.com/apps> → **Create New App** → **From a manifest**,

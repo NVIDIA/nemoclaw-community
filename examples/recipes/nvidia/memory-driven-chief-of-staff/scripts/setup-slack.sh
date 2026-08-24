@@ -60,7 +60,7 @@ command -v python3 >/dev/null 2>&1 || {
   exit 1
 }
 
-echo "1/6  Looking for a Slack credential this sandbox can already read"
+echo "1/7  Looking for a Slack credential this sandbox can already read"
 
 # `|| true` here would turn every failure into "nothing attached" — a mistyped
 # sandbox name, an unauthenticated gateway, a stopped one — and answer by
@@ -111,7 +111,57 @@ else
   echo "     none attached that exposes $USABLE_KEY"
 fi
 
-echo "2/6  App credentials"
+echo "2/7  Storage encryption"
+# Attaching this provider is the moment real message bodies start landing in
+# the store. Owner-only directory permissions are not encryption at rest: they
+# stop another account reading the file on a running system and do nothing for
+# a disk that is lost, imaged, or backed up.
+#
+# The check is best-effort and says so. `HERMES_HOME` inside a sandbox is an
+# overlay with no visible block device, so encryption cannot be established
+# from in there at all; what protects it is the host filesystem underneath the
+# sandbox's storage, which is what this looks at. Where the answer is not
+# provable, the operator affirms it rather than never being asked.
+encrypted="unknown"
+if command -v findmnt >/dev/null 2>&1 && command -v lsblk >/dev/null 2>&1; then
+  source_dev="$(findmnt -no SOURCE --target "$HOME" 2>/dev/null || true)"
+  if [[ -n "$source_dev" ]]; then
+    if lsblk -no TYPE "$source_dev" 2>/dev/null | grep -q crypt; then
+      encrypted="yes"
+    else
+      encrypted="no"
+    fi
+  fi
+fi
+
+case "$encrypted" in
+  yes)
+    echo "     the host filesystem under this sandbox is on an encrypted volume" ;;
+  no)
+    echo "     the host filesystem under this sandbox does NOT appear to be on"
+    echo "     an encrypted volume." ;;
+  *)
+    echo "     could not determine whether the host filesystem is encrypted." ;;
+esac
+
+if [[ "$encrypted" != "yes" ]]; then
+  echo ""
+  echo "This recipe stores message subjects, senders and bodies once a"
+  echo "connector is attached. The prerequisite is an encrypted volume"
+  echo "underneath the profile home; see docs/encrypted-storage.md."
+  echo ""
+  if [[ "${STORE_ENCRYPTION_ACKNOWLEDGED:-0}" == "1" ]]; then
+    echo "     STORE_ENCRYPTION_ACKNOWLEDGED=1 — continuing."
+  else
+    read -r -p "Type 'encrypted' to confirm the prerequisite is met: " ACK
+    if [[ "$ACK" != "encrypted" ]]; then
+      echo "Not confirmed. Nothing has been configured." >&2
+      exit 1
+    fi
+  fi
+fi
+
+echo "3/7  App credentials"
 echo ""
 echo "Create the app first if you have not: https://api.slack.com/apps"
 echo "  -> Create New App -> From a manifest, and paste"
@@ -128,7 +178,7 @@ if ! read -r -s -p "Client Secret: " CLIENT_SECRET; then
 fi
 echo ""
 
-echo "3/6  Authorize"
+echo "4/7  Authorize"
 echo ""
 # The manifest requests user scopes and no bot scopes, so the app has no bot
 # user and therefore no "Install to Workspace" button — that button installs a
@@ -146,7 +196,7 @@ if ! read -r -p "code: " CODE; then
 fi
 [[ -n "$CODE" ]] || { echo "Nothing entered." >&2; exit 1; }
 
-echo "4/6  Exchanging the code"
+echo "5/7  Exchanging the code"
 # The refresh token is taken from `authed_user.refresh_token` by name, and from
 # nowhere else. An app that also had bot scopes returns a second refresh token
 # at the top level belonging to the bot; configuring that one refreshes the
@@ -208,7 +258,7 @@ SLACK_USER_ID="$(printf '%s\n' "$EXCHANGED" | sed -n 3p)"
 unset EXCHANGED
 echo "     authorized as ${SLACK_USER_ID:-unknown}"
 
-echo "5/6  Registering the provider"
+echo "6/7  Registering the provider"
 # The profile carries `endpoints: slack.com` with `access: read-only`, which is
 # what scopes the egress substitution and stops the sandbox writing to Slack. A
 # provider created without it would get neither.
@@ -253,7 +303,7 @@ fi
 unset CLIENT_SECRET REFRESH_TOKEN
 echo "     refresh configured; the gateway owns renewal from here"
 
-echo "6/6  Attaching to sandbox '$SANDBOX'"
+echo "7/7  Attaching to sandbox '$SANDBOX'"
 # Attaching works on a sandbox that already exists; it does not have to be
 # recreated.
 if ! openshell sandbox provider attach "$SANDBOX" "$PROVIDER" >/dev/null 2>&1; then
