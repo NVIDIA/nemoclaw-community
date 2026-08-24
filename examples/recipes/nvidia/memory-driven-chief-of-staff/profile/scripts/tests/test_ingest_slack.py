@@ -165,8 +165,12 @@ class TestTheTokenIsClassifiedBeforeItIsSpent(unittest.TestCase):
     copy instead.
     """
 
-    def test_a_user_token_is_accepted(self):
-        self.assertEqual(ingest_slack.classify_token("xoxp-1-2-3"), "user")
+    def test_a_rotating_user_token_is_what_this_recipe_wants(self):
+        self.assertEqual(ingest_slack.classify_token("xoxe.xoxp-1-2-3"), "rotating")
+
+    def test_a_non_rotating_user_token_is_named_static(self):
+        """It works, and is refused anyway — it never expires."""
+        self.assertEqual(ingest_slack.classify_token("xoxp-1-2-3"), "static")
 
     def test_an_openshell_placeholder_is_accepted(self):
         self.assertEqual(
@@ -175,10 +179,6 @@ class TestTheTokenIsClassifiedBeforeItIsSpent(unittest.TestCase):
 
     def test_a_bot_token_is_named_as_a_bot_token(self):
         self.assertEqual(ingest_slack.classify_token("xoxb-1-2-3"), "bot")
-
-    def test_a_rotating_token_is_named_as_rotating(self):
-        """`xoxe.xoxp-` also starts with neither `xoxp-` nor `xoxb-`."""
-        self.assertEqual(ingest_slack.classify_token("xoxe.xoxp-1-2"), "rotating")
 
     def test_an_app_token_is_named_as_an_app_token(self):
         self.assertEqual(ingest_slack.classify_token("xapp-1-2"), "app")
@@ -210,8 +210,14 @@ class TestTheWrongTokenNeverReachesSlack(CollectorCase):
                          "the collector called Slack with a token it had "
                          "already decided was wrong")
 
-    def test_a_rotating_token_exits_as_a_credential_problem(self):
-        self.assertEqual(self._run("xoxe.xoxp-1-2"), ingest_slack.EXIT_CREDENTIAL)
+    def test_a_static_token_exits_as_a_credential_problem(self):
+        """A token that never expires is a permanent key to one person's Slack."""
+        self.assertEqual(self._run("xoxp-1-2"), ingest_slack.EXIT_CREDENTIAL)
+
+    def test_the_static_explanation_says_why_rather_than_only_no(self):
+        text = ingest_slack._explain("static")
+        self.assertIn("never expires", text)
+        self.assertIn("rotation", text)
 
     def test_never_configured_is_a_state_rather_than_a_failure(self):
         """This file existing is what makes the selector run it.
@@ -242,7 +248,7 @@ class TestTheWrongTokenNeverReachesSlack(CollectorCase):
         was working yesterday goes quiet instead of loud — the exact failure
         the wake gate exists to prevent.
         """
-        os.environ["SLACK_USER_TOKEN"] = "xoxp-test"
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
         self.serve(self.working_slack())
         self.assertEqual(self.run_main(), ingest_slack.EXIT_OK)
         self.assertTrue(ingest_slack.capabilities_path().exists())
@@ -254,7 +260,7 @@ class TestTheWrongTokenNeverReachesSlack(CollectorCase):
 class TestAFetchWritesRowsTheNormalizerMade(CollectorCase):
     def setUp(self):
         super().setUp()
-        os.environ["SLACK_USER_TOKEN"] = "xoxp-test"
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
 
     def test_a_direct_message_becomes_a_direct_row(self):
         self.serve(self.working_slack())
@@ -299,7 +305,7 @@ class TestAFetchWritesRowsTheNormalizerMade(CollectorCase):
 class TestTheCredentialIsNeverEchoed(CollectorCase):
     """The collector may hold a real token on a plain Hermes install."""
 
-    SECRET = "xoxp-9999-DO-NOT-PRINT-THIS"
+    SECRET = "xoxe.xoxp-9999-DO-NOT-PRINT-THIS"
 
     def test_no_stream_contains_the_token_on_success(self):
         os.environ["SLACK_USER_TOKEN"] = self.SECRET
@@ -342,7 +348,7 @@ class TestFailuresCarryTheirDiagnosisInTheExitCode(CollectorCase):
 
     def setUp(self):
         super().setUp()
-        os.environ["SLACK_USER_TOKEN"] = "xoxp-test"
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
 
     def test_a_rejected_token_is_a_credential_failure(self):
         self.serve({"auth.test": {"ok": False, "error": "invalid_auth"}})
@@ -376,7 +382,7 @@ class TestAPartlyGrantedAppStillWorks(CollectorCase):
 
     def setUp(self):
         super().setUp()
-        os.environ["SLACK_USER_TOKEN"] = "xoxp-test"
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
 
     def _partial(self):
         def conversations(params):
@@ -401,7 +407,7 @@ class TestAPartlyGrantedAppStillWorks(CollectorCase):
 
     def test_the_refused_family_is_reported_rather_than_hidden(self):
         self.serve(self._partial())
-        caps = ingest_slack.load_capabilities("xoxp-test")
+        caps = ingest_slack.load_capabilities("xoxe.xoxp-test")
         self.assertIn("public_channel", caps["missing"])
         self.assertIn("im", caps["available"])
 
@@ -453,11 +459,27 @@ class TestPrivateChannelsAreLeftOutOnPurpose(unittest.TestCase):
             (self.RECIPE / "docs" / "slack_app_manifest.json").read_text())
         self.assertEqual(manifest["oauth_config"]["scopes"]["bot"], [])
 
-    def test_the_manifest_turns_token_rotation_off(self):
-        """Enabling it on a Slack app cannot be undone."""
+    def test_the_manifest_turns_token_rotation_on(self):
+        """The gateway is what keeps the credential short-lived.
+
+        Enabling rotation on a Slack app cannot be undone, so this is a real
+        commitment rather than a default — and it is the commitment the
+        approved design makes: a user token that never expires is a permanent
+        key to one person's entire Slack.
+        """
         manifest = json.loads(
             (self.RECIPE / "docs" / "slack_app_manifest.json").read_text())
-        self.assertIs(manifest["settings"]["token_rotation_enabled"], False)
+        self.assertIs(manifest["settings"]["token_rotation_enabled"], True)
+
+    def test_the_manifest_declares_a_redirect_url(self):
+        """Rotation requires the OAuth flow, and the flow requires a redirect.
+
+        Slack refuses to create the app without one, which is how this was
+        found — the first manifest omitted it and could not be imported.
+        """
+        manifest = json.loads(
+            (self.RECIPE / "docs" / "slack_app_manifest.json").read_text())
+        self.assertTrue(manifest["oauth_config"].get("redirect_urls"))
 
     def test_the_collector_reads_no_private_channels(self):
         self.assertNotIn("private_channel", ingest_slack.FAMILIES)
@@ -485,7 +507,7 @@ class TestAnIncompleteCrawlDoesNotMoveTheWatermark(CollectorCase):
 
     def setUp(self):
         super().setUp()
-        os.environ["SLACK_USER_TOKEN"] = "xoxp-test"
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
 
     def _truncated(self):
         return {
@@ -529,7 +551,7 @@ class TestOneBadConversationDoesNotDiscardTheRest(CollectorCase):
 
     def setUp(self):
         super().setUp()
-        os.environ["SLACK_USER_TOKEN"] = "xoxp-test"
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
 
     def _three_with_one_broken(self, broken="D02"):
         def history(params):
@@ -597,7 +619,7 @@ class TestTheFirstRunIsBounded(CollectorCase):
 
     def setUp(self):
         super().setUp()
-        os.environ["SLACK_USER_TOKEN"] = "xoxp-test"
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
 
     def test_the_first_fetch_asks_for_a_window_not_everything(self):
         self.serve(self.working_slack())
@@ -630,7 +652,7 @@ class TestOnlyPeopleTalkingCount(CollectorCase):
 
     def setUp(self):
         super().setUp()
-        os.environ["SLACK_USER_TOKEN"] = "xoxp-test"
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
 
     def _noisy(self):
         return {
@@ -683,7 +705,7 @@ class TestTheProbeChecksTheCallItWillActuallyMake(CollectorCase):
 
     def setUp(self):
         super().setUp()
-        os.environ["SLACK_USER_TOKEN"] = "xoxp-test"
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
 
     def test_read_without_history_is_caught_at_probe_time(self):
         self.serve({
@@ -718,12 +740,12 @@ class TestReplacingTheTokenReplacesTheIdentity(CollectorCase):
     """
 
     def test_a_different_token_re_probes(self):
-        os.environ["SLACK_USER_TOKEN"] = "xoxp-first"
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-first"
         self.serve(self.working_slack())
         self.run_main()
         first = json.loads(ingest_slack.capabilities_path().read_text())
 
-        os.environ["SLACK_USER_TOKEN"] = "xoxp-second"
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-second"
         self.slack.responses["auth.test"] = {"ok": True, "user_id": "U0NEWME",
                                              "team_id": "T1"}
         self.run_main()
@@ -733,11 +755,11 @@ class TestReplacingTheTokenReplacesTheIdentity(CollectorCase):
         self.assertNotEqual(first["credential"], second["credential"])
 
     def test_the_cache_stores_a_fingerprint_and_not_the_token(self):
-        os.environ["SLACK_USER_TOKEN"] = "xoxp-secret-value"
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-secret-value"
         self.serve(self.working_slack())
         self.run_main()
         raw = ingest_slack.capabilities_path().read_text()
-        self.assertNotIn("xoxp-secret-value", raw)
+        self.assertNotIn("xoxe.xoxp-secret-value", raw)
         self.assertIn("credential", json.loads(raw))
 
 

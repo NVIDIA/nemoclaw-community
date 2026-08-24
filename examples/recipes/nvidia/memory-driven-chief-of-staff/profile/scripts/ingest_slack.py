@@ -102,11 +102,18 @@ class SlackError(Exception):
 def classify_token(raw: str | None) -> str:
     """Name what kind of credential this is before spending a call on it.
 
-    Slack's token prefixes are load-bearing here. `xoxb-` is a bot token, which
-    silently cannot see direct messages; `xoxe.xoxp-` is a rotating user token,
-    whose access half expires in hours and which this recipe does not refresh.
-    Both fail in ways that look like "no new messages" rather than like an
-    error, which is why they are rejected up front.
+    Slack's token prefixes are load-bearing here.
+
+    `xoxe.xoxp-` is what this recipe wants: a rotating user token, refreshed by
+    the gateway. `xoxp-` is the non-rotating kind, which never expires — a
+    permanent key to one person's whole Slack, and refused for that reason
+    rather than because it would not work. `xoxb-` is a bot token, which cannot
+    see a person's direct messages at all.
+
+    A bot token fails in the way that matters most: not with an error, but with
+    an empty result that looks like a quiet week. Naming the prefix costs one
+    comparison and turns a silent wrong answer into a sentence saying which
+    token to use instead.
     """
     token = (raw or "").strip()
     if not token:
@@ -116,7 +123,7 @@ def classify_token(raw: str | None) -> str:
     if token.startswith("xoxe.xoxp-"):
         return "rotating"
     if token.startswith("xoxp-"):
-        return "user"
+        return "static"
     if token.startswith("xoxb-"):
         return "bot"
     if token.startswith("xapp-"):
@@ -137,12 +144,13 @@ def _explain(kind: str) -> str:
         return ("SLACK_USER_TOKEN holds an app-level token (xapp-). That one is "
                 "for Socket Mode. This recipe needs the User OAuth Token "
                 "(xoxp-).")
-    if kind == "rotating":
-        return ("SLACK_USER_TOKEN holds a rotating user token (xoxe.xoxp-). "
-                "This recipe supports static user tokens only; its access half "
-                "would expire within hours and nothing here refreshes it. "
-                "Create the app from docs/slack_app_manifest.json, which sets "
-                "token_rotation_enabled to false.")
+    if kind == "static":
+        return ("SLACK_USER_TOKEN holds a non-rotating user token (xoxp-). "
+                "This recipe requires a rotating one: a token that never "
+                "expires is a permanent key to your whole Slack, and the "
+                "gateway is what keeps it short-lived. Create the app from "
+                "docs/slack_app_manifest.json, which enables token rotation, "
+                "and run scripts/setup-slack.sh.")
     return ("SLACK_USER_TOKEN does not look like a Slack token. Expected a "
             "User OAuth Token starting with xoxp-.")
 
@@ -486,7 +494,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"unconfigured": True}))
         return EXIT_OK
 
-    if kind not in ("placeholder", "user"):
+    if kind not in ("placeholder", "rotating"):
         print(_explain(kind), file=sys.stderr)
         return EXIT_CREDENTIAL
 

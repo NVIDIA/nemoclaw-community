@@ -1018,17 +1018,24 @@ class TestTheSlackSetupKnowsWhichMachineItIsOn(unittest.TestCase):
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("host", proc.stderr.lower())
 
-    def test_inside_a_sandbox_it_does_not_offer_the_dotenv_fallback(self):
-        """That fallback is right for a plain Hermes install and wrong here."""
-        proc = self._run({"OPENSHELL_SANDBOX": "hermes"})
-        self.assertNotIn("SLACK_USER_TOKEN=xoxp-", proc.stderr,
-                         "it offered the .env fallback inside a sandbox, "
-                         "which drops the gateway-held credential silently")
+    def test_no_dotenv_fallback_is_offered_anywhere(self):
+        """There is no supported path that puts a Slack token in the profile.
 
-    def test_off_a_sandbox_it_does_offer_the_dotenv_fallback(self):
+        An earlier draft fell back to writing one into `.env` when `openshell`
+        was absent. That silently abandoned gateway custody — and with rotation
+        required, a token written there would expire in twelve hours with
+        nothing to renew it. Refusing is the honest answer in both places.
+        """
+        for env in ({"OPENSHELL_SANDBOX": "hermes"}, {}):
+            proc = self._run(env)
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertNotIn("SLACK_USER_TOKEN=xox", proc.stderr,
+                             "a .env fallback is still being offered")
+
+    def test_off_a_sandbox_it_says_the_gateway_is_required(self):
         proc = self._run({})
         self.assertNotEqual(proc.returncode, 0)
-        self.assertIn("SLACK_USER_TOKEN=xoxp-", proc.stderr)
+        self.assertIn("gateway", proc.stderr.lower())
 
     def test_the_two_scripts_do_not_claim_to_need_the_same_cli(self):
         install = (HERE.parents[1] / "scripts" / "install.sh").read_text()
