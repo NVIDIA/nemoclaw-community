@@ -388,8 +388,6 @@ class TestAPartlyGrantedAppStillWorks(CollectorCase):
         def conversations(params):
             if params.get("types") == "im":
                 return {"ok": True, "channels": [channel("D01")]}
-            if params.get("types") == "mpim":
-                return {"ok": True, "channels": []}
             return {"ok": False, "error": "missing_scope"}
         return {
             "auth.test": {"ok": True, "user_id": USER, "team_id": "T1"},
@@ -406,10 +404,18 @@ class TestAPartlyGrantedAppStillWorks(CollectorCase):
         self.assertEqual(len(self.rows()), 1)
 
     def test_the_refused_family_is_reported_rather_than_hidden(self):
+        """`mpim`, not `public_channel`: the latter is skipped when unnamed."""
         self.serve(self._partial())
         caps = ingest_slack.load_capabilities("xoxe.xoxp-test")
-        self.assertIn("public_channel", caps["missing"])
+        self.assertIn("mpim", caps["missing"])
         self.assertIn("im", caps["available"])
+
+    def test_an_unnamed_public_channel_family_is_neither_available_nor_missing(self):
+        """Nothing to read is not the same as being refused permission."""
+        self.serve(self._partial())
+        caps = ingest_slack.load_capabilities("xoxe.xoxp-test")
+        self.assertNotIn("public_channel", caps["available"])
+        self.assertNotIn("public_channel", caps["missing"])
 
     def test_the_probe_is_cached_so_every_tick_does_not_re_ask(self):
         self.serve(self._partial())
@@ -538,7 +544,9 @@ class TestAnIncompleteCrawlDoesNotMoveTheWatermark(CollectorCase):
     def test_the_run_says_the_crawl_was_incomplete(self):
         self.serve(self._truncated())
         self.run_main()
-        self.assertIn("incomplete", json.loads(self.stdout))
+        payload = json.loads(self.stdout)
+        self.assertIn("incomplete_coverage", payload)
+        self.assertIn("im", payload["incomplete_coverage"]["truncated_families"])
 
 
 class TestOneBadConversationDoesNotDiscardTheRest(CollectorCase):
@@ -761,6 +769,206 @@ class TestReplacingTheTokenReplacesTheIdentity(CollectorCase):
         raw = ingest_slack.capabilities_path().read_text()
         self.assertNotIn("xoxe.xoxp-secret-value", raw)
         self.assertIn("credential", json.loads(raw))
+
+
+class TestCoverageIsBoundedAndRotates(CollectorCase):
+    """Slack allows one `conversations.history` per minute for affected apps.
+
+    A workspace sweep cannot finish inside a half-hour tick; it spends the
+    window being throttled and then throws the work away. So a tick is given a
+    request budget, and what it could not reach is reported rather than left
+    to look like an absence of messages. The starting point rotates, or the
+    same first few conversations would be served forever.
+    """
+
+    def setUp(self):
+        super().setUp()
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
+
+    def tearDown(self):
+        os.environ.pop("INTAKE_SLACK_BUDGET", None)
+        super().tearDown()
+
+    def _many(self, n=6):
+        ids = [f"D{i:02d}" for i in range(n)]
+        return {
+            "auth.test": {"ok": True, "user_id": USER, "team_id": "T1"},
+            "users.conversations": lambda p: (
+                {"ok": True, "channels": [channel(c) for c in ids]}
+                if p.get("types") == "im" else {"ok": True, "channels": []}),
+            "conversations.history": {"ok": True, "has_more": False,
+                                      "messages": [message("1787000000.0001")]},
+            "users.info": {"ok": True, "user": {"real_name": "Dana", "profile": {}}},
+        }
+
+    def test_a_tick_stops_at_its_budget(self):
+        os.environ["INTAKE_SLACK_BUDGET"] = "4"
+        self.serve(self._many(6))
+        self.run_main()
+        payload = json.loads(self.stdout)
+        self.assertLess(payload["served"], payload["conversations"])
+        self.assertTrue(payload["incomplete_coverage"]["budget_exhausted"])
+
+    def test_what_it_could_not_reach_is_counted(self):
+        os.environ["INTAKE_SLACK_BUDGET"] = "4"
+        self.serve(self._many(6))
+        self.run_main()
+        gap = json.loads(self.stdout)["incomplete_coverage"]
+        self.assertGreater(gap["conversations_unserved"], 0)
+
+    def test_the_next_tick_starts_where_this_one_stopped(self):
+        """Otherwise the tail of the list is never read at all."""
+        os.environ["INTAKE_SLACK_BUDGET"] = "3"
+        self.serve(self._many(6))
+        self.run_main()
+        first = {c["channel"] for m, c in self.slack.calls
+                 if m == "conversations.history" and c.get("limit") != "1"}
+        before = len(self.slack.calls)
+        self.run_main()
+        second = {c["channel"] for m, c in self.slack.calls[before:]
+                  if m == "conversations.history" and c.get("limit") != "1"}
+        self.assertTrue(second - first,
+                        "the second tick served only conversations the first "
+                        "had already covered")
+
+    def test_a_budget_that_would_spend_nothing_is_refused(self):
+        for bad in ("0", "-1", "abc"):
+            os.environ["INTAKE_SLACK_BUDGET"] = bad
+            self.serve(self._many(2))
+            with self.assertRaises(SystemExit):
+                self.run_main()
+
+    def test_an_unbudgeted_run_still_covers_everything(self):
+        """The bound must not become the behaviour when nothing is scarce."""
+        self.serve(self._many(3))
+        self.run_main()
+        payload = json.loads(self.stdout)
+        self.assertEqual(payload["served"], payload["conversations"])
+        self.assertNotIn("incomplete_coverage", payload)
+
+
+class TestPublicChannelsAreNamedRatherThanSwept(CollectorCase):
+    """`#122` replaces starred discovery with an explicit channel list.
+
+    Reading every channel a person happens to be in collects far more than the
+    job needs, and at one request per minute it cannot finish anyway. Direct
+    messages need no list — they are the user's by definition.
+    """
+
+    def setUp(self):
+        super().setUp()
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
+
+    def _responses(self):
+        return {
+            "auth.test": {"ok": True, "user_id": USER, "team_id": "T1"},
+            "users.conversations": lambda p: (
+                {"ok": True, "channels": [channel("D01")]}
+                if p.get("types") == "im" else {"ok": True, "channels": []}),
+            "conversations.history": {"ok": True, "has_more": False,
+                                      "messages": [message("1787000000.0001")]},
+            "users.info": {"ok": True, "user": {"real_name": "Dana", "profile": {}}},
+        }
+
+    def test_with_no_list_no_public_channel_is_read(self):
+        self.serve(self._responses())
+        self.run_main()
+        read = {c["channel"] for m, c in self.slack.calls
+                if m == "conversations.history" and c.get("limit") != "1"}
+        self.assertEqual(read, {"D01"})
+
+    def test_a_named_channel_is_read(self):
+        path = Path(self.home) / "workspace" / ingest_slack.SCOPE_FILE
+        path.write_text(json.dumps({"channels": ["C0TEAM0001"]}))
+        self.serve(self._responses())
+        self.run_main()
+        read = {c["channel"] for m, c in self.slack.calls
+                if m == "conversations.history" and c.get("limit") != "1"}
+        self.assertIn("C0TEAM0001", read)
+
+    def test_the_workspace_is_never_enumerated_for_channels(self):
+        path = Path(self.home) / "workspace" / ingest_slack.SCOPE_FILE
+        path.write_text(json.dumps({"channels": ["C0TEAM0001"]}))
+        self.serve(self._responses())
+        self.run_main()
+        asked = [c.get("types") for m, c in self.slack.calls
+                 if m == "users.conversations"]
+        self.assertNotIn("public_channel", [a for a in asked if a],
+                         "the collector listed public channels instead of "
+                         "reading the ones it was told about")
+
+    def test_an_unreadable_list_is_treated_as_no_list(self):
+        """A broken file must not stop the direct messages being read."""
+        path = Path(self.home) / "workspace" / ingest_slack.SCOPE_FILE
+        path.write_text("{ not json")
+        self.serve(self._responses())
+        self.assertEqual(self.run_main(), ingest_slack.EXIT_OK)
+
+
+class TestThreadRepliesAreCollected(CollectorCase):
+    """`conversations.history` returns parents, not ordinary replies.
+
+    A colleague answering inside a thread in the user's own DM would otherwise
+    never become an item — the recipe's central promise failing with no error
+    and no log line. `normalize.py` builds `thread_ref` from `thread_ts`, which
+    reads as reply support and made the gap easy to miss.
+    """
+
+    def setUp(self):
+        super().setUp()
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
+
+    def _threaded(self):
+        parent = {"ts": "1787000000.0001", "user": OTHER, "text": "kickoff",
+                  "reply_count": 2}
+        return {
+            "auth.test": {"ok": True, "user_id": USER, "team_id": "T1"},
+            "users.conversations": lambda p: (
+                {"ok": True, "channels": [channel("D01")]}
+                if p.get("types") == "im" else {"ok": True, "channels": []}),
+            "conversations.history": lambda p: (
+                {"ok": True, "messages": []} if p.get("limit") == "1" else
+                {"ok": True, "has_more": False, "messages": [parent]}),
+            "conversations.replies": {"ok": True, "messages": [
+                parent,
+                {"ts": "1787000000.0002", "user": OTHER,
+                 "thread_ts": "1787000000.0001",
+                 "text": "can you get me the numbers before the review"},
+            ]},
+            "users.info": {"ok": True, "user": {"real_name": "Dana", "profile": {}}},
+        }
+
+    def test_a_reply_becomes_an_item(self):
+        self.serve(self._threaded())
+        self.run_main()
+        stored = [row[0] for row in self.rows()]
+        self.assertIn("D01:1787000000.0002", stored,
+                      "a thread reply was never collected")
+
+    def test_the_parent_is_not_stored_twice(self):
+        """`conversations.replies` returns the parent alongside its replies."""
+        self.serve(self._threaded())
+        self.run_main()
+        stored = [row[0] for row in self.rows()]
+        self.assertEqual(stored.count("D01:1787000000.0001"), 1)
+
+    def test_a_thread_with_no_replies_costs_no_call(self):
+        responses = self._threaded()
+        responses["conversations.history"] = lambda p: (
+            {"ok": True, "messages": []} if p.get("limit") == "1" else
+            {"ok": True, "has_more": False,
+             "messages": [{"ts": "1787000000.0001", "user": OTHER, "text": "hi"}]})
+        self.serve(responses)
+        self.run_main()
+        self.assertNotIn("conversations.replies",
+                         [m for m, _ in self.slack.calls])
+
+    def test_a_failing_thread_does_not_discard_the_conversation(self):
+        responses = self._threaded()
+        responses["conversations.replies"] = {"ok": False, "error": "ratelimited"}
+        self.serve(responses)
+        self.assertEqual(self.run_main(), ingest_slack.EXIT_OK)
+        self.assertIn("partial", json.loads(self.stdout))
 
 
 if __name__ == "__main__":

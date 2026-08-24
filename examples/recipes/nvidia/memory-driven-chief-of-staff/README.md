@@ -10,11 +10,14 @@ runtime's scheduler. The user's own ignores and priority overrides change the
 ranking. The recipe never writes back to the
 source system.
 
-Two phases are here: the store with its tests and an offline walkthrough, and
-the installer and scheduled jobs that run it without a person present. Neither
-needs an email account, a Slack workspace, or a network. Only the scheduled
-path needs an inference endpoint, and only when a job finds work; the
-walkthrough and the tests need none. A fixture corpus exercises the same code a
+Three phases are here: the store with its tests and an offline walkthrough,
+the installer and scheduled jobs that run it without a person present, and a
+Slack collector that reads the messages the user receives. The first two need
+no account, no workspace and no network, and the walkthrough and the tests
+still need none. The collector is optional; until it is set up it reports
+itself unconfigured and the schedule runs over whatever the store holds. Only
+the scheduled path needs an inference endpoint, and only when a job finds
+work. A fixture corpus exercises the same code a
 live source would. Two recorded model turns stand in for the two steps that
 would otherwise need a model: the intake judgment, in
 `fixtures/envelopes/intake.json`, and the scheduled re-judgment, recorded
@@ -97,8 +100,9 @@ those two apart.
 | `profile/skills/` | Five skills: judging, review, repair, consolidation, preference update. Retention needs none — it clears bodies and never wakes the agent |
 | `fixtures/` | Eight synthetic messages, a seed memory, and one recorded model turn |
 
-A later phase adds the optional Microsoft Graph and Slack connectors. Until
-then the scheduled jobs judge and re-judge whatever the store already holds.
+Slack is connected through `scripts/setup-slack.sh`; a Microsoft Graph
+connector is still to come. Until a connector is set up, the scheduled jobs
+judge and re-judge whatever the store already holds.
 
 ## Requirements
 
@@ -240,7 +244,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the ten files report 285 tests in
+Expected result: every file ends with `OK`, the ten files report 299 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -266,8 +270,10 @@ Four points are worth calling out.
   examples, including `urlopen(url, data=…)` and a `subprocess` call to
   `curl`. Read it as a tripwire rather than a proof: it matches call shapes, so
   a write spelled in some further way could still pass it. What actually holds
-  the property in this phase is that the recipe reaches no network at all;
-  policy takes over once the connectors land.
+  the property is enforced twice on the connector path: the provider profile
+  declares `slack.com` at `access: read-only` with `enforcement: enforce`, so
+  a write is refused at the egress boundary before any test runs, and the
+  collector reaches no other host.
 - `test_nothing_this_example_ships_lands_on_a_user_owned_path`, also in
   `tests/test_durability.py`, asserts that nothing this recipe ships occupies a
   user-owned name, and that the user-owned and distribution-owned sets stay
@@ -341,10 +347,12 @@ script's output, so a gate printed anywhere else is ignored and the model
 wakes. A test asserts the gate exactly the way the scheduler parses it, rather
 than looking for the string somewhere in the output.
 
-The intake pre-step also looks for the connectors that arrive with the next
-phase. They are not here, so its output reports each as `"absent": true` and it
-carries on with whatever the store already holds. That is the intended reading:
-this phase schedules the judging, and there is nothing yet to collect.
+The intake pre-step also runs whichever collectors are present. The Slack
+one ships with the recipe and reports `{"unconfigured": true}` until
+`scripts/setup-slack.sh` has run, exiting zero so an idle tick still costs
+nothing. A Graph collector is not here yet, so it is reported as
+`"absent": true`. Either way the tick carries on with whatever the store
+already holds.
 
 **Registering is not starting.** Under the builtin scheduler the jobs fire
 only while a gateway is serving the profile, and starting one takes two steps
@@ -595,10 +603,18 @@ package, so nothing is added to the repository's third-party notices.
 
 ## Sandbox and policy
 
-The recipe's own scripts reach no network. They read the recipe's files from
-the checkout and write application state only inside the profile home, and they
-also leave a Python bytecode cache beside the scripts — see
-[Cleanup](#cleanup). The five skill files a runtime loads add nothing to that.
+Every script except the Slack collector reaches no network. They read the
+recipe's files from the checkout and write application state only inside the
+profile home, and they also leave a Python bytecode cache beside the scripts —
+see [Cleanup](#cleanup). The five skill files a runtime loads add nothing to
+that.
+
+The collector reaches exactly one host, `slack.com`, and only for reads. That
+is declared in `providers/slack-user.yaml` as `access: read-only` with
+`enforcement: enforce`, so the egress proxy refuses anything else — the
+property is enforced by policy rather than promised by prose. The credential
+never enters the sandbox: the gateway holds it and substitutes it at the
+boundary, so the collector handles a placeholder it cannot spend.
 
 The scheduled path does reach one. A job that wakes runs an agent turn, and the
 runtime calls whichever inference provider it is configured for, over its own

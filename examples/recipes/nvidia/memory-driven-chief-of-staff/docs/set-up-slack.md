@@ -4,38 +4,45 @@
 # Set Up Slack
 
 This connects the scheduled intake to the Slack messages you receive: direct
-messages, group DMs, and the public channels you are in. It is read-only. The
+messages, group DMs, and any public channels you name. It is read-only. The
 recipe never posts, never reacts, and never joins anything.
 
 See the [recipe README](../README.md) for what the assistant then does with
 those messages.
 
+## What holds the credential
+
+The OpenShell gateway does, and it refreshes it. Slack rotates user tokens: the
+access half lasts twelve hours and each refresh token can be spent once. The
+sandbox never receives the credential — it receives a placeholder that the
+egress proxy substitutes on the way to `slack.com`, so the collector handles a
+string it cannot spend.
+
+Nothing outside the gateway may refresh this credential. A second refresher
+does not fail loudly; Slack allows a spent refresh token to work for a short
+grace period, so the two chains diverge quietly and surface days later as an
+expired token with no obvious cause.
+
+There is no supported path without the gateway. A token in the profile's
+`.env` would abandon that custody, and with rotation on it would stop working
+in twelve hours with nothing to renew it.
+
 ## The one thing that goes wrong
 
-Slack hands out two kinds of token from the same page, and only one of them
-can see your direct messages.
+Slack has two kinds of token, and only one can see your direct messages.
 
-- A **user token** (`xoxp-`) acts as you. It sees what you see.
-- A **bot token** (`xoxb-`) acts as the app. It sees only the conversations the
-  app was invited into — never your DMs.
+- A **user token** acts as you. It sees what you see.
+- A **bot token** acts as the app. It sees only conversations the app was
+  invited into — never your DMs.
 
-Pasting the bot token does not produce an error. It produces an assistant that
-quietly never mentions anything anyone sent you directly. The bundled manifest
-avoids the choice entirely: it declares user scopes and no bot scopes, so the
-app has no bot token to confuse yours with. The collector also checks the
-prefix and refuses a `xoxb-` by name.
-
-## Prerequisites
-
-- A Slack workspace you can install an app into. Some workspaces require an
-  admin to approve app installation; if yours does, you need that approval
-  before the token exists.
-- Linux, including WSL. See [Requirements](../README.md#requirements).
+Using a bot token produces no error. It produces an assistant that quietly
+never mentions anything anyone sent you. Three things prevent it: the bundled
+manifest requests user scopes and no bot scopes, so the app has no bot token at
+all; the setup script takes the refresh token from `authed_user.refresh_token`
+by name rather than by position; and the collector checks the token's prefix
+before it spends a call.
 
 ## Where each step runs
-
-These two steps run in different places, and the CLIs they need do not exist in
-each other's:
 
 | Step | Runs | Needs |
 | --- | --- | --- |
@@ -43,55 +50,21 @@ each other's:
 | `scripts/setup-slack.sh` | **on the host** | `openshell` |
 
 A NemoClaw sandbox has `hermes` and no `openshell`; the host has `openshell`
-and no `hermes`. The credential is held by the OpenShell gateway rather than
-by the sandbox, so configuring it from outside is the design and not a
-workaround. `setup-slack.sh` detects being run in the wrong place and says so
-rather than falling back and quietly leaving the gateway out of it.
+and no `hermes`. Because the gateway holds the credential, configuring it from
+outside the sandbox is the design rather than a workaround.
+`setup-slack.sh` detects being run in the wrong place and says so.
 
-On a plain Hermes install with no OpenShell at all, there is only one place and
-the token goes in the profile's `.env` — see step 4.
+## 1. Create the app
 
-## 1. Check whether you already have one
+Go to <https://api.slack.com/apps> → **Create New App** → **From a manifest**,
+pick your workspace, and paste
+[`slack_app_manifest.json`](slack_app_manifest.json).
 
-If this machine has run another NemoClaw recipe, a Slack credential may already
-be attached to the sandbox. **From the host:**
-
-```bash
-bash scripts/setup-slack.sh
-```
-
-It looks first and exits without changing anything if it finds a provider that
-exposes `SLACK_USER_TOKEN`. Only if it finds none does it ask you for a token.
-
-It deliberately does **not** reuse a provider whose credential key is
-`SLACK_BOT_TOKEN` or `SLACK_APP_TOKEN`. Hermes removes those names from the
-environment of the subprocesses it spawns — cron pre-steps included — so that
-a shell command an agent wrote cannot read them. A provider using one of those
-keys therefore attaches cleanly and delivers nothing the collector can read.
-The script says so when it skips one rather than leaving you to debug an empty
-result.
-
-You can check the list on your own install; `providers/slack-user.yaml` gives
-the one-line command. That it is a *list* is the point: this recipe does not
-depend on it staying as it is, because the collector fails loudly when the
-variable is missing rather than reporting an empty inbox.
-
-## 2. Create the app from the bundled manifest
-
-Only if step 1 asked you for a token.
-
-1. Go to <https://api.slack.com/apps> and choose **Create New App** → **From a
-   manifest**.
-2. Pick your workspace.
-3. Paste the contents of
-   [`slack_app_manifest.json`](slack_app_manifest.json).
-4. Review and create.
-
-The manifest sets `token_rotation_enabled: false`. Leave it that way. This
-recipe supports static user tokens only, and **enabling rotation on a Slack app
-cannot be undone** — the access token would then expire within hours and
-nothing here refreshes it. The collector rejects a rotating token (`xoxe.xoxp-`)
-rather than working for one afternoon and then going quiet.
+The manifest turns **token rotation on**. Leave it on. Enabling it cannot be
+undone, which is deliberate: a user token that never expires is a permanent key
+to your entire Slack, and the gateway is what keeps this one short-lived. The
+collector refuses a non-rotating token for that reason rather than because it
+would not work.
 
 ### What it asks for, and why
 
@@ -99,133 +72,141 @@ rather than working for one afternoon and then going quiet.
 | --- | --- |
 | `im:read`, `im:history` | Your direct messages. Without these the recipe has no job. |
 | `mpim:read`, `mpim:history` | Group DMs. |
-| `channels:read`, `channels:history` | The public channels you are in. |
+| `channels:read`, `channels:history` | The public channels you name. |
 | `users:read` | Turning `U04AB…` into a name a person can read. |
 
 Private channels are **not** requested. `groups:read` / `groups:history`
 commonly need workspace-admin approval, and asking for a scope your admin
-refuses can cost you the whole install rather than just that one scope. If you
-want them, add both to the manifest's `oauth_config.scopes.user` and add
-`"private_channel": "groups:history"` to `FAMILIES` in
-`profile/scripts/ingest_slack.py`.
+refuses can cost you the whole install rather than that one scope.
 
-## 3. Install it and copy the User token
+## 2. Hand it to the gateway
 
-1. **OAuth & Permissions** → **Install to Workspace** → approve.
-2. Copy **User OAuth Token**. It starts with `xoxp-`.
-
-That page shows the bot token too, lower down. You want the one above it.
-
-## 4. Hand it over
-
-Re-run the setup script **on the host** and paste the token when it asks:
+**On the host**, from the recipe root:
 
 ```bash
 bash scripts/setup-slack.sh
 ```
 
-It stores the token in the OpenShell gateway and attaches the provider to your
-sandbox. The sandbox itself only ever sees a placeholder — the real token is
-substituted by the egress proxy on the way to `slack.com`, so the collector
-handles a string it cannot spend.
+It looks first: if a provider exposing `SLACK_USER_TOKEN` is already attached
+to your sandbox, it reuses it and changes nothing. It deliberately does not
+reuse a provider whose credential key is `SLACK_BOT_TOKEN` or
+`SLACK_APP_TOKEN` — Hermes removes those names from the environment of the
+subprocesses it spawns, so such a provider attaches cleanly and delivers
+nothing the collector can read. `providers/slack-user.yaml` carries the command
+to check that list on your own install.
 
-Attaching works on a sandbox that already exists; you do not have to rebuild
-it.
+Otherwise it asks for the app's Client ID and Client Secret, prints an
+authorization URL, and takes back the `code` from it.
 
-**No OpenShell on this machine?** Put the token in the profile's `.env`.
-Resolve the path first and check it — an unguarded `$(…)` that comes back
-empty makes the target `/.env`, which as root writes a live token to the
-filesystem root. `install.sh` guards the same pipeline for the same reason.
+**There is no "Install to Workspace" button for this app.** That button
+installs a bot, and this app has no bot user. A user-scopes-only app is
+authorized by opening the URL directly, which the script prints for you. The
+page it redirects to will fail to load — the target is the IANA-reserved
+example domain, so nobody receives your code and it stays visible in the
+address bar where you can copy it.
 
-```bash
-PROFILE_HOME="$(hermes profile show memory-driven-chief-of-staff 2>/dev/null \
-  | sed -n 's/^Path:[[:space:]]*//p' || true)"
-if [ -z "$PROFILE_HOME" ]; then
-  echo "Could not resolve the profile home." >&2
-  exit 1
-fi
-read -r -s -p "Token: " T
-printf 'SLACK_USER_TOKEN=%s\n' "$T" >> "$PROFILE_HOME/.env"
-unset T
-chmod 600 "$PROFILE_HOME/.env"
-```
+The script then exchanges the code, takes the refresh token from
+`authed_user.refresh_token`, registers the provider profile, creates the
+provider, configures rotation, and attaches it to your sandbox. Attaching works
+on a sandbox that already exists; it does not have to be rebuilt.
 
-`read -s` rather than typing the token into the command line keeps it out of
-your shell history. That file is never copied by the installer and never
-travels with the profile.
-
-## 5. Verify
+To replace the credential later — after regenerating the app's tokens, or if
+the refresh chain broke:
 
 ```bash
-python3 profile/scripts/ingest_slack.py --recheck
+FORCE_REAUTH=1 bash scripts/setup-slack.sh
 ```
 
-A working run prints one line of JSON — how many conversations it saw, how many
-messages it fetched, how many were new, and which conversation families your
-workspace did not grant.
+## 3. Choose which channels to read
+
+Direct messages and group DMs need no list; they are yours by definition. Public
+channels are read only when you name them, in `workspace/slack_channels.json`
+inside the profile home:
+
+```json
+{ "channels": ["C0TEAM0001", "C0PROJECT2"] }
+```
+
+This is not a convenience. Slack documents one request per minute and fifteen
+messages per response for `conversations.history` on affected non-Marketplace
+apps, so a workspace sweep cannot finish inside a scheduled tick — it spends
+the window being throttled and then discards the work. Naming channels is what
+makes coverage bounded, and it also keeps the recipe from collecting far more
+than the job needs.
+
+## 4. Verify
+
+The collector runs inside the sandbox, so run it there:
+
+```bash
+openshell sandbox exec --name <sandbox> -- \
+    python3 <profile home>/scripts/ingest_slack.py --recheck
+```
+
+Running it on the host reports `unconfigured`: the placeholder is injected into
+the sandbox, not into your shell, so that tells you nothing.
+
+A working run prints one line of JSON — how many conversations it considered,
+how many it served this tick, how many messages were fetched and how many were
+new, plus anything it could not reach.
 
 `--recheck` re-probes what the token can do. The answer is cached in
 `workspace/slack_capabilities.json`, because asking every half hour is a rate
 limit waiting to happen. Re-run with `--recheck` after changing scopes.
 
+Renewal is the gateway's:
+
+```bash
+openshell provider refresh status <provider> --credential-key SLACK_USER_TOKEN
+```
+
 ### When it fails
 
-The collector exits with a code that says which kind of problem it is, because
-the scheduled path deliberately drops a collector's output rather than writing
-it to a job log — see [the README](../README.md#when-a-collector-fails). Run it
-by hand to read the explanation.
+The scheduled path deliberately drops a collector's output rather than writing
+it to a job log — see [the README](../README.md#when-a-collector-fails) — so
+the diagnosis rides in the exit code. Run it by hand to read the explanation.
 
 | Exit | Meaning |
 | --- | --- |
-| `0` | Fetched — or never configured, which is a state rather than a fault. |
-| `2` | Configured before and the credential is now gone, wrong type, rejected, or `slack.com` unreachable. |
+| `0` | Fetched, or never configured. Never configured is a state, not a fault. |
+| `2` | Configured before and the credential has gone, is the wrong type, was rejected, or `slack.com` was unreachable. |
 | `3` | Rate-limited. The next tick resumes from the same watermark. |
 | `4` | The token works but lacks a scope the recipe needs. |
 | `1` | Anything else. |
 
-Two failures worth naming:
+Two worth naming:
 
-- **`slack.com` unreachable.** The sandbox's egress policy has to allow it.
-  `nemohermes <sandbox> policy list` shows what is applied — look for a `●`
-  beside `slack`. If it is `○`, add it:
-
-  ```bash
-  nemohermes <sandbox> policy add slack
-  ```
-
-  **Do not check this with `curl`.** On the sandbox measured for this recipe,
-  `curl https://slack.com/api/api.test` returns
-  `CONNECT tunnel failed, response 403` while the collector's own request to
-  the same URL returns HTTP 200 — the egress proxy treats the two clients
-  differently, and not by `User-Agent` (swapping them changes nothing). A curl
-  probe will tell you Slack is blocked when it is not. Use the collector:
-
-  ```bash
-  python3 profile/scripts/ingest_slack.py --recheck
-  ```
+- **`slack.com` unreachable.** `nemohermes <sandbox> policy list` shows what is
+  applied; look for a `●` beside `slack`, and add it with
+  `nemohermes <sandbox> policy add slack` if it is `○`. **Do not check this
+  with `curl`** — on the sandbox this recipe was measured against, `curl`
+  returns `CONNECT tunnel failed, response 403` while the collector's own
+  request to the same URL returns HTTP 200. The egress proxy treats the two
+  clients differently, and not by `User-Agent`. Use the collector.
 - **Exit `4` naming `im:history`.** The app installed with fewer scopes than it
-  asked for, which an admin can do. Add them, reinstall the app, and re-run
-  with `--recheck`.
+  asked for, which an admin can do. Add them, reinstall, re-run with
+  `--recheck`.
 
 ## What the schedule does with it
 
 Nothing extra to configure. `select_intake.py` runs this collector before every
-intake tick, and `scripts/register-jobs.sh` already scheduled that. Until this
-setup is done the collector reports itself unconfigured and exits zero, so the
-schedule runs over whatever is already in the store and an idle tick still
-costs nothing.
+intake tick, and `scripts/register-jobs.sh` already scheduled that.
 
-Once it is connected, a failure here is *not* silent: a collector that exits
-non-zero wakes the agent even when nothing is pending, so a token that stops
-working shows up as a run rather than as an absence of runs.
+A tick is bounded, and where it starts rotates, so every conversation is
+reached within a few ticks rather than the first few being served forever. What
+a tick could not reach is reported as `incomplete_coverage` rather than left to
+look like an absence of messages.
 
-## Rotating the token
+Once connected, a failure here is not silent: a collector that exits non-zero
+wakes the agent even when nothing is pending, so a credential that stops working
+shows up as a run rather than as an absence of runs.
 
-If you regenerate the token in Slack, hand the new one over the same way:
+## Revoking
+
+Uninstalling the app from your workspace revokes the token. Then remove the
+provider, which removes the stored credential with it:
 
 ```bash
-bash scripts/setup-slack.sh
+openshell sandbox provider detach <sandbox> <provider>
+openshell provider delete <provider>
 ```
-
-It updates the existing provider rather than creating a second one. Nothing
-else needs restarting — the collector reads the credential fresh on every tick.

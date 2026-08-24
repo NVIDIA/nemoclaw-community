@@ -83,11 +83,49 @@ PAGE = 200  # Slack's maximum for conversations.history.
 # nothing would ever come back for.
 BACKFILL_DAYS = 7
 
+# How many Slack calls one tick may spend.
+#
+# Slack documents one request per minute and fifteen messages per response for
+# `conversations.history` on affected non-Marketplace apps. That is restrictive
+# enough to shape the design rather than be absorbed by retries: a workspace
+# sweep cannot finish, and a tick that tries will spend its whole window being
+# throttled and then discard the work. So coverage is bounded and rotates —
+# each tick serves the conversations the last one did not reach, and says so
+# when it ran out of budget rather than reporting an empty result.
+REQUEST_BUDGET = 10
+MAX_BACKOFF_SECONDS = 30
+
+# Public channels are read only when the operator names them. Direct messages
+# and group DMs need no list: they are the user's by definition, and they are
+# the reason this recipe wants a user token at all.
+SCOPE_FILE = "slack_channels.json"
+
 # Message subtypes worth judging. Everything else — joins, leaves, topic
 # changes, pinned notices — is Slack talking about the channel rather than a
 # person talking to the user, and in a DM it would arrive as `direct`, this
 # recipe's highest-priority class.
 KEPT_SUBTYPES = {None, "thread_broadcast", "file_share"}
+
+
+class Budget:
+    """How many calls are left, and whether anything was left unread.
+
+    Passing this around rather than counting globally keeps the accounting
+    honest across the probe, the listing and the per-conversation crawl — all
+    three spend from the same allowance, because Slack counts them the same
+    way.
+    """
+
+    def __init__(self, allowance: int) -> None:
+        self.left = allowance
+        self.exhausted = False
+
+    def spend(self) -> bool:
+        if self.left <= 0:
+            self.exhausted = True
+            return False
+        self.left -= 1
+        return True
 
 
 class SlackError(Exception):
@@ -174,6 +212,17 @@ def call(method: str, token: str, **params: Any) -> dict[str, Any]:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         if exc.code == 429:
+            # Slack says how long to wait. Honour it when the wait is short
+            # enough to be worth holding the tick for, and give up otherwise
+            # rather than sleeping through the next scheduled run.
+            wait = exc.headers.get("Retry-After") if exc.headers else None
+            try:
+                seconds = int(wait) if wait else 0
+            except ValueError:
+                seconds = 0
+            if 0 < seconds <= MAX_BACKOFF_SECONDS:
+                time.sleep(seconds)
+                raise SlackError(method, "retry_after") from None
             raise SlackError(method, "ratelimited") from None
         # The body can quote the request, so it is not repeated here.
         raise SlackError(method, f"http_{exc.code}") from None
@@ -184,6 +233,27 @@ def call(method: str, token: str, **params: Any) -> dict[str, Any]:
     if not payload.get("ok"):
         raise SlackError(method, str(payload.get("error") or "unknown"))
     return payload
+
+
+def bounded_budget() -> int:
+    """Read `INTAKE_SLACK_BUDGET`, bounded, the way the selectors read theirs.
+
+    Unvalidated, a zero or a negative would mean "spend nothing" and every tick
+    would report total incomplete coverage while looking like a working run.
+    """
+    raw = os.environ.get("INTAKE_SLACK_BUDGET")
+    if raw is None or raw == "":
+        return REQUEST_BUDGET
+    try:
+        value = int(raw)
+    except ValueError:
+        raise SystemExit(
+            f"INTAKE_SLACK_BUDGET must be a whole number between 1 and 200; "
+            f"got {raw!r}")
+    if value < 1 or value > 200:
+        raise SystemExit(
+            f"INTAKE_SLACK_BUDGET must be between 1 and 200; got {value}")
+    return value
 
 
 def capabilities_path():
@@ -209,18 +279,29 @@ def probe(token: str) -> dict[str, Any]:
     not doing the job it claims to, so that one is fatal; the rest degrade to
     "skipped" and are reported.
     """
-    identity = call("auth.test", token)
+    identity = call("auth.test", token)  # one call, outside the tick budget
     available: list[str] = []
     missing: list[str] = []
     for family in FAMILIES:
-        try:
-            listing = call("users.conversations", token, types=family, limit=1)
-        except SlackError as exc:
-            if exc.error in ("missing_scope", "not_allowed_token_type"):
-                missing.append(family)
+        if family == "public_channel":
+            # Not enumerated, for the same reason it is not collected by
+            # enumeration: at one request per minute a workspace sweep is not
+            # affordable, and an unnamed channel is not read anyway. Probe the
+            # first channel the operator named, or skip the family entirely.
+            named = named_channels()
+            if not named:
                 continue
-            raise
-        channels = listing.get("channels") or []
+            channels = [{"id": named[0]}]
+        else:
+            try:
+                listing = call("users.conversations", token, types=family,
+                               limit=1)
+            except SlackError as exc:
+                if exc.error in ("missing_scope", "not_allowed_token_type"):
+                    missing.append(family)
+                    continue
+                raise
+            channels = listing.get("channels") or []
         if not channels:
             # Nothing to read in this family, so history access cannot be
             # tested and does not matter. Treat it as available rather than
@@ -276,21 +357,53 @@ def load_capabilities(token: str, *, refresh: bool = False) -> dict[str, Any]:
     return caps
 
 
-def conversations(token: str, families: list[str]) -> list[dict[str, Any]]:
-    """Every conversation the user belongs to, in the families they granted.
+def scope_path():
+    return ledger_path().parent.parent / SCOPE_FILE
 
-    `users.conversations` rather than `conversations.list`: the second returns
-    the whole workspace, which on a large one is both a rate limit and a
-    privacy surprise. This recipe only wants what the user is already in.
+
+def named_channels() -> list[str]:
+    """The public channels the operator asked for, if any.
+
+    A workspace sweep is not an option at one request per minute, and it is not
+    wanted either — a recipe that reads every channel a person happens to be in
+    collects far more than the job needs. Direct messages need no such list.
+    """
+    path = scope_path()
+    if not path.exists():
+        return []
+    try:
+        declared = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if isinstance(declared, dict):
+        declared = declared.get("channels") or []
+    return [str(c) for c in declared if str(c).strip()]
+
+
+def conversations(token: str, families: list[str],
+                  budget: Budget) -> list[dict[str, Any]]:
+    """The conversations this tick will consider.
+
+    Direct and group messages are enumerated, because they are the user's by
+    definition and there is no list to keep. Public channels are taken from
+    `slack_channels.json` — naming them is what makes coverage bounded, and
+    unnamed channels are simply not read.
     """
     found: list[dict[str, Any]] = []
     for family in families:
+        if family == "public_channel":
+            found.extend({"id": cid, "type": "channel"}
+                         for cid in named_channels())
+            continue
         cursor = None
         while True:
+            if not budget.spend():
+                return found
             page = call("users.conversations", token, types=family,
                         exclude_archived="true", limit=PAGE, cursor=cursor)
             for channel in page.get("channels", []):
-                found.append({"id": channel["id"], "type": family_of(channel, family)})
+                found.append({"id": channel["id"],
+                              "type": family_of(channel, family)})
             cursor = (page.get("response_metadata") or {}).get("next_cursor") or None
             if not cursor:
                 break
@@ -308,8 +421,8 @@ def family_of(channel: dict[str, Any], requested: str) -> str:
     return "channel" if requested == "public_channel" else requested
 
 
-def history(token: str, channel_id: str,
-            oldest: str | None) -> tuple[list[dict[str, Any]], bool]:
+def history(token: str, channel_id: str, oldest: str | None,
+            budget: Budget) -> tuple[list[dict[str, Any]], bool]:
     """Messages since the watermark, oldest first, and whether the crawl finished.
 
     Completeness is returned rather than assumed, because the watermark depends
@@ -329,6 +442,9 @@ def history(token: str, channel_id: str,
     cursor = None
     complete = True
     while True:
+        if not budget.spend():
+            complete = False
+            break
         page = call("conversations.history", token, channel=channel_id,
                     oldest=oldest, inclusive="false", limit=PAGE, cursor=cursor)
         messages.extend(page.get("messages", []))
@@ -340,6 +456,28 @@ def history(token: str, channel_id: str,
             break
     messages.sort(key=lambda m: float(m.get("ts", "0")))
     return messages, complete
+
+
+def replies(token: str, channel_id: str, parent_ts: str, oldest: str | None,
+            budget: Budget) -> list[dict[str, Any]]:
+    """The replies under one thread parent.
+
+    `conversations.history` returns thread parents and broadcast replies, not
+    ordinary replies — those live behind `conversations.replies`. Without this,
+    a colleague answering inside a thread in the user's own DM never becomes an
+    item, never becomes an obligation, and never appears in the shortlist. The
+    recipe's central promise fails with no error and no log line.
+
+    Bounded like everything else: one page, spent from the same allowance, and
+    a thread whose replies do not fit is left for the watermark to catch on a
+    later tick rather than paged through here.
+    """
+    if not budget.spend():
+        return []
+    page = call("conversations.replies", token, channel=channel_id,
+                ts=parent_ts, oldest=oldest, inclusive="false", limit=PAGE)
+    # The parent comes back with its replies; it is already accounted for.
+    return [m for m in page.get("messages", []) if m.get("ts") != parent_ts]
 
 
 def worth_judging(message: dict[str, Any], user_id: str | None) -> bool:
@@ -405,8 +543,35 @@ def commit_channel(channel: dict[str, Any], items: list[dict[str, Any]],
     return added
 
 
-def collect(token: str, caps: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-    """Fetch every granted family, one conversation at a time.
+def rotation_offset(count: int) -> int:
+    """Where this tick starts in the conversation list.
+
+    A bounded tick that always starts at the same place would serve the first
+    few conversations forever and never reach the rest. The offset advances by
+    however many were served, so coverage rotates and every conversation is
+    reached within a few ticks rather than never.
+    """
+    path = scope_path().with_name("slack_rotation.json")
+    try:
+        offset = int(json.loads(path.read_text(encoding="utf-8"))["offset"])
+    except (OSError, json.JSONDecodeError, KeyError, ValueError, TypeError):
+        offset = 0
+    return offset % count if count else 0
+
+
+def save_rotation(offset: int) -> None:
+    path = scope_path().with_name("slack_rotation.json")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"offset": offset}), encoding="utf-8")
+    except OSError:
+        # Losing the offset costs coverage fairness, not correctness.
+        pass
+
+
+def collect(token: str, caps: dict[str, Any],
+            budget: Budget) -> tuple[dict[str, Any], bool]:
+    """Fetch what the budget allows, starting where the last tick stopped.
 
     A failure in one conversation used to abort the run and roll back every
     conversation already fetched — so a single rate-limited channel meant zero
@@ -415,28 +580,53 @@ def collect(token: str, caps: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     livelock that wakes the model every half hour to redo work it will discard.
     """
     ensure_store()
-    channels = conversations(token, caps["available"])
+    channels = conversations(token, caps["available"], budget)
     watermarks = read_cursors()
     names: dict[str, str | None] = {}
-    fetched = added = 0
+    fetched = added = served = failed_conversations = 0
     partial: list[dict[str, str]] = []
     incomplete: list[str] = []
 
-    for channel in channels:
+    start = rotation_offset(len(channels))
+    ordered = channels[start:] + channels[:start]
+
+    for channel in ordered:
+        if budget.left <= 0:
+            budget.exhausted = True
+            break
+        served += 1
         try:
             messages, complete = history(token, channel["id"],
-                                         watermarks.get(channel["id"]))
+                                         watermarks.get(channel["id"]), budget)
         except SlackError as exc:
             # The conversation id is not repeated: a DM id names who the user
             # talks to, and this summary is the agent's prompt.
+            failed_conversations += 1
             partial.append({"family": channel["type"], "error": exc.error})
             continue
         if not messages:
             continue
+        # A thread parent whose reply count moved since the watermark has
+        # replies this tick has not seen.
+        threaded: list[dict[str, Any]] = []
+        for message in messages:
+            if not message.get("reply_count"):
+                continue
+            try:
+                threaded.extend(replies(token, channel["id"], message["ts"],
+                                        watermarks.get(channel["id"]), budget))
+            except SlackError as exc:
+                # A thread that could not be read is not a conversation that
+                # could not be read: the parents are already in hand and worth
+                # storing. Reported, but it does not make the run a failure.
+                partial.append({"family": channel["type"], "scope": "thread",
+                                "error": exc.error})
+                break
+
         items = [
             slack_message_to_item(message, channel, caps["user_id"],
                                   sender_name(token, message.get("user"), names))
-            for message in messages
+            for message in messages + threaded
             if worth_judging(message, caps["user_id"])
         ]
         fetched += len(items)
@@ -447,19 +637,30 @@ def collect(token: str, caps: dict[str, Any]) -> tuple[dict[str, Any], bool]:
             incomplete.append(channel["type"])
         added += commit_channel(channel, items, watermark)
 
+    if channels:
+        save_rotation((start + served) % len(channels))
+
     result: dict[str, Any] = {
         "conversations": len(channels),
+        "served": served,
         "fetched": fetched,
         "added": added,
         "skipped_families": caps["missing"],
     }
     if partial:
         result["partial"] = partial
-    if incomplete:
-        result["incomplete"] = incomplete
-    # A run in which every conversation failed is a failed run; one in which
-    # some succeeded made progress and must not throw it away.
-    total_failed = bool(partial) and len(partial) == len(channels)
+    if incomplete or budget.exhausted or served < len(channels):
+        # Coverage that was not achieved is reported rather than being left to
+        # look like an absence of messages.
+        result["incomplete_coverage"] = {
+            "budget_exhausted": budget.exhausted,
+            "conversations_unserved": max(0, len(channels) - served),
+            "truncated_families": sorted(set(incomplete)),
+        }
+    # A run that reached nothing is a failed run. One where some conversations
+    # worked made progress and must not throw it away — and a thread failing
+    # inside a conversation that otherwise succeeded is neither.
+    total_failed = served > 0 and failed_conversations == served
     return result, total_failed
 
 
@@ -510,8 +711,9 @@ def main(argv: list[str] | None = None) -> int:
               "reinstall it, then re-run with --recheck.", file=sys.stderr)
         return EXIT_SCOPE
 
+    budget = Budget(bounded_budget())
     try:
-        result, everything_failed = collect(token, caps)
+        result, everything_failed = collect(token, caps, budget)
     except SlackError as exc:
         return _report_failure(exc)
 
