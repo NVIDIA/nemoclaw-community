@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 Linespotting AB
+# SPDX-License-Identifier: Apache-2.0
+#
+# Additive OpenShell network policy for the gbr-pair recipe.
+# Applied with `nemoclaw <sandbox> policy-add --from-file`.
+#
+# Allowed edge: host Bot API only. The sandboxed agent can read health,
+# sessions, and status. It cannot inject keystrokes and cannot reach the
+# vendor relay. Inject stays on the host / paired remote-control client.
+#
+# Denied edge (deliberate): there is no route to
+# gbr-relay.ekobrott.workers.dev. Pair, push, poll, and ack stay on the host.
+
+preset:
+  name: gbr-pair
+  description: "Sandbox route to the host Build Remote Agent Bot API only"
+
+network_policies:
+  gbr-pair-bot-api:
+    name: gbr-pair-bot-api
+    endpoints:
+      - host: host.openshell.internal
+        port: 8788
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow:
+              method: GET
+              path: /health
+          - allow:
+              method: GET
+              path: /v1/health
+          - allow:
+              method: GET
+              path: /v1/sessions
+          - allow:
+              method: GET
+              path: /v1/status
+    binaries:
+      - { path: /usr/bin/curl }
+      - { path: /usr/bin/bash }
+      - { path: /usr/bin/sh }
+      - { path: /usr/bin/python* }
+      - { path: /usr/local/bin/python* }
+      - { path: /usr/bin/env }

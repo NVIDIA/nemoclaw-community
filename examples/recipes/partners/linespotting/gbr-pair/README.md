@@ -1,16 +1,15 @@
 <!-- SPDX-FileCopyrightText: Copyright (c) 2026 Linespotting AB -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# Build Remote Agent pairing
+# Build Remote Agent remote operator
 
-For an operator who already has NemoClaw or OpenShell open as a **host
-terminal window**, this recipe installs host-side `gbr-agent` so a phone can
-see that TTY the same way it sees any other host terminal.
+For an operator who runs a NemoClaw/OpenClaw agent inside OpenShell, this
+recipe adds a remote-operator skill and a GET-only host Bot API policy, then
+runs host-side `gbr-agent` so a paired phone can inject into the NemoClaw TTY.
 
-`gbr-agent` is a **host tool**. It discovers terminal windows on the host. It
-does not enter the OpenShell sandbox. There is no NemoClaw-specific adapter,
-no in-sandbox `gbr-agent`, and no fourth pair protocol. If NemoClaw or
-OpenShell is not a TTY on that host, the phone does not see it.
+The sandboxed agent can ping the host Bot API. It cannot inject keystrokes. It
+cannot reach the vendor relay. Inject is host-keyboard authority on the host
+and on the paired **remote-control client**.
 
 Build Remote Agent is an independent product by Linespotting AB. It is not
 affiliated with NVIDIA, xAI, or SpaceX. Catalog placement is for discovery
@@ -18,22 +17,38 @@ only.
 
 ## Screenshot
 
-This is a host command-line recipe. The block below is terminal-result
-evidence captured on this contributor host after downloading GitHub Release
-**v0.6.0** `gbr-agent-darwin-arm64` and checking the hard-coded digest. This
-change did **not** live-run NemoClaw or OpenShell.
+This is a command-line recipe. The block below is terminal-result evidence
+captured on a Windows amd64 contributor host on 2026-08-24. Mailbox ids and
+keys are omitted. The NemoClaw sandbox attach was not live-run on this host;
+that path is `scripts/onboard.sh`.
 
 ```text
-$ printf '%s  %s\n' '7baa1a8e214cd71b60e3f2b5063713e00ff740939749c3cab3d702784a1432f8' 'gbr-agent-darwin-arm64' | shasum -a 256 -c -
-gbr-agent-darwin-arm64: OK
+Get-FileHash -Algorithm SHA256 gbr-agent-windows-amd64.exe
+SHA256  40355b2be6cd68f3be68f2a06dfd30307ec1a60f16f87f1d6174012b35aa4a49  OK
 
-$ ./gbr-agent-darwin-arm64 version
-gbr-agent v0.6.0 commit=903806c date=2026-08-21T15:57:34Z darwin/arm64
+.\gbr-agent-windows-amd64.exe version
+gbr-agent v0.6.0 commit=903806c date=2026-08-21T15:57:30Z windows/amd64
+
+GET http://127.0.0.1:8788/health
+{"ok":true,"version":"v0.6.0","health":{"quality":"ok","relay_quality":"ok"}}
+
+GET http://127.0.0.1:8788/v1/sessions
+session_id=windows-terminal-bd010e  title=gbr-pair-verify-tty
+
+POST http://127.0.0.1:8788/v1/inject
+{"ok":true,"session_id":"windows-terminal-bd010e","local":true}
+
+GET https://gbr-relay.ekobrott.workers.dev/v1/bot
+{"ok":true,"service":"gbr-relay-bot","version":"0.6.0"}
+
+GET https://gbr-relay.ekobrott.workers.dev/v1/mb/gbr-example/poll
+HTTP 401
 ```
 
-The checksum line confirms the pinned GitHub Release asset. The version line
-confirms that binary. The phone pair UI is not shown. A NemoClaw or OpenShell
-session is not shown.
+The checksum line confirms the pinned GitHub Release asset. Health and
+`relay_quality` confirm the running v0.6.0 agent reached the vendor relay.
+Sessions and inject confirm TTY discovery and host-keyboard inject. Relay
+discovery does not require a key; poll without a key returned 401.
 
 ## At A Glance
 
@@ -41,14 +56,14 @@ session is not shown.
 | --- | --- |
 | Category | Partner Recipe |
 | Contributor or provenance | Linespotting AB |
-| Use this when | You want a phone or the host Bot API to see **host terminal windows**, including a NemoClaw or OpenShell TTY if one is already open on that host. |
-| You will get | Host-side `gbr-agent` **v0.6.0** that discovers host TTYs. This is a host TTY spectator next to NemoClaw, not a NemoClaw integration. |
-| Runs on | macOS, Windows, or Linux host. The optional phone app runs on iOS or Android. |
-| Requires | GitHub Release **v0.6.0** `gbr-agent` with the hard-coded digest below. NemoClaw or OpenShell is optional: if present, it is only another host TTY. The paid phone app is optional for host-only Bot API use. |
-| Verified on | Not yet verified on NemoClaw or OpenShell. Checksum and version captured on macOS darwin/arm64 from GitHub Release v0.6.0 (`commit=903806c`). |
-| Evidence level | local/static |
+| Use this when | You want a NemoClaw/OpenClaw sandbox to ping a host operator, and a phone to inject into the NemoClaw TTY, without giving the sandbox a route to the vendor relay. |
+| You will get | An OpenClaw skill, an additive OpenShell policy, and host-side `gbr-agent` **v0.6.0**. |
+| Runs on | Host `gbr-agent`: macOS, Windows, or Linux. NemoClaw/OpenShell sandbox attach: macOS, Linux, or Windows Subsystem for Linux (WSL). The optional phone app runs on iOS or Android. |
+| Requires | GitHub Release **v0.6.0** `gbr-agent` with the hard-coded digest below. NemoClaw and OpenShell on `PATH` for sandbox attach. The paid phone app is optional for host-only Bot API use. |
+| Verified on | Windows amd64 host path: GitHub Release v0.6.0 checksum (`commit=903806c`), live Bot API, TTY discover, inject, and relay discovery/401. NemoClaw/OpenShell sandbox attach not live-run (`nemoclaw` and `openshell` were not on `PATH`). |
+| Evidence level | integration |
 | Support and maturity | Best-effort community support. See the repository [support policy](../../../../../SUPPORT.md). |
-| External access, data, and actions | Outbound HTTPS to `https://gbr-relay.ekobrott.workers.dev` (session titles and agent output for the paired mailbox). Phone can inject text into discovered host TTYs (`POST /v1/inject`). Loopback `127.0.0.1:8788` is unauthenticated by default. macOS Accessibility is required for TTY inject. Do not commit mailbox keys. Host `gbr-agent` is MIT. The mobile Build Remote Agent app is a paid closed-source spectator and is not required for host-only Bot API use. |
+| External access, data, and actions | Host `gbr-agent` sends `gbr/1` envelopes to `https://gbr-relay.ekobrott.workers.dev` (session titles and agent output for the paired mailbox). The paired remote-control client can inject text into discovered host TTYs. Loopback `127.0.0.1:8788` is unauthenticated by default. macOS Accessibility is required for TTY inject. The OpenShell policy allows GET to `host.openshell.internal:8788` only. Do not commit mailbox keys. Host `gbr-agent` is MIT. The mobile Build Remote Agent app is a paid closed-source remote-control client and is not required for host-only Bot API use. |
 | Start here | [Start Here](#start-here) |
 | Confirm success | [Verification](#verification) |
 
@@ -56,55 +71,67 @@ session is not shown.
 
 Read this section before you run any command below.
 
-- **Outbound HTTPS relay.** `gbr-agent pair` and `gbr-agent run` send `gbr/1`
-  envelopes to `https://gbr-relay.ekobrott.workers.dev`. Those envelopes can
-  include session titles and agent output for the paired mailbox. The relay
-  always requires the `X-GBR-Key` request header. Do not commit mailbox keys,
-  `X-GBR-Key`, or `device.json`.
-- **Remote inject.** A paired phone can inject text into discovered host
-  terminal windows through `POST /v1/inject`. Treat that as host keyboard
-  authority, not a read-only spectator.
+- **Outbound HTTPS relay (host only).** `gbr-agent pair` and `gbr-agent run`
+  send `gbr/1` envelopes to `https://gbr-relay.ekobrott.workers.dev`. Those
+  envelopes can include session titles and agent output for the paired
+  mailbox. Auth is not uniform:
+  - `POST /v1/mb/:id/pair` is unauthenticated and throttled (12/hour/mailbox)
+    because it issues the mailbox key.
+  - Post-pair `push`, `poll`, and `ack` require `X-GBR-Key`.
+  - Vendor reference:
+    <https://github.com/LinespottingOrg/GrokBuildRemote-Agents/blob/v0.6.0/relay/README.md>
+  Do not commit mailbox keys, `X-GBR-Key`, or `device.json`.
+- **Remote inject is host-keyboard authority.** A paired phone is a
+  **remote-control client**. It can inject text into discovered host terminal
+  windows through `POST /v1/inject`. That is not read-only. Treat a paired
+  device as equivalent to sitting at the host keyboard.
 - **Loopback Bot API.** `http://127.0.0.1:8788` is **unauthenticated by
-  default**. Set the environment variable `GBR_BOT_REQUIRE_KEY=1` if loopback
-  callers must present the mailbox key. The relay path still requires
-  `X-GBR-Key` even when loopback does not.
+  default**. Keep that default when the OpenShell skill must GET the Bot API;
+  the sandbox has no mailbox key. Set the environment variable
+  `GBR_BOT_REQUIRE_KEY=1` only for host-only Bot API use with no sandbox
+  attach.
+- **OpenShell boundary.** `policy.yaml` allows GET to
+  `host.openshell.internal:8788` (`/health`, `/v1/sessions`, `/v1/status`).
+  It does not allow POST `/v1/inject`. It does not allow
+  `gbr-relay.ekobrott.workers.dev`. Do not copy `gbr-agent` into the sandbox
+  image.
 - **macOS Accessibility.** TTY inject on macOS needs Accessibility permission
   for `gbr-agent`. Grant it only if you want inject. Capture of terminal
   titles can still work without it.
 - **License boundary.** Desktop `gbr-agent` is MIT. The mobile **Build Remote
-  Agent** app is a paid closed-source spectator. It is not required for
-  host-only Bot API use.
-- **No in-sandbox agent.** Do not copy `gbr-agent` into the OpenShell sandbox
-  image. Do not add a NemoClaw-specific pair protocol. Pairing is only
-  `gbr-agent pair` (browser QR and printed 8-character code) and
-  `gbr-agent run`.
+  Agent** app is a paid closed-source remote-control client. It is not
+  required for host-only Bot API use.
 
 ## Architecture
 
 ```text
 phone (optional paid Build Remote Agent app)
+  remote-control client — host-keyboard inject
         |
-        |  HTTPS gbr/1 envelopes (titles, agent output)
+        |  HTTPS gbr/1
+        |  POST /v1/mb/:id/pair     no key (issues the key; throttled)
+        |  push / poll / ack        X-GBR-Key required
         v
-https://gbr-relay.ekobrott.workers.dev     (always X-GBR-Key)
+https://gbr-relay.ekobrott.workers.dev
         ^
-        |
+        |  host only — no sandbox route
 host
-  gbr-agent  -- discover / inject -->  host TTY windows
-       |                               (Terminal, iTerm, Windows Terminal, ...)
-       |                               If NemoClaw or OpenShell is one of
-       |                               those TTYs, it is visible like any
-       |                               other TTY. There is no adapter.
+  gbr-agent  -- discover / inject -->  host TTY
+       |                               (NemoClaw CLI / OpenShell gateway TTY)
        v
   127.0.0.1:8788 Bot API               (unauthenticated by default)
-  optional host-side gbr-mcp
 
-OpenShell sandbox                      (unchanged; no gbr-agent inside)
-  NemoClaw / OpenClaw / Hermes
+OpenShell sandbox                      (policy-enforced)
+  OpenClaw / Hermes agent
+    skill gbr-remote-operator
+      GET host.openshell.internal:8788/health
+      GET host.openshell.internal:8788/v1/sessions
+      no POST /v1/inject
+      no vendor relay
 ```
 
-NemoClaw keeps its own sandbox. `gbr-agent` stays on the host and talks to
-host TTYs.
+NemoClaw keeps the sandbox. `gbr-agent` stays on the host. The skill is the
+harness integration. The policy is the OpenShell boundary.
 
 ## Start Here
 
@@ -112,132 +139,166 @@ Do not `curl` a website `install.sh`. Install the GitHub Release **v0.6.0**
 binary and check the **hard-coded** digest. Do not trust a `SHA256SUMS` file
 downloaded from the same release as the only check.
 
-Run every command on the **host**, not inside `openshell sandbox exec`.
+Run host commands on the **host**, not inside `openshell sandbox exec`.
 
-1. Install `gbr-agent` v0.6.0 (darwin-arm64 shown). Swap the asset name and
-   digest for your platform from the table below.
+### 1. Install host `gbr-agent` v0.6.0
 
-   ```bash
-   VER=v0.6.0
-   BASE=https://github.com/LinespottingOrg/GrokBuildRemote-Agents/releases/download/$VER
-   SHA=7baa1a8e214cd71b60e3f2b5063713e00ff740939749c3cab3d702784a1432f8
-   curl -fsSL -o gbr-agent-darwin-arm64 "$BASE/gbr-agent-darwin-arm64"
-   printf '%s  %s\n' "$SHA" 'gbr-agent-darwin-arm64' | shasum -a 256 -c -
-   mkdir -p ~/.local/bin
-   install -m 0755 gbr-agent-darwin-arm64 ~/.local/bin/gbr-agent
-   export PATH="$HOME/.local/bin:$PATH"
-   gbr-agent version   # v0.6.0
-   ```
+**PowerShell (Windows):**
 
-   GitHub Release v0.6.0 SHA-256 (hard-coded; verified by downloading each
-   asset on 2026-08-24):
+```powershell
+cd examples/recipes/partners/linespotting/gbr-pair
+Set-ExecutionPolicy -Scope Process Bypass
+.\scripts\install-gbr-agent.ps1
+```
 
-   | Asset | SHA-256 |
-   | --- | --- |
-   | `gbr-agent-darwin-amd64` | `62673a6856342a87d4a2a659bc1de92200aa19a5b60d88d252254940820f0b7f` |
-   | `gbr-agent-darwin-arm64` | `7baa1a8e214cd71b60e3f2b5063713e00ff740939749c3cab3d702784a1432f8` |
-   | `gbr-agent-linux-amd64` | `fb54724367882497f2e8e05e40ecdeb4be29e008e6c865fc5c426cf464e6ad6e` |
-   | `gbr-agent-linux-arm64` | `9e9d7ca45bb0c4ded9d04226136013e9b64ae30f16bcf03069d35e9c38171cb9` |
-   | `gbr-agent-windows-amd64.exe` | `40355b2be6cd68f3be68f2a06dfd30307ec1a60f16f87f1d6174012b35aa4a49` |
-   | `gbr-agent-windows-arm64.exe` | `8fb9efcbc7e2ac91c11964944bf0f45e31bb23f4356d9dcb4b305d7cb9b0fe8c` |
+**bash (macOS / Linux / WSL):**
 
-   On Linux, `sha256sum -c` is an equivalent check. Abort if the digest does
-   not match. Do not continue on a failed check.
+```bash
+cd examples/recipes/partners/linespotting/gbr-pair
+bash scripts/install-gbr-agent.sh
+```
 
-2. Pair the phone with the existing product command. Use both the browser QR
-   and the printed 8-character code. Do not add another pair protocol.
+GitHub Release v0.6.0 SHA-256 (hard-coded; Windows amd64 re-checked on
+2026-08-24; other hashes from the same release assets):
 
-   ```bash
-   gbr-agent pair
-   ```
+| Asset | SHA-256 |
+| --- | --- |
+| `gbr-agent-darwin-amd64` | `62673a6856342a87d4a2a659bc1de92200aa19a5b60d88d252254940820f0b7f` |
+| `gbr-agent-darwin-arm64` | `7baa1a8e214cd71b60e3f2b5063713e00ff740939749c3cab3d702784a1432f8` |
+| `gbr-agent-linux-amd64` | `fb54724367882497f2e8e05e40ecdeb4be29e008e6c865fc5c426cf464e6ad6e` |
+| `gbr-agent-linux-arm64` | `9e9d7ca45bb0c4ded9d04226136013e9b64ae30f16bcf03069d35e9c38171cb9` |
+| `gbr-agent-windows-amd64.exe` | `40355b2be6cd68f3be68f2a06dfd30307ec1a60f16f87f1d6174012b35aa4a49` |
+| `gbr-agent-windows-arm64.exe` | `8fb9efcbc7e2ac91c11964944bf0f45e31bb23f4356d9dcb4b305d7cb9b0fe8c` |
 
-3. On the phone, open Build Remote Agent and choose **Scan QR from computer**,
-   or type the 8-character code. Skip this step for host-only Bot API use.
+Abort if the digest does not match. Do not continue on a failed check.
 
-4. Leave the host agent running. Set `GBR_BOT_REQUIRE_KEY=1` if loopback
-   callers must present the mailbox key.
+### 2. Pair the remote-control client
 
-   ```bash
-   gbr-agent run
-   ```
+This step talks to the vendor relay. `POST /v1/mb/:id/pair` is unauthenticated
+and throttled because it issues the mailbox key. After that, push, poll, and
+ack require `X-GBR-Key`.
 
-5. Confirm the host Bot API listener:
+```bash
+gbr-agent pair
+```
 
-   ```bash
-   curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8788/health
-   ```
+On the phone, open Build Remote Agent and choose **Scan QR from computer**,
+or type the 8-character code. Skip this step for host-only Bot API use.
 
-   Optional: run host-side `gbr-mcp` from the same v0.6.0 source tag. Do not
-   install `gbr-mcp` inside the OpenShell sandbox.
+### 3. Leave the host agent running
 
-Keep `gbr-agent` on the host. The sandbox does not need it. Do not add
-sandbox egress to `127.0.0.1:8788` unless an existing OpenShell policy already
-allows that host loopback path.
+```bash
+gbr-agent run
+```
 
-The phone is not the NemoClaw orchestrator. This recipe does not replace
-NemoClaw, OpenClaw, or Hermes device or chat pairing.
+### 4. Confirm the host Bot API
+
+```bash
+curl -sS http://127.0.0.1:8788/health
+curl -sS http://127.0.0.1:8788/v1/sessions
+```
+
+On Windows PowerShell:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8788/health
+Invoke-RestMethod http://127.0.0.1:8788/v1/sessions
+```
+
+### 5. Attach the NemoClaw / OpenShell sandbox
+
+Requires `nemoclaw` and `openshell` on `PATH` (macOS, Linux, or WSL). Native
+Windows OpenShell is not the documented path.
+
+```bash
+export SANDBOX_NAME=gbr-pair
+# Create the sandbox first if it does not exist, then:
+bash scripts/onboard.sh
+openshell sandbox exec --name gbr-pair -- /sandbox/bin/gbr-operator-ping
+```
+
+`onboard.sh` adds `policy.yaml` with `nemoclaw <sandbox> policy-add --from-file`
+and copies the skill. The sandbox GET-only route is
+`host.openshell.internal:8788`. Do not add sandbox egress to the vendor relay.
+
+### 6. Inject from the remote-control client
+
+On the phone, select the NemoClaw TTY and type. That is host-keyboard
+authority. The sandboxed agent does not inject.
 
 ## Verification
 
-**Evidence level:** local/static
+**Evidence level:** integration
 
-This contribution did not live-verify NemoClaw or OpenShell. This host has
-neither `nemoclaw` nor `openshell` on `PATH`. The commands below are the
-documented host checks for the pinned binary.
+The full transcript is in
+[docs/verify-functionality.md](docs/verify-functionality.md).
 
-On the host, after step 1 of [Start Here](#start-here):
+On Windows:
+
+```powershell
+cd examples/recipes/partners/linespotting/gbr-pair
+.\scripts\verify.ps1
+```
+
+On macOS, Linux, or WSL:
 
 ```bash
-printf '%s  %s\n' '7baa1a8e214cd71b60e3f2b5063713e00ff740939749c3cab3d702784a1432f8' 'gbr-agent-darwin-arm64' | shasum -a 256 -c -
-gbr-agent version
+cd examples/recipes/partners/linespotting/gbr-pair
+bash scripts/verify.sh
 ```
 
 **Expected result:**
 
 ```text
-gbr-agent-darwin-arm64: OK
-gbr-agent v0.6.0 commit=903806c date=2026-08-21T15:57:34Z darwin/arm64
+PASS: gbr-pair verification
 ```
 
-(The date and commit fields can vary by platform. The version must be
-`v0.6.0`, not "v0.6.0 or newer".)
+Static checks must pass. Host Bot API and relay checks pass when `gbr-agent`
+is running. Sandbox attach is SKIP when `nemoclaw` and `openshell` are not on
+`PATH`.
 
-After `gbr-agent run`, `curl` to `http://127.0.0.1:8788/health` can return
-`200`. This contribution did not capture that result from the pinned v0.6.0
-binary.
+**This verifies:** The recipe files (policy, skill, agents manifest, scripts)
+are present and GET-only against the host Bot API. On the captured Windows
+host: the v0.6.0 GitHub Release checksum, a live Bot API, TTY discovery,
+inject `ok: true` into `gbr-pair-verify-tty`, relay discovery without a key,
+and poll without a key returning 401.
 
-**This verifies:** The GitHub Release v0.6.0 darwin-arm64 asset matches the
-hard-coded digest, and that binary reports `v0.6.0`.
-
-**This does not verify:** A live NemoClaw or OpenShell sandbox, a GPU box, a
-phone QR or 8-character pair, TTY inject, the relay path, `gbr-mcp`, sandbox
-policy, loopback authentication, or any claim that the phone spectates a
-NemoClaw session as a product surface. If a maintainer requires live
-end-to-end NemoClaw evidence, this recipe cannot supply it from this host.
+**This does not verify:** A live `nemoclaw onboard` / `openshell sandbox exec`
+on this contributor host, a GPU box, macOS Accessibility, or
+`GBR_BOT_REQUIRE_KEY=1`. Layer C remains scripted in `scripts/onboard.sh`.
 
 ## Credentials And Secret Handling
 
 Do not put mailbox keys, `X-GBR-Key`, `device.json`, or other pairing secrets
 in this recipe, in sandbox environment variables, or in git.
 
-Pairing material stays on the phone and the host. This recipe does not require
-those files in the repository.
+Pairing material stays on the phone and the host. Copy `.env.example` to
+`.env` for `SANDBOX_NAME` only. `.env` is gitignored.
 
 ## Teardown And Cleanup
+
+```bash
+bash scripts/teardown.sh
+```
+
+Then:
 
 1. Unpair in the phone app Settings. Force-close is not enough before you
    change hosts.
 2. Stop `gbr-agent run` on the host.
-3. No in-sandbox skill files to remove. This recipe does not install any.
+3. `teardown.sh` removes the in-sandbox skill. It does not stop `gbr-agent`
+   unless `GBR_TEARDOWN_STOP_AGENT=1`.
 
 ## Known Limitations
 
-- Evidence level is `local/static`. This contribution did not live-verify
-  NemoClaw, OpenShell, phone pairing, inject, or the relay.
-- This is a host TTY spectator next to NemoClaw, not a NemoClaw integration.
+- Evidence level is `integration`. Host Bot API, TTY discover, inject, and
+  relay were captured on Windows amd64. NemoClaw/OpenShell sandbox attach was
+  not live-run on this host.
+- Native Windows is documented for host `gbr-agent` only. Sandbox attach uses
+  WSL, macOS, or Linux.
+- Windows Terminal inject can return `ok: true` while console capture reports
+  `The handle is invalid`.
 - The host agent is an independent MIT-licensed tool. NVIDIA does not maintain
   it.
-- Default attach is host loopback `127.0.0.1:8788`. Optional `gbr-mcp` is
-  host-side only.
-- This recipe does not vendor `gbr-agent` or `gbr-mcp` and does not change
-  sandbox policy.
+- This recipe does not vendor `gbr-agent` and does not replace NemoClaw,
+  OpenClaw, or Hermes device pairing.
