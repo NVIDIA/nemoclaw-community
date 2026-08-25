@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+id: nemoclaw-outlook-email
+display_name: NemoClaw Outlook Email
+description: Delegated Microsoft Graph email read/send via gateway-managed OAuth refresh
+category: messaging
+credentials:
+  - name: graph_access_token
+    description: Microsoft Graph delegated access token
+    env_vars: [MS_GRAPH_ACCESS_TOKEN]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+    refresh:
+      strategy: oauth2_refresh_token
+      token_url: https://login.microsoftonline.com/common/oauth2/v2.0/token
+      scopes: [https://graph.microsoft.com/.default]
+      refresh_before_seconds: 600
+      max_lifetime_seconds: 3600
+      material:
+        - name: tenant_id
+          description: Microsoft Entra tenant ID
+          required: true
+        - name: client_id
+          description: Microsoft Entra application client ID
+          required: true
+        - name: refresh_token
+          description: Delegated OAuth refresh token
+          required: true
+          secret: true
+endpoints:
+  - host: graph.microsoft.com
+    port: 443
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+binaries:
+  - /opt/hermes/.venv/bin/python
+  - /usr/bin/python3
+  - /usr/bin/python3.13
+  - /usr/bin/curl

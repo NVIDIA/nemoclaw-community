@@ -10,6 +10,7 @@ again by contributor provenance.
 
 | Example | Description |
 | --- | --- |
+| [Agentic AI Learning Path](recipes/nvidia/agentic-ai-learning-path/README.md) | Runs the seven-module Build an Agent workshop in an OpenShell sandbox with an AI tutor. |
 | [Developer Community Chief of Staff](recipes/nvidia/developer-community-chief-of-staff/README.md) | Turns community signals into operating briefs and follow-up recommendations. |
 | [Kubernetes GPU Autoscaling](recipes/nvidia/kubernetes-gpu-autoscaling/README.md) | Runs NemoClaw on Kubernetes with GPU-backed Ollama autoscaling. |
 | [Memory-Driven Chief of Staff](recipes/nvidia/memory-driven-chief-of-staff/README.md) | Maintains and re-ranks a revisable local record of email and Slack inputs without writing back. |

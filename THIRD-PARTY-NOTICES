@@ -228,6 +228,110 @@ Package: uvicorn
 License: BSD-3-Clause
 URL: https://github.com/Kludex/uvicorn
 
+Package: data-designer
+License: Apache-2.0
+URL: https://pypi.org/project/data-designer/
+
+Package: duckdb
+License: MIT
+URL: https://github.com/duckdb/duckdb
+
+Package: faiss-cpu
+License: MIT
+URL: https://github.com/facebookresearch/faiss
+
+Package: ipywidgets
+License: BSD-3-Clause
+URL: https://github.com/jupyter-widgets/ipywidgets
+
+Package: jupyter-app-launcher
+License: BSD-3-Clause
+URL: https://github.com/trungleduc/jupyter_app_launcher
+
+Package: jupyterlab
+License: BSD-3-Clause
+URL: https://github.com/jupyterlab/jupyterlab
+
+Package: jupyterlab-git
+License: BSD-3-Clause
+URL: https://github.com/jupyterlab/jupyterlab-git
+
+Package: langchain
+License: MIT
+URL: https://github.com/langchain-ai/langchain
+
+Package: langchain-classic
+License: MIT
+URL: https://github.com/langchain-ai/langchain
+
+Package: langchain-mcp-adapters
+License: MIT
+URL: https://github.com/langchain-ai/langchain-mcp-adapters
+
+Package: langchain-nvidia-ai-endpoints
+License: MIT
+URL: https://github.com/langchain-ai/langchain-nvidia
+
+Package: langgraph
+License: MIT
+URL: https://github.com/langchain-ai/langgraph
+
+Package: langgraph-cli[inmem]
+License: MIT
+URL: https://github.com/langchain-ai/langgraph
+
+Package: langgraph-sdk
+License: MIT
+URL: https://github.com/langchain-ai/langgraph
+
+Package: langsmith
+License: MIT
+URL: https://github.com/langchain-ai/langsmith-sdk
+
+Package: model-signing
+License: Apache-2.0
+URL: https://github.com/sigstore/model-transparency
+
+Package: openai
+License: Apache-2.0
+URL: https://github.com/openai/openai-python
+
+Package: pandas
+License: BSD-3-Clause
+URL: https://github.com/pandas-dev/pandas
+
+Package: python-dotenv
+License: BSD-3-Clause
+URL: https://github.com/theskumar/python-dotenv
+
+Package: ragas
+License: Apache-2.0
+URL: https://github.com/vibrantlabsai/ragas
+
+Package: scikit-learn
+License: BSD-3-Clause
+URL: https://github.com/scikit-learn/scikit-learn
+
+Package: streamlit
+License: Apache-2.0
+URL: https://github.com/streamlit/streamlit
+
+Package: tavily-python
+License: MIT
+URL: https://github.com/tavily-ai/tavily-python
+
+Package: tiktoken
+License: MIT
+URL: https://github.com/openai/tiktoken
+
+Package: voila
+License: BSD-3-Clause
+URL: https://github.com/voila-dashboards/voila
+
+Package: ziglang
+License: MIT
+URL: https://github.com/ziglang/zig-pypi
+
 ================================================================================
 Node.js Packages
 ================================================================================
@@ -368,6 +472,10 @@ Project: lfdevs Blender Linux ARM64 build
 License: GPL-3.0-or-later and included Blender notices
 URL: https://github.com/lfdevs/blender_linux_arm64
 
+Project: brevdev/workshop-build-an-agent (Build an Agent workshop content)
+License: Apache-2.0 (upstream LICENSE.txt, added 2026-08-10 in commit 37c94cf); the workshop itself is cloned into the sandbox at setup time with its own dependency manifests, not distributed in this repository; the module-1…7 tutor references in examples/recipes/nvidia/agentic-ai-learning-path are derived from its teaching content under that license
+URL: https://github.com/brevdev/workshop-build-an-agent
+
 Model: NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4
 License: NVIDIA Open Model License
 URL: https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4
@@ -392,6 +500,18 @@ Service: NVIDIA Developer Forums
 Terms: See provider terms
 URL: https://forums.developer.nvidia.com/
 
+Service: NVIDIA API Catalog / NIM inference endpoints (build.nvidia.com, integrate.api.nvidia.com, ai.api.nvidia.com)
+Terms: See provider terms
+URL: https://build.nvidia.com/
+
+Service: Tavily Search API and remote MCP
+Terms: See provider terms
+URL: https://tavily.com/
+
+Service: LangSmith API
+Terms: See provider terms
+URL: https://smith.langchain.com/
+
 Dataset: Curated fixture derived from the U.S. Treasury OFAC Specially Designated Nationals list
 License: U.S. Government work, public domain
 URL: https://sanctionslistservice.ofac.treas.gov/
@@ -407,3 +527,7 @@ Notes: Personal/workspace screenshots are intentionally not distributed in this 
 Asset: NVIDIA header image under examples/recipes/nvidia/payment-ops-hermes/assets/
 Owner: NVIDIA
 Notes: Reuses the repository's existing NVIDIA-owned header asset.
+
+Asset: devx-jupyterapp-bridge/ source directory under examples/recipes/nvidia/agentic-ai-learning-path/skills/setup-workshop-nemoclaw/assets/
+Owner: NVIDIA
+Notes: First-party JupyterLab federated extension (~2 KB) hand-crafted for this example; sets window.jupyterapp for the workshop's in-lesson buttons. Distributed as inspectable, SPDX-headed source (package.json + static/remoteEntry.js) — no prebuilt archive. Mirrors only the structure of a prebuilt labextension and contains no third-party code. Provenance documented in the skill's references/sandbox-internals.md.

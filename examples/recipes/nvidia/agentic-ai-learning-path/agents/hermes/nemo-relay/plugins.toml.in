@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Native NeMo Relay config loaded in-process by Hermes's bundled
+# observability/nemo_relay plugin. Dockerfile substitutes the @@...@@ tokens.
+
+version = 1
+
+[[components]]
+kind = "observability"
+enabled = true
+
+[components.config]
+version = 3
+
+[components.config.atif]
+enabled = true
+output_directory = "/tmp/atif"
+filename_template = "hermes-atif-{session_id}.json"
+agent_name = "Developer Community Chief of Staff"
+agent_version = "0.20.0"
+@@ATIF_STORAGE_BLOCK@@
+
+[components.config.opentelemetry]
+enabled = @@PHOENIX_ENABLED@@
+
+[[components.config.opentelemetry.endpoints]]
+type = "openinference"
+transport = "http_binary"
+endpoint = "@@PHOENIX_ENDPOINT@@"
+service_name = "hermes-agent"
+timeout_millis = 3000
+
+[components.config.opentelemetry.endpoints.resource_attributes]
+"openinference.project.name" = "@@PHOENIX_PROJECT_NAME@@"
+
+# OpenShell provider placeholders are intentionally present in Hermes request
+# metadata until the L7 proxy resolves them on egress. Keep those references
+# out of local trajectories and telemetry without changing the live request.
+[[components]]
+kind = "pii_redaction"
+enabled = true
+
+[components.config]
+version = 1
+
+[[components.config.profiles]]
+mode = "builtin"
+priority = 80
+
+[components.config.profiles.builtin]
+action = "regex_replace"
+pattern = "openshell:resolve:env:[A-Za-z_][A-Za-z0-9_]*"
+replacement = "[openshell env placeholder]"

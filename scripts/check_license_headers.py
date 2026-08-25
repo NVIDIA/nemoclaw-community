@@ -19,6 +19,8 @@ LICENSE_ID = "Apache-2.0"
 SPDX_MARKER = "SPDX-License-Identifier"
 
 COMMENT_STYLES: dict[str, str] = {
+    ".c": "//",
+    ".h": "//",
     ".js": "//",
     ".py": "#",
     ".sh": "#",

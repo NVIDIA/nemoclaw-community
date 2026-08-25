@@ -1,0 +1,230 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Combined stack: Phoenix telemetry + source ETLs.
+# Start through ../scripts/00-host-services.sh up so host CA preflight runs
+# before Compose evaluates bind mounts.
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Telemetry
+  # ---------------------------------------------------------------------------
+
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    ports:
+      - "6006:6006"   # Phoenix UI
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+
+  # ---------------------------------------------------------------------------
+  # Source ETLs
+  # ---------------------------------------------------------------------------
+
+  postgres:
+    build:
+      context: ./source-etls/postgres
+    restart: unless-stopped
+    ports:
+      - "${SOURCE_ETL_POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: "${SOURCE_ETL_POSTGRES_DB:-source_etls}"
+      POSTGRES_USER: "${SOURCE_ETL_POSTGRES_SUPERUSER:-postgres}"
+      POSTGRES_PASSWORD: "${SOURCE_ETL_POSTGRES_SUPERUSER_PASSWORD:-postgres}"
+      SOURCE_ETL_POSTGRES_APP_USER: "${SOURCE_ETL_POSTGRES_APP_USER:-source_etl_writer}"
+      SOURCE_ETL_POSTGRES_APP_PASSWORD: "${SOURCE_ETL_POSTGRES_APP_PASSWORD:-source_etl_writer}"
+      SOURCE_ETL_POSTGRES_READER_USER: "${SOURCE_ETL_POSTGRES_READER_USER:-source_etl_reader}"
+      SOURCE_ETL_POSTGRES_READER_PASSWORD: "${SOURCE_ETL_POSTGRES_READER_PASSWORD:-source_etl_reader}"
+    volumes:
+      - source-etls-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  github-etl:
+    profiles: ["github-etl"]
+    build:
+      context: ./source-etls/github-etl
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SYNC_INTERVAL_SECONDS: "${SOURCE_ETL_INTERVAL_SECONDS:-3600}"
+      BACKFILL_HOURS: "${SOURCE_ETL_INITIAL_BACKFILL_HOURS:-72}"
+      GITHUB_REPOSITORY: "${SOURCE_ETL_GITHUB_REPO:-NVIDIA/NemoClaw}"
+      GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: "${SOURCE_ETL_POSTGRES_DB:-source_etls}"
+      POSTGRES_USER: "${SOURCE_ETL_POSTGRES_APP_USER:-source_etl_writer}"
+      POSTGRES_PASSWORD: "${SOURCE_ETL_POSTGRES_APP_PASSWORD:-source_etl_writer}"
+      POSTGRES_SCHEMA: github_raw
+      ETL_STATE_DIR: /var/lib/github-etl/state
+      # Requests/certifi does not automatically inherit the managed host's
+      # inspection CA. Use the host bundle mounted below for outbound GitHub.
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+    volumes:
+      - github-etl-state:/var/lib/github-etl/state
+      - type: bind
+        source: "${NEMOCLAW_HOST_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}"
+        target: /etc/ssl/certs/ca-certificates.crt
+        read_only: true
+        bind:
+          create_host_path: false
+
+  forums-etl:
+    build:
+      context: ./source-etls/forums-etl
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ETL_INTERVAL_SECONDS: "${SOURCE_ETL_INTERVAL_SECONDS:-3600}"
+      ETL_INITIAL_BACKFILL_HOURS: "${SOURCE_ETL_INITIAL_BACKFILL_HOURS:-72}"
+      ETL_OVERLAP_HOURS: "${SOURCE_ETL_OVERLAP_HOURS:-72}"
+      SOURCE_ETL_FORUM_TAG: "${SOURCE_ETL_FORUM_TAG:-nemoclaw}"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: "${SOURCE_ETL_POSTGRES_DB:-source_etls}"
+      POSTGRES_USER: "${SOURCE_ETL_POSTGRES_APP_USER:-source_etl_writer}"
+      POSTGRES_PASSWORD: "${SOURCE_ETL_POSTGRES_APP_PASSWORD:-source_etl_writer}"
+      SOURCE_ETL_POSTGRES_READER_USER: "${SOURCE_ETL_POSTGRES_READER_USER:-source_etl_reader}"
+      # HTTPX reads SSL_CERT_FILE because trust_env is enabled by default.
+      # Mount the managed host bundle to keep forum TLS verification enabled.
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+    volumes:
+      - type: bind
+        source: "${NEMOCLAW_HOST_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}"
+        target: /etc/ssl/certs/ca-certificates.crt
+        read_only: true
+        bind:
+          create_host_path: false
+
+  postgrest:
+    image: postgrest/postgrest:v13.0.4
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${SOURCE_ETL_API_PORT:-3100}:3000"
+    environment:
+      PGRST_DB_URI: "postgres://${SOURCE_ETL_POSTGRES_READER_USER:-source_etl_reader}:${SOURCE_ETL_POSTGRES_READER_PASSWORD:-source_etl_reader}@postgres:5432/${SOURCE_ETL_POSTGRES_DB:-source_etls}"
+      PGRST_DB_SCHEMAS: api
+      PGRST_DB_ANON_ROLE: "${SOURCE_ETL_POSTGRES_READER_USER:-source_etl_reader}"
+      PGRST_SERVER_PORT: 3000
+      PGRST_OPENAPI_MODE: follow-privileges
+
+  # ---------------------------------------------------------------------------
+  # ATIF export — receives native HTTP trajectory POSTs from the sandbox,
+  # writes with downstream credentials, and forwards to MinIO (testing) or
+  # real S3 (production).
+  # Activated via `docker compose --profile $ATIF_RELAY_BACKEND up -d` when
+  # ATIF_EXPORT_MODE=relay.
+  # ---------------------------------------------------------------------------
+
+  atif-export-relay:
+    profiles: ["minio", "s3", "s3-compatible"]
+    build:
+      context: ./atif-export-relay
+    restart: unless-stopped
+    # network_mode: host lets the container reach IMDS (169.254.169.254) for
+    # downstream=s3, and reach the host's localhost:9000 (MinIO) for
+    # downstream=minio. Trade-off: no docker network isolation for this
+    # container — acceptable for a single-host trust boundary.
+    network_mode: host
+    volumes:
+      # TLS cert + key for the HTTPS listener. Generated on bring-up by
+      # scripts/00-host-services.sh via atif-export-relay/generate-tls-cert.sh.
+      - ./atif-export-relay/tls:/etc/atif-export-relay/tls:ro
+      - type: bind
+        source: "${NEMOCLAW_HOST_CA_BUNDLE:-/etc/ssl/certs/ca-certificates.crt}"
+        target: /etc/ssl/certs/ca-certificates.crt
+        read_only: true
+        bind:
+          create_host_path: false
+    environment:
+      ATIF_RELAY_DOWNSTREAM: "${ATIF_RELAY_BACKEND:-minio}"
+      ATIF_RELAY_BIND_ADDR: "${ATIF_RELAY_BIND_ADDR:-0.0.0.0:${ATIF_RELAY_PORT:-18443}}"
+      # The relay owns the downstream bucket; the sandbox sends only a
+      # trajectory filename. Set this to the real bucket in .env (the default
+      # is the local-MinIO development bucket).
+      ATIF_RELAY_BUCKET: "${ATIF_RELAY_BUCKET:-nemo-relay-traces}"
+      # TLS paths are not env-defaulted because they have to match the
+      # volume mount target above. Override the mount + these together if
+      # you need a different layout.
+      ATIF_RELAY_TLS_CERT: "/etc/atif-export-relay/tls/server.crt"
+      ATIF_RELAY_TLS_KEY: "/etc/atif-export-relay/tls/server.key"
+      # Single bearer token the relay accepts. Generated by scripts/02-
+      # providers.sh into gitignored .bootstrap/cache unless the operator pins
+      # it in .env. INTENTIONALLY has no default — a built-in default would be
+      # a known credential baked into every deployment, defeating the auth
+      # check. The relay exits at startup if this is unset.
+      ATIF_RELAY_AUTH_TOKEN: "${ATIF_RELAY_AUTH_TOKEN}"
+      # AWS region for the AWS `s3` backend (boto3 picks up IMDS creds):
+      AWS_REGION: "${ATIF_RELAY_S3_REGION:-us-west-2}"
+      # Signing region for the minio / s3-compatible backends (they read this
+      # directly; most S3-compatible stores ignore it but boto3 requires one):
+      ATIF_RELAY_S3_REGION: "${ATIF_RELAY_S3_REGION:-us-west-2}"
+      # Relay-owned object-key prefix (applies to whichever backend is active).
+      # The relay composes the prefix as prefixer.compute() + ATIF_RELAY_KEY_PREFIX.
+      # Prefixer `ec2-instance-id` resolves the EC2 instance-id via IMDSv2 at relay
+      # startup → keys land under "<instance-id>/", matching a bucket IAM policy
+      # scoped to <bucket>/<instance-id>/*. Default `none` adds no dynamic
+      # segment (use a static ATIF_RELAY_KEY_PREFIX, e.g. hermes/, for MinIO).
+      # See extras/atif-export-relay/backends/prefixers.py.
+      ATIF_RELAY_PREFIXER: "${ATIF_RELAY_PREFIXER:-none}"
+      ATIF_RELAY_KEY_PREFIX: "${ATIF_RELAY_KEY_PREFIX:-}"
+      # Endpoint + static creds for the custom-endpoint backends: `minio`
+      # (local-dev preset; defaults to http://localhost:9000 + minioadmin when
+      # these are empty) and `s3-compatible` (external store: OCI / Nebius /
+      # GCS-XML / self-hosted — required, fail-loud). AWS `s3` uses IMDS creds
+      # (above), not these. Remote endpoints must be https (loopback may be http).
+      ATIF_RELAY_S3_ENDPOINT: "${ATIF_RELAY_S3_ENDPOINT:-}"
+      ATIF_RELAY_S3_ACCESS_KEY: "${ATIF_RELAY_S3_ACCESS_KEY:-}"
+      ATIF_RELAY_S3_SECRET_KEY: "${ATIF_RELAY_S3_SECRET_KEY:-}"
+      # boto3/botocore otherwise uses its bundled CA set and does not inherit
+      # enterprise inspection roots from the managed Omnistation host.
+      AWS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+    healthcheck:
+      # -k: skip cert verification — the self-signed relay cert isn't in the
+      # host's curl trust store; we only need to confirm the listener is up.
+      test: ["CMD", "curl", "-skf", "https://localhost:${ATIF_RELAY_PORT:-18443}/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # MinIO — S3-compatible local store for ATIF export testing. Only active
+  # when ATIF_RELAY_BACKEND=minio (under ATIF_EXPORT_MODE=relay). Bucket
+  # creation is done by scripts/00-host-services.sh after MinIO comes healthy.
+  minio:
+    profiles: ["minio"]
+    image: minio/minio:latest
+    container_name: extras-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web console (optional, for trace inspection)
+    environment:
+      MINIO_ROOT_USER: "${NEMOCLAW_MINIO_ROOT_USER:-minioadmin}"
+      MINIO_ROOT_PASSWORD: "${NEMOCLAW_MINIO_ROOT_PASSWORD:-minioadmin}"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  source-etls-postgres-data:
+  github-etl-state:
+  minio-data:
