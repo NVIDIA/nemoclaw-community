@@ -18,6 +18,28 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 
 
+# The two published corpora, by content hash (see docs/provenance.md). A run
+# against anything else is shown by hash prefix rather than silently grouped
+# with corpus A, which is what the old default did.
+CORPUS_LABELS = {
+    "2b6efff3ddc4bfa1af1e57871074728953f51375f79d0320be141311f6b9cf71": "A",
+    "ef57ca34e3937b5c4ae847428676550d3a036c5a73b7ed9ae3c6a038e9187e96": "B",
+}
+
+
+def _corpus_label(report: dict) -> str:
+    """Which corpus a row was graded against, as a groupable label.
+
+    ``report["corpus"]`` is a dict of document counts, so it cannot be a group
+    key. The fingerprint identifies the corpus exactly, which is the thing the
+    grouping is actually about.
+    """
+    digest = (report.get("fingerprint") or {}).get("corpus", "")
+    if digest in CORPUS_LABELS:
+        return CORPUS_LABELS[digest]
+    return digest[:12] or "unknown"
+
+
 def _adapter_name(report: dict) -> str:
     """Adapter name across report schema versions.
 
@@ -62,7 +84,7 @@ def _rows(runs_dir: Path) -> list[dict]:
                 "per_question_tokens": cost.get("tokens_per_question"),
                 "evidence_recall": summary["evidence"]["evidence_recall_mean"],
                 "accounting": _accounting_method(report),
-                "corpus": report.get("corpus", "A"),
+                "corpus": _corpus_label(report),
                 "run_id": report.get("run_id", report_path.parent.name),
             }
         )

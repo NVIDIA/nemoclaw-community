@@ -42,7 +42,7 @@ it did not:
   that reads like an answer key, two similar records mentioned in one thread, an
   incidental date that does not line up. Across nine rounds those counts moved
   between roughly 30 and 130 without converging, because each regeneration
-  resamples 170 documents and grows a fresh tail of one-off defects. Those are
+  resamples all 173 documents and grows a fresh tail of one-off defects. Those are
   generation-time observations; the review records behind them are not part of
   this contribution.
 

@@ -135,7 +135,7 @@
       "S:C200ATLE001_channel@2026-04-27"
     ],
     "entity": "concepts/wave_ingest",
-    "notes": "Wave ingest is Atlas's ingest pipeline (design doc at docs/design/ingest_pipeline.md): processes items in waves (e.g. 80 items/wave) via a wave_runner and a batch prompt built by prompt_builder (PromptBuilder constructed once per inges",
+    "notes": "Wave ingest is Atlas's ingest pipeline (design doc at docs/design/wave_pipeline.md): processes items in waves (e.g. 80 items/wave) via a wave_runner and a batch prompt built by prompt_builder (PromptBuilder constructed once per inges",
     "accept": [
       "256"
     ]

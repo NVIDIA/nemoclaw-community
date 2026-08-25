@@ -12,8 +12,8 @@ actually crosses the wire.
 The proxy is deliberately dumb — it forwards bytes and reads ``usage`` off the
 response. It understands OpenAI-style (``prompt_tokens`` / ``completion_tokens``)
 and Anthropic-style (``input_tokens`` / ``output_tokens``) payloads, streaming
-or not. Systems that run a local model make no HTTP calls; those submissions
-self-report and are flagged as such in the leaderboard.
+or not. Systems that run a local model make no HTTP calls; their rows carry
+``accounting: none-observed`` rather than a token count of zero.
 """
 
 from __future__ import annotations

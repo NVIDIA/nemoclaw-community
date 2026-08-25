@@ -5,6 +5,9 @@
 
 from __future__ import annotations
 
+NO_SUCH_QUESTION = "n/a — no question of this kind in this corpus"
+NO_EVIDENCE = "n/a — no source ids were supplied"
+
 from collections import defaultdict
 from typing import Iterable
 
@@ -14,9 +17,10 @@ from bench.grader import Verdict
 def summarize(verdicts: Iterable[Verdict], gold_by_id: dict[str, dict]) -> dict:
     """Aggregate accuracy by question type plus the evidence diagnostics.
 
-    Questions deferred to a judge model are counted separately rather than
-    folded into accuracy, so a run that skipped judging cannot look better than
-    one that ran it.
+    A question in ``mode: llm`` would be counted separately rather than folded
+    into accuracy, so a run that skipped judging could not look better than one
+    that ran it. No shipped question uses that mode, so the count is always
+    zero.
     """
     verdicts = list(verdicts)
     by_type: dict[str, list[Verdict]] = defaultdict(list)
@@ -60,6 +64,16 @@ def summarize(verdicts: Iterable[Verdict], gold_by_id: dict[str, dict]) -> dict:
     }
 
 
+def _rate(value, absent: str) -> str:
+    """Render a rate, or say why there isn't one.
+
+    ``None`` here means "never computed" -- no question of that kind in this
+    corpus, or no source ids supplied -- which is not the same as zero and must
+    not be printed as a bare ``None``.
+    """
+    return absent if value is None else str(value)
+
+
 def _adapter_name(report: dict) -> str:
     """Adapter name across report schema versions.
 
@@ -101,13 +115,14 @@ def render_markdown(report: dict) -> str:
         lines.append(f"  * {name}: {value}")
     detail = summary["freshness_detail"]
     lines += [
-        f"  * freshness with a competing stale claim in corpus: {detail['with_stale_in_corpus']}",
-        f"  * freshness recency-only: {detail['recency_only']}",
+        f"  * freshness with a competing stale claim in corpus: "
+        f"{_rate(detail['with_stale_in_corpus'], NO_SUCH_QUESTION)}",
+        f"  * freshness recency-only: {_rate(detail['recency_only'], NO_SUCH_QUESTION)}",
         "",
         "## Evidence (diagnostic, not part of accuracy)",
         f"* citation coverage: {summary['evidence']['citation_coverage']}",
-        f"* evidence recall: {summary['evidence']['evidence_recall_mean']}",
-        f"* evidence precision: {summary['evidence']['evidence_precision_mean']}",
+        f"* evidence recall: {_rate(summary['evidence']['evidence_recall_mean'], NO_EVIDENCE)}",
+        f"* evidence precision: {_rate(summary['evidence']['evidence_precision_mean'], NO_EVIDENCE)}",
         "",
         "## Cost",
     ]

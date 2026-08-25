@@ -24,8 +24,9 @@ Two numbers come out, and the benchmark refuses to collapse them into one:
 That split is the point. A system that reasons hard at ingest time should answer
 cheaply; a system that stores raw chunks pays on every question instead. Total
 cost of ownership is `ingest_tokens + N × per_question_tokens`, and where the two
-curves cross — at what N a heavy ingest pays for itself — is a question no public
-benchmark answers today.
+curves cross — at what N a heavy ingest pays for itself — is a question the
+accuracy-only benchmarks we looked at do not report. If you know of one that
+does, open an issue.
 
 ## At A Glance
 
@@ -40,7 +41,7 @@ benchmark answers today.
 | Verified on | Python 3.9.6 on macOS. Offline self-test and unit tests only; no scored run against a live endpoint is included as evidence here. |
 | Evidence level | local/static |
 | Support and maturity | Best-effort community support; see [SUPPORT.md](../../../SUPPORT.md). |
-| External access, data, and actions | Scoring a real system sends corpus text and questions to the endpoint you point `--upstream` at, and you pay for those tokens. Writes only under `results/`. The offline self-test sends nothing and costs nothing. |
+| External access, data, and actions | Scoring a real system sends corpus text and questions to the endpoint you point `--upstream` at, and you pay for those tokens. The harness writes only under `results/`; an adapter you add is not sandboxed and can write anywhere your user can. The offline self-test sends nothing and costs nothing. |
 | Start here | [Running it](#running-it) |
 | Confirm success | [Checking it works](#checking-it-works) |
 
@@ -64,9 +65,13 @@ The offline self-test, run as printed in [Checking it works](#checking-it-works)
   * multi_source: 1.0
   * ordering: 1.0
   * single_hop: 1.0
+…
 ```
 
-The same command against `selftest/wrong` reports `accuracy overall: **0.0**`
+The block continues with the freshness split, the evidence diagnostics, and a
+Cost section; on the offline fixture every token count is zero.
+
+The same command with `--adapter selftest/wrong` reports `accuracy overall: **0.0**`
 with every type at `0.0`. A scored run against a real system produces the same
 shape with a Cost section filled in.
 
@@ -113,7 +118,7 @@ runs as printed. To score a different model, set `model` in the adapter's
 
 The proxy forwards to `https://api.openai.com` by default; `--upstream` (or
 `MNEMO_UPSTREAM`) points it at any OpenAI-compatible gateway, where model ids
-are usually namespaced differently. An adapter that needs a host-specific path
+are often namespaced differently. An adapter that needs a host-specific path
 declares it in its `env` block; anything already exported wins, so nothing
 machine-specific has to be committed:
 
@@ -141,7 +146,7 @@ Write an `adapter.json` with two commands:
 `answer` reads `questions.jsonl` on stdin and writes one JSON object per line:
 
 ```json
-{"id": "fresh-quillon-launch-date", "answer": "2026-07-14", "source_ids": ["S:D200SAM001_dm@2026-05-14"]}
+{"id": "example-launch-date", "answer": "<your short answer>", "source_ids": ["E:2027-02-05T10-00-00__bbbb0002"]}
 ```
 
 `source_ids` is optional. Supplying it gets you the evidence diagnostics;
@@ -151,8 +156,9 @@ Full instructions, including the path for a system that cannot be wrapped in a
 command line: [`docs/SUBMITTING.md`](docs/SUBMITTING.md).
 
 **Token accounting is not self-reported.** The runner points `OPENAI_BASE_URL` /
-`ANTHROPIC_BASE_URL` at a local proxy and counts what crosses the wire. Systems
-running local inference are marked as self-reported in the leaderboard.
+`ANTHROPIC_BASE_URL` at a local proxy and counts what crosses the wire. A system
+running local inference makes no calls the proxy can see, so its row carries
+`accounting: none-observed` rather than a token count of zero.
 
 ### How the runner treats your adapter
 
@@ -213,7 +219,9 @@ memory that keeps only the current value has thrown the answer away.
 
 **All 186 are graded deterministically** — no judge model, no LLM in the scoring
 path. Answers are matched after normalizing case, punctuation, and date spelling,
-against a per-mode `accept` / `reject` / `require_all` / `expected` / `sequence` rule set. That is a deliberate
+against a per-mode rule set: `accept` / `reject` /
+`require_all`, plus `expected` for `boolean`, `sequence` for `ordering`, and
+`accept_as_decline` for `abstain`. That is a deliberate
 constraint: a benchmark whose scores move when the judge model is upgraded cannot
 be compared across years.
 
@@ -223,6 +231,9 @@ reviewed. Confidently describing either is scored wrong, and saying "the corpus
 does not say" is scored right.
 
 ## Reading a result
+
+Why the two axes are never combined, and what deterministic grading cannot
+express: [`docs/methodology.md`](docs/methodology.md).
 
 Accuracy is reported per question type, never as a single blended number.
 Freshness is split further, into questions where the superseded value is also in
@@ -283,7 +294,9 @@ python3 -m bench.runner --adapter selftest/oracle \
 Each run writes `results/runs/<timestamp>-<adapter>/`, which holds the report,
 the verdicts, the answers, and whatever memory the system under test built —
 that last part can reach hundreds of megabytes. Nothing outside that directory
-is modified. Delete it to reclaim the space; `results/` is not tracked.
+is modified by the harness — though an adapter is not sandboxed, so one you
+add can write elsewhere; see [How the runner treats your adapter](#how-the-runner-treats-your-adapter).
+Delete the run directory to reclaim the space; `results/` is not tracked.
 
 ## Provenance
 

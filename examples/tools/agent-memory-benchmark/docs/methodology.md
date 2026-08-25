@@ -72,9 +72,15 @@ current value has thrown the answer away.
 ## Why there is no judge model
 
 All 186 questions grade deterministically. Answers are normalized for case,
-punctuation, and date spelling, then matched against `accept` (any of these
-strings means correct), `reject` (any of these means wrong, checked first), and
-`require_all` (every element must appear).
+punctuation, and date spelling, then matched by a per-mode rule set:
+
+* `string_any` — `reject` (any of these means wrong, checked first),
+  `require_all` (every element must appear), `accept` (any of these means
+  correct).
+* `boolean` — the same three, plus `expected` (`yes` or `no`).
+* `ordering` — `sequence`: every element present, in that order.
+* `abstain` — `reject`, plus `accept_as_decline` for a phrasing that rejects
+  the question's premise rather than answering it.
 
 This was a constraint, not a discovery. A judge model is a moving part: it gets
 deprecated, retuned, and replaced, and every one of those events silently

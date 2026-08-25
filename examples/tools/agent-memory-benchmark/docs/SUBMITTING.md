@@ -5,8 +5,8 @@ gets you the cost numbers as well.
 
 ## Path 1 — answer the questions, send the file
 
-Do this if your system cannot be wrapped in a command line, or you just want a
-score quickly.
+Do this if your system cannot be wrapped in a command line, or you want a score
+without wiring anything up.
 
 **1. Read the corpus, in order.** `corpus/part_a/` first, then `corpus/part_b/`.
 Walk it recursively rather than hardcoding subdirectory names: corpus A files
@@ -44,7 +44,7 @@ Reply with a single JSON object and nothing else:
 **3. Write one JSON object per line** to `answers.jsonl`:
 
 ```json
-{"id": "fresh-quillon-launch-date", "answer": "2026-07-14", "source_ids": ["S:D200SAM001_dm@2026-05-14"]}
+{"id": "example-launch-date", "answer": "<your short answer>", "source_ids": ["E:2027-02-05T10-00-00__bbbb0002"]}
 ```
 
 `source_ids` is optional. Providing it gets you the evidence diagnostics;
@@ -93,8 +93,8 @@ python3 -m bench.runner --adapter adapters/my-system
 
 The runner points `OPENAI_BASE_URL` and `ANTHROPIC_BASE_URL` at a local proxy and
 counts the tokens that actually cross the wire, so nobody has to be trusted about
-their own cost. A system running local inference makes no HTTP calls and is
-labelled self-reported in the leaderboard.
+their own cost. A system running local inference makes no HTTP calls, so its row
+carries `accounting: none-observed` rather than a token count of zero.
 
 ## What makes a submission comparable
 
@@ -103,9 +103,10 @@ labelled self-reported in the leaderboard.
   advantage that appears under one model and vanishes under another is not an
   architectural advantage.
 * **One question, one context.** See step 2.
-* **Don't tune on the corpus.** The whole reason corpus B exists is that corpus A
-  came from one system's own test fixture, and that system's lead on it turned out
-  not to transfer.
+* **Don't tune on the corpus.** Corpus A began as one system's test fixture, so
+  a design iterated against material like it starts with an advantage no score
+  can separate out. Corpus B exists to check a result against a corpus no system
+  was built alongside; see [`corpus_b/README.md`](../corpus_b/README.md).
 * **Report what you left out.** A system that skips a question type should say so
   rather than let it read as a zero.
 
@@ -150,7 +151,7 @@ throughout these docs:
 python3 tools/leaderboard.py --runs results/runs --out results/leaderboard.md
 ```
 
-To contribute a system rather than just score one, open a pull request adding
+To contribute a system rather than only score one, open a pull request adding
 `adapters/<name>/` — the adapter definition and whatever code it needs. Keep
 run artifacts out of it: they are large, they age, and they are reproducible
 from the adapter.

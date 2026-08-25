@@ -84,7 +84,7 @@ same documents, the same questions and the same grading rules. Every
 `report.json` carries a `fingerprint` block; compare it against the values
 below to know which version a stored run was graded at.
 
-Hashing rule `sha256-v1`: for a directory, every file under it in sorted order,
+Hashing rule `sha256-v1`: for a directory, every file under it in sorted order (excluding `__pycache__`),
 with its path and bytes fed into one SHA-256, so a renamed document changes the
 hash even if its contents did not (`bench.fingerprint.hash_tree`). A
 single-file artifact is hashed as its bytes alone, with no path framing
@@ -92,10 +92,10 @@ single-file artifact is hashed as its bytes alone, with no path framing
 
 | Artifact | Files | SHA-256 |
 | --- | ---: | --- |
-| `corpus/` (corpus A) | 428 | `e65e337a304a79eadfc1cf8de81a0a7eccd2f5f3f25cdfba17a40f5efc2d29f5` |
+| `corpus/` (corpus A) | 428 | `2b6efff3ddc4bfa1af1e57871074728953f51375f79d0320be141311f6b9cf71` |
 | `corpus_b/corpus/` (corpus B) | 176 | `ef57ca34e3937b5c4ae847428676550d3a036c5a73b7ed9ae3c6a038e9187e96` |
 | `questions/questions.jsonl` | 1 | `6d38f6c11edbefb4baa77b8014af1920c48ab65f3647a2bb10daa691e9259b06` |
-| `gold/answers.jsonl` | 1 | `b2aa330c05cbb2004d0e99cacfdadac1b12961c4b071ca170881bd7ce213dede` |
+| `gold/answers.jsonl` | 1 | `cdb0a6f00c8236e87ce8e3e8bbc4c698837f9ff637e2b7cf47ba0f1007d6ee29` |
 | `corpus_b/questions/questions.jsonl` | 1 | `8ea778aa8abb4e4e7c86a6517f5ea33b1b79f43b359186cbb9be2284375714e3` |
 
 Recompute at any time:
