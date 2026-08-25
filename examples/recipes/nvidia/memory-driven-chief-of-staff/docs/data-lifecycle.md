@@ -3,10 +3,10 @@
 
 # What is kept, and how to be rid of it
 
-Four controls, all of them local, none of them requiring a connector. They
-work on the fixture corpus today, which is how they are tested, and they apply
-unchanged to real messages when a connector lands. That order is deliberate:
-the controls ship before the thing that would need them.
+Four controls, all of them local. They were built against the fixture corpus,
+which is how they are tested, and they apply unchanged to the real Slack
+messages the collector brings in. That order was deliberate: the controls
+landed before the thing that would need them.
 
 Every command below runs from `profile/scripts/`, against the store belonging
 to the profile named by `HERMES_HOME`.
@@ -87,10 +87,13 @@ silent — nothing arrives, and nothing says why.
 
 The rules are applied in `insert_items`, the one function every writer passes
 through, rather than in any collector. So an excluded message is never written
-by the fixture loader, by the Slack collector when it lands, or by anything
-added later, without each of them having to remember — and a new writer cannot
-quietly opt out. Filtering at display would leave the text on disk, which is
-no use to somebody excluding their doctor.
+by the fixture loader, by the Slack collector, or by anything added later,
+without each of them having to remember — and a new writer cannot quietly opt
+out. Filtering at display would leave the text on disk, which is no use to
+somebody excluding their doctor.
+
+That the collector inherits this is tested by driving it against a rule and
+asserting the row never appears, not by reading the call chain.
 
 A dropped message is reported on stderr as a count, never as content:
 
@@ -143,7 +146,8 @@ For Microsoft Graph, an item deleted at the source is tombstoned locally and
 its body cleared at once, because the delta query reports deletions
 explicitly.
 
-Slack offers no such notice. A deleted message stops appearing in
+Slack, which is the connector that ships, offers no such notice. A deleted
+message stops appearing in
 `conversations.history`, and its absence from a bounded, paginated read cannot
 be told apart from it lying outside the window. Reliable notice needs the
 Events API, which this design does not use; the legacy RTM API carries the

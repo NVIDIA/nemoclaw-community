@@ -244,7 +244,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the ten files report 312 tests in
+Expected result: every file ends with `OK`, the eleven files report 355 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -260,7 +260,8 @@ leave the loop exiting `0`.
 | Writer behavior, audit trail, caps across batches, correction idempotency, correction state transitions, displaced-row audit | `tests/test_apply_decisions.py` |
 | The walkthrough, and its central claims | `tests/test_walkthrough.py` |
 | Selector output, the wake gate, and the scheduler contract | `tests/test_selectors.py` |
-| The Slack collector: watermarks, partial failure, scope probing, and the credential never reaching a stream | `tests/test_ingest_slack.py` |
+| Retention, exclusion, export and reset | `tests/test_lifecycle.py` |
+| The Slack collector: watermarks, partial failure, scope probing, the credential never reaching a stream, and the lifecycle controls applying to what it writes | `tests/test_ingest_slack.py` |
 
 Four points are worth calling out.
 
@@ -416,7 +417,9 @@ own credential handling — Hermes keeps provider credentials outside
 
 ## Privacy
 
-Nothing in this phase reaches a network or reads a real account.
+The fixture path reaches no network and reads no real account. The Slack
+collector does both, once you have configured it, and everything below is
+written for that case rather than for the fixtures.
 
 One reduction already ships, because it is part of the schema under review:
 recipient lists are never stored. Ingest reduces them to a single `addressing`
@@ -424,10 +427,10 @@ value — `direct`, `mentioned`, or `broadcast` — so the store never holds a
 copy of who else was on a thread. `normalize.py` does this today, and
 `tests/test_normalize.py` asserts it.
 
-Four controls over what is kept ship alongside it, before any connector
-exists to fill the store. They work
-on the fixture corpus today, which is how they are tested, and they apply
-unchanged to real messages when a connector lands. The commands, the rules
+Four controls over what is kept ship alongside it, and they were in place
+before the collector that fills the store was. They apply to real Slack
+messages exactly as they apply to the fixtures, because the collector writes
+through the same function every other writer does. The commands, the rules
 file and the exact boundaries are in
 [docs/data-lifecycle.md](docs/data-lifecycle.md); what follows is why they are
 drawn where they are.
@@ -443,9 +446,12 @@ was cleared, so it is not confused with one that never existed.
 
 **Senders, domains and channels can be excluded at ingest.** Rules live in
 `workspace/exclusions.json` and are applied in `insert_items`, which is the one
-place every writer passes through — so an excluded message is never written,
-by any collector, including ones added later. Filtering at display would leave
-the text on disk, which is no use to somebody excluding their doctor.
+place every writer passes through — the fixture loader, the Slack collector,
+and anything added later — so an excluded message is never written by any of
+them. Filtering at display would leave the text on disk, which is no use to
+somebody excluding their doctor. A test drives the collector against a rule
+and asserts the row never appears, rather than reading the call chain and
+concluding it should not.
 
 **Everything can be exported and everything can be removed.**
 `export_store.py` writes the store and the memory as Markdown beside JSON —
@@ -455,9 +461,10 @@ policy together, and reports each; a partial reset would answer the question
 wrongly. It also prints how to revoke the credential, which lives with the
 gateway rather than here, because somebody withdrawing consent wants both.
 
-Three things remain for the connectors themselves:
+Three things about the connectors themselves:
 
-- Attachments will not be fetched.
+- Attachments are not fetched. The collector stores a file-sharing message's
+  text and never requests the file behind it.
 - For Microsoft Graph, an item deleted at the source will be tombstoned locally
   and its body cleared at once, because the delta query reports deletions
   explicitly.
@@ -467,7 +474,7 @@ Three things remain for the connectors themselves:
   requires the Slack Events API, which this design does not use. Slack's legacy
   Real Time Messaging (RTM) API carries the event too, but Slack states that
   granular-permission apps cannot use it and that classic apps can no longer be
-  created, so it is not an option a connector could take today. Slack content
+  created, so it is not an option this collector could take. Slack content
   therefore ages out on the scheduled body-clearing pass rather than at the
   moment of deletion — the weaker guarantee, kept, rather than the stronger one
   implied.

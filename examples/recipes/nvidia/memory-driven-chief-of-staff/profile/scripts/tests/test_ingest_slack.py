@@ -1110,5 +1110,117 @@ class TestTheBudgetCoversEveryCall(CollectorCase):
         self.assertEqual(self.run_main(), ingest_slack.EXIT_RATE_LIMIT)
 
 
+class TestTheCollectorInheritsTheExclusionRules(CollectorCase):
+    """The rules are applied in `insert_items`, so the collector gets them free.
+
+    Free is a claim, not a guarantee — the collector could have grown its own
+    write path at any point. So this drives the real collector against a real
+    rule rather than reading the call chain and concluding it must hold.
+    """
+
+    def rule(self, **kinds):
+        Path(self.home, "workspace", "exclusions.json").write_text(
+            json.dumps(kinds), encoding="utf-8")
+
+    def test_an_excluded_display_name_never_reaches_the_store(self):
+        # The collector prefers the Slack display name over the real name, so
+        # `dana` is the string a user would actually put in the rule.
+        self.rule(senders=["dana"])
+        self.serve(self.working_slack())
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(self.rows(), [])
+
+    def test_an_excluded_slack_id_never_reaches_the_store(self):
+        """The documented case: a display name is theirs to change, the id is not.
+
+        The collector resolves `U0DANA0001` to `Dana Ruiz` before the row is
+        built, so excluding by id only works because the raw id is carried
+        alongside for matching.
+        """
+        self.rule(senders=[OTHER])
+        self.serve(self.working_slack())
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(self.rows(), [])
+
+    def test_an_excluded_channel_never_reaches_the_store(self):
+        self.rule(channels=["D01"])
+        self.serve(self.working_slack())
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(self.rows(), [])
+
+    def test_the_raw_slack_id_is_matched_on_but_never_stored(self):
+        """Matching material must not become a new thing the store holds."""
+        self.serve(self.working_slack())
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
+        self.run_main()
+        with sqlite3.connect(self.db) as conn:
+            columns = {r[1] for r in conn.execute("PRAGMA table_info(items)")}
+            body = conn.execute("SELECT group_concat(sender) FROM items").fetchone()[0]
+        self.assertNotIn("sender_id", columns)
+        self.assertNotIn(OTHER, body or "")
+
+    def test_everything_not_excluded_still_arrives(self):
+        """Otherwise the three tests above would pass on a collector that
+        simply stopped writing."""
+        self.rule(senders=["Someone Else"])
+        self.serve(self.working_slack())
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(len(self.rows()), 1)
+
+
+class TestAttachmentsAreNotFetched(CollectorCase):
+    """A file-sharing message is kept; the file behind it is not.
+
+    `file_share` is in `KEPT_SUBTYPES`, so the message survives the filter and
+    it would be easy to follow `url_private` while doing so.
+    """
+
+    def shared_file(self):
+        working = self.working_slack()
+        working["conversations.history"] = {
+            "ok": True, "has_more": False,
+            "messages": [{
+                "ts": "1787000000.0001", "user": OTHER,
+                "subtype": "file_share", "text": "here is the plan",
+                "files": [{
+                    "id": "F01", "name": "salaries.pdf",
+                    "url_private": "https://files.slack.example/salaries.pdf",
+                    "url_private_download":
+                        "https://files.slack.example/download/salaries.pdf",
+                }],
+            }]}
+        return working
+
+    def test_the_message_is_kept(self):
+        self.serve(self.shared_file())
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
+        self.run_main()
+        self.assertEqual(len(self.rows()), 1)
+
+    def test_no_file_endpoint_is_called(self):
+        self.serve(self.shared_file())
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
+        self.run_main()
+        called = {method for method, _ in self.slack.calls}
+        self.assertEqual({m for m in called if m.startswith("files")}, set())
+
+    def test_nothing_the_file_points_at_is_stored(self):
+        """Not the URL either: it is a live handle to the content."""
+        self.serve(self.shared_file())
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
+        self.run_main()
+        with sqlite3.connect(self.db) as conn:
+            everything = "".join(
+                str(value) for row in conn.execute("SELECT * FROM items")
+                for value in row)
+        self.assertNotIn("url_private", everything)
+        self.assertNotIn("files.slack.example", everything)
+        self.assertNotIn("salaries.pdf", everything)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

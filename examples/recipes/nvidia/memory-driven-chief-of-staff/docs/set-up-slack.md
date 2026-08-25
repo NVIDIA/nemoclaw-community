@@ -150,6 +150,13 @@ the window being throttled and then discards the work. Naming channels is what
 makes coverage bounded, and it also keeps the recipe from collecting far more
 than the job needs.
 
+Naming a channel decides what is read. Deciding what is *never stored* is a
+separate list, `workspace/exclusions.json`, which takes senders, domains and
+channels and is applied before any row is written — so a colleague you would
+rather not keep, or a channel where pay is discussed, never lands on disk even
+though the DM or channel it arrived in is being read. See
+[data-lifecycle.md](data-lifecycle.md).
+
 ## 4. Verify
 
 The collector runs inside the sandbox, so run it there:
@@ -226,3 +233,10 @@ provider, which removes the stored credential with it:
 openshell sandbox provider detach <sandbox> <provider>
 openshell provider delete <provider>
 ```
+
+That ends the collection. It does not remove what was already collected: the
+messages read up to that point are still in the store. `python3 reset.py --yes`
+removes them along with the memory and the learned policy, and
+`python3 export_store.py` writes out a copy first if you want one. Both are in
+[data-lifecycle.md](data-lifecycle.md); revoking and erasing are separate
+actions and doing one is easy to mistake for both.
