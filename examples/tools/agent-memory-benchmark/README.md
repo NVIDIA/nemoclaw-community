@@ -179,13 +179,51 @@ which is not the same as whether it was right.
 
 ```
 corpus/      the documents, in two dated halves, plus a manifest
+corpus_b/    a second corpus, another domain, for cross-checking a result
 questions/   what gets asked
 gold/        the answer key and its grading rules
 bench/       runner, grader, accounting proxy, price table
 adapters/    one directory per system under test
-docs/        methodology and known limitations
+selftest/    a six-document fixture plus two adapters whose scores are known
+docs/        methodology, provenance, and known limitations
 tools/       scoring utilities: re-grade stored answers, build a leaderboard
+tests/       the benchmark's own tests
 ```
+
+## Checking it works
+
+The whole pipeline runs offline against a small fixture whose score is known in
+advance — no model, no network, no API key:
+
+```bash
+python3 -m pytest tests/
+```
+
+`selftest/` holds a six-document corpus, six questions covering all four
+grading modes, and two adapters: one that answers everything correctly and one
+that gets everything wrong, in a different way per mode. They score exactly
+1.0 and exactly 0.0, so any drift between the runner and the report moves a
+number the tests pin. Run one directly:
+
+```bash
+python3 -m bench.runner --adapter selftest/oracle \
+    --corpus selftest/corpus \
+    --questions selftest/questions.jsonl \
+    --gold selftest/gold.jsonl
+```
+
+## Provenance
+
+Authored and maintained by NVIDIA, contributed under Apache-2.0.
+
+Both corpora are fully synthetic: every person, company, project, domain and
+address is invented, every message body was generated from a fixed fictional
+cast, and nothing was collected from a live account. Every address sits under
+the RFC 2606 reserved `.example` top-level domain.
+
+How the corpora were generated, what was screened before publication, and the
+content hashes that say whether two scores are comparable:
+[`docs/provenance.md`](docs/provenance.md).
 
 ## Licence
 

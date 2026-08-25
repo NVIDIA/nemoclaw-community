@@ -18,6 +18,27 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 
 
+def _adapter_name(report: dict) -> str:
+    """Adapter name across report schema versions.
+
+    Schema 1 made ``adapter`` an object so a row could carry the revision that
+    produced it; before that it was the bare name. Stored runs are not
+    rewritten, so both shapes are read here.
+    """
+    adapter = report.get("adapter")
+    if isinstance(adapter, dict):
+        return str(adapter.get("name", ""))
+    return str(adapter or "")
+
+
+def _accounting_method(report: dict) -> str:
+    """Token-count method across report schema versions."""
+    accounting = report.get("accounting", "")
+    if isinstance(accounting, dict):
+        return str(accounting.get("method", ""))
+    return str(accounting)
+
+
 def _rows(runs_dir: Path) -> list[dict]:
     rows = []
     for report_path in sorted(runs_dir.glob("*/report.json")):
@@ -27,12 +48,12 @@ def _rows(runs_dir: Path) -> list[dict]:
         # with their reason and are listed below the table, never ranked in it.
         if report.get("valid") is False:
             rows.append({"invalid": True, "run_id": report_path.parent.name,
-                         "adapter": report["adapter"], "reason": report.get("invalid_reason", "")})
+                         "adapter": _adapter_name(report), "reason": report.get("invalid_reason", "")})
             continue
         summary, cost = report["summary"], report.get("cost", {})
         rows.append(
             {
-                "adapter": report["adapter"],
+                "adapter": _adapter_name(report),
                 "model": report.get("model") or "undeclared",
                 "accuracy": summary["accuracy_overall"],
                 "by_type": summary["accuracy_by_type"],
@@ -40,7 +61,7 @@ def _rows(runs_dir: Path) -> list[dict]:
                 "ingest_tokens": cost.get("ingest_input_tokens", 0) + cost.get("ingest_output_tokens", 0),
                 "per_question_tokens": cost.get("tokens_per_question"),
                 "evidence_recall": summary["evidence"]["evidence_recall_mean"],
-                "accounting": report.get("accounting", ""),
+                "accounting": _accounting_method(report),
                 "corpus": report.get("corpus", "A"),
                 "run_id": report.get("run_id", report_path.parent.name),
             }

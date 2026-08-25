@@ -26,6 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from bench.fingerprint import fingerprint, hash_tree  # noqa: E402
 from bench.grader import Verdict, grade  # noqa: E402
 from bench.pricing import SNAPSHOT_DATE, phase_cost_usd  # noqa: E402
 from bench.proxy import AccountingProxy  # noqa: E402
@@ -38,6 +39,9 @@ REPO = Path(__file__).resolve().parents[1]
 DEFAULT_UPSTREAM = os.environ.get("MNEMO_UPSTREAM", "https://api.openai.com")
 # How long a killed adapter gets to exit on SIGTERM before SIGKILL.
 GRACE_SECONDS = 10
+# report.json layout version. Bump on any change that a reader parsing an older
+# report would get wrong; add fields freely without bumping.
+REPORT_SCHEMA_VERSION = 1
 
 
 def _render(command: list[str], env: dict[str, str], **subs: str) -> list[str]:
@@ -165,6 +169,32 @@ def _run(
     return elapsed
 
 
+def _adapter_revision(adapter_dir: Path) -> dict:
+    """Identify the adapter that produced a row.
+
+    The commit is the useful answer when there is one, but an adapter may be
+    an untracked directory or live outside a repository, so the hash of its
+    own files is always recorded and never depends on git being present.
+    """
+    revision: dict = {"files_sha256": hash_tree(adapter_dir)}
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(adapter_dir), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        if completed.returncode == 0:
+            revision["git_commit"] = completed.stdout.strip()
+        dirty = subprocess.run(
+            ["git", "-C", str(adapter_dir), "status", "--porcelain", "--", str(adapter_dir)],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        if dirty.returncode == 0:
+            revision["git_dirty"] = bool(dirty.stdout.strip())
+    except (OSError, subprocess.SubprocessError):
+        pass  # git is optional; the file hash already identifies the adapter
+    return revision
+
+
 def _self_reported(state_dir: Path) -> dict | None:
     """Adapter-recorded token usage, if the adapter wrote any."""
     path = state_dir / "usage_selfreport.json"
@@ -204,6 +234,8 @@ def main() -> None:
     parser.add_argument("--out", type=Path, default=None, help="run directory (default: results/runs/<ts>-<adapter>)")
     parser.add_argument("--state", type=Path, default=None, help="memory dir for the system under test")
     parser.add_argument("--upstream", default=DEFAULT_UPSTREAM)
+    parser.add_argument("--trial-index", type=int, default=1, help="which trial this run is (1-based)")
+    parser.add_argument("--trial-count", type=int, default=1, help="how many trials the submission runs")
     parser.add_argument("--skip-ingest", action="store_true", help="reuse an existing --state and only answer")
     parser.add_argument(
         "--timeout-seconds",
@@ -228,6 +260,8 @@ def main() -> None:
         args.state = args.state.resolve()
 
     spec = json.loads((args.adapter / "adapter.json").read_text(encoding="utf-8"))
+    if args.trial_index < 1 or args.trial_index > args.trial_count:
+        raise SystemExit(f"--trial-index {args.trial_index} is outside 1..{args.trial_count}")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = (args.out or REPO / "results" / "runs" / f"{stamp}-{spec['name']}").resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -301,18 +335,40 @@ def main() -> None:
     answer_in = usage["input_tokens"].get("answer", 0)
     answer_out = usage["output_tokens"].get("answer", 0)
     report = {
-        "adapter": spec["name"],
+        "schema_version": REPORT_SCHEMA_VERSION,
+        "adapter": {
+            "name": spec["name"],
+            # What was actually executed, so a row can be traced to the
+            # definition that produced it even after the adapter changes.
+            "revision": _adapter_revision(args.adapter),
+            "declared_model": spec.get("model"),
+            "declared_env": sorted(spec.get("env", {})),
+        },
+        # Kept at the top level as well: every existing reader looks here.
         "model": model,
         "observed_models": usage.get("models", {}),
         "run_id": run_dir.name,
         "timestamp": stamp,
+        "trial": {"index": args.trial_index, "of": args.trial_count},
+        # The identity of the scoring configuration. Two rows are comparable
+        # only if all three hashes match; see docs/provenance.md.
+        "fingerprint": fingerprint(args.corpus, args.questions, args.gold),
         "corpus": {
             "documents": len(manifest),
             "part_a": sum(1 for m in manifest if m["part"] == "part_a"),
             "part_b": sum(1 for m in manifest if m["part"] == "part_b"),
         },
         "timing": timing,
-        "accounting": "proxy" if (ingest_in or answer_in) else "none observed (local inference?)",
+        "accounting": {
+            "method": "proxy" if (ingest_in or answer_in) else "none-observed",
+            "description": (
+                "counted at a local proxy the runner put in front of the model endpoint"
+                if (ingest_in or answer_in)
+                else "no model traffic crossed the proxy; a locally-hosted model is not "
+                "comparable on the cost axis"
+            ),
+            "proxy_observed_calls": sum(usage.get("calls", {}).values()),
+        },
         "cost": {
             "ingest_input_tokens": ingest_in,
             "ingest_output_tokens": ingest_out,

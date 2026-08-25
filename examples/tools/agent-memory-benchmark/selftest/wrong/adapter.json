@@ -1,0 +1,21 @@
+{
+  "name": "selftest-wrong",
+  "description": "An adapter that gets every question wrong, one way per grading mode.",
+  "model": "none (offline fixture)",
+  "ingest": [
+    "python3",
+    "selftest/wrong/run.py",
+    "ingest",
+    "--corpus",
+    "{corpus}",
+    "--state",
+    "{state}"
+  ],
+  "answer": [
+    "python3",
+    "selftest/wrong/run.py",
+    "answer",
+    "--state",
+    "{state}"
+  ]
+}
