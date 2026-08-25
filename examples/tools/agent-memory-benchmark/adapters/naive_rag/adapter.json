@@ -1,0 +1,7 @@
+{
+  "name": "naive_rag",
+  "description": "Embedding retrieval over raw chunks; no ingest-time reasoning.",
+  "model": "azure/openai/gpt-5.5",
+  "ingest": ["python3", "adapters/naive_rag/run.py", "ingest", "--corpus", "{corpus}", "--state", "{state}"],
+  "answer": ["python3", "adapters/naive_rag/run.py", "answer", "--state", "{state}"]
+}

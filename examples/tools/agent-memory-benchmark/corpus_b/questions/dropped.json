@@ -1,0 +1,166 @@
+[
+  {
+    "id": "b-asof-sup-assistant-hire",
+    "type": "as_of",
+    "difficulty": "hard",
+    "question": "As of 2027-08-29, what was the position on Assistant superintendent hire? Answer with the value that was current on that date.",
+    "mode": "string_any",
+    "accept": [
+      "two finalists, offer not out"
+    ],
+    "reject": [
+      "Nadia Correa",
+      "2027-10-05"
+    ],
+    "notes": "the earliest recorded state",
+    "why": "expected value absent from corpus"
+  },
+  {
+    "id": "b-fresh-sup-pb2219-status",
+    "type": "freshness",
+    "difficulty": "base",
+    "question": "As of the end of the corpus, what is the current position on Harbor Point facade permit PB-2219 review status?",
+    "mode": "string_any",
+    "accept": [
+      "corrections accepted; technical review still open"
+    ],
+    "reject": [
+      "is submitted; completeness check pending"
+    ],
+    "notes": "chain: ['submitted; completeness check pending', 'corrections required: east-elevation fire-stopping detail missing', 'corrections accepted; technical review still open']",
+    "why": "expected value absent from corpus"
+  },
+  {
+    "id": "b-asof-sup-pb2219-status",
+    "type": "as_of",
+    "difficulty": "hard",
+    "question": "As of 2027-08-08, what was the position on Harbor Point facade permit PB-2219 review status? Answer with the value that was current on that date.",
+    "mode": "string_any",
+    "accept": [
+      "submitted; completeness check pending"
+    ],
+    "reject": [
+      "corrections accepted; technical review still open"
+    ],
+    "notes": "the earliest recorded state",
+    "why": "expected value absent from corpus"
+  },
+  {
+    "id": "b-chain-sup-pb2219-status",
+    "type": "chain_freshness",
+    "difficulty": "hard",
+    "question": "Harbor Point facade permit PB-2219 review status moved more than once. Give the value it held in between, and the value now.",
+    "mode": "string_any",
+    "require_all": [
+      "corrections required: east-elevation fire-stopping detail missing",
+      "corrections accepted; technical review still open"
+    ],
+    "notes": "middle and final states",
+    "why": "corpus lacks {'corrections accepted; technical review still open', 'corrections required: east-elevation fire-stopping detail missing'}"
+  },
+  {
+    "id": "b-fresh-sup-ridgeway-closeout-count",
+    "type": "freshness",
+    "difficulty": "base",
+    "question": "As of the end of the corpus, what is the current position on Ridgeway Depot closeout packages still outstanding?",
+    "mode": "string_any",
+    "accept": [
+      "5 packages"
+    ],
+    "reject": [
+      "is 11 packages"
+    ],
+    "notes": "chain: ['11 packages', '7 packages', '5 packages: fire-alarm matrix, dock-leveller O&M manuals, elevator recall certificate, commissioning trend logs and final civil as-builts']",
+    "why": "expected value absent from corpus"
+  },
+  {
+    "id": "b-chain-sup-ridgeway-closeout-count",
+    "type": "chain_freshness",
+    "difficulty": "hard",
+    "question": "Ridgeway Depot closeout packages still outstanding moved more than once. Give the value it held in between, and the value now.",
+    "mode": "string_any",
+    "require_all": [
+      "7 packages",
+      "5 packages"
+    ],
+    "notes": "middle and final states",
+    "why": "corpus lacks {'7 packages', '5 packages'}"
+  },
+  {
+    "id": "b-multi-multi-steel-cause",
+    "type": "multi_source",
+    "difficulty": "base",
+    "question": "Summarise what the record shows about this: steel cause.",
+    "mode": "string_any",
+    "require_all": [],
+    "accept": [],
+    "notes": "The Harbor Point steel slip was caused by labour action at Brannigan's primary mill; two of five loads were rerouted from the Ellisburg plant at a $9,300 freight premium that Kofi absorbed rather than passing to the client.",
+    "why": "no deterministic answer key yet"
+  },
+  {
+    "id": "b-multi-multi-rebar-failure",
+    "type": "multi_source",
+    "difficulty": "base",
+    "question": "Summarise what the record shows about this: rebar failure.",
+    "mode": "string_any",
+    "require_all": [],
+    "accept": [],
+    "notes": "The Camden Row rebar inspection failed on spacing at the north bay on 2027-08-27; Alan Reyes issued a correction detail, the crew re-tied over three days, and the re-inspection passed on 2027-09-05 — nine days from failure to pass.",
+    "why": "no deterministic answer key yet"
+  },
+  {
+    "id": "b-multi-multi-crane-share",
+    "type": "multi_source",
+    "difficulty": "base",
+    "question": "Summarise what the record shows about this: crane share.",
+    "mode": "string_any",
+    "require_all": [],
+    "accept": [],
+    "notes": "Priya proposed reserving the mobile crane's idle days for Ridgeway rather than releasing them back to the rental firm; Dana negotiated it, and the firm cut the daily rate from $2,400 to $2,150 in exchange for a 60-day commitment running 202",
+    "why": "no deterministic answer key yet"
+  },
+  {
+    "id": "b-multi-multi-facade-co",
+    "type": "multi_source",
+    "difficulty": "base",
+    "question": "Summarise what the record shows about this: facade co.",
+    "mode": "string_any",
+    "require_all": [],
+    "accept": [],
+    "notes": "CO-114 upgrades the Harbor Point facade to higher-performance solar-control glazing at $184k. Vestamark funded it by releasing contingency from the Camden Row budget — a cross-site transfer Sofia Duarte authorised on 2027-09-09 on condition",
+    "why": "no deterministic answer key yet"
+  },
+  {
+    "id": "b-multi-multi-closeout-long-tail",
+    "type": "multi_source",
+    "difficulty": "base",
+    "question": "Summarise what the record shows about this: closeout long tail.",
+    "mode": "string_any",
+    "require_all": [],
+    "accept": [],
+    "notes": "At the end of 2027-09-24, eight closeout items remained across Dana's sites: Harbor Point elevator certificate, facade warranty and electrical as-builts; Ridgeway Depot fire-alarm matrix and dock-leveller O&M manuals; Camden Row final-clean",
+    "why": "no deterministic answer key yet"
+  },
+  {
+    "id": "b-multi-multi-steel-load-ledger",
+    "type": "multi_source",
+    "difficulty": "base",
+    "question": "Summarise what the record shows about this: steel load ledger.",
+    "mode": "string_any",
+    "require_all": [],
+    "accept": [],
+    "notes": "The Harbor Point order comprised loads HPS-1 through HPS-5. Delivery tickets confirm only HPS-2 and HPS-4 arrived, both on 2027-08-31 from Ellisburg; HPS-1, HPS-3 and HPS-5 were discussed and scheduled but had no delivery ticket or site rec",
+    "why": "no deterministic answer key yet"
+  },
+  {
+    "id": "b-multi-multi-camden-release-signoffs",
+    "type": "multi_source",
+    "difficulty": "base",
+    "question": "Summarise what the record shows about this: camden release signoffs.",
+    "mode": "string_any",
+    "require_all": [],
+    "accept": [],
+    "notes": "Camden Row's unit-release checklist required eight signoffs: structural, electrical, plumbing, fire-stopping, lead-paint clearance, window water test, acoustic test and resident notice. By 2027-09-24, dated completion records existed for ev",
+    "why": "no deterministic answer key yet"
+  }
+]

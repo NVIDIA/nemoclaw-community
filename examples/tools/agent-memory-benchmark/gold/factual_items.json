@@ -1,0 +1,1595 @@
+[
+  {
+    "id": "fact-000",
+    "type": "multi_source",
+    "question": "What item number was the integration-test gap in the Atlas auth inventory?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-12T08-52-00__9b2b6f55",
+      "E:2026-05-13T08-58-00__6b669d1f",
+      "E:2026-05-15T08-50-00__c3dc1e53"
+    ],
+    "entity": "concepts/auth_scope",
+    "notes": "Atlas auth changes in scope for security review: token storage migration in src/atlas/auth/store.py (keyring -> encrypted-blob, Dimitri-signed) plus keyring_compat.py migration-window shim, the Helix-side OAuth callback handler (helix_callb",
+    "accept": [
+      "item 14"
+    ]
+  },
+  {
+    "id": "fact-001",
+    "type": "single_hop",
+    "question": "What is the new Tier 2 rate limit for chat platform bot methods conversations.history and .replies effective 2026-06-15?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-22T20-52-00__ed95b1fe"
+    ],
+    "entity": "concepts/chat_platform_rate_limits",
+    "notes": "Chat platform bot rate-limit changes effective 2026-06-15: Tier 2 (conversations.history/.replies) drops 50/min -> 30/min; Tier 3 (users.lookupByEmail, team.info) drops 20/min -> 10/min; Tier 1 (chat.postMessage 1 req/sec/channel) unchanged",
+    "accept": [
+      "30 / min",
+      "30/min"
+    ]
+  },
+  {
+    "id": "fact-002",
+    "type": "single_hop",
+    "question": "For the evaluator workstream, what metric is computed between the predicted-probability histogram and label-probability histogram?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-23T08-49-00__a2c190e8"
+    ],
+    "entity": "concepts/evaluator_metric",
+    "notes": "The evaluator metric is symmetric KL divergence between the predicted-probability and label-probability histograms, computed per priority class and averaged; the rollup is (1 - normalized_kl) rescaled to 0-100 (100 = identical distributions",
+    "accept": [
+      "symmetric KL"
+    ]
+  },
+  {
+    "id": "fact-003",
+    "type": "multi_source",
+    "question": "What type of equality did Alex say the provider's prefix cache works on?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-17T21-05-00__735ea58b",
+      "E:2026-05-18T10-15-00__46c8336d"
+    ],
+    "entity": "concepts/prefix_cache",
+    "notes": "The provider's prefix cache works on prefix-byte-equality with a provider-side LRU for eviction; it does NOT do cheap token-level longest-common-prefix matching, so even a single-byte prefix difference (e.g. moving ## Style guidelines above",
+    "accept": [
+      "prefix-byte-equality"
+    ]
+  },
+  {
+    "id": "fact-004",
+    "type": "multi_source",
+    "question": "For Atlas prefix-trim, what trimming granularity was chosen instead of per-token?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-17T08-57-00__0e29129c",
+      "E:2026-05-17T21-05-00__735ea58b",
+      "S:C200ATLE001_channel@2026-05-03"
+    ],
+    "entity": "concepts/prefix_trim",
+    "notes": "prefix-trim is an Atlas feature that trims the stable prompt prefix to lower per-message ingest cost; trimming is per-section (section headers in prefix-stable), not per-token. Per-token was rejected because the provider's cache works on by",
+    "accept": [
+      "per-section",
+      "section-level"
+    ]
+  },
+  {
+    "id": "fact-005",
+    "type": "multi_source",
+    "question": "What was the comments deadline for Atlas product surface RFC v2?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-19T10-18-00__7a77c9c1",
+      "S:D200SAM001_dm@2026-05-18"
+    ],
+    "entity": "concepts/product_surface_rfc",
+    "notes": "Atlas product surface RFC v2 (Alex + Sam, opened for comments 2026-05-19 at https://wiki.example-co.com/atlas/rfc/product-surface-v2, comments due May 29) is a rewrite incorporating Lena's design feedback and Elena's cost constraints; vs v1",
+    "accept": [
+      "May 29"
+    ]
+  },
+  {
+    "id": "fact-006",
+    "type": "multi_source",
+    "question": "For Atlas merge request !521's ContextSelector, what complexity should select() have after building an inverted index from section tokens to section ids?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-18T09-12-00__15ecdd33",
+      "E:2026-05-18T14-22-00__87841ee4"
+    ],
+    "entity": "concepts/selective_context_inclusion",
+    "notes": "Selective context inclusion (MR !521) adds a ContextSelector that trims the per-item context block in the wave batch prompt to only the wiki sections an item references. It builds an inverted index from section tokens to section ids at wave",
+    "accept": [
+      "O(|item_tokens|)"
+    ]
+  },
+  {
+    "id": "fact-007",
+    "type": "multi_source",
+    "question": "What merge request did Rohan Dasgupta push as the shared runtime abstraction sketch for Atlas and Beacon?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:D200ROH001_dm@2026-04-23",
+      "S:D200ROH001_dm@2026-04-27",
+      "S:D200ROH001_dm@2026-04-28",
+      "S:D200ROH001_dm@2026-04-29"
+    ],
+    "entity": "concepts/shared_runtime",
+    "notes": "Proposed atlas.runtime shared package for Atlas + Beacon; MR !318 (Rohan's proposal) covers folder structure + interface stubs for a task registry, session scheduler, prefix-prompt cache primitive, plus a thin event bus. Alex's review: pick",
+    "accept": [
+      "MR !318",
+      "!318"
+    ]
+  },
+  {
+    "id": "fact-008",
+    "type": "multi_source",
+    "question": "In Atlas's context selector, what is the default top-K bound for IDF-ranked tokens?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-19T14-50-00__caa4e16d",
+      "E:2026-05-20T09-25-00__42ecc663",
+      "S:C200ATLE001_channel@2026-04-27"
+    ],
+    "entity": "concepts/wave_ingest",
+    "notes": "Wave ingest is Atlas's ingest pipeline (design doc at docs/sot/designs/ingest_pipeline.md): processes items in waves (e.g. 80 items/wave) via a wave_runner and a batch prompt built by prompt_builder (PromptBuilder constructed once per inges",
+    "accept": [
+      "256"
+    ]
+  },
+  {
+    "id": "fact-009",
+    "type": "multi_source",
+    "question": "In the Atlas wave-ingest refactor discussion, what phrase did Jordan use to describe the wiki group mutex?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-14T10-15-00__adcf1655",
+      "E:2026-05-26T09-00-00__42416b62"
+    ],
+    "entity": "concepts/wiki_group_mutex",
+    "notes": "The wiki group mutex doubles as a write lock doing back-pressure work — a load-bearing hack with a poor mental model for new team members, flagged for cleaner factoring in the wave-ingest refactor. It assumes a single canonical wiki root; a",
+    "accept": [
+      "load-bearing hack"
+    ]
+  },
+  {
+    "id": "fact-010",
+    "type": "multi_source",
+    "question": "When is the Atlas Q3 planning offsite scheduled?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200PFE001_channel@2026-04-21",
+      "S:D200MOR001_dm@2026-05-14"
+    ],
+    "entity": "episodes/milestones",
+    "notes": "Team off-site / Atlas Q3 planning offsite confirmed for June 8-10 2026 at last year's venue (three days, light agenda).",
+    "accept": [
+      "June 8-10"
+    ]
+  },
+  {
+    "id": "fact-011",
+    "type": "multi_source",
+    "question": "What percentage did Alex Chen set as the end-of-Q2 per-message ingest cost reduction target for Atlas KR3?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200GRP001_group_dm@2026-04-29",
+      "S:C200GRP002_group_dm@2026-04-30"
+    ],
+    "entity": "goals/quarterly",
+    "notes": "Atlas Q2 OKRs (draft at platform-eng/atlas/-/wikis/q2-okrs-draft): four KRs with reliability and cost as the top two; reliability moved up to KR1 (framed as p95 latency + error rate, Elena praised the p95 target), prefix-trim became its own",
+    "accept": [
+      "40%"
+    ]
+  },
+  {
+    "id": "fact-013",
+    "type": "multi_source",
+    "question": "Who is listed as the organizer for the Beacon eval — methodology walkthrough scheduled for Thursday, 2026-05-28?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-14T09-29-00__eba84193",
+      "E:2026-05-19T09-51-00__423da7a0",
+      "S:D200ROH001_dm@2026-05-18"
+    ],
+    "entity": "people/anya_volkov",
+    "notes": "Anya Volkov (@anya, anya.volkov@example-co.com, Slack U200AB4CC77E) is on the Beacon team; owns the Beacon eval framework, organized the Beacon eval methodology walkthrough, and is leading the Beacon eval methodology refactor.",
+    "accept": [
+      "Anya Volkov",
+      "Anya",
+      "@anya"
+    ]
+  },
+  {
+    "id": "fact-014",
+    "type": "multi_source",
+    "question": "What department was ready to onboard the eval annotation tool Jin requested?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-23T08-44-00__46412f2d",
+      "E:2026-05-24T08-48-00__1d4ced89"
+    ],
+    "entity": "people/carla_silvera",
+    "notes": "Carla Silvera (carla.silvera@example-co.com) is in procurement, onboarding the eval annotation vendor; coordinated seat count, DPA routing, and contract terms with Alex (budget owner).",
+    "accept": [
+      "Procurement",
+      "procurement"
+    ]
+  },
+  {
+    "id": "fact-015",
+    "type": "multi_source",
+    "question": "Who said that every MR touching auth or token paths needs a Product Security review tag?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-12T08-52-00__9b2b6f55",
+      "E:2026-05-12T09-18-00__4cbf1a58",
+      "S:C200PFE001_channel@2026-04-24",
+      "S:D200SAM001_dm@2026-05-26"
+    ],
+    "entity": "people/dimitri_costa",
+    "notes": "Dimitri Costa (@dimitri) is the security signoff owner; designed/signed off the encrypted-blob token storage scheme, reviews the calendar auth-scope expansion, owns the Helix v2 security review (confirmed done by July 7), and enforces the P",
+    "accept": [
+      "Dimitri Costa"
+    ]
+  },
+  {
+    "id": "fact-016",
+    "type": "multi_source",
+    "question": "Who emailed Alex Chen about the quarterly skip-level next week?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200GRP002_group_dm@2026-04-21",
+      "E:2026-05-15T09-00-00__67e1733e"
+    ],
+    "entity": "people/elena_marquez",
+    "notes": "Elena Marquez (elena.marquez@example-co.com, Slack U2008298D057) is Alex's skip-level / org lead (Morgan is Alex's direct manager); reviews OKRs and the QBR and runs Platform Eng staff.",
+    "accept": [
+      "Elena Marquez",
+      "Elena"
+    ]
+  },
+  {
+    "id": "fact-017",
+    "type": "multi_source",
+    "question": "Who pushed 3 new commits to merge request !521 in platform-eng/atlas for switching the CI runner pool to the `atlas-fast` tag?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200ATLE001_channel@2026-04-25",
+      "E:2026-05-21T12-12-00__ec47dc04"
+    ],
+    "entity": "people/felix_oduya",
+    "notes": "Felix Oduya (@felix, Slack U20010E22CBA) owns CI/runner infrastructure and runner-pool tuning; is Alex's CI coverage during absences.",
+    "accept": [
+      "Felix Oduya",
+      "Felix"
+    ]
+  },
+  {
+    "id": "fact-018",
+    "type": "multi_source",
+    "question": "Who has 4 candidates in pipeline for the 2 open reqs on Platform Eng?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200GRP002_group_dm@2026-04-22",
+      "S:D200JOR001_dm@2026-04-30"
+    ],
+    "entity": "people/harper_quinn",
+    "notes": "Harper Quinn (@harper) runs Platform Eng hiring/recruiting and intern intake; owns the pipeline for the 2 open reqs and coordinated the senior backend IC5 loop, the Wen-Qing intern offer, and tech-interview slots.",
+    "accept": [
+      "Harper"
+    ]
+  },
+  {
+    "id": "fact-019",
+    "type": "single_hop",
+    "question": "Who is covering the queue while Iris Nakamura is on PTO June 2-6?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-24T11-28-00__17360ea5"
+    ],
+    "entity": "people/iris_nakamura",
+    "notes": "Iris Nakamura owns the weekly Atlas customer escalation summary; on PTO June 2-6 with Noah covering the queue.",
+    "accept": [
+      "Noah"
+    ]
+  },
+  {
+    "id": "fact-020",
+    "type": "multi_source",
+    "question": "Who is noted as representing the ML-research side in the Beacon eval methodology walkthrough?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-19T08-43-00__3265f4a2",
+      "E:2026-05-19T09-51-00__423da7a0",
+      "E:2026-05-23T08-41-00__a917fd3a"
+    ],
+    "entity": "people/jin_oh",
+    "notes": "Jin Oh (jin.oh@example-co.com) is an ML researcher (not an engineer) who owns the evaluator workstream methodology and represents ML-research in the Beacon eval working group; prefers methodology critique delivered directly during sessions.",
+    "accept": [
+      "Jin Oh"
+    ]
+  },
+  {
+    "id": "fact-021",
+    "type": "multi_source",
+    "question": "Who did Morgan Lee tell Alex Chen to hold on because he was the one piece of leverage if Compass's Q3 plan slips?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-22T09-07-00__21005530",
+      "S:D200JOR001_dm@2026-04-16"
+    ],
+    "entity": "people/jordan_kim",
+    "notes": "Jordan Kim (@jordan, jordan.kim@example-co.com, Slack U200DC075DFC) is an Atlas backend engineer working closely with Alex on wave-ingest and prefix-trim; Alex's coverage for Atlas during absences and a leverage piece Morgan holds against C",
+    "accept": [
+      "Jordan",
+      "Jordan Kim"
+    ]
+  },
+  {
+    "id": "fact-022",
+    "type": "multi_source",
+    "question": "Who sent the Compass v2 launch heads-up saying the cross-team kickoff calendar invite would come within 48 hours?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-21T13-16-00__11fe239e",
+      "E:2026-05-26T16-18-00__42b9a86b"
+    ],
+    "entity": "people/kavya_ramaswamy",
+    "notes": "Kavya Ramaswamy (@kavya, kavya.ramaswamy@example-co.com) owns the Compass v2 launch and convened the cross-team kickoff; presents the Compass v2 cutover spotlight at the May 30 all-hands.",
+    "accept": [
+      "Kavya Ramaswamy",
+      "Kavya",
+      "@kavya"
+    ]
+  },
+  {
+    "id": "fact-023",
+    "type": "multi_source",
+    "question": "Who sent the May 24, 2026 email titled \"follow-up: design walkthrough action items\" to Alex Chen?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200ATLD001_channel@2026-04-21",
+      "E:2026-05-24T09-00-00__ab3c019e"
+    ],
+    "entity": "people/lena_park",
+    "notes": "Lena Park (@lena, Slack U20094F0C2DD) leads design-eng work on the Atlas dashboard/frontend (has her own team); owns the design-system tokens and the dashboard mocks in canvas; the default UI driver for the Atlas demo.",
+    "accept": [
+      "Lena Park (@lena)",
+      "Lena Park",
+      "@lena"
+    ]
+  },
+  {
+    "id": "fact-024",
+    "type": "multi_source",
+    "question": "Who sent Alex Chen the email titled \"feedback form — manager 1:1 cadence\"?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-12T20-59-00__94500b42",
+      "E:2026-05-18T12-12-00__b2204fe8"
+    ],
+    "entity": "people/morgan_lee",
+    "notes": "Morgan Lee (@morgan, morgan.lee@example-co.com, Slack U200B3C81BDF) is Alex's direct manager; runs Platform Eng 1:1 cadence and OKR/headcount/QBR coordination; terse/understated (\"good catch, let's not do that again\" is about as effusive as",
+    "accept": [
+      "Morgan Lee",
+      "Morgan",
+      "@morgan"
+    ]
+  },
+  {
+    "id": "fact-025",
+    "type": "multi_source",
+    "question": "Who had been pushing the “co-engineered surface” framing for Helix v2 messaging?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-12T09-18-00__4cbf1a58",
+      "S:D200SAM001_dm@2026-05-09",
+      "E:2026-05-20T08-51-00__6c97f35e"
+    ],
+    "entity": "people/noah_arenson",
+    "notes": "Noah Arenson (noah.arenson@example-co.com) is on the Helix/partner side; coordinates the Helix partner sync, pushed the rejected \"co-engineered surface\" framing, and pings weekly about the Helix timeline (which keeps slipping, with Platform",
+    "accept": [
+      "Noah",
+      "Noah Arenson"
+    ]
+  },
+  {
+    "id": "fact-027",
+    "type": "multi_source",
+    "question": "What shared design channel did Rohan Dasgupta create for Atlas <-> Beacon runtime coordination?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:D200ROH001_dm@2026-04-20",
+      "E:2026-05-14T09-29-00__eba84193",
+      "S:D200ROH001_dm@2026-05-09"
+    ],
+    "entity": "people/rohan_dasgupta",
+    "notes": "Rohan Dasgupta (@rohan, rohan.dasgupta@example-co.com, Slack U200F6FF520A) leads the Beacon team and is Alex's counterpart on the shared Atlas<->Beacon runtime work; created the private #atlas-beacon-runtime design channel (added Anya) and ",
+    "accept": [
+      "#atlas-beacon-runtime"
+    ]
+  },
+  {
+    "id": "fact-028",
+    "type": "multi_source",
+    "question": "Who said the first pass at the Atlas dashboard surface IA was up?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200ATLD001_channel@2026-04-21",
+      "E:2026-05-19T10-18-00__7a77c9c1"
+    ],
+    "entity": "people/sam_iverson",
+    "notes": "Sam Iverson (@sam, sam.iverson@example-co.com, Slack U200C6EF237B) is the Atlas product/PM lead; owns product framing, the product surface RFC (v2 co-authored with Alex), the dashboard surface, customer briefings, and all-hands demo coordin",
+    "accept": [
+      "Sam Iverson",
+      "@sam"
+    ]
+  },
+  {
+    "id": "fact-029",
+    "type": "multi_source",
+    "question": "Which person was both paged for the Atlas prefix-cache hit-rate drop and announced the scheduled cluster maintenance window?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200PFE001_channel@2026-04-26",
+      "S:D200MOR001_dm@2026-04-26"
+    ],
+    "entity": "people/tomas_bergman",
+    "notes": "Tomas Bergman owns cluster maintenance/failover; on-call engineer paged for the April cache regression and the 2026-05-09 Atlas cluster partial outage (filed the incident doc).",
+    "accept": [
+      "Tomas Bergman",
+      "Tomas",
+      "tomas"
+    ]
+  },
+  {
+    "id": "fact-030",
+    "type": "multi_source",
+    "question": "What workstream did Alex Chen say he would put Wen-Qing on?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:D200MOR001_dm@2026-04-27",
+      "S:C200PFE001_channel@2026-04-23"
+    ],
+    "entity": "people/wen_qing_tang",
+    "notes": "Wen-Qing Tang (Slack U2008B2B5F4D) is a newer engineer who joined Atlas the week of ~2026-04-23 and is still ramping onto the ingest path; received an intern offer with a strong signal across all 4 loops (no dissenting votes), recommended f",
+    "accept": [
+      "ingest-backfill workstream",
+      "ingest-backfill"
+    ]
+  },
+  {
+    "id": "fact-031",
+    "type": "multi_source",
+    "question": "What is the GitLab project path for Atlas?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-13T09-05-00__39f5f36d",
+      "E:2026-05-18T09-12-00__15ecdd33",
+      "E:2026-05-25T16-32-00__42f0285e"
+    ],
+    "entity": "projects/atlas",
+    "notes": "Project Atlas is a Platform Eng project on GitLab (gitlab.example-co.com/platform-eng/atlas), owned by team platform-eng/atlas; Alex Chen leads/maintains it.",
+    "accept": [
+      "platform-eng/atlas",
+      "platform-eng / atlas"
+    ]
+  },
+  {
+    "id": "fact-032",
+    "type": "multi_source",
+    "question": "Who sent the FYI announcing that Beacon hit its 50% rollout milestone?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:D200ROH001_dm@2026-04-20",
+      "E:2026-05-14T09-29-00__eba84193"
+    ],
+    "entity": "projects/beacon",
+    "notes": "Beacon is a sibling Platform Eng product to Atlas; Rohan Dasgupta leads it; it shares agent-runtime concerns with Atlas and drives the Atlas/Beacon shared-runtime convergence.",
+    "accept": [
+      "Rohan Dasgupta",
+      "Rohan"
+    ]
+  },
+  {
+    "id": "fact-033",
+    "type": "multi_source",
+    "question": "Who said they would handle the cross-org framing for Beacon parity and Compass dependencies?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-21T13-16-00__11fe239e",
+      "E:2026-05-20T08-51-00__6c97f35e"
+    ],
+    "entity": "projects/compass",
+    "notes": "Compass is a sibling project with dependencies on Atlas; Kavya Ramaswamy owns the Compass v2 launch; Morgan handles the Compass-dependency cross-org framing.",
+    "accept": [
+      "Morgan",
+      "Morgan Lee"
+    ]
+  },
+  {
+    "id": "fact-034",
+    "type": "multi_source",
+    "question": "How much of Jin's week is being borrowed to keep the evaluator pipeline running?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-19T08-43-00__3265f4a2",
+      "E:2026-05-23T08-41-00__a917fd3a"
+    ],
+    "entity": "projects/evaluator",
+    "notes": "The evaluator workstream produces a triage-quality eval + harness writeup that scores triage MRs for go/no-go decisions; Jin Oh (ML researcher) owns the methodology. The team is borrowing 30-40% of Jin's week to keep it running; Alex wants ",
+    "accept": [
+      "30-40%"
+    ]
+  },
+  {
+    "id": "fact-035",
+    "type": "multi_source",
+    "question": "What file path is listed for the Helix OAuth callback?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-12T08-52-00__9b2b6f55",
+      "E:2026-05-13T08-58-00__6b669d1f",
+      "S:C200GRP002_group_dm@2026-05-23"
+    ],
+    "entity": "projects/helix",
+    "notes": "Helix is a partner-facing integration with its own release at risk if Atlas auth inventory slips; involves a Helix-side OAuth callback handler (src/atlas/auth/helix_callback.py) and requires Platform Eng sign-off on an auth model change bef",
+    "accept": [
+      "src/atlas/auth/helix_callback.py",
+      "`src/atlas/auth/helix_callback.py`"
+    ]
+  },
+  {
+    "id": "fact-036",
+    "type": "single_hop",
+    "question": "In Alex Chen's threat-model delta for the auth changes, what new external surface was identified?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-13T08-58-00__6b669d1f"
+    ],
+    "entity": "concepts/auth_scope",
+    "notes": "Threat-model delta from Q4: Q4 covered token storage in steady state; new are the migration window, the Helix callback (new external surface), and cross-surface session validation (Slack-to-web token reuse, not designed in Q4).",
+    "accept": [
+      "Helix callback",
+      "Helix OAuth callback",
+      "OAuth callback"
+    ]
+  },
+  {
+    "id": "fact-037",
+    "type": "single_hop",
+    "question": "Starting on what date should chat platform bot developers test against the new limits in the sandbox?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-22T20-52-00__ed95b1fe"
+    ],
+    "entity": "concepts/chat_platform_rate_limits",
+    "notes": "Recommended bot mitigations: paginate thread history with cursor, respect Retry-After on 429s, cache users.lookupByEmail, test against new limits in sandbox starting 2026-06-01.",
+    "accept": [
+      "2026-06-01"
+    ]
+  },
+  {
+    "id": "fact-038",
+    "type": "single_hop",
+    "question": "For the triage-quality eval, what metric did Jin Oh say would compare the model's confidence histogram to the label distribution?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-19T08-43-00__3265f4a2"
+    ],
+    "entity": "concepts/evaluator_metric",
+    "notes": "Jin Oh posed two options for the triage-quality eval: re-label the golden set with inter-rater agreement filtering (slow), or switch to a distribution-based metric comparing the model's confidence histogram to the label distribution (faster",
+    "accept": [
+      "distribution-based metric",
+      "symmetric KL"
+    ]
+  },
+  {
+    "id": "fact-039",
+    "type": "single_hop",
+    "question": "What sharing status did Alex Chen say the prefix-cache primitive needs to have for Atlas and Beacon because they have different invariants on cache eviction?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:D200ROH001_dm@2026-04-29"
+    ],
+    "entity": "concepts/prefix_cache",
+    "notes": "Atlas and Beacon intentionally keep the prefix-cache primitive duplicated (NOT shared) because they have different invariants on cache eviction; \"fix once\" would have caused worse divergence than two correct implementations.",
+    "accept": [
+      "NOT shared",
+      "not shared"
+    ]
+  },
+  {
+    "id": "fact-040",
+    "type": "multi_source",
+    "question": "What trim threshold did Alex Chen mark for prefix-trim v1 to revisit after 4 weeks of prod data?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200GRP001_group_dm@2026-05-11",
+      "S:D200JOR001_dm@2026-05-11"
+    ],
+    "entity": "concepts/prefix_trim",
+    "notes": "Prefix-trim trim threshold set to 16k tokens for v1 (8k too aggressive for long-context tenants, 32k buys little), decided at the Tuesday 2026-05-12 workshop, to be revisited after ~4 weeks of prod data.",
+    "accept": [
+      "16k"
+    ]
+  },
+  {
+    "id": "fact-041",
+    "type": "multi_source",
+    "question": "What ingest config key controls the ContextSelector top-K token cap?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-19T09-30-00__2e5b9110",
+      "E:2026-05-19T14-50-00__caa4e16d",
+      "E:2026-05-20T09-18-00__5e1248b2"
+    ],
+    "entity": "concepts/selective_context_inclusion",
+    "notes": "Each section contributes only its top-K IDF-ranked tokens (default 256) to the inverted index to bound memory (a 50KB section can otherwise contribute ~8000 distinct tokens); the cap is exposed as config knob ingest.context_selector_top_k. ",
+    "accept": [
+      "ingest.context_selector_top_k"
+    ]
+  },
+  {
+    "id": "fact-042",
+    "type": "multi_source",
+    "question": "What did Alex ask `TaskRegistry.cancel_all` to be renamed to for v3 of MR !318?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:D200ROH001_dm@2026-05-18",
+      "S:D200ROH001_dm@2026-05-20"
+    ],
+    "entity": "concepts/shared_runtime",
+    "notes": "!318 v3 widened TaskRegistry to support Beacon's eval-driven cancellations and addressed the transport-leak comment; Alex gave LGTM with one ask: rename TaskRegistry.cancel_all to TaskRegistry.cancel_group.",
+    "accept": [
+      "TaskRegistry.cancel_group",
+      "`TaskRegistry.cancel_group`"
+    ]
+  },
+  {
+    "id": "fact-043",
+    "type": "multi_source",
+    "question": "What does wave_runner.py:_retry_with_backoff do with the prefix on a full-batch failure?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200ATLE001_channel@2026-05-06",
+      "E:2026-05-22T09-12-00__1496da82",
+      "E:2026-05-23T09-30-00__a7fb2016"
+    ],
+    "entity": "concepts/wave_ingest",
+    "notes": "wave_runner.py has a retry path in _retry_with_backoff: on full-batch failure it re-emits the prefix, on partial retries it reuses the snapshot. A single batch session re-reads the same wiki pages 5-8x while building per-item context (one r",
+    "accept": [
+      "re-emits",
+      "re-emit"
+    ]
+  },
+  {
+    "id": "fact-044",
+    "type": "multi_source",
+    "question": "What release tag included the hotfix where wiki_group_mutex no longer deadlocks when a consolidate worker is cancelled mid-flight?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200ATLE001_channel@2026-05-12",
+      "S:C200ATLE001_channel@2026-05-21",
+      "E:2026-05-25T16-32-00__42f0285e"
+    ],
+    "entity": "concepts/wiki_group_mutex",
+    "notes": "The wiki group mutex has a sharp edge with concurrent consolidate jobs (Morgan says it has bitten the team twice). After turning on the prefix-trim path it showed up in a consolidate run with no deadlock but longer-than-liked wait time; Ale",
+    "accept": [
+      "v0.43.1"
+    ]
+  },
+  {
+    "id": "fact-045",
+    "type": "single_hop",
+    "question": "When Elena Marquez posted that intern offers are out for Atlas-side mentoring, how many accepted?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200PFE001_channel@2026-05-01"
+    ],
+    "entity": "episodes/milestones",
+    "notes": "Intern offers went out 2026-05-01: 2 accepted, 1 declined for a competing offer; interns start June 15.",
+    "accept": [
+      "2"
+    ]
+  },
+  {
+    "id": "fact-046",
+    "type": "multi_source",
+    "question": "What committed/stretch split did Alex Chen choose for KR3 cost reduction?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200GRP002_group_dm@2026-04-30",
+      "S:C200GRP001_group_dm@2026-05-16"
+    ],
+    "entity": "goals/quarterly",
+    "notes": "KR3 (cost): reduce per-message ingest cost by 40% by end of Q2 with 50% as stretch; baseline 0.71¢, target 0.43¢. The 40% vs 45% vs 50% debate resolved to 40% committed / 50% stretch on 2026-05-16 (Jordan argued 45% was the honest number an",
+    "accept": [
+      "40% committed / 50% stretch"
+    ]
+  },
+  {
+    "id": "fact-047",
+    "type": "multi_source",
+    "question": "Who was the only person carrying the wave-ingest design, making it a real bus factor in the headcount discussion?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-20T08-51-00__6c97f35e",
+      "E:2026-05-21T09-24-00__88129152",
+      "E:2026-05-23T08-41-00__a917fd3a"
+    ],
+    "entity": "people/alex_chen",
+    "notes": "Alex is the sole owner / bus-factor risk for the wave-ingest design and the wiki group mutex; if out two weeks, ingest backfill stalls — flagged as a real bus factor in the headcount ask.",
+    "accept": [
+      "Alex",
+      "Alex Chen"
+    ]
+  },
+  {
+    "id": "fact-048",
+    "type": "multi_source",
+    "question": "What field did Anya from Beacon side ask to add to the consolidate-pass output payload?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:D200JOR001_dm@2026-05-18",
+      "E:2026-05-23T14-54-00__b452dd9d"
+    ],
+    "entity": "people/anya_volkov",
+    "notes": "Anya is reusing the evaluator metric on Beacon's golden set and is the designated Beacon-side owner for the prefix-trim integration; raised per-skill prefix-cache invalidation and requested schema_version be added to the consolidate-pass ou",
+    "accept": [
+      "schema_version",
+      "`schema_version`"
+    ]
+  },
+  {
+    "id": "fact-049",
+    "type": "single_hop",
+    "question": "Who needs to co-sign the DPA for the eval annotation tool vendor onboarding?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-23T08-44-00__46412f2d"
+    ],
+    "entity": "people/carla_silvera",
+    "notes": "Carla recommends the vendor's 12-month annual contract over monthly for ~15% off; needs a confirmed seat count, a budget code, and acknowledgment that Dimitri must co-sign the DPA.",
+    "accept": [
+      "Dimitri"
+    ]
+  },
+  {
+    "id": "fact-052",
+    "type": "multi_source",
+    "question": "When Felix warned that the CI runner pool was at 92% utilisation, how many runners did he say he would add by EoD?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200PFE001_channel@2026-04-29",
+      "S:C200ATLE001_channel@2026-05-22",
+      "S:C200ATLE001_channel@2026-05-23"
+    ],
+    "entity": "people/felix_oduya",
+    "notes": "Felix added 2 CI runners (pool was at 92% utilisation) and bumped the per-job timeout 20m->30m because the wave-ingest test occasionally spikes; flagged CI capacity as a soft constraint on throughput unless the runner pool bump is approved.",
+    "accept": [
+      "2 runners"
+    ]
+  },
+  {
+    "id": "fact-053",
+    "type": "single_hop",
+    "question": "By what deadline did Harper ask Alex to review the six Platform Eng intern candidate packets?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-23T12-41-00__d576de71"
+    ],
+    "entity": "people/harper_quinn",
+    "notes": "Harper asked Alex to review six final intern candidate packets by EOD Friday May 29 with strong-yes / yes-with-context / hold signals plus project-fit notes; three of the six are returning interns from last summer.",
+    "accept": [
+      "EOD Friday May 29",
+      "Friday May 29"
+    ]
+  },
+  {
+    "id": "fact-054",
+    "type": "single_hop",
+    "question": "How many reports of slow wiki-page renders after a large refresh were listed in the weekly customer escalation summary sent on 2026-05-24?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-24T11-28-00__17360ea5"
+    ],
+    "entity": "people/iris_nakamura",
+    "notes": "Week of 2026-05-24 escalations: one enterprise tenant hitting unexpected ingest rate limits (their misconfig); two reports of slow wiki-page renders after a large refresh (likely prefix-cache-rollout related, pinged Jordan); auth-scope conf",
+    "accept": [
+      "Two"
+    ]
+  },
+  {
+    "id": "fact-055",
+    "type": "multi_source",
+    "question": "How many annual seats did Jin ask for for the eval annotation tool?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-23T08-44-00__46412f2d",
+      "E:2026-05-23T08-49-00__a2c190e8"
+    ],
+    "entity": "people/jin_oh",
+    "notes": "Jin committed to the distribution-based (symmetric KL) evaluator metric and to delivering the writeup + first MR by Thursday (week of 2026-05-23); requested 6 annual seats for the eval annotation tool (subject to Alex's confirmation).",
+    "accept": [
+      "6"
+    ]
+  },
+  {
+    "id": "fact-056",
+    "type": "multi_source",
+    "question": "What MR number did Jordan Kim say was up for the `make refresh-prompt-cache-hashes` work?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-13T08-45-00__ac720967",
+      "S:D200JOR001_dm@2026-04-23"
+    ],
+    "entity": "people/jordan_kim",
+    "notes": "Jordan owns the prompt-prefix-cache hash CI work (MR !412) and the cache-bump migration script for prefix-trim, and led the April cost-spike post-mortem (Alex reviewed).",
+    "accept": [
+      "!412"
+    ]
+  },
+  {
+    "id": "fact-057",
+    "type": "single_hop",
+    "question": "Which team lead besides Alex has a perf packet that feeds the staff calibration?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-26T16-18-00__42b9a86b"
+    ],
+    "entity": "people/kavya_ramaswamy",
+    "notes": "Kavya is a team lead whose perf packet feeds the staff calibration alongside Alex.",
+    "accept": [
+      "Kavya"
+    ]
+  },
+  {
+    "id": "fact-058",
+    "type": "single_hop",
+    "question": "For how long will the side nav rework ship behind a feature flag?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-24T09-00-00__ab3c019e"
+    ],
+    "entity": "people/lena_park",
+    "notes": "Lena's design walkthrough action items: wave-ingest progress bar moves to dashboard top section (small frontend MR); wiki status indicator stays in top bar with a new tooltip explaining color states; empty-state copy locked to variant B; si",
+    "accept": [
+      "the first week",
+      "first week",
+      "one week"
+    ]
+  },
+  {
+    "id": "fact-059",
+    "type": "multi_source",
+    "question": "By when did Morgan need Alex's staffing one-pager, read on Wen-Qing's ramp, and Helix contractor tradeoff input for the Platform Eng headcount conversation prep?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200PFE001_channel@2026-04-30",
+      "S:D200MOR001_dm@2026-05-07",
+      "E:2026-05-20T08-51-00__6c97f35e"
+    ],
+    "entity": "people/morgan_lee",
+    "notes": "Morgan is tracking 2 open reqs on Platform Eng (secured one additional Q3 slot; got approval for 1 senior eng req announced 2026-04-30) and prepping a skip-level with Elena to justify them; needed from Alex by Mon EOD a staffing one-pager, ",
+    "accept": [
+      "Mon EOD"
+    ]
+  },
+  {
+    "id": "fact-061",
+    "type": "multi_source",
+    "question": "What did Priya say the Beacon spec was shaped like when explaining why she missed an entry point last time?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-12T08-52-00__9b2b6f55",
+      "E:2026-05-14T08-46-00__abaf36a8"
+    ],
+    "entity": "people/priya_raman",
+    "notes": "Priya pushes for earlier security-review involvement (the earlier you bring her in, the cheaper the shape change); she missed a Beacon entry point last time because the spec was prose-shaped, and considers first-write token paths the highes",
+    "accept": [
+      "prose-shaped"
+    ]
+  },
+  {
+    "id": "fact-062",
+    "type": "multi_source",
+    "question": "Which merge request did Rohan Dasgupta say had v3 up after addressing the transport-leak comment and widening TaskRegistry to support Beacon's eval-driven cancellations?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:D200ROH001_dm@2026-04-27",
+      "S:D200ROH001_dm@2026-05-18",
+      "S:C200ATLE001_channel@2026-05-06"
+    ],
+    "entity": "people/rohan_dasgupta",
+    "notes": "Rohan authored the shared-runtime proposal MR !318, iterating it to v3 on Alex's review feedback (widened TaskRegistry for Beacon's eval-driven cancellations, renamed cancel_all to cancel_group); owns merge-agent budget knobs / budget-math ",
+    "accept": [
+      "MR !318",
+      "!318"
+    ]
+  },
+  {
+    "id": "fact-063",
+    "type": "multi_source",
+    "question": "For the All-hands prep — Atlas demo dry-run scheduled Thursday, 2026-05-28 from 16:00–16:45 UTC, what one story was picked?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:D200SAM001_dm@2026-04-29",
+      "E:2026-05-25T13-24-00__965d402a"
+    ],
+    "entity": "people/sam_iverson",
+    "notes": "Division of labor: Sam drives narrative/product framing, Alex handles live walkthrough and eng-facing questions. Sam organized the \"All-hands prep — Atlas demo\" dry-run Thursday 2026-05-28 16:00-16:45 UTC (Alex, Lena, Morgan), choosing the ",
+    "accept": [
+      "prefix-cache win"
+    ]
+  },
+  {
+    "id": "fact-064",
+    "type": "multi_source",
+    "question": "How many seconds of degraded performance did Tomas Bergman report for atlas after the cluster maintenance window?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200PFE001_channel@2026-04-26",
+      "S:C200PFE001_channel@2026-05-09",
+      "S:C200PFE001_channel@2026-05-23"
+    ],
+    "entity": "people/tomas_bergman",
+    "notes": "A Wed 28 Apr 02:00-04:00 UTC maintenance window had atlas+beacon fail over automatically with <30s degraded perf (24s atlas, 18s beacon, no user-visible errors); Tomas scheduled a cluster failover drill for Wed 27 with a 5-min planned degra",
+    "accept": [
+      "24s"
+    ]
+  },
+  {
+    "id": "fact-065",
+    "type": "multi_source",
+    "question": "At earliest, when did Alex say Wen-Qing could own a domain end-to-end?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-21T09-24-00__88129152",
+      "E:2026-05-23T08-41-00__a917fd3a"
+    ],
+    "entity": "people/wen_qing_tang",
+    "notes": "Alex's honest read: Wen-Qing is solid on the ingest reader side, slow on the wiki-write path (the mutex bites everyone); Q3 productive on ingest backfill, owning a domain end-to-end Q4 at earliest. Her onboarding question about backfill-cro",
+    "accept": [
+      "Q4"
+    ]
+  },
+  {
+    "id": "fact-066",
+    "type": "single_hop",
+    "question": "When did Atlas ship the wave-ingest revamp?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-12T09-18-00__4cbf1a58"
+    ],
+    "entity": "projects/atlas",
+    "notes": "Atlas shipped the wave-ingest revamp in April 2026: end-to-end ingest latency dropped ~40% with no behavior change on the partner-facing API.",
+    "accept": [
+      "April"
+    ]
+  },
+  {
+    "id": "fact-067",
+    "type": "single_hop",
+    "question": "What is the target date for Beacon's 75% cohort after it hit the 50% rollout milestone?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-14T09-29-00__eba84193"
+    ],
+    "entity": "projects/beacon",
+    "notes": "Beacon hit its 50% rollout milestone on 2026-05-14 with stable cohort numbers: p99 latency held within 8% of pre-rollout baseline (mostly the new evaluator path), error rate flat, no new failure categories, runtime memory headroom fine; rol",
+    "accept": [
+      "May 28"
+    ]
+  },
+  {
+    "id": "fact-068",
+    "type": "single_hop",
+    "question": "For the Compass v2 migration, what metrics namespace do Atlas dashboards need to move to from `metrics.v1.*`?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-21T13-16-00__11fe239e"
+    ],
+    "entity": "projects/compass",
+    "notes": "Compass v2 is a rewritten metrics pipeline with seconds-not-minutes freshness guarantees and a stable schema for downstream consumers like Atlas dashboards; consumers move from metrics.v1.* to metrics.v2.* namespaces (mostly same names, ren",
+    "accept": [
+      "metrics.v2.*",
+      "`metrics.v2.*`"
+    ]
+  },
+  {
+    "id": "fact-069",
+    "type": "multi_source",
+    "question": "What metric did Jin say would be used between the predicted-probability histogram and the label-probability histogram for the evaluator plan?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-21T08-44-00__14c21529",
+      "E:2026-05-23T08-49-00__a2c190e8"
+    ],
+    "entity": "projects/evaluator",
+    "notes": "Decision: the evaluator accuracy metric is distribution-based (not point-accuracy) — Alex chose distribution-based when Jin posed the methodology question. Jin then decided it is symmetric KL between the predicted-probability and label-prob",
+    "accept": [
+      "symmetric KL"
+    ]
+  },
+  {
+    "id": "fact-070",
+    "type": "multi_source",
+    "question": "What date did Alex Chen say was realistic for the Helix v2 launch after Sam Iverson said partner ops wanted June 30?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:D200SAM001_dm@2026-05-14",
+      "S:D200SAM001_dm@2026-05-26"
+    ],
+    "entity": "projects/helix",
+    "notes": "Helix v2 launch date moved from a June 30 internal target to July 14 (realistic); June 30 would have shipped without rate-limit hardening. Security review owner is Dimitri, confirmed done by July 7 (buffer to the July 14 launch).",
+    "accept": [
+      "july 14",
+      "July 14"
+    ]
+  },
+  {
+    "id": "fact-071",
+    "type": "multi_source",
+    "question": "For how long does a token transit an in-memory buffer between fetch and encryption in the first-write path?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-15T08-50-00__c3dc1e53",
+      "E:2026-05-16T08-39-00__e959df8b"
+    ],
+    "entity": "concepts/auth_scope",
+    "notes": "Open auth question: one first-write branch transits a token through an in-memory buffer for ~30ms between fetch and encryption; Priya's initial read is it's probably acceptable with the right guarantees but wants to see the code path at the",
+    "accept": [
+      "~30ms",
+      "30ms"
+    ]
+  },
+  {
+    "id": "fact-072",
+    "type": "multi_source",
+    "question": "For the triage-quality eval, to what percentage would re-labeling move the noise floor on the labels?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-19T08-43-00__3265f4a2",
+      "E:2026-05-21T08-44-00__14c21529"
+    ],
+    "entity": "concepts/evaluator_metric",
+    "notes": "Atlas's triage-quality eval previously scored against a single human-labeled correct priority per email; two annotators disagree on ~12% of the golden set, making the 88-100% range partially noise. The label noise floor is 12%, reducible on",
+    "accept": [
+      "6%"
+    ]
+  },
+  {
+    "id": "fact-073",
+    "type": "multi_source",
+    "question": "What config key was proposed to gate prompt section reordering for Atlas ingest?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:D200JOR001_dm@2026-04-18",
+      "E:2026-05-12T08-36-00__b66e0dbe",
+      "E:2026-05-18T14-22-00__87841ee4"
+    ],
+    "entity": "concepts/prefix_cache",
+    "notes": "Decision baked into the ingest spec: prompt section ordering is gated behind config key ingest.prompt_layout (\"legacy\" | \"v2\", default \"legacy\" — deploy legacy, confirm baseline, then flip to v2); the static prefix portion is marked explici",
+    "accept": [
+      "ingest.prompt_layout"
+    ]
+  },
+  {
+    "id": "fact-075",
+    "type": "single_hop",
+    "question": "What hashing function was recommended to replace `hash(tuple(section_ids))` for the ContextSelector subset key?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-18T10-15-00__46c8336d"
+    ],
+    "entity": "concepts/selective_context_inclusion",
+    "notes": "The ContextSelector emits a stable subset key (deterministic on item content) so the prompt prefix cache still hits; the key is a hashlib.blake2b 8-byte hex digest over a sorted, comma-joined canonical representation (changed from Python ha",
+    "accept": [
+      "hashlib.blake2b",
+      "blake2b"
+    ]
+  },
+  {
+    "id": "fact-076",
+    "type": "multi_source",
+    "question": "What shared design channel did Rohan create for Atlas/Beacon runtime coordination?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:D200ROH001_dm@2026-05-08",
+      "S:D200ROH001_dm@2026-05-09"
+    ],
+    "entity": "concepts/shared_runtime",
+    "notes": "Atlas/Beacon coordination established: weekly 30min sync (Fridays 9:30 Alex's time) plus shared design channel #atlas-beacon-runtime (created by Rohan, added Anya). !318 was paused (~2026-05-08) until the wiki-mutex postmortem fix landed fi",
+    "accept": [
+      "#atlas-beacon-runtime"
+    ]
+  },
+  {
+    "id": "fact-077",
+    "type": "multi_source",
+    "question": "What margin factor did Rohan Dasgupta say feels hand-wavy for the K-fanout merge budget?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200WAVE001_private_channel@2026-04-29",
+      "S:C200WAVE001_private_channel@2026-05-04",
+      "S:C200WAVE001_private_channel@2026-05-14",
+      "S:C200WAVE001_private_channel@2026-05-20"
+    ],
+    "entity": "concepts/wave_ingest",
+    "notes": "Atlas K-fanout was historically fixed at 8 (chosen from a single benchmark on a medium workspace, never re-tuned). Alex proposed a K-fanout curve K = clamp(log2(n_docs) * c, 2, 16) with merge budget = K * per-doc-tokens * margin (margin 1.4",
+    "accept": [
+      "1.4x"
+    ]
+  },
+  {
+    "id": "fact-078",
+    "type": "single_hop",
+    "question": "What idea did Jordan Kim want to bounce off Alex Chen for addressing backfill starvation in the wave-ingest refactor?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-26T09-00-00__42416b62"
+    ],
+    "entity": "concepts/wiki_group_mutex",
+    "notes": "Backfill starvation: the current ingest scheduler is fair on paper but a backfill catching up after a long outage starves interactive ingest for hours; Jordan has a priority-lanes idea for the design doc. Jordan invited Alex to lunch on 202",
+    "accept": [
+      "priority lanes"
+    ]
+  },
+  {
+    "id": "fact-079",
+    "type": "multi_source",
+    "question": "What threshold did Alex Chen say he would firm up in the prefix-trim spec after the workshop?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200GRP001_group_dm@2026-05-12",
+      "S:D200JOR001_dm@2026-05-12"
+    ],
+    "entity": "episodes/milestones",
+    "notes": "Prefix-trim workshop held Tuesday 2026-05-12 at 3pm: decided the 16k threshold; Jordan owns the cache-bump migration script, Sam writes the customer-comms doc for long-context tenants, Alex firms up the spec.",
+    "accept": [
+      "16k"
+    ]
+  },
+  {
+    "id": "fact-080",
+    "type": "single_hop",
+    "question": "What did Sam Iverson reshape the customer-facing KR4 wording to instead of \"improve onboarding\"?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200GRP001_group_dm@2026-05-02"
+    ],
+    "entity": "goals/quarterly",
+    "notes": "KR4 (customer-facing) was reshaped by Sam from \"improve onboarding\" to \"first-meaningful-action under 10 minutes for 80% of new tenants\".",
+    "accept": [
+      "first-meaningful-action under 10 minutes for 80% of new tenants",
+      "\"first-meaningful-action under 10 minutes for 80% of new tenants\""
+    ]
+  },
+  {
+    "id": "fact-082",
+    "type": "multi_source",
+    "question": "What cache hit rate did Anya Volkov say Beacon reached after running !327's instrumentation overnight?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200ATLE001_channel@2026-04-28",
+      "S:C200ATLE001_channel@2026-05-14"
+    ],
+    "entity": "people/anya_volkov",
+    "notes": "Anya diagnosed Beacon's ingest spend doubling as a stale eval harness not using the cached prefix and patched it; ran !327's instrumentation on Beacon (cache hit ~94%) and agreed to mirror Atlas's prefix-trim flag-flip on Beacon if Atlas nu",
+    "accept": [
+      "~94%"
+    ]
+  },
+  {
+    "id": "fact-084",
+    "type": "single_hop",
+    "question": "In Morgan Lee's advice to Alex about the one-pager for Elena, what did Morgan say Elena cares more about than capacity?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-22T09-07-00__21005530"
+    ],
+    "entity": "people/elena_marquez",
+    "notes": "Elena engages with bus-factor framing but waves off \"stretched\"; she cares more about delivery risk than capacity and skims (no diagrams).",
+    "accept": [
+      "delivery risk"
+    ]
+  },
+  {
+    "id": "fact-086",
+    "type": "single_hop",
+    "question": "What start date was given for the senior backend candidate who signed?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:D200JOR001_dm@2026-05-21"
+    ],
+    "entity": "people/harper_quinn",
+    "notes": "A senior backend (IC5) candidate signed with start date 6/8; Alex planned a 3-week ramp (week 1 read ingest pipeline + wave-ingest design, week 2 pair with Jordan on a small change, week 3 own a small MR end-to-end).",
+    "accept": [
+      "6/8"
+    ]
+  },
+  {
+    "id": "fact-087",
+    "type": "multi_source",
+    "question": "What config flag can workspaces use to opt in to prefix-trim?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200ATLE001_channel@2026-05-17",
+      "S:C200ATLE001_channel@2026-05-20",
+      "S:C200WAVE001_private_channel@2026-05-21"
+    ],
+    "entity": "people/jordan_kim",
+    "notes": "Jordan pushed MR !344 (per-workspace prefix-trim flag-store wiring, ~1-day patch), exposed via atlas.config.prefix_trim_enabled (defaulted off); merged ~2026-05-20.",
+    "accept": [
+      "atlas.config.prefix_trim_enabled",
+      "`atlas.config.prefix_trim_enabled`"
+    ]
+  },
+  {
+    "id": "fact-088",
+    "type": "multi_source",
+    "question": "What chip style did Lena Park say she would probably use for the spend tile's \"trim off\" state?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200ATLD001_channel@2026-05-04",
+      "S:C200ATLD001_channel@2026-05-12"
+    ],
+    "entity": "people/lena_park",
+    "notes": "Lena specced the prefix-trim-off spend-tile state as a chip.warning (\"optimization off\") with three states (on/off/unknown; unknown = flag system unreachable); fixed a dark-mode WCAG contrast fail on the spend-tile sparkline (now color.surf",
+    "accept": [
+      "chip.warning",
+      "`chip.warning`"
+    ]
+  },
+  {
+    "id": "fact-089",
+    "type": "single_hop",
+    "question": "Who did Morgan tell Alex not to promise anywhere until after the skip-level during headcount conversation prep?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-22T09-07-00__21005530"
+    ],
+    "entity": "people/morgan_lee",
+    "notes": "Morgan advised leading the headcount one-pager with the wave-ingest bus-factor risk and putting the eval req second (Elena cares more about delivery risk than capacity); keep it one page, no diagrams; told Alex not to promise Jordan anywher",
+    "accept": [
+      "Jordan"
+    ]
+  },
+  {
+    "id": "fact-090",
+    "type": "single_hop",
+    "question": "Who did Morgan Lee say it would be worth raising the provider rolling cache keys issue with from a contract-risk angle?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:D200MOR001_dm@2026-04-26"
+    ],
+    "entity": "people/priya_raman",
+    "notes": "Priya owns vendor/contract relationships; engaged on the prefix-cache provider contract-risk angle and the proposed joint Atlas/Beacon vendor regression ticket.",
+    "accept": [
+      "Priya"
+    ]
+  },
+  {
+    "id": "fact-091",
+    "type": "single_hop",
+    "question": "In Rohan Dasgupta's prefix-trim review pass on !341, which logic did he want to talk through synchronously?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200ATLE001_channel@2026-05-17"
+    ],
+    "entity": "people/rohan_dasgupta",
+    "notes": "Rohan reviewed prefix-trim !341 (~8 mostly-cosmetic comments; snapshot-invalidation was the one to discuss synchronously) and shared a Beacon soft-cap patch that Alex adapted into Atlas !356.",
+    "accept": [
+      "snapshot-invalidation logic",
+      "the snapshot-invalidation logic"
+    ]
+  },
+  {
+    "id": "fact-093",
+    "type": "multi_source",
+    "question": "Which section did Anya Volkov say she was copying verbatim into Beacon onboarding?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200ATLE001_channel@2026-05-15",
+      "S:C200ATLE001_channel@2026-05-16"
+    ],
+    "entity": "people/wen_qing_tang",
+    "notes": "Wen-Qing wrote the wave-ingest walkthrough wiki page (gitlab.example-co.com/platform-eng/atlas/-/wikis/wave-ingest-walkthrough-2026-05-12) after Alex's 2026-05-12 mutex walkthrough — recommended reading for new team members; Beacon copied t",
+    "accept": [
+      "mutex section"
+    ]
+  },
+  {
+    "id": "fact-094",
+    "type": "multi_source",
+    "question": "Which merge request reordered two prompt-prefix header fields and caused prefix-cache misses on every call?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:D200JOR001_dm@2026-04-17",
+      "S:D200JOR001_dm@2026-04-24"
+    ],
+    "entity": "projects/atlas",
+    "notes": "Atlas had an ingest cost spike of ~60% week-over-week in mid-April 2026, caused by MR !419 reordering two prompt-prefix header fields and forcing prefix-cache misses on every call; the fix went to prod and cost returned to baseline.",
+    "accept": [
+      "!419"
+    ]
+  },
+  {
+    "id": "fact-095",
+    "type": "single_hop",
+    "question": "The Atlas/Beacon shared-runtime sync to cover lessons learned was scheduled for what day?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-14T09-29-00__eba84193"
+    ],
+    "entity": "projects/beacon",
+    "notes": "The Atlas/Beacon shared-abstraction refactor (with Alex's team, last sprint) lets the same code path run both products without the working set doubling; an Atlas/Beacon shared-runtime sync was set for the Friday after 2026-05-14.",
+    "accept": [
+      "this Friday",
+      "Friday"
+    ]
+  },
+  {
+    "id": "fact-097",
+    "type": "multi_source",
+    "question": "In Jin Oh's evaluator metric plan, what approximate score did the random baseline get after rescaling the single-number rollup to 0–100?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-21T08-44-00__14c21529",
+      "E:2026-05-23T08-49-00__a2c190e8"
+    ],
+    "entity": "projects/evaluator",
+    "notes": "The evaluator single-number rollup is (1 - normalized_kl) rescaled to 0-100 (100 = identical distributions, random baseline ~50); Jin chose rescaling so reviewers pattern-match \"higher is better, 100 is the ceiling\". Alex required keeping a",
+    "accept": [
+      "~50",
+      "50"
+    ]
+  },
+  {
+    "id": "fact-098",
+    "type": "single_hop",
+    "question": "What Helix framing did Sam Iverson say they settled on after pushing back on \"co-engineered\"?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:D200SAM001_dm@2026-05-10"
+    ],
+    "entity": "projects/helix",
+    "notes": "Helix v2 messaging settled on \"partner integration with extended capabilities\" (Alex and Sam both rejected Noah's \"co-engineered surface\" framing).",
+    "accept": [
+      "partner integration with extended capabilities"
+    ]
+  },
+  {
+    "id": "fact-099",
+    "type": "multi_source",
+    "question": "Which directory contains the Atlas auth integration tests that cover store and callback?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-13T08-58-00__6b669d1f",
+      "E:2026-05-14T09-29-00__eba84193"
+    ],
+    "entity": "concepts/auth_scope",
+    "notes": "Atlas auth integration tests live in tests/auth/ covering store + callback; cross-surface session validation has unit tests but only one thin integration test — flagged as a gap, with a post-review action item to add a second integration te",
+    "accept": [
+      "tests/auth/",
+      "`tests/auth/`",
+      "tests/auth"
+    ]
+  },
+  {
+    "id": "fact-100",
+    "type": "multi_source",
+    "question": "What make target did Alex Chen ask Jordan Kim to use for regenerating prompt cache hashes?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-12T08-36-00__b66e0dbe",
+      "E:2026-05-12T20-59-00__94500b42",
+      "E:2026-05-13T08-45-00__ac720967"
+    ],
+    "entity": "concepts/prefix_cache",
+    "notes": "MR !412 (Jordan Kim) implements the byte-equality CI test: it renders both prompt blocks, computes a stable hash of prefix-stable stored in tests/atlas/prompts/prefix_hashes.txt, and diffs on every render, failing loudly if the stable prefi",
+    "accept": [
+      "make refresh-prompt-cache-hashes"
+    ]
+  },
+  {
+    "id": "fact-102",
+    "type": "multi_source",
+    "question": "Who asked for a Q3 atlas/beacon joint pilot that Alex said he had to push back on?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200WAVE001_private_channel@2026-05-19",
+      "S:D200ROH001_dm@2026-05-12"
+    ],
+    "entity": "concepts/shared_runtime",
+    "notes": "The Atlas+Beacon shared rank cache is framed as a Q3 \"platform-level\" win to justify deeper convergence; deferred from this quarter due to too much in flight. A Q3 Atlas/Beacon joint customer pilot was raised preliminarily by a VP, but Alex",
+    "accept": [
+      "Sam"
+    ]
+  },
+  {
+    "id": "fact-103",
+    "type": "single_hop",
+    "question": "For the wave ingest rollout, under what condition does the K override only fire?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200WAVE001_private_channel@2026-05-20"
+    ],
+    "entity": "concepts/wave_ingest",
+    "notes": "Rollout decision: K=8 stays default, the per-workspace K override only fires when n_docs < 100; the big-doc split is more impactful for larger workspaces.",
+    "accept": [
+      "n_docs < 100"
+    ]
+  },
+  {
+    "id": "fact-104",
+    "type": "multi_source",
+    "question": "Who said they'd bring the customer-feedback slide deck to the Atlas Roadmap meeting?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-15T08-32-00__90877e11",
+      "S:D200SAM001_dm@2026-05-17"
+    ],
+    "entity": "episodes/milestones",
+    "notes": "Atlas roadmap meeting Tue 2026-05-19 17:00-18:00 UTC (organizer Alex, room Cascade); Sam brought the customer-feedback deck. Leadership product checkpoint (Alex, Sam, Lena, 30 min) ~Thursday 2026-05-21 reviewed RFC v2 near-final and went we",
+    "accept": [
+      "Sam Iverson"
+    ]
+  },
+  {
+    "id": "fact-106",
+    "type": "multi_source",
+    "question": "What career scope had Alex been thinking about for the quarterly skip-level with Elena?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-15T09-00-00__67e1733e",
+      "E:2026-05-26T16-18-00__42b9a86b"
+    ],
+    "entity": "people/alex_chen",
+    "notes": "Alex is considering staff-plus scope; career is a topic for the skip-level with Elena; his perf packet feeds the staff calibration (named alongside Kavya as team leads).",
+    "accept": [
+      "staff-plus scope"
+    ]
+  },
+  {
+    "id": "fact-107",
+    "type": "single_hop",
+    "question": "Who did Jordan Kim say he had been duplicating effort with on evaluation harnesses between atlas and beacon?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200WAVE001_private_channel@2026-05-19"
+    ],
+    "entity": "people/anya_volkov",
+    "notes": "Anya and Jordan have been duplicating effort on evaluation harnesses across Atlas and Beacon.",
+    "accept": [
+      "anya",
+      "Anya"
+    ]
+  },
+  {
+    "id": "fact-108",
+    "type": "multi_source",
+    "question": "By when did Elena ask leads to reflect the Atlas roadmap themes in their team's plans?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200GRP002_group_dm@2026-04-30",
+      "E:2026-05-16T11-10-00__485a1af8"
+    ],
+    "entity": "people/elena_marquez",
+    "notes": "Elena committed the three Atlas roadmap themes in front of the org at the 2026-05-15 all-hands and asked leads to reflect them in plans by end of May; she steered that reliability be quantified (p95 latency + error rate) and the KR3 cost ta",
+    "accept": [
+      "end of May"
+    ]
+  },
+  {
+    "id": "fact-110",
+    "type": "multi_source",
+    "question": "In Jordan Kim's comment about the cache-bump migration ordering, what rollout did he say was needed rather than 1-phase?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-20T09-25-00__42ecc663",
+      "S:C200GRP001_group_dm@2026-05-21"
+    ],
+    "entity": "people/jordan_kim",
+    "notes": "Jordan approved the prefix-trim spec on 2026-05-20 conditioned on the rolling-deploy paragraph landing, and required a 2-phase rollout for the cache-bump migration ordering (vs 1-phase); said issue #487 captured the right follow-up.",
+    "accept": [
+      "2-phase rollout",
+      "2-phase"
+    ]
+  },
+  {
+    "id": "fact-111",
+    "type": "multi_source",
+    "question": "In the atlas-design Slack channel on 2026-04-25, what design-system token did Lena Park say had been tokenised since the prior week?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200ATLD001_channel@2026-04-25",
+      "S:C200ATLD001_channel@2026-05-20"
+    ],
+    "entity": "people/lena_park",
+    "notes": "Lena tokenised the wave-progress accent as color.accent.progress and kept the unified green, only softening the wave-finish transition timing (an alt success color was \"too cute\").",
+    "accept": [
+      "color.accent.progress",
+      "`color.accent.progress`"
+    ]
+  },
+  {
+    "id": "fact-113",
+    "type": "multi_source",
+    "question": "What value did Priya Raman say should be rotated to a hash before going to a production telemetry sink if it maps to PII?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200PFE001_channel@2026-05-06",
+      "E:2026-05-21T09-24-00__88129152"
+    ],
+    "entity": "people/priya_raman",
+    "notes": "Priya's review of !318 was clean with a note to hash workspace_id before production telemetry if any map to PII; she is reviewing the Helix auth changes that make the Helix surface hard for a contractor to take over.",
+    "accept": [
+      "workspace_id",
+      "`workspace_id`"
+    ]
+  },
+  {
+    "id": "fact-114",
+    "type": "multi_source",
+    "question": "In Rohan Dasgupta's K-curve sim results, what range did the optimal K stay around between 100 and 1000 docs?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200WAVE001_private_channel@2026-05-14",
+      "S:C200WAVE001_private_channel@2026-05-20"
+    ],
+    "entity": "people/rohan_dasgupta",
+    "notes": "Rohan flagged the K-curve 1.4x margin factor as hand-wavy, proposed the big-doc-split escape valve, and reported the K-curve sim showing optimal K stays ~6-8 between 100-1000 docs.",
+    "accept": [
+      "6-8"
+    ]
+  },
+  {
+    "id": "fact-116",
+    "type": "multi_source",
+    "question": "What starter task did Wen-Qing Tang say she was assigned on 2026-05-15?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200PFE001_channel@2026-05-15",
+      "E:2026-05-15T08-50-00__c3dc1e53"
+    ],
+    "entity": "people/wen_qing_tang",
+    "notes": "Wen-Qing's starter task: clean up the ingest log format so it's easier to grep; she is the observer on the prefix-trim workshop and takes the smaller follow-up MR. She has been pairing with Alex on gateway-layer auth changes and attended th",
+    "accept": [
+      "clean up the ingest log format so it's easier to grep"
+    ]
+  },
+  {
+    "id": "fact-117",
+    "type": "single_hop",
+    "question": "Which action item did Alex Chen say should be assigned to him, not \"platform eng\", for the `platform-eng/atlas/-/wikis/postmortem-2026-04-cost-spike` draft?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:D200JOR001_dm@2026-04-24"
+    ],
+    "entity": "projects/atlas",
+    "notes": "April cost-spike post-mortem at platform-eng/atlas/-/wikis/postmortem-2026-04-cost-spike (Jordan led, Alex reviewed) with 3 action items; Alex insisted action item AI3 be assigned to him personally, not to \"platform eng\".",
+    "accept": [
+      "AI3"
+    ]
+  },
+  {
+    "id": "fact-119",
+    "type": "single_hop",
+    "question": "When was the dual-write completed that lets Atlas events go to Compass v2 automatically without producer-side code changes?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-21T13-16-00__11fe239e"
+    ],
+    "entity": "projects/compass",
+    "notes": "Atlas events already flow to Compass v2 automatically (no producer-side code change) because the dual-write was done in March.",
+    "accept": [
+      "March"
+    ]
+  }
+]

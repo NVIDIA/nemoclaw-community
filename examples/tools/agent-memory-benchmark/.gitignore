@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Run artifacts. The harness writes report.json, summary.md, answers.jsonl and
+# verdicts.jsonl under results/runs/<run-id>/ plus whatever memory the system
+# under test built. None of it is source, and the built memory can reach
+# hundreds of megabytes, so a run is kept by whoever produced it.
+results/

@@ -50,6 +50,7 @@ again by contributor provenance.
 | Example | Description |
 | --- | --- |
 | [Harness Engineering Playground](tools/harness-engineering-playground/README.md) | Provides an experimental CLI for eval-driven harness profile optimization. It is not an OpenShell blueprint. |
+| [Agent Memory Benchmark](tools/agent-memory-benchmark/README.md) | Measures the memory a system builds from a corpus: it ingests synthetic email and chat, asks 186 questions, and reports accuracy per question type alongside ingest and per-answer token cost. |
 
 ## Contributing An Example
 
