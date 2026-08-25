@@ -35,7 +35,7 @@ CATEGORY_HEADERS: dict[str, tuple[str, ...]] = {
     "Developer Tools": ("Example", "Description"),
 }
 
-REQUIRED_CARD_FIELDS: set[str] = {"Requires", "External access", "Boundary"}
+REQUIRED_CARD_FIELDS: set[str] = {"Fit"}
 REQUIRED_POLICY_LINKS: set[str] = {
     "https://github.com/NVIDIA/nemoclaw-community",
     "https://github.com/NVIDIA/nemoclaw-community/blob/main/CONTRIBUTING.md",
@@ -44,9 +44,6 @@ REQUIRED_POLICY_LINKS: set[str] = {
     "https://github.com/brevdev/nemoclaw-demos",
 }
 GITHUB_BLOB_PREFIX = "https://github.com/NVIDIA/nemoclaw-community/blob/main/"
-README_ONLY_GUIDES: set[str] = {
-    "examples/launchables/brev/hermes/README.md",
-}
 SUPPORT_BOUNDARY = (
     "NemoClaw Community support is best-effort unless a specific NVIDIA product "
     "agreement says otherwise."
@@ -605,10 +602,7 @@ def check_catalog_parity(root: Path) -> list[str]:
             errors.append(
                 f"{source_entry.name} must have one source guide link: {expected_guide}"
             )
-        if readme in README_ONLY_GUIDES:
-            guide_text = f"Open example README for {source_entry.name}"
-        else:
-            guide_text = f"Open setup and verification guide for {source_entry.name}"
+        guide_text = f"Get Started with {source_entry.name}"
         if site_entry.guide_texts != [guide_text]:
             errors.append(
                 f"{source_entry.name} must have one meaningful guide link name: "

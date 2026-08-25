@@ -9,7 +9,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta
       name="description"
-      content="Browse NemoClaw Community examples by outcome, requirements, external access, and documented boundary."
+      content="Browse NemoClaw Community recipes, demos, launchables, and tools by outcome and fit."
     >
     <title>NemoClaw Community Example Catalog | NVIDIA</title>
     <link rel="stylesheet" href="styles.css">
@@ -125,33 +125,15 @@
                 <p class="provenance">NVIDIA recipe</p>
                 <h3 id="example-developer-community-chief-of-staff-title">Developer Community Chief of Staff</h3>
                 <p class="outcome">
-                  Synthesizes Slack, Outlook, GitHub, and mirrored community signals into
-                  operating briefs, gaps, priorities, and follow-up recommendations.
+                  Turns community signals into operating briefs and follow-up recommendations.
                 </p>
-                <dl>
-                  <div>
-                    <dt>Requires</dt>
-                    <dd>Docker, OpenShell 0.0.85, an inference key, and Slack or Outlook credentials.</dd>
-                  </div>
-                  <div>
-                    <dt>External access</dt>
-                    <dd>
-                      Inference and the selected messaging channel; exact read-only GitHub
-                      repositories; optional GitLab and Tavily; host-mirrored forum and history data.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Boundary</dt>
-                    <dd>
-                      Personal, single-host managed virtual machine recipe; not a Kubernetes
-                      deployment. Repository support is best-effort.
-                    </dd>
-                  </div>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Docker · Slack/Outlook · single host</dd></div>
                 </dl>
                 <a
                   class="guide-link"
                   href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/nvidia/developer-community-chief-of-staff/README.md"
-                >Open setup and verification guide<span class="sr-only"> for Developer Community Chief of Staff</span></a>
+                >Get Started<span class="sr-only"> with Developer Community Chief of Staff</span></a>
               </article>
 
               <article
@@ -166,41 +148,15 @@
                 <p class="provenance">NVIDIA recipe</p>
                 <h3 id="example-kubernetes-gpu-autoscaling-title">Kubernetes GPU Autoscaling</h3>
                 <p class="outcome">
-                  Runs a CPU-only NemoClaw/OpenClaw sandbox through OpenShell on Kubernetes
-                  and autoscales authenticated, GPU-backed Ollama inference pods from
-                  <abbr title="NVIDIA Data Center GPU Manager">DCGM</abbr> utilization.
+                  Runs NemoClaw on Kubernetes with GPU-backed Ollama autoscaling.
                 </p>
-                <dl>
-                  <div>
-                    <dt>Requires</dt>
-                    <dd>
-                      Kubernetes 1.25+ with kubectl, Helm 3, allocatable NVIDIA GPUs, GPU
-                      Operator/DCGM, and Metrics Server. The OpenShell path also needs Docker
-                      Buildx, a pullable registry, a version-matched OpenShell command-line
-                      interface (CLI), Agent Sandbox custom resource definitions, and OpenID
-                      Connect or the documented
-                      unauthenticated evaluation exception.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>External access</dt>
-                    <dd>
-                      Cluster-local authenticated inference, registry and model downloads,
-                      and TLS through Envoy by default.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Boundary</dt>
-                    <dd>
-                      Experimental. Validated on single-node MicroK8s on Brev AWS with four
-                      L40S GPUs; four GPUs is not a hard limit.
-                    </dd>
-                  </div>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Kubernetes · NVIDIA GPU · experimental</dd></div>
                 </dl>
                 <a
                   class="guide-link"
                   href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/nvidia/kubernetes-gpu-autoscaling/README.md"
-                >Open setup and verification guide<span class="sr-only"> for Kubernetes GPU Autoscaling</span></a>
+                >Get Started<span class="sr-only"> with Kubernetes GPU Autoscaling</span></a>
               </article>
 
               <article
@@ -215,37 +171,16 @@
                 <p class="provenance">NVIDIA recipe</p>
                 <h3 id="example-memory-driven-chief-of-staff-title">Memory-Driven Chief of Staff</h3>
                 <p class="outcome">
-                  Keeps a locally-authoritative, revisable record per inbound email and Slack
-                  message, re-judged on a schedule and re-ranked under fixed caps, without
-                  writing back to the source.
+                  Maintains and re-ranks a revisable local record of email and Slack inputs
+                  without writing back.
                 </p>
-                <dl>
-                  <div>
-                    <dt>Requires</dt>
-                    <dd>
-                      Python 3.10+ for offline fixtures; Linux, Hermes 0.19+, and a model
-                      credential for scheduled operation.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>External access</dt>
-                    <dd>
-                      Fixtures use no network. Scheduled jobs reach only the configured
-                      inference provider. Email and Slack connectors are not included yet.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Boundary</dt>
-                    <dd>
-                      Designed for one person’s work stream. It is a recipe, not a product,
-                      and has no support commitment.
-                    </dd>
-                  </div>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Python 3.10+ · Hermes 0.19+ · connectors not included</dd></div>
                 </dl>
                 <a
                   class="guide-link"
                   href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/nvidia/memory-driven-chief-of-staff/README.md"
-                >Open setup and verification guide<span class="sr-only"> for Memory-Driven Chief of Staff</span></a>
+                >Get Started<span class="sr-only"> with Memory-Driven Chief of Staff</span></a>
               </article>
 
               <article
@@ -260,32 +195,15 @@
                 <p class="provenance">NVIDIA recipe</p>
                 <h3 id="example-nv-tech-assistant-title">NV Tech Assistant</h3>
                 <p class="outcome">
-                  Answers NVIDIA technical questions with cited evidence from allowlisted
-                  NVIDIA, GitHub, and arXiv sources.
+                  Answers NVIDIA technical questions with citations from allowlisted sources.
                 </p>
-                <dl>
-                  <div>
-                    <dt>Requires</dt>
-                    <dd>
-                      Docker, NemoClaw, and an NVIDIA Endpoints API key. Brave Search is optional.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>External access</dt>
-                    <dd>
-                      Read-only allowlisted NVIDIA, GitHub, Hugging Face, and arXiv sources;
-                      optional Brave Search.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Boundary</dt>
-                    <dd>No offline corpus is included. NemoClaw Community support is best-effort.</dd>
-                  </div>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Docker · NVIDIA Endpoints API key · no offline corpus</dd></div>
                 </dl>
                 <a
                   class="guide-link"
                   href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/nvidia/nv-tech-assistant/README.md"
-                >Open setup and verification guide<span class="sr-only"> for NV Tech Assistant</span></a>
+                >Get Started<span class="sr-only"> with NV Tech Assistant</span></a>
               </article>
 
               <article
@@ -300,36 +218,16 @@
                 <p class="provenance">NVIDIA recipe</p>
                 <h3 id="example-payment-operations-hermes-assistant-title">Payment Operations Hermes Assistant</h3>
                 <p class="outcome">
-                  Demonstrates constrained payment screening, evidence preparation, and a
+                  Demonstrates payment screening, evidence preparation, and a
                   platform-enforced human release boundary.
                 </p>
-                <dl>
-                  <div>
-                    <dt>Requires</dt>
-                    <dd>
-                      Linux x86_64 or arm64, Docker Compose, OpenShell 0.0.53, and an
-                      OpenAI-compatible inference key.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>External access</dt>
-                    <dd>
-                      Inference and observability. The payment rail remains host-only and is
-                      absent from sandbox policy.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Boundary</dt>
-                    <dd>
-                      Educational single-host deployment with synthetic data; not a production
-                      payment system. A human remains accountable for release.
-                    </dd>
-                  </div>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Docker Compose · OpenShell 0.0.53 · synthetic data</dd></div>
                 </dl>
                 <a
                   class="guide-link"
                   href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/nvidia/payment-ops-hermes/README.md"
-                >Open setup and verification guide<span class="sr-only"> for Payment Operations Hermes Assistant</span></a>
+                >Get Started<span class="sr-only"> with Payment Operations Hermes Assistant</span></a>
               </article>
 
               <article
@@ -344,37 +242,16 @@
                 <p class="provenance">NVIDIA recipe</p>
                 <h3 id="example-pr-review-advisor-title">PR Review Advisor</h3>
                 <p class="outcome">
-                  Reviews exact pull request heads with a constrained Hermes workflow,
-                  produces attested artifacts, and publishes only through a separate maintainer action.
+                  Reviews exact pull request heads with Hermes, produces attested artifacts,
+                  and leaves publication to a maintainer.
                 </p>
-                <dl>
-                  <div>
-                    <dt>Requires</dt>
-                    <dd>
-                      Linux, Docker, OpenShell 0.0.85, Git, Node.js 22.19+, Python 3, curl,
-                      and an inference provider. The workflow also needs GitHub.com and a
-                      dedicated self-hosted runner.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>External access</dt>
-                    <dd>
-                      The inference endpoint receives repository and pull request context.
-                      GitHub credentials are removed before model work; publication is a separate host action.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Boundary</dt>
-                    <dd>
-                      Hermes-only educational blueprint, not a hosted service. Version 0.1
-                      does not support GitHub Enterprise Server.
-                    </dd>
-                  </div>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>OpenShell · GitHub.com only · self-hosted runner</dd></div>
                 </dl>
                 <a
                   class="guide-link"
                   href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/nvidia/pr-review-advisor/README.md"
-                >Open setup and verification guide<span class="sr-only"> for PR Review Advisor</span></a>
+                >Get Started<span class="sr-only"> with PR Review Advisor</span></a>
               </article>
             </div>
           </div>
@@ -408,41 +285,16 @@
                 <p class="provenance">Partner recipe · BlueTier</p>
                 <h3 id="example-x402-payment-gate-title">x402 Payment Gate</h3>
                 <p class="outcome">
-                  Releases an agent's x402 payments through a maker/checker boundary: the
-                  sandboxed agent can only submit payment intents, and a host-side gate outside
-                  the sandbox re-screens each one with pre-signature GO/HOLD/STOP verdicts
-                  (counterparty reputation, price anomaly,
-                  <abbr title="Office of Foreign Assets Control">OFAC</abbr> sanctions)
-                  before anything is signed or settled.
+                  Screens x402 payment intents through a host-side maker/checker gate before
+                  signing or settlement.
                 </p>
-                <dl>
-                  <div>
-                    <dt>Requires</dt>
-                    <dd>
-                      Python 3 for the host boundary, Docker and OpenShell for sandbox
-                      verification, and access to the Blackwall verdict service.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>External access</dt>
-                    <dd>
-                      Only the payment claim is sent to Blackwall. The sandbox has neither a
-                      signing key nor a payment-rail route.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Boundary</dt>
-                    <dd>
-                      BlueTier-supported boundary demonstration, not an interactive Hermes
-                      runtime. It uses no real money; the public verdict service has no
-                      service-level agreement.
-                    </dd>
-                  </div>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Python 3 + Docker · Blackwall · no real money</dd></div>
                 </dl>
                 <a
                   class="guide-link"
                   href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/partners/bluetier/x402-payment-gate/README.md"
-                >Open setup and verification guide<span class="sr-only"> for x402 Payment Gate</span></a>
+                >Get Started<span class="sr-only"> with x402 Payment Gate</span></a>
               </article>
 
               <article
@@ -457,37 +309,16 @@
                 <p class="provenance">Partner recipe · HPE</p>
                 <h3 id="example-retail-assistant-title">Retail Assistant</h3>
                 <p class="outcome">
-                  Provides role-aware retail operations through Telegram, FastAPI, PostgreSQL,
-                  Docker Compose, and Helm.
+                  Provides role-aware retail operations through Telegram with Docker Compose
+                  or Helm deployment paths.
                 </p>
-                <dl>
-                  <div>
-                    <dt>Requires</dt>
-                    <dd>
-                      A Telegram bot token and user IDs, a tool-calling large language model,
-                      and either Docker or Kubernetes with Helm. Docker Compose requires access
-                      to <code>/var/run/docker.sock</code>.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>External access</dt>
-                    <dd>
-                      Telegram and the inference endpoint. FastAPI and PostgreSQL remain
-                      deployment components.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Boundary</dt>
-                    <dd>
-                      HPE-contributed demonstration presented as-is. Telegram-ID identity
-                      mapping is a demonstration workaround; deployments should use an external identity provider.
-                    </dd>
-                  </div>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Telegram · Docker or Kubernetes · demo identity mapping</dd></div>
                 </dl>
                 <a
                   class="guide-link"
                   href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/partners/hpe/retail-assistant/README.md"
-                >Open setup and verification guide<span class="sr-only"> for Retail Assistant</span></a>
+                >Get Started<span class="sr-only"> with Retail Assistant</span></a>
               </article>
 
               <article
@@ -502,37 +333,18 @@
                 <p class="provenance">Partner recipe · Shrike Security</p>
                 <h3 id="example-shrike-security-action-governance-title">Shrike Security Action Governance</h3>
                 <p class="outcome">
-                  Governs agent tool calls with a <code>before_tool_call</code> plugin that
-                  returns allow / warn / require_approval / block from Shrike's enforce plane,
-                  with host-side secret handling and scoped egress to Shrike.
+                  Applies Shrike decisions before agent tool calls run.
                 </p>
-                <dl>
+                <dl class="fit">
                   <div>
-                    <dt>Requires</dt>
-                    <dd>
-                      NemoClaw/OpenShell, an inference provider, a Shrike API key, Node.js/npm,
-                      and curl.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>External access</dt>
-                    <dd>
-                      Tool-call action content is sent to Shrike over TLS on two scoped POST
-                      routes. Without a key, nothing is sent and default behavior blocks fail-closed.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Boundary</dt>
-                    <dd>
-                      Provided as-is and outside NVIDIA support. It is in-sandbox defense-in-depth,
-                      not an independent security boundary; runtime installation is best-effort.
-                    </dd>
+                    <dt>Fit</dt>
+                    <dd>NemoClaw/OpenShell · Shrike API · not an independent security boundary</dd>
                   </div>
                 </dl>
                 <a
                   class="guide-link"
                   href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/partners/shrike/shrike-security/README.md"
-                >Open setup and verification guide<span class="sr-only"> for Shrike Security Action Governance</span></a>
+                >Get Started<span class="sr-only"> with Shrike Security Action Governance</span></a>
               </article>
 
               <article
@@ -547,29 +359,15 @@
                 <p class="provenance">Partner recipe · Tavily</p>
                 <h3 id="example-watchtower-title">Watchtower</h3>
                 <p class="outcome">
-                  Runs scheduled, cited web monitoring with persistent deduplication and auditable outputs.
+                  Runs scheduled, cited web monitoring with deduplication and auditable outputs.
                 </p>
-                <dl>
-                  <div>
-                    <dt>Requires</dt>
-                    <dd>Docker, NemoClaw, a Tavily API key, and inference credentials.</dd>
-                  </div>
-                  <div>
-                    <dt>External access</dt>
-                    <dd>Tavily search and extraction plus inference. Generic web fetch is denied.</dd>
-                  </div>
-                  <div>
-                    <dt>Boundary</dt>
-                    <dd>
-                      Contributed and supported by Tavily. Creating scheduled jobs requires
-                      explicit <code>operator.admin</code> approval.
-                    </dd>
-                  </div>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Docker + NemoClaw · Tavily · administrator approval</dd></div>
                 </dl>
                 <a
                   class="guide-link"
                   href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/partners/tavily/watchtower/README.md"
-                >Open setup and verification guide<span class="sr-only"> for Watchtower</span></a>
+                >Get Started<span class="sr-only"> with Watchtower</span></a>
               </article>
             </div>
           </div>
@@ -603,37 +401,15 @@
                 <p class="provenance">Community recipe</p>
                 <h3 id="example-deep-research-worker-title">Deep Research Worker</h3>
                 <p class="outcome">
-                  Queues long-running research tasks from one sandbox to a host-side
-                  DeepAgents worker, with a narrow worker-only sandbox policy and optional
-                  read-only host-side search integrations.
+                  Queues long-running research from a sandbox to a host-side DeepAgents worker.
                 </p>
-                <dl>
-                  <div>
-                    <dt>Requires</dt>
-                    <dd>
-                      Docker Compose, Python 3.10+ for local checks, an existing dedicated
-                      sandbox, and an OpenAI-compatible inference endpoint.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>External access</dt>
-                    <dd>
-                      The sandbox reaches only the host worker on port 9050. The worker reaches
-                      inference and optional host-side search helpers.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Boundary</dt>
-                    <dd>
-                      Independent community contribution, not NemoClaw core. It has no NVIDIA
-                      support or readiness guarantee; operators own production hardening.
-                    </dd>
-                  </div>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Docker Compose · dedicated sandbox · no readiness guarantee</dd></div>
                 </dl>
                 <a
                   class="guide-link"
                   href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/community/deep-research-worker/README.md"
-                >Open setup and verification guide<span class="sr-only"> for Deep Research Worker</span></a>
+                >Get Started<span class="sr-only"> with Deep Research Worker</span></a>
               </article>
             </div>
           </div>
@@ -664,38 +440,18 @@
                 <p class="provenance">NVIDIA field demo</p>
                 <h3 id="example-dgx-station-blender-and-omniverse-title">DGX Station Blender and Omniverse</h3>
                 <p class="outcome">
-                  Controls visible Blender on DGX Station, renders with OVRTX, and runs native
-                  OVPhysX simulations.
+                  Controls Blender on DGX Station for OVRTX rendering and OVPhysX simulation.
                 </p>
-                <dl>
+                <dl class="fit">
                   <div>
-                    <dt>Requires</dt>
-                    <dd>
-                      DGX Station with Ubuntu 24.04 ARM64, GB300, an RTX-capable GPU, Blender
-                      5.1.x, OVRTX/OVPhysX, local Nemotron 3 Ultra, NemoClaw/OpenShell,
-                      Docker/NVIDIA Container Toolkit, and a Hugging Face read token.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>External access</dt>
-                    <dd>
-                      Local inference and the host Blender Model Context Protocol bridge, with
-                      public release and model downloads during setup.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Boundary</dt>
-                    <dd>
-                      Validated on the documented DGX Station, GB300, and RTX PRO 6000
-                      configuration. It is an additive upstream extension with temporary
-                      compatibility patches.
-                    </dd>
+                    <dt>Fit</dt>
+                    <dd>Ubuntu 24.04 ARM64 · Blender 5.1.x · GB300 + RTX PRO 6000 validation</dd>
                   </div>
                 </dl>
                 <a
                   class="guide-link"
                   href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/demos/field/blender-omniverse-dgx-station/README.md"
-                >Open setup and verification guide<span class="sr-only"> for DGX Station Blender and Omniverse</span></a>
+                >Get Started<span class="sr-only"> with DGX Station Blender and Omniverse</span></a>
               </article>
             </div>
           </div>
@@ -726,30 +482,16 @@
                 <p class="provenance">Launchable · Brev</p>
                 <h3 id="example-hermes-title">Hermes</h3>
                 <p class="outcome">
-                  Provides a notebook path from a fresh Brev CPU instance to a
-                  NemoClaw-managed Hermes sandbox.
+                  Takes a fresh Brev CPU instance to a NemoClaw-managed Hermes sandbox through
+                  a notebook.
                 </p>
-                <dl>
-                  <div>
-                    <dt>Requires</dt>
-                    <dd>A Brev CPU instance and NVIDIA Build API key.</dd>
-                  </div>
-                  <div>
-                    <dt>External access</dt>
-                    <dd>Brev and the NVIDIA Build inference API.</dd>
-                  </div>
-                  <div>
-                    <dt>Boundary</dt>
-                    <dd>
-                      NemoClaw Community support is best-effort. No example-specific maturity
-                      or support claim is documented.
-                    </dd>
-                  </div>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Brev CPU · NVIDIA Build API key · best-effort support</dd></div>
                 </dl>
                 <a
                   class="guide-link"
                   href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/launchables/brev/hermes/README.md"
-                >Open example README<span class="sr-only"> for Hermes</span></a>
+                >Get Started<span class="sr-only"> with Hermes</span></a>
               </article>
             </div>
           </div>
@@ -783,36 +525,16 @@
                 <p class="provenance">Developer tool</p>
                 <h3 id="example-harness-engineering-playground-title">Harness Engineering Playground</h3>
                 <p class="outcome">
-                  Provides an experimental <abbr title="command-line interface">CLI</abbr> for
-                  eval-driven harness profile optimization. It is not an OpenShell blueprint.
+                  Provides an experimental command-line interface for evaluation-driven
+                  harness profile optimization.
                 </p>
-                <dl>
-                  <div>
-                    <dt>Requires</dt>
-                    <dd>
-                      Python 3.11+, uv, proposer-model credentials, model-under-test
-                      credentials, the initialized DeepAgents submodule, and the DeepAgents extra.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>External access</dt>
-                    <dd>
-                      Proposer and target-model endpoints. LangSmith is optional and can be
-                      disabled for offline test tracking.
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Boundary</dt>
-                    <dd>
-                      Experimental and evolving, with breaking changes expected. It is not
-                      intended for production use.
-                    </dd>
-                  </div>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Python 3.11+ · DeepAgents · not for production</dd></div>
                 </dl>
                 <a
                   class="guide-link"
                   href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/tools/harness-engineering-playground/README.md"
-                >Open setup and verification guide<span class="sr-only"> for Harness Engineering Playground</span></a>
+                >Get Started<span class="sr-only"> with Harness Engineering Playground</span></a>
               </article>
             </div>
           </div>

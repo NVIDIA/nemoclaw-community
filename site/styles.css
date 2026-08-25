@@ -374,6 +374,11 @@ h1 {
   margin: 0 0 0.75rem;
 }
 
+.example-card dl.fit {
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--line);
+}
+
 .example-card dl div {
   display: block;
 }
@@ -391,11 +396,18 @@ h1 {
 }
 
 .example-card dt::after {
-  content: ":";
+  content: ": ";
+  white-space: pre;
 }
 
 .example-card dd {
   margin: 0;
+}
+
+.example-card .fit dt,
+.example-card .fit dd {
+  color: var(--nvidia-green);
+  font-weight: 500;
 }
 
 .example-card code {
@@ -420,6 +432,11 @@ h1 {
   color: var(--nvidia-green);
   font-size: 0.84rem;
   font-weight: 500;
+}
+
+.guide-link::after {
+  margin-left: 0.25rem;
+  content: "↗";
 }
 
 .site-footer {
