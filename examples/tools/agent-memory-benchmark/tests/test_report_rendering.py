@@ -74,4 +74,4 @@ def test_a_rate_that_was_never_computed_says_so_rather_than_zero():
     rendered = render_markdown(report)
     assert "None" not in rendered
     assert "n/a" in rendered
-    assert "0.0" != rendered, "an uncomputed rate must not be rendered as zero"
+    assert "* evidence recall: n/a" in rendered, "an uncomputed rate rendered as a number"

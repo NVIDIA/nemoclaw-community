@@ -13,7 +13,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from bench.report import _rate  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -22,7 +27,7 @@ REPO = Path(__file__).resolve().parents[1]
 # against anything else is shown by hash prefix rather than silently grouped
 # with corpus A, which is what the old default did.
 CORPUS_LABELS = {
-    "2b6efff3ddc4bfa1af1e57871074728953f51375f79d0320be141311f6b9cf71": "A",
+    "d4d5dc68726e6e94d7317f9c1940aa428c4480a26685c0fc453cd7e430a8643d": "A",
     "ef57ca34e3937b5c4ae847428676550d3a036c5a73b7ed9ae3c6a038e9187e96": "B",
 }
 
@@ -118,8 +123,9 @@ def render(rows: list[dict]) -> str:
                   "|---|---:|---:|---:|---:|---:|---|"]
         for row in sorted(group, key=lambda r: -(r["accuracy"] or 0)):
             lines.append(
-                f"| {row['adapter']} | {row['accuracy']} | {row['abstention']} | {row['evidence_recall']} | "
-                f"{row['ingest_tokens']:,} | {row['per_question_tokens']} | {row['accounting']} |"
+                f"| {row['adapter']} | {row['accuracy']} | {row['abstention']} | "
+                f"{_rate(row['evidence_recall'], 'n/a')} | {row['ingest_tokens']:,} | "
+                f"{_rate(row['per_question_tokens'], 'n/a')} | {row['accounting']} |"
             )
         lines.append("")
         if len(group) == 2:
@@ -140,6 +146,7 @@ def main() -> None:
     args = parser.parse_args()
     rows = _rows(args.runs)
     text = render(rows)
+    args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(text, encoding="utf-8")
     print(text)
 

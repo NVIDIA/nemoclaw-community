@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-NO_SUCH_QUESTION = "n/a — no question of this kind in this corpus"
+NO_SUCH_QUESTION = "n/a — not annotated for this corpus"
 NO_EVIDENCE = "n/a — no source ids were supplied"
 
 from collections import defaultdict

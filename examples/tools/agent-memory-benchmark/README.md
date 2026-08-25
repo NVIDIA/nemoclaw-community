@@ -10,7 +10,7 @@ system worth using tells you the current answer, not the one it learned first.*
 **Does your ingestion produce memory you can actually answer from — and what did
 it cost you?**
 
-Give a system three months of one person's email and chat. Let it build whatever
+Give a system six weeks of one person's email and chat. Let it build whatever
 memory it likes: a wiki, a vector store, a graph, a pile of summaries. Then ask
 it 186 questions about that corpus and check the answers.
 
@@ -36,7 +36,7 @@ does, open an issue.
 | Contributor or provenance | NVIDIA |
 | Use this when | You need to compare memory designs — consolidating, retrieval, or anything else — on the same corpus and the same questions. |
 | You will get | Accuracy per question type, plus ingest and per-answer token cost measured at a proxy rather than self-reported. |
-| Runs on | Any host with Python 3.9 or later. |
+| Runs on | Any host with Python 3.9 or later, on macOS or Linux. The shipped adapter definitions invoke `python3`, which a default Windows install does not provide. |
 | Requires | `pytest` for the offline check. To score a real system: an API key for an OpenAI-compatible endpoint, and an adapter for the system under test. |
 | Verified on | Python 3.9.6 on macOS. Offline self-test and unit tests only; no scored run against a live endpoint is included as evidence here. |
 | Evidence level | local/static |
@@ -157,8 +157,9 @@ command line: [`docs/SUBMITTING.md`](docs/SUBMITTING.md).
 
 **Token accounting is not self-reported.** The runner points `OPENAI_BASE_URL` /
 `ANTHROPIC_BASE_URL` at a local proxy and counts what crosses the wire. A system
-running local inference makes no calls the proxy can see, so its row carries
-`accounting: none-observed` rather than a token count of zero.
+running local inference makes no calls the proxy can see, so its row is labelled
+`accounting: none-observed`. The zero token counts printed beside that label
+mean "not observed", not "free".
 
 ### How the runner treats your adapter
 
@@ -273,7 +274,7 @@ The whole pipeline runs offline against a small fixture whose score is known in
 advance — no model, no network, no API key:
 
 ```bash
-python3 -m pytest tests/     # expected: 86 passed
+python3 -m pytest tests/     # expected: 94 passed
 ```
 
 `selftest/` holds a six-document corpus, six questions covering all four

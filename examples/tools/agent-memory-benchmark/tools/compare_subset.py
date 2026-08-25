@@ -19,6 +19,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from bench.report import _rate  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from bench.grader import grade  # noqa: E402
 from bench.report import summarize  # noqa: E402
 
@@ -81,7 +85,7 @@ def main() -> None:
         lines.append(f"| {qtype} | " + " | ".join(
             str(summaries[n]["accuracy_by_type"].get(qtype)) for n in names) + " |")
     lines.append("| evidence recall | " + " | ".join(
-        str(summaries[n]["evidence"]["evidence_recall_mean"]) for n in names) + " |")
+        _rate(summaries[n]["evidence"]["evidence_recall_mean"], "n/a") for n in names) + " |")
     lines.append("| citation coverage | " + " | ".join(
         str(summaries[n]["evidence"]["citation_coverage"]) for n in names) + " |")
     text = "\n".join(lines) + "\n"

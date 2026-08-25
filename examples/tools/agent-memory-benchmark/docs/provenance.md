@@ -60,10 +60,9 @@ arise. Every URL points at a `.example` host.
 **Organization and project names.** The invented project names were screened
 against internal sources for collision with real projects. Where a name
 collided with something publicly marketed, it was renamed — the project now
-called Quillon was one such rename. Names that collide only with unrelated
-internal work were kept: the corpus describes an ingest pipeline, an evaluation
-framework and a migration, and none of that content has anything to do with the
-work it shares a word with. A shared word is not a disclosure.
+called Quillon was one such rename. A shared word is not a disclosure, so a
+name was changed only where the collision was with something publicly
+marketed.
 
 **No real content.** Because every body was generated rather than collected or
 redacted, there is no underlying real message that a reader could recover.
@@ -92,10 +91,11 @@ single-file artifact is hashed as its bytes alone, with no path framing
 
 | Artifact | Files | SHA-256 |
 | --- | ---: | --- |
-| `corpus/` (corpus A) | 428 | `2b6efff3ddc4bfa1af1e57871074728953f51375f79d0320be141311f6b9cf71` |
+| `corpus/` (corpus A) | 428 | `d4d5dc68726e6e94d7317f9c1940aa428c4480a26685c0fc453cd7e430a8643d` |
 | `corpus_b/corpus/` (corpus B) | 176 | `ef57ca34e3937b5c4ae847428676550d3a036c5a73b7ed9ae3c6a038e9187e96` |
 | `questions/questions.jsonl` | 1 | `6d38f6c11edbefb4baa77b8014af1920c48ab65f3647a2bb10daa691e9259b06` |
-| `gold/answers.jsonl` | 1 | `cdb0a6f00c8236e87ce8e3e8bbc4c698837f9ff637e2b7cf47ba0f1007d6ee29` |
+| `gold/answers.jsonl` | 1 | `55a66b80ff0f62d8b3a340dcbb9cc970a011922b1e509269c4402192f9504970` |
+| `corpus_b/questions/answers.jsonl` | 1 | `972e8a3bf6b4690cae14aa844c2853dbfc16ba3e3415685bc8c3095c97d79740` |
 | `corpus_b/questions/questions.jsonl` | 1 | `8ea778aa8abb4e4e7c86a6517f5ea33b1b79f43b359186cbb9be2284375714e3` |
 
 Recompute at any time:
@@ -106,6 +106,11 @@ from pathlib import Path; from bench.fingerprint import hash_tree, hash_file; \
 print(hash_tree(Path('corpus'))); \
 print(hash_file(Path('questions/questions.jsonl')))"
 ```
+
+Grading also depends on the date-normalization years (`MNEMO_DEFAULT_YEAR`,
+default `2026`; `MNEMO_ALT_YEARS`, default `2027`). Both are recorded in the
+report's `fingerprint` block. Leave them at their defaults for a comparable
+run.
 
 Scores graded under different hashes should not be compared. If a grading rule
 turns out to be wrong, fix it and re-score the stored answers with

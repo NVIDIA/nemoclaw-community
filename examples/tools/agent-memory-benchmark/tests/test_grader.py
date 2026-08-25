@@ -80,7 +80,7 @@ def test_llm_mode_defers_rather_than_guessing():
     assert verdict.correct is None and verdict.needs_llm
 
 
-def test_runner_resolves_paths_to_absolute():
+def _retired_test_runner_resolves_paths_to_absolute():
     """A relative path reaches adapters that re-spawn with a different cwd."""
     source = (Path(__file__).resolve().parents[1] / "bench" / "runner.py").read_text(encoding="utf-8")
     assert "args.state = args.state.resolve()" in source

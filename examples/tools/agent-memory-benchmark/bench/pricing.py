@@ -3,10 +3,10 @@
 
 """Dated price snapshot used to convert token counts into dollars.
 
-Prices move and tokenizers differ, so the leaderboard always reports raw token
-counts first. Dollars are a convenience column computed from this table, which
-carries the date it was captured; anyone can recompute an old run against a new
-table.
+Prices move and tokenizers differ, so the leaderboard reports raw token counts
+only. Dollars are computed from this table into each run's summary.md; the table
+carries the date it was captured, so anyone can recompute an old run against a
+new one.
 """
 
 from __future__ import annotations

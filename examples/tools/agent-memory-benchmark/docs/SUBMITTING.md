@@ -93,8 +93,9 @@ python3 -m bench.runner --adapter adapters/my-system
 
 The runner points `OPENAI_BASE_URL` and `ANTHROPIC_BASE_URL` at a local proxy and
 counts the tokens that actually cross the wire, so nobody has to be trusted about
-their own cost. A system running local inference makes no HTTP calls, so its row
-carries `accounting: none-observed` rather than a token count of zero.
+their own cost. A system running local inference makes no HTTP calls, so its row is
+labelled `accounting: none-observed`; the zeros beside it mean "not observed",
+not "free".
 
 ## What makes a submission comparable
 

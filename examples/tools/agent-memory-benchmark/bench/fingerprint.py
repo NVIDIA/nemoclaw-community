@@ -46,8 +46,13 @@ def hash_file(path: Path) -> str:
 
 def fingerprint(corpus: Path, questions: Path, gold: Path) -> dict:
     """The identity of one scoring configuration."""
+    from bench.normalize import ALT_YEARS, DEFAULT_YEAR  # noqa: PLC0415
+
     return {
         "algorithm": ALGORITHM,
+        # Date normalization changes verdicts, so it belongs in the identity of
+        # a scoring configuration alongside the files themselves.
+        "normalization": {"default_year": DEFAULT_YEAR, "alt_years": sorted(ALT_YEARS)},
         "corpus": hash_tree(corpus),
         "corpus_documents": len(_walk(corpus)),
         "questions": hash_file(questions),

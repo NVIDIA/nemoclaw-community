@@ -156,6 +156,7 @@ def test_the_published_hashes_still_describe_what_ships():
         "questions/questions.jsonl": hash_file(REPO / "questions" / "questions.jsonl"),
         "gold/answers.jsonl": hash_file(REPO / "gold" / "answers.jsonl"),
         "corpus_b/questions/questions.jsonl": hash_file(REPO / "corpus_b" / "questions" / "questions.jsonl"),
+        "corpus_b/questions/answers.jsonl": hash_file(REPO / "corpus_b" / "questions" / "answers.jsonl"),
     }
     stale = {k: (published.get(k), v) for k, v in computed.items() if published.get(k) != v}
     assert not stale, (
@@ -176,3 +177,42 @@ def test_no_address_in_either_corpus_uses_a_registrable_domain():
                 if not domain.lower().endswith(".example"):
                     offenders.add(domain)
     assert not offenders, f"addresses outside the reserved .example TLD: {sorted(offenders)}"
+
+
+def test_the_readme_states_the_number_of_tests_that_exist():
+    """The count a reader uses to confirm the install must be the real one.
+
+    It has been wrong twice: a round of review added test files and left the
+    README's number behind. Pinning it here means the next person who adds a
+    test is told to update the sentence.
+    """
+    import re
+    import subprocess
+    import sys
+
+    stated = re.search(r"expected: (\d+) passed", (REPO / "README.md").read_text())
+    assert stated, "README no longer states an expected test count"
+    collected = subprocess.run(
+        [sys.executable, "-m", "pytest", "tests/", "--collect-only", "-q"],
+        cwd=REPO, capture_output=True, text=True, timeout=180,
+    ).stdout
+    actual = re.search(r"(\d+) tests? collected", collected)
+    assert actual, collected[-500:]
+    assert int(stated.group(1)) == int(actual.group(1)), (
+        f"README says {stated.group(1)} passed; the suite collects {actual.group(1)}"
+    )
+
+
+def test_no_accepted_answer_is_a_bare_common_word():
+    """A one-word `accept` makes an answer that contradicts the gold correct.
+
+    `asof-jordan-load` accepted bare "still", so "it was still being worked but
+    no longer untouched" -- the opposite of the gold -- scored correct.
+    """
+    COMMON = {"still", "open", "yes", "no", "done", "not", "none", "some", "was", "is", "the"}
+    offenders = []
+    for g in GOLD:
+        for a in g.get("accept", []):
+            if str(a).strip().lower() in COMMON:
+                offenders.append((g["id"], a))
+    assert not offenders, f"accept entries that match almost any answer: {offenders}"

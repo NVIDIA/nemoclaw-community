@@ -28,6 +28,11 @@ total = ingest_tokens + N × per_question_tokens
 Reporting a single blended score would hide exactly the trade-off a practitioner
 needs to make.
 
+The two-group split is an annotation on the answer key. A corpus whose
+freshness entries do not carry it reports "not annotated for this corpus"
+rather than a rate, because an unannotated question is not the same as an
+absent one.
+
 ## Why hop count is a cost, not a penalty
 
 An early draft scored retrieval with `recall@k`. That is a vector-store-shaped
@@ -117,7 +122,8 @@ Thirteen questions have no correct answer. They ask about a project that does no
 exist, a review whose date falls after the corpus ends, a merge request that
 exists only as a reserved URL.
 
-Scheduled is not done. A system that describes how the 2026-05-28 review went is
+Scheduled is not done. A system that describes how the scheduled auth-changes
+review went is
 wrong, however plausible the description; a system that says the corpus does not
 say is right. This is scored as its own type because it is the failure mode most
 invisible in aggregate accuracy — confabulation reads as coverage.
