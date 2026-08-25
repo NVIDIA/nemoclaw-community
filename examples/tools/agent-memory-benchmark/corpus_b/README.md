@@ -4,7 +4,8 @@ A second corpus, in a domain deliberately far from corpus A's software
 engineering, so that a result on one can be checked against the other. Dana
 Okafor runs three building sites across permits, inspections, change orders,
 concrete pours and steel deliveries. 173 documents, 2027-07-20 to 2027-09-24,
-split after 2027-08-28 (no document falls on 2027-08-29). Everyone and everything in it is fictional.
+split after 2027-08-28 (no document falls on 2027-08-29). Everyone and
+everything in it is fictional.
 
 ## Why it exists
 
@@ -24,8 +25,9 @@ disagreement nobody settles. Documents were then generated from that key, which
 is why nothing had to be annotated afterwards and why every fact has exact
 provenance.
 
-Two models were used and neither was the model the benchmark tests: the corpus
-was written by **DeepSeek V4 Pro**, and audited by a second frontier model from a different family.
+Two models were used, and neither is a baseline shipped with this benchmark: the corpus
+was written by **DeepSeek V4 Pro**, and audited by a second frontier model
+from a different family.
 The audit ran nine times. It is worth being precise about what it fixed and what
 it did not:
 
@@ -47,8 +49,9 @@ it did not:
 So the guarantee this corpus makes is **about its questions, not about every
 sentence of its prose**. Each question is checked against the corpus before it
 ships: the expected answer must actually be present, and a question whose answer
-cannot be verified is dropped rather than published. 13 of 50 curated candidates were dropped that
-way, and 9 of 70 drafted factual ones — `dropped.json` and
+cannot be verified is dropped rather than published. 13 of 50 curated
+candidates were dropped that
+way, and 10 of 70 drafted factual ones — `dropped.json` and
 `factual_dropped.json` carry the reason for each.
 
 ## Layout

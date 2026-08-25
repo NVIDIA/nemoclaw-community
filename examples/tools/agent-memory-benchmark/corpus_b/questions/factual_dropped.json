@@ -142,5 +142,10 @@
     ],
     "notes": "drawn from E:2027-09-04T08-21-00__c9fbb4fc; answer also appears in 0 other documents",
     "drop_reason": "answer is a superseded value; ambiguous without a date"
+  },
+  {
+    "id": "b-fact-056",
+    "question": "Who has Camden Row day-to-day site-side oversight?",
+    "reason": "withdrawn during review; the reason was not recorded at the time"
   }
 ]

@@ -51,7 +51,8 @@ The same memory architecture scored with two different base models can differ
 more than two architectures scored with the same one. A submission is therefore a
 (system × model) pair, and rows are grouped by model rather than ranked globally.
 
-A valid submission must run at least two base models and publish the difference. An
+A submission that runs two base models and publishes the difference is worth
+more than one that does not. An
 architectural advantage that appears under one model and vanishes under another
 is not an architectural advantage.
 

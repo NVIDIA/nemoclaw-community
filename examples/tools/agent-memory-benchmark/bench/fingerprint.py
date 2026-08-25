@@ -9,8 +9,10 @@ files, and files drift: a typo gets fixed, a rule gets relaxed, a document gets
 regenerated. Recording a hash of each in the report turns "are these two rows
 comparable?" from a judgement call into a comparison.
 
-The hash covers the bytes of every file and the path it sits at, in sorted
-order, so a renamed document changes the hash even if its contents did not.
+``hash_tree`` covers the bytes of every file under a directory and the path it
+sits at, in sorted order, so a renamed document changes the hash even if its
+contents did not. ``hash_file`` covers a single artifact's bytes alone, with no
+path framing — three of the published rows are single files.
 """
 
 from __future__ import annotations

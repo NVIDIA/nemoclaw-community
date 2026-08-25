@@ -17,7 +17,7 @@ it 186 questions about that corpus and check the answers.
 Two numbers come out, and the benchmark refuses to collapse them into one:
 
 * **quality** — did it answer correctly, keep up when a later message overturned
-  an earlier one, and admit when the corpus simply does not say?
+  an earlier one, and admit when the corpus does not say?
 * **cost** — how many tokens went into building the memory, and how many into
   each answer?
 
@@ -26,6 +26,49 @@ cheaply; a system that stores raw chunks pays on every question instead. Total
 cost of ownership is `ingest_tokens + N × per_question_tokens`, and where the two
 curves cross — at what N a heavy ingest pays for itself — is a question no public
 benchmark answers today.
+
+## At A Glance
+
+| Question | Answer |
+| --- | --- |
+| Category | Developer Tool |
+| Contributor or provenance | NVIDIA |
+| Use this when | You need to compare memory designs — consolidating, retrieval, or anything else — on the same corpus and the same questions. |
+| You will get | Accuracy per question type, plus ingest and per-answer token cost measured at a proxy rather than self-reported. |
+| Runs on | Any host with Python 3.9 or later. |
+| Requires | `pytest` for the offline check. To score a real system: an API key for an OpenAI-compatible endpoint, and an adapter for the system under test. |
+| Verified on | Python 3.9.6 on macOS. Offline self-test and unit tests only; no scored run against a live endpoint is included as evidence here. |
+| Evidence level | local/static |
+| Support and maturity | Best-effort community support; see [SUPPORT.md](../../../SUPPORT.md). |
+| External access, data, and actions | Scoring a real system sends corpus text and questions to the endpoint you point `--upstream` at, and you pay for those tokens. Writes only under `results/`. The offline self-test sends nothing and costs nothing. |
+| Start here | [Running it](#running-it) |
+| Confirm success | [Checking it works](#checking-it-works) |
+
+## What a run looks like
+
+The offline self-test, run as printed in [Checking it works](#checking-it-works):
+
+```text
+# selftest-oracle — none (offline fixture)
+
+* corpus: 6 docs (4 part_a / 2 part_b)
+* questions: 6 (graded deterministically: 6, deferred to judge: 0)
+
+## Quality
+* accuracy overall: **1.0**
+  * [base] 1.0
+  * [hard] 1.0
+  * abstention: 1.0
+  * citation: 1.0
+  * freshness: 1.0
+  * multi_source: 1.0
+  * ordering: 1.0
+  * single_hop: 1.0
+```
+
+The same command against `selftest/wrong` reports `accuracy overall: **0.0**`
+with every type at `0.0`. A scored run against a real system produces the same
+shape with a Cost section filled in.
 
 ## The corpora
 
@@ -130,8 +173,10 @@ from a repository. What the runner does provide is a boundary against
   answer never receives the answer key. A run that would violate this stops
   before the adapter launches.
 
-**Every phase has a wall-clock budget.** `--timeout-seconds` (default six hours,
-`0` to wait indefinitely). Each adapter runs in its own process group, so a
+**Every phase has a wall-clock budget.** `--timeout-seconds`, or
+`MNEMO_TIMEOUT_SECONDS` (default six hours, `0` to wait indefinitely). The
+budget applies to each phase *call*, and ingest is called twice, so a default
+run can occupy up to eighteen hours before anything is killed. Each adapter runs in its own process group, so a
 timeout — or a Ctrl-C — reaches the workers your adapter started and not just
 the adapter itself. A process that ignores `SIGTERM` is killed ten seconds
 later. Without this, a hung run leaves workers behind that keep the accounting
@@ -168,7 +213,7 @@ memory that keeps only the current value has thrown the answer away.
 
 **All 186 are graded deterministically** — no judge model, no LLM in the scoring
 path. Answers are matched after normalizing case, punctuation, and date spelling,
-against an `accept` / `reject` / `require_all` rule set. That is a deliberate
+against a per-mode `accept` / `reject` / `require_all` / `expected` / `sequence` rule set. That is a deliberate
 constraint: a benchmark whose scores move when the judge model is upgraded cannot
 be compared across years.
 
@@ -192,7 +237,7 @@ which is not the same as whether it was right.
 corpus/      the documents in two dated halves, plus a manifest, counts and canary
 corpus_b/    a second corpus, another domain, for cross-checking a result
 questions/   what gets asked
-gold/        the answer key and its grading rules
+gold/        the answer key, its grading rules, and the drafting drop lists
 bench/       runner, grader, accounting proxy, price table
 adapters/    one directory per system under test
 selftest/    a six-document fixture plus two adapters whose scores are known
@@ -210,11 +255,14 @@ proxy at.
 
 ## Checking it works
 
+**Evidence level:** local/static — the checks below are offline and complete in
+under a minute. Nothing here exercises a live endpoint.
+
 The whole pipeline runs offline against a small fixture whose score is known in
 advance — no model, no network, no API key:
 
 ```bash
-python3 -m pytest tests/
+python3 -m pytest tests/     # expected: 86 passed
 ```
 
 `selftest/` holds a six-document corpus, six questions covering all four
@@ -243,7 +291,8 @@ Authored and maintained by NVIDIA, contributed under Apache-2.0.
 
 Both corpora are fully synthetic: every person, company, project, domain and
 address is invented, every message body was generated from a fixed fictional
-cast, and nothing was collected from a live account. Every address sits under
+cast, and nothing was collected from a live account. The file and symbol names
+in corpus A's engineering threads describe its own fictional codebase. Every address sits under
 the RFC 2606 reserved `.example` top-level domain.
 
 How the corpora were generated, what was screened before publication, and the

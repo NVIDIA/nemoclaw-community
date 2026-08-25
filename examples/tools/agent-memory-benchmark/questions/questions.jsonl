@@ -121,7 +121,7 @@
 {"id": "fact-039", "type": "single_hop", "difficulty": "base", "question": "What sharing status did Alex Chen say the prefix-cache primitive needs to have for Atlas and Beacon because they have different invariants on cache eviction?", "requires_citation": false}
 {"id": "fact-040", "type": "multi_source", "difficulty": "base", "question": "What trim threshold did Alex Chen mark for prefix-trim v1 to revisit after 4 weeks of prod data?", "requires_citation": false}
 {"id": "fact-041", "type": "multi_source", "difficulty": "base", "question": "What ingest config key controls the ContextSelector top-K token cap?", "requires_citation": false}
-{"id": "fact-042", "type": "multi_source", "difficulty": "base", "question": "What did Alex ask `TaskRegistry.cancel_all` to be renamed to for v3 of MR !318?", "requires_citation": false}
+{"id": "fact-042", "type": "multi_source", "difficulty": "base", "question": "What did Alex ask `JobRegistry.cancel_all` to be renamed to for v3 of MR !318?", "requires_citation": false}
 {"id": "fact-043", "type": "multi_source", "difficulty": "base", "question": "What does wave_runner.py:_retry_with_backoff do with the prefix on a full-batch failure?", "requires_citation": false}
 {"id": "fact-044", "type": "multi_source", "difficulty": "base", "question": "What release tag included the hotfix where wiki_group_mutex no longer deadlocks when a consolidate worker is cancelled mid-flight?", "requires_citation": false}
 {"id": "fact-045", "type": "single_hop", "difficulty": "base", "question": "When Elena Marquez posted that intern offers are out for Atlas-side mentoring, how many accepted?", "requires_citation": false}
@@ -138,7 +138,7 @@
 {"id": "fact-058", "type": "single_hop", "difficulty": "base", "question": "For how long will the side nav rework ship behind a feature flag?", "requires_citation": false}
 {"id": "fact-059", "type": "multi_source", "difficulty": "base", "question": "By when did Morgan need Alex's staffing one-pager, read on Wen-Qing's ramp, and Quillon contractor tradeoff input for the Platform Eng headcount conversation prep?", "requires_citation": false}
 {"id": "fact-061", "type": "multi_source", "difficulty": "base", "question": "What did Priya say the Beacon spec was shaped like when explaining why she missed an entry point last time?", "requires_citation": false}
-{"id": "fact-062", "type": "multi_source", "difficulty": "base", "question": "Which merge request did Rohan Dasgupta say had v3 up after addressing the transport-leak comment and widening TaskRegistry to support Beacon's eval-driven cancellations?", "requires_citation": false}
+{"id": "fact-062", "type": "multi_source", "difficulty": "base", "question": "Which merge request did Rohan Dasgupta say had v3 up after addressing the transport-leak comment and widening JobRegistry to support Beacon's eval-driven cancellations?", "requires_citation": false}
 {"id": "fact-063", "type": "multi_source", "difficulty": "base", "question": "For the All-hands prep — Atlas demo dry-run scheduled Thursday, 2026-05-28 from 16:00–16:45 UTC, what one story was picked?", "requires_citation": false}
 {"id": "fact-064", "type": "multi_source", "difficulty": "base", "question": "How many seconds of degraded performance did Tomas Bergman report for atlas after the cluster maintenance window?", "requires_citation": false}
 {"id": "fact-065", "type": "multi_source", "difficulty": "base", "question": "At earliest, when did Alex say Wen-Qing could own a domain end-to-end?", "requires_citation": false}

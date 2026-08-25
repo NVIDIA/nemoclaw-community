@@ -13,8 +13,11 @@ Apache-2.0. See the repository `LICENSE`.
 Both corpora are **fully synthetic**. Every person, company, project, domain
 and address in them is invented, and every message body was generated from a
 fixed fictional cast defined before any document existed. Nothing was collected
-from a live mailbox, workspace or account, and no real message, identifier,
-address or organization appears in either.
+from a live mailbox, workspace or account, and no real message, address or
+organization appears in either. The technical identifiers in corpus A's
+engineering threads — file paths, module names, table names — belong to the
+fictional codebase the corpus describes; they were reviewed before publication
+and renamed where they were not.
 
 | | Documents | Period | Domain |
 | --- | ---: | --- | --- |
@@ -23,8 +26,9 @@ address or organization appears in either.
 
 ## How they were generated
 
-**Corpus A** was generated from a fixed cast — people, organizations, projects
-and domains — written before any document. A language model produced the
+**Corpus A** began as an existing synthetic test fixture and was reviewed and
+edited for publication. It was generated from a fixed cast — people,
+organizations, projects and domains — written before any document. A language model produced the
 message bodies constrained to that cast, so an identity outside it cannot
 appear. The documents were then split at a cutoff into `part_a` and `part_b`,
 where the second half supersedes the first in places, and the answer key was
@@ -88,10 +92,10 @@ single-file artifact is hashed as its bytes alone, with no path framing
 
 | Artifact | Files | SHA-256 |
 | --- | ---: | --- |
-| `corpus/` (corpus A) | 428 | `c36ca1db72ebab8fd962701ffaffacf679de66d1d713d763f651b47cda3f1110` |
+| `corpus/` (corpus A) | 428 | `e65e337a304a79eadfc1cf8de81a0a7eccd2f5f3f25cdfba17a40f5efc2d29f5` |
 | `corpus_b/corpus/` (corpus B) | 176 | `ef57ca34e3937b5c4ae847428676550d3a036c5a73b7ed9ae3c6a038e9187e96` |
-| `questions/questions.jsonl` | 1 | `ab24142d7392bf02a764187e9ef410d52e60f9aba2b8afe74bca0c31fd6412f5` |
-| `gold/answers.jsonl` | 1 | `9bfd81ad88da5adbd0273d896add1dcda8e87a26786aa8d637f44928789a400e` |
+| `questions/questions.jsonl` | 1 | `6d38f6c11edbefb4baa77b8014af1920c48ab65f3647a2bb10daa691e9259b06` |
+| `gold/answers.jsonl` | 1 | `b2aa330c05cbb2004d0e99cacfdadac1b12961c4b071ca170881bd7ce213dede` |
 | `corpus_b/questions/questions.jsonl` | 1 | `8ea778aa8abb4e4e7c86a6517f5ea33b1b79f43b359186cbb9be2284375714e3` |
 
 Recompute at any time:

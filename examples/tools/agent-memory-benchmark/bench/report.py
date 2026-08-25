@@ -14,7 +14,7 @@ from bench.grader import Verdict
 def summarize(verdicts: Iterable[Verdict], gold_by_id: dict[str, dict]) -> dict:
     """Aggregate accuracy by question type plus the evidence diagnostics.
 
-    Questions deferred to a judge model are counted separately (no shipped question is: the count is always zero) rather than
+    Questions deferred to a judge model are counted separately rather than
     folded into accuracy, so a run that skipped judging cannot look better than
     one that ran it.
     """
@@ -110,13 +110,21 @@ def render_markdown(report: dict) -> str:
         f"* evidence precision: {summary['evidence']['evidence_precision_mean']}",
         "",
         "## Cost",
-        f"* ingest: {cost.get('ingest_input_tokens', 0)} in / {cost.get('ingest_output_tokens', 0)} out "
-        f"in {report['timing'].get('ingest_seconds')}s",
-        f"* answering: {cost.get('answer_input_tokens', 0)} in / {cost.get('answer_output_tokens', 0)} out "
-        f"in {report['timing'].get('answer_seconds')}s",
-        f"* per question: {cost.get('tokens_per_question')} tokens",
-        f"* accounting: {_accounting_method(report)}",
     ]
+    # Answers scored outside the harness have no timings and no token counts.
+    # Printing the empty fields renders a column of raw ``None`` into the file
+    # the submission guide tells a contributor to read.
+    if report.get("timing"):
+        lines += [
+            f"* ingest: {cost.get('ingest_input_tokens', 0)} in / {cost.get('ingest_output_tokens', 0)} out "
+            f"in {report['timing'].get('ingest_seconds')}s",
+            f"* answering: {cost.get('answer_input_tokens', 0)} in / {cost.get('answer_output_tokens', 0)} out "
+            f"in {report['timing'].get('answer_seconds')}s",
+            f"* per question: {cost.get('tokens_per_question')} tokens",
+        ]
+    else:
+        lines.append("* not measured — answers were scored without the harness")
+    lines.append(f"* accounting: {_accounting_method(report)}")
     self_reported = report.get("self_reported_usage")
     if self_reported:
         latest = self_reported["latest"]

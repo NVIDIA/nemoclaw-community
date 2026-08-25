@@ -3,13 +3,13 @@
 
 """Deterministic grading for mnemo-benchmark answers.
 
-Most questions are graded without an LLM: the gold entry names the strings that
-must appear (``accept``), the stale/fabricated strings that must not
-(``reject``), and — for questions where the honest answer is "the corpus does
-not say" — the abstention contract. Only free-text explanation questions fall
-through to ``mode: llm``, which a pinned judge model resolves; keeping that set
-small is a design goal, because a judge model is a moving part the benchmark
-cannot pin forever.
+Every shipped question is graded without a model: the gold entry names the
+strings that must appear (``accept``), the stale or fabricated strings that must
+not (``reject``), and — for questions where the honest answer is "the corpus
+does not say" — the abstention contract. A free-text explanation question would
+need ``mode: llm`` and a judge model to resolve it. No shipped question uses
+that mode, and keeping it empty is a design goal rather than an accident,
+because a judge model is a moving part this benchmark cannot pin forever.
 
 Every mode returns the same :class:`Verdict` so the report never has to care how
 a question was scored.
@@ -50,7 +50,7 @@ class Verdict:
     """Outcome of grading one answer."""
 
     question_id: str
-    correct: bool | None  # None => deferred to the LLM judge
+    correct: bool | None  # None => mode llm, which no shipped question uses
     mode: str
     reason: str = ""
     evidence_recall: float | None = None

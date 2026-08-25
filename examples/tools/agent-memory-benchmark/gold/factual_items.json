@@ -135,7 +135,7 @@
       "S:C200ATLE001_channel@2026-04-27"
     ],
     "entity": "concepts/wave_ingest",
-    "notes": "Wave ingest is Atlas's ingest pipeline (design doc at docs/sot/designs/ingest_pipeline.md): processes items in waves (e.g. 80 items/wave) via a wave_runner and a batch prompt built by prompt_builder (PromptBuilder constructed once per inges",
+    "notes": "Wave ingest is Atlas's ingest pipeline (design doc at docs/design/ingest_pipeline.md): processes items in waves (e.g. 80 items/wave) via a wave_runner and a batch prompt built by prompt_builder (PromptBuilder constructed once per inges",
     "accept": [
       "256"
     ]
@@ -637,17 +637,17 @@
   {
     "id": "fact-042",
     "type": "multi_source",
-    "question": "What did Alex ask `TaskRegistry.cancel_all` to be renamed to for v3 of MR !318?",
+    "question": "What did Alex ask `JobRegistry.cancel_all` to be renamed to for v3 of MR !318?",
     "mode": "string_any",
     "gold_source_ids": [
       "S:D200ROH001_dm@2026-05-18",
       "S:D200ROH001_dm@2026-05-20"
     ],
     "entity": "concepts/shared_runtime",
-    "notes": "!318 v3 widened TaskRegistry to support Beacon's eval-driven cancellations and addressed the transport-leak comment; Alex gave LGTM with one ask: rename TaskRegistry.cancel_all to TaskRegistry.cancel_group.",
+    "notes": "!318 v3 widened JobRegistry to support Beacon's eval-driven cancellations and addressed the transport-leak comment; Alex gave LGTM with one ask: rename JobRegistry.cancel_all to JobRegistry.cancel_group.",
     "accept": [
-      "TaskRegistry.cancel_group",
-      "`TaskRegistry.cancel_group`"
+      "JobRegistry.cancel_group",
+      "`JobRegistry.cancel_group`"
     ]
   },
   {
@@ -898,7 +898,7 @@
   {
     "id": "fact-062",
     "type": "multi_source",
-    "question": "Which merge request did Rohan Dasgupta say had v3 up after addressing the transport-leak comment and widening TaskRegistry to support Beacon's eval-driven cancellations?",
+    "question": "Which merge request did Rohan Dasgupta say had v3 up after addressing the transport-leak comment and widening JobRegistry to support Beacon's eval-driven cancellations?",
     "mode": "string_any",
     "gold_source_ids": [
       "S:D200ROH001_dm@2026-04-27",
@@ -906,7 +906,7 @@
       "S:C200ATLE001_channel@2026-05-06"
     ],
     "entity": "people/rohan_dasgupta",
-    "notes": "Rohan authored the shared-runtime proposal MR !318, iterating it to v3 on Alex's review feedback (widened TaskRegistry for Beacon's eval-driven cancellations, renamed cancel_all to cancel_group); owns merge-agent budget knobs / budget-math ",
+    "notes": "Rohan authored the shared-runtime proposal MR !318, iterating it to v3 on Alex's review feedback (widened JobRegistry for Beacon's eval-driven cancellations, renamed cancel_all to cancel_group); owns merge-agent budget knobs / budget-math ",
     "accept": [
       "MR !318",
       "!318"

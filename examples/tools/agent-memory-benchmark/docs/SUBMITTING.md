@@ -60,8 +60,15 @@ That writes `report.json`, `verdicts.jsonl` and `summary.md` into that
 directory. Read `summary.md` for accuracy overall and by question type;
 `verdicts.jsonl` carries the reason each answer was scored the way it was.
 
-Add `--gold corpus_b/questions/answers.jsonl` when the answers are for
-corpus B.
+When the answers are for corpus B, pass all three of its paths. `--gold` alone
+leaves the tool reading corpus A's questions, and it fails with a `KeyError`:
+
+```bash
+python3 tools/regrade.py --run <dir containing your answers.jsonl> \
+  --gold corpus_b/questions/answers.jsonl \
+  --questions corpus_b/questions/questions.jsonl \
+  --corpus corpus_b/corpus
+```
 
 ## Path 2 — wire it into the harness
 
@@ -125,10 +132,10 @@ python3 -m bench.runner --adapter adapters/my-system \
   --gold corpus_b/questions/answers.jsonl
 ```
 
-Corpus B is 97 questions over 173 documents — 86 base and 11 hard:
-`single_hop` 40, `multi_source` 20, `abstention` 12, `disambiguation` 8,
-`freshness` 7, `as_of` 7, `chain_freshness` 2, `ordering` 1. It is a smaller
-and differently balanced set than corpus A, so read the two as separate
+Corpus B is 97 questions over 173 documents. Base (86): `single_hop` 40,
+`multi_source` 20, `abstention` 12, `disambiguation` 7, `freshness` 7. Hard
+(11): `as_of` 7, `chain_freshness` 2, `disambiguation` 1, `ordering` 1. It is a
+smaller and differently balanced set than corpus A, so read the two as separate
 results rather than averaging them.
 
 Run at least A and B. A result on one corpus is a result about that corpus.
