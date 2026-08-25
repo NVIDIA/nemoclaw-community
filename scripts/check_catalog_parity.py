@@ -38,7 +38,7 @@ CATEGORY_HEADERS: dict[str, tuple[str, ...]] = {
 REQUIRED_CARD_FIELDS: set[str] = {"Fit"}
 REQUIRED_POLICY_LINKS: set[str] = {
     "https://github.com/NVIDIA/nemoclaw-community",
-    "https://github.com/NVIDIA/nemoclaw-community/blob/main/CONTRIBUTING.md",
+    "https://github.com/NVIDIA/nemoclaw-community/blob/main/CONTRIBUTING.md#add-a-new-example",
     "https://github.com/NVIDIA/nemoclaw-community/blob/main/SUPPORT.md",
     "https://github.com/NVIDIA/nemoclaw-community/blob/main/SECURITY.md",
     "https://github.com/brevdev/nemoclaw-demos",
