@@ -20,8 +20,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from bench.fingerprint import fingerprint
 from bench.grader import grade  # noqa: E402
-from bench.report import render_markdown, summarize  # noqa: E402
+from bench.report import render_markdown, summarize
+from bench.runner import REPORT_SCHEMA_VERSION  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -31,6 +33,8 @@ def main() -> None:
     parser.add_argument("--run", required=True, type=Path)
     parser.add_argument("--gold", type=Path, default=REPO / "gold" / "answers.jsonl")
     parser.add_argument("--questions", type=Path, default=REPO / "questions" / "questions.jsonl")
+    parser.add_argument("--corpus", type=Path, default=REPO / "corpus",
+                        help="only used to fingerprint what the answers were graded against")
     args = parser.parse_args()
 
     gold = {json.loads(line)["id"]: json.loads(line)
@@ -44,15 +48,51 @@ def main() -> None:
               answers.get(q["id"], {}).get("source_ids"), gold[q["id"]])
         for q in questions
     ]
-    report = json.loads((args.run / "report.json").read_text(encoding="utf-8"))
-    before = report["summary"]["accuracy_overall"]
+    # Two callers, one path. A finished run has a report to re-score in place.
+    # Someone who answered the questions by hand has only answers.jsonl -- that
+    # is the whole point of the answer-only submission path -- so score that
+    # into a fresh report rather than failing on a file they were never told to
+    # produce.
+    report_path = args.run / "report.json"
+    if report_path.exists():
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        before = report.get("summary", {}).get("accuracy_overall")
+    else:
+        report = {
+            "schema_version": REPORT_SCHEMA_VERSION,
+            "adapter": {"name": args.run.name, "revision": None, "declared_model": None},
+            "model": None,
+            "run_id": args.run.name,
+            "fingerprint": fingerprint(args.corpus, args.questions, args.gold),
+            "accounting": {
+                "method": "not-measured",
+                "description": "answers were scored without the harness, so no token cost was observed",
+            },
+            "timing": {},
+            "cost": {},
+        }
+        manifest_path = args.corpus / "manifest.jsonl"
+        if manifest_path.exists():
+            manifest = [json.loads(line) for line in
+                        manifest_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+            report["corpus"] = {
+                "documents": len(manifest),
+                "part_a": sum(1 for m in manifest if m.get("part") == "part_a"),
+                "part_b": sum(1 for m in manifest if m.get("part") == "part_b"),
+            }
+        else:
+            report["corpus"] = {"documents": 0, "part_a": 0, "part_b": 0}
+        before = None
     report["summary"] = summarize(verdicts, gold)
     report["regraded"] = True
     (args.run / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     (args.run / "verdicts.jsonl").write_text(
         "\n".join(json.dumps(v.to_dict()) for v in verdicts) + "\n", encoding="utf-8")
     (args.run / "summary.md").write_text(render_markdown(report), encoding="utf-8")
-    print(f"{args.run.name}: accuracy {before} -> {report['summary']['accuracy_overall']}")
+    now = report["summary"]["accuracy_overall"]
+    moved = f"{before} -> {now}" if before is not None else f"{now}"
+    print(f"{args.run.name}: accuracy {moved}")
+    print(f"wrote {report_path.name}, verdicts.jsonl and summary.md to {args.run}")
 
 
 if __name__ == "__main__":

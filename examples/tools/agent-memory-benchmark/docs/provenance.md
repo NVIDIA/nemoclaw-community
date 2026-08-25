@@ -19,7 +19,7 @@ address or organization appears in either.
 | | Documents | Period | Domain |
 | --- | ---: | --- | --- |
 | Corpus A | 425 | 2026-04-16 .. 2026-05-27 | a software platform engineering team |
-| Corpus B | 173 | 2027-07-19 .. 2027-09-24 | a construction program manager |
+| Corpus B | 173 | 2027-07-20 .. 2027-09-24 | a construction program manager |
 
 ## How they were generated
 
@@ -68,9 +68,10 @@ Any resemblance to a real project or organization is coincidental.
 
 ## Canary
 
-`corpus/CANARY.txt` carries a unique string. If a language model emits it, that
-model was trained on this corpus, and any score it produces here is
-meaningless. Leave the file in place.
+`corpus/CANARY.txt` and `corpus_b/corpus/CANARY.txt` each carry a unique
+string — one per corpus, so a leak can be attributed to the corpus it came
+from. If a language model emits either, that model was trained on that corpus,
+and any score it produces there is meaningless. Leave both files in place.
 
 ## Content hashes
 
@@ -79,9 +80,11 @@ same documents, the same questions and the same grading rules. Every
 `report.json` carries a `fingerprint` block; compare it against the values
 below to know which version a stored run was graded at.
 
-Hashing rule `sha256-v1`: every file under the tree, in sorted order, with its
-path and bytes fed into one SHA-256. A renamed document changes the hash even
-if its contents did not.
+Hashing rule `sha256-v1`: for a directory, every file under it in sorted order,
+with its path and bytes fed into one SHA-256, so a renamed document changes the
+hash even if its contents did not (`bench.fingerprint.hash_tree`). A
+single-file artifact is hashed as its bytes alone, with no path framing
+(`bench.fingerprint.hash_file`).
 
 | Artifact | Files | SHA-256 |
 | --- | ---: | --- |
@@ -95,8 +98,9 @@ Recompute at any time:
 
 ```bash
 python3 -c "import sys; sys.path.insert(0, '.'); \
-from pathlib import Path; from bench.fingerprint import hash_tree; \
-print(hash_tree(Path('corpus')))"
+from pathlib import Path; from bench.fingerprint import hash_tree, hash_file; \
+print(hash_tree(Path('corpus'))); \
+print(hash_file(Path('questions/questions.jsonl')))"
 ```
 
 Scores graded under different hashes should not be compared. If a grading rule

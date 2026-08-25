@@ -16,6 +16,8 @@ SNAPSHOT_DATE = "2026-08-21"
 # USD per 1M tokens: (input, output). Unknown models fall back to None and the
 # report prints tokens only rather than inventing a number.
 PRICES: dict[str, tuple[float, float]] = {
+    "gpt-4o": (2.50, 10.00),
+    "text-embedding-3-small": (0.02, 0.0),
     "azure/openai/gpt-5.5": (1.25, 10.00),
     "nvidia/deepseek-ai/deepseek-v4-pro": (0.27, 1.10),
     "nvidia/deepseek-ai/deepseek-v4-flash": (0.07, 0.28),

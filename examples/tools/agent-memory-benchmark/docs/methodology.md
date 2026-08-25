@@ -51,9 +51,22 @@ The same memory architecture scored with two different base models can differ
 more than two architectures scored with the same one. A submission is therefore a
 (system × model) pair, and rows are grouped by model rather than ranked globally.
 
-A valid submission runs at least two models and publishes the difference. An
+A valid submission must run at least two base models and publish the difference. An
 architectural advantage that appears under one model and vanishes under another
 is not an architectural advantage.
+
+## How the hard set was written
+
+The 31 hard questions were written after the base set saturated, and each type
+starts from a property of the corpus rather than from a document: a value that
+moves twice, a set with one member that does not belong, a fact that was true
+at a date but is not now, two conditions that each match several candidates
+alone. Candidates were drafted against the answer key, then checked against the
+corpus the same way the base set was — the expected answer must actually be
+present and reachable, and a candidate whose answer could not be verified was
+dropped rather than published. `as_of` was written deliberately to be
+adversarial to ingest-time consolidation, since a memory that keeps only the
+current value has thrown the answer away.
 
 ## Why there is no judge model
 
@@ -130,14 +143,15 @@ against a newer table.
 
 ## Known limitations
 
-* **One corpus, one persona.** 425 documents from one invented professional life.
+* **Two corpora, two personas.** 425 documents from one invented professional
+  life and 173 from another.
   Results describe behaviour on this shape of data, not on personal archives in
   general.
 * **Retrieval is bundled into the score.** The benchmark measures ingestion
   through the QA it enables, so a system with weak ingestion and strong retrieval
   can score well. Evidence recall is reported separately to expose that case, but
   the two are not fully separable by design.
-* **English only.**
+* **English questions and answers.**
 * **Contamination.** The corpus is public and will eventually be crawled. It
   carries a canary string (`corpus/CANARY.txt`) so future contamination can be
   detected rather than merely suspected.

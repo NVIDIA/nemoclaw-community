@@ -14,7 +14,7 @@ from bench.grader import Verdict
 def summarize(verdicts: Iterable[Verdict], gold_by_id: dict[str, dict]) -> dict:
     """Aggregate accuracy by question type plus the evidence diagnostics.
 
-    Questions deferred to the judge model are counted separately rather than
+    Questions deferred to a judge model are counted separately (no shipped question is: the count is always zero) rather than
     folded into accuracy, so a run that skipped judging cannot look better than
     one that ran it.
     """
@@ -60,12 +60,32 @@ def summarize(verdicts: Iterable[Verdict], gold_by_id: dict[str, dict]) -> dict:
     }
 
 
+def _adapter_name(report: dict) -> str:
+    """Adapter name across report schema versions.
+
+    Schema 1 made ``adapter`` an object so a row could carry the revision that
+    produced it; before that it was the bare name. Stored reports are not
+    rewritten, so both shapes render.
+    """
+    adapter = report.get("adapter")
+    if isinstance(adapter, dict):
+        return str(adapter.get("name", "unnamed"))
+    return str(adapter or "unnamed")
+
+
+def _accounting_method(report: dict) -> str:
+    accounting = report.get("accounting", "proxy")
+    if isinstance(accounting, dict):
+        return str(accounting.get("method", "unknown"))
+    return str(accounting)
+
+
 def render_markdown(report: dict) -> str:
     """One human-readable block per run — the thing pasted into an issue or MR."""
     summary = report["summary"]
     cost = report.get("cost", {})
     lines = [
-        f"# {report['adapter']} — {report.get('model') or 'model not declared'}",
+        f"# {_adapter_name(report)} — {report.get('model') or 'model not declared'}",
         "",
         f"* corpus: {report['corpus']['documents']} docs "
         f"({report['corpus']['part_a']} part_a / {report['corpus']['part_b']} part_b)",
@@ -95,7 +115,7 @@ def render_markdown(report: dict) -> str:
         f"* answering: {cost.get('answer_input_tokens', 0)} in / {cost.get('answer_output_tokens', 0)} out "
         f"in {report['timing'].get('answer_seconds')}s",
         f"* per question: {cost.get('tokens_per_question')} tokens",
-        f"* accounting: {report.get('accounting', 'proxy')}",
+        f"* accounting: {_accounting_method(report)}",
     ]
     self_reported = report.get("self_reported_usage")
     if self_reported:

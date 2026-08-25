@@ -78,6 +78,7 @@ coordination and intelligence outcome rather than one analysis technique.
 | Tavily Watchtower | `examples/recipes/partners/tavily/watchtower/` |
 | DGX Station Blender and Omniverse | `examples/demos/field/blender-omniverse-dgx-station/` |
 | Hermes Brev Launchable | `examples/launchables/brev/hermes/` |
+| Agent Memory Benchmark | `examples/tools/agent-memory-benchmark/` |
 | Harness Engineering Playground | `examples/tools/harness-engineering-playground/` |
 
 ## Public Repository Boundary

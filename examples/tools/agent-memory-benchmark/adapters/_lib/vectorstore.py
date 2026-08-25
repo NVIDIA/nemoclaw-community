@@ -20,7 +20,7 @@ from pathlib import Path
 
 CHUNK_CHARS = 3200
 CHUNK_OVERLAP = 400
-EMBED_MODEL = os.environ.get("MNEMO_EMBED_MODEL", "azure/openai/text-embedding-3-small")
+EMBED_MODEL = os.environ.get("MNEMO_EMBED_MODEL", "text-embedding-3-small")
 
 
 def base_url() -> str:

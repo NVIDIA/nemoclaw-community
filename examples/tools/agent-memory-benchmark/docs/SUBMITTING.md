@@ -9,6 +9,10 @@ Do this if your system cannot be wrapped in a command line, or you just want a
 score quickly.
 
 **1. Read the corpus, in order.** `corpus/part_a/` first, then `corpus/part_b/`.
+Walk it recursively rather than hardcoding subdirectory names: corpus A files
+chat under `slack/` and corpus B under `chat/`, so a path-specific reader
+silently ingests zero chat documents on the second corpus. The `doc_id` in each
+document's frontmatter and `manifest.jsonl` are the stable interface.
 Both halves are plain markdown with a `doc_id` in the frontmatter. The order
 matters: `part_b` overturns things `part_a` says, and several questions ask which
 version is current. If your system has no notion of ingesting twice, ingest
@@ -46,14 +50,18 @@ Reply with a single JSON object and nothing else:
 `source_ids` is optional. Providing it gets you the evidence diagnostics;
 omitting it costs nothing on accuracy.
 
-**4. Score it:**
+**4. Score it.** Put `answers.jsonl` in a directory of its own and run:
 
 ```bash
 python3 tools/regrade.py --run <dir containing your answers.jsonl>
 ```
 
-That prints accuracy overall and by question type, and writes per-question
-verdicts with the reason each was scored the way it was.
+That writes `report.json`, `verdicts.jsonl` and `summary.md` into that
+directory. Read `summary.md` for accuracy overall and by question type;
+`verdicts.jsonl` carries the reason each answer was scored the way it was.
+
+Add `--gold corpus_b/questions/answers.jsonl` when the answers are for
+corpus B.
 
 ## Path 2 — wire it into the harness
 
@@ -94,10 +102,21 @@ labelled self-reported in the leaderboard.
 * **Report what you left out.** A system that skips a question type should say so
   rather than let it read as a zero.
 
+**Use the same answer instruction as Path 1.** It is importable, so it cannot
+drift from what other submissions used:
+
+```python
+from bench.answer_contract import ANSWER_CONTRACT
+```
+
+The runner puts the benchmark root on `PYTHONPATH`, so an adapter can import it
+directly. Prepend your own scaffolding if you need to; do not weaken these
+rules, or the run stops being comparable.
+
 ## Which corpus to run
 
-`corpus/` and `questions/` are corpus A. Corpus B lives in `corpus_b/corpus/` and
-`corpus_b/questions/`, C and D likewise. Pass them explicitly:
+`corpus/` and `questions/` are corpus A. Corpus B lives in `corpus_b/corpus/`
+and `corpus_b/questions/`. Pass them explicitly:
 
 ```bash
 python3 -m bench.runner --adapter adapters/my-system \
@@ -106,4 +125,25 @@ python3 -m bench.runner --adapter adapters/my-system \
   --gold corpus_b/questions/answers.jsonl
 ```
 
+Corpus B is 97 questions over 173 documents — 86 base and 11 hard:
+`single_hop` 40, `multi_source` 20, `abstention` 12, `disambiguation` 8,
+`freshness` 7, `as_of` 7, `chain_freshness` 2, `ordering` 1. It is a smaller
+and differently balanced set than corpus A, so read the two as separate
+results rather than averaging them.
+
 Run at least A and B. A result on one corpus is a result about that corpus.
+
+## Where a result goes
+
+There is no hosted leaderboard. `tools/leaderboard.py` builds a local table
+from the runs in a directory you choose, and that is what "leaderboard" means
+throughout these docs:
+
+```bash
+python3 tools/leaderboard.py --runs results/runs --out results/leaderboard.md
+```
+
+To contribute a system rather than just score one, open a pull request adding
+`adapters/<name>/` — the adapter definition and whatever code it needs. Keep
+run artifacts out of it: they are large, they age, and they are reproducible
+from the adapter.

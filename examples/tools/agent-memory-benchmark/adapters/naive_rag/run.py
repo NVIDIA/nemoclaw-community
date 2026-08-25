@@ -37,7 +37,7 @@ def cmd_ingest(corpus: Path, state: Path) -> None:
 def cmd_answer(state: Path, workers: int) -> None:
     chunks = vs.load_store(state)
     questions = [json.loads(line) for line in sys.stdin.read().splitlines() if line.strip()]
-    model = os.environ.get("MNEMO_MODEL") or "azure/openai/gpt-5.5"
+    model = os.environ.get("MNEMO_MODEL") or "gpt-4o"
     vectors = vs.embed([q["question"] for q in questions])
 
     def answer_one(pair: tuple[dict, list[float]]) -> dict:

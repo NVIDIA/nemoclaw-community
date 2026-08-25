@@ -96,7 +96,7 @@ def _assert_isolated(command: list[str], env: dict, phase: str, forbidden: dict[
 def _terminate_group(process: subprocess.Popen, label: str) -> None:
     """Kill the adapter and everything it spawned.
 
-    An adapter is usually a shell or an interpreter that starts workers of its
+    An adapter is often a shell or an interpreter that starts workers of its
     own. Killing only the process we launched leaves those workers running,
     holding the accounting proxy open and continuing to spend tokens after the
     run has been declared over. The child is started in its own process group
@@ -246,10 +246,9 @@ def main() -> None:
     args = parser.parse_args()
 
     # Absolute paths, always. A relative --state reaches the adapter as-is, and
-    # a system that re-spawns itself with a different working directory (Pi
-    # does) then resolves it against the wrong root: its files vanish, the turn
-    # produces nothing, and the failure looks like a bad model rather than a bad
-    # path.
+    # a system that re-spawns itself with a different working directory then
+    # resolves it against the wrong root: its files vanish, the turn produces
+    # nothing, and the failure looks like a bad model rather than a bad path.
     args.adapter = args.adapter.resolve()
     args.corpus = args.corpus.resolve()
     args.questions = args.questions.resolve()

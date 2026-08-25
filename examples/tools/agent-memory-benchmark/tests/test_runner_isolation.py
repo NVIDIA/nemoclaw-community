@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""The runner's two guarantees to a submitter, tested by exercising them.
+"""The runner's two guarantees to a contributor, tested by exercising them.
 
 Both of these are only worth anything if they hold when an adapter misbehaves,
 so each test runs a small adapter that actually misbehaves: one reaches for the
