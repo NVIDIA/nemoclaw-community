@@ -30,6 +30,7 @@ again by contributor provenance.
 
 | Example | Description |
 | --- | --- |
+| [Axe A11y Browser Auditor](recipes/community/axe-a11y-browser-auditor/README.md) | Audits web pages for accessibility and captures screenshots, PDFs, and network traces. |
 | [Deep Research Worker](recipes/community/deep-research-worker/README.md) | Queues long-running research from a sandbox to a host-side DeepAgents worker. |
 
 ## NVIDIA Field Demos
