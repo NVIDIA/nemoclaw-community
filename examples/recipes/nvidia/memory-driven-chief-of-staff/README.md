@@ -369,10 +369,12 @@ provider takes over from the in-process ticker.
 **The job store is not part of the distribution.** `distribution.yaml` does not
 declare `cron`. An update replaces what it does declare — `SOUL.md`,
 `schema.md`, `skills`, `scripts` and the manifest — and leaves the jobs and
-their run history alone. Measured, not assumed: six jobs
-registered, `hermes profile update` run on Hermes 0.20.0, six jobs still
-there with the same ids. A test asserts
-the manifest never claims `cron` or `workspace`.
+their run history alone. This is worth being deliberate about: `profile
+update` lists `cron/` among the directories it overwrites, and it leaves ours
+alone only because the manifest never claims it. Measured, not assumed: six
+jobs registered, `hermes profile update` run on Hermes 0.19.0, six jobs still
+there with the same ids. A test asserts the manifest never claims `cron` or
+`workspace`.
 
 To undo, remove the jobs individually. Deleting the profile removes its
 `workspace` too, which is where the store and the memory live; removing the
