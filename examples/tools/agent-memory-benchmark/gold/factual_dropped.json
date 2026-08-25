@@ -10,7 +10,7 @@
       "E:2026-05-23T08-44-00__46412f2d"
     ],
     "entity": "people/alex_chen",
-    "notes": "Alex Chen (alex.chen@example-co.com, @alex, GitLab alex_chen, Slack U200AC3F7E12) is the Atlas tech lead and a Platform Eng team lead; drives specs, MRs, OKRs, and the all-hands narrative; owns the Platform Eng tooling budget line. Reports ",
+    "notes": "Alex Chen (alex.chen@examplecorp.example, @alex, GitLab alex_chen, Slack U200AC3F7E12) is the Atlas tech lead and a Platform Eng team lead; drives specs, MRs, OKRs, and the all-hands narrative; owns the Platform Eng tooling budget line. Reports ",
     "accept": [
       "alex_chen"
     ],
@@ -26,9 +26,9 @@
       "E:2026-05-17T08-44-00__30adea6f"
     ],
     "entity": "people/priya_raman",
-    "notes": "Priya Raman (@priya, priya.raman@example-co.com) runs Atlas security reviews for auth changes using a structured intake (file-level inventory, threat-model delta from prior scope, specific test-coverage info); signs off on the auth-changes ",
+    "notes": "Priya Raman (@priya, priya.raman@examplecorp.example) runs Atlas security reviews for auth changes using a structured intake (file-level inventory, threat-model delta from prior scope, specific test-coverage info); signs off on the auth-changes ",
     "accept": [
-      "https://gitlab.example-co.com/platform-eng/atlas/-/merge_requests/342"
+      "https://gitlab.examplecorp.example/platform-eng/atlas/-/merge_requests/342"
     ],
     "drop_reason": "Asks for an exact URL/MR identifier, which is formatting/identifier trivia rather than substantive remembered content."
   },
@@ -108,7 +108,7 @@
       "E:2026-05-23T08-41-00__a917fd3a"
     ],
     "entity": "people/alex_chen",
-    "notes": "Alex's headcount one-pager structure: (1) bus factor — wave ingest, (2) delivery risk — eval coverage, (3) explicit list of what they are NOT asking for (Helix, Beacon parity, scope growth).",
+    "notes": "Alex's headcount one-pager structure: (1) bus factor — wave ingest, (2) delivery risk — eval coverage, (3) explicit list of what they are NOT asking for (Quillon, Beacon parity, scope growth).",
     "require_all": [
       "Bus factor",
       "wave ingest"

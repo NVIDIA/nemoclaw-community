@@ -10,7 +10,7 @@
       "E:2026-05-15T08-50-00__c3dc1e53"
     ],
     "entity": "concepts/auth_scope",
-    "notes": "Atlas auth changes in scope for security review: token storage migration in src/atlas/auth/store.py (keyring -> encrypted-blob, Dimitri-signed) plus keyring_compat.py migration-window shim, the Helix-side OAuth callback handler (helix_callb",
+    "notes": "Atlas auth changes in scope for security review: token storage migration in src/atlas/auth/store.py (keyring -> encrypted-blob, Dimitri-signed) plus keyring_compat.py migration-window shim, the Quillon-side OAuth callback handler (quillon_callb",
     "accept": [
       "item 14"
     ]
@@ -86,7 +86,7 @@
       "S:D200SAM001_dm@2026-05-18"
     ],
     "entity": "concepts/product_surface_rfc",
-    "notes": "Atlas product surface RFC v2 (Alex + Sam, opened for comments 2026-05-19 at https://wiki.example-co.com/atlas/rfc/product-surface-v2, comments due May 29) is a rewrite incorporating Lena's design feedback and Elena's cost constraints; vs v1",
+    "notes": "Atlas product surface RFC v2 (Alex + Sam, opened for comments 2026-05-19 at https://wiki.examplecorp.example/atlas/rfc/product-surface-v2, comments due May 29) is a rewrite incorporating Lena's design feedback and Elena's cost constraints; vs v1",
     "accept": [
       "May 29"
     ]
@@ -196,7 +196,7 @@
       "S:D200ROH001_dm@2026-05-18"
     ],
     "entity": "people/anya_volkov",
-    "notes": "Anya Volkov (@anya, anya.volkov@example-co.com, Slack U200AB4CC77E) is on the Beacon team; owns the Beacon eval framework, organized the Beacon eval methodology walkthrough, and is leading the Beacon eval methodology refactor.",
+    "notes": "Anya Volkov (@anya, anya.volkov@examplecorp.example, Slack U200AB4CC77E) is on the Beacon team; owns the Beacon eval framework, organized the Beacon eval methodology walkthrough, and is leading the Beacon eval methodology refactor.",
     "accept": [
       "Anya Volkov",
       "Anya",
@@ -213,7 +213,7 @@
       "E:2026-05-24T08-48-00__1d4ced89"
     ],
     "entity": "people/carla_silvera",
-    "notes": "Carla Silvera (carla.silvera@example-co.com) is in procurement, onboarding the eval annotation vendor; coordinated seat count, DPA routing, and contract terms with Alex (budget owner).",
+    "notes": "Carla Silvera (carla.silvera@examplecorp.example) is in procurement, onboarding the eval annotation vendor; coordinated seat count, DPA routing, and contract terms with Alex (budget owner).",
     "accept": [
       "Procurement",
       "procurement"
@@ -231,7 +231,7 @@
       "S:D200SAM001_dm@2026-05-26"
     ],
     "entity": "people/dimitri_costa",
-    "notes": "Dimitri Costa (@dimitri) is the security signoff owner; designed/signed off the encrypted-blob token storage scheme, reviews the calendar auth-scope expansion, owns the Helix v2 security review (confirmed done by July 7), and enforces the P",
+    "notes": "Dimitri Costa (@dimitri) is the security signoff owner; designed/signed off the encrypted-blob token storage scheme, reviews the calendar auth-scope expansion, owns the Quillon v2 security review (confirmed done by July 7), and enforces the P",
     "accept": [
       "Dimitri Costa"
     ]
@@ -246,7 +246,7 @@
       "E:2026-05-15T09-00-00__67e1733e"
     ],
     "entity": "people/elena_marquez",
-    "notes": "Elena Marquez (elena.marquez@example-co.com, Slack U2008298D057) is Alex's skip-level / org lead (Morgan is Alex's direct manager); reviews OKRs and the QBR and runs Platform Eng staff.",
+    "notes": "Elena Marquez (elena.marquez@examplecorp.example, Slack U2008298D057) is Alex's skip-level / org lead (Morgan is Alex's direct manager); reviews OKRs and the QBR and runs Platform Eng staff.",
     "accept": [
       "Elena Marquez",
       "Elena"
@@ -308,7 +308,7 @@
       "E:2026-05-23T08-41-00__a917fd3a"
     ],
     "entity": "people/jin_oh",
-    "notes": "Jin Oh (jin.oh@example-co.com) is an ML researcher (not an engineer) who owns the evaluator workstream methodology and represents ML-research in the Beacon eval working group; prefers methodology critique delivered directly during sessions.",
+    "notes": "Jin Oh (jin.oh@examplecorp.example) is an ML researcher (not an engineer) who owns the evaluator workstream methodology and represents ML-research in the Beacon eval working group; prefers methodology critique delivered directly during sessions.",
     "accept": [
       "Jin Oh"
     ]
@@ -323,7 +323,7 @@
       "S:D200JOR001_dm@2026-04-16"
     ],
     "entity": "people/jordan_kim",
-    "notes": "Jordan Kim (@jordan, jordan.kim@example-co.com, Slack U200DC075DFC) is an Atlas backend engineer working closely with Alex on wave-ingest and prefix-trim; Alex's coverage for Atlas during absences and a leverage piece Morgan holds against C",
+    "notes": "Jordan Kim (@jordan, jordan.kim@examplecorp.example, Slack U200DC075DFC) is an Atlas backend engineer working closely with Alex on wave-ingest and prefix-trim; Alex's coverage for Atlas during absences and a leverage piece Morgan holds against C",
     "accept": [
       "Jordan",
       "Jordan Kim"
@@ -339,7 +339,7 @@
       "E:2026-05-26T16-18-00__42b9a86b"
     ],
     "entity": "people/kavya_ramaswamy",
-    "notes": "Kavya Ramaswamy (@kavya, kavya.ramaswamy@example-co.com) owns the Compass v2 launch and convened the cross-team kickoff; presents the Compass v2 cutover spotlight at the May 30 all-hands.",
+    "notes": "Kavya Ramaswamy (@kavya, kavya.ramaswamy@examplecorp.example) owns the Compass v2 launch and convened the cross-team kickoff; presents the Compass v2 cutover spotlight at the May 30 all-hands.",
     "accept": [
       "Kavya Ramaswamy",
       "Kavya",
@@ -373,7 +373,7 @@
       "E:2026-05-18T12-12-00__b2204fe8"
     ],
     "entity": "people/morgan_lee",
-    "notes": "Morgan Lee (@morgan, morgan.lee@example-co.com, Slack U200B3C81BDF) is Alex's direct manager; runs Platform Eng 1:1 cadence and OKR/headcount/QBR coordination; terse/understated (\"good catch, let's not do that again\" is about as effusive as",
+    "notes": "Morgan Lee (@morgan, morgan.lee@examplecorp.example, Slack U200B3C81BDF) is Alex's direct manager; runs Platform Eng 1:1 cadence and OKR/headcount/QBR coordination; terse/understated (\"good catch, let's not do that again\" is about as effusive as",
     "accept": [
       "Morgan Lee",
       "Morgan",
@@ -383,7 +383,7 @@
   {
     "id": "fact-025",
     "type": "multi_source",
-    "question": "Who had been pushing the “co-engineered surface” framing for Helix v2 messaging?",
+    "question": "Who had been pushing the “co-engineered surface” framing for Quillon v2 messaging?",
     "mode": "string_any",
     "gold_source_ids": [
       "E:2026-05-12T09-18-00__4cbf1a58",
@@ -391,7 +391,7 @@
       "E:2026-05-20T08-51-00__6c97f35e"
     ],
     "entity": "people/noah_arenson",
-    "notes": "Noah Arenson (noah.arenson@example-co.com) is on the Helix/partner side; coordinates the Helix partner sync, pushed the rejected \"co-engineered surface\" framing, and pings weekly about the Helix timeline (which keeps slipping, with Platform",
+    "notes": "Noah Arenson (noah.arenson@examplecorp.example) is on the Quillon/partner side; coordinates the Quillon partner sync, pushed the rejected \"co-engineered surface\" framing, and pings weekly about the Quillon timeline (which keeps slipping, with Platform",
     "accept": [
       "Noah",
       "Noah Arenson"
@@ -408,7 +408,7 @@
       "S:D200ROH001_dm@2026-05-09"
     ],
     "entity": "people/rohan_dasgupta",
-    "notes": "Rohan Dasgupta (@rohan, rohan.dasgupta@example-co.com, Slack U200F6FF520A) leads the Beacon team and is Alex's counterpart on the shared Atlas<->Beacon runtime work; created the private #atlas-beacon-runtime design channel (added Anya) and ",
+    "notes": "Rohan Dasgupta (@rohan, rohan.dasgupta@examplecorp.example, Slack U200F6FF520A) leads the Beacon team and is Alex's counterpart on the shared Atlas<->Beacon runtime work; created the private #atlas-beacon-runtime design channel (added Anya) and ",
     "accept": [
       "#atlas-beacon-runtime"
     ]
@@ -423,7 +423,7 @@
       "E:2026-05-19T10-18-00__7a77c9c1"
     ],
     "entity": "people/sam_iverson",
-    "notes": "Sam Iverson (@sam, sam.iverson@example-co.com, Slack U200C6EF237B) is the Atlas product/PM lead; owns product framing, the product surface RFC (v2 co-authored with Alex), the dashboard surface, customer briefings, and all-hands demo coordin",
+    "notes": "Sam Iverson (@sam, sam.iverson@examplecorp.example, Slack U200C6EF237B) is the Atlas product/PM lead; owns product framing, the product surface RFC (v2 co-authored with Alex), the dashboard surface, customer briefings, and all-hands demo coordin",
     "accept": [
       "Sam Iverson",
       "@sam"
@@ -473,7 +473,7 @@
       "E:2026-05-25T16-32-00__42f0285e"
     ],
     "entity": "projects/atlas",
-    "notes": "Project Atlas is a Platform Eng project on GitLab (gitlab.example-co.com/platform-eng/atlas), owned by team platform-eng/atlas; Alex Chen leads/maintains it.",
+    "notes": "Project Atlas is a Platform Eng project on GitLab (gitlab.examplecorp.example/platform-eng/atlas), owned by team platform-eng/atlas; Alex Chen leads/maintains it.",
     "accept": [
       "platform-eng/atlas",
       "platform-eng / atlas"
@@ -529,18 +529,18 @@
   {
     "id": "fact-035",
     "type": "multi_source",
-    "question": "What file path is listed for the Helix OAuth callback?",
+    "question": "What file path is listed for the Quillon OAuth callback?",
     "mode": "string_any",
     "gold_source_ids": [
       "E:2026-05-12T08-52-00__9b2b6f55",
       "E:2026-05-13T08-58-00__6b669d1f",
       "S:C200GRP002_group_dm@2026-05-23"
     ],
-    "entity": "projects/helix",
-    "notes": "Helix is a partner-facing integration with its own release at risk if Atlas auth inventory slips; involves a Helix-side OAuth callback handler (src/atlas/auth/helix_callback.py) and requires Platform Eng sign-off on an auth model change bef",
+    "entity": "projects/quillon",
+    "notes": "Quillon is a partner-facing integration with its own release at risk if Atlas auth inventory slips; involves a Quillon-side OAuth callback handler (src/atlas/auth/quillon_callback.py) and requires Platform Eng sign-off on an auth model change bef",
     "accept": [
-      "src/atlas/auth/helix_callback.py",
-      "`src/atlas/auth/helix_callback.py`"
+      "src/atlas/auth/quillon_callback.py",
+      "`src/atlas/auth/quillon_callback.py`"
     ]
   },
   {
@@ -552,10 +552,10 @@
       "E:2026-05-13T08-58-00__6b669d1f"
     ],
     "entity": "concepts/auth_scope",
-    "notes": "Threat-model delta from Q4: Q4 covered token storage in steady state; new are the migration window, the Helix callback (new external surface), and cross-surface session validation (Slack-to-web token reuse, not designed in Q4).",
+    "notes": "Threat-model delta from Q4: Q4 covered token storage in steady state; new are the migration window, the Quillon callback (new external surface), and cross-surface session validation (Slack-to-web token reuse, not designed in Q4).",
     "accept": [
-      "Helix callback",
-      "Helix OAuth callback",
+      "Quillon callback",
+      "Quillon OAuth callback",
       "OAuth callback"
     ]
   },
@@ -867,7 +867,7 @@
   {
     "id": "fact-059",
     "type": "multi_source",
-    "question": "By when did Morgan need Alex's staffing one-pager, read on Wen-Qing's ramp, and Helix contractor tradeoff input for the Platform Eng headcount conversation prep?",
+    "question": "By when did Morgan need Alex's staffing one-pager, read on Wen-Qing's ramp, and Quillon contractor tradeoff input for the Platform Eng headcount conversation prep?",
     "mode": "string_any",
     "gold_source_ids": [
       "S:C200PFE001_channel@2026-04-30",
@@ -1019,14 +1019,14 @@
   {
     "id": "fact-070",
     "type": "multi_source",
-    "question": "What date did Alex Chen say was realistic for the Helix v2 launch after Sam Iverson said partner ops wanted June 30?",
+    "question": "What date did Alex Chen say was realistic for the Quillon v2 launch after Sam Iverson said partner ops wanted June 30?",
     "mode": "string_any",
     "gold_source_ids": [
       "S:D200SAM001_dm@2026-05-14",
       "S:D200SAM001_dm@2026-05-26"
     ],
-    "entity": "projects/helix",
-    "notes": "Helix v2 launch date moved from a June 30 internal target to July 14 (realistic); June 30 would have shipped without rate-limit hardening. Security review owner is Dimitri, confirmed done by July 7 (buffer to the July 14 launch).",
+    "entity": "projects/quillon",
+    "notes": "Quillon v2 launch date moved from a June 30 internal target to July 14 (realistic); June 30 would have shipped without rate-limit hardening. Security review owner is Dimitri, confirmed done by July 7 (buffer to the July 14 launch).",
     "accept": [
       "july 14",
       "July 14"
@@ -1299,7 +1299,7 @@
       "S:C200ATLE001_channel@2026-05-16"
     ],
     "entity": "people/wen_qing_tang",
-    "notes": "Wen-Qing wrote the wave-ingest walkthrough wiki page (gitlab.example-co.com/platform-eng/atlas/-/wikis/wave-ingest-walkthrough-2026-05-12) after Alex's 2026-05-12 mutex walkthrough — recommended reading for new team members; Beacon copied t",
+    "notes": "Wen-Qing wrote the wave-ingest walkthrough wiki page (gitlab.examplecorp.example/platform-eng/atlas/-/wikis/wave-ingest-walkthrough-2026-05-12) after Alex's 2026-05-12 mutex walkthrough — recommended reading for new team members; Beacon copied t",
     "accept": [
       "mutex section"
     ]
@@ -1353,13 +1353,13 @@
   {
     "id": "fact-098",
     "type": "single_hop",
-    "question": "What Helix framing did Sam Iverson say they settled on after pushing back on \"co-engineered\"?",
+    "question": "What Quillon framing did Sam Iverson say they settled on after pushing back on \"co-engineered\"?",
     "mode": "string_any",
     "gold_source_ids": [
       "S:D200SAM001_dm@2026-05-10"
     ],
-    "entity": "projects/helix",
-    "notes": "Helix v2 messaging settled on \"partner integration with extended capabilities\" (Alex and Sam both rejected Noah's \"co-engineered surface\" framing).",
+    "entity": "projects/quillon",
+    "notes": "Quillon v2 messaging settled on \"partner integration with extended capabilities\" (Alex and Sam both rejected Noah's \"co-engineered surface\" framing).",
     "accept": [
       "partner integration with extended capabilities"
     ]
@@ -1528,7 +1528,7 @@
       "E:2026-05-21T09-24-00__88129152"
     ],
     "entity": "people/priya_raman",
-    "notes": "Priya's review of !318 was clean with a note to hash workspace_id before production telemetry if any map to PII; she is reviewing the Helix auth changes that make the Helix surface hard for a contractor to take over.",
+    "notes": "Priya's review of !318 was clean with a note to hash workspace_id before production telemetry if any map to PII; she is reviewing the Quillon auth changes that make the Quillon surface hard for a contractor to take over.",
     "accept": [
       "workspace_id",
       "`workspace_id`"

@@ -90,7 +90,7 @@ Write an `adapter.json` with two commands:
 `answer` reads `questions.jsonl` on stdin and writes one JSON object per line:
 
 ```json
-{"id": "fresh-helix-launch-date", "answer": "2026-07-14", "source_ids": ["S:D200SAM001_dm@2026-05-14"]}
+{"id": "fresh-quillon-launch-date", "answer": "2026-07-14", "source_ids": ["S:D200SAM001_dm@2026-05-14"]}
 ```
 
 `source_ids` is optional. Supplying it gets you the evidence diagnostics;

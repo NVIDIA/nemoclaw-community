@@ -40,7 +40,7 @@ Reply with a single JSON object and nothing else:
 **3. Write one JSON object per line** to `answers.jsonl`:
 
 ```json
-{"id": "fresh-helix-launch-date", "answer": "2026-07-14", "source_ids": ["S:D200SAM001_dm@2026-05-14"]}
+{"id": "fresh-quillon-launch-date", "answer": "2026-07-14", "source_ids": ["S:D200SAM001_dm@2026-05-14"]}
 ```
 
 `source_ids` is optional. Providing it gets you the evidence diagnostics;
