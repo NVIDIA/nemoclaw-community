@@ -76,13 +76,15 @@ Examples of requests and matching skills:
 - Slack channel discovery (finding channels by topic) -> `slack-channel-finder`
 - Slack channel history or summaries -> `slack-channel-summarizer`
 - Current live GitHub issues, PRs, commits, branches, README, or repository
-  contents for the configured repo -> `github-readonly-live`
+  contents for an allowed repository -> `github-readonly-live`
 - GitHub discussion mirrors, historical GitHub mirror data, or NVIDIA forum topics ->
   `source-etl-query`
 - Outlook email search or thread reads -> `outlook-email-search`
 - Cross-source comparison or gap analysis across Slack, GitHub, forums,
   or Outlook -> `cross-source-gap-analysis`, plus whichever source
   skills are needed
+- Current public-web discovery outside the configured private and repository
+  sources -> `public-web-search` (when enabled)
 - Agent availability, Slack response failures, first-time auto-heal setup, or
   host proxy troubleshooting -> `nemoclaw-autoheal`
 - Named NVTeam personas, product decisions, cross-functional readiness,
@@ -95,10 +97,11 @@ Your initial setup includes skills which you should prefer to use over creating
 custom Python code, terminal commands, etc:
 - interacting with Slack
 - interacting with Outlook
-- interacting with live GitHub data for one policy-scoped repo
+- interacting with live GitHub data for policy-scoped repositories
 - interacting with mirrored GitHub/forum data via a local database populated
   with ETL cron jobs
 - routing cross-functional work through evidence-bounded NVTeam role lenses
+- searching the public web through the optional, search-only Tavily provider
 
 ### Writing New Skills
 
@@ -112,20 +115,21 @@ in these origial skills and scripts when creating new skills or saving memories.
 ### GitHub live REST
 
 Live GitHub access is available only through authenticated, policy-scoped `GET`
-requests to `api.github.com` for the single configured repo in
-`$GITHUB_READONLY_REPO`. GitHub auth comes from an OpenShell provider
-placeholder in `GITHUB_TOKEN`; use it only through the
+requests to `api.github.com` for repositories in `$GITHUB_READONLY_REPOS`, or
+the legacy `$GITHUB_READONLY_REPO` fallback. GitHub authentication comes from
+an OpenShell provider placeholder in `GITHUB_TOKEN`; use it only through the
 `github-readonly-live` helper and do not print, inspect, or modify it.
 For any live GitHub request, your first action must be either to read the
 `github-readonly-live` skill or to run the exact helper path documented by that
 skill. Do not run `github-readonly-live` as a command, search for GitHub
 binaries, or probe the shell environment first.
 Use `github-readonly-live` for current issues, PRs, commits, branches, README,
-or repository contents from that repo. For new GitHub questions, use the
-helper's generic `get` command with repo-relative REST routes, `--param`
-query params, `--paginate`, `--count`, `--fields`, and `--exclude-pulls` as
-needed. Do not invent one-off GitHub scripts when the generic helper can make
-the policy-compatible request directly.
+or repository contents from an allowed repository. For new GitHub questions,
+use the helper's generic `get` command with repository-relative REST routes,
+`--repo` when more than one repository is allowed, `--param` query parameters,
+`--paginate`, `--count`, `--fields`, and `--exclude-pulls` as needed. Do not
+invent one-off GitHub scripts when the generic helper can make the
+policy-compatible request directly.
 
 Do not use `gh`, `git`, `github.com`, `raw.githubusercontent.com`,
 `codeload.github.com`, GraphQL, search endpoints, or hand-written GitHub
@@ -142,8 +146,8 @@ custom GitHub request code, or alternate GitHub hosts.
 Use `source-etl-query` for GitHub discussions, historical GitHub mirror data,
 and NVIDIA forum topics. The mirror is served by a host-side PostgREST bridge
 and may lag live sources. Use live GitHub REST for current issues and PRs when
-the repo is covered by `$GITHUB_READONLY_REPO`. NVIDIA forum live HTML access
-is blocked by sandbox policy.
+the repository is covered by the live GitHub allowlist. NVIDIA forum live HTML
+access is blocked by sandbox policy.
 
 ### Slack
 
@@ -160,3 +164,7 @@ endpoints needed by that bridge.
 ### Browser tool
 
 Browser automation tools are disabled for this sandbox configuration.
+Direct URL fetching and web extraction are also disabled. When the optional
+Tavily integration is configured, use `public-web-search` and the native
+`web_search` tool only. If it is unavailable, report that public web search is
+disabled instead of trying another binary, host, or route.

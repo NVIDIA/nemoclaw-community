@@ -1,0 +1,188 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""Acceptance: schema migration."""
+
+import json, os, sqlite3, subprocess, sys, tempfile, unittest
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(HERE))
+from migrate import MIGRATIONS, SCHEMA_VERSION, SchemaFromTheFuture, current_version, migrate, open_store  # noqa: E402
+
+SCHEMA = (HERE / "schema.sql").read_text(encoding="utf-8")
+
+
+class TestMigration(unittest.TestCase):
+
+    def fresh(self):
+        p = Path(tempfile.mkdtemp()) / "state.db"
+        c = sqlite3.connect(p); c.executescript(SCHEMA); c.commit(); c.close()
+        return p
+
+    def test_a_fresh_store_reports_the_current_version(self):
+        with sqlite3.connect(self.fresh()) as c:
+            self.assertEqual(current_version(c), SCHEMA_VERSION)
+
+    def test_migrating_an_up_to_date_store_does_nothing(self):
+        # Every job calls this on startup, so a no-op has to be genuinely free.
+        with sqlite3.connect(self.fresh()) as c:
+            self.assertEqual(migrate(c), [])
+
+    def test_migration_is_idempotent(self):
+        p = self.fresh()
+        with sqlite3.connect(p) as c:
+            migrate(c); migrate(c)
+            self.assertEqual(current_version(c), SCHEMA_VERSION)
+
+    def test_a_store_from_the_future_is_refused_rather_than_opened(self):
+        p = self.fresh()
+        with sqlite3.connect(p) as c:
+            c.execute("UPDATE meta SET value=? WHERE key='schema_version'",
+                      (str(SCHEMA_VERSION + 5),))
+        with self.assertRaises(SchemaFromTheFuture):
+            open_store(p)
+
+    def test_this_recipe_ships_at_the_baseline_with_nothing_to_upgrade_from(self):
+        """No store exists at an earlier version, so there is no upgrade path.
+
+        There used to be a v1-to-v2 step here, written against a v1 that never
+        shipped. The test built its "old" store by taking the current schema
+        and removing one column, which is not the same artifact: it kept every
+        other column the real v1 lacked, so a genuine v1 database still failed
+        to open while the test passed.
+        """
+        self.assertEqual(SCHEMA_VERSION, 1)
+        self.assertEqual(MIGRATIONS, {})
+        p = self.fresh()
+        with sqlite3.connect(p) as c:
+            self.assertEqual(current_version(c), 1)
+            self.assertEqual(migrate(c), [])           # already current
+
+    def test_the_shipped_schema_opens_a_store_that_the_shipped_schema_made(self):
+        """The artifact under test is the one the recipe installs."""
+        p = self.fresh()
+        with sqlite3.connect(p) as c:
+            columns = {r[1] for r in c.execute("PRAGMA table_info(items)")}
+        # Columns belonging to phases that have not shipped must not be here:
+        # one of them arrived by a bad merge and broke opening a real store.
+        self.assertNotIn("deleted_at", columns)
+        with sqlite3.connect(p) as c:
+            self.assertEqual(migrate(c), [])
+
+    def test_a_versionless_store_migrates_up_from_zero(self):
+        p = self.fresh()
+        with sqlite3.connect(p) as c:
+            c.execute("DELETE FROM meta WHERE key='schema_version'")
+        with sqlite3.connect(p) as c:
+            self.assertEqual(current_version(c), 0)
+            self.assertEqual(migrate(c), list(range(1, SCHEMA_VERSION + 1)))
+            self.assertEqual(current_version(c), SCHEMA_VERSION)
+
+
+class TestVersionGuardOnTheRealPath(unittest.TestCase):
+    """A store from the future is refused before anything writes to it.
+
+    Checking the version inside a migration helper is not protection if the
+    executables never call that helper. These tests go through the paths a
+    reader actually runs: the store opener every script begins with, and the
+    writer's command line.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.environ["HERMES_HOME"] = self.tmp
+        for m in ("_db", "migrate", "ranking", "apply_decisions"):
+            sys.modules.pop(m, None)
+        import _db                            # noqa: E402
+        self._db = _db
+        _db.ensure_store()
+        self.db = _db.ledger_path()
+
+    def _set_version(self, value):
+        with sqlite3.connect(self.db) as c:
+            c.execute("UPDATE meta SET value=? WHERE key='schema_version'", (str(value),))
+
+    def test_ensure_store_refuses_a_newer_schema(self):
+        import migrate                        # noqa: E402
+        self._set_version(99)
+        with self.assertRaises(migrate.SchemaFromTheFuture):
+            self._db.ensure_store()
+
+    def test_the_writer_exits_nonzero_and_writes_nothing(self):
+        """The refusal reaches the command line, and no row is created."""
+        self._set_version(99)
+        env = json.dumps({"version": 1, "decisions": [
+            {"source_id": "m1", "decision": "CREATE", "rank": 1, "title": "t"}]})
+        proc = subprocess.run(
+            [sys.executable, str(HERE / "apply_decisions.py")],
+            input=env, capture_output=True, text=True,
+            env={**os.environ, "HERMES_HOME": self.tmp})
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("99", proc.stderr)
+        with sqlite3.connect(self.db) as c:
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM obligations").fetchone()[0], 0)
+
+    def _fake_a_future_store(self):
+        """A v99 store that dropped a table we ship and added one we do not."""
+        with sqlite3.connect(self.db) as c:
+            c.execute("UPDATE meta SET value='99' WHERE key='schema_version'")
+            c.execute("DROP TABLE events")
+            c.execute("CREATE TABLE v99_notes (id TEXT)")
+
+    def _tables(self):
+        with sqlite3.connect(self.db) as c:
+            return sorted(r[0] for r in c.execute(
+                "SELECT name FROM sqlite_master"
+                " WHERE type='table' AND name NOT LIKE 'sqlite_%'"))
+
+    def test_the_schema_is_not_touched_before_the_refusal(self):
+        """"Refused before any write" has to include the baseline DDL.
+
+        `CREATE TABLE IF NOT EXISTS` is idempotent against our own schema and
+        not against a later version's. Running it first silently recreated a
+        table that version had dropped, and the store was left carrying a
+        table from a schema the refusing code does not understand. Asserting
+        only that no rows were written missed it, because the damage is DDL.
+        """
+        import migrate                        # noqa: E402
+        self._fake_a_future_store()
+        before = self._tables()
+        self.assertNotIn("events", before)     # the future version dropped it
+        with self.assertRaises(migrate.SchemaFromTheFuture):
+            self._db.ensure_store()
+        self.assertEqual(self._tables(), before)
+
+    def test_the_version_is_not_rewritten_by_the_refusal(self):
+        self._fake_a_future_store()
+        with self.assertRaises(Exception):
+            self._db.ensure_store()
+        with sqlite3.connect(self.db) as c:
+            version = c.execute(
+                "SELECT value FROM meta WHERE key='schema_version'").fetchone()[0]
+        self.assertEqual(int(version), 99)
+
+    def test_a_store_with_no_meta_table_is_not_mistaken_for_the_future(self):
+        """The pre-check runs before the baseline exists, so it must tolerate that."""
+        import migrate                        # noqa: E402
+        with sqlite3.connect(self.db) as c:
+            c.execute("DROP TABLE meta")
+        with sqlite3.connect(self.db) as c:
+            migrate.refuse_if_from_the_future(c)      # must not raise
+        self.assertTrue(self._db.ensure_store().is_file())
+
+    def test_an_older_store_is_migrated_rather_than_refused(self):
+        """The guard is one-sided: behind is upgraded, ahead is refused."""
+        import migrate                        # noqa: E402
+        self._set_version(1)
+        with sqlite3.connect(self.db) as c:
+            c.execute("UPDATE obligations SET global_rank=NULL")
+        self._db.ensure_store()
+        with sqlite3.connect(self.db) as c:
+            version = c.execute(
+                "SELECT value FROM meta WHERE key='schema_version'").fetchone()[0]
+        self.assertEqual(int(version), migrate.SCHEMA_VERSION)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

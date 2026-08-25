@@ -53,12 +53,66 @@ fi
 ALLOWED_SENDERS="${OUTLOOK_ALLOWED_SENDERS:-}"
 SOURCE_ETL_HOST="${SOURCE_ETL_API_HOST:-host.openshell.internal}"
 SOURCE_ETL_PORT="${SOURCE_ETL_API_PORT:-3100}"
-GITHUB_READONLY_REPO="${GITHUB_READONLY_REPO:-NVIDIA/OpenShell}"
-if [[ ! "$GITHUB_READONLY_REPO" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]+$ ]]; then
-  echo "Invalid GITHUB_READONLY_REPO '$GITHUB_READONLY_REPO' — expected owner/repo" >&2
+if ! GITHUB_READONLY_REPOS="$(python3 "$DIR/lib/github_repositories.py" resolve)"; then
   exit 1
 fi
-echo "GitHub read-only repo scope: $GITHUB_READONLY_REPO"
+GITHUB_READONLY_REPO="${GITHUB_READONLY_REPOS%%,*}"
+export GITHUB_READONLY_REPOS GITHUB_READONLY_REPO
+echo "GitHub read-only repository scope: $GITHUB_READONLY_REPOS"
+
+NEMOCLAW_WEB_SEARCH_PROVIDER=""
+if [[ -n "${TAVILY_API_KEY:-}" ]]; then
+  NEMOCLAW_WEB_SEARCH_PROVIDER="tavily"
+  echo "Public web search: Tavily (search-only)"
+else
+  echo "Public web search: disabled"
+fi
+
+GITLAB_READONLY_PROJECTS="${GITLAB_READONLY_PROJECTS:-}"
+GITLAB_PROJECTS=()
+declare -A GITLAB_PROJECT_KEYS=()
+if [[ -n "$GITLAB_READONLY_PROJECTS" ]]; then
+  IFS=',' read -ra _GITLAB_PROJECTS_RAW <<<"$GITLAB_READONLY_PROJECTS"
+  for project in "${_GITLAB_PROJECTS_RAW[@]}"; do
+    project="${project#"${project%%[![:space:]]*}"}"
+    project="${project%"${project##*[![:space:]]}"}"
+    if [[ ! "$project" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)+$ ]]; then
+      echo "Invalid GitLab project '$project' — expected group[/subgroup]/project" >&2
+      exit 1
+    fi
+    project_key="${project,,}"
+    if [[ -n "${GITLAB_PROJECT_KEYS[$project_key]:-}" ]]; then
+      echo "Duplicate GitLab project '$project'" >&2
+      exit 1
+    fi
+    GITLAB_PROJECT_KEYS[$project_key]=1
+    GITLAB_PROJECTS+=("$project")
+  done
+  GITLAB_READONLY_PROJECTS="$(IFS=,; echo "${GITLAB_PROJECTS[*]}")"
+fi
+if [[ -n "${GITLAB_TOKEN:-}" && ${#GITLAB_PROJECTS[@]} -eq 0 ]]; then
+  echo "GITLAB_READONLY_PROJECTS is required when GITLAB_TOKEN is set" >&2
+  exit 1
+fi
+if [[ -z "${GITLAB_TOKEN:-}" && ${#GITLAB_PROJECTS[@]} -gt 0 ]]; then
+  echo "GITLAB_TOKEN is required when GITLAB_READONLY_PROJECTS is set" >&2
+  exit 1
+fi
+
+GITLAB_PROJECT_SPECS=()
+GITLAB_READONLY_PROJECT_IDS=""
+if [[ ${#GITLAB_PROJECTS[@]} -gt 0 ]]; then
+  echo "GitLab read-only project scopes: $GITLAB_READONLY_PROJECTS"
+  mapfile -t GITLAB_PROJECT_SPECS < <(
+    python3 "$DIR/lib/resolve-gitlab-projects.py" \
+      --api-url "$GITLAB_API_URL" "${GITLAB_PROJECTS[@]}"
+  )
+  if [[ ${#GITLAB_PROJECT_SPECS[@]} -ne ${#GITLAB_PROJECTS[@]} ]]; then
+    echo "Failed to resolve every GitLab project to a numeric ID" >&2
+    exit 1
+  fi
+  GITLAB_READONLY_PROJECT_IDS="$(IFS=,; echo "${GITLAB_PROJECT_SPECS[*]}")"
+fi
 
 NEMOCLAW_SLACK_RICH_BLOCKS="${NEMOCLAW_SLACK_RICH_BLOCKS:-true}"
 case "$NEMOCLAW_SLACK_RICH_BLOCKS" in
@@ -81,7 +135,12 @@ bash "$DIR/stage-enterprise-cas.sh"
 declare -A DOCKERFILE_ARGS=(
   [NEMOCLAW_MESSAGING_CHANNELS_B64]="$CHANNELS_B64"
   [NEMOCLAW_SLACK_RICH_BLOCKS]="$NEMOCLAW_SLACK_RICH_BLOCKS"
+  [NEMOCLAW_WEB_SEARCH_PROVIDER]="$NEMOCLAW_WEB_SEARCH_PROVIDER"
+  [GITHUB_READONLY_REPOS]="$GITHUB_READONLY_REPOS"
   [GITHUB_READONLY_REPO]="$GITHUB_READONLY_REPO"
+  [GITLAB_READONLY_PROJECTS]="$GITLAB_READONLY_PROJECTS"
+  [GITLAB_API_URL]="$GITLAB_API_URL"
+  [GITLAB_READONLY_PROJECT_IDS]="$GITLAB_READONLY_PROJECT_IDS"
   [SOURCE_ETL_API_HOST]="$SOURCE_ETL_HOST"
   [SOURCE_ETL_API_PORT]="$SOURCE_ETL_PORT"
   [NEMOCLAW_BUILD_ID]="$(date +%s)"
@@ -145,10 +204,18 @@ if [[ -n "${GITHUB_TOKEN:-}" ]] || grep -q -- "--mount=type=secret" "$STAGED_DOC
   fi
 fi
 
-# ── Stage policy and patch per-run repo scope ───────────────────────────
-cp "$EXAMPLE_DIR/policy.yaml" "$STAGED_POLICY"
+# ── Stage policy with exact GitHub, GitLab, and web-search rules ────────
+python3 "$DIR/lib/github_repositories.py" stage-policy \
+  --template "$EXAMPLE_DIR/policy.yaml" \
+  --output "$STAGED_POLICY"
+python3 "$DIR/lib/web_search_policy.py" \
+  --template "$STAGED_POLICY" \
+  --output "$STAGED_POLICY"
+python3 "$DIR/lib/stage-gitlab-policy.py" \
+  "$STAGED_POLICY" "${GITLAB_PROJECT_SPECS[@]}"
 sed -i \
-  -e "s|__GITHUB_READONLY_REPO__|$GITHUB_READONLY_REPO|g" \
+  -e "s|__GITLAB_API_HOST__|$GITLAB_API_HOST|g" \
+  -e "s|__GITLAB_API_PORT__|$GITLAB_API_PORT|g" \
   "$STAGED_POLICY"
 
 # ── Build provider flags from what 02-providers.sh actually created ────
@@ -158,6 +225,8 @@ PROVIDER_FLAGS=()
 [[ -n "${OUTLOOK_CLIENT_ID:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-outlook")
 [[ -n "${SLACK_BOT_TOKEN:-}" || -n "${SLACK_APP_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-slack")
 [[ -n "${GITHUB_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-github")
+[[ -n "${GITLAB_TOKEN:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-gitlab")
+[[ -n "${TAVILY_API_KEY:-}" ]] && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-tavily-search")
 atif_remote_enabled && PROVIDER_FLAGS+=(--provider "$SANDBOX_NAME-atif-export-relay")
 
 # ── Create the sandbox ─────────────────────────────────────────────────
@@ -182,7 +251,11 @@ setsid openshell sandbox create \
     OUTLOOK_TARGET_MAILBOX="${OUTLOOK_TARGET_MAILBOX:-}" \
     OUTLOOK_REPLY_TO="${OUTLOOK_REPLY_TO:-}" \
     OUTLOOK_ALLOWED_SENDERS="$ALLOWED_SENDERS" \
+    GITHUB_READONLY_REPOS="$GITHUB_READONLY_REPOS" \
     GITHUB_READONLY_REPO="$GITHUB_READONLY_REPO" \
+    GITLAB_READONLY_PROJECTS="$GITLAB_READONLY_PROJECTS" \
+    GITLAB_API_URL="$GITLAB_API_URL" \
+    GITLAB_READONLY_PROJECT_IDS="$GITLAB_READONLY_PROJECT_IDS" \
     NEMOCLAW_MESSAGING_CHANNELS_B64="$CHANNELS_B64" \
     CHAT_UI_URL="http://127.0.0.1:8642" \
     PHOENIX_COLLECTOR_ENDPOINT="${PHOENIX_COLLECTOR_ENDPOINT:-}" \

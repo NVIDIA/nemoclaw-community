@@ -165,6 +165,11 @@ RUN chmod 755 /usr/local/lib/nemoclaw/bin/hermes
 COPY agents/hermes/refresh-placeholders.py /usr/local/lib/nemoclaw/refresh-placeholders.py
 RUN chmod 755 /usr/local/lib/nemoclaw/refresh-placeholders.py
 
+# The same script runs on the host and inside the sandbox. The host performs
+# the guided Slack API check; the sandbox reads only sanitized stage markers.
+COPY scripts/slack_delivery_diagnostic.py /usr/local/lib/nemoclaw/slack-delivery-diagnostic.py
+RUN chmod 755 /usr/local/lib/nemoclaw/slack-delivery-diagnostic.py
+
 COPY agents/hermes/patches/ /usr/local/lib/nemoclaw-patches/
 COPY agents/hermes/tests/verify-rich-block-renderer.py /tmp/verify-rich-block-renderer.py
 
@@ -300,7 +305,12 @@ ARG CHAT_UI_URL=http://127.0.0.1:8642
 # image stays generic and shareable.
 ARG NEMOCLAW_MESSAGING_CHANNELS_B64=W10=
 ARG NEMOCLAW_SLACK_RICH_BLOCKS=true
+ARG NEMOCLAW_WEB_SEARCH_PROVIDER=
+ARG GITHUB_READONLY_REPOS=
 ARG GITHUB_READONLY_REPO=NVIDIA/OpenShell
+ARG GITLAB_READONLY_PROJECTS=
+ARG GITLAB_API_URL=https://gitlab.example.com/api/v4
+ARG GITLAB_READONLY_PROJECT_IDS=
 ARG SOURCE_ETL_GITHUB_REPO=
 ARG SOURCE_ETL_FORUM_TAG=
 ARG SOURCE_ETL_API_URL=
@@ -315,7 +325,12 @@ ENV NEMOCLAW_MODEL=${NEMOCLAW_MODEL} \
     CHAT_UI_URL=${CHAT_UI_URL} \
     NEMOCLAW_MESSAGING_CHANNELS_B64=${NEMOCLAW_MESSAGING_CHANNELS_B64} \
     NEMOCLAW_SLACK_RICH_BLOCKS=${NEMOCLAW_SLACK_RICH_BLOCKS} \
+    NEMOCLAW_WEB_SEARCH_PROVIDER=${NEMOCLAW_WEB_SEARCH_PROVIDER} \
+    GITHUB_READONLY_REPOS=${GITHUB_READONLY_REPOS} \
     GITHUB_READONLY_REPO=${GITHUB_READONLY_REPO} \
+    GITLAB_READONLY_PROJECTS=${GITLAB_READONLY_PROJECTS} \
+    GITLAB_API_URL=${GITLAB_API_URL} \
+    GITLAB_READONLY_PROJECT_IDS=${GITLAB_READONLY_PROJECT_IDS} \
     SOURCE_ETL_GITHUB_REPO=${SOURCE_ETL_GITHUB_REPO} \
     SOURCE_ETL_FORUM_TAG=${SOURCE_ETL_FORUM_TAG} \
     SOURCE_ETL_API_URL=${SOURCE_ETL_API_URL} \

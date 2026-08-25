@@ -13,6 +13,7 @@ again by contributor provenance.
 | [Agentic AI Learning Path](recipes/nvidia/agentic-ai-learning-path/README.md) | Adapts the popular Build an Agent Brev Launchable to run inside a NemoClaw sandbox with a self-contained deployment (vendored from the Chief of Staff recipe): the sandboxed agent provisions JupyterLab and tutors the seven modules. |
 | [Developer Community Chief of Staff](recipes/nvidia/developer-community-chief-of-staff/README.md) | Synthesizes Slack, Outlook, GitHub, and mirrored community signals into operating briefs, gaps, priorities, and follow-up recommendations. |
 | [Kubernetes GPU Autoscaling](recipes/nvidia/kubernetes-gpu-autoscaling/README.md) | Runs a CPU-only NemoClaw/OpenClaw sandbox through OpenShell on Kubernetes and autoscales authenticated, GPU-backed Ollama inference pods from DCGM utilization. |
+| [Memory-Driven Chief of Staff](recipes/nvidia/memory-driven-chief-of-staff/README.md) | Keeps a locally-authoritative, revisable record per inbound email and Slack message, re-judged on a schedule and re-ranked under fixed caps, without writing back to the source. |
 | [NV Tech Assistant](recipes/nvidia/nv-tech-assistant/README.md) | Answers NVIDIA technical questions with cited evidence from allowlisted NVIDIA, GitHub, and arXiv sources. |
 | [Payment Operations Hermes Assistant](recipes/nvidia/payment-ops-hermes/README.md) | Demonstrates constrained payment screening, evidence preparation, and a platform-enforced human release boundary. |
 | [PR Review Advisor](recipes/nvidia/pr-review-advisor/README.md) | Reviews exact pull request heads with a constrained Hermes workflow, produces attested artifacts, and publishes only through a separate maintainer action. |
@@ -30,6 +31,7 @@ again by contributor provenance.
 
 | Example | Description |
 | --- | --- |
+| [Axe A11y Browser Auditor](recipes/community/axe-a11y-browser-auditor/README.md) | Performs automated WCAG accessibility audits, visual screenshots, PDF exports, and network tracing via a sidecar MCP server using axe-core and Patchright with real Google Chrome. |
 | [Deep Research Worker](recipes/community/deep-research-worker/README.md) | Queues long-running research tasks from one sandbox to a host-side DeepAgents worker, with a narrow worker-only sandbox policy and optional read-only host-side search integrations. |
 
 ## NVIDIA Field Demos

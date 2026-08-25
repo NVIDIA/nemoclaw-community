@@ -25,6 +25,10 @@ process:
   run_as_user: sandbox
   run_as_group: sandbox
 network_policies:
+  # Optional Tavily search is staged only when TAVILY_API_KEY is configured.
+  # The static template grants no Tavily egress. scripts/03-sandbox.sh replaces
+  # this marker with one POST /search rule for Hermes's pinned Python runtime.
+  # __TAVILY_WEB_SEARCH_POLICY__
   # Load-bearing: per-path allow rules for the NVIDIA inference API.
   # providers/compatible-endpoint.yaml grants read-write over these hosts but
   # cannot express path scoping (v2 ProviderProfile schema has no rules[]).
@@ -126,15 +130,15 @@ network_policies:
     - path: /usr/local/bin/hermes
     - path: /opt/hermes/.venv/bin/hermes
     - path: /usr/bin/curl
-  # Load-bearing: per-repo path scoping for live GitHub REST reads.
+  # Load-bearing: per-repository path scoping for live GitHub REST reads.
   # providers/github.yaml grants read-only over all of api.github.com.
-  # This block is the sole gate preventing reads from repos other than
-  # $GITHUB_READONLY_REPO. Do not delete without an upstream OpenShell
+  # This block is the sole gate preventing reads from repositories outside
+  # the configured GitHub allowlist. Do not delete without an upstream OpenShell
   # change that adds per-path rules to the v2 ProviderProfile schema.
   github_repo_readonly:
     name: github-repo-readonly
-    # scripts/03-sandbox.sh replaces __GITHUB_READONLY_REPO__ with
-    # GITHUB_READONLY_REPO from .env before applying this policy.
+    # scripts/03-sandbox.sh replaces the rule marker below with exact paths
+    # for GITHUB_READONLY_REPOS, or the legacy GITHUB_READONLY_REPO fallback.
     endpoints:
     - host: api.github.com
       port: 443
@@ -143,22 +147,35 @@ network_policies:
       enforcement: enforce
       rules:
       - allow: { method: GET, path: /rate_limit }
-      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__ }
-      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/issues }
-      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/issues/** }
-      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/labels }
-      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/labels/** }
-      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/milestones }
-      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/milestones/** }
-      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/pulls }
-      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/pulls/** }
-      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/commits }
-      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/commits/** }
-      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/branches }
-      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/branches/** }
-      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/contents }
-      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/contents/** }
-      - allow: { method: GET, path: /repos/__GITHUB_READONLY_REPO__/readme }
+      # __GITHUB_READONLY_REPOSITORY_RULES__
+    binaries:
+    - path: /usr/bin/curl
+    - path: /usr/bin/python3
+    - path: /usr/bin/python3.13
+    - path: /opt/hermes/.venv/bin/python
+  # Load-bearing: GET-only, per-project path scoping for GitLab. The v2
+  # provider profile grants read-only access to the configured API host, but
+  # cannot express these path rules. scripts/03-sandbox.sh replaces the marker
+  # below with one explicit rule set per project in GITLAB_READONLY_PROJECTS.
+  # Sensitive project endpoints such as variables, hooks, tokens, runners,
+  # and members are intentionally absent.
+  gitlab_projects_readonly:
+    name: gitlab-projects-readonly
+    endpoints:
+    - host: __GITLAB_API_HOST__
+      port: __GITLAB_API_PORT__
+      protocol: rest
+      tls: terminate
+      enforcement: enforce
+      # Permit private-address GitLab deployments while retaining exact
+      # hostname, port, method, path, and binary restrictions.
+      allowed_ips:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+      - fc00::/7
+      rules:
+      - allow: { method: GET, path: "/api/v4/__gitlab_disabled__" } # __GITLAB_READONLY_RULES__
     binaries:
     - path: /usr/bin/curl
     - path: /usr/bin/python3

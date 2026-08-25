@@ -1,16 +1,16 @@
 ---
 name: github-readonly-live
-description: Read the configured live GitHub repository through authenticated, policy-scoped GitHub REST GET requests.
+description: Read an allowed live GitHub repository through authenticated, policy-scoped GitHub REST GET requests.
 ---
 
 # github-readonly-live
 
-Use this skill for current live GitHub REST data from the single repository
-allowed by the sandbox policy.
+Use this skill for current live GitHub REST data from a repository allowed by
+the sandbox policy.
 
 ## When to use
 
-- Inspect the currently allowed live GitHub repository.
+- Inspect a currently allowed live GitHub repository.
 - Read current issues, issue comments, pull requests, pull request files,
   reviews, commits, branches, labels, milestones, README, or repository
   contents.
@@ -21,7 +21,11 @@ Do not use this skill for GitHub discussions or NVIDIA forums. Use
 
 ## Access model
 
-- The allowed repository is `$GITHUB_READONLY_REPO`.
+- The repository allowlist is `$GITHUB_READONLY_REPOS`. The legacy
+  `$GITHUB_READONLY_REPO` setting remains the fallback.
+- Pass `--repo owner/repository` before the command when more than one
+  repository is allowed. The helper requires an explicit selection in that
+  case and rejects repositories outside the allowlist.
 - Requests use the OpenShell GitHub provider placeholder from `GITHUB_TOKEN`.
   Treat it as a secret placeholder: do not print
   it, modify it, or copy it into responses.
@@ -30,7 +34,7 @@ Do not use this skill for GitHub discussions or NVIDIA forums. Use
 - Do not inspect `.env` files, shell environments, proxy settings, or token
   variables to troubleshoot GitHub. If the helper cannot authenticate or reach
   GitHub, it will report the error itself.
-- Only repo-scoped `GET` requests to `api.github.com` are allowed.
+- Only repository-scoped `GET` requests to `api.github.com` are allowed.
 - Do not use `gh`, `git`, `github.com`, `raw.githubusercontent.com`,
   `codeload.github.com`, GraphQL, or GitHub search endpoints.
 - If a request returns an OpenShell policy 403, report the policy scope instead
@@ -43,21 +47,26 @@ Write-block validation pattern:
 
 ```bash
 auth="${GITHUB_TOKEN:-}"
+repo="NVIDIA/OpenShell"
 curl -sS -o /tmp/github-write-denied.json -w 'HTTP Status: %{http_code}\n' \
   -X POST \
   -H "Authorization: Bearer ${auth}" \
   -H 'Accept: application/vnd.github+json' \
   -H 'X-GitHub-Api-Version: 2022-11-28' \
-  "https://api.github.com/repos/${GITHUB_READONLY_REPO:-NVIDIA/OpenShell}/issues/<number>/comments" \
+  "https://api.github.com/repos/${repo}/issues/<number>/comments" \
   -d '{"body":"policy-validation-test"}'
 cat /tmp/github-write-denied.json
 ```
 
+Set `repo` to the allowed repository that the user selected.
+
 ## Procedure
 
 Always run the bundled helper script via the terminal tool. It constructs only
-repo-scoped GitHub REST GET requests. Prefer the generic `get` command and map
-the user's question to a repo-relative REST route plus query params.
+repository-scoped GitHub REST GET requests. Prefer the generic `get` command
+and map the user's question to a repository-relative REST route plus query
+parameters. Select the target with `--repo` when the allowlist contains more
+than one repository.
 Do not invoke `github-readonly-live` as a shell command; it is the skill name,
 not an executable. Do not call a tool named `github-readonly-live`; use
 `skill_view` only if you need to read this instruction file.
@@ -71,19 +80,22 @@ the user the helper error and stop. Do not diagnose by inspecting token env vars
 `.env` files, proxy env vars, DNS tools, `curl`, `gh`, `git`, custom Python
 requests, or alternate GitHub hosts.
 
+Replace `NVIDIA/OpenShell` in the repository-scoped examples below with the
+allowed repository that matches the user's request.
+
 ```bash
 /usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py rate-limit
-/usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py get . --fields full_name,description,open_issues_count
-/usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py get issues --param state=open --limit 20 --exclude-pulls --fields number,title,state,html_url
-/usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py get issues/<number>/comments --paginate --fields user.login,created_at,body
-/usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py get pulls --param state=open --paginate --count
-/usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py get pulls/<number>/files --paginate --fields filename,status,changes
-/usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py get contents/<path>
+/usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py --repo NVIDIA/OpenShell get . --fields full_name,description,open_issues_count
+/usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py --repo NVIDIA/OpenShell get issues --param state=open --limit 20 --exclude-pulls --fields number,title,state,html_url
+/usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py --repo NVIDIA/OpenShell get issues/<number>/comments --paginate --fields user.login,created_at,body
+/usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py --repo NVIDIA/OpenShell get pulls --param state=open --paginate --count
+/usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py --repo NVIDIA/OpenShell get pulls/<number>/files --paginate --fields filename,status,changes
+/usr/bin/python3 /sandbox/.hermes-data/skills/github-readonly-live/scripts/github_readonly.py --repo NVIDIA/OpenShell get contents/<path>
 ```
 
 Generic route rules:
 
-- Use repo-relative REST routes only: `.`, `issues`, `issues/<number>`,
+- Use repository-relative REST routes only: `.`, `issues`, `issues/<number>`,
   `issues/<number>/comments`, `pulls`, `pulls/<number>`,
   `pulls/<number>/files`, `commits`, `branches`, `contents/<path>`, etc.
 - Put query strings in `--param KEY=VALUE`, not in the route.
@@ -106,7 +118,8 @@ the default pattern for new GitHub questions.
 - For "how many PRs" or "how many pull requests" questions, use generic count:
   `get pulls --param state=open --paginate --count` or the requested state. Do
   not estimate from a single page.
-- The live GitHub scope and the source ETL mirror scope can be different repos.
+- The live GitHub scope and the source ETL mirror scope can use different
+  repositories.
   Do not merge their results without naming which source each fact came from.
 - If the helper is rate-limited, report that GitHub auth was absent or
   exhausted; use `source-etl-query` only when the user's task can tolerate
