@@ -15,6 +15,7 @@ on:
       - "examples/README.md"
       - "examples/**/README.md"
       - "scripts/check_catalog_parity.py"
+      - "scripts/tests/test_catalog_parity.py"
       - "site/**"
   push:
     branches:
@@ -27,6 +28,7 @@ on:
       - "examples/README.md"
       - "examples/**/README.md"
       - "scripts/check_catalog_parity.py"
+      - "scripts/tests/test_catalog_parity.py"
       - "site/**"
   workflow_dispatch:
 
@@ -45,6 +47,9 @@ jobs:
 
       - name: Check catalog parity and local links
         run: python3 scripts/check_catalog_parity.py --check
+
+      - name: Run catalog validator tests
+        run: python3 -m unittest discover -s scripts/tests -p 'test_catalog_parity.py'
 
       - name: Check license headers
         run: python3 scripts/check_license_headers.py --check
