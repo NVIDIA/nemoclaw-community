@@ -296,6 +296,10 @@ class TestTheDocumentedScheduleMatchesTheScript(unittest.TestCase):
     EXPECTED = {
         "intake": ("*/30 * * * *", "inbound-judging"),
         "review": ("0 */6 * * *", "obligation-review"),
+        # No skill: retention needs no judgment, clears bodies past the
+        # window, and gates the agent off. Naming one would advertise a
+        # capability the job never reaches.
+        "retention": ("0 2 * * *", None),
         "memory repair": ("0 3 * * *", "memory-repair"),
         "memory consolidation": ("0 4 * * *", "memory-consolidation"),
         "preference update": ("30 4 * * *", "preference-update"),
@@ -307,7 +311,11 @@ class TestTheDocumentedScheduleMatchesTheScript(unittest.TestCase):
         found = {}
         for name, schedule, skill in re.findall(
                 r'register\s+("?[a-z ]+"?)\s+"([^"]+)"\s+(\S+)', script):
-            found[name.strip('"')] = (schedule, skill)
+            # `register` takes an empty skill argument (`""`) for a job that
+            # never wakes the agent; read that as no skill rather than as a
+            # skill named `""`, which would then be looked for on disk.
+            found[name.strip('"')] = (schedule,
+                                      skill.strip('"') or None)
         return found
 
     def test_the_script_registers_exactly_the_documented_jobs(self):
@@ -335,6 +343,8 @@ class TestTheDocumentedScheduleMatchesTheScript(unittest.TestCase):
 
     def test_every_skill_the_schedule_names_is_shipped(self):
         for _, skill in self.EXPECTED.values():
+            if skill is None:
+                continue
             with self.subTest(skill=skill):
                 self.assertTrue((self.RECIPE / "profile" / "skills" / skill
                                  / "SKILL.md").is_file())

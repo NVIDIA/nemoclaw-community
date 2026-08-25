@@ -1,3 +1,17 @@
+-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+--
+-- The schema as shipped at v1, kept verbatim so the upgrade to v2 can be
+-- exercised against a store the released code would actually have made.
+--
+-- Not derived from the current schema by removing what v2 added. That
+-- shortcut keeps every other column the real v1 had, so a genuine v1 database
+-- can still fail to open while the test passes — the failure mode the
+-- acceptance criteria on #122 names directly. This file is the artifact.
+--
+-- It is frozen. A change to the live schema goes in schema.sql and a
+-- migration, never here.
+
 -- Ledger store for the memory-driven chief-of-staff recipe.
 --
 -- Target runtime : SQLite bundled with Hermes 0.19.0 (the version the current
@@ -22,7 +36,7 @@ CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
-INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '2');
+INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '1');
 
 
 -- ---------------------------------------------------------------------------
@@ -42,10 +56,6 @@ CREATE TABLE IF NOT EXISTS items (
     sender      TEXT,                       -- display name or address
     subject     TEXT,                       -- NULL for slack
     body        TEXT,
-    -- Set when the retention pass clears `body`, and never otherwise. It is
-    -- what tells a cleared message from one that never carried text: both
-    -- leave `body` NULL, and only one of them is a message somebody sent.
-    body_cleared_at TEXT,
     permalink   TEXT,                       -- link back to the source system
 
     -- Normalized across sources, because the judging rules ask the same

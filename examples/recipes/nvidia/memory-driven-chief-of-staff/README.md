@@ -80,7 +80,7 @@ those two apart.
 | `profile/scripts/memory_check.py` | Invariant detection over the memory, deterministic |
 | `profile/scripts/preferences.py` | Correction counting against a fixed threshold |
 | `profile/scripts/apply_decisions.py` | Applies model decisions; the model returns an envelope and never writes SQL |
-| `profile/scripts/migrate.py` | Schema versioning, forward-only. This recipe ships at v1, so there is nothing to upgrade from yet |
+| `profile/scripts/migrate.py` | Schema versioning, forward-only. At v2: adds `body_cleared_at` to a v1 store in place, without touching what it holds |
 | `profile/scripts/normalize.py` | Source payloads to store rows, kept separate from the network calls |
 | `profile/scripts/_db.py` | Connection and transaction boundary |
 | `profile/scripts/correct.py` | The user's writer: pins, ignores, and the only source of `actor='user'` events |
@@ -88,9 +88,13 @@ those two apart.
 | `profile/scripts/walkthrough.py` | The fixture walkthrough, end to end, with no credentials and no model |
 | `profile/scripts/select_intake.py` | The intake job's pre-step: what to judge, and whether to wake the model at all |
 | `profile/scripts/select_review.py` | The review job's pre-step: the stalest open obligations, oldest review first |
+| `profile/scripts/retention.py` | The retention job: clears message bodies past the window, keeps the record |
+| `profile/scripts/exclusions.py` | Senders, domains and channels that are never written, applied in `insert_items` |
+| `profile/scripts/export_store.py` | Writes the whole store and memory out as Markdown beside JSON |
+| `profile/scripts/reset.py` | Removes the store, the memory and the learned policy together |
 | `scripts/install.sh` | Installs the profile, inherits the runtime's model config, registers the jobs |
-| `scripts/register-jobs.sh` | Registers the five scheduled jobs through the cron CLI. Re-runnable |
-| `profile/skills/` | Five skills: judging, review, repair, consolidation, preference update |
+| `scripts/register-jobs.sh` | Registers the six scheduled jobs through the cron CLI. Re-runnable |
+| `profile/skills/` | Five skills: judging, review, repair, consolidation, preference update. Retention needs none — it clears bodies and never wakes the agent |
 | `fixtures/` | Eight synthetic messages, a seed memory, and one recorded model turn |
 
 A later phase adds the optional Microsoft Graph and Slack connectors. Until
@@ -236,7 +240,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the nine files report 223 tests in
+Expected result: every file ends with `OK`, the ten files report 258 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -309,19 +313,20 @@ profile afterwards, so a setting that could not be written — or that reports
 success without sticking — ends the run rather than leaving a profile that
 took some of its configuration. The installer then checks both — that a model
 resolves and that a credential is present — and exits before registering any
-job if either is missing, rather than scheduling five jobs that would each
+job if either is missing, rather than scheduling six jobs that would each
 fail. If your endpoint genuinely needs no key, pass `ALLOW_NO_API_KEY=1` to
 say so.
 
 Re-running it is safe: the registration looks each job up by name and edits it
 rather than adding another copy.
 
-Five jobs are registered:
+Six jobs are registered:
 
 | Job | Schedule | Pre-step | Skill |
 | --- | --- | --- | --- |
 | intake | every 30 minutes | `select_intake.py` | `inbound-judging` |
 | review | every 6 hours | `select_review.py` | `obligation-review` |
+| retention | daily 02:00 | `retention.py` | — |
 | memory repair | daily 03:00 | — | `memory-repair` |
 | memory consolidation | daily 04:00 | — | `memory-consolidation` |
 | preference update | daily 04:30 | — | `preference-update` |
@@ -364,8 +369,8 @@ provider takes over from the in-process ticker.
 **The job store is not part of the distribution.** `distribution.yaml` does not
 declare `cron`. An update replaces what it does declare — `SOUL.md`,
 `schema.md`, `skills`, `scripts` and the manifest — and leaves the jobs and
-their run history alone. Measured, not assumed: five jobs
-registered, `hermes profile update` run on Hermes 0.20.0, five jobs still
+their run history alone. Measured, not assumed: six jobs
+registered, `hermes profile update` run on Hermes 0.20.0, six jobs still
 there with the same ids. A test asserts
 the manifest never claims `cron` or `workspace`.
 
@@ -408,14 +413,40 @@ value — `direct`, `mentioned`, or `broadcast` — so the store never holds a
 copy of who else was on a thread. `normalize.py` does this today, and
 `tests/test_normalize.py` asserts it.
 
-The rest of the handling below is not implemented yet. It describes what the
-optional connectors will do, and is stated here because it shapes the schema.
+Four controls over what is kept ship alongside it, before any connector
+exists to fill the store. They work
+on the fixture corpus today, which is how they are tested, and they apply
+unchanged to real messages when a connector lands. The commands, the rules
+file and the exact boundaries are in
+[docs/data-lifecycle.md](docs/data-lifecycle.md); what follows is why they are
+drawn where they are.
 
-Once a connector is attached:
+**Message bodies are cleared on a schedule.** `retention.py` runs daily and
+clears the text of anything past the window — thirty days by default,
+`RETENTION_DAYS` to change it. What stays is the record: sender, subject,
+timestamp, addressing, the obligation and its title, and every event with its
+actor. A month later you can still see that Dana asked about the cutover on the
+third, that it ranked high, and that you ignored it on the fifth. You cannot
+re-read Dana's words, which is the point. `body_cleared_at` marks a body that
+was cleared, so it is not confused with one that never existed.
+
+**Senders, domains and channels can be excluded at ingest.** Rules live in
+`workspace/exclusions.json` and are applied in `insert_items`, which is the one
+place every writer passes through — so an excluded message is never written,
+by any collector, including ones added later. Filtering at display would leave
+the text on disk, which is no use to somebody excluding their doctor.
+
+**Everything can be exported and everything can be removed.**
+`export_store.py` writes the store and the memory as Markdown beside JSON —
+the first to read, the second to process — and omits nothing.
+`reset.py --yes` removes the store, the memory and the learned preference
+policy together, and reports each; a partial reset would answer the question
+wrongly. It also prints how to revoke the credential, which lives with the
+gateway rather than here, because somebody withdrawing consent wants both.
+
+Three things remain for the connectors themselves:
 
 - Attachments will not be fetched.
-- Message bodies will be cleared on a schedule. Metadata and the audit trail
-  will be kept, so history stays inspectable without content sitting on disk.
 - For Microsoft Graph, an item deleted at the source will be tombstoned locally
   and its body cleared at once, because the delta query reports deletions
   explicitly.
@@ -426,10 +457,9 @@ Once a connector is attached:
   Real Time Messaging (RTM) API carries the event too, but Slack states that
   granular-permission apps cannot use it and that classic apps can no longer be
   created, so it is not an option a connector could take today. Slack content
-  will therefore age out on the scheduled body-clearing pass rather than at the
-  moment of deletion.
-- Senders, domains, and channels will be excludable at ingest, before anything
-  is written.
+  therefore ages out on the scheduled body-clearing pass rather than at the
+  moment of deletion — the weaker guarantee, kept, rather than the stronger one
+  implied.
 
 ## Fixtures
 
@@ -560,7 +590,7 @@ Three separate questions, with three different answers.
 **Do the jobs survive?** Yes. They live in `$HERMES_HOME/cron/jobs.json`, which
 is ordinary disk state — not part of the distribution, so a profile update
 leaves it alone, and not tied to any process, so shutting everything down and
-starting again finds the same five jobs with the same ids.
+starting again finds the same six jobs with the same ids.
 
 **Do they start firing again on their own?** Only if the gateway was installed
 as a service. `hermes -p <profile> gateway install` registers one — a launchd

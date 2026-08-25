@@ -24,6 +24,11 @@ is where that translation is pinned down:
 
 from __future__ import annotations
 
+import sys
+
+import exclusions
+
+
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -138,7 +143,21 @@ ITEM_COLUMNS = (
 
 
 def insert_items(conn, items) -> int:
-    """Idempotent on source_id, so re-reading a source window is harmless."""
+    """Idempotent on source_id, so re-reading a source window is harmless.
+
+    Exclusion is applied here, and only here. Every writer goes through this
+    function, so a sender or channel the user excluded never reaches the store
+    no matter which collector found it — including collectors written later,
+    which cannot forget a rule they never had to know about.
+
+    Filtering at display would leave the text on disk, which is no use to
+    somebody excluding their doctor or a channel where pay is discussed.
+    """
+    items, dropped = exclusions.partition(list(items))
+    if dropped:
+        # Said out loud, on stderr, because a silent drop and an empty mailbox
+        # look identical from the outside.
+        print(f"exclusions: {dropped} message(s) not stored", file=sys.stderr)
     placeholders = ",".join("?" * len(ITEM_COLUMNS))
     rows = [tuple(item.get(c) for c in ITEM_COLUMNS) for item in items]
     before = conn.execute("SELECT count(*) FROM items").fetchone()[0]
