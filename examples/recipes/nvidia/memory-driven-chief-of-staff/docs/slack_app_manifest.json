@@ -18,7 +18,7 @@
       "bot": []
     },
     "redirect_urls": [
-      "https://example.com/slack/oauth"
+      "https://localhost:8899/slack/oauth"
     ]
   },
   "settings": {

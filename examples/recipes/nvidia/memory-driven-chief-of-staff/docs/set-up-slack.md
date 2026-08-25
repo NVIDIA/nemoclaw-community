@@ -108,10 +108,18 @@ authorization URL, and takes back the `code` from it.
 
 **There is no "Install to Workspace" button for this app.** That button
 installs a bot, and this app has no bot user. A user-scopes-only app is
-authorized by opening the URL directly, which the script prints for you. The
-page it redirects to will fail to load — the target is the IANA-reserved
-example domain, so nobody receives your code and it stays visible in the
-address bar where you can copy it.
+authorized by opening the URL directly, which the script prints for you.
+
+The redirect target is a **loopback** address, and that matters. Slack sends
+the authorization code to whatever redirect URI the app declares — it is a
+real HTTP request carrying a real credential, so the destination has to be
+somewhere only you can reach. A loopback URL sends it to your own machine and
+nowhere else. The page will fail to load because nothing is listening there;
+the code is still visible in the address bar, which is where you copy it from.
+
+Do not point this at a domain you do not operate. A documentation-example
+domain is not an exception: those are reserved for use in examples, not
+unserved, and a request sent to one reaches somebody else's web server.
 
 The script then exchanges the code, takes the refresh token from
 `authed_user.refresh_token`, registers the provider profile, creates the

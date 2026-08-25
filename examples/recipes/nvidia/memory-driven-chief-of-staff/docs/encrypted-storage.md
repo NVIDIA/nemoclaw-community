@@ -26,16 +26,30 @@ Those are the cases encryption at rest addresses, and permissions do not
 overlap with any of them. The two protect different things and the recipe
 needs both.
 
-## What "the profile home" means here
+## Which volume this is about
 
 Not the path inside the sandbox. `HERMES_HOME` there is an overlay filesystem
 with no block device behind it — encryption is not merely unconfigured from
-inside a sandbox, it is not observable, and a check run in there would be
+inside a sandbox, it is unobservable, and a check run in there would be
 answering a different question.
 
-What protects the store is the **host** filesystem underneath the sandbox's
-storage. That is the volume this page is about, and it is what
-`setup-slack.sh` inspects.
+What protects the store is the host volume underneath the sandbox's storage,
+and **where that is depends on the driver**. Docker keeps it under its
+data-root, a VM keeps it inside a disk image, Kubernetes in a volume. None of
+those is reliably the host's home directory, so `setup-slack.sh` does not
+guess: it requires `SANDBOX_STORAGE_PATH` and verifies that path.
+
+Find it for the Docker driver with:
+
+```bash
+docker info --format '{{.DockerRootDir}}'
+```
+
+Then:
+
+```bash
+SANDBOX_STORAGE_PATH=<path> bash scripts/setup-slack.sh
+```
 
 ## Verifying it
 

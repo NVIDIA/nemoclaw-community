@@ -244,7 +244,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the ten files report 303 tests in
+Expected result: every file ends with `OK`, the ten files report 312 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -498,25 +498,29 @@ commands per platform, and what to do when the answer is no.
 
 The scheduled intake reads whichever collectors are present in
 `profile/scripts/`. Slack is one of them, and it is read-only: direct
-messages, group DMs, and the public channels you are in. It never posts.
+messages, group DMs, and the public channels you name. It never posts.
 
 ```bash
 bash scripts/setup-slack.sh
 ```
 
-That reuses a Slack credential already attached to the sandbox when it finds
-one, and otherwise walks you through creating an app from the bundled
-manifest. Full walkthrough, including what to do when a workspace admin
-grants less than the app asked for:
-[`docs/set-up-slack.md`](docs/set-up-slack.md).
+Run it on the host, not in the sandbox — it needs `openshell`, which the
+sandbox does not have. It reuses a Slack credential already attached when it
+finds one, and otherwise walks you through authorizing the app. Full
+walkthrough, including what to do when a workspace admin grants less than the
+app asked for: [`docs/set-up-slack.md`](docs/set-up-slack.md).
 
-Two things are deliberate. The recipe needs a **user** token (`xoxp-`), not a
-bot token — a bot cannot read your direct messages, and pasting one produces
-an assistant that quietly never sees them, so the collector checks the prefix
-and names the mistake. And it supports **static** tokens only: enabling
-rotation on a Slack app cannot be undone, and nothing here refreshes an
-expiring one, so a rotating token is refused rather than working for an
-afternoon.
+Three things are deliberate. The recipe needs a **user** token, not a bot
+token — a bot cannot read your direct messages, and using one produces an
+assistant that quietly never sees them, so the collector checks the prefix and
+names the mistake. That token **rotates**: the gateway holds it and refreshes
+it every twelve hours, and a non-rotating one is refused, because a user token
+that never expires is a permanent key to your entire Slack. And public
+channels are read only when you **name** them in
+`workspace/slack_channels.json` — Slack allows one history request per minute
+for affected apps, so a workspace sweep cannot finish inside a scheduled tick,
+and reading every channel you happen to be in collects more than the job
+needs.
 
 Until this is set up the collector still runs — it ships with the recipe — but
 reports `{"unconfigured": true}` and exits zero, so the schedule runs over
@@ -634,9 +638,14 @@ boundary, so the collector handles a placeholder it cannot spend.
 The scheduled path does reach one. A job that wakes runs an agent turn, and the
 runtime calls whichever inference provider it is configured for, over its own
 egress path — the recipe holds no credential and opens no connection itself.
-A job that does not wake makes no call at all. Egress to a message source, and
-the provider permissions that needs, arrive with the connectors in a later
-phase and will be documented there.
+A job that does not wake makes no call at all.
+
+Egress to a message source is here, and it is narrow: the Slack collector
+reaches `slack.com` and nothing else, declared in the provider profile at
+`access: read-only` with `enforcement: enforce`, so a write is refused at the
+boundary rather than caught by a test. The credential it uses is held by the
+gateway and substituted there — see
+[Connecting Slack](#connecting-slack).
 
 ## Startup
 

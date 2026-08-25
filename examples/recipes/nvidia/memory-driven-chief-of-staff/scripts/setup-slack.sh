@@ -39,7 +39,7 @@ PROVIDER="${SLACK_PROVIDER_NAME:-memory-driven-cos-slack-user}"
 PROFILE_ID="memory-driven-cos-slack-user"
 PROFILE_YAML="$RECIPE_ROOT/providers/slack-user.yaml"
 USABLE_KEY="SLACK_USER_TOKEN"
-REDIRECT="https://example.com/slack/oauth"
+REDIRECT="https://localhost:8899/slack/oauth"
 USER_SCOPES="im:read,im:history,mpim:read,mpim:history,channels:read,channels:history,users:read"
 
 if ! command -v openshell >/dev/null 2>&1; then
@@ -74,14 +74,52 @@ fi
 # The output is a table whose first column is the provider name, with a header
 # row. Take field one from every line after the first, and do not transform it —
 # a name is what gets passed back to the same CLI.
+#
+# Finding a `SLACK_USER_TOKEN` key is not enough to reuse something. A provider
+# with the right key but the wrong type carries a different endpoint policy,
+# and one with no refresh configured will simply expire in twelve hours. Both
+# would attach cleanly and fail later, quietly. So the state is validated and a
+# mismatch stops the run rather than being worked around.
+validate_provider() {
+  local name="$1" detail
+  if ! detail="$(openshell provider get "$name" 2>&1)"; then
+    echo "     could not read provider '$name'" >&2
+    return 1
+  fi
+  detail="$(printf '%s' "$detail" | sed 's/\x1b\[[0-9;]*m//g')"
+  local type
+  type="$(printf '%s\n' "$detail" | sed -n 's/^[[:space:]]*Type:[[:space:]]*//p')"
+  if [[ "$type" != "$PROFILE_ID" ]]; then
+    echo "     '$name' is type '$type', not '$PROFILE_ID'" >&2
+    return 1
+  fi
+  local status
+  if ! status="$(openshell provider refresh status "$name" \
+      --credential-key "$USABLE_KEY" 2>&1)"; then
+    echo "     '$name' has no refresh configured" >&2
+    return 1
+  fi
+  if ! printf '%s' "$status" | grep -q "oauth2_refresh_token"; then
+    echo "     '$name' is not configured for token rotation" >&2
+    return 1
+  fi
+  return 0
+}
+
 reusable=""
 while read -r name; do
   [[ -z "$name" ]] && continue
   keys="$(openshell provider get "$name" 2>/dev/null \
     | sed -n 's/.*Credential keys:[[:space:]]*//p' || true)"
   if [[ "$keys" == *"$USABLE_KEY"* ]]; then
-    reusable="$name"
-    break
+    if validate_provider "$name"; then
+      reusable="$name"
+      break
+    fi
+    echo "     '$name' exposes $USABLE_KEY but does not match this recipe;" >&2
+    echo "     refusing to reuse it. Remove it, or set SLACK_PROVIDER_NAME to" >&2
+    echo "     a different name." >&2
+    exit 1
   fi
   # A bot-shaped Slack provider attaches cleanly and delivers nothing a cron
   # pre-step can read: Hermes removes `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN`
@@ -97,7 +135,7 @@ done < <(printf '%s\n' "$attached" \
          | awk 'NR > 1 && NF { print $1 }')
 
 if [[ -n "$reusable" ]]; then
-  echo "     reusing attached provider '$reusable'"
+  echo "     reusing attached provider '$reusable' (type and rotation verified)"
   if [[ "${FORCE_REAUTH:-0}" != "1" ]]; then
     echo ""
     echo "Nothing to do. To replace its credential — after regenerating the"
@@ -113,18 +151,44 @@ fi
 
 echo "2/7  Storage encryption"
 # Attaching this provider is the moment real message bodies start landing in
-# the store. Owner-only directory permissions are not encryption at rest: they
-# stop another account reading the file on a running system and do nothing for
-# a disk that is lost, imaged, or backed up.
+# the store, and the prerequisite is that they land on an encrypted volume.
+# Owner-only permissions are not that: they stop another account reading the
+# file on a running system and do nothing for a disk that is lost, imaged, or
+# backed up.
 #
-# The check is best-effort and says so. `HERMES_HOME` inside a sandbox is an
-# overlay with no visible block device, so encryption cannot be established
-# from in there at all; what protects it is the host filesystem underneath the
-# sandbox's storage, which is what this looks at. Where the answer is not
-# provable, the operator affirms it rather than never being asked.
+# Which volume is the whole question, and it is not one this script can guess.
+# `HERMES_HOME` inside a sandbox is an overlay with no block device behind it,
+# so encryption is unobservable from in there. On the host it depends on the
+# driver: Docker keeps sandbox storage under its data-root, a VM keeps it in a
+# disk image, Kubernetes in a volume — none of which is reliably `$HOME`. An
+# earlier version inspected `$HOME` and would have approved the wrong volume on
+# every one of those.
+#
+# So the path is asserted rather than inferred. `SANDBOX_STORAGE_PATH` names
+# where this sandbox's storage actually lives; the script then verifies *that*
+# path, which is a real check rather than a plausible one.
+storage_path="${SANDBOX_STORAGE_PATH:-}"
+if [[ -z "$storage_path" ]]; then
+  echo "     where this sandbox's storage lives is not something this script"
+  echo "     can determine — it differs by driver, and guessing would mean"
+  echo "     checking the wrong volume."
+  echo ""
+  echo "Find it, then re-run with it named. For the Docker driver:"
+  echo "  docker info --format '{{.DockerRootDir}}'"
+  echo ""
+  echo "  SANDBOX_STORAGE_PATH=<path> bash scripts/setup-slack.sh"
+  echo ""
+  echo "docs/encrypted-storage.md explains what to look for and why."
+  exit 1
+fi
+if [[ ! -e "$storage_path" ]]; then
+  echo "SANDBOX_STORAGE_PATH does not exist: $storage_path" >&2
+  exit 1
+fi
+
 encrypted="unknown"
 if command -v findmnt >/dev/null 2>&1 && command -v lsblk >/dev/null 2>&1; then
-  source_dev="$(findmnt -no SOURCE --target "$HOME" 2>/dev/null || true)"
+  source_dev="$(findmnt -no SOURCE --target "$storage_path" 2>/dev/null || true)"
   if [[ -n "$source_dev" ]]; then
     if lsblk -no TYPE "$source_dev" 2>/dev/null | grep -q crypt; then
       encrypted="yes"
@@ -136,19 +200,17 @@ fi
 
 case "$encrypted" in
   yes)
-    echo "     the host filesystem under this sandbox is on an encrypted volume" ;;
+    echo "     $storage_path is on an encrypted volume" ;;
   no)
-    echo "     the host filesystem under this sandbox does NOT appear to be on"
-    echo "     an encrypted volume." ;;
+    echo "     $storage_path does NOT appear to be on an encrypted volume" ;;
   *)
-    echo "     could not determine whether the host filesystem is encrypted." ;;
+    echo "     could not determine whether $storage_path is encrypted" ;;
 esac
 
 if [[ "$encrypted" != "yes" ]]; then
   echo ""
   echo "This recipe stores message subjects, senders and bodies once a"
-  echo "connector is attached. The prerequisite is an encrypted volume"
-  echo "underneath the profile home; see docs/encrypted-storage.md."
+  echo "connector is attached. See docs/encrypted-storage.md."
   echo ""
   if [[ "${STORE_ENCRYPTION_ACKNOWLEDGED:-0}" == "1" ]]; then
     echo "     STORE_ENCRYPTION_ACKNOWLEDGED=1 — continuing."
@@ -184,9 +246,12 @@ echo ""
 # user and therefore no "Install to Workspace" button — that button installs a
 # bot. A user-scopes-only app is authorized by visiting the OAuth URL directly.
 echo "Open this, approve, and copy the value of 'code' from the address bar."
-echo "The page will fail to load. That is deliberate: the redirect target is"
-echo "the IANA-reserved example domain, so nobody receives your code and it"
-echo "stays visible where you can read it."
+echo ""
+echo "The page will fail to load — nothing is listening on that port, which is"
+echo "the point. Slack sends the authorization code to whatever redirect the"
+echo "app declares, so it must be an address only you can reach. A loopback"
+echo "URL sends it to your own machine and no further; the browser still shows"
+echo "it in the address bar, which is where you copy it from."
 echo ""
 echo "https://slack.com/oauth/v2/authorize?client_id=${CLIENT_ID}&user_scope=${USER_SCOPES}&redirect_uri=${REDIRECT}"
 echo ""
@@ -262,11 +327,30 @@ echo "6/7  Registering the provider"
 # The profile carries `endpoints: slack.com` with `access: read-only`, which is
 # what scopes the egress substitution and stops the sandbox writing to Slack. A
 # provider created without it would get neither.
+# Delete-then-import, because import rejects an existing id rather than
+# upserting. A profile in use by a live sandbox cannot be deleted, so on a
+# re-run the delete is a no-op and the import collides — which is fine, the
+# profile is already registered. What is not fine is suppressing both and
+# carrying on: that leaves whatever was registered before in force, including
+# an older endpoint policy, and the provider is then created against it.
+# So the outcome is verified rather than the commands being trusted.
 openshell provider profile delete "$PROFILE_ID" >/dev/null 2>&1 || true
-openshell provider profile import --file "$PROFILE_YAML" >/dev/null 2>&1 || true
-if ! openshell provider list-profiles 2>/dev/null | grep -q "$PROFILE_ID"; then
+import_out="$(openshell provider profile import --file "$PROFILE_YAML" 2>&1 || true)"
+if ! registered="$(openshell provider profile export "$PROFILE_ID" 2>&1)"; then
   echo "Provider profile '$PROFILE_ID' is not registered." >&2
-  echo "  openshell provider profile import --file $PROFILE_YAML" >&2
+  printf '%s\n' "$import_out" >&2
+  exit 1
+fi
+if ! printf '%s' "$registered" | grep -q "host: slack.com"; then
+  echo "The registered '$PROFILE_ID' profile does not declare slack.com." >&2
+  echo "An older profile is still in force. Delete it and re-run:" >&2
+  echo "  openshell provider profile delete $PROFILE_ID" >&2
+  exit 1
+fi
+if ! printf '%s' "$registered" | grep -q "access: read-only"; then
+  echo "The registered '$PROFILE_ID' profile is not read-only." >&2
+  echo "An older profile is still in force. Delete it and re-run:" >&2
+  echo "  openshell provider profile delete $PROFILE_ID" >&2
   exit 1
 fi
 

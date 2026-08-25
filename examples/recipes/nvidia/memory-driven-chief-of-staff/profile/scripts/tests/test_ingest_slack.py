@@ -61,9 +61,14 @@ class FakeSlack:
                 reply = outer.responses.get(method, {"ok": False, "error": "unknown_method"})
                 if callable(reply):
                     reply = reply(params)
-                status = 429 if reply == "RATELIMIT" else 200
+                headers = {}
+                if reply == "RETRY_AFTER":
+                    headers["Retry-After"] = "1"
+                status = 429 if reply in ("RATELIMIT", "RETRY_AFTER") else 200
                 body = b"" if status == 429 else json.dumps(reply).encode()
                 self.send_response(status)
+                for key, value in headers.items():
+                    self.send_header(key, value)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
@@ -969,6 +974,140 @@ class TestThreadRepliesAreCollected(CollectorCase):
         self.serve(responses)
         self.assertEqual(self.run_main(), ingest_slack.EXIT_OK)
         self.assertIn("partial", json.loads(self.stdout))
+
+
+class TestThreadCoverageSurvivesTheWatermark(CollectorCase):
+    """A parent's `ts` never changes, so the channel watermark passes it once.
+
+    After that the parent is never returned by `conversations.history` again,
+    and a reply arriving later would be invisible for as long as the thread
+    stayed alive — a silent gap exactly like the truncated-crawl one, a level
+    down. Threads carry their own watermark for that reason.
+    """
+
+    def setUp(self):
+        super().setUp()
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
+
+    def _first_then_quiet(self, replies_payload):
+        """History returns the parent once; afterwards the channel is quiet."""
+        parent = {"ts": "1787000000.0001", "user": OTHER, "text": "kickoff",
+                  "reply_count": 1}
+        seen = {"history": 0}
+
+        def history(params):
+            if params.get("limit") == "1":
+                return {"ok": True, "messages": []}
+            seen["history"] += 1
+            if seen["history"] == 1:
+                return {"ok": True, "has_more": False, "messages": [parent]}
+            return {"ok": True, "has_more": False, "messages": []}
+
+        return {
+            "auth.test": {"ok": True, "user_id": USER, "team_id": "T1"},
+            "users.conversations": lambda p: (
+                {"ok": True, "channels": [channel("D01")]}
+                if p.get("types") == "im" else {"ok": True, "channels": []}),
+            "conversations.history": history,
+            "conversations.replies": replies_payload,
+            "users.info": {"ok": True, "user": {"real_name": "Dana", "profile": {}}},
+        }
+
+    def test_a_reply_arriving_after_the_parent_is_still_found(self):
+        parent = {"ts": "1787000000.0001", "user": OTHER, "text": "kickoff"}
+        later = {"ts": "1787000900.0009", "user": OTHER,
+                 "thread_ts": "1787000000.0001", "text": "numbers before review"}
+        state = {"tick": 0}
+
+        def replies(params):
+            state["tick"] += 1
+            if state["tick"] == 1:
+                return {"ok": True, "has_more": False, "messages": [parent]}
+            return {"ok": True, "has_more": False, "messages": [parent, later]}
+
+        self.serve(self._first_then_quiet(replies))
+        self.run_main()          # parent seen, thread remembered
+        self.run_main()          # channel quiet; the thread is re-read anyway
+        self.assertIn("D01:1787000900.0009", [row[0] for row in self.rows()],
+                      "a reply to an already-watermarked thread was never found")
+
+    def test_a_quiet_tick_still_revisits_known_threads(self):
+        self.serve(self._first_then_quiet(
+            {"ok": True, "has_more": False, "messages": []}))
+        self.run_main()
+        before = sum(1 for m, _ in self.slack.calls if m == "conversations.replies")
+        self.run_main()
+        after = sum(1 for m, _ in self.slack.calls if m == "conversations.replies")
+        self.assertGreater(after, before)
+
+    def test_a_truncated_thread_holds_the_channel_watermark_back(self):
+        """Advancing past a parent whose replies were cut loses them for good."""
+        parent = {"ts": "1787000000.0001", "user": OTHER, "text": "kickoff",
+                  "reply_count": 400}
+        self.serve({
+            "auth.test": {"ok": True, "user_id": USER, "team_id": "T1"},
+            "users.conversations": lambda p: (
+                {"ok": True, "channels": [channel("D01")]}
+                if p.get("types") == "im" else {"ok": True, "channels": []}),
+            "conversations.history": lambda p: (
+                {"ok": True, "messages": []} if p.get("limit") == "1" else
+                {"ok": True, "has_more": False, "messages": [parent]}),
+            "conversations.replies": {
+                "ok": True, "has_more": True, "response_metadata": {},
+                "messages": [parent, {"ts": "1787000000.0002", "user": OTHER,
+                                      "thread_ts": "1787000000.0001",
+                                      "text": "one of many"}]},
+            "users.info": {"ok": True, "user": {"real_name": "D", "profile": {}}},
+        })
+        self.run_main()
+        self.assertEqual(self.cursors(), {},
+                         "the channel watermark advanced past a thread whose "
+                         "replies were truncated")
+
+
+class TestTheBudgetCoversEveryCall(CollectorCase):
+    """`users.info` counts too — Slack does not exempt it."""
+
+    def setUp(self):
+        super().setUp()
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
+
+    def tearDown(self):
+        os.environ.pop("INTAKE_SLACK_BUDGET", None)
+        super().tearDown()
+
+    def test_the_collection_stays_within_its_budget(self):
+        """Probe calls are excluded: they run once and are cached afterwards.
+
+        Collection is what recurs every half hour, and it is what the budget
+        bounds. `users.info` is inside that bound — Slack does not exempt it,
+        and an unbounded name lookup would spend the allowance on decoration.
+        """
+        os.environ["INTAKE_SLACK_BUDGET"] = "3"
+        self.serve(self.working_slack())
+        self.run_main()
+        spent = sum(1 for m, c in self.slack.calls
+                    if m in ("users.conversations", "conversations.history",
+                             "users.info") and c.get("limit") != "1")
+        self.assertLessEqual(spent, 3,
+                             "collection spent more calls than its budget")
+
+    def test_users_info_is_counted_rather_than_free(self):
+        os.environ["INTAKE_SLACK_BUDGET"] = "2"
+        self.serve(self.working_slack())
+        self.run_main()
+        names = sum(1 for m, _ in self.slack.calls if m == "users.info")
+        collection = sum(1 for m, c in self.slack.calls
+                         if m in ("users.conversations", "conversations.history",
+                                  "users.info") and c.get("limit") != "1")
+        self.assertLessEqual(collection, 2)
+        self.assertLessEqual(names, 2)
+
+    def test_a_short_retry_after_reads_as_rate_limiting(self):
+        """Not as an unclassified failure, which is what it used to be."""
+        self.serve({"auth.test": {"ok": True, "user_id": USER, "team_id": "T1"},
+                    "users.conversations": "RETRY_AFTER"})
+        self.assertEqual(self.run_main(), ingest_slack.EXIT_RATE_LIMIT)
 
 
 if __name__ == "__main__":

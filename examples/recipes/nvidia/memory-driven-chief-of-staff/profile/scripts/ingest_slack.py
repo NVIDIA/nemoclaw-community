@@ -459,7 +459,7 @@ def history(token: str, channel_id: str, oldest: str | None,
 
 
 def replies(token: str, channel_id: str, parent_ts: str, oldest: str | None,
-            budget: Budget) -> list[dict[str, Any]]:
+            budget: Budget) -> tuple[list[dict[str, Any]], bool]:
     """The replies under one thread parent.
 
     `conversations.history` returns thread parents and broadcast replies, not
@@ -468,16 +468,34 @@ def replies(token: str, channel_id: str, parent_ts: str, oldest: str | None,
     item, never becomes an obligation, and never appears in the shortlist. The
     recipe's central promise fails with no error and no log line.
 
-    Bounded like everything else: one page, spent from the same allowance, and
-    a thread whose replies do not fit is left for the watermark to catch on a
-    later tick rather than paged through here.
+    Paginated, and it reports whether it finished. A thread with more replies
+    than one page holds would otherwise lose the remainder the moment the
+    channel watermark moved past the parent — the same silent gap the channel
+    crawl has, one level down. An unfinished thread holds the channel's
+    watermark back, so the next tick reads the window again.
+
+    Returns the replies and whether the crawl completed.
     """
-    if not budget.spend():
-        return []
-    page = call("conversations.replies", token, channel=channel_id,
-                ts=parent_ts, oldest=oldest, inclusive="false", limit=PAGE)
-    # The parent comes back with its replies; it is already accounted for.
-    return [m for m in page.get("messages", []) if m.get("ts") != parent_ts]
+    gathered: list[dict[str, Any]] = []
+    cursor = None
+    complete = True
+    while True:
+        if not budget.spend():
+            complete = False
+            break
+        page = call("conversations.replies", token, channel=channel_id,
+                    ts=parent_ts, oldest=oldest, inclusive="false",
+                    limit=PAGE, cursor=cursor)
+        # The parent comes back with its replies; it is already accounted for.
+        gathered.extend(m for m in page.get("messages", [])
+                        if m.get("ts") != parent_ts)
+        if not page.get("has_more"):
+            break
+        cursor = (page.get("response_metadata") or {}).get("next_cursor") or None
+        if not cursor:
+            complete = False
+            break
+    return gathered, complete
 
 
 def worth_judging(message: dict[str, Any], user_id: str | None) -> bool:
@@ -496,7 +514,8 @@ def worth_judging(message: dict[str, Any], user_id: str | None) -> bool:
     return message.get("user") != user_id
 
 
-def sender_name(token: str, user_id: str | None, cache: dict[str, str | None]) -> str | None:
+def sender_name(token: str, user_id: str | None, cache: dict[str, str | None],
+                budget: Budget) -> str | None:
     """Resolve one display name, or give up quietly.
 
     Slack's own guidance for a large workspace, learned the expensive way on
@@ -507,6 +526,11 @@ def sender_name(token: str, user_id: str | None, cache: dict[str, str | None]) -
     if not user_id:
         return None
     if user_id not in cache:
+        if not budget.spend():
+            # A name is cosmetic; the message is not. Do not spend the last
+            # call on decoration, and do not cache the miss — a later tick
+            # with budget left should still be able to resolve it.
+            return None
         try:
             profile = call("users.info", token, user=user_id).get("user", {})
             cache[user_id] = (profile.get("profile", {}).get("display_name")
@@ -541,6 +565,41 @@ def commit_channel(channel: dict[str, Any], items: list[dict[str, Any]],
                 " updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')",
                 (channel["id"], watermark))
     return added
+
+
+def threads_path():
+    return scope_path().with_name("slack_threads.json")
+
+
+def read_threads(channel_id: str) -> dict[str, str | None]:
+    """Per-thread watermarks for one conversation.
+
+    Collection bookkeeping rather than anything the agent judges, kept beside
+    the store and rebuilt harmlessly if lost — every thread is simply re-read
+    from the channel's own window once.
+    """
+    try:
+        stored = json.loads(threads_path().read_text(encoding="utf-8"))
+        return dict(stored.get(channel_id, {}))
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return {}
+
+
+def save_threads(channel_id: str, threads: dict[str, str | None]) -> None:
+    path = threads_path()
+    try:
+        existing = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(existing, dict):
+            existing = {}
+    except (OSError, json.JSONDecodeError):
+        existing = {}
+    existing[channel_id] = threads
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(existing), encoding="utf-8")
+    except OSError:
+        # Losing this costs a re-read, not correctness.
+        pass
 
 
 def rotation_offset(count: int) -> int:
@@ -604,36 +663,64 @@ def collect(token: str, caps: dict[str, Any],
             failed_conversations += 1
             partial.append({"family": channel["type"], "error": exc.error})
             continue
-        if not messages:
-            continue
+        # No early exit on an empty channel. A quiet conversation is exactly
+        # where a thread reply hides: the parent is already below the
+        # watermark, so `conversations.history` returns nothing, and skipping
+        # here would mean the thread is never revisited at all.
+        #
         # A thread parent whose reply count moved since the watermark has
-        # replies this tick has not seen.
-        threaded: list[dict[str, Any]] = []
+        # replies this tick has not seen — but a parent's `ts` never changes,
+        # so once the channel watermark passes it the parent is never returned
+        # again, and a reply arriving after that would be invisible for as long
+        # as the thread stayed alive. Threads therefore carry their own
+        # watermark: remembered when first seen, re-read on later ticks from
+        # wherever their own reading stopped.
+        known = read_threads(channel["id"])
         for message in messages:
-            if not message.get("reply_count"):
-                continue
+            if message.get("reply_count"):
+                known.setdefault(message["ts"], None)
+
+        threaded: list[dict[str, Any]] = []
+        threads_complete = True
+        for parent_ts in sorted(known):
+            if budget.left <= 0:
+                threads_complete = False
+                break
             try:
-                threaded.extend(replies(token, channel["id"], message["ts"],
-                                        watermarks.get(channel["id"]), budget))
+                found, done = replies(token, channel["id"], parent_ts,
+                                      known[parent_ts], budget)
             except SlackError as exc:
                 # A thread that could not be read is not a conversation that
                 # could not be read: the parents are already in hand and worth
                 # storing. Reported, but it does not make the run a failure.
                 partial.append({"family": channel["type"], "scope": "thread",
                                 "error": exc.error})
+                threads_complete = False
                 break
+            threaded.extend(found)
+            if done and found:
+                known[parent_ts] = found[-1]["ts"]
+            elif not done:
+                threads_complete = False
+        save_threads(channel["id"], known)
 
         items = [
             slack_message_to_item(message, channel, caps["user_id"],
-                                  sender_name(token, message.get("user"), names))
+                                  sender_name(token, message.get("user"), names, budget))
             for message in messages + threaded
             if worth_judging(message, caps["user_id"])
         ]
+        if not items:
+            continue
         fetched += len(items)
         # Only a complete crawl may move the watermark; the rows are idempotent
         # on `source_id`, so re-reading an unmoved window costs nothing.
-        watermark = messages[-1]["ts"] if complete else None
-        if not complete:
+        # An unfinished thread crawl holds the channel back too: advancing
+        # past a parent whose replies were truncated is how those replies would
+        # be lost for good.
+        watermark = (messages[-1]["ts"]
+                     if (messages and complete and threads_complete) else None)
+        if not complete or not threads_complete:
             incomplete.append(channel["type"])
         added += commit_channel(channel, items, watermark)
 
@@ -722,7 +809,8 @@ def main(argv: list[str] | None = None) -> int:
         errors = sorted({entry["error"] for entry in result["partial"]})
         print(f"Every conversation failed ({', '.join(errors)}).",
               file=sys.stderr)
-        return (EXIT_RATE_LIMIT if errors == ["ratelimited"] else EXIT_OTHER)
+        throttled = {"ratelimited", "retry_after"}
+        return (EXIT_RATE_LIMIT if set(errors) <= throttled else EXIT_OTHER)
     return EXIT_OK
 
 
@@ -734,7 +822,7 @@ def _report_failure(exc: SlackError) -> int:
         print(f"Slack rejected the credential ({exc.error}). See "
               "docs/set-up-slack.md.", file=sys.stderr)
         return EXIT_CREDENTIAL
-    if exc.error == "ratelimited":
+    if exc.error in ("ratelimited", "retry_after"):
         print("Slack asked us to slow down; the next tick will resume from the "
               "same watermark.", file=sys.stderr)
         return EXIT_RATE_LIMIT

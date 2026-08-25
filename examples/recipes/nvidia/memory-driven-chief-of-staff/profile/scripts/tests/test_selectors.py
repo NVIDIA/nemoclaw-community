@@ -1089,5 +1089,56 @@ class TestTheEncryptionPrerequisiteIsEstablishedNotMentioned(unittest.TestCase):
                           f"{name} never mentions the prerequisite")
 
 
+class TestTheEncryptionGateChecksAPathItWasGiven(unittest.TestCase):
+    """The four tests above read the script; none of them runs it.
+
+    That gap was demonstrated rather than assumed: reverting the storage path
+    from `SANDBOX_STORAGE_PATH` back to `$HOME` — the defect this review
+    found, where the check can approve a volume the sandbox does not use —
+    left every one of them passing. A gate that cannot be seen to fail is not
+    a gate, so this one runs the script.
+    """
+
+    SCRIPT = HERE.parents[1] / "scripts" / "setup-slack.sh"
+
+    def _run(self, env=None):
+        fake = Path(tempfile.mkdtemp())
+        (fake / "uname").write_text("#!/bin/sh\necho Linux\n", encoding="utf-8")
+        # An openshell that reports an empty provider list, so the run reaches
+        # the storage gate instead of stopping at the CLI check.
+        (fake / "openshell").write_text(
+            "#!/bin/sh\n"
+            'case "$1 $2" in\n'
+            '  "sandbox provider") echo NAME; exit 0 ;;\n'
+            "esac\nexit 0\n", encoding="utf-8")
+        for name in ("uname", "openshell"):
+            (fake / name).chmod(0o755)
+        return subprocess.run(
+            ["bash", str(self.SCRIPT)], capture_output=True, text=True,
+            stdin=subprocess.DEVNULL,
+            env={"PATH": f"{fake}:/bin:/usr/bin",
+                 "HOME": os.environ.get("HOME", "/tmp"), **(env or {})})
+
+    def test_it_refuses_to_guess_where_the_storage_lives(self):
+        proc = self._run()
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("SANDBOX_STORAGE_PATH", proc.stdout + proc.stderr,
+                      "the script inferred a storage location instead of "
+                      "requiring one to be named")
+
+    def test_a_path_that_does_not_exist_is_refused(self):
+        proc = self._run({"SANDBOX_STORAGE_PATH": "/no/such/place"})
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("does not exist", proc.stderr)
+
+    def test_an_unencrypted_path_is_not_waved_through(self):
+        """`/tmp` is not on a crypt device in any environment this runs in."""
+        proc = self._run({"SANDBOX_STORAGE_PATH": "/tmp"})
+        self.assertNotEqual(proc.returncode, 0,
+                            "an unencrypted path was accepted without the "
+                            "operator confirming anything")
+        self.assertIn("encrypted", (proc.stdout + proc.stderr).lower())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
