@@ -27,7 +27,7 @@ REPO = Path(__file__).resolve().parents[1]
 # against anything else is shown by hash prefix rather than silently grouped
 # with corpus A, which is what the old default did.
 CORPUS_LABELS = {
-    "d4d5dc68726e6e94d7317f9c1940aa428c4480a26685c0fc453cd7e430a8643d": "A",
+    "12772a521d95bd777625924d8ec7b151d0d9c0e388f4dc4bafbd7540130cc9a9": "A",
     "ef57ca34e3937b5c4ae847428676550d3a036c5a73b7ed9ae3c6a038e9187e96": "B",
 }
 

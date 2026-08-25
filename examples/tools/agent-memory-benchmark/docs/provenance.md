@@ -91,7 +91,7 @@ single-file artifact is hashed as its bytes alone, with no path framing
 
 | Artifact | Files | SHA-256 |
 | --- | ---: | --- |
-| `corpus/` (corpus A) | 428 | `d4d5dc68726e6e94d7317f9c1940aa428c4480a26685c0fc453cd7e430a8643d` |
+| `corpus/` (corpus A) | 428 | `12772a521d95bd777625924d8ec7b151d0d9c0e388f4dc4bafbd7540130cc9a9` |
 | `corpus_b/corpus/` (corpus B) | 176 | `ef57ca34e3937b5c4ae847428676550d3a036c5a73b7ed9ae3c6a038e9187e96` |
 | `questions/questions.jsonl` | 1 | `6d38f6c11edbefb4baa77b8014af1920c48ab65f3647a2bb10daa691e9259b06` |
 | `gold/answers.jsonl` | 1 | `55a66b80ff0f62d8b3a340dcbb9cc970a011922b1e509269c4402192f9504970` |
