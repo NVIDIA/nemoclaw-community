@@ -100,6 +100,32 @@ omitting it costs you nothing on the accuracy score.
 `ANTHROPIC_BASE_URL` at a local proxy and counts what crosses the wire. Systems
 running local inference are marked as self-reported in the leaderboard.
 
+### How the runner treats your adapter
+
+**Commands are argument arrays, never shell strings.** `["my-cli", "ingest",
+"--corpus", "{corpus}"]` is executed directly, with no shell in between, so a
+path containing a space or a quote cannot become a second command.
+
+**An adapter runs local code that you chose to run.** It is not sandboxed: it
+executes with your user, your filesystem, and whatever credentials are in the
+environment. Read an adapter before you run it, exactly as you would any script
+from a repository. What the runner does provide is a boundary against
+*accidental* leakage, not against a hostile adapter:
+
+- Adapters are launched from a scratch directory, not from the benchmark root,
+  so a relative `open("gold/answers.jsonl")` finds nothing.
+- Before each phase starts, the runner checks that the phase was not handed a
+  path it must not have. Ingest never receives the questions or the answer key;
+  answer never receives the answer key. A run that would violate this stops
+  before the adapter launches.
+
+**Every phase has a wall-clock budget.** `--timeout-seconds` (default six hours,
+`0` to wait indefinitely). Each adapter runs in its own process group, so a
+timeout — or a Ctrl-C — reaches the workers your adapter started and not just
+the adapter itself. A process that ignores `SIGTERM` is killed ten seconds
+later. Without this, a hung run leaves workers behind that keep the accounting
+proxy open and keep spending tokens after the run is over.
+
 ## The questions
 
 **Base set (155).**

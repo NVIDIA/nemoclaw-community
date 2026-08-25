@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -35,6 +36,8 @@ REPO = Path(__file__).resolve().parents[1]
 # MNEMO_UPSTREAM; the default is the public OpenAI endpoint so a fresh clone
 # works without knowing about anyone's internal gateway.
 DEFAULT_UPSTREAM = os.environ.get("MNEMO_UPSTREAM", "https://api.openai.com")
+# How long a killed adapter gets to exit on SIGTERM before SIGKILL.
+GRACE_SECONDS = 10
 
 
 def _render(command: list[str], env: dict[str, str], **subs: str) -> list[str]:
@@ -51,23 +54,114 @@ def _render(command: list[str], env: dict[str, str], **subs: str) -> list[str]:
         for name, value in env.items():
             part = part.replace(f"${{{name}}}", value)
         part = os.path.expandvars(os.path.expanduser(part))
-        rendered.append(part.format(**subs))
+        part = part.format(**subs)
+        # Adapters are invoked from a scratch directory rather than from the
+        # benchmark root (see ``_assert_isolated``), so a committed relative
+        # path like ``adapters/naive_rag/run.py`` would no longer resolve.
+        # Bind it to the benchmark root here, while the root is still known.
+        if not os.path.isabs(part) and (REPO / part).exists():
+            part = str((REPO / part).resolve())
+        rendered.append(part)
     return rendered
 
 
-def _run(command: list[str], env: dict, cwd: Path, stdin: Path | None, stdout: Path | None, label: str) -> float:
+def _assert_isolated(command: list[str], env: dict, phase: str, forbidden: dict[str, Path]) -> None:
+    """Fail before launching if a phase was handed something it must not see.
+
+    The benchmark is only meaningful if a system answers from the memory it
+    built, so ingest must not see the questions and neither phase may see the
+    answer key. The placeholders enforce that by construction — ingest is only
+    ever rendered with ``{corpus}`` and ``{state}`` — and this is the check
+    that keeps a future edit from quietly widening them.
+
+    This is a guard against leakage, not a sandbox. An adapter runs local code
+    that you chose to run, with your filesystem and your credentials; nothing
+    here stops one that goes looking. What it does stop is an adapter reading
+    the key by accident because the runner left it within reach.
+    """
+    haystack = " ".join(command) + " " + " ".join(f"{k}={v}" for k, v in env.items())
+    for label, path in forbidden.items():
+        if str(path) in haystack:
+            raise SystemExit(
+                f"refusing to start {phase}: it was given the {label} ({path}). "
+                "The ingest phase must not see the questions, and no phase may "
+                "see the answer key."
+            )
+
+
+def _terminate_group(process: subprocess.Popen, label: str) -> None:
+    """Kill the adapter and everything it spawned.
+
+    An adapter is usually a shell or an interpreter that starts workers of its
+    own. Killing only the process we launched leaves those workers running,
+    holding the accounting proxy open and continuing to spend tokens after the
+    run has been declared over. The child is started in its own process group
+    precisely so the whole tree can be signalled here.
+    """
+    if process.poll() is not None:
+        return
+    try:
+        if hasattr(os, "killpg"):
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        else:  # Windows: the child was started as its own process group.
+            process.send_signal(signal.CTRL_BREAK_EVENT)
+    except (ProcessLookupError, PermissionError, OSError):
+        process.terminate()
+    try:
+        process.wait(timeout=GRACE_SECONDS)
+        return
+    except subprocess.TimeoutExpired:
+        print(f"[runner] {label} ignored SIGTERM; killing", file=sys.stderr, flush=True)
+    try:
+        if hasattr(os, "killpg"):
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+        else:
+            process.kill()
+    except (ProcessLookupError, PermissionError, OSError):
+        process.kill()
+    process.wait()
+
+
+def _run(
+    command: list[str],
+    env: dict,
+    cwd: Path,
+    stdin: Path | None,
+    stdout: Path | None,
+    label: str,
+    timeout: float | None = None,
+) -> float:
     started = time.monotonic()
     fin = open(stdin, "rb") if stdin else subprocess.DEVNULL
     fout = open(stdout, "wb") if stdout else subprocess.DEVNULL
+    # Its own process group, so a timeout or a Ctrl-C reaches the workers the
+    # adapter started and not just the adapter.
+    if hasattr(os, "setsid"):
+        group = {"start_new_session": True}
+    else:  # Windows
+        group = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    process = subprocess.Popen(
+        command, env=env, cwd=cwd, stdin=fin, stdout=fout, stderr=None, **group
+    )
     try:
-        completed = subprocess.run(command, env=env, cwd=cwd, stdin=fin, stdout=fout, stderr=None)
+        returncode = process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _terminate_group(process, label)
+        raise SystemExit(
+            f"{label} exceeded the {timeout:.0f}s budget and was killed. "
+            "Raise --timeout-seconds, or pass 0 to wait indefinitely."
+        ) from None
+    except BaseException:
+        # Ctrl-C, or anything else on the way out: do not leave the tree running.
+        _terminate_group(process, label)
+        raise
     finally:
         for handle in (fin, fout):
             if hasattr(handle, "close"):
                 handle.close()
     elapsed = round(time.monotonic() - started, 2)
-    if completed.returncode != 0:
-        raise SystemExit(f"{label} failed with exit code {completed.returncode}")
+    if returncode != 0:
+        raise SystemExit(f"{label} failed with exit code {returncode}")
     return elapsed
 
 
@@ -111,6 +205,12 @@ def main() -> None:
     parser.add_argument("--state", type=Path, default=None, help="memory dir for the system under test")
     parser.add_argument("--upstream", default=DEFAULT_UPSTREAM)
     parser.add_argument("--skip-ingest", action="store_true", help="reuse an existing --state and only answer")
+    parser.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=float(os.environ.get("MNEMO_TIMEOUT_SECONDS", 6 * 3600)),
+        help="per-phase wall-clock budget; 0 waits indefinitely (default: 6h)",
+    )
     args = parser.parse_args()
 
     # Absolute paths, always. A relative --state reaches the adapter as-is, and
@@ -134,6 +234,10 @@ def main() -> None:
     state_dir = (args.state or run_dir / "state").resolve()
     state_dir.mkdir(parents=True, exist_ok=True)
     answers_path = run_dir / "answers.jsonl"
+    # Adapters run from here, not from the benchmark root: a relative open() of
+    # "gold/answers.jsonl" must not find the answer key.
+    work_dir = run_dir / "work"
+    work_dir.mkdir(parents=True, exist_ok=True)
 
     gold_by_id = {}
     for line in args.gold.read_text(encoding="utf-8").splitlines():
@@ -156,19 +260,27 @@ def main() -> None:
         env["MNEMO_MODEL"] = spec.get("model", "")
         env["PYTHONPATH"] = str(REPO) + os.pathsep + env.get("PYTHONPATH", "")
 
+        timeout = args.timeout_seconds or None
         if not args.skip_ingest:
             proxy.set_phase("ingest")
             ingest_seconds = 0.0
             for part in ("part_a", "part_b"):
                 command = _render(spec["ingest"], env, corpus=str(args.corpus / part), state=str(state_dir), part=part)
+                _assert_isolated(
+                    command, env, f"ingest {part}",
+                    {"answer key": args.gold, "question set": args.questions},
+                )
                 print(f"[runner] ingest {part}: {' '.join(command)}", flush=True)
-                ingest_seconds += _run(command, env, REPO, None, None, f"ingest {part}")
+                ingest_seconds += _run(command, env, work_dir, None, None, f"ingest {part}", timeout)
             timing["ingest_seconds"] = round(ingest_seconds, 2)
 
         proxy.set_phase("answer")
         command = _render(spec["answer"], env, state=str(state_dir), questions=str(args.questions))
+        _assert_isolated(command, env, "answer", {"answer key": args.gold})
         print(f"[runner] answer: {' '.join(command)}", flush=True)
-        timing["answer_seconds"] = _run(command, env, REPO, args.questions, answers_path, "answer")
+        timing["answer_seconds"] = _run(
+            command, env, work_dir, args.questions, answers_path, "answer", timeout
+        )
         usage = proxy.usage.snapshot()
 
     answers = _read_answers(answers_path)
