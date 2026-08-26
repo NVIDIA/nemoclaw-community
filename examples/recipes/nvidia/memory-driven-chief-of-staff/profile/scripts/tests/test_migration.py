@@ -258,6 +258,62 @@ class TestVersionGuardOnTheRealPath(unittest.TestCase):
         self.assertEqual(row[1], "b")
         self.assertIsNone(row[2])
 
+    def test_the_documented_command_actually_migrates(self):
+        """`docs/data-lifecycle.md` told people to run this file when it had no
+        entry point, so it did nothing and reported nothing — an instruction
+        that succeeds by being silent."""
+        v1 = (HERE / "schema-v1.sql").read_text(encoding="utf-8")
+        with sqlite3.connect(self.db) as c:
+            c.executescript("DROP TABLE IF EXISTS items;"
+                            "DROP TABLE IF EXISTS obligations;"
+                            "DROP TABLE IF EXISTS events;"
+                            "DROP TABLE IF EXISTS cursors;"
+                            "DROP TABLE IF EXISTS meta;")
+            c.executescript(v1)
+
+        proc = subprocess.run(
+            [sys.executable, str(HERE / "migrate.py")],
+            capture_output=True, text=True,
+            env={**os.environ, "HERMES_HOME": self.tmp})
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+        with sqlite3.connect(self.db) as c:
+            version = c.execute(
+                "SELECT value FROM meta WHERE key='schema_version'").fetchone()[0]
+            columns = {r[1] for r in c.execute("PRAGMA table_info(items)")}
+        self.assertEqual(int(version), 2)
+        self.assertIn("body_cleared_at", columns)
+
+    def test_the_check_flag_reports_without_changing(self):
+        v1 = (HERE / "schema-v1.sql").read_text(encoding="utf-8")
+        with sqlite3.connect(self.db) as c:
+            c.executescript("DROP TABLE IF EXISTS items;"
+                            "DROP TABLE IF EXISTS obligations;"
+                            "DROP TABLE IF EXISTS events;"
+                            "DROP TABLE IF EXISTS cursors;"
+                            "DROP TABLE IF EXISTS meta;")
+            c.executescript(v1)
+
+        proc = subprocess.run(
+            [sys.executable, str(HERE / "migrate.py"), "--check"],
+            capture_output=True, text=True,
+            env={**os.environ, "HERMES_HOME": self.tmp})
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(json.loads(proc.stdout)["schema_version"], 1)
+
+        with sqlite3.connect(self.db) as c:
+            columns = {r[1] for r in c.execute("PRAGMA table_info(items)")}
+        self.assertNotIn("body_cleared_at", columns,
+                         "--check changed the store")
+
+    def test_the_docs_do_not_promise_a_command_that_does_nothing(self):
+        docs = (HERE.parents[1] / "docs" / "data-lifecycle.md").read_text(
+            encoding="utf-8")
+        if "python3 migrate.py" in docs:
+            module = (HERE / "migrate.py").read_text(encoding="utf-8")
+            self.assertIn('if __name__ == "__main__"', module,
+                          "the docs name a command this module cannot run")
+
     def test_an_older_store_is_migrated_rather_than_refused(self):
         """The guard is one-sided: behind is upgraded, ahead is refused."""
         import migrate                        # noqa: E402
