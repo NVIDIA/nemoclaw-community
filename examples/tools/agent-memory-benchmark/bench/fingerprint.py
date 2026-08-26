@@ -47,7 +47,10 @@ def hash_file(path: Path) -> str:
 # The modules that turn an answer into a verdict. Two reports graded by
 # different versions of these are not comparable however identical their inputs
 # are, so the scorer is part of a scoring configuration's identity.
-_SCORER = ("grader.py", "normalize.py", "answer_contract.py")
+# Every module between an answer and a published number: the ones that decide
+# a verdict, and the one that aggregates verdicts into the overall, per-type,
+# difficulty, freshness and evidence figures a reader compares.
+_SCORER = ("grader.py", "normalize.py", "answer_contract.py", "report.py")
 
 
 def scorer_revision() -> str:

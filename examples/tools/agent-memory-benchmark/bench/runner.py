@@ -181,7 +181,10 @@ VALID_ACCOUNTING = ("proxy", "local")
 
 def _accounting_method(declared: str, forwarded: int, uncounted: int) -> str:
     if declared == "local":
-        return "local-unmeasured"
+        # Declaring a local model and then calling through the proxy is a
+        # mismatch in the other direction: the cost was partly observed, and
+        # calling it unmeasured would understate it.
+        return "declared-local-but-called" if forwarded else "local-unmeasured"
     if not forwarded:
         return "declared-proxy-but-silent"
     return "partial" if uncounted else "proxy"
@@ -189,6 +192,9 @@ def _accounting_method(declared: str, forwarded: int, uncounted: int) -> str:
 
 def _accounting_description(declared: str, forwarded: int, uncounted: int) -> str:
     if declared == "local":
+        if forwarded:
+            return (f"the adapter declares a locally-hosted model but {forwarded} requests "
+                    "crossed the proxy, so its declaration does not describe what it did")
         return ("the adapter declares a locally-hosted model, so no cost was measured "
                 "and this run is not comparable on the cost axis")
     if not forwarded:
@@ -382,9 +388,11 @@ def main() -> None:
     answers = _read_answers(answers_path)
     verdicts: list[Verdict] = []
     for question in questions:
+        answered = question["id"] in answers
         row = answers.get(question["id"], {})
         verdicts.append(
-            grade(question["id"], str(row.get("answer", "")), row.get("source_ids"), gold_by_id[question["id"]])
+            grade(question["id"], str(row.get("answer", "")), row.get("source_ids"),
+                  gold_by_id[question["id"]], answered=answered)
         )
 
     manifest = [json.loads(line) for line in (args.corpus / "manifest.jsonl").read_text().splitlines() if line.strip()]
@@ -468,6 +476,13 @@ def main() -> None:
     }
     # A system that answered nothing is a broken run, not a system that scored
     # zero. Say so in the report and mark the run invalid.
+    if declared_accounting == "local" and forwarded:
+        report["valid"] = False
+        report["invalid_reason"] = (
+            f'the adapter declares "accounting": "local" but {forwarded} requests crossed '
+            "the proxy. Declare proxy accounting, or stop routing through it."
+        )
+        print(f"[runner] WARNING: {report['invalid_reason']}", file=sys.stderr)
     if declared_accounting == "proxy" and not forwarded:
         report["valid"] = False
         report["invalid_reason"] = (
@@ -485,11 +500,12 @@ def main() -> None:
             "together; re-run against an endpoint that returns usage."
         )
         print(f"[runner] WARNING: {report['invalid_reason']}", file=sys.stderr)
-    if not answers or len(report["answers_missing"]) > len(questions) // 2:
+    if report["answers_missing"]:
         report["valid"] = False
         report["invalid_reason"] = (
-            f"only {len(answers)} of {len(questions)} questions were answered — "
-            "the adapter did not run to completion"
+            f"{len(report['answers_missing'])} of {len(questions)} questions received no "
+            "answer. An incomplete submission is not a lower score: a question a system "
+            "declined to answer at all is not the same as one it answered by declining."
         )
         print(f"[runner] WARNING: {report['invalid_reason']}", file=sys.stderr)
     (run_dir / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

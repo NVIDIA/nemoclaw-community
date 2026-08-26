@@ -46,7 +46,8 @@ def main() -> None:
 
     verdicts = [
         grade(q["id"], str(answers.get(q["id"], {}).get("answer", "")),
-              answers.get(q["id"], {}).get("source_ids"), gold[q["id"]])
+              answers.get(q["id"], {}).get("source_ids"), gold[q["id"]],
+              answered=q["id"] in answers)
         for q in questions
     ]
     # Two callers, one path. A finished run has a report to re-score in place.
@@ -94,6 +95,13 @@ def main() -> None:
     # them. Leaving the old one made the report name a scorer that did not
     # score it.
     report["benchmark_revision"] = _git_revision(REPO)
+    report["answers_missing"] = [q["id"] for q in questions if q["id"] not in answers]
+    if report["answers_missing"]:
+        report["valid"] = False
+        report["invalid_reason"] = (
+            f"{len(report['answers_missing'])} of {len(questions)} questions received no "
+            "answer. An incomplete submission is not a lower score."
+        )
     report["regraded"] = True
     (args.run / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     (args.run / "verdicts.jsonl").write_text(

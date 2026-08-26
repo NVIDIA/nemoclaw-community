@@ -230,3 +230,51 @@ def test_an_unknown_accounting_mode_is_refused(tmp_path):
 def test_a_counted_run_is_the_only_shape_marked_cost_comparable(tmp_path):
     report = _run(tmp_path, {"prompt_tokens": 4, "completion_tokens": 1})
     assert report["accounting"]["comparable_on_cost"] is True
+
+
+def test_declaring_local_while_calling_through_the_proxy_is_refused(tmp_path):
+    """The mirror of the bypass case: a declaration that does not describe the run.
+
+    Declaring a locally-hosted model and then routing through the proxy left
+    the report saying no cost was measured while the proxy had counted real
+    traffic, which understates a cost that was in fact observed.
+    """
+    adapter = _bypassing_adapter(tmp_path, "local")
+    # Make it actually call, contradicting its own declaration.
+    (adapter / "run.py").write_text(
+        "import json, os, sys, urllib.request\n"
+        "if sys.argv[1] == 'ingest':\n    sys.exit(0)\n"
+        "base = os.environ['OPENAI_BASE_URL']\n"
+        "for line in sys.stdin:\n"
+        "    if not line.strip():\n        continue\n"
+        "    q = json.loads(line)\n"
+        "    r = urllib.request.Request(f'{base}/chat/completions',\n"
+        "        data=json.dumps({'model': 'm', 'messages': []}).encode(),\n"
+        "        headers={'Content-Type': 'application/json'})\n"
+        "    b = json.loads(urllib.request.urlopen(r).read())\n"
+        "    print(json.dumps({'id': q['id'],\n"
+        "        'answer': b['choices'][0]['message']['content'], 'source_ids': []}), flush=True)\n",
+        encoding="utf-8")
+    server = _upstream({"prompt_tokens": 3, "completion_tokens": 1})
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-m", "bench.runner", "--adapter", str(adapter),
+             "--corpus", str(SELFTEST / "corpus"),
+             "--questions", str(SELFTEST / "questions.jsonl"),
+             "--gold", str(SELFTEST / "gold.jsonl"),
+             "--out", str(tmp_path / "run"), "--timeout-seconds", "120"],
+            cwd=REPO, capture_output=True, text=True, timeout=300,
+            env={**os.environ,
+                 "MNEMO_UPSTREAM": f"http://127.0.0.1:{server.server_address[1]}",
+                 "OPENAI_API_KEY": "stub"})
+        assert completed.returncode == 0, completed.stderr[-1500:]
+    finally:
+        server.shutdown()
+        server.server_close()
+    report = json.loads((tmp_path / "run" / "report.json").read_text(encoding="utf-8"))
+    accounting = report["accounting"]
+    assert accounting["forwarded_calls"] > 0
+    assert accounting["method"] == "declared-local-but-called"
+    assert "does not describe what it did" in accounting["description"]
+    assert accounting["comparable_on_cost"] is False
+    assert report["valid"] is False

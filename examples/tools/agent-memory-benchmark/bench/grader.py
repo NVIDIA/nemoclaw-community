@@ -197,9 +197,34 @@ def score_evidence(cited: list[str] | None, gold_ids: list[str] | None) -> tuple
     return hit / len(gold_set), hit / len(cited_set)
 
 
-def grade(question_id: str, answer: str, cited: list[str] | None, gold: dict) -> Verdict:
-    """Grade one answer against its gold entry."""
+def grade(
+    question_id: str,
+    answer: str,
+    cited: list[str] | None,
+    gold: dict,
+    *,
+    answered: bool = True,
+) -> Verdict:
+    """Grade one answer against its gold entry.
+
+    ``answered=False`` means the system produced no row for this question at
+    all. That is not an abstention: an abstention is a system saying "the
+    corpus does not support an answer", which is a judgement it had to make.
+    Silence is the absence of one, and crediting it would let a system score
+    every abstention question by skipping them.
+    """
     mode = gold.get("mode", "string_any")
+    if not answered:
+        recall, precision = score_evidence(cited, gold.get("gold_source_ids"))
+        return Verdict(
+            question_id=question_id,
+            correct=False,
+            mode=mode,
+            reason="no answer was produced for this question",
+            evidence_recall=recall,
+            evidence_precision=precision,
+            cited=list(cited or []),
+        )
     recall, precision = score_evidence(cited, gold.get("gold_source_ids"))
     if mode == "llm":
         return Verdict(
