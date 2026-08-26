@@ -149,10 +149,19 @@ thread. However loud, that is the outside world asking. Promoting any of it
 here tells the ranking job the user picked work they never picked, which is
 the failure this page exists to prevent.
 
-Only corrections whose `direction` is `chose` may become a priority. A
-`declined` one — the person set something to `low`, or ignored it — is a real
-choice and worth knowing, but writing it here would promote the very thing
-they pushed away. Put it on the relevant person's page as context if it says
+Only corrections whose `direction` is `chose` may become a priority. Two
+things carry that direction: raising something to `high`, and restoring
+something previously ignored — the second is the person changing their mind
+and saying it is their work after all, which is as clear a statement as the
+first. A `declined` one — a lower tier, or an ignore — is a real choice and
+worth knowing, but writing it here would promote the very thing they pushed
+away.
+
+If `corrections_not_shown` is above zero, the pass was bounded and there are
+older corrections you were not given. Everything unapplied is always in what
+you were given, so nothing you need is missing — but say so on the page rather
+than implying the list is the whole history. Put it on the relevant person's
+page as context if it says
 something about how they work together, or leave it.
 
 **Record which corrections the page accounts for.** Every correction you used,

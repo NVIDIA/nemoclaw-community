@@ -62,6 +62,10 @@ MAX_WINDOW_DAYS = 3650
 # Bounds on one pass, for the same reason the intake slice is bounded: a turn
 # that tries to write forty pages writes forty bad ones.
 MAX_PEOPLE = 8
+
+# How many corrections one pass carries. Unapplied ones are never the part
+# dropped, so a bound cannot lose a choice that has not been written up yet.
+MAX_CORRECTIONS = 40
 MAX_INTERACTIONS = 12
 
 # Senders that are machinery rather than people. A page for a build server
@@ -295,6 +299,7 @@ def evidence(conn, since: str) -> dict[str, object]:
         latest[sender] = last
 
     have = existing_people()
+    today = datetime.now(timezone.utc).date().isoformat()
 
     # Two different senders that reduce to one page name.
     #
@@ -330,6 +335,11 @@ def evidence(conn, since: str) -> dict[str, object]:
             # job runs nightly, so one quiet correspondent cost thirty model
             # calls to be told thirty times that nothing had changed.
             recorded = have[mark]
+            # A page dated in the future would skip that person for as long as
+            # the date stood — silently, and a typo or a clock skew is enough
+            # to write one. Treat it as unknown, which means look.
+            if recorded > today:
+                recorded = ""
             if recorded and last and last <= recorded:
                 continue
         candidates.append({
@@ -397,11 +407,18 @@ def corrections(conn, since: str) -> list[dict[str, object]]:
     Without this the job could only ever write an empty priorities page, and
     the ranking gate it exists to feed would stay shut on every install.
     """
+    # No LIMIT here, and the bound is applied after the classification below.
+    #
+    # Taking the newest forty in SQL dropped the oldest silently, and the ones
+    # dropped were exactly the ones most likely to be unapplied — an older
+    # correction that had never been written up could be pushed out of the
+    # window forever by newer traffic. A choice the person made deliberately
+    # would vanish without anything saying so.
     rows = conn.execute(
         "SELECT e.id, e.ts, e.event_type, e.after_json, o.title, o.source_id"
         "  FROM events e JOIN obligations o ON o.id = e.obligation_id"
         " WHERE e.actor = 'user' AND e.ts >= ?"
-        " ORDER BY e.ts DESC LIMIT 40", (since,)).fetchall()
+        " ORDER BY e.ts DESC", (since,)).fetchall()
 
     out: list[dict[str, object]] = []
     for event_id, ts, event_type, after_json, title, source_id in rows:
@@ -418,14 +435,25 @@ def corrections(conn, since: str) -> list[dict[str, object]]:
         status = after.get("status")
 
         # A choice has a direction, and only one direction belongs on the
-        # priorities page. Raising something to `high` is the person saying
-        # this is their work. Setting it to `low`, or ignoring it, is them
-        # saying it is not — evidence about them, and useful, but writing it
-        # into `current_priorities.md` would promote exactly what they pushed
+        # priorities page.
+        #
+        # `correct.py` emits exactly three user events and all three are
+        # classified here. Raising something to `high` is the person saying it
+        # is their work; restoring something they had ignored is them changing
+        # their mind and saying the same thing, which an earlier version of
+        # this left as `other` and so kept out of the page it belongs in.
+        # Setting a lower tier, or ignoring, is them saying the opposite —
+        # real evidence, worth knowing, and writing it into
+        # `current_priorities.md` would promote the very thing they pushed
         # away.
-        if tier == "high":
+        #
+        # Anything else is `other` rather than guessed at. The schema allows
+        # event types no user path writes today (`snoozed`, `completed`), and
+        # a classifier that assumed a direction for one would be inventing the
+        # user's intent from a row somebody else's code might write later.
+        if tier == "high" or event_type == "restored":
             direction = "chose"
-        elif tier in ("medium", "low") or status == "ignored":
+        elif tier in ("medium", "low") or event_type == "ignored":
             direction = "declined"
         else:
             direction = "other"
@@ -477,6 +505,14 @@ def main() -> int:
     seen_events = applied_events(memory_root())
     unapplied = [c for c in chosen if c["event_id"] not in seen_events]
 
+    # Bound the payload, but never at the cost of losing an unapplied choice.
+    # Unapplied first, newest within each group; anything dropped is counted
+    # so a truncated pass says so rather than looking complete.
+    ordered = unapplied + [c for c in chosen if c["event_id"] in seen_events]
+    dropped = max(0, len(ordered) - MAX_CORRECTIONS)
+    chosen = ordered[:MAX_CORRECTIONS]
+    unapplied = [c for c in chosen if c["event_id"] not in seen_events]
+
     report = {
         "window_days": window,
         "since": since,
@@ -495,6 +531,7 @@ def main() -> int:
         # second may reach `current_priorities.md`.
         "user_corrections": chosen,
         "unapplied_corrections": unapplied,
+        "corrections_not_shown": dropped,
         "attention": stale_attention(),
     }
     print(json.dumps(report, indent=2, ensure_ascii=False))

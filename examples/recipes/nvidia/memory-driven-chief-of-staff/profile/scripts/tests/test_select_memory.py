@@ -349,6 +349,17 @@ class TestAQuietDayCostsNothing(SelectorCase):
         self.assertNotIn("wakeAgent", out)
         self.assertIn("Dana Okoro", out)
 
+    def test_a_page_dated_in_the_future_does_not_hide_somebody(self):
+        """A typo or a clock skew is enough to write one, and it would skip
+        that person for as long as the date stood, silently."""
+        self.current_attention()
+        self.page("dana_okoro", last_interaction="2099-01-01")
+        self.add("Dana Okoro", days_ago=0)
+        self.add("Dana Okoro", days_ago=1, body="b2")
+        out, _ = self.run_selector()
+        self.assertNotIn("wakeAgent", out)
+        self.assertIn("Dana Okoro", out)
+
     def test_a_page_with_no_recorded_date_is_still_offered(self):
         """Unknown means look, not skip."""
         self.current_attention()
@@ -396,6 +407,25 @@ class TestOnlyTheUserSaysWhatTheyChose(SelectorCase):
         self.user_ignored()
         entry = self.report()["user_corrections"][0]
         self.assertEqual(entry["direction"], "declined")
+
+    def test_restoring_something_ignored_is_choosing_it(self):
+        """The person changed their mind and said it is their work after all.
+        Leaving it as `other` kept it out of the page it belongs in."""
+        self.user_ignored(source_id="m1")
+        correct.unignore("m1")
+        entries = self.report()["user_corrections"]
+        restored = [e for e in entries if e["action"] == "restored"]
+        self.assertTrue(restored, "restore did not reach the selector")
+        self.assertEqual(restored[0]["direction"], "chose")
+
+    def test_every_event_correct_py_writes_is_classified(self):
+        """Three user paths exist; a fourth appearing should be a visible
+        edit here rather than a silent `other`."""
+        module = (HERE / "correct.py").read_text(encoding="utf-8")
+        emitted = set(re.findall(r'_log\(conn, \w+, "(\w+)"', module))
+        self.assertEqual(emitted, {"ignored", "restored", "priority_override"},
+                         "correct.py emits an event this selector does not "
+                         "classify; add it to `corrections()` and here")
 
     def test_an_agent_event_is_not_a_correction(self):
         """Only `correct.py` writes `actor='user'`; a rerank is the assistant
@@ -449,6 +479,39 @@ class TestACorrectionIsEvidenceOnce(SelectorCase):
         again = self.report()
         self.assertTrue(again["user_corrections"])
         self.assertEqual(again["unapplied_corrections"], [])
+
+    def test_an_unapplied_correction_is_never_the_one_dropped(self):
+        """Taking the newest N in SQL dropped the oldest silently, and the
+        oldest are the ones most likely never to have been written up — a
+        deliberate choice could be pushed out of the window forever by newer
+        traffic, with nothing saying so."""
+        self.current_attention()
+        for i in range(select_memory.MAX_CORRECTIONS + 5):
+            self.correction(source_id=f"m{i}")
+        found = self.report()
+        first = found["user_corrections"]
+        oldest = min(c["event_id"] for c in first)
+        # Apply everything except the oldest, then add newer traffic.
+        for c in first:
+            if c["event_id"] != oldest:
+                self.applied(c["event_id"])
+        for i in range(10):
+            self.correction(source_id=f"later{i}")
+            self.applied(self.report()["user_corrections"][0]["event_id"])
+        again = self.report()
+        self.assertIn(oldest,
+                      [c["event_id"] for c in again["unapplied_corrections"]],
+                      "the one correction never written up was dropped")
+
+    def test_a_truncated_pass_says_it_was_truncated(self):
+        """Silent truncation reads as "that was all of them"."""
+        self.current_attention()
+        for i in range(select_memory.MAX_CORRECTIONS + 5):
+            self.correction(source_id=f"m{i}")
+        found = self.report()
+        self.assertEqual(len(found["user_corrections"]),
+                         select_memory.MAX_CORRECTIONS)
+        self.assertEqual(found["corrections_not_shown"], 5)
 
     def test_a_new_correction_after_an_applied_one_is_work(self):
         self.current_attention()
