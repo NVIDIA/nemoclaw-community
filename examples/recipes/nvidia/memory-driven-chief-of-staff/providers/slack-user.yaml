@@ -1,0 +1,66 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# The gateway holds the Slack user credential and refreshes it; the sandbox
+# receives only a placeholder, substituted at egress.
+#
+# Slack rotates user tokens: the access half expires in twelve hours and each
+# refresh token is single-use. `oauth2_refresh_token` handles that — verified
+# against live Slack, whose refresh response returns the credential at the top
+# level discriminated by `token_type`, which is the shape this strategy reads.
+#
+# The refresh token configured here must come from `authed_user.refresh_token`
+# in the authorization response. An app with bot scopes also returns a
+# top-level refresh token belonging to the bot; configuring that one refreshes
+# the bot's credential under this user-token key, reports healthy, and yields a
+# collector that never sees a direct message. This recipe's manifest requests
+# no bot scopes, so no such token exists to confuse it with, but `setup-slack.sh`
+# extracts the field by name regardless.
+id: memory-driven-cos-slack-user
+resource_version: 1
+display_name: Memory-Driven Chief of Staff — Slack user
+description: >-
+  Read-only Slack access as the user, for the scheduled intake collector.
+  Gateway-held rotating credential.
+category: messaging
+credentials:
+  - name: slack_user_token
+    description: Slack rotating user token (xoxe.xoxp-)
+    env_vars: [SLACK_USER_TOKEN]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+    refresh:
+      strategy: oauth2_refresh_token
+      token_url: https://slack.com/api/oauth.v2.access
+      scopes: []
+      # Twelve hours is Slack's fixed lifetime; refresh ten minutes early so a
+      # tick that starts near the boundary does not race the expiry.
+      refresh_before_seconds: 600
+      max_lifetime_seconds: 43200
+      material:
+        - name: client_id
+          description: Slack app client id
+          required: true
+        - name: client_secret
+          description: Slack app client secret
+          required: true
+          secret: true
+        - name: refresh_token
+          description: User refresh token, from authed_user.refresh_token
+          required: true
+          secret: true
+endpoints:
+  # One host, and read-only: this recipe never writes to Slack. The scan in
+  # tests/test_durability.py enforces the same property in the code; this
+  # enforces it at the egress boundary, where a future mistake would otherwise
+  # reach the network before any test ran.
+  - host: slack.com
+    port: 443
+    protocol: rest
+    access: read-only
+    enforcement: enforce
+# The collector is a Python cron pre-step and needs nothing else.
+binaries:
+  - /usr/bin/python3
+  - /opt/hermes/.venv/bin/python

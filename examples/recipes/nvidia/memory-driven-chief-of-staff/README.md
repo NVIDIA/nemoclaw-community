@@ -10,11 +10,14 @@ runtime's scheduler. The user's own ignores and priority overrides change the
 ranking. The recipe never writes back to the
 source system.
 
-Two phases are here: the store with its tests and an offline walkthrough, and
-the installer and scheduled jobs that run it without a person present. Neither
-needs an email account, a Slack workspace, or a network. Only the scheduled
-path needs an inference endpoint, and only when a job finds work; the
-walkthrough and the tests need none. A fixture corpus exercises the same code a
+Three phases are here: the store with its tests and an offline walkthrough,
+the installer and scheduled jobs that run it without a person present, and a
+Slack collector that reads the messages the user receives. The first two need
+no account, no workspace and no network, and the walkthrough and the tests
+still need none. The collector is optional; until it is set up it reports
+itself unconfigured and the schedule runs over whatever the store holds. Only
+the scheduled path needs an inference endpoint, and only when a job finds
+work. A fixture corpus exercises the same code a
 live source would. Two recorded model turns stand in for the two steps that
 would otherwise need a model: the intake judgment, in
 `fixtures/envelopes/intake.json`, and the scheduled re-judgment, recorded
@@ -80,7 +83,7 @@ those two apart.
 | `profile/scripts/memory_check.py` | Invariant detection over the memory, deterministic |
 | `profile/scripts/preferences.py` | Correction counting against a fixed threshold |
 | `profile/scripts/apply_decisions.py` | Applies model decisions; the model returns an envelope and never writes SQL |
-| `profile/scripts/migrate.py` | Schema versioning, forward-only. This recipe ships at v1, so there is nothing to upgrade from yet |
+| `profile/scripts/migrate.py` | Schema versioning, forward-only. At v2: adds `body_cleared_at` to a v1 store in place, without touching what it holds |
 | `profile/scripts/normalize.py` | Source payloads to store rows, kept separate from the network calls |
 | `profile/scripts/_db.py` | Connection and transaction boundary |
 | `profile/scripts/correct.py` | The user's writer: pins, ignores, and the only source of `actor='user'` events |
@@ -89,14 +92,20 @@ those two apart.
 | `profile/scripts/select_intake.py` | The intake job's pre-step: what to judge, and whether to wake the model at all |
 | `profile/scripts/select_review.py` | The review job's pre-step: the stalest open obligations, oldest review first |
 | `profile/scripts/select_memory.py` | The memory-writing job's pre-step: recurring correspondents, and whether the attention pages have gone stale |
+| `profile/scripts/retention.py` | The retention job: clears message bodies past the window, keeps the record |
+| `profile/scripts/exclusions.py` | Senders, domains and channels that are never written, applied in `insert_items` |
+| `profile/scripts/export_store.py` | Writes the whole store and memory out as Markdown beside JSON |
+| `profile/scripts/reset.py` | Removes the store, the memory and the learned policy together |
 | `profile/seed/` | The pages a fresh memory starts from — copied in if missing, never overwritten |
 | `scripts/install.sh` | Installs the profile, inherits the runtime's model config, registers the jobs |
-| `scripts/register-jobs.sh` | Registers the six scheduled jobs through the cron CLI. Re-runnable |
-| `profile/skills/` | Six skills: judging, review, memory writing, repair, consolidation, preference update |
+| `scripts/register-jobs.sh` | Registers the seven scheduled jobs through the cron CLI. Re-runnable |
+| `profile/skills/` | Six skills: judging, review, memory writing, repair, consolidation, preference update. Retention needs none — it clears bodies and never wakes the agent |
+>>>>>>> upstream/main
 | `fixtures/` | Eight synthetic messages, a seed memory, and one recorded model turn |
 
-A later phase adds the optional Microsoft Graph and Slack connectors. Until
-then the scheduled jobs judge and re-judge whatever the store already holds.
+Slack is connected through `scripts/setup-slack.sh`; a Microsoft Graph
+connector is still to come. Until a connector is set up, the scheduled jobs
+judge and re-judge whatever the store already holds.
 
 ## Requirements
 
@@ -238,7 +247,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the ten files report 280 tests in
+Expected result: every file ends with `OK`, the twelve files report 477 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -254,6 +263,8 @@ leave the loop exiting `0`.
 | Writer behavior, audit trail, caps across batches, correction idempotency, correction state transitions, displaced-row audit | `tests/test_apply_decisions.py` |
 | The walkthrough, and its central claims | `tests/test_walkthrough.py` |
 | Selector output, the wake gate, and the scheduler contract | `tests/test_selectors.py` |
+| Retention, exclusion, export and reset | `tests/test_lifecycle.py` |
+| The Slack collector: watermarks, partial failure, scope probing, thread discovery and rotation, the credential never reaching a stream, and the lifecycle controls applying to what it writes | `tests/test_ingest_slack.py` |
 
 Four points are worth calling out.
 
@@ -263,8 +274,10 @@ Four points are worth calling out.
   examples, including `urlopen(url, data=…)` and a `subprocess` call to
   `curl`. Read it as a tripwire rather than a proof: it matches call shapes, so
   a write spelled in some further way could still pass it. What actually holds
-  the property in this phase is that the recipe reaches no network at all;
-  policy takes over once the connectors land.
+  the property is enforced twice on the connector path: the provider profile
+  declares `slack.com` at `access: read-only` with `enforcement: enforce`, so
+  a write is refused at the egress boundary before any test runs, and the
+  collector reaches no other host.
 - `test_nothing_this_example_ships_lands_on_a_user_owned_path`, also in
   `tests/test_durability.py`, asserts that nothing this recipe ships occupies a
   user-owned name, and that the user-owned and distribution-owned sets stay
@@ -325,6 +338,7 @@ Six jobs are registered:
 | intake | every 30 minutes | `select_intake.py` | `inbound-judging` |
 | review | every 6 hours | `select_review.py` | `obligation-review` |
 | memory writing | daily 01:00 | `select_memory.py` | `memory-writing` |
+| retention | daily 02:00 | `retention.py` | — |
 | memory repair | daily 03:00 | — | `memory-repair` |
 | memory consolidation | daily 04:00 | — | `memory-consolidation` |
 | preference update | daily 04:30 | — | `preference-update` |
@@ -370,10 +384,12 @@ script's output, so a gate printed anywhere else is ignored and the model
 wakes. A test asserts the gate exactly the way the scheduler parses it, rather
 than looking for the string somewhere in the output.
 
-The intake pre-step also looks for the connectors that arrive with the next
-phase. They are not here, so its output reports each as `"absent": true` and it
-carries on with whatever the store already holds. That is the intended reading:
-this phase schedules the judging, and there is nothing yet to collect.
+The intake pre-step also runs whichever collectors are present. The Slack
+one ships with the recipe and reports `{"unconfigured": true}` until
+`scripts/setup-slack.sh` has run, exiting zero so an idle tick still costs
+nothing. A Graph collector is not here yet, so it is reported as
+`"absent": true`. Either way the tick carries on with whatever the store
+already holds.
 
 **Registering is not starting.** Under the builtin scheduler the jobs fire
 only while a gateway is serving the profile, and starting one takes two steps
@@ -399,10 +415,12 @@ provider takes over from the in-process ticker.
 **The job store is not part of the distribution.** `distribution.yaml` does not
 declare `cron`. An update replaces what it does declare — `SOUL.md`,
 `schema.md`, `skills`, `scripts` and the manifest — and leaves the jobs and
-their run history alone. Measured, not assumed: six jobs
-registered, `hermes profile update` run on Hermes 0.19.0, six jobs still
-there with the same ids. A test asserts
-the manifest never claims `cron` or `workspace`.
+their run history alone. This is worth being deliberate about: `profile
+update` lists `cron/` among the directories it overwrites, and it leaves ours
+alone only because the manifest never claims it. Measured, not assumed: seven
+jobs registered, `hermes profile update` run on Hermes 0.19.0, seven jobs
+still there with the same ids. A test asserts the manifest never claims `cron`
+or `workspace`.
 
 To undo, remove the jobs individually. Deleting the profile removes its
 `workspace` too, which is where the store and the memory live; removing the
@@ -435,7 +453,9 @@ own credential handling — Hermes keeps provider credentials outside
 
 ## Privacy
 
-Nothing in this phase reaches a network or reads a real account.
+The fixture path reaches no network and reads no real account. The Slack
+collector does both, once you have configured it, and everything below is
+written for that case rather than for the fixtures.
 
 One reduction already ships, because it is part of the schema under review:
 recipient lists are never stored. Ingest reduces them to a single `addressing`
@@ -443,14 +463,44 @@ value — `direct`, `mentioned`, or `broadcast` — so the store never holds a
 copy of who else was on a thread. `normalize.py` does this today, and
 `tests/test_normalize.py` asserts it.
 
-The rest of the handling below is not implemented yet. It describes what the
-optional connectors will do, and is stated here because it shapes the schema.
+Four controls over what is kept ship alongside it, and they were in place
+before the collector that fills the store was. They apply to real Slack
+messages exactly as they apply to the fixtures, because the collector writes
+through the same function every other writer does. The commands, the rules
+file and the exact boundaries are in
+[docs/data-lifecycle.md](docs/data-lifecycle.md); what follows is why they are
+drawn where they are.
 
-Once a connector is attached:
+**Message bodies are cleared on a schedule.** `retention.py` runs daily and
+clears the text of anything past the window — thirty days by default,
+`RETENTION_DAYS` to change it. What stays is the record: sender, subject,
+timestamp, addressing, the obligation and its title, and every event with its
+actor. A month later you can still see that Dana asked about the cutover on the
+third, that it ranked high, and that you ignored it on the fifth. You cannot
+re-read Dana's words, which is the point. `body_cleared_at` marks a body that
+was cleared, so it is not confused with one that never existed.
 
-- Attachments will not be fetched.
-- Message bodies will be cleared on a schedule. Metadata and the audit trail
-  will be kept, so history stays inspectable without content sitting on disk.
+**Senders, domains and channels can be excluded at ingest.** Rules live in
+`workspace/exclusions.json` and are applied in `insert_items`, which is the one
+place every writer passes through — the fixture loader, the Slack collector,
+and anything added later — so an excluded message is never written by any of
+them. Filtering at display would leave the text on disk, which is no use to
+somebody excluding their doctor. A test drives the collector against a rule
+and asserts the row never appears, rather than reading the call chain and
+concluding it should not.
+
+**Everything can be exported and everything can be removed.**
+`export_store.py` writes the store and the memory as Markdown beside JSON —
+the first to read, the second to process — and omits nothing.
+`reset.py --yes` removes the store, the memory and the learned preference
+policy together, and reports each; a partial reset would answer the question
+wrongly. It also prints how to revoke the credential, which lives with the
+gateway rather than here, because somebody withdrawing consent wants both.
+
+Three things about the connectors themselves:
+
+- Attachments are not fetched. The collector stores a file-sharing message's
+  text and never requests the file behind it.
 - For Microsoft Graph, an item deleted at the source will be tombstoned locally
   and its body cleared at once, because the delta query reports deletions
   explicitly.
@@ -460,11 +510,10 @@ Once a connector is attached:
   requires the Slack Events API, which this design does not use. Slack's legacy
   Real Time Messaging (RTM) API carries the event too, but Slack states that
   granular-permission apps cannot use it and that classic apps can no longer be
-  created, so it is not an option a connector could take today. Slack content
-  will therefore age out on the scheduled body-clearing pass rather than at the
-  moment of deletion.
-- Senders, domains, and channels will be excludable at ingest, before anything
-  is written.
+  created, so it is not an option this collector could take. Slack content
+  therefore ages out on the scheduled body-clearing pass rather than at the
+  moment of deletion — the weaker guarantee, kept, rather than the stronger one
+  implied.
 
 ## Fixtures
 
@@ -472,6 +521,54 @@ The fixtures were written from scratch. The people, the company, the projects,
 and every message body are invented. Nothing is derived from a real mailbox or
 from an anonymized copy of one. See [`fixtures/README.md`](fixtures/README.md)
 for what each record is a control for.
+
+### Before a connector: encrypted storage
+
+The fixture path stores invented messages. A connector changes that — the store
+then holds real subjects, senders and bodies — so the profile home must sit on
+an encrypted volume before one is attached. Owner-only permissions are not
+encryption: they stop another account reading the file on a running system and
+do nothing for a disk that is lost, imaged, or backed up.
+
+`scripts/setup-slack.sh` checks what it can and refuses to attach a provider
+until the rest is confirmed. What it inspects is the **host** filesystem under
+the sandbox's storage, because `HERMES_HOME` inside a sandbox is an overlay
+with no block device behind it — encryption is not observable from in there.
+[`docs/encrypted-storage.md`](docs/encrypted-storage.md) has the verification
+commands per platform, and what to do when the answer is no.
+
+### Connecting Slack
+
+The scheduled intake reads whichever collectors are present in
+`profile/scripts/`. Slack is one of them, and it is read-only: direct
+messages, group DMs, and the public channels you name. It never posts.
+
+```bash
+bash scripts/setup-slack.sh
+```
+
+Run it on the host, not in the sandbox — it needs `openshell`, which the
+sandbox does not have. It reuses a Slack credential already attached when it
+finds one, and otherwise walks you through authorizing the app. Full
+walkthrough, including what to do when a workspace admin grants less than the
+app asked for: [`docs/set-up-slack.md`](docs/set-up-slack.md).
+
+Three things are deliberate. The recipe needs a **user** token, not a bot
+token — a bot cannot read your direct messages, and using one produces an
+assistant that quietly never sees them, so the collector checks the prefix and
+names the mistake. That token **rotates**: the gateway holds it and refreshes
+it every twelve hours, and a non-rotating one is refused, because a user token
+that never expires is a permanent key to your entire Slack. And public
+channels are read only when you **name** them in
+`workspace/slack_channels.json` — Slack allows one history request per minute
+for affected apps, so a workspace sweep cannot finish inside a scheduled tick,
+and reading every channel you happen to be in collects more than the job
+needs.
+
+Until this is set up the collector still runs — it ships with the recipe — but
+reports `{"unconfigured": true}` and exits zero, so the schedule runs over
+whatever is already in the store and an idle tick still costs nothing. That is
+a supported state, not a broken one.
 
 ### When a collector fails
 
@@ -568,17 +665,30 @@ package, so nothing is added to the repository's third-party notices.
 
 ## Sandbox and policy
 
-The recipe's own scripts reach no network. They read the recipe's files from
-the checkout and write application state only inside the profile home, and they
-also leave a Python bytecode cache beside the scripts — see
-[Cleanup](#cleanup). The six skill files a runtime loads add nothing to that.
+Every script except the Slack collector reaches no network. They read the
+recipe's files from the checkout and write application state only inside the
+profile home, and they also leave a Python bytecode cache beside the scripts —
+see [Cleanup](#cleanup). The six skill files a runtime loads add nothing to
+that.
+
+The collector reaches exactly one host, `slack.com`, and only for reads. That
+is declared in `providers/slack-user.yaml` as `access: read-only` with
+`enforcement: enforce`, so the egress proxy refuses anything else — the
+property is enforced by policy rather than promised by prose. The credential
+never enters the sandbox: the gateway holds it and substitutes it at the
+boundary, so the collector handles a placeholder it cannot spend.
 
 The scheduled path does reach one. A job that wakes runs an agent turn, and the
 runtime calls whichever inference provider it is configured for, over its own
 egress path — the recipe holds no credential and opens no connection itself.
-A job that does not wake makes no call at all. Egress to a message source, and
-the provider permissions that needs, arrive with the connectors in a later
-phase and will be documented there.
+A job that does not wake makes no call at all.
+
+Egress to a message source is here, and it is narrow: the Slack collector
+reaches `slack.com` and nothing else, declared in the provider profile at
+`access: read-only` with `enforcement: enforce`, so a write is refused at the
+boundary rather than caught by a test. The credential it uses is held by the
+gateway and substituted there — see
+[Connecting Slack](#connecting-slack).
 
 ## Startup
 

@@ -24,6 +24,11 @@ is where that translation is pinned down:
 
 from __future__ import annotations
 
+import sys
+
+import exclusions
+
+
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -82,6 +87,12 @@ def graph_message_to_item(msg: dict[str, Any], user_address: str) -> dict[str, A
         "thread_ref": msg.get("conversationId"),
         "event_at": _iso(msg.get("receivedDateTime", "")),
         "sender": _display_of(msg.get("from")),
+        # Carried for the exclusion rules and dropped before the insert: it is
+        # not in ITEM_COLUMNS, so it is matched on and never stored. `sender`
+        # holds the display name when there is one, which means a domain rule
+        # has nothing to match without this — the address is exactly what the
+        # user wrote the rule against.
+        "sender_address": _address_of(msg.get("from")),
         "subject": msg.get("subject"),
         "body": body.get("content"),
         "permalink": msg.get("webLink"),
@@ -122,6 +133,10 @@ def slack_message_to_item(
         "thread_ref": msg.get("thread_ts") or ts,
         "event_at": _slack_ts_to_iso(ts),
         "sender": sender_name or msg.get("user"),
+        # Same reason as the Graph address above. The collector resolves the
+        # Slack user to a display name, which the person can change at will;
+        # without the raw id a `U…` rule matches nothing.
+        "sender_id": msg.get("user"),
         "subject": None,
         "body": msg.get("text"),
         "permalink": msg.get("permalink"),
@@ -138,7 +153,26 @@ ITEM_COLUMNS = (
 
 
 def insert_items(conn, items) -> int:
-    """Idempotent on source_id, so re-reading a source window is harmless."""
+    """Idempotent on source_id, so re-reading a source window is harmless.
+
+    Exclusion is applied here, and only here. Every writer goes through this
+    function, so a sender or channel the user excluded never reaches the store
+    no matter which collector found it — including collectors written later,
+    which cannot forget a rule they never had to know about.
+
+    Filtering at display would leave the text on disk, which is no use to
+    somebody excluding their doctor or a channel where pay is discussed.
+
+    A malformed rules file stops the insert rather than proceeding without it.
+    The guarantee is that excluded content is never written; continuing past a
+    file the user wrote in order to keep something out would breach exactly
+    that, silently, and they would find out from the row on disk.
+    """
+    items, dropped = exclusions.partition(list(items))
+    if dropped:
+        # Said out loud, on stderr, because a silent drop and an empty mailbox
+        # look identical from the outside.
+        print(f"exclusions: {dropped} message(s) not stored", file=sys.stderr)
     placeholders = ",".join("?" * len(ITEM_COLUMNS))
     rows = [tuple(item.get(c) for c in ITEM_COLUMNS) for item in items]
     before = conn.execute("SELECT count(*) FROM items").fetchone()[0]

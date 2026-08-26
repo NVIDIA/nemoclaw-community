@@ -86,7 +86,11 @@ register() {
   local existing
   existing="$(job_id_for "$name")"
 
-  local args=(--name "$name" --deliver local --skill "$skill")
+  # A job that needs no judgment names no skill. Retention is one: it clears
+  # bodies past a fixed window and gates the agent off, so attaching a skill
+  # would advertise a capability the job never reaches.
+  local args=(--name "$name" --deliver local)
+  [[ -n "$skill" ]] && args+=(--skill "$skill")
   [[ -n "$script" ]] && args+=(--script "$script")
 
   if [[ -n "$existing" ]]; then
@@ -118,6 +122,13 @@ register "memory repair" "0 3 * * *" memory-repair "" \
 
 register "memory consolidation" "0 4 * * *" memory-consolidation "" \
   "Compact any memory page over the ceilings in the schema growth-control table. Compact, never truncate; preserve unresolved commitments and provenance."
+
+# Bodies age out daily, before the memory jobs run — so a consolidation pass
+# never reads text that was due to be cleared this morning.
+register "retention" "0 2 * * *" "" retention.py \
+  "The retention pre-step clears message bodies past the configured window and
+gates the agent off, so this prompt is never reached. It exists because the
+scheduler requires one."
 
 register "preference update" "30 4 * * *" preference-update "" \
   "Read the audit trail for user corrections since the last run and update the bounded preference policy. Never write to obligations."
