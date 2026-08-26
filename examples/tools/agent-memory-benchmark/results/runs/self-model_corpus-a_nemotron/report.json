@@ -2,7 +2,9 @@
   "adapter": {
     "name": "self-model",
     "revision": {
-      "note": "produced outside this repository; see provenance_note"
+      "shipped_here": null,
+      "files_sha256": null,
+      "note": "no adapter for this system ships here; the run is not reproducible from this repository"
     },
     "declared_model": "nvidia/nvidia/nemotron-3-ultra",
     "declared_env": [],
@@ -26,11 +28,15 @@
   "accounting": {
     "declared": "proxy",
     "method": "proxy",
-    "forwarded_calls": 1675,
-    "uncounted_calls": 0,
-    "description": "counted at a local proxy in front of the model endpoint",
-    "proxy_observed_calls": 1675,
-    "comparable_on_cost": true
+    "observed_calls": {
+      "ingest": 1603,
+      "answer": 1675
+    },
+    "observed_calls_total": 3278,
+    "forwarded_calls": null,
+    "uncounted_calls": null,
+    "comparable_on_cost": false,
+    "description": "counted at a local proxy, but this run predates the forwarded-call record, so the gap between forwarded and counted cannot be established from the artifact and the run is not treated as cost-comparable"
   },
   "cost": {
     "ingest_input_tokens": 180119409,
@@ -86,24 +92,24 @@
     "questions": 186,
     "graded": 186,
     "deferred_to_judge": 0,
-    "accuracy_overall": 0.9086,
+    "accuracy_overall": 0.8925,
     "accuracy_by_type": {
       "abstention": 0.7692,
-      "as_of": 0.8333,
+      "as_of": 0.6667,
       "attribution": 0.8,
       "chain_freshness": 1.0,
       "citation": 1.0,
       "constraint": 1.0,
       "disambiguation": 0.8667,
       "freshness": 0.9167,
-      "multi_source": 0.9452,
+      "multi_source": 0.9315,
       "ordering": 1.0,
-      "set_difference": 1.0,
+      "set_difference": 0.8333,
       "single_hop": 0.8333
     },
     "accuracy_by_difficulty": {
-      "base": 0.9032,
-      "hard": 0.9355
+      "base": 0.8968,
+      "hard": 0.871
     },
     "freshness_detail": {
       "with_stale_in_corpus": 0.8889,
@@ -121,7 +127,7 @@
   "corpus_name": "corpus_a",
   "fingerprint": {
     "algorithm": "sha256-v1",
-    "scorer": "8113ac76357f37847a719891fe90990f7f1f7bd7312842c2a1510ccd24eba255",
+    "scorer": "56d91ca15433c65d0fcd9da13be7af73f01e440b06f746a86a63bec5077c8970",
     "normalization": {
       "default_year": "2026",
       "alt_years": [
@@ -134,8 +140,8 @@
     "gold": "55a66b80ff0f62d8b3a340dcbb9cc970a011922b1e509269c4402192f9504970"
   },
   "benchmark_revision": {
-    "commit": "e4954a471fbb2c185a4c9688f45ed576ee48ce89",
-    "dirty": true
+    "commit": null,
+    "note": "graded by the scorer this repository carries; see fingerprint.scorer"
   },
   "provenance_note": {
     "answers_transformed": true,
@@ -174,8 +180,8 @@
     },
     "not_a_rerun": "This is not a run against the published corpus. The systems never saw it. Reproducing these numbers requires re-running the answer phase.",
     "effect": {
-      "accuracy_as_answered": 0.8978,
-      "accuracy_after_map": 0.9247,
+      "accuracy_as_answered": 0.8656,
+      "accuracy_after_map": 0.8925,
       "questions_reported_unanswered_before_id_map": 4,
       "note": "The id map matters more than the text map: four question ids were renamed at publication, and without mapping them those four answers are reported as unanswered, which invalidates the run."
     },
@@ -189,6 +195,6 @@
   },
   "run_parameters": {
     "max_rounds": null,
-    "note": "the agentic baseline ran adapters/agentic_rag/ at its shipped default"
+    "note": "consolidating design; no round budget applies"
   }
 }

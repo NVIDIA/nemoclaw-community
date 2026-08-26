@@ -182,60 +182,67 @@ def _denied_at(text: str, position: int) -> bool:
     return any(cue in clause for cue in DENIAL_CUES)
 
 
-# Markers that split a sentence into clauses, and what they do to the denial
-# carried into them. A rejecting contrast ("Sofia rather than Kofi") names the
-# rejected thing *after* the marker, so the tail is denied and the head is not.
-# A resetting contrast ("It was not Kofi; Sofia approved") ends a denial, so the
-# tail is clean.
-_REJECTING_CONTRAST = re.compile(r"\brather than\b|\binstead of\b|\bnot\b(?=[^,;.]*\bbut\b)")
-# A comma ends a denial when what follows restates the fact ("Not 12 March, it
-# is on 27 March"), but continues it when what follows is the next item of the
-# list the denial introduced ("Neither 50%, nor 75%"). The difference is
-# whether the tail continues the enumeration.
-# A comma ends a denial when what follows restates the fact ("Not 12 March, it
-# is on 27 March"), and continues it in two cases: when the tail is the next
-# item of a list the denial introduced ("Neither 50%, nor 75%"), and when the
-# tail carries its own denial ("June 30, not July 14"), where resetting would
-# hand the answer the very value it is rejecting.
-_RESETTING_CONTRAST = re.compile(
-    r"[;]|,(?!\s*(?:nor|or|and|not|never|no\b)\b)|\bbut\b|\bhowever\b|\bactually\b")
+# Clause splitting, in one direction only: split first, then decide each piece
+# on its own. An earlier version computed one denial flag for the whole
+# sentence before splitting, so "75% is correct; 50% is incorrect" carried the
+# second clause's denial back onto the first, and it applied a rejecting
+# contrast before any enclosing denial, so "None of these are correct: Sofia
+# rather than Kofi" let the contrast lift Sofia out of the denial that governed
+# the whole list.
+_SPLIT = re.compile(
+    r"(?P<reject>\brather than\b|\binstead of\b)"
+    # A comma between digits is a thousands separator, not a clause boundary:
+    # splitting "55,000" produced two clauses and lost the value entirely.
+    r"|(?P<reset>;|\bbut\b|\bhowever\b|\bactually\b|(?<!\d),(?!\d))")
+_LIST_CONTINUATION = re.compile(r"^\s*(?:nor|or|and)\b")
+_LEADING_DENIAL = re.compile(r"^\s*(?:not|never|no)\b")
 
 
 def _clauses(answer: str) -> list[tuple[str, bool]]:
     """Split an answer into clauses, each tagged with whether it is denied.
 
-    Working in clauses rather than in character offsets is what lets the denial
+    Working in clauses rather than character offsets is what lets the denial
     scope survive normalisation: each clause is matched with the full
     normalising ``contains``, so a date written as "July 14, 2026" is found in
-    the clause that actually contains it, and a denial governing that clause
-    still applies. Comparing a normalised needle against un-normalised text was
-    the hole -- an alias matched only after normalisation skipped the scope
-    check entirely and was trusted.
+    the clause that holds it and a denial governing that clause still applies.
+
+    Denial is inherited forward and cleared by a resetting marker, so a denial
+    never reaches backwards into a clause that precedes it.
     """
     out: list[tuple[str, bool]] = []
     for sentence in _SENTENCE_BREAK.split(answer):
         if not sentence.strip():
             continue
-        denied = bool(_denial_cue(sentence))
-        # A rejecting contrast denies what follows it and clears what precedes.
-        match = _REJECTING_CONTRAST.search(sentence.lower())
-        if match:
-            head, tail = sentence[: match.start()], sentence[match.end():]
-            out.append((head, False))
-            out.append((tail, True))
+        # A denial before a colon governs everything the colon introduces, and
+        # nothing inside that list can lift itself out.
+        if _introduces_list(sentence):
+            out.append((sentence, True))
             continue
-        # A resetting contrast ends a denial that started before it.
-        parts = _RESETTING_CONTRAST.split(sentence.lower())
-        if denied and len(parts) > 1:
-            # The denial governs a list it introduces ("none of these: a; b"),
-            # but not a clause that contrasts with it.
-            if _introduces_list(sentence):
-                out.append((sentence, True))
+        denied = False
+        pos = 0
+        for match in _SPLIT.finditer(sentence):
+            piece = sentence[pos:match.start()]
+            piece_denied = denied or bool(_denial_cue(piece))
+            if piece.strip():
+                out.append((piece, piece_denied))
+            tail = sentence[match.end():]
+            if match.group("reject"):
+                # "A rather than B": B is the rejected one, A was not.
+                denied = True
+            elif _LIST_CONTINUATION.match(tail):
+                # "Neither 50%, nor 75%": the next item continues the list the
+                # denial introduced, so the denial carries forward into it.
+                denied = piece_denied
+            elif _LEADING_DENIAL.match(tail):
+                # The tail carries its own denial; resetting here would hand
+                # the answer the value that tail is rejecting.
+                pass
             else:
-                out.append((parts[0], True))
-                out.extend((part, False) for part in parts[1:])
-            continue
-        out.append((sentence, denied))
+                denied = False
+            pos = match.end()
+        piece = sentence[pos:]
+        if piece.strip():
+            out.append((piece, denied or bool(_denial_cue(piece))))
     return out
 
 

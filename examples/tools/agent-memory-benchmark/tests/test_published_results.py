@@ -183,3 +183,66 @@ def test_the_readme_says_corpus_a_only():
     assert "One base model" in readme, (
         "the methodology asks for two; the omission must be stated where the numbers are"
     )
+
+
+@pytest.mark.parametrize("run", RUNS, ids=lambda p: p.name)
+def test_the_published_effect_is_what_regrading_actually_gives(run: Path, tmp_path):
+    """`effect` is a claim about two numbers; recompute both and compare.
+
+    These values described a previous grader for one round, because the grader
+    moved and the report did not. Deriving them here means they cannot drift
+    again without a test failing.
+    """
+    note = _report(run)["provenance_note"]["effect"]
+
+    def score(source: Path) -> float:
+        scratch = tmp_path / source.stem
+        scratch.mkdir(parents=True, exist_ok=True)
+        (scratch / "answers.jsonl").write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        completed = subprocess.run(
+            [sys.executable, "tools/regrade.py", "--run", str(scratch)],
+            cwd=REPO, capture_output=True, text=True, timeout=180)
+        assert completed.returncode == 0, completed.stderr[-1500:]
+        return json.loads((scratch / "report.json").read_text())["summary"]["accuracy_overall"]
+
+    assert score(run / "answers.as-answered.jsonl") == pytest.approx(note["accuracy_as_answered"]), (
+        "provenance_note.effect.accuracy_as_answered is not what regrading gives"
+    )
+    assert score(run / "answers.jsonl") == pytest.approx(note["accuracy_after_map"]), (
+        "provenance_note.effect.accuracy_after_map is not what regrading gives"
+    )
+
+
+@pytest.mark.parametrize("run", RUNS, ids=lambda p: p.name)
+def test_accounting_claims_only_what_the_artifact_establishes(run: Path):
+    """A count the stored run never recorded must read as unknown, not as zero.
+
+    These runs predate the forwarded-call record, so the gap between forwarded
+    and counted calls cannot be derived from them. Asserting `uncounted: 0` and
+    `comparable_on_cost: true` would be inventing the evidence for a cost
+    comparison.
+    """
+    r = _report(run)
+    accounting = r["accounting"]
+    observed = accounting.get("observed_calls") or {}
+    assert observed == r.get("usage_raw", {}).get("calls", {}), (
+        "the reported call counts must be the ones the run recorded, ingest included"
+    )
+    assert accounting["observed_calls_total"] == sum(observed.values())
+    assert accounting["forwarded_calls"] is None
+    assert accounting["uncounted_calls"] is None
+    assert accounting["comparable_on_cost"] is False, (
+        "a run whose forwarded calls were never recorded cannot be compared on cost"
+    )
+
+
+@pytest.mark.parametrize("run", RUNS, ids=lambda p: p.name)
+def test_adapter_provenance_says_what_is_and_is_not_reproducible(run: Path):
+    revision = _report(run)["adapter"]["revision"]
+    assert "note" in revision and revision["note"], "adapter provenance must say something"
+    if run.name.startswith("agentic-rag"):
+        assert revision["shipped_here"] == "adapters/agentic_rag"
+        assert _report(run)["run_parameters"]["max_rounds"] == 3
+    else:
+        assert revision["shipped_here"] is None
+        assert "not reproducible" in revision["note"]

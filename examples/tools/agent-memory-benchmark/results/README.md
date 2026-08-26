@@ -20,15 +20,17 @@ any such system would implement.
 
 | Metric | Agentic RAG | Self-model | Difference |
 | --- | ---: | ---: | ---: |
-| Overall accuracy (186 questions) | 82.8% | 90.9% | +8.1 pp |
-| Hard questions (31) | 74.2% | 93.5% | +19.4 pp |
+| Overall accuracy (186 questions) | 82.8% | 89.2% | +6.5 pp |
+| Hard questions (31) | 67.7% | 87.1% | +19.4 pp |
 | Tracking facts that changed over time (5) | 60.0% | 100.0% | +40.0 pp |
-| Point-in-time reasoning (6) | 50.0% | 83.3% | +33.3 pp |
-| Entity disambiguation (15) | 60.0% | 86.7% | +26.7 pp |
-| Multi-source synthesis (73) | 86.3% | 94.5% | +8.2 pp |
+| Point-in-time reasoning (6) | 33.3% | 66.7% | +33.3 pp |
+| Entity disambiguation (15) | 66.7% | 86.7% | +20.0 pp |
+| Multi-source synthesis (73) | 87.7% | 93.2% | +5.5 pp |
 | Citation coverage (186) | 92.5% | 97.9% | +5.4 pp |
 
-Cost, which the benchmark reports separately and never blends into the above:
+Cost, which the benchmark reports separately and never blends into the above. Both runs
+predate the forwarded-call record the harness now keeps, so their reports mark cost as
+not comparable: the counts below are what each run observed, not a proven total.
 
 | | Agentic RAG | Self-model |
 | --- | ---: | ---: |
@@ -81,8 +83,8 @@ What it changed, measured:
 
 | | Agentic RAG | Self-model |
 | --- | ---: | ---: |
-| As answered, against the published key | 80.1% | 88.2% |
-| After the substitution | 82.8% | 90.9% |
+| As answered, against the published key | 80.1% | 86.6% |
+| After the substitution | 82.8% | 89.2% |
 | Answers reported unanswered before the id map | 4 | 4 |
 
 The id map does more work than the text map. Four question ids were renamed at

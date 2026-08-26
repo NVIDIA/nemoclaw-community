@@ -6,20 +6,20 @@
 * questions: 186 (graded deterministically: 186, deferred to judge: 0)
 
 ## Quality
-* accuracy overall: **0.9086**
-  * [base] 0.9032
-  * [hard] 0.9355
+* accuracy overall: **0.8925**
+  * [base] 0.8968
+  * [hard] 0.871
   * abstention: 0.7692
-  * as_of: 0.8333
+  * as_of: 0.6667
   * attribution: 0.8
   * chain_freshness: 1.0
   * citation: 1.0
   * constraint: 1.0
   * disambiguation: 0.8667
   * freshness: 0.9167
-  * multi_source: 0.9452
+  * multi_source: 0.9315
   * ordering: 1.0
-  * set_difference: 1.0
+  * set_difference: 0.8333
   * single_hop: 0.8333
   * freshness with a competing stale claim in corpus: 0.8889
   * freshness recency-only: 1.0

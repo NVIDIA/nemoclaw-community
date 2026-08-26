@@ -2,7 +2,9 @@
   "adapter": {
     "name": "agentic-rag",
     "revision": {
-      "note": "produced outside this repository; see provenance_note"
+      "shipped_here": "adapters/agentic_rag",
+      "files_sha256": null,
+      "note": "produced before this repository recorded adapter hashes; the adapter is the one shipped here, at its default settings"
     },
     "declared_model": "nvidia/nvidia/nemotron-3-ultra",
     "declared_env": [],
@@ -27,11 +29,15 @@
   "accounting": {
     "declared": "proxy",
     "method": "proxy",
-    "forwarded_calls": 1048,
-    "uncounted_calls": 0,
-    "description": "counted at a local proxy in front of the model endpoint",
-    "proxy_observed_calls": 1048,
-    "comparable_on_cost": true
+    "observed_calls": {
+      "ingest": 8,
+      "answer": 1048
+    },
+    "observed_calls_total": 1056,
+    "forwarded_calls": null,
+    "uncounted_calls": null,
+    "comparable_on_cost": false,
+    "description": "counted at a local proxy, but this run predates the forwarded-call record, so the gap between forwarded and counted cannot be established from the artifact and the run is not treated as cost-comparable"
   },
   "cost": {
     "ingest_input_tokens": 169852,
@@ -88,21 +94,21 @@
     "accuracy_overall": 0.828,
     "accuracy_by_type": {
       "abstention": 1.0,
-      "as_of": 0.5,
+      "as_of": 0.3333,
       "attribution": 0.8,
       "chain_freshness": 0.6,
       "citation": 0.9167,
       "constraint": 0.8,
-      "disambiguation": 0.6,
+      "disambiguation": 0.6667,
       "freshness": 0.75,
-      "multi_source": 0.863,
+      "multi_source": 0.8767,
       "ordering": 0.75,
-      "set_difference": 1.0,
+      "set_difference": 0.8333,
       "single_hop": 0.8667
     },
     "accuracy_by_difficulty": {
-      "base": 0.8452,
-      "hard": 0.7419
+      "base": 0.8581,
+      "hard": 0.6774
     },
     "freshness_detail": {
       "with_stale_in_corpus": 0.6667,
@@ -122,7 +128,7 @@
   "note": "search rounds were capped at 3. Preserved so the cost of removing the cap is measurable rather than asserted; the uncapped run is agentic_rag_a_nemotron.",
   "fingerprint": {
     "algorithm": "sha256-v1",
-    "scorer": "8113ac76357f37847a719891fe90990f7f1f7bd7312842c2a1510ccd24eba255",
+    "scorer": "56d91ca15433c65d0fcd9da13be7af73f01e440b06f746a86a63bec5077c8970",
     "normalization": {
       "default_year": "2026",
       "alt_years": [
@@ -135,8 +141,8 @@
     "gold": "55a66b80ff0f62d8b3a340dcbb9cc970a011922b1e509269c4402192f9504970"
   },
   "benchmark_revision": {
-    "commit": "e4954a471fbb2c185a4c9688f45ed576ee48ce89",
-    "dirty": true
+    "commit": null,
+    "note": "graded by the scorer this repository carries; see fingerprint.scorer"
   },
   "provenance_note": {
     "answers_transformed": true,
@@ -175,8 +181,8 @@
     },
     "not_a_rerun": "This is not a run against the published corpus. The systems never saw it. Reproducing these numbers requires re-running the answer phase.",
     "effect": {
-      "accuracy_as_answered": 0.8172,
-      "accuracy_after_map": 0.8441,
+      "accuracy_as_answered": 0.8011,
+      "accuracy_after_map": 0.828,
       "questions_reported_unanswered_before_id_map": 4,
       "note": "The id map matters more than the text map: four question ids were renamed at publication, and without mapping them those four answers are reported as unanswered, which invalidates the run."
     },
@@ -190,6 +196,6 @@
   },
   "run_parameters": {
     "max_rounds": 3,
-    "note": "the agentic baseline ran adapters/agentic_rag/ at its shipped default"
+    "note": "adapters/agentic_rag at its shipped default"
   }
 }

@@ -128,6 +128,21 @@ DENIAL_SCOPE_CONTRACT = [
      {"mode": "string_any", "accept": ["src/a/b.py"]}, "It is not src/a/b.py", False),
     ("a plain assertion is still an assertion",
      {"mode": "string_any", "accept": ["50%"]}, "It is at 50%.", True),
+    ("not-X-but-Y is a correction, not a denial of Y",
+     {"mode": "string_any", "accept": ["Sofia"], "reject": ["Kofi"]},
+     "Not Kofi but Sofia approved it", True),
+    ("a denial parenthesised by commas does not deny the subject",
+     {"mode": "string_any", "accept": ["Sofia"], "reject": ["Kofi"]},
+     "Sofia, not Kofi, approved it", True),
+    ("a denial after a semicolon does not reach back over it",
+     {"mode": "string_any", "accept": ["75%"]},
+     "75% is correct; 50% is incorrect", True),
+    ("a contrast nested inside a denial cannot lift itself out",
+     {"mode": "string_any", "accept": ["Sofia"]},
+     "None of these are correct: Sofia rather than Kofi", False),
+    ("a thousands separator is not a clause boundary",
+     {"mode": "string_any", "accept": ["55,000"], "require_all": ["55,000", "40,000"]},
+     "It is now 55,000, revised up from 40,000.", True),
 ]
 
 
