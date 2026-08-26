@@ -89,9 +89,11 @@ def test_the_report_records_what_a_future_reader_needs(oracle):
     fp = oracle["fingerprint"]
     assert fp["algorithm"] == "sha256-v1"
     assert fp["corpus"] and fp["questions"] and fp["gold"]
-    assert oracle["accounting"]["method"] == "none-observed", (
-        "the fixture makes no model calls, so nothing should have crossed the proxy"
+    assert oracle["accounting"]["declared"] == "local"
+    assert oracle["accounting"]["method"] == "local-unmeasured", (
+        "the fixture makes no model calls and declares so"
     )
+    assert oracle["accounting"]["comparable_on_cost"] is False
 
 
 def test_two_runs_of_the_same_adapter_produce_the_same_score(tmp_path):

@@ -176,6 +176,31 @@ def _run(
     return elapsed
 
 
+VALID_ACCOUNTING = ("proxy", "local")
+
+
+def _accounting_method(declared: str, forwarded: int, uncounted: int) -> str:
+    if declared == "local":
+        return "local-unmeasured"
+    if not forwarded:
+        return "declared-proxy-but-silent"
+    return "partial" if uncounted else "proxy"
+
+
+def _accounting_description(declared: str, forwarded: int, uncounted: int) -> str:
+    if declared == "local":
+        return ("the adapter declares a locally-hosted model, so no cost was measured "
+                "and this run is not comparable on the cost axis")
+    if not forwarded:
+        return ("the adapter declares proxy accounting but nothing crossed the proxy, "
+                "so no cost was observed and this run is invalid")
+    if uncounted:
+        return (f"{uncounted} of {forwarded} forwarded requests returned no countable "
+                "usage, so the cost below is a floor and this run is not comparable "
+                "on the cost axis")
+    return "counted at a local proxy the runner put in front of the model endpoint"
+
+
 def _git_revision(path: Path) -> dict:
     """The commit a directory sits at, and whether it was edited since.
 
@@ -292,6 +317,11 @@ def main() -> None:
         args.state = args.state.resolve()
 
     spec = json.loads((args.adapter / "adapter.json").read_text(encoding="utf-8"))
+    if spec.get("accounting", "proxy") not in VALID_ACCOUNTING:
+        raise SystemExit(
+            f'adapter.json declares accounting={spec["accounting"]!r}; '
+            f"expected one of {VALID_ACCOUNTING}"
+        )
     if args.trial_index < 1 or args.trial_index > args.trial_count:
         raise SystemExit(f"--trial-index {args.trial_index} is outside 1..{args.trial_count}")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -362,6 +392,7 @@ def main() -> None:
     # call auxiliary models (embeddings, rerankers) and those are priced too but
     # never rename the row.
     model = spec.get("model") or (max(usage["models"], key=usage["models"].get) if usage.get("models") else None)
+    declared_accounting = spec.get("accounting", "proxy")
     forwarded = sum(usage.get("forwarded", {}).values())
     uncounted = sum(usage.get("uncounted", {}).values())
     ingest_in = usage["input_tokens"].get("ingest", 0)
@@ -400,22 +431,20 @@ def main() -> None:
         },
         "timing": timing,
         "accounting": {
-            "method": ("partial" if uncounted else "proxy") if forwarded else "none-observed",
-            # Requests the proxy forwarded whose response carried no usage. Any
-            # number here means the cost below is a floor, not a total.
+            # What the adapter said it would do, so silence can be read. A
+            # proxy-measured adapter that produced no traffic bypassed the
+            # proxy; a local one is expected to.
+            "declared": declared_accounting,
+            "method": _accounting_method(declared_accounting, forwarded, uncounted),
+            # Requests the proxy forwarded, and those whose response carried no
+            # usage. Any number in the second means the cost is a floor.
             "forwarded_calls": forwarded,
             "uncounted_calls": uncounted,
-            "description": (
-                f"{uncounted} of {forwarded} forwarded requests returned no countable "
-                "usage, so the cost below is a floor and this run is not comparable "
-                "on the cost axis"
-                if uncounted
-                else "counted at a local proxy the runner put in front of the model endpoint"
-                if forwarded
-                else "no request crossed the proxy; either the model runs locally or the "
-                "adapter bypassed the proxy, and either way no cost was observed"
-            ),
+            "description": _accounting_description(declared_accounting, forwarded, uncounted),
             "proxy_observed_calls": sum(usage.get("calls", {}).values()),
+            # A run whose cost was not measured must never be ranked on cost,
+            # whether it was honest about that or not.
+            "comparable_on_cost": declared_accounting == "proxy" and forwarded > 0 and uncounted == 0,
         },
         "cost": {
             "ingest_input_tokens": ingest_in,
@@ -439,6 +468,15 @@ def main() -> None:
     }
     # A system that answered nothing is a broken run, not a system that scored
     # zero. Say so in the report and mark the run invalid.
+    if declared_accounting == "proxy" and not forwarded:
+        report["valid"] = False
+        report["invalid_reason"] = (
+            "the adapter declares proxy accounting but no request crossed the proxy, "
+            "so its cost was never observed. Either it bypassed OPENAI_BASE_URL / "
+            'ANTHROPIC_BASE_URL, or it runs a local model and should declare '
+            '"accounting": "local" in its adapter.json.'
+        )
+        print(f"[runner] WARNING: {report['invalid_reason']}", file=sys.stderr)
     if uncounted:
         report["valid"] = False
         report["invalid_reason"] = (

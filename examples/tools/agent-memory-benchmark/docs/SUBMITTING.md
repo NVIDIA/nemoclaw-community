@@ -94,9 +94,11 @@ python3 -m bench.runner --adapter adapters/my-system
 
 The runner points `OPENAI_BASE_URL` and `ANTHROPIC_BASE_URL` at a local proxy and
 counts the tokens that actually cross the wire, so nobody has to be trusted about
-their own cost. A system running local inference makes no HTTP calls, so its row is
-labelled `accounting: none-observed`; the zeros beside it mean "not observed",
-not "free".
+their own cost. Declare which you intend with `"accounting"` in your
+`adapter.json`: `"proxy"` (the default) means your calls go through it and are
+counted, `"local"` means you host the model and there is nothing to count. An
+adapter that declares `proxy` and produces no traffic is an invalid run, not a
+free one.
 
 ## What makes a submission comparable
 
@@ -162,7 +164,10 @@ not the recipe's own behaviour: the recipe has no question-answering path.
 There is no hosted leaderboard and no table renderer ships here: each run
 writes its own `report.json`, and comparing runs is the reader's job. Two
 reports are comparable only when their `fingerprint` blocks match — same
-corpus, same questions, same answer key, same normalization. Compare rows that
+corpus, same questions, same answer key, same normalization, and the same
+scorer. That last part is a hash of the modules that turn an answer into a
+verdict, so a report regraded under changed rules no longer matches one graded
+under the old ones, which is the point. Compare rows that
 differ in any of those and the numbers are not measuring the same thing.
 
 To contribute a system rather than only score one, open a pull request adding

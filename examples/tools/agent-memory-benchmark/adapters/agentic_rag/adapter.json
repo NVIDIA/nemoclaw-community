@@ -20,5 +20,6 @@
   ],
   "env": {
     "MNEMO_RAG_WORKERS": "6"
-  }
+  },
+  "accounting": "proxy"
 }

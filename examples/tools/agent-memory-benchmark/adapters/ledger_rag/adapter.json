@@ -25,5 +25,6 @@
     "schema": "the Memory-Driven Chief of Staff example, for profile/scripts/schema.sql; override with MNEMO_LEDGER_SCHEMA",
     "endpoint": "an OpenAI-compatible chat endpoint for the answer phase only; ingest needs no network"
   },
-  "caveat": "Measures candidate selection over the Memory-Driven Chief of Staff ledger plus the model \u2014 not the recipe's own behaviour."
+  "caveat": "Measures candidate selection over the Memory-Driven Chief of Staff ledger plus the model \u2014 not the recipe's own behaviour.",
+  "accounting": "proxy"
 }

@@ -21,6 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bench.fingerprint import fingerprint
+from bench.runner import REPO, _git_revision
 from bench.grader import grade  # noqa: E402
 from bench.report import render_markdown, summarize
 from bench.runner import REPORT_SCHEMA_VERSION  # noqa: E402
@@ -88,6 +89,11 @@ def main() -> None:
     # Regrading against a different question set or answer key changes that
     # claim, so it is recomputed here rather than carried over.
     report["fingerprint"] = fingerprint(args.corpus, args.questions, args.gold)
+    # The verdicts in this report were produced by the benchmark running now,
+    # not by whatever produced the original, so the revision must move with
+    # them. Leaving the old one made the report name a scorer that did not
+    # score it.
+    report["benchmark_revision"] = _git_revision(REPO)
     report["regraded"] = True
     (args.run / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     (args.run / "verdicts.jsonl").write_text(

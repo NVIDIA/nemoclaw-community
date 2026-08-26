@@ -180,10 +180,21 @@ Full instructions, including the path for a system that cannot be wrapped in a
 command line: [`docs/SUBMITTING.md`](docs/SUBMITTING.md).
 
 **Token accounting is not self-reported.** The runner points `OPENAI_BASE_URL` /
-`ANTHROPIC_BASE_URL` at a local proxy and counts what crosses the wire. A system
-running local inference makes no calls the proxy can see, so its row is labelled
-`accounting: none-observed`. The zero token counts printed beside that label
-mean "not observed", not "free".
+`ANTHROPIC_BASE_URL` at a local proxy and counts what crosses the wire.
+
+Every adapter declares which of those it intends, so silence can be read:
+
+```json
+{"accounting": "proxy"}   // the default: calls go through the proxy and are counted
+{"accounting": "local"}   // a locally-hosted model; nothing to count, and it says so
+```
+
+A run is invalid if it declares `proxy` and nothing crossed the proxy — the
+adapter either bypassed it or runs a local model and should say so — and
+invalid if a forwarded request came back without countable usage, because a
+cost nobody measured must not read as a cost of zero. Only a fully counted run
+carries `comparable_on_cost: true`; a `local` run stays valid and stays out of
+cost comparisons.
 
 ### How the runner treats your adapter
 
@@ -303,7 +314,7 @@ proxy at.
 **Expected result:**
 
 ```text
-119 passed
+123 passed
 ```
 
 **This verifies:** the runner, grader, report renderer and the
@@ -319,7 +330,7 @@ The whole pipeline runs offline against a small fixture whose score is known in
 advance — no model, no network, no API key:
 
 ```bash
-python3 -m pytest tests/     # expected: 119 passed
+python3 -m pytest tests/     # expected: 123 passed
 ```
 
 `selftest/` holds a six-document corpus, six questions covering all four

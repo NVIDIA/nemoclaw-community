@@ -44,12 +44,32 @@ def hash_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+# The modules that turn an answer into a verdict. Two reports graded by
+# different versions of these are not comparable however identical their inputs
+# are, so the scorer is part of a scoring configuration's identity.
+_SCORER = ("grader.py", "normalize.py", "answer_contract.py")
+
+
+def scorer_revision() -> str:
+    """Hash of the code that decides a verdict."""
+    here = Path(__file__).resolve().parent
+    digest = hashlib.sha256()
+    for name in _SCORER:
+        digest.update(name.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update((here / name).read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
 def fingerprint(corpus: Path, questions: Path, gold: Path) -> dict:
-    """The identity of one scoring configuration."""
+    """The identity of one scoring configuration: inputs and scorer alike."""
     from bench.normalize import ALT_YEARS, DEFAULT_YEAR  # noqa: PLC0415
 
     return {
         "algorithm": ALGORITHM,
+        # Which code produced the verdicts, not only which files it read.
+        "scorer": scorer_revision(),
         # Date normalization changes verdicts, so it belongs in the identity of
         # a scoring configuration alongside the files themselves.
         "normalization": {"default_year": DEFAULT_YEAR, "alt_years": sorted(ALT_YEARS)},

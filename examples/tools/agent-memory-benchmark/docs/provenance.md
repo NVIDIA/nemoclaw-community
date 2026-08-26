@@ -106,6 +106,11 @@ print(hash_tree(Path('corpus'))); \
 print(hash_file(Path('questions/questions.jsonl')))"
 ```
 
+The `fingerprint` block also carries a `scorer` hash — of the modules that
+decide a verdict, not only of the files they read — so two reports produced by
+different grading code are visibly not comparable even when their inputs are
+identical.
+
 Grading also depends on the date-normalization years (`MNEMO_DEFAULT_YEAR`,
 default `2026`; `MNEMO_ALT_YEARS`, default `2027`). Both are recorded in the
 report's `fingerprint` block. Leave them at their defaults for a comparable

@@ -119,35 +119,27 @@ def test_an_endpoint_that_omits_usage_invalidates_the_run(tmp_path):
     assert "no countable usage" in report["invalid_reason"]
 
 
-def test_a_run_that_never_reaches_the_proxy_says_so(tmp_path):
-    """An adapter that makes no call at all leaves nothing to count.
+def test_the_offline_fixtures_declare_that_they_measure_nothing(tmp_path):
+    """The fixture adapters make no model call, and say so.
 
-    Zero forwarded requests is honest -- a locally-hosted model, or an adapter
-    that ignored OPENAI_BASE_URL -- but the report must name both readings
-    rather than presenting a cost of zero as a measured one.
+    Before the accounting mode existed they produced a `none-observed` row
+    that looked like a measured zero. Declaring `local` makes the silence
+    intentional and keeps the row out of cost comparisons.
     """
-    server = _upstream({"prompt_tokens": 1, "completion_tokens": 1})
-    try:
-        completed = subprocess.run(
-            [sys.executable, "-m", "bench.runner", "--adapter", str(SELFTEST / "oracle"),
-             "--corpus", str(SELFTEST / "corpus"),
-             "--questions", str(SELFTEST / "questions.jsonl"),
-             "--gold", str(SELFTEST / "gold.jsonl"),
-             "--out", str(tmp_path / "run"), "--timeout-seconds", "120"],
-            cwd=REPO, capture_output=True, text=True, timeout=300,
-            env={**os.environ,
-                 "MNEMO_UPSTREAM": f"http://127.0.0.1:{server.server_address[1]}",
-                 "OPENAI_API_KEY": "stub"},
-        )
-        assert completed.returncode == 0, completed.stderr[-1500:]
-    finally:
-        server.shutdown()
-        server.server_close()
+    completed = subprocess.run(
+        [sys.executable, "-m", "bench.runner", "--adapter", str(SELFTEST / "oracle"),
+         "--corpus", str(SELFTEST / "corpus"),
+         "--questions", str(SELFTEST / "questions.jsonl"),
+         "--gold", str(SELFTEST / "gold.jsonl"),
+         "--out", str(tmp_path / "run"), "--timeout-seconds", "120"],
+        cwd=REPO, capture_output=True, text=True, timeout=300,
+        env={**os.environ, "OPENAI_API_KEY": "stub"})
+    assert completed.returncode == 0, completed.stderr[-1500:]
     accounting = json.loads((tmp_path / "run" / "report.json").read_text())["accounting"]
+    assert accounting["declared"] == "local"
     assert accounting["forwarded_calls"] == 0
-    assert accounting["uncounted_calls"] == 0
-    assert accounting["method"] == "none-observed"
-    assert "bypassed the proxy" in accounting["description"], accounting["description"]
+    assert accounting["method"] == "local-unmeasured"
+    assert accounting["comparable_on_cost"] is False
 
 
 def test_equal_token_costs_stay_equal(tmp_path):
@@ -157,3 +149,84 @@ def test_equal_token_costs_stay_equal(tmp_path):
     assert first["cost"]["answer_input_tokens"] == second["cost"]["answer_input_tokens"]
     assert first["cost"]["answer_output_tokens"] == second["cost"]["answer_output_tokens"]
     assert first["accounting"]["uncounted_calls"] == second["accounting"]["uncounted_calls"] == 0
+
+
+def _bypassing_adapter(tmp_path: Path, declared: str) -> Path:
+    """An adapter that answers without any model call at all."""
+    d = tmp_path / f"bypass-{declared}"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "run.py").write_text(
+        "import json, sys\n"
+        "if sys.argv[1] == 'ingest':\n    sys.exit(0)\n"
+        "for line in sys.stdin:\n"
+        "    if not line.strip():\n        continue\n"
+        "    print(json.dumps({'id': json.loads(line)['id'],\n"
+        "        'answer': '60%', 'source_ids': []}), flush=True)\n", encoding="utf-8")
+    (d / "adapter.json").write_text(json.dumps({
+        "name": f"bypass-{declared}", "model": "m", "accounting": declared,
+        "ingest": ["python3", str(d / "run.py"), "ingest", "--corpus", "{corpus}", "--state", "{state}"],
+        "answer": ["python3", str(d / "run.py"), "answer", "--state", "{state}"],
+    }, indent=2) + "\n", encoding="utf-8")
+    return d
+
+
+def _run_adapter(adapter: Path, out: Path) -> dict:
+    completed = subprocess.run(
+        [sys.executable, "-m", "bench.runner", "--adapter", str(adapter),
+         "--corpus", str(SELFTEST / "corpus"),
+         "--questions", str(SELFTEST / "questions.jsonl"),
+         "--gold", str(SELFTEST / "gold.jsonl"),
+         "--out", str(out), "--timeout-seconds", "120"],
+        cwd=REPO, capture_output=True, text=True, timeout=300,
+        env={**os.environ, "OPENAI_API_KEY": "stub"})
+    assert completed.returncode == 0, completed.stderr[-1500:]
+    return json.loads((out / "report.json").read_text(encoding="utf-8"))
+
+
+def test_a_bypassed_remote_call_cannot_produce_a_valid_cost_row(tmp_path):
+    """Silence from an adapter that promised proxy accounting is a bypass.
+
+    The missing-usage case already failed closed; this is its other half. The
+    run still produces a score, and the score may even be right, but nothing
+    measured what it cost, so the row must not be valid or cost-comparable.
+    """
+    report = _run_adapter(_bypassing_adapter(tmp_path, "proxy"), tmp_path / "run")
+    accounting = report["accounting"]
+    assert accounting["declared"] == "proxy"
+    assert accounting["forwarded_calls"] == 0
+    assert accounting["method"] == "declared-proxy-but-silent"
+    assert accounting["comparable_on_cost"] is False
+    assert report["valid"] is False
+    assert "no request crossed the proxy" in report["invalid_reason"]
+    # The score exists; it is the cost that was never observed.
+    assert report["summary"]["accuracy_overall"] > 0
+
+
+def test_an_adapter_that_declares_a_local_model_stays_valid_but_uncomparable(tmp_path):
+    """Honest silence is allowed, and still kept out of cost comparisons."""
+    report = _run_adapter(_bypassing_adapter(tmp_path, "local"), tmp_path / "run")
+    accounting = report["accounting"]
+    assert accounting["method"] == "local-unmeasured"
+    assert accounting["comparable_on_cost"] is False
+    assert report.get("valid") is not False
+
+
+def test_an_unknown_accounting_mode_is_refused(tmp_path):
+    adapter = _bypassing_adapter(tmp_path, "proxy")
+    spec = json.loads((adapter / "adapter.json").read_text())
+    spec["accounting"] = "whatever"
+    (adapter / "adapter.json").write_text(json.dumps(spec), encoding="utf-8")
+    completed = subprocess.run(
+        [sys.executable, "-m", "bench.runner", "--adapter", str(adapter),
+         "--corpus", str(SELFTEST / "corpus"),
+         "--questions", str(SELFTEST / "questions.jsonl"),
+         "--gold", str(SELFTEST / "gold.jsonl"),
+         "--out", str(tmp_path / "run"), "--timeout-seconds", "60"],
+        cwd=REPO, capture_output=True, text=True, timeout=120)
+    assert completed.returncode != 0
+    assert "expected one of" in completed.stderr
+
+
+def test_a_counted_run_is_the_only_shape_marked_cost_comparable(tmp_path):
+    report = _run(tmp_path, {"prompt_tokens": 4, "completion_tokens": 1})
+    assert report["accounting"]["comparable_on_cost"] is True
