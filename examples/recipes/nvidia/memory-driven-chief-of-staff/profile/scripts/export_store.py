@@ -24,6 +24,12 @@ owner-only permissions as the store they came from.
     python3 export_store.py                 # to ./export-<date>/
     python3 export_store.py --to <dir>
 
+The destination must be somewhere else. This replaces whatever is there, so
+exporting into the workspace would delete the store and leave a copy of it in
+place — the destination and the workspace have to be disjoint, and a
+destination that is either of them, inside the other, or around it is refused
+before anything is created or removed.
+
 Pairs with `reset.py`, which removes what this shows. The two are documented
 together because somebody withdrawing consent usually wants both: see what is
 held, then have it gone.
@@ -36,6 +42,7 @@ import json
 import os
 import shutil
 import sqlite3
+import tempfile
 import sys
 from datetime import date
 from pathlib import Path
@@ -128,13 +135,97 @@ def as_markdown(data: dict[str, list[dict]]) -> str:
     return "\n".join(out) + "\n"
 
 
+def _copy_inside_workspace(source: Path, target: Path, workspace: Path) -> int:
+    """Copy a tree, refusing anything that leaves the workspace.
+
+    `copytree` follows symbolic links by default — it copies what the link
+    points at, not the link — so a link under `memory/` pulls a file from
+    anywhere on the machine into an export the user is about to hand to
+    somebody. Every entry is resolved and checked against the workspace before
+    it is read.
+    """
+    copied = 0
+    for entry in sorted(source.rglob("*")):
+        if entry.name.startswith("._") or entry.name == ".DS_Store":
+            continue
+        resolved = entry.resolve()
+        try:
+            resolved.relative_to(workspace.resolve())
+        except ValueError:
+            raise ExportEscapesWorkspace(
+                f"{entry} points outside the workspace, at {resolved}. "
+                "Nothing has been exported. Remove the link or copy the file "
+                "in.")
+        relative = entry.relative_to(source)
+        if entry.is_dir() and not entry.is_symlink():
+            (target / relative).mkdir(parents=True, exist_ok=True)
+        elif entry.is_file():
+            (target / relative).parent.mkdir(parents=True, exist_ok=True)
+            _write_private(target / relative,
+                           entry.read_text(encoding="utf-8", errors="replace"))
+            copied += 1
+    return copied
+
+
+class ExportEscapesWorkspace(Exception):
+    """A source resolved outside the workspace, so nothing is written."""
+
+
+class ExportOverlapsWorkspace(Exception):
+    """The destination and the live workspace are not disjoint."""
+
+
+def _refuse_overlap(destination: Path, workspace: Path) -> None:
+    """The destination must not be the workspace, inside it, or around it.
+
+    This export replaces its destination, which is what makes it a snapshot
+    rather than an accumulation — and what makes an overlapping destination
+    destructive. Exporting into the workspace deleted the live store and left
+    the two export files in its place, reported as success.
+
+    Checked on resolved paths, before the staging directory is created and
+    before anything is removed, so a refusal costs nothing.
+    """
+    destination = destination.resolve()
+    workspace = workspace.resolve()
+
+    if destination == workspace:
+        raise ExportOverlapsWorkspace(
+            f"{destination} is the workspace itself. Exporting there would "
+            "replace the store with a copy of it. Nothing has been written.")
+    try:
+        destination.relative_to(workspace)
+    except ValueError:
+        pass
+    else:
+        raise ExportOverlapsWorkspace(
+            f"{destination} is inside the workspace at {workspace}. The "
+            "export replaces its destination, and the store lives here. "
+            "Nothing has been written.")
+    try:
+        workspace.relative_to(destination)
+    except ValueError:
+        return
+    raise ExportOverlapsWorkspace(
+        f"{destination} contains the workspace at {workspace}. Replacing it "
+        "would remove the store. Nothing has been written.")
+
+
 def export(destination: Path) -> dict[str, object]:
     ensure_store()
-    destination.mkdir(parents=True, exist_ok=True)
-    # The store is deliberately owner-only. An export that widens that is a
-    # copy of the same content readable by every account on the machine, which
-    # is a quieter version of not having protected it at all.
-    os.chmod(destination, 0o700)
+
+    # Build the whole thing beside the destination and rename on success.
+    #
+    # Writing in place left a previous export's files behind: a memory page
+    # deleted since yesterday survived into today's export, and the default
+    # destination is date-based so the same directory is reused all day. A
+    # partial write also looked complete. A fresh directory renamed at the end
+    # gives an export that is either whole or absent.
+    destination = destination.resolve()
+    _refuse_overlap(destination, ledger_path().parent.parent)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".export-", dir=destination.parent))
+    os.chmod(staging, 0o700)
 
     data: dict[str, list[dict]] = {}
     with sqlite3.connect(ledger_path()) as conn:
@@ -144,28 +235,31 @@ def export(destination: Path) -> dict[str, object]:
             # command exists to avoid. Let it raise.
             data[table] = rows(conn, table)
 
-    _write_private(destination / "store.json",
-                   json.dumps(data, indent=2, ensure_ascii=False))
-    _write_private(destination / "store.md", as_markdown(data))
+    workspace = ledger_path().parent.parent
+    try:
+        _write_private(staging / "store.json",
+                       json.dumps(data, indent=2, ensure_ascii=False))
+        _write_private(staging / "store.md", as_markdown(data))
 
-    memory_src = ledger_path().parent.parent / "memory"
-    copied = 0
-    if memory_src.is_dir():
-        memory_dst = destination / "memory"
-        if memory_dst.exists():
-            shutil.rmtree(memory_dst)
-        shutil.copytree(memory_src, memory_dst,
-                        ignore=shutil.ignore_patterns("._*", ".DS_Store"))
-        copied = sum(1 for _ in memory_dst.rglob("*.md"))
+        copied = 0
+        memory_src = workspace / "memory"
+        if memory_src.is_dir():
+            _copy_inside_workspace(memory_src, staging / "memory", workspace)
+            copied = sum(1 for _ in (staging / "memory").rglob("*.md"))
 
-    policy_src = ledger_path().parent.parent / "policy"
-    if policy_src.is_dir():
-        shutil.copytree(policy_src, destination / "policy", dirs_exist_ok=True)
+        policy_src = workspace / "policy"
+        if policy_src.is_dir():
+            _copy_inside_workspace(policy_src, staging / "policy", workspace)
 
-    # copytree carries the source's modes, and a wiki page written by an
-    # agent turn has ordinary ones. Narrow the whole tree rather than trusting
-    # what it arrived with.
-    _narrow(destination)
+        _narrow(staging)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+
+    # Replace whatever was there. An export is a snapshot, not an accumulation.
+    if destination.exists():
+        shutil.rmtree(destination)
+    os.replace(staging, destination)
 
     return {
         "to": str(destination),
@@ -184,6 +278,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         print(json.dumps(export(args.to)))
+    except ExportOverlapsWorkspace as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    except ExportEscapesWorkspace as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     except OSError as exc:
         print(f"could not write the export: {exc}", file=sys.stderr)
         return 1

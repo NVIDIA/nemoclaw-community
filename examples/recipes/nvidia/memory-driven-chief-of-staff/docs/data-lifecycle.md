@@ -101,10 +101,21 @@ A dropped message is reported on stderr as a count, never as content:
 exclusions: 2 message(s) not stored
 ```
 
-A malformed `exclusions.json` yields no rules rather than an error. The
-direction is deliberate: a typo must not silently halt collection, and the
-consequence — a message arriving that the user meant to exclude — is visible
-to them, where a stalled pipeline would not be.
+A malformed `exclusions.json` stops the insert. Nothing is written until it
+is fixed, and the error names the file, the line and the column.
+
+That is the opposite of what an earlier version did, and the reasoning is
+worth stating because the other direction is tempting. Failing open keeps
+collection running through a typo, at the cost of writing exactly what the
+file was created to keep out — and the user learns about it from the row on
+disk. A stalled pipeline is loud and recoverable; a silent breach of the one
+guarantee this file provides is neither.
+
+Fail-closed means strict about shape as well as syntax. An unknown key is
+rejected rather than ignored: `{"sender": [...]}` parses cleanly, matches
+nothing, and reads as a working rule. A non-string entry is rejected rather
+than coerced, for the same reason — `123` would become the rule `"123"` and
+match nothing.
 
 ## Take a copy
 
@@ -115,7 +126,19 @@ python3 export_store.py --to ~/out
 
 Writes `store.md` and `store.json` side by side — the first to read, the
 second to process — and copies the memory and the learned preference policy
-whole. Nothing is summarised and nothing is omitted; an export that quietly
+whole.
+
+Each export is a snapshot rather than an accumulation. The whole thing is
+built beside the destination and moved into place at the end, so a previous
+export cannot leave a deleted page behind in the next one — which the
+date-based default directory makes likely, since the same path is reused all
+day — and a failure part-way leaves no directory at all rather than one that
+looks complete.
+
+Nothing outside the workspace is read. A symbolic link under `memory/` that
+points elsewhere on the machine stops the export rather than pulling that file
+into something the user is about to hand to somebody. Nothing is summarised
+and nothing is omitted; an export that quietly
 left something out would answer the question wrongly.
 
 A body cleared by the retention pass appears as `text cleared <timestamp>`
@@ -162,8 +185,14 @@ guarantee, stated rather than implied.
 forward in place:
 
 ```bash
-python3 migrate.py
+python3 migrate.py            # bring the store to the current schema
+python3 migrate.py --check    # report the version, change nothing
 ```
+
+You rarely need either. Migration happens on its own: `ensure_store()` is the
+only way anything opens the store, and every executable here goes through it,
+so the first job to run after an upgrade migrates it. The command exists for
+doing it deliberately, before a scheduled job does it unattended.
 
 The column is added if it is absent and the version is recorded; running it
 twice does nothing the second time. `schema-v1.sql` is kept beside

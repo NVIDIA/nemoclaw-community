@@ -258,6 +258,40 @@ class TestExclusionHappensBeforeAnythingIsWritten(StoreCase):
             self.insert([self.item()])
         self.assertEqual(self.rows(), [])
 
+    def test_a_misspelled_key_stops_the_insert(self):
+        """`{"sender": [...]}` parsed cleanly, matched nothing, and read as a
+        working rule — the exact failure fail-closed exists to prevent."""
+        (self.workspace / exclusions.RULES_FILE).write_text(
+            json.dumps({"sender": ["Dana"]}), encoding="utf-8")
+        with self.assertRaises(exclusions.ExclusionsUnreadable) as caught:
+            self.insert([self.item()])
+        self.assertIn("sender", str(caught.exception))
+        self.assertEqual(self.rows(), [])
+
+    def test_a_key_alongside_the_documented_ones_stops_the_insert(self):
+        (self.workspace / exclusions.RULES_FILE).write_text(
+            json.dumps({"senders": ["dana"], "sendrs": ["sam"]}),
+            encoding="utf-8")
+        with self.assertRaises(exclusions.ExclusionsUnreadable):
+            self.insert([self.item()])
+        self.assertEqual(self.rows(), [])
+
+    def test_a_non_string_rule_stops_the_insert(self):
+        """`123` used to become the rule "123", which matches nothing."""
+        (self.workspace / exclusions.RULES_FILE).write_text(
+            json.dumps({"senders": [123]}), encoding="utf-8")
+        with self.assertRaises(exclusions.ExclusionsUnreadable) as caught:
+            self.insert([self.item()])
+        self.assertIn("123", str(caught.exception))
+        self.assertEqual(self.rows(), [])
+
+    def test_the_documented_keys_are_all_accepted(self):
+        """Strictness must not reject the shape the docs tell people to write."""
+        self.write_rules(senders=["dana"], domains=["x.example"],
+                         channels=["C01"])
+        self.insert([self.item(source_id="keep", sender="Sam")])
+        self.assertEqual(self.rows(), ["keep"])
+
     def test_no_rules_file_at_all_is_not_an_error(self):
         """Absent is the ordinary state of a fresh install and must stay free."""
         self.insert([self.item()])
@@ -501,6 +535,127 @@ class TestExportShowsEverythingItHolds(StoreCase):
         text = (destination / "store.md").read_text(encoding="utf-8")
         self.assertIn("cutover window is Thursday", text)
         self.assertNotIn("body continues", text)
+
+    def test_a_link_out_of_the_workspace_stops_the_export(self):
+        """`copytree` follows links, so one under memory/ copies a file from
+        anywhere on the machine into something about to be handed over."""
+        self.add("m1")
+        outside = Path(self.home) / "outside-the-workspace.txt"
+        outside.write_text("private", encoding="utf-8")
+        memory = self.workspace / "memory"
+        memory.mkdir(exist_ok=True)
+        (memory / "leak.md").symlink_to(outside)
+
+        destination = Path(self.home) / "out"
+        with self.assertRaises(export_store.ExportEscapesWorkspace):
+            export_store.export(destination)
+        self.assertFalse(destination.exists(),
+                         "a refused export must leave nothing behind")
+
+    def test_a_link_inside_the_workspace_is_fine(self):
+        """The rule is about leaving the boundary, not about links."""
+        self.add("m1")
+        memory = self.workspace / "memory"
+        memory.mkdir(exist_ok=True)
+        (memory / "real.md").write_text("page", encoding="utf-8")
+        (memory / "alias.md").symlink_to(memory / "real.md")
+        destination = Path(self.home) / "out"
+        export_store.export(destination)
+        self.assertTrue((destination / "memory" / "alias.md").exists())
+
+    def test_an_export_is_a_snapshot_not_an_accumulation(self):
+        """The default destination is date-based and reused all day, so a page
+        deleted since the last export survived into the next one."""
+        self.add("m1")
+        memory = self.workspace / "memory"
+        memory.mkdir(exist_ok=True)
+        (memory / "gone.md").write_text("deleted later", encoding="utf-8")
+        (memory / "kept.md").write_text("still here", encoding="utf-8")
+        destination = Path(self.home) / "out"
+        export_store.export(destination)
+        self.assertTrue((destination / "memory" / "gone.md").exists())
+
+        (memory / "gone.md").unlink()
+        export_store.export(destination)
+        self.assertFalse((destination / "memory" / "gone.md").exists(),
+                         "a removed page survived the next export")
+        self.assertTrue((destination / "memory" / "kept.md").exists())
+
+    def test_a_stale_store_file_does_not_survive_either(self):
+        self.add("m1")
+        destination = Path(self.home) / "out"
+        destination.mkdir()
+        (destination / "store.md").write_text("yesterday", encoding="utf-8")
+        (destination / "leftover.txt").write_text("stale", encoding="utf-8")
+        export_store.export(destination)
+        self.assertNotIn("yesterday",
+                         (destination / "store.md").read_text(encoding="utf-8"))
+        self.assertFalse((destination / "leftover.txt").exists())
+
+    def live_workspace(self):
+        """Everything a refusal has to leave untouched."""
+        self.add("m1")
+        memory = self.workspace / "memory"
+        memory.mkdir(exist_ok=True)
+        (memory / "index.md").write_text("the memory", encoding="utf-8")
+        policy = self.workspace / "policy"
+        policy.mkdir(exist_ok=True)
+        (policy / "preferences.md").write_text("the policy", encoding="utf-8")
+
+    def assert_workspace_intact(self):
+        self.assertTrue(self.db.exists(), "the live store was removed")
+        with sqlite3.connect(self.db) as conn:
+            rows = conn.execute("SELECT count(*) FROM items").fetchone()[0]
+        self.assertEqual(rows, 1, "the live store lost rows")
+        self.assertEqual(
+            (self.workspace / "memory" / "index.md").read_text(
+                encoding="utf-8"), "the memory")
+        self.assertEqual(
+            (self.workspace / "policy" / "preferences.md").read_text(
+                encoding="utf-8"), "the policy")
+
+    def test_exporting_into_the_workspace_is_refused(self):
+        """The export replaces its destination, so this deleted the store and
+        left a copy of it in place — reported as success."""
+        self.live_workspace()
+        with self.assertRaises(export_store.ExportOverlapsWorkspace):
+            export_store.export(self.workspace)
+        self.assert_workspace_intact()
+
+    def test_exporting_inside_the_workspace_is_refused(self):
+        self.live_workspace()
+        with self.assertRaises(export_store.ExportOverlapsWorkspace):
+            export_store.export(self.workspace / "memory")
+        self.assert_workspace_intact()
+
+    def test_exporting_into_a_directory_containing_the_workspace_is_refused(self):
+        self.live_workspace()
+        with self.assertRaises(export_store.ExportOverlapsWorkspace):
+            export_store.export(Path(self.home))
+        self.assert_workspace_intact()
+
+    def test_the_refusal_leaves_no_staging_directory(self):
+        """Refused before anything is created, so nothing is left to clean."""
+        self.live_workspace()
+        before = sorted(p.name for p in Path(self.home).iterdir())
+        with self.assertRaises(export_store.ExportOverlapsWorkspace):
+            export_store.export(self.workspace)
+        self.assertEqual(sorted(p.name for p in Path(self.home).iterdir()),
+                         before)
+
+    def test_a_destination_beside_the_workspace_is_fine(self):
+        """The rule is about overlap, not about being nearby."""
+        self.live_workspace()
+        destination = Path(self.home) / "export-out"
+        export_store.export(destination)
+        self.assertTrue((destination / "store.json").exists())
+        self.assert_workspace_intact()
+
+    def test_the_command_reports_the_refusal_rather_than_raising(self):
+        self.live_workspace()
+        self.assertEqual(
+            export_store.main(["--to", str(self.workspace)]), 1)
+        self.assert_workspace_intact()
 
     def test_the_learned_policy_travels_with_it(self):
         """Documented as copied whole; it is as much about the user as the memory."""

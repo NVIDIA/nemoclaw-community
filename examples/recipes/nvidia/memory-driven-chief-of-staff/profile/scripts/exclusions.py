@@ -89,15 +89,35 @@ def load_rules() -> dict[str, set[str]]:
             f"{path} must hold a JSON object with `senders`, `domains` and "
             f"`channels` keys; found {type(declared).__name__}. Nothing has "
             "been stored.")
+    # An unknown key is a typo, and a typo here is the failure this whole
+    # module is trying to prevent: `{"sender": [...]}` parsed cleanly, matched
+    # nothing, and let through exactly what the user wrote it to keep out.
+    # Silence is the worst possible response to it.
+    unknown = sorted(set(declared) - set(empty))
+    if unknown:
+        raise ExclusionsUnreadable(
+            f"{path}: unknown key(s) {', '.join(unknown)}. Expected "
+            f"{', '.join(sorted(empty))}. Nothing has been stored — a "
+            "misspelled key would silently exclude nothing.")
+
     for key in empty:
         value = declared.get(key, [])
         if not isinstance(value, (list, tuple)):
             raise ExclusionsUnreadable(
                 f"{path}: `{key}` must be a list of strings, not "
                 f"{type(value).__name__}. Nothing has been stored.")
+        # `str()` on a non-string used to make `123` into the rule `"123"`,
+        # which matches nothing and reads as a working rule. A number here is
+        # a mistake, not a value to coerce.
+        for member in value:
+            if not isinstance(member, str):
+                raise ExclusionsUnreadable(
+                    f"{path}: `{key}` contains {member!r} "
+                    f"({type(member).__name__}); every entry must be a "
+                    "string. Nothing has been stored.")
+
     return {
-        key: {str(v).strip().lower() for v in declared.get(key, [])
-              if str(v).strip()}
+        key: {v.strip().lower() for v in declared.get(key, []) if v.strip()}
         for key in empty
     }
 

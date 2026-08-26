@@ -16,6 +16,8 @@ migrations themselves:
 
 from __future__ import annotations
 
+import contextlib
+import json
 import sqlite3
 from pathlib import Path
 from typing import Callable
@@ -102,6 +104,43 @@ def migrate(conn: sqlite3.Connection) -> list[int]:
     return applied
 
 
+def main(argv: list[str] | None = None) -> int:
+    """Bring the store at `$HERMES_HOME` to the current schema.
+
+    `docs/data-lifecycle.md` told people to run this file and it had no entry
+    point, so `python3 migrate.py` did nothing at all and left a v1 store at
+    v1 — an instruction that reported success by saying nothing. Migration
+    does happen on its own through `ensure_store()`, which every executable
+    goes through; this exists so the documented command is real, and so
+    somebody can do it deliberately before a job does it for them.
+    """
+    import argparse
+
+    from _db import ensure_store, ledger_path
+
+    parser = argparse.ArgumentParser(description=main.__doc__.splitlines()[0])
+    parser.add_argument("--check", action="store_true",
+                        help="report the version and change nothing")
+    args = parser.parse_args(argv)
+
+    if args.check:
+        path = ledger_path()
+        if not path.exists():
+            print(json.dumps({"store": str(path), "exists": False}))
+            return 0
+        with contextlib.closing(sqlite3.connect(path)) as conn:
+            print(json.dumps({"store": str(path), "exists": True,
+                              "schema_version": current_version(conn),
+                              "code_understands": SCHEMA_VERSION}))
+        return 0
+
+    path = ensure_store()
+    with contextlib.closing(sqlite3.connect(path)) as conn:
+        version = current_version(conn)
+    print(json.dumps({"store": str(path), "schema_version": version}))
+    return 0
+
+
 def open_store(path: Path) -> sqlite3.Connection:
     """Open a store and bring it to the current schema."""
     conn = sqlite3.connect(path, isolation_level=None)
@@ -119,3 +158,7 @@ def open_store(path: Path) -> sqlite3.Connection:
         conn.close()
         raise
     return conn
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
