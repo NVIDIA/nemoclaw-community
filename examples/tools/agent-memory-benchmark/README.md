@@ -296,9 +296,22 @@ bench/       runner, grader, accounting proxy, price table
 adapters/    one directory per system under test, including a ledger adapter
 selftest/    a six-document fixture plus two adapters whose scores are known
 docs/        how to submit, methodology, provenance, known limitations
+results/     one pair of reference runs on corpus A, and what they are not
 tools/       re-grade stored answers against the current rules
 tests/       the benchmark's own tests
 ```
+
+## Results
+
+One pair of runs ships as a worked example: a self-model and an agentic
+retrieval baseline on corpus A, both on the same base model, both graded by the
+grader in this repository. The self-model answers better on every question type
+and pays about a thousand times more to build its memory.
+
+Read [`results/README.md`](results/README.md) before the table there. Those runs
+are corpus A only, one base model, and their answers predate a rename at
+publication — all three limit what the numbers mean, and each is stated where
+the numbers are.
 
 ## Prerequisites
 
@@ -314,7 +327,7 @@ proxy at.
 **Expected result:**
 
 ```text
-139 passed
+153 passed
 ```
 
 **This verifies:** the runner, grader, report renderer and the
@@ -330,7 +343,7 @@ The whole pipeline runs offline against a small fixture whose score is known in
 advance — no model, no network, no API key:
 
 ```bash
-python3 -m pytest tests/     # expected: 139 passed
+python3 -m pytest tests/     # expected: 153 passed
 ```
 
 `selftest/` holds a six-document corpus, six questions covering all four

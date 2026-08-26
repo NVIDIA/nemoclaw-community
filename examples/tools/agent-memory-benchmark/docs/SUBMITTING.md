@@ -161,7 +161,9 @@ not the recipe's own behaviour: the recipe has no question-answering path.
 
 ## Where a result goes
 
-There is no hosted leaderboard and no table renderer ships here: each run
+One pair of reference runs ships under `results/`, as an example of the
+format rather than as a ranking. There is no hosted leaderboard and no table
+renderer ships here: each run
 writes its own `report.json`, and comparing runs is the reader's job. Two
 reports are comparable only when their `fingerprint` blocks match — same
 corpus, same questions, same answer key, same normalization, and the same

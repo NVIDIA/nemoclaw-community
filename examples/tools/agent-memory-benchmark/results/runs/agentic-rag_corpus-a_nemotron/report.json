@@ -1,0 +1,152 @@
+{
+  "adapter": {
+    "name": "agentic-rag",
+    "declared_model": "nvidia/nvidia/nemotron-3-ultra"
+  },
+  "model": "nvidia/nvidia/nemotron-3-ultra",
+  "observed_models": {
+    "azure/openai/text-embedding-3-small": 392,
+    "nvidia/nvidia/nemotron-3-ultra": 664
+  },
+  "run_id": "agentic_rag_a_nemotron_capped3",
+  "timestamp": "20260824T070608Z",
+  "corpus": {
+    "documents": 425,
+    "part_a": 212,
+    "part_b": 213
+  },
+  "timing": {
+    "ingest_seconds": 25.46,
+    "answer_seconds": 358.54
+  },
+  "accounting": "proxy",
+  "cost": {
+    "ingest_input_tokens": 169852,
+    "ingest_output_tokens": 0,
+    "answer_input_tokens": 2472672,
+    "answer_output_tokens": 226034,
+    "answer_calls": 1048,
+    "tokens_per_question": 14509.2,
+    "ingest_usd": 0.0034,
+    "answer_usd": null,
+    "price_snapshot": "2026-08-21"
+  },
+  "usage_raw": {
+    "calls": {
+      "ingest": 8,
+      "answer": 1048
+    },
+    "input_tokens": {
+      "ingest": 169852,
+      "answer": 2472672
+    },
+    "output_tokens": {
+      "ingest": 0,
+      "answer": 226034
+    },
+    "models": {
+      "azure/openai/text-embedding-3-small": 392,
+      "nvidia/nvidia/nemotron-3-ultra": 664
+    },
+    "by_phase_model": {
+      "ingest": {
+        "azure/openai/text-embedding-3-small": [
+          169852,
+          0
+        ]
+      },
+      "answer": {
+        "nvidia/nvidia/nemotron-3-ultra": [
+          2464583,
+          226034
+        ],
+        "azure/openai/text-embedding-3-small": [
+          8089,
+          0
+        ]
+      }
+    }
+  },
+  "self_reported_usage": null,
+  "summary": {
+    "questions": 186,
+    "graded": 186,
+    "deferred_to_judge": 0,
+    "accuracy_overall": 0.8441,
+    "accuracy_by_type": {
+      "abstention": 1.0,
+      "as_of": 0.5,
+      "attribution": 0.8,
+      "chain_freshness": 0.6,
+      "citation": 0.9167,
+      "constraint": 0.8,
+      "disambiguation": 0.6667,
+      "freshness": 0.75,
+      "multi_source": 0.8767,
+      "ordering": 0.75,
+      "set_difference": 1.0,
+      "single_hop": 0.9
+    },
+    "accuracy_by_difficulty": {
+      "base": 0.8645,
+      "hard": 0.7419
+    },
+    "freshness_detail": {
+      "with_stale_in_corpus": 0.6667,
+      "recency_only": 1.0
+    },
+    "evidence": {
+      "questions_with_citations": 172,
+      "citation_coverage": 0.9247,
+      "evidence_recall_mean": 0.6342,
+      "evidence_precision_mean": 0.7535
+    }
+  },
+  "answers_missing": [],
+  "regraded": true,
+  "corpus_name": "corpus_a",
+  "max_rounds": "3",
+  "note": "search rounds were capped at 3. Preserved so the cost of removing the cap is measurable rather than asserted; the uncapped run is agentic_rag_a_nemotron.",
+  "fingerprint": {
+    "algorithm": "sha256-v1",
+    "scorer": "fb71aa2aefae9ec3c542b2a227f5d03ae56f800e6c79821f3471513cd64ca090",
+    "normalization": {
+      "default_year": "2026",
+      "alt_years": [
+        "2027"
+      ]
+    },
+    "corpus": "12772a521d95bd777625924d8ec7b151d0d9c0e388f4dc4bafbd7540130cc9a9",
+    "corpus_documents": 428,
+    "questions": "6d38f6c11edbefb4baa77b8014af1920c48ab65f3647a2bb10daa691e9259b06",
+    "gold": "55a66b80ff0f62d8b3a340dcbb9cc970a011922b1e509269c4402192f9504970"
+  },
+  "benchmark_revision": {
+    "commit": "f0703b31e6e199833911c6040579283650361fcf",
+    "dirty": false
+  },
+  "provenance_note": {
+    "answers_transformed": true,
+    "why": "These answers were produced against the corpus before publication, when a set of identifiers carried different names. The same substitution applied to the corpus at publication was applied to the answers, because an answer is derived from the corpus it read: a system reading the published corpus would have written the published name. Nothing else was changed.",
+    "verify": "answers.as-answered.jsonl is the untransformed output. Apply the map below to it and the result is answers.jsonl; regrade either one to see the difference for yourself.",
+    "substitutions": {
+      "Helix": "Quillon",
+      "helix": "quillon",
+      "TaskRegistry": "JobRegistry",
+      "example-co.com": "examplecorp.example",
+      "docs/sot/": "docs/design/",
+      "WaveAbort": "BatchAbort",
+      "inbox--gitlab": "inbox-automated",
+      "(full map)": "see results/README.md",
+      "(question ids)": "fresh-helix-launch-date -> fresh-quillon-launch-date, and three siblings"
+    },
+    "not_a_rerun": "This is not a run against the published corpus. The systems never saw it. Reproducing these numbers requires re-running the answer phase.",
+    "effect": {
+      "accuracy_as_answered": 0.8172,
+      "accuracy_after_map": 0.8441,
+      "questions_reported_unanswered_before_id_map": 4,
+      "note": "The id map matters more than the text map: four question ids were renamed at publication, and without mapping them those four answers are reported as unanswered, which invalidates the run."
+    }
+  },
+  "corpus_scope": "A only. Corpus B was not run on this model; see results/README.md."
+}
