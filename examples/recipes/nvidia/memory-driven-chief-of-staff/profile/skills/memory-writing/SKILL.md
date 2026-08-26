@@ -157,10 +157,17 @@ first. A `declined` one — a lower tier, or an ignore — is a real choice and
 worth knowing, but writing it here would promote the very thing they pushed
 away.
 
-If `corrections_not_shown` is above zero, the pass was bounded and there are
-older corrections you were not given. Everything unapplied is always in what
-you were given, so nothing you need is missing — but say so on the page rather
-than implying the list is the whole history. Put it on the relevant person's
+Only an explicit `high` override carries `chose`. A restore — the person
+un-ignoring something — arrives as `other`, because the obligation it restores
+may still be at `low`, and treating it as a priority would promote work they
+had deliberately kept down. Restoring means track this again.
+
+If `corrections_not_shown` is above zero, the pass was bounded and you were not
+given everything. Unapplied corrections come first, so what you have is the
+part most likely to need writing up — but when more of them exist than fit,
+the remainder waits for a later pass and reaches you once this batch's markers
+are on the page. Say on the page that the list is partial rather than implying
+it is the whole history. Put it on the relevant person's
 page as context if it says
 something about how they work together, or leave it.
 

@@ -408,15 +408,38 @@ class TestOnlyTheUserSaysWhatTheyChose(SelectorCase):
         entry = self.report()["user_corrections"][0]
         self.assertEqual(entry["direction"], "declined")
 
-    def test_restoring_something_ignored_is_choosing_it(self):
-        """The person changed their mind and said it is their work after all.
-        Leaving it as `other` kept it out of the page it belongs in."""
-        self.user_ignored(source_id="m1")
+    def test_restoring_is_not_choosing(self):
+        """`low` then `ignore` then `restore` leaves the obligation at `low`.
+
+        Reading the restore as a choice would promote work the person had
+        deliberately kept down — which is the failure the priorities page
+        exists to prevent, arriving through the one event that looks like
+        agreement.
+        """
+        self.obligation(source_id="m1")
+        correct.set_priority("m1", "low")
+        correct.ignore("m1")
         correct.unignore("m1")
+
+        with sqlite3.connect(self.db) as conn:
+            tier = conn.execute("SELECT manual_priority FROM obligations"
+                                " WHERE id='m1'").fetchone()[0]
+        self.assertEqual(tier, "low", "the fixture does not reproduce it")
+
         entries = self.report()["user_corrections"]
         restored = [e for e in entries if e["action"] == "restored"]
         self.assertTrue(restored, "restore did not reach the selector")
-        self.assertEqual(restored[0]["direction"], "chose")
+        self.assertEqual(restored[0]["direction"], "other")
+        self.assertEqual(
+            [e for e in entries if e["direction"] == "chose"], [],
+            "a low, ignored, restored obligation produced a chosen priority")
+
+    def test_only_a_high_override_is_choosing(self):
+        self.correction(tier="high", source_id="m2")
+        chose = [e for e in self.report()["user_corrections"]
+                 if e["direction"] == "chose"]
+        self.assertEqual(len(chose), 1)
+        self.assertEqual(chose[0]["to"], "high")
 
     def test_every_event_correct_py_writes_is_classified(self):
         """Three user paths exist; a fourth appearing should be a visible
@@ -502,6 +525,28 @@ class TestACorrectionIsEvidenceOnce(SelectorCase):
         self.assertIn(oldest,
                       [c["event_id"] for c in again["unapplied_corrections"]],
                       "the one correction never written up was dropped")
+
+    def test_the_remainder_arrives_on_a_later_pass(self):
+        """The bound is a batch, not a loss: acknowledging this batch moves
+        those events aside and the next pass takes the next slice."""
+        self.current_attention()
+        total = select_memory.MAX_CORRECTIONS + 5
+        for i in range(total):
+            self.correction(source_id=f"m{i}")
+
+        first = self.report()
+        self.assertEqual(len(first["unapplied_corrections"]),
+                         select_memory.MAX_CORRECTIONS)
+        seen = {c["event_id"] for c in first["unapplied_corrections"]}
+        for event_id in seen:
+            self.applied(event_id)
+
+        second = self.report()
+        remainder = {c["event_id"] for c in second["unapplied_corrections"]}
+        self.assertTrue(remainder, "the remainder never arrived")
+        self.assertEqual(remainder & seen, set(),
+                         "the second pass re-offered acknowledged events")
+        self.assertEqual(len(seen | remainder), total)
 
     def test_a_truncated_pass_says_it_was_truncated(self):
         """Silent truncation reads as "that was all of them"."""

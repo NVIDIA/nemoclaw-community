@@ -438,20 +438,25 @@ def corrections(conn, since: str) -> list[dict[str, object]]:
         # priorities page.
         #
         # `correct.py` emits exactly three user events and all three are
-        # classified here. Raising something to `high` is the person saying it
-        # is their work; restoring something they had ignored is them changing
-        # their mind and saying the same thing, which an earlier version of
-        # this left as `other` and so kept out of the page it belongs in.
-        # Setting a lower tier, or ignoring, is them saying the opposite —
-        # real evidence, worth knowing, and writing it into
-        # `current_priorities.md` would promote the very thing they pushed
-        # away.
+        # classified here.
         #
-        # Anything else is `other` rather than guessed at. The schema allows
-        # event types no user path writes today (`snoozed`, `completed`), and
-        # a classifier that assumed a direction for one would be inventing the
-        # user's intent from a row somebody else's code might write later.
-        if tier == "high" or event_type == "restored":
+        # Only an explicit `high` override is choosing. Raising something to
+        # the top tier is the person saying it is their work, and nothing else
+        # says that. Restoring an ignored obligation was briefly treated the
+        # same way, on the reasoning that changing one's mind is a choice —
+        # but the sequence `low` then `ignore` then `restore` leaves the
+        # obligation at `low`, and reading the restore as `chose` would
+        # promote work the person had deliberately kept down. Restoring means
+        # track this again; it does not establish priority.
+        #
+        # Setting a lower tier or ignoring is `declined` — real evidence,
+        # worth knowing, and the opposite of a priority.
+        #
+        # A restore is `other`: neither, and not guessed at. So are the event
+        # types the schema allows that no user path writes today (`snoozed`,
+        # `completed`); assuming a direction for one would be inventing intent
+        # from a row somebody else's code might write later.
+        if tier == "high":
             direction = "chose"
         elif tier in ("medium", "low") or event_type == "ignored":
             direction = "declined"
@@ -505,9 +510,15 @@ def main() -> int:
     seen_events = applied_events(memory_root())
     unapplied = [c for c in chosen if c["event_id"] not in seen_events]
 
-    # Bound the payload, but never at the cost of losing an unapplied choice.
-    # Unapplied first, newest within each group; anything dropped is counted
-    # so a truncated pass says so rather than looking complete.
+    # Bound the payload, unapplied first.
+    #
+    # This is a batch, not a guarantee that everything unapplied is present:
+    # with more unapplied corrections than the bound, the remainder waits for
+    # a later pass — and gets there, because acknowledging this batch's
+    # markers moves those events out of the way and the next pass takes the
+    # next slice. What must not happen is the bound silently favouring
+    # applied ones, so unapplied come first, and what was left out is
+    # counted rather than omitted in silence.
     ordered = unapplied + [c for c in chosen if c["event_id"] in seen_events]
     dropped = max(0, len(ordered) - MAX_CORRECTIONS)
     chosen = ordered[:MAX_CORRECTIONS]

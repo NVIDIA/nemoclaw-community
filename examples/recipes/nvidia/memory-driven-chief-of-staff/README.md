@@ -247,7 +247,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the twelve files report 482 tests in
+Expected result: every file ends with `OK`, the twelve files report 484 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -324,14 +324,14 @@ profile afterwards, so a setting that could not be written — or that reports
 success without sticking — ends the run rather than leaving a profile that
 took some of its configuration. The installer then checks both — that a model
 resolves and that a credential is present — and exits before registering any
-job if either is missing, rather than scheduling six jobs that would each
+job if either is missing, rather than scheduling seven jobs that would each
 fail. If your endpoint genuinely needs no key, pass `ALLOW_NO_API_KEY=1` to
 say so.
 
 Re-running it is safe: the registration looks each job up by name and edits it
 rather than adding another copy.
 
-Six jobs are registered:
+Seven jobs are registered:
 
 | Job | Schedule | Pre-step | Skill |
 | --- | --- | --- | --- |
@@ -705,7 +705,7 @@ Three separate questions, with three different answers.
 **Do the jobs survive?** Yes. They live in `$HERMES_HOME/cron/jobs.json`, which
 is ordinary disk state — not part of the distribution, so a profile update
 leaves it alone, and not tied to any process, so shutting everything down and
-starting again finds the same six jobs with the same ids.
+starting again finds the same seven jobs with the same ids.
 
 **Do they start firing again on their own?** Only if the gateway was installed
 as a service. `hermes -p <profile> gateway install` registers one — a launchd
