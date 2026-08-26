@@ -6,9 +6,10 @@
 # Catalog Deployment
 
 The [Pages workflow](../.github/workflows/pages.yml) validates the static catalog
-and local links. Pull requests attach an `example-catalog-preview` artifact and
-do not deploy. A push to `main`, or a manual run from `main`, packages `site/`
-and deploys it with the `github-pages` environment.
+and local links when a watched catalog path changes. Matching pull requests
+attach an `example-catalog-preview` artifact and do not deploy. A matching push
+to `main`, or a manual run from `main`, packages `site/` and deploys it with the
+`github-pages` environment.
 
 ## Enable GitHub Pages
 

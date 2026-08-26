@@ -238,8 +238,9 @@ git diff --cached --check
 These commands do not replace example-specific verification. For each changed
 example, run the checks that its README specifies.
 
-Catalog pull requests include a preview artifact. Merges to `main` deploy
-automatically through GitHub Pages. Maintainers can use the
+Catalog pull requests that trigger the Pages workflow include a preview
+artifact. Matching changes merged to `main` deploy automatically through
+GitHub Pages. Maintainers can use the
 [catalog deployment runbook](docs/catalog-deployment.md) for setup and
 verification.
 
