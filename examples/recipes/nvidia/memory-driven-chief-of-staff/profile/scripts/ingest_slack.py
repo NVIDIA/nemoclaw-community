@@ -93,6 +93,27 @@ BACKFILL_DAYS = 7
 # each tick serves the conversations the last one did not reach, and says so
 # when it ran out of budget rather than reporting an empty result.
 REQUEST_BUDGET = 10
+
+# How many recent thread parents a channel remembers.
+#
+# A parent with no replies yet is not in `known`, and once the channel
+# watermark passes it `conversations.history` never returns it again — so its
+# first later reply would be invisible for as long as the thread stayed alive,
+# because an ordinary reply does not appear in the channel history at all.
+# Remembering every parent regardless of reply count closes that, and the
+# bound keeps the state file from growing with the channel. Past this many
+# parents the oldest are forgotten: a first reply to something further back
+# than that is not discovered, which is a real limit and is documented rather
+# than hidden.
+REMEMBERED_PARENTS = 200
+
+# How many threads one tick may serve before the next tick takes over.
+#
+# Threads were served in timestamp order on every tick, so a channel with more
+# live threads than the budget can cover served the same oldest ones forever
+# and never reached the newest — the ones most likely to be waiting on a
+# reply. Rotation is per channel, held beside the watermarks.
+THREADS_PER_TICK = 8
 MAX_BACKOFF_SECONDS = 30
 
 # Public channels are read only when the operator names them. Direct messages
@@ -602,6 +623,57 @@ def save_threads(channel_id: str, threads: dict[str, str | None]) -> None:
         pass
 
 
+def prune_threads(known: dict[str, str | None]) -> dict[str, str | None]:
+    """Keep the most recent parents, and those still being read.
+
+    A thread with a watermark is one this collector has already fetched
+    replies for, so forgetting it would re-read the whole thread. Those are
+    kept regardless of age; it is the never-replied-to parents, remembered
+    only in case a first reply arrives, that the bound applies to.
+    """
+    active = {ts: mark for ts, mark in known.items() if mark is not None}
+    watching = sorted((ts for ts, mark in known.items() if mark is None),
+                      reverse=True)[:REMEMBERED_PARENTS]
+    kept = dict(active)
+    for ts in watching:
+        kept[ts] = None
+    return kept
+
+
+def thread_offsets_path():
+    return scope_path().with_name("slack_thread_rotation.json")
+
+
+def thread_offset(channel_id: str, count: int) -> int:
+    """Where this tick starts in one channel's thread list."""
+    if not count:
+        return 0
+    try:
+        stored = json.loads(thread_offsets_path().read_text(encoding="utf-8"))
+        return int(stored.get(channel_id, 0)) % count
+    except (OSError, json.JSONDecodeError, KeyError, ValueError, TypeError):
+        return 0
+
+
+def save_thread_offset(channel_id: str, offset: int, count: int) -> None:
+    if not count:
+        return
+    path = thread_offsets_path()
+    try:
+        stored = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(stored, dict):
+            stored = {}
+    except (OSError, json.JSONDecodeError):
+        stored = {}
+    stored[channel_id] = offset % count
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(stored), encoding="utf-8")
+    except OSError:
+        # Losing the offset costs coverage fairness, not correctness.
+        pass
+
+
 def rotation_offset(count: int) -> int:
     """Where this tick starts in the conversation list.
 
@@ -676,16 +748,47 @@ def collect(token: str, caps: dict[str, Any],
         # watermark: remembered when first seen, re-read on later ticks from
         # wherever their own reading stopped.
         known = read_threads(channel["id"])
+
+        # Two different things live in `known`, and conflating them was the
+        # first mistake here.
+        #
+        # A thread with replies is *owed*: this tick must read it, and not
+        # finishing holds the channel watermark back, because advancing past a
+        # parent whose replies were truncated loses them for good.
+        #
+        # A parent with no replies yet is *watched*: remembered only in case a
+        # first reply arrives later, which the channel history will never show
+        # — an ordinary reply does not appear there, and once the watermark
+        # passes the parent it is not returned again. Checking every watched
+        # parent on every tick would cost one call each for nothing; a
+        # rotating slice reaches them all within a few ticks. Not having
+        # reached one is the steady state, not incomplete coverage, so it must
+        # not hold the watermark.
+        owed: set[str] = {ts for ts, mark in known.items() if mark is not None}
         for message in messages:
-            if message.get("reply_count"):
+            if message.get("subtype") in (None, "thread_broadcast"):
                 known.setdefault(message["ts"], None)
+                if message.get("reply_count"):
+                    owed.add(message["ts"])
+        known = prune_threads(known)
+        owed &= set(known)
+
+        watched = sorted(ts for ts in known if ts not in owed)
+        start_thread = thread_offset(channel["id"], len(watched))
+        rotated = watched[start_thread:] + watched[:start_thread]
+        order = sorted(owed) + rotated[:THREADS_PER_TICK]
+        served_watched = 0
 
         threaded: list[dict[str, Any]] = []
         threads_complete = True
-        for parent_ts in sorted(known):
+        for parent_ts in order:
             if budget.left <= 0:
-                threads_complete = False
+                # Only an unread *owed* thread is incomplete coverage.
+                if parent_ts in owed:
+                    threads_complete = False
                 break
+            if parent_ts not in owed:
+                served_watched += 1
             try:
                 found, done = replies(token, channel["id"], parent_ts,
                                       known[parent_ts], budget)
@@ -695,14 +798,15 @@ def collect(token: str, caps: dict[str, Any],
                 # storing. Reported, but it does not make the run a failure.
                 partial.append({"family": channel["type"], "scope": "thread",
                                 "error": exc.error})
-                threads_complete = False
+                if parent_ts in owed:
+                    threads_complete = False
                 break
             threaded.extend(found)
             if done and found:
                 known[parent_ts] = found[-1]["ts"]
+                owed.add(parent_ts)
             elif not done:
                 threads_complete = False
-        save_threads(channel["id"], known)
 
         items = [
             slack_message_to_item(message, channel, caps["user_id"],
@@ -711,6 +815,11 @@ def collect(token: str, caps: dict[str, Any],
             if worth_judging(message, caps["user_id"])
         ]
         if not items:
+            # Nothing to store, so nothing to lose by recording where the
+            # thread reading reached.
+            save_threads(channel["id"], known)
+            save_thread_offset(channel["id"], start_thread + served_watched,
+                               len(watched))
             continue
         fetched += len(items)
         # Only a complete crawl may move the watermark; the rows are idempotent
@@ -723,6 +832,15 @@ def collect(token: str, caps: dict[str, Any],
         if not complete or not threads_complete:
             incomplete.append(channel["type"])
         added += commit_channel(channel, items, watermark)
+        # Only now. `save_threads` writes a file rather than a row, so it
+        # cannot share the store's transaction — but it can be made to happen
+        # strictly afterwards. Advancing a thread watermark before the rows it
+        # covers are durable is how a crash in between skips those replies
+        # permanently: the next run reads from a position past messages that
+        # were never written.
+        save_threads(channel["id"], known)
+        save_thread_offset(channel["id"], start_thread + served_watched,
+                           len(watched))
 
     if channels:
         save_rotation((start + served) % len(channels))

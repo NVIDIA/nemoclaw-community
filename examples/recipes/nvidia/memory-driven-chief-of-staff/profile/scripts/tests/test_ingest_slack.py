@@ -602,8 +602,14 @@ class TestOneBadConversationDoesNotDiscardTheRest(CollectorCase):
         self.serve(self._three_with_one_broken())
         self.run_main()
         payload = json.loads(self.stdout)
-        self.assertEqual(payload["partial"], [{"family": "im",
-                                               "error": "ratelimited"}])
+        # The property is that nothing names the conversation, not that the
+        # report has one exact shape — a thread-level failure carries a
+        # `scope` and is equally anonymous.
+        self.assertTrue(payload["partial"], "the failure was not reported")
+        for entry in payload["partial"]:
+            self.assertEqual(entry["family"], "im")
+            self.assertIn("error", entry)
+            self.assertNotIn("D02", json.dumps(entry))
         self.assertNotIn("D02", self.stdout)
 
     def test_a_partial_failure_still_exits_zero(self):
@@ -957,7 +963,15 @@ class TestThreadRepliesAreCollected(CollectorCase):
         stored = [row[0] for row in self.rows()]
         self.assertEqual(stored.count("D01:1787000000.0001"), 1)
 
-    def test_a_thread_with_no_replies_costs_no_call(self):
+    def test_a_parent_with_no_replies_is_still_checked_later(self):
+        """This used to assert the opposite, and the opposite was the defect.
+
+        A parent with no replies was never fetched again, and an ordinary
+        thread reply does not appear in `conversations.history` — so once the
+        channel watermark passed the parent, its first later reply was
+        invisible for as long as the thread stayed alive. Checking costs one
+        call, which is why it is bounded rather than avoided.
+        """
         responses = self._threaded()
         responses["conversations.history"] = lambda p: (
             {"ok": True, "messages": []} if p.get("limit") == "1" else
@@ -965,8 +979,95 @@ class TestThreadRepliesAreCollected(CollectorCase):
              "messages": [{"ts": "1787000000.0001", "user": OTHER, "text": "hi"}]})
         self.serve(responses)
         self.run_main()
-        self.assertNotIn("conversations.replies",
-                         [m for m, _ in self.slack.calls])
+        self.assertIn("conversations.replies",
+                      [m for m, _ in self.slack.calls])
+
+    def test_checking_watched_parents_is_bounded_per_tick(self):
+        """Otherwise a busy channel spends the whole budget on parents that
+        have nothing to say."""
+        parents = [{"ts": f"17870000{i:02d}.0001", "user": OTHER,
+                    "text": f"m{i}"}
+                   for i in range(ingest_slack.THREADS_PER_TICK + 12)]
+        responses = self._threaded()
+        responses["conversations.history"] = lambda p: (
+            {"ok": True, "messages": []} if p.get("limit") == "1" else
+            {"ok": True, "has_more": False, "messages": parents})
+        os.environ["INTAKE_SLACK_BUDGET"] = "200"
+        self.serve(responses)
+        self.run_main()
+        replies = sum(1 for m, _ in self.slack.calls
+                      if m == "conversations.replies")
+        self.assertLessEqual(replies, ingest_slack.THREADS_PER_TICK)
+
+    def test_the_next_tick_checks_different_parents(self):
+        """Serving the oldest every time never reaches the newest, which are
+        the ones most likely to be waiting on a reply.
+
+        The parents here never gain a reply, so they stay in the watched set
+        across ticks. That is the case rotation exists for: a parent that
+        answers once moves out of the set on its own and would make an
+        unrotated collector look fair.
+        """
+        parents = [{"ts": f"17870000{i:02d}.0001", "user": OTHER,
+                    "text": f"m{i}"}
+                   for i in range(ingest_slack.THREADS_PER_TICK * 3)]
+        responses = self._threaded()
+        responses["conversations.history"] = lambda p: (
+            {"ok": True, "messages": []} if p.get("limit") == "1" else
+            {"ok": True, "has_more": False, "messages": parents})
+        # No replies, ever: the parent comes back and nothing else.
+        responses["conversations.replies"] = lambda p: (
+            {"ok": True, "has_more": False,
+             "messages": [{"ts": p.get("ts"), "user": OTHER, "text": "m"}]})
+        os.environ["INTAKE_SLACK_BUDGET"] = "200"
+        self.serve(responses)
+        self.run_main()
+        first = {c.get("ts") for m, c in self.slack.calls
+                 if m == "conversations.replies"}
+        self.slack.calls.clear()
+        self.run_main()
+        second = {c.get("ts") for m, c in self.slack.calls
+                  if m == "conversations.replies"}
+        self.assertTrue(first, "the first tick checked nothing")
+        self.assertTrue(second - first,
+                        "the second tick checked only parents the first "
+                        "already had — the newest are never reached")
+
+    def test_thread_progress_is_not_recorded_before_the_rows_are_durable(self):
+        """A crash between the two skipped those replies permanently.
+
+        `save_threads` writes a file rather than a row, so it cannot share the
+        store's transaction — but it can be made to happen strictly after the
+        commit. Here the commit is made to fail: the thread watermark must not
+        have moved, so the next run reads the same replies again rather than
+        starting past messages that were never written.
+        """
+        self.serve(self._threaded())
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
+        original = ingest_slack.commit_channel
+
+        def refuse(channel, items, watermark):
+            raise sqlite3.OperationalError("disk I/O error")
+
+        ingest_slack.commit_channel = refuse
+        try:
+            with self.assertRaises(sqlite3.Error):
+                self.run_main()
+        finally:
+            ingest_slack.commit_channel = original
+
+        self.assertEqual(
+            ingest_slack.read_threads("D01"), {},
+            "thread progress was recorded over rows that were never written")
+
+    def test_thread_progress_is_recorded_once_the_rows_are_durable(self):
+        """The other half: it must still be recorded on the happy path, or
+        every tick re-reads every thread."""
+        self.serve(self._threaded())
+        os.environ["SLACK_USER_TOKEN"] = "xoxe.xoxp-test"
+        self.run_main()
+        self.assertTrue(ingest_slack.read_threads("D01"),
+                        "no thread progress recorded after a good run")
 
     def test_a_failing_thread_does_not_discard_the_conversation(self):
         responses = self._threaded()

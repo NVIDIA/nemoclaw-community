@@ -60,17 +60,6 @@ command -v python3 >/dev/null 2>&1 || {
   exit 1
 }
 
-echo "1/7  Looking for a Slack credential this sandbox can already read"
-
-# `|| true` here would turn every failure into "nothing attached" — a mistyped
-# sandbox name, an unauthenticated gateway, a stopped one — and answer by
-# creating a duplicate. Ask, then check.
-if ! attached="$(openshell sandbox provider list "$SANDBOX" 2>&1)"; then
-  echo "Could not list providers on sandbox '$SANDBOX'." >&2
-  echo "Check the name with: openshell sandbox list" >&2
-  exit 1
-fi
-
 # The output is a table whose first column is the provider name, with a header
 # row. Take field one from every line after the first, and do not transform it —
 # a name is what gets passed back to the same CLI.
@@ -80,6 +69,155 @@ fi
 # and one with no refresh configured will simply expire in twelve hours. Both
 # would attach cleanly and fail later, quietly. So the state is validated and a
 # mismatch stops the run rather than being worked around.
+# The storage prerequisite, checked before anything is inspected or
+# attached.
+#
+# It used to sit after the reuse early-exit, which meant a run that
+# found a usable provider printed "Nothing to do" and exited 0 without
+# ever checking it — reported as a successful setup on a machine whose
+# store had never been looked at. The check belongs before the branch,
+# because it is a property of the machine rather than of the run.
+require_encrypted_storage() {
+  # Attaching this provider is the moment real message bodies start landing in
+  # the store, and the prerequisite is that they land on an encrypted volume.
+  # Owner-only permissions are not that: they stop another account reading the
+  # file on a running system and do nothing for a disk that is lost, imaged, or
+  # backed up.
+  #
+  # Which volume is the whole question, and it is not one this script can guess.
+  # `HERMES_HOME` inside a sandbox is an overlay with no block device behind it,
+  # so encryption is unobservable from in there. On the host it depends on the
+  # driver: Docker keeps sandbox storage under its data-root, a VM keeps it in a
+  # disk image, Kubernetes in a volume — none of which is reliably `$HOME`. An
+  # earlier version inspected `$HOME` and would have approved the wrong volume on
+  # every one of those.
+  #
+  # So the path is asserted rather than inferred. `SANDBOX_STORAGE_PATH` names
+  # where this sandbox's storage actually lives; the script then verifies *that*
+  # path, which is a real check rather than a plausible one.
+  storage_path="${SANDBOX_STORAGE_PATH:-}"
+  if [[ -z "$storage_path" ]]; then
+    echo "     where this sandbox's storage lives is not something this script"
+    echo "     can determine — it differs by driver, and guessing would mean"
+    echo "     checking the wrong volume."
+    echo ""
+    echo "Find it, then re-run with it named. For the Docker driver:"
+    echo "  docker info --format '{{.DockerRootDir}}'"
+    echo ""
+    echo "  SANDBOX_STORAGE_PATH=<path> bash scripts/setup-slack.sh"
+    echo ""
+    echo "docs/encrypted-storage.md explains what to look for and why."
+    exit 1
+  fi
+  if [[ ! -e "$storage_path" ]]; then
+    echo "SANDBOX_STORAGE_PATH does not exist: $storage_path" >&2
+    exit 1
+  fi
+
+  encrypted="unknown"
+  if command -v findmnt >/dev/null 2>&1 && command -v lsblk >/dev/null 2>&1; then
+    source_dev="$(findmnt -no SOURCE --target "$storage_path" 2>/dev/null || true)"
+    if [[ -n "$source_dev" ]]; then
+      if lsblk -no TYPE "$source_dev" 2>/dev/null | grep -q crypt; then
+        encrypted="yes"
+      else
+        encrypted="no"
+      fi
+    fi
+  fi
+
+  case "$encrypted" in
+    yes)
+      echo "     $storage_path is on an encrypted volume" ;;
+    no)
+      echo "     $storage_path does NOT appear to be on an encrypted volume" ;;
+    *)
+      echo "     could not determine whether $storage_path is encrypted" ;;
+  esac
+
+  if [[ "$encrypted" != "yes" ]]; then
+    echo ""
+    echo "This recipe stores message subjects, senders and bodies once a"
+    echo "connector is attached. See docs/encrypted-storage.md."
+    echo ""
+    if [[ "${STORE_ENCRYPTION_ACKNOWLEDGED:-0}" == "1" ]]; then
+      echo "     STORE_ENCRYPTION_ACKNOWLEDGED=1 — continuing."
+    else
+      read -r -p "Type 'encrypted' to confirm the prerequisite is met: " ACK
+      if [[ "$ACK" != "encrypted" ]]; then
+        echo "Not confirmed. Nothing has been configured." >&2
+        exit 1
+      fi
+    fi
+  fi
+}
+
+# The registered profile, checked field by field rather than by looking for
+# strings anywhere in a rendered blob.
+#
+# The previous version grepped for `host: slack.com` and `access: read-only`
+# independently. Those can belong to different endpoints — a profile with a
+# read-only entry for one host and a read-write entry for slack.com passes
+# both greps — and enforcement was not checked at all, so a profile in
+# `observe` mode read as enforced. This exports the profile as JSON and
+# validates the exact endpoint: the host, the port, the access level, the
+# enforcement mode, and that the credential this recipe uses is the one the
+# profile declares.
+validate_profile() {
+  local id="$1" exported
+  if ! exported="$(openshell provider profile export "$id" -o json 2>&1)"; then
+    echo "     could not export provider profile '$id'" >&2
+    return 1
+  fi
+  PROFILE_JSON="$exported" USABLE_KEY="$USABLE_KEY" python3 - <<'PYCHECK'
+import json, os, sys
+
+want_host, want_port = "slack.com", 443
+try:
+    profile = json.loads(os.environ["PROFILE_JSON"])
+except json.JSONDecodeError as exc:
+    sys.exit(f"     provider profile is not valid JSON: {exc}")
+
+endpoints = profile.get("endpoints") or []
+matching = [e for e in endpoints
+            if e.get("host") == want_host and int(e.get("port", 0)) == want_port]
+if not matching:
+    hosts = ", ".join(sorted({str(e.get("host")) for e in endpoints})) or "none"
+    sys.exit(f"     profile declares no {want_host}:{want_port} endpoint "
+             f"(found: {hosts})")
+if len(matching) > 1:
+    sys.exit(f"     profile declares {len(matching)} {want_host} endpoints; "
+             "exactly one is expected")
+
+endpoint = matching[0]
+if endpoint.get("access") != "read-only":
+    sys.exit(f"     {want_host} is declared {endpoint.get('access')!r}, not "
+             "read-only. This recipe never writes to Slack and the boundary "
+             "is what enforces that.")
+if endpoint.get("enforcement") != "enforce":
+    sys.exit(f"     {want_host} enforcement is {endpoint.get('enforcement')!r}, "
+             "not 'enforce'. Anything else observes rather than refuses.")
+
+# Anything the profile allows beyond that one endpoint widens the boundary
+# without saying so.
+extra = [e for e in endpoints if e is not endpoint]
+if extra:
+    hosts = ", ".join(sorted({str(e.get("host")) for e in extra}))
+    sys.exit(f"     profile allows more than {want_host}: {hosts}")
+
+key = os.environ["USABLE_KEY"]
+declared = {v for c in (profile.get("credentials") or [])
+            for v in (c.get("env_vars") or [])}
+if key not in declared:
+    sys.exit(f"     profile does not declare {key} "
+             f"(declares: {', '.join(sorted(declared)) or 'nothing'})")
+
+if not (profile.get("binaries") or []):
+    sys.exit("     profile declares no binary allow-list, so any process in "
+             "the sandbox could spend the credential")
+PYCHECK
+}
+
 validate_provider() {
   local name="$1" detail
   if ! detail="$(openshell provider get "$name" 2>&1)"; then
@@ -103,8 +241,30 @@ validate_provider() {
     echo "     '$name' is not configured for token rotation" >&2
     return 1
   fi
+  # The endpoint policy is the part that decides what the credential can
+  # reach. A provider of the right type whose profile was edited afterwards
+  # attaches cleanly and is not the boundary this recipe describes.
+  if ! validate_profile "$type"; then
+    echo "     '$name' does not carry this recipe's endpoint policy" >&2
+    return 1
+  fi
   return 0
 }
+
+echo "1/7  Storage encryption"
+require_encrypted_storage
+
+echo "2/7  Looking for a Slack credential this sandbox can already read"
+
+# `|| true` here would turn every failure into "nothing attached" — a mistyped
+# sandbox name, an unauthenticated gateway, a stopped one — and answer by
+# creating a duplicate. Ask, then check.
+if ! attached="$(openshell sandbox provider list "$SANDBOX" 2>&1)"; then
+  echo "Could not list providers on sandbox '$SANDBOX'." >&2
+  echo "Check the name with: openshell sandbox list" >&2
+  exit 1
+fi
+
 
 reusable=""
 while read -r name; do
@@ -121,14 +281,21 @@ while read -r name; do
     echo "     a different name." >&2
     exit 1
   fi
-  # A bot-shaped Slack provider attaches cleanly and delivers nothing a cron
-  # pre-step can read: Hermes removes `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN`
-  # from the environment of the subprocesses it spawns, so a shell command an
-  # agent wrote cannot read them. `providers/slack-user.yaml` carries the
-  # command to check that list on your own install.
+  # Say what is true of this provider, not of every provider that is not the
+  # one being looked for. An earlier version printed "is removed from cron
+  # subprocesses" for whatever it skipped, which is right for the Slack bot
+  # and app tokens and wrong for others: measured on Hermes 0.19.0,
+  # `SLACK_BOT_TOKEN` is absent from a cron subprocess while
+  # `MS_GRAPH_ACCESS_TOKEN` arrives as a placeholder. Claiming otherwise sends
+  # somebody to debug a stripped variable that was never stripped.
   if [[ -n "$keys" ]]; then
-    echo "     skipping '$name' — its credential key ($keys) is removed from"
-    echo "     cron subprocesses, so the collector would never see it"
+    case "$keys" in
+      *SLACK_BOT_TOKEN*|*SLACK_APP_TOKEN*)
+        echo "     skipping '$name' — Hermes removes $keys from cron"
+        echo "     subprocesses, so the collector would never see it" ;;
+      *)
+        echo "     skipping '$name' — it exposes $keys, not $USABLE_KEY" ;;
+    esac
   fi
 done < <(printf '%s\n' "$attached" \
          | sed 's/\x1b\[[0-9;]*m//g' \
@@ -147,80 +314,6 @@ if [[ -n "$reusable" ]]; then
   PROVIDER="$reusable"
 else
   echo "     none attached that exposes $USABLE_KEY"
-fi
-
-echo "2/7  Storage encryption"
-# Attaching this provider is the moment real message bodies start landing in
-# the store, and the prerequisite is that they land on an encrypted volume.
-# Owner-only permissions are not that: they stop another account reading the
-# file on a running system and do nothing for a disk that is lost, imaged, or
-# backed up.
-#
-# Which volume is the whole question, and it is not one this script can guess.
-# `HERMES_HOME` inside a sandbox is an overlay with no block device behind it,
-# so encryption is unobservable from in there. On the host it depends on the
-# driver: Docker keeps sandbox storage under its data-root, a VM keeps it in a
-# disk image, Kubernetes in a volume — none of which is reliably `$HOME`. An
-# earlier version inspected `$HOME` and would have approved the wrong volume on
-# every one of those.
-#
-# So the path is asserted rather than inferred. `SANDBOX_STORAGE_PATH` names
-# where this sandbox's storage actually lives; the script then verifies *that*
-# path, which is a real check rather than a plausible one.
-storage_path="${SANDBOX_STORAGE_PATH:-}"
-if [[ -z "$storage_path" ]]; then
-  echo "     where this sandbox's storage lives is not something this script"
-  echo "     can determine — it differs by driver, and guessing would mean"
-  echo "     checking the wrong volume."
-  echo ""
-  echo "Find it, then re-run with it named. For the Docker driver:"
-  echo "  docker info --format '{{.DockerRootDir}}'"
-  echo ""
-  echo "  SANDBOX_STORAGE_PATH=<path> bash scripts/setup-slack.sh"
-  echo ""
-  echo "docs/encrypted-storage.md explains what to look for and why."
-  exit 1
-fi
-if [[ ! -e "$storage_path" ]]; then
-  echo "SANDBOX_STORAGE_PATH does not exist: $storage_path" >&2
-  exit 1
-fi
-
-encrypted="unknown"
-if command -v findmnt >/dev/null 2>&1 && command -v lsblk >/dev/null 2>&1; then
-  source_dev="$(findmnt -no SOURCE --target "$storage_path" 2>/dev/null || true)"
-  if [[ -n "$source_dev" ]]; then
-    if lsblk -no TYPE "$source_dev" 2>/dev/null | grep -q crypt; then
-      encrypted="yes"
-    else
-      encrypted="no"
-    fi
-  fi
-fi
-
-case "$encrypted" in
-  yes)
-    echo "     $storage_path is on an encrypted volume" ;;
-  no)
-    echo "     $storage_path does NOT appear to be on an encrypted volume" ;;
-  *)
-    echo "     could not determine whether $storage_path is encrypted" ;;
-esac
-
-if [[ "$encrypted" != "yes" ]]; then
-  echo ""
-  echo "This recipe stores message subjects, senders and bodies once a"
-  echo "connector is attached. See docs/encrypted-storage.md."
-  echo ""
-  if [[ "${STORE_ENCRYPTION_ACKNOWLEDGED:-0}" == "1" ]]; then
-    echo "     STORE_ENCRYPTION_ACKNOWLEDGED=1 — continuing."
-  else
-    read -r -p "Type 'encrypted' to confirm the prerequisite is met: " ACK
-    if [[ "$ACK" != "encrypted" ]]; then
-      echo "Not confirmed. Nothing has been configured." >&2
-      exit 1
-    fi
-  fi
 fi
 
 echo "3/7  App credentials"

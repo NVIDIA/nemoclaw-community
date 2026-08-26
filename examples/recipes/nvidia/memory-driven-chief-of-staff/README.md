@@ -244,7 +244,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the eleven files report 355 tests in
+Expected result: every file ends with `OK`, the eleven files report 392 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -261,7 +261,7 @@ leave the loop exiting `0`.
 | The walkthrough, and its central claims | `tests/test_walkthrough.py` |
 | Selector output, the wake gate, and the scheduler contract | `tests/test_selectors.py` |
 | Retention, exclusion, export and reset | `tests/test_lifecycle.py` |
-| The Slack collector: watermarks, partial failure, scope probing, the credential never reaching a stream, and the lifecycle controls applying to what it writes | `tests/test_ingest_slack.py` |
+| The Slack collector: watermarks, partial failure, scope probing, thread discovery and rotation, the credential never reaching a stream, and the lifecycle controls applying to what it writes | `tests/test_ingest_slack.py` |
 
 Four points are worth calling out.
 

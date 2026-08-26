@@ -150,6 +150,31 @@ the window being throttled and then discards the work. Naming channels is what
 makes coverage bounded, and it also keeps the recipe from collecting far more
 than the job needs.
 
+### Threads, and what the bound costs
+
+A thread reply does not appear in `conversations.history` — only the parent
+does, and only while it is inside the window being read. Once the channel
+watermark passes a parent, Slack never returns it again. So a thread that is
+still alive needs its own watermark, and a parent with no replies yet needs to
+be checked occasionally in case a first one arrives.
+
+Both are bounded, and the bounds are worth knowing because they are the
+difference between "collected everything" and "collected what a scheduled tick
+can afford":
+
+- A channel remembers its **200 most recent** parents for that check. A first
+  reply to something further back than that is not discovered. Parents that
+  already have replies are remembered regardless of age, since forgetting one
+  would re-read the whole thread.
+- Each tick checks **eight** of the watched parents, starting where the last
+  tick stopped, so a busy channel reaches all of them within a few ticks
+  rather than serving the oldest forever. Threads that are known to have
+  replies are always read first; only those hold the channel watermark back.
+
+Neither bound loses a message that has already been collected. They decide how
+quickly a *new* reply to an *old* thread is noticed, which on a half-hourly
+schedule is a few ticks rather than immediately.
+
 Naming a channel decides what is read. Deciding what is *never stored* is a
 separate list, `workspace/exclusions.json`, which takes senders, domains and
 channels and is applied before any row is written — so a colleague you would

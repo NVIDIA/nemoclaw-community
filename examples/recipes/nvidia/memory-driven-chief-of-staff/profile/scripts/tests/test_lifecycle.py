@@ -577,6 +577,7 @@ class TestResetLeavesNothingBehind(StoreCase):
         "slack_channels.json",
         "slack_threads.json",
         "slack_rotation.json",
+        "slack_thread_rotation.json",
         "graph_identity.json",
         "exclusions.json",
     )

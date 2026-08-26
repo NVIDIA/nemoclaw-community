@@ -1064,15 +1064,165 @@ class TestTheEncryptionPrerequisiteIsEstablishedNotMentioned(unittest.TestCase):
         text = page.read_text(encoding="utf-8")
         self.assertIn("not encryption", text)
 
-    def test_the_setup_script_gates_on_it_before_attaching(self):
-        code = "\n".join(line for line in self.SCRIPT.read_text().splitlines()
-                         if not line.lstrip().startswith("#"))
-        gate = code.find("STORE_ENCRYPTION_ACKNOWLEDGED")
-        attach = code.find("sandbox provider attach")
-        self.assertNotEqual(gate, -1, "no encryption gate in the setup flow")
-        self.assertLess(gate, attach,
-                        "the gate must precede attaching, or bodies can land "
-                        "before the question is asked")
+    # What the registered profile is supposed to look like. The tests below
+    # bend one field at a time, because the finding was that a profile could
+    # be wrong in a way independent substring checks could not see.
+    GOOD_PROFILE = {
+        "id": "memory-driven-cos-slack-user",
+        "endpoints": [{"host": "slack.com", "port": 443, "protocol": "rest",
+                       "access": "read-only", "enforcement": "enforce"}],
+        "credentials": [{"env_vars": ["SLACK_USER_TOKEN"]}],
+        "binaries": ["/usr/bin/python3"],
+    }
+
+    def fake_openshell(self, folder, *, reusable=True, policy=None):
+        """An `openshell` on PATH that reports a provider worth reusing.
+
+        The reuse path is the one that skipped the gate, and it cannot be
+        reached without a gateway answering. Stubbing the command is what lets
+        the script actually run to that branch.
+        """
+        stub = folder / "openshell"
+        rows = "mdcos-slack  memory-driven-cos-slack-user  1" if reusable else ""
+        profile = json.dumps(dict(self.GOOD_PROFILE, **(policy or {})))
+        stub.write_text(f"""#!/usr/bin/env bash
+case "$1 $2" in
+  "sandbox provider") cat <<'LIST'
+NAME  TYPE  CREDENTIAL_KEYS
+{rows}
+LIST
+  ;;
+  "provider get") printf 'Type: memory-driven-cos-slack-user\\nCredential keys: SLACK_USER_TOKEN\\n' ;;
+  "provider refresh") printf 'STRATEGY oauth2_refresh_token STATUS refreshed\\n' ;;
+  "provider profile") cat <<'JSON'
+{profile}
+JSON
+  ;;
+  *) exit 0 ;;
+esac
+""", encoding="utf-8")
+        stub.chmod(0o755)
+
+        # The script refuses to run outside Linux, which is a different gate
+        # and not what these tests are about. Answering `uname` keeps them
+        # runnable on a contributor's machine; the Linux refusal has its own
+        # test elsewhere.
+        uname = folder / "uname"
+        uname.write_text("#!/usr/bin/env bash\necho Linux\n", encoding="utf-8")
+        uname.chmod(0o755)
+        return folder
+
+    def run_setup(self, folder, env):
+        base = {"PATH": f"{folder}:{os.environ['PATH']}",
+                "HOME": str(folder), "OPENSHELL_SANDBOX": ""}
+        base.update(env)
+        return subprocess.run(
+            ["bash", str(self.SCRIPT)], capture_output=True, text=True,
+            stdin=subprocess.DEVNULL, cwd=str(self.RECIPE), env=base)
+
+    def test_the_gate_runs_even_when_a_usable_provider_is_already_attached(self):
+        """The reproduced defect: reuse exited 0 without ever checking.
+
+        The previous test for this compared the position of two strings in the
+        source. The early exit sits between them, so it stayed green for as
+        long as the bypass shipped. This runs the script.
+        """
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            self.fake_openshell(folder)
+            proc = self.run_setup(folder, {})
+        self.assertNotEqual(proc.returncode, 0,
+                            "setup succeeded without checking storage")
+        self.assertNotIn("Nothing to do", proc.stdout,
+                         "reported a finished setup with the prerequisite "
+                         "unchecked")
+        self.assertIn("SANDBOX_STORAGE_PATH", proc.stdout + proc.stderr)
+
+    def test_the_gate_runs_before_anything_is_inspected(self):
+        """Ordering asserted by what the run produced, not by source offsets."""
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            self.fake_openshell(folder, reusable=False)
+            proc = self.run_setup(folder, {})
+        out = proc.stdout + proc.stderr
+        self.assertIn("SANDBOX_STORAGE_PATH", out)
+        self.assertNotIn("none attached that exposes", out,
+                         "looked for a credential before checking the "
+                         "prerequisite")
+
+    def test_a_named_path_that_does_not_exist_stops_the_run(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            self.fake_openshell(folder)
+            proc = self.run_setup(
+                folder, {"SANDBOX_STORAGE_PATH": str(folder / "nope")})
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("does not exist", proc.stdout + proc.stderr)
+
+    def refuses_policy(self, policy, expected):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            self.fake_openshell(folder, policy=policy)
+            proc = self.run_setup(folder, {
+                "SANDBOX_STORAGE_PATH": str(folder),
+                "STORE_ENCRYPTION_ACKNOWLEDGED": "1"})
+        out = proc.stdout + proc.stderr
+        self.assertNotIn("Nothing to do", out,
+                         f"reused a provider whose profile is {expected}")
+        return out
+
+    def test_a_read_write_slack_endpoint_is_not_reused(self):
+        """The recipe never writes to Slack; the boundary is what enforces it."""
+        out = self.refuses_policy(
+            {"endpoints": [{"host": "slack.com", "port": 443,
+                            "protocol": "rest", "access": "read-write",
+                            "enforcement": "enforce"}]},
+            "read-write")
+        self.assertIn("read-only", out)
+
+    def test_an_unenforced_endpoint_is_not_reused(self):
+        """`observe` watches a write go through and records it."""
+        out = self.refuses_policy(
+            {"endpoints": [{"host": "slack.com", "port": 443,
+                            "protocol": "rest", "access": "read-only",
+                            "enforcement": "observe"}]},
+            "unenforced")
+        self.assertIn("enforce", out)
+
+    def test_a_second_host_is_not_reused(self):
+        """The defect the substring checks allowed: a read-only entry for one
+        host and something else for another, both matching the old greps."""
+        out = self.refuses_policy(
+            {"endpoints": [
+                {"host": "slack.com", "port": 443, "protocol": "rest",
+                 "access": "read-only", "enforcement": "enforce"},
+                {"host": "files.slack.example", "port": 443,
+                 "protocol": "rest", "access": "read-write",
+                 "enforcement": "enforce"}]},
+            "wider than slack.com")
+        self.assertIn("files.slack.example", out)
+
+    def test_a_profile_that_does_not_declare_the_credential_is_not_reused(self):
+        out = self.refuses_policy(
+            {"credentials": [{"env_vars": ["SLACK_BOT_TOKEN"]}]},
+            "bound to a different credential")
+        self.assertIn("SLACK_USER_TOKEN", out)
+
+    def test_a_profile_with_no_binary_allow_list_is_not_reused(self):
+        """Without one, any process in the sandbox can spend the credential."""
+        out = self.refuses_policy({"binaries": []}, "unbounded by binary")
+        self.assertIn("binary", out)
+
+    def test_an_acknowledged_unencrypted_path_lets_the_run_continue(self):
+        """The gate is a question, not a wall — but it has to be asked."""
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            self.fake_openshell(folder)
+            proc = self.run_setup(folder, {
+                "SANDBOX_STORAGE_PATH": str(folder),
+                "STORE_ENCRYPTION_ACKNOWLEDGED": "1"})
+        self.assertIn("Nothing to do", proc.stdout,
+                      "the acknowledged path should reach the reuse branch")
 
     def test_an_unconfirmed_prerequisite_aborts(self):
         code = "\n".join(line for line in self.SCRIPT.read_text().splitlines()

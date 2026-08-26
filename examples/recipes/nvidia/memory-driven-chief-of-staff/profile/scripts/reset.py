@@ -44,6 +44,7 @@ COLLECTION_STATE = (
     "slack_channels.json",       # the public channels the user named
     "slack_threads.json",        # per-thread watermarks
     "slack_rotation.json",       # where the next bounded tick starts
+    "slack_thread_rotation.json",  # per-channel thread rotation
     "graph_identity.json",       # the mailbox the token belongs to
     "exclusions.json",           # who the user chose to keep out
 )
