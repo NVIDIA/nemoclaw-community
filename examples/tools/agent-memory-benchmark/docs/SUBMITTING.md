@@ -101,7 +101,7 @@ not "free".
 ## What makes a submission comparable
 
 * **Say which base model you used.** A row is a (system × model) pair, and the
-  leaderboard groups by model. Two models is better than one: an architectural
+  a result is a (system, model) pair. Two models is better than one: an architectural
   advantage that appears under one model and vanishes under another is not an
   architectural advantage.
 * **One question, one context.** See step 2.
@@ -135,8 +135,8 @@ python3 -m bench.runner --adapter adapters/my-system \
   --gold corpus_b/questions/answers.jsonl
 ```
 
-Corpus B is 97 questions over 173 documents. Base (86): `single_hop` 40,
-`multi_source` 20, `abstention` 12, `disambiguation` 7, `freshness` 7. Hard
+Corpus B is 96 questions over 173 documents. Base (85): `single_hop` 40,
+`multi_source` 19, `abstention` 12, `disambiguation` 7, `freshness` 7. Hard
 (11): `as_of` 7, `chain_freshness` 2, `disambiguation` 1, `ordering` 1. It is a
 smaller and differently balanced set than corpus A, so read the two as separate
 results rather than averaging them. Its `multi_source` items are also annotated
@@ -159,13 +159,11 @@ not the recipe's own behaviour: the recipe has no question-answering path.
 
 ## Where a result goes
 
-There is no hosted leaderboard. `tools/leaderboard.py` builds a local table
-from the runs in a directory you choose, and that is what "leaderboard" means
-throughout these docs:
-
-```bash
-python3 tools/leaderboard.py --runs results/runs --out results/leaderboard.md
-```
+There is no hosted leaderboard and no table renderer ships here: each run
+writes its own `report.json`, and comparing runs is the reader's job. Two
+reports are comparable only when their `fingerprint` blocks match — same
+corpus, same questions, same answer key, same normalization. Compare rows that
+differ in any of those and the numbers are not measuring the same thing.
 
 To contribute a system rather than only score one, open a pull request adding
 `adapters/<name>/` — the adapter definition and whatever code it needs. Keep

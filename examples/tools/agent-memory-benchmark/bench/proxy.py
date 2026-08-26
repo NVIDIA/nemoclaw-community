@@ -54,11 +54,19 @@ class Usage:
 
     phase: str = "ingest"
     calls: dict[str, int] = field(default_factory=dict)
+    # Every request the proxy forwarded upstream, whether or not the response
+    # carried usage. counted < forwarded means the run's cost is understated,
+    # and a cost nobody measured must not read as a cost of zero.
+    forwarded: dict[str, int] = field(default_factory=dict)
     input_tokens: dict[str, int] = field(default_factory=dict)
     output_tokens: dict[str, int] = field(default_factory=dict)
     models: dict[str, int] = field(default_factory=dict)
     by_phase_model: dict[str, dict[str, list[int]]] = field(default_factory=dict)
     lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def note_forwarded(self) -> None:
+        with self.lock:
+            self.forwarded[self.phase] = self.forwarded.get(self.phase, 0) + 1
 
     def add(self, model: str, prompt: int, completion: int) -> None:
         with self.lock:
@@ -75,6 +83,12 @@ class Usage:
         with self.lock:
             return {
                 "calls": dict(self.calls),
+                "forwarded": dict(self.forwarded),
+                "uncounted": {
+                    phase: n - self.calls.get(phase, 0)
+                    for phase, n in self.forwarded.items()
+                    if n > self.calls.get(phase, 0)
+                },
                 "input_tokens": dict(self.input_tokens),
                 "output_tokens": dict(self.output_tokens),
                 "models": dict(self.models),
@@ -133,6 +147,10 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _forward(self, body: bytes) -> None:
         url = type(self).upstream.rstrip("/") + self.path
+        # Noted before the response exists: a request whose reply carries no
+        # usage still cost money, and the gap between forwarded and counted is
+        # what tells a reader the total is incomplete.
+        type(self).usage.note_forwarded()
         _log_error("request", f"{self.command} {self.path} bytes={len(body)}")
         headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP_BY_HOP}
         request = urllib.request.Request(url, data=body or None, headers=headers, method=self.command)

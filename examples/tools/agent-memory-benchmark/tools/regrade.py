@@ -84,6 +84,10 @@ def main() -> None:
             report["corpus"] = {"documents": 0, "part_a": 0, "part_b": 0}
         before = None
     report["summary"] = summarize(verdicts, gold)
+    # The fingerprint is the report's claim about what it was graded against.
+    # Regrading against a different question set or answer key changes that
+    # claim, so it is recomputed here rather than carried over.
+    report["fingerprint"] = fingerprint(args.corpus, args.questions, args.gold)
     report["regraded"] = True
     (args.run / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     (args.run / "verdicts.jsonl").write_text(

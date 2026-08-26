@@ -95,3 +95,25 @@ def test_every_drafted_question_is_published_or_recorded_as_dropped():
     drafted = {i.get("id") for i in json.loads((base / "factual_items.json").read_text())}
     orphans = sorted(drafted - published - dropped)
     assert not orphans, f"drafted, then neither published nor recorded as dropped: {orphans}"
+
+
+def test_the_documented_counts_match_the_shipped_question_set():
+    """A drop that is not reflected in the prose leaves two truths in the tree.
+
+    Dropping one question moved the total from 97 to 96, and the submission
+    guide and the catalog each stated it separately.
+    """
+    import re
+
+    guide = (REPO / "docs" / "SUBMITTING.md").read_text(encoding="utf-8")
+    stated = re.search(r"Corpus B is (\d+) questions over (\d+) documents", guide)
+    assert stated, "the submission guide no longer states corpus B's size"
+    assert int(stated.group(1)) == len(QUESTIONS)
+    assert int(stated.group(2)) == len(MANIFEST)
+
+    catalog = (REPO.parents[1] / "README.md").read_text(encoding="utf-8")
+    row = re.search(r"asks (\d+) questions on one corpus and (\d+) on a second", catalog)
+    assert row, "the example catalog no longer states the question counts"
+    assert int(row.group(2)) == len(QUESTIONS), (
+        f"examples/README.md says {row.group(2)}; corpus B ships {len(QUESTIONS)}"
+    )

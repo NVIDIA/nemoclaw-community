@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Turn per-question verdicts into the numbers a leaderboard row carries."""
+"""Turn per-question verdicts into the numbers a result carries."""
 
 from __future__ import annotations
 

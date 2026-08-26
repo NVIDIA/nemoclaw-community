@@ -185,7 +185,7 @@ def score_evidence(cited: list[str] | None, gold_ids: list[str] | None) -> tuple
     Returns ``(None, None)`` when the question has no gold ids or the system
     cited nothing — "did not participate" must not be scored as zero, or a
     system without provenance support would be penalized twice (once here and
-    once in the leaderboard's n/a cell).
+    once in the reported evidence rate).
     """
     if not gold_ids:
         return None, None

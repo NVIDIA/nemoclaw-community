@@ -28,26 +28,15 @@ curves cross — at what N a heavy ingest pays for itself — is a question the
 accuracy-only benchmarks we looked at do not report. If you know of one that
 does, open an issue.
 
-## At A Glance
+## Screenshot
 
-| Question | Answer |
-| --- | --- |
-| Category | Developer Tool |
-| Contributor or provenance | NVIDIA |
-| Use this when | You need to compare memory designs — consolidating, retrieval, or anything else — on the same corpus and the same questions. |
-| You will get | Accuracy per question type, plus ingest and per-answer token cost measured at a proxy rather than self-reported. |
-| Runs on | Any host with Python 3.9 or later, on macOS or Linux. The shipped adapter definitions invoke `python3`, which a default Windows install does not provide. |
-| Requires | `pytest` for the offline check. To score a real system: an API key for an OpenAI-compatible endpoint, and an adapter for the system under test. |
-| Verified on | Python 3.9.6 on macOS. Offline self-test and unit tests only; no scored run against a live endpoint is included as evidence here. |
-| Evidence level | local/static |
-| Support and maturity | Best-effort community support; see [SUPPORT.md](../../../SUPPORT.md). |
-| External access, data, and actions | Scoring a real system sends corpus text and questions to the endpoint you point `--upstream` at, and you pay for those tokens. The harness writes only under `results/`; an adapter you add is not sandboxed and can write anywhere your user can. The offline self-test sends nothing and costs nothing. |
-| Start here | [Checking it works](#checking-it-works) — offline; then [Running it](#running-it) for a scored run |
-| Confirm success | [Checking it works](#checking-it-works) |
+![Terminal session: the offline self-test scoring exactly 1.0 on every question type, followed by the test suite passing](docs/assets/offline-self-test.svg)
 
-## What a run looks like
-
-The offline self-test, run as printed in [Checking it works](#checking-it-works):
+The oracle adapter answers the six-document fixture correctly, so every type
+reads `1.0` and the freshness split reports `n/a` for the group this fixture
+does not annotate. The same command against `selftest/wrong` reports
+`accuracy overall: 0.0` with every type at `0.0`. Both run with no model, no
+network and no API key. The essential output, as searchable text:
 
 ```text
 # selftest-oracle — none (offline fixture)
@@ -68,12 +57,26 @@ The offline self-test, run as printed in [Checking it works](#checking-it-works)
 …
 ```
 
-The block continues with the freshness split, the evidence diagnostics, and a
-Cost section; on the offline fixture every token count is zero.
+The block continues with the evidence diagnostics and a Cost section; on the
+offline fixture every token count is zero. A scored run against a real system
+produces the same shape with those filled in.
 
-The same command with `--adapter selftest/wrong` reports `accuracy overall: **0.0**`
-with every type at `0.0`. A scored run against a real system produces the same
-shape with a Cost section filled in.
+## At A Glance
+
+| Question | Answer |
+| --- | --- |
+| Category | Developer Tool |
+| Contributor or provenance | NVIDIA |
+| Use this when | You need to compare memory designs — consolidating, retrieval, or anything else — on the same corpus and the same questions. |
+| You will get | Accuracy per question type, plus ingest and per-answer token cost measured at a proxy rather than self-reported. |
+| Runs on | Any host with Python 3.9 or later, on macOS or Linux. The shipped adapter definitions invoke `python3`, which a default Windows install does not provide. |
+| Requires | `pytest` for the offline check. To score a real system: an API key for an OpenAI-compatible endpoint, and an adapter for the system under test. |
+| Verified on | Python 3.9.6 on macOS. Offline self-test and unit tests only; no scored run against a live endpoint is included as evidence here. |
+| Evidence level | local/static |
+| Support and maturity | Best-effort community support; see [SUPPORT.md](../../../SUPPORT.md). |
+| External access, data, and actions | Scoring a real system sends corpus text and questions to the endpoint you point `--upstream` at, and you pay for those tokens. The harness writes only under `results/`; an adapter you add is not sandboxed and can write anywhere your user can. The offline self-test sends nothing and costs nothing. |
+| Start here | [Checking it works](#checking-it-works) — offline; then [Running it](#running-it) for a scored run |
+| Confirm success | [Checking it works](#checking-it-works) |
 
 ## The corpora
 
@@ -113,7 +116,7 @@ python3 -m bench.runner --adapter adapters/naive_rag
 
 The shipped baselines default to `gpt-4o` and `text-embedding-3-small`, so that
 runs as printed. To score a different model, set `model` in the adapter's
-`adapter.json` — that is the id the leaderboard groups by — and
+`adapter.json` — that is the id a result is filed under — and
 `MNEMO_EMBED_MODEL` for the embedding model.
 
 The proxy forwards to `https://api.openai.com` by default; `--upstream` (or
@@ -191,8 +194,15 @@ path containing a space or a quote cannot become a second command.
 **An adapter runs local code that you chose to run.** It is not sandboxed: it
 executes with your user, your filesystem, and whatever credentials are in the
 environment. Read an adapter before you run it, exactly as you would any script
-from a repository. What the runner does provide is a boundary against
-*accidental* leakage, not against a hostile adapter:
+from a repository.
+
+The runner guards against *accidental* leakage, not against an adapter that
+goes looking. In particular the answer key is **not** out of reach: the
+benchmark root is on `PYTHONPATH` so adapters can import `adapters._lib`, and
+an adapter can use that to locate and read `gold/answers.jsonl` directly.
+`tests/test_isolation_is_not_a_sandbox.py` demonstrates it. Treat a score as
+meaningful only for an adapter you trust; the benchmark measures memory, it
+does not police it. What the guards do provide:
 
 - Adapters are launched from a scratch directory, not from the benchmark root,
   so a relative `open("gold/answers.jsonl")` finds nothing.
@@ -275,7 +285,7 @@ bench/       runner, grader, accounting proxy, price table
 adapters/    one directory per system under test, including a ledger adapter
 selftest/    a six-document fixture plus two adapters whose scores are known
 docs/        how to submit, methodology, provenance, known limitations
-tools/       scoring utilities: re-grade stored answers, build a leaderboard
+tools/       re-grade stored answers against the current rules
 tests/       the benchmark's own tests
 ```
 
@@ -293,10 +303,10 @@ proxy at.
 **Expected result:**
 
 ```text
-115 passed
+119 passed
 ```
 
-**This verifies:** the runner, grader, report renderer, leaderboard and the
+**This verifies:** the runner, grader, report renderer and the
 ledger adapter's SQLite ingest agree with the shipped corpus, questions and
 answer key; the two fixture adapters still score exactly 1.0 and 0.0; and the
 claims the documentation makes about hashes, counts and domains still hold.
@@ -309,7 +319,7 @@ The whole pipeline runs offline against a small fixture whose score is known in
 advance — no model, no network, no API key:
 
 ```bash
-python3 -m pytest tests/     # expected: 115 passed
+python3 -m pytest tests/     # expected: 119 passed
 ```
 
 `selftest/` holds a six-document corpus, six questions covering all four

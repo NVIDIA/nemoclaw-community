@@ -45,7 +45,7 @@ many did the system actually touch or cite — however it got there. A vector st
 reports retrieved chunk ids, a wiki reader reports pages and source ids, a graph
 reports traversed nodes. Same measurement, no architectural bias.
 
-## Why the base model is a leaderboard column
+## Why the base model is part of a result's identity
 
 The same memory architecture scored with two different base models can differ
 more than two architectures scored with the same one. A submission is therefore a

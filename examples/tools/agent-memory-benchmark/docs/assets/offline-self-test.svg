@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="609" height="534" viewBox="0 0 609 534" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13">
+  <rect width="609" height="534" rx="10" fill="#0d1117"/>
+  <rect width="609" height="34" rx="10" fill="#161b22"/>
+  <rect y="24" width="100%" height="10" fill="#161b22"/>
+  <circle cx="20" cy="17" r="5" fill="#ff5f56"/>
+  <circle cx="38" cy="17" r="5" fill="#ffbd2e"/>
+  <circle cx="56" cy="17" r="5" fill="#27c93f"/>
+  <text x="304" y="22" fill="#8b949e" font-size="11" text-anchor="middle">agent-memory-benchmark — offline self-test</text>
+  <text x="22" y="52" fill="#7ee787" xml:space="preserve">$ python3 -m bench.runner --adapter selftest/oracle \</text>
+  <text x="22" y="72" fill="#c9d1d9" xml:space="preserve">      --corpus selftest/corpus --questions selftest/questions.jsonl \</text>
+  <text x="22" y="92" fill="#c9d1d9" xml:space="preserve">      --gold selftest/gold.jsonl</text>
+  <text x="22" y="112" fill="#79c0ff" xml:space="preserve"># selftest-oracle — none (offline fixture)</text>
+  <text x="22" y="132" fill="#c9d1d9" xml:space="preserve"></text>
+  <text x="22" y="152" fill="#c9d1d9" xml:space="preserve">* corpus: 6 docs (4 part_a / 2 part_b)</text>
+  <text x="22" y="172" fill="#c9d1d9" xml:space="preserve">* questions: 6 (graded deterministically: 6, deferred to judge: 0)</text>
+  <text x="22" y="192" fill="#c9d1d9" xml:space="preserve"></text>
+  <text x="22" y="212" fill="#79c0ff" xml:space="preserve">## Quality</text>
+  <text x="22" y="232" fill="#ffa657" xml:space="preserve">* accuracy overall: 1.0</text>
+  <text x="22" y="252" fill="#c9d1d9" xml:space="preserve">  * [base] 1.0</text>
+  <text x="22" y="272" fill="#c9d1d9" xml:space="preserve">  * [hard] 1.0</text>
+  <text x="22" y="292" fill="#c9d1d9" xml:space="preserve">  * abstention: 1.0</text>
+  <text x="22" y="312" fill="#c9d1d9" xml:space="preserve">  * citation: 1.0</text>
+  <text x="22" y="332" fill="#c9d1d9" xml:space="preserve">  * freshness: 1.0</text>
+  <text x="22" y="352" fill="#c9d1d9" xml:space="preserve">  * multi_source: 1.0</text>
+  <text x="22" y="372" fill="#c9d1d9" xml:space="preserve">  * ordering: 1.0</text>
+  <text x="22" y="392" fill="#c9d1d9" xml:space="preserve">  * single_hop: 1.0</text>
+  <text x="22" y="412" fill="#c9d1d9" xml:space="preserve">  * freshness with a competing stale claim in corpus: 1.0</text>
+  <text x="22" y="432" fill="#8b949e" xml:space="preserve">  * freshness recency-only: n/a — not annotated for this corpus</text>
+  <text x="22" y="452" fill="#c9d1d9" xml:space="preserve"></text>
+  <text x="22" y="472" fill="#7ee787" xml:space="preserve">$ python3 -m pytest tests/</text>
+  <text x="22" y="492" fill="#7ee787" xml:space="preserve">119 passed in 23.22s</text>
+</svg>

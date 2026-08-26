@@ -2,7 +2,7 @@
 
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Run one system under test end to end and produce its leaderboard row.
+"""Run one system under test end to end and produce its result.
 
     python3 -m bench.runner --adapter adapters/naive_rag
 
@@ -73,15 +73,22 @@ def _assert_isolated(command: list[str], env: dict, phase: str, forbidden: dict[
     """Fail before launching if a phase was handed something it must not see.
 
     The benchmark is only meaningful if a system answers from the memory it
-    built, so ingest must not see the questions and neither phase may see the
-    answer key. The placeholders enforce that by construction — ingest is only
-    ever rendered with ``{corpus}`` and ``{state}`` — and this is the check
-    that keeps a future edit from quietly widening them.
+    built, so ingest is never handed the questions and no phase is handed the
+    answer key. This check keeps a future edit from quietly widening the
+    placeholders.
 
-    This is a guard against leakage, not a sandbox. An adapter runs local code
-    that you chose to run, with your filesystem and your credentials; nothing
-    here stops one that goes looking. What it does stop is an adapter reading
-    the key by accident because the runner left it within reach.
+    **It is not a sandbox, and it does not make the key unreachable.** The
+    runner puts the benchmark root on ``PYTHONPATH`` so adapters can import
+    ``adapters._lib``; an adapter can therefore import this module, read
+    ``REPO``, and open the key directly. Running an adapter you did not write
+    is running a program with your filesystem and your credentials, and this
+    function does not change that. What it does is keep the runner from putting
+    the key in an adapter's hands by accident.
+
+    Making the key genuinely unreachable needs a filesystem boundary the
+    harness does not have. See ``tests/test_isolation_is_not_a_sandbox.py``,
+    which demonstrates the bypass so that nobody has to discover it in a
+    result.
     """
     haystack = " ".join(command) + " " + " ".join(f"{k}={v}" for k, v in env.items())
     for label, path in forbidden.items():
@@ -351,10 +358,12 @@ def main() -> None:
         )
 
     manifest = [json.loads(line) for line in (args.corpus / "manifest.jsonl").read_text().splitlines() if line.strip()]
-    # The declared model is the one the leaderboard groups by; a run may also
+    # The declared model is the one the result is filed under; a run may also
     # call auxiliary models (embeddings, rerankers) and those are priced too but
     # never rename the row.
     model = spec.get("model") or (max(usage["models"], key=usage["models"].get) if usage.get("models") else None)
+    forwarded = sum(usage.get("forwarded", {}).values())
+    uncounted = sum(usage.get("uncounted", {}).values())
     ingest_in = usage["input_tokens"].get("ingest", 0)
     ingest_out = usage["output_tokens"].get("ingest", 0)
     answer_in = usage["input_tokens"].get("answer", 0)
@@ -391,12 +400,20 @@ def main() -> None:
         },
         "timing": timing,
         "accounting": {
-            "method": "proxy" if (ingest_in or answer_in) else "none-observed",
+            "method": ("partial" if uncounted else "proxy") if forwarded else "none-observed",
+            # Requests the proxy forwarded whose response carried no usage. Any
+            # number here means the cost below is a floor, not a total.
+            "forwarded_calls": forwarded,
+            "uncounted_calls": uncounted,
             "description": (
-                "counted at a local proxy the runner put in front of the model endpoint"
-                if (ingest_in or answer_in)
-                else "no model traffic crossed the proxy; a locally-hosted model is not "
-                "comparable on the cost axis"
+                f"{uncounted} of {forwarded} forwarded requests returned no countable "
+                "usage, so the cost below is a floor and this run is not comparable "
+                "on the cost axis"
+                if uncounted
+                else "counted at a local proxy the runner put in front of the model endpoint"
+                if forwarded
+                else "no request crossed the proxy; either the model runs locally or the "
+                "adapter bypassed the proxy, and either way no cost was observed"
             ),
             "proxy_observed_calls": sum(usage.get("calls", {}).values()),
         },
@@ -421,7 +438,15 @@ def main() -> None:
         "answers_missing": [q["id"] for q in questions if q["id"] not in answers],
     }
     # A system that answered nothing is a broken run, not a system that scored
-    # zero. Say so in the report and keep it off the leaderboard.
+    # zero. Say so in the report and mark the run invalid.
+    if uncounted:
+        report["valid"] = False
+        report["invalid_reason"] = (
+            f"{uncounted} of {forwarded} forwarded requests returned no countable usage. "
+            "The score may be sound but its cost is not, and the two are reported "
+            "together; re-run against an endpoint that returns usage."
+        )
+        print(f"[runner] WARNING: {report['invalid_reason']}", file=sys.stderr)
     if not answers or len(report["answers_missing"]) > len(questions) // 2:
         report["valid"] = False
         report["invalid_reason"] = (
