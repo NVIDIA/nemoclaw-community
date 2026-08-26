@@ -24,6 +24,12 @@ owner-only permissions as the store they came from.
     python3 export_store.py                 # to ./export-<date>/
     python3 export_store.py --to <dir>
 
+The destination must be somewhere else. This replaces whatever is there, so
+exporting into the workspace would delete the store and leave a copy of it in
+place — the destination and the workspace have to be disjoint, and a
+destination that is either of them, inside the other, or around it is refused
+before anything is created or removed.
+
 Pairs with `reset.py`, which removes what this shows. The two are documented
 together because somebody withdrawing consent usually wants both: see what is
 held, then have it gone.
@@ -165,6 +171,46 @@ class ExportEscapesWorkspace(Exception):
     """A source resolved outside the workspace, so nothing is written."""
 
 
+class ExportOverlapsWorkspace(Exception):
+    """The destination and the live workspace are not disjoint."""
+
+
+def _refuse_overlap(destination: Path, workspace: Path) -> None:
+    """The destination must not be the workspace, inside it, or around it.
+
+    This export replaces its destination, which is what makes it a snapshot
+    rather than an accumulation — and what makes an overlapping destination
+    destructive. Exporting into the workspace deleted the live store and left
+    the two export files in its place, reported as success.
+
+    Checked on resolved paths, before the staging directory is created and
+    before anything is removed, so a refusal costs nothing.
+    """
+    destination = destination.resolve()
+    workspace = workspace.resolve()
+
+    if destination == workspace:
+        raise ExportOverlapsWorkspace(
+            f"{destination} is the workspace itself. Exporting there would "
+            "replace the store with a copy of it. Nothing has been written.")
+    try:
+        destination.relative_to(workspace)
+    except ValueError:
+        pass
+    else:
+        raise ExportOverlapsWorkspace(
+            f"{destination} is inside the workspace at {workspace}. The "
+            "export replaces its destination, and the store lives here. "
+            "Nothing has been written.")
+    try:
+        workspace.relative_to(destination)
+    except ValueError:
+        return
+    raise ExportOverlapsWorkspace(
+        f"{destination} contains the workspace at {workspace}. Replacing it "
+        "would remove the store. Nothing has been written.")
+
+
 def export(destination: Path) -> dict[str, object]:
     ensure_store()
 
@@ -176,6 +222,7 @@ def export(destination: Path) -> dict[str, object]:
     # partial write also looked complete. A fresh directory renamed at the end
     # gives an export that is either whole or absent.
     destination = destination.resolve()
+    _refuse_overlap(destination, ledger_path().parent.parent)
     destination.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".export-", dir=destination.parent))
     os.chmod(staging, 0o700)
@@ -231,6 +278,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         print(json.dumps(export(args.to)))
+    except ExportOverlapsWorkspace as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    except ExportEscapesWorkspace as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     except OSError as exc:
         print(f"could not write the export: {exc}", file=sys.stderr)
         return 1

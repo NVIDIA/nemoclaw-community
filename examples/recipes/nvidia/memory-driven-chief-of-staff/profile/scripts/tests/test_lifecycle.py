@@ -592,6 +592,71 @@ class TestExportShowsEverythingItHolds(StoreCase):
                          (destination / "store.md").read_text(encoding="utf-8"))
         self.assertFalse((destination / "leftover.txt").exists())
 
+    def live_workspace(self):
+        """Everything a refusal has to leave untouched."""
+        self.add("m1")
+        memory = self.workspace / "memory"
+        memory.mkdir(exist_ok=True)
+        (memory / "index.md").write_text("the memory", encoding="utf-8")
+        policy = self.workspace / "policy"
+        policy.mkdir(exist_ok=True)
+        (policy / "preferences.md").write_text("the policy", encoding="utf-8")
+
+    def assert_workspace_intact(self):
+        self.assertTrue(self.db.exists(), "the live store was removed")
+        with sqlite3.connect(self.db) as conn:
+            rows = conn.execute("SELECT count(*) FROM items").fetchone()[0]
+        self.assertEqual(rows, 1, "the live store lost rows")
+        self.assertEqual(
+            (self.workspace / "memory" / "index.md").read_text(
+                encoding="utf-8"), "the memory")
+        self.assertEqual(
+            (self.workspace / "policy" / "preferences.md").read_text(
+                encoding="utf-8"), "the policy")
+
+    def test_exporting_into_the_workspace_is_refused(self):
+        """The export replaces its destination, so this deleted the store and
+        left a copy of it in place — reported as success."""
+        self.live_workspace()
+        with self.assertRaises(export_store.ExportOverlapsWorkspace):
+            export_store.export(self.workspace)
+        self.assert_workspace_intact()
+
+    def test_exporting_inside_the_workspace_is_refused(self):
+        self.live_workspace()
+        with self.assertRaises(export_store.ExportOverlapsWorkspace):
+            export_store.export(self.workspace / "memory")
+        self.assert_workspace_intact()
+
+    def test_exporting_into_a_directory_containing_the_workspace_is_refused(self):
+        self.live_workspace()
+        with self.assertRaises(export_store.ExportOverlapsWorkspace):
+            export_store.export(Path(self.home))
+        self.assert_workspace_intact()
+
+    def test_the_refusal_leaves_no_staging_directory(self):
+        """Refused before anything is created, so nothing is left to clean."""
+        self.live_workspace()
+        before = sorted(p.name for p in Path(self.home).iterdir())
+        with self.assertRaises(export_store.ExportOverlapsWorkspace):
+            export_store.export(self.workspace)
+        self.assertEqual(sorted(p.name for p in Path(self.home).iterdir()),
+                         before)
+
+    def test_a_destination_beside_the_workspace_is_fine(self):
+        """The rule is about overlap, not about being nearby."""
+        self.live_workspace()
+        destination = Path(self.home) / "export-out"
+        export_store.export(destination)
+        self.assertTrue((destination / "store.json").exists())
+        self.assert_workspace_intact()
+
+    def test_the_command_reports_the_refusal_rather_than_raising(self):
+        self.live_workspace()
+        self.assertEqual(
+            export_store.main(["--to", str(self.workspace)]), 1)
+        self.assert_workspace_intact()
+
     def test_the_learned_policy_travels_with_it(self):
         """Documented as copied whole; it is as much about the user as the memory."""
         policy = self.workspace / "policy"
