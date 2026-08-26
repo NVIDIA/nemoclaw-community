@@ -33,6 +33,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from collections import Counter
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
@@ -173,6 +174,11 @@ def slug(name: str) -> str:
     original = (name or "").strip()
     if not original:
         return ""
+    # Canonical composition first. `Ünal` typed as one code point and `Ünal`
+    # typed as `U` plus a combining diaeresis are the same name and the same
+    # person; without this they are two pages, and which one you get depends
+    # on which client the message came from.
+    original = unicodedata.normalize("NFC", original)
     lowered = original.casefold()
     kept = "".join(c if (c.isalnum() or c == " ") else " " for c in lowered)
     cleaned = "_".join(kept.split())
@@ -289,17 +295,40 @@ def evidence(conn, since: str) -> dict[str, object]:
         latest[sender] = last
 
     have = existing_people()
+
+    # Two different senders that reduce to one page name.
+    #
+    # A display name is not an identity: two people called `Sam Ruiz` share a
+    # page, and the second overwrites the first's history under the first's
+    # name. Neither is recoverable afterwards, because nothing in the store
+    # distinguishes them — `items` keeps the display name and drops the
+    # address and the Slack user id at normalization.
+    #
+    # So this fails closed. An ambiguous name is reported rather than written,
+    # and the pass carries on with everybody else. Resolving it needs a stable
+    # source identity in the store, which is a schema change and belongs with
+    # the connectors that would populate it.
+    by_slug: dict[str, set[str]] = {}
+    for sender in counts:
+        by_slug.setdefault(slug(sender), set()).add(sender)
+    ambiguous = {mark: sorted(names) for mark, names in by_slug.items()
+                 if mark and len(names) > 1}
+
     candidates = []
     for sender, count in counts.most_common():
         if count < PEOPLE_THRESHOLD:
             continue
         mark = slug(sender)
+        if mark in ambiguous:
+            continue
         last = (latest.get(sender) or "")[:10]
         if mark in have:
-            # Offer an existing person only when something happened after the
-            # date their page records. A page written today and two messages
-            # from last week is not work, and treating it as work kept the
-            # agent awake every half hour for the length of the window.
+            # Offer an existing person only when something happened after
+            # the date their page records. A page written last night and two
+            # messages from last week is not work, and treating it as work
+            # woke the agent on every run for the rest of the window — this
+            # job runs nightly, so one quiet correspondent cost thirty model
+            # calls to be told thirty times that nothing had changed.
             recorded = have[mark]
             if recorded and last and last <= recorded:
                 continue
@@ -331,7 +360,8 @@ def evidence(conn, since: str) -> dict[str, object]:
              "addressing": addressing, "text": " ".join((text or "").split())}
             for source, event_at, addressing, text in rows]
 
-    return {"people": chosen, "interactions": interactions}
+    return {"people": chosen, "interactions": interactions,
+            "ambiguous_identity": ambiguous}
 
 
 def open_obligations(conn) -> list[dict[str, object]]:
@@ -368,20 +398,65 @@ def corrections(conn, since: str) -> list[dict[str, object]]:
     the ranking gate it exists to feed would stay shut on every install.
     """
     rows = conn.execute(
-        "SELECT e.ts, e.event_type, e.after_json, o.title, o.source_id"
+        "SELECT e.id, e.ts, e.event_type, e.after_json, o.title, o.source_id"
         "  FROM events e JOIN obligations o ON o.id = e.obligation_id"
         " WHERE e.actor = 'user' AND e.ts >= ?"
         " ORDER BY e.ts DESC LIMIT 40", (since,)).fetchall()
+
     out: list[dict[str, object]] = []
-    for ts, event_type, after_json, title, source_id in rows:
+    for event_id, ts, event_type, after_json, title, source_id in rows:
         try:
             after = json.loads(after_json) if after_json else {}
         except (TypeError, json.JSONDecodeError):
             after = {}
-        out.append({"when": (ts or "")[:10], "action": event_type,
-                    "title": title, "source_id": source_id,
-                    "to": after.get("priority") or after.get("status")})
+
+        # The field `correct.py` actually writes. Reading `priority` returned
+        # None for every real override, and the first test for this inserted a
+        # synthetic `priority` key, so the mismatch was invisible from both
+        # sides at once.
+        tier = after.get("manual_priority")
+        status = after.get("status")
+
+        # A choice has a direction, and only one direction belongs on the
+        # priorities page. Raising something to `high` is the person saying
+        # this is their work. Setting it to `low`, or ignoring it, is them
+        # saying it is not — evidence about them, and useful, but writing it
+        # into `current_priorities.md` would promote exactly what they pushed
+        # away.
+        if tier == "high":
+            direction = "chose"
+        elif tier in ("medium", "low") or status == "ignored":
+            direction = "declined"
+        else:
+            direction = "other"
+
+        out.append({"event_id": event_id, "when": (ts or "")[:10],
+                    "action": event_type, "title": title,
+                    "source_id": source_id, "to": tier or status,
+                    "direction": direction})
     return out
+
+
+def applied_events(root) -> set[int]:
+    """Event ids the priorities page already reflects.
+
+    A correction is evidence once. Returning every event in the window on
+    every pass woke the writer nightly for a month over one thing the user did
+    once — the same defect as offering a correspondent whose page is already
+    current, arriving from the other side.
+
+    The record lives in the page itself rather than beside it. A marker file
+    written after the page could be lost with the page still written, or
+    written with the page still missing; a line in the page is durable exactly
+    when the page is, which is the only moment that matters.
+    """
+    page = root / "attention" / "current_priorities.md"
+    try:
+        text = page.read_text(encoding="utf-8")
+    except OSError:
+        return set()
+    return {int(found) for found in re.findall(r"<!--\s*applied:\s*(\d+)\s*-->",
+                                               text)}
 
 
 def main() -> int:
@@ -396,6 +471,12 @@ def main() -> int:
         obligations = open_obligations(conn)
         chosen = corrections(conn, since)
 
+    # Everything the priorities page already accounts for. Still handed over,
+    # because the page is rewritten whole and the model needs what is already
+    # on it, but not counted as work.
+    seen_events = applied_events(memory_root())
+    unapplied = [c for c in chosen if c["event_id"] not in seen_events]
+
     report = {
         "window_days": window,
         "since": since,
@@ -404,12 +485,16 @@ def main() -> int:
         "seeded": seeded,
         "schema": str(memory_root().parent.parent / "schema.md"),
         "people": found["people"],
+        # Named rather than silently skipped: somebody whose page is never
+        # written should be able to find out why.
+        "ambiguous_identity": found["ambiguous_identity"],
         "interactions": found["interactions"],
         "open_obligations": obligations,
         # Kept separate from `open_obligations` on purpose. One is what other
         # people asked for; this is what the user did about it. Only the
         # second may reach `current_priorities.md`.
         "user_corrections": chosen,
+        "unapplied_corrections": unapplied,
         "attention": stale_attention(),
     }
     print(json.dumps(report, indent=2, ensure_ascii=False))
@@ -418,7 +503,7 @@ def main() -> int:
     # A missing or stale attention page counts as work even when no person
     # qualifies, because that page is what the ranking job gates on.
     work = (bool(found["people"]) or bool(report["attention"])
-            or bool(chosen))
+            or bool(unapplied))
     if not work:
         print(json.dumps({"wakeAgent": False}))
     return 0

@@ -17,3 +17,7 @@ work the person picked and reads this page to find out what that is.
 
 Until there is such evidence this page stays as it is, and the top tier stays
 empty. That is the correct state, not a missing one.
+
+Markers below record which user corrections this page already accounts for,
+so the writing job is not handed the same evidence every night. There are
+none yet.

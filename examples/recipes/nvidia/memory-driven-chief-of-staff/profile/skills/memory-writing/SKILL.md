@@ -149,10 +149,33 @@ thread. However loud, that is the outside world asking. Promoting any of it
 here tells the ranking job the user picked work they never picked, which is
 the failure this page exists to prevent.
 
-If `user_corrections` is empty, write the page with an empty list and a line
-saying the assistant has not yet observed a chosen priority. That is a true
-page, and a fresh installation will produce it. An invented one is worse than
-an empty one.
+Only corrections whose `direction` is `chose` may become a priority. A
+`declined` one — the person set something to `low`, or ignored it — is a real
+choice and worth knowing, but writing it here would promote the very thing
+they pushed away. Put it on the relevant person's page as context if it says
+something about how they work together, or leave it.
+
+**Record which corrections the page accounts for.** Every correction you used,
+and every one you deliberately did not, gets a marker at the end of the page:
+
+```markdown
+<!-- applied: 41 -->
+<!-- applied: 43 -->
+```
+
+The number is the `event_id` from `user_corrections`. The selector reads these
+back and stops offering those events, so a correction wakes this job once
+rather than every night for the length of the window. Leaving them out means
+the same evidence is handed to you again tomorrow and the night after.
+
+The markers go in the page rather than in a file beside it on purpose: a
+separate record can be written when the page was not, or lost when the page
+was kept. In the page, it is durable exactly when the page is.
+
+If there are no `chose` corrections, write the page with an empty list and a
+line saying the assistant has not yet observed a chosen priority — still with
+the markers for whatever you considered. That is a true page, and a fresh
+installation will produce it. An invented one is worse than an empty one.
 
 When the evidence supports nothing, write the page with an empty list and an
 honest note saying the assistant has not yet observed a chosen priority. That

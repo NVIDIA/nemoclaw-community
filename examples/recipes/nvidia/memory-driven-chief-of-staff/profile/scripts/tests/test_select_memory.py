@@ -17,6 +17,7 @@ import re
 import shutil
 import sqlite3
 import sys
+import unicodedata
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -25,6 +26,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(HERE))
 
+import correct  # noqa: E402
 import select_memory  # noqa: E402
 
 SCHEMA = (HERE / "schema.sql").read_text(encoding="utf-8")
@@ -82,17 +84,31 @@ class SelectorCase(unittest.TestCase):
         head += ["---", "", "# page"]
         (folder / f"{slug}.md").write_text("\n".join(head), encoding="utf-8")
 
-    def correction(self, actor="user", event_type="priority_override"):
-        """One row the user wrote, through the only path that writes them."""
+    def obligation(self, source_id="m1", title="the cutover"):
         with sqlite3.connect(self.db) as conn:
+            rank = conn.execute(
+                "SELECT COALESCE(MAX(global_rank), 0) + 1"
+                "  FROM obligations").fetchone()[0]
             conn.execute(
                 "INSERT INTO obligations(id, source_id, title, status,"
-                " priority, global_rank) VALUES"
-                " ('o1','m1','the cutover','open','high',1)")
-            conn.execute(
-                "INSERT INTO events(obligation_id, event_type, actor,"
-                " after_json) VALUES (?,?,?,?)",
-                ("o1", event_type, actor, json.dumps({"priority": "high"})))
+                " priority, global_rank) VALUES (?,?,?,'open','medium',?)",
+                (source_id, source_id, title, rank))
+
+    def correction(self, tier="high", source_id="m1"):
+        """A correction made the way the user makes one.
+
+        Through `correct.py`, not by inserting an event. The first version of
+        this inserted `{"priority": tier}` while the production path writes
+        `{"manual_priority": tier}` — so the selector read `None` for every
+        real override and the test agreed with it. A fixture that constructs
+        a shape the writer never produces cannot see that.
+        """
+        self.obligation(source_id=source_id)
+        correct.set_priority(source_id, tier)
+
+    def user_ignored(self, source_id="m1"):
+        self.obligation(source_id=source_id)
+        correct.ignore(source_id)
 
     def run_selector(self):
         import contextlib
@@ -103,6 +119,15 @@ class SelectorCase(unittest.TestCase):
         out = buffer.getvalue()
         lines = [line for line in out.splitlines() if line.strip()]
         return out, lines[-1]
+
+    def report(self):
+        """The selector's report, parsed.
+
+        The gate is printed after it when there is nothing to do, so the whole
+        of stdout is not one JSON document. Decode only the first.
+        """
+        out, _ = self.run_selector()
+        return json.JSONDecoder().raw_decode(out)[0]
 
 
 class TestWhoIsWorthAsking(SelectorCase):
@@ -345,26 +370,135 @@ class TestAQuietDayCostsNothing(SelectorCase):
 class TestOnlyTheUserSaysWhatTheyChose(SelectorCase):
     """`current_priorities.md` gates the top tier, so its evidence is narrow."""
 
-    def test_corrections_are_surfaced_separately_from_obligations(self):
-        self.correction()
-        found = json.loads(self.run_selector()[0])
-        self.assertTrue(found["user_corrections"])
-        self.assertIn("user_corrections", found)
-        self.assertIn("open_obligations", found)
+    def test_a_real_override_carries_its_tier(self):
+        """`correct.py` records `manual_priority`; reading `priority` gave
+        `None` for every override that ever happened."""
+        self.correction(tier="high")
+        entry = self.report()["user_corrections"][0]
+        self.assertEqual(entry["action"], "priority_override")
+        self.assertEqual(entry["title"], "the cutover")
+        self.assertEqual(entry["to"], "high")
+
+    def test_raising_to_high_is_choosing(self):
+        self.correction(tier="high")
+        entry = self.report()["user_corrections"][0]
+        self.assertEqual(entry["direction"], "chose")
+
+    def test_pushing_something_down_is_not_choosing_it(self):
+        """A real choice, and the opposite one. Writing it into the priorities
+        page would promote exactly what the person pushed away."""
+        self.correction(tier="low")
+        entry = self.report()["user_corrections"][0]
+        self.assertEqual(entry["to"], "low")
+        self.assertEqual(entry["direction"], "declined")
+
+    def test_ignoring_is_not_choosing_either(self):
+        self.user_ignored()
+        entry = self.report()["user_corrections"][0]
+        self.assertEqual(entry["direction"], "declined")
 
     def test_an_agent_event_is_not_a_correction(self):
         """Only `correct.py` writes `actor='user'`; a rerank is the assistant
         talking to itself."""
-        self.correction(actor="agent")
-        found = json.loads(self.run_selector()[0])
+        self.obligation()
+        with sqlite3.connect(self.db) as conn:
+            conn.execute(
+                "INSERT INTO events(obligation_id, event_type, actor,"
+                " after_json) VALUES ('m1','reranked','agent','{}')")
+        found = self.report()
         self.assertEqual(found["user_corrections"], [])
 
-    def test_the_correction_names_what_it_was_about(self):
+
+class TestACorrectionIsEvidenceOnce(SelectorCase):
+    """It woke the writer nightly for a month over one thing done once."""
+
+    def current_attention(self):
+        today = datetime.now(timezone.utc).date().isoformat()
+        self.page("current_priorities", updated=today, decay="daily",
+                  kind="attention")
+        self.page("active_threads", updated=today, decay="weekly",
+                  kind="attention")
+
+    def applied(self, event_id):
+        page = self.workspace / "memory" / "attention" / "current_priorities.md"
+        page.write_text(page.read_text(encoding="utf-8")
+                        + f"\n<!-- applied: {event_id} -->\n",
+                        encoding="utf-8")
+
+    def test_an_unapplied_correction_is_work(self):
+        self.current_attention()
         self.correction()
-        entry = json.loads(self.run_selector()[0])["user_corrections"][0]
-        self.assertEqual(entry["action"], "priority_override")
-        self.assertEqual(entry["title"], "the cutover")
-        self.assertEqual(entry["to"], "high")
+        out, _ = self.run_selector()
+        self.assertNotIn("wakeAgent", out)
+
+    def test_a_correction_the_page_accounts_for_is_not_work_again(self):
+        """Two consecutive runs with nothing changed both woke the agent."""
+        self.current_attention()
+        self.correction()
+        found = self.report()
+        self.applied(found["user_corrections"][0]["event_id"])
+        _, last = self.run_selector()
+        self.assertEqual(json.loads(last), {"wakeAgent": False})
+
+    def test_an_applied_correction_is_still_handed_over(self):
+        """The page is rewritten whole, so the model needs what is on it."""
+        self.current_attention()
+        self.correction()
+        found = self.report()
+        self.applied(found["user_corrections"][0]["event_id"])
+        again = self.report()
+        self.assertTrue(again["user_corrections"])
+        self.assertEqual(again["unapplied_corrections"], [])
+
+    def test_a_new_correction_after_an_applied_one_is_work(self):
+        self.current_attention()
+        self.correction(source_id="m1")
+        found = self.report()
+        self.applied(found["user_corrections"][0]["event_id"])
+        self.correction(source_id="m2")
+        out, _ = self.run_selector()
+        self.assertNotIn("wakeAgent", out)
+
+
+class TestAnAmbiguousIdentityIsNotGuessed(SelectorCase):
+    """Two people, one page name: the second overwrites the first's history
+    under the first's name, and nothing in the store can tell them apart."""
+
+    def test_two_senders_with_one_page_name_are_not_written(self):
+        for n in range(2):
+            self.add("Sam Ruiz", days_ago=n, body=f"a{n}", source="email")
+            self.add("sam ruiz", days_ago=n, body=f"b{n}", source="slack")
+        found = self.report()
+        self.assertEqual([p["sender"] for p in found["people"]], [])
+
+    def test_the_ambiguity_is_reported_rather_than_silent(self):
+        """Somebody whose page is never written should be able to find out."""
+        for n in range(2):
+            self.add("Sam Ruiz", days_ago=n, body=f"a{n}")
+            self.add("sam ruiz", days_ago=n, body=f"b{n}")
+        found = self.report()
+        self.assertIn("sam_ruiz", found["ambiguous_identity"])
+        self.assertEqual(sorted(found["ambiguous_identity"]["sam_ruiz"]),
+                         ["Sam Ruiz", "sam ruiz"])
+
+    def test_everybody_else_is_still_offered(self):
+        """One ambiguous name must not stop the pass."""
+        for n in range(2):
+            self.add("Sam Ruiz", days_ago=n, body=f"a{n}")
+            self.add("sam ruiz", days_ago=n, body=f"b{n}")
+            self.add("Dana Okoro", days_ago=n, body=f"c{n}")
+        found = self.report()
+        self.assertEqual([p["sender"] for p in found["people"]],
+                         ["Dana Okoro"])
+
+    def test_the_two_unicode_spellings_of_one_name_are_one_person(self):
+        """Composed and decomposed forms are the same name; which one arrives
+        depends on the client the message came from."""
+        composed = "\u00dcnal \u00d6z"
+        decomposed = unicodedata.normalize("NFD", composed)
+        self.assertNotEqual(composed, decomposed)
+        self.assertEqual(select_memory.slug(composed),
+                         select_memory.slug(decomposed))
 
 
 class TestTheScopeIsStatedWhereItIsChecked(unittest.TestCase):
