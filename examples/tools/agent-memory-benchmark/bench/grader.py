@@ -201,15 +201,16 @@ def is_answered(row: dict | None) -> bool:
     """Did the system actually answer this question?
 
     One definition, used by the runner and by regrade alike. A row that is
-    absent, a row with no ``answer`` key, and a row whose answer is blank are
-    all the same thing: no answer was given. The answer contract asks a system
-    to say plainly that the corpus does not support an answer, and none of
-    these says anything -- crediting them would let a system score every
-    abstention question by staying quiet in one of three ways.
+    absent, a row with no ``answer`` key, a non-string answer, and a row whose
+    answer is blank are all the same thing: no answer was given. The answer
+    contract asks a system to say plainly that the corpus does not support an
+    answer, and none of these says anything -- crediting them would let a
+    system score every abstention question by staying quiet.
     """
-    if not row:
+    if not isinstance(row, dict):
         return False
-    return bool(str(row.get("answer", "")).strip())
+    answer = row.get("answer")
+    return isinstance(answer, str) and bool(answer.strip())
 
 
 def grade(

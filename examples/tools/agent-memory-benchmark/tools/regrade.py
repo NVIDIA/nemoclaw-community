@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from bench.fingerprint import fingerprint
 from bench.runner import REPO, _git_revision
 from bench.grader import grade, is_answered  # noqa: E402
-from bench.report import render_markdown, summarize
+from bench.report import _accounting_method, render_markdown, summarize
 from bench.runner import REPORT_SCHEMA_VERSION  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
@@ -100,7 +100,8 @@ def main() -> None:
     # Carrying the old flags forward made a corrected submission keep claiming
     # it was invalid for an omission it no longer had. An accounting failure is
     # a property of the original run, not of this scoring pass, so it stays.
-    accounting_failure = (report.get("accounting") or {}).get("method") in {
+    accounting_method = _accounting_method(report)
+    accounting_failure = accounting_method in {
         "partial", "declared-proxy-but-silent", "declared-local-but-called",
     }
     report.pop("valid", None)
@@ -115,7 +116,7 @@ def main() -> None:
         report["valid"] = False
         report["invalid_reason"] = (
             "the original run's cost was not fully observed "
-            f"({report['accounting']['method']}); regrading does not change that."
+            f"({accounting_method}); regrading does not change that."
         )
     report["regraded"] = True
     (args.run / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

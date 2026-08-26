@@ -147,7 +147,12 @@ def test_an_incomplete_row_earns_no_abstention_credit():
     from bench.grader import is_answered
 
     for row in (None, {"id": ABSTAIN["id"]}, {"id": ABSTAIN["id"], "answer": ""},
-                {"id": ABSTAIN["id"], "answer": "   "}):
+                {"id": ABSTAIN["id"], "answer": "   "},
+                {"id": ABSTAIN["id"], "answer": None},
+                {"id": ABSTAIN["id"], "answer": False},
+                {"id": ABSTAIN["id"], "answer": 0},
+                {"id": ABSTAIN["id"], "answer": []},
+                {"id": ABSTAIN["id"], "answer": {}}):
         assert is_answered(row) is False, row
         verdict = grade(ABSTAIN["id"], str((row or {}).get("answer", "")), None,
                         ABSTAIN, answered=False)
@@ -233,3 +238,20 @@ def test_regrading_does_not_clear_an_accounting_failure(tmp_path):
     again = _regrade(run)
     assert again["valid"] is False
     assert "not fully observed" in again["invalid_reason"]
+
+
+def test_regrading_accepts_the_legacy_accounting_shape(tmp_path):
+    """Stored pre-schema reports carried accounting as a bare string."""
+    run = tmp_path / "run"
+    run.mkdir()
+    ids = [json.loads(line)["id"] for line in
+           (SELFTEST / "questions.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+    run.joinpath("answers.jsonl").write_text(
+        "\n".join(json.dumps({"id": i, "answer": "60%"}) for i in ids) + "\n", encoding="utf-8")
+    report = _regrade(run)
+    report["accounting"] = "proxy"
+    (run / "report.json").write_text(json.dumps(report), encoding="utf-8")
+
+    again = _regrade(run)
+    assert again["accounting"] == "proxy"
+    assert again.get("valid") is not False
