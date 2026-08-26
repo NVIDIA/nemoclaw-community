@@ -23,6 +23,7 @@ import io
 import json
 import os
 import shutil
+import subprocess
 import sqlite3
 import sys
 import tempfile
@@ -58,12 +59,20 @@ def message(mid, *, when="2026-08-20T09:00:00Z", sender="Dana Okoro",
         "parentFolderId": "inbox",
         "conversationId": "c1",
         "webLink": "https://outlook.example/" + mid,
+        "internetMessageId": "<%s@example.com>" % mid,
     }
 
 
-def removed(mid, reason="deleted"):
-    """What a delta page carries for something that is gone."""
-    return {"id": mid, "@removed": {"reason": reason}}
+def removed(mid):
+    """What a delta page carries for something that left the folder.
+
+    Always `deleted`, whether the message was deleted or filed elsewhere —
+    measured against the live service, where moving one to Archive produces
+    exactly this. An earlier version of these tests invented a `changed`
+    reason for a move; no such value exists, so the collector's handling of
+    moves was asserted against a payload Graph never sends.
+    """
+    return {"id": mid, "@removed": {"reason": "deleted"}}
 
 
 class FakeGraph:
@@ -77,6 +86,12 @@ class FakeGraph:
         self.headers_seen: list[str] = []
         self.identity = {"mail": ME, "displayName": "Avery"}
         self.status_for_next = None
+        # Whether a message that left the folder is still somewhere in the
+        # mailbox. `True` is a move, `False` is a deletion — the service tells
+        # them apart no other way.
+        self.still_present = False
+        self.identity_lookups = 0
+        self.rate_limit_forever = False
         outer = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -90,6 +105,22 @@ class FakeGraph:
 
                 if parsed.path.endswith("/me"):
                     return outer._send(self, 200, outer.identity)
+
+                if parsed.path.endswith("/messages") and "filter" in self.path:
+                    # The "is it still in the mailbox" question, asked by
+                    # `internetMessageId` when something leaves the folder.
+                    outer.identity_lookups += 1
+                    hits = [{"id": "elsewhere"}] if outer.still_present else []
+                    return outer._send(self, 200, {"value": hits})
+
+                if outer.rate_limit_forever:
+                    body = json.dumps({"error": {"code": "throttled"}}).encode()
+                    self.send_response(429)
+                    self.send_header("Retry-After", "1")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
 
                 if outer.status_for_next is not None:
                     code = outer.status_for_next
@@ -274,16 +305,42 @@ class TestDeletionIsReconciled(CollectorCase):
         self.run_main()
         self.assertEqual(self.rows()[0][1], "Dana Okoro")
 
-    def test_a_move_is_not_a_deletion(self):
-        """`@removed` carries a reason, and `changed` means it left the scope
-        being synchronised — filing something is not deleting it."""
+    def test_a_message_filed_elsewhere_is_not_a_deletion(self):
+        """Graph reports a move out of the folder exactly as it reports a
+        deletion, and the per-folder id changes so it cannot answer either.
+        What survives a move is `internetMessageId`; if the mailbox still
+        holds it, the message was filed rather than deleted."""
         self.stored()
-        self.graph.queue({"value": [removed("m1", reason="changed")],
+        self.graph.still_present = True
+        self.graph.queue({"value": [removed("m1")],
                           "@odata.deltaLink": "http://x/final2"})
         self.run_main()
         row = self.rows()[0]
-        self.assertIsNone(row[3], "a moved message was tombstoned")
-        self.assertIsNotNone(row[2], "a moved message lost its body")
+        self.assertIsNone(row[3], "a filed message was tombstoned")
+        self.assertIsNotNone(row[2], "a filed message lost its body")
+        self.assertEqual(self.report()["moved"], 1)
+        self.assertEqual(self.report()["removed"], 0)
+
+    def test_the_question_is_actually_asked(self):
+        """Without the lookup the two cases are indistinguishable, so a test
+        that never sees the request is not testing the distinction."""
+        self.stored()
+        self.graph.still_present = True
+        before = self.graph.identity_lookups
+        self.graph.queue({"value": [removed("m1")],
+                          "@odata.deltaLink": "http://x/final2"})
+        self.run_main()
+        self.assertGreater(self.graph.identity_lookups, before)
+
+    def test_a_message_gone_from_the_mailbox_is_a_deletion(self):
+        self.stored()
+        self.graph.still_present = False
+        self.graph.queue({"value": [removed("m1")],
+                          "@odata.deltaLink": "http://x/final2"})
+        self.run_main()
+        row = self.rows()[0]
+        self.assertIsNotNone(row[3])
+        self.assertIsNone(row[2])
 
     def test_the_report_counts_removals(self):
         self.stored()
@@ -373,6 +430,200 @@ class TestTheCursorIsTheWatermark(CollectorCase):
         self.assertEqual(self.run_main(), ingest_graph.EXIT_OK)
         self.assertTrue(self.report().get("resynchronised"))
         self.assertIn("m2", [r[0] for r in self.rows()])
+
+
+class TestTheMailboxIdentityIsChecked(CollectorCase):
+    """Inside the sandbox the credential is a placeholder the gateway
+    substitutes, and it does not change when the token behind it does."""
+
+    def test_a_changed_mailbox_discards_the_previous_cursor(self):
+        """The cursor is the thing that must not carry over.
+
+        Asserting that the recorded address changed proves nothing: it is
+        written on every run regardless. What matters is that a cursor issued
+        for one mailbox is not used to ask another what has changed.
+        """
+        self.serve([{"value": [message("m1")],
+                     "@odata.deltaLink": "http://x/first-mailbox"}])
+        self.run_main()
+        first_cursor = self.state()["delta"]
+        self.assertIn("first-mailbox", first_cursor)
+
+        self.graph.identity = {"mail": "someone.else@example.com",
+                               "displayName": "Someone Else"}
+        self.graph.calls.clear()
+        self.graph.queue({"value": [message("m2")],
+                          "@odata.deltaLink": "http://x/second-mailbox"})
+        self.run_main()
+
+        followed = [c for c in self.graph.calls if "first-mailbox" in c]
+        self.assertEqual(followed, [],
+                         "asked the new mailbox what changed since the old "
+                         "one's cursor")
+        self.assertIn("/delta?", "".join(self.graph.calls),
+                      "did not start a fresh round for the new mailbox")
+
+    def test_a_changed_mailbox_forgets_the_old_message_identities(self):
+        """They answer "moved or deleted" for messages in a mailbox nobody is
+        reading any more."""
+        self.serve([{"value": [message("m1")],
+                     "@odata.deltaLink": "http://x/final"}])
+        self.run_main()
+        self.assertTrue(self.state().get("message_ids"))
+
+        self.graph.identity = {"mail": "someone.else@example.com"}
+        self.graph.queue({"value": [], "@odata.deltaLink": "http://x/f2"})
+        self.run_main()
+        self.assertNotIn("m1", self.state().get("message_ids", {}))
+
+    def test_the_placeholder_staying_the_same_does_not_hide_it(self):
+        """The credential is byte-identical across the change; only the
+        mailbox differs, so only the mailbox can be compared."""
+        self.serve([{"value": [], "@odata.deltaLink": "http://x/final"}])
+        self.run_main()
+        before = os.environ["MS_GRAPH_ACCESS_TOKEN"]
+        self.graph.identity = {"mail": "other@example.com"}
+        self.graph.queue({"value": [], "@odata.deltaLink": "http://x/f2"})
+        self.run_main()
+        self.assertEqual(os.environ["MS_GRAPH_ACCESS_TOKEN"], before)
+        self.assertEqual(self.state()["identity"]["address"],
+                         "other@example.com")
+
+    def test_the_same_mailbox_keeps_its_cursor(self):
+        """Re-checking must not become re-synchronising every tick."""
+        self.serve([{"value": [], "@odata.deltaLink": "http://x/final"}])
+        self.run_main()
+        first = self.state()["delta"]
+        self.graph.queue({"value": [], "@odata.deltaLink": "http://x/final"})
+        self.run_main()
+        self.assertEqual(self.state()["delta"], first)
+
+
+class TestTheScopesAreTheOnesUsed(CollectorCase):
+    """A setup that depends on a permission it does not request is a setup
+    that works for whoever already had it."""
+
+    RECIPE = HERE.parents[1]
+
+    def scopes_requested(self):
+        """The `SCOPES=` line, not the whole file.
+
+        Searching the file finds the comment explaining why `User.Read` is
+        needed, which stays true whether or not the flow asks for it — so the
+        first version of this passed with the scope deleted.
+        """
+        setup = (self.RECIPE / "scripts" / "setup-graph.sh").read_text(
+            encoding="utf-8")
+        line = [l for l in setup.splitlines() if l.startswith("SCOPES=")]
+        self.assertEqual(len(line), 1, "expected exactly one SCOPES= line")
+        return line[0]
+
+    def test_user_read_is_requested_because_me_is_read(self):
+        collector = (HERE / "ingest_graph.py").read_text(encoding="utf-8")
+        self.assertIn("/me?", collector)
+        self.assertIn("User.Read", self.scopes_requested())
+
+    def test_the_profile_refreshes_with_named_scopes(self):
+        """`.default` returns whatever the client already has, which is more
+        than this needs and grows as an administrator grants more."""
+        profile = (self.RECIPE / "providers" / "graph-user.yaml").read_text(
+            encoding="utf-8")
+        # Asserted on the scope list rather than on the file, because the file
+        # names `.default` in the comment explaining why it is not used —
+        # which is worth keeping and is not a use of it.
+        block = profile.split("scopes:", 1)[1].split("material:", 1)[0]
+        self.assertNotIn(".default", block)
+        self.assertIn("Mail.Read", block)
+        self.assertIn("User.Read", block)
+        self.assertIn("offline_access", block)
+
+    def test_the_setup_and_the_profile_ask_for_the_same_thing(self):
+        requested = self.scopes_requested()
+        profile = (self.RECIPE / "providers" / "graph-user.yaml").read_text(
+            encoding="utf-8")
+        block = profile.split("scopes:", 1)[1].split("material:", 1)[0]
+        for scope in ("Mail.Read", "User.Read", "offline_access"):
+            self.assertIn(scope, requested, scope)
+            self.assertIn(scope, block, scope)
+
+
+class TestTheGraphSetupRefusesAnIncompleteProvider(unittest.TestCase):
+    """A provider that attaches cleanly and stops within the hour is worse
+    than one that refuses: the setup reports success and the failure arrives
+    later, unattended."""
+
+    RECIPE = HERE.parents[1]
+    SCRIPT = RECIPE / "scripts" / "setup-graph.sh"
+
+    def fake_openshell(self, folder, *, refresh_ok=True, strategy="oauth2_refresh_token"):
+        stub = folder / "openshell"
+        status = (f"STRATEGY {strategy} STATUS refreshed"
+                  if refresh_ok else "")
+        rc = "0" if refresh_ok else "1"
+        profile = json.dumps({
+            "id": "memory-driven-cos-graph-user",
+            "endpoints": [{"host": "graph.microsoft.com", "port": 443,
+                           "protocol": "rest", "access": "read-only",
+                           "enforcement": "enforce"}],
+            "credentials": [{"env_vars": ["MS_GRAPH_ACCESS_TOKEN"]}],
+            "binaries": ["/usr/bin/python3"]})
+        stub.write_text(f"""#!/usr/bin/env bash
+case "$1 $2" in
+  "sandbox provider") cat <<'LIST'
+NAME  TYPE  CREDENTIAL_KEYS
+mdcos-graph  memory-driven-cos-graph-user  1
+LIST
+  ;;
+  "provider get") printf 'Type: memory-driven-cos-graph-user\nCredential keys: MS_GRAPH_ACCESS_TOKEN\n' ;;
+  "provider refresh") printf '%s\n' {status!r}; exit {rc} ;;
+  "provider profile") cat <<'JSON'
+{profile}
+JSON
+  ;;
+  *) exit 0 ;;
+esac
+""", encoding="utf-8")
+        stub.chmod(0o755)
+        uname = folder / "uname"
+        uname.write_text("#!/usr/bin/env bash\necho Linux\n", encoding="utf-8")
+        uname.chmod(0o755)
+        return folder
+
+    def run_setup(self, folder):
+        return subprocess.run(
+            ["bash", str(self.SCRIPT)], capture_output=True, text=True,
+            stdin=subprocess.DEVNULL, cwd=str(self.RECIPE),
+            env={"PATH": f"{folder}:{os.environ['PATH']}",
+                 "HOME": str(folder), "OPENSHELL_SANDBOX": "",
+                 "SANDBOX_STORAGE_PATH": str(folder),
+                 "STORE_ENCRYPTION_ACKNOWLEDGED": "1"})
+
+    def test_a_provider_with_refresh_is_reusable(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            self.fake_openshell(folder)
+            proc = self.run_setup(folder)
+        self.assertIn("Nothing to do", proc.stdout)
+
+    def test_a_provider_without_refresh_is_refused(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            self.fake_openshell(folder, refresh_ok=False)
+            proc = self.run_setup(folder)
+        out = proc.stdout + proc.stderr
+        self.assertNotIn("Nothing to do", out,
+                         "reported a finished setup for a credential that "
+                         "would expire within the hour")
+        self.assertIn("refresh", out)
+
+    def test_a_provider_with_the_wrong_strategy_is_refused(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            self.fake_openshell(folder, strategy="static")
+            proc = self.run_setup(folder)
+        out = proc.stdout + proc.stderr
+        self.assertNotIn("Nothing to do", out)
+        self.assertIn("rotation", out)
 
 
 class TestTheFirstRoundIsBounded(CollectorCase):
@@ -471,10 +722,29 @@ class TestFailuresCarryTheirDiagnosisInTheExitCode(CollectorCase):
         self.graph.identity = {"displayName": "App"}
         self.assertEqual(self.run_main(), ingest_graph.EXIT_SCOPE)
 
-    def test_rate_limiting_has_its_own_code(self):
+    def test_an_unrecognised_status_is_the_general_code(self):
+        """This test used to be named for rate limiting and sent a 500."""
         self.serve([{"value": [], "@odata.deltaLink": "http://x/final"}])
         self.graph.status_for_next = 500
         self.assertEqual(self.run_main(), ingest_graph.EXIT_OTHER)
+
+    def test_relentless_throttling_ends_the_tick(self):
+        """A `Retry-After` inside the per-wait bound, over and over, is a loop
+        with no exit: the page budget counts successful responses and a cron
+        pre-step has no timeout of its own. Reproduced at review as 9,248
+        retries still going."""
+        self.serve([{"value": [], "@odata.deltaLink": "http://x/final"}])
+        self.graph.rate_limit_forever = True
+        ingest_graph.MAX_TOTAL_BACKOFF_SECONDS = 3
+        try:
+            self.assertEqual(self.run_main(), ingest_graph.EXIT_RATE_LIMIT)
+        finally:
+            ingest_graph.MAX_TOTAL_BACKOFF_SECONDS = 120
+
+    def test_the_throttling_bound_is_a_total_not_a_per_wait(self):
+        """Each individual wait was already bounded; the sum was not."""
+        self.assertLessEqual(ingest_graph.MAX_BACKOFF_SECONDS,
+                             ingest_graph.MAX_TOTAL_BACKOFF_SECONDS)
 
     def test_something_unrecognised_in_the_variable_is_refused(self):
         os.environ["MS_GRAPH_ACCESS_TOKEN"] = "not-a-token"

@@ -11,9 +11,12 @@
 # boundary. Gateway-held keeps it out entirely, and the cost is a dependency on
 # a running gateway, which this recipe already has.
 #
-# Delegated access only. `Mail.Read` covers the signed-in mailbox and nothing
-# else, and `offline_access` is what lets the gateway keep renewing without
-# asking again. An application permission would read every mailbox in the
+# Delegated access only, and exactly three permissions. `Mail.Read` covers the
+# signed-in mailbox and nothing else. `User.Read` is what makes `/me` readable,
+# which the collector needs to know whose mailbox this is — a message that
+# names the user is a different thing from one that copies them, and the
+# addressing field says which. `offline_access` lets the gateway keep renewing
+# without asking again. An application permission would read every mailbox in the
 # tenant, which is not what a personal assistant needs and not what the
 # collector checks for — it refuses a token whose `/me` has no address, which
 # is what an application token looks like.
@@ -34,7 +37,22 @@ credentials:
     refresh:
       strategy: oauth2_refresh_token
       token_url: https://login.microsoftonline.com/common/oauth2/v2.0/token
-      scopes: [https://graph.microsoft.com/.default]
+      # The exact permissions, not `.default`.
+      #
+      # `.default` asks for everything already granted to this client for
+      # this user, which on a client registered for other purposes is more
+      # than this recipe needs — and it would grow silently as an
+      # administrator granted more. Naming them keeps the credential the
+      # gateway holds no wider than the boundary declared below.
+      #
+      # `User.Read` is here because the collector reads `/me` to learn which
+      # mailbox it is looking at, which decides whether a message addressed
+      # the user or merely copied them. Microsoft documents it as the
+      # least-privileged permission for that endpoint.
+      scopes:
+        - https://graph.microsoft.com/Mail.Read
+        - https://graph.microsoft.com/User.Read
+        - offline_access
       # An hour is the Microsoft identity platform's usual access-token
       # lifetime; renew ten minutes early so a tick starting near the boundary
       # does not race the expiry.

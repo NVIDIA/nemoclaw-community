@@ -32,7 +32,12 @@ WANT_HOST="graph.microsoft.com"
 # own application passes its ids rather than editing this file.
 CLIENT_ID="${GRAPH_CLIENT_ID:-}"
 TENANT_ID="${GRAPH_TENANT_ID:-common}"
-SCOPES="offline_access https://graph.microsoft.com/Mail.Read"
+# Exactly what the collector uses. `User.Read` is not incidental: it is
+# what makes `/me` readable, and `/me` is how the collector learns which
+# mailbox it is reading — which decides whether a message addressed the
+# user or copied them. Requesting `Mail.Read` alone produced a setup that
+# depended on a permission it never asked for.
+SCOPES="offline_access https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/User.Read"
 
 if ! command -v openshell >/dev/null 2>&1; then
   if [[ -n "${OPENSHELL_SANDBOX:-}" ]]; then
@@ -86,6 +91,20 @@ while read -r name; do
     fi
     if ! validate_profile "$type"; then
       echo "     '$name' does not carry this recipe's endpoint policy" >&2
+      exit 1
+    fi
+    # And that something renews it. A provider with the right key, the right
+    # type and the right policy but no refresh chain attaches cleanly and
+    # stops within the hour — reported here as "nothing to do", which is the
+    # least useful moment to be told nothing.
+    if ! status="$(openshell provider refresh status "$name" \
+        --credential-key "$USABLE_KEY" 2>&1)"; then
+      echo "     '$name' has no refresh configured; its credential would" >&2
+      echo "     expire within the hour. Re-run with FORCE_REAUTH=1." >&2
+      exit 1
+    fi
+    if ! printf '%s' "$status" | grep -q "oauth2_refresh_token"; then
+      echo "     '$name' is not configured for token rotation" >&2
       exit 1
     fi
     reusable="$name"

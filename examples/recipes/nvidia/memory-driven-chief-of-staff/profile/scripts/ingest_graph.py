@@ -40,7 +40,6 @@ Exit codes are the contract `select_intake.py` reads:
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import sys
@@ -86,6 +85,20 @@ MAX_BACKFILL_DAYS = 3650
 # issue unbounded requests will eventually meet a mailbox that makes it do so,
 # and the tick after that one still has to finish.
 REQUEST_BUDGET = 10
+
+# How many message identities are remembered for answering "moved or deleted".
+# A removal concerns something collected recently; an unbounded map would grow
+# with the mailbox for no benefit.
+REMEMBERED_IDENTITIES = 5000
+
+# How long one run may spend being told to wait.
+#
+# Graph answers 429 with a `Retry-After`, and a caller that honours it without
+# a total bound will honour it forever: the page budget counts successful
+# responses, and a scheduled pre-step has no timeout of its own. Reproduced at
+# review: 9,248 retries and still going. A tick that cannot make progress
+# inside this budget reports rate limiting and lets the next one try.
+MAX_TOTAL_BACKOFF_SECONDS = 120
 PAGE_SIZE = 50
 MAX_BACKOFF_SECONDS = 30
 
@@ -95,7 +108,8 @@ MAX_BACKOFF_SECONDS = 30
 STATE_FILE = "graph_state.json"
 
 FIELDS = ("id,parentFolderId,conversationId,receivedDateTime,from,subject,"
-          "body,webLink,isRead,toRecipients,ccRecipients")
+          "body,webLink,isRead,toRecipients,ccRecipients,"
+          "internetMessageId")
 
 
 class GraphError(Exception):
@@ -171,10 +185,6 @@ def save_state(state: dict[str, Any]) -> None:
         pass
 
 
-def fingerprint(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
-
-
 def call(path: str, token: str, *, absolute: bool = False) -> dict[str, Any]:
     """One Graph GET, with the failures that need distinguishing.
 
@@ -192,6 +202,7 @@ def call(path: str, token: str, *, absolute: bool = False) -> dict[str, Any]:
         "Prefer": 'outlook.body-content-type="text"',
     })
     delay = 1.0
+    waited = 0.0
     while True:
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
@@ -210,7 +221,13 @@ def call(path: str, token: str, *, absolute: bool = False) -> dict[str, Any]:
                 if wait > MAX_BACKOFF_SECONDS:
                     raise GraphError("rate limited beyond the backoff bound",
                                      "rate_limit") from exc
+                if waited + wait > MAX_TOTAL_BACKOFF_SECONDS:
+                    raise GraphError(
+                        "rate limited for longer than one tick may wait "
+                        f"({int(waited)}s so far); the next tick continues "
+                        "from where this one stopped", "rate_limit") from exc
                 time.sleep(wait)
+                waited += wait
                 delay = min(delay * 2, MAX_BACKOFF_SECONDS)
                 continue
             raise GraphError("Graph returned HTTP %d" % exc.code) from exc
@@ -222,30 +239,37 @@ def call(path: str, token: str, *, absolute: bool = False) -> dict[str, Any]:
                              "other") from exc
 
 
-def identity(token: str, state: dict[str, Any], *,
-             refresh: bool = False) -> dict[str, Any]:
-    """Whose mailbox this is, cached.
+def identity(token: str, state: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    """Whose mailbox this is, checked every run. Returns it and whether it
+    changed.
 
-    The address decides addressing — being a To recipient is being asked,
-    being copied is being informed — so it is needed on every message and
-    fetched once. Keyed on the credential, so replacing the token re-probes
-    rather than inheriting the previous mailbox's identity along with its
-    delta cursor.
+    Not cached against the credential, which was the mistake here. Inside the
+    sandbox the credential is a placeholder that the gateway substitutes, and
+    the placeholder does not change when the token behind it is replaced — so
+    a digest of it stays the same across a re-authorisation to a completely
+    different account. The identity cache and the delta cursor would then be
+    carried over to somebody else's mailbox, which is the one outcome worth
+    spending a request per tick to prevent.
+
+    So `/me` is asked every run, and what is compared is the mailbox address
+    — a durable identifier belonging to the account rather than to the
+    credential presented for it. One request against a bounded budget, and
+    the answer is the addressing input every message needs anyway.
     """
-    mark = fingerprint(token)
-    cached = state.get("identity")
-    if not refresh and isinstance(cached, dict) and cached.get("token") == mark:
-        return cached
-
     me = call("/me?$select=mail,userPrincipalName,displayName", token)
     address = me.get("mail") or me.get("userPrincipalName") or ""
     if not address:
         raise GraphError(
             "The token works but the mailbox has no address. This usually "
             "means an application token rather than a delegated one; this "
-            "recipe needs delegated Mail.Read.", "scope")
-    return {"token": mark, "address": address,
-            "display_name": me.get("displayName")}
+            "recipe needs delegated Mail.Read and User.Read.", "scope")
+
+    previous = state.get("identity")
+    changed = bool(isinstance(previous, dict)
+                   and previous.get("address")
+                   and previous["address"].lower() != address.lower())
+    return ({"address": address, "display_name": me.get("displayName")},
+            changed)
 
 
 def first_round_url(days: int) -> str:
@@ -258,6 +282,31 @@ def first_round_url(days: int) -> str:
         "$filter": "receivedDateTime ge %s" % start,
     })
     return "/me/mailFolders/inbox/messages/delta?" + query
+
+
+def still_in_mailbox(source_id: str, token: str) -> bool:
+    """Is this message somewhere else in the mailbox, or actually gone?
+
+    Asked by `internetMessageId`, which a message keeps when it moves; the
+    per-folder id does not, so it cannot be used here. A failure to answer is
+    read as "still there", because the cost of being wrong in that direction
+    is a body kept a little longer, and the cost of the other is a body
+    cleared because a search timed out.
+    """
+    known = read_state().get("message_ids", {})
+    internet_id = known.get(source_id)
+    if not internet_id:
+        # Never seen with an identity of its own — collected before this
+        # existed, or the field was absent. Treat a removal as a removal
+        # rather than guessing that it moved.
+        return False
+    query = urllib.parse.quote(
+        "internetMessageId eq '%s'" % internet_id.replace("'", "''"), safe="")
+    try:
+        found = call("/me/messages?$filter=%s&$select=id&$top=1" % query, token)
+    except GraphError:
+        return True
+    return bool(found.get("value"))
 
 
 def tombstone(conn, source_ids: list[str]) -> int:
@@ -326,7 +375,7 @@ def collect(token: str, address: str, state: dict[str, Any],
     else:
         url, absolute = first_round_url(days), False
 
-    added_total = removed_total = pages = 0
+    added_total = removed_total = moved = pages = 0
     delta_link = None
 
     while url and pages < REQUEST_BUDGET:
@@ -334,15 +383,42 @@ def collect(token: str, address: str, state: dict[str, Any],
         pages += 1
 
         batch = payload.get("value") or []
-        # A delta page mixes changes and removals. `@removed` carries a reason
-        # — `deleted` or `changed` — and only the first is a deletion; the
-        # second means the item moved out of the scope being synchronised,
-        # which is not the same thing and must not tombstone it.
-        removals = [m["id"] for m in batch
-                    if isinstance(m.get("@removed"), dict)
-                    and m["@removed"].get("reason") == "deleted"
-                    and m.get("id")]
+        # A delta page mixes changes and removals, and the removals need a
+        # second question asked before any of them is believed.
+        #
+        # Graph reports `@removed.reason == "deleted"` when a message leaves
+        # the folder being tracked — whether it was deleted or filed
+        # somewhere else. An earlier version of this read a `"changed"`
+        # reason for a move; no such value is documented and the service does
+        # not send one, so archiving a message was recorded as the person
+        # deleting it and its body was cleared. Measured against the live
+        # service: moving a message to Archive produces exactly the removal a
+        # deletion produces, and the per-folder id changes, so the id cannot
+        # answer it either.
+        #
+        # What survives a move is `internetMessageId`, which is the message's
+        # own identity rather than its position. If a search of the mailbox
+        # still finds it, it moved; if it does not, it is gone. One request
+        # per removal, and removals are rare beside messages.
+        gone_ids = [m["id"] for m in batch
+                    if isinstance(m.get("@removed"), dict) and m.get("id")]
         present = [m for m in batch if "@removed" not in m and m.get("id")]
+
+        removals = [source_id for source_id in gone_ids
+                    if not still_in_mailbox(source_id, token)]
+        moved += len(gone_ids) - len(removals)
+
+        # Remember each message's own identity, so a later removal can be
+        # asked about. Bounded, and oldest first out: a removal concerns
+        # something collected recently, and an unbounded map would grow with
+        # the mailbox.
+        known = state.setdefault("message_ids", {})
+        for m in present:
+            if m.get("internetMessageId"):
+                known[m["id"]] = m["internetMessageId"]
+        if len(known) > REMEMBERED_IDENTITIES:
+            for stale in list(known)[:len(known) - REMEMBERED_IDENTITIES]:
+                known.pop(stale, None)
 
         items = [graph_message_to_item(m, address) for m in present]
         added, gone = commit(items, removals)
@@ -369,7 +445,7 @@ def collect(token: str, address: str, state: dict[str, Any],
         complete = False
 
     return {"source": "email", "scope": "inbox", "added": added_total,
-            "removed": removed_total, "pages": pages,
+            "removed": removed_total, "moved": moved, "pages": pages,
             "resumed": resuming, "complete": complete,
             "synchronised": bool(state.get("delta"))}
 
@@ -412,7 +488,19 @@ def main(argv: list[str] | None = None) -> int:
     days = bounded_days("GRAPH_BACKFILL_DAYS", BACKFILL_DAYS)
 
     try:
-        who = identity(token, state, refresh=refresh)
+        who, mailbox_changed = identity(token, state)
+        if mailbox_changed:
+            # A different account. Everything remembered describes the old
+            # one: a delta cursor issued for its inbox, a resume link into
+            # its pages, identities of its messages. Carrying any of it over
+            # would synchronise one mailbox against another's position.
+            print("the mailbox has changed; discarding the previous "
+                  "synchronisation state", file=sys.stderr)
+            for key in ("delta", "next", "message_ids"):
+                state.pop(key, None)
+        elif refresh:
+            state.pop("delta", None)
+            state.pop("next", None)
         state["identity"] = who
         try:
             report = collect(token, who["address"], state, days)
