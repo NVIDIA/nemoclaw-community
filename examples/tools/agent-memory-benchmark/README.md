@@ -42,7 +42,7 @@ does, open an issue.
 | Evidence level | local/static |
 | Support and maturity | Best-effort community support; see [SUPPORT.md](../../../SUPPORT.md). |
 | External access, data, and actions | Scoring a real system sends corpus text and questions to the endpoint you point `--upstream` at, and you pay for those tokens. The harness writes only under `results/`; an adapter you add is not sandboxed and can write anywhere your user can. The offline self-test sends nothing and costs nothing. |
-| Start here | [Running it](#running-it) |
+| Start here | [Checking it works](#checking-it-works) — offline; then [Running it](#running-it) for a scored run |
 | Confirm success | [Checking it works](#checking-it-works) |
 
 ## What a run looks like
@@ -288,14 +288,28 @@ proxy at.
 
 ## Checking it works
 
-**Evidence level:** local/static — the checks below are offline and complete in
-under a minute. Nothing here exercises a live endpoint.
+**Evidence level:** local/static. Nothing here exercises a live endpoint.
+
+**Expected result:**
+
+```text
+115 passed
+```
+
+**This verifies:** the runner, grader, report renderer, leaderboard and the
+ledger adapter's SQLite ingest agree with the shipped corpus, questions and
+answer key; the two fixture adapters still score exactly 1.0 and 0.0; and the
+claims the documentation makes about hashes, counts and domains still hold.
+
+**This does not verify:** any scored run against a live endpoint, the
+accounting proxy against real upstream traffic, a real model call from any
+adapter, or Windows.
 
 The whole pipeline runs offline against a small fixture whose score is known in
 advance — no model, no network, no API key:
 
 ```bash
-python3 -m pytest tests/     # expected: 100 passed
+python3 -m pytest tests/     # expected: 115 passed
 ```
 
 `selftest/` holds a six-document corpus, six questions covering all four

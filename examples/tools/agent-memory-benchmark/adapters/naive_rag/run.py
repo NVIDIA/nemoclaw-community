@@ -8,7 +8,7 @@ This adapter anchors the cheap end of the trade-off the benchmark measures. It
 spends almost nothing at ingest (embeddings only, no reasoning) and does exactly
 one retrieval per question — no query rewriting, no reranking, no second round.
 It is deliberately a floor, not a strong RAG: `agentic_rag` shares its index and
-adds the search policy, so the difference between their rows is what search
+adds the search strategy, so the difference between their rows is what search
 policy buys.
 """
 

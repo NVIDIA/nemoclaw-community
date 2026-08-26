@@ -57,8 +57,7 @@ addresses and no telephone numbers, so the equivalent reserved ranges
 (RFC 5737 documentation networks, the `555-01xx` telephone block) do not
 arise. Every URL points at a `.example` host.
 
-**Organization and project names.** The invented project names were screened
-against internal sources for collision with real projects. Where a name
+**Organization and project names.** The invented project names were checked for collision with real products. Where a name
 collided with something publicly marketed, it was renamed — the project now
 called Quillon was one such rename. A shared word is not a disclosure, so a
 name was changed only where the collision was with something publicly
@@ -95,8 +94,8 @@ single-file artifact is hashed as its bytes alone, with no path framing
 | `corpus_b/corpus/` (corpus B) | 176 | `ef57ca34e3937b5c4ae847428676550d3a036c5a73b7ed9ae3c6a038e9187e96` |
 | `questions/questions.jsonl` | 1 | `6d38f6c11edbefb4baa77b8014af1920c48ab65f3647a2bb10daa691e9259b06` |
 | `gold/answers.jsonl` | 1 | `55a66b80ff0f62d8b3a340dcbb9cc970a011922b1e509269c4402192f9504970` |
-| `corpus_b/questions/answers.jsonl` | 1 | `972e8a3bf6b4690cae14aa844c2853dbfc16ba3e3415685bc8c3095c97d79740` |
-| `corpus_b/questions/questions.jsonl` | 1 | `8ea778aa8abb4e4e7c86a6517f5ea33b1b79f43b359186cbb9be2284375714e3` |
+| `corpus_b/questions/answers.jsonl` | 1 | `d2543be56bbf072b5c68b94f1939d16d0b7c6472812951acbc9913c803803671` |
+| `corpus_b/questions/questions.jsonl` | 1 | `e5d8414e712911e04d314ef2b5fa81caa0058e794eb95c12533f8cbe3d43f0d4` |
 
 Recompute at any time:
 
@@ -112,6 +111,6 @@ default `2026`; `MNEMO_ALT_YEARS`, default `2027`). Both are recorded in the
 report's `fingerprint` block. Leave them at their defaults for a comparable
 run.
 
-Scores graded under different hashes should not be compared. If a grading rule
+Scores graded under different hashes must not be compared. If a grading rule
 turns out to be wrong, fix it and re-score the stored answers with
 `tools/regrade.py` — no tokens, no re-run — and record the new hash.

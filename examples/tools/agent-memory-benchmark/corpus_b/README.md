@@ -37,7 +37,10 @@ it did not:
   cross-document facts collapsed into one place; planted sentences missing
   altogether. A generation-time checker enforced all of these before
   publication and reported zero; the generator and its review records are not
-  part of this contribution.
+  part of this contribution. The checker did not test for an empty body, and
+  two documents ship with frontmatter and no body
+  (`E:2027-08-24T12-40-00__1886520e`, `E:2027-08-25T15-01-00__42183c16`). No
+  published question depends on either.
 * **Not fixed:** the reviewer still flags prose-level imperfections — a phrase
   that reads like an answer key, two similar records mentioned in one thread, an
   incidental date that does not line up. Across nine rounds those counts moved
@@ -51,7 +54,7 @@ sentence of its prose**. Each question is checked against the corpus before it
 ships: the expected answer must actually be present, and a question whose answer
 cannot be verified is dropped rather than published. 13 of 50 curated
 candidates were dropped that
-way, and 10 of 70 drafted factual ones — `dropped.json` and
+way, and 11 of 70 drafted factual ones — `dropped.json` and
 `factual_dropped.json` carry the reason for each.
 
 ## Layout
@@ -66,7 +69,7 @@ produced are not shipped: they are how the corpus was made, not evidence about
 it. What ships is the corpus, its questions, and the record of what was
 dropped.
 
-## Honest limitations
+## Known limitations
 
 * Synthetic. Real email is messier: quoted forwards, dead threads, meaning that
   depends on a conversation held in a corridor.

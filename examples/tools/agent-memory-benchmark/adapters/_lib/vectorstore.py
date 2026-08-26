@@ -5,7 +5,7 @@
 
 Both retrieval baselines build the *same* index from the same corpus. Keeping
 that in one place is what makes their comparison mean something: the only
-difference between `naive_rag` and `agentic_rag` is the search policy on top —
+difference between `naive_rag` and `agentic_rag` is the search strategy on top —
 one fixed top-k lookup versus an agent writing its own queries over several
 rounds.
 """

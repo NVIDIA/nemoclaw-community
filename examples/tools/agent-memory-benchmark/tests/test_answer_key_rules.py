@@ -216,3 +216,35 @@ def test_no_accepted_answer_is_a_bare_common_word():
             if str(a).strip().lower() in COMMON:
                 offenders.append((g["id"], a))
     assert not offenders, f"accept entries that match almost any answer: {offenders}"
+
+
+def test_the_submission_guide_quotes_the_contract_verbatim():
+    """The guide's pasted copy is what a Path-1 submitter actually uses.
+
+    The module is importable so an adapter cannot drift, but the copy in the
+    document is hand-maintained and nothing held the two together.
+    """
+    import re
+
+    from bench.answer_contract import ANSWER_CONTRACT
+
+    guide = (REPO / "docs" / "SUBMITTING.md").read_text(encoding="utf-8")
+    quoted = re.search(r"```\n(Answer the question from the memory.*?)```", guide, re.S)
+    assert quoted, "the submission guide no longer quotes the answer contract"
+    assert quoted.group(1).strip() == ANSWER_CONTRACT.strip(), (
+        "docs/SUBMITTING.md and bench/answer_contract.py have drifted apart"
+    )
+
+
+def test_the_answer_contract_names_no_real_corpus_document():
+    """An id in the system prompt is handed to the model on every question.
+
+    Two real ids used to sit in the example, and between them they were the
+    gold citation for thirteen questions, which inflated the evidence
+    diagnostics of every submission.
+    """
+    from bench.answer_contract import ANSWER_CONTRACT
+
+    cited = {sid for g in GOLD for sid in (g.get("gold_source_ids") or [])}
+    leaked = sorted(sid for sid in cited if sid in ANSWER_CONTRACT)
+    assert not leaked, f"the answer contract names real corpus documents: {leaked}"

@@ -74,6 +74,12 @@ def _rate(value, absent: str) -> str:
     return absent if value is None else str(value)
 
 
+def _caveat(report: dict) -> str:
+    """What a reader must know before believing this row's number."""
+    adapter = report.get("adapter")
+    return str(adapter.get("caveat") or "") if isinstance(adapter, dict) else ""
+
+
 def _adapter_name(report: dict) -> str:
     """Adapter name across report schema versions.
 
@@ -100,6 +106,7 @@ def render_markdown(report: dict) -> str:
     cost = report.get("cost", {})
     lines = [
         f"# {_adapter_name(report)} — {report.get('model') or 'model not declared'}",
+        *( [f"> {_caveat(report)}", ""] if _caveat(report) else [] ),
         "",
         f"* corpus: {report['corpus']['documents']} docs "
         f"({report['corpus']['part_a']} part_a / {report['corpus']['part_b']} part_b)",

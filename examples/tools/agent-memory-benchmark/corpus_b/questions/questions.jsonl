@@ -14,13 +14,13 @@
 {"id": "b-chain-sup-pour-window", "type": "chain_freshness", "difficulty": "hard", "question": "Camden Row podium concrete pour window moved more than once. Give the value it held in between, and the value now."}
 {"id": "b-fresh-sup-assistant-hire", "type": "freshness", "difficulty": "base", "question": "As of the end of the corpus, what is the current position on Assistant superintendent hire?"}
 {"id": "b-asof-sup-ridgeway-closeout-count", "type": "as_of", "difficulty": "hard", "question": "As of 2027-08-19, what was the position on Ridgeway Depot closeout packages still outstanding? Answer with the value that was current on that date."}
-{"id": "b-disambig-look-two-reyes", "type": "disambiguation", "difficulty": "base", "question": "Alan Reyes and Alana Reyes are two different people — is that right? Identify each one separately and say what it is."}
-{"id": "b-disambig-look-two-permits", "type": "disambiguation", "difficulty": "base", "question": "PB-2291 and PB-2219 are different permits — is that right? Identify each one separately and say what it is."}
-{"id": "b-disambig-look-two-inspections", "type": "disambiguation", "difficulty": "base", "question": "The electrical rough-in and electrical final inspections are different events — is that right? Identify each one separately and say what it is."}
-{"id": "b-disambig-look-two-change-orders", "type": "disambiguation", "difficulty": "base", "question": "CO-114 and CO-141 have opposite outcomes — is that right? Identify each one separately and say what it is."}
-{"id": "b-disambig-look-bots-not-people", "type": "disambiguation", "difficulty": "base", "question": "SitePulse, PermitTrack and Northline Payroll are automated senders — is that right? Identify each one separately and say what it is."}
-{"id": "b-disambig-look-rfi17-sk17", "type": "disambiguation", "difficulty": "base", "question": "Harbor Point RFI-17 and Camden Row sketch SK-17 are different records — is that right? Identify each one separately and say what it is."}
-{"id": "b-disambig-look-co141-submittal141", "type": "disambiguation", "difficulty": "base", "question": "Camden Row CO-141 and Ridgeway Depot submittal 141 are different records with different outcomes — is that right? Identify each one separately and say what it is."}
+{"id": "b-disambig-look-two-reyes", "type": "disambiguation", "difficulty": "base", "question": "Alan Reyes and Alana Reyes are two different people \u2014 is that right? Identify each one separately and say what it is."}
+{"id": "b-disambig-look-two-permits", "type": "disambiguation", "difficulty": "base", "question": "PB-2291 and PB-2219 are different permits \u2014 is that right? Identify each one separately and say what it is."}
+{"id": "b-disambig-look-two-inspections", "type": "disambiguation", "difficulty": "base", "question": "The electrical rough-in and electrical final inspections are different events \u2014 is that right? Identify each one separately and say what it is."}
+{"id": "b-disambig-look-two-change-orders", "type": "disambiguation", "difficulty": "base", "question": "CO-114 and CO-141 have opposite outcomes \u2014 is that right? Identify each one separately and say what it is."}
+{"id": "b-disambig-look-bots-not-people", "type": "disambiguation", "difficulty": "base", "question": "SitePulse, PermitTrack and Northline Payroll are automated senders \u2014 is that right? Identify each one separately and say what it is."}
+{"id": "b-disambig-look-rfi17-sk17", "type": "disambiguation", "difficulty": "base", "question": "Harbor Point RFI-17 and Camden Row sketch SK-17 are different records \u2014 is that right? Identify each one separately and say what it is."}
+{"id": "b-disambig-look-co141-submittal141", "type": "disambiguation", "difficulty": "base", "question": "Camden Row CO-141 and Ridgeway Depot submittal 141 are different records with different outcomes \u2014 is that right? Identify each one separately and say what it is."}
 {"id": "b-abstain-sched-walkthrough", "type": "abstention", "difficulty": "base", "question": "How did Vestamark pre-handover walkthrough at Harbor Point go? Describe the outcome."}
 {"id": "b-abstain-sched-design-review", "type": "abstention", "difficulty": "base", "question": "How did Client design review for the Camden Row lobby go? Describe the outcome."}
 {"id": "b-abstain-sched-crane-dismantle", "type": "abstention", "difficulty": "base", "question": "How did Tower crane dismantle at Harbor Point go? Describe the outcome."}
@@ -51,7 +51,6 @@
 {"id": "b-fact-018", "type": "single_hop", "difficulty": "base", "question": "For Camden Row, which two trade completion notices were attached?"}
 {"id": "b-fact-019", "type": "single_hop", "difficulty": "base", "question": "Which permit was still sitting with the city for Harbor Point on August 24, 2027?"}
 {"id": "b-fact-020", "type": "multi_source", "difficulty": "base", "question": "For the Harbor Point steel shipping schedule, what load range did Hal identify?"}
-{"id": "b-fact-021", "type": "multi_source", "difficulty": "base", "question": "Who sent the HPS steel delivery update?"}
 {"id": "b-fact-022", "type": "single_hop", "difficulty": "base", "question": "What was the batching plant's order confirmation for the podium pour?"}
 {"id": "b-fact-023", "type": "single_hop", "difficulty": "base", "question": "What is Marcus's podium pour take-off for Camden Row?"}
 {"id": "b-fact-024", "type": "single_hop", "difficulty": "base", "question": "What foundation permit number came through for Harbor Point?"}

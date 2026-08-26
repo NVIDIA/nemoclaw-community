@@ -34,8 +34,9 @@ Rules:
    later one is the answer; do not present the superseded value as still true.
 3. If the corpus does not support an answer, say plainly that it is not in the
    corpus. Never guess. Something that was only scheduled has not happened.
-4. Cite the document ids you relied on, exactly as they appear in the corpus
-   (for example "E:2026-05-14T09-29-00__eba84193" or "S:D200JOR001_dm@2026-05-21").
+4. Cite the document ids you relied on, exactly as they appear in the corpus.
+   They look like "E:<timestamp>__<hash>" for one email and
+   "S:<channel>@<date>" for one channel-day.
 
 Reply with a single JSON object and nothing else:
 {"answer": "<your short answer>", "source_ids": ["<doc id>", ...]}
@@ -138,7 +139,10 @@ Corpus B is 97 questions over 173 documents. Base (86): `single_hop` 40,
 `multi_source` 20, `abstention` 12, `disambiguation` 7, `freshness` 7. Hard
 (11): `as_of` 7, `chain_freshness` 2, `disambiguation` 1, `ordering` 1. It is a
 smaller and differently balanced set than corpus A, so read the two as separate
-results rather than averaging them.
+results rather than averaging them. Its `multi_source` items are also annotated
+differently: each cites one supporting document and records how many others
+repeat the value, where corpus A's cite two to four. Compare a per-type rate
+only within a corpus.
 
 Run at least A and B. A result on one corpus is a result about that corpus.
 
@@ -147,7 +151,11 @@ Run at least A and B. A result on one corpus is a result about that corpus.
 `adapters/ledger_rag/` is worth reading before writing your own: it is a short,
 complete adapter over a memory store that lives in this repository, and it
 shows the shape — ingest writes into the store, answer selects from it and
-calls a model, and neither phase can see the questions or the answer key.
+calls a model. Ingest never sees the questions, and neither phase ever sees
+the answer key.
+
+A number from it measures candidate selection over that ledger plus the model,
+not the recipe's own behaviour: the recipe has no question-answering path.
 
 ## Where a result goes
 

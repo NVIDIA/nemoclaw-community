@@ -26,7 +26,9 @@ PRICES: dict[str, tuple[float, float]] = {
 
 
 def cost_usd(model: str, input_tokens: int, output_tokens: int) -> float | None:
-    price = PRICES.get(model)
+    # Gateways namespace ids as "<vendor>/<publisher>/<model>". Price the
+    # model, not the route it took to reach one.
+    price = PRICES.get(model) or PRICES.get(model.rsplit("/", 1)[-1])
     if price is None:
         return None
     return round(input_tokens / 1e6 * price[0] + output_tokens / 1e6 * price[1], 4)

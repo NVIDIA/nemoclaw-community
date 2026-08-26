@@ -368,6 +368,9 @@ def main() -> None:
             "revision": _adapter_revision(args.adapter),
             "declared_model": spec.get("model"),
             "declared_env": sorted(spec.get("env", {})),
+            # Carried into the report so it can be printed beside the number,
+            # not only in the adapter's own directory.
+            "caveat": spec.get("caveat"),
         },
         # Kept at the top level as well: every existing reader looks here.
         "model": model,

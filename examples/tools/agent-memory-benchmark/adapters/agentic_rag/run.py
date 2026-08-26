@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Agentic retrieval baseline: the model writes its own queries, over rounds.
 
-Same index as `naive_rag`, different search policy. Instead of one fixed top-k
+Same index as `naive_rag`, different search strategy. Instead of one fixed top-k
 lookup against the question text, the model decides what to search for, reads
 what comes back, and decides whether it has enough — up to a round limit. That
 is the honest middle row of the comparison: a system that digests nothing at

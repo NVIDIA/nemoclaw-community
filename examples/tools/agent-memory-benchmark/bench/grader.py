@@ -38,6 +38,10 @@ ABSTAIN_MARKERS = (
     "only planned", "not opened", "no outcome", "has not happened", "not yet happened",
     "did not happen", "no record of", "nothing in the raw", "does not state",
     "doesn't state", "does not say", "doesn't say", "corpus only shows",
+    # Active-voice forms of markers already on this list. "not mentioned" was
+    # here and "does not mention" was not, so the most natural way to decline
+    # scored wrong.
+    "does not mention", "doesn't mention", "does not record", "doesn't record",
     "only reserved", "no opened", "never opened", "not reviewed",
 )
 

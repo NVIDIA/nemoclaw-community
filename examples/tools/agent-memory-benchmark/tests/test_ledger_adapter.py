@@ -5,16 +5,23 @@
 
 Its ingest phase is pure SQLite over the recipe's own schema, so the part that
 proves the benchmark can drive a NemoClaw Community memory store is testable
-offline. Only the answer phase needs an endpoint, and nothing here calls one.
+offline. The answer phase is exercised too, against a loopback stub that
+returns a canned completion: only a real model call is out of scope. The first
+version of this file tested ingest alone, and the untested half was the broken
+half -- the answer phase shared one sqlite connection across a thread pool and
+raised on the first question of every run.
 """
 
 from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import threading
 import sqlite3
 import subprocess
 import sys
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
@@ -115,3 +122,55 @@ def test_the_adapter_declares_its_optional_endpoint(loaded):
     assert "not to the recipe" in spec["description"], (
         "the adapter must say whose behaviour a score describes"
     )
+
+
+class _StubCompletions(BaseHTTPRequestHandler):
+    """Answers any /chat/completions with a fixed, contract-shaped reply."""
+
+    def do_POST(self):  # noqa: N802 - BaseHTTPRequestHandler's spelling
+        self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        payload = json.dumps({
+            "choices": [{"message": {"content": json.dumps(
+                {"answer": "60%", "source_ids": ["E:2027-02-02T09-00-00__bbbb0001"]})}}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+        }).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def log_message(self, *args):  # keep the test output readable
+        return
+
+
+@pytest.fixture(scope="module")
+def stub_endpoint():
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _StubCompletions)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://127.0.0.1:{server.server_address[1]}/v1"
+    server.shutdown()
+    server.server_close()
+
+
+@pytest.mark.parametrize("workers", [1, 3, 6])
+def test_the_answer_phase_runs_at_every_worker_count(loaded, stub_endpoint, workers):
+    """The defect this catches raised on the first question at every count.
+
+    ThreadPoolExecutor never runs work on the calling thread, so no worker
+    count avoided a connection opened outside the pool.
+    """
+    questions = (SELFTEST / "questions.jsonl").read_text(encoding="utf-8")
+    completed = subprocess.run(
+        [sys.executable, str(RUN_PY), "answer", "--state", str(loaded),
+         "--workers", str(workers)],
+        input=questions, capture_output=True, text=True, timeout=120,
+        env={**os.environ, "OPENAI_BASE_URL": stub_endpoint,
+             "OPENAI_API_KEY": "stub", "MNEMO_MODEL": "stub-model"},
+    )
+    assert completed.returncode == 0, completed.stderr[-2000:]
+    rows = [json.loads(line) for line in completed.stdout.splitlines() if line.strip()]
+    assert len(rows) == 6, f"answered {len(rows)} of 6 questions"
+    assert all(r["answer"] for r in rows), "an answer came back empty"
+    assert all(r["source_ids"] for r in rows), "no evidence was attributed"

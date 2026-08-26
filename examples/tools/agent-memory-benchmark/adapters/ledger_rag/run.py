@@ -30,6 +30,7 @@ import os
 import re
 import sqlite3
 import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -146,13 +147,22 @@ def _select(conn: sqlite3.Connection, question: str) -> list[sqlite3.Row]:
 
 
 def cmd_answer(state: Path, workers: int) -> None:
-    conn = sqlite3.connect(state / "ledger.db")
-    conn.row_factory = sqlite3.Row
+    # One connection per worker thread. A sqlite3 connection is bound to the
+    # thread that opened it, and sharing one across the pool with
+    # check_same_thread=False trades the error for a race on the schema cache.
+    local = threading.local()
+
+    def conn() -> sqlite3.Connection:
+        if not hasattr(local, "db"):
+            local.db = sqlite3.connect(state / "ledger.db")
+            local.db.row_factory = sqlite3.Row
+        return local.db
+
     questions = [json.loads(line) for line in sys.stdin.read().splitlines() if line.strip()]
     model = os.environ.get("MNEMO_MODEL") or "gpt-4o"
 
     def answer_one(question: dict) -> dict:
-        rows = _select(conn, question["question"])
+        rows = _select(conn(), question["question"])
         context = "\n\n".join(
             f"[{r['source_id']}] {r['event_at']} {r['sender'] or ''}\n"
             f"{r['subject'] or ''}\n{(r['body'] or '')[:1800]}" for r in rows)
@@ -175,7 +185,6 @@ def cmd_answer(state: Path, workers: int) -> None:
     with ThreadPoolExecutor(max_workers=workers) as pool:
         for row in pool.map(answer_one, questions):
             print(json.dumps(row), flush=True)
-    conn.close()
 
 
 def main() -> None:

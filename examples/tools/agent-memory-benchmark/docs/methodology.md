@@ -28,11 +28,6 @@ total = ingest_tokens + N × per_question_tokens
 Reporting a single blended score would hide exactly the trade-off a practitioner
 needs to make.
 
-The two-group split is an annotation on the answer key. A corpus whose
-freshness entries do not carry it reports "not annotated for this corpus"
-rather than a rate, because an unannotated question is not the same as an
-absent one.
-
 ## Why hop count is a cost, not a penalty
 
 An early draft scored retrieval with `recall@k`. That is a vector-store-shaped
@@ -73,6 +68,11 @@ present and reachable, and a candidate whose answer could not be verified was
 dropped rather than published. `as_of` was written deliberately to be
 adversarial to ingest-time consolidation, since a memory that keeps only the
 current value has thrown the answer away.
+
+The two-group split is an annotation on the answer key. A corpus whose
+freshness entries do not carry it reports "not annotated for this corpus"
+rather than a rate, because an unannotated question is not the same as an
+absent one.
 
 ## Why there is no judge model
 
@@ -161,7 +161,7 @@ against a newer table.
   Results describe behaviour on this shape of data, not on personal archives in
   general.
 * **Retrieval is bundled into the score.** The benchmark measures ingestion
-  through the QA it enables, so a system with weak ingestion and strong retrieval
+  through the question answering it enables, so a system with weak ingestion and strong retrieval
   can score well. Evidence recall is reported separately to expose that case, but
   the two are not fully separable by design.
 * **English questions and answers.**

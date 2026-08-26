@@ -90,6 +90,8 @@ def _rows(runs_dir: Path) -> list[dict]:
                 "evidence_recall": summary["evidence"]["evidence_recall_mean"],
                 "accounting": _accounting_method(report),
                 "corpus": _corpus_label(report),
+                "caveat": (report.get("adapter") or {}).get("caveat")
+                if isinstance(report.get("adapter"), dict) else None,
                 "run_id": report.get("run_id", report_path.parent.name),
             }
         )
@@ -127,6 +129,11 @@ def render(rows: list[dict]) -> str:
                 f"{_rate(row['evidence_recall'], 'n/a')} | {row['ingest_tokens']:,} | "
                 f"{_rate(row['per_question_tokens'], 'n/a')} | {row['accounting']} |"
             )
+        caveats = sorted({row["caveat"] for row in group if row.get("caveat")})
+        for caveat in caveats:
+            lines.append(f"> {caveat}")
+        if caveats:
+            lines.append("")
         lines.append("")
         if len(group) == 2:
             lines += ["**Ingest-time vs query-time:** " + _breakeven(*group), ""]

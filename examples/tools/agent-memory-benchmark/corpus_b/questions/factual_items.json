@@ -65,7 +65,7 @@
     "question": "What is the status of the Camden Row window warranty?",
     "mode": "string_any",
     "accept": [
-      "hasn’t been issued",
+      "hasn\u2019t been issued",
       "hasn't been issued",
       "still sitting in the processing queue"
     ],
@@ -250,20 +250,6 @@
       "E:2027-07-21T10-14-00__06ac8aad"
     ],
     "notes": "drawn from E:2027-07-21T10-14-00__06ac8aad; answer also appears in 1 other documents"
-  },
-  {
-    "id": "b-fact-021",
-    "type": "multi_source",
-    "difficulty": "base",
-    "question": "Who sent the HPS steel delivery update?",
-    "mode": "string_any",
-    "accept": [
-      "Dana Oka"
-    ],
-    "gold_source_ids": [
-      "E:2027-08-24T12-40-00__1886520e"
-    ],
-    "notes": "drawn from E:2027-08-24T12-40-00__1886520e; answer also appears in 158 other documents"
   },
   {
     "id": "b-fact-022",
@@ -649,7 +635,7 @@
     "question": "At Camden Row, which detail did the north bay spacing match after the rebar re-inspection?",
     "mode": "string_any",
     "accept": [
-      "Alan’s SK-17 detail",
+      "Alan\u2019s SK-17 detail",
       "Alan's SK-17 detail",
       "SK-17"
     ],
@@ -715,22 +701,6 @@
       "S:C300RIDG001_channel@2027-09-07"
     ],
     "notes": "drawn from S:C300RIDG001_channel@2027-09-07; answer also appears in 0 other documents"
-  },
-  {
-    "id": "b-fact-056",
-    "type": "multi_source",
-    "difficulty": "base",
-    "question": "Who has Camden Row day-to-day site-side oversight?",
-    "mode": "string_any",
-    "accept": [
-      "marcus",
-      "Marcus",
-      "Marcus Bell"
-    ],
-    "gold_source_ids": [
-      "E:2027-07-20T08-00-00__71903ea9"
-    ],
-    "notes": "drawn from E:2027-07-20T08-00-00__71903ea9; answer also appears in 88 other documents"
   },
   {
     "id": "b-fact-057",

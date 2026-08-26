@@ -89,6 +89,7 @@ def main() -> None:
     lines.append("| citation coverage | " + " | ".join(
         str(summaries[n]["evidence"]["citation_coverage"]) for n in names) + " |")
     text = "\n".join(lines) + "\n"
+    args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(text, encoding="utf-8")
     print(text)
 

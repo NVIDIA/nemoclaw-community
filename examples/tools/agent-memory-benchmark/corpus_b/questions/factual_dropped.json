@@ -147,5 +147,10 @@
     "id": "b-fact-056",
     "question": "Who has Camden Row day-to-day site-side oversight?",
     "reason": "withdrawn during review; the reason was not recorded at the time"
+  },
+  {
+    "id": "b-fact-021",
+    "question": "Who sent the HPS steel delivery update?",
+    "drop_reason": "gold citation has no body, so the fact it asks about is not in the corpus; the accept value was a truncated sender name that matched the real one by substring"
   }
 ]
