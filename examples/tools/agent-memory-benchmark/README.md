@@ -327,7 +327,7 @@ proxy at.
 **Expected result:**
 
 ```text
-153 passed
+172 passed
 ```
 
 **This verifies:** the runner, grader, report renderer and the
@@ -343,7 +343,7 @@ The whole pipeline runs offline against a small fixture whose score is known in
 advance — no model, no network, no API key:
 
 ```bash
-python3 -m pytest tests/     # expected: 153 passed
+python3 -m pytest tests/     # expected: 172 passed
 ```
 
 `selftest/` holds a six-document corpus, six questions covering all four
@@ -366,7 +366,7 @@ the verdicts, the answers, and whatever memory the system under test built —
 that last part can reach hundreds of megabytes. Nothing outside that directory
 is modified by the harness — though an adapter is not sandboxed, so one you
 add can write elsewhere; see [How the runner treats your adapter](#how-the-runner-treats-your-adapter).
-Delete the run directory to reclaim the space; `results/` is not tracked.
+Delete the run directory to reclaim the space. Generated run state stays out of version control; a result someone chose to publish is added explicitly, which is what `results/runs/` holds.
 
 ## Provenance
 

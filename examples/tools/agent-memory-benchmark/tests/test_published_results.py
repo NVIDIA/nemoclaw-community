@@ -83,10 +83,87 @@ def test_every_run_is_valid(run: Path):
 
 
 @pytest.mark.parametrize("run", RUNS, ids=lambda p: p.name)
+def test_the_published_map_reproduces_the_transformed_answers(run: Path):
+    """Apply the published map to the as-answered rows and expect answers.jsonl.
+
+    The claim is that the same substitution applied to the corpus was applied
+    to the answers and nothing else was changed. An earlier version of this
+    test only checked that a non-empty map existed, which proves nothing: it
+    would pass against a map that was wrong, abbreviated, or unrelated to the
+    file beside it.
+    """
+    note = _report(run)["provenance_note"]
+    text_map = note["substitutions"]["text"]
+    id_map = note["substitutions"]["question_ids"]
+    assert text_map and id_map, "the map must ship whole, not summarised"
+    assert not any("..." in k or "full map" in k.lower() for k in text_map), (
+        "the published map must be the map, not a pointer to one"
+    )
+
+    def rows(path: Path) -> list[dict]:
+        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+    rebuilt = []
+    for row in rows(run / "answers.as-answered.jsonl"):
+        out = dict(row)
+        out["id"] = id_map.get(row["id"], row["id"])
+        answer = str(row.get("answer", ""))
+        for old_text, new_text in text_map.items():
+            answer = answer.replace(old_text, new_text)
+        if "answer" in row:
+            out["answer"] = answer
+        rebuilt.append(out)
+
+    published = rows(run / "answers.jsonl")
+    assert len(rebuilt) == len(published)
+    mismatches = [(a["id"], b["id"]) for a, b in zip(rebuilt, published) if a != b]
+    assert not mismatches, (
+        f"{run.name}: applying the published map to answers.as-answered.jsonl does not "
+        f"reproduce answers.jsonl; {len(mismatches)} rows differ, first {mismatches[:3]}"
+    )
+
+
+@pytest.mark.parametrize("run", RUNS, ids=lambda p: p.name)
+def test_the_transform_changed_only_what_the_map_touches(run: Path):
+    """Nothing outside the map moved: every difference is explained by it."""
+    def rows(path: Path) -> dict:
+        return {json.loads(l)["id"]: json.loads(l)
+                for l in path.read_text(encoding="utf-8").splitlines() if l.strip()}
+    note = _report(run)["provenance_note"]
+    id_map = note["substitutions"]["question_ids"]
+    text_map = note["substitutions"]["text"]
+    before, after = rows(run / "answers.as-answered.jsonl"), rows(run / "answers.jsonl")
+    for old_id, row in before.items():
+        new_id = id_map.get(old_id, old_id)
+        assert new_id in after, f"{old_id} vanished from the transformed answers"
+        old_answer, new_answer = str(row.get("answer", "")), str(after[new_id].get("answer", ""))
+        if old_answer == new_answer:
+            continue
+        assert any(k in old_answer for k in text_map), (
+            f"{new_id} changed but contains no key from the published map"
+        )
+
+
+@pytest.mark.parametrize("run", RUNS, ids=lambda p: p.name)
+def test_the_report_follows_the_current_schema(run: Path):
+    """A published example must be an example of the current output format."""
+    r = _report(run)
+    assert r.get("schema_version") == 1, "reports must carry the current schema version"
+    adapter = r.get("adapter")
+    assert isinstance(adapter, dict) and adapter.get("name"), "adapter must be structured"
+    assert "revision" in adapter and "declared_model" in adapter
+    assert r.get("trial") == {"index": 1, "of": 1}
+    assert "run_parameters" in r, "the parameters a rerun would need must be recorded"
+    accounting = r.get("accounting")
+    assert isinstance(accounting, dict), "accounting must be the structured record, not a bare string"
+    for key in ("declared", "method", "forwarded_calls", "uncounted_calls", "comparable_on_cost"):
+        assert key in accounting, f"accounting is missing {key}"
+
+
+@pytest.mark.parametrize("run", RUNS, ids=lambda p: p.name)
 def test_the_transform_is_disclosed(run: Path):
     note = _report(run).get("provenance_note")
     assert note and note.get("answers_transformed") is True
-    assert note.get("substitutions"), "the substitution map must ship with the claim"
     assert "not a run against the published corpus" in note["not_a_rerun"]
 
 

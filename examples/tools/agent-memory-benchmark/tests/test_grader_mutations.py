@@ -18,6 +18,8 @@ then stated the forbidden claim.
 from __future__ import annotations
 
 import json
+
+import pytest
 from pathlib import Path
 
 from bench.grader import grade
@@ -84,3 +86,56 @@ def test_a_correction_after_a_denial_still_scores():
     assert grade("q", "It was not Kofi; Sofia Ramos approved it.", None, gold).correct
     gold = {"id": "q", "mode": "string_any", "accept": ["27 March"]}
     assert grade("q", "Not 12 March, it is on 27 March.", None, gold).correct
+
+
+# Each of these was reported as a bypass or a false rejection against the first
+# version of the denial scope. They are kept as a table so the contract is
+# readable in one place and a future refinement has to satisfy all of it.
+DENIAL_SCOPE_CONTRACT = [
+    ("a denial that introduces a list governs the list",
+     {"mode": "string_any", "accept": ["50%", "75%"]},
+     "None of these are correct: 50%; 75%", False),
+    ("a refusal does not license the fabrication after it",
+     {"mode": "abstain", "reject": ["the cutover completed"]},
+     "No evidence in the corpus. The cutover completed", False),
+    ("a denial applies to a value that matched only after normalisation",
+     {"mode": "string_any", "accept": ["2026-07-14"]},
+     "None of these dates is correct: July 14, 2026", False),
+    ("a denial after the value still denies it",
+     {"mode": "string_any", "accept": ["50%"]}, "50% is not correct", False),
+    ("neither/nor governs both items",
+     {"mode": "string_any", "accept": ["50%", "75%"]},
+     "Neither 50%, nor 75% is correct", False),
+    ("a comma before a denial does not reset it",
+     {"mode": "string_any", "accept": ["2026-07-14"], "reject": ["launch is june 30"]},
+     "The launch is June 30, not July 14.", False),
+    ("rather-than names the rejected thing, not the asserted one",
+     {"mode": "string_any", "accept": ["Sofia Ramos"], "reject": ["Kofi"]},
+     "Sofia Ramos rather than Kofi approved it", True),
+    ("instead-of behaves the same way",
+     {"mode": "string_any", "accept": ["Sofia"], "reject": ["Kofi"]},
+     "Sofia instead of Kofi", True),
+    ("a semicolon ends a denial so the correction scores",
+     {"mode": "string_any", "accept": ["Sofia"], "reject": ["Kofi"]},
+     "It was not Kofi; Sofia approved it", True),
+    ("a comma ends a denial so the correction scores",
+     {"mode": "string_any", "accept": ["27 March"]},
+     "Not 12 March, it is on 27 March.", True),
+    ("a denial in one sentence does not reach the next",
+     {"mode": "string_any", "accept": ["75%"]},
+     "50% is not correct. The target is 75%.", True),
+    ("a dot inside a path does not end the sentence",
+     {"mode": "string_any", "accept": ["src/a/b.py"]}, "It is not src/a/b.py", False),
+    ("a plain assertion is still an assertion",
+     {"mode": "string_any", "accept": ["50%"]}, "It is at 50%.", True),
+]
+
+
+@pytest.mark.parametrize(
+    "label,gold,answer,expected", DENIAL_SCOPE_CONTRACT,
+    ids=[c[0].replace(" ", "-") for c in DENIAL_SCOPE_CONTRACT])
+def test_the_denial_scope_contract(label, gold, answer, expected):
+    """Both directions matter: a bypass scores an attack, a false rejection
+    marks a correct answer wrong. The first version of this scope did both."""
+    gold = {"id": "q", **gold}
+    assert grade("q", answer, None, gold).correct is expected, label

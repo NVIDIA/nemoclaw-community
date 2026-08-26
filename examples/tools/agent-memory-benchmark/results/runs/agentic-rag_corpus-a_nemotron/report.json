@@ -1,7 +1,12 @@
 {
   "adapter": {
     "name": "agentic-rag",
-    "declared_model": "nvidia/nvidia/nemotron-3-ultra"
+    "revision": {
+      "note": "produced outside this repository; see provenance_note"
+    },
+    "declared_model": "nvidia/nvidia/nemotron-3-ultra",
+    "declared_env": [],
+    "caveat": null
   },
   "model": "nvidia/nvidia/nemotron-3-ultra",
   "observed_models": {
@@ -19,7 +24,15 @@
     "ingest_seconds": 25.46,
     "answer_seconds": 358.54
   },
-  "accounting": "proxy",
+  "accounting": {
+    "declared": "proxy",
+    "method": "proxy",
+    "forwarded_calls": 1048,
+    "uncounted_calls": 0,
+    "description": "counted at a local proxy in front of the model endpoint",
+    "proxy_observed_calls": 1048,
+    "comparable_on_cost": true
+  },
   "cost": {
     "ingest_input_tokens": 169852,
     "ingest_output_tokens": 0,
@@ -72,7 +85,7 @@
     "questions": 186,
     "graded": 186,
     "deferred_to_judge": 0,
-    "accuracy_overall": 0.8441,
+    "accuracy_overall": 0.828,
     "accuracy_by_type": {
       "abstention": 1.0,
       "as_of": 0.5,
@@ -80,15 +93,15 @@
       "chain_freshness": 0.6,
       "citation": 0.9167,
       "constraint": 0.8,
-      "disambiguation": 0.6667,
+      "disambiguation": 0.6,
       "freshness": 0.75,
-      "multi_source": 0.8767,
+      "multi_source": 0.863,
       "ordering": 0.75,
       "set_difference": 1.0,
-      "single_hop": 0.9
+      "single_hop": 0.8667
     },
     "accuracy_by_difficulty": {
-      "base": 0.8645,
+      "base": 0.8452,
       "hard": 0.7419
     },
     "freshness_detail": {
@@ -109,7 +122,7 @@
   "note": "search rounds were capped at 3. Preserved so the cost of removing the cap is measurable rather than asserted; the uncapped run is agentic_rag_a_nemotron.",
   "fingerprint": {
     "algorithm": "sha256-v1",
-    "scorer": "fb71aa2aefae9ec3c542b2a227f5d03ae56f800e6c79821f3471513cd64ca090",
+    "scorer": "8113ac76357f37847a719891fe90990f7f1f7bd7312842c2a1510ccd24eba255",
     "normalization": {
       "default_year": "2026",
       "alt_years": [
@@ -122,23 +135,43 @@
     "gold": "55a66b80ff0f62d8b3a340dcbb9cc970a011922b1e509269c4402192f9504970"
   },
   "benchmark_revision": {
-    "commit": "f0703b31e6e199833911c6040579283650361fcf",
-    "dirty": false
+    "commit": "e4954a471fbb2c185a4c9688f45ed576ee48ce89",
+    "dirty": true
   },
   "provenance_note": {
     "answers_transformed": true,
     "why": "These answers were produced against the corpus before publication, when a set of identifiers carried different names. The same substitution applied to the corpus at publication was applied to the answers, because an answer is derived from the corpus it read: a system reading the published corpus would have written the published name. Nothing else was changed.",
     "verify": "answers.as-answered.jsonl is the untransformed output. Apply the map below to it and the result is answers.jsonl; regrade either one to see the difference for yourself.",
     "substitutions": {
-      "Helix": "Quillon",
-      "helix": "quillon",
-      "TaskRegistry": "JobRegistry",
-      "example-co.com": "examplecorp.example",
-      "docs/sot/": "docs/design/",
-      "WaveAbort": "BatchAbort",
-      "inbox--gitlab": "inbox-automated",
-      "(full map)": "see results/README.md",
-      "(question ids)": "fresh-helix-launch-date -> fresh-quillon-launch-date, and three siblings"
+      "text": {
+        "docs/sot/designs/": "docs/design/",
+        "docs/sot/log.md": "docs/design/CHANGELOG.md",
+        "docs/sot/": "docs/design/",
+        "docs/specs/": "docs/proposals/",
+        "TaskRegistry": "JobRegistry",
+        "task_registry": "job_registry",
+        ".ingest_state.json": ".wave_state.json",
+        "ingest_state": "wave_state",
+        "ingest_backfill": "wave_backfill",
+        "consolidate_service.py": "rollup_service.py",
+        "action_results": "wave_results",
+        "self_model/": "wiki/",
+        "state.db": "atlas.db",
+        "WikiPage": "PageRef",
+        "ingest_pipeline.md": "wave_pipeline.md",
+        "consolidate.md": "rollup.md",
+        "WaveAbort": "BatchAbort",
+        "inbox--gitlab": "inbox-automated",
+        "example-co.com": "examplecorp.example",
+        "Helix": "Quillon",
+        "helix": "quillon"
+      },
+      "question_ids": {
+        "fresh-helix-launch-date": "fresh-quillon-launch-date",
+        "abstain-helix-launched": "abstain-quillon-launched",
+        "disambig-helix-single-date": "disambig-quillon-single-date",
+        "chain-helix-date": "chain-quillon-date"
+      }
     },
     "not_a_rerun": "This is not a run against the published corpus. The systems never saw it. Reproducing these numbers requires re-running the answer phase.",
     "effect": {
@@ -146,7 +179,17 @@
       "accuracy_after_map": 0.8441,
       "questions_reported_unanswered_before_id_map": 4,
       "note": "The id map matters more than the text map: four question ids were renamed at publication, and without mapping them those four answers are reported as unanswered, which invalidates the run."
-    }
+    },
+    "substitution_order": "Text substitutions are applied in the listed order to the answer field; longer keys precede their prefixes. Question ids are replaced whole, never by substring."
   },
-  "corpus_scope": "A only. Corpus B was not run on this model; see results/README.md."
+  "corpus_scope": "A only. Corpus B was not run on this model; see results/README.md.",
+  "schema_version": 1,
+  "trial": {
+    "index": 1,
+    "of": 1
+  },
+  "run_parameters": {
+    "max_rounds": 3,
+    "note": "the agentic baseline ran adapters/agentic_rag/ at its shipped default"
+  }
 }

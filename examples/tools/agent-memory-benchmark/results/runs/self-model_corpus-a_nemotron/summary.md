@@ -1,11 +1,13 @@
 # self-model — nvidia/nvidia/nemotron-3-ultra
+> Measures a consolidating design that does not ship an adapter here; the row is a data point, not something this repository can re-run.
+
 
 * corpus: 425 docs (212 part_a / 213 part_b)
 * questions: 186 (graded deterministically: 186, deferred to judge: 0)
 
 ## Quality
-* accuracy overall: **0.9247**
-  * [base] 0.9226
+* accuracy overall: **0.9086**
+  * [base] 0.9032
   * [hard] 0.9355
   * abstention: 0.7692
   * as_of: 0.8333
@@ -13,12 +15,12 @@
   * chain_freshness: 1.0
   * citation: 1.0
   * constraint: 1.0
-  * disambiguation: 0.9333
+  * disambiguation: 0.8667
   * freshness: 0.9167
-  * multi_source: 0.9589
+  * multi_source: 0.9452
   * ordering: 1.0
   * set_difference: 1.0
-  * single_hop: 0.8667
+  * single_hop: 0.8333
   * freshness with a competing stale claim in corpus: 0.8889
   * freshness recency-only: 1.0
 

@@ -182,29 +182,94 @@ def _denied_at(text: str, position: int) -> bool:
     return any(cue in clause for cue in DENIAL_CUES)
 
 
-def asserts(answer: str, value: str) -> bool:
-    """True when the answer actually claims ``value``, rather than denying it.
+# Markers that split a sentence into clauses, and what they do to the denial
+# carried into them. A rejecting contrast ("Sofia rather than Kofi") names the
+# rejected thing *after* the marker, so the tail is denied and the head is not.
+# A resetting contrast ("It was not Kofi; Sofia approved") ends a denial, so the
+# tail is clean.
+_REJECTING_CONTRAST = re.compile(r"\brather than\b|\binstead of\b|\bnot\b(?=[^,;.]*\bbut\b)")
+# A comma ends a denial when what follows restates the fact ("Not 12 March, it
+# is on 27 March"), but continues it when what follows is the next item of the
+# list the denial introduced ("Neither 50%, nor 75%"). The difference is
+# whether the tail continues the enumeration.
+# A comma ends a denial when what follows restates the fact ("Not 12 March, it
+# is on 27 March"), and continues it in two cases: when the tail is the next
+# item of a list the denial introduced ("Neither 50%, nor 75%"), and when the
+# tail carries its own denial ("June 30, not July 14"), where resetting would
+# hand the answer the very value it is rejecting.
+_RESETTING_CONTRAST = re.compile(
+    r"[;]|,(?!\s*(?:nor|or|and|not|never|no\b)\b)|\bbut\b|\bhowever\b|\bactually\b")
 
-    Scope is computed on text that still has its sentence punctuation.
-    ``normalize`` strips it, which collapsed "No evidence in the corpus. The
-    cutover completed" into one clause and let the leading refusal suppress the
-    fabrication that followed it.
+
+def _clauses(answer: str) -> list[tuple[str, bool]]:
+    """Split an answer into clauses, each tagged with whether it is denied.
+
+    Working in clauses rather than in character offsets is what lets the denial
+    scope survive normalisation: each clause is matched with the full
+    normalising ``contains``, so a date written as "July 14, 2026" is found in
+    the clause that actually contains it, and a denial governing that clause
+    still applies. Comparing a normalised needle against un-normalised text was
+    the hole -- an alias matched only after normalisation skipped the scope
+    check entirely and was trusted.
+    """
+    out: list[tuple[str, bool]] = []
+    for sentence in _SENTENCE_BREAK.split(answer):
+        if not sentence.strip():
+            continue
+        denied = bool(_denial_cue(sentence))
+        # A rejecting contrast denies what follows it and clears what precedes.
+        match = _REJECTING_CONTRAST.search(sentence.lower())
+        if match:
+            head, tail = sentence[: match.start()], sentence[match.end():]
+            out.append((head, False))
+            out.append((tail, True))
+            continue
+        # A resetting contrast ends a denial that started before it.
+        parts = _RESETTING_CONTRAST.split(sentence.lower())
+        if denied and len(parts) > 1:
+            # The denial governs a list it introduces ("none of these: a; b"),
+            # but not a clause that contrasts with it.
+            if _introduces_list(sentence):
+                out.append((sentence, True))
+            else:
+                out.append((parts[0], True))
+                out.extend((part, False) for part in parts[1:])
+            continue
+        out.append((sentence, denied))
+    return out
+
+
+def _denial_cue(text: str) -> str | None:
+    lowered = " " + _COLLAPSE.sub(" ", text.lower()).strip() + " "
+    for cue in DENIAL_CUES:
+        if cue.strip() and cue in lowered:
+            return cue
+    return None
+
+
+def _introduces_list(sentence: str) -> bool:
+    """A denial before a colon governs everything the colon introduces."""
+    lowered = sentence.lower()
+    cue = _denial_cue(sentence)
+    if not cue:
+        return False
+    colon = lowered.find(":")
+    return colon >= 0 and lowered.find(cue) < colon
+
+
+def asserts(answer: str, value: str) -> bool:
+    """True when the answer claims ``value`` somewhere it is not denying it.
+
+    The value has to appear in at least one clause that is not under a denial.
+    ``contains`` runs per clause, so normalisation and denial scope see the
+    same text.
     """
     if not contains(answer, value):
         return False
-    scoped, needle = _scoped(answer), _scoped(value)
-    if not needle or needle not in scoped:
-        # Matched only after full normalisation (a date form, a unicode
-        # variant). No clause to inspect, so trust the match.
+    clauses = _clauses(answer)
+    if not clauses:
         return True
-    start = 0
-    while True:
-        position = scoped.find(needle, start)
-        if position < 0:
-            return False
-        if not _denied_at(scoped, position):
-            return True
-        start = position + 1
+    return any(not denied and contains(clause, value) for clause, denied in clauses)
 
 
 def _hit_asserted(answer: str, values: Iterable[str]) -> str | None:
