@@ -1,0 +1,57 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Provider profile for the host-side atif-export-relay. The sandbox holds
+# an OpenShell placeholder for the bearer token; the L7 proxy substitutes
+# the real value on egress. atif-export-relay validates the token, then
+# re-signs the outbound leg with real downstream credentials (real STS
+# for AWS S3, or MinIO admin). The relay's pluggable backend layer (see
+# extras/atif-export-relay/backends/) abstracts which object store is
+# actually targeted.
+#
+# Transport: NeMo Relay's native HTTP ATIF storage sends POST /atif with an
+# `Authorization: Bearer openshell:resolve:env:ATIF_RELAY_AUTH_TOKEN` header.
+# OpenShell's L7 proxy substitutes the placeholder at egress, and the host
+# relay validates the resulting bearer before writing through its configured
+# storage backend.
+
+id: nemoclaw-atif-export-relay
+display_name: NemoClaw ATIF Export Relay
+description: Bearer-token egress to the host-side atif-export-relay for ATIF trace upload
+# `data` is the closest match in OpenShell's category enum (no `storage` variant);
+# valid values: other, inference, agent, source_control, messaging, data, knowledge.
+category: data
+credentials:
+  # Credential injection remains in-band: NeMo Relay emits the Authorization
+  # header containing this env placeholder, and the proxy resolves it.
+  - name: auth_token
+    description: >-
+      Per-sandbox bearer token. Sandbox env carries an OpenShell placeholder
+      under ATIF_RELAY_AUTH_TOKEN; native NeMo Relay sends it as an
+      Authorization Bearer credential; the L7 proxy substitutes at egress;
+      atif-export-relay validates against ATIF_RELAY_AUTH_TOKEN.
+    env_vars: [ATIF_RELAY_AUTH_TOKEN]
+    required: true
+endpoints:
+  - host: __ATIF_RELAY_HOST__
+    port: __ATIF_RELAY_PORT__
+    protocol: rest
+    enforcement: enforce
+    # host.openshell.internal resolves to a private internal address
+    # (typically 172.18.0.1 — the docker bridge). OpenShell's SSRF engine
+    # blocks private ranges by default, so this provider explicitly approves
+    # the common private ranges where the operator's relay may resolve.
+    allowed_ips:
+      - 10.0.0.0/8
+      - 172.0.0.0/8
+      - 192.168.0.0/16
+      - fc00::/7
+    # `rules` and `access` are mutually exclusive — choose one. Runtime
+    # sandbox egress needs only the completed-trajectory POST.
+    rules:
+      - allow:
+          method: POST
+          path: /atif
+binaries:
+  - /usr/bin/python3
+  - /usr/bin/python3.13

@@ -238,6 +238,12 @@ git diff --cached --check
 These commands do not replace example-specific verification. For each changed
 example, run the checks that its README specifies.
 
+Catalog pull requests that trigger the Pages workflow include a preview
+artifact. Matching changes merged to `main` deploy automatically through
+GitHub Pages. Maintainers can use the
+[catalog deployment runbook](docs/catalog-deployment.md) for setup and
+verification.
+
 Run the documented setup, syntax, unit, configuration, and teardown-safe checks.
 A stable check gives the same result when its inputs do not change. A
 teardown-safe check does not leave services or temporary resources active.

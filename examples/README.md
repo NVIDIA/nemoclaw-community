@@ -10,47 +10,48 @@ again by contributor provenance.
 
 | Example | Description |
 | --- | --- |
-| [Developer Community Chief of Staff](recipes/nvidia/developer-community-chief-of-staff/README.md) | Synthesizes Slack, Outlook, GitHub, and mirrored community signals into operating briefs, gaps, priorities, and follow-up recommendations. |
-| [Kubernetes GPU Autoscaling](recipes/nvidia/kubernetes-gpu-autoscaling/README.md) | Runs a CPU-only NemoClaw/OpenClaw sandbox through OpenShell on Kubernetes and autoscales authenticated, GPU-backed Ollama inference pods from DCGM utilization. |
-| [Memory-Driven Chief of Staff](recipes/nvidia/memory-driven-chief-of-staff/README.md) | Keeps a locally-authoritative, revisable record per inbound email and Slack message, re-judged on a schedule and re-ranked under fixed caps, without writing back to the source. |
-| [NV Tech Assistant](recipes/nvidia/nv-tech-assistant/README.md) | Answers NVIDIA technical questions with cited evidence from allowlisted NVIDIA, GitHub, and arXiv sources. |
-| [Payment Operations Hermes Assistant](recipes/nvidia/payment-ops-hermes/README.md) | Demonstrates constrained payment screening, evidence preparation, and a platform-enforced human release boundary. |
-| [PR Review Advisor](recipes/nvidia/pr-review-advisor/README.md) | Reviews exact pull request heads with a constrained Hermes workflow, produces attested artifacts, and publishes only through a separate maintainer action. |
+| [Agentic AI Learning Path](recipes/nvidia/agentic-ai-learning-path/README.md) | Runs the seven-module Build an Agent workshop in an OpenShell sandbox with an AI tutor. |
+| [Developer Community Chief of Staff](recipes/nvidia/developer-community-chief-of-staff/README.md) | Turns community signals into operating briefs and follow-up recommendations. |
+| [Kubernetes GPU Autoscaling](recipes/nvidia/kubernetes-gpu-autoscaling/README.md) | Runs NemoClaw on Kubernetes with GPU-backed Ollama autoscaling. |
+| [Memory-Driven Chief of Staff](recipes/nvidia/memory-driven-chief-of-staff/README.md) | Maintains and re-ranks a revisable local record of email and Slack inputs without writing back. |
+| [NV Tech Assistant](recipes/nvidia/nv-tech-assistant/README.md) | Answers NVIDIA technical questions with citations from allowlisted sources. |
+| [Payment Operations Hermes Assistant](recipes/nvidia/payment-ops-hermes/README.md) | Demonstrates payment screening, evidence preparation, and a platform-enforced human release boundary. |
+| [PR Review Advisor](recipes/nvidia/pr-review-advisor/README.md) | Reviews exact pull request heads with Hermes, produces attested artifacts, and leaves publication to a maintainer. |
 
 ## Partner Recipes
 
 | Contributor | Example | Description |
 | --- | --- | --- |
-| BlueTier | [x402 Payment Gate](recipes/partners/bluetier/x402-payment-gate/README.md) | Releases an agent's x402 payments through a maker/checker boundary: the sandboxed agent can only submit payment intents, and a host-side gate outside the sandbox re-screens each one with pre-signature GO/HOLD/STOP verdicts (counterparty reputation, price anomaly, OFAC sanctions) before anything is signed or settled. |
-| HPE | [Retail Assistant](recipes/partners/hpe/retail-assistant/README.md) | Provides role-aware retail operations through Telegram, FastAPI, PostgreSQL, Docker Compose, and Helm. |
-| Shrike Security | [Shrike Security Action Governance](recipes/partners/shrike/shrike-security/README.md) | Governs agent tool calls with a `before_tool_call` plugin that returns allow / warn / require_approval / block from Shrike's enforce plane, with host-side secret handling and scoped egress to Shrike. |
-| Tavily | [Watchtower](recipes/partners/tavily/watchtower/README.md) | Runs scheduled, cited web monitoring with persistent deduplication and auditable outputs. |
+| BlueTier | [x402 Payment Gate](recipes/partners/bluetier/x402-payment-gate/README.md) | Screens x402 payment intents through a host-side maker/checker gate before signing or settlement. |
+| HPE | [Retail Assistant](recipes/partners/hpe/retail-assistant/README.md) | Provides role-aware retail operations through Telegram with Docker Compose or Helm deployment paths. |
+| Shrike Security | [Shrike Security Action Governance](recipes/partners/shrike/shrike-security/README.md) | Applies Shrike decisions before agent tool calls run. |
+| Tavily | [Watchtower](recipes/partners/tavily/watchtower/README.md) | Runs scheduled, cited web monitoring with deduplication and auditable outputs. |
 
 ## Community Recipes
 
 | Example | Description |
 | --- | --- |
-| [Axe A11y Browser Auditor](recipes/community/axe-a11y-browser-auditor/README.md) | Performs automated WCAG accessibility audits, visual screenshots, PDF exports, and network tracing via a sidecar MCP server using axe-core and Patchright with real Google Chrome. |
-| [Deep Research Worker](recipes/community/deep-research-worker/README.md) | Queues long-running research tasks from one sandbox to a host-side DeepAgents worker, with a narrow worker-only sandbox policy and optional read-only host-side search integrations. |
+| [Axe A11y Browser Auditor](recipes/community/axe-a11y-browser-auditor/README.md) | Audits web pages for accessibility and captures screenshots, PDFs, and network traces. |
+| [Deep Research Worker](recipes/community/deep-research-worker/README.md) | Queues long-running research from a sandbox to a host-side DeepAgents worker. |
 
 ## NVIDIA Field Demos
 
 | Example | Description |
 | --- | --- |
-| [DGX Station Blender and Omniverse](demos/field/blender-omniverse-dgx-station/README.md) | Controls visible Blender on DGX Station, renders with OVRTX, and runs native OVPhysX simulations. |
+| [DGX Station Blender and Omniverse](demos/field/blender-omniverse-dgx-station/README.md) | Controls Blender on DGX Station for OVRTX rendering and OVPhysX simulation. |
 
 ## Launchables
 
 | Environment | Example | Description |
 | --- | --- | --- |
-| Brev | [Hermes](launchables/brev/hermes/README.md) | Provides a notebook path from a fresh Brev CPU instance to a NemoClaw-managed Hermes sandbox. |
+| Brev | [Hermes](launchables/brev/hermes/README.md) | Takes a fresh Brev CPU instance to a NemoClaw-managed Hermes sandbox through a notebook. |
 
 ## Developer Tools
 
 | Example | Description |
 | --- | --- |
-| [Agent Memory Benchmark](tools/agent-memory-benchmark/README.md) | Measures the memory a system builds from a corpus: it ingests synthetic email and chat, asks 186 questions, and reports accuracy per question type alongside ingest and per-answer token cost. |
-| [Harness Engineering Playground](tools/harness-engineering-playground/README.md) | Provides an experimental CLI for eval-driven harness profile optimization. It is not an OpenShell blueprint. |
+| [Agent Memory Benchmark](tools/agent-memory-benchmark/README.md) | Measures the memory a system builds from a corpus: it feeds a system synthetic email and chat, asks 186 questions on one corpus and 96 on a second, and reports accuracy per question type alongside ingest and per-answer token cost. |
+| [Harness Engineering Playground](tools/harness-engineering-playground/README.md) | Provides an experimental command-line interface for evaluation-driven harness profile optimization. |
 
 ## Contributing An Example
 

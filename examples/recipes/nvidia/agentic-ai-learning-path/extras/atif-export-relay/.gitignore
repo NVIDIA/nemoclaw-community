@@ -1,0 +1,3 @@
+# TLS material: never commit the private key, and don't commit the cert
+# either (re-generated per host setup via generate-tls-cert.sh).
+tls/

@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+id: nemoclaw-github
+display_name: NemoClaw GitHub
+description: GitHub REST read-only access for live api.github.com reads; sandbox policy further restricts paths to GITHUB_READONLY_REPO
+category: source_control
+credentials:
+  - name: api_token
+    description: GitHub personal access token
+    env_vars: [GITHUB_TOKEN]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+endpoints:
+  - host: api.github.com
+    port: 443
+    protocol: rest
+    access: read-only
+    enforcement: enforce
+binaries:
+  - /opt/hermes/.venv/bin/python
+  - /usr/bin/python3
+  - /usr/bin/python3.13
+  - /usr/bin/curl
+  - /usr/bin/gh
+  - /usr/local/bin/gh

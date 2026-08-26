@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+interface:
+  display_name: "NemoClaw Community NVTeam"
+  short_description: "Eight local role lenses for cross-functional work"
+  default_prompt: "Use $nemoclaw-nvteam to route this work through the Community recipe's local role lenses and return an evidence-bounded recommendation."

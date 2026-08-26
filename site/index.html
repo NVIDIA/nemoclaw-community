@@ -1,0 +1,609 @@
+<!doctype html>
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="Browse NemoClaw Community recipes, demos, launchables, and tools by outcome and fit."
+    >
+    <title>NemoClaw Community Example Catalog | NVIDIA</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#catalog">Skip to examples</a>
+
+    <header class="site-header">
+      <div class="shell masthead">
+        <div class="brand-lockup">
+          <a class="nvidia-brand" href="https://www.nvidia.com/" aria-label="NVIDIA home">
+            <img src="assets/nvidia-logo.png" alt="NVIDIA" width="400" height="138">
+          </a>
+          <span class="brand-divider" aria-hidden="true"></span>
+          <span class="product-name">NemoClaw Community</span>
+        </div>
+        <a class="repository-link" href="https://github.com/NVIDIA/nemoclaw-community">
+          GitHub repository
+          <span aria-hidden="true">↗</span>
+        </a>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="shell hero-shell">
+          <div class="hero-grid">
+            <div class="hero-copy">
+              <p class="eyebrow">Example catalog</p>
+              <h1 id="hero-title">Start with the kind of example you need.</h1>
+              <p class="hero-summary">
+                Browse NVIDIA, partner, and community recipes, field demos, launchables,
+                and developer tools.
+              </p>
+
+              <nav class="hero-actions" aria-label="Catalog actions">
+                <a class="button button-primary" href="#catalog">Browse examples <span aria-hidden="true">↓</span></a>
+                <a
+                  class="button button-secondary"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/CONTRIBUTING.md#add-a-new-example"
+                >
+                  Contribute an example
+                </a>
+              </nav>
+            </div>
+
+            <nav
+              class="category-nav taxonomy-grid"
+              aria-label="Example categories"
+            >
+              <a class="category-tile" href="#nvidia-recipes">
+                <span class="category-name">NVIDIA recipes</span>
+                <span class="category-count">7 examples <span aria-hidden="true">→</span></span>
+              </a>
+              <a class="category-tile" href="#partner-recipes">
+                <span class="category-name">Partner recipes</span>
+                <span class="category-count">4 examples <span aria-hidden="true">→</span></span>
+              </a>
+              <a class="category-tile" href="#community-recipes">
+                <span class="category-name">Community recipes</span>
+                <span class="category-count">2 examples <span aria-hidden="true">→</span></span>
+              </a>
+              <a class="category-tile" href="#nvidia-field-demos">
+                <span class="category-name">NVIDIA field demos</span>
+                <span class="category-count">1 example <span aria-hidden="true">→</span></span>
+              </a>
+              <a class="category-tile" href="#launchables">
+                <span class="category-name">Launchables</span>
+                <span class="category-count">1 example <span aria-hidden="true">→</span></span>
+              </a>
+              <a class="category-tile" href="#developer-tools">
+                <span class="category-name">Developer tools</span>
+                <span class="category-count">1 example <span aria-hidden="true">→</span></span>
+              </a>
+            </nav>
+          </div>
+        </div>
+      </section>
+
+      <section
+        class="catalog"
+        id="catalog"
+        tabindex="-1"
+        aria-labelledby="catalog-title"
+      >
+        <h2 class="sr-only" id="catalog-title">Example catalog</h2>
+
+        <section
+          class="catalog-group"
+          id="nvidia-recipes"
+          tabindex="-1"
+          data-catalog-category="NVIDIA Recipes"
+          aria-labelledby="nvidia-recipes-title"
+        >
+          <div class="shell group-layout">
+            <header class="group-heading">
+              <h2 id="nvidia-recipes-title">NVIDIA recipes</h2>
+              <p>
+                Reusable agent recipes authored or maintained by NVIDIA. Placement does not
+                state a support or maturity level.
+              </p>
+            </header>
+            <div class="card-grid">
+              <article
+                class="example-card"
+                id="example-agentic-ai-learning-path"
+                aria-labelledby="example-agentic-ai-learning-path-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Agentic AI Learning Path"
+                data-readme="examples/recipes/nvidia/agentic-ai-learning-path/README.md"
+              >
+                <p class="provenance">NVIDIA recipe</p>
+                <h3 id="example-agentic-ai-learning-path-title">Agentic AI Learning Path</h3>
+                <p class="outcome">
+                  Runs the seven-module Build an Agent workshop in an OpenShell sandbox with an AI tutor.
+                </p>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Linux + Docker + OpenShell · API keys + Slack or Outlook · CPU-first; module 4 training read-through</dd></div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/nvidia/agentic-ai-learning-path/README.md"
+                >Get Started<span class="sr-only"> with Agentic AI Learning Path</span></a>
+              </article>
+
+              <article
+                class="example-card"
+                id="example-developer-community-chief-of-staff"
+                aria-labelledby="example-developer-community-chief-of-staff-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Developer Community Chief of Staff"
+                data-readme="examples/recipes/nvidia/developer-community-chief-of-staff/README.md"
+              >
+                <p class="provenance">NVIDIA recipe</p>
+                <h3 id="example-developer-community-chief-of-staff-title">Developer Community Chief of Staff</h3>
+                <p class="outcome">
+                  Turns community signals into operating briefs and follow-up recommendations.
+                </p>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Docker · Slack/Outlook · single host</dd></div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/nvidia/developer-community-chief-of-staff/README.md"
+                >Get Started<span class="sr-only"> with Developer Community Chief of Staff</span></a>
+              </article>
+
+              <article
+                class="example-card"
+                id="example-kubernetes-gpu-autoscaling"
+                aria-labelledby="example-kubernetes-gpu-autoscaling-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Kubernetes GPU Autoscaling"
+                data-readme="examples/recipes/nvidia/kubernetes-gpu-autoscaling/README.md"
+              >
+                <p class="provenance">NVIDIA recipe</p>
+                <h3 id="example-kubernetes-gpu-autoscaling-title">Kubernetes GPU Autoscaling</h3>
+                <p class="outcome">
+                  Runs NemoClaw on Kubernetes with GPU-backed Ollama autoscaling.
+                </p>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Kubernetes · NVIDIA GPU · experimental</dd></div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/nvidia/kubernetes-gpu-autoscaling/README.md"
+                >Get Started<span class="sr-only"> with Kubernetes GPU Autoscaling</span></a>
+              </article>
+
+              <article
+                class="example-card"
+                id="example-memory-driven-chief-of-staff"
+                aria-labelledby="example-memory-driven-chief-of-staff-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Memory-Driven Chief of Staff"
+                data-readme="examples/recipes/nvidia/memory-driven-chief-of-staff/README.md"
+              >
+                <p class="provenance">NVIDIA recipe</p>
+                <h3 id="example-memory-driven-chief-of-staff-title">Memory-Driven Chief of Staff</h3>
+                <p class="outcome">
+                  Maintains and re-ranks a revisable local record of email and Slack inputs
+                  without writing back.
+                </p>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Python 3.10+ · Hermes 0.19+ · connectors not included</dd></div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/nvidia/memory-driven-chief-of-staff/README.md"
+                >Get Started<span class="sr-only"> with Memory-Driven Chief of Staff</span></a>
+              </article>
+
+              <article
+                class="example-card"
+                id="example-nv-tech-assistant"
+                aria-labelledby="example-nv-tech-assistant-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="NV Tech Assistant"
+                data-readme="examples/recipes/nvidia/nv-tech-assistant/README.md"
+              >
+                <p class="provenance">NVIDIA recipe</p>
+                <h3 id="example-nv-tech-assistant-title">NV Tech Assistant</h3>
+                <p class="outcome">
+                  Answers NVIDIA technical questions with citations from allowlisted sources.
+                </p>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Docker · NVIDIA Endpoints API key · no offline corpus</dd></div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/nvidia/nv-tech-assistant/README.md"
+                >Get Started<span class="sr-only"> with NV Tech Assistant</span></a>
+              </article>
+
+              <article
+                class="example-card"
+                id="example-payment-operations-hermes-assistant"
+                aria-labelledby="example-payment-operations-hermes-assistant-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Payment Operations Hermes Assistant"
+                data-readme="examples/recipes/nvidia/payment-ops-hermes/README.md"
+              >
+                <p class="provenance">NVIDIA recipe</p>
+                <h3 id="example-payment-operations-hermes-assistant-title">Payment Operations Hermes Assistant</h3>
+                <p class="outcome">
+                  Demonstrates payment screening, evidence preparation, and a
+                  platform-enforced human release boundary.
+                </p>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Docker Compose · OpenShell 0.0.53 · synthetic data</dd></div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/nvidia/payment-ops-hermes/README.md"
+                >Get Started<span class="sr-only"> with Payment Operations Hermes Assistant</span></a>
+              </article>
+
+              <article
+                class="example-card"
+                id="example-pr-review-advisor"
+                aria-labelledby="example-pr-review-advisor-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="PR Review Advisor"
+                data-readme="examples/recipes/nvidia/pr-review-advisor/README.md"
+              >
+                <p class="provenance">NVIDIA recipe</p>
+                <h3 id="example-pr-review-advisor-title">PR Review Advisor</h3>
+                <p class="outcome">
+                  Reviews exact pull request heads with Hermes, produces attested artifacts,
+                  and leaves publication to a maintainer.
+                </p>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>OpenShell · GitHub.com only · self-hosted runner</dd></div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/nvidia/pr-review-advisor/README.md"
+                >Get Started<span class="sr-only"> with PR Review Advisor</span></a>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section
+          class="catalog-group"
+          id="partner-recipes"
+          tabindex="-1"
+          data-catalog-category="Partner Recipes"
+          aria-labelledby="partner-recipes-title"
+        >
+          <div class="shell group-layout">
+            <header class="group-heading">
+              <h2 id="partner-recipes-title">Partner recipes</h2>
+              <p>
+                Reusable agent recipes contributed by named partner organizations. Partner
+                attribution remains visible on each card.
+              </p>
+            </header>
+            <div class="card-grid">
+              <article
+                class="example-card"
+                id="example-x402-payment-gate"
+                aria-labelledby="example-x402-payment-gate-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="x402 Payment Gate"
+                data-readme="examples/recipes/partners/bluetier/x402-payment-gate/README.md"
+              >
+                <p class="provenance">Partner recipe · BlueTier</p>
+                <h3 id="example-x402-payment-gate-title">x402 Payment Gate</h3>
+                <p class="outcome">
+                  Screens x402 payment intents through a host-side maker/checker gate before
+                  signing or settlement.
+                </p>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Python 3 + Docker · Blackwall · no real money</dd></div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/partners/bluetier/x402-payment-gate/README.md"
+                >Get Started<span class="sr-only"> with x402 Payment Gate</span></a>
+              </article>
+
+              <article
+                class="example-card"
+                id="example-retail-assistant"
+                aria-labelledby="example-retail-assistant-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Retail Assistant"
+                data-readme="examples/recipes/partners/hpe/retail-assistant/README.md"
+              >
+                <p class="provenance">Partner recipe · HPE</p>
+                <h3 id="example-retail-assistant-title">Retail Assistant</h3>
+                <p class="outcome">
+                  Provides role-aware retail operations through Telegram with Docker Compose
+                  or Helm deployment paths.
+                </p>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Telegram · Docker or Kubernetes · demo identity mapping</dd></div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/partners/hpe/retail-assistant/README.md"
+                >Get Started<span class="sr-only"> with Retail Assistant</span></a>
+              </article>
+
+              <article
+                class="example-card"
+                id="example-shrike-security-action-governance"
+                aria-labelledby="example-shrike-security-action-governance-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Shrike Security Action Governance"
+                data-readme="examples/recipes/partners/shrike/shrike-security/README.md"
+              >
+                <p class="provenance">Partner recipe · Shrike Security</p>
+                <h3 id="example-shrike-security-action-governance-title">Shrike Security Action Governance</h3>
+                <p class="outcome">
+                  Applies Shrike decisions before agent tool calls run.
+                </p>
+                <dl class="fit">
+                  <div>
+                    <dt>Fit</dt>
+                    <dd>NemoClaw/OpenShell · Shrike API · not an independent security boundary</dd>
+                  </div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/partners/shrike/shrike-security/README.md"
+                >Get Started<span class="sr-only"> with Shrike Security Action Governance</span></a>
+              </article>
+
+              <article
+                class="example-card"
+                id="example-watchtower"
+                aria-labelledby="example-watchtower-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Watchtower"
+                data-readme="examples/recipes/partners/tavily/watchtower/README.md"
+              >
+                <p class="provenance">Partner recipe · Tavily</p>
+                <h3 id="example-watchtower-title">Watchtower</h3>
+                <p class="outcome">
+                  Runs scheduled, cited web monitoring with deduplication and auditable outputs.
+                </p>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Docker + NemoClaw · Tavily · administrator approval</dd></div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/partners/tavily/watchtower/README.md"
+                >Get Started<span class="sr-only"> with Watchtower</span></a>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section
+          class="catalog-group"
+          id="community-recipes"
+          tabindex="-1"
+          data-catalog-category="Community Recipes"
+          aria-labelledby="community-recipes-title"
+        >
+          <div class="shell group-layout">
+            <header class="group-heading">
+              <h2 id="community-recipes-title">Community recipes</h2>
+              <p>
+                Reusable agent recipes contributed independently without formal
+                organizational provenance.
+              </p>
+            </header>
+            <div class="card-grid">
+              <article
+                class="example-card"
+                id="example-axe-a11y-browser-auditor"
+                aria-labelledby="example-axe-a11y-browser-auditor-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Axe A11y Browser Auditor"
+                data-readme="examples/recipes/community/axe-a11y-browser-auditor/README.md"
+              >
+                <p class="provenance">Community recipe</p>
+                <h3 id="example-axe-a11y-browser-auditor-title">Axe A11y Browser Auditor</h3>
+                <p class="outcome">
+                  Audits web pages for accessibility and captures screenshots, PDFs, and
+                  network traces.
+                </p>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Docker 24+ · linux/amd64 · dedicated sandbox</dd></div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/community/axe-a11y-browser-auditor/README.md"
+                >Get Started<span class="sr-only"> with Axe A11y Browser Auditor</span></a>
+              </article>
+
+              <article
+                class="example-card"
+                id="example-deep-research-worker"
+                aria-labelledby="example-deep-research-worker-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Deep Research Worker"
+                data-readme="examples/recipes/community/deep-research-worker/README.md"
+              >
+                <p class="provenance">Community recipe</p>
+                <h3 id="example-deep-research-worker-title">Deep Research Worker</h3>
+                <p class="outcome">
+                  Queues long-running research from a sandbox to a host-side DeepAgents worker.
+                </p>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Docker Compose · dedicated sandbox · no readiness guarantee</dd></div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/recipes/community/deep-research-worker/README.md"
+                >Get Started<span class="sr-only"> with Deep Research Worker</span></a>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section
+          class="catalog-group"
+          id="nvidia-field-demos"
+          tabindex="-1"
+          data-catalog-category="NVIDIA Field Demos"
+          aria-labelledby="nvidia-field-demos-title"
+        >
+          <div class="shell group-layout">
+            <header class="group-heading">
+              <h2 id="nvidia-field-demos-title">NVIDIA field demos</h2>
+              <p>Bounded NVIDIA demonstrations for named hardware and software environments.</p>
+            </header>
+            <div class="card-grid">
+              <article
+                class="example-card"
+                id="example-dgx-station-blender-and-omniverse"
+                aria-labelledby="example-dgx-station-blender-and-omniverse-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="DGX Station Blender and Omniverse"
+                data-readme="examples/demos/field/blender-omniverse-dgx-station/README.md"
+              >
+                <p class="provenance">NVIDIA field demo</p>
+                <h3 id="example-dgx-station-blender-and-omniverse-title">DGX Station Blender and Omniverse</h3>
+                <p class="outcome">
+                  Controls Blender on DGX Station for OVRTX rendering and OVPhysX simulation.
+                </p>
+                <dl class="fit">
+                  <div>
+                    <dt>Fit</dt>
+                    <dd>Ubuntu 24.04 ARM64 · Blender 5.1.x · GB300 + RTX PRO 6000 validation</dd>
+                  </div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/demos/field/blender-omniverse-dgx-station/README.md"
+                >Get Started<span class="sr-only"> with DGX Station Blender and Omniverse</span></a>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section
+          class="catalog-group"
+          id="launchables"
+          tabindex="-1"
+          data-catalog-category="Launchables"
+          aria-labelledby="launchables-title"
+        >
+          <div class="shell group-layout">
+            <header class="group-heading">
+              <h2 id="launchables-title">Launchables</h2>
+              <p>Provisioning and onboarding paths for a specific environment.</p>
+            </header>
+            <div class="card-grid">
+              <article
+                class="example-card"
+                id="example-hermes"
+                aria-labelledby="example-hermes-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Hermes"
+                data-readme="examples/launchables/brev/hermes/README.md"
+              >
+                <p class="provenance">Launchable · Brev</p>
+                <h3 id="example-hermes-title">Hermes</h3>
+                <p class="outcome">
+                  Takes a fresh Brev CPU instance to a NemoClaw-managed Hermes sandbox through
+                  a notebook.
+                </p>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Brev CPU · NVIDIA Build API key · best-effort support</dd></div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/launchables/brev/hermes/README.md"
+                >Get Started<span class="sr-only"> with Hermes</span></a>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section
+          class="catalog-group"
+          id="developer-tools"
+          tabindex="-1"
+          data-catalog-category="Developer Tools"
+          aria-labelledby="developer-tools-title"
+        >
+          <div class="shell group-layout">
+            <header class="group-heading">
+              <h2 id="developer-tools-title">Developer tools</h2>
+              <p>
+                Standalone development and evaluation utilities, separate from deployed
+                agent blueprints.
+              </p>
+            </header>
+            <div class="card-grid">
+              <article
+                class="example-card"
+                id="example-harness-engineering-playground"
+                aria-labelledby="example-harness-engineering-playground-title"
+                data-catalog-entry
+                tabindex="-1"
+                data-name="Harness Engineering Playground"
+                data-readme="examples/tools/harness-engineering-playground/README.md"
+              >
+                <p class="provenance">Developer tool</p>
+                <h3 id="example-harness-engineering-playground-title">Harness Engineering Playground</h3>
+                <p class="outcome">
+                  Provides an experimental command-line interface for evaluation-driven
+                  harness profile optimization.
+                </p>
+                <dl class="fit">
+                  <div><dt>Fit</dt><dd>Python 3.11+ · DeepAgents · not for production</dd></div>
+                </dl>
+                <a
+                  class="guide-link"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/tools/harness-engineering-playground/README.md"
+                >Get Started<span class="sr-only"> with Harness Engineering Playground</span></a>
+              </article>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="shell footer-layout">
+        <div>
+          <p>
+            NemoClaw Community support is best-effort unless a specific NVIDIA product
+            agreement says otherwise.
+          </p>
+        </div>
+        <nav class="footer-links" aria-label="Repository policies and resources">
+          <a href="https://github.com/NVIDIA/nemoclaw-community">Repository</a>
+          <a href="https://github.com/NVIDIA/nemoclaw-community/blob/main/SUPPORT.md">Support</a>
+          <a href="https://github.com/NVIDIA/nemoclaw-community/blob/main/SECURITY.md">Security</a>
+          <a href="https://github.com/brevdev/nemoclaw-demos">Additional examples</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>
