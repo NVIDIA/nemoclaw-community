@@ -123,11 +123,37 @@ def ensure_store(schema_sql: Path | None = None) -> Path:
         # still ship would have it silently recreated, so "refused before any
         # write" has to mean before the DDL too.
         refuse_if_from_the_future(conn)
+        # What the store said before the baseline DDL runs. The DDL carries
+        # `INSERT OR IGNORE INTO meta ... ('schema_version', '<current>')`, so
+        # on a store whose version row is absent it stamps the current version
+        # over a database that has none of the current columns. `migrate` then
+        # sees a version equal to its own and does nothing, and the store is
+        # left claiming a shape it does not have — which surfaces later as a
+        # missing column in a job nobody was watching. Remember the real answer
+        # first and put it back afterwards.
+        recorded = conn.execute(
+            "SELECT value FROM meta WHERE key='schema_version'").fetchone() \
+            if conn.execute("SELECT name FROM sqlite_master WHERE type='table'"
+                            " AND name='meta'").fetchone() else None
+
         # Creating tables is idempotent, so this is safe on an existing store;
         # it is what brings a brand new one up to the baseline. executescript
         # commits implicitly, so it runs before the transaction rather than
         # inside one.
+        had_tables = conn.execute(
+            "SELECT count(*) FROM sqlite_master WHERE type='table'"
+            " AND name='items'").fetchone()[0]
         conn.executescript(schema_sql.read_text(encoding="utf-8"))
+
+        # An existing store keeps whatever version it actually had; only a
+        # genuinely new one is allowed to start at the baseline. A pre-existing
+        # store with no version row is version 0 by definition — unversioned —
+        # and must be migrated forward rather than declared current.
+        if had_tables:
+            conn.execute(
+                "INSERT INTO meta(key, value) VALUES ('schema_version', ?)"
+                " ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (recorded[0] if recorded else "0",))
         conn.execute("BEGIN IMMEDIATE")
         try:
             migrate(conn)

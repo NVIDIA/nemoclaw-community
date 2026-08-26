@@ -43,21 +43,51 @@ class TestMigration(unittest.TestCase):
         with self.assertRaises(SchemaFromTheFuture):
             open_store(p)
 
-    def test_this_recipe_ships_at_the_baseline_with_nothing_to_upgrade_from(self):
-        """No store exists at an earlier version, so there is no upgrade path.
+    def test_a_real_v1_store_upgrades_to_the_current_version(self):
+        """Exercised against v1's own schema artifact, not a doctored current one.
 
-        There used to be a v1-to-v2 step here, written against a v1 that never
-        shipped. The test built its "old" store by taking the current schema
-        and removing one column, which is not the same artifact: it kept every
-        other column the real v1 lacked, so a genuine v1 database still failed
-        to open while the test passed.
+        The shortcut — take the current schema and remove what v2 added — keeps
+        every other column the real v1 had, so a genuine v1 database can still
+        fail to open while the test passes. `schema-v1.sql` is the file that
+        shipped, kept verbatim for this.
         """
-        self.assertEqual(SCHEMA_VERSION, 1)
-        self.assertEqual(MIGRATIONS, {})
-        p = self.fresh()
-        with sqlite3.connect(p) as c:
+        artifact = HERE / "schema-v1.sql"
+        self.assertTrue(artifact.exists(), "the v1 schema artifact is missing")
+        path = Path(tempfile.mkdtemp()) / "v1.db"
+        with sqlite3.connect(path) as c:
+            c.executescript(artifact.read_text(encoding="utf-8"))
             self.assertEqual(current_version(c), 1)
-            self.assertEqual(migrate(c), [])           # already current
+            columns = {row[1] for row in c.execute("PRAGMA table_info(items)")}
+            self.assertNotIn("body_cleared_at", columns,
+                             "the artifact is not really v1")
+
+        with sqlite3.connect(path) as c:
+            self.assertEqual(migrate(c), [2])
+            self.assertEqual(current_version(c), SCHEMA_VERSION)
+            columns = {row[1] for row in c.execute("PRAGMA table_info(items)")}
+            self.assertIn("body_cleared_at", columns)
+
+    def test_the_upgrade_keeps_the_rows_that_were_already_there(self):
+        """An upgrade that loses a message is worse than one that refuses."""
+        artifact = HERE / "schema-v1.sql"
+        path = Path(tempfile.mkdtemp()) / "v1.db"
+        with sqlite3.connect(path) as c:
+            c.executescript(artifact.read_text(encoding="utf-8"))
+            c.execute("INSERT INTO items(source_id, source, scope, event_at,"
+                      " body, state) VALUES"
+                      " ('m1','email','inbox','2026-08-01T00:00:00Z','kept','pending')")
+        with sqlite3.connect(path) as c:
+            migrate(c)
+            row = c.execute("SELECT body, body_cleared_at FROM items"
+                            " WHERE source_id='m1'").fetchone()
+        self.assertEqual(row[0], "kept")
+        self.assertIsNone(row[1], "an upgraded row was marked as cleared")
+
+    def test_the_v1_artifact_is_never_quietly_edited(self):
+        """It is frozen: a schema change goes in schema.sql and a migration."""
+        artifact = (HERE / "schema-v1.sql").read_text(encoding="utf-8")
+        self.assertIn("'schema_version', '1'", artifact)
+        self.assertNotIn("body_cleared_at", artifact)
 
     def test_the_shipped_schema_opens_a_store_that_the_shipped_schema_made(self):
         """The artifact under test is the one the recipe installs."""
@@ -170,6 +200,119 @@ class TestVersionGuardOnTheRealPath(unittest.TestCase):
         with sqlite3.connect(self.db) as c:
             migrate.refuse_if_from_the_future(c)      # must not raise
         self.assertTrue(self._db.ensure_store().is_file())
+
+    def test_a_versionless_v1_store_is_migrated_not_stamped_current(self):
+        """The baseline DDL must not vote on the version of a store it finds.
+
+        `schema.sql` carries `INSERT OR IGNORE ... ('schema_version', '2')`.
+        Run over a real v1 store whose version row is missing — a restored
+        backup, a hand-built table, any reason — it stamps 2 over a database
+        with none of the v2 columns, and `migrate` then sees its own version
+        and does nothing. The store ends up claiming a shape it does not have,
+        which surfaces as a missing column in whichever job touches it first.
+        """
+        import migrate                        # noqa: E402
+        v1 = (HERE / "schema-v1.sql").read_text(encoding="utf-8")
+        with sqlite3.connect(self.db) as c:
+            c.executescript("DROP TABLE IF EXISTS items;"
+                            "DROP TABLE IF EXISTS obligations;"
+                            "DROP TABLE IF EXISTS events;"
+                            "DROP TABLE IF EXISTS cursors;"
+                            "DROP TABLE IF EXISTS meta;")
+            c.executescript(v1)
+            c.execute("DELETE FROM meta WHERE key='schema_version'")
+
+        self._db.ensure_store()
+
+        with sqlite3.connect(self.db) as c:
+            version = c.execute(
+                "SELECT value FROM meta WHERE key='schema_version'").fetchone()[0]
+            columns = {r[1] for r in c.execute("PRAGMA table_info(items)")}
+        self.assertEqual(int(version), migrate.SCHEMA_VERSION)
+        self.assertIn("body_cleared_at", columns,
+                      "store reports the current version without the column "
+                      "that version added")
+
+    def test_a_versionless_store_keeps_the_rows_it_already_held(self):
+        """The repair must not be a rebuild: an unversioned store has data."""
+        v1 = (HERE / "schema-v1.sql").read_text(encoding="utf-8")
+        with sqlite3.connect(self.db) as c:
+            c.executescript("DROP TABLE IF EXISTS items;"
+                            "DROP TABLE IF EXISTS obligations;"
+                            "DROP TABLE IF EXISTS events;"
+                            "DROP TABLE IF EXISTS cursors;"
+                            "DROP TABLE IF EXISTS meta;")
+            c.executescript(v1)
+            c.execute("DELETE FROM meta WHERE key='schema_version'")
+            c.execute("INSERT INTO items(source_id, source, scope, event_at,"
+                      " sender, subject, body, state)"
+                      " VALUES ('m1','email','inbox','2026-01-01T00:00:00.000Z',"
+                      "         'Dana','s','b','pending')")
+
+        self._db.ensure_store()
+
+        with sqlite3.connect(self.db) as c:
+            row = c.execute("SELECT sender, body, body_cleared_at FROM items"
+                            " WHERE source_id='m1'").fetchone()
+        self.assertEqual(row[0], "Dana")
+        self.assertEqual(row[1], "b")
+        self.assertIsNone(row[2])
+
+    def test_the_documented_command_actually_migrates(self):
+        """`docs/data-lifecycle.md` told people to run this file when it had no
+        entry point, so it did nothing and reported nothing — an instruction
+        that succeeds by being silent."""
+        v1 = (HERE / "schema-v1.sql").read_text(encoding="utf-8")
+        with sqlite3.connect(self.db) as c:
+            c.executescript("DROP TABLE IF EXISTS items;"
+                            "DROP TABLE IF EXISTS obligations;"
+                            "DROP TABLE IF EXISTS events;"
+                            "DROP TABLE IF EXISTS cursors;"
+                            "DROP TABLE IF EXISTS meta;")
+            c.executescript(v1)
+
+        proc = subprocess.run(
+            [sys.executable, str(HERE / "migrate.py")],
+            capture_output=True, text=True,
+            env={**os.environ, "HERMES_HOME": self.tmp})
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+        with sqlite3.connect(self.db) as c:
+            version = c.execute(
+                "SELECT value FROM meta WHERE key='schema_version'").fetchone()[0]
+            columns = {r[1] for r in c.execute("PRAGMA table_info(items)")}
+        self.assertEqual(int(version), 2)
+        self.assertIn("body_cleared_at", columns)
+
+    def test_the_check_flag_reports_without_changing(self):
+        v1 = (HERE / "schema-v1.sql").read_text(encoding="utf-8")
+        with sqlite3.connect(self.db) as c:
+            c.executescript("DROP TABLE IF EXISTS items;"
+                            "DROP TABLE IF EXISTS obligations;"
+                            "DROP TABLE IF EXISTS events;"
+                            "DROP TABLE IF EXISTS cursors;"
+                            "DROP TABLE IF EXISTS meta;")
+            c.executescript(v1)
+
+        proc = subprocess.run(
+            [sys.executable, str(HERE / "migrate.py"), "--check"],
+            capture_output=True, text=True,
+            env={**os.environ, "HERMES_HOME": self.tmp})
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(json.loads(proc.stdout)["schema_version"], 1)
+
+        with sqlite3.connect(self.db) as c:
+            columns = {r[1] for r in c.execute("PRAGMA table_info(items)")}
+        self.assertNotIn("body_cleared_at", columns,
+                         "--check changed the store")
+
+    def test_the_docs_do_not_promise_a_command_that_does_nothing(self):
+        docs = (HERE.parents[1] / "docs" / "data-lifecycle.md").read_text(
+            encoding="utf-8")
+        if "python3 migrate.py" in docs:
+            module = (HERE / "migrate.py").read_text(encoding="utf-8")
+            self.assertIn('if __name__ == "__main__"', module,
+                          "the docs name a command this module cannot run")
 
     def test_an_older_store_is_migrated_rather_than_refused(self):
         """The guard is one-sided: behind is upgraded, ahead is refused."""
