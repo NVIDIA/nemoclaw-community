@@ -1213,6 +1213,92 @@ esac
         out = self.refuses_policy({"binaries": []}, "unbounded by binary")
         self.assertIn("binary", out)
 
+    VALIDATOR = RECIPE / "scripts" / "validate-slack-profile.sh"
+
+    def validate(self, policy):
+        """Run the shipped validator against a profile with one field bent.
+
+        Invoked directly rather than through `setup-slack.sh`, because step 5
+        of that script exchanges an authorization code against Slack — a run
+        that reaches the profile check has already talked to a live service.
+        This is the same file both paths source.
+        """
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            self.fake_openshell(folder, policy=policy)
+            proc = subprocess.run(
+                ["bash", str(self.VALIDATOR), "memory-driven-cos-slack-user"],
+                capture_output=True, text=True,
+                env={"PATH": f"{folder}:{os.environ['PATH']}",
+                     "HOME": str(folder),
+                     "USABLE_KEY": "SLACK_USER_TOKEN"})
+        return proc.returncode, proc.stdout + proc.stderr
+
+    def test_the_expected_profile_passes(self):
+        """Strictness that rejects the shipped profile is not strictness."""
+        code, out = self.validate(None)
+        self.assertEqual(code, 0, out)
+
+    def test_a_read_write_endpoint_is_refused(self):
+        """Two independent greps passed this: the read-only match came from a
+        different endpoint than the slack.com one."""
+        code, out = self.validate(
+            {"endpoints": [{"host": "slack.com", "port": 443,
+                            "protocol": "rest", "access": "read-write",
+                            "enforcement": "enforce"}]})
+        self.assertNotEqual(code, 0)
+        self.assertIn("read-only", out)
+
+    def test_an_unenforced_endpoint_is_refused(self):
+        """`observe` watches a write go through and records it."""
+        code, out = self.validate(
+            {"endpoints": [{"host": "slack.com", "port": 443,
+                            "protocol": "rest", "access": "read-only",
+                            "enforcement": "observe"}]})
+        self.assertNotEqual(code, 0)
+        self.assertIn("enforce", out)
+
+    def test_a_second_endpoint_is_refused(self):
+        code, out = self.validate(
+            {"endpoints": [
+                {"host": "slack.com", "port": 443, "protocol": "rest",
+                 "access": "read-only", "enforcement": "enforce"},
+                {"host": "files.slack.example", "port": 443,
+                 "protocol": "rest", "access": "read-write",
+                 "enforcement": "enforce"}]})
+        self.assertNotEqual(code, 0)
+        self.assertIn("files.slack.example", out)
+
+    def test_a_missing_slack_endpoint_is_refused(self):
+        code, out = self.validate(
+            {"endpoints": [{"host": "example.invalid", "port": 443,
+                            "protocol": "rest", "access": "read-only",
+                            "enforcement": "enforce"}]})
+        self.assertNotEqual(code, 0)
+        self.assertIn("slack.com", out)
+
+    def test_a_different_credential_is_refused(self):
+        code, out = self.validate(
+            {"credentials": [{"env_vars": ["SLACK_BOT_TOKEN"]}]})
+        self.assertNotEqual(code, 0)
+        self.assertIn("SLACK_USER_TOKEN", out)
+
+    def test_a_missing_binary_allow_list_is_refused(self):
+        """Without one, any process in the sandbox can spend the credential."""
+        code, out = self.validate({"binaries": []})
+        self.assertNotEqual(code, 0)
+        self.assertIn("binary", out)
+
+    def test_both_paths_run_it(self):
+        """Reuse validated and the fresh path grepped. Asserted on the source
+        because the fresh path cannot be reached without exchanging a real
+        authorization code — the validator's behaviour is covered above."""
+        script = self.SCRIPT.read_text(encoding="utf-8")
+        self.assertEqual(script.count("validate_profile "), 2,
+                         "both the reuse and the fresh path must validate")
+        self.assertNotIn('grep -q "host: slack.com"', script)
+        self.assertNotIn('grep -q "access: read-only"', script)
+
     def test_an_acknowledged_unencrypted_path_lets_the_run_continue(self):
         """The gate is a question, not a wall — but it has to be asked."""
         with tempfile.TemporaryDirectory() as folder:

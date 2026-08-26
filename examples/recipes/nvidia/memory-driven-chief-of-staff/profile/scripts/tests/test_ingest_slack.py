@@ -1033,6 +1033,74 @@ class TestThreadRepliesAreCollected(CollectorCase):
                         "the second tick checked only parents the first "
                         "already had — the newest are never reached")
 
+    def _many_active(self, count):
+        """A channel with more threads holding replies than one tick can serve."""
+        parents = [{"ts": f"17870000{i:02d}.0001", "user": OTHER,
+                    "text": f"m{i}", "reply_count": 2}
+                   for i in range(count)]
+        responses = self._threaded()
+        responses["conversations.history"] = lambda p: (
+            {"ok": True, "messages": []} if p.get("limit") == "1" else
+            {"ok": True, "has_more": False, "messages": parents})
+        responses["conversations.replies"] = lambda p: (
+            {"ok": True, "has_more": False,
+             "messages": [{"ts": p.get("ts"), "user": OTHER, "text": "parent"},
+                          {"ts": p.get("ts") + "1", "user": OTHER,
+                           "text": "reply", "thread_ts": p.get("ts")}]})
+        return responses
+
+    def served_replies(self):
+        return [c.get("ts") for m, c in self.slack.calls
+                if m == "conversations.replies"]
+
+    def test_the_next_tick_reaches_different_active_threads(self):
+        """Active threads were served oldest-first on every tick, so a channel
+        with more of them than the budget covers never reached the newest —
+        and those are the ones known to be holding replies."""
+        os.environ["INTAKE_SLACK_BUDGET"] = "6"
+        self.serve(self._many_active(12))
+        self.run_main()
+        first = set(self.served_replies())
+        self.slack.calls.clear()
+        self.run_main()
+        second = set(self.served_replies())
+        self.assertTrue(first, "the first tick served no thread")
+        self.assertTrue(second - first,
+                        "the second tick served only threads the first "
+                        "already had")
+
+    def test_an_unserved_active_thread_holds_the_channel_watermark(self):
+        """Rotation must not become a way to skip replies.
+
+        Rotation changes which active threads a tick serves, not whether the
+        rest still count as unread. With more of them than the budget covers,
+        the channel must not advance past the ones it did not reach — or the
+        next tick starts beyond replies nobody collected.
+        """
+        os.environ["INTAKE_SLACK_BUDGET"] = "6"
+        self.serve(self._many_active(12))
+        self.run_main()
+        payload = json.loads(self.stdout)
+        self.assertIn("incomplete_coverage", payload)
+        self.assertEqual(self.cursors(), {},
+                         "the channel advanced past threads it had not read")
+
+    def test_active_threads_are_served_before_watched_parents(self):
+        """A thread known to hold replies outranks one being checked in case."""
+        parents = [{"ts": "1787000001.0001", "user": OTHER, "text": "quiet"},
+                   {"ts": "1787000002.0001", "user": OTHER, "text": "busy",
+                    "reply_count": 2}]
+        responses = self._threaded()
+        responses["conversations.history"] = lambda p: (
+            {"ok": True, "messages": []} if p.get("limit") == "1" else
+            {"ok": True, "has_more": False, "messages": parents})
+        os.environ["INTAKE_SLACK_BUDGET"] = "200"
+        self.serve(responses)
+        self.run_main()
+        served = self.served_replies()
+        self.assertEqual(served[0], "1787000002.0001",
+                         "a watched parent was served before an active thread")
+
     def test_thread_progress_is_not_recorded_before_the_rows_are_durable(self):
         """A crash between the two skipped those replies permanently.
 

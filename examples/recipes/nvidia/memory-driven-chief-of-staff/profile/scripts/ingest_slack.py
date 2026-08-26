@@ -644,18 +644,30 @@ def thread_offsets_path():
     return scope_path().with_name("slack_thread_rotation.json")
 
 
-def thread_offset(channel_id: str, count: int) -> int:
-    """Where this tick starts in one channel's thread list."""
+def thread_offset(channel_id: str, count: int, kind: str = "watched") -> int:
+    """Where this tick starts in one channel's thread list.
+
+    Active and watched threads rotate independently: they are served in
+    different quantities and one holds the channel watermark while the other
+    does not, so a shared offset would make each one's progress depend on how
+    many of the other there happened to be.
+    """
     if not count:
         return 0
     try:
         stored = json.loads(thread_offsets_path().read_text(encoding="utf-8"))
-        return int(stored.get(channel_id, 0)) % count
+        entry = stored.get(channel_id, 0)
+        if isinstance(entry, dict):
+            return int(entry.get(kind, 0)) % count
+        # An offset written before the two were separated. Reading it as the
+        # watched one loses nothing: the worst case is one unfair tick.
+        return (int(entry) % count) if kind == "watched" else 0
     except (OSError, json.JSONDecodeError, KeyError, ValueError, TypeError):
         return 0
 
 
-def save_thread_offset(channel_id: str, offset: int, count: int) -> None:
+def save_thread_offset(channel_id: str, offset: int, count: int,
+                       kind: str = "watched") -> None:
     if not count:
         return
     path = thread_offsets_path()
@@ -665,7 +677,11 @@ def save_thread_offset(channel_id: str, offset: int, count: int) -> None:
             stored = {}
     except (OSError, json.JSONDecodeError):
         stored = {}
-    stored[channel_id] = offset % count
+    entry = stored.get(channel_id)
+    if not isinstance(entry, dict):
+        entry = {}
+    entry[kind] = offset % count
+    stored[channel_id] = entry
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(stored), encoding="utf-8")
@@ -773,11 +789,28 @@ def collect(token: str, caps: dict[str, Any],
         known = prune_threads(known)
         owed &= set(known)
 
+        # Both sets rotate, for the same reason and with different
+        # consequences.
+        #
+        # Active threads were served oldest-first on every tick. A channel
+        # with more of them than the budget covers served the same few
+        # forever, and a thread that became active yesterday was never
+        # reached — which is worse than the watched case, because those
+        # threads are known to be holding replies. They are still served
+        # before watched parents, and any left unserved still holds the
+        # channel watermark: unread replies are unread whether the reason was
+        # the budget or the rotation.
+        active = sorted(owed)
+        start_active = thread_offset(channel["id"], len(active), "owed")
+        active = active[start_active:] + active[:start_active]
+
         watched = sorted(ts for ts in known if ts not in owed)
         start_thread = thread_offset(channel["id"], len(watched))
         rotated = watched[start_thread:] + watched[:start_thread]
-        order = sorted(owed) + rotated[:THREADS_PER_TICK]
+
+        order = active + rotated[:THREADS_PER_TICK]
         served_watched = 0
+        served_active = 0
 
         threaded: list[dict[str, Any]] = []
         threads_complete = True
@@ -787,7 +820,9 @@ def collect(token: str, caps: dict[str, Any],
                 if parent_ts in owed:
                     threads_complete = False
                 break
-            if parent_ts not in owed:
+            if parent_ts in owed:
+                served_active += 1
+            else:
                 served_watched += 1
             try:
                 found, done = replies(token, channel["id"], parent_ts,
@@ -820,6 +855,8 @@ def collect(token: str, caps: dict[str, Any],
             save_threads(channel["id"], known)
             save_thread_offset(channel["id"], start_thread + served_watched,
                                len(watched))
+            save_thread_offset(channel["id"], start_active + served_active,
+                               len(active), "owed")
             continue
         fetched += len(items)
         # Only a complete crawl may move the watermark; the rows are idempotent
@@ -841,6 +878,8 @@ def collect(token: str, caps: dict[str, Any],
         save_threads(channel["id"], known)
         save_thread_offset(channel["id"], start_thread + served_watched,
                            len(watched))
+        save_thread_offset(channel["id"], start_active + served_active,
+                           len(active), "owed")
 
     if channels:
         save_rotation((start + served) % len(channels))
