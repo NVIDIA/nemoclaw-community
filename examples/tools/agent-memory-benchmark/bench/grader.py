@@ -197,6 +197,21 @@ def score_evidence(cited: list[str] | None, gold_ids: list[str] | None) -> tuple
     return hit / len(gold_set), hit / len(cited_set)
 
 
+def is_answered(row: dict | None) -> bool:
+    """Did the system actually answer this question?
+
+    One definition, used by the runner and by regrade alike. A row that is
+    absent, a row with no ``answer`` key, and a row whose answer is blank are
+    all the same thing: no answer was given. The answer contract asks a system
+    to say plainly that the corpus does not support an answer, and none of
+    these says anything -- crediting them would let a system score every
+    abstention question by staying quiet in one of three ways.
+    """
+    if not row:
+        return False
+    return bool(str(row.get("answer", "")).strip())
+
+
 def grade(
     question_id: str,
     answer: str,
@@ -207,11 +222,11 @@ def grade(
 ) -> Verdict:
     """Grade one answer against its gold entry.
 
-    ``answered=False`` means the system produced no row for this question at
-    all. That is not an abstention: an abstention is a system saying "the
-    corpus does not support an answer", which is a judgement it had to make.
-    Silence is the absence of one, and crediting it would let a system score
-    every abstention question by skipping them.
+    ``answered=False`` means the system said nothing for this question --
+    no row, no ``answer`` field, or a blank one; see :func:`is_answered`.
+    That is not an abstention. An abstention is a system saying "the corpus
+    does not support an answer", which is a judgement it had to make; silence
+    is the absence of one.
     """
     mode = gold.get("mode", "string_any")
     if not answered:
@@ -220,7 +235,7 @@ def grade(
             question_id=question_id,
             correct=False,
             mode=mode,
-            reason="no answer was produced for this question",
+            reason="no answer was given for this question",
             evidence_recall=recall,
             evidence_precision=precision,
             cited=list(cited or []),

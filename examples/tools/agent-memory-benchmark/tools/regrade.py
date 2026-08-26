@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bench.fingerprint import fingerprint
 from bench.runner import REPO, _git_revision
-from bench.grader import grade  # noqa: E402
+from bench.grader import grade, is_answered  # noqa: E402
 from bench.report import render_markdown, summarize
 from bench.runner import REPORT_SCHEMA_VERSION  # noqa: E402
 
@@ -47,7 +47,7 @@ def main() -> None:
     verdicts = [
         grade(q["id"], str(answers.get(q["id"], {}).get("answer", "")),
               answers.get(q["id"], {}).get("source_ids"), gold[q["id"]],
-              answered=q["id"] in answers)
+              answered=is_answered(answers.get(q["id"])))
         for q in questions
     ]
     # Two callers, one path. A finished run has a report to re-score in place.
@@ -95,12 +95,27 @@ def main() -> None:
     # them. Leaving the old one made the report name a scorer that did not
     # score it.
     report["benchmark_revision"] = _git_revision(REPO)
-    report["answers_missing"] = [q["id"] for q in questions if q["id"] not in answers]
+    report["answers_missing"] = [q["id"] for q in questions if not is_answered(answers.get(q["id"]))]
+    # Regrading re-decides every verdict, so it re-decides validity with them.
+    # Carrying the old flags forward made a corrected submission keep claiming
+    # it was invalid for an omission it no longer had. An accounting failure is
+    # a property of the original run, not of this scoring pass, so it stays.
+    accounting_failure = (report.get("accounting") or {}).get("method") in {
+        "partial", "declared-proxy-but-silent", "declared-local-but-called",
+    }
+    report.pop("valid", None)
+    report.pop("invalid_reason", None)
     if report["answers_missing"]:
         report["valid"] = False
         report["invalid_reason"] = (
             f"{len(report['answers_missing'])} of {len(questions)} questions received no "
             "answer. An incomplete submission is not a lower score."
+        )
+    elif accounting_failure:
+        report["valid"] = False
+        report["invalid_reason"] = (
+            "the original run's cost was not fully observed "
+            f"({report['accounting']['method']}); regrading does not change that."
         )
     report["regraded"] = True
     (args.run / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

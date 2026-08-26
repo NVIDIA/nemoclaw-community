@@ -53,9 +53,14 @@ def hash_file(path: Path) -> str:
 _SCORER = ("grader.py", "normalize.py", "answer_contract.py", "report.py")
 
 
-def scorer_revision() -> str:
-    """Hash of the code that decides a verdict."""
-    here = Path(__file__).resolve().parent
+def scorer_revision(source_dir: Path | None = None) -> str:
+    """Hash of the code that produces a score.
+
+    ``source_dir`` exists so a test can hash an isolated copy rather than
+    editing the checked-in modules: a run interrupted mid-test would otherwise
+    leave the tree dirty.
+    """
+    here = Path(source_dir) if source_dir else Path(__file__).resolve().parent
     digest = hashlib.sha256()
     for name in _SCORER:
         digest.update(name.encode("utf-8"))

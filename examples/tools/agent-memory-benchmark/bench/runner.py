@@ -27,7 +27,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bench.fingerprint import fingerprint, hash_tree  # noqa: E402
-from bench.grader import Verdict, grade  # noqa: E402
+from bench.grader import Verdict, grade, is_answered  # noqa: E402
 from bench.pricing import SNAPSHOT_DATE, phase_cost_usd  # noqa: E402
 from bench.proxy import AccountingProxy  # noqa: E402
 from bench.report import render_markdown, summarize  # noqa: E402
@@ -388,11 +388,10 @@ def main() -> None:
     answers = _read_answers(answers_path)
     verdicts: list[Verdict] = []
     for question in questions:
-        answered = question["id"] in answers
-        row = answers.get(question["id"], {})
+        row = answers.get(question["id"])
         verdicts.append(
-            grade(question["id"], str(row.get("answer", "")), row.get("source_ids"),
-                  gold_by_id[question["id"]], answered=answered)
+            grade(question["id"], str((row or {}).get("answer", "")), (row or {}).get("source_ids"),
+                  gold_by_id[question["id"]], answered=is_answered(row))
         )
 
     manifest = [json.loads(line) for line in (args.corpus / "manifest.jsonl").read_text().splitlines() if line.strip()]
@@ -472,7 +471,7 @@ def main() -> None:
         # segment. Reported side by side, never merged.
         "self_reported_usage": _self_reported(state_dir),
         "summary": summarize(verdicts, gold_by_id),
-        "answers_missing": [q["id"] for q in questions if q["id"] not in answers],
+        "answers_missing": [q["id"] for q in questions if not is_answered(answers.get(q["id"]))],
     }
     # A system that answered nothing is a broken run, not a system that scored
     # zero. Say so in the report and mark the run invalid.
