@@ -60,8 +60,15 @@ def test_abstention_requires_declining():
     assert not grade("q", "Project Phoenix is a metrics pipeline.", None, gold).correct
 
 
-def test_empty_answer_counts_as_abstention_not_as_a_claim():
-    assert grade("q", "", None, {"mode": "abstain"}).correct
+def test_an_empty_answer_is_not_an_abstention():
+    """Saying nothing is not the same as saying the corpus does not support it.
+
+    An earlier contract credited a blank answer as a poorly-phrased refusal.
+    A system could then take every abstention question by staying silent.
+    """
+    assert grade("q", "", None, {"mode": "abstain"}).correct is False
+    assert grade("q", "", None, {"mode": "abstain"}, answered=False).correct is False
+    assert grade("q", "The corpus does not say.", None, {"mode": "abstain"}).correct
 
 
 def test_evidence_is_none_when_the_system_cited_nothing():

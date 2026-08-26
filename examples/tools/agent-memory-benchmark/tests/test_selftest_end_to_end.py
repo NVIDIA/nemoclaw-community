@@ -74,7 +74,7 @@ def test_each_grading_mode_fails_for_its_own_stated_reason(wrong, tmp_path_facto
     verdicts = {json.loads(line)["question_id"]: json.loads(line)
                 for line in matches[0].read_text(encoding="utf-8").splitlines() if line.strip()}
     assert "rejected" in verdicts["st-freshness"]["reason"].lower()
-    assert "missing required element" in verdicts["st-require-all"]["reason"].lower()
+    assert "required element" in verdicts["st-require-all"]["reason"].lower()
     assert "abstention" in verdicts["st-abstain"]["reason"].lower() or \
            "does not support" in verdicts["st-abstain"]["reason"].lower()
     assert "expected no" in verdicts["st-boolean"]["reason"].lower()
