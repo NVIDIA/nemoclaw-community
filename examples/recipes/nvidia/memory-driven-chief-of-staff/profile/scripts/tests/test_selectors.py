@@ -1214,7 +1214,7 @@ esac
         out = self.refuses_policy({"binaries": []}, "unbounded by binary")
         self.assertIn("binary", out)
 
-    VALIDATOR = RECIPE / "scripts" / "validate-slack-profile.sh"
+    VALIDATOR = RECIPE / "scripts" / "validate-provider-profile.sh"
 
     def validate(self, policy):
         """Run the shipped validator against a profile with one field bent.
@@ -1232,7 +1232,8 @@ esac
                 capture_output=True, text=True,
                 env={"PATH": f"{folder}:{os.environ['PATH']}",
                      "HOME": str(folder),
-                     "USABLE_KEY": "SLACK_USER_TOKEN"})
+                     "USABLE_KEY": "SLACK_USER_TOKEN",
+                     "WANT_HOST": "slack.com"})
         return proc.returncode, proc.stdout + proc.stderr
 
     def test_the_expected_profile_passes(self):
@@ -1312,12 +1313,21 @@ esac
                       "the acknowledged path should reach the reuse branch")
 
     def test_an_unconfirmed_prerequisite_aborts(self):
-        code = "\n".join(line for line in self.SCRIPT.read_text().splitlines()
-                         if not line.lstrip().startswith("#"))
-        window = code[code.find("STORE_ENCRYPTION_ACKNOWLEDGED"):
-                      code.find("sandbox provider attach")]
-        self.assertIn("exit 1", window,
-                      "an unconfirmed prerequisite must abort, not warn")
+        """Run it rather than search the source for `exit 1`.
+
+        The previous form looked between two strings in `setup-slack.sh`. The
+        gate has since moved into a file both setup flows source, so the
+        search window emptied and the test passed on nothing — the same shape
+        of failure that let the reuse-path bypass ship.
+        """
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            self.fake_openshell(folder)
+            proc = self.run_setup(folder, {
+                "SANDBOX_STORAGE_PATH": str(folder)})
+        self.assertNotEqual(proc.returncode, 0,
+                            "an unconfirmed prerequisite must abort, not warn")
+        self.assertNotIn("Nothing to do", proc.stdout)
 
     def test_the_docs_point_at_the_page(self):
         for name in ("README.md", "docs/set-up-slack.md"):

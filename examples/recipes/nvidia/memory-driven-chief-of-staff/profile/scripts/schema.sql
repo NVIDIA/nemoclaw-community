@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
-INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '3');
+INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '4');
 
 
 -- ---------------------------------------------------------------------------
@@ -54,13 +54,20 @@ CREATE TABLE IF NOT EXISTS items (
     -- string they happen to be displayed as. Nullable: rows collected before
     -- this column existed have none, and a collector that cannot supply one
     -- is not a reason to refuse the message.
-    sender_key  TEXT,                       -- display name or address
+    sender_key  TEXT,                       -- address or user id, never a name
     subject     TEXT,                       -- NULL for slack
     body        TEXT,
     -- Set when the retention pass clears `body`, and never otherwise. It is
     -- what tells a cleared message from one that never carried text: both
     -- leave `body` NULL, and only one of them is a message somebody sent.
     body_cleared_at TEXT,
+    -- Set when the source says the message is gone. Distinct from
+    -- `body_cleared_at`, which records this recipe ageing the text out on its
+    -- own schedule: one is the person deleting something, the other is us
+    -- forgetting it, and a report that conflates them answers the wrong
+    -- question. The row survives either way, because obligations and events
+    -- hang off `source_id` and removing it would break the audit trail.
+    deleted_at    TEXT,
     permalink   TEXT,                       -- link back to the source system
 
     -- Normalized across sources, because the judging rules ask the same

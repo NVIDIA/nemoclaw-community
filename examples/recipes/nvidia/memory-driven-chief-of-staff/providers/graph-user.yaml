@@ -1,0 +1,73 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# The gateway holds the Microsoft Graph credential and refreshes it; the
+# sandbox receives only a placeholder, substituted at egress.
+#
+# This is the arrangement #122 decision 1 settled on. The alternative
+# considered there was MSAL-managed renewal with an encrypted token cache,
+# which makes a recipe self-contained at the cost of the refresh token living
+# inside the sandbox — where an encrypted cache is a mitigation rather than a
+# boundary. Gateway-held keeps it out entirely, and the cost is a dependency on
+# a running gateway, which this recipe already has.
+#
+# Delegated access only. `Mail.Read` covers the signed-in mailbox and nothing
+# else, and `offline_access` is what lets the gateway keep renewing without
+# asking again. An application permission would read every mailbox in the
+# tenant, which is not what a personal assistant needs and not what the
+# collector checks for — it refuses a token whose `/me` has no address, which
+# is what an application token looks like.
+id: memory-driven-cos-graph-user
+resource_version: 1
+display_name: Memory-Driven Chief of Staff — Microsoft Graph mailbox
+description: >-
+  Read-only delegated mailbox access, for the scheduled intake collector.
+  Gateway-held credential, renewed through the Microsoft identity platform.
+category: messaging
+credentials:
+  - name: graph_access_token
+    description: Microsoft Graph delegated access token
+    env_vars: [MS_GRAPH_ACCESS_TOKEN]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+    refresh:
+      strategy: oauth2_refresh_token
+      token_url: https://login.microsoftonline.com/common/oauth2/v2.0/token
+      scopes: [https://graph.microsoft.com/.default]
+      # An hour is the Microsoft identity platform's usual access-token
+      # lifetime; renew ten minutes early so a tick starting near the boundary
+      # does not race the expiry.
+      refresh_before_seconds: 600
+      max_lifetime_seconds: 3600
+      material:
+        - name: tenant_id
+          description: Microsoft Entra tenant id
+          required: true
+        - name: client_id
+          description: Microsoft Entra application client id
+          required: true
+        - name: refresh_token
+          description: Delegated refresh token from the device-code flow
+          required: true
+          secret: true
+endpoints:
+  # One host, and read-only: this recipe never writes to a mailbox. It does not
+  # mark a message read, move it, or reply — the source is an input. The scan
+  # in tests/test_durability.py enforces the same property in the code; this
+  # enforces it at the egress boundary, where a future mistake would otherwise
+  # reach the network before any test ran.
+  #
+  # `login.microsoftonline.com` is deliberately absent. The gateway performs
+  # the token exchange, so the sandbox never talks to the identity platform;
+  # declaring it here would widen the boundary for a call the collector does
+  # not make.
+  - host: graph.microsoft.com
+    port: 443
+    protocol: rest
+    access: read-only
+    enforcement: enforce
+# The collector is a Python cron pre-step and needs nothing else.
+binaries:
+  - /usr/bin/python3
+  - /opt/hermes/.venv/bin/python

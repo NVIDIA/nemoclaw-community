@@ -4,6 +4,11 @@
 #
 # Validate a registered provider profile, field by field.
 #
+# One file for every connector rather than one per connector. A second copy of
+# a check like this is a copy that drifts: the one nobody edited keeps passing
+# a profile the other would refuse, and the difference surfaces as a boundary
+# that was narrower in one setup flow than the other.
+#
 # Its own file because two paths need it — reusing an attached provider and
 # creating a fresh one — and because the setup script cannot be driven this
 # far in a test: step 5 exchanges an authorization code against Slack, so a
@@ -11,7 +16,8 @@
 # Sourced by `setup-slack.sh`; invoked directly by the tests and by anybody
 # who wants to check what is registered:
 #
-#     USABLE_KEY=SLACK_USER_TOKEN bash scripts/validate-slack-profile.sh <id>
+#     WANT_HOST=slack.com USABLE_KEY=SLACK_USER_TOKEN \
+#         bash scripts/validate-provider-profile.sh <id>
 
 # The registered profile, checked field by field rather than by looking for
 # strings anywhere in a rendered blob.
@@ -30,10 +36,13 @@ validate_profile() {
     echo "     could not export provider profile '$id'" >&2
     return 1
   fi
-  PROFILE_JSON="$exported" USABLE_KEY="$USABLE_KEY" python3 - <<'PYCHECK'
+  PROFILE_JSON="$exported" USABLE_KEY="$USABLE_KEY" \
+  WANT_HOST="$WANT_HOST" WANT_PORT="${WANT_PORT:-443}" \
+  python3 - <<'PYCHECK'
 import json, os, sys
 
-want_host, want_port = "slack.com", 443
+want_host = os.environ["WANT_HOST"]
+want_port = int(os.environ.get("WANT_PORT", "443"))
 try:
     profile = json.loads(os.environ["PROFILE_JSON"])
 except json.JSONDecodeError as exc:
@@ -80,6 +89,7 @@ PYCHECK
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-  USABLE_KEY="${USABLE_KEY:-SLACK_USER_TOKEN}"
+  : "${WANT_HOST:?WANT_HOST is required}"
+  : "${USABLE_KEY:?USABLE_KEY is required}"
   validate_profile "$1"
 fi

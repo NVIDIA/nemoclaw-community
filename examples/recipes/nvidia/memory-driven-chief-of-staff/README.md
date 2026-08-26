@@ -90,6 +90,8 @@ those two apart.
 | `profile/scripts/load_fixtures.py` | Replays the fixtures through the real ingest path |
 | `profile/scripts/walkthrough.py` | The fixture walkthrough, end to end, with no credentials and no model |
 | `profile/scripts/select_intake.py` | The intake job's pre-step: what to judge, and whether to wake the model at all |
+| `profile/scripts/ingest_graph.py` | The mailbox collector: a delta synchronisation, resumable, with deletions reconciled |
+| `profile/scripts/ingest_slack.py` | The Slack collector: bounded conversation coverage, per-thread watermarks |
 | `profile/scripts/select_review.py` | The review job's pre-step: the stalest open obligations, oldest review first |
 | `profile/scripts/select_memory.py` | The memory-writing job's pre-step: recurring correspondents, and whether the attention pages have gone stale |
 | `profile/scripts/retention.py` | The retention job: clears message bodies past the window, keeps the record |
@@ -102,8 +104,9 @@ those two apart.
 | `profile/skills/` | Six skills: judging, review, memory writing, repair, consolidation, preference update. Retention needs none — it clears bodies and never wakes the agent |
 | `fixtures/` | Eight synthetic messages, a seed memory, and one recorded model turn |
 
-Slack is connected through `scripts/setup-slack.sh`. Until a connector is set
-up, the scheduled jobs judge and re-judge whatever the store already holds.
+Slack is connected through `scripts/setup-slack.sh` and a mailbox through
+`scripts/setup-graph.sh`. Either can be set up alone; with neither, the
+scheduled jobs judge and re-judge whatever the store already holds.
 
 ## Requirements
 
@@ -245,7 +248,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the twelve files report 505 tests in
+Expected result: every file ends with `OK`, the thirteen files report 505 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -264,6 +267,7 @@ leave the loop exiting `0`.
 | What the memory job hands the agent: who is worth a page, stable identity across namesakes and renames, quiet days costing nothing, and corrections counted once | `tests/test_select_memory.py` |
 | Retention, exclusion, export and reset | `tests/test_lifecycle.py` |
 | The Slack collector: watermarks, partial failure, scope probing, thread discovery and rotation, the credential never reaching a stream, and the lifecycle controls applying to what it writes | `tests/test_ingest_slack.py` |
+| The mailbox collector: delta synchronisation, resumption, deletions reconciled, the window bound, and the credential never reaching a stream | `tests/test_ingest_graph.py` |
 
 Four points are worth calling out.
 
@@ -522,9 +526,10 @@ Three things about the connectors themselves:
 
 - Attachments are not fetched. The collector stores a file-sharing message's
   text and never requests the file behind it.
-- For Microsoft Graph, an item deleted at the source will be tombstoned locally
-  and its body cleared at once, because the delta query reports deletions
-  explicitly.
+- For Microsoft Graph, an item deleted at the source is tombstoned locally and
+  its body cleared at once, because the delta query reports deletions
+  explicitly. The row stays: obligations and events hang off it, and removing
+  it would break the record of why something was ranked.
 - For Slack, that guarantee is not available. A deleted message stops appearing
   in `conversations.history`, and its absence from a bounded, paginated read
   cannot be told apart from it lying outside the window. Reliable notice
@@ -606,9 +611,7 @@ stderr is captured by the scheduler into the job log, where something
 transient becomes a file that outlives the token in it.
 
 So both get the same sanitized triple — which collector, what exit code, which
-error class. After the connector phase supplies a collector, run that collector
-directly to read what it actually said. For example, once `ingest_graph.py` is
-installed:
+error class. To read what a collector actually said, run it directly:
 
 ```bash
 HERMES_HOME="/path/to/profile" python3 profile/scripts/ingest_graph.py
