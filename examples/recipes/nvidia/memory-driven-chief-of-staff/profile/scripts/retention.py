@@ -41,8 +41,13 @@ from _db import ensure_store, write_txn
 #
 # Thirty days is long enough that a person looking back at a decision can still
 # read what prompted it, and short enough that a store is not a copy of the
-# mailbox. It is the default rather than the rule: `RETENTION_DAYS` moves it,
-# and the README says so.
+# mailbox. It is the default rather than the rule: `RETENTION_DAYS` moves it.
+#
+# For the scheduled job, set it in `$HERMES_HOME/.env` — `hermes config
+# env-path` prints the file. That is the only place a value survives to the
+# next tick: `hermes cron create` and `cron edit` take no environment, so
+# exporting the variable in a shell changes the run you are watching and
+# nothing after it. Measured: a `.env` line reaches the cron subprocess.
 RETENTION_DAYS = 30
 
 MAX_RETENTION_DAYS = 3650

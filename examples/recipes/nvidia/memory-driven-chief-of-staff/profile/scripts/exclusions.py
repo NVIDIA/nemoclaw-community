@@ -30,6 +30,14 @@ mail folder or the Slack channel id.
 Matching is case-insensitive and exact — no globs. A pattern language here
 would be a way to exclude more than intended by accident, and the failure is
 silent: nothing arrives, and nothing says why.
+
+A file that cannot be read stops collection. An earlier version treated an
+unreadable file as no rules at all, on the reasoning that a typo should not
+halt the intake — but the guarantee this module exists to provide is that
+excluded content is never written, and failing open converts a typo into a
+silent breach of exactly that. The user finds out when the thing they
+excluded is already on disk. Stopping is loud, recoverable, and honest about
+which of the two failures happened.
 """
 
 from __future__ import annotations
@@ -45,13 +53,18 @@ def rules_path():
     return ledger_path().parent.parent / RULES_FILE
 
 
-def load_rules() -> dict[str, set[str]]:
-    """Read the rules, or none at all.
+class ExclusionsUnreadable(Exception):
+    """The rules exist but cannot be honoured, so nothing may be written."""
 
-    An unreadable file yields no rules rather than an error. That is the
-    deliberate direction: a typo in this file must not stop the intake, and the
-    consequence — a message arriving that the user meant to exclude — is
-    visible to them, where a stalled pipeline would not be.
+
+def load_rules() -> dict[str, set[str]]:
+    """Read the rules, or refuse to proceed without them.
+
+    Absent is not the same as broken. No file means no rules, which is the
+    ordinary state of a fresh install and must stay free. A file that is
+    present but malformed is a different thing: the user wrote it in order to
+    keep something out, and continuing without it writes exactly what they
+    were trying to prevent.
     """
     empty: dict[str, set[str]] = {"senders": set(), "domains": set(),
                                   "channels": set()}
@@ -59,11 +72,29 @@ def load_rules() -> dict[str, set[str]]:
     if not path.exists():
         return empty
     try:
-        declared = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return empty
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ExclusionsUnreadable(
+            f"{path} exists but could not be read ({exc.strerror or exc}). "
+            "Nothing has been stored. Fix the file or remove it.") from exc
+    try:
+        declared = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ExclusionsUnreadable(
+            f"{path} is not valid JSON (line {exc.lineno}, column "
+            f"{exc.colno}: {exc.msg}). Nothing has been stored, because the "
+            "rules that say what to keep out cannot be read.") from exc
     if not isinstance(declared, dict):
-        return empty
+        raise ExclusionsUnreadable(
+            f"{path} must hold a JSON object with `senders`, `domains` and "
+            f"`channels` keys; found {type(declared).__name__}. Nothing has "
+            "been stored.")
+    for key in empty:
+        value = declared.get(key, [])
+        if not isinstance(value, (list, tuple)):
+            raise ExclusionsUnreadable(
+                f"{path}: `{key}` must be a list of strings, not "
+                f"{type(value).__name__}. Nothing has been stored.")
     return {
         key: {str(v).strip().lower() for v in declared.get(key, [])
               if str(v).strip()}
@@ -87,14 +118,26 @@ def excluded(item: dict[str, Any], rules: dict[str, set[str]]) -> bool:
     # `sender_id` is set by a collector that knows the source's own identifier,
     # so a Slack user can be excluded by `U…` rather than by a display name
     # they can change.
+    # `sender_id` and `sender_address` are set by the normalizers and dropped
+    # before the insert. They exist because `sender` holds a display name
+    # whenever the source supplies one — a Slack user the person can rename,
+    # a mail sender whose address never appears in the row. Matching only on
+    # `sender` meant a domain rule matched nothing at all on real mail, and a
+    # `U…` rule matched nothing on real Slack. Both were documented as
+    # working.
     sender_id = str(item.get("sender_id") or "").strip().lower()
     if sender_id and sender_id in rules["senders"]:
         return True
 
-    if sender and "@" in sender:
-        domain = sender.rsplit("@", 1)[-1]
-        if domain in rules["domains"]:
-            return True
+    address = str(item.get("sender_address") or "").strip().lower()
+    if address and address in rules["senders"]:
+        return True
+
+    for candidate in (address, sender):
+        if candidate and "@" in candidate:
+            domain = candidate.rsplit("@", 1)[-1]
+            if domain in rules["domains"]:
+                return True
 
     return False
 

@@ -32,17 +32,37 @@ from pathlib import Path
 from _db import ledger_path
 
 
+# Everything a collector or a lifecycle control leaves in the workspace.
+#
+# Named individually rather than by glob: a reset that removed whatever it
+# found would eventually remove something a future feature meant to keep, and
+# the failure would be silent and unrecoverable. A new file here is a
+# deliberate line, and the test below fails when the workspace grows one that
+# nobody listed.
+COLLECTION_STATE = (
+    "slack_capabilities.json",   # probed scopes, keyed on the credential
+    "slack_channels.json",       # the public channels the user named
+    "slack_threads.json",        # per-thread watermarks
+    "slack_rotation.json",       # where the next bounded tick starts
+    "graph_identity.json",       # the mailbox the token belongs to
+    "exclusions.json",           # who the user chose to keep out
+)
+
+
 def targets() -> dict[str, Path]:
     workspace = ledger_path().parent.parent
-    return {
+    found = {
         "store": ledger_path().parent,
         "memory": workspace / "memory",
         "policy": workspace / "policy",
-        # Collection bookkeeping. Not personal in itself, but it names channels
-        # and threads, and leaving it behind would have the next run re-read
-        # windows the user just cleared.
-        "collection_state": workspace / "slack_capabilities.json",
     }
+    # Collection bookkeeping. Not personal in the way a message is, but it
+    # names channels, threads and correspondents, and leaving it behind has
+    # the next run re-read windows the user just cleared — which is the one
+    # outcome a reset must not produce.
+    for name in COLLECTION_STATE:
+        found[name] = workspace / name
+    return found
 
 
 def survey() -> dict[str, object]:
@@ -105,13 +125,29 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print("", file=sys.stderr)
-    print("The store, the memory and the policy are gone. The Slack "
-          "credential is not — it is held by the gateway, not by this "
-          "recipe. To revoke it as well:", file=sys.stderr)
-    print("  uninstall the app from your Slack workspace, then", file=sys.stderr)
-    print("  openshell sandbox provider detach <sandbox> <provider>",
+    print("The store, the memory, the policy and the collection state are "
+          "gone. The credential is not — it is held by the gateway, not by "
+          "this recipe.", file=sys.stderr)
+    print("", file=sys.stderr)
+    # Order matters, and getting it wrong undoes the reset within half an
+    # hour: a scheduled collector that is still running against a credential
+    # that is still attached will refill the store from the source before
+    # anybody notices. Stop the schedule first, detach second, delete last.
+    print("Do these in order, or the next scheduled tick refills what you "
+          "just removed:", file=sys.stderr)
+    print("  1. stop collecting   hermes -p <profile> cron pause <intake job "
+          "id>", file=sys.stderr)
+    print("                       or remove the job entirely with `cron "
+          "remove`", file=sys.stderr)
+    print("  2. detach            openshell sandbox provider detach <sandbox> "
+          "<provider>", file=sys.stderr)
+    print("  3. revoke            uninstall the app from the source workspace",
           file=sys.stderr)
-    print("  openshell provider delete <provider>", file=sys.stderr)
+    print("  4. delete            openshell provider delete <provider>",
+          file=sys.stderr)
+    print("", file=sys.stderr)
+    print("Deleting the profile removes its workspace with it, which is the "
+          "one-step version: hermes profile delete <profile>", file=sys.stderr)
     return 0
 
 

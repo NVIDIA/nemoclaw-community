@@ -201,6 +201,63 @@ class TestVersionGuardOnTheRealPath(unittest.TestCase):
             migrate.refuse_if_from_the_future(c)      # must not raise
         self.assertTrue(self._db.ensure_store().is_file())
 
+    def test_a_versionless_v1_store_is_migrated_not_stamped_current(self):
+        """The baseline DDL must not vote on the version of a store it finds.
+
+        `schema.sql` carries `INSERT OR IGNORE ... ('schema_version', '2')`.
+        Run over a real v1 store whose version row is missing — a restored
+        backup, a hand-built table, any reason — it stamps 2 over a database
+        with none of the v2 columns, and `migrate` then sees its own version
+        and does nothing. The store ends up claiming a shape it does not have,
+        which surfaces as a missing column in whichever job touches it first.
+        """
+        import migrate                        # noqa: E402
+        v1 = (HERE / "schema-v1.sql").read_text(encoding="utf-8")
+        with sqlite3.connect(self.db) as c:
+            c.executescript("DROP TABLE IF EXISTS items;"
+                            "DROP TABLE IF EXISTS obligations;"
+                            "DROP TABLE IF EXISTS events;"
+                            "DROP TABLE IF EXISTS cursors;"
+                            "DROP TABLE IF EXISTS meta;")
+            c.executescript(v1)
+            c.execute("DELETE FROM meta WHERE key='schema_version'")
+
+        self._db.ensure_store()
+
+        with sqlite3.connect(self.db) as c:
+            version = c.execute(
+                "SELECT value FROM meta WHERE key='schema_version'").fetchone()[0]
+            columns = {r[1] for r in c.execute("PRAGMA table_info(items)")}
+        self.assertEqual(int(version), migrate.SCHEMA_VERSION)
+        self.assertIn("body_cleared_at", columns,
+                      "store reports the current version without the column "
+                      "that version added")
+
+    def test_a_versionless_store_keeps_the_rows_it_already_held(self):
+        """The repair must not be a rebuild: an unversioned store has data."""
+        v1 = (HERE / "schema-v1.sql").read_text(encoding="utf-8")
+        with sqlite3.connect(self.db) as c:
+            c.executescript("DROP TABLE IF EXISTS items;"
+                            "DROP TABLE IF EXISTS obligations;"
+                            "DROP TABLE IF EXISTS events;"
+                            "DROP TABLE IF EXISTS cursors;"
+                            "DROP TABLE IF EXISTS meta;")
+            c.executescript(v1)
+            c.execute("DELETE FROM meta WHERE key='schema_version'")
+            c.execute("INSERT INTO items(source_id, source, scope, event_at,"
+                      " sender, subject, body, state)"
+                      " VALUES ('m1','email','inbox','2026-01-01T00:00:00.000Z',"
+                      "         'Dana','s','b','pending')")
+
+        self._db.ensure_store()
+
+        with sqlite3.connect(self.db) as c:
+            row = c.execute("SELECT sender, body, body_cleared_at FROM items"
+                            " WHERE source_id='m1'").fetchone()
+        self.assertEqual(row[0], "Dana")
+        self.assertEqual(row[1], "b")
+        self.assertIsNone(row[2])
+
     def test_an_older_store_is_migrated_rather_than_refused(self):
         """The guard is one-sided: behind is upgraded, ahead is refused."""
         import migrate                        # noqa: E402

@@ -22,8 +22,22 @@ python3 retention.py             # clear it
 RETENTION_DAYS=7 python3 retention.py
 ```
 
-Set `RETENTION_DAYS` in the job's environment to change the schedule's window
-rather than a single run's. Values below 1 or above 3650 are refused: a zero
+Those two change the run in front of you. To change every run after it, put
+the value in the profile's environment file — `hermes config env-path` prints
+where it is, `$HERMES_HOME/.env`:
+
+```bash
+ENV=$(hermes -p <profile> config env-path)
+echo 'RETENTION_DAYS=7' >> "$ENV"
+```
+
+That file is the supported path and the only one that persists. `hermes cron
+create` and `cron edit` take no environment argument, so a variable exported
+in a shell reaches the manual invocation and nothing scheduled. A value set
+there and never checked is the failure worth naming: the window looks changed
+and the nightly pass keeps using thirty days.
+
+Values below 1 or above 3650 are refused: a zero
 would clear the message that arrived a minute ago, and a negative one would
 put the cutoff in the future and clear everything ever stored. Both are the
 kind of mistake found only afterwards.
