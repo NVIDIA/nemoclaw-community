@@ -59,7 +59,7 @@ fi
 # steadier than parsing that table, and it is a read.
 #
 # Without this the script cannot tell an existing job from a missing one, and
-# every run creates another copy of all five.
+# every run creates another copy of all six.
 job_id_for() {
   local name="$1" store="$PROFILE_HOME/cron/jobs.json"
   [[ -f "$store" ]] || return 0
@@ -105,6 +105,13 @@ register intake "*/30 * * * *" inbound-judging select_intake.py \
 
 register review "0 */6 * * *" obligation-review select_review.py \
   "Re-judge and re-rank the obligations in the script output, following the obligation-review skill exactly. Then WRITE the result: save your decision envelope to a file and run \`python3 \$HERMES_HOME/scripts/apply_decisions.py < that file\`. Report the counts it prints. Printing the envelope without running the writer stores nothing and is a failed run."
+
+# Memory is written before it is repaired or compacted. The order is the point:
+# repair checks invariants on pages that exist, consolidation compacts pages
+# that grew, and neither creates one. Writing last would leave every new page
+# unchecked until the following night.
+register "memory writing" "0 1 * * *" memory-writing select_memory.py \
+  "Write the memory pages the script output supports, following the memory-writing skill exactly. Read \$HERMES_HOME/schema.md first — a page that violates it is a defect the repair job rewrites. Write complete pages, update index.md in the same pass, and append one line to memory/log.md. Report only the count of pages written."
 
 register "memory repair" "0 3 * * *" memory-repair "" \
   "Check the memory under workspace/memory against its schema and repair what can be repaired safely. Append one log entry even when nothing changed."

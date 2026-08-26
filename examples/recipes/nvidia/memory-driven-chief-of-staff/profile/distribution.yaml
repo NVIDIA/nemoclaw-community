@@ -21,4 +21,5 @@ distribution_owned:
   - schema.md
   - skills
   - scripts
+  - seed
   - distribution.yaml

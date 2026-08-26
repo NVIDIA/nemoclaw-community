@@ -88,9 +88,11 @@ those two apart.
 | `profile/scripts/walkthrough.py` | The fixture walkthrough, end to end, with no credentials and no model |
 | `profile/scripts/select_intake.py` | The intake job's pre-step: what to judge, and whether to wake the model at all |
 | `profile/scripts/select_review.py` | The review job's pre-step: the stalest open obligations, oldest review first |
+| `profile/scripts/select_memory.py` | The memory-writing job's pre-step: recurring correspondents, and whether the attention pages have gone stale |
+| `profile/seed/` | The pages a fresh memory starts from — copied in if missing, never overwritten |
 | `scripts/install.sh` | Installs the profile, inherits the runtime's model config, registers the jobs |
-| `scripts/register-jobs.sh` | Registers the five scheduled jobs through the cron CLI. Re-runnable |
-| `profile/skills/` | Five skills: judging, review, repair, consolidation, preference update |
+| `scripts/register-jobs.sh` | Registers the six scheduled jobs through the cron CLI. Re-runnable |
+| `profile/skills/` | Six skills: judging, review, memory writing, repair, consolidation, preference update |
 | `fixtures/` | Eight synthetic messages, a seed memory, and one recorded model turn |
 
 A later phase adds the optional Microsoft Graph and Slack connectors. Until
@@ -102,7 +104,7 @@ then the scheduled jobs judge and re-judge whatever the store already holds.
 - The fixture path — everything under [Try it](#try-it) and
   [Verify](#verify) — runs on Linux, macOS, or Windows under Windows Subsystem
   for Linux. Every command is written for a POSIX shell.
-- **The scheduled path is Linux only**, including WSL. All five shipped skills
+- **The scheduled path is Linux only**, including WSL. All six shipped skills
   declare `platforms: [linux]`, and Hermes refuses to load a skill outside its
   declared platforms. On macOS the jobs would still fire and the model would
   still be called — with no skill attached and a "skill not found" notice in
@@ -236,7 +238,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the nine files report 223 tests in
+Expected result: every file ends with `OK`, the ten files report 270 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -309,22 +311,55 @@ profile afterwards, so a setting that could not be written — or that reports
 success without sticking — ends the run rather than leaving a profile that
 took some of its configuration. The installer then checks both — that a model
 resolves and that a credential is present — and exits before registering any
-job if either is missing, rather than scheduling five jobs that would each
+job if either is missing, rather than scheduling six jobs that would each
 fail. If your endpoint genuinely needs no key, pass `ALLOW_NO_API_KEY=1` to
 say so.
 
 Re-running it is safe: the registration looks each job up by name and edits it
 rather than adding another copy.
 
-Five jobs are registered:
+Six jobs are registered:
 
 | Job | Schedule | Pre-step | Skill |
 | --- | --- | --- | --- |
 | intake | every 30 minutes | `select_intake.py` | `inbound-judging` |
 | review | every 6 hours | `select_review.py` | `obligation-review` |
+| memory writing | daily 01:00 | `select_memory.py` | `memory-writing` |
 | memory repair | daily 03:00 | — | `memory-repair` |
 | memory consolidation | daily 04:00 | — | `memory-consolidation` |
 | preference update | daily 04:30 | — | `preference-update` |
+
+**Where the memory comes from.** Three of the memory jobs maintain one and
+none of them creates it: repair checks invariants, consolidation compacts
+pages past their ceiling, preference-update writes the policy. The
+memory-writing job is what fills the gap. `select_memory.py` does the
+counting — who has been in touch inside the window, how often, who already has
+a page, which attention pages are past their decay window — and the skill
+decides who is worth a page and what it says. `MEMORY_WINDOW_DAYS` moves the
+window, which matters on a first run against a store that already holds
+months of history.
+
+That job is load-bearing rather than decorative. `ranking.py` reserves `high`
+for work the person has *chosen*, and only `attention/` and `goals/` can
+answer that. With an empty memory nothing reaches the top tier and the
+assistant is left measuring how loudly the outside world is asking, which is
+the thing it exists not to do. Measured on a real mailbox: 952 collected
+messages produced obligations that were all `medium` or `low`, because no page
+could gate one higher.
+
+It writes people and attention pages only, and `schema.md` now carries a
+table saying which page types have a writer at all — `projects/`,
+`patterns/`, `concepts/` and `event_triggers.md` do not yet, and a rule about
+a page nothing creates is a rule about a page somebody would keep by hand.
+Naming that is the point: the schema previously said ingest checked
+`event_triggers.md` against every incoming message, which no shipped job has
+ever done.
+
+`goals/` is the one absence that is a decision. It gates the ranking job's
+top tier alongside `attention/`, so a goal inferred from somebody's inbox
+promotes work they never chose. The job also declines to invent a priority:
+when the evidence supports none it writes the page saying so, because a
+guessed priority produces the same failure by the same route.
 
 **An idle tick costs nothing.** Each of the first two jobs runs its pre-step
 script first, then one agent turn over that script's output. When the script
@@ -364,8 +399,8 @@ provider takes over from the in-process ticker.
 **The job store is not part of the distribution.** `distribution.yaml` does not
 declare `cron`. An update replaces what it does declare — `SOUL.md`,
 `schema.md`, `skills`, `scripts` and the manifest — and leaves the jobs and
-their run history alone. Measured, not assumed: five jobs
-registered, `hermes profile update` run on Hermes 0.20.0, five jobs still
+their run history alone. Measured, not assumed: six jobs
+registered, `hermes profile update` run on Hermes 0.19.0, six jobs still
 there with the same ids. A test asserts
 the manifest never claims `cron` or `workspace`.
 
@@ -536,7 +571,7 @@ package, so nothing is added to the repository's third-party notices.
 The recipe's own scripts reach no network. They read the recipe's files from
 the checkout and write application state only inside the profile home, and they
 also leave a Python bytecode cache beside the scripts — see
-[Cleanup](#cleanup). The five skill files a runtime loads add nothing to that.
+[Cleanup](#cleanup). The six skill files a runtime loads add nothing to that.
 
 The scheduled path does reach one. A job that wakes runs an agent turn, and the
 runtime calls whichever inference provider it is configured for, over its own
@@ -560,7 +595,7 @@ Three separate questions, with three different answers.
 **Do the jobs survive?** Yes. They live in `$HERMES_HOME/cron/jobs.json`, which
 is ordinary disk state — not part of the distribution, so a profile update
 leaves it alone, and not tied to any process, so shutting everything down and
-starting again finds the same five jobs with the same ids.
+starting again finds the same six jobs with the same ids.
 
 **Do they start firing again on their own?** Only if the gateway was installed
 as a service. `hermes -p <profile> gateway install` registers one — a launchd

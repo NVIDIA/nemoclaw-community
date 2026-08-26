@@ -38,6 +38,32 @@ An append-only note store needs no schema, and gets none of these properties:
   itself later.
 - Dates are `YYYY-MM-DD`. Timestamps that need a time use ISO-8601 UTC.
 
+## What writes these pages
+
+Not every page type has a writer yet, and the difference matters when reading
+the rest of this file: a rule about a page nothing creates is a rule about a
+page somebody would have to write by hand.
+
+| Page type | Written by |
+| --- | --- |
+| `people/` | the memory-writing job |
+| `attention/current_priorities.md` | the memory-writing job, from user corrections only |
+| `attention/active_threads.md` | the memory-writing job |
+| `attention/event_triggers.md` | nothing yet |
+| `projects/` | nothing yet |
+| `patterns/` | nothing yet |
+| `concepts/` | nothing yet |
+| `goals/` | nothing yet — deliberately, see below |
+| `index.md`, `log.md` | seeded at bootstrap, maintained by every writer |
+
+The repair job checks all of them regardless, because a page written by hand
+is held to the same contract as one written by a job.
+
+`goals/` is the one absence that is a decision rather than a gap. Together
+with `attention/`, it gates the ranking job's top tier, so a goal inferred
+from somebody's inbox promotes work they never chose — the same failure
+`current_priorities.md` is careful to avoid. Goals come from the person.
+
 ## Page types
 
 ### People (`people/`)
@@ -191,9 +217,12 @@ The short-lived layer: what this person is actually doing right now.
 - **`active_threads.md`** — conversations awaiting a reply or a decision.
   Use `decay: weekly`.
 - **`event_triggers.md`** — "when X happens, do Y" reminders. An Active
-  section for pending triggers, a Completed section for fired ones. Ingest
-  checks active triggers against every incoming message. Use `decay: weekly`;
-  a long decay defeats the purpose.
+  section for pending triggers, a Completed section for fired ones. Use
+  `decay: weekly`; a long decay defeats the purpose. Nothing shipped writes
+  or reads this page yet: it is a page type a person can keep by hand, and
+  the schema defines it so that one written by hand is checkable. An earlier
+  version of this file said ingest checks active triggers against every
+  incoming message, which no shipped job does.
 
 **Decay windows:** `daily` must be refreshed each day or it is stale.
 `weekly` is good for ~7 days from `updated`, `monthly` ~30, `quarterly` ~90.
@@ -273,7 +302,8 @@ a claim that survives.
 ```markdown
 ## [2026-08-18T09:14:00Z] repair
 - created stub people/sam_ruiz.md for a link on projects/billing_migration
-- flagged attention/current_priorities.md stale (updated 2026-08-11, decay daily)
+- flagged attention/current_priorities.md stale (updated 2026-08-11, decay
+daily)
 ```
 
 One entry per job run, even when nothing changed — a run that found nothing

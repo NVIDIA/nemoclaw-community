@@ -78,7 +78,7 @@ echo "2/3  Carrying over the model settings"
 # as the left operand of `&&` — `false && echo` is a no-op, not an abort — so
 # writing this as `config set … && echo …` swallowed the failure. A profile
 # that took `model.default` and silently dropped `provider` and `base_url`
-# passed both checks below and got all five jobs registered, pointed at
+# passed both checks below and got all six jobs registered, pointed at
 # whatever route it had left.
 carried=()
 for key in model.default model.provider model.base_url; do

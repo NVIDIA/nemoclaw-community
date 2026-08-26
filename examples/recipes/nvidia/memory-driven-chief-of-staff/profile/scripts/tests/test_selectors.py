@@ -296,6 +296,7 @@ class TestTheDocumentedScheduleMatchesTheScript(unittest.TestCase):
     EXPECTED = {
         "intake": ("*/30 * * * *", "inbound-judging"),
         "review": ("0 */6 * * *", "obligation-review"),
+        "memory writing": ("0 1 * * *", "memory-writing"),
         "memory repair": ("0 3 * * *", "memory-repair"),
         "memory consolidation": ("0 4 * * *", "memory-consolidation"),
         "preference update": ("30 4 * * *", "preference-update"),
