@@ -243,6 +243,14 @@ def test_adapter_provenance_says_what_is_and_is_not_reproducible(run: Path):
     if run.name.startswith("agentic-rag"):
         assert revision["shipped_here"] == "adapters/agentic_rag"
         assert _report(run)["run_parameters"]["max_rounds"] == 3
+        # An adapter that ships here can be identified exactly, so it is.
+        from bench.fingerprint import hash_tree
+
+        assert revision["files_sha256"] == hash_tree(REPO / "adapters" / "agentic_rag"), (
+            "the recorded adapter hash does not match the adapter that ships; if the "
+            "adapter changed, the published run no longer describes it"
+        )
+        assert revision["shared_lib_sha256"] == hash_tree(REPO / "adapters" / "_lib")
     else:
         assert revision["shipped_here"] is None
         assert "not reproducible" in revision["note"]

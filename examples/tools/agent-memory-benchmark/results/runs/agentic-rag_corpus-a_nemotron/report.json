@@ -3,8 +3,9 @@
     "name": "agentic-rag",
     "revision": {
       "shipped_here": "adapters/agentic_rag",
-      "files_sha256": null,
-      "note": "produced before this repository recorded adapter hashes; the adapter is the one shipped here, at its default settings"
+      "files_sha256": "455d4c216063d0258c65584676c30ce6ad451d4389269b0c22e53b96c6a7fcbb",
+      "shared_lib_sha256": "78b56583913f7810b79f669af83475d085586be6250a8d1474ab2f87271e1a8f",
+      "note": "The adapter is the one shipped here, hashed at this revision. The run itself predates the hash being recorded, so this identifies the adapter a reader would re-run with, not a hash captured at run time."
     },
     "declared_model": "nvidia/nvidia/nemotron-3-ultra",
     "declared_env": [],
