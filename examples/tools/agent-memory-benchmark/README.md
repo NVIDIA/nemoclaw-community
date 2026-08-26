@@ -130,6 +130,27 @@ MY_SYSTEM_PYTHON=~/src/my-system/.venv/bin/python \
 The runner ingests both halves, feeds `questions/questions.jsonl` to your system,
 grades the answers, and writes `report.json` + `summary.md` under `results/runs/`.
 
+## Scoring a memory store that lives in this repository
+
+`adapters/ledger_rag/` drives the [Memory-Driven Chief of
+Staff](../../recipes/nvidia/memory-driven-chief-of-staff/README.md) ledger. It
+loads the corpus into that recipe's own `schema.sql`, then answers by selecting
+candidates out of the ledger and passing them to a model.
+
+**Read its score carefully.** What it measures is candidate selection over the
+ledger plus the model. It is not a score of the recipe's own behaviour: that
+ledger is built for triage and ranking and has no question-answering path, so
+the selection and the answer call belong to this adapter, not to the recipe.
+Nothing in the adapter writes to or changes the recipe. Treat a number from it
+as evidence that the harness can drive a memory store in this repository.
+
+Ingest is plain SQLite and needs no network, which is why the offline check
+covers it. Only the answer phase calls an endpoint.
+
+```bash
+python3 -m bench.runner --adapter adapters/ledger_rag
+```
+
 ## Adding your system
 
 Write an `adapter.json` with two commands:
@@ -251,7 +272,7 @@ corpus_b/    a second corpus, another domain, for cross-checking a result
 questions/   what gets asked
 gold/        the answer key, its grading rules, and the drafting drop lists
 bench/       runner, grader, accounting proxy, price table
-adapters/    one directory per system under test
+adapters/    one directory per system under test, including a ledger adapter
 selftest/    a six-document fixture plus two adapters whose scores are known
 docs/        how to submit, methodology, provenance, known limitations
 tools/       scoring utilities: re-grade stored answers, build a leaderboard
@@ -274,7 +295,7 @@ The whole pipeline runs offline against a small fixture whose score is known in
 advance — no model, no network, no API key:
 
 ```bash
-python3 -m pytest tests/     # expected: 94 passed
+python3 -m pytest tests/     # expected: 100 passed
 ```
 
 `selftest/` holds a six-document corpus, six questions covering all four

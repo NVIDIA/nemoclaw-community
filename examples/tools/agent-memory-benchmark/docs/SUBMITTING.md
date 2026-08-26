@@ -142,6 +142,13 @@ results rather than averaging them.
 
 Run at least A and B. A result on one corpus is a result about that corpus.
 
+## Scoring a store that ships here
+
+`adapters/ledger_rag/` is worth reading before writing your own: it is a short,
+complete adapter over a memory store that lives in this repository, and it
+shows the shape — ingest writes into the store, answer selects from it and
+calls a model, and neither phase can see the questions or the answer key.
+
 ## Where a result goes
 
 There is no hosted leaderboard. `tools/leaderboard.py` builds a local table

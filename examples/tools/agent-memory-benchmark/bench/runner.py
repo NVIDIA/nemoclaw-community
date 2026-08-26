@@ -169,6 +169,32 @@ def _run(
     return elapsed
 
 
+def _git_revision(path: Path) -> dict:
+    """The commit a directory sits at, and whether it was edited since.
+
+    Recorded for the benchmark itself as well as for the adapter: an adapter
+    can live inside this repository, and then "which adapter produced this
+    row" and "which benchmark scored it" are two different questions.
+    """
+    revision: dict = {}
+    try:
+        for key, argv in (
+            ("commit", ["rev-parse", "HEAD"]),
+            ("dirty", ["status", "--porcelain"]),
+        ):
+            completed = subprocess.run(
+                ["git", "-C", str(path), *argv],
+                capture_output=True, text=True, timeout=10, check=False,
+            )
+            if completed.returncode != 0:
+                return revision
+            revision[key] = (bool(completed.stdout.strip()) if key == "dirty"
+                             else completed.stdout.strip())
+    except (OSError, subprocess.SubprocessError):
+        pass  # git is optional
+    return revision
+
+
 def _adapter_revision(adapter_dir: Path) -> dict:
     """Identify the adapter that produced a row.
 
@@ -348,6 +374,9 @@ def main() -> None:
         "observed_models": usage.get("models", {}),
         "run_id": run_dir.name,
         "timestamp": stamp,
+        # Which benchmark scored the row, distinct from which adapter produced
+        # it: an adapter shipped here moves with the tool.
+        "benchmark_revision": _git_revision(REPO),
         "trial": {"index": args.trial_index, "of": args.trial_count},
         # The identity of the scoring configuration. Two rows are comparable
         # only if all three hashes match; see docs/provenance.md.
