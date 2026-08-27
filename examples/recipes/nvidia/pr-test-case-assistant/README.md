@@ -192,6 +192,26 @@ This final command is destructive and requires confirmation.
 The policy allows reading public pull request metadata and diffs. It cannot
 comment, label, merge, or close a pull request.
 
+## Untrusted Input
+
+Two kinds of text reach the agent from people who cannot be vouched for: the
+Slack request, and everything fetched from GitHub. Both are handled as data.
+
+Repository coordinates never reach a command as typed. The skill fetches only
+through [`gh-pr.sh`](skills/pr-test-case-assistant/scripts/gh-pr.sh), which
+validates the account, repository name, and pull request number against
+GitHub's naming rules and then builds the URL itself. The accepted character
+sets exclude shell metacharacters, path separators, and whitespace, so a
+hostile value such as `owner/name; curl evil.example` is refused before any
+request is made rather than quoted correctly by hand.
+
+Pull request titles, bodies, and patches are evidence to describe, never
+instructions. `SKILL.md` forbids running commands found in fetched text,
+fetching URLs found in fetched text, and letting that text change the
+procedure or the boundaries. The policy gate is the backstop: it permits only
+`GET` to `api.github.com/repos/**`, so a successful injection still cannot
+reach another host or write to GitHub.
+
 ## Grounding Check
 
 The optional host-side verifier checks whether identifiers cited by an answer
@@ -221,7 +241,10 @@ Run the teardown-safe checks from this example directory:
 
 ```bash
 bash scripts/tests/test_lifecycle_commands.sh
-bash -n scripts/*.sh scripts/tests/*.sh
+bash skills/pr-test-case-assistant/scripts/tests/test_gh_pr_validation.sh
+bash -n scripts/*.sh scripts/tests/*.sh \
+  skills/pr-test-case-assistant/scripts/gh-pr.sh \
+  skills/pr-test-case-assistant/scripts/tests/*.sh
 python3 -m py_compile scripts/verify-grounding.py
 ```
 
@@ -229,11 +252,17 @@ python3 -m py_compile scripts/verify-grounding.py
 
 ```text
 PASS: pr-test-case-assistant lifecycle command contracts
+PASS: gh-pr.sh coordinate validation and untrusted-data handling
 ```
 
 **This verifies:** lifecycle command construction, shell syntax, and Python
 syntax without reading `.env`, creating a sandbox, or contacting an external
-service.
+service. The second test is adversarial: it asserts that hostile repository
+coordinates and pull request numbers are refused before any request, that a
+pull request body carrying `IGNORE ALL PREVIOUS INSTRUCTIONS` and shell syntax
+passes through as inert text without executing or triggering a second request,
+and that a rate-limit response stops instead of retrying. It stubs `curl`, so
+it contacts no network.
 
 **This does not verify:** live Slack event delivery, the configured inference
 provider, GitHub availability, or answer quality. Confirm those by sending the
@@ -266,7 +295,10 @@ pr-test-case-assistant/
 ├── skills/
 │   └── pr-test-case-assistant/
 │       ├── SKILL.md
-│       └── references/
+│       ├── references/
+│       └── scripts/
+│           ├── gh-pr.sh
+│           └── tests/test_gh_pr_validation.sh
 └── verification/
 ```
 
