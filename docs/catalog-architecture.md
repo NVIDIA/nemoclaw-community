@@ -14,21 +14,23 @@ downloaded at build time and served locally only on pages that contain diagrams.
 ## Source And Outputs
 
 ```text
-examples/catalog.json ─┬─> examples/README.md
-example READMEs ───────┼─> _site/examples/<canonical-path>/index.html
-site/*.template.html ──┼─> _site/index.html
+example root READMEs ──┬─> examples/README.md
+                       ├─> _site/index.html
+                       ├─> _site/examples/<canonical-path>/index.html
+                       └─> _site/catalog.json
+site/*.template.html ──┬─> generated HTML
 site/styles.css ───────┼─> _site/styles.css
 site/catalog.mjs ──────┼─> _site/catalog.mjs
 site/diagrams.mjs ─────┼─> _site/diagrams.mjs
-Mermaid Tiny cache ────┼─> _site/assets/vendor/mermaid.tiny.js
-                      └─> _site/catalog.json
+Mermaid Tiny cache ────┴─> _site/assets/vendor/mermaid.tiny.js
 ```
 
-[`examples/catalog.json`](../examples/catalog.json) is the canonical metadata
-source. [`scripts/build_catalog.py`](../scripts/build_catalog.py) validates it,
-derives artifact kind and recipe provenance from the example path, and renders
-the human and web outputs. The ignored `_site/` directory is disposable; do
-not edit it directly.
+The standardized catalog block at the top of each example's root `README.md` is
+the canonical metadata source. [`scripts/build_catalog.py`](../scripts/build_catalog.py)
+discovers those READMEs from the repository taxonomy, validates their title,
+description, industry emoji and title, requirements, and conditional fields,
+then derives artifact kind and recipe provenance from each path. The ignored
+`_site/` directory is disposable; do not edit it directly.
 
 The generated HTML contains every example card. The local JavaScript module
 filters those cards in the browser, so the full category-organized catalog
@@ -57,9 +59,10 @@ count and rejects configuration, click handlers, active HTML, image/icon
 shapes, CSS imports, and CSS resource URLs. Rendering uses Mermaid's
 sandbox security level. The catalog then validates the generated SVG,
 places it in a permissionless `srcdoc` iframe, and applies parent and iframe
-Content Security Policies that block network and active content. The runtime
-bundle is version pinned, SHA-256 verified before publication, and never loaded
-from a CDN by a reader's browser.
+Content Security Policies. The parent policy blocks outbound connections and
+nonlocal resources. The iframe policy blocks scripts and network-loaded
+resources. The runtime bundle is version pinned, SHA-256 verified before
+publication, and never loaded from a CDN by a reader's browser.
 
 ## Independent Discovery Dimensions
 
@@ -69,14 +72,14 @@ The catalog keeps these concepts separate:
   canonical path.
 - `provenance` is `nvidia`, `partner`, or `community`, applies only to recipes,
   and also comes from the canonical path.
-- `industry` is one required controlled value on every example, independent of
-  kind and provenance.
-- `collections` is an optional cross-cutting discovery field. `hackathon` is a
+- `industry` is one required controlled emoji-and-title value on every example,
+  independent of kind and provenance.
+- `collection` is an optional cross-cutting discovery field. `Hackathon` is a
   collection; it does not replace kind, provenance, or contributor attribution.
 
-The build rejects a manifest path that disagrees with the repository taxonomy,
-an unlisted top-level example, a listed example without a README, and metadata
-outside the controlled schema.
+The build rejects unknown taxonomy roots, unsafe or invalid example paths,
+canonical example directories without a root README, malformed metadata
+blocks, duplicate titles, and values outside the controlled vocabulary.
 
 ## Browser Search Contract
 
@@ -85,7 +88,7 @@ bookmarked, or created by another program:
 
 | Parameter | Values | Behavior |
 | --- | --- | --- |
-| `q` | Plain text | Case-insensitive whitespace-token AND search across title, description, requirements, contributor, category, and industry. |
+| `q` | Plain text | Case-insensitive whitespace-token AND search across title, description, requirements, category and provenance display text, industry, contributor, environment, and collections. |
 | `view` | `category` or `industry` | Selects which discovery dimension is active. The default is `category`. |
 | `category` | `all`, `nvidia-recipes`, `partner-recipes`, `community-recipes`, `hackathon-recipes`, `nvidia-field-demos`, `launchables`, or `developer-tools` | Applies in category view. `hackathon-recipes` selects recipes carrying the `hackathon` collection. |
 | `industry` | `all` or an industry ID published in `catalog.json` | Applies in industry view. |
@@ -108,7 +111,7 @@ and example fragments remain valid.
 publishes a deterministic JSON index containing:
 
 - category IDs, labels, kinds, provenance, and counts;
-- every allowed industry ID, label, and current count;
+- every allowed industry ID, label, emoji, and current count;
 - collection IDs and counts;
 - each example's title, description, category, kind, recipe provenance,
   industry, contributor or environment when applicable, collections,
@@ -120,10 +123,11 @@ contract above.
 
 ## Update And Verify
 
-After adding or changing a manifest entry, regenerate the committed Markdown
-catalog and local site:
+After adding or changing an example README catalog block, validate its format,
+then regenerate the committed Markdown catalog and local site:
 
 ```bash
+python3 scripts/build_catalog.py --validate-metadata
 python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
 python3 scripts/fetch_catalog_assets.py
 python3 scripts/build_catalog.py --write

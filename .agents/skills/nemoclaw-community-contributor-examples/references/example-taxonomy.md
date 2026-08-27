@@ -61,10 +61,10 @@ contribution came from. It does not encode every way a reader may discover the
 example.
 
 Record the one primary industry and any accepted cross-cutting collection in
-[`examples/catalog.json`](../../../../examples/catalog.json). Use the exact
-industry values documented in
-[`CONTRIBUTING.md`](../../../../CONTRIBUTING.md#catalog-metadata). Industry
-does not change kind, provenance, support, or maturity.
+the standardized catalog block at the top of the example's root `README.md`.
+Use the exact emoji-and-title values documented in
+[`CONTRIBUTING.md`](../../../../CONTRIBUTING.md#catalog-metadata). Industry does
+not change kind, provenance, support, or maturity.
 
 `hackathon` is a collection, not an artifact kind or provenance. A hackathon
 entry that is a reusable workflow remains a recipe under its NVIDIA, partner,
@@ -90,8 +90,7 @@ coordination and intelligence outcome rather than one analysis technique.
 
 Use the generated [`examples/README.md`](../../../../examples/README.md) for
 the current example-to-path mapping. Do not duplicate that inventory in policy
-documentation; [`examples/catalog.json`](../../../../examples/catalog.json) is
-the structured source of truth.
+documentation; each example's root README is its structured source of truth.
 
 ## Public Repository Boundary
 

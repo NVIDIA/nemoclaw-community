@@ -1,4 +1,11 @@
-# Harness Engineering Playground (`hep`)
+# Harness Engineering Playground
+
+Provides an experimental command-line interface for evaluation-driven harness profile optimization.
+
+| Catalog field | Value |
+| --- | --- |
+| Industry | ✨ Other |
+| Requirements | Python 3.11+ · uv · DeepAgents submodule + extra · proposer and target-model API keys · experimental/not for production |
 
 > **⚠️ Experimental.** `hep` is an early, evolving example — expect rough
 > edges and breaking changes. Today it ships one framework adapter

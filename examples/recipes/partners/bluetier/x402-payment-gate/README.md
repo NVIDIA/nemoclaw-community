@@ -1,4 +1,12 @@
-# x402-payment-gate: Verdict-Gated Payment Release
+# x402 Payment Gate
+
+Screens x402 payment intents through a host-side maker/checker gate before signing or settlement.
+
+| Catalog field | Value |
+| --- | --- |
+| Industry | 💳 Financial Services |
+| Requirements | Python 3 · Docker + OpenShell for sandbox checks · Blackwall service · simulated signing/no real money |
+| Contributor | BlueTier Operations |
 
 A maker/checker payment boundary for [x402](https://www.x402.org/) machine
 payments, in the pattern of the

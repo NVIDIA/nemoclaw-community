@@ -1,4 +1,12 @@
-# Watchtower: Scheduled Web Monitoring with Tavily
+# Watchtower
+
+Runs scheduled, cited web monitoring with deduplication and auditable outputs.
+
+| Catalog field | Value |
+| --- | --- |
+| Industry | ✨ Other |
+| Requirements | Docker · NemoClaw · Tavily and inference provider API keys · one-time operator.admin approval |
+| Contributor | Tavily |
 
 Watchtower is a NemoClaw community example for unattended web monitoring. It
 runs as an auditable **OpenClaw Cron Job**, searches the web with Tavily,

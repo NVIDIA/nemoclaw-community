@@ -64,6 +64,7 @@ Install these tools before you run repository checks:
 
 - Git.
 - Python 3.10 or newer. Use the `python3` command.
+- Node.js 22 for catalog or Pages changes.
 
 Some examples require a newer Python version, additional software, credentials,
 or external service access. The software can include Docker, `uv`, Helm, or
@@ -249,6 +250,7 @@ For a catalog, example-metadata, or Pages change, also run:
 ```bash
 python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
 python3 scripts/fetch_catalog_assets.py
+python3 scripts/build_catalog.py --validate-metadata
 python3 scripts/build_catalog.py --check
 python3 -m unittest discover -s scripts/tests -p 'test_build_catalog.py'
 node --test scripts/tests/catalog.test.mjs
@@ -306,10 +308,12 @@ entry point first and link the alternatives. Do not add an empty `setup.sh`
 only to satisfy a filename convention; the documented entry point must perform
 the setup it claims to perform.
 
-Add the example to [`examples/catalog.json`](examples/catalog.json), then
-regenerate the human-readable catalog and local Pages build:
+The catalog discovers a new example from its canonical directory and root
+`README.md`; there is no separate manifest to edit. Validate the README block,
+then regenerate the human-readable catalog and local Pages build:
 
 ```bash
+python3 scripts/build_catalog.py --validate-metadata
 python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
 python3 scripts/fetch_catalog_assets.py
 python3 scripts/build_catalog.py --write
@@ -330,79 +334,81 @@ source remains visible when browser rendering is unavailable.
 
 ## Catalog Metadata
 
-[`examples/catalog.json`](examples/catalog.json) is the single source for the
-generated [Markdown catalog](examples/README.md), GitHub Pages cards, filters,
-and public `catalog.json` search index. Its
-[`catalog.schema.json`](examples/catalog.schema.json) file provides editor
-validation and the controlled field values. The
+The root README is the single source for the generated
+[Markdown catalog](examples/README.md), GitHub Pages cards, filters, detail
+pages, and public `catalog.json` search index. The build discovers example
+directories from the canonical taxonomy, derives kind and provenance from the
+path, and reads this exact opening block after any license header. Existing
+non-catalog YAML frontmatter may also precede the title and is ignored by
+catalog generation:
+
+```markdown
+# Recognizable Example Name
+
+Performs a concrete job and produces an observable result.
+
+| Catalog field | Value |
+| --- | --- |
+| Industry | ✨ Other |
+| Requirements | Linux · Docker · required service or boundary |
+```
+
+Add `Contributor` after `Requirements` for a partner recipe, `Environment` for
+a launchable, or `Collection | Hackathon` for a recipe accepted into that
+collection. Omit those rows when they do not apply. Do not add YAML frontmatter
+for catalog data; place all new catalog metadata in the Markdown table. The
 [catalog architecture](docs/catalog-architecture.md) documents the complete
 generation and public query contract.
 
-Add one object to the manifest's `examples` array:
-
-```json
-{
-  "path": "recipes/community/recognizable-example-name",
-  "title": "Recognizable Example Name",
-  "description": "Performs a concrete job and produces an observable result.",
-  "industry": "Other",
-  "requirements": "Linux · Docker · required service or boundary",
-  "collections": []
-}
-```
-
 Follow these metadata rules:
 
-- `path` is relative to `examples/` and must match the canonical taxonomy.
-  Artifact kind and recipe provenance are derived from this path; do not repeat
-  them as mutable metadata.
-- `title` is the concise catalog name. Keep the README's level-one heading
-  recognizable as the same example.
-- `description` is one plain-text outcome sentence for catalog and search
-  results. Keep it aligned with the outcome sentence immediately below the
-  README title; do not let the human and catalog descriptions make different
-  claims.
-- `industry` is exactly one primary industry from the controlled list below.
+- The level-one title is the concise catalog name, must be plain text, and is
+  limited to 100 characters.
+- The next paragraph is one plain-text outcome description for catalog and
+  search results, limited to 300 characters.
+- `Industry` is exactly one emoji-and-title pair from the controlled list below.
   Choose the industry of the workflow, not the contributor, model, hardware,
-  or a sample dataset. Use `Other` for horizontal workflows.
-- `requirements` is a short, factual summary of the main environment,
+  or an example dataset. Use `Other` for horizontal workflows.
+- `Requirements` is a short, factual summary of the main environment,
   dependency, and material operating boundary. It appears as “Requirements &
-  limits” in catalog cards and detail pages.
-- `contributor` is required for partner recipes. `environment` is required for
-  launchables. Omit either field when it does not apply.
-- `collections` is empty unless maintainers have accepted the example into a
-  cross-cutting collection. Use `"hackathon"` for that collection. A hackathon
-  recipe still keeps its NVIDIA, partner, or community provenance and its
-  canonical recipe path.
+  limits” in catalog cards and detail pages and is limited to 240 characters.
+- `Contributor` is required only for partner recipes. `Environment` is required
+  only for launchables.
+- `Collection` is optional and currently accepts `Hackathon` only for recipes.
+  A hackathon recipe still keeps its NVIDIA, partner, or community provenance
+  and canonical recipe path.
+- The directory path remains the source for artifact kind and recipe
+  provenance; do not repeat either in the catalog block.
 
-Choose one of these exact industry values:
+Choose one of these exact industry values, including its emoji:
 
-- `Academia/Education`
-- `AEC`
-- `Aerospace`
-- `Agriculture`
-- `Automotive/Transportation`
-- `Cloud Services`
-- `Consumer Internet`
-- `Energy`
-- `Financial Services`
-- `Gaming`
-- `Hardware/Semiconductor`
-- `Health and Life Sciences`
-- `HPC/Scientific Computing`
-- `Manufacturing`
-- `Media & Entertainment`
-- `Public Sector`
-- `Restaurant/Quick Service`
-- `Retail/Consumer Packaged Goods`
-- `Smart Cities/Spaces`
-- `Telecommunications`
-- `Other`
+- `🎓 Academia/Education`
+- `🏗️ AEC`
+- `🚀 Aerospace`
+- `🌾 Agriculture`
+- `🚗 Automotive/Transportation`
+- `☁️ Cloud Services`
+- `🌐 Consumer Internet`
+- `⚡ Energy`
+- `💳 Financial Services`
+- `🎮 Gaming`
+- `🖥️ Hardware/Semiconductor`
+- `🧬 Health and Life Sciences`
+- `🔬 HPC/Scientific Computing`
+- `🏭 Manufacturing`
+- `🎬 Media & Entertainment`
+- `🏛️ Public Sector`
+- `🍽️ Restaurant/Quick Service`
+- `🛍️ Retail/Consumer Packaged Goods`
+- `🏙️ Smart Cities/Spaces`
+- `📡 Telecommunications`
+- `✨ Other`
 
-The build rejects missing example directories, unlisted top-level examples,
-invalid paths, unknown fields, duplicate titles or paths, and values outside
-the controlled industry and collection lists. Do not edit generated catalog
-rows or deployed cards by hand.
+The `Validate example README metadata` GitHub check rejects missing root
+READMEs, invalid paths, malformed opening blocks, unknown fields, duplicate
+titles, and values outside the controlled industry and collection lists. Run it
+locally with `python3 scripts/build_catalog.py --validate-metadata`. Do not edit
+generated catalog rows or deployed cards by hand.
 
 ## Example README Template
 
@@ -456,6 +462,17 @@ authoring comments before submission.
 [For an intended user, this example performs a concrete job so they can obtain
 an observable result.]
 
+| Catalog field | Value |
+| --- | --- |
+| Industry | [Choose one exact emoji-and-title pair from Catalog Metadata.] |
+| Requirements | [Summarize the main environment, dependency, and material operating boundary.] |
+
+<!--
+For a partner recipe, add `| Contributor | [Organization] |` next. For a
+launchable, add `| Environment | [Environment] |`. For an accepted hackathon
+recipe, add `| Collection | Hackathon |`. Omit rows that do not apply.
+-->
+
 ## Screenshot
 
 ![Describe the visible workflow or result and its relevant context](path-to-current-sanitized-screenshot-or-gif)
@@ -477,8 +494,6 @@ also preserve the essential expected output as searchable text.
 | --- | --- |
 | Category | [Choose one: NVIDIA Recipe, Partner Recipe, Community Recipe, Field Demo, Launchable, or Developer Tool] |
 | Contributor or provenance | [Name the person or organization responsible for the example.] |
-| Industry | [Choose the one primary industry from the controlled list in Catalog Metadata.] |
-| Collection | [State "Hackathon" only when accepted into that collection; otherwise state "None."] |
 | Use this when | [Name the specific user, scenario, or operational need.] |
 | You will get | [Name the observable workflow, output, artifact, or result.] |
 | Runs on | [Name the required host, platform, operating system, or hardware.] |
@@ -492,8 +507,9 @@ also preserve the essential expected output as searchable text.
 
 <!--
 Use the canonical category exactly. Keep category separate from contributor
-provenance. Industry and collection are discovery metadata; neither changes
-category, provenance, or directory placement.
+provenance. The opening catalog block is authoritative for industry and
+collection; do not repeat those fields here. Neither changes category,
+provenance, or directory placement.
 
 Use "verified on" only when completed evidence supports the exact environment.
 Do not substitute "supported on" unless there is an actual support commitment.
@@ -532,8 +548,8 @@ remaining validation.]
 
 - Put material credential, data-sharing, permission, cost, write, or
   destructive-action warnings before the command that triggers them.
-- Keep the example name recognizable. Put the audience, job, and result in the
-  sentence immediately below it.
+- Start with the exact title, outcome sentence, and catalog table documented in
+  [Catalog Metadata](#catalog-metadata).
 - Use the canonical category independently from contributor or organizational
   provenance.
 - Preserve partner and community attribution.

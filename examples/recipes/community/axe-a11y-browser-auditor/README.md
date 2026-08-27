@@ -3,6 +3,13 @@
 
 # Axe A11y Browser Auditor
 
+Audits web pages for accessibility and captures screenshots, PDFs, and network traces.
+
+| Catalog field | Value |
+| --- | --- |
+| Industry | 🌐 Consumer Internet |
+| Requirements | Docker 24+ with Compose · linux/amd64 or Docker Desktop emulation · dedicated OpenShell/NemoClaw sandbox |
+
 Axe A11y Browser Auditor is a community recipe for automated web quality and WCAG accessibility compliance testing inside a NemoClaw-managed sandbox. It installs an `axe-a11y` skill into an existing OpenClaw sandbox, then routes requests to a host-side Streamable-HTTP MCP sidecar running `axe-core` and Patchright against real Google Chrome Stable.
 
 This example is based on the public proposal in issue `#109`. It is an independent community contribution, not a supported part of NemoClaw core.

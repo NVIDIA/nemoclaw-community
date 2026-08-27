@@ -24,7 +24,7 @@ by example type or industry, browse the
 [source example catalog](examples/README.md), or consume the
 [machine-readable catalog](https://nvidia.github.io/nemoclaw-community/catalog.json).
 See the [catalog architecture](docs/catalog-architecture.md) for its metadata,
-generation, URL-filter, and JSON contracts.
+generation, URL filter, and JSON contracts.
 
 Each example has its own prerequisites, credentials, setup, and limitations.
 Review the example README before setup.

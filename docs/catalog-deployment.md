@@ -5,14 +5,14 @@
 
 # Catalog Deployment
 
-The [Pages workflow](../.github/workflows/pages.yml) validates structured
-catalog metadata, generated Markdown, the static site, local resources, and
-dependency-free interaction tests when a watched catalog path changes. It then
-builds `_site/` from [`examples/catalog.json`](../examples/catalog.json) and
-the sources under `site/`.
+The [Pages workflow](../.github/workflows/pages.yml) exposes a separate check
+for the standardized metadata block in every example README, then validates
+generated Markdown, the static site, local resources, and dependency-free
+interaction tests. It builds `_site/` from the discovered root READMEs and the
+sources under `site/`.
 
 See [Example Catalog Architecture](catalog-architecture.md) for the metadata,
-generation, README-detail, URL-filter, and public JSON contracts.
+generation, README detail-page, URL filter, and public JSON contracts.
 
 Matching pull requests attach the generated `_site/` directory as an
 `example-catalog-preview` artifact and do not deploy. A matching push to
@@ -21,10 +21,11 @@ deploys it with the `github-pages` environment.
 
 ## Build Locally
 
-After changing catalog metadata, regenerate the committed Markdown catalog and
-build the site:
+After changing an example's opening catalog block, validate its format,
+regenerate the committed Markdown catalog, and build the site:
 
 ```bash
+python3 scripts/build_catalog.py --validate-metadata
 python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
 python3 scripts/fetch_catalog_assets.py
 python3 scripts/build_catalog.py --write

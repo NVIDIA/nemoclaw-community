@@ -1,5 +1,12 @@
 # NV Tech Assistant
 
+Answers NVIDIA technical questions with citations from allowlisted sources.
+
+| Catalog field | Value |
+| --- | --- |
+| Industry | 🖥️ Hardware/Semiconductor |
+| Requirements | Docker · NemoClaw · NVIDIA Endpoints API key · optional Brave Search · no offline corpus |
+
 NV Tech Assistant is a NemoClaw community example for grounded NVIDIA
 technical research. It searches authorized NVIDIA sources, GitHub, and arXiv,
 then answers with citations to evidence retrieved during the current task

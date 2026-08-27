@@ -3,7 +3,14 @@ SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All 
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# NemoClaw Review Advisor
+# PR Review Advisor
+
+Reviews exact pull request (PR) heads with Hermes, produces attested artifacts, and leaves publication to a maintainer.
+
+| Catalog field | Value |
+| --- | --- |
+| Industry | ✨ Other |
+| Requirements | Linux + Docker · OpenShell 0.0.85 · Node.js 22.19+ · inference provider API key or existing provider · GitHub.com self-hosted runner for the generated workflow |
 
 This first-party NemoClaw turns Hermes and Nemotron 3 Ultra into a reusable,
 repository-aware pull-request review advisor. Its first-party design combines

@@ -1,7 +1,14 @@
 <!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# Agentic AI Learning Path: Build-an-Agent Workshop on NemoClaw
+# Agentic AI Learning Path
+
+Runs the seven-module Build an Agent workshop in an OpenShell sandbox with an AI tutor.
+
+| Catalog field | Value |
+| --- | --- |
+| Industry | 🎓 Academia/Education |
+| Requirements | Linux · Docker · OpenShell · inference, NVIDIA, and Tavily API keys · Slack or Outlook · CPU-first; module 4 training is read-through |
 
 [NVIDIA's **Build an Agent** workshop](https://github.com/brevdev/workshop-build-an-agent)
 is a hands-on developer course: seven JupyterLab modules that take you from

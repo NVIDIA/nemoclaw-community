@@ -5,6 +5,13 @@
 
 # PR Test Case Assistant
 
+Reads public GitHub pull requests and drafts grounded feature test cases through Slack.
+
+| Catalog field | Value |
+| --- | --- |
+| Industry | ✨ Other |
+| Requirements | NemoClaw + Docker · Slack app with Socket Mode · Slack bot + app access tokens · inference provider API key · public GitHub only |
+
 This NVIDIA-authored recipe runs an OpenClaw assistant in a NemoClaw sandbox.
 People send it a Slack direct message with a public GitHub repository or pull
 request. It returns a pull request brief or proposed test cases grounded in the

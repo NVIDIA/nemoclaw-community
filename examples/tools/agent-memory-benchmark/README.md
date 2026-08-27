@@ -18,7 +18,14 @@ license: Apache-2.0
 evidence_level: local/static
 ---
 
-# 🧠 mnemo — Agent Memory Benchmark
+# Agent Memory Benchmark
+
+Measures memory-system accuracy and token cost on two synthetic email-and-chat corpora.
+
+| Catalog field | Value |
+| --- | --- |
+| Industry | ✨ Other |
+| Requirements | Python 3.9+ · pytest for the offline check · endpoint and adapter required only for live scoring |
 
 **mnemo measures the memory a system builds from a corpus: what it can answer
 afterwards, and what building it cost.** Give it six weeks of one person's email
@@ -571,8 +578,6 @@ rows that change what you do are repeated above, where you need them.
 | --- | --- |
 | Category | Developer Tool |
 | Contributor or provenance | NVIDIA |
-| Industry | Other |
-| Collection | None |
 | Use this when | You need to compare memory designs — consolidating, retrieval, or anything else — on the same corpus and the same questions. |
 | You will get | Accuracy per question type, plus ingest and per-answer token cost measured at a proxy rather than self-reported. |
 | Runs on | Any host with Python 3.9 or later, on macOS or Linux. The shipped adapter definitions invoke `python3`, which a default Windows install does not provide. |

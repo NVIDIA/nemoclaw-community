@@ -2,7 +2,15 @@
 <!-- SPDX-FileCopyrightText: Copyright (c) 2026, Shrike Security, Inc. All rights reserved. -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# Shrike Security — Agent Action Governance
+# Shrike Security Action Governance
+
+Checks OpenClaw tool calls against Shrike policy before they run.
+
+| Catalog field | Value |
+| --- | --- |
+| Industry | ✨ Other |
+| Requirements | NemoClaw/OpenShell · Node.js + npm · inference provider · Shrike API key · in-sandbox defense-in-depth only |
+| Contributor | Shrike Security, Inc. |
 
 Govern what an OpenClaw agent is allowed to **do**. This recipe installs a
 Shrike **`before_tool_call` plugin** into a NemoClaw/OpenShell sandbox so every

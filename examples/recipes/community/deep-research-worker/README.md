@@ -3,6 +3,13 @@
 
 # Deep Research Worker
 
+Queues long-running research from a sandbox to a host-side DeepAgents worker.
+
+| Catalog field | Value |
+| --- | --- |
+| Industry | ✨ Other |
+| Requirements | Docker Compose · dedicated OpenShell/NemoClaw sandbox · OpenAI-compatible inference endpoint + API key · no readiness guarantee |
+
 Deep Research Worker is a community recipe for asynchronous, long-horizon
 research with a NemoClaw-managed sandbox. It installs a `deep-research` skill
 and CLI wrapper into one existing sandbox, then routes requests from that

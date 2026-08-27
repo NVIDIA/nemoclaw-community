@@ -5,14 +5,13 @@
 
 from __future__ import annotations
 
-import json
-import shutil
 import tempfile
 import unittest
 from pathlib import Path
 
 from scripts.build_catalog import (
     CatalogError,
+    INDUSTRY_EMOJIS,
     MERMAID_SHA256,
     MERMAID_VERSION,
     build_site,
@@ -35,44 +34,64 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class CatalogBuildTests(unittest.TestCase):
-    def _fixture_root(self, record: dict[str, object] | None = None) -> Path:
-        temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(temporary.cleanup)
-        root = Path(temporary.name)
-        example = root / "examples" / "recipes" / "community" / "sample"
-        example.mkdir(parents=True)
-        (example / "README.md").write_text(
-            "# Sample Example\n\nA small fixture.\n", encoding="utf-8"
-        )
-        shutil.copy2(
-            ROOT / "examples" / "catalog.schema.json",
-            root / "examples" / "catalog.schema.json",
-        )
-        source_record: dict[str, object] = {
-            "path": "recipes/community/sample",
+    def _write_fixture_readme(
+        self,
+        root: Path,
+        path: str,
+        record: dict[str, str] | None = None,
+        body: str = "A small fixture.\n",
+    ) -> None:
+        values = {
             "title": "Sample Example",
             "description": "Produces a small observable fixture result.",
             "industry": "Other",
             "requirements": "Python 3 · local/static",
-            "collections": [],
         }
         if record:
-            source_record.update(record)
-        manifest = {
-            "$schema": "catalog.schema.json",
-            "schema_version": 2,
-            "examples": [source_record],
-        }
-        (root / "examples" / "catalog.json").write_text(
-            json.dumps(manifest), encoding="utf-8"
+            values.update(record)
+        industry = values["industry"]
+        industry_cell = values.get(
+            "industry_cell",
+            f"{INDUSTRY_EMOJIS.get(industry, '✨')} {industry}",
+        )
+        rows = [
+            f"| Industry | {industry_cell} |",
+            f"| Requirements | {values['requirements']} |",
+        ]
+        for field in ("Contributor", "Environment", "Collection"):
+            value = values.get(field.casefold())
+            if value:
+                rows.append(f"| {field} | {value} |")
+        content = (
+            f"# {values['title']}\n\n"
+            f"{values['description']}\n\n"
+            "| Catalog field | Value |\n"
+            "| --- | --- |\n"
+            + "\n".join(rows)
+            + "\n\n"
+            + body
+        )
+        readme = root / "examples" / path / "README.md"
+        readme.parent.mkdir(parents=True, exist_ok=True)
+        readme.write_text(content, encoding="utf-8")
+
+    def _fixture_root(
+        self,
+        record: dict[str, str] | None = None,
+        body: str = "A small fixture.\n",
+    ) -> Path:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        values = dict(record or {})
+        path = values.pop("path", "recipes/community/sample")
+        self._write_fixture_readme(
+            root,
+            path,
+            values,
+            body,
         )
         return root
-
-    def _rewrite_manifest(self, root: Path, mutate) -> None:
-        path = root / "examples" / "catalog.json"
-        manifest = json.loads(path.read_text(encoding="utf-8"))
-        mutate(manifest)
-        path.write_text(json.dumps(manifest), encoding="utf-8")
 
     def test_mermaid_fetch_and_build_pins_match(self) -> None:
         self.assertEqual(MERMAID_VERSION, FETCHED_MERMAID_VERSION)
@@ -102,7 +121,13 @@ class CatalogBuildTests(unittest.TestCase):
     def test_unknown_industry_is_rejected(self) -> None:
         root = self._fixture_root({"industry": "Software"})
 
-        with self.assertRaisesRegex(CatalogError, "documented values"):
+        with self.assertRaisesRegex(CatalogError, "documented emoji and title"):
+            load_catalog(root)
+
+    def test_wrong_industry_emoji_is_rejected(self) -> None:
+        root = self._fixture_root({"industry_cell": "🎓 Other"})
+
+        with self.assertRaisesRegex(CatalogError, "documented emoji and title"):
             load_catalog(root)
 
     def test_non_kebab_case_catalog_path_is_rejected(self) -> None:
@@ -111,33 +136,23 @@ class CatalogBuildTests(unittest.TestCase):
         with self.assertRaisesRegex(CatalogError, "canonical example taxonomy"):
             load_catalog(root)
 
-    def test_unlisted_top_level_example_is_rejected(self) -> None:
+    def test_every_discovered_example_requires_readme_metadata(self) -> None:
         root = self._fixture_root()
         unlisted = root / "examples" / "tools" / "unlisted"
         unlisted.mkdir(parents=True)
-        (unlisted / "README.md").write_text("# Unlisted\n", encoding="utf-8")
-
-        with self.assertRaisesRegex(CatalogError, "missing from examples/catalog.json"):
+        with self.assertRaisesRegex(CatalogError, "requires a regular README.md"):
             load_catalog(root)
 
     def test_partner_recipe_requires_contributor(self) -> None:
-        root = self._fixture_root()
-        old = root / "examples" / "recipes" / "community" / "sample"
-        new = root / "examples" / "recipes" / "partners" / "acme" / "sample"
-        new.parent.mkdir(parents=True)
-        old.rename(new)
-        self._rewrite_manifest(
-            root,
-            lambda manifest: manifest["examples"][0].update(
-                {"path": "recipes/partners/acme/sample"}
-            ),
+        root = self._fixture_root(
+            {"path": "recipes/partners/acme/sample"}
         )
 
-        with self.assertRaisesRegex(CatalogError, "requires contributor"):
+        with self.assertRaisesRegex(CatalogError, "requires a Contributor row"):
             load_catalog(root)
 
     def test_hackathon_collection_does_not_replace_provenance(self) -> None:
-        entry = load_catalog(self._fixture_root({"collections": ["hackathon"]}))[0]
+        entry = load_catalog(self._fixture_root({"collection": "Hackathon"}))[0]
 
         self.assertEqual(entry.category.provenance, "community")
         self.assertEqual(entry.collections, ("hackathon",))
@@ -150,6 +165,7 @@ class CatalogBuildTests(unittest.TestCase):
         self.assertEqual(example["kind"], "recipe")
         self.assertEqual(example["provenance"], "community")
         self.assertEqual(example["industry"]["id"], "other")
+        self.assertEqual(example["industry"]["emoji"], "✨")
         self.assertEqual(example["collections"], [])
         self.assertEqual(example["requirements"], "Python 3 · local/static")
         self.assertEqual(
@@ -168,6 +184,7 @@ class CatalogBuildTests(unittest.TestCase):
             page = detail_pages[entry.detail_path]
             self.assertEqual(page.count("<h1"), 1)
             self.assertIn("Requirements &amp; limits", page)
+            self.assertNotIn("Catalog field", page)
             self.assertIn('id="readme" tabindex="-1"', page)
             self.assertNotRegex(page, r'<(?:iframe|object|embed)\b')
             self.assertNotRegex(page, r'<img[^>]+src="https?://')
@@ -213,18 +230,8 @@ class CatalogBuildTests(unittest.TestCase):
         }
         for case, diagram in unsafe_sources.items():
             with self.subTest(case=case):
-                root = self._fixture_root()
-                readme = (
-                    root
-                    / "examples"
-                    / "recipes"
-                    / "community"
-                    / "sample"
-                    / "README.md"
-                )
-                readme.write_text(
-                    f"# Sample Example\n\n```mermaid\n{diagram}\n```\n",
-                    encoding="utf-8",
+                root = self._fixture_root(
+                    body=f"```mermaid\n{diagram}\n```\n"
                 )
                 entry = load_catalog(root)[0]
 
@@ -237,16 +244,14 @@ class CatalogBuildTests(unittest.TestCase):
                     )
 
     def test_readme_compiler_allows_plain_text_mermaid_labels(self) -> None:
-        root = self._fixture_root()
-        readme = root / "examples" / "recipes" / "community" / "sample" / "README.md"
-        readme.write_text(
-            "# Sample Example\n\n"
+        root = self._fixture_root(
+            body=(
             "```mermaid\n"
             "graph LR\n"
             "    A[Data: customer records] --> B[Metadata: status]\n"
             "    B --> C[JavaScript: browser client]\n"
-            "```\n",
-            encoding="utf-8",
+            "```\n"
+            )
         )
         entry = load_catalog(root)[0]
 
@@ -261,11 +266,8 @@ class CatalogBuildTests(unittest.TestCase):
         self.assertIn('class="language-mermaid"', body)
 
     def test_readme_compiler_rejects_active_raw_html(self) -> None:
-        root = self._fixture_root()
-        readme = root / "examples" / "recipes" / "community" / "sample" / "README.md"
-        readme.write_text(
-            "# Sample Example\n\n<script>alert('unsafe')</script>\n",
-            encoding="utf-8",
+        root = self._fixture_root(
+            body="<script>alert('unsafe')</script>\n"
         )
         entry = load_catalog(root)[0]
 
@@ -287,13 +289,8 @@ class CatalogBuildTests(unittest.TestCase):
         )
         for destination in unsafe_links:
             with self.subTest(destination=destination):
-                root = self._fixture_root()
-                readme = (
-                    root / "examples" / "recipes" / "community" / "sample" / "README.md"
-                )
-                readme.write_text(
-                    f"# Sample Example\n\n[Unsafe link]({destination})\n",
-                    encoding="utf-8",
+                root = self._fixture_root(
+                    body=f"[Unsafe link]({destination})\n"
                 )
                 entry = load_catalog(root)[0]
 
@@ -328,9 +325,10 @@ class CatalogBuildTests(unittest.TestCase):
                 else:
                     asset = assets / "unsafe.png"
                     asset.write_bytes(b"x" * (5 * 1024 * 1024 + 1))
-                (example / "README.md").write_text(
-                    f"# Sample Example\n\n![Unsafe image](assets/{asset.name})\n",
-                    encoding="utf-8",
+                self._write_fixture_readme(
+                    root,
+                    "recipes/community/sample",
+                    body=f"![Unsafe image](assets/{asset.name})\n",
                 )
                 entry = load_catalog(root)[0]
 
@@ -343,37 +341,25 @@ class CatalogBuildTests(unittest.TestCase):
                     )
 
     def test_readme_compiler_rejects_missing_fragments(self) -> None:
-        root = self._fixture_root()
+        root = self._fixture_root(body="[Missing](README.md#not-present)\n")
         example = root / "examples" / "recipes" / "community" / "sample"
-        (example / "README.md").write_text(
-            "# Sample Example\n\n[Missing](README.md#not-present)\n",
-            encoding="utf-8",
-        )
         entry = load_catalog(root)[0]
         with self.assertRaisesRegex(CatalogError, "unresolved local fragments"):
             render_readme_html(root, entry, {entry.readme_path: entry}, set())
 
-        target = root / "examples" / "recipes" / "community" / "target"
-        target.mkdir()
-        (target / "README.md").write_text(
-            "# Target Example\n\n## Present\n", encoding="utf-8"
-        )
-        (example / "README.md").write_text(
-            "# Sample Example\n\n[Missing](../target/README.md#not-present)\n",
-            encoding="utf-8",
-        )
-        self._rewrite_manifest(
+        self._write_fixture_readme(
             root,
-            lambda manifest: manifest["examples"].append(
-                {
-                    "path": "recipes/community/target",
-                    "title": "Target Example",
-                    "description": "Provides a second observable fixture result.",
-                    "industry": "Other",
-                    "requirements": "Python 3 · local/static",
-                    "collections": [],
-                }
-            ),
+            "recipes/community/target",
+            {
+                "title": "Target Example",
+                "description": "Provides a second observable fixture result.",
+            },
+            body="## Present\n",
+        )
+        self._write_fixture_readme(
+            root,
+            "recipes/community/sample",
+            body="[Missing](../target/README.md#not-present)\n",
         )
         entries = load_catalog(root)
         template = (ROOT / "site" / "detail.template.html").read_text(encoding="utf-8")

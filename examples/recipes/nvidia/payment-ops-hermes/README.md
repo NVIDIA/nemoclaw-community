@@ -1,6 +1,13 @@
-![NVIDIA](assets/nvidia_header.png)
+# Payment Operations Hermes Assistant
 
-# Payment Operations Hermes Assistant — FinGuard
+Demonstrates payment screening, evidence preparation, and a platform-enforced human release boundary.
+
+| Catalog field | Value |
+| --- | --- |
+| Industry | 💳 Financial Services |
+| Requirements | Linux · Docker Compose · OpenShell 0.0.53 · OpenAI-compatible inference API key · synthetic data only |
+
+![NVIDIA](assets/nvidia_header.png)
 
 FinGuard is a NeMoClaw community example for a regulated payment-operations
 desk. It screens synthetic outbound payments, explains holds, and prepares

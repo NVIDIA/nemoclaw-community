@@ -3,10 +3,11 @@
 
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import test from "node:test";
 
 import {
+  CATALOG_CATEGORIES,
   CATALOG_INDUSTRIES,
   DEFAULT_CATALOG_STATE,
   canonicalizeCatalogState,
@@ -19,9 +20,14 @@ import {
 } from "../../site/catalog.mjs";
 import { decodeSandboxSource } from "../../site/diagrams.mjs";
 
-const catalogSchema = JSON.parse(
-  readFileSync(new URL("../../examples/catalog.schema.json", import.meta.url), "utf8"),
-);
+const taxonomy = JSON.parse(execFileSync(
+  "python3",
+  ["scripts/build_catalog.py", "--print-taxonomy"],
+  {
+    cwd: new URL("../../", import.meta.url),
+    encoding: "utf8",
+  },
+));
 
 test("Mermaid sandbox documents decode Unicode as UTF-8", () => {
   const source = "♿ axe-core · 🌐 browser → 🤖 agent — 1920×1080";
@@ -154,13 +160,9 @@ test("inactive facets are removed from URL state", () => {
   );
 });
 
-test("client industry identifiers match the catalog schema", () => {
-  const labels = catalogSchema.$defs.example.properties.industry.enum;
-  const identifiers = labels.map((label) => normalizeSearchText(label)
-    .replace(/[^a-z0-9]+/gu, "-")
-    .replace(/^-|-$/gu, ""));
-
-  assert.deepEqual(CATALOG_INDUSTRIES, ["all", ...identifiers]);
+test("client facet identifiers match the README catalog builder", () => {
+  assert.deepEqual(CATALOG_CATEGORIES, taxonomy.categories);
+  assert.deepEqual(CATALOG_INDUSTRIES, taxonomy.industries);
 });
 
 function fakeControl(properties = {}) {

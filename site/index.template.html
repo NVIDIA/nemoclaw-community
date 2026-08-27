@@ -41,7 +41,7 @@
             <div class="hero-copy">
               <p class="hero-summary">
                 Explore reusable recipes, field demos, launchables, and developer
-                tools—then narrow the catalog by source, format, or industry.
+                tools—then narrow the catalog by type, provenance, collection, or industry.
               </p>
               <nav class="hero-actions" aria-label="Catalog actions">
                 <a class="button button-primary" href="#catalog">Search examples <span aria-hidden="true">↓</span></a>
@@ -55,7 +55,7 @@
             </div>
             <dl class="hero-stats" aria-label="Catalog coverage">
               <div><dt>{{EXAMPLE_COUNT}}</dt><dd>Examples</dd></div>
-              <div><dt>{{CATEGORY_COUNT}}</dt><dd>Catalog types</dd></div>
+              <div><dt>{{CATEGORY_COUNT}}</dt><dd>Catalog categories</dd></div>
               <div><dt>{{REPRESENTED_INDUSTRY_COUNT}}</dt><dd>Industries represented</dd></div>
             </dl>
           </div>
@@ -67,10 +67,10 @@
           <header class="discovery-header">
             <div>
               <p class="eyebrow">Explore the catalog</p>
-              <h2 id="browse-title">Browse by type or industry</h2>
+              <h2 id="browse-title">Browse by category or industry</h2>
               <p>
-                Type explains what an example is and where it came from. Industry
-                describes the workflow it serves.
+                Category combines artifact type with recipe provenance. Industry
+                describes the workflow that the example serves.
               </p>
             </div>
 
@@ -86,7 +86,7 @@
                     aria-controls="browse-category-panel catalog-results"
                     checked
                   >
-                  <span><strong>Type &amp; collection</strong><small>Source and format</small></span>
+                  <span><strong>Category &amp; collection</strong><small>Type, provenance, or collection</small></span>
                 </label>
                 <label class="browse-mode-option" for="catalog-view-industry">
                   <input
@@ -96,7 +96,7 @@
                     value="industry"
                     aria-controls="browse-industry-panel catalog-results"
                   >
-                  <span><strong>Industry</strong><small>{{INDUSTRY_COUNT}} controlled values</small></span>
+                  <span><strong>Industry</strong><small>{{INDUSTRY_COUNT}} industry options</small></span>
                 </label>
               </div>
             </fieldset>
@@ -105,7 +105,7 @@
           <nav
             class="browse-grid browse-grid-categories"
             id="browse-category-panel"
-            aria-label="Browse by type or collection"
+            aria-label="Browse by category or collection"
           >
 {{CATEGORY_NAV}}
           </nav>
@@ -123,14 +123,14 @@
       <section class="catalog" id="catalog" tabindex="-1" aria-labelledby="catalog-title">
         <div class="shell catalog-intro">
           <div>
-            <p class="eyebrow">Search the repository</p>
+            <p class="eyebrow">Search the catalog</p>
             <h2 id="catalog-title">Find an example</h2>
             <p>
-              Search titles, descriptions, requirements, contributors, types, and
-              industries.
+              Search titles, descriptions, requirements, contributors, types,
+              provenance, collections, and industries.
             </p>
           </div>
-          <a class="data-link" href="catalog.json">Use the catalog JSON <span aria-hidden="true">→</span></a>
+          <a class="data-link" href="catalog.json">Use generated catalog JSON <span aria-hidden="true">→</span></a>
         </div>
 
         <div
@@ -152,7 +152,7 @@
           </div>
 
           <div class="filter-control" data-filter-for="category">
-            <label for="catalog-category">Source, format, or collection</label>
+            <label for="catalog-category">Category or collection</label>
             <div class="select-shell">
               <select id="catalog-category">
 {{CATEGORY_OPTIONS}}

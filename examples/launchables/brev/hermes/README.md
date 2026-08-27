@@ -1,4 +1,12 @@
-# NemoClaw Hermes Brev Launchable
+# Hermes
+
+Creates a NemoClaw-managed Hermes sandbox on a fresh Brev CPU instance through a notebook.
+
+| Catalog field | Value |
+| --- | --- |
+| Industry | ☁️ Cloud Services |
+| Requirements | Linux Brev CPU instance · Docker · NVIDIA Build API key or compatible inference endpoint API key · billable Brev instance · best-effort support |
+| Environment | Brev |
 
 This example is a notebook for a [Brev launchable](https://brev.nvidia.com) to create a Hermes agent on a Brev CPU instance.
 

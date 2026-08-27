@@ -1,6 +1,13 @@
-![NVIDIA](assets/nvidia_header.png)
+# Developer Community Chief of Staff
 
-# Developer Community Chief of Staff: Hermes + Outlook
+Turns community signals into operating briefs and follow-up recommendations.
+
+| Catalog field | Value |
+| --- | --- |
+| Industry | ✨ Other |
+| Requirements | Single Linux host · Docker · OpenShell · inference provider API key · Slack or Outlook |
+
+![NVIDIA](assets/nvidia_header.png)
 
 A personal Hermes agent that surfaces what the developer community is working
 on, struggling with, asking about, and flagging as gaps — and compares it

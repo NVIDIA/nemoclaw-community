@@ -28,31 +28,31 @@ except ModuleNotFoundError:  # Report a targeted build error when dependencies a
     markdown = None
 
 
-INDUSTRIES: tuple[str, ...] = (
-    "Academia/Education",
-    "AEC",
-    "Aerospace",
-    "Agriculture",
-    "Automotive/Transportation",
-    "Cloud Services",
-    "Consumer Internet",
-    "Energy",
-    "Financial Services",
-    "Gaming",
-    "Hardware/Semiconductor",
-    "Health and Life Sciences",
-    "HPC/Scientific Computing",
-    "Manufacturing",
-    "Media & Entertainment",
-    "Public Sector",
-    "Restaurant/Quick Service",
-    "Retail/Consumer Packaged Goods",
-    "Smart Cities/Spaces",
-    "Telecommunications",
-    "Other",
-)
+INDUSTRY_EMOJIS: dict[str, str] = {
+    "Academia/Education": "🎓",
+    "AEC": "🏗️",
+    "Aerospace": "🚀",
+    "Agriculture": "🌾",
+    "Automotive/Transportation": "🚗",
+    "Cloud Services": "☁️",
+    "Consumer Internet": "🌐",
+    "Energy": "⚡",
+    "Financial Services": "💳",
+    "Gaming": "🎮",
+    "Hardware/Semiconductor": "🖥️",
+    "Health and Life Sciences": "🧬",
+    "HPC/Scientific Computing": "🔬",
+    "Manufacturing": "🏭",
+    "Media & Entertainment": "🎬",
+    "Public Sector": "🏛️",
+    "Restaurant/Quick Service": "🍽️",
+    "Retail/Consumer Packaged Goods": "🛍️",
+    "Smart Cities/Spaces": "🏙️",
+    "Telecommunications": "📡",
+    "Other": "✨",
+}
+INDUSTRIES: tuple[str, ...] = tuple(INDUSTRY_EMOJIS)
 
-COLLECTIONS: tuple[str, ...] = ("hackathon",)
 PATH_SEGMENT_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 MERMAID_VERSION = "11.17.2"
 MERMAID_SHA256 = (
@@ -173,7 +173,7 @@ CATEGORY_BY_ID = {category.id: category for category in CATEGORIES}
 
 @dataclass(frozen=True)
 class CatalogEntry:
-    """Validated source metadata plus taxonomy derived from its path."""
+    """Validated README metadata plus taxonomy derived from its path."""
 
     path: str
     title: str
@@ -184,6 +184,7 @@ class CatalogEntry:
     category: Category
     contributor: str | None = None
     environment: str | None = None
+    readme_body: str = ""
 
     @property
     def readme_path(self) -> str:
@@ -211,6 +212,14 @@ class CatalogEntry:
     @property
     def industry_id(self) -> str:
         return slugify(self.industry)
+
+    @property
+    def industry_emoji(self) -> str:
+        return INDUSTRY_EMOJIS[self.industry]
+
+    @property
+    def industry_label(self) -> str:
+        return f"{self.industry_emoji} {self.industry}"
 
     @property
     def display_label(self) -> str:
@@ -273,184 +282,343 @@ def classify_path(path: str) -> Category:
     return CATEGORY_BY_ID[category_id]
 
 
-def _required_string(record: dict[str, Any], key: str, index: int) -> str:
-    value = record.get(key)
-    if not isinstance(value, str) or not value.strip() or value != value.strip():
-        raise CatalogError(
-            f"examples[{index}].{key} must be a non-empty, trimmed string."
-        )
-    if "\n" in value or "\r" in value:
-        raise CatalogError(f"examples[{index}].{key} must be one line.")
-    return value
-
-
-def _optional_string(record: dict[str, Any], key: str, index: int) -> str | None:
-    if key not in record:
-        return None
-    return _required_string(record, key, index)
-
-
 def discover_example_paths(root: Path) -> set[str]:
-    """Discover catalog-level example READMEs at taxonomy-defined depths."""
+    """Discover canonical example directories and require one safe root README."""
 
     examples = root / "examples"
+    if not examples.is_dir() or examples.is_symlink():
+        raise CatalogError("examples/ must be a regular directory.")
+    allowed_roots = {"demos", "launchables", "recipes", "tools"}
+    unexpected_roots = {
+        child.name
+        for child in examples.iterdir()
+        if child.is_dir() and child.name not in allowed_roots
+    }
+    if unexpected_roots:
+        raise CatalogError(
+            "Unexpected example taxonomy directories: "
+            + ", ".join(sorted(unexpected_roots))
+        )
+
+    recipes = examples / "recipes"
+    if recipes.is_dir():
+        allowed_recipe_roots = {"community", "nvidia", "partners"}
+        unexpected_recipe_roots = {
+            child.name
+            for child in recipes.iterdir()
+            if child.is_dir() and child.name not in allowed_recipe_roots
+        }
+        if unexpected_recipe_roots:
+            raise CatalogError(
+                "Unexpected recipe provenance directories: "
+                + ", ".join(sorted(unexpected_recipe_roots))
+            )
+
+    demos = examples / "demos"
+    if demos.is_dir():
+        unexpected_demo_roots = {
+            child.name
+            for child in demos.iterdir()
+            if child.is_dir() and child.name != "field"
+        }
+        if unexpected_demo_roots:
+            raise CatalogError(
+                "Unexpected demo taxonomy directories: "
+                + ", ".join(sorted(unexpected_demo_roots))
+            )
+
     patterns = (
-        "recipes/nvidia/*/README.md",
-        "recipes/community/*/README.md",
-        "recipes/partners/*/*/README.md",
-        "demos/field/*/README.md",
-        "launchables/*/*/README.md",
-        "tools/*/README.md",
+        "recipes/nvidia/*",
+        "recipes/community/*",
+        "recipes/partners/*/*",
+        "demos/field/*",
+        "launchables/*/*",
+        "tools/*",
     )
     paths: set[str] = set()
     for pattern in patterns:
-        for readme in examples.glob(pattern):
-            paths.add(readme.parent.relative_to(examples).as_posix())
+        for directory in examples.glob(pattern):
+            if not directory.is_dir():
+                continue
+            path = directory.relative_to(examples).as_posix()
+            classify_path(path)
+            if directory.is_symlink():
+                raise CatalogError(
+                    f"Example directory must not be a symlink: examples/{path}"
+                )
+            if not directory.resolve().is_relative_to(examples.resolve()):
+                raise CatalogError(
+                    f"Example directory resolves outside examples/: examples/{path}"
+                )
+            readme = directory / "README.md"
+            if not readme.is_file() or readme.is_symlink():
+                raise CatalogError(
+                    f"Example directory requires a regular README.md: examples/{path}"
+                )
+            paths.add(path)
     return paths
 
 
-def _validate_schema_contract(root: Path) -> None:
-    schema_path = root / "examples" / "catalog.schema.json"
-    try:
-        schema = json.loads(schema_path.read_text(encoding="utf-8"))
-        enum = schema["$defs"]["example"]["properties"]["industry"]["enum"]
-        collection_enum = schema["$defs"]["example"]["properties"]["collections"][
-            "items"
-        ]["enum"]
-    except (OSError, json.JSONDecodeError, KeyError, TypeError) as error:
-        raise CatalogError(f"Invalid catalog schema: {error}") from error
-    if tuple(enum) != INDUSTRIES:
-        raise CatalogError("catalog.schema.json industry enum is out of sync.")
-    if tuple(collection_enum) != COLLECTIONS:
-        raise CatalogError("catalog.schema.json collection enum is out of sync.")
+CATALOG_TABLE_HEADER = "| Catalog field | Value |"
+CATALOG_TABLE_DIVIDER = "| --- | --- |"
+CATALOG_FIELD_ORDER = (
+    "Industry",
+    "Requirements",
+    "Contributor",
+    "Environment",
+    "Collection",
+)
+
+
+def _skip_leading_readme_comments(lines: list[str], readme_path: str) -> int:
+    """Skip optional legacy YAML plus comments before the visible README title."""
+
+    index = 0
+    while index < len(lines) and not lines[index].strip():
+        index += 1
+    if index < len(lines) and lines[index] == "---":
+        index += 1
+        while index < len(lines) and lines[index] != "---":
+            index += 1
+        if index >= len(lines):
+            raise CatalogError(f"Unclosed leading YAML block in {readme_path}.")
+        index += 1
+    while index < len(lines):
+        while index < len(lines) and not lines[index].strip():
+            index += 1
+        if index >= len(lines) or not lines[index].lstrip().startswith("<!--"):
+            break
+        while index < len(lines) and "-->" not in lines[index]:
+            index += 1
+        if index >= len(lines):
+            raise CatalogError(f"Unclosed leading HTML comment in {readme_path}.")
+        index += 1
+    return index
+
+
+def _parse_catalog_row(line: str, readme_path: str) -> tuple[str, str]:
+    match = re.fullmatch(r"\| ([A-Za-z]+) \| ([^|]+) \|", line)
+    if match is None:
+        raise CatalogError(
+            f"Invalid catalog metadata row in {readme_path}: {line!r}. "
+            "Use `| Field | Value |` with no additional columns."
+        )
+    field, value = match.groups()
+    if field not in CATALOG_FIELD_ORDER:
+        raise CatalogError(
+            f"Unknown catalog metadata field in {readme_path}: {field!r}."
+        )
+    if value != value.strip() or not value.strip():
+        raise CatalogError(
+            f"Catalog metadata field {field!r} must have a trimmed value in "
+            f"{readme_path}."
+        )
+    if any(ord(character) < 32 for character in value) or re.search(
+        r"[`*_~\[\]<>]", value
+    ):
+        raise CatalogError(
+            f"Catalog metadata field {field!r} must be plain text in {readme_path}."
+        )
+    return field, value
+
+
+def parse_readme_metadata(root: Path, path: str) -> CatalogEntry:
+    """Parse the required human-readable metadata block from one example README."""
+
+    category = classify_path(path)
+    readme_path = f"examples/{path}/README.md"
+    readme = root / readme_path
+    if not readme.is_file() or readme.is_symlink():
+        raise CatalogError(f"Example README is not a regular file: {readme_path}")
+    lines = readme.read_text(encoding="utf-8").splitlines()
+    index = _skip_leading_readme_comments(lines, readme_path)
+
+    if index >= len(lines):
+        raise CatalogError(f"Example README is empty: {readme_path}")
+    title_match = re.fullmatch(r"# ([^#].*)", lines[index])
+    if title_match is None:
+        raise CatalogError(
+            f"The first README content must be one level-one title in {readme_path}."
+        )
+    title = title_match.group(1).strip()
+    if title != title_match.group(1) or len(title) > 100:
+        raise CatalogError(
+            f"README title must be trimmed and at most 100 characters in {readme_path}."
+        )
+    if any(ord(character) < 32 for character in title) or re.search(
+        r"[`*_~\[\]<>]", title
+    ):
+        raise CatalogError(f"README title must be plain text in {readme_path}.")
+    if not slugify(title):
+        raise CatalogError(f"README title must contain letters or numbers in {readme_path}.")
+    index += 1
+    if index >= len(lines) or lines[index].strip():
+        raise CatalogError(f"README title must be followed by a blank line in {readme_path}.")
+    index += 1
+
+    description_lines: list[str] = []
+    while index < len(lines) and lines[index].strip():
+        description_lines.append(lines[index].strip())
+        index += 1
+    description = " ".join(description_lines)
+    if not description:
+        raise CatalogError(
+            f"README title must be followed by a description paragraph in {readme_path}."
+        )
+    if (
+        len(description) > 300
+        or any(ord(character) < 32 for character in description)
+        or re.search(r"[`*_~\[\]<>]", description)
+    ):
+        raise CatalogError(
+            f"README description must be plain text and at most 300 characters in "
+            f"{readme_path}."
+        )
+    if index >= len(lines):
+        raise CatalogError(f"README catalog metadata table is missing in {readme_path}.")
+    index += 1
+    if index >= len(lines) or lines[index] != CATALOG_TABLE_HEADER:
+        raise CatalogError(
+            f"README description must be followed by `{CATALOG_TABLE_HEADER}` in "
+            f"{readme_path}."
+        )
+    index += 1
+    if index >= len(lines) or lines[index] != CATALOG_TABLE_DIVIDER:
+        raise CatalogError(
+            f"README catalog table must use `{CATALOG_TABLE_DIVIDER}` in {readme_path}."
+        )
+    index += 1
+
+    fields: dict[str, str] = {}
+    field_names: list[str] = []
+    while index < len(lines) and lines[index].startswith("|"):
+        field, value = _parse_catalog_row(lines[index], readme_path)
+        if field in fields:
+            raise CatalogError(
+                f"Duplicate catalog metadata field {field!r} in {readme_path}."
+            )
+        fields[field] = value
+        field_names.append(field)
+        index += 1
+    expected_order = sorted(field_names, key=CATALOG_FIELD_ORDER.index)
+    if field_names != expected_order:
+        raise CatalogError(
+            f"Catalog metadata fields are out of order in {readme_path}; use: "
+            + ", ".join(CATALOG_FIELD_ORDER)
+            + "."
+        )
+    missing_fields = {"Industry", "Requirements"} - set(fields)
+    if missing_fields:
+        raise CatalogError(
+            f"Missing catalog metadata fields in {readme_path}: "
+            + ", ".join(sorted(missing_fields))
+        )
+    if index < len(lines) and lines[index].strip():
+        raise CatalogError(
+            f"README catalog metadata table must be followed by a blank line in "
+            f"{readme_path}."
+        )
+    while index < len(lines) and not lines[index].strip():
+        index += 1
+
+    industry_value = fields["Industry"]
+    industry = next(
+        (
+            name
+            for name, emoji in INDUSTRY_EMOJIS.items()
+            if industry_value == f"{emoji} {name}"
+        ),
+        None,
+    )
+    if industry is None:
+        raise CatalogError(
+            f"Industry must use one documented emoji and title in {readme_path}; "
+            f"got {industry_value!r}."
+        )
+    requirements = fields["Requirements"]
+    if len(requirements) > 240:
+        raise CatalogError(
+            f"Requirements must be at most 240 characters in {readme_path}."
+        )
+
+    contributor = fields.get("Contributor")
+    environment = fields.get("Environment")
+    for field, value in (("Contributor", contributor), ("Environment", environment)):
+        if value is not None and len(value) > 100:
+            raise CatalogError(
+                f"{field} must be at most 100 characters in {readme_path}."
+            )
+    if category.id == "partner-recipes" and contributor is None:
+        raise CatalogError(f"Partner recipe {path!r} requires a Contributor row.")
+    if category.id != "partner-recipes" and contributor is not None:
+        raise CatalogError(f"Only partner recipes can set Contributor ({path!r}).")
+    if category.id == "launchables" and environment is None:
+        raise CatalogError(f"Launchable {path!r} requires an Environment row.")
+    if category.id != "launchables" and environment is not None:
+        raise CatalogError(f"Only launchables can set Environment ({path!r}).")
+    if environment is not None and slugify(environment) != PurePosixPath(path).parts[1]:
+        raise CatalogError(
+            f"Launchable Environment must match its path in {readme_path}."
+        )
+
+    collection = fields.get("Collection")
+    if collection is None:
+        collections: tuple[str, ...] = ()
+    elif collection == "Hackathon" and category.kind == "recipe":
+        collections = ("hackathon",)
+    elif collection == "Hackathon":
+        raise CatalogError("Only recipes can join the Hackathon collection.")
+    else:
+        raise CatalogError(
+            f"Unknown Collection value in {readme_path}: {collection!r}."
+        )
+
+    return CatalogEntry(
+        path=path,
+        title=title,
+        description=description,
+        industry=industry,
+        requirements=requirements,
+        collections=collections,
+        category=category,
+        contributor=contributor,
+        environment=environment,
+        readme_body="\n".join(lines[index:]).strip(),
+    )
 
 
 def load_catalog(root: Path) -> list[CatalogEntry]:
-    """Load and validate the canonical source manifest."""
+    """Discover examples and validate catalog metadata in their READMEs."""
 
-    _validate_schema_contract(root)
-    manifest_path = root / "examples" / "catalog.json"
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise CatalogError(f"Invalid catalog manifest: {error}") from error
-
-    if not isinstance(manifest, dict):
-        raise CatalogError("examples/catalog.json must contain a JSON object.")
-    allowed_manifest_keys = {"$schema", "schema_version", "examples"}
-    unexpected_manifest = set(manifest) - allowed_manifest_keys
-    if unexpected_manifest:
-        raise CatalogError(
-            "Unexpected catalog manifest keys: "
-            + ", ".join(sorted(unexpected_manifest))
+    paths = discover_example_paths(root)
+    if not paths:
+        raise CatalogError("No canonical example READMEs were discovered.")
+    entries = [parse_readme_metadata(root, path) for path in paths]
+    category_order = {category.id: index for index, category in enumerate(CATEGORIES)}
+    def sort_key(entry: CatalogEntry) -> tuple[int, str, str, str]:
+        qualifier = ""
+        if entry.category.id == "partner-recipes":
+            qualifier = (entry.contributor or "").casefold()
+        elif entry.category.id == "launchables":
+            qualifier = (entry.environment or "").casefold()
+        return (
+            category_order[entry.category.id],
+            qualifier,
+            entry.title.casefold(),
+            entry.path,
         )
-    if manifest.get("$schema") != "catalog.schema.json":
-        raise CatalogError("examples/catalog.json must reference catalog.schema.json.")
-    if manifest.get("schema_version") != 2:
-        raise CatalogError("Unsupported catalog schema_version; expected 2.")
-    records = manifest.get("examples")
-    if not isinstance(records, list):
-        raise CatalogError("examples/catalog.json examples must be an array.")
 
-    entries: list[CatalogEntry] = []
-    seen_paths: set[str] = set()
+    entries.sort(key=sort_key)
+
     seen_titles: set[str] = set()
     seen_ids: set[str] = set()
-    base_keys = {
-        "path",
-        "title",
-        "description",
-        "industry",
-        "requirements",
-        "collections",
-        "contributor",
-        "environment",
-    }
-    for index, record in enumerate(records):
-        if not isinstance(record, dict):
-            raise CatalogError(f"examples[{index}] must be a JSON object.")
-        unexpected = set(record) - base_keys
-        if unexpected:
-            raise CatalogError(
-                f"Unexpected keys in examples[{index}]: "
-                + ", ".join(sorted(unexpected))
-            )
-        path = _required_string(record, "path", index)
-        category = classify_path(path)
-        title = _required_string(record, "title", index)
-        description = _required_string(record, "description", index)
-        industry = _required_string(record, "industry", index)
-        requirements = _required_string(record, "requirements", index)
-        contributor = _optional_string(record, "contributor", index)
-        environment = _optional_string(record, "environment", index)
-        collections_value = record.get("collections")
-        if not isinstance(collections_value, list) or any(
-            not isinstance(item, str) for item in collections_value
-        ):
-            raise CatalogError(f"examples[{index}].collections must be an array of strings.")
-        if len(collections_value) != len(set(collections_value)):
-            raise CatalogError(f"examples[{index}].collections contains duplicates.")
-        unknown_collections = set(collections_value) - set(COLLECTIONS)
-        if unknown_collections:
-            raise CatalogError(
-                f"examples[{index}] has unknown collections: "
-                + ", ".join(sorted(unknown_collections))
-            )
-        if "hackathon" in collections_value and category.kind != "recipe":
-            raise CatalogError("Only recipes can join the hackathon collection.")
-        if industry not in INDUSTRIES:
-            raise CatalogError(
-                f"examples[{index}].industry must be one of the documented values; "
-                f"got {industry!r}."
-            )
-        if category.id == "partner-recipes" and contributor is None:
-            raise CatalogError(f"Partner recipe {path!r} requires contributor.")
-        if category.id == "launchables" and environment is None:
-            raise CatalogError(f"Launchable {path!r} requires environment.")
-        if category.id != "launchables" and environment is not None:
-            raise CatalogError(f"Only launchables can set environment ({path!r}).")
-
-        entry = CatalogEntry(
-            path=path,
-            title=title,
-            description=description,
-            industry=industry,
-            requirements=requirements,
-            collections=tuple(collections_value),
-            category=category,
-            contributor=contributor,
-            environment=environment,
-        )
-        if path in seen_paths:
-            raise CatalogError(f"Duplicate catalog path: {path}")
-        if title.casefold() in seen_titles:
-            raise CatalogError(f"Duplicate catalog title: {title}")
+    for entry in entries:
+        if entry.title.casefold() in seen_titles:
+            raise CatalogError(f"Duplicate catalog title: {entry.title}")
         if entry.id in seen_ids:
             raise CatalogError(f"Duplicate generated catalog ID: {entry.id}")
-        seen_paths.add(path)
-        seen_titles.add(title.casefold())
+        seen_titles.add(entry.title.casefold())
         seen_ids.add(entry.id)
-        entries.append(entry)
-
-    discovered = discover_example_paths(root)
-    missing = discovered - seen_paths
-    unknown = seen_paths - discovered
-    if missing:
-        raise CatalogError(
-            "Example directories missing from examples/catalog.json: "
-            + ", ".join(sorted(missing))
-        )
-    if unknown:
-        raise CatalogError(
-            "Catalog paths without a top-level README: " + ", ".join(sorted(unknown))
-        )
-
-    for entry in entries:
-        readme = root / entry.readme_path
-        content = readme.read_text(encoding="utf-8")
-        if re.search(r"^#\s+\S", content, flags=re.MULTILINE) is None:
-            raise CatalogError(f"Example README has no level-one title: {entry.readme_path}")
-
     return entries
 
 
@@ -470,8 +638,9 @@ def render_readme(entries: Iterable[CatalogEntry]) -> str:
         "",
         "Examples are organized first by artifact type. Reusable recipes are organized",
         "again by contributor provenance. Industry is an independent discovery field.",
-        "This file is generated from [`catalog.json`](catalog.json); edit the manifest and",
-        "run `python3 scripts/build_catalog.py --write` from the repository root.",
+        "This file is generated from the catalog metadata block at the top of each",
+        "example README. Edit that README, then run",
+        "`python3 scripts/build_catalog.py --write` from the repository root.",
         "",
     ]
     for category in CATEGORIES:
@@ -488,7 +657,7 @@ def render_readme(entries: Iterable[CatalogEntry]) -> str:
                 lines.append(
                     f"| {_markdown_cell(entry.contributor or '')} | "
                     f"[{_markdown_cell(entry.title)}]({entry.path}/README.md) | "
-                    f"{_markdown_cell(entry.industry)} | "
+                    f"{_markdown_cell(entry.industry_label)} | "
                     f"{_markdown_cell(entry.description)} |"
                 )
         elif category.id == "launchables":
@@ -502,7 +671,7 @@ def render_readme(entries: Iterable[CatalogEntry]) -> str:
                 lines.append(
                     f"| {_markdown_cell(entry.environment or '')} | "
                     f"[{_markdown_cell(entry.title)}]({entry.path}/README.md) | "
-                    f"{_markdown_cell(entry.industry)} | "
+                    f"{_markdown_cell(entry.industry_label)} | "
                     f"{_markdown_cell(entry.description)} |"
                 )
         else:
@@ -515,7 +684,7 @@ def render_readme(entries: Iterable[CatalogEntry]) -> str:
             for entry in category_entries:
                 lines.append(
                     f"| [{_markdown_cell(entry.title)}]({entry.path}/README.md) | "
-                    f"{_markdown_cell(entry.industry)} | "
+                    f"{_markdown_cell(entry.industry_label)} | "
                     f"{_markdown_cell(entry.description)} |"
                 )
         lines.append("")
@@ -588,7 +757,8 @@ def render_industry_nav(entries: list[CatalogEntry]) -> str:
             (
                 f'<a class="industry-tile" data-empty="{str(counts[industry] == 0).lower()}" '
                 f'href="?view=industry&amp;industry={slugify(industry)}#catalog">',
-                f'  <span>{html.escape(industry)}</span>',
+                f'  <span>{html.escape(INDUSTRY_EMOJIS[industry])} '
+                f'{html.escape(industry)}</span>',
                 f'  <span class="industry-tile-count" aria-label="{_plural(counts[industry])}">'
                 f'{counts[industry]}</span>',
                 "</a>",
@@ -635,7 +805,8 @@ def industry_filter_options(entries: list[CatalogEntry]) -> str:
         counts[entry.industry] += 1
     options = [f'<option value="all">All industries ({len(entries)})</option>']
     options.extend(
-        f'<option value="{slugify(industry)}">{html.escape(industry)} ({counts[industry]})</option>'
+        f'<option value="{slugify(industry)}">{html.escape(INDUSTRY_EMOJIS[industry])} '
+        f'{html.escape(industry)} ({counts[industry]})</option>'
         for industry in INDUSTRIES
     )
     return "\n".join(options)
@@ -664,7 +835,7 @@ def render_card(entry: CatalogEntry) -> str:
   <h3 id="{entry.id}-title"><a class="example-title-link" href="{entry.detail_url}">{html.escape(entry.title)}</a></h3>
   <p class="outcome">{html.escape(entry.description)}</p>
   <ul class="card-tags" aria-label="Discovery fields">
-    <li class="tag">{html.escape(entry.industry)}</li>{collection_tags}
+    <li class="tag">{html.escape(entry.industry_label)}</li>{collection_tags}
   </ul>
   <dl class="requirements">
     <div><dt>Requirements &amp; limits</dt><dd>{html.escape(entry.requirements)}</dd></div>
@@ -743,7 +914,7 @@ def public_catalog(entries: list[CatalogEntry]) -> dict[str, Any]:
         industry_counts[entry.industry] += 1
     return {
         "schema_version": 2,
-        "source": "https://github.com/NVIDIA/nemoclaw-community/blob/main/examples/catalog.json",
+        "source": "https://github.com/NVIDIA/nemoclaw-community/tree/main/examples",
         "categories": [
             {
                 "id": category.id,
@@ -758,6 +929,7 @@ def public_catalog(entries: list[CatalogEntry]) -> dict[str, Any]:
             {
                 "id": slugify(industry),
                 "label": industry,
+                "emoji": INDUSTRY_EMOJIS[industry],
                 "count": industry_counts[industry],
             }
             for industry in INDUSTRIES
@@ -777,6 +949,7 @@ def public_catalog(entries: list[CatalogEntry]) -> dict[str, Any]:
                 "industry": {
                     "id": entry.industry_id,
                     "label": entry.industry,
+                    "emoji": entry.industry_emoji,
                 },
                 "kind": entry.category.kind,
                 "provenance": entry.category.provenance,
@@ -797,12 +970,26 @@ def public_catalog(entries: list[CatalogEntry]) -> dict[str, Any]:
     }
 
 
+def taxonomy_contract() -> dict[str, list[str]]:
+    """Return stable browser identifiers for cross-language contract tests."""
+
+    return {
+        "categories": [
+            "all",
+            *(category.id for category in CATEGORIES[:3]),
+            "hackathon-recipes",
+            *(category.id for category in CATEGORIES[3:]),
+        ],
+        "industries": ["all", *(slugify(industry) for industry in INDUSTRIES)],
+    }
+
+
 def github_heading_slug(value: str, separator: str) -> str:
     """Approximate GitHub's stable heading IDs for README fragment links."""
 
     normalized = html.unescape(value).strip().casefold()
-    normalized = re.sub(r"[^\w\- ]", "", normalized, flags=re.UNICODE)
-    return re.sub(r"\s+", separator, normalized).strip(separator)
+    normalized = re.sub(r"[^\w\-\ufe0f ]", "", normalized, flags=re.UNICODE)
+    return re.sub(r"\s+", separator, normalized)
 
 
 def extract_mermaid_sources(content: str, readme_path: str) -> tuple[str, ...]:
@@ -856,23 +1043,6 @@ def extract_mermaid_sources(content: str, readme_path: str) -> tuple[str, ...]:
                 raise CatalogError(f"{label} contains forbidden {description}.")
         sources.append(source)
     return tuple(sources)
-
-
-def _readme_title_and_body(content: str, readme_path: str) -> tuple[str, str]:
-    lines = content.splitlines()
-    title_index = next(
-        (index for index, line in enumerate(lines) if re.fullmatch(r"#\s+\S.*", line)),
-        None,
-    )
-    if title_index is None:
-        raise CatalogError(f"Example README has no level-one title: {readme_path}")
-    source_title = lines[title_index][2:].strip()
-    plain_title = re.sub(r"\[([^]]+)\]\([^)]+\)", r"\1", source_title)
-    plain_title = re.sub(r"[`*_~]", "", plain_title).strip()
-    if not plain_title:
-        raise CatalogError(f"Example README has an empty title: {readme_path}")
-    del lines[title_index]
-    return plain_title, "\n".join(lines).strip()
 
 
 class ReadmeHTMLSanitizer(HTMLParser):
@@ -1077,7 +1247,9 @@ class ReadmeHTMLSanitizer(HTMLParser):
             if values.get("class") == "toc":
                 safe.append(("class", "toc"))
             else:
-                self.errors.append("Only the generated README toc div is allowed.")
+                self.errors.append(
+                    "Only the generated README table-of-contents div is allowed."
+                )
 
         allowed_names = {name for name, _ in safe}
         ignored_generated = {"class"} if tag == "div" else set()
@@ -1180,7 +1352,6 @@ def render_readme_html(
         )
     source = (root / entry.readme_path).read_text(encoding="utf-8")
     mermaid_sources = extract_mermaid_sources(source, entry.readme_path)
-    readme_title, body = _readme_title_and_body(source, entry.readme_path)
     from markdown.extensions.tables import TableExtension
 
     renderer = markdown.Markdown(
@@ -1198,7 +1369,7 @@ def render_readme_html(
         },
         output_format="html5",
     )
-    rendered_body = renderer.convert(body)
+    rendered_body = renderer.convert(entry.readme_body)
     body_sanitizer = ReadmeHTMLSanitizer(
         root, entry, catalog_by_readme, copied_assets
     )
@@ -1214,7 +1385,8 @@ def render_readme_html(
         unresolved_toc = toc_sanitizer.fragments - body_sanitizer.ids
         if unresolved_toc:
             raise CatalogError(
-                f"Generated README toc has unresolved fragments for {entry.readme_path}: "
+                f"Generated README table of contents has unresolved fragments for "
+                f"{entry.readme_path}: "
                 + ", ".join(sorted(unresolved_toc))
             )
     else:
@@ -1230,7 +1402,7 @@ def render_readme_html(
         raise CatalogError(
             f"Mermaid source/render count mismatch for {entry.readme_path}."
         )
-    return readme_title, safe_body, safe_toc, bool(mermaid_sources)
+    return entry.title, safe_body, safe_toc, bool(mermaid_sources)
 
 
 def _detail_relative(entry: CatalogEntry, target: str) -> str:
@@ -1286,9 +1458,9 @@ def render_detail_pages(
             "{{SOURCE_URL}}": html.escape(entry.guide_url, quote=True),
             "{{DISPLAY_LABEL}}": html.escape(entry.display_label),
             "{{DESCRIPTION}}": html.escape(entry.description),
-            "{{INDUSTRY}}": html.escape(entry.industry),
+            "{{INDUSTRY}}": html.escape(entry.industry_label),
             "{{COLLECTION_TAGS}}": collection_tags,
-            "{{CATEGORY}}": html.escape(entry.category.title),
+            "{{CATEGORY}}": html.escape(entry.category.singular),
             "{{ATTRIBUTION_FACT}}": attribution_fact,
             "{{REQUIREMENTS}}": html.escape(entry.requirements),
             "{{TABLE_OF_CONTENTS}}": toc_html,
@@ -1478,7 +1650,7 @@ def validate_generated_site(root: Path, entries: list[CatalogEntry], site_html: 
         for card in parser.cards
     ] if expected_cards else []
     if actual_cards != expected_cards:
-        errors.append("Generated card metadata or order does not match the manifest.")
+        errors.append("Generated card metadata or order does not match the READMEs.")
     for entry, card in zip(entries, parser.cards):
         if card.get("id") != entry.id:
             errors.append(f"Generated card ID does not match {entry.title}.")
@@ -1754,8 +1926,10 @@ def build_site(
     if has_mermaid:
         mermaid_asset = verified_mermaid_asset(root)
         diagram_module = root / "site" / "diagrams.mjs"
-        if not diagram_module.is_file() or diagram_module.is_symlink():
-            raise CatalogError("Refusing unsafe Mermaid diagram module.")
+        if not diagram_module.is_file():
+            raise CatalogError("Mermaid diagram module is not a regular file.")
+        if diagram_module.is_symlink():
+            raise CatalogError("Mermaid diagram module must not be a symlink.")
     if output.exists():
         shutil.rmtree(output)
     output.mkdir(parents=True)
@@ -1785,12 +1959,12 @@ def build_site(
     for relative in sorted(copied_assets or set()):
         source = root / relative
         resolved_source = source.resolve()
-        if (
-            not resolved_source.is_relative_to(root.resolve())
-            or not resolved_source.is_file()
-            or source.is_symlink()
-        ):
-            raise CatalogError(f"Refusing unsafe README asset: {relative}")
+        if not resolved_source.is_relative_to(root.resolve()):
+            raise CatalogError(f"README asset resolves outside the repository: {relative}")
+        if not resolved_source.is_file():
+            raise CatalogError(f"README asset is not a regular file: {relative}")
+        if source.is_symlink():
+            raise CatalogError(f"README asset must not be a symlink: {relative}")
         total_asset_size += resolved_source.stat().st_size
         if total_asset_size > 20 * 1024 * 1024:
             raise CatalogError("README assets exceed the 20 MiB catalog limit.")
@@ -1816,11 +1990,30 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Regenerate examples/README.md and build the site.",
     )
+    mode.add_argument(
+        "--validate-metadata",
+        action="store_true",
+        help="Validate example README catalog blocks without building the site.",
+    )
+    mode.add_argument(
+        "--print-taxonomy",
+        action="store_true",
+        help="Print the generated browser taxonomy contract as JSON.",
+    )
     args = parser.parse_args(argv)
     root = find_repo_root()
     output = root / "_site"
 
     try:
+        if args.print_taxonomy:
+            print(json.dumps(taxonomy_contract(), ensure_ascii=False))
+            return 0
+        if args.validate_metadata:
+            entries = load_catalog(root)
+            print(
+                f"README catalog metadata is valid for {len(entries)} examples."
+            )
+            return 0
         (
             entries,
             readme,
