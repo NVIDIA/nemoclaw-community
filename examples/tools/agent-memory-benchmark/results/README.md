@@ -40,12 +40,12 @@ separately and never summed.
 
 | Metric | Agentic RAG | Self-model | Difference |
 | --- | ---: | ---: | ---: |
-| Overall accuracy (186 questions) | 82.8% | 89.2% | +6.5 pp |
+| Overall accuracy (186 questions) | 82.8% | 89.8% | +7.0 pp |
 | Hard questions (31) | 67.7% | 87.1% | +19.4 pp |
 | Tracking facts that changed over time (5) | 60.0% | 100.0% | +40.0 pp |
 | Point-in-time reasoning (6) | 33.3% | 66.7% | +33.3 pp |
 | Entity disambiguation (15) | 66.7% | 86.7% | +20.0 pp |
-| Multi-source synthesis (73) | 87.7% | 93.2% | +5.5 pp |
+| Multi-source synthesis (73) | 87.7% | 94.5% | +6.9 pp |
 | Citation coverage (186) | 92.5% | 97.9% | +5.4 pp |
 
 Cost, which the benchmark reports separately and never blends into the above. Both runs
@@ -117,8 +117,8 @@ What it changed, measured:
 
 | | Agentic RAG | Self-model |
 | --- | ---: | ---: |
-| As answered, against the published key | 80.1% | 86.6% |
-| After the substitution | 82.8% | 89.2% |
+| As answered, against the published key | 80.1% | 87.1% |
+| After the substitution | 82.8% | 89.8% |
 | Answers reported unanswered before the id map | 4 | 4 |
 
 The id map does more work than the text map. Four question ids were renamed at

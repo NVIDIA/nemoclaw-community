@@ -182,6 +182,23 @@ DENIAL_SCOPE_CONTRACT = [
      'migration script reviewable in one sitting instead of three." The third '
      'burden was addressed by setting a boundary: "just do not let it become a '
      'recurring meeting."', True),
+    # Cues were matched as raw substrings, so a cue could fire across a token
+    # boundary and deny a clause that says the opposite. Both directions: the
+    # cue must still deny when it is a real cue.
+    ("a cue that only appears across a token boundary does not deny",
+     {"mode": "string_any", "accept": ["75%"]},
+     "This wrong estimate was corrected to 75%", True),
+    ("the same, with a different verb",
+     {"mode": "string_any", "accept": ["75%"]},
+     "This wrong value was replaced with 75%", True),
+    # Taken from the published self-model run, where "is not" matched inside
+    # "is noted" and cost the answer its point.
+    ("'is noted' is not 'is not'",
+     {"mode": "string_any", "accept": ["Jin Oh"]},
+     "Jin Oh (Jin) is noted as representing the ML-research side in the "
+     "Beacon eval methodology walkthrough.", True),
+    ("the cue still denies when it is really there",
+     {"mode": "string_any", "accept": ["50%"]}, "The figure is not 50%", False),
 ]
 
 

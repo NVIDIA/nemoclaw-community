@@ -195,7 +195,7 @@ def _denied_at(text: str, position: int) -> bool:
         contrasts = [m.end() for m in _CONTRAST.finditer(clause)]
         if contrasts:
             clause = clause[contrasts[-1]:]
-    return any(cue in clause for cue in DENIAL_CUES)
+    return any(pattern.search(clause) for _, pattern in _CUE_PATTERNS)
 
 
 # Clause splitting, in one direction only: split first, then decide each piece
@@ -265,10 +265,19 @@ def _clauses(answer: str) -> list[tuple[str, bool]]:
     return out
 
 
+# Substring matching found "is wrong" inside "th|is wrong| estimate", so a
+# correction was read as a denial. The comment claimed the copula anchored these
+# cues; only a boundary does. Both places that ask "is there a denial here" go
+# through this table so the two cannot drift apart again.
+_CUE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
+    (cue.strip(), re.compile(r"(?<!\w)" + re.escape(cue.strip()) + r"(?!\w)"))
+    for cue in DENIAL_CUES if cue.strip())
+
+
 def _denial_cue(text: str) -> str | None:
     lowered = " " + _COLLAPSE.sub(" ", text.lower()).strip() + " "
-    for cue in DENIAL_CUES:
-        if cue.strip() and cue in lowered:
+    for cue, pattern in _CUE_PATTERNS:
+        if pattern.search(lowered):
             return cue
     return None
 
@@ -286,8 +295,11 @@ def _introduces_list(sentence: str) -> bool:
     colon = lowered.find(":")
     if colon < 0:
         return False
-    return any(
-        cue in lowered and lowered.find(cue) < colon for cue in SET_DENIAL_CUES)
+    for cue in SET_DENIAL_CUES:
+        found = re.search(r"(?<!\w)" + re.escape(cue.strip()) + r"(?!\w)", lowered)
+        if found and found.start() < colon:
+            return True
+    return False
 
 
 def asserts(answer: str, value: str) -> bool:

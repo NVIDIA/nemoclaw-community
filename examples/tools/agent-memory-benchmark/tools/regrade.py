@@ -118,6 +118,26 @@ def main() -> None:
             "the original run's cost was not fully observed "
             f"({accounting_method}); regrading does not change that."
         )
+    # `provenance_note.effect` compares two gradings of the same run, so it is
+    # only true of the grader that produced it. Leaving it behind on a regrade
+    # published a comparison against a scorer that no longer exists; recompute
+    # both halves from the two answer files whenever the untransformed one ships.
+    as_answered = args.run / "answers.as-answered.jsonl"
+    effect = report.get("provenance_note", {}).get("effect")
+    if effect is not None and as_answered.exists():
+        raw = {json.loads(line)["id"]: json.loads(line)
+               for line in as_answered.read_text(encoding="utf-8").splitlines() if line.strip()}
+        raw_verdicts = [
+            grade(q["id"], str(raw.get(q["id"], {}).get("answer", "")),
+                  raw.get(q["id"], {}).get("source_ids"), gold[q["id"]],
+                  answered=is_answered(raw.get(q["id"])))
+            for q in questions
+        ]
+        effect["accuracy_as_answered"] = summarize(raw_verdicts, gold)["accuracy_overall"]
+        effect["accuracy_after_map"] = report["summary"]["accuracy_overall"]
+        effect["questions_reported_unanswered_before_id_map"] = sum(
+            1 for q in questions if not is_answered(raw.get(q["id"])))
+
     report["regraded"] = True
     (args.run / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     (args.run / "verdicts.jsonl").write_text(

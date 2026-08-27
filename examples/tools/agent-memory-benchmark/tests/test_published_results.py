@@ -265,16 +265,27 @@ def test_adapter_provenance_says_what_is_and_is_not_reproducible(run: Path):
 # `comparable_on_cost` to false. The prose said "1,076 times more" two lines
 # below the sentence admitting the counts were unproven. This keeps the prose
 # and the flag from disagreeing again.
+# Anchored on "times more" rather than on a digit: the root README said "about a
+# thousand times more", which an earlier version of this pattern missed because
+# it required a numeral.
 _COST_RATIO = re.compile(
-    r"\b\d[\d,.]*\s*(?:times|x|×)\s+(?:more|less|fewer|cheaper|costlier|higher|lower|the|as)\b"
-    r"|\b(?:more|less)\s+than\s+\d[\d,.]*\s*(?:times|x|×)\b"
-    r"|\border[s]? of magnitude\b",
+    r"\btimes\s+(?:more|less|fewer|cheaper|costlier|higher|lower)\b"
+    r"|\b\d[\d,.]*\s*[x×]\s+(?:more|less|fewer|cheaper|costlier|higher|lower)\b"
+    r"|\border[s]?\s+of\s+magnitude\b",
     re.IGNORECASE)
 
 
 def _published_prose() -> list[Path]:
+    # Every piece of prose this example publishes, not just the results page:
+    # the root README repeated the ratio for a round after results/README.md
+    # stopped stating it, and a guard that scanned one of them passed anyway.
     results = REPO / "results"
-    return [results / "README.md", *sorted((results / "runs").glob("*/summary.md"))]
+    return [
+        REPO / "README.md",
+        results / "README.md",
+        *sorted((REPO / "docs").glob("*.md")),
+        *sorted((results / "runs").glob("*/summary.md")),
+    ]
 
 
 def test_published_prose_states_no_cost_ratio_while_cost_is_not_comparable():

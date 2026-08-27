@@ -305,8 +305,11 @@ tests/       the benchmark's own tests
 
 One pair of runs ships as a worked example: a self-model and an agentic
 retrieval baseline on corpus A, both on the same base model, both graded by the
-grader in this repository. The self-model answers better on every question type
-and pays about a thousand times more to build its memory.
+grader in this repository. The self-model answers better on every question type.
+It also spends its tokens somewhere else — at ingest rather than per question —
+which the results page reports as two separate counts rather than one ratio,
+because neither run carries the forwarded-call record that would establish the
+two were counted the same way.
 
 Read [`results/README.md`](results/README.md) before the table there. Those runs
 are corpus A only, one base model, and their answers predate a rename at
@@ -327,7 +330,7 @@ proxy at.
 **Expected result:**
 
 ```text
-196 passed
+200 passed
 ```
 
 **This verifies:** the runner, grader, report renderer and the
@@ -343,7 +346,7 @@ The whole pipeline runs offline against a small fixture whose score is known in
 advance — no model, no network, no API key:
 
 ```bash
-python3 -m pytest tests/     # expected: 196 passed
+python3 -m pytest tests/     # expected: 200 passed
 ```
 
 `selftest/` holds a six-document corpus, six questions covering all four

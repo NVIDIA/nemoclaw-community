@@ -92,7 +92,7 @@
     "questions": 186,
     "graded": 186,
     "deferred_to_judge": 0,
-    "accuracy_overall": 0.8925,
+    "accuracy_overall": 0.8978,
     "accuracy_by_type": {
       "abstention": 0.7692,
       "as_of": 0.6667,
@@ -102,13 +102,13 @@
       "constraint": 1.0,
       "disambiguation": 0.8667,
       "freshness": 0.9167,
-      "multi_source": 0.9315,
+      "multi_source": 0.9452,
       "ordering": 1.0,
       "set_difference": 0.8333,
       "single_hop": 0.8333
     },
     "accuracy_by_difficulty": {
-      "base": 0.8968,
+      "base": 0.9032,
       "hard": 0.871
     },
     "freshness_detail": {
@@ -127,7 +127,7 @@
   "corpus_name": "corpus_a",
   "fingerprint": {
     "algorithm": "sha256-v1",
-    "scorer": "255902f6fbf37507cb3828a45625509ec9f22a6e1886151791f86b06217bfada",
+    "scorer": "067838533c09d47131b2420c60e148cb1d023b01249b3fad9eada7234c604f62",
     "normalization": {
       "default_year": "2026",
       "alt_years": [
@@ -140,7 +140,7 @@
     "gold": "55a66b80ff0f62d8b3a340dcbb9cc970a011922b1e509269c4402192f9504970"
   },
   "benchmark_revision": {
-    "commit": "c943e5f5cbcb4b8db26029c326c28bfa7c4641cb",
+    "commit": "f47a108c4894cd0d52ab633a91d82fb8c48008a9",
     "dirty": true
   },
   "provenance_note": {
@@ -180,8 +180,8 @@
     },
     "not_a_rerun": "This is not a run against the published corpus. The systems never saw it. Reproducing these numbers requires re-running the answer phase.",
     "effect": {
-      "accuracy_as_answered": 0.8656,
-      "accuracy_after_map": 0.8925,
+      "accuracy_as_answered": 0.871,
+      "accuracy_after_map": 0.8978,
       "questions_reported_unanswered_before_id_map": 4,
       "note": "The id map matters more than the text map: four question ids were renamed at publication, and without mapping them those four answers are reported as unanswered, which invalidates the run."
     },
