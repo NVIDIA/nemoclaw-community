@@ -10,12 +10,18 @@ on:
     paths:
       - ".github/workflows/pages.yml"
       - "README.md"
+      - "CONTRIBUTING.md"
+      - "docs/catalog-architecture.md"
+      - "docs/catalog-deployment.md"
       - "SUPPORT.md"
+      - "THIRD-PARTY-NOTICES"
       - ".agents/skills/nemoclaw-community-contributor-examples/references/example-taxonomy.md"
-      - "examples/README.md"
-      - "examples/**/README.md"
-      - "scripts/check_catalog_parity.py"
-      - "scripts/tests/test_catalog_parity.py"
+      - "examples/**"
+      - "scripts/build_catalog.py"
+      - "scripts/fetch_catalog_assets.py"
+      - "scripts/catalog-requirements.txt"
+      - "scripts/tests/test_build_catalog.py"
+      - "scripts/tests/catalog.test.mjs"
       - "site/**"
   push:
     branches:
@@ -23,12 +29,18 @@ on:
     paths:
       - ".github/workflows/pages.yml"
       - "README.md"
+      - "CONTRIBUTING.md"
+      - "docs/catalog-architecture.md"
+      - "docs/catalog-deployment.md"
       - "SUPPORT.md"
+      - "THIRD-PARTY-NOTICES"
       - ".agents/skills/nemoclaw-community-contributor-examples/references/example-taxonomy.md"
-      - "examples/README.md"
-      - "examples/**/README.md"
-      - "scripts/check_catalog_parity.py"
-      - "scripts/tests/test_catalog_parity.py"
+      - "examples/**"
+      - "scripts/build_catalog.py"
+      - "scripts/fetch_catalog_assets.py"
+      - "scripts/catalog-requirements.txt"
+      - "scripts/tests/test_build_catalog.py"
+      - "scripts/tests/catalog.test.mjs"
       - "site/**"
   workflow_dispatch:
 
@@ -36,20 +48,56 @@ permissions:
   contents: read
 
 jobs:
-  validate:
-    name: Validate catalog
+  metadata:
+    name: Validate example README metadata
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Check catalog parity and local links
-        run: python3 scripts/check_catalog_parity.py --check
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-      - name: Run catalog validator tests
-        run: python3 -m unittest discover -s scripts/tests -p 'test_catalog_parity.py'
+      - name: Validate README catalog blocks
+        run: python3 scripts/build_catalog.py --validate-metadata
+
+  validate:
+    name: Validate catalog
+    needs: metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install catalog build dependency
+        run: python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
+
+      - name: Fetch pinned catalog browser assets
+        run: python3 scripts/fetch_catalog_assets.py
+
+      - name: Check generated catalog sources
+        run: python3 scripts/build_catalog.py --check
+
+      - name: Run catalog build tests
+        run: python3 -m unittest discover -s scripts/tests -p 'test_build_catalog.py'
+
+      - name: Run catalog interaction tests
+        run: node --test scripts/tests/catalog.test.mjs
 
       - name: Check license headers
         run: python3 scripts/check_license_headers.py --check
@@ -58,18 +106,32 @@ jobs:
     name: Package catalog
     needs: validate
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install catalog build dependency
+        run: python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
+
+      - name: Fetch pinned catalog browser assets
+        run: python3 scripts/fetch_catalog_assets.py
+
+      - name: Build generated catalog
+        run: python3 scripts/build_catalog.py
+
       - name: Upload pull request preview
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: example-catalog-preview
-          path: site
+          path: _site
           if-no-files-found: error
           retention-days: 14
 
@@ -77,13 +139,14 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: site
+          path: _site
 
   deploy:
     name: Deploy catalog
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     concurrency:
       group: github-pages
       cancel-in-progress: false

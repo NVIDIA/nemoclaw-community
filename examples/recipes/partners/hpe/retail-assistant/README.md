@@ -1,4 +1,12 @@
-# NemoClaw Retail Demo
+# Retail Assistant
+
+| Catalog field | Value |
+| --- | --- |
+| Description | Helps store employees check inventory and sales or request transfers and reorders through role-aware Telegram conversations scoped to their assigned store. |
+| Industry | 🛍️ Retail/Consumer Packaged Goods |
+| Requirements | Telegram bot · tool-calling OpenAI-compatible LLM · Docker Compose or Kubernetes + Helm · demo identity mapping |
+| Contributor | HPE |
+
 This example was built by HPE AI & Data Technical consultants: Paula Serna and Sergio Donís; and is presented as-is. See credits for contact information.
 
 This NemoClaw demo provides an AI-powered retail management assistant that lets store employees interact with company data through natural conversation - no dashboards, no SQL, no training required. Users connect via Telegram and ask questions or trigger operations naturally: check inventory, request stock transfers, query sales trends.

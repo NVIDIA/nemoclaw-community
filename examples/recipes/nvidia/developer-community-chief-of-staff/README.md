@@ -1,6 +1,12 @@
-![NVIDIA](assets/nvidia_header.png)
+# Developer Community Chief of Staff
 
-# Developer Community Chief of Staff: Hermes + Outlook
+| Catalog field | Value |
+| --- | --- |
+| Description | Helps developer community leaders align priorities with demand by turning available GitHub, GitLab, forum, Slack, email, and web signals into evidence-grounded briefs, gaps, and follow-up recommendations. |
+| Industry | ✨ Other |
+| Requirements | Single Linux host · Docker · OpenShell · inference provider API key · Slack or Outlook |
+
+![NVIDIA](assets/nvidia_header.png)
 
 A personal Hermes agent that surfaces what the developer community is working
 on, struggling with, asking about, and flagging as gaps — and compares it
@@ -61,7 +67,6 @@ Hermes Python runtime. The disabled configuration attaches neither the Tavily
 provider nor its network policy.
 
 ```mermaid
-%%{init: {'theme': 'default', 'flowchart': {'nodeSpacing': 50, 'rankSpacing': 100, 'curve': 'basis', 'padding': 20}, 'themeVariables': {'fontSize': '13px'}}}%%
 flowchart LR
 
     nvidia["Internal\nLLM Inference Provider"]

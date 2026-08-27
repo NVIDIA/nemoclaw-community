@@ -19,8 +19,12 @@ Recipes and demos show how a model, harness, and OpenShell come together. The ca
 
 Examples are organized as reusable NVIDIA and partner recipes, community
 recipes, NVIDIA field demos, environment launchables, and standalone developer
-tools. Browse the [source example catalog](examples/README.md) to choose an
-example.
+tools. Search the [web catalog](https://nvidia.github.io/nemoclaw-community/)
+by example type or industry, browse the
+[source example catalog](examples/README.md), or consume the
+[machine-readable catalog](https://nvidia.github.io/nemoclaw-community/catalog.json).
+See the [catalog architecture](docs/catalog-architecture.md) for its metadata,
+generation, URL filter, and JSON contracts.
 
 Each example has its own prerequisites, credentials, setup, and limitations.
 Review the example README before setup.

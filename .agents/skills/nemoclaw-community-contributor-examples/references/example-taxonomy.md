@@ -11,7 +11,8 @@ This is the canonical placement and naming policy for content under
 - Classify first by artifact type: recipe, demo, launchable, or tool.
 - For recipes, classify second by contributor provenance.
 - Encode stable navigation in paths. Keep mutable attributes such as maturity,
-  supported versions, integrations, and deployment status in documentation.
+  supported versions, integrations, deployment status, industry, and program
+  collections in documentation and catalog metadata.
 - Use directory placement for discovery, not as a support-level claim.
 - Keep each example independently deployable.
 
@@ -53,6 +54,23 @@ Using an NVIDIA model, GPU, SDK, or service does not by itself make a recipe an
 NVIDIA recipe. Determine provenance from explicit README attribution or
 repository history.
 
+## Discovery Metadata
+
+Directory placement answers what an artifact is and, for a recipe, where its
+contribution came from. It does not encode every way a reader may discover the
+example.
+
+Record the one primary industry and any accepted cross-cutting collection in
+the standardized catalog block at the top of the example's root `README.md`.
+Use the exact emoji-and-title values documented in
+[`CONTRIBUTING.md`](../../../../CONTRIBUTING.md#catalog-metadata). Industry does
+not change kind, provenance, support, or maturity.
+
+`hackathon` is a collection, not an artifact kind or provenance. A hackathon
+entry that is a reusable workflow remains a recipe under its NVIDIA, partner,
+or community provenance path. Do not create a `hackathon` path or use the
+collection to erase contributor attribution.
+
 ## Naming
 
 - Use lowercase kebab-case.
@@ -68,18 +86,11 @@ Prefer `developer-community-chief-of-staff` over
 `personal-community-sentiment-triage`: the former describes the workflow's
 coordination and intelligence outcome rather than one analysis technique.
 
-## Current Catalog Mapping
+## Current Catalog
 
-| Example | Canonical path |
-| --- | --- |
-| Developer Community Chief of Staff | `examples/recipes/nvidia/developer-community-chief-of-staff/` |
-| Payment Operations Hermes Assistant | `examples/recipes/nvidia/payment-ops-hermes/` |
-| HPE Retail Assistant | `examples/recipes/partners/hpe/retail-assistant/` |
-| Tavily Watchtower | `examples/recipes/partners/tavily/watchtower/` |
-| DGX Station Blender and Omniverse | `examples/demos/field/blender-omniverse-dgx-station/` |
-| Hermes Brev Launchable | `examples/launchables/brev/hermes/` |
-| Agent Memory Benchmark | `examples/tools/agent-memory-benchmark/` |
-| Harness Engineering Playground | `examples/tools/harness-engineering-playground/` |
+Use the generated [`examples/README.md`](../../../../examples/README.md) for
+the current example-to-path mapping. Do not duplicate that inventory in policy
+documentation; each example's root README is its structured source of truth.
 
 ## Public Repository Boundary
 

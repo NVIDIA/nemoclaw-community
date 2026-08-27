@@ -18,7 +18,13 @@ license: Apache-2.0
 evidence_level: local/static
 ---
 
-# 🧠 mnemo — Agent Memory Benchmark
+# Agent Memory Benchmark
+
+| Catalog field | Value |
+| --- | --- |
+| Description | Measures the memory an agent builds from synthetic email and chat by asking 186 questions on one corpus and 96 on another, then reports accuracy by question type separately from ingest and answer token costs. |
+| Industry | ✨ Other |
+| Requirements | Python 3.9+ · pytest for the offline check · endpoint and adapter required only for live scoring |
 
 **mnemo measures the memory a system builds from a corpus: what it can answer
 afterwards, and what building it cost.** Give it six weeks of one person's email
@@ -54,7 +60,7 @@ system worth using tells you the current answer, not the one it learned first.*
 
 ## 👀 What A Run Looks Like
 
-![Terminal session: the offline self-test scoring exactly 1.0 on every question type, followed by the test suite passing](docs/assets/offline-self-test.svg)
+![Terminal session: the offline self-test scoring exactly 1.0 on every question type, followed by the test suite passing](docs/assets/offline-self-test.png)
 
 The whole pipeline running with no model and no network: the oracle adapter
 answers a six-document fixture, scores exactly `1.0` on every question type, and

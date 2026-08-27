@@ -5,11 +5,47 @@
 
 # Catalog Deployment
 
-The [Pages workflow](../.github/workflows/pages.yml) validates the static catalog
-and local links when a watched catalog path changes. Matching pull requests
-attach an `example-catalog-preview` artifact and do not deploy. A matching push
-to `main`, or a manual run from `main`, packages `site/` and deploys it with the
-`github-pages` environment.
+The [Pages workflow](../.github/workflows/pages.yml) exposes a separate check
+for the standardized metadata block in every example README, then validates
+generated Markdown, the static site, local resources, and dependency-free
+interaction tests. It builds `_site/` from the discovered root READMEs and the
+sources under `site/`.
+
+See [Example Catalog Architecture](catalog-architecture.md) for the metadata,
+generation, README detail-page, URL filter, and public JSON contracts.
+
+Matching pull requests attach the generated `_site/` directory as an
+`example-catalog-preview` artifact and do not deploy. A matching push to
+`main`, or a manual run from `main`, uploads that generated directory and
+deploys it with the `github-pages` environment.
+
+## Build Locally
+
+After changing an example's opening catalog block, validate its format,
+regenerate the committed Markdown catalog, and build the site:
+
+```bash
+python3 scripts/build_catalog.py --validate-metadata
+python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
+python3 scripts/fetch_catalog_assets.py
+python3 scripts/build_catalog.py --write
+```
+
+Validate without changing files and rebuild the ignored `_site/` directory:
+
+```bash
+python3 scripts/build_catalog.py --check
+python3 scripts/build_catalog.py
+```
+
+Serve the same directory that Pages receives:
+
+```bash
+python3 -m http.server --directory _site 8000
+```
+
+Open `http://localhost:8000/`. Do not edit `_site/` directly; it is disposable
+build output.
 
 ## Enable GitHub Pages
 
@@ -30,7 +66,12 @@ because Pages was disabled, rerun that workflow from `main`.
 
 ## Verify The Deployment
 
-After deployment, verify the HTTPS page, the stylesheet and logo under the
-`/nemoclaw-community/` project path, the category links, and the example README
-links. Then set the repository website field to
+After deployment, verify the HTTPS page, the stylesheet, script, logo, and
+`catalog.json` under the `/nemoclaw-community/` project path. Exercise text
+search, both browse views, at least one category and industry filter, reset,
+browser Back, a copied filtered URL, category fragments, and representative
+compiled README detail pages, including local images and source links. Verify
+at least one Mermaid detail page renders its diagrams without remote requests,
+retains expandable source, and shows source when JavaScript is disabled. Then
+set the repository website field to
 `https://nvidia.github.io/nemoclaw-community/`.

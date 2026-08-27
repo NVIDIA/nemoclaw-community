@@ -3,7 +3,13 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-# NemoClaw Kubernetes GPU autoscaling
+# Kubernetes GPU Autoscaling
+
+| Catalog field | Value |
+| --- | --- |
+| Description | Helps Kubernetes operators match GPU inference capacity to demand by pairing a CPU-only OpenShell sandbox with Ollama replicas that scale on utilization or latency and return to one after load. |
+| Industry | ☁️ Cloud Services |
+| Requirements | Kubernetes 1.25+ · Helm 3 · NVIDIA GPU Operator/DCGM · Metrics Server · Docker Buildx + registry · OpenShell + Agent Sandbox CRDs pinned in versions.env · OIDC or acknowledged isolated-eval exception · experimental |
 
 This experimental community recipe demonstrates a cost-efficient architecture that runs a single OpenClaw agent securely inside a CPU-only OpenShell sandbox while independently autoscaling the GPU-backed Ollama model for inference. Because GPU inference is the primary compute and cost bottleneck, Kubernetes HPA dynamically adjusts Ollama capacity from one to multiple replicas as demand changes—maintaining responsiveness during traffic spikes while releasing idle GPU resources when demand falls.
 

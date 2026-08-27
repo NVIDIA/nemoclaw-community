@@ -22,6 +22,7 @@ COMMENT_STYLES: dict[str, str] = {
     ".c": "//",
     ".h": "//",
     ".js": "//",
+    ".mjs": "//",
     ".py": "#",
     ".sh": "#",
     ".ts": "//",
@@ -31,8 +32,10 @@ COMMENT_STYLES: dict[str, str] = {
 }
 
 EXCLUDE_DIRS: set[str] = {
+    ".cache",
     ".git",
     ".planning",
+    "_site",
     ".venv",
     "__pycache__",
 }
