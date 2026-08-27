@@ -15,19 +15,15 @@ license: Apache-2.0
 
 # 📈 Reference Results
 
-![Corpus](https://img.shields.io/badge/corpus-A%20only-yellow)
-![Base models](https://img.shields.io/badge/base%20models-1%20of%202%20asked%20for-yellow)
-![Reproducible](https://img.shields.io/badge/reproducible%20as--is-no-red)
-![Cost comparison](https://img.shields.io/badge/cost%20comparison-unsupported-red)
-
 One pair of runs on **corpus A only**, both on the same base model, both graded
 by the grader in this repository. They are here so a reader can see what the
 benchmark produces and check a number against the verdicts that produced it —
 **not as a ranking, and not as a claim about either architecture in general.**
 
-> ⚠️ Every badge above is a limitation, and each one is explained in
-> [What These Numbers Are Not](#-what-these-numbers-are-not). Read that section
-> before quoting anything from the tables.
+> ⚠️ **Four limits govern everything below:** corpus A only, one base model, not
+> reproducible as-is, and cost that these artifacts cannot compare. Each is
+> explained in [What These Numbers Are Not](#-what-these-numbers-are-not) and in
+> [Cost](#-cost). Read those before quoting anything from the tables.
 
 ---
 

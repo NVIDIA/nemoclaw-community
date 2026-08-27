@@ -18,11 +18,6 @@ license: Apache-2.0
 
 # 💼 Corpus A — software platform engineering
 
-![Documents](https://img.shields.io/badge/documents-425-blue)
-![Questions](https://img.shields.io/badge/questions-186-blue)
-![Content](https://img.shields.io/badge/content-fully%20synthetic-brightgreen)
-![Role](https://img.shields.io/badge/role-the%20default%20corpus-orange)
-
 Six weeks of one person's inbox and team chat at a fictional software platform
 company: an ingest pipeline being rebuilt, a launch date that moves, a hire, a
 cost figure that drops, and the ordinary traffic around all of it. **This is the

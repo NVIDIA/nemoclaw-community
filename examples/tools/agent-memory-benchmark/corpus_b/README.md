@@ -16,11 +16,6 @@ license: Apache-2.0
 
 # 🏗️ Corpus B — construction program management
 
-![Documents](https://img.shields.io/badge/documents-173-blue)
-![Questions](https://img.shields.io/badge/questions-96-blue)
-![Content](https://img.shields.io/badge/content-fully%20synthetic-brightgreen)
-![Purpose](https://img.shields.io/badge/purpose-cross--check%20a%20result-orange)
-
 A second corpus, in a domain deliberately far from corpus A's software
 engineering, so that a result on one can be checked against the other. Dana
 Okafor runs three building sites across permits, inspections, change orders,

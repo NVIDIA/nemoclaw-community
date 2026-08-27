@@ -30,7 +30,6 @@ REAL_INFRASTRUCTURE = {
     "api.openai.com",        # the proxy's documented default upstream
     "api.anthropic.com",     # the other base URL the proxy rewrites
     "www.w3.org",            # the SVG namespace in docs/assets
-    "img.shields.io",        # the README badges
     "127.0.0.1",             # the accounting proxy's loopback bind address
     "localhost",
 }

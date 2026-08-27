@@ -20,12 +20,6 @@ evidence_level: local/static
 
 # 🧠 mnemo — Agent Memory Benchmark
 
-![Python](https://img.shields.io/badge/python-3.9%2B-blue)
-![License](https://img.shields.io/badge/license-Apache--2.0-green)
-![Runtime deps](https://img.shields.io/badge/runtime%20deps-none-brightgreen)
-![Grading](https://img.shields.io/badge/grading-deterministic%20%E2%80%94%20no%20judge%20model-orange)
-![Offline self-test](https://img.shields.io/badge/offline%20self--test-included-blueviolet)
-
 **mnemo measures the memory a system builds from a corpus: what it can answer
 afterwards, and what building it cost.** Give it six weeks of one person's email
 and chat, let it build whatever memory it likes, then ask 186 questions and check
