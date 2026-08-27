@@ -35,32 +35,87 @@
 
     <main>
       <section class="hero" aria-labelledby="hero-title">
-        <div class="shell hero-grid">
-          <div class="hero-copy">
-            <p class="eyebrow">Example catalog</p>
-            <h1 id="hero-title">Find a starting point for your next agent.</h1>
-            <p class="hero-summary">
-              Search {{EXAMPLE_COUNT}} NVIDIA, partner, and community examples by
-              catalog type or by one of {{INDUSTRY_COUNT}} industries.
-            </p>
-            <p class="hero-detail">
-              {{REPRESENTED_INDUSTRY_COUNT}} industries are represented today. The catalog
-              grows automatically from structured repository metadata.
-            </p>
-
-            <nav class="hero-actions" aria-label="Catalog actions">
-              <a class="button button-primary" href="#catalog">Search examples <span aria-hidden="true">↓</span></a>
-              <a
-                class="button button-secondary"
-                href="https://github.com/NVIDIA/nemoclaw-community/blob/main/CONTRIBUTING.md#add-a-new-example"
-              >
-                Contribute an example
-              </a>
-            </nav>
+        <div class="shell hero-layout">
+          <h1 id="hero-title">Find a starting point for your next agent.</h1>
+          <div class="hero-support">
+            <div class="hero-copy">
+              <p class="hero-summary">
+                Explore reusable recipes, field demos, launchables, and developer
+                tools—then narrow the catalog by source, format, or industry.
+              </p>
+              <nav class="hero-actions" aria-label="Catalog actions">
+                <a class="button button-primary" href="#catalog">Search examples <span aria-hidden="true">↓</span></a>
+                <a
+                  class="button button-secondary"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/CONTRIBUTING.md#add-a-new-example"
+                >
+                  Contribute an example
+                </a>
+              </nav>
+            </div>
+            <dl class="hero-stats" aria-label="Catalog coverage">
+              <div><dt>{{EXAMPLE_COUNT}}</dt><dd>Examples</dd></div>
+              <div><dt>{{CATEGORY_COUNT}}</dt><dd>Catalog types</dd></div>
+              <div><dt>{{REPRESENTED_INDUSTRY_COUNT}}</dt><dd>Industries represented</dd></div>
+            </dl>
           </div>
+        </div>
+      </section>
 
-          <nav class="category-nav taxonomy-grid" aria-label="Example categories">
+      <section class="discovery" aria-labelledby="browse-title">
+        <div class="shell discovery-layout">
+          <header class="discovery-header">
+            <div>
+              <p class="eyebrow">Explore the catalog</p>
+              <h2 id="browse-title">Browse by type or industry</h2>
+              <p>
+                Type explains what an example is and where it came from. Industry
+                describes the workflow it serves.
+              </p>
+            </div>
+
+            <fieldset class="browse-mode" id="catalog-view-controls" hidden>
+              <legend class="sr-only">Browse examples by</legend>
+              <div class="browse-mode-options">
+                <label class="browse-mode-option" for="catalog-view-category">
+                  <input
+                    id="catalog-view-category"
+                    type="radio"
+                    name="catalog-view"
+                    value="category"
+                    aria-controls="browse-category-panel catalog-results"
+                    checked
+                  >
+                  <span><strong>Type &amp; collection</strong><small>Source and format</small></span>
+                </label>
+                <label class="browse-mode-option" for="catalog-view-industry">
+                  <input
+                    id="catalog-view-industry"
+                    type="radio"
+                    name="catalog-view"
+                    value="industry"
+                    aria-controls="browse-industry-panel catalog-results"
+                  >
+                  <span><strong>Industry</strong><small>{{INDUSTRY_COUNT}} controlled values</small></span>
+                </label>
+              </div>
+            </fieldset>
+          </header>
+
+          <nav
+            class="browse-grid browse-grid-categories"
+            id="browse-category-panel"
+            aria-label="Browse by type or collection"
+          >
 {{CATEGORY_NAV}}
+          </nav>
+          <nav
+            class="browse-grid browse-grid-industries"
+            id="browse-industry-panel"
+            aria-label="Browse by industry"
+            hidden
+          >
+{{INDUSTRY_NAV}}
           </nav>
         </div>
       </section>
@@ -68,11 +123,11 @@
       <section class="catalog" id="catalog" tabindex="-1" aria-labelledby="catalog-title">
         <div class="shell catalog-intro">
           <div>
-            <p class="eyebrow">Browse the repository</p>
-            <h2 id="catalog-title">Search the example catalog</h2>
+            <p class="eyebrow">Search the repository</p>
+            <h2 id="catalog-title">Find an example</h2>
             <p>
-              Search titles, descriptions, fit, contributor, category, and industry.
-              Category remains the repository taxonomy; industry is an independent view.
+              Search titles, descriptions, requirements, contributors, types, and
+              industries.
             </p>
           </div>
           <a class="data-link" href="catalog.json">Use the catalog JSON <span aria-hidden="true">→</span></a>
@@ -96,43 +151,22 @@
             >
           </div>
 
-          <fieldset class="view-control">
-            <legend>Filter by</legend>
-            <div class="view-options">
-              <label class="view-option" for="catalog-view-category">
-                <input
-                  id="catalog-view-category"
-                  type="radio"
-                  name="catalog-view"
-                  value="category"
-                  checked
-                >
-                <span>Type / collection</span>
-              </label>
-              <label class="view-option" for="catalog-view-industry">
-                <input
-                  id="catalog-view-industry"
-                  type="radio"
-                  name="catalog-view"
-                  value="industry"
-                >
-                <span>Industry</span>
-              </label>
-            </div>
-          </fieldset>
-
           <div class="filter-control" data-filter-for="category">
-            <label for="catalog-category">Type or collection</label>
-            <select id="catalog-category">
+            <label for="catalog-category">Source, format, or collection</label>
+            <div class="select-shell">
+              <select id="catalog-category">
 {{CATEGORY_OPTIONS}}
-            </select>
+              </select>
+            </div>
           </div>
 
           <div class="filter-control" data-filter-for="industry" hidden>
             <label for="catalog-industry">Industry</label>
-            <select id="catalog-industry" disabled>
+            <div class="select-shell">
+              <select id="catalog-industry" disabled>
 {{INDUSTRY_OPTIONS}}
-            </select>
+              </select>
+            </div>
           </div>
 
           <div class="control-summary">

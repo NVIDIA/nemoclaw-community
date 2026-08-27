@@ -32,6 +32,7 @@ COMMENT_STYLES: dict[str, str] = {
 }
 
 EXCLUDE_DIRS: set[str] = {
+    ".cache",
     ".git",
     ".planning",
     "_site",

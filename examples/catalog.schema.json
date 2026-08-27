@@ -9,7 +9,7 @@
       "type": "string"
     },
     "schema_version": {
-      "const": 1
+      "const": 2
     },
     "examples": {
       "type": "array",
@@ -27,7 +27,7 @@
         "title",
         "description",
         "industry",
-        "fit",
+        "requirements",
         "collections"
       ],
       "properties": {
@@ -45,30 +45,30 @@
         },
         "industry": {
           "enum": [
-            "Academia/education",
+            "Academia/Education",
             "AEC",
             "Aerospace",
             "Agriculture",
-            "Automotive/transportation",
-            "Cloud services",
-            "Consumer internet",
+            "Automotive/Transportation",
+            "Cloud Services",
+            "Consumer Internet",
             "Energy",
-            "Financial services",
+            "Financial Services",
             "Gaming",
-            "Hardware/semiconductor",
-            "Health and life sciences",
-            "HPC/scientific computing",
+            "Hardware/Semiconductor",
+            "Health and Life Sciences",
+            "HPC/Scientific Computing",
             "Manufacturing",
-            "Media & entertainment",
-            "Public sector",
-            "Restaurant/quick service",
-            "Retail/consumer packaged goods",
-            "Smart cities/spaces",
+            "Media & Entertainment",
+            "Public Sector",
+            "Restaurant/Quick Service",
+            "Retail/Consumer Packaged Goods",
+            "Smart Cities/Spaces",
             "Telecommunications",
             "Other"
           ]
         },
-        "fit": {
+        "requirements": {
           "type": "string",
           "minLength": 1
         },

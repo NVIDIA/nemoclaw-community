@@ -61,7 +61,6 @@ Hermes Python runtime. The disabled configuration attaches neither the Tavily
 provider nor its network policy.
 
 ```mermaid
-%%{init: {'theme': 'default', 'flowchart': {'nodeSpacing': 50, 'rankSpacing': 100, 'curve': 'basis', 'padding': 20}, 'themeVariables': {'fontSize': '13px'}}}%%
 flowchart LR
 
     nvidia["Internal\nLLM Inference Provider"]

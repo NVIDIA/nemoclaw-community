@@ -14,12 +14,20 @@ on:
       - "docs/catalog-architecture.md"
       - "docs/catalog-deployment.md"
       - "SUPPORT.md"
+      - "THIRD-PARTY-NOTICES"
       - ".agents/skills/nemoclaw-community-contributor-examples/references/example-taxonomy.md"
       - "examples/README.md"
       - "examples/catalog.json"
       - "examples/catalog.schema.json"
       - "examples/**/README.md"
+      - "examples/**/*.gif"
+      - "examples/**/*.jpeg"
+      - "examples/**/*.jpg"
+      - "examples/**/*.png"
+      - "examples/**/*.webp"
       - "scripts/build_catalog.py"
+      - "scripts/fetch_catalog_assets.py"
+      - "scripts/catalog-requirements.txt"
       - "scripts/tests/test_build_catalog.py"
       - "scripts/tests/catalog.test.mjs"
       - "site/**"
@@ -33,12 +41,20 @@ on:
       - "docs/catalog-architecture.md"
       - "docs/catalog-deployment.md"
       - "SUPPORT.md"
+      - "THIRD-PARTY-NOTICES"
       - ".agents/skills/nemoclaw-community-contributor-examples/references/example-taxonomy.md"
       - "examples/README.md"
       - "examples/catalog.json"
       - "examples/catalog.schema.json"
       - "examples/**/README.md"
+      - "examples/**/*.gif"
+      - "examples/**/*.jpeg"
+      - "examples/**/*.jpg"
+      - "examples/**/*.png"
+      - "examples/**/*.webp"
       - "scripts/build_catalog.py"
+      - "scripts/fetch_catalog_assets.py"
+      - "scripts/catalog-requirements.txt"
       - "scripts/tests/test_build_catalog.py"
       - "scripts/tests/catalog.test.mjs"
       - "site/**"
@@ -56,6 +72,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Install catalog build dependency
+        run: python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
+
+      - name: Fetch pinned catalog browser assets
+        run: python3 scripts/fetch_catalog_assets.py
 
       - name: Check catalog metadata and generated sources
         run: python3 scripts/build_catalog.py --check
@@ -78,6 +100,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Install catalog build dependency
+        run: python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
+
+      - name: Fetch pinned catalog browser assets
+        run: python3 scripts/fetch_catalog_assets.py
 
       - name: Build generated catalog
         run: python3 scripts/build_catalog.py

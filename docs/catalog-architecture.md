@@ -7,17 +7,21 @@
 
 The NemoClaw Community catalog is a generated static site hosted by GitHub
 Pages. It has no application server, database, remote JavaScript, or package
-installation step.
+runtime. One pinned, pure-Python Markdown package compiles example READMEs into
+static detail pages. A pinned, hash-verified Mermaid Tiny browser asset is
+downloaded at build time and served locally only on pages that contain diagrams.
 
 ## Source And Outputs
 
 ```text
 examples/catalog.json ─┬─> examples/README.md
-                       ├─> _site/index.html
-site/index.template.html│
-site/styles.css ────────┼─> _site/styles.css
-site/catalog.mjs ───────┼─> _site/catalog.mjs
-                       └─> _site/catalog.json
+example READMEs ───────┼─> _site/examples/<canonical-path>/index.html
+site/*.template.html ──┼─> _site/index.html
+site/styles.css ───────┼─> _site/styles.css
+site/catalog.mjs ──────┼─> _site/catalog.mjs
+site/diagrams.mjs ─────┼─> _site/diagrams.mjs
+Mermaid Tiny cache ────┼─> _site/assets/vendor/mermaid.tiny.js
+                      └─> _site/catalog.json
 ```
 
 [`examples/catalog.json`](../examples/catalog.json) is the canonical metadata
@@ -30,6 +34,32 @@ The generated HTML contains every example card. The local JavaScript module
 filters those cards in the browser, so the full category-organized catalog
 remains readable when JavaScript is unavailable. GitHub Pages only serves the
 generated files.
+
+Each card links to a static detail page. The build extracts the source README
+title, compiles headings, tables, lists, links, code, and images, and renders
+the result inside the shared site theme. Detail pages without Mermaid remain
+script-free. Pages with supported Mermaid fences load the pinned local Tiny
+runtime and progressively replace each fence with a themed diagram. The
+original source stays in an expandable disclosure and is the no-JavaScript or
+render-error fallback.
+
+The README compiler sanitizes its HTML output. Same-page heading fragments stay
+local, links to another catalog README use its local detail route, and other
+repository files or directories link to GitHub. Only referenced local images
+in GIF, JPEG, PNG, or WebP format are copied into `_site/`, with type, size,
+path, and symlink checks. SVG images are rejected because Pages would otherwise
+serve contributed active documents from the site origin. Remote README images
+become outbound links instead of third-party page resources.
+
+Mermaid publication uses a deliberately narrow subset: flowcharts, graphs,
+sequence diagrams, and state diagrams. The build caps source size and diagram
+count and rejects configuration, click handlers, active HTML, image/icon
+shapes, CSS imports, and CSS resource URLs. Rendering uses Mermaid's
+sandbox security level. The catalog then validates the generated SVG,
+places it in a permissionless `srcdoc` iframe, and applies parent and iframe
+Content Security Policies that block network and active content. The runtime
+bundle is version pinned, SHA-256 verified before publication, and never loaded
+from a CDN by a reader's browser.
 
 ## Independent Discovery Dimensions
 
@@ -55,7 +85,7 @@ bookmarked, or created by another program:
 
 | Parameter | Values | Behavior |
 | --- | --- | --- |
-| `q` | Plain text | Case-insensitive whitespace-token AND search across title, description, fit, contributor, category, and industry. |
+| `q` | Plain text | Case-insensitive whitespace-token AND search across title, description, requirements, contributor, category, and industry. |
 | `view` | `category` or `industry` | Selects which discovery dimension is active. The default is `category`. |
 | `category` | `all`, `nvidia-recipes`, `partner-recipes`, `community-recipes`, `hackathon-recipes`, `nvidia-field-demos`, `launchables`, or `developer-tools` | Applies in category view. `hackathon-recipes` selects recipes carrying the `hackathon` collection. |
 | `industry` | `all` or an industry ID published in `catalog.json` | Applies in industry view. |
@@ -81,8 +111,8 @@ publishes a deterministic JSON index containing:
 - every allowed industry ID, label, and current count;
 - collection IDs and counts;
 - each example's title, description, category, kind, recipe provenance,
-  industry, contributor or environment when applicable, collections, fit,
-  source path, and guide URL.
+  industry, contributor or environment when applicable, collections,
+  requirements, source path, source guide URL, and local detail URL.
 
 This is a static index rather than a server-side query API. A program can fetch
 it once and apply its own filters, or construct a browser URL using the query
@@ -94,10 +124,12 @@ After adding or changing a manifest entry, regenerate the committed Markdown
 catalog and local site:
 
 ```bash
+python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
+python3 scripts/fetch_catalog_assets.py
 python3 scripts/build_catalog.py --write
 ```
 
-Run the same dependency-free checks used by the Pages workflow:
+Run the same checks used by the Pages workflow:
 
 ```bash
 python3 scripts/build_catalog.py --check

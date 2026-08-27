@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import assert from "node:assert/strict";
+import { Buffer } from "node:buffer";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
@@ -16,10 +17,21 @@ import {
   serializeCatalogURLState,
   tokenizeQuery,
 } from "../../site/catalog.mjs";
+import { decodeSandboxSource } from "../../site/diagrams.mjs";
 
 const catalogSchema = JSON.parse(
   readFileSync(new URL("../../examples/catalog.schema.json", import.meta.url), "utf8"),
 );
+
+test("Mermaid sandbox documents decode Unicode as UTF-8", () => {
+  const source = "♿ axe-core · 🌐 browser → 🤖 agent — 1920×1080";
+  const payload = Buffer.from(source, "utf8").toString("base64");
+
+  assert.equal(
+    decodeSandboxSource(`data:text/html;charset=UTF-8;base64,${payload}`),
+    source,
+  );
+});
 
 test("search normalization collapses whitespace and ignores case and accents", () => {
   assert.equal(normalizeSearchText("  GPU\n  Café  "), "gpu cafe");
@@ -216,8 +228,11 @@ function fakeCatalogDOM() {
     hidden: true,
     querySelectorAll: () => [categoryWrapper, industryWrapper],
   });
+  const categoryPanel = fakeControl({ hidden: false });
+  const industryPanel = fakeControl({ hidden: true });
   const elements = {
     "catalog-controls": controls,
+    "catalog-view-controls": fakeControl({ hidden: true }),
     "catalog-search": fakeControl(),
     "catalog-view-category": fakeControl(),
     "catalog-view-industry": fakeControl(),
@@ -234,6 +249,8 @@ function fakeCatalogDOM() {
         return [];
       },
     }),
+    "browse-category-panel": categoryPanel,
+    "browse-industry-panel": industryPanel,
     "nvidia-recipes": nvidiaGroup,
   };
   const location = {
@@ -281,6 +298,8 @@ test("an explicit view change clears a reconciled category fragment", () => {
   });
   assert.equal(fixture.windowObject.location.hash, "");
   assert.equal(fixture.elements["catalog-results"].dataset.view, "industry");
+  assert.equal(fixture.elements["browse-category-panel"].hidden, true);
+  assert.equal(fixture.elements["browse-industry-panel"].hidden, false);
   assert.equal(fixture.nvidiaCard.hidden, false);
   assert.equal(fixture.partnerCard.hidden, false);
 });

@@ -247,6 +247,8 @@ verification.
 For a catalog, example-metadata, or Pages change, also run:
 
 ```bash
+python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
+python3 scripts/fetch_catalog_assets.py
 python3 scripts/build_catalog.py --check
 python3 -m unittest discover -s scripts/tests -p 'test_build_catalog.py'
 node --test scripts/tests/catalog.test.mjs
@@ -308,8 +310,23 @@ Add the example to [`examples/catalog.json`](examples/catalog.json), then
 regenerate the human-readable catalog and local Pages build:
 
 ```bash
+python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
+python3 scripts/fetch_catalog_assets.py
 python3 scripts/build_catalog.py --write
 ```
+
+Generated detail pages can embed referenced local GIF, JPEG, PNG, and WebP
+images. Convert SVG screenshots or diagrams to one of those raster formats, or
+link to the SVG source on GitHub; the Pages build does not publish contributed
+SVGs as same-origin documents.
+
+Fenced Mermaid diagrams render on generated detail pages when their first line
+uses `flowchart`, `graph`, `sequenceDiagram`, or `stateDiagram-v2`. Keep each
+diagram under 10,000 characters and each README to at most 10 diagrams. The
+build rejects Mermaid configuration and click directives, active HTML,
+image/icon shapes, CSS imports, and CSS URL references. Do not load remote
+diagram resources. Readers can always expand the retained source, and the
+source remains visible when browser rendering is unavailable.
 
 ## Catalog Metadata
 
@@ -329,7 +346,7 @@ Add one object to the manifest's `examples` array:
   "title": "Recognizable Example Name",
   "description": "Performs a concrete job and produces an observable result.",
   "industry": "Other",
-  "fit": "Linux · Docker · required service or boundary",
+  "requirements": "Linux · Docker · required service or boundary",
   "collections": []
 }
 ```
@@ -348,8 +365,9 @@ Follow these metadata rules:
 - `industry` is exactly one primary industry from the controlled list below.
   Choose the industry of the workflow, not the contributor, model, hardware,
   or a sample dataset. Use `Other` for horizontal workflows.
-- `fit` is a short, factual summary of the main environment, dependency, and
-  material operating boundary.
+- `requirements` is a short, factual summary of the main environment,
+  dependency, and material operating boundary. It appears as “Requirements &
+  limits” in catalog cards and detail pages.
 - `contributor` is required for partner recipes. `environment` is required for
   launchables. Omit either field when it does not apply.
 - `collections` is empty unless maintainers have accepted the example into a
@@ -359,25 +377,25 @@ Follow these metadata rules:
 
 Choose one of these exact industry values:
 
-- `Academia/education`
+- `Academia/Education`
 - `AEC`
 - `Aerospace`
 - `Agriculture`
-- `Automotive/transportation`
-- `Cloud services`
-- `Consumer internet`
+- `Automotive/Transportation`
+- `Cloud Services`
+- `Consumer Internet`
 - `Energy`
-- `Financial services`
+- `Financial Services`
 - `Gaming`
-- `Hardware/semiconductor`
-- `Health and life sciences`
-- `HPC/scientific computing`
+- `Hardware/Semiconductor`
+- `Health and Life Sciences`
+- `HPC/Scientific Computing`
 - `Manufacturing`
-- `Media & entertainment`
-- `Public sector`
-- `Restaurant/quick service`
-- `Retail/consumer packaged goods`
-- `Smart cities/spaces`
+- `Media & Entertainment`
+- `Public Sector`
+- `Restaurant/Quick Service`
+- `Retail/Consumer Packaged Goods`
+- `Smart Cities/Spaces`
 - `Telecommunications`
 - `Other`
 

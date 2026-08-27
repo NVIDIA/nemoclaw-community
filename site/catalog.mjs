@@ -218,6 +218,7 @@ export function initCatalog({
   }
 
   const controls = documentObject.getElementById("catalog-controls");
+  const viewControls = documentObject.getElementById("catalog-view-controls");
   const search = documentObject.getElementById("catalog-search");
   const categoryView = documentObject.getElementById("catalog-view-category");
   const industryView = documentObject.getElementById("catalog-view-industry");
@@ -227,9 +228,12 @@ export function initCatalog({
   const status = documentObject.getElementById("catalog-status");
   const empty = documentObject.getElementById("catalog-empty");
   const results = documentObject.getElementById("catalog-results");
+  const categoryPanel = documentObject.getElementById("browse-category-panel");
+  const industryPanel = documentObject.getElementById("browse-industry-panel");
 
   if (
     !controls
+    || !viewControls
     || !search
     || !categoryView
     || !industryView
@@ -239,6 +243,8 @@ export function initCatalog({
     || !status
     || !empty
     || !results
+    || !categoryPanel
+    || !industryPanel
   ) {
     return null;
   }
@@ -254,6 +260,8 @@ export function initCatalog({
     industry.value = state.industry;
     setViewControlState(categoryView, state.view === "category");
     setViewControlState(industryView, state.view === "industry");
+    categoryPanel.hidden = state.view !== "category";
+    industryPanel.hidden = state.view !== "industry";
 
     for (const wrapper of filterWrappers) {
       const active = wrapper.dataset.filterFor === state.view;
@@ -419,6 +427,7 @@ export function initCatalog({
   updateHistory("replace", true);
   controls.hidden = false;
   controls.dataset.catalogReady = "true";
+  viewControls.hidden = false;
 
   return {
     getState: () => ({ ...state }),

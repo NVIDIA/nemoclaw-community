@@ -12,20 +12,20 @@ run `python3 scripts/build_catalog.py --write` from the repository root.
 
 | Example | Industry | Description |
 | --- | --- | --- |
-| [Agentic AI Learning Path](recipes/nvidia/agentic-ai-learning-path/README.md) | Academia/education | Runs the seven-module Build an Agent workshop in an OpenShell sandbox with an AI tutor. |
+| [Agentic AI Learning Path](recipes/nvidia/agentic-ai-learning-path/README.md) | Academia/Education | Runs the seven-module Build an Agent workshop in an OpenShell sandbox with an AI tutor. |
 | [Developer Community Chief of Staff](recipes/nvidia/developer-community-chief-of-staff/README.md) | Other | Turns community signals into operating briefs and follow-up recommendations. |
-| [Kubernetes GPU Autoscaling](recipes/nvidia/kubernetes-gpu-autoscaling/README.md) | Cloud services | Runs NemoClaw on Kubernetes with GPU-backed Ollama autoscaling. |
+| [Kubernetes GPU Autoscaling](recipes/nvidia/kubernetes-gpu-autoscaling/README.md) | Cloud Services | Runs NemoClaw on Kubernetes with GPU-backed Ollama autoscaling. |
 | [Memory-Driven Chief of Staff](recipes/nvidia/memory-driven-chief-of-staff/README.md) | Other | Maintains and re-ranks a revisable local record of email and Slack inputs without writing back. |
-| [NV Tech Assistant](recipes/nvidia/nv-tech-assistant/README.md) | Hardware/semiconductor | Answers NVIDIA technical questions with citations from allowlisted sources. |
-| [Payment Operations Hermes Assistant](recipes/nvidia/payment-ops-hermes/README.md) | Financial services | Demonstrates payment screening, evidence preparation, and a platform-enforced human release boundary. |
+| [NV Tech Assistant](recipes/nvidia/nv-tech-assistant/README.md) | Hardware/Semiconductor | Answers NVIDIA technical questions with citations from allowlisted sources. |
+| [Payment Operations Hermes Assistant](recipes/nvidia/payment-ops-hermes/README.md) | Financial Services | Demonstrates payment screening, evidence preparation, and a platform-enforced human release boundary. |
 | [PR Review Advisor](recipes/nvidia/pr-review-advisor/README.md) | Other | Reviews exact pull request heads with Hermes, produces attested artifacts, and leaves publication to a maintainer. |
 
 ## Partner Recipes
 
 | Contributor | Example | Industry | Description |
 | --- | --- | --- | --- |
-| BlueTier | [x402 Payment Gate](recipes/partners/bluetier/x402-payment-gate/README.md) | Financial services | Screens x402 payment intents through a host-side maker/checker gate before signing or settlement. |
-| HPE | [Retail Assistant](recipes/partners/hpe/retail-assistant/README.md) | Retail/consumer packaged goods | Provides role-aware retail operations through Telegram with Docker Compose or Helm deployment paths. |
+| BlueTier | [x402 Payment Gate](recipes/partners/bluetier/x402-payment-gate/README.md) | Financial Services | Screens x402 payment intents through a host-side maker/checker gate before signing or settlement. |
+| HPE | [Retail Assistant](recipes/partners/hpe/retail-assistant/README.md) | Retail/Consumer Packaged Goods | Provides role-aware retail operations through Telegram with Docker Compose or Helm deployment paths. |
 | Shrike Security | [Shrike Security Action Governance](recipes/partners/shrike/shrike-security/README.md) | Other | Applies Shrike decisions before agent tool calls run. |
 | Tavily | [Watchtower](recipes/partners/tavily/watchtower/README.md) | Other | Runs scheduled, cited web monitoring with deduplication and auditable outputs. |
 
@@ -33,20 +33,20 @@ run `python3 scripts/build_catalog.py --write` from the repository root.
 
 | Example | Industry | Description |
 | --- | --- | --- |
-| [Axe A11y Browser Auditor](recipes/community/axe-a11y-browser-auditor/README.md) | Consumer internet | Audits web pages for accessibility and captures screenshots, PDFs, and network traces. |
+| [Axe A11y Browser Auditor](recipes/community/axe-a11y-browser-auditor/README.md) | Consumer Internet | Audits web pages for accessibility and captures screenshots, PDFs, and network traces. |
 | [Deep Research Worker](recipes/community/deep-research-worker/README.md) | Other | Queues long-running research from a sandbox to a host-side DeepAgents worker. |
 
 ## NVIDIA Field Demos
 
 | Example | Industry | Description |
 | --- | --- | --- |
-| [DGX Station Blender and Omniverse](demos/field/blender-omniverse-dgx-station/README.md) | Media & entertainment | Controls Blender on DGX Station for OVRTX rendering and OVPhysX simulation. |
+| [DGX Station Blender and Omniverse](demos/field/blender-omniverse-dgx-station/README.md) | Media & Entertainment | Controls Blender on DGX Station for OVRTX rendering and OVPhysX simulation. |
 
 ## Launchables
 
 | Environment | Example | Industry | Description |
 | --- | --- | --- | --- |
-| Brev | [Hermes](launchables/brev/hermes/README.md) | Cloud services | Takes a fresh Brev CPU instance to a NemoClaw-managed Hermes sandbox through a notebook. |
+| Brev | [Hermes](launchables/brev/hermes/README.md) | Cloud Services | Takes a fresh Brev CPU instance to a NemoClaw-managed Hermes sandbox through a notebook. |
 
 ## Developer Tools
 

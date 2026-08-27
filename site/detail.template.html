@@ -1,0 +1,97 @@
+<!doctype html>
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="{{META_DESCRIPTION}}">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'self'; worker-src 'none'; base-uri 'none'; form-action 'none'">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <title>{{PAGE_TITLE}} | NemoClaw Community</title>
+    <link rel="stylesheet" href="{{STYLES_URL}}">
+  </head>
+  <body class="detail-page">
+    <a class="skip-link" href="#readme">Skip to example guide</a>
+
+    <header class="site-header">
+      <div class="shell masthead">
+        <div class="brand-lockup">
+          <a class="nvidia-brand" href="https://www.nvidia.com/" aria-label="NVIDIA home">
+            <img src="{{LOGO_URL}}" alt="NVIDIA" width="400" height="138">
+          </a>
+          <span class="brand-divider" aria-hidden="true"></span>
+          <a class="product-name product-link" href="{{CATALOG_URL}}">NemoClaw Community</a>
+        </div>
+        <a class="repository-link" href="{{SOURCE_URL}}">
+          View source
+          <span aria-hidden="true">↗</span>
+        </a>
+      </div>
+    </header>
+
+    <main>
+      <section class="detail-hero" aria-labelledby="detail-title">
+        <div class="shell detail-hero-grid">
+          <div class="detail-heading">
+            <a class="back-link" href="{{CATALOG_URL}}"><span aria-hidden="true">←</span> All examples</a>
+            <p class="provenance">{{DISPLAY_LABEL}}</p>
+            <h1 id="detail-title">{{PAGE_TITLE}}</h1>
+            <p class="detail-summary">{{DESCRIPTION}}</p>
+            <ul class="card-tags detail-tags" aria-label="Discovery fields">
+              <li class="tag">{{INDUSTRY}}</li>{{COLLECTION_TAGS}}
+            </ul>
+          </div>
+
+          <aside class="detail-facts" aria-labelledby="facts-title">
+            <h2 id="facts-title">At a glance</h2>
+            <dl>
+              <div><dt>Type</dt><dd>{{CATEGORY}}</dd></div>
+              <div><dt>Industry</dt><dd>{{INDUSTRY}}</dd></div>
+              {{ATTRIBUTION_FACT}}
+              <div><dt>Requirements &amp; limits</dt><dd>{{REQUIREMENTS}}</dd></div>
+            </dl>
+            <a class="button button-primary detail-source" href="{{SOURCE_URL}}">
+              View source on GitHub <span aria-hidden="true">↗</span>
+            </a>
+          </aside>
+        </div>
+      </section>
+
+      <section class="detail-content" aria-label="Example guide">
+        <div class="shell detail-content-layout">
+          <nav class="detail-toc detail-toc-desktop" aria-labelledby="toc-title">
+            <h2 id="toc-title">On this page</h2>
+            {{TABLE_OF_CONTENTS}}
+          </nav>
+          <details class="detail-toc detail-toc-mobile">
+            <summary>On this page</summary>
+            <nav aria-label="On this page">
+              {{TABLE_OF_CONTENTS}}
+            </nav>
+          </details>
+          <article class="readme-content" id="readme" tabindex="-1">
+{{README_HTML}}
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="shell footer-layout">
+        <p>
+          NemoClaw Community support is best-effort unless a specific NVIDIA product
+          agreement says otherwise.
+        </p>
+        <nav class="footer-links" aria-label="Repository policies and resources">
+          <a href="{{CATALOG_URL}}">Example catalog</a>
+          <a href="https://github.com/NVIDIA/nemoclaw-community/blob/main/SUPPORT.md">Support</a>
+          <a href="https://github.com/NVIDIA/nemoclaw-community/blob/main/SECURITY.md">Security</a>
+        </nav>
+      </div>
+    </footer>
+{{DIAGRAM_SCRIPTS}}
+  </body>
+</html>

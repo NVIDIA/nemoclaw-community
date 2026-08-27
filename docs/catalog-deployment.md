@@ -12,7 +12,7 @@ builds `_site/` from [`examples/catalog.json`](../examples/catalog.json) and
 the sources under `site/`.
 
 See [Example Catalog Architecture](catalog-architecture.md) for the metadata,
-generation, URL-filter, and public JSON contracts.
+generation, README-detail, URL-filter, and public JSON contracts.
 
 Matching pull requests attach the generated `_site/` directory as an
 `example-catalog-preview` artifact and do not deploy. A matching push to
@@ -25,6 +25,8 @@ After changing catalog metadata, regenerate the committed Markdown catalog and
 build the site:
 
 ```bash
+python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
+python3 scripts/fetch_catalog_assets.py
 python3 scripts/build_catalog.py --write
 ```
 
@@ -66,6 +68,9 @@ because Pages was disabled, rerun that workflow from `main`.
 After deployment, verify the HTTPS page, the stylesheet, script, logo, and
 `catalog.json` under the `/nemoclaw-community/` project path. Exercise text
 search, both browse views, at least one category and industry filter, reset,
-browser Back, a copied filtered URL, category fragments, and example README
-links. Then set the repository website field to
+browser Back, a copied filtered URL, category fragments, and representative
+compiled README detail pages, including local images and source links. Verify
+at least one Mermaid detail page renders its diagrams without remote requests,
+retains expandable source, and shows source when JavaScript is disabled. Then
+set the repository website field to
 `https://nvidia.github.io/nemoclaw-community/`.

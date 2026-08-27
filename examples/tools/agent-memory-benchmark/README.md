@@ -54,7 +54,7 @@ system worth using tells you the current answer, not the one it learned first.*
 
 ## 👀 What A Run Looks Like
 
-![Terminal session: the offline self-test scoring exactly 1.0 on every question type, followed by the test suite passing](docs/assets/offline-self-test.svg)
+![Terminal session: the offline self-test scoring exactly 1.0 on every question type, followed by the test suite passing](docs/assets/offline-self-test.png)
 
 The whole pipeline running with no model and no network: the oracle adapter
 answers a six-document fixture, scores exactly `1.0` on every question type, and

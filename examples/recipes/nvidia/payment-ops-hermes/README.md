@@ -32,7 +32,6 @@ replacing the fixtures and mock services with approved enterprise systems.
 ## Architecture
 
 ```mermaid
-%%{init: {'theme': 'default', 'flowchart': {'nodeSpacing': 40, 'rankSpacing': 70, 'curve': 'basis'}}}%%
 flowchart LR
     operator["Payment operator"]
     inference["OpenAI-compatible<br/>inference endpoint"]
