@@ -4,7 +4,7 @@
 name: agent-memory-benchmark-corpus-a
 display_name: Corpus A — software platform engineering
 parent: ../README.md
-location_note: kept outside corpus_a/corpus/ because adapters ingest every .md under the corpus root
+location_note: kept outside corpus_a/corpus/ because every file under the corpus root is hashed into the corpus fingerprint
 documents: 425
 emails: 200
 chat_documents: 225
@@ -33,7 +33,7 @@ result was produced on.**
 | Questions asked about it | 186, in [`questions/questions.jsonl`](questions/questions.jsonl) |
 
 > 🧪 Everyone and everything in it is fictional. See
-> [Provenance](#-provenance-and-what-was-checked).
+> [Provenance](#️-provenance-and-what-was-checked).
 
 ---
 
@@ -76,11 +76,14 @@ ingest token count will say so.
 
 ## 🗂️ Layout
 
-> 📌 This page sits at `corpus_a/README.md`, one level **above** the documents.
-> Adapters are handed `corpus_a/corpus/` and read **every** `.md` under it, so a
-> README placed in there would be ingested as document 426 — and a third-party
-> adapter cannot be assumed to skip it. Anything inside the corpus directory is
-> data. `corpus_b/` has the same shape for the same reason.
+> 📌 This page sits at `corpus_a/README.md`, one level **above** the documents,
+> because `bench.fingerprint.hash_tree` hashes **every file** under the corpus
+> root — all 428 of them, not only the 425 documents. A README added there
+> changes the corpus hash, and every published result stops being comparable to
+> what ships. The shipped adapters would not have ingested it (the runner hands
+> them `part_a` and `part_b`, and they skip a file with no `doc_id:`), but a
+> third-party adapter is handed a directory and cannot be assumed to do either.
+> `corpus_b/` has the same shape for the same reason.
 
 ```text
 corpus_a/
@@ -95,7 +98,7 @@ corpus_a/
 │   ├── manifest.jsonl           425 rows — doc_id, part, path, source, timestamp
 │   ├── counts.json              the counts this page and the root README quote
 │   └── CANARY.txt               a string that must not appear in any model output
-└── questions/                   kept out of corpus/, where adapters cannot read it
+└── questions/                   outside corpus/, so ingest never walks over it
     ├── questions.jsonl          the 186 questions
     ├── answers.jsonl            the answer key and its grading rules
     ├── factual_items.json       ┐
@@ -170,7 +173,7 @@ Naming it explicitly is equivalent, and is how you would point at a variant:
 ```bash
 python3 -m bench.runner \
     --adapter adapters/naive_rag \
-    --corpus corpus \
+    --corpus corpus_a/corpus \
     --questions corpus_a/questions/questions.jsonl \
     --gold corpus_a/questions/answers.jsonl
 ```

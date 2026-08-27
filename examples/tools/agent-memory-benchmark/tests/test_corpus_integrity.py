@@ -61,10 +61,14 @@ def test_corpus_is_split_across_both_halves():
 def test_the_corpus_directory_holds_only_corpus(corpus):
     """Anything inside a corpus directory is data an adapter will read.
 
-    The retrieval baselines walk the corpus root with `rglob("*.md")`, and a
-    third-party adapter cannot be assumed to skip anything either. A README
-    dropped in here became document 426 and changed the corpus fingerprint,
-    which is why corpus A's page lives in `docs/` instead.
+    `bench.fingerprint.hash_tree` hashes every file under the corpus root, not
+    only the documents, so a README dropped in here changes the corpus hash and
+    every published result stops describing what ships. That is what happened,
+    and it is why corpus A's page lives at `corpus_a/README.md`, one level up.
+    The shipped adapters would not have ingested it -- the runner hands them
+    `part_a` and `part_b`, and they skip a file with no `doc_id:` -- but a
+    third-party adapter is handed a directory and cannot be assumed to do
+    either.
     """
     allowed = {"manifest.jsonl", "counts.json", "CANARY.txt"}
     for path in sorted(corpus.iterdir()):

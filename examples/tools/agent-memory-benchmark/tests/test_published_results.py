@@ -102,6 +102,11 @@ def test_the_published_map_reproduces_the_transformed_answers(run: Path):
         "the published map must be the map, not a pointer to one"
     )
 
+    def _substitute(value: str, mapping: dict) -> str:
+        for old_text, new_text in mapping.items():
+            value = value.replace(old_text, new_text)
+        return value
+
     def rows(path: Path) -> list[dict]:
         return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
@@ -114,6 +119,12 @@ def test_the_published_map_reproduces_the_transformed_answers(run: Path):
             answer = answer.replace(old_text, new_text)
         if "answer" in row:
             out["answer"] = answer
+        # source_ids name things from the same namespace the corpus renamed, so
+        # the map has to reach them too. It did not, and 114 published rows kept
+        # a pre-rename path while the answer text beside it did not.
+        if row.get("source_ids"):
+            out["source_ids"] = [
+                _substitute(str(source), text_map) for source in row["source_ids"]]
         rebuilt.append(out)
 
     published = rows(run / "answers.jsonl")
