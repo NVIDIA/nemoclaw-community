@@ -88,7 +88,7 @@
 {"answer": "Section-level trimming was chosen (per-section basis using section headers in `prefix-stable`), not per-token.", "source_ids": ["E:2026-05-17T08-57-00__0e29129c", "E:2026-05-17T21-05-00__735ea58b"], "id": "fact-004"}
 {"answer": "May 29, 2026", "source_ids": ["E:2026-05-19T10-18-00__7a77c9c1"], "id": "fact-005"}
 {"answer": "O(|item_tokens|) — the select() method performs lookups proportional to the number of tokens in the item after the inverted index is built.", "source_ids": ["E:2026-05-18T14-22-00__87841ee4", "E:2026-05-19T09-30-00__2e5b9110"], "id": "fact-006"}
-{"answer": "MR !318 (merge request 318) at https://gitlab.example-co.com/platform-eng/atlas/-/merge_requests/318", "source_ids": ["S:D200ROH001_dm@2026-04-27"], "id": "fact-007"}
+{"answer": "MR !318 (merge request 318) at https://gitlab.examplecorp.example/platform-eng/atlas/-/merge_requests/318", "source_ids": ["S:D200ROH001_dm@2026-04-27"], "id": "fact-007"}
 {"answer": "256", "source_ids": ["E:2026-05-19T14-50-00__caa4e16d", "E:2026-05-20T09-18-00__5e1248b2"], "id": "fact-008"}
 {"answer": "wiki-mutex thing", "source_ids": ["E:2026-04-20T05-29-00__7d18c1b0", "E:2026-04-21T02-03-00__4918774c"], "id": "fact-009"}
 {"answer": "July 8-10, 2026 (with optional arrival July 7 evening)", "source_ids": ["E:2026-04-29T17-34-00__b06a83d5"], "id": "fact-010"}

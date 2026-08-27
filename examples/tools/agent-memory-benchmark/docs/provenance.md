@@ -47,10 +47,12 @@ fixed and what it did not.
 
 **Domains.** Every address and URL in both corpora sits under a domain reserved
 by RFC 2606 — the `.example` top-level domain. This matters more than it looks:
-corpus A previously used `example-co.com`, which reads like a placeholder but
-is an ordinary registrable `.com`, and is in fact registered. A name that
-merely *looks* fake is not reserved. Verified: no address in either corpus
-resolves to a domain a third party can own.
+corpus A previously used a `.com` that reads like a placeholder but is an
+ordinary registrable name, and is in fact registered. A name that merely *looks*
+fake is not reserved. It is not repeated here, because naming it in a public
+document is the same act as shipping it in one. Verified: no address in either
+corpus — and no address in any published result artifact — resolves to a domain
+a third party can own.
 
 **Other identifiers that can be accidentally real.** The corpora contain no IP
 addresses and no telephone numbers, so the equivalent reserved ranges

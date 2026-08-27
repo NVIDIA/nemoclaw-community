@@ -146,7 +146,7 @@
   "provenance_note": {
     "answers_transformed": true,
     "why": "These answers were produced against the corpus before publication, when a set of identifiers carried different names. The same substitution applied to the corpus at publication was applied to the answers, because an answer is derived from the corpus it read: a system reading the published corpus would have written the published name. Nothing else was changed.",
-    "verify": "answers.as-answered.jsonl is the untransformed output. Apply the map below to it and the result is answers.jsonl; regrade either one to see the difference for yourself.",
+    "verify": "Applying substitutions.text then substitutions.question_ids to answers.as-answered.jsonl reproduces answers.jsonl exactly. One further substitution was applied at publication and is deliberately not listed: it replaced a registrable .com domain, and publishing its pre-image here would put that domain back into a public artifact. It is pre-applied in answers.as-answered.jsonl, so the map below still reproduces the rows.",
     "substitutions": {
       "text": {
         "docs/sot/designs/": "docs/design/",
@@ -167,7 +167,6 @@
         "consolidate.md": "rollup.md",
         "WaveAbort": "BatchAbort",
         "inbox--gitlab": "inbox-automated",
-        "example-co.com": "examplecorp.example",
         "Helix": "Quillon",
         "helix": "quillon"
       },

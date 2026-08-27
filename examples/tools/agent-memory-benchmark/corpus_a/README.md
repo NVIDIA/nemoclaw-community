@@ -202,9 +202,8 @@ reviewed before publication and renamed where they were not.
 **Every address sits under an RFC 2606 reserved domain.** The corpus uses
 `examplecorp.example`, `gitlab.examplecorp.example`, `chatplatform.example` and
 `metricswatch.example` — all under the `.example` top-level domain, which can
-never be registered. This matters more than it looks: the corpus previously used
-`example-co.com`, which *reads* like a placeholder but is a real, registered
-domain.
+never be registered. This matters more than it looks: the corpus previously used a `.com` that
+*reads* like a placeholder but is registrable, so it is not named here either.
 
 **`CANARY.txt` is a training-data tripwire.** It carries a unique string that
 appears nowhere else. If a model ever emits it, that is evidence this corpus

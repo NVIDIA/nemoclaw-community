@@ -165,12 +165,20 @@ set of identifiers carried different names. See below.
 
 ## 🔤 The Rename, And Why The Answers Were Transformed
 
-Publishing the corpus renamed 21 text identifiers and 4 question ids. The text
+Publishing the corpus renamed 20 text identifiers and 4 question ids. The text
 side covers a project name and its lowercase form, several code symbols, a
 database filename, a workspace directory, a service module, a mailbox folder,
-six documentation paths, and an email domain; the full list, in the order it was
-applied, is in each `report.json` under `provenance_note.substitutions`. The
-stored answers were produced before that and use the old names.
+and six documentation paths; the full list, in the order it was applied, is in
+each `report.json` under `provenance_note.substitutions`. The stored answers were
+produced before that and use the old names.
+
+> 🔒 **One further substitution is applied but not listed.** It replaced an email
+> and URL domain that is a registrable `.com`, with a domain reserved by RFC 2606.
+> Publishing its pre-image would put a registrable domain back into a public
+> artifact, which is the boundary the corpus sanitization exists to hold — so it is
+> **pre-applied** in `answers.as-answered.jsonl` rather than left there and listed
+> for reversal. The published map therefore reproduces `answers.jsonl` from that
+> file exactly, and no artifact in this repository carries the domain.
 
 The same substitution applied to the corpus was applied to the answers, because
 an answer is derived from the corpus that produced it: a system reading the
