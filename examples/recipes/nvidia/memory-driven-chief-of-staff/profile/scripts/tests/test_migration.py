@@ -132,6 +132,38 @@ class TestMigration(unittest.TestCase):
         # identify anybody.
         self.assertIsNone(row[2])
 
+    def test_a_real_v3_store_upgrades_to_the_current_version(self):
+        """Exercise v4 against the exact schema that #140 shipped."""
+        artifact = HERE / "schema-v3.sql"
+        self.assertTrue(artifact.exists(), "the v3 schema artifact is missing")
+        path = Path(tempfile.mkdtemp()) / "v3.db"
+        with sqlite3.connect(path) as c:
+            c.executescript(artifact.read_text(encoding="utf-8"))
+            c.execute("INSERT INTO items(source_id, source, scope, event_at,"
+                      " sender, sender_key, body, state) VALUES"
+                      " ('m1','email','inbox','2026-08-01T00:00:00Z',"
+                      "  'Dana Okoro','dana@example.com','kept','pending')")
+            self.assertEqual(current_version(c), 3)
+            columns = {row[1] for row in c.execute("PRAGMA table_info(items)")}
+            self.assertIn("sender_key", columns)
+            self.assertNotIn("deleted_at", columns,
+                             "the frozen v3 schema contains a v4 column")
+            self.assertNotIn("internet_message_id", columns,
+                             "the frozen v3 schema contains a v4 column")
+
+        with sqlite3.connect(path) as c:
+            self.assertEqual(migrate(c), [4])
+            self.assertEqual(current_version(c), SCHEMA_VERSION)
+            columns = {row[1] for row in c.execute("PRAGMA table_info(items)")}
+            row = c.execute("SELECT sender, sender_key, body, deleted_at,"
+                            " internet_message_id FROM items"
+                            " WHERE source_id='m1'").fetchone()
+        self.assertIn("deleted_at", columns)
+        self.assertIn("internet_message_id", columns)
+        self.assertEqual(row[:3], ("Dana Okoro", "dana@example.com", "kept"))
+        self.assertIsNone(row[3], "an existing row was marked deleted")
+        self.assertIsNone(row[4], "a missing identity was invented")
+
     def test_migrating_an_already_migrated_store_is_not_an_error(self):
         """Two runs happen — a retried job, an interrupted upgrade. An ALTER
         that only works once turns the second into a crash loop."""
@@ -153,6 +185,13 @@ class TestMigration(unittest.TestCase):
         self.assertIn("body_cleared_at", artifact)
         self.assertNotIn("sender_key", artifact)
 
+    def test_the_v3_artifact_is_never_quietly_edited(self):
+        artifact = (HERE / "schema-v3.sql").read_text(encoding="utf-8")
+        self.assertIn("'schema_version', '3'", artifact)
+        self.assertIn("sender_key", artifact)
+        self.assertNotIn("deleted_at", artifact)
+        self.assertNotIn("internet_message_id", artifact)
+
     def test_the_v1_artifact_is_never_quietly_edited(self):
         """It is frozen: a schema change goes in schema.sql and a migration."""
         artifact = (HERE / "schema-v1.sql").read_text(encoding="utf-8")
@@ -168,8 +207,9 @@ class TestMigration(unittest.TestCase):
         # one arrived once by a bad merge and broke opening a real store.
         #
         # `deleted_at` was that column and is no longer speculative — it ships
-        # with the Graph collector, whose delta query reports deletions, and
-        # the migration that adds it is tested against the frozen v2 schema.
+        # with the Graph collector, whose removal reconciliation distinguishes
+        # moves from deletions, and its migration is tested against the frozen
+        # v3 schema that immediately preceded it.
         # The rule it stood for still holds; the example moved on.
         self.assertIn("deleted_at", columns)
         self.assertNotIn("thread_participants", columns)
