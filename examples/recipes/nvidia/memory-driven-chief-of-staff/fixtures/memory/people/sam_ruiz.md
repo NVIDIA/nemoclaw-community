@@ -1,6 +1,7 @@
 ---
 name: Sam Ruiz
-source_key: sam.ruiz@example.com
+identities:
+  - email:sam.ruiz@example.com
 email: sam.ruiz@example.com
 role: Platform engineer
 relationship: Collaborator on the onboarding revamp; occasional reviewer on migration work.

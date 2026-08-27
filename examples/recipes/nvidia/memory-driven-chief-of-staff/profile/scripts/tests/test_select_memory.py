@@ -83,7 +83,7 @@ class SelectorCase(unittest.TestCase):
         return found
 
     def page(self, slug, updated=None, decay=None, kind="people",
-             last_interaction=None, source_key=None):
+             last_interaction=None, source_key=None, identities=None):
         folder = self.workspace / "memory" / kind
         folder.mkdir(parents=True, exist_ok=True)
         head = ["---"]
@@ -94,7 +94,13 @@ class SelectorCase(unittest.TestCase):
         if last_interaction:
             head.append(f"last_interaction: {last_interaction}")
         if source_key:
+            # The pre-list spelling. Kept in the helper because pages written
+            # by an earlier version still carry it, and reading them is a
+            # promise this code makes.
             head.append(f"source_key: {source_key}")
+        if identities:
+            head.append("identities:")
+            head += [f"  - {who}" for who in identities]
         head += ["---", "", "# page"]
         (folder / f"{slug}.md").write_text("\n".join(head), encoding="utf-8")
 
@@ -716,16 +722,18 @@ class TestAPersonIsWhoTheyAreNotWhatTheyAreCalled(SelectorCase):
         their display name turned up."""
         page_slug = "sam_ruiz"
         self.page(page_slug, updated="2020-01-01", last_interaction=None,
-                  source_key="sam.ruiz@example.com")
+                  source_key="email:sam.ruiz@example.com")
         for n in range(2):
             self.arrive("Sam Ruiz", "sam.ruiz@example.com", days_ago=n,
                         body=f"a{n}")
             self.arrive("Sam Ruiz", "s.ruiz@other.example", days_ago=n,
                         body=f"b{n}")
         found = self.report()
-        by_key = {p["source_key"]: p["slug"] for p in found["people"]}
-        self.assertEqual(by_key["sam.ruiz@example.com"], page_slug)
-        self.assertTrue(by_key["s.ruiz@other.example"].startswith("sam_ruiz_"))
+        by_key = {who: p["slug"] for p in found["people"]
+                  for who in p["identities"]}
+        self.assertEqual(by_key["email:sam.ruiz@example.com"], page_slug)
+        self.assertTrue(
+            by_key["email:s.ruiz@other.example"].startswith("sam_ruiz_"))
 
     def test_a_page_from_before_the_field_existed_is_not_abandoned(self):
         """Pages written by an earlier version record no identity. The sole
@@ -783,7 +791,8 @@ class TestUpgradingDoesNotSplitAPerson(SelectorCase):
                         body=f"new{n}")
         found = self.report()
         self.assertEqual(len(found["people"]), 1, found["people"])
-        self.assertEqual(found["people"][0]["source_key"], "dana@example.com")
+        self.assertEqual(found["people"][0]["identities"],
+                         ["email:dana@example.com"])
 
     def test_rows_with_no_identity_are_counted_rather_than_guessed(self):
         for n in range(2):

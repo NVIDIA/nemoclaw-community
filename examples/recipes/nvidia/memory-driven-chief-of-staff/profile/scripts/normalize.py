@@ -96,6 +96,15 @@ def graph_message_to_item(msg: dict[str, Any], user_address: str) -> dict[str, A
         # The stable half. `sender` is the display name when there is one,
         # which two different people can share; the address is theirs.
         "sender_key": _address_of(msg.get("from")) or None,
+        # Mail has no handle of its own — Graph gives a sender a name and an
+        # address and nothing else — so this is *derived* from the address
+        # rather than stated by the source. Said plainly because it changes
+        # what it is worth as evidence: a handle matching another mail
+        # identity's proves nothing new, since both come from the key that
+        # already distinguishes them. Matching a handle from a different
+        # source is a different matter.
+        "sender_handle": (_address_of(msg.get("from")) or "").split("@")[0]
+                         or None,
         "subject": msg.get("subject"),
         "body": body.get("content"),
         "permalink": msg.get("webLink"),
@@ -113,6 +122,7 @@ def slack_message_to_item(
     channel: dict[str, Any],
     user_id: str,
     sender_name: str | None = None,
+    sender_handle: str | None = None,
 ) -> dict[str, Any]:
     """One Slack message -> one `items` row.
 
@@ -147,6 +157,10 @@ def slack_message_to_item(
         # The stable half, for the same reason: a display name is something
         # its owner can change, and two people can choose the same one.
         "sender_key": msg.get("user") or None,
+        # Stated by the source, unlike mail's: Slack's `name` is the `@handle`
+        # a colleague is addressed by. Unique in the workspace, and the person
+        # can change it — readable, and not an identity.
+        "sender_handle": sender_handle or None,
         "subject": None,
         "body": msg.get("text"),
         "permalink": msg.get("permalink"),
@@ -158,8 +172,8 @@ def slack_message_to_item(
 
 ITEM_COLUMNS = (
     "source_id", "source", "scope", "thread_ref", "event_at",
-    "sender", "sender_key", "subject", "body", "permalink", "addressing",
-    "unread",
+    "sender", "sender_key", "sender_handle", "subject", "body", "permalink",
+    "addressing", "unread",
     # Mail only. Slack has no equivalent and leaves it NULL; the collector
     # that needs it is the one that can tell a move from a deletion.
     "internet_message_id",

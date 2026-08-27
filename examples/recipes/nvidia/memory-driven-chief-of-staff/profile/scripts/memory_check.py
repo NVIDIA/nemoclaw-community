@@ -268,19 +268,39 @@ def check_ceilings(root: Path) -> list[Finding]:
     return findings
 
 
+# A source name is what appears before the first colon of an identity, so it
+# may not contain one. Keys may: a Teams id looks like `29:1a2b`.
+IDENTITY_SOURCE = re.compile(r"^[a-z0-9_]+$")
+
+
+def _identities_of(text: str) -> list[str]:
+    """Every identity a page claims, from either spelling of the field."""
+    listed = re.search(r"^identities:\s*\n((?:\s*-\s*\S+\s*\n)+)",
+                       text, re.M)
+    if listed:
+        return [line.strip().lstrip("-").strip()
+                for line in listed.group(1).splitlines() if line.strip()]
+    single = re.search(r"^source_key:\s*(\S+)", text, re.M)
+    return [single.group(1)] if single else []
+
+
 def check_identity(root: Path) -> list[Finding]:
-    """People pages carry an identity, and no two carry the same one.
+    """People pages carry at least one identity, and no two claim the same one.
 
-    `source_key` is what the memory job matches a person on. A page without
-    one is found only by its filename, so it is renamed the day a namesake
+    `identities` is what the memory job matches a person on. A page without
+    any is found only by its filename, so it is renamed the day a namesake
     appears — and a renamed page is a page whose history was lost. Two pages
-    with the same one are worse: the job finds whichever it looks at first and
-    writes both people into it.
+    claiming one identity are worse: the job finds whichever it looks at
+    first and writes both people into it.
 
-    Neither is repaired by guessing. A missing key is reported so the page can
-    be given the value the selector hands over for that person; there is
-    nothing on the page itself that could supply it, and deriving one from the
-    name is the exact mistake the field exists to prevent.
+    Neither is repaired by guessing. A missing list is reported so the page
+    can be given the values the selector hands over; there is nothing on the
+    page itself that could supply them, and deriving one from the name is the
+    exact mistake the field exists to prevent.
+
+    A malformed entry is its own finding. `dana@example.com` without a source
+    matches nothing — the selector looks for `email:dana@example.com` — and a
+    page that matches nothing is silently orphaned rather than loudly broken.
     """
     findings: list[Finding] = []
     seen: dict[str, str] = {}
@@ -291,21 +311,29 @@ def check_identity(root: Path) -> list[Finding]:
         if text is None:
             continue
         rel = str(page.relative_to(root))
-        key = _frontmatter(text).get("source_key", "").strip()
-        if not key:
+        claimed = _identities_of(text)
+        if not claimed:
             findings.append(Finding(
                 "missing-identity", rel,
-                "no source_key; a page written now must carry the value the "
+                "no identities; a page written now must carry the values the "
                 "selector reports, and one written before the field existed "
-                "needs it supplied rather than derived from the name"))
+                "needs them supplied rather than derived from the name"))
             continue
-        if key in seen:
-            findings.append(Finding(
-                "duplicate-identity", rel,
-                f"source_key {key} is also on {seen[key]}; one of them is "
-                "about somebody else"))
-            continue
-        seen[key] = rel
+        for text_form in claimed:
+            source, _, key = text_form.partition(":")
+            if not key or not IDENTITY_SOURCE.match(source):
+                findings.append(Finding(
+                    "malformed-identity", rel,
+                    f"{text_form} is not `<source>:<key>`; it will match no "
+                    "message, so the page is orphaned rather than broken"))
+                continue
+            if text_form in seen:
+                findings.append(Finding(
+                    "duplicate-identity", rel,
+                    f"identity {text_form} is also on {seen[text_form]}; one "
+                    "of them is about somebody else"))
+                continue
+            seen[text_form] = rel
     return findings
 
 

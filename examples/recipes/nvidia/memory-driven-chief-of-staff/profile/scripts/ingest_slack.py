@@ -535,9 +535,20 @@ def worth_judging(message: dict[str, Any], user_id: str | None) -> bool:
     return message.get("user") != user_id
 
 
-def sender_name(token: str, user_id: str | None, cache: dict[str, str | None],
-                budget: Budget) -> str | None:
-    """Resolve one display name, or give up quietly.
+def sender_name(token: str, user_id: str | None,
+                cache: dict[str, tuple[str | None, str | None]],
+                budget: Budget) -> tuple[str | None, str | None]:
+    """Resolve one sender's display name and handle, or give up quietly.
+
+    Two values, because Slack has two and they answer different questions.
+    `profile.display_name` (falling back to `real_name`) is what to show a
+    reader; `name` is the workspace handle — the `@dana` a colleague is
+    addressed by, unique within the workspace and recognisable to the user in
+    a way a `U0…` id never is. The same response carries both, so keeping the
+    second costs no request.
+
+    Neither is an identity. Both can be changed by the person they describe,
+    which is what `sender_key` is for.
 
     Slack's own guidance for a large workspace, learned the expensive way on
     one: never enumerate the member list. Names are resolved one at a time and
@@ -545,19 +556,22 @@ def sender_name(token: str, user_id: str | None, cache: dict[str, str | None],
     whole collection because one lookup was rate-limited would be worse.
     """
     if not user_id:
-        return None
+        return (None, None)
     if user_id not in cache:
         if not budget.spend():
             # A name is cosmetic; the message is not. Do not spend the last
             # call on decoration, and do not cache the miss — a later tick
             # with budget left should still be able to resolve it.
-            return None
+            return (None, None)
         try:
-            profile = call("users.info", token, user=user_id).get("user", {})
-            cache[user_id] = (profile.get("profile", {}).get("display_name")
-                              or profile.get("real_name") or None)
+            user = call("users.info", token, user=user_id).get("user", {})
+            profile = user.get("profile", {}) or {}
+            cache[user_id] = (
+                profile.get("display_name") or user.get("real_name") or None,
+                user.get("name") or None,
+            )
         except SlackError:
-            cache[user_id] = None
+            cache[user_id] = (None, None)
     return cache[user_id]
 
 
@@ -844,8 +858,9 @@ def collect(token: str, caps: dict[str, Any],
                 threads_complete = False
 
         items = [
-            slack_message_to_item(message, channel, caps["user_id"],
-                                  sender_name(token, message.get("user"), names, budget))
+            slack_message_to_item(
+                message, channel, caps["user_id"],
+                *sender_name(token, message.get("user"), names, budget))
             for message in messages + threaded
             if worth_judging(message, caps["user_id"])
         ]

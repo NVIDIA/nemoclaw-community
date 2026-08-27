@@ -81,7 +81,8 @@ People pages require **all** of:
 ```yaml
 ---
 name: Full Name
-source_key: <copy `source_key` from the selector, exactly as given>
+identities:                      # copy `identities` from the selector, as given
+  - <source:key>
 role: Job title or function      # write "unknown" rather than omitting it
 relationship: How they relate to the user, 1-2 sentences
 importance: high | medium | low
@@ -90,12 +91,30 @@ interaction_frequency: daily | weekly | monthly | rare
 ---
 ```
 
-**Copy `source_key` verbatim and never invent one.** It is how the selector
-finds this page again — an address or a user id, not a name. Get it wrong and
-the page is orphaned: the next run finds nobody who matches it, writes a
-second page for the same person, and their history stays behind in the first.
-If the selector did not give you one for somebody, leave the field out rather
-than guessing.
+**Copy `identities` verbatim and never invent an entry.** It is how the
+selector finds this page again — addresses and user ids, not names. Get one
+wrong and the page is orphaned: the next run finds nobody who matches it,
+writes a second page for the same person, and their history stays behind in
+the first. If the selector gave you none for somebody, leave the field out
+rather than guessing.
+
+**Never add an entry because two identities look like the same person.** That
+decision is the user's, and `link_identity.py` is the only thing that records
+it. When the selector reports `identity_candidates`, you may raise it in
+conversation — "Dana Okoro writes from Slack and from mail; same person?" —
+and if the user says yes, run:
+
+    python3 profile/scripts/link_identity.py same slack:U01DANA email:dana@example.com
+
+Then the next run writes one page for them. **Do not wait for an answer.**
+Write the pages you can write, mention what you noticed, and finish; the
+question keeps, and a job that blocks on a human is a job that does not
+complete.
+
+`identity_conflicts` means two answers no longer agree — the user said two
+identities were different people, and other answers since have joined them
+anyway. Report it and change nothing. Only the user can say which answer was
+the wrong one.
 
 Attention pages require **all** of `type`, `updated`, **and `decay`** —
 `decay: daily` for `current_priorities.md`, `decay: weekly` for

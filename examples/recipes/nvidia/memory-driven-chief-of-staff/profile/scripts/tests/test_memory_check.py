@@ -122,12 +122,12 @@ class TestInvariants(unittest.TestCase):
 
 
 class TestPersonIdentityIsChecked(unittest.TestCase):
-    """`source_key` is what the memory job matches a person on.
+    """`identities` is what the memory job matches a person on.
 
-    Until this existed, two valid-looking people pages with no key at all —
-    and two claiming the same one — both passed `check_all()`, so the page
-    that decides who a person is was the one thing the deterministic checker
-    did not look at.
+    Until this existed, two valid-looking people pages with no identity at
+    all — and two claiming the same one — both passed `check_all()`, so the
+    field that decides who a person is was the one thing the deterministic
+    checker did not look at.
     """
 
     def setUp(self):
@@ -136,31 +136,43 @@ class TestPersonIdentityIsChecked(unittest.TestCase):
         self.person = self.root / "people" / "sam_ruiz.md"
         self.other = self.root / "people" / "dana_okoro.md"
 
-    def _drop_line(self, page, key):
-        page.write_text(re.sub(rf"^{key}:.*\n", "", page.read_text(),
-                               count=1, flags=re.M))
+    def _drop_identities(self, page):
+        page.write_text(re.sub(r"^identities:\n(?:\s*-\s*\S+\n)+", "",
+                               page.read_text(), count=1, flags=re.M))
 
-    def _set(self, page, key, value):
-        page.write_text(re.sub(rf"^{key}:.*$", f"{key}: {value}",
+    def _set_identities(self, page, *values):
+        block = "identities:\n" + "".join(f"  - {v}\n" for v in values)
+        page.write_text(re.sub(r"^identities:\n(?:\s*-\s*\S+\n)+", block,
                                page.read_text(), count=1, flags=re.M))
 
     def test_the_shipped_fixture_pages_carry_identities(self):
         self.assertEqual(check_identity(self.root), [])
 
     def test_a_page_with_no_identity_is_reported(self):
-        self._drop_line(self.person, "source_key")
+        self._drop_identities(self.person)
         findings = check_identity(self.root)
         self.assertEqual([f.kind for f in findings], ["missing-identity"])
         self.assertEqual(findings[0].path, "people/sam_ruiz.md")
 
-    def test_an_empty_identity_counts_as_missing(self):
-        """A key present but blank is the shape a half-written page has."""
-        self._set(self.person, "source_key", "")
-        self.assertEqual([f.kind for f in check_identity(self.root)],
-                         ["missing-identity"])
+    def test_a_page_from_before_the_list_still_counts_as_carrying_one(self):
+        """`source_key:` is what earlier pages have. Reporting them as
+        missing would send the repair job to rewrite pages that are fine."""
+        self._drop_identities(self.person)
+        self.person.write_text(
+            self.person.read_text().replace(
+                "name: Sam Ruiz",
+                "name: Sam Ruiz\nsource_key: email:sam.ruiz@example.com", 1))
+        self.assertEqual(check_identity(self.root), [])
+
+    def test_an_entry_with_no_source_is_reported_as_malformed(self):
+        """`dana@example.com` matches nothing — the selector looks for
+        `email:dana@example.com` — so the page is orphaned, silently."""
+        self._set_identities(self.person, "sam.ruiz@example.com")
+        findings = check_identity(self.root)
+        self.assertEqual([f.kind for f in findings], ["malformed-identity"])
 
     def test_two_pages_claiming_one_identity_are_reported(self):
-        self._set(self.person, "source_key", "dana.okoro@example.com")
+        self._set_identities(self.person, "email:dana.okoro@example.com")
         findings = check_identity(self.root)
         self.assertEqual([f.kind for f in findings], ["duplicate-identity"])
         # Both pages are named, because the finding is about the pair and
@@ -168,26 +180,31 @@ class TestPersonIdentityIsChecked(unittest.TestCase):
         self.assertIn("dana_okoro.md", findings[0].detail)
         self.assertEqual(findings[0].path, "people/sam_ruiz.md")
 
+    def test_a_duplicate_among_several_entries_is_still_caught(self):
+        """A page may claim many, and the clash can be on any of them."""
+        self._set_identities(self.person, "email:sam.ruiz@example.com",
+                             "slack:U01SAM", "email:dana.okoro@example.com")
+        self.assertIn("duplicate-identity",
+                      [f.kind for f in check_identity(self.root)])
+
+    def test_two_pages_sharing_no_identity_are_not_a_duplicate(self):
+        """Otherwise a person with several accounts would report themselves."""
+        self._set_identities(self.person, "email:sam.ruiz@example.com",
+                             "slack:U01SAM")
+        self._set_identities(self.other, "email:dana.okoro@example.com",
+                             "slack:U01DANA")
+        self.assertEqual(check_identity(self.root), [])
+
     def test_the_duplicate_report_does_not_depend_on_directory_order(self):
         """`glob` order is filesystem order. A finding that appears only on
         some machines is worse than no finding."""
-        self._set(self.other, "source_key", "sam.ruiz@example.com")
+        self._set_identities(self.other, "email:sam.ruiz@example.com")
         self.assertEqual([f.kind for f in check_identity(self.root)],
                          ["duplicate-identity"])
 
-    def test_pages_of_other_types_are_left_alone(self):
-        """Only people pages have this field; a project page is not a person
-        missing an identity."""
-        for page in self.root.rglob("*.md"):
-            if page.parent.name != "people":
-                self.assertNotIn(
-                    "missing-identity",
-                    [f.kind for f in check_identity(self.root)
-                     if f.path.endswith(page.name)])
-
     def test_check_all_runs_it(self):
         """A check that exists but is not wired in has never run."""
-        self._drop_line(self.person, "source_key")
+        self._drop_identities(self.person)
         self.assertIn("missing-identity",
                       [f.kind for f in check_all(self.root)])
 

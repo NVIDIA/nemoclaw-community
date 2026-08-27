@@ -1,6 +1,7 @@
 ---
 name: Dana Okoro
-source_key: dana.okoro@example.com
+identities:
+  - email:dana.okoro@example.com
 email: dana.okoro@example.com
 role: Finance systems lead
 relationship: Owns the billing systems this person is migrating. Every cutover decision needs her sign-off.

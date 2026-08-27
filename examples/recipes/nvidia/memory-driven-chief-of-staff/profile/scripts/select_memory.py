@@ -38,6 +38,7 @@ from collections import Counter
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
+import identity
 from _db import ensure_store, write_txn
 
 # How many exchanges before somebody is worth a page.
@@ -196,50 +197,63 @@ def slug(name: str) -> str:
     return f"{cleaned}_{mark}" if cleaned else f"person_{mark}"
 
 
-def page_names(display: dict[str, str],
-               have: dict[str, dict[str, str]]) -> dict[str, str]:
-    """Stable identity -> the page slug that identity owns.
+def page_names(display: dict[object, str],
+               have: dict[str, dict[str, object]],
+               members: dict[object, list[object]]) -> dict[object, str]:
+    """Person -> the page slug that person owns.
 
     Two people called `Sam Ruiz` need two pages, and each needs to keep its
     own name across runs. Neither follows from the display name, so the
-    allocation is driven by the stable key and by what the pages on disk
-    already claim:
+    allocation is driven by identity and by what the pages on disk claim:
 
-    - A page that records this key keeps it. This is the case that makes the
-      name durable: once written, a person's page is found by who they are,
-      so a namesake appearing later cannot rename or overwrite them.
-    - Otherwise the readable slug is used when exactly one identity wants it
-      and no other identity already holds it.
-    - Otherwise every contender takes a digest of its own key. Nobody wins the
-      readable name by being processed first, because a winner picked that way
-      changes between runs, and a page name that changes is a page lost.
+    - A page that records **any** of this person's identities keeps its name.
+      That is what makes the name durable, and why it is a list: a colleague
+      whose Slack account is later confirmed to be the same person as their
+      mailbox must not be moved to a new page because the identity the page
+      happens to be found by was not the one that wrote this week.
+    - Otherwise the readable slug is used when exactly one person wants it
+      and no other person already holds it.
+    - Otherwise every contender takes a digest of its own identity. Nobody
+      wins the readable name by being processed first, because a winner
+      picked that way changes between runs, and a page name that changes is
+      a page lost.
 
-    A page with no `source_key` was written before the field existed. It is
-    treated as belonging to the sole contender for its name — the migration
-    case, and the alternative is abandoning a real page and starting a blank
-    one beside it. With two contenders it cannot be attributed to either, so
-    both take digests and the old page is left where it is.
+    A page claiming no identity at all was written before the field existed.
+    It is treated as belonging to the sole contender for its name — the
+    migration case, and the alternative is abandoning a real page and
+    starting a blank one beside it. With two contenders it cannot be
+    attributed to either, so both take digests and the old page is left where
+    it is.
     """
-    owned = {page["source_key"]: mark for mark, page in have.items()
-             if page.get("source_key")}
+    # Identity text -> the page that claims it. A page may claim several.
+    claimed: dict[str, str] = {}
+    for mark, page in have.items():
+        for text in page.get("identities") or []:
+            claimed.setdefault(text, mark)
 
-    contenders: dict[str, list[str]] = {}
-    for key in display:
-        if key in owned:
+    names: dict[object, str] = {}
+    for person in display:
+        for who in members.get(person, [person]):
+            if str(who) in claimed:
+                names[person] = claimed[str(who)]
+                break
+
+    contenders: dict[str, list[object]] = {}
+    for person in display:
+        if person in names:
             continue
-        contenders.setdefault(slug(display[key]), []).append(key)
+        contenders.setdefault(slug(display[person]), []).append(person)
 
-    names = {key: mark for key, mark in owned.items() if key in display}
-    for base, keys in contenders.items():
+    for base, people in contenders.items():
         if not base:
             base = "person"
         # Sorted so the digest set is the same whatever order the store
         # returned the senders in.
-        for key in sorted(keys):
-            solo = len(keys) == 1 and (
-                base not in have or not have[base].get("source_key"))
-            names[key] = base if solo else (
-                f"{base}_{hashlib.sha256(key.encode()).hexdigest()[:8]}")
+        for person in sorted(people, key=str):
+            solo = len(people) == 1 and (
+                base not in have or not (have[base].get("identities") or []))
+            names[person] = base if solo else (
+                f"{base}_{hashlib.sha256(str(person).encode()).hexdigest()[:8]}")
     return names
 
 
@@ -271,12 +285,30 @@ def existing_people() -> dict[str, dict[str, str]]:
             continue
         seen = re.search(r"^last_interaction:\s*(\d{4}-\d{2}-\d{2})",
                          head, re.M)
-        key = re.search(r"^source_key:\s*(\S+)", head, re.M)
         found[page.stem] = {
             "last_interaction": seen.group(1) if seen else "",
-            "source_key": key.group(1) if key else "",
+            "identities": _page_identities(head),
         }
     return found
+
+
+def _page_identities(head: str) -> list[str]:
+    """Every identity a page claims, from either spelling of the field.
+
+    `identities:` is a YAML list — a person holds as many as they have places
+    to write from, and privileging one of them as `source_key` made "which is
+    the primary" a question with no answer as soon as a third arrived. Pages
+    written before the list existed carry the single `source_key:`, which is
+    read as a list of one rather than migrated: the page is the user's, and
+    rewriting their frontmatter to suit a schema change is not this job's.
+    """
+    listed = re.search(r"^identities:\s*\n((?:\s*-\s*\S+\s*\n)+)",
+                       head, re.M)
+    if listed:
+        return [line.strip().lstrip("-").strip()
+                for line in listed.group(1).splitlines() if line.strip()]
+    single = re.search(r"^source_key:\s*(\S+)", head, re.M)
+    return [single.group(1)] if single else []
 
 
 def stale_attention() -> list[dict[str, str]]:
@@ -351,11 +383,17 @@ def evidence(conn, since: str) -> dict[str, object]:
     # name, from the old rows, and once by their address, from the new ones —
     # and got two pages that each held half their history. A display name is
     # not an identity in the fallback either.
+    #
+    # Grouped by `(source, sender_key)`, not by the key alone. Two sources can
+    # mint the same string, and merging two people because their opaque ids
+    # happened to match would be silent and unrecoverable.
     counted = conn.execute(
-        "SELECT sender_key, sender, COUNT(*), MAX(event_at)"
+        "SELECT source, sender_key, sender, sender_handle,"
+        "       COUNT(*), MAX(event_at)"
         "  FROM items"
         "  WHERE event_at >= ? AND sender IS NOT NULL AND sender_key IS NOT NULL"
-        "  GROUP BY sender_key, sender", (since,)).fetchall()
+        "  GROUP BY source, sender_key, sender, sender_handle",
+        (since,)).fetchall()
 
     # Said out loud rather than silently skipped. These are rows from before
     # the upgrade; they stop appearing as the collectors re-read their window
@@ -366,36 +404,64 @@ def evidence(conn, since: str) -> dict[str, object]:
         "  WHERE event_at >= ? AND sender IS NOT NULL AND sender_key IS NULL",
         (since,)).fetchone()[0]
 
-    counts: Counter[str] = Counter()
-    latest: dict[str, str] = {}
-    display: dict[str, str] = {}
-    for key, sender, count, last in counted:
+    # Per identity first: how much they wrote, when last, and what they are
+    # called and known as there.
+    seen: Counter[identity.Identity] = Counter()
+    last_at: dict[identity.Identity, str] = {}
+    shown: dict[identity.Identity, str] = {}
+    handles: dict[identity.Identity, str | None] = {}
+    for source, key, sender, handle, count, last in counted:
         if AUTOMATED.search(sender or ""):
             continue
-        if not key:
+        if not key or not source:
             continue
-        counts[key] += count
-        if last and last > latest.get(key, ""):
-            latest[key] = last
+        who = identity.Identity(source, key)
+        seen[who] += count
+        handles.setdefault(who, handle)
+        if last and last > last_at.get(who, ""):
+            last_at[who] = last
             # The name they go by now, not the one they used first.
-            display[key] = sender
-        display.setdefault(key, sender)
+            shown[who] = sender
+        shown.setdefault(who, sender)
+
+    # Then per person: identities the user has confirmed belong together are
+    # one correspondent with one page, however many of them there are.
+    persons = identity.resolve(conn, seen)
+    counts: Counter[identity.Identity] = Counter()
+    latest: dict[identity.Identity, str] = {}
+    display: dict[identity.Identity, str] = {}
+    members: dict[identity.Identity, list[identity.Identity]] = {}
+    for who, count in seen.items():
+        person = persons.of(who)
+        counts[person] += count
+        members.setdefault(person, persons.group(who))
+        if last_at.get(who, "") > latest.get(person, ""):
+            latest[person] = last_at[who]
+            display[person] = shown[who]
+        display.setdefault(person, shown[who])
 
     have = existing_people()
     today = datetime.now(timezone.utc).date().isoformat()
 
-    names = page_names(display, have)
+    names = page_names(display, have, members)
 
-    # Namesakes still worth reporting: they now get one page each, but the
-    # agent is writing about two people whose names it cannot tell apart, and
-    # it should say so on the page rather than leave a reader to guess.
-    by_name: dict[str, set[str]] = {}
-    for key, sender in display.items():
-        by_name.setdefault(sender, set()).add(key)
-    shared = {sender: sorted(names[key] for key in keys)
-              for sender, keys in by_name.items() if len(keys) > 1}
+    # Namesakes still worth reporting: two people the agent cannot tell apart
+    # by name get one page each, and it should say so on both rather than
+    # leave a reader to guess which colleague a page is about.
+    by_name: dict[str, set[identity.Identity]] = {}
+    for person, sender in display.items():
+        by_name.setdefault(sender, set()).add(person)
+    shared = {sender: sorted(names[p] for p in people)
+              for sender, people in by_name.items() if len(people) > 1}
+
+    # Identities that may be one person, for the user to answer later. The
+    # job does not wait for the answer and does not act without one.
+    proposals = identity.candidates(
+        [(who, shown.get(who, ""), handles.get(who)) for who in seen],
+        identity.decisions(conn), persons)
 
     candidates = []
+    group_of: dict[str, list[identity.Identity]] = {}
     for key, count in counts.most_common():
         if count < PEOPLE_THRESHOLD:
             continue
@@ -419,7 +485,10 @@ def evidence(conn, since: str) -> dict[str, object]:
                 continue
         candidates.append({
             "sender": sender,
-            "source_key": key,
+            # Every identity this person writes from, not one of them. The
+            # page records the whole list, so it is still found when the
+            # message that arrives next comes from a different source.
+            "identities": [str(i) for i in members[key]],
             "slug": mark,
             "messages": count,
             "last_interaction": last,
@@ -427,31 +496,40 @@ def evidence(conn, since: str) -> dict[str, object]:
             "page_records": (have[mark]["last_interaction"] or None)
                             if mark in have else None,
         })
+        group_of[mark] = members[key]
 
     # A person with no page at all is more valuable than one whose page is
     # merely a few bullets behind, so they go first within the bound.
     candidates.sort(key=lambda c: (c["has_page"], -c["messages"]))
     chosen = candidates[:MAX_PEOPLE]
-    wanted = {c["source_key"] for c in chosen}
+    wanted = [(c["slug"], group_of[c["slug"]]) for c in chosen]
 
     # Keyed by page slug, not by display name: two namesakes would otherwise
     # write into one entry and the second would replace the first's history.
     interactions: dict[str, list[dict[str, str]]] = {}
-    for key in wanted:
-        rows = conn.execute(
-            "SELECT source, event_at, addressing,"
-            "       substr(COALESCE(subject, body), 1, 200)"
-            "  FROM items WHERE sender_key = ?"
-            "    AND event_at >= ?"
-            "  ORDER BY event_at DESC LIMIT ?",
-            (key, since, MAX_INTERACTIONS)).fetchall()
-        interactions[names[key]] = [
+    for mark, group in wanted:
+        # One query per identity rather than a join or an IN list built from
+        # two columns: the store keeps its tables as independent silos and
+        # the number of identities a person has is small.
+        rows: list[tuple] = []
+        for who in group:
+            rows += conn.execute(
+                "SELECT source, event_at, addressing,"
+                "       substr(COALESCE(subject, body), 1, 200)"
+                "  FROM items WHERE source = ? AND sender_key = ?"
+                "    AND event_at >= ?"
+                "  ORDER BY event_at DESC LIMIT ?",
+                (who.source, who.key, since, MAX_INTERACTIONS)).fetchall()
+        rows.sort(key=lambda r: r[1] or "", reverse=True)
+        interactions[mark] = [
             {"when": (event_at or "")[:10], "source": source,
              "addressing": addressing, "text": " ".join((text or "").split())}
-            for source, event_at, addressing, text in rows]
+            for source, event_at, addressing, text in rows[:MAX_INTERACTIONS]]
 
     return {"people": chosen, "interactions": interactions,
             "shared_display_name": shared,
+            "identity_candidates": proposals,
+            "identity_conflicts": identity.contradictions(conn),
             "messages_without_identity": unkeyed}
 
 
@@ -616,6 +694,12 @@ def main() -> int:
         # Namesakes get one page each, but the agent cannot tell them apart
         # by name and should say which page is about whom.
         "shared_display_name": found["shared_display_name"],
+        # Identities that may be one person. Proposed, never acted on: the
+        # user answers these after the run, and the run does not wait.
+        "identity_candidates": found["identity_candidates"],
+        # Answers that no longer agree with each other. Reported rather than
+        # resolved, because neither side is knowably the wrong one.
+        "identity_conflicts": found["identity_conflicts"],
         # Collected before the store kept identities. Not attributed to
         # anybody, because the only thing left to attribute them by is the
         # display name that cannot identify anybody.

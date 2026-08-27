@@ -71,7 +71,9 @@ from somebody's inbox promotes work they never chose — the same failure
 ```yaml
 ---
 name: Full Name
-source_key: person@example.com     # the address or user id this page is about
+identities:                        # every account this person writes from
+  - email:person@example.com
+  - slack:U01EXAMPLE
 email: person@example.com          # optional
 role: Job title or function
 relationship: How they relate to the user, 1-2 sentences
@@ -85,14 +87,31 @@ status: active | departing | departed   # optional, default active
 **Sections, in order:** Relationship · Communication Style · Key Context ·
 Projects (linked) · Recent Interactions.
 
-**`source_key` is what makes the page durable, and it is not the same field
-as `email`.** `email` is contact information a reader might use; `source_key`
-is the identity the selector matches on, copied verbatim from what it hands
-over. Without it a page is found only by its filename, so the day a second
+**`identities` is what makes the page durable, and it is not the same field
+as `email`.** `email` is contact information a reader might use; `identities`
+is what the selector matches on, copied verbatim from what it hands over.
+Without it a page is found only by its filename, so the day a second
 `Sam Ruiz` appears the pages have to be renamed to tell them apart — and a
 renamed page is a page whose history was lost. With it, whoever was there
-first keeps their name and the newcomer gets a new one. Never edit it to tidy
-it up: an address that no longer matches the store is the same as no page.
+first keeps their name and the newcomer gets a new one. Never edit an entry
+to tidy it up: a value that no longer matches the store is the same as no
+page.
+
+**It is a list because a person is not one account.** Each entry is
+`source:key` — the connector that collected it, then the identity that
+connector gave. A colleague who writes from Slack and from mail has two
+entries; a third connector adds a third, and nothing about the page's shape
+changes. Split on the *first* colon only: a key may contain colons of its
+own.
+
+**Only the user adds an entry, and only through
+`profile/scripts/link_identity.py`.** A matching display name is not
+evidence — the reason the store keeps a stable identity at all is that
+guessing from a name puts two people on one page. A matching handle is a
+reason to *ask*, which the memory job does by reporting
+`identity_candidates`; it is never a reason to write. Pages written before
+the list existed carry a single `source_key:` and are read as a list of one;
+they are not rewritten, because the page belongs to the user.
 
 **Importance is about working proximity, not seniority.**
 

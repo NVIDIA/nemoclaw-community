@@ -63,7 +63,7 @@ class TestMigration(unittest.TestCase):
 
         with sqlite3.connect(path) as c:
             # v1 -> v4 now, so all three steps run in order.
-            self.assertEqual(migrate(c), [2, 3, 4])
+            self.assertEqual(migrate(c), [2, 3, 4, 5])
             self.assertEqual(current_version(c), SCHEMA_VERSION)
             columns = {row[1] for row in c.execute("PRAGMA table_info(items)")}
             self.assertIn("body_cleared_at", columns)
@@ -104,7 +104,7 @@ class TestMigration(unittest.TestCase):
                              "the artifact is not really v2")
 
         with sqlite3.connect(path) as c:
-            self.assertEqual(migrate(c), [3, 4])
+            self.assertEqual(migrate(c), [3, 4, 5])
             self.assertEqual(current_version(c), SCHEMA_VERSION)
             columns = {row[1] for row in c.execute("PRAGMA table_info(items)")}
             self.assertIn("sender_key", columns)
@@ -152,7 +152,7 @@ class TestMigration(unittest.TestCase):
                              "the frozen v3 schema contains a v4 column")
 
         with sqlite3.connect(path) as c:
-            self.assertEqual(migrate(c), [4])
+            self.assertEqual(migrate(c), [4, 5])
             self.assertEqual(current_version(c), SCHEMA_VERSION)
             columns = {row[1] for row in c.execute("PRAGMA table_info(items)")}
             row = c.execute("SELECT sender, sender_key, body, deleted_at,"
@@ -160,6 +160,7 @@ class TestMigration(unittest.TestCase):
                             " WHERE source_id='m1'").fetchone()
         self.assertIn("deleted_at", columns)
         self.assertIn("internet_message_id", columns)
+        self.assertIn("sender_handle", columns)
         self.assertEqual(row[:3], ("Dana Okoro", "dana@example.com", "kept"))
         self.assertIsNone(row[3], "an existing row was marked deleted")
         self.assertIsNone(row[4], "a missing identity was invented")
@@ -176,7 +177,7 @@ class TestMigration(unittest.TestCase):
         with sqlite3.connect(path) as c:
             c.execute("UPDATE meta SET value='2' WHERE key='schema_version'")
         with sqlite3.connect(path) as c:
-            self.assertEqual(migrate(c), [3, 4])
+            self.assertEqual(migrate(c), [3, 4, 5])
             self.assertEqual(current_version(c), SCHEMA_VERSION)
 
     def test_the_v2_artifact_is_never_quietly_edited(self):

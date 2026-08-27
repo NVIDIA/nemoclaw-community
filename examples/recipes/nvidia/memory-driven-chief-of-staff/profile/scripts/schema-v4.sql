@@ -1,3 +1,10 @@
+-- FROZEN. The v4 schema exactly as it shipped.
+--
+-- Kept so the v4 -> v5 migration is tested against the database people
+-- actually have. The v5 step rebuilds `items` to drop a CHECK constraint,
+-- which is the one migration shape that can lose rows, so the state it
+-- starts from has to be the real one.
+--
 -- Ledger store for the memory-driven chief-of-staff recipe.
 --
 -- Target runtime : SQLite bundled with Hermes 0.19.0 (the version the current
@@ -22,24 +29,7 @@ CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
-INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '5');
-
-
--- ---------------------------------------------------------------------------
--- 0) sources — the systems messages can arrive from.
---
---    A table rather than a CHECK list on `items.source`. The list was
---    `CHECK (source IN ('email','slack'))`, which meant a third connector
---    could not write a single row until someone shipped a schema migration —
---    and SQLite cannot alter a CHECK, so that migration is a full table
---    rebuild. Adding a source is now an INSERT, and the foreign key still
---    refuses a typo, which is what the CHECK was actually for.
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS sources (
-    name      TEXT PRIMARY KEY,
-    added_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-INSERT OR IGNORE INTO sources(name) VALUES ('email'), ('slack');
+INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '4');
 
 
 -- ---------------------------------------------------------------------------
@@ -50,7 +40,7 @@ CREATE TABLE IF NOT EXISTS items (
     -- Email: the Graph message id. Slack: "<channel_id>:<ts>", because a
     -- Slack timestamp is only unique within its channel.
     source_id   TEXT PRIMARY KEY,
-    source      TEXT NOT NULL REFERENCES sources(name),
+    source      TEXT NOT NULL CHECK (source IN ('email','slack')),
     scope       TEXT NOT NULL,              -- mail folder id / slack channel id
     thread_ref  TEXT,                       -- groups replies; NULL when standalone
     -- ISO-8601 UTC. Slack returns an epoch float and must be converted at
@@ -72,20 +62,6 @@ CREATE TABLE IF NOT EXISTS items (
     -- this column existed have none, and a collector that cannot supply one
     -- is not a reason to refuse the message.
     sender_key  TEXT,                       -- address or user id, never a name
-    -- What the person is called *by the source*, as opposed to who they are
-    -- (`sender_key`) or what they are displayed as (`sender`).
-    --
-    -- A Slack `@handle`, a GitHub login, a mail local part. Three distinct
-    -- things, and conflating any two of them loses something: the handle is
-    -- unique within its source but the person can change it, so it cannot be
-    -- an identity; the display name is neither unique nor stable; the stable
-    -- id is neither readable nor something anyone would recognise.
-    --
-    -- Kept because it is the strongest evidence a source gives for the same
-    -- person appearing in another one, and because it is what a user
-    -- recognises when asked whether two identities are the same colleague.
-    -- NULL when the source has no such concept — mail does not.
-    sender_handle TEXT,
     subject     TEXT,                       -- NULL for slack
     body        TEXT,
     -- Set when the retention pass clears `body`, and never otherwise. It is
@@ -122,52 +98,6 @@ CREATE TABLE IF NOT EXISTS items (
                 DEFAULT 'pending',
     state_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
-
--- ---------------------------------------------------------------------------
--- 1b) identity_links — the user's answer to "are these the same person?"
---
---    An identity is a (source, key) pair, and one person holds as many as
---    they have places to write from. Nothing in the data says which belong
---    together: a shared display name is not evidence, and guessing from one
---    is precisely the mistake `sender_key` exists to prevent. Only the user
---    can say, so only the user's answer is recorded here.
---
---    Pairs, not groups, because pairs compose. Confirming A~B and B~C makes
---    A~C true without asking a third time, and a fourth identity is one more
---    pair rather than a new shape. The grouping is a disjoint-set union over
---    the confirmed rows; see `identity.py`.
---
---    Rejections are kept for the same reason as confirmations. A candidate
---    the user has already dismissed must not be proposed again on the next
---    run — an unresolved question re-asked nightly is how a job that should
---    be idle wakes the agent forever.
---
---    Each pair is stored once, with the lexicographically smaller identity
---    on the left, so (A,B) and (B,A) cannot both exist and disagree.
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS identity_links (
-    left_source   TEXT NOT NULL REFERENCES sources(name),
-    left_key      TEXT NOT NULL,
-    right_source  TEXT NOT NULL REFERENCES sources(name),
-    right_key     TEXT NOT NULL,
-    status        TEXT NOT NULL CHECK (status IN ('confirmed','rejected')),
-    decided_at    TEXT NOT NULL
-                  DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    -- How the answer was obtained. Only the user decides, but the route
-    -- matters when reading back a decision months later.
-    decided_via   TEXT NOT NULL DEFAULT 'user',
-    PRIMARY KEY (left_source, left_key, right_source, right_key),
-    -- The ordering invariant, enforced rather than remembered.
-    CHECK ((left_source, left_key) < (right_source, right_key))
-);
-
--- Resolving a person means walking every confirmed link touching an
--- identity, from either side.
-CREATE INDEX IF NOT EXISTS idx_links_left
-    ON identity_links(left_source, left_key) WHERE status = 'confirmed';
-CREATE INDEX IF NOT EXISTS idx_links_right
-    ON identity_links(right_source, right_key) WHERE status = 'confirmed';
-
 
 -- Intake selector reads this: oldest pending first.
 CREATE INDEX IF NOT EXISTS idx_items_pending ON items(state, event_at);

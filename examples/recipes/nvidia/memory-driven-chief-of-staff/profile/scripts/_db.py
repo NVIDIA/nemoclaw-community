@@ -117,6 +117,12 @@ def ensure_store(schema_sql: Path | None = None) -> Path:
 
     with contextlib.closing(sqlite3.connect(path, isolation_level=None)) as conn:
         conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
+        # `sources` is a foreign key, not a CHECK, so that adding a
+        # connector is an INSERT rather than a table rebuild. The cost is
+        # that SQLite enforces foreign keys per connection: unset, the
+        # constraint is inert. Every connection this code opens for writing
+        # sets it, here and in `write_txn`.
+        conn.execute("PRAGMA foreign_keys = ON")
         # Check the version before the baseline DDL, not after. `CREATE TABLE
         # IF NOT EXISTS` is idempotent against our own schema but not against
         # someone else's: a store from a later version that dropped a table we

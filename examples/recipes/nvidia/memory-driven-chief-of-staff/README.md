@@ -83,10 +83,12 @@ those two apart.
 | `profile/scripts/memory_check.py` | Invariant detection over the memory, deterministic |
 | `profile/scripts/preferences.py` | Correction counting against a fixed threshold |
 | `profile/scripts/apply_decisions.py` | Applies model decisions; the model returns an envelope and never writes SQL |
-| `profile/scripts/migrate.py` | Schema versioning, forward-only. At v2: adds `body_cleared_at` to a v1 store in place, without touching what it holds |
+| `profile/scripts/migrate.py` | Schema versioning, forward-only, v1 through v5. Each step is idempotent; v5 rebuilds `items` to trade a hardcoded source list for a foreign key, and refuses rather than completing if the copy would lose a row |
 | `profile/scripts/normalize.py` | Source payloads to store rows, kept separate from the network calls |
 | `profile/scripts/_db.py` | Connection and transaction boundary |
 | `profile/scripts/correct.py` | The user's writer: pins, ignores, and the only source of `actor='user'` events |
+| `profile/scripts/identity.py` | Which identities are one person: pairwise answers, resolved with a disjoint set |
+| `profile/scripts/link_identity.py` | The user's other writer, and the only thing that answers "are these the same person?" |
 | `profile/scripts/load_fixtures.py` | Replays the fixtures through the real ingest path |
 | `profile/scripts/walkthrough.py` | The fixture walkthrough, end to end, with no credentials and no model |
 | `profile/scripts/select_intake.py` | The intake job's pre-step: what to judge, and whether to wake the model at all |
@@ -248,7 +250,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the thirteen files report 564 tests in
+Expected result: every file ends with `OK`, the fourteen files report 589 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -264,6 +266,7 @@ leave the loop exiting `0`.
 | Writer behavior, audit trail, caps across batches, correction idempotency, correction state transitions, displaced-row audit | `tests/test_apply_decisions.py` |
 | The walkthrough, and its central claims | `tests/test_walkthrough.py` |
 | Selector output, the wake gate, and the scheduler contract | `tests/test_selectors.py` |
+| Identity across connectors: composing answers, refusing to guess, and the user's command | `tests/test_identity.py` |
 | What the memory job hands the agent: who is worth a page, stable identity across namesakes and renames, quiet days costing nothing, and corrections counted once | `tests/test_select_memory.py` |
 | Retention, exclusion, export and reset | `tests/test_lifecycle.py` |
 | The Slack collector: watermarks, partial failure, scope probing, thread discovery and rotation, the credential never reaching a stream, and the lifecycle controls applying to what it writes | `tests/test_ingest_slack.py` |
@@ -640,16 +643,34 @@ Both connectors can be set up, or either one alone. They write into the same
 store and run in the same tick, independently — see [When a collector
 fails](#when-a-collector-fails) for what happens when one of them cannot.
 
-**A person gets a page per source they reach you from.** Slack identifies
-people by user id and mail by address; nothing links them, and nothing should
-on the evidence available — a shared display name is not evidence, and the
-reason this recipe keeps a stable identity per sender at all is that guessing
-from a name puts two people on one page. So a colleague who writes from two
-places holds a page for each, and the selector reports them together under
-`shared_display_name` so the agent can say as much on both. That is a
-per-source split, not a Slack-and-mail one: a third connector would add a
-third page for the same person. Linking identities on the user's word rather
-than on a name is not in this change.
+**A person is a set of identities, and only the user says which.** Slack
+identifies people by user id, mail by address, and a third connector will do
+it a third way; nothing in the data links them, because a shared display name
+is not evidence and the reason this recipe keeps a stable identity per sender
+at all is that guessing from a name puts two people on one page.
+
+So the memory job proposes and never decides. When identities share a handle
+— stronger, because a handle is unique within its own source — or a display
+name, they are reported as `identity_candidates` and each still gets its own
+page. The user answers whenever they get to it:
+
+```bash
+python3 profile/scripts/link_identity.py same slack:U01DANA email:dana@example.com
+```
+
+and the next run writes one page holding the whole history. **Nothing waits
+for that answer.** The job records what it noticed and exits; an unanswered
+question costs nothing, and a nightly job whose completion depends on when
+somebody read a message is a job that does not complete.
+
+Answers are stored pairwise and composed, so confirming two pairs joins three
+identities without a third question, and a fourth connector is one more pair
+rather than a new shape. A rejection is recorded as durably as a
+confirmation, so a candidate the user has dismissed is not proposed again on
+every run. When answers stop agreeing with each other — two identities
+answered as different people, joined anyway by other confirmations since —
+that is reported as `identity_conflicts` and nothing is changed, because
+neither answer is knowably the wrong one.
 
 ### When a collector fails
 
