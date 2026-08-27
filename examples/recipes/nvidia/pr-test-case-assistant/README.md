@@ -37,6 +37,11 @@ assumptions.
 Both screenshots were captured while the reply was still streaming, so Slack
 marks the message `(edited)`.
 
+The requester's display name and profile photo are replaced with a placeholder
+identity. Everything else is the original capture: the pull request numbers,
+titles, GitHub authors, dates, timestamps, and the assistant's replies are
+unmodified.
+
 ## At A Glance
 
 | Question | Answer |
