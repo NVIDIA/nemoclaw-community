@@ -15,13 +15,27 @@ This recipe complements the
 attested review artifacts with Hermes. This recipe uses OpenClaw and Slack to
 help quality engineers turn a pull request into a test checklist.
 
-## Screenshot
+## Screenshots
 
-![Slack direct message requesting feature test cases for a public pull request](assets/slack-test-cases.png)
+The assistant answers two kinds of request in a Slack direct message.
+
+A repository asks for a pull request brief:
+
+![Slack direct message asking for a pull request brief, answered with five pull request numbers, titles, authors, and update dates](assets/slack-pr-brief.png)
+
+The reply lists the five most recently updated open pull requests and
+recommends which one to inspect first.
+
+A selected pull request asks for test cases:
+
+![Slack direct message asking for feature test cases for pull request 783, answered with proposed test cases](assets/slack-test-cases.png)
 
 The assistant names the public pull request, labels the output as proposed test
 cases, and separates identifiers read from the diff from build or test-harness
 assumptions.
+
+Both screenshots were captured while the reply was still streaming, so Slack
+marks the message `(edited)`.
 
 ## At A Glance
 
@@ -231,6 +245,7 @@ two messages in [Start Here](#start-here).
 pr-test-case-assistant/
 ├── .env.example
 ├── assets/
+│   ├── slack-pr-brief.png
 │   └── slack-test-cases.png
 ├── config/
 │   └── slack-app-manifest.yml
@@ -265,7 +280,7 @@ pr-test-case-assistant/
 - Proposed test cases are not executed.
 - Slack Socket Mode permits one active connection per app-level token. Do not
   reuse the same app token in another active sandbox.
-- The screenshot shows the original live assistant. This public recipe
+- The screenshots show the original live assistant. This public recipe
   revision has local/static verification until its full setup is rerun.
 
 ## Third-Party Services and Dependencies
