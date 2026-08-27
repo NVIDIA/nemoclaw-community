@@ -9,7 +9,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(HERE))
-from memory_check import check_all, check_ceilings, check_decay, check_frontmatter, check_index, check_links, check_provenance  # noqa: E402
+from memory_check import check_all, check_ceilings, check_decay, check_frontmatter, check_identity, check_index, check_links, check_provenance  # noqa: E402
 
 FIXTURES = HERE.parents[1] / "fixtures" / "memory"
 
@@ -119,6 +119,77 @@ class TestInvariants(unittest.TestCase):
         second = [str(f) for f in check_all(self.root, self.today)]
         self.assertEqual(first, second)
         self.assertTrue(first, "the fixture was supposed to be dirty")
+
+
+class TestPersonIdentityIsChecked(unittest.TestCase):
+    """`source_key` is what the memory job matches a person on.
+
+    Until this existed, two valid-looking people pages with no key at all —
+    and two claiming the same one — both passed `check_all()`, so the page
+    that decides who a person is was the one thing the deterministic checker
+    did not look at.
+    """
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp()) / "memory"
+        shutil.copytree(FIXTURES, self.root)
+        self.person = self.root / "people" / "sam_ruiz.md"
+        self.other = self.root / "people" / "dana_okoro.md"
+
+    def _drop_line(self, page, key):
+        page.write_text(re.sub(rf"^{key}:.*\n", "", page.read_text(),
+                               count=1, flags=re.M))
+
+    def _set(self, page, key, value):
+        page.write_text(re.sub(rf"^{key}:.*$", f"{key}: {value}",
+                               page.read_text(), count=1, flags=re.M))
+
+    def test_the_shipped_fixture_pages_carry_identities(self):
+        self.assertEqual(check_identity(self.root), [])
+
+    def test_a_page_with_no_identity_is_reported(self):
+        self._drop_line(self.person, "source_key")
+        findings = check_identity(self.root)
+        self.assertEqual([f.kind for f in findings], ["missing-identity"])
+        self.assertEqual(findings[0].path, "people/sam_ruiz.md")
+
+    def test_an_empty_identity_counts_as_missing(self):
+        """A key present but blank is the shape a half-written page has."""
+        self._set(self.person, "source_key", "")
+        self.assertEqual([f.kind for f in check_identity(self.root)],
+                         ["missing-identity"])
+
+    def test_two_pages_claiming_one_identity_are_reported(self):
+        self._set(self.person, "source_key", "dana.okoro@example.com")
+        findings = check_identity(self.root)
+        self.assertEqual([f.kind for f in findings], ["duplicate-identity"])
+        # Both pages are named, because the finding is about the pair and
+        # neither one is knowably the wrong one.
+        self.assertIn("dana_okoro.md", findings[0].detail)
+        self.assertEqual(findings[0].path, "people/sam_ruiz.md")
+
+    def test_the_duplicate_report_does_not_depend_on_directory_order(self):
+        """`glob` order is filesystem order. A finding that appears only on
+        some machines is worse than no finding."""
+        self._set(self.other, "source_key", "sam.ruiz@example.com")
+        self.assertEqual([f.kind for f in check_identity(self.root)],
+                         ["duplicate-identity"])
+
+    def test_pages_of_other_types_are_left_alone(self):
+        """Only people pages have this field; a project page is not a person
+        missing an identity."""
+        for page in self.root.rglob("*.md"):
+            if page.parent.name != "people":
+                self.assertNotIn(
+                    "missing-identity",
+                    [f.kind for f in check_identity(self.root)
+                     if f.path.endswith(page.name)])
+
+    def test_check_all_runs_it(self):
+        """A check that exists but is not wired in has never run."""
+        self._drop_line(self.person, "source_key")
+        self.assertIn("missing-identity",
+                      [f.kind for f in check_all(self.root)])
 
 
 class TestFrontmatter(unittest.TestCase):

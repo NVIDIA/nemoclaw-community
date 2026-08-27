@@ -343,17 +343,36 @@ def evidence(conn, since: str) -> dict[str, object]:
     # Grouped by identity and display name together, so a person who changed
     # how their name is shown is still one person, and two people who share a
     # display name are still two.
+    #
+    # Only rows that carry an identity. Falling back to the display name for
+    # the ones that do not looked harmless and split people in half: a store
+    # upgraded to v3 keeps `sender_key IS NULL` on everything collected
+    # before, so one real correspondent appeared twice — once keyed by their
+    # name, from the old rows, and once by their address, from the new ones —
+    # and got two pages that each held half their history. A display name is
+    # not an identity in the fallback either.
     counted = conn.execute(
-        "SELECT COALESCE(sender_key, sender), sender, COUNT(*), MAX(event_at)"
+        "SELECT sender_key, sender, COUNT(*), MAX(event_at)"
         "  FROM items"
-        "  WHERE event_at >= ? AND sender IS NOT NULL"
-        "  GROUP BY COALESCE(sender_key, sender), sender", (since,)).fetchall()
+        "  WHERE event_at >= ? AND sender IS NOT NULL AND sender_key IS NOT NULL"
+        "  GROUP BY sender_key, sender", (since,)).fetchall()
+
+    # Said out loud rather than silently skipped. These are rows from before
+    # the upgrade; they stop appearing as the collectors re-read their window
+    # and `insert_items` fills the identity in, and they are gone entirely
+    # once the window has turned over.
+    unkeyed = conn.execute(
+        "SELECT COUNT(*) FROM items"
+        "  WHERE event_at >= ? AND sender IS NOT NULL AND sender_key IS NULL",
+        (since,)).fetchone()[0]
 
     counts: Counter[str] = Counter()
     latest: dict[str, str] = {}
     display: dict[str, str] = {}
     for key, sender, count, last in counted:
         if AUTOMATED.search(sender or ""):
+            continue
+        if not key:
             continue
         counts[key] += count
         if last and last > latest.get(key, ""):
@@ -422,7 +441,7 @@ def evidence(conn, since: str) -> dict[str, object]:
         rows = conn.execute(
             "SELECT source, event_at, addressing,"
             "       substr(COALESCE(subject, body), 1, 200)"
-            "  FROM items WHERE COALESCE(sender_key, sender) = ?"
+            "  FROM items WHERE sender_key = ?"
             "    AND event_at >= ?"
             "  ORDER BY event_at DESC LIMIT ?",
             (key, since, MAX_INTERACTIONS)).fetchall()
@@ -432,7 +451,8 @@ def evidence(conn, since: str) -> dict[str, object]:
             for source, event_at, addressing, text in rows]
 
     return {"people": chosen, "interactions": interactions,
-            "shared_display_name": shared}
+            "shared_display_name": shared,
+            "messages_without_identity": unkeyed}
 
 
 def open_obligations(conn) -> list[dict[str, object]]:
@@ -596,6 +616,10 @@ def main() -> int:
         # Namesakes get one page each, but the agent cannot tell them apart
         # by name and should say which page is about whom.
         "shared_display_name": found["shared_display_name"],
+        # Collected before the store kept identities. Not attributed to
+        # anybody, because the only thing left to attribute them by is the
+        # display name that cannot identify anybody.
+        "messages_without_identity": found["messages_without_identity"],
         "interactions": found["interactions"],
         "open_obligations": obligations,
         # Kept separate from `open_obligations` on purpose. One is what other

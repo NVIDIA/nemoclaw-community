@@ -47,15 +47,23 @@ quickly.
    requires. A missing `updated` is filled from the newest dated content on
    the page, never from today — today would assert a freshness the page has
    not earned.
-4. **Decay windows.** Any page past its `decay` window is flagged as stale in
+4. **Person identity.** Every people page carries a `source_key`, and no two
+   carry the same one. **Never derive one from the page.** For
+   `missing-identity`, take the value from the memory job's `source_key` for
+   that person and write it in; if the selector does not name them, leave the
+   field absent and note it — a page found by the wrong identity is worse than
+   one found only by its filename. For `duplicate-identity`, do not merge and
+   do not pick: two pages claiming one identity means one of them is about
+   somebody else, and only the selector's evidence can say which.
+5. **Decay windows.** Any page past its `decay` window is flagged as stale in
    the log. **Do not delete it and do not silently refresh the date.** A page
    marked stale is still useful; a page whose date was quietly bumped is a
    lie.
-5. **Provenance.** Claims on `patterns/` pages carry a footnote or an
+6. **Provenance.** Claims on `patterns/` pages carry a footnote or an
    `(inferred)` marker. A page with neither is flagged. Never invent a
    footnote to satisfy the check — an unsupported claim should be visible, not
    dressed up.
-6. **Section ceilings.** Pages past the limits in the schema's growth-control
+7. **Section ceilings.** Pages past the limits in the schema's growth-control
    table are reported for the consolidation job. Repair does not compact;
    those are different jobs on purpose, because compaction needs judgment and
    repair should be safe enough to run unattended.
@@ -65,7 +73,8 @@ quickly.
 - Promote an inference to a sourced fact.
 - Delete an unresolved commitment.
 - Merge two pages on a name match alone. Identity needs evidence; a shared
-  first name is not evidence.
+  first name is not evidence, and neither is a shared full name.
+- Invent a `source_key`, or copy one from another page to clear a finding.
 - Rewrite a page wholesale when a bounded fix would do.
 
 ## Log

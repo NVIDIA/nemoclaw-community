@@ -186,4 +186,22 @@ def insert_items(conn, items) -> int:
     conn.executemany(
         f"INSERT OR IGNORE INTO items({','.join(ITEM_COLUMNS)}) VALUES ({placeholders})",
         rows)
+
+    # Fill in an identity a row does not have yet.
+    #
+    # `INSERT OR IGNORE` leaves an existing row alone, so a store upgraded to
+    # v3 keeps `sender_key IS NULL` on everything it collected before — even
+    # when the collector re-reads the very same message and now knows the
+    # answer. Nothing else about the row is touched, and the value comes from
+    # that message rather than from matching a name against another row, so
+    # this cannot merge two people the way a name-based backfill would.
+    #
+    # It is a floor, not a guarantee: it reaches what the collectors re-read,
+    # which for a rolling window is the recent past and nothing older. What
+    # stays unkeyed is handled by refusing to guess — see `people()`.
+    conn.executemany(
+        "UPDATE items SET sender_key = ?"
+        "  WHERE source_id = ? AND sender_key IS NULL",
+        [(item["sender_key"], item["source_id"]) for item in items
+         if item.get("sender_key") and item.get("source_id")])
     return conn.execute("SELECT count(*) FROM items").fetchone()[0] - before

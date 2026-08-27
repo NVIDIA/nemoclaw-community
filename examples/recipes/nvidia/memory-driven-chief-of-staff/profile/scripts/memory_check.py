@@ -268,11 +268,52 @@ def check_ceilings(root: Path) -> list[Finding]:
     return findings
 
 
+def check_identity(root: Path) -> list[Finding]:
+    """People pages carry an identity, and no two carry the same one.
+
+    `source_key` is what the memory job matches a person on. A page without
+    one is found only by its filename, so it is renamed the day a namesake
+    appears — and a renamed page is a page whose history was lost. Two pages
+    with the same one are worse: the job finds whichever it looks at first and
+    writes both people into it.
+
+    Neither is repaired by guessing. A missing key is reported so the page can
+    be given the value the selector hands over for that person; there is
+    nothing on the page itself that could supply it, and deriving one from the
+    name is the exact mistake the field exists to prevent.
+    """
+    findings: list[Finding] = []
+    seen: dict[str, str] = {}
+    for page in sorted(_pages(root)):
+        if page.parent.name != "people":
+            continue
+        text = _read(page)
+        if text is None:
+            continue
+        rel = str(page.relative_to(root))
+        key = _frontmatter(text).get("source_key", "").strip()
+        if not key:
+            findings.append(Finding(
+                "missing-identity", rel,
+                "no source_key; a page written now must carry the value the "
+                "selector reports, and one written before the field existed "
+                "needs it supplied rather than derived from the name"))
+            continue
+        if key in seen:
+            findings.append(Finding(
+                "duplicate-identity", rel,
+                f"source_key {key} is also on {seen[key]}; one of them is "
+                "about somebody else"))
+            continue
+        seen[key] = rel
+    return findings
+
+
 def check_all(root: Path, today: date | None = None) -> list[Finding]:
     """Cheap and mechanical first, so a clean run finishes quickly."""
     return (check_index(root) + check_frontmatter(root) + check_links(root)
-            + check_decay(root, today) + check_provenance(root)
-            + check_ceilings(root))
+            + check_identity(root) + check_decay(root, today)
+            + check_provenance(root) + check_ceilings(root))
 
 
 def main() -> int:

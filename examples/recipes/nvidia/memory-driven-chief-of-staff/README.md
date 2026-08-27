@@ -245,7 +245,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the twelve files report 494 tests in
+Expected result: every file ends with `OK`, the twelve files report 505 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -471,6 +471,18 @@ purpose: nothing matches on it but the memory job, and it is one column both
 sources agree on rather than a per-source pair. An excluded sender's identity
 is not stored either, because exclusion is applied inside `insert_items` and
 nothing about them is written at all.
+
+**An upgraded store does not get this retroactively.** The value was never
+kept, and it cannot be recovered from a display name — deriving it that way is
+the mistake the field exists to prevent. So rows collected before the upgrade
+carry no identity, and the memory job does not guess at one: it counts them,
+reports the count as `messages_without_identity`, and writes nobody's page
+from them. Two things close the gap. Re-reading a message fills its identity
+in, so a rolling collection window keys the recent past within a window; and
+the job only looks thirty days back, so the gap is gone once the window has
+turned over. What is lost in between is that a person's pre-upgrade messages
+do not count toward whether they are worth a page — not that anything was
+attributed to the wrong person, which is the failure this refuses.
 
 Four controls over what is kept ship alongside it, and they were in place
 before the collector that fills the store was. They apply to real Slack

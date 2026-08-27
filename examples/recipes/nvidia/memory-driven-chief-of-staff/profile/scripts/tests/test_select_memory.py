@@ -55,14 +55,25 @@ class SelectorCase(unittest.TestCase):
         shutil.rmtree(self.home, ignore_errors=True)
 
     def add(self, sender, *, days_ago=0, source="email", subject="s",
-            body="b", scope="inbox"):
+            body="b", scope="inbox", key=None):
+        """A row as a current collector writes one: with an identity.
+
+        The identity defaults to an address derived from the name, because a
+        row whose `sender_key` is the display name is a shape no normalizer
+        produces — and a fixture in a shape production never produces is how
+        three earlier defects here stayed invisible. Tests about identity
+        itself go through `normalize` instead; see
+        `TestAPersonIsWhoTheyAreNotWhatTheyAreCalled`.
+        """
+        if key is None:
+            key = sender.strip().lower().replace(" ", ".") + "@example.com"
         with sqlite3.connect(self.db) as conn:
             conn.execute(
                 "INSERT INTO items(source_id, source, scope, event_at, sender,"
-                " subject, body, addressing, state)"
-                " VALUES (?,?,?,?,?,?,?, 'direct', 'pending')",
+                " sender_key, subject, body, addressing, state)"
+                " VALUES (?,?,?,?,?,?,?,?, 'direct', 'pending')",
                 (f"{sender}:{days_ago}:{body}", source, scope, iso(days_ago),
-                 sender, subject, body))
+                 sender, key, subject, body))
 
     def report(self):
         """The selector's real output, parsed the way the scheduler sees it."""
@@ -726,6 +737,92 @@ class TestAPersonIsWhoTheyAreNotWhatTheyAreCalled(SelectorCase):
                         body=f"a{n}")
         found = self.report()
         self.assertEqual([p["slug"] for p in found["people"]], ["dana_okoro"])
+
+
+class TestUpgradingDoesNotSplitAPerson(SelectorCase):
+    """The v2 -> v3 boundary, end to end.
+
+    The migration deliberately leaves existing rows with `sender_key IS NULL`
+    — the value was never stored and cannot be derived from a display name.
+    What matters is what the selector then does with a store holding both
+    kinds of row, which is the state every upgrading user is in.
+    """
+
+    def legacy(self, name, *, days_ago=0, body="b"):
+        """A row as v2 wrote it: a display name and no identity at all."""
+        with sqlite3.connect(self.db) as conn:
+            conn.execute(
+                "INSERT INTO items(source_id, source, scope, event_at, sender,"
+                " subject, body, addressing, state)"
+                " VALUES (?,?,?,?,?,?,?, 'direct', 'pending')",
+                (f"legacy:{name}:{days_ago}:{body}", "email", "inbox",
+                 iso(days_ago), name, body, body))
+
+    def arrive(self, name, address, *, days_ago=0, body="b"):
+        msg = {
+            "id": f"{address}:{days_ago}:{body}",
+            "receivedDateTime": iso(days_ago),
+            "from": {"emailAddress": {"name": name, "address": address}},
+            "toRecipients": [{"emailAddress": {"address": "user@example.com"}}],
+            "subject": body, "bodyPreview": body, "isRead": False,
+        }
+        item = normalize.graph_message_to_item(msg, "user@example.com")
+        with sqlite3.connect(self.db) as conn:
+            normalize.insert_items(conn, [item])
+
+    def test_one_person_either_side_of_the_upgrade_is_not_two_people(self):
+        """Two legacy rows and two keyed rows, one real correspondent.
+
+        Falling back to the display name produced two candidates and two page
+        slugs — one keyed by `Dana Okoro`, one by `dana@example.com` — each
+        holding half of one person's history.
+        """
+        for n in range(2):
+            self.legacy("Dana Okoro", days_ago=n + 2, body=f"old{n}")
+            self.arrive("Dana Okoro", "dana@example.com", days_ago=n,
+                        body=f"new{n}")
+        found = self.report()
+        self.assertEqual(len(found["people"]), 1, found["people"])
+        self.assertEqual(found["people"][0]["source_key"], "dana@example.com")
+
+    def test_rows_with_no_identity_are_counted_rather_than_guessed(self):
+        for n in range(2):
+            self.legacy("Dana Okoro", days_ago=n + 2, body=f"old{n}")
+        found = self.report()
+        self.assertEqual(found["people"], [])
+        self.assertEqual(found["messages_without_identity"], 2)
+
+    def test_re_reading_a_message_fills_in_the_identity_it_now_knows(self):
+        """The backfill that shortens the boundary to one collection window.
+
+        `INSERT OR IGNORE` leaves the existing row alone, so re-reading the
+        same message used to change nothing and a store stayed half-keyed for
+        as long as those rows were in the window.
+        """
+        msg_id = "dana@example.com:0:same"
+        with sqlite3.connect(self.db) as conn:
+            conn.execute(
+                "INSERT INTO items(source_id, source, scope, event_at, sender,"
+                " subject, body, addressing, state)"
+                " VALUES (?,'email','inbox',?,?,?,?, 'direct', 'pending')",
+                (msg_id, iso(0), "Dana Okoro", "same", "same"))
+        self.arrive("Dana Okoro", "dana@example.com", body="same")
+        with sqlite3.connect(self.db) as conn:
+            rows = conn.execute(
+                "SELECT source_id, sender_key FROM items").fetchall()
+        self.assertEqual(rows, [(msg_id, "dana@example.com")],
+                         "the re-read neither backfilled nor stayed idempotent")
+
+    def test_the_backfill_never_overwrites_an_identity_already_there(self):
+        """It fills an absent value. Changing one would let a later message
+        move a row to a different person."""
+        self.arrive("Dana Okoro", "dana@example.com", body="same")
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE items SET sender_key = 'first@example.com'")
+        self.arrive("Dana Okoro", "dana@example.com", body="same")
+        with sqlite3.connect(self.db) as conn:
+            keys = [r[0] for r in conn.execute("SELECT sender_key FROM items")]
+        self.assertEqual(keys, ["first@example.com"])
 
 
 class TestTheScopeIsStatedWhereItIsChecked(unittest.TestCase):
