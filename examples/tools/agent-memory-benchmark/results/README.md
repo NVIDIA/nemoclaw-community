@@ -8,13 +8,33 @@ by the grader in this repository. They are here so a reader can see what the
 benchmark produces and check a number against the verdicts that produced it —
 not as a ranking, and not as a claim about either architecture in general.
 
-**Agentic RAG** is `adapters/agentic_rag/`, which ships here: an embedding index
-over the raw documents, with the model writing its own search queries over up to
-three rounds before answering. **Self-model** is a consolidating design — it
-reasons at ingest time and writes a structured record it later answers from. No
-adapter for it ships here, so its rows are a data point rather than something
-you can re-run from this repository; `docs/SUBMITTING.md` describes the contract
-any such system would implement.
+## The two settings
+
+Both runs read the same 425 documents, answer the same 186 questions, are graded
+by the same answer key and the same grader, and answer with the same base model.
+One thing differs, and the benchmark exists to price it: **when the reasoning
+happens.**
+
+| | Agentic RAG | Self-model |
+| --- | --- | --- |
+| Where the reasoning happens | at question time | at ingest time |
+| What it does while reading the corpus | embeds each document into an index; no model reasoning | reads the documents and writes a consolidated, structured record |
+| What its memory is when questions start | the raw documents, plus the index | the record it wrote at ingest |
+| How it answers | writes its own search queries, retrieves, and repeats for up to three rounds | answers from the record |
+| Where the cost falls | per question, every question | once, up front |
+| Ships in this repository | yes — `adapters/agentic_rag/`, hashed into its report | no |
+
+That last row is the important caveat about these numbers. The agentic baseline
+is code you can run: its adapter ships here and its report records the hash of
+the adapter that produced the run. The self-model is a system that exists
+elsewhere; only its outputs ship. Its rows are a data point, not something you
+can re-execute from this repository — `docs/SUBMITTING.md` describes the
+contract any consolidating system would implement to be scored the same way.
+
+The two rows of the cost table below follow directly from this table: a design
+that front-loads its reasoning and a design that defers it do not have one
+comparable "total", so ingest cost and per-question cost are reported
+separately and never summed.
 
 ## Corpus A, NVIDIA Nemotron 3 Ultra
 
@@ -110,15 +130,34 @@ why a transformed result is weaker evidence than a fresh run.
 means re-running the answer phase against what ships here. The full substitution
 map is in each `report.json` under `provenance_note`.
 
-## Reading a run directory
+## Where the files are
+
+One directory per run, all siblings under `results/runs/`. Nothing nests: each
+run directory holds its own complete copy of the same five files, and neither
+run lives inside the other.
 
 ```
-report.json                 the row: accuracy by type, evidence, cost, fingerprint
-summary.md                  the same, readable
-answers.jsonl               what was scored, after the publication rename
-answers.as-answered.jsonl   what the system actually wrote, before it
-verdicts.jsonl              per question: correct, why, and the evidence it cited
+results/
+├── README.md                              this file
+└── runs/
+    ├── agentic-rag_corpus-a_nemotron/     the baseline's run — five files
+    └── self-model_corpus-a_nemotron/      the self-model's run — the same five
 ```
+
+A directory is named `<system>_<corpus>_<base model>`, so a second corpus or a
+second base model adds a sibling rather than overwriting one of these. Both
+directories here end in `corpus-a_nemotron` because that is the only pair that
+was run; corpus B and a second model would appear alongside them.
+
+Inside each one:
+
+| File | What it holds |
+| --- | --- |
+| `report.json` | the machine-readable row: accuracy by question type, evidence, cost, fingerprint, provenance |
+| `summary.md` | the same run, written to be read |
+| `answers.jsonl` | what was scored — the answers after the publication rename |
+| `answers.as-answered.jsonl` | what the system actually wrote, before the rename |
+| `verdicts.jsonl` | per question: correct or not, which accepted value matched, and the evidence the answer cited |
 
 Two reports are comparable only when their `fingerprint` blocks match — same
 corpus, same questions, same answer key, same normalization, same scorer. Both

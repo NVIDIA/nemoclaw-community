@@ -175,6 +175,10 @@ def test_the_readme_states_this_run_s_headline(run: Path):
     assert f"{overall:.1%}" in readme, (
         f"{run.name} scores {overall:.1%}, which does not appear in results/README.md"
     )
+    documents = _report(run)["corpus"]["documents"]
+    assert str(documents) in readme, (
+        f"{run.name} read {documents} documents; results/README.md describes a "
+        f"different corpus size")
 
 
 def test_the_readme_says_corpus_a_only():
