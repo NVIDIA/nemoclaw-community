@@ -180,6 +180,80 @@ class TestMigration(unittest.TestCase):
             self.assertEqual(migrate(c), [3, 4, 5])
             self.assertEqual(current_version(c), SCHEMA_VERSION)
 
+    def test_the_rebuild_keeps_the_audit_trail(self):
+        """The v5 step drops and recreates `items`.
+
+        `obligations.source_id` references it `ON DELETE CASCADE`, and with
+        foreign keys on, SQLite runs an implicit `DELETE FROM` before
+        dropping a table — which fires that cascade, and the cascade from
+        `obligations` to `events` after it. Measured before the fix: one
+        message, one obligation and one event went in; the message came out
+        alone. The audit trail is what the recipe promises outlives its
+        subject, so this is the one thing the rebuild must not cost.
+        """
+        path = Path(tempfile.mkdtemp()) / "v4.db"
+        with sqlite3.connect(path) as c:
+            c.executescript((HERE / "schema-v4.sql").read_text(encoding="utf-8"))
+            c.execute("INSERT INTO items(source_id, source, scope, event_at,"
+                      " sender, body, addressing, state) VALUES"
+                      " ('m1','email','inbox','2026-08-01T00:00:00Z','Dana',"
+                      "  'b','direct','judged')")
+            c.execute("INSERT INTO obligations(id, source_id, title, status,"
+                      " priority, global_rank)"
+                      " VALUES ('o1','m1','the cutover','open','high',1)")
+            c.execute("INSERT INTO events(obligation_id, actor, event_type)"
+                      " VALUES ('o1','user','ignored')")
+
+        with sqlite3.connect(path) as c:
+            # As `ensure_store` opens it. Without the pragma the cascade does
+            # not fire and this test cannot see the defect.
+            c.execute("PRAGMA foreign_keys = ON")
+            migrate(c)
+
+        with sqlite3.connect(path) as c:
+            self.assertEqual(
+                c.execute("SELECT id, source_id, title FROM obligations"
+                          " ORDER BY id").fetchall(),
+                [("o1", "m1", "the cutover")])
+            self.assertEqual(
+                c.execute("SELECT obligation_id, actor, event_type FROM events"
+                          " ORDER BY obligation_id").fetchall(),
+                [("o1", "user", "ignored")])
+            self.assertEqual(c.execute("PRAGMA foreign_key_check").fetchall(),
+                             [])
+
+    def test_the_rebuild_follows_the_cascade_further_than_one_table(self):
+        """`events` hangs off `obligations`, which hangs off `items`.
+
+        Saving only the tables that name `items` directly restores the
+        obligations and still loses the events — which is what a first
+        attempt at this did. The closure is what has to be carried.
+        """
+        path = Path(tempfile.mkdtemp()) / "v4.db"
+        with sqlite3.connect(path) as c:
+            c.executescript((HERE / "schema-v4.sql").read_text(encoding="utf-8"))
+            for n in range(3):
+                c.execute("INSERT INTO items(source_id, source, scope, event_at,"
+                          " sender, body, addressing, state) VALUES"
+                          " (?,'slack','c',?,?,'b','direct','judged')",
+                          (f"m{n}", f"2026-08-0{n + 1}T00:00:00Z", f"P{n}"))
+                c.execute("INSERT INTO obligations(id, source_id, title, status,"
+                          " priority, global_rank) VALUES (?,?,?,'open','high',?)",
+                          (f"o{n}", f"m{n}", f"t{n}", n + 1))
+                for actor in ("user", "agent"):
+                    c.execute("INSERT INTO events(obligation_id, actor,"
+                              " event_type) VALUES (?,?,'ignored')",
+                              (f"o{n}", actor))
+
+        with sqlite3.connect(path) as c:
+            c.execute("PRAGMA foreign_keys = ON")
+            migrate(c)
+
+        with sqlite3.connect(path) as c:
+            counts = {t: c.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
+                      for t in ("items", "obligations", "events")}
+        self.assertEqual(counts, {"items": 3, "obligations": 3, "events": 6})
+
     def test_the_v2_artifact_is_never_quietly_edited(self):
         artifact = (HERE / "schema-v2.sql").read_text(encoding="utf-8")
         self.assertIn("'schema_version', '2'", artifact)

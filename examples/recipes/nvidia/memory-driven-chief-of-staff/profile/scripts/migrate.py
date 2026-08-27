@@ -165,12 +165,25 @@ def _rebuild_items_without_the_source_check(conn: sqlite3.Connection) -> None:
     Detected rather than attempted: a store that already has the foreign key
     is left alone, so a re-run costs a `PRAGMA` and nothing else.
 
-    `PRAGMA foreign_keys` is deliberately not touched. The callers that open
-    a store for writing set it, and turning it off here would silently do
-    nothing anyway — SQLite ignores the pragma inside a transaction. The
-    order below does not need it off: nothing has a foreign key to `items`,
-    and `sources` is populated before any row is copied, so every row has a
-    parent by the time the constraint applies.
+    **The dependants have to be carried across by hand.** `obligations.source_id`
+    references `items(source_id)` `ON DELETE CASCADE`, and with foreign keys
+    enabled SQLite performs an implicit `DELETE FROM` before dropping a table
+    — which fires that cascade and takes the obligations, and the events
+    hanging off them, with it. Measured: a v4 store with one message, one
+    obligation and one event came out of this migration with the message and
+    nothing else. The audit trail is the thing the recipe promises outlives
+    its subject, so losing it here would have been the worst possible place.
+
+    Turning the pragma off does not help: SQLite ignores
+    `PRAGMA foreign_keys` inside a transaction, and `defer_foreign_keys`
+    defers constraint *checks* rather than cascade *actions*. All three were
+    tried. The documented procedure sets the pragma before `BEGIN`, which is
+    the caller's business and not something a migration step can reach.
+
+    So the rows are saved and put back. The dependants are discovered from
+    `PRAGMA foreign_key_list` rather than named here, because a table added
+    later that references `items` would otherwise be silently emptied by this
+    same code — which is the defect above, one table further on.
     """
     sql = conn.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='items'"
@@ -178,7 +191,33 @@ def _rebuild_items_without_the_source_check(conn: sqlite3.Connection) -> None:
     if sql and "REFERENCES sources" in (sql[0] or ""):
         return
 
-    before = conn.execute("SELECT count(*) FROM items").fetchone()[0]
+    # The transitive closure, not the direct dependants. `events` references
+    # `obligations`, which references `items`, so dropping `items` empties
+    # obligations by cascade and events by the cascade from *that* — and a
+    # first attempt at this saved only the direct dependants and lost the
+    # events anyway.
+    tables = [row[0] for row in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+        "   AND name NOT LIKE 'sqlite_%'").fetchall()]
+    parents = {table: {row[2] for row in
+                       conn.execute(f"PRAGMA foreign_key_list({table})")}
+               for table in tables}
+    reached, dependants = {"items"}, []
+    growing = True
+    while growing:
+        growing = False
+        for table in tables:
+            if table not in reached and parents[table] & reached:
+                reached.add(table)
+                dependants.append(table)
+                growing = True
+
+    before = {"items": conn.execute("SELECT count(*) FROM items").fetchone()[0]}
+    for table in dependants:
+        before[table] = conn.execute(
+            f"SELECT count(*) FROM {table}").fetchone()[0]
+        conn.execute(f"CREATE TEMP TABLE _carry_{table} AS"
+                     f" SELECT * FROM {table}")
     names = ", ".join(ITEM_COLUMNS_V5)
     conn.execute("""
         CREATE TABLE items_v5 (
@@ -206,13 +245,14 @@ def _rebuild_items_without_the_source_check(conn: sqlite3.Connection) -> None:
                         DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
         )""")
     conn.execute(f"INSERT INTO items_v5({names}) SELECT {names} FROM items")
-    after = conn.execute("SELECT count(*) FROM items_v5").fetchone()[0]
-    if after != before:
+    copied = conn.execute("SELECT count(*) FROM items_v5").fetchone()[0]
+    if copied != before["items"]:
         # The transaction is rolled back by the caller, so the old table is
         # still there. Better to refuse an upgrade than to complete one that
         # dropped messages.
         raise RuntimeError(
-            f"rebuilding items would have kept {after} of {before} rows")
+            f"rebuilding items would have kept {copied} of {before['items']}"
+            " rows")
 
     conn.execute("DROP TABLE items")
     conn.execute("ALTER TABLE items_v5 RENAME TO items")
@@ -221,6 +261,19 @@ def _rebuild_items_without_the_source_check(conn: sqlite3.Connection) -> None:
                  " ON items(state, event_at)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_items_event_at"
                  " ON items(event_at) WHERE body IS NOT NULL")
+
+    for table in dependants:
+        conn.execute(f"INSERT INTO {table} SELECT * FROM _carry_{table}")
+        conn.execute(f"DROP TABLE _carry_{table}")
+
+    # Every affected table, not only the one being rebuilt. Counting `items`
+    # alone is what let the cascade through unnoticed.
+    for table, count in before.items():
+        now = conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+        if now != count:
+            raise RuntimeError(
+                f"rebuilding items would have left {table} with {now} of "
+                f"{count} rows")
 
 
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
