@@ -1,9 +1,8 @@
 # Payment Operations Hermes Assistant
 
-Demonstrates payment screening, evidence preparation, and a platform-enforced human release boundary.
-
 | Catalog field | Value |
 | --- | --- |
+| Description | Demonstrates payment screening, evidence preparation, and a platform-enforced human release boundary. |
 | Industry | 💳 Financial Services |
 | Requirements | Linux · Docker Compose · OpenShell 0.0.53 · OpenAI-compatible inference API key · synthetic data only |
 

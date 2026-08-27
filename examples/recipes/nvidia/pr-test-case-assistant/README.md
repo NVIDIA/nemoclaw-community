@@ -5,10 +5,9 @@
 
 # PR Test Case Assistant
 
-Reads public GitHub pull requests and drafts grounded feature test cases through Slack.
-
 | Catalog field | Value |
 | --- | --- |
+| Description | Reads public GitHub pull requests and drafts grounded feature test cases through Slack. |
 | Industry | ✨ Other |
 | Requirements | NemoClaw + Docker · Slack app with Socket Mode · Slack bot + app access tokens · inference provider API key · public GitHub only |
 

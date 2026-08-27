@@ -1,9 +1,8 @@
 # Harness Engineering Playground
 
-Provides an experimental command-line interface for evaluation-driven harness profile optimization.
-
 | Catalog field | Value |
 | --- | --- |
+| Description | Provides an experimental command-line interface for evaluation-driven harness profile optimization. |
 | Industry | ✨ Other |
 | Requirements | Python 3.11+ · uv · DeepAgents submodule + extra · proposer and target-model API keys · experimental/not for production |
 

@@ -3,10 +3,9 @@
 
 # Axe A11y Browser Auditor
 
-Audits web pages for accessibility and captures screenshots, PDFs, and network traces.
-
 | Catalog field | Value |
 | --- | --- |
+| Description | Audits web pages for accessibility and captures screenshots, PDFs, and network traces. |
 | Industry | 🌐 Consumer Internet |
 | Requirements | Docker 24+ with Compose · linux/amd64 or Docker Desktop emulation · dedicated OpenShell/NemoClaw sandbox |
 

@@ -3,10 +3,9 @@
 
 # Deep Research Worker
 
-Queues long-running research from a sandbox to a host-side DeepAgents worker.
-
 | Catalog field | Value |
 | --- | --- |
+| Description | Queues long-running research from a sandbox to a host-side DeepAgents worker. |
 | Industry | ✨ Other |
 | Requirements | Docker Compose · dedicated OpenShell/NemoClaw sandbox · OpenAI-compatible inference endpoint + API key · no readiness guarantee |
 

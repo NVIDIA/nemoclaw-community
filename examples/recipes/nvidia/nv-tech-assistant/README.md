@@ -1,9 +1,8 @@
 # NV Tech Assistant
 
-Answers NVIDIA technical questions with citations from allowlisted sources.
-
 | Catalog field | Value |
 | --- | --- |
+| Description | Answers NVIDIA technical questions with citations from allowlisted sources. |
 | Industry | 🖥️ Hardware/Semiconductor |
 | Requirements | Docker · NemoClaw · NVIDIA Endpoints API key · optional Brave Search · no offline corpus |
 

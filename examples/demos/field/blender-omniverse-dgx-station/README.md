@@ -1,9 +1,8 @@
 # DGX Station Blender and Omniverse
 
-Controls Blender on DGX Station for OVRTX rendering and OVPhysX simulation.
-
 | Catalog field | Value |
 | --- | --- |
+| Description | Controls Blender on DGX Station for OVRTX rendering and OVPhysX simulation. |
 | Industry | 🎬 Media & Entertainment |
 | Requirements | DGX Station · Ubuntu 24.04 ARM64 · GB300 + RTX GPU · Blender 5.1.x + OVRTX/OVPhysX · local vLLM with Nemotron 3 Ultra · Hugging Face read access token |
 

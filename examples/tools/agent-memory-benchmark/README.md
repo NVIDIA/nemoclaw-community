@@ -20,10 +20,9 @@ evidence_level: local/static
 
 # Agent Memory Benchmark
 
-Measures memory-system accuracy and token cost on two synthetic email-and-chat corpora.
-
 | Catalog field | Value |
 | --- | --- |
+| Description | Measures memory-system accuracy and token cost on two synthetic email-and-chat corpora. |
 | Industry | ✨ Other |
 | Requirements | Python 3.9+ · pytest for the offline check · endpoint and adapter required only for live scoring |
 

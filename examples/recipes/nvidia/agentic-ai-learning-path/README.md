@@ -3,10 +3,9 @@
 
 # Agentic AI Learning Path
 
-Runs the seven-module Build an Agent workshop in an OpenShell sandbox with an AI tutor.
-
 | Catalog field | Value |
 | --- | --- |
+| Description | Runs the seven-module Build an Agent workshop in an OpenShell sandbox with an AI tutor. |
 | Industry | 🎓 Academia/Education |
 | Requirements | Linux · Docker · OpenShell · inference, NVIDIA, and Tavily API keys · Slack or Outlook · CPU-first; module 4 training is read-through |
 

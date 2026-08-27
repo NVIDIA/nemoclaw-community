@@ -28,9 +28,9 @@ Mermaid Tiny cache ────┴─> _site/assets/vendor/mermaid.tiny.js
 The standardized catalog block at the top of each example's root `README.md` is
 the canonical metadata source. [`scripts/build_catalog.py`](../scripts/build_catalog.py)
 discovers those READMEs from the repository taxonomy, validates their title,
-description, industry emoji and title, requirements, and conditional fields,
-then derives artifact kind and recipe provenance from each path. The ignored
-`_site/` directory is disposable; do not edit it directly.
+required `Description` table row, industry emoji and title, requirements, and
+conditional fields, then derives artifact kind and recipe provenance from each
+path. The ignored `_site/` directory is disposable; do not edit it directly.
 
 The generated HTML contains every example card. The local JavaScript module
 filters those cards in the browser, so the full category-organized catalog

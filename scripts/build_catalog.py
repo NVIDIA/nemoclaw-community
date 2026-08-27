@@ -362,6 +362,7 @@ def discover_example_paths(root: Path) -> set[str]:
 CATALOG_TABLE_HEADER = "| Catalog field | Value |"
 CATALOG_TABLE_DIVIDER = "| --- | --- |"
 CATALOG_FIELD_ORDER = (
+    "Description",
     "Industry",
     "Requirements",
     "Contributor",
@@ -455,32 +456,9 @@ def parse_readme_metadata(root: Path, path: str) -> CatalogEntry:
     if index >= len(lines) or lines[index].strip():
         raise CatalogError(f"README title must be followed by a blank line in {readme_path}.")
     index += 1
-
-    description_lines: list[str] = []
-    while index < len(lines) and lines[index].strip():
-        description_lines.append(lines[index].strip())
-        index += 1
-    description = " ".join(description_lines)
-    if not description:
-        raise CatalogError(
-            f"README title must be followed by a description paragraph in {readme_path}."
-        )
-    if (
-        len(description) > 300
-        or any(ord(character) < 32 for character in description)
-        or re.search(r"[`*_~\[\]<>]", description)
-    ):
-        raise CatalogError(
-            f"README description must be plain text and at most 300 characters in "
-            f"{readme_path}."
-        )
-    if index >= len(lines):
-        raise CatalogError(f"README catalog metadata table is missing in {readme_path}.")
-    index += 1
     if index >= len(lines) or lines[index] != CATALOG_TABLE_HEADER:
         raise CatalogError(
-            f"README description must be followed by `{CATALOG_TABLE_HEADER}` in "
-            f"{readme_path}."
+            f"README title must be followed by `{CATALOG_TABLE_HEADER}` in {readme_path}."
         )
     index += 1
     if index >= len(lines) or lines[index] != CATALOG_TABLE_DIVIDER:
@@ -507,7 +485,7 @@ def parse_readme_metadata(root: Path, path: str) -> CatalogEntry:
             + ", ".join(CATALOG_FIELD_ORDER)
             + "."
         )
-    missing_fields = {"Industry", "Requirements"} - set(fields)
+    missing_fields = {"Description", "Industry", "Requirements"} - set(fields)
     if missing_fields:
         raise CatalogError(
             f"Missing catalog metadata fields in {readme_path}: "
@@ -521,6 +499,11 @@ def parse_readme_metadata(root: Path, path: str) -> CatalogEntry:
     while index < len(lines) and not lines[index].strip():
         index += 1
 
+    description = fields["Description"]
+    if len(description) > 300:
+        raise CatalogError(
+            f"Description must be at most 300 characters in {readme_path}."
+        )
     industry_value = fields["Industry"]
     industry = next(
         (

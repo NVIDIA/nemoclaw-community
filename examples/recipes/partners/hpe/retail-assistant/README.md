@@ -1,9 +1,8 @@
 # Retail Assistant
 
-Provides role-aware retail operations through Telegram with Docker Compose or Helm deployment paths.
-
 | Catalog field | Value |
 | --- | --- |
+| Description | Provides role-aware retail operations through Telegram with Docker Compose or Helm deployment paths. |
 | Industry | 🛍️ Retail/Consumer Packaged Goods |
 | Requirements | Telegram bot · tool-calling OpenAI-compatible LLM · Docker Compose or Kubernetes + Helm · demo identity mapping |
 | Contributor | HPE |

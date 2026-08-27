@@ -1,9 +1,8 @@
 # x402 Payment Gate
 
-Screens x402 payment intents through a host-side maker/checker gate before signing or settlement.
-
 | Catalog field | Value |
 | --- | --- |
+| Description | Screens x402 payment intents through a host-side maker/checker gate before signing or settlement. |
 | Industry | 💳 Financial Services |
 | Requirements | Python 3 · Docker + OpenShell for sandbox checks · Blackwall service · simulated signing/no real money |
 | Contributor | BlueTier Operations |

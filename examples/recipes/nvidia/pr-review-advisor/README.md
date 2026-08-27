@@ -5,10 +5,9 @@ SPDX-License-Identifier: Apache-2.0
 
 # PR Review Advisor
 
-Reviews exact pull request (PR) heads with Hermes, produces attested artifacts, and leaves publication to a maintainer.
-
 | Catalog field | Value |
 | --- | --- |
+| Description | Reviews exact pull request (PR) heads with Hermes, produces attested artifacts, and leaves publication to a maintainer. |
 | Industry | ✨ Other |
 | Requirements | Linux + Docker · OpenShell 0.0.85 · Node.js 22.19+ · inference provider API key or existing provider · GitHub.com self-hosted runner for the generated workflow |
 

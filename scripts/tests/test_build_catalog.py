@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import html
 import tempfile
 import unittest
 from pathlib import Path
@@ -56,6 +57,7 @@ class CatalogBuildTests(unittest.TestCase):
             f"{INDUSTRY_EMOJIS.get(industry, '✨')} {industry}",
         )
         rows = [
+            f"| Description | {values['description']} |",
             f"| Industry | {industry_cell} |",
             f"| Requirements | {values['requirements']} |",
         ]
@@ -65,7 +67,6 @@ class CatalogBuildTests(unittest.TestCase):
                 rows.append(f"| {field} | {value} |")
         content = (
             f"# {values['title']}\n\n"
-            f"{values['description']}\n\n"
             "| Catalog field | Value |\n"
             "| --- | --- |\n"
             + "\n".join(rows)
@@ -131,6 +132,43 @@ class CatalogBuildTests(unittest.TestCase):
         with self.assertRaisesRegex(CatalogError, "documented emoji and title"):
             load_catalog(root)
 
+    def test_description_is_required_in_catalog_table(self) -> None:
+        root = self._fixture_root()
+        readme = root / "examples" / "recipes" / "community" / "sample" / "README.md"
+        content = readme.read_text(encoding="utf-8").replace(
+            "| Description | Produces a small observable fixture result. |\n",
+            "",
+        )
+        readme.write_text(content, encoding="utf-8")
+
+        with self.assertRaisesRegex(CatalogError, "Missing.*Description"):
+            load_catalog(root)
+
+    def test_description_paragraph_before_catalog_table_is_rejected(self) -> None:
+        root = self._fixture_root()
+        readme = root / "examples" / "recipes" / "community" / "sample" / "README.md"
+        content = readme.read_text(encoding="utf-8").replace(
+            "# Sample Example\n\n| Catalog field | Value |",
+            "# Sample Example\n\nA legacy description paragraph.\n\n"
+            "| Catalog field | Value |",
+        )
+        readme.write_text(content, encoding="utf-8")
+
+        with self.assertRaisesRegex(CatalogError, "title must be followed by"):
+            load_catalog(root)
+
+    def test_description_row_must_be_plain_text_and_at_most_300_characters(self) -> None:
+        invalid_descriptions = (
+            ("x" * 301, "at most 300 characters"),
+            ("Uses `inline code`.", "must be plain text"),
+        )
+        for description, message in invalid_descriptions:
+            with self.subTest(description=description[:20]):
+                root = self._fixture_root({"description": description})
+
+                with self.assertRaisesRegex(CatalogError, message):
+                    load_catalog(root)
+
     def test_industry_navigation_wraps_slash_labels_at_word_boundaries(self) -> None:
         entries = load_catalog(
             self._fixture_root({"industry": "Automotive/Transportation"})
@@ -178,6 +216,10 @@ class CatalogBuildTests(unittest.TestCase):
         self.assertEqual(example["industry"]["id"], "other")
         self.assertEqual(example["industry"]["emoji"], "✨")
         self.assertEqual(example["collections"], [])
+        self.assertEqual(
+            example["description"],
+            "Produces a small observable fixture result.",
+        )
         self.assertEqual(example["requirements"], "Python 3 · local/static")
         self.assertEqual(
             example["detail_url"], "examples/recipes/community/sample/"
@@ -194,6 +236,10 @@ class CatalogBuildTests(unittest.TestCase):
         for entry in entries:
             page = detail_pages[entry.detail_path]
             self.assertEqual(page.count("<h1"), 1)
+            self.assertIn(
+                f'<p class="detail-summary">{html.escape(entry.description)}</p>',
+                page,
+            )
             self.assertIn("Requirements &amp; limits", page)
             self.assertNotIn("Catalog field", page)
             self.assertIn('id="readme" tabindex="-1"', page)

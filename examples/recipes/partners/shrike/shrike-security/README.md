@@ -4,10 +4,9 @@
 
 # Shrike Security Action Governance
 
-Checks OpenClaw tool calls against Shrike policy before they run.
-
 | Catalog field | Value |
 | --- | --- |
+| Description | Checks OpenClaw tool calls against Shrike policy before they run. |
 | Industry | ✨ Other |
 | Requirements | NemoClaw/OpenShell · Node.js + npm · inference provider · Shrike API key · in-sandbox defense-in-depth only |
 | Contributor | Shrike Security, Inc. |

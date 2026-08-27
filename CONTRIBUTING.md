@@ -345,10 +345,9 @@ catalog generation:
 ```markdown
 # Recognizable Example Name
 
-Performs a concrete job and produces an observable result.
-
 | Catalog field | Value |
 | --- | --- |
+| Description | Performs a concrete job and produces an observable result. |
 | Industry | ✨ Other |
 | Requirements | Linux · Docker · required service or boundary |
 ```
@@ -364,8 +363,8 @@ Follow these metadata rules:
 
 - The level-one title is the concise catalog name, must be plain text, and is
   limited to 100 characters.
-- The next paragraph is one plain-text outcome description for catalog and
-  search results, limited to 300 characters.
+- `Description` is one plain-text outcome description for catalog and search
+  results, limited to 300 characters.
 - `Industry` is exactly one emoji-and-title pair from the controlled list below.
   Choose the industry of the workflow, not the contributor, model, hardware,
   or an example dataset. Use `Other` for horizontal workflows.
@@ -459,11 +458,9 @@ authoring comments before submission.
 
 # [Replace with a recognizable example name]
 
-[For an intended user, this example performs a concrete job so they can obtain
-an observable result.]
-
 | Catalog field | Value |
 | --- | --- |
+| Description | [For an intended user, explain the concrete job and observable result.] |
 | Industry | [Choose one exact emoji-and-title pair from Catalog Metadata.] |
 | Requirements | [Summarize the main environment, dependency, and material operating boundary.] |
 
@@ -548,8 +545,8 @@ remaining validation.]
 
 - Put material credential, data-sharing, permission, cost, write, or
   destructive-action warnings before the command that triggers them.
-- Start with the exact title, outcome sentence, and catalog table documented in
-  [Catalog Metadata](#catalog-metadata).
+- Start with the exact title and catalog table, including its `Description`
+  outcome, documented in [Catalog Metadata](#catalog-metadata).
 - Use the canonical category independently from contributor or organizational
   provenance.
 - Preserve partner and community attribution.

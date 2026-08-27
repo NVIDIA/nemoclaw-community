@@ -1,9 +1,8 @@
 # Developer Community Chief of Staff
 
-Turns community signals into operating briefs and follow-up recommendations.
-
 | Catalog field | Value |
 | --- | --- |
+| Description | Turns community signals into operating briefs and follow-up recommendations. |
 | Industry | ✨ Other |
 | Requirements | Single Linux host · Docker · OpenShell · inference provider API key · Slack or Outlook |
 

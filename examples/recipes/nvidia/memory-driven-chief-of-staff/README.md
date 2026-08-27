@@ -3,10 +3,9 @@
 
 # Memory-Driven Chief of Staff
 
-Maintains and re-ranks a revisable local record of email and Slack inputs without writing back to source systems.
-
 | Catalog field | Value |
 | --- | --- |
+| Description | Maintains and re-ranks a revisable local record of email and Slack inputs without writing back to source systems. |
 | Industry | ✨ Other |
 | Requirements | Python 3.10+ · scheduled use: Linux/WSL, Hermes 0.19+, and an inference provider API key · Slack and Microsoft Graph collectors optional |
 
