@@ -640,14 +640,16 @@ Both connectors can be set up, or either one alone. They write into the same
 store and run in the same tick, independently — see [When a collector
 fails](#when-a-collector-fails) for what happens when one of them cannot.
 
-**A person who reaches you on both gets two pages.** Slack identifies people
-by user id and mail by address, and nothing links the two: a shared display
-name is not evidence, and the whole reason this recipe keeps a stable identity
-per sender is that guessing from a name puts two people on one page. So one
-colleague can hold a page for their Slack half and another for their mail
-half, and the selector reports the pair under `shared_display_name` so the
-agent can say so on each. Linking them on the user's word, rather than on a
-name, is not in this change.
+**A person gets a page per source they reach you from.** Slack identifies
+people by user id and mail by address; nothing links them, and nothing should
+on the evidence available — a shared display name is not evidence, and the
+reason this recipe keeps a stable identity per sender at all is that guessing
+from a name puts two people on one page. So a colleague who writes from two
+places holds a page for each, and the selector reports them together under
+`shared_display_name` so the agent can say as much on both. That is a
+per-source split, not a Slack-and-mail one: a third connector would add a
+third page for the same person. Linking identities on the user's word rather
+than on a name is not in this change.
 
 ### When a collector fails
 
