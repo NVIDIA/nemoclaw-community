@@ -1,12 +1,14 @@
+<!-- markdownlint-disable MD013 -->
 <!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- markdownlint-enable MD013 -->
 
 # What is kept, and how to be rid of it
 
 Four controls, all of them local. They were built against the fixture corpus,
-which is how they are tested, and they apply unchanged to the real Slack
-messages the collector brings in. That order was deliberate: the controls
-landed before the thing that would need them.
+which is how they are tested, and they apply unchanged to the real Slack and
+Outlook messages the collectors bring in. That order was deliberate: the
+controls landed before the thing that would need them.
 
 Every command below runs from `profile/scripts/`, against the store belonging
 to the profile named by `HERMES_HOME`.
@@ -44,11 +46,13 @@ kind of mistake found only afterwards.
 
 What a cleared row keeps:
 
+<!-- markdownlint-disable MD013 -->
 | Kept | Gone |
 | --- | --- |
 | sender and their stable identity, subject, timestamp, addressing, state | the message body |
 | the obligation and the title the judging turn wrote | |
 | every event, with its actor and its before and after | |
+<!-- markdownlint-enable MD013 -->
 
 So a month later you can still see that Dana asked about the cutover on the
 third, that it ranked high because the memory said you had chosen that work,
@@ -97,7 +101,7 @@ asserting the row never appears, not by reading the call chain.
 
 A dropped message is reported on stderr as a count, never as content:
 
-```
+```text
 exclusions: 2 message(s) not stored
 ```
 
@@ -158,8 +162,9 @@ cannot be removed it says so and exits non-zero — a reset that half worked
 must not read as one that worked. The policy goes with the rest because it
 encodes what its subject ignores, which is about them.
 
-The credential is not removed, because it was never held here: it lives with
-the OpenShell gateway. `reset.py` prints the commands to revoke it, since
+On the supported provider path, the credential is not removed because it was
+never held here: it lives with the OpenShell gateway. `reset.py` prints the
+commands to revoke it, since
 somebody withdrawing consent wants both and would otherwise stop after the one
 that felt complete.
 
@@ -174,8 +179,7 @@ guessed either way, and one with no identity to ask about — a row from before
 the connector stored one — is reported as unresolved rather than treated as a
 deletion.
 
-Slack, which is the connector that ships, offers no such notice. A deleted
-message stops appearing in
+The Slack collector offers no such notice. A deleted message stops appearing in
 `conversations.history`, and its absence from a bounded, paginated read cannot
 be told apart from it lying outside the window. Reliable notice needs the
 Events API, which this design does not use; the legacy RTM API carries the

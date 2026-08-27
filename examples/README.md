@@ -58,7 +58,7 @@ Standalone utilities that help developers build, evaluate, inspect, or operate N
 
 | Example | Industry | Description |
 | --- | --- | --- |
-| [Agent Memory Benchmark](tools/agent-memory-benchmark/README.md) | ✨ Other | Measures the memory an agent builds from synthetic email and chat by asking 186 questions on one corpus and 96 on another, then reports accuracy by question type separately from ingest and answer token costs. |
+| [Agent Memory Benchmark](tools/agent-memory-benchmark/README.md) | ✨ Other | Benchmarks memory systems on synthetic email and chat, reporting answer accuracy and token cost. |
 | [Harness Engineering Playground](tools/harness-engineering-playground/README.md) | ✨ Other | Provides an experimental loop for tuning DeepAgents harness profiles against behavioral evaluations, keeping fixes that pass verification and rolling back rejected edits. |
 
 ## Recipe Collections
