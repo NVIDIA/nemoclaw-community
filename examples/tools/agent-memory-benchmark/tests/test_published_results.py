@@ -347,3 +347,26 @@ def test_the_readme_states_the_size_of_the_substitution_map():
         assert int(stated.group(2)) == len(subs["question_ids"]), (
             f"{run.name} carries {len(subs['question_ids'])} question-id "
             f"substitutions, the README says {stated.group(2)}")
+
+
+def test_the_results_page_names_every_type_the_self_model_loses():
+    """A table that shows only the wins is a selective result, not a result.
+
+    The published table listed seven question types, none of which were the two
+    where the baseline scores higher, while the root README said the self-model
+    answered better on every type. Whatever the table shows, a type the
+    self-model loses has to appear on the page.
+    """
+    by_name = {run.name.split("_")[0]: _report(run)["summary"]["accuracy_by_type"]
+               for run in RUNS}
+    if {"agentic-rag", "self-model"} - by_name.keys():
+        return  # a different pair of runs ships; this comparison does not apply
+    readme = (REPO / "results" / "README.md").read_text(encoding="utf-8")
+    for kind, baseline in sorted(by_name["agentic-rag"].items()):
+        ours = by_name["self-model"][kind]
+        if ours >= baseline:
+            continue
+        assert f"{ours:.1%}" in readme and f"{baseline:.1%}" in readme, (
+            f"the self-model scores {ours:.1%} against {baseline:.1%} on "
+            f"{kind!r}, and results/README.md does not report it. A table that "
+            f"omits the losses is not a result.")

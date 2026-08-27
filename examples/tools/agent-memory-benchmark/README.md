@@ -305,7 +305,9 @@ tests/       the benchmark's own tests
 
 One pair of runs ships as a worked example: a self-model and an agentic
 retrieval baseline on corpus A, both on the same base model, both graded by the
-grader in this repository. The self-model answers better on every question type.
+grader in this repository. The self-model answers better overall and on most
+question types, and worse on two: it refuses to answer far less reliably than
+the retrieval baseline, and it is slightly weaker at plain single-hop lookup.
 It also spends its tokens somewhere else — at ingest rather than per question —
 which the results page reports as two separate counts rather than one ratio,
 because neither run carries the forwarded-call record that would establish the
@@ -330,7 +332,7 @@ proxy at.
 **Expected result:**
 
 ```text
-200 passed
+201 passed
 ```
 
 **This verifies:** the runner, grader, report renderer and the
@@ -346,7 +348,7 @@ The whole pipeline runs offline against a small fixture whose score is known in
 advance — no model, no network, no API key:
 
 ```bash
-python3 -m pytest tests/     # expected: 200 passed
+python3 -m pytest tests/     # expected: 201 passed
 ```
 
 `selftest/` holds a six-document corpus, six questions covering all four

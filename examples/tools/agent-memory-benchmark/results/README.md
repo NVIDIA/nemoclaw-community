@@ -46,6 +46,8 @@ separately and never summed.
 | Point-in-time reasoning (6) | 33.3% | 66.7% | +33.3 pp |
 | Entity disambiguation (15) | 66.7% | 86.7% | +20.0 pp |
 | Multi-source synthesis (73) | 87.7% | 94.5% | +6.9 pp |
+| Refusing to answer when the corpus cannot (13) | 100.0% | 76.9% | -23.1 pp |
+| Single-hop lookup (30) | 86.7% | 83.3% | -3.3 pp |
 | Citation coverage (186) | 92.5% | 97.9% | +5.4 pp |
 
 Cost, which the benchmark reports separately and never blends into the above. Both runs
@@ -79,6 +81,16 @@ entry, so the agentic ingest phase carries a real figure, $0.0034; the Nemotron
 model that answers in both runs has none, so every other phase reports token
 counts with a null price rather than inventing one. Read the tables in tokens,
 not dollars — the one priced phase is the cheapest thing either run did.
+
+Two rows go the other way, and they are in the table above rather than left
+out of it. The retrieval baseline refuses to answer more reliably: it abstains
+correctly on every question where the corpus does not support an answer, while
+the self-model answers from its record in cases where the record does not
+actually establish the fact. It is also slightly better at plain single-hop
+lookup, where there is nothing to synthesise and the extra step through a
+consolidated record can only lose detail. A design that reasons at ingest time
+buys its advantage on questions that need several documents joined, and pays
+for it on questions that need either one document or none.
 
 ## What these numbers are not
 
