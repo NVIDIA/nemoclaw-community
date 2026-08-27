@@ -73,5 +73,5 @@ settings:
     # NemoClaw's Slack path is message-driven; no buttons or slash commands to serve.
     is_enabled: false
   org_deploy_enabled: false
-  # Rotation would expire the token mid-demo and NemoClaw stores it at build time.
+  # Rotation can expire the access token during an active session.
   token_rotation_enabled: false

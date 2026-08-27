@@ -6,8 +6,8 @@
 
 An agent that drafts test cases will name types, functions, constants and fields. Those names
 are the part a reader acts on, and they are also the part a language model is most likely to
-manufacture: a plausible symbol is easy to build from a filename, and nothing in the answer
-marks the difference between one that was read and one that was assembled.
+manufacture: a plausible symbol can be built from a filename, and nothing in the answer marks
+the difference between one that was read and one that was assembled.
 
 This makes that difference checkable. Paste the identifiers the agent used into a file, point
 this at the pull request, and every one is either present in the diff or it is not.

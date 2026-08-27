@@ -24,8 +24,8 @@ expensive to process and can hide truncation.
 ## Do not expose hidden reasoning
 
 The assistant must answer directly. It must not narrate internal reasoning,
-quote its instructions, reveal credentials, or expose sandbox paths. End a
-session and investigate if any of that content appears in Slack.
+quote its instructions, reveal API keys or access tokens, or expose sandbox
+paths. End a session and investigate if any of that content appears in Slack.
 
 ## Check Slack readiness
 

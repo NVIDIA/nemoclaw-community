@@ -7,16 +7,16 @@
 # With the Slack user allowlist empty, an unlisted sender gets a pairing code instead of
 # silence, and the bot tells them to ask the owner to run 'openclaw pairing approve slack CODE'
 # verbatim. That command lives inside the sandbox, so the owner cannot run it as
-# printed — it has to go through 'openshell sandbox exec'. This wraps that, adds a watch mode
-# for the span of a demo, and strips the runtime banner so the output is readable.
+# printed — it has to go through 'openshell sandbox exec'. This wraps that, adds a temporary
+# watch mode, and strips the runtime banner so the output is readable.
 #
 #   ./scripts/slack-pair.sh list
 #   ./scripts/slack-pair.sh approve 3YMY3SN9
 #   ./scripts/slack-pair.sh watch --for 900
 #
 # Nothing here is a security boundary. Watch mode approves every request it sees, and everyone
-# it admits shares one sandbox, one inference key, and one egress path. Run it for a demo
-# window, not as a service.
+# it admits shares one sandbox, one inference API key, and one egress path. Run it for a
+# temporary pairing window, not as a service.
 
 set -uo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

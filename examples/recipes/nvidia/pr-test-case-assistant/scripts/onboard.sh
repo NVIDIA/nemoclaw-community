@@ -30,7 +30,7 @@ case "$NEMOCLAW_PROVIDER" in
     require_var NEMOCLAW_ENDPOINT_URL
     ;;
   *)
-    echo "note: NemoClaw will validate credentials for provider '$NEMOCLAW_PROVIDER'." >&2
+    echo "note: NemoClaw will validate the API key for provider '$NEMOCLAW_PROVIDER'." >&2
     ;;
 esac
 

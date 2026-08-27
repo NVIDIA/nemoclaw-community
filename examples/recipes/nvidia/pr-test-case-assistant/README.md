@@ -32,12 +32,12 @@ assumptions.
 | Use this when | A quality engineer needs a first test checklist for a public GitHub pull request in Slack. |
 | You will get | A five-item pull request brief or proposed feature test cases grounded in the selected pull request. |
 | Runs on | A host that can run NemoClaw and Docker. |
-| Requires | NemoClaw, Docker, a Slack app with Socket Mode, and an inference-provider credential. |
-| Verified on | The original workflow completed live on a Linux host with Slack, OpenClaw, NVIDIA inference, and public GitHub. The community-recipe lifecycle scripts have local/static verification only. |
+| Requires | NemoClaw, Docker, a Slack app with Socket Mode, and an inference provider API key. |
+| Verified on | The original assistant completed live on a Linux host with Slack, OpenClaw, NVIDIA inference, and public GitHub. The public-recipe lifecycle scripts have local/static verification only. |
 | Evidence level | local/static for this public recipe revision |
 | Support and maturity | Educational example with best-effort community support. See the repository [support policy](../../../../SUPPORT.md). |
 | External access, data, and actions | Sends Slack messages to Slack, public pull request data to the configured inference endpoint, and read-only requests to `api.github.com`. It does not write to GitHub. |
-| Start here | [Prepare the Slack app and credentials](#prepare-the-slack-app-and-credentials), then run the setup commands. |
+| Start here | [Prepare the Slack app and API key](#prepare-the-slack-app-and-api-key), then run the setup commands. |
 | Confirm success | [Verification](#verification) |
 
 ## Architecture
@@ -57,15 +57,15 @@ OpenClaw in an OpenShell sandbox
 GitHub REST API          configured inference endpoint
 ```
 
-NemoClaw stores the Slack and inference credentials through OpenShell provider
-plumbing. The sandbox receives only the credential forms required by those
-integrations. This recipe does not place a GitHub token in the sandbox. GitHub
-requests are therefore limited to the unauthenticated public API quota.
+NemoClaw stores the Slack access tokens and inference API key through OpenShell
+provider plumbing. The sandbox receives only the values required by those
+integrations. This recipe does not place a GitHub access token in the sandbox.
+GitHub requests are therefore limited to the unauthenticated public API quota.
 
 The custom `github-api` policy permits `GET /repos/**` on
 `api.github.com`. It does not permit `POST`, `PATCH`, `PUT`, or `DELETE`.
 
-## Prepare the Slack App and Credentials
+## Prepare the Slack App and API Key
 
 Creating or installing an app can require approval from a Slack workspace
 administrator. Complete that process before you run onboarding.
@@ -79,8 +79,8 @@ administrator. Complete that process before you run onboarding.
 4. Copy your Slack member ID if you want to restrict direct messages to
    specified users.
 
-Copy the environment template. The populated `.env` contains credentials and
-is ignored by Git.
+Copy the environment template. The populated `.env` contains an API key and
+Slack access tokens. Git ignores this file.
 
 ```bash
 cp .env.example .env
@@ -265,7 +265,7 @@ pr-test-case-assistant/
 - Proposed test cases are not executed.
 - Slack Socket Mode permits one active connection per app-level token. Do not
   reuse the same app token in another active sandbox.
-- The screenshot shows the original live workflow. This public recipe
+- The screenshot shows the original live assistant. This public recipe
   revision has local/static verification until its full setup is rerun.
 
 ## Third-Party Services and Dependencies

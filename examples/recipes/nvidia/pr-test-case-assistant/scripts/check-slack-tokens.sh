@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Validate Slack credentials before onboarding spends a rebuild on them.
+# Validate Slack access tokens before onboarding spends a rebuild on them.
 #
 # NemoClaw validates both tokens live during onboarding, against auth.test and
 # apps.connections.open. If either is rejected, Slack is not enabled. This runs
@@ -36,7 +36,7 @@ Usage: check-slack-tokens.sh [--channel CID]
   -h, --help      Show this help
 
 Reads SLACK_BOT_TOKEN and SLACK_APP_TOKEN from the environment.
-Exit 0 if NemoClaw onboarding would accept these credentials.
+Exit 0 if NemoClaw onboarding would accept these access tokens.
 EOF
 }
 
@@ -73,7 +73,7 @@ field() { python3 -c 'import json,sys
 try: print(json.load(sys.stdin).get(sys.argv[1], ""))
 except Exception: print("")' "$1"; }
 
-printf '\nSlack credential check\n\n'
+printf '\nSlack access-token check\n\n'
 
 # ---- bot token -------------------------------------------------------------------------
 printf 'Bot token (SLACK_BOT_TOKEN)\n'
