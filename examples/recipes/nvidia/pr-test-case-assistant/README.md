@@ -131,14 +131,19 @@ bash scripts/start.sh
 Send this direct message to the Slack app:
 
 ```text
-Give me a pull request brief for NVIDIA/NemoClaw.
+Give me a pull request brief for NVIDIA/NemoClaw for the last 5 PRs, with titles, authors and update dates.
 ```
 
-Then select a pull request:
+Then pick a pull request number from the reply and ask for its test cases:
 
 ```text
-/pr_test_case_assistant Draft feature test cases for #<number> in NVIDIA/NemoClaw.
+Can you give me feature test cases for #<number> in NVIDIA/NemoClaw?
 ```
+
+Ask in plain language. The app is message-driven and registers no slash
+commands, so Slack intercepts anything starting with `/` and never delivers it
+to the assistant. The skill is selected by what you ask for, not by a command
+name.
 
 The response must identify proposed tests as unexecuted and state which details
 came from the pull request versus agent inference.

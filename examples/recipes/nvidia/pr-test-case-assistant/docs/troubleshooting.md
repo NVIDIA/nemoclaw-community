@@ -17,6 +17,7 @@ this recipe.
 | `check-slack-tokens.sh` rejects a token | The bot token must begin with `xoxb-`; the app-level Socket Mode token must begin with `xapp-`. |
 | The app is installed but does not receive messages | Confirm Socket Mode and event subscriptions are enabled, then run `bash scripts/start.sh` and wait for the Slack readiness result. |
 | A direct message returns a pairing code | Run `bash scripts/slack-pair.sh approve <code>` on the host, or set `SLACK_ALLOWED_USERS` before onboarding. |
+| Slack answers `/... is not a valid command` and the assistant never sees the message | This app registers no slash commands, so Slack intercepts a leading `/`. Ask in plain language instead. |
 | A shared Slack app stops responding elsewhere | One app-level token supports one active Socket Mode connection. Use a dedicated Slack app for this recipe. |
 
 ## GitHub
