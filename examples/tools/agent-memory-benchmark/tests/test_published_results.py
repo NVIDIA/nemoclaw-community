@@ -368,10 +368,17 @@ def test_the_results_page_names_every_type_the_self_model_loses():
         ours = by_name["self-model"][kind]
         if ours >= baseline:
             continue
-        assert f"{ours:.1%}" in readme and f"{baseline:.1%}" in readme, (
+        row = next(
+            (line for line in readme.splitlines()
+             if line.startswith("|") and kind in line
+             and f"{ours:.1%}" in line and f"{baseline:.1%}" in line),
+            None)
+        assert row, (
             f"the self-model scores {ours:.1%} against {baseline:.1%} on "
-            f"{kind!r}, and results/README.md does not report it. A table that "
-            f"omits the losses is not a result.")
+            f"{kind!r}, and results/README.md has no table row naming {kind!r} "
+            f"with both numbers. Two percentages loose on the page can appear "
+            f"without the losing type ever being named; a table that omits the "
+            f"losses is not a result.")
 
 
 def test_a_generated_run_is_ignored_and_a_published_one_is_not():

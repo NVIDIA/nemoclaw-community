@@ -79,23 +79,29 @@ and never summed.
 | --- | ---: | ---: | ---: |
 | Overall accuracy (186 questions) | 82.8% | 89.8% | +7.0 pp |
 | Hard questions (31) | 67.7% | 87.1% | +19.4 pp |
-| Tracking facts that changed over time (5) | 60.0% | 100.0% | +40.0 pp |
-| Point-in-time reasoning (6) | 33.3% | 66.7% | +33.3 pp |
-| Entity disambiguation (15) | 66.7% | 86.7% | +20.0 pp |
-| Multi-source synthesis (73) | 87.7% | 94.5% | +6.9 pp |
-| Refusing to answer when the corpus cannot (13) | 100.0% | 76.9% | -23.1 pp |
-| Single-hop lookup (30) | 86.7% | 83.3% | -3.3 pp |
+| Tracking facts that changed over time — `chain_freshness` (5) | 60.0% | 100.0% | +40.0 pp |
+| Point-in-time reasoning — `as_of` (6) | 33.3% | 66.7% | +33.3 pp |
+| Entity disambiguation — `disambiguation` (15) | 66.7% | 86.7% | +20.0 pp |
+| Multi-source synthesis — `multi_source` (73) | 87.7% | 94.5% | +6.9 pp |
+| Refusing to answer when the corpus cannot — `abstention` (13) | 100.0% | 76.9% | -23.1 pp |
+| Single-hop lookup — `single_hop` (30) | 86.7% | 83.3% | -3.3 pp |
 | Citation coverage (186) | 92.5% | 97.9% | +5.4 pp |
 
 Two rows go the other way, and they are in the table above rather than left out
-of it. The retrieval baseline refuses to answer more reliably: it abstains
-correctly on every question where the corpus does not support an answer, while
-the self-model answers from its record in cases where the record does not
-actually establish the fact. It is also slightly better at plain single-hop
-lookup, where there is nothing to synthesise and the extra step through a
-consolidated record can only lose detail. **A design that reasons at ingest time
-buys its advantage on questions that need several documents joined, and pays for
-it on questions that need either one document or none.**
+of it. **What the artifacts establish is the counts.** On `abstention`, the
+agentic baseline answered 13 of 13 correctly and the self-model 10 of 13. On
+`single_hop`, the baseline scored 86.7% against the self-model's 83.3%. Both
+differences are visible per question in each run's `verdicts.jsonl`.
+
+**Why is not established here, and the difference matters.** These artifacts do
+not include the self-model's adapter or the memory it built, so nothing in them
+can show what a wrong answer was derived from. One hypothesis worth testing is
+that a system answering from a consolidated record is less able to tell "the
+record does not establish this" from "the record does not mention this" — but
+this pair of runs cannot confirm or refute it, and it says nothing about
+ingest-time consolidation in general. Testing it needs runs where the memory is
+inspectable, on more than one corpus and more than one base model. Read the two
+rows as measurements, not as a finding about either architecture.
 
 ---
 

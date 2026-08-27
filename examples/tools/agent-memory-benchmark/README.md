@@ -459,9 +459,11 @@ corpus, same questions, same answer key, same normalization, same scorer.
 
 One pair of runs ships as a worked example: a self-model and an agentic
 retrieval baseline on corpus A, both on the same base model, both graded by the
-grader in this repository. The self-model answers better overall and on most
-question types, and worse on two: it refuses to answer far less reliably than
-the retrieval baseline, and it is slightly weaker at plain single-hop lookup.
+grader in this repository. **In this pair of runs** the self-model scored higher
+overall and on most question types, and lower on two — `abstention`, where it
+answered 10 of 13 against the baseline's 13, and `single_hop`. Those are counts
+from these two runs; the artifacts do not include the self-model's memory, so
+they cannot say what caused any of it.
 It also spends its tokens somewhere else — at ingest rather than per question —
 which the results page reports as two separate counts rather than one ratio,
 because neither run carries the forwarded-call record that would establish the
