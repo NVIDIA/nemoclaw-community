@@ -271,6 +271,44 @@ class TestTheUserFacingCommand(StoreCase):
         self.assertEqual(code, 0)
         self.assertIn(str(GITHUB), out)
 
+    def test_a_group_cannot_be_answered_as_different(self):
+        """The negative does not distribute.
+
+        "These three are not one person" rules out the group and says nothing
+        about which member is the odd one out — A and B may be the same
+        colleague with C a stranger. Recording all three pairs as rejected
+        buries the A~B link and stops it ever being proposed again, on the
+        strength of an answer nobody gave.
+        """
+        self.item(SLACK)
+        self.item(MAIL)
+        self.item(TEAMS)
+        code, _ = self.run_cli("different", str(SLACK), str(MAIL), str(TEAMS))
+        self.assertEqual(code, 2)
+        with contextlib.closing(self.conn()) as conn:
+            self.assertEqual(identity.decisions(conn), {},
+                             "a group rejection was recorded pairwise")
+
+    def test_the_pair_the_user_did_deny_is_still_recorded(self):
+        """Refusing the group must not refuse the answer they can give."""
+        self.item(SLACK)
+        self.item(MAIL)
+        code, _ = self.run_cli("different", str(SLACK), str(MAIL))
+        self.assertEqual(code, 0)
+        with contextlib.closing(self.conn()) as conn:
+            persons = identity.resolve(conn, [SLACK, MAIL])
+        self.assertNotEqual(persons.of(SLACK), persons.of(MAIL))
+
+    def test_a_group_can_still_be_answered_as_the_same_person(self):
+        """`same` distributes where `different` does not: one person is a
+        claim about every pair, and each of them follows."""
+        for who in (SLACK, MAIL, TEAMS):
+            self.item(who)
+        code, _ = self.run_cli("same", str(SLACK), str(MAIL), str(TEAMS))
+        self.assertEqual(code, 0)
+        with contextlib.closing(self.conn()) as conn:
+            self.assertEqual(len(identity.decisions(conn)), 3)
+
     def test_naming_one_identity_is_refused(self):
         code, _ = self.run_cli("same", str(SLACK))
         self.assertEqual(code, 2)

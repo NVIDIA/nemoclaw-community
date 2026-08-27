@@ -199,8 +199,9 @@ def slug(name: str) -> str:
 
 def page_names(display: dict[object, str],
                have: dict[str, dict[str, object]],
-               members: dict[object, list[object]]) -> dict[object, str]:
-    """Person -> the page slug that person owns.
+               members: dict[object, list[object]],
+               ) -> tuple[dict[object, str], dict[object, list[str]]]:
+    """Person -> the page slug they own, and any other pages that are theirs.
 
     Two people called `Sam Ruiz` need two pages, and each needs to keep its
     own name across runs. Neither follows from the display name, so the
@@ -231,12 +232,31 @@ def page_names(display: dict[object, str],
         for text in page.get("identities") or []:
             claimed.setdefault(text, mark)
 
+    # Every page this person's identities land on, not the first one found.
+    #
+    # Before the user answers, each identity has a page of its own — that is
+    # the state the whole feature exists to resolve. Confirming the link then
+    # makes them one person with two pages, and returning one slug quietly
+    # strands the other: its history and its index entry stay on disk,
+    # belonging to nobody, while the handoff claims a single page holds
+    # everything. So all of them are returned and the extras are named for
+    # merging.
     names: dict[object, str] = {}
+    extra: dict[object, list[str]] = {}
     for person in display:
+        found = []
         for who in members.get(person, [person]):
-            if str(who) in claimed:
-                names[person] = claimed[str(who)]
-                break
+            mark = claimed.get(str(who))
+            if mark and mark not in found:
+                found.append(mark)
+        if not found:
+            continue
+        # Sorted, so which page is kept does not depend on the order the
+        # identities came back in. A keep-choice that changes between runs
+        # would move content back and forth and lose some of it each way.
+        found.sort()
+        names[person] = found[0]
+        extra[person] = found[1:]
 
     contenders: dict[str, list[object]] = {}
     for person in display:
@@ -254,7 +274,7 @@ def page_names(display: dict[object, str],
                 base not in have or not (have[base].get("identities") or []))
             names[person] = base if solo else (
                 f"{base}_{hashlib.sha256(str(person).encode()).hexdigest()[:8]}")
-    return names
+    return names, extra
 
 
 def existing_people() -> dict[str, dict[str, str]]:
@@ -443,7 +463,7 @@ def evidence(conn, since: str) -> dict[str, object]:
     have = existing_people()
     today = datetime.now(timezone.utc).date().isoformat()
 
-    names = page_names(display, have, members)
+    names, extra = page_names(display, have, members)
 
     # Namesakes still worth reporting: two people the agent cannot tell apart
     # by name get one page each, and it should say so on both rather than
@@ -485,6 +505,13 @@ def evidence(conn, since: str) -> dict[str, object]:
                 continue
         candidates.append({
             "sender": sender,
+            # Pages that belong to this person and are not the one above.
+            # Present only after a link is confirmed over identities that had
+            # each already been written up. Their content has to be folded
+            # into `slug` and the page then removed, index entry included —
+            # nothing else will do it, and left alone they are history
+            # attributed to nobody.
+            "merge_into_slug": extra.get(key) or [],
             # Every identity this person writes from, not one of them. The
             # page records the whole list, so it is still found when the
             # message that arrives next comes from a different source.

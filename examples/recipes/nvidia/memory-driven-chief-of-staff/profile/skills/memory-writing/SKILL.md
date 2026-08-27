@@ -106,10 +106,30 @@ and if the user says yes, run:
 
     python3 profile/scripts/link_identity.py same slack:U01DANA email:dana@example.com
 
+`same` takes any number of identities. `different` takes exactly two — "these
+three are not one person" does not say which of them is the odd one out, and
+recording every pair as denied would bury a link the user never denied. If
+they rule out a group, ask which pairs.
+
 Then the next run writes one page for them. **Do not wait for an answer.**
 Write the pages you can write, mention what you noticed, and finish; the
 question keeps, and a job that blocks on a human is a job that does not
 complete.
+
+**`merge_into_slug` means this person has pages you have to fold together.**
+It is the state right after the user confirms a link over identities that had
+each already been written up: two real pages, two histories, two index
+entries, one person. Move everything worth keeping from each named page into
+`slug`, then delete that page and remove its index entry. Nothing else does
+this, and a page left behind is history attributed to nobody — it will not
+show up as a person again, because its identities now resolve to the page you
+kept.
+
+Merge by hand, not by concatenation. Recent Interactions is newest-first and
+has a ceiling; two lists spliced end to end are neither. Relationship and Key
+Context may disagree between the pages — say what is true now rather than
+keeping both, and if they disagree about a fact rather than a wording, keep
+the one the newer evidence supports and note that it changed.
 
 `identity_conflicts` means two answers no longer agree — the user said two
 identities were different people, and other answers since have joined them

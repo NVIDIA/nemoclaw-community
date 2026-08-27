@@ -80,16 +80,27 @@ def _check_sources(conn, people: list[identity.Identity]) -> None:
 
 
 def decide(texts: list[str], status: str) -> dict[str, object]:
-    """Record one answer over every pair among the named identities.
+    """Record the user's answer, pairwise.
 
-    Stored pairwise even when the user answered about a group, so a later
-    answer about one member does not have to unpick a group decision — and so
-    `different` means what it says. Confirming a group of three is three
-    pairs; rejecting one is also three, because "these are not one person"
-    does not say which of them is the odd one out, and recording only some of
-    the pairs would leave the rest to be asked again.
+    `same` takes any number, because "these are one person" is a claim about
+    every pair in the group and each of them follows from it. Confirming
+    three identities is three pairs, and a later answer about one member can
+    revise that pair without unpicking a group decision.
+
+    `different` takes exactly two, because the negative does not distribute.
+    "These three are not one person" rules out the group and says nothing
+    about which member is the odd one out — A and B may well be the same
+    colleague with C a stranger. Recording all three pairs as rejected would
+    bury the A~B link and stop it ever being proposed again, on the strength
+    of an answer the user did not give.
     """
     people = _identities(texts)
+    if status == "rejected" and len(people) != 2:
+        raise ValueError(
+            "`different` takes exactly two identities. Saying a group is not "
+            "one person does not say which member is the odd one out, and "
+            "recording every pair as rejected would bury a link the user "
+            "never denied. Answer the pairs that are actually different.")
     unknown = []
     with write_txn() as conn:
         _check_sources(conn, people)
@@ -143,7 +154,7 @@ def main(argv: list[str] | None = None) -> int:
     same = sub.add_parser("same", help="one person, several accounts")
     same.add_argument("identities", nargs="+", metavar="source:key")
 
-    diff = sub.add_parser("different", help="not the same person")
+    diff = sub.add_parser("different", help="these two are not one person")
     diff.add_argument("identities", nargs="+", metavar="source:key")
 
     shown = sub.add_parser("list", help="what has been answered so far")

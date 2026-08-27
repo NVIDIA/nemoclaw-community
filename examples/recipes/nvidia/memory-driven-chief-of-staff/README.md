@@ -250,7 +250,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the fourteen files report 591 tests in
+Expected result: every file ends with `OK`, the fourteen files report 599 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -658,8 +658,11 @@ page. The user answers whenever they get to it:
 python3 profile/scripts/link_identity.py same slack:U01DANA email:dana@example.com
 ```
 
-and the next run writes one page holding the whole history. **Nothing waits
-for that answer.** The job records what it noticed and exits; an unanswered
+and the next run reports them as one person. If each identity had already
+been written up, that run also names the other pages as `merge_into_slug`, so
+the agent folds them into one and removes what it emptied — a page nobody
+merged is history attributed to nobody, and it will not surface again on its
+own. **Nothing waits for that answer.** The job records what it noticed and exits; an unanswered
 question costs nothing, and a nightly job whose completion depends on when
 somebody read a message is a job that does not complete.
 
