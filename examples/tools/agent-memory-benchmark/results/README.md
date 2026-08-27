@@ -37,11 +37,19 @@ not comparable: the counts below are what each run observed, not a proven total.
 | Ingest tokens | 169,852 | 182,760,709 |
 | Tokens per question | 14,509 | 241,240 |
 
-Read the two tables together. The self-model answers better on every type, and
-pays about 1,076 times more to build its memory and 17 times more per
-answer. Which of those matters depends on how many questions the memory will
-ever be asked — the trade-off `docs/methodology.md` declines to collapse into
-one number.
+Read the two tables together, but not as a ratio. Each cost column is what that
+run observed for itself. Neither report carries a forwarded-call record, so
+nothing in these artifacts establishes that the two runs counted the same
+events — which is why both set `comparable_on_cost` to false, and why no
+multiple between the columns is stated here or in the reports.
+
+What each run's own counts do show is where it spends. The self-model does its
+reasoning while reading the corpus; the agentic baseline defers that to question
+time and spends per question instead. Whether that trade is worth making depends
+on how many questions the memory will ever be asked — a judgement
+`docs/methodology.md` declines to collapse into one number. A run that wants a
+defensible cost comparison has to be executed under the current harness, which
+records forwarded calls.
 
 Two notes on the cost table. The agentic baseline's ingest cost is an embedding
 pass and nothing else, which is why its output tokens are zero; it does no

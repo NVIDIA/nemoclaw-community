@@ -143,6 +143,45 @@ DENIAL_SCOPE_CONTRACT = [
     ("a thousands separator is not a clause boundary",
      {"mode": "string_any", "accept": ["55,000"], "require_all": ["55,000", "40,000"]},
      "It is now 55,000, revised up from 40,000.", True),
+    # A colon can introduce a denied set or a correction. Both directions,
+    # because narrowing the colon rule to set denials could have re-opened the
+    # attack it was added to block.
+    ("a value-scoped denial before a colon does not deny the correction after it",
+     {"mode": "string_any", "accept": ["75%"]},
+     "The answer is not 50%: it is 75%", True),
+    ("that same colon leaves the denied value denied",
+     {"mode": "string_any", "accept": ["50%"]},
+     "The answer is not 50%: it is 75%", False),
+    ("a rejecting contrast before a colon still asserts the kept value",
+     {"mode": "string_any", "accept": ["Sofia"]},
+     "Sofia rather than Kofi: she approved it", True),
+    ("that same contrast leaves the rejected value denied",
+     {"mode": "string_any", "accept": ["Kofi"]},
+     "Sofia rather than Kofi: she approved it", False),
+    ("a set denial before a colon still governs the list it introduces",
+     {"mode": "string_any", "accept": ["Sofia"]},
+     "None of these are correct: Sofia rather than Kofi", False),
+    # Denial that follows the value, and denial by exclusion: neither negates a
+    # verb ahead of the value, so both slipped past the cue list.
+    ("a denial that follows the value denies it",
+     {"mode": "string_any", "accept": ["50%"]}, "50% is wrong", False),
+    ("a correction phrased the same way still asserts its own value",
+     {"mode": "string_any", "accept": ["75%"]}, "50% is wrong; it is 75%", True),
+    ("exclusion denies the value it carves out",
+     {"mode": "string_any", "accept": ["50%"]}, "Anything except 50%", False),
+    ("exclusion does not deny the value it keeps",
+     {"mode": "string_any", "accept": ["75%"]}, "75%, anything except 50%", True),
+    # Found in a published answer, not invented: a closing quote after the
+    # period keeps the sentence from ending, so the run-on reaches a later
+    # colon and the old rule let an "instead of" ahead of that colon deny the
+    # quoted assertion. The score survived only because a second accepted value
+    # matched, which is exactly how a defect like this stays invisible.
+    ("a quote that defers the sentence break does not extend a denial over a colon",
+     {"mode": "string_any", "accept": ["protected"]},
+     'Jordan confirmed "protected mornings already helped this week, got the '
+     'migration script reviewable in one sitting instead of three." The third '
+     'burden was addressed by setting a boundary: "just do not let it become a '
+     'recurring meeting."', True),
 ]
 
 

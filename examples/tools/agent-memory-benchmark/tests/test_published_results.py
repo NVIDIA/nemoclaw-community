@@ -254,3 +254,37 @@ def test_adapter_provenance_says_what_is_and_is_not_reproducible(run: Path):
     else:
         assert revision["shipped_here"] is None
         assert "not reproducible" in revision["note"]
+
+
+# A ratio between the two cost columns is a comparison, and these runs have not
+# earned one: neither report carries a forwarded-call record, so both set
+# `comparable_on_cost` to false. The prose said "1,076 times more" two lines
+# below the sentence admitting the counts were unproven. This keeps the prose
+# and the flag from disagreeing again.
+_COST_RATIO = re.compile(
+    r"\b\d[\d,.]*\s*(?:times|x|×)\s+(?:more|less|fewer|cheaper|costlier|higher|lower|the|as)\b"
+    r"|\b(?:more|less)\s+than\s+\d[\d,.]*\s*(?:times|x|×)\b"
+    r"|\border[s]? of magnitude\b",
+    re.IGNORECASE)
+
+
+def _published_prose() -> list[Path]:
+    results = REPO / "results"
+    return [results / "README.md", *sorted((results / "runs").glob("*/summary.md"))]
+
+
+def test_published_prose_states_no_cost_ratio_while_cost_is_not_comparable():
+    """No comparative cost claim may ship while a run says it cannot support one."""
+    unproven = sorted(
+        run.name for run in RUNS
+        if not _report(run)["accounting"].get("comparable_on_cost"))
+    if not unproven:
+        return  # every shipped run established its accounting; a ratio is earned
+    for doc in _published_prose():
+        for number, line in enumerate(doc.read_text().splitlines(), 1):
+            found = _COST_RATIO.search(line)
+            assert not found, (
+                f"{doc.relative_to(REPO)}:{number} states the cost ratio "
+                f"{found.group(0)!r}, but {', '.join(unproven)} set "
+                f"comparable_on_cost to false. Report each run's observed counts, "
+                f"or establish the accounting and flip the flag.")

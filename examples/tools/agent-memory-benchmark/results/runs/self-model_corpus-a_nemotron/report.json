@@ -127,7 +127,7 @@
   "corpus_name": "corpus_a",
   "fingerprint": {
     "algorithm": "sha256-v1",
-    "scorer": "56d91ca15433c65d0fcd9da13be7af73f01e440b06f746a86a63bec5077c8970",
+    "scorer": "255902f6fbf37507cb3828a45625509ec9f22a6e1886151791f86b06217bfada",
     "normalization": {
       "default_year": "2026",
       "alt_years": [
@@ -140,8 +140,8 @@
     "gold": "55a66b80ff0f62d8b3a340dcbb9cc970a011922b1e509269c4402192f9504970"
   },
   "benchmark_revision": {
-    "commit": null,
-    "note": "graded by the scorer this repository carries; see fingerprint.scorer"
+    "commit": "c943e5f5cbcb4b8db26029c326c28bfa7c4641cb",
+    "dirty": true
   },
   "provenance_note": {
     "answers_transformed": true,

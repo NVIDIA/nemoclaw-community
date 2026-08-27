@@ -140,6 +140,22 @@ DENIAL_CUES = (
     "is not", "are not", "was not", "were not", "isn't", "aren't", "wasn't",
     "weren't", "no longer", "rather than", "instead of", "not ", "never ",
     "cannot", "can't", "don't", "doesn't", "didn't", "no evidence", "not the",
+    # A denial can follow the value instead of preceding it. Anchoring these on
+    # the copula keeps "is wrong" from matching a noun like "the wrong-way
+    # valve", which asserts nothing.
+    "is wrong", "are wrong", "was wrong", "were wrong", "is false", "are false",
+    "is inaccurate", "is mistaken",
+    # Exclusion denies by carving the value out of a set rather than negating a
+    # verb, so none of the cues above fire on it.
+    " except ", " other than ", " excluding ",
+)
+# Cues that announce a *set* whose members are all denied. Only these let a
+# denial reach past a colon: "None of these are correct: A, B" denies A and B,
+# while "The answer is not 50%: it is 75%" uses the colon to correct itself and
+# the tail must stay assertable.
+SET_DENIAL_CUES = (
+    "none of these", "none of the above", "none of them", "neither",
+    "nothing", " except ", " other than ", " excluding ",
 )
 # A dot only ends a sentence when whitespace follows it. Without that guard the
 # dots inside "metrics.v2" and "src/atlas/auth/helix_callback.py" cut the clause
@@ -193,7 +209,10 @@ _SPLIT = re.compile(
     r"(?P<reject>\brather than\b|\binstead of\b)"
     # A comma between digits is a thousands separator, not a clause boundary:
     # splitting "55,000" produced two clauses and lost the value entirely.
-    r"|(?P<reset>;|\bbut\b|\bhowever\b|\bactually\b|(?<!\d),(?!\d))")
+    # A colon is a reset like ";" unless a set-denial introduced it: a
+    # correcting answer says "not 50%: it is 75%", and treating every colon as
+    # governed by an earlier denial rejected the correction it was making.
+    r"|(?P<reset>;|:|\bbut\b|\bhowever\b|\bactually\b|(?<!\d),(?!\d))")
 _LIST_CONTINUATION = re.compile(r"^\s*(?:nor|or|and)\b")
 _LEADING_DENIAL = re.compile(r"^\s*(?:not|never|no)\b")
 
@@ -255,13 +274,20 @@ def _denial_cue(text: str) -> str | None:
 
 
 def _introduces_list(sentence: str) -> bool:
-    """A denial before a colon governs everything the colon introduces."""
-    lowered = sentence.lower()
-    cue = _denial_cue(sentence)
-    if not cue:
-        return False
+    """A *set* denial before a colon governs everything the colon introduces.
+
+    Narrowed deliberately. Any denial before a colon used to govern the tail,
+    which denied the corrective half of "The answer is not 50%: it is 75%" and
+    of "Sofia rather than Kofi: she approved it". Only a cue that announces a
+    set — "none of these", "neither", "except" — describes what follows as the
+    denied members; a value-scoped denial is correcting itself instead.
+    """
+    lowered = " " + _COLLAPSE.sub(" ", sentence.lower()).strip() + " "
     colon = lowered.find(":")
-    return colon >= 0 and lowered.find(cue) < colon
+    if colon < 0:
+        return False
+    return any(
+        cue in lowered and lowered.find(cue) < colon for cue in SET_DENIAL_CUES)
 
 
 def asserts(answer: str, value: str) -> bool:
