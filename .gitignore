@@ -27,6 +27,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# Generated GitHub Pages catalog
+_site/
+
 # OpenShell/NemoClaw local artifacts
 .Dockerfile.staged
 .policy.staged.yaml

@@ -10,12 +10,18 @@ on:
     paths:
       - ".github/workflows/pages.yml"
       - "README.md"
+      - "CONTRIBUTING.md"
+      - "docs/catalog-architecture.md"
+      - "docs/catalog-deployment.md"
       - "SUPPORT.md"
       - ".agents/skills/nemoclaw-community-contributor-examples/references/example-taxonomy.md"
       - "examples/README.md"
+      - "examples/catalog.json"
+      - "examples/catalog.schema.json"
       - "examples/**/README.md"
-      - "scripts/check_catalog_parity.py"
-      - "scripts/tests/test_catalog_parity.py"
+      - "scripts/build_catalog.py"
+      - "scripts/tests/test_build_catalog.py"
+      - "scripts/tests/catalog.test.mjs"
       - "site/**"
   push:
     branches:
@@ -23,12 +29,18 @@ on:
     paths:
       - ".github/workflows/pages.yml"
       - "README.md"
+      - "CONTRIBUTING.md"
+      - "docs/catalog-architecture.md"
+      - "docs/catalog-deployment.md"
       - "SUPPORT.md"
       - ".agents/skills/nemoclaw-community-contributor-examples/references/example-taxonomy.md"
       - "examples/README.md"
+      - "examples/catalog.json"
+      - "examples/catalog.schema.json"
       - "examples/**/README.md"
-      - "scripts/check_catalog_parity.py"
-      - "scripts/tests/test_catalog_parity.py"
+      - "scripts/build_catalog.py"
+      - "scripts/tests/test_build_catalog.py"
+      - "scripts/tests/catalog.test.mjs"
       - "site/**"
   workflow_dispatch:
 
@@ -45,11 +57,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check catalog parity and local links
-        run: python3 scripts/check_catalog_parity.py --check
+      - name: Check catalog metadata and generated sources
+        run: python3 scripts/build_catalog.py --check
 
-      - name: Run catalog validator tests
-        run: python3 -m unittest discover -s scripts/tests -p 'test_catalog_parity.py'
+      - name: Run catalog build tests
+        run: python3 -m unittest discover -s scripts/tests -p 'test_build_catalog.py'
+
+      - name: Run catalog interaction tests
+        run: node --test scripts/tests/catalog.test.mjs
 
       - name: Check license headers
         run: python3 scripts/check_license_headers.py --check
@@ -64,12 +79,15 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Build generated catalog
+        run: python3 scripts/build_catalog.py
+
       - name: Upload pull request preview
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: example-catalog-preview
-          path: site
+          path: _site
           if-no-files-found: error
           retention-days: 14
 
@@ -77,7 +95,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: site
+          path: _site
 
   deploy:
     name: Deploy catalog

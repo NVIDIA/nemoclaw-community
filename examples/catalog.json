@@ -1,0 +1,147 @@
+{
+  "$schema": "catalog.schema.json",
+  "schema_version": 1,
+  "examples": [
+    {
+      "path": "recipes/nvidia/agentic-ai-learning-path",
+      "title": "Agentic AI Learning Path",
+      "description": "Runs the seven-module Build an Agent workshop in an OpenShell sandbox with an AI tutor.",
+      "industry": "Academia/education",
+      "fit": "Linux + Docker + OpenShell · API keys + Slack or Outlook · CPU-first; module 4 training read-through",
+      "collections": []
+    },
+    {
+      "path": "recipes/nvidia/developer-community-chief-of-staff",
+      "title": "Developer Community Chief of Staff",
+      "description": "Turns community signals into operating briefs and follow-up recommendations.",
+      "industry": "Other",
+      "fit": "Docker · Slack/Outlook · single host",
+      "collections": []
+    },
+    {
+      "path": "recipes/nvidia/kubernetes-gpu-autoscaling",
+      "title": "Kubernetes GPU Autoscaling",
+      "description": "Runs NemoClaw on Kubernetes with GPU-backed Ollama autoscaling.",
+      "industry": "Cloud services",
+      "fit": "Kubernetes · NVIDIA GPU · experimental",
+      "collections": []
+    },
+    {
+      "path": "recipes/nvidia/memory-driven-chief-of-staff",
+      "title": "Memory-Driven Chief of Staff",
+      "description": "Maintains and re-ranks a revisable local record of email and Slack inputs without writing back.",
+      "industry": "Other",
+      "fit": "Python 3.10+ · Hermes 0.19+ · connectors not included",
+      "collections": []
+    },
+    {
+      "path": "recipes/nvidia/nv-tech-assistant",
+      "title": "NV Tech Assistant",
+      "description": "Answers NVIDIA technical questions with citations from allowlisted sources.",
+      "industry": "Hardware/semiconductor",
+      "fit": "Docker · NVIDIA Endpoints API key · no offline corpus",
+      "collections": []
+    },
+    {
+      "path": "recipes/nvidia/payment-ops-hermes",
+      "title": "Payment Operations Hermes Assistant",
+      "description": "Demonstrates payment screening, evidence preparation, and a platform-enforced human release boundary.",
+      "industry": "Financial services",
+      "fit": "Docker Compose · OpenShell 0.0.53 · synthetic data",
+      "collections": []
+    },
+    {
+      "path": "recipes/nvidia/pr-review-advisor",
+      "title": "PR Review Advisor",
+      "description": "Reviews exact pull request heads with Hermes, produces attested artifacts, and leaves publication to a maintainer.",
+      "industry": "Other",
+      "fit": "OpenShell · GitHub.com only · self-hosted runner",
+      "collections": []
+    },
+    {
+      "path": "recipes/partners/bluetier/x402-payment-gate",
+      "title": "x402 Payment Gate",
+      "description": "Screens x402 payment intents through a host-side maker/checker gate before signing or settlement.",
+      "industry": "Financial services",
+      "fit": "Python 3 + Docker · Blackwall · no real money",
+      "contributor": "BlueTier",
+      "collections": []
+    },
+    {
+      "path": "recipes/partners/hpe/retail-assistant",
+      "title": "Retail Assistant",
+      "description": "Provides role-aware retail operations through Telegram with Docker Compose or Helm deployment paths.",
+      "industry": "Retail/consumer packaged goods",
+      "fit": "Telegram · Docker or Kubernetes · demo identity mapping",
+      "contributor": "HPE",
+      "collections": []
+    },
+    {
+      "path": "recipes/partners/shrike/shrike-security",
+      "title": "Shrike Security Action Governance",
+      "description": "Applies Shrike decisions before agent tool calls run.",
+      "industry": "Other",
+      "fit": "NemoClaw/OpenShell · Shrike API · not an independent security boundary",
+      "contributor": "Shrike Security",
+      "collections": []
+    },
+    {
+      "path": "recipes/partners/tavily/watchtower",
+      "title": "Watchtower",
+      "description": "Runs scheduled, cited web monitoring with deduplication and auditable outputs.",
+      "industry": "Other",
+      "fit": "Docker + NemoClaw · Tavily · administrator approval",
+      "contributor": "Tavily",
+      "collections": []
+    },
+    {
+      "path": "recipes/community/axe-a11y-browser-auditor",
+      "title": "Axe A11y Browser Auditor",
+      "description": "Audits web pages for accessibility and captures screenshots, PDFs, and network traces.",
+      "industry": "Consumer internet",
+      "fit": "Docker 24+ · linux/amd64 · dedicated sandbox",
+      "collections": []
+    },
+    {
+      "path": "recipes/community/deep-research-worker",
+      "title": "Deep Research Worker",
+      "description": "Queues long-running research from a sandbox to a host-side DeepAgents worker.",
+      "industry": "Other",
+      "fit": "Docker Compose · dedicated sandbox · no readiness guarantee",
+      "collections": []
+    },
+    {
+      "path": "demos/field/blender-omniverse-dgx-station",
+      "title": "DGX Station Blender and Omniverse",
+      "description": "Controls Blender on DGX Station for OVRTX rendering and OVPhysX simulation.",
+      "industry": "Media & entertainment",
+      "fit": "Ubuntu 24.04 ARM64 · Blender 5.1.x · GB300 + RTX PRO 6000 validation",
+      "collections": []
+    },
+    {
+      "path": "launchables/brev/hermes",
+      "title": "Hermes",
+      "description": "Takes a fresh Brev CPU instance to a NemoClaw-managed Hermes sandbox through a notebook.",
+      "industry": "Cloud services",
+      "fit": "Brev CPU · NVIDIA Build API key · best-effort support",
+      "environment": "Brev",
+      "collections": []
+    },
+    {
+      "path": "tools/agent-memory-benchmark",
+      "title": "Agent Memory Benchmark",
+      "description": "Measures the memory a system builds from a corpus: it feeds a system synthetic email and chat, asks 186 questions on one corpus and 96 on a second, and reports accuracy per question type alongside ingest and per-answer token cost.",
+      "industry": "Other",
+      "fit": "Python 3.9+ · offline self-test · endpoint optional",
+      "collections": []
+    },
+    {
+      "path": "tools/harness-engineering-playground",
+      "title": "Harness Engineering Playground",
+      "description": "Provides an experimental command-line interface for evaluation-driven harness profile optimization.",
+      "industry": "Other",
+      "fit": "Python 3.11+ · DeepAgents · not for production",
+      "collections": []
+    }
+  ]
+}

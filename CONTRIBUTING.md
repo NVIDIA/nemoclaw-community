@@ -244,6 +244,14 @@ GitHub Pages. Maintainers can use the
 [catalog deployment runbook](docs/catalog-deployment.md) for setup and
 verification.
 
+For a catalog, example-metadata, or Pages change, also run:
+
+```bash
+python3 scripts/build_catalog.py --check
+python3 -m unittest discover -s scripts/tests -p 'test_build_catalog.py'
+node --test scripts/tests/catalog.test.mjs
+```
+
 Run the documented setup, syntax, unit, configuration, and teardown-safe checks.
 A stable check gives the same result when its inputs do not change. A
 teardown-safe check does not leave services or temporary resources active.
@@ -290,7 +298,93 @@ Document this information for a new example:
 - Its known limitations.
 - Its third-party dependencies and license obligations.
 
-Add the example to the [example catalog](examples/README.md).
+Give readers one recommended start command or action. If the example has
+multiple deployment paths, name the lowest-risk or most generally applicable
+entry point first and link the alternatives. Do not add an empty `setup.sh`
+only to satisfy a filename convention; the documented entry point must perform
+the setup it claims to perform.
+
+Add the example to [`examples/catalog.json`](examples/catalog.json), then
+regenerate the human-readable catalog and local Pages build:
+
+```bash
+python3 scripts/build_catalog.py --write
+```
+
+## Catalog Metadata
+
+[`examples/catalog.json`](examples/catalog.json) is the single source for the
+generated [Markdown catalog](examples/README.md), GitHub Pages cards, filters,
+and public `catalog.json` search index. Its
+[`catalog.schema.json`](examples/catalog.schema.json) file provides editor
+validation and the controlled field values. The
+[catalog architecture](docs/catalog-architecture.md) documents the complete
+generation and public query contract.
+
+Add one object to the manifest's `examples` array:
+
+```json
+{
+  "path": "recipes/community/recognizable-example-name",
+  "title": "Recognizable Example Name",
+  "description": "Performs a concrete job and produces an observable result.",
+  "industry": "Other",
+  "fit": "Linux · Docker · required service or boundary",
+  "collections": []
+}
+```
+
+Follow these metadata rules:
+
+- `path` is relative to `examples/` and must match the canonical taxonomy.
+  Artifact kind and recipe provenance are derived from this path; do not repeat
+  them as mutable metadata.
+- `title` is the concise catalog name. Keep the README's level-one heading
+  recognizable as the same example.
+- `description` is one plain-text outcome sentence for catalog and search
+  results. Keep it aligned with the outcome sentence immediately below the
+  README title; do not let the human and catalog descriptions make different
+  claims.
+- `industry` is exactly one primary industry from the controlled list below.
+  Choose the industry of the workflow, not the contributor, model, hardware,
+  or a sample dataset. Use `Other` for horizontal workflows.
+- `fit` is a short, factual summary of the main environment, dependency, and
+  material operating boundary.
+- `contributor` is required for partner recipes. `environment` is required for
+  launchables. Omit either field when it does not apply.
+- `collections` is empty unless maintainers have accepted the example into a
+  cross-cutting collection. Use `"hackathon"` for that collection. A hackathon
+  recipe still keeps its NVIDIA, partner, or community provenance and its
+  canonical recipe path.
+
+Choose one of these exact industry values:
+
+- `Academia/education`
+- `AEC`
+- `Aerospace`
+- `Agriculture`
+- `Automotive/transportation`
+- `Cloud services`
+- `Consumer internet`
+- `Energy`
+- `Financial services`
+- `Gaming`
+- `Hardware/semiconductor`
+- `Health and life sciences`
+- `HPC/scientific computing`
+- `Manufacturing`
+- `Media & entertainment`
+- `Public sector`
+- `Restaurant/quick service`
+- `Retail/consumer packaged goods`
+- `Smart cities/spaces`
+- `Telecommunications`
+- `Other`
+
+The build rejects missing example directories, unlisted top-level examples,
+invalid paths, unknown fields, duplicate titles or paths, and values outside
+the controlled industry and collection lists. Do not edit generated catalog
+rows or deployed cards by hand.
 
 ## Example README Template
 
@@ -365,6 +459,8 @@ also preserve the essential expected output as searchable text.
 | --- | --- |
 | Category | [Choose one: NVIDIA Recipe, Partner Recipe, Community Recipe, Field Demo, Launchable, or Developer Tool] |
 | Contributor or provenance | [Name the person or organization responsible for the example.] |
+| Industry | [Choose the one primary industry from the controlled list in Catalog Metadata.] |
+| Collection | [State "Hackathon" only when accepted into that collection; otherwise state "None."] |
 | Use this when | [Name the specific user, scenario, or operational need.] |
 | You will get | [Name the observable workflow, output, artifact, or result.] |
 | Runs on | [Name the required host, platform, operating system, or hardware.] |
@@ -378,7 +474,8 @@ also preserve the essential expected output as searchable text.
 
 <!--
 Use the canonical category exactly. Keep category separate from contributor
-provenance.
+provenance. Industry and collection are discovery metadata; neither changes
+category, provenance, or directory placement.
 
 Use "verified on" only when completed evidence supports the exact environment.
 Do not substitute "supported on" unless there is an actual support commitment.

@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NemoClaw Community example catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "examples"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "examples": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/example"
+      }
+    }
+  },
+  "$defs": {
+    "example": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "title",
+        "description",
+        "industry",
+        "fit",
+        "collections"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^(recipes/(nvidia|community)/[a-z0-9]+(-[a-z0-9]+)*|recipes/partners/[a-z0-9]+(-[a-z0-9]+)*/[a-z0-9]+(-[a-z0-9]+)*|demos/field/[a-z0-9]+(-[a-z0-9]+)*|launchables/[a-z0-9]+(-[a-z0-9]+)*/[a-z0-9]+(-[a-z0-9]+)*|tools/[a-z0-9]+(-[a-z0-9]+)*)$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "industry": {
+          "enum": [
+            "Academia/education",
+            "AEC",
+            "Aerospace",
+            "Agriculture",
+            "Automotive/transportation",
+            "Cloud services",
+            "Consumer internet",
+            "Energy",
+            "Financial services",
+            "Gaming",
+            "Hardware/semiconductor",
+            "Health and life sciences",
+            "HPC/scientific computing",
+            "Manufacturing",
+            "Media & entertainment",
+            "Public sector",
+            "Restaurant/quick service",
+            "Retail/consumer packaged goods",
+            "Smart cities/spaces",
+            "Telecommunications",
+            "Other"
+          ]
+        },
+        "fit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contributor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "environment": {
+          "type": "string",
+          "minLength": 1
+        },
+        "collections": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": ["hackathon"]
+          }
+        }
+      }
+    }
+  }
+}

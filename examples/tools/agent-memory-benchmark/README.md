@@ -571,6 +571,8 @@ rows that change what you do are repeated above, where you need them.
 | --- | --- |
 | Category | Developer Tool |
 | Contributor or provenance | NVIDIA |
+| Industry | Other |
+| Collection | None |
 | Use this when | You need to compare memory designs — consolidating, retrieval, or anything else — on the same corpus and the same questions. |
 | You will get | Accuracy per question type, plus ingest and per-answer token cost measured at a proxy rather than self-reported. |
 | Runs on | Any host with Python 3.9 or later, on macOS or Linux. The shipped adapter definitions invoke `python3`, which a default Windows install does not provide. |

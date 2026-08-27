@@ -5,11 +5,44 @@
 
 # Catalog Deployment
 
-The [Pages workflow](../.github/workflows/pages.yml) validates the static catalog
-and local links when a watched catalog path changes. Matching pull requests
-attach an `example-catalog-preview` artifact and do not deploy. A matching push
-to `main`, or a manual run from `main`, packages `site/` and deploys it with the
-`github-pages` environment.
+The [Pages workflow](../.github/workflows/pages.yml) validates structured
+catalog metadata, generated Markdown, the static site, local resources, and
+dependency-free interaction tests when a watched catalog path changes. It then
+builds `_site/` from [`examples/catalog.json`](../examples/catalog.json) and
+the sources under `site/`.
+
+See [Example Catalog Architecture](catalog-architecture.md) for the metadata,
+generation, URL-filter, and public JSON contracts.
+
+Matching pull requests attach the generated `_site/` directory as an
+`example-catalog-preview` artifact and do not deploy. A matching push to
+`main`, or a manual run from `main`, uploads that generated directory and
+deploys it with the `github-pages` environment.
+
+## Build Locally
+
+After changing catalog metadata, regenerate the committed Markdown catalog and
+build the site:
+
+```bash
+python3 scripts/build_catalog.py --write
+```
+
+Validate without changing files and rebuild the ignored `_site/` directory:
+
+```bash
+python3 scripts/build_catalog.py --check
+python3 scripts/build_catalog.py
+```
+
+Serve the same directory that Pages receives:
+
+```bash
+python3 -m http.server --directory _site 8000
+```
+
+Open `http://localhost:8000/`. Do not edit `_site/` directly; it is disposable
+build output.
 
 ## Enable GitHub Pages
 
@@ -30,7 +63,9 @@ because Pages was disabled, rerun that workflow from `main`.
 
 ## Verify The Deployment
 
-After deployment, verify the HTTPS page, the stylesheet and logo under the
-`/nemoclaw-community/` project path, the category links, and the example README
+After deployment, verify the HTTPS page, the stylesheet, script, logo, and
+`catalog.json` under the `/nemoclaw-community/` project path. Exercise text
+search, both browse views, at least one category and industry filter, reset,
+browser Back, a copied filtered URL, category fragments, and example README
 links. Then set the repository website field to
 `https://nvidia.github.io/nemoclaw-community/`.
