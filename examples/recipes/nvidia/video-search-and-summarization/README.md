@@ -131,8 +131,7 @@ Ask the agent to tear down the deployment. It invokes
 `vss_orchestrator__docker_down`, which removes the deployment's containers and
 volumes. Then stop the MCP server process from the notebook session and remove
 the sandbox when you no longer need it. Deleting the sandbox discards its agent
-sessions. For sandbox lifecycle details, see the
-[NemoClaw sandbox lifecycle documentation](https://docs.nvidia.com/nemoclaw/manage-sandboxes/lifecycle).
+sessions.
 
 The Docker package holds applied by `deploy_nemoclaw.ipynb` stay in place until
 you release them.
