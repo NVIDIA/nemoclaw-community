@@ -23,6 +23,12 @@ readonly API="https://api.github.com"
 readonly MAX_BYTES=200000
 readonly USER_AGENT="nemoclaw-pr-test-case-assistant"
 
+# The files endpoint returns at most 100 entries per page. Read a bounded number of
+# pages so a large pull request cannot exhaust the public quota, and report the
+# shortfall rather than letting a partial diff look complete.
+readonly PER_PAGE=100
+readonly MAX_FILE_PAGES=5
+
 OWNER=""
 NAME=""
 URL_NUMBER=""
@@ -135,10 +141,53 @@ cmd_meta() {
     | jq -r '"#\(.number) \(.title)\nby \(.user.login), \(.changed_files) files, +\(.additions)/-\(.deletions)\n\n\(.body // "(no description)")"'
 }
 
+# Read changed files across a bounded number of pages and end with an explicit
+# coverage line. The count is compared with the metadata's changed_files value,
+# so a pull request wider than the page budget is reported as partial instead of
+# being presented as the whole diff.
 cmd_files() {
   local number="$1"
-  fetch "/repos/$OWNER/$NAME/pulls/$number/files?per_page=100" \
-    | jq -r '.[] | "=== \(.filename) (+\(.additions)/-\(.deletions))\n\(.patch // "(patch unavailable)")"'
+  local page=1 read_count=0 page_count=0 expected="" body=""
+
+  expected=$(fetch "/repos/$OWNER/$NAME/pulls/$number" | jq -r '.changed_files // empty')
+
+  while (( page <= MAX_FILE_PAGES )); do
+    body=$(fetch "/repos/$OWNER/$NAME/pulls/$number/files?per_page=$PER_PAGE&page=$page")
+    page_count=$(printf '%s' "$body" | jq 'if type == "array" then length else 0 end')
+
+    (( page_count == 0 )) && break
+
+    printf '%s' "$body" \
+      | jq -r '.[] | "=== \(.filename) (+\(.additions)/-\(.deletions))\n\(.patch // "(patch unavailable)")"'
+
+    read_count=$(( read_count + page_count ))
+    (( page_count < PER_PAGE )) && break
+    page=$(( page + 1 ))
+  done
+
+  report_coverage "$read_count" "$expected"
+}
+
+# A caller must be able to tell a complete diff from a truncated one without
+# counting the output itself.
+report_coverage() {
+  local read_count="$1" expected="$2"
+
+  if [[ -z "$expected" ]]; then
+    printf '\n=== coverage: %d changed files read; the total could not be confirmed.\n' "$read_count"
+    printf 'Treat patch coverage as unconfirmed and say so.\n'
+    return 0
+  fi
+
+  if (( read_count < expected )); then
+    printf '\n=== coverage: INCOMPLETE — %d of %d changed files read.\n' "$read_count" "$expected"
+    printf 'The remaining %d files were not fetched. State that patch coverage is\n' \
+      "$(( expected - read_count ))"
+    printf 'partial, and do not claim the full diff was reviewed.\n'
+    return 0
+  fi
+
+  printf '\n=== coverage: complete — %d of %d changed files read.\n' "$read_count" "$expected"
 }
 
 main() {

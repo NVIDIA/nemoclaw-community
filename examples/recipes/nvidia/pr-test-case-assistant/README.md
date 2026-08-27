@@ -276,7 +276,7 @@ python3 -m py_compile scripts/verify-grounding.py
 
 ```text
 PASS: pr-test-case-assistant lifecycle command contracts
-PASS: gh-pr.sh coordinate validation and untrusted-data handling
+PASS: gh-pr.sh coordinate validation, untrusted-data handling, and diff coverage
 ```
 
 **This verifies:** lifecycle command construction, shell syntax, and Python
@@ -285,8 +285,10 @@ service. The second test is adversarial: it asserts that hostile repository
 coordinates and pull request numbers are refused before any request, that a
 pull request body carrying `IGNORE ALL PREVIOUS INSTRUCTIONS` and shell syntax
 passes through as inert text without executing or triggering a second request,
-and that a rate-limit response stops instead of retrying. It stubs `curl`, so
-it contacts no network.
+that a rate-limit response stops instead of retrying, and that diff coverage is
+reported honestly for a small pull request, an exact page boundary, and one
+wider than the page budget. It stubs `curl`, so it contacts no network. It skips
+if `jq` is absent, since `gh-pr.sh` requires `jq` at runtime.
 
 **This does not verify:** live Slack event delivery, the configured inference
 provider, GitHub availability, or answer quality. Confirm those by sending the
@@ -334,6 +336,13 @@ pr-test-case-assistant/
   public API quota for the host's egress address.
 - Large pull request patches can be truncated by the GitHub API. The skill
   must state when a patch is unavailable.
+- GitHub returns changed files in pages of 100. `gh-pr.sh files` reads up to
+  five pages, so a pull request with more than 500 changed files is read
+  partially. It compares what it read with the metadata's `changed_files` value
+  and ends with a `=== coverage:` line stating `complete` or `INCOMPLETE` with
+  both counts, and the skill must not claim full diff coverage against an
+  `INCOMPLETE` line. Raise `MAX_FILE_PAGES` in the script if you need more, at
+  the cost of one request per page against the public quota.
 - Proposed test cases are not executed.
 - Slack Socket Mode permits one active connection per app-level token. Do not
   reuse the same app token in another active sandbox.
@@ -346,3 +355,7 @@ The recipe adds no package dependency. It uses installed NemoClaw and
 OpenClaw components and contacts Slack, the configured inference endpoint, and
 the public GitHub REST API. Each external service has its own terms,
 availability, data handling, and quota behavior.
+
+`gh-pr.sh` uses `curl` and `jq` inside the sandbox, and reports which one is
+missing rather than failing obscurely. The host-side scripts use `curl` and
+`python3`.

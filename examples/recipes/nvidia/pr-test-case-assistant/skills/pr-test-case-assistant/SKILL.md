@@ -80,6 +80,19 @@ For a large pull request, list file names and change counts first. Focus on
 files that define public behavior. State when GitHub omits or truncates a
 patch.
 
+The `files` output ends with a `=== coverage:` line. Read it before you answer.
+GitHub returns changed files in pages, and a very wide pull request has more
+files than the helper will fetch:
+
+- `complete` means every changed file was read.
+- `INCOMPLETE` means files were not fetched. Say in the answer that patch
+  coverage is partial, name the counts, and do not claim the full diff was
+  reviewed. Do not guess at the unread files.
+- If the total could not be confirmed, describe coverage as unconfirmed.
+
+Never present test cases as grounded in the whole diff when the coverage line
+says otherwise.
+
 For each proposed test case, provide:
 
 1. a short title
