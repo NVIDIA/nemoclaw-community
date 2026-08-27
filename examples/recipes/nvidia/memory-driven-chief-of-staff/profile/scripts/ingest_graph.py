@@ -41,6 +41,7 @@ Exit codes are the contract `select_intake.py` reads:
 from __future__ import annotations
 
 import json
+import sqlite3
 import os
 import sys
 import time
@@ -86,10 +87,6 @@ MAX_BACKFILL_DAYS = 3650
 # and the tick after that one still has to finish.
 REQUEST_BUDGET = 10
 
-# How many message identities are remembered for answering "moved or deleted".
-# A removal concerns something collected recently; an unbounded map would grow
-# with the mailbox for no benefit.
-REMEMBERED_IDENTITIES = 5000
 
 # How long one run may spend being told to wait.
 #
@@ -319,8 +316,13 @@ def first_round_url(days: int) -> str:
     return "/me/mailFolders/inbox/messages/delta?" + query
 
 
-def still_in_mailbox(source_id: str, token: str, budget: Budget) -> bool:
-    """Is this message somewhere else in the mailbox, or actually gone?
+def still_in_mailbox(source_id: str, token: str, budget: Budget) -> str:
+    """Is this message somewhere else in the mailbox, gone, or unanswerable?
+
+    Three answers, not two. A bool had to spend "I could not find out" on one
+    of the other two, and both were wrong: as "gone" it cleared the body of a
+    message that had merely been filed away, and as "present" it let a real
+    deletion pass unrecorded.
 
     Asked by `internetMessageId`, which a message keeps when it moves; the
     per-folder id does not, so it cannot be used here.
@@ -336,13 +338,18 @@ def still_in_mailbox(source_id: str, token: str, budget: Budget) -> bool:
     Stopping costs a re-read of pages this tick already handled, which is
     idempotent, and the next tick asks the question again.
     """
-    known = read_state().get("message_ids", {})
-    internet_id = known.get(source_id)
+    with sqlite3.connect(ledger_path()) as conn:
+        row = conn.execute(
+            "SELECT internet_message_id FROM items WHERE source_id = ?",
+            (source_id,)).fetchone()
+    internet_id = row[0] if row else None
     if not internet_id:
-        # Never seen with an identity of its own — collected before this
-        # existed, or the field was absent. Treat a removal as a removal
-        # rather than guessing that it moved.
-        return False
+        # Nothing to ask about: a row collected before this column existed,
+        # or a message that arrived without the field. Unknown, and unknown
+        # is not "deleted" — reading it that way tombstoned the row and
+        # cleared its body, which is the irreversible direction and was
+        # reached without contacting Graph at all.
+        return "unknown"
     query = urllib.parse.quote(
         "internetMessageId eq '%s'" % internet_id.replace("'", "''"), safe="")
     try:
@@ -355,7 +362,7 @@ def still_in_mailbox(source_id: str, token: str, budget: Budget) -> bool:
             "could not establish whether a removed message was deleted or "
             f"moved ({exc}); the round stops here rather than advancing past "
             "a removal it did not resolve", exc.kind) from exc
-    return bool(found.get("value"))
+    return "present" if found.get("value") else "gone"
 
 
 def tombstone(conn, source_ids: list[str]) -> int:
@@ -386,19 +393,33 @@ def tombstone(conn, source_ids: list[str]) -> int:
     return cursor.rowcount
 
 
-def commit(items: list[dict[str, Any]], removed: list[str]) -> tuple[int, int]:
-    """Rows and tombstones, in one transaction, taken after the fetch.
+def commit_rows(items: list[dict[str, Any]]) -> int:
+    """The page's messages, in their own transaction.
 
-    Holding a write transaction open across a network call holds a write lock
-    for the length of that call, and the user's own corrections queue behind
-    it. The delta cursor is saved by the caller and only after this returns:
-    a cursor recorded over rows that were never written would have the next
+    Separate from the tombstones, and before them, for two reasons. A write
+    transaction held across a network call holds a write lock for the length
+    of that call, and the user's own corrections queue behind it. And the
+    question a removal asks — what is this message's own identity — is
+    answered from the row, so the rows have to be there before it is asked;
+    a message collected in one page and removed in a later page of the same
+    round is otherwise unanswerable.
+
+    The delta cursor is saved by the caller and only after this returns: a
+    cursor recorded over rows that were never written would have the next
     round start past them.
     """
+    if not items:
+        return 0
     with write_txn() as conn:
-        added = insert_items(conn, items) if items else 0
-        gone = tombstone(conn, removed)
-    return added, gone
+        return insert_items(conn, items)
+
+
+def commit_tombstones(removed: list[str]) -> int:
+    """What the source no longer has, once that has actually been asked."""
+    if not removed:
+        return 0
+    with write_txn() as conn:
+        return tombstone(conn, removed)
 
 
 def collect(token: str, address: str, state: dict[str, Any],
@@ -424,7 +445,7 @@ def collect(token: str, address: str, state: dict[str, Any],
     else:
         url, absolute = first_round_url(days), False
 
-    added_total = removed_total = moved = pages = 0
+    added_total = removed_total = moved = unresolved = pages = 0
     delta_link = None
 
     while url and pages < REQUEST_BUDGET:
@@ -449,30 +470,28 @@ def collect(token: str, address: str, state: dict[str, Any],
         # own identity rather than its position. If a search of the mailbox
         # still finds it, it moved; if it does not, it is gone. One request
         # per removal, and removals are rare beside messages.
+        #
+        # That identity is kept on the row, by `normalize`, rather than in a
+        # map beside the cursor. The map was bounded at five thousand and
+        # evicted oldest-first, so filing away a message older than that
+        # produced a removal nobody could ask about — and the code read the
+        # absence as a deletion, cleared the body, and never made a request.
+        # The row is where the message already is, and it does not evict.
         gone_ids = [m["id"] for m in batch
                     if isinstance(m.get("@removed"), dict) and m.get("id")]
         present = [m for m in batch if "@removed" not in m and m.get("id")]
 
-        removals = [source_id for source_id in gone_ids
-                    if not still_in_mailbox(source_id, token, budget)]
-        moved += len(gone_ids) - len(removals)
-
-        # Remember each message's own identity, so a later removal can be
-        # asked about. Bounded, and oldest first out: a removal concerns
-        # something collected recently, and an unbounded map would grow with
-        # the mailbox.
-        known = state.setdefault("message_ids", {})
-        for m in present:
-            if m.get("internetMessageId"):
-                known[m["id"]] = m["internetMessageId"]
-        if len(known) > REMEMBERED_IDENTITIES:
-            for stale in list(known)[:len(known) - REMEMBERED_IDENTITIES]:
-                known.pop(stale, None)
-
+        # Written before the removals are resolved, so a message collected
+        # earlier in this same round can be asked about in a later page.
         items = [graph_message_to_item(m, address) for m in present]
-        added, gone = commit(items, removals)
-        added_total += added
-        removed_total += gone
+        added_total += commit_rows(items)
+
+        verdicts = {source_id: still_in_mailbox(source_id, token, budget)
+                    for source_id in gone_ids}
+        moved += sum(1 for v in verdicts.values() if v == "present")
+        unresolved += sum(1 for v in verdicts.values() if v == "unknown")
+        removed_total += commit_tombstones(
+            [s for s, verdict in verdicts.items() if verdict == "gone"])
 
         delta_link = payload.get("@odata.deltaLink")
         url = payload.get("@odata.nextLink")
@@ -494,7 +513,15 @@ def collect(token: str, address: str, state: dict[str, Any],
         complete = False
 
     return {"source": "email", "scope": "inbox", "added": added_total,
-            "removed": removed_total, "moved": moved, "pages": pages,
+            "removed": removed_total, "moved": moved,
+            # Removals that left the folder while the row had no identity of
+            # its own to ask about — collected before the column existed, or
+            # arrived without the field. Left alone rather than tombstoned,
+            # and counted rather than passed over in silence, because the
+            # alternative was clearing the body of a message that had only
+            # been filed away.
+            "unresolved_removals": unresolved,
+            "pages": pages,
             "resumed": resuming, "complete": complete,
             "synchronised": bool(state.get("delta"))}
 
@@ -550,7 +577,7 @@ def main(argv: list[str] | None = None) -> int:
             # would synchronise one mailbox against another's position.
             print("the mailbox has changed; discarding the previous "
                   "synchronisation state", file=sys.stderr)
-            for key in ("delta", "next", "message_ids"):
+            for key in ("delta", "next"):
                 state.pop(key, None)
         elif refresh:
             state.pop("delta", None)

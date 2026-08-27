@@ -505,18 +505,34 @@ class TestTheMailboxIdentityIsChecked(CollectorCase):
         self.assertIn("/delta?", "".join(self.graph.calls),
                       "did not start a fresh round for the new mailbox")
 
-    def test_a_changed_mailbox_forgets_the_old_message_identities(self):
-        """They answer "moved or deleted" for messages in a mailbox nobody is
-        reading any more."""
+    def test_a_changed_mailbox_does_not_answer_removals_from_the_old_one(self):
+        """Message identities used to live in a map beside the cursor, and
+        the map had to be discarded with it. They now live on the row, where
+        the question is which mailbox a row belongs to.
+
+        Graph ids are per-mailbox, so a removal reported by the new mailbox
+        names an id the store has never seen. That is the `unknown` case: no
+        row is tombstoned, and the old mailbox's messages are left exactly as
+        they were rather than being resolved against a different inbox.
+        """
         self.serve([{"value": [message("m1")],
                      "@odata.deltaLink": "http://x/final"}])
         self.run_main()
-        self.assertTrue(self.state().get("message_ids"))
 
         self.graph.identity = {"mail": "someone.else@example.com"}
-        self.graph.queue({"value": [], "@odata.deltaLink": "http://x/f2"})
-        self.run_main()
-        self.assertNotIn("m1", self.state().get("message_ids", {}))
+        self.graph.queue({"value": [removed("other-mailbox-id")],
+                          "@odata.deltaLink": "http://x/f2"})
+        self.graph.still_present = False
+        before = self.graph.identity_lookups
+        self.assertEqual(self.run_main(), 0)
+
+        # No request was made, because there was nothing to ask about.
+        self.assertEqual(self.graph.identity_lookups, before)
+        # rows() is (source_id, sender, body, deleted_at, body_cleared_at)
+        self.assertEqual([r[0] for r in self.rows()], ["m1"])
+        self.assertIsNone(self.rows()[0][3],
+                          "a row was tombstoned by another mailbox's removal")
+        self.assertEqual(self.report()["unresolved_removals"], 1)
 
     def test_the_placeholder_staying_the_same_does_not_hide_it(self):
         """The credential is byte-identical across the change; only the
@@ -834,6 +850,60 @@ class TestFailuresCarryTheirDiagnosisInTheExitCode(CollectorCase):
         self.assertEqual(code, ingest_graph.EXIT_RATE_LIMIT)
         self.assertLessEqual(sum(waits),
                              ingest_graph.MAX_TOTAL_BACKOFF_SECONDS)
+
+    def test_a_removal_with_no_identity_is_not_read_as_a_deletion(self):
+        """The case that cleared a body without contacting Graph at all.
+
+        Identities used to live in a map capped at five thousand entries that
+        evicted oldest-first, so filing away an older message produced a
+        removal with nothing to ask about — and the absence was read as a
+        deletion. A row collected before the column existed is the same
+        situation, and is the one that survives the map being gone.
+        """
+        self.serve([{"value": [message("m1")],
+                     "@odata.deltaLink": "http://x/final"}])
+        self.run_main()
+        # Exactly a v3 row: collected, but with no identity of its own.
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE items SET internet_message_id = NULL")
+
+        self.graph.queue({"value": [removed("m1")],
+                          "@odata.deltaLink": "http://x/final2"})
+        before = self.graph.identity_lookups
+        self.assertEqual(self.run_main(), 0)
+
+        self.assertEqual(self.graph.identity_lookups, before,
+                         "asked Graph a question it had no id for")
+        self.assertIsNone(self.rows()[0][3],
+                          "tombstoned a message it could not ask about")
+        self.assertIsNotNone(self.rows()[0][2], "cleared the body anyway")
+        self.assertEqual(self.report()["unresolved_removals"], 1)
+
+    def test_an_identity_learned_earlier_in_the_same_round_answers(self):
+        """A message collected on one page and removed on a later page of the
+        same round. The rows are written before the removals are resolved, so
+        the question can be answered without waiting for the next tick."""
+        self.serve([
+            {"value": [message("m1")], "@odata.nextLink": "http://x/p2"},
+            {"value": [removed("m1")], "@odata.deltaLink": "http://x/final"},
+        ])
+        self.graph.still_present = False
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(self.graph.identity_lookups, 1,
+                         "the identity from the first page was not available")
+        self.assertIsNotNone(self.rows()[0][3])
+        self.assertEqual(self.report()["unresolved_removals"], 0)
+
+    def test_a_message_moved_in_the_same_round_is_not_a_deletion(self):
+        """The other half: same arrangement, and the mailbox still has it."""
+        self.serve([
+            {"value": [message("m1")], "@odata.nextLink": "http://x/p2"},
+            {"value": [removed("m1")], "@odata.deltaLink": "http://x/final"},
+        ])
+        self.graph.still_present = True
+        self.assertEqual(self.run_main(), 0)
+        self.assertIsNone(self.rows()[0][3])
+        self.assertEqual(self.report()["moved"], 1)
 
     def test_a_failed_removal_lookup_does_not_let_the_round_advance(self):
         """A removal is reported once.

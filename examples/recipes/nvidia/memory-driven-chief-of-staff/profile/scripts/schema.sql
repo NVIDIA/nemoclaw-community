@@ -68,6 +68,14 @@ CREATE TABLE IF NOT EXISTS items (
     -- question. The row survives either way, because obligations and events
     -- hang off `source_id` and removing it would break the audit trail.
     deleted_at    TEXT,
+    -- The message's own identity, as opposed to its position in a folder.
+    --
+    -- Needed to tell a deletion from a move: the delta query reports both
+    -- identically and the per-folder id changes when a message moves, so
+    -- this is the only thing that survives to ask about. Kept on the row
+    -- rather than in a bounded map beside it — a map that evicts turns an
+    -- older message being filed away into a deletion, and clears its body.
+    internet_message_id TEXT,
     permalink   TEXT,                       -- link back to the source system
 
     -- Normalized across sources, because the judging rules ask the same

@@ -50,7 +50,7 @@ require_encrypted_storage() {
     echo "Find it, then re-run with it named. For the Docker driver:"
     echo "  docker info --format '{{.DockerRootDir}}'"
     echo ""
-    echo "  SANDBOX_STORAGE_PATH=<path> bash scripts/setup-slack.sh"
+    echo "  SANDBOX_STORAGE_PATH=<path> bash ${SETUP_SCRIPT:-scripts/setup-slack.sh}"
     echo ""
     echo "docs/encrypted-storage.md explains what to look for and why."
     exit 1

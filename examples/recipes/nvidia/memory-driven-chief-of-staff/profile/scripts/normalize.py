@@ -101,6 +101,10 @@ def graph_message_to_item(msg: dict[str, Any], user_address: str) -> dict[str, A
         "permalink": msg.get("webLink"),
         "addressing": addressing,
         "unread": 0 if msg.get("isRead") else 1,
+        # Stored, unlike `sender_address`: a removal reported later can only
+        # be told apart from a move by asking about this, and by then the
+        # message is no longer available to read it from.
+        "internet_message_id": msg.get("internetMessageId"),
     }
 
 
@@ -156,6 +160,9 @@ ITEM_COLUMNS = (
     "source_id", "source", "scope", "thread_ref", "event_at",
     "sender", "sender_key", "subject", "body", "permalink", "addressing",
     "unread",
+    # Mail only. Slack has no equivalent and leaves it NULL; the collector
+    # that needs it is the one that can tell a move from a deletion.
+    "internet_message_id",
 )
 
 

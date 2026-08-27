@@ -146,7 +146,7 @@ class TestSchedulerIntegrationContract(unittest.TestCase):
     registration script. Neither was covered, and one of them was already
     false — the script looked jobs up with `cron list --json`, a flag the CLI
     does not have, so the lookup always came back empty and every run created
-    another copy of all five jobs.
+    another copy of all seven jobs.
     """
 
     RECIPE = HERE.parents[1]
@@ -502,7 +502,7 @@ class TestTheInstallerRefusesTheWrongPlatform(unittest.TestCase):
     """Documentation that says "Linux only" and code that installs anywhere.
 
     The README states the scheduled path does not work on macOS, and the
-    scripts installed and registered five jobs there regardless — producing
+    scripts installed and registered seven jobs there regardless — producing
     exactly the model-without-skill calls the same document warns about. A
     warning nothing enforces is not a warning.
     """
@@ -696,7 +696,7 @@ class TestTheInstallerCarriesSettingsNotSecrets(unittest.TestCase):
         self.assertNotEqual(register, -1, "installer no longer registers jobs")
         self.assertLess(check, register,
                         "the check must precede registration, or the exit "
-                        "leaves five jobs scheduled against a dead profile")
+                        "leaves seven jobs scheduled against a dead profile")
 
     def test_an_unresolvable_model_exits_non_zero(self):
         """The check has to end the run, not merely print a complaint."""
@@ -858,7 +858,7 @@ class TestAFailedTransferStopsTheInstall(unittest.TestCase):
     `false && echo` is a no-op, not an abort. So a profile could take
     `model.default`, silently drop `model.provider` and `model.base_url`, pass
     the model check — which only asks about `model.default` — pass the
-    credential check, and get all five jobs registered against whatever route
+    credential check, and get all seven jobs registered against whatever route
     it had left.
 
     Exit status alone is also not proof the value landed, so each carried

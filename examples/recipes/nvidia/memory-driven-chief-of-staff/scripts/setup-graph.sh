@@ -25,6 +25,9 @@ PROFILE_YAML="$RECIPE_ROOT/providers/graph-user.yaml"
 PROVIDER="${GRAPH_PROVIDER_NAME:-memory-driven-cos-graph}"
 SANDBOX="${OPENSHELL_SANDBOX_NAME:-${SANDBOX_NAME:-hermes}}"
 USABLE_KEY="MS_GRAPH_ACCESS_TOKEN"
+# Named for the shared helpers, so their error paths tell the user to re-run
+# the script they actually ran.
+SETUP_SCRIPT="scripts/setup-graph.sh"
 WANT_HOST="graph.microsoft.com"
 
 # Microsoft's own public client id for the device-code flow, and the tenant
@@ -38,6 +41,12 @@ TENANT_ID="${GRAPH_TENANT_ID:-common}"
 # user or copied them. Requesting `Mail.Read` alone produced a setup that
 # depended on a permission it never asked for.
 SCOPES="offline_access https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/User.Read"
+
+# First, and before the device-code flow: an Entra consent granted on a
+# machine that cannot register the jobs is a consent spent for nothing, and
+# it is granted in a browser to a tenant an administrator may have to approve.
+. "$HERE/require-linux.sh"
+require_linux
 
 if ! command -v openshell >/dev/null 2>&1; then
   if [[ -n "${OPENSHELL_SANDBOX:-}" ]]; then

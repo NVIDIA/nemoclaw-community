@@ -416,8 +416,11 @@ class TestVersionGuardOnTheRealPath(unittest.TestCase):
             columns = {r[1] for r in c.execute("PRAGMA table_info(items)")}
             row = c.execute("SELECT sender, body, deleted_at FROM items"
                             " WHERE source_id='m1'").fetchone()
-        self.assertEqual(int(version), 3)
+        self.assertEqual(int(version), SCHEMA_VERSION)
         self.assertIn("deleted_at", columns)
+        self.assertIn("internet_message_id", columns)
+        # v3 ran too, on the way past: a real v2 store takes the whole chain.
+        self.assertIn("sender_key", columns)
         self.assertEqual(row[0], "Dana")
         self.assertEqual(row[1], "b")
         self.assertIsNone(row[2], "an existing row was marked deleted")

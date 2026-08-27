@@ -21,15 +21,7 @@ set -euo pipefail
 
 # Same reason as install.sh: every shipped skill declares `platforms: [linux]`,
 # so the scheduled path this credential feeds does not run anywhere else.
-require_linux() {
-  local kernel
-  kernel="$(uname -s)"
-  if [[ "$kernel" != "Linux" ]]; then
-    echo "The scheduled path is Linux only; detected $kernel." >&2
-    echo "The fixture walkthrough needs no credential and runs anywhere." >&2
-    exit 1
-  fi
-}
+. "$(dirname "${BASH_SOURCE[0]}")/require-linux.sh"
 require_linux
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -71,6 +63,7 @@ command -v python3 >/dev/null 2>&1 || {
 # mismatch stops the run rather than being worked around.
 # The storage prerequisite, shared by every connector.
 # shellcheck source=scripts/require-encrypted-storage.sh
+SETUP_SCRIPT="scripts/setup-slack.sh"
 . "$(dirname "${BASH_SOURCE[0]}")/require-encrypted-storage.sh"
 
 # Field-by-field profile validation, shared by both paths.

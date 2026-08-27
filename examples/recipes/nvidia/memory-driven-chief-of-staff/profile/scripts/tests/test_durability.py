@@ -685,7 +685,8 @@ class TestTheDocumentedTestCountIsTheRealOne(unittest.TestCase):
     terminal is a claim, so it gets an assertion like any other.
     """
 
-    WORDS = {"nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
+    WORDS = {"nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+             "thirteen": 13, "fourteen": 14, "fifteen": 15}
 
     def _documented(self):
         readme = (HERE.parents[1] / "README.md").read_text(encoding="utf-8")

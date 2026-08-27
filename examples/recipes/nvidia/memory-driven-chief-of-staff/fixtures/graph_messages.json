@@ -10,66 +10,147 @@
       "id": "msg-priorities-match",
       "receivedDateTime": "2026-08-18T08:10:00Z",
       "subject": "Billing migration — need the cutover window confirmed",
-      "from": {"emailAddress": {"name": "Dana Okoro", "address": "dana.okoro@example.com"}},
-      "toRecipients": [{"emailAddress": {"address": "avery.chen@example.com"}}],
+      "from": {
+        "emailAddress": {
+          "name": "Dana Okoro",
+          "address": "dana.okoro@example.com"
+        }
+      },
+      "toRecipients": [
+        {
+          "emailAddress": {
+            "address": "avery.chen@example.com"
+          }
+        }
+      ],
       "ccRecipients": [],
-      "body": {"contentType": "text", "content": "The vendor offered Sept 2 or Sept 9 for the billing cutover. I need one of them confirmed before I can book the freeze. Can you decide by Thursday?"},
+      "body": {
+        "contentType": "text",
+        "content": "The vendor offered Sept 2 or Sept 9 for the billing cutover. I need one of them confirmed before I can book the freeze. Can you decide by Thursday?"
+      },
       "parentFolderId": "inbox",
       "conversationId": "conv-billing-01",
       "webLink": "https://outlook.example.com/mail/id/msg-priorities-match",
-      "isRead": false
+      "isRead": false,
+      "internetMessageId": "<msg-priorities-match@example.com>"
     },
     {
       "id": "msg-urgent-not-chosen",
       "receivedDateTime": "2026-08-18T07:55:00Z",
       "subject": "URGENT: expense policy attestation closes Friday",
-      "from": {"emailAddress": {"name": "Finance Operations", "address": "finance-ops@example.com"}},
-      "toRecipients": [{"emailAddress": {"address": "avery.chen@example.com"}}],
+      "from": {
+        "emailAddress": {
+          "name": "Finance Operations",
+          "address": "finance-ops@example.com"
+        }
+      },
+      "toRecipients": [
+        {
+          "emailAddress": {
+            "address": "avery.chen@example.com"
+          }
+        }
+      ],
       "ccRecipients": [],
-      "body": {"contentType": "text", "content": "All staff must complete the annual expense policy attestation before Friday 17:00. This is mandatory and non-negotiable. Unattested accounts will be suspended."},
+      "body": {
+        "contentType": "text",
+        "content": "All staff must complete the annual expense policy attestation before Friday 17:00. This is mandatory and non-negotiable. Unattested accounts will be suspended."
+      },
       "parentFolderId": "inbox",
       "conversationId": "conv-attestation-01",
       "webLink": "https://outlook.example.com/mail/id/msg-urgent-not-chosen",
-      "isRead": false
+      "isRead": false,
+      "internetMessageId": "<msg-urgent-not-chosen@example.com>"
     },
     {
       "id": "msg-quiet-decay",
       "receivedDateTime": "2026-08-11T14:30:00Z",
       "subject": "Thoughts on the onboarding revamp doc?",
-      "from": {"emailAddress": {"name": "Sam Ruiz", "address": "sam.ruiz@example.com"}},
-      "toRecipients": [{"emailAddress": {"address": "avery.chen@example.com"}}],
+      "from": {
+        "emailAddress": {
+          "name": "Sam Ruiz",
+          "address": "sam.ruiz@example.com"
+        }
+      },
+      "toRecipients": [
+        {
+          "emailAddress": {
+            "address": "avery.chen@example.com"
+          }
+        }
+      ],
       "ccRecipients": [],
-      "body": {"contentType": "text", "content": "Dropped a draft of the onboarding revamp in the shared folder whenever you have a moment. No rush."},
+      "body": {
+        "contentType": "text",
+        "content": "Dropped a draft of the onboarding revamp in the shared folder whenever you have a moment. No rush."
+      },
       "parentFolderId": "inbox",
       "conversationId": "conv-onboarding-01",
       "webLink": "https://outlook.example.com/mail/id/msg-quiet-decay",
-      "isRead": false
+      "isRead": false,
+      "internetMessageId": "<msg-quiet-decay@example.com>"
     },
     {
       "id": "msg-automated-noise",
       "receivedDateTime": "2026-08-18T06:00:00Z",
       "subject": "[build] pipeline #4821 succeeded on main",
-      "from": {"emailAddress": {"name": "CI", "address": "noreply@ci.example.com"}},
-      "toRecipients": [{"emailAddress": {"address": "avery.chen@example.com"}}],
+      "from": {
+        "emailAddress": {
+          "name": "CI",
+          "address": "noreply@ci.example.com"
+        }
+      },
+      "toRecipients": [
+        {
+          "emailAddress": {
+            "address": "avery.chen@example.com"
+          }
+        }
+      ],
       "ccRecipients": [],
-      "body": {"contentType": "text", "content": "Pipeline #4821 completed successfully in 6m41s. No action required."},
+      "body": {
+        "contentType": "text",
+        "content": "Pipeline #4821 completed successfully in 6m41s. No action required."
+      },
       "parentFolderId": "inbox",
       "conversationId": "conv-ci-4821",
       "webLink": "https://outlook.example.com/mail/id/msg-automated-noise",
-      "isRead": false
+      "isRead": false,
+      "internetMessageId": "<msg-automated-noise@ci.example.com>"
     },
     {
       "id": "msg-cc-only",
       "receivedDateTime": "2026-08-18T09:05:00Z",
       "subject": "Re: vendor contract redlines",
-      "from": {"emailAddress": {"name": "Priya Raman", "address": "priya.raman@example.com"}},
-      "toRecipients": [{"emailAddress": {"address": "legal@example.com"}}],
-      "ccRecipients": [{"emailAddress": {"address": "avery.chen@example.com"}}],
-      "body": {"contentType": "text", "content": "Legal — attaching the redlines we discussed. Copying Avery so they have visibility on the timeline."},
+      "from": {
+        "emailAddress": {
+          "name": "Priya Raman",
+          "address": "priya.raman@example.com"
+        }
+      },
+      "toRecipients": [
+        {
+          "emailAddress": {
+            "address": "legal@example.com"
+          }
+        }
+      ],
+      "ccRecipients": [
+        {
+          "emailAddress": {
+            "address": "avery.chen@example.com"
+          }
+        }
+      ],
+      "body": {
+        "contentType": "text",
+        "content": "Legal — attaching the redlines we discussed. Copying Avery so they have visibility on the timeline."
+      },
       "parentFolderId": "inbox",
       "conversationId": "conv-vendor-01",
       "webLink": "https://outlook.example.com/mail/id/msg-cc-only",
-      "isRead": false
+      "isRead": false,
+      "internetMessageId": "<msg-cc-only@example.com>"
     }
   ],
   "@odata.deltaLink": "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=FIXTURE"

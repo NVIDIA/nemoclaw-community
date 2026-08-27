@@ -59,7 +59,7 @@ fi
 # steadier than parsing that table, and it is a read.
 #
 # Without this the script cannot tell an existing job from a missing one, and
-# every run creates another copy of all six.
+# every run creates another copy of all seven.
 job_id_for() {
   local name="$1" store="$PROFILE_HOME/cron/jobs.json"
   [[ -f "$store" ]] || return 0

@@ -248,7 +248,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the thirteen files report 505 tests in
+Expected result: every file ends with `OK`, the thirteen files report 562 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -387,12 +387,14 @@ script's output, so a gate printed anywhere else is ignored and the model
 wakes. A test asserts the gate exactly the way the scheduler parses it, rather
 than looking for the string somewhere in the output.
 
-The intake pre-step also runs whichever collectors are present. The Slack
-one ships with the recipe and reports `{"unconfigured": true}` until
-`scripts/setup-slack.sh` has run, exiting zero so an idle tick still costs
-nothing. A Graph collector is not here yet, so it is reported as
-`"absent": true`. Either way the tick carries on with whatever the store
-already holds.
+The intake pre-step also runs whichever collectors are present. Both ship
+with the recipe, and each reports `{"unconfigured": true}` until its setup
+script has run — `scripts/setup-slack.sh` or `scripts/setup-graph.sh` —
+exiting zero so an idle tick still costs nothing. They run in the same tick
+and independently: a mailbox credential that has expired does not stop Slack
+being read, and neither can hold the tick open, because each is bounded in
+requests and in the time it may spend waiting. Either way the tick carries on
+with whatever the store already holds.
 
 **Registering is not starting.** Under the builtin scheduler the jobs fire
 only while a gateway is serving the profile, and starting one takes two steps
@@ -533,7 +535,10 @@ Three things about the connectors themselves:
   `internetMessageId`, and only a message the mailbox no longer holds anywhere
   is tombstoned. If that question cannot be answered the round stops and the
   next one asks again, rather than advancing past a removal it did not
-  resolve. The row stays: obligations and events hang off it, and removing it
+  resolve. If there is no identity to ask about — a row collected before the
+  connector stored one — the removal is left unresolved and counted, never
+  guessed: reading an absent identity as a deletion cleared the body of a
+  message that had only been filed away. The row stays: obligations and events hang off it, and removing it
   would break the record of why something was ranked.
 - For Slack, that guarantee is not available. A deleted message stops appearing
   in `conversations.history`, and its absence from a bounded, paginated read
@@ -600,6 +605,49 @@ Until this is set up the collector still runs — it ships with the recipe — b
 reports `{"unconfigured": true}` and exits zero, so the schedule runs over
 whatever is already in the store and an idle tick still costs nothing. That is
 a supported state, not a broken one.
+
+### Connecting a mailbox
+
+Microsoft Graph is the other collector, and it is read-only: the messages in
+your Inbox. It never sends, never replies, and never touches a draft.
+
+```bash
+bash scripts/setup-graph.sh
+```
+
+Run it on the host, not in the sandbox, for the same reason as Slack — it
+needs `openshell`. It walks you through Microsoft's device-code flow: a code
+to type into a browser on any machine, and a consent your tenant may require
+an administrator to approve. Full walkthrough:
+[`docs/set-up-graph.md`](docs/set-up-graph.md).
+
+**The first synchronisation asks how far back to read.** The default is seven
+days; the prompt offers seven, fourteen or thirty, and takes any number you
+type instead. `GRAPH_BACKFILL_DAYS` sets it without the prompt. The window
+applies once — after the first round the collector tracks changes rather than
+re-reading, so a larger number costs a slower first sync and nothing after
+that.
+
+Two things are deliberate here as well. The scopes are **named** — `Mail.Read`,
+`User.Read`, `offline_access` — rather than `.default`, which would return
+whatever the application has already been granted and make the permission the
+recipe actually holds unknowable from the code. And `login.microsoftonline.com`
+is **not** in the sandbox's egress policy: the token exchange and every refresh
+belong to the gateway, so the collector holds a placeholder it cannot spend and
+cannot reach the endpoint that would turn it into a real one.
+
+Both connectors can be set up, or either one alone. They write into the same
+store and run in the same tick, independently — see [When a collector
+fails](#when-a-collector-fails) for what happens when one of them cannot.
+
+**A person who reaches you on both gets two pages.** Slack identifies people
+by user id and mail by address, and nothing links the two: a shared display
+name is not evidence, and the whole reason this recipe keeps a stable identity
+per sender is that guessing from a name puts two people on one page. So one
+colleague can hold a page for their Slack half and another for their mail
+half, and the selector reports the pair under `shared_display_name` so the
+agent can say so on each. Linking them on the user's word, rather than on a
+name, is not in this change.
 
 ### When a collector fails
 
@@ -700,12 +748,16 @@ profile home, and they also leave a Python bytecode cache beside the scripts —
 see [Cleanup](#cleanup). The six skill files a runtime loads add nothing to
 that.
 
-The collector reaches exactly one host, `slack.com`, and only for reads. That
-is declared in `providers/slack-user.yaml` as `access: read-only` with
-`enforcement: enforce`, so the egress proxy refuses anything else — the
-property is enforced by policy rather than promised by prose. The credential
-never enters the sandbox: the gateway holds it and substitutes it at the
-boundary, so the collector handles a placeholder it cannot spend.
+The collectors reach two hosts between them, `slack.com` and
+`graph.microsoft.com`, and only for reads. Each is declared in its provider
+profile — `providers/slack-user.yaml` and `providers/graph-user.yaml` — as
+`access: read-only` with `enforcement: enforce`, so the egress proxy refuses
+anything else, and refuses the other collector's host to each of them. The
+property is enforced by policy rather than promised by prose. Neither
+credential enters the sandbox: the gateway holds both and substitutes them at
+the boundary, so a collector handles a placeholder it cannot spend.
+`login.microsoftonline.com` is deliberately absent from the sandbox's
+allow-list — the token exchange is the gateway's, not the collector's.
 
 The scheduled path does reach one. A job that wakes runs an agent turn, and the
 runtime calls whichever inference provider it is configured for, over its own
@@ -713,9 +765,10 @@ egress path — the recipe holds no credential and opens no connection itself.
 A job that does not wake makes no call at all.
 
 Egress to a message source is here, and it is narrow: the Slack collector
-reaches `slack.com` and nothing else, declared in the provider profile at
-`access: read-only` with `enforcement: enforce`, so a write is refused at the
-boundary rather than caught by a test. The credential it uses is held by the
+reaches `slack.com` and nothing else, the Graph collector reaches
+`graph.microsoft.com` and nothing else, each declared in its own provider
+profile at `access: read-only` with `enforcement: enforce`, so a write is
+refused at the boundary rather than caught by a test. The credential it uses is held by the
 gateway and substituted there — see
 [Connecting Slack](#connecting-slack).
 
