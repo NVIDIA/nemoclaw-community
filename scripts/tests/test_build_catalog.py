@@ -113,6 +113,22 @@ class CatalogBuildTests(unittest.TestCase):
             len(entries),
         )
 
+    def test_new_empty_example_cannot_bypass_catalog_discovery(self) -> None:
+        root = self._fixture_root()
+        readme = (
+            root
+            / "examples"
+            / "recipes"
+            / "community"
+            / "empty-example"
+            / "README.md"
+        )
+        readme.parent.mkdir(parents=True)
+        readme.write_text("", encoding="utf-8")
+
+        with self.assertRaisesRegex(CatalogError, "Example README is empty"):
+            load_catalog(root)
+
     def test_path_derives_kind_and_recipe_provenance(self) -> None:
         entry = load_catalog(self._fixture_root())[0]
 

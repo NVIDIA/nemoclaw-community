@@ -40,18 +40,22 @@ jobs:
 
           normalized_body="$(printf '%s\n' "$PR_BODY" | tr -d '\r')"
 
-          if ! printf '%s\n' "$normalized_body" \
-            | grep -Eq '^Signed-off-by:[[:space:]]+.+[[:space:]]+<[^<>]+>$'; then
-            echo "::error::PR description must contain a DCO sign-off line."
-            echo "::error::Expected format: Signed-off-by: Your Name <your-email@example.com>"
+          has_valid_signoff() {
+            grep -E '^Signed-off-by:[[:space:]]+[^<>]+[[:space:]]+<[^<>[:space:]@]+@[^<>[:space:]@]+>$' \
+              | grep -Eiv '<[^<>[:space:]@]+@example\.(com|net|org)>$' \
+              | grep -Eiv '^Signed-off-by:[[:space:]]+(Your([[:space:]]+Real)?[[:space:]]+Name|Full[[:space:]]+Name)[[:space:]]+<' \
+              > /dev/null
+          }
+
+          placeholder='Signed-off-by: Your Real Name <your-email@example.com>'
+          if printf '%s\n' "$placeholder" | has_valid_signoff; then
+            echo "::error::DCO placeholder regression check failed."
             exit 1
           fi
 
-          if ! printf '%s\n' "$normalized_body" \
-            | grep -E '^Signed-off-by:[[:space:]]+.+[[:space:]]+<[^<>]+>$' \
-            | grep -Eiv '^Signed-off-by:[[:space:]]+Your Name[[:space:]]+<your[.-]email@example\.com>$' \
-            > /dev/null; then
-            echo "::error::Replace the example DCO sign-off with your own name and email address."
+          if ! printf '%s\n' "$normalized_body" | has_valid_signoff; then
+            echo "::error::PR description must contain your valid DCO sign-off."
+            echo "::error::Replace all example names and addresses with your own name and email."
             exit 1
           fi
 
