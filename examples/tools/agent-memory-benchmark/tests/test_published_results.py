@@ -424,3 +424,71 @@ def test_a_generated_run_is_ignored_and_a_published_one_is_not():
         assert not ignored(run / "report.json"), (
             f"{run.name} ships as a published result but is ignored, so the "
             f"files in this PR are not the ones a checkout would get")
+
+
+def test_every_difference_in_the_results_table_follows_from_the_counts():
+    """A Difference cell must come from the counts, not from rounded rates.
+
+    `multi_source` shipped as +6.9 pp because 0.9452 - 0.8767 was computed from
+    the report's `accuracy_by_type`, which is stored rounded to four places, and
+    rounded again for display. From the verdicts it is 5/73 = 6.8493, which
+    rounds to +6.8. It was the only cell in the table that did not reproduce,
+    and nothing checked any of them -- including a first version of this test,
+    which read the same rounded field and agreed with the wrong number.
+    """
+    runs = {run.name.split("_")[0]: run for run in RUNS}
+    if {"agentic-rag", "self-model"} - runs.keys():
+        return  # a different pair ships; this table does not apply
+    readme = (REPO / "results" / "README.md").read_text(encoding="utf-8")
+    questions = {
+        json.loads(line)["id"]: json.loads(line)
+        for line in (REPO / "corpus_a" / "questions" / "questions.jsonl")
+        .read_text(encoding="utf-8").splitlines() if line.strip()}
+
+    def verdicts(run: Path) -> list[dict]:
+        return [json.loads(line) for line
+                in (run / "verdicts.jsonl").read_text(encoding="utf-8").splitlines()
+                if line.strip()]
+
+    def rates(run: Path) -> dict[str, tuple[int, int]]:
+        rows = verdicts(run)
+        out: dict[str, list[int]] = {}
+        for row in rows:
+            question = questions[row["question_id"]]
+            for key in (question["type"], question["difficulty"], "overall"):
+                bucket = out.setdefault(key, [0, 0])
+                bucket[0] += bool(row["correct"])
+                bucket[1] += 1
+        # Integer counts from the report, not its rounded rate: the whole point
+        # of this test is that a rounded rate is not a source for a difference.
+        evidence = _report(run)["summary"]
+        out["citation_coverage"] = [
+            evidence["evidence"]["questions_with_citations"], evidence["questions"]]
+        return {k: (v[0], v[1]) for k, v in out.items()}
+
+    baseline_counts, ours_counts = rates(runs["agentic-rag"]), rates(runs["self-model"])
+    checked = 0
+    for line in readme.splitlines():
+        if not line.startswith("|") or "pp |" not in line:
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        percentages = [c for c in cells if c.endswith("%")]
+        if len(percentages) != 2:
+            continue
+        shown = [float(p.rstrip("%")) / 100 for p in percentages]
+        stated = float(cells[-1].replace("pp", "").strip())
+        label = next(
+            (name for name, (hit, total) in ours_counts.items()
+             if name in baseline_counts
+             and abs(baseline_counts[name][0] / baseline_counts[name][1] - shown[0]) <= 5.001e-4
+             and abs(hit / total - shown[1]) <= 5.001e-4),
+            None)
+        assert label, f"no measured metric matches the row {line!r}"
+        exact = (ours_counts[label][0] / ours_counts[label][1]
+                 - baseline_counts[label][0] / baseline_counts[label][1]) * 100
+        assert abs(round(exact, 1) - stated) < 1e-9, (
+            f"row {label!r} states {stated:+.1f} pp; the counts "
+            f"{baseline_counts[label]} and {ours_counts[label]} give {exact:+.4f}, "
+            f"which rounds to {round(exact, 1):+.1f}.")
+        checked += 1
+    assert checked >= 8, f"only {checked} difference rows were checked; the table has more"

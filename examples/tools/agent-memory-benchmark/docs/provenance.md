@@ -12,7 +12,8 @@ Apache-2.0. See the repository `LICENSE`.
 
 Both corpora are **fully synthetic**. Every person, company, project, domain
 and address in them is invented, and every message body was generated from a
-fixed fictional cast defined before any document existed. Nothing was collected
+fixed fictional cast defined before any document existed — with two exceptions
+in corpus B, which ship with frontmatter and no body at all. Nothing was collected
 from a live mailbox, workspace or account, and no real message, address or
 organization appears in either. The technical identifiers in corpus A's
 engineering threads — file paths, module names, table names — belong to the
@@ -38,8 +39,9 @@ written against the result.
 structure (values that get overturned, records that look alike, things
 scheduled but never held, facts split across several documents, one
 disagreement nobody settles) were all fixed before generation, and the
-documents were generated from that key. It used a different model family from
-corpus A's, in a deliberately unrelated domain, so that a result on one corpus
+documents were generated from that key. It used a different model family from the one that
+generated corpus A — which is not named anywhere here, so the comparison rests
+on our word — in a deliberately unrelated domain, so that a result on one corpus
 can be checked against the other. `corpus_b/README.md` records what its audit
 fixed and what it did not.
 
@@ -48,7 +50,9 @@ fixed and what it did not.
 **Domains.** Every address and URL in both corpora sits under a domain reserved
 by RFC 2606 — the `.example` top-level domain. This matters more than it looks:
 corpus A previously used a `.com` that reads like a placeholder but is an
-ordinary registrable name, and is in fact registered. A name that merely *looks*
+ordinary registrable name, and was found to be registered at the time it was
+replaced. Nothing in this repository can confirm that — the name is withheld on
+purpose — so treat it as the reason for the rule, not as evidence for it. A name that merely *looks*
 fake is not reserved. It is not repeated here, because naming it in a public
 document is the same act as shipping it in one. Verified: no address in either
 corpus — and no address in any published result artifact — resolves to a domain
@@ -60,10 +64,12 @@ addresses and no telephone numbers, so the equivalent reserved ranges
 arise. Every URL points at a `.example` host.
 
 **Organization and project names.** The invented project names were checked for collision with real products. Where a name
-collided with something publicly marketed, it was renamed — the project now
-called Quillon was one such rename. A shared word is not a disclosure, so a
-name was changed only where the collision was with something publicly
-marketed.
+collided with something publicly marketed, it was renamed; the project now
+called Quillon is one such rename. A shared word is not a disclosure, so a name
+was changed only where the collision was with something publicly marketed. The
+rename is recorded in each report's substitution map alongside the
+de-identification renames, and nothing in the artifacts tells one motive from
+the other.
 
 **No real content.** Because every body was generated rather than collected or
 redacted, there is no underlying real message that a reader could recover.
@@ -72,7 +78,7 @@ Any resemblance to a real project or organization is coincidental.
 
 ## Canary
 
-`corpus/CANARY.txt` and `corpus_b/corpus/CANARY.txt` each carry a unique
+`corpus_a/corpus/CANARY.txt` and `corpus_b/corpus/CANARY.txt` each carry a unique
 string — one per corpus, so a leak can be attributed to the corpus it came
 from. If a language model emits either, that model was trained on that corpus,
 and any score it produces there is meaningless. Leave both files in place.

@@ -70,7 +70,7 @@ the corpus was written by **DeepSeek V4 Pro** and audited by a second frontier
 model from a different family. The audit ran nine times. It is worth being
 precise about what it fixed and what it did not.
 
-### ✅ Fixed, and mechanically enforced now
+### ✅ Fixed, and checked at generation time
 
 - documents that described events later than their own date
 - supersession chains recited in a single message
@@ -80,7 +80,10 @@ precise about what it fixed and what it did not.
 - planted sentences missing altogether
 
 A generation-time checker enforced all of these before publication and reported
-zero. The generator and its review records are not part of this contribution.
+zero. **That checker is not part of this contribution**, so nothing in this
+repository re-checks them; what ships is the corpus it produced. The tests that
+do run here cover the answer key — id agreement, dangling citations, empty-body
+citations, grading-rule sanity — not the six items above.
 
 > 📌 The checker did **not** test for an empty body, and two documents ship with
 > frontmatter and no body — `E:2027-08-24T12-40-00__1886520e` and
@@ -114,8 +117,10 @@ cannot be verified is dropped rather than published.
 
 ```text
 corpus_b/
-├── corpus/                        the documents, in the same format as corpus A
+├── corpus/                        same document format as corpus A for chat;
+│                                 its emails carry 8 of corpus A's 14 fields
 │   ├── part_a/                    90 documents, 2027-07-20 .. 2027-08-28
+│   │                              (chat/, and `source: chat` — corpus A uses slack/)
 │   │   ├── email/
 │   │   └── chat/
 │   ├── part_b/                    83 documents, 2027-08-30 .. 2027-09-24

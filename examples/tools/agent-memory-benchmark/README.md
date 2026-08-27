@@ -13,7 +13,7 @@ entry_point: python3 -m bench.runner
 offline_check: python3 -m pytest tests/
 adapter_contract: docs/SUBMITTING.md
 corpora: [corpus_a/, corpus_b/]
-question_count: 186
+question_count: 186  # corpus A; corpus B adds 96, see corpus_b/README.md
 license: Apache-2.0
 evidence_level: local/static
 ---
@@ -22,8 +22,8 @@ evidence_level: local/static
 
 **mnemo measures the memory a system builds from a corpus: what it can answer
 afterwards, and what building it cost.** Give it six weeks of one person's email
-and chat, let it build whatever memory it likes, then ask 186 questions and check
-the answers — with quality and cost reported separately and never blended.
+and chat, let it build whatever memory it likes, then ask the 186 questions of
+corpus A — or the 96 of corpus B — and check the answers — with quality and cost reported separately and never blended.
 
 *Named for Mnemosyne, memory herself. The hard part is not remembering — it is
 remembering the right version: a later message overturns an earlier one, and a
@@ -33,22 +33,22 @@ system worth using tells you the current answer, not the one it learned first.*
 
 ## 📑 Table of Contents
 
-- [👀 What A Run Looks Like](#what-a-run-looks-like)
-- [📚 What Is In The Corpora](#what-is-in-the-corpora)
-- [❓ What It Asks](#what-it-asks)
-- [🚀 Getting Started](#getting-started)
-- [✨ Why It Is Built This Way](#why-it-is-built-this-way)
-- [🗂️ Project Structure](#project-structure)
-- [⚙️ Configuration](#configuration)
-- [🧩 Adding Your System](#adding-your-system)
-- [🔐 How The Runner Treats Your Adapter](#how-the-runner-treats-your-adapter)
-- [📊 Reading A Result](#reading-a-result)
-- [📈 Published Results](#published-results)
-- [✅ Verification](#verification)
-- [🩺 Troubleshooting](#troubleshooting)
-- [🧹 Cleanup](#cleanup)
-- [🔎 At A Glance](#at-a-glance)
-- [🏷️ Provenance And License](#provenance-and-license)
+- [👀 What A Run Looks Like](#-what-a-run-looks-like)
+- [📚 What Is In The Corpora](#-what-is-in-the-corpora)
+- [❓ What It Asks](#-what-it-asks)
+- [🚀 Getting Started](#-getting-started)
+- [✨ Why It Is Built This Way](#-why-it-is-built-this-way)
+- [🗂️ Project Structure](#️-project-structure)
+- [⚙️ Configuration](#️-configuration)
+- [🧩 Adding Your System](#-adding-your-system)
+- [🔐 How The Runner Treats Your Adapter](#-how-the-runner-treats-your-adapter)
+- [📊 Reading A Result](#-reading-a-result)
+- [📈 Published Results](#-published-results)
+- [✅ Verification](#-verification)
+- [🩺 Troubleshooting](#-troubleshooting)
+- [🧹 Cleanup](#-cleanup)
+- [🔎 At A Glance](#-at-a-glance)
+- [🏷️ Provenance And License](#️-provenance-and-license)
 
 ---
 
@@ -133,9 +133,9 @@ ingest token count will say so.
 | `freshness` | 12 | reporting a superseded value as if it were current |
 | `citation` | 12 | recalling a detail only one document carries; cited ids are a diagnostic, not accuracy |
 
-**Hard set (31)** — added because the base set stopped separating systems once a
-consolidating design answered all of it; the set could no longer measure an
-improvement.
+**Hard set (31)** — added because the base set had stopped separating the
+designs being compared at the time; it was saturating, and a set that everything
+passes cannot measure an improvement.
 
 | Type | Count | What it catches |
 |---|---:|---|
@@ -150,11 +150,14 @@ improvement.
 > consolidation: a memory that keeps only the current value has thrown the
 > answer away.
 
-**All 186 are graded deterministically** — no judge model, no LLM anywhere in
-the scoring path. Answers are matched after normalizing case, punctuation and
-date spelling, against a per-mode rule set: `accept` / `reject` / `require_all`,
-plus `expected` for `boolean`, `sequence` for `ordering`, and
-`accept_as_decline` for `abstain`.
+**All 186 are graded deterministically** — no shipped question defers to a
+judge, so no model runs in the scoring path. The grader does implement an `llm`
+mode and every report carries `deferred_to_judge`; it is always zero, and no
+judge is wired up to resolve one if it were not. Answers are matched after normalizing case, punctuation, whitespace, date
+spelling and thousands separators, against a per-mode rule set. `string_any` uses `accept` / `reject` /
+`require_all`; `boolean` uses `expected` plus `reject` / `require_all` and never
+reads `accept`; `ordering` uses `sequence` alone; `abstain` uses `reject` plus
+an optional `accept_as_decline`, and may not carry `accept` at all.
 
 Abstention questions have no correct answer. Something merely scheduled has not
 happened; a merge request that exists only as a reserved URL has not been
@@ -179,7 +182,7 @@ point the proxy at.
 ```bash
 cd examples/tools/agent-memory-benchmark
 python3 -m pip install pytest
-python3 -m pytest tests/     # expected: 209 passed
+python3 -m pytest tests/     # expected: 217 passed
 ```
 
 Then run the whole pipeline against a fixture whose score is known in advance:
@@ -273,7 +276,7 @@ agent-memory-benchmark/
 │   └── questions/               the questions and the answer key, kept out of corpus/
 │       ├── questions.jsonl      the 186 questions asked of every system
 │       ├── answers.jsonl        the answer key and its grading rules
-│       └── factual_*.json       the drafting drop lists, with reasons
+│       └── factual_*.json       the drafting record — 103 kept, 17 dropped with a reason, 0 rejected
 ├── corpus_b/                    corpus B — a second domain, same shape as corpus_a/
 ├── adapters/                    one directory per system under test
 │   ├── naive_rag/               ┐
@@ -300,8 +303,10 @@ its own requirements separately, inside its own directory.
 
 ### `adapter.json` — the contract for a system under test
 
-Every adapter is one JSON file. Two commands are required; everything else has a
-default.
+Every adapter is one JSON file. `name`, `ingest` and `answer` are required —
+omitting any of them is an uncaught `KeyError`, not a default. `model` is
+optional despite naming the id a result is filed under: without it the runner
+falls back to the model it observed most.
 
 ```json
 {
@@ -322,7 +327,12 @@ interface AdapterConfig {
   name: string;
   /** The model id a result is filed under. Not resolved by the harness. */
   model: string;
-  /** Argument arrays, never shell strings. {corpus} and {state} are substituted. */
+  /**
+   * Argument arrays, never shell strings.
+   * ingest receives {corpus} (the part directory), {state} and {part}.
+   * answer receives {state} and {questions} — NOT {corpus}. Using {corpus}
+   * there fails after both ingest calls have already run.
+   */
   ingest: string[];
   answer: string[];
   /**
@@ -336,12 +346,18 @@ interface AdapterConfig {
 }
 ```
 
-> ⚠️ **A declared accounting mode is enforced.** A run is invalid if it declares
-> `proxy` and nothing crossed the proxy — the adapter either bypassed it or runs
-> a local model and should say so — and invalid if a forwarded request came back
-> without countable usage, because a cost nobody measured must not read as a cost
-> of zero. Only a fully counted run carries `comparable_on_cost: true`; a `local`
-> run stays valid and stays out of cost comparisons.
+> ⚠️ **A declared accounting mode is enforced in both directions.** Three things
+> make a run invalid:
+>
+> - it declares `proxy` and nothing crossed the proxy — the adapter either
+>   bypassed it or runs a local model and should say so;
+> - it declares `local` and requests crossed the proxy anyway — the declaration
+>   and the traffic disagree, and the traffic wins;
+> - a forwarded request came back without countable usage, because a cost nobody
+>   measured must not read as a cost of zero.
+>
+> A `local` run that really is local stays valid, and stays out of cost
+> comparisons. Only a fully counted run carries `comparable_on_cost: true`.
 
 ### Environment variables
 
@@ -351,8 +367,13 @@ interface AdapterConfig {
 | `MNEMO_UPSTREAM` | `https://api.openai.com` | Where the accounting proxy forwards. Also `--upstream`. |
 | `MNEMO_EMBED_MODEL` | `text-embedding-3-small` | Embedding model for the retrieval baselines. |
 | `MNEMO_TIMEOUT_SECONDS` | `21600` (six hours) | Wall-clock budget **per phase call**. `0` waits indefinitely. Also `--timeout-seconds`. |
-| `MNEMO_RAG_WORKERS` | `6` | Answer-phase concurrency for `agentic_rag` and `ledger_rag`. |
+| `MNEMO_RAG_WORKERS` | `6` | Answer-phase concurrency for all three shipped baselines. |
 | `MNEMO_LEDGER_TOP_K` | `12` | Candidates `ledger_rag` selects per question. |
+| `MNEMO_LEDGER_SCHEMA` | recipe default path | Where `ledger_rag` finds the recipe's `schema.sql`, if the recipe is not at its usual place. |
+| `MNEMO_MODEL` | *(unset)* | Overrides the model id passed to the adapter. |
+| `MNEMO_PROXY_LOG` | *(unset)* | Writes a proxy request log. |
+| `MNEMO_DEFAULT_YEAR` | `2026` | Date-normalization year. **Part of the fingerprint** — changing it makes a run incomparable with published ones. |
+| `MNEMO_ALT_YEARS` | `2027` | The other year normalization accepts. **Also part of the fingerprint.** |
 
 The shipped baselines default to `gpt-4o` and `text-embedding-3-small`, so they
 run as printed. Point `--upstream` at any OpenAI-compatible gateway; model ids
@@ -387,7 +408,12 @@ MY_SYSTEM_PYTHON=~/src/my-system/.venv/bin/python \
 interface AnswerRow {
   /** Must match the question id it answers. */
   id: string;
-  /** A short, checkable answer. Blank or missing counts as "nothing was said". */
+  /**
+   * A short, checkable answer. Blank, whitespace-only, non-string and missing
+   * are all "nothing was said" — and one of them invalidates the whole run,
+   * because an incomplete submission is not a lower score. A blank answer is
+   * not credited as an abstention either.
+   */
   answer: string;
   /** Optional. Buys the evidence diagnostics; omitting it costs nothing on accuracy. */
   source_ids?: string[];
@@ -413,8 +439,9 @@ path containing a space or a quote cannot become a second command.
 **The guards are against accidents, not against an adapter that goes looking.**
 The answer key is *not* out of reach: the benchmark root is on `PYTHONPATH` so
 adapters can import `adapters._lib`, and an adapter can use that to locate and
-read `corpus_a/questions/answers.jsonl` directly. `tests/test_isolation_is_not_a_sandbox.py`
-demonstrates exactly that. Treat a score as meaningful only for an adapter you
+read `corpus_a/questions/answers.jsonl` directly.
+`tests/test_isolation_is_not_a_sandbox.py` demonstrates the bypass, reaching
+`REPO` through `bench.runner`. Treat a score as meaningful only for an adapter you
 trust — the benchmark measures memory, it does not police it. What the guards do
 provide:
 
@@ -434,7 +461,9 @@ provide:
 
 ## 📊 Reading A Result
 
-Accuracy is reported **per question type, never as a single blended number**.
+Accuracy is reported **per question type**. An overall figure is reported too,
+first, because a reader wants one — but it is an average over a question mix
+this benchmark chose, so the per-type rows are what a comparison should rest on.
 Freshness is split further, into questions where the superseded value is also in
 the corpus (the system must resist it) and questions where it is not (a plain
 recency check). Evidence recall and citation coverage sit alongside accuracy and
@@ -458,15 +487,16 @@ overall and on most question types, and lower on two — `abstention`, where it
 answered 10 of 13 against the baseline's 13, and `single_hop`. Those are counts
 from these two runs; the artifacts do not include the self-model's memory, so
 they cannot say what caused any of it.
-It also spends its tokens somewhere else — at ingest rather than per question —
-which the results page reports as two separate counts rather than one ratio,
-because neither run carries the forwarded-call record that would establish the
-two were counted the same way.
+It also spends its tokens differently: most of the self-model's fall in the
+ingest phase, most of the baseline's fall per question — though the self-model's
+per-question figure is the larger of the two. The results page reports the two
+counts separately rather than as one ratio, because neither run carries the
+forwarded-call record that would establish they counted the same events.
 
 Read [`results/README.md`](results/README.md) **before** the table there. Those
-runs are corpus A only, one base model, and their answers predate a rename at
-publication — all three limit what the numbers mean, and each is stated where
-the numbers are.
+runs are corpus A only, on one base model; their answers predate a rename at
+publication; and their accounting cannot support a cost comparison. All four
+limits are stated where the numbers are.
 
 ---
 
@@ -476,13 +506,13 @@ the numbers are.
 here exercises a live endpoint.
 
 ```bash
-python3 -m pytest tests/     # expected: 209 passed
+python3 -m pytest tests/     # expected: 217 passed
 ```
 
 **Expected result:**
 
 ```text
-209 passed
+217 passed
 ```
 
 **This verifies:** the runner, grader, report renderer and the ledger adapter's
@@ -505,6 +535,8 @@ Windows.
 | Adapter command not found on Windows | The shipped adapters invoke `python3`, which a default Windows install does not provide. | Run on macOS or Linux, or under WSL. |
 | Run marked invalid: *declared proxy, nothing crossed it* | The adapter bypassed the proxy, or it runs a locally-hosted model. | Point the client at `OPENAI_BASE_URL`, or declare `"accounting": "local"`. |
 | Run marked invalid: *forwarded request without countable usage* | The upstream returned no usage block. | Use a gateway that returns usage; a cost nobody measured must not read as zero. |
+| Run marked invalid: *declared local but N requests crossed the proxy* | The adapter says it runs locally but its client still points at `OPENAI_BASE_URL`. | Stop routing through the proxy, or declare `"accounting": "proxy"`. |
+| Run marked invalid: *N of M questions received no answer* | One or more answer rows are missing, blank or non-string. An incomplete submission is not a lower score. | Emit one row per question; to decline, say so in the answer rather than leaving it empty. |
 | USD is `null` in the report | `bench/pricing.py` has no entry for that model. | Expected. Token counts are still exact; the harness will not invent a price. |
 | Two reports refuse to be compared | Their `fingerprint` blocks differ — corpus, questions, key, normalization or scorer moved. | Re-score the stored answers: `python3 tools/regrade.py --run results/runs/<dir>` |
 | A phase hangs, then dies at six hours | The per-phase wall-clock budget. | Raise `MNEMO_TIMEOUT_SECONDS`, or set `0` to wait indefinitely. |
@@ -519,8 +551,9 @@ verdicts, the answers, and whatever memory the system under test built — that
 last part can reach hundreds of megabytes. Delete the run directory to reclaim
 the space.
 
-Nothing outside that directory is modified by the harness — though an adapter is
-not sandboxed, so one you add can write elsewhere; see
+By default nothing outside that directory is modified by the harness. `--out`
+and `--state` will write wherever you point them, and an adapter is not
+sandboxed, so one you add can write elsewhere; see
 [How the runner treats your adapter](#-how-the-runner-treats-your-adapter).
 
 A generated run is **ignored**, not merely untracked, so `git add -A` after a run

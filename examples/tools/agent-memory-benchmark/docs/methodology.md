@@ -36,20 +36,28 @@ page, follows a cross-reference, and then opens a source document has no k at
 all — and a fact about one person genuinely does live across eight emails.
 Multi-hop retrieval is the task, not a defect.
 
-So hops and tokens are counted on the cost axis, and never subtracted from
-quality. A system that takes twenty hops and answers correctly scores the same
-quality as one that takes one, and pays the difference where it belongs.
+So the cost of getting there is charged to the cost axis and never subtracted
+from quality. A system that takes twenty retrieval rounds and answers correctly
+scores the same quality as one that takes a single lookup, and pays the
+difference in tokens. Tokens are what is counted — rounds are not recorded
+anywhere, so a design that pays in latency rather than tokens is not charged for
+it here.
 
-`evidence_recall` replaced `recall@k`: of the documents the answer key cites, how
-many did the system actually touch or cite — however it got there. A vector store
-reports retrieved chunk ids, a wiki reader reports pages and source ids, a graph
-reports traversed nodes. Same measurement, no architectural bias.
+`evidence_recall` replaced `recall@k`: of the documents the answer key cites,
+how many did the system **report** citing. It is computed from the `source_ids`
+a system puts in its own answer row, matched against corpus `doc_id`s — nothing
+observes what a system retrieved or read. A store that emits its own chunk or
+node ids scores zero until it maps them onto corpus `doc_id`s, so the measure is
+neutral between architectures only for systems willing to do that mapping.
+Reporting `source_ids` is optional and costs nothing on accuracy.
 
 ## Why the base model is part of a result's identity
 
 The same memory architecture scored with two different base models can differ
 more than two architectures scored with the same one. A submission is therefore a
-(system × model) pair, and rows are grouped by model rather than ranked globally.
+(system × model) pair, and rows are meant to be grouped by model rather than ranked globally — a
+convention for whoever assembles a comparison, since no renderer here produces
+one.
 
 A submission that runs two base models and publishes the difference is worth
 more than one that does not. An
@@ -70,19 +78,25 @@ adversarial to ingest-time consolidation, since a memory that keeps only the
 current value has thrown the answer away.
 
 The two-group split is an annotation on the answer key. A corpus whose
-freshness entries do not carry it reports "not annotated for this corpus"
-rather than a rate, because an unannotated question is not the same as an
-absent one.
+freshness entries all sit on one side of it reports "not annotated for this
+corpus" for the empty side, rather than a rate over no questions. The limit is
+worth knowing: the partition tests the annotation's truthiness, so a *missing*
+`stale_in_corpus` is indistinguishable from `false`, and a corpus that never
+carries the annotation reports a rate for the recency-only group instead of
+declining to.
 
 ## Why there is no judge model
 
 All 186 questions grade deterministically. Answers are normalized for case,
 punctuation, and date spelling, then matched by a per-mode rule set:
 
-* `string_any` — `reject` (any of these means wrong, checked first),
-  `require_all` (every element must appear), `accept` (any of these means
-  correct).
-* `boolean` — the same three, plus `expected` (`yes` or `no`).
+* `string_any` — `reject` (any of these, *asserted*, means wrong; checked
+  first), `require_all` (every element must be asserted), `accept` (any of
+  these, asserted, means correct). "Asserted" carries the weight in all three:
+  a value that appears only inside a denial does not count as said, so
+  `It is not 50%` neither earns an `accept` of `50%` nor trips a `reject` of it.
+* `boolean` — `expected` (`yes` or `no`), plus `reject` and `require_all`.
+  `accept` is never read in this mode.
 * `ordering` — `sequence`: every element present, in that order.
 * `abstain` — `reject`, plus `accept_as_decline` for a phrasing that rejects
   the question's premise rather than answering it.
@@ -112,9 +126,10 @@ Factual questions were drafted by a model and then filtered twice:
    asked about formatting trivia (a URL slug, a username inside a link). 17 of
    120 drafts were dropped.
 
-Every gold citation is verified against the corpus manifest at build time. The
+Every gold citation is verified against the corpus manifest by the test suite. The
 source answer key contained one dangling reference — a channel-day with no
-messages in it — which now fails the build rather than sitting unnoticed.
+messages in it — which now fails `pytest tests/` rather than sitting unnoticed. Nothing in CI
+runs it — it is a check a contributor runs.
 
 ## Abstention
 

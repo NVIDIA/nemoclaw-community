@@ -127,7 +127,7 @@ rules, or the run stops being comparable.
 
 ## Which corpus to run
 
-`corpus/` and `questions/` are corpus A. Corpus B lives in `corpus_b/corpus/`
+`corpus_a/corpus/` and `corpus_a/questions/` are corpus A. Corpus B lives in `corpus_b/corpus/`
 and `corpus_b/questions/`. Pass them explicitly:
 
 ```bash

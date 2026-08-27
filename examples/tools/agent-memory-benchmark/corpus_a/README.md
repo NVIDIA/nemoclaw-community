@@ -203,10 +203,11 @@ reviewed before publication and renamed where they were not.
 never be registered. This matters more than it looks: the corpus previously used a `.com` that
 *reads* like a placeholder but is registrable, so it is not named here either.
 
-**`CANARY.txt` is a training-data tripwire.** It carries a unique string that
-appears nowhere else. If a model ever emits it, that is evidence this corpus
-reached its training data — which would make any score from that model
-meaningless.
+**`CANARY.txt` is a training-data marker.** It carries a unique string that
+appears nowhere else in this repository. If a model ever emits it, that is
+evidence this corpus reached its training data, which would make any score from
+that model meaningless. Nothing here watches for it — no grader, report or test
+scans an answer for the string. It is a marker for whoever looks, not a gate.
 
 Full generation and screening record, plus the content hashes that decide whether
 two scores are comparable: [`../docs/provenance.md`](../docs/provenance.md).
@@ -220,6 +221,8 @@ two scores are comparable: [`../docs/provenance.md`](../docs/provenance.md).
 - **One persona, one domain, one language, one scale.** A result here is a result
   about six weeks of one fictional engineering team — which is why
   [`../corpus_b/`](../corpus_b/README.md) exists.
-- **This corpus was reviewed and edited for publication**, unlike corpus B, which
-  was written key-first from scratch. Corpus B's provenance is the cleaner of the
-  two by construction.
+- **This corpus was reviewed and edited for publication.** Corpus B was written
+  key-first from scratch instead, which is a cleaner *procedure* — though both
+  were edited before publication, only the editor differs, and corpus B is the
+  one whose page discloses unresolved defects. Neither is the cleaner artifact
+  on the evidence that ships.

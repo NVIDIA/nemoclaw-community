@@ -42,21 +42,25 @@ benchmark produces and check a number against the verdicts that produced it —
 
 Both runs read the same 425 documents, answer the same 186 questions, are graded
 by the same answer key and the same grader, and answer with the same base model.
-One thing differs, and the benchmark exists to price it: **when the reasoning
-happens.**
+The difference the benchmark is built to price is **when the reasoning
+happens**. It is not the only difference — the baseline is a round-capped
+configuration and also calls an embedding model — and the rows below say which
+of them the artifacts can show.
 
 | | Agentic RAG | Self-model |
 | --- | --- | --- |
 | Where the reasoning happens | at question time | at ingest time |
-| What it does while reading the corpus | embeds each document into an index; no model reasoning | reads the documents and writes a consolidated, structured record |
-| What its memory is when questions start | the raw documents, plus the index | the record it wrote at ingest |
-| How it answers | writes its own search queries, retrieves, and repeats for up to three rounds | answers from the record |
+| What it does while reading the corpus | embeds each document into an index; no model reasoning | spends 1,603 model calls and 182.8M tokens in the ingest phase |
+| What its memory is when questions start | the raw documents, plus the index | whatever ingest produced; it does not ship, so this page cannot say |
+| How it answers | writes its own search queries, retrieves, and repeats for up to three rounds | 1,675 calls in the answer phase; the mechanism is not observable here |
 | Where the cost falls | per question, every question | once, up front |
 | Ships in this repository | ✅ `adapters/agentic_rag/`, hashed into its report | ❌ |
 
 That last row is the important caveat about these numbers. The agentic baseline
-is code you can run: its adapter ships here and its report records the hash of
-the adapter that produced the run. The self-model is a system that exists
+is code you can run: its adapter ships here, and its report records the hash of
+that adapter **as it ships today** — enough to tell whether it has moved since,
+which is not the same as a hash captured while the run was executing. The run
+predates the field. The self-model is a system that exists
 elsewhere; only its outputs ship. Its rows are a data point, not something you
 can re-execute from this repository — [`docs/SUBMITTING.md`](../docs/SUBMITTING.md)
 describes the contract any consolidating system would implement to be scored the
@@ -78,10 +82,10 @@ and never summed.
 | Tracking facts that changed over time — `chain_freshness` (5) | 60.0% | 100.0% | +40.0 pp |
 | Point-in-time reasoning — `as_of` (6) | 33.3% | 66.7% | +33.3 pp |
 | Entity disambiguation — `disambiguation` (15) | 66.7% | 86.7% | +20.0 pp |
-| Multi-source synthesis — `multi_source` (73) | 87.7% | 94.5% | +6.9 pp |
+| Multi-source synthesis — `multi_source` (73) | 87.7% | 94.5% | +6.8 pp |
 | Refusing to answer when the corpus cannot — `abstention` (13) | 100.0% | 76.9% | -23.1 pp |
 | Single-hop lookup — `single_hop` (30) | 86.7% | 83.3% | -3.3 pp |
-| Citation coverage (186) | 92.5% | 97.9% | +5.4 pp |
+| Citation coverage (186) | 92.5% | 97.8% | +5.4 pp |
 
 Two rows go the other way, and they are in the table above rather than left out
 of it. **What the artifacts establish is the counts.** On `abstention`, the
@@ -116,9 +120,9 @@ The benchmark reports cost separately and never blends it into accuracy.
 > same events — which is why both set `comparable_on_cost` to false, and why no
 > multiple between the columns is stated here or in the reports.
 
-What each run's own counts do show is where it spends. The self-model does its
-reasoning while reading the corpus; the agentic baseline defers that to question
-time and spends per question instead. Whether that trade is worth making depends
+What each run's own counts do show is where it spends: 80% of the self-model's
+tokens fall in the ingest phase, and 94% of the baseline's fall in the answer
+phase. What those tokens were spent *on* is not in these artifacts. Whether that trade is worth making depends
 on how many questions the memory will ever be asked — a judgement
 [`docs/methodology.md`](../docs/methodology.md) declines to collapse into one
 number. A run that wants a defensible cost comparison has to be executed under
@@ -131,7 +135,8 @@ reports price only what `bench/pricing.py` knows. That embedding model has an
 entry, so the agentic ingest phase carries a real figure, $0.0034; the Nemotron
 model that answers in both runs has none, so every other phase reports token
 counts with a null price rather than inventing one. **Read the tables in tokens,
-not dollars** — the one priced phase is the cheapest thing either run did.
+not dollars**: with three of the four phases unpriced, one dollar figure cannot
+be ranked against them.
 
 ---
 ## 🚫 What These Numbers Are Not
