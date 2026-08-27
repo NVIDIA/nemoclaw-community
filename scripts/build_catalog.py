@@ -255,6 +255,33 @@ def slugify(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", value.casefold()).strip("-")
 
 
+def path_uses_symlink(root: Path, path: Path) -> bool:
+    """Return whether a repository-relative path contains any symlink."""
+
+    root_absolute = root.absolute()
+    path_absolute = path.absolute()
+    try:
+        relative = path_absolute.relative_to(root_absolute)
+    except ValueError:
+        return True
+    current = root_absolute
+    for part in relative.parts:
+        current /= part
+        if current.is_symlink():
+            return True
+    return False
+
+
+def is_regular_repo_file(root: Path, path: Path) -> bool:
+    """Return whether path is a regular file contained in root without symlinks."""
+
+    return (
+        not path_uses_symlink(root, path)
+        and path.is_file()
+        and path.resolve().is_relative_to(root.resolve())
+    )
+
+
 def classify_path(path: str) -> Category:
     """Derive artifact kind and recipe provenance from canonical placement."""
 
@@ -342,7 +369,7 @@ def discover_example_paths(root: Path) -> set[str]:
                 continue
             path = directory.relative_to(examples).as_posix()
             classify_path(path)
-            if directory.is_symlink():
+            if path_uses_symlink(examples, directory):
                 raise CatalogError(
                     f"Example directory must not be a symlink: examples/{path}"
                 )
@@ -351,7 +378,7 @@ def discover_example_paths(root: Path) -> set[str]:
                     f"Example directory resolves outside examples/: examples/{path}"
                 )
             readme = directory / "README.md"
-            if not readme.is_file() or readme.is_symlink():
+            if not is_regular_repo_file(examples, readme):
                 raise CatalogError(
                     f"Example directory requires a regular README.md: examples/{path}"
                 )
@@ -429,7 +456,7 @@ def parse_readme_metadata(root: Path, path: str) -> CatalogEntry:
     category = classify_path(path)
     readme_path = f"examples/{path}/README.md"
     readme = root / readme_path
-    if not readme.is_file() or readme.is_symlink():
+    if not is_regular_repo_file(root, readme):
         raise CatalogError(f"Example README is not a regular file: {readme_path}")
     lines = readme.read_text(encoding="utf-8").splitlines()
     index = _skip_leading_readme_comments(lines, readme_path)
@@ -1149,7 +1176,7 @@ class ReadmeHTMLSanitizer(HTMLParser):
         if target is None:
             return ""
         target_path = self.root / target
-        if not target_path.is_file() or target_path.is_symlink():
+        if not is_regular_repo_file(self.root, target_path):
             self.errors.append(f"README image target is not a regular file: {value}")
             return ""
         if target_path.suffix.casefold() not in {
@@ -1664,7 +1691,7 @@ def validate_generated_site(root: Path, entries: list[CatalogEntry], site_html: 
         errors.append("The catalog support boundary no longer matches SUPPORT.md.")
 
     for relative in ("site/styles.css", "site/catalog.mjs", "site/assets/nvidia-logo.png"):
-        if not (root / relative).is_file():
+        if not is_regular_repo_file(root, root / relative):
             errors.append(f"Missing required site source: {relative}")
     css = (root / "site" / "styles.css").read_text(encoding="utf-8")
     if re.search(r"@import\b", css, flags=re.IGNORECASE):
@@ -1805,7 +1832,7 @@ def validate_detail_pages(
             "site/diagrams.mjs",
             "site/assets/vendor/mermaid-LICENSE.txt",
         ):
-            if not (root / relative).is_file():
+            if not is_regular_repo_file(root, root / relative):
                 raise CatalogError(f"Missing required diagram source: {relative}")
 
 
@@ -1814,9 +1841,7 @@ def verified_mermaid_asset(root: Path) -> Path:
 
     asset = root / MERMAID_CACHE_PATH
     if (
-        not asset.is_file()
-        or asset.is_symlink()
-        or not asset.resolve().is_relative_to(root.resolve())
+        not is_regular_repo_file(root, asset)
     ):
         raise CatalogError(
             "The pinned Mermaid browser asset is missing. Run "
@@ -1900,6 +1925,29 @@ def build_site(
         raise CatalogError("Catalog output is restricted to the generated _site directory.")
     if output.is_symlink():
         raise CatalogError("Refusing to replace a symlinked _site directory.")
+    shared_files = (
+        root / "site" / "styles.css",
+        root / "site" / "catalog.mjs",
+    )
+    for source in shared_files:
+        if not is_regular_repo_file(root, source):
+            raise CatalogError(
+                f"Catalog site source must be a regular repository file: "
+                f"{source.relative_to(root)}"
+            )
+    site_assets = root / "site" / "assets"
+    if (
+        path_uses_symlink(root, site_assets)
+        or not site_assets.is_dir()
+        or not site_assets.resolve().is_relative_to(root.resolve())
+    ):
+        raise CatalogError("Catalog site assets must be a regular repository directory.")
+    for asset in site_assets.rglob("*"):
+        if path_uses_symlink(root, asset) or not (asset.is_file() or asset.is_dir()):
+            raise CatalogError(
+                "Catalog site asset must not use a symlink or special file: "
+                f"{asset.relative_to(root)}"
+            )
     has_mermaid = any(
         'class="language-mermaid"' in page
         for page in (detail_pages or {}).values()
@@ -1918,9 +1966,9 @@ def build_site(
     output.mkdir(parents=True)
     (output / "index.html").write_text(site_html, encoding="utf-8")
     (output / "catalog.json").write_text(catalog_json, encoding="utf-8")
-    shutil.copy2(root / "site" / "styles.css", output / "styles.css")
-    shutil.copy2(root / "site" / "catalog.mjs", output / "catalog.mjs")
-    shutil.copytree(root / "site" / "assets", output / "assets")
+    shutil.copy2(shared_files[0], output / "styles.css")
+    shutil.copy2(shared_files[1], output / "catalog.mjs")
+    shutil.copytree(site_assets, output / "assets")
     if has_mermaid:
         assert mermaid_asset is not None
         assert diagram_module is not None
@@ -1942,12 +1990,11 @@ def build_site(
     for relative in sorted(copied_assets or set()):
         source = root / relative
         resolved_source = source.resolve()
-        if not resolved_source.is_relative_to(root.resolve()):
-            raise CatalogError(f"README asset resolves outside the repository: {relative}")
-        if not resolved_source.is_file():
-            raise CatalogError(f"README asset is not a regular file: {relative}")
-        if source.is_symlink():
-            raise CatalogError(f"README asset must not be a symlink: {relative}")
+        if not is_regular_repo_file(root, source):
+            raise CatalogError(
+                f"README asset must be a regular repository file without symlinks: "
+                f"{relative}"
+            )
         total_asset_size += resolved_source.stat().st_size
         if total_asset_size > 20 * 1024 * 1024:
             raise CatalogError("README assets exceed the 20 MiB catalog limit.")

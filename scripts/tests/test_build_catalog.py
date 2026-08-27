@@ -360,12 +360,19 @@ class CatalogBuildTests(unittest.TestCase):
                     )
 
     def test_readme_compiler_rejects_unsafe_image_assets(self) -> None:
-        for case in ("svg", "symlink", "oversized"):
+        for case in ("svg", "symlink", "symlinked-parent", "oversized"):
             with self.subTest(case=case):
                 root = self._fixture_root()
                 example = root / "examples" / "recipes" / "community" / "sample"
                 assets = example / "assets"
-                assets.mkdir()
+                if case == "symlinked-parent":
+                    real_assets = example / "real-assets"
+                    real_assets.mkdir()
+                    asset = real_assets / "unsafe.png"
+                    asset.write_bytes(b"png")
+                    assets.symlink_to(real_assets, target_is_directory=True)
+                else:
+                    assets.mkdir()
                 if case == "svg":
                     asset = assets / "unsafe.svg"
                     asset.write_text(
@@ -379,7 +386,7 @@ class CatalogBuildTests(unittest.TestCase):
                     source.write_bytes(b"png")
                     asset = assets / "unsafe.png"
                     asset.symlink_to(source)
-                else:
+                elif case == "oversized":
                     asset = assets / "unsafe.png"
                     asset.write_bytes(b"x" * (5 * 1024 * 1024 + 1))
                 self._write_fixture_readme(
@@ -441,6 +448,22 @@ class CatalogBuildTests(unittest.TestCase):
         with self.assertRaisesRegex(CatalogError, "symlinked"):
             build_site(root, root / "_site", "", "")
         self.assertEqual(evidence.read_text(encoding="utf-8"), "keep")
+
+    def test_build_output_rejects_symlinked_shared_asset(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name).resolve()
+        site = root / "site"
+        assets = site / "assets"
+        assets.mkdir(parents=True)
+        (site / "styles.css").write_text("", encoding="utf-8")
+        (site / "catalog.mjs").write_text("", encoding="utf-8")
+        source = root / "source.txt"
+        source.write_text("must not be published", encoding="utf-8")
+        (assets / "unsafe.txt").symlink_to(source)
+
+        with self.assertRaisesRegex(CatalogError, "must not use a symlink"):
+            build_site(root, root / "_site", "", "")
 
 
 if __name__ == "__main__":
