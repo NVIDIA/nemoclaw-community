@@ -136,26 +136,21 @@ not dollars** — the one priced phase is the cheapest thing either run did.
 ---
 ## 🚫 What These Numbers Are Not
 
-### **Corpus A only.**
+**Corpus A only.** Corpus B ships with the benchmark and was not run on this
+model. Corpus B exists precisely because a result on one corpus is a result
+about that corpus — see [`corpus_b/README.md`](../corpus_b/README.md) — so the
+table above says nothing about how either design behaves on documents shaped
+differently. Do not read it as a general finding.
 
-Corpus B ships with the benchmark and was not run on this model. Corpus B exists
-precisely because a result on one corpus is a result about that corpus — see
-[`corpus_b/README.md`](../corpus_b/README.md) — so the table above says nothing
-about how either design behaves on documents shaped differently. Do not read it
-as a general finding.
+**One base model.** [`docs/methodology.md`](../docs/methodology.md) asks a
+submission to run at least two and publish the difference, on the grounds that
+an advantage appearing under one model and vanishing under another is not an
+architectural advantage. This is one. Treat it as a worked example of the output
+format rather than as a submission that meets that bar.
 
-### **One base model.**
-
-[`docs/methodology.md`](../docs/methodology.md) asks a submission to run at least
-two and publish the difference, on the grounds that an advantage appearing under
-one model and vanishing under another is not an architectural advantage. This is
-one. Treat it as a worked example of the output format rather than as a
-submission that meets that bar.
-
-### **Not reproducible as-is.**
-
-The systems answered against the corpus as it stood before publication, when a
-set of identifiers carried different names. See below.
+**Not reproducible as-is.** The systems answered against the corpus as it stood
+before publication, when a set of identifiers carried different names. See
+below.
 
 ---
 
@@ -168,6 +163,13 @@ and six documentation paths; the full list, in the order it was applied, is in
 each `report.json` under `provenance_note.substitutions`. The stored answers were
 produced before that and use the old names.
 
+The same substitution applied to the corpus was applied to the answers, because
+an answer is derived from the corpus that produced it: a system reading the
+published corpus would have written the published name. Nothing else was
+changed, and each run ships `answers.as-answered.jsonl` — the output as
+answered, save for the one substitution noted below — so the transform can be
+checked rather than believed.
+
 > 🔒 **One further substitution is applied but not listed.** It replaced an email
 > and URL domain that is a registrable `.com`, with a domain reserved by RFC 2606.
 > Publishing its pre-image would put a registrable domain back into a public
@@ -175,12 +177,6 @@ produced before that and use the old names.
 > **pre-applied** in `answers.as-answered.jsonl` rather than left there and listed
 > for reversal. The published map therefore reproduces `answers.jsonl` from that
 > file exactly, and no artifact in this repository carries the domain.
-
-The same substitution applied to the corpus was applied to the answers, because
-an answer is derived from the corpus that produced it: a system reading the
-published corpus would have written the published name. Nothing else was
-changed, and each run ships `answers.as-answered.jsonl` — the untransformed
-output — so the transform can be checked rather than believed.
 
 What it changed, measured:
 
@@ -194,9 +190,6 @@ The id map does more work than the text map. Four question ids were renamed at
 publication; without mapping them those four answers look absent, and an absent
 answer invalidates a run. That is the runner behaving correctly — it is also why
 a transformed result is weaker evidence than a fresh run.
-
-> ⚠️ **This is not a run against the published corpus.** Reproducing these
-> numbers means re-running the answer phase against what ships here.
 
 ---
 
