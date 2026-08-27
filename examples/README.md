@@ -17,6 +17,7 @@ again by contributor provenance.
 | [NV Tech Assistant](recipes/nvidia/nv-tech-assistant/README.md) | Answers NVIDIA technical questions with citations from allowlisted sources. |
 | [Payment Operations Hermes Assistant](recipes/nvidia/payment-ops-hermes/README.md) | Demonstrates payment screening, evidence preparation, and a platform-enforced human release boundary. |
 | [PR Review Advisor](recipes/nvidia/pr-review-advisor/README.md) | Reviews exact pull request heads with Hermes, produces attested artifacts, and leaves publication to a maintainer. |
+| [PR Test Case Assistant](recipes/nvidia/pr-test-case-assistant/README.md) | Reads public GitHub pull requests and drafts grounded feature test cases through Slack. |
 
 ## Partner Recipes
 

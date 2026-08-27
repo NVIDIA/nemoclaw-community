@@ -1,0 +1,13 @@
+# Run output. Nothing here is a deliverable, and install logs can contain host detail.
+logs/
+*.log
+
+# Never commit a credential, however it got named.
+.env
+*.token
+*-token.txt
+
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
