@@ -62,10 +62,11 @@ class TestMigration(unittest.TestCase):
                              "the artifact is not really v1")
 
         with sqlite3.connect(path) as c:
-            self.assertEqual(migrate(c), [2])
+            self.assertEqual(migrate(c), [2, 3])
             self.assertEqual(current_version(c), SCHEMA_VERSION)
             columns = {row[1] for row in c.execute("PRAGMA table_info(items)")}
             self.assertIn("body_cleared_at", columns)
+            self.assertIn("sender_key", columns)
 
     def test_the_upgrade_keeps_the_rows_that_were_already_there(self):
         """An upgrade that loses a message is worse than one that refuses."""
@@ -82,6 +83,73 @@ class TestMigration(unittest.TestCase):
                             " WHERE source_id='m1'").fetchone()
         self.assertEqual(row[0], "kept")
         self.assertIsNone(row[1], "an upgraded row was marked as cleared")
+
+    def test_a_real_v2_store_upgrades_to_the_current_version(self):
+        """The store the previously released version actually created.
+
+        Same reason the v1 case has its own artifact: current-schema-minus-a-
+        column is a database nobody has, and it cannot fail the way a real one
+        does.
+        """
+        artifact = HERE / "schema-v2.sql"
+        self.assertTrue(artifact.exists(), "the v2 schema artifact is missing")
+        path = Path(tempfile.mkdtemp()) / "v2.db"
+        with sqlite3.connect(path) as c:
+            c.executescript(artifact.read_text(encoding="utf-8"))
+            self.assertEqual(current_version(c), 2)
+            columns = {row[1] for row in c.execute("PRAGMA table_info(items)")}
+            self.assertIn("body_cleared_at", columns)
+            self.assertNotIn("sender_key", columns,
+                             "the artifact is not really v2")
+
+        with sqlite3.connect(path) as c:
+            self.assertEqual(migrate(c), [3])
+            self.assertEqual(current_version(c), SCHEMA_VERSION)
+            columns = {row[1] for row in c.execute("PRAGMA table_info(items)")}
+            self.assertIn("sender_key", columns)
+
+    def test_the_v2_upgrade_keeps_the_messages_it_already_held(self):
+        """A person's history is the point of the column. Losing the messages
+        to gain somewhere to record who sent them would be a poor trade."""
+        path = Path(tempfile.mkdtemp()) / "v2.db"
+        with sqlite3.connect(path) as c:
+            c.executescript(
+                (HERE / "schema-v2.sql").read_text(encoding="utf-8"))
+            c.execute("INSERT INTO items(source_id, source, scope, event_at,"
+                      " sender, body, state) VALUES"
+                      " ('m1','email','inbox','2026-08-01T00:00:00Z',"
+                      "  'Dana Okoro','kept','pending')")
+        with sqlite3.connect(path) as c:
+            migrate(c)
+            row = c.execute("SELECT sender, body, sender_key FROM items"
+                            " WHERE source_id='m1'").fetchone()
+        self.assertEqual(row[0], "Dana Okoro")
+        self.assertEqual(row[1], "kept")
+        # Not backfilled, and cannot be: the value was never stored, and the
+        # display name it would have to come from is exactly what cannot
+        # identify anybody.
+        self.assertIsNone(row[2])
+
+    def test_migrating_an_already_migrated_store_is_not_an_error(self):
+        """Two runs happen — a retried job, an interrupted upgrade. An ALTER
+        that only works once turns the second into a crash loop."""
+        path = Path(tempfile.mkdtemp()) / "v2.db"
+        with sqlite3.connect(path) as c:
+            c.executescript(
+                (HERE / "schema-v2.sql").read_text(encoding="utf-8"))
+        with sqlite3.connect(path) as c:
+            migrate(c)
+        with sqlite3.connect(path) as c:
+            c.execute("UPDATE meta SET value='2' WHERE key='schema_version'")
+        with sqlite3.connect(path) as c:
+            self.assertEqual(migrate(c), [3])
+            self.assertEqual(current_version(c), SCHEMA_VERSION)
+
+    def test_the_v2_artifact_is_never_quietly_edited(self):
+        artifact = (HERE / "schema-v2.sql").read_text(encoding="utf-8")
+        self.assertIn("'schema_version', '2'", artifact)
+        self.assertIn("body_cleared_at", artifact)
+        self.assertNotIn("sender_key", artifact)
 
     def test_the_v1_artifact_is_never_quietly_edited(self):
         """It is frozen: a schema change goes in schema.sql and a migration."""
@@ -281,8 +349,9 @@ class TestVersionGuardOnTheRealPath(unittest.TestCase):
             version = c.execute(
                 "SELECT value FROM meta WHERE key='schema_version'").fetchone()[0]
             columns = {r[1] for r in c.execute("PRAGMA table_info(items)")}
-        self.assertEqual(int(version), 2)
+        self.assertEqual(int(version), SCHEMA_VERSION)
         self.assertIn("body_cleared_at", columns)
+        self.assertIn("sender_key", columns)
 
     def test_the_check_flag_reports_without_changing(self):
         v1 = (HERE / "schema-v1.sql").read_text(encoding="utf-8")

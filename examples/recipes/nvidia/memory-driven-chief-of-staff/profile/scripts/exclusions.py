@@ -139,7 +139,9 @@ def excluded(item: dict[str, Any], rules: dict[str, set[str]]) -> bool:
     # so a Slack user can be excluded by `U…` rather than by a display name
     # they can change.
     # `sender_id` and `sender_address` are set by the normalizers and dropped
-    # before the insert. They exist because `sender` holds a display name
+    # before the insert; the identity that survives it is the single
+    # `sender_key` column, which is one of these two depending on the source.
+    # They exist because `sender` holds a display name
     # whenever the source supplies one — a Slack user the person can rename,
     # a mail sender whose address never appears in the row. Matching only on
     # `sender` meant a domain rule matched nothing at all on real mail, and a

@@ -1,3 +1,10 @@
+-- FROZEN. The v2 schema exactly as it shipped.
+--
+-- Kept so the v2 -> v3 migration is tested against the database people
+-- actually have, rather than against the current schema with a column
+-- removed — a state that never existed and cannot fail the way a real one
+-- does. Never edit this file; add a migration instead.
+--
 -- Ledger store for the memory-driven chief-of-staff recipe.
 --
 -- Target runtime : SQLite bundled with Hermes 0.19.0 (the version the current
@@ -22,7 +29,7 @@ CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
-INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '3');
+INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '2');
 
 
 -- ---------------------------------------------------------------------------
@@ -39,22 +46,7 @@ CREATE TABLE IF NOT EXISTS items (
     -- ISO-8601 UTC. Slack returns an epoch float and must be converted at
     -- ingest so both sources sort together.
     event_at    TEXT NOT NULL,
-    sender      TEXT,
-    -- Who the sender is, as opposed to what they are called.
-    --
-    -- `sender` holds a display name whenever the source supplies one, and a
-    -- display name is not an identity: two people called the same thing share
-    -- a page, and the second overwrites the first's history under the first's
-    -- name. Neither is recoverable afterwards, because nothing else in the
-    -- row distinguishes them.
-    --
-    -- Both normalizers already compute a stable value — a mail address, a
-    -- Slack user id — and until now dropped it before the insert. It is kept
-    -- here so a page can be named after the person rather than after the
-    -- string they happen to be displayed as. Nullable: rows collected before
-    -- this column existed have none, and a collector that cannot supply one
-    -- is not a reason to refuse the message.
-    sender_key  TEXT,                       -- display name or address
+    sender      TEXT,                       -- display name or address
     subject     TEXT,                       -- NULL for slack
     body        TEXT,
     -- Set when the retention pass clears `body`, and never otherwise. It is

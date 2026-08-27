@@ -27,6 +27,7 @@ HERE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(HERE))
 
 import correct  # noqa: E402
+import normalize  # noqa: E402
 import select_memory  # noqa: E402
 
 SCHEMA = (HERE / "schema.sql").read_text(encoding="utf-8")
@@ -71,7 +72,7 @@ class SelectorCase(unittest.TestCase):
         return found
 
     def page(self, slug, updated=None, decay=None, kind="people",
-             last_interaction=None):
+             last_interaction=None, source_key=None):
         folder = self.workspace / "memory" / kind
         folder.mkdir(parents=True, exist_ok=True)
         head = ["---"]
@@ -81,6 +82,8 @@ class SelectorCase(unittest.TestCase):
             head.append(f"decay: {decay}")
         if last_interaction:
             head.append(f"last_interaction: {last_interaction}")
+        if source_key:
+            head.append(f"source_key: {source_key}")
         head += ["---", "", "# page"]
         (folder / f"{slug}.md").write_text("\n".join(head), encoding="utf-8")
 
@@ -185,7 +188,9 @@ class TestWhoIsWorthAsking(SelectorCase):
         for n in range(select_memory.MAX_INTERACTIONS + 5):
             self.add("Dana Okoro", days_ago=n, body=f"b{n}")
         found = self.report()
-        self.assertLessEqual(len(found["interactions"]["Dana Okoro"]),
+        # Keyed by page slug: a display name cannot index this, because two
+        # people can share one.
+        self.assertLessEqual(len(found["interactions"]["dana_okoro"]),
                              select_memory.MAX_INTERACTIONS)
 
 
@@ -568,45 +573,159 @@ class TestACorrectionIsEvidenceOnce(SelectorCase):
         self.assertNotIn("wakeAgent", out)
 
 
-class TestAnAmbiguousIdentityIsNotGuessed(SelectorCase):
-    """Two people, one page name: the second overwrites the first's history
-    under the first's name, and nothing in the store can tell them apart."""
+class TestAPersonIsWhoTheyAreNotWhatTheyAreCalled(SelectorCase):
+    """Namesakes, renames, and the two Unicode spellings of one name.
 
-    def test_two_senders_with_one_page_name_are_not_written(self):
-        for n in range(2):
-            self.add("Sam Ruiz", days_ago=n, body=f"a{n}", source="email")
-            self.add("sam ruiz", days_ago=n, body=f"b{n}", source="slack")
-        found = self.report()
-        self.assertEqual([p["sender"] for p in found["people"]], [])
+    These go through `normalize` and `insert_items` rather than an INSERT
+    written here, because the defect being pinned is that the identity was
+    computed by the normalizer and dropped before the store. A fixture that
+    sets `sender_key` by hand cannot fail that way, so it would prove nothing
+    — which is exactly how the earlier version of this file passed while
+    real senders collided.
+    """
 
-    def test_the_ambiguity_is_reported_rather_than_silent(self):
-        """Somebody whose page is never written should be able to find out."""
-        for n in range(2):
-            self.add("Sam Ruiz", days_ago=n, body=f"a{n}")
-            self.add("sam ruiz", days_ago=n, body=f"b{n}")
-        found = self.report()
-        self.assertIn("sam_ruiz", found["ambiguous_identity"])
-        self.assertEqual(sorted(found["ambiguous_identity"]["sam_ruiz"]),
-                         ["Sam Ruiz", "sam ruiz"])
+    def arrive(self, name, address, *, days_ago=0, body="b"):
+        """One email, through the shipped normalizer, into the store."""
+        msg = {
+            "id": f"{address}:{days_ago}:{body}",
+            "receivedDateTime": iso(days_ago),
+            "from": {"emailAddress": {"name": name, "address": address}},
+            "toRecipients": [{"emailAddress": {"address": "user@example.com"}}],
+            "subject": body, "bodyPreview": body, "isRead": False,
+        }
+        item = normalize.graph_message_to_item(msg, "user@example.com")
+        with sqlite3.connect(self.db) as conn:
+            normalize.insert_items(conn, [item])
+        return item
 
-    def test_everybody_else_is_still_offered(self):
-        """One ambiguous name must not stop the pass."""
+    def test_two_people_with_one_name_get_one_page_each(self):
+        """The case that used to lose a person's history under a namesake's
+        name, and then used to refuse to write either of them."""
         for n in range(2):
-            self.add("Sam Ruiz", days_ago=n, body=f"a{n}")
-            self.add("sam ruiz", days_ago=n, body=f"b{n}")
-            self.add("Dana Okoro", days_ago=n, body=f"c{n}")
+            self.arrive("Sam Ruiz", "sam.ruiz@example.com", days_ago=n,
+                        body=f"a{n}")
+            self.arrive("Sam Ruiz", "s.ruiz@other.example", days_ago=n,
+                        body=f"b{n}")
         found = self.report()
         self.assertEqual([p["sender"] for p in found["people"]],
-                         ["Dana Okoro"])
+                         ["Sam Ruiz", "Sam Ruiz"])
+        pages = sorted(p["slug"] for p in found["people"])
+        self.assertEqual(len(set(pages)), 2, f"one page for two people: {pages}")
+        # Neither wins the readable name, because whoever won it would be
+        # decided by row order and would change between runs.
+        self.assertNotIn("sam_ruiz", pages)
+        for mark in pages:
+            self.assertTrue(mark.startswith("sam_ruiz_"), mark)
+
+    def test_each_namesake_gets_only_their_own_messages(self):
+        """A page split that still mixes the histories has not split
+        anything."""
+        for n in range(2):
+            self.arrive("Sam Ruiz", "sam.ruiz@example.com", days_ago=n,
+                        body=f"first{n}")
+            self.arrive("Sam Ruiz", "s.ruiz@other.example", days_ago=n,
+                        body=f"second{n}")
+        found = self.report()
+        for mark, seen in found["interactions"].items():
+            texts = {line["text"] for line in seen}
+            self.assertTrue(
+                all(x.startswith("first") for x in texts)
+                or all(x.startswith("second") for x in texts),
+                f"{mark} mixes two people: {texts}")
+
+    def test_the_namesakes_are_reported_so_the_pages_can_say_so(self):
+        for n in range(2):
+            self.arrive("Sam Ruiz", "sam.ruiz@example.com", days_ago=n,
+                        body=f"a{n}")
+            self.arrive("Sam Ruiz", "s.ruiz@other.example", days_ago=n,
+                        body=f"b{n}")
+        found = self.report()
+        self.assertIn("Sam Ruiz", found["shared_display_name"])
+        self.assertEqual(len(found["shared_display_name"]["Sam Ruiz"]), 2)
+
+    def test_one_shared_name_does_not_stop_the_pass(self):
+        for n in range(2):
+            self.arrive("Sam Ruiz", "sam.ruiz@example.com", days_ago=n,
+                        body=f"a{n}")
+            self.arrive("Sam Ruiz", "s.ruiz@other.example", days_ago=n,
+                        body=f"b{n}")
+            self.arrive("Dana Okoro", "dana@example.com", days_ago=n,
+                        body=f"c{n}")
+        found = self.report()
+        self.assertIn("Dana Okoro", [p["sender"] for p in found["people"]])
 
     def test_the_two_unicode_spellings_of_one_name_are_one_person(self):
         """Composed and decomposed forms are the same name; which one arrives
-        depends on the client the message came from."""
+        depends on the client the message came from.
+
+        End to end, not through `slug` alone: the store now groups by address,
+        so both spellings must land on one page for two reasons at once, and a
+        unit test of the slug rule can only see one of them.
+        """
         composed = "\u00dcnal \u00d6z"
         decomposed = unicodedata.normalize("NFD", composed)
         self.assertNotEqual(composed, decomposed)
-        self.assertEqual(select_memory.slug(composed),
-                         select_memory.slug(decomposed))
+        for n in range(2):
+            self.arrive(composed, "unal@example.com", days_ago=n, body=f"a{n}")
+            self.arrive(decomposed, "unal@example.com", days_ago=n,
+                        body=f"b{n}")
+        found = self.report()
+        self.assertEqual(len(found["people"]), 1, found["people"])
+        self.assertEqual(found["people"][0]["messages"], 4)
+        self.assertEqual(found["shared_display_name"], {})
+
+    def test_two_spellings_from_two_addresses_stay_two_people(self):
+        """The mirror image, and the reason the slug rule alone is not
+        enough: the same name in two scripts from two people is two pages."""
+        composed = "\u00dcnal \u00d6z"
+        decomposed = unicodedata.normalize("NFD", composed)
+        for n in range(2):
+            self.arrive(composed, "unal@example.com", days_ago=n, body=f"a{n}")
+            self.arrive(decomposed, "u.oz@other.example", days_ago=n,
+                        body=f"b{n}")
+        found = self.report()
+        self.assertEqual(len(found["people"]), 2, found["people"])
+        self.assertEqual(len({p["slug"] for p in found["people"]}), 2)
+
+    def test_a_rename_does_not_start_a_second_page(self):
+        """People change how their name is displayed. That is not a new
+        person, and the page that has their history is theirs."""
+        self.arrive("Dana Okoro", "dana@example.com", days_ago=3, body="a")
+        self.arrive("Dana Okoro-Bell", "dana@example.com", days_ago=1,
+                    body="b")
+        found = self.report()
+        self.assertEqual(len(found["people"]), 1, found["people"])
+        # The name they go by now, not the one they arrived under.
+        self.assertEqual(found["people"][0]["sender"], "Dana Okoro-Bell")
+        self.assertEqual(found["people"][0]["messages"], 2)
+
+    def test_an_existing_page_keeps_its_name_when_a_namesake_appears(self):
+        """The durability the whole scheme exists for. Somebody with a page
+        must not be renamed — and so lose it — because a stranger who shares
+        their display name turned up."""
+        page_slug = "sam_ruiz"
+        self.page(page_slug, updated="2020-01-01", last_interaction=None,
+                  source_key="sam.ruiz@example.com")
+        for n in range(2):
+            self.arrive("Sam Ruiz", "sam.ruiz@example.com", days_ago=n,
+                        body=f"a{n}")
+            self.arrive("Sam Ruiz", "s.ruiz@other.example", days_ago=n,
+                        body=f"b{n}")
+        found = self.report()
+        by_key = {p["source_key"]: p["slug"] for p in found["people"]}
+        self.assertEqual(by_key["sam.ruiz@example.com"], page_slug)
+        self.assertTrue(by_key["s.ruiz@other.example"].startswith("sam_ruiz_"))
+
+    def test_a_page_from_before_the_field_existed_is_not_abandoned(self):
+        """Pages written by an earlier version record no identity. The sole
+        person with that name still owns it; moving them to a digest name
+        would strand a real page and start a blank one beside it."""
+        self.page("dana_okoro", updated="2020-01-01")
+        for n in range(2):
+            self.arrive("Dana Okoro", "dana@example.com", days_ago=n,
+                        body=f"a{n}")
+        found = self.report()
+        self.assertEqual([p["slug"] for p in found["people"]], ["dana_okoro"])
 
 
 class TestTheScopeIsStatedWhereItIsChecked(unittest.TestCase):

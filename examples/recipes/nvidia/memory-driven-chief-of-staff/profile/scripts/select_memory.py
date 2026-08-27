@@ -196,19 +196,70 @@ def slug(name: str) -> str:
     return f"{cleaned}_{mark}" if cleaned else f"person_{mark}"
 
 
-def existing_people() -> dict[str, str]:
-    """Slug to the `last_interaction` its page records, for pages that have one.
+def page_names(display: dict[str, str],
+               have: dict[str, dict[str, str]]) -> dict[str, str]:
+    """Stable identity -> the page slug that identity owns.
 
-    That date is what makes a quiet day quiet. Without it every correspondent
-    above the threshold was offered on every tick, whether or not anything had
-    happened since their page was written — so `wakeAgent` was never false and
-    the idle-tick guarantee this recipe is built on did not hold for anybody
-    with a page.
+    Two people called `Sam Ruiz` need two pages, and each needs to keep its
+    own name across runs. Neither follows from the display name, so the
+    allocation is driven by the stable key and by what the pages on disk
+    already claim:
+
+    - A page that records this key keeps it. This is the case that makes the
+      name durable: once written, a person's page is found by who they are,
+      so a namesake appearing later cannot rename or overwrite them.
+    - Otherwise the readable slug is used when exactly one identity wants it
+      and no other identity already holds it.
+    - Otherwise every contender takes a digest of its own key. Nobody wins the
+      readable name by being processed first, because a winner picked that way
+      changes between runs, and a page name that changes is a page lost.
+
+    A page with no `source_key` was written before the field existed. It is
+    treated as belonging to the sole contender for its name — the migration
+    case, and the alternative is abandoning a real page and starting a blank
+    one beside it. With two contenders it cannot be attributed to either, so
+    both take digests and the old page is left where it is.
+    """
+    owned = {page["source_key"]: mark for mark, page in have.items()
+             if page.get("source_key")}
+
+    contenders: dict[str, list[str]] = {}
+    for key in display:
+        if key in owned:
+            continue
+        contenders.setdefault(slug(display[key]), []).append(key)
+
+    names = {key: mark for key, mark in owned.items() if key in display}
+    for base, keys in contenders.items():
+        if not base:
+            base = "person"
+        # Sorted so the digest set is the same whatever order the store
+        # returned the senders in.
+        for key in sorted(keys):
+            solo = len(keys) == 1 and (
+                base not in have or not have[base].get("source_key"))
+            names[key] = base if solo else (
+                f"{base}_{hashlib.sha256(key.encode()).hexdigest()[:8]}")
+    return names
+
+
+def existing_people() -> dict[str, dict[str, str]]:
+    """Page slug to what that page records about who it is about, and when.
+
+    `last_interaction` is what makes a quiet day quiet. Without it every
+    correspondent above the threshold was offered on every tick, whether or
+    not anything had happened since their page was written — so `wakeAgent`
+    was never false and the idle-tick guarantee this recipe is built on did
+    not hold for anybody with a page.
+
+    `source_key` is what lets a page keep its name. It is the stable identity
+    the page was written about; pages written before the field existed have
+    none, which is a fact `page_names` needs and cannot get any other way.
     """
     folder = memory_root() / "people"
     if not folder.is_dir():
         return {}
-    found: dict[str, str] = {}
+    found: dict[str, dict[str, str]] = {}
     for page in folder.glob("*.md"):
         try:
             head = page.read_text(encoding="utf-8")[:400]
@@ -216,11 +267,15 @@ def existing_people() -> dict[str, str]:
             # Unreadable means unknown, and unknown means offer the person
             # rather than skip them: a page nobody can read is one worth
             # looking at.
-            found[page.stem] = ""
+            found[page.stem] = {"last_interaction": "", "source_key": ""}
             continue
         seen = re.search(r"^last_interaction:\s*(\d{4}-\d{2}-\d{2})",
                          head, re.M)
-        found[page.stem] = seen.group(1) if seen else ""
+        key = re.search(r"^source_key:\s*(\S+)", head, re.M)
+        found[page.stem] = {
+            "last_interaction": seen.group(1) if seen else "",
+            "source_key": key.group(1) if key else "",
+        }
     return found
 
 
@@ -285,48 +340,49 @@ def evidence(conn, since: str) -> dict[str, object]:
     neither. A fixture-sized store never reaches the spill, so the bug is
     invisible until the first real mailbox. Keep the payload small here.
     """
+    # Grouped by identity and display name together, so a person who changed
+    # how their name is shown is still one person, and two people who share a
+    # display name are still two.
     counted = conn.execute(
-        "SELECT sender, COUNT(*), MAX(event_at) FROM items"
+        "SELECT COALESCE(sender_key, sender), sender, COUNT(*), MAX(event_at)"
+        "  FROM items"
         "  WHERE event_at >= ? AND sender IS NOT NULL"
-        "  GROUP BY sender", (since,)).fetchall()
+        "  GROUP BY COALESCE(sender_key, sender), sender", (since,)).fetchall()
 
     counts: Counter[str] = Counter()
     latest: dict[str, str] = {}
-    for sender, count, last in counted:
+    display: dict[str, str] = {}
+    for key, sender, count, last in counted:
         if AUTOMATED.search(sender or ""):
             continue
-        counts[sender] = count
-        latest[sender] = last
+        counts[key] += count
+        if last and last > latest.get(key, ""):
+            latest[key] = last
+            # The name they go by now, not the one they used first.
+            display[key] = sender
+        display.setdefault(key, sender)
 
     have = existing_people()
     today = datetime.now(timezone.utc).date().isoformat()
 
-    # Two different senders that reduce to one page name.
-    #
-    # A display name is not an identity: two people called `Sam Ruiz` share a
-    # page, and the second overwrites the first's history under the first's
-    # name. Neither is recoverable afterwards, because nothing in the store
-    # distinguishes them — `items` keeps the display name and drops the
-    # address and the Slack user id at normalization.
-    #
-    # So this fails closed. An ambiguous name is reported rather than written,
-    # and the pass carries on with everybody else. Resolving it needs a stable
-    # source identity in the store, which is a schema change and belongs with
-    # the connectors that would populate it.
-    by_slug: dict[str, set[str]] = {}
-    for sender in counts:
-        by_slug.setdefault(slug(sender), set()).add(sender)
-    ambiguous = {mark: sorted(names) for mark, names in by_slug.items()
-                 if mark and len(names) > 1}
+    names = page_names(display, have)
+
+    # Namesakes still worth reporting: they now get one page each, but the
+    # agent is writing about two people whose names it cannot tell apart, and
+    # it should say so on the page rather than leave a reader to guess.
+    by_name: dict[str, set[str]] = {}
+    for key, sender in display.items():
+        by_name.setdefault(sender, set()).add(key)
+    shared = {sender: sorted(names[key] for key in keys)
+              for sender, keys in by_name.items() if len(keys) > 1}
 
     candidates = []
-    for sender, count in counts.most_common():
+    for key, count in counts.most_common():
         if count < PEOPLE_THRESHOLD:
             continue
-        mark = slug(sender)
-        if mark in ambiguous:
-            continue
-        last = (latest.get(sender) or "")[:10]
+        sender = display[key]
+        mark = names[key]
+        last = (latest.get(key) or "")[:10]
         if mark in have:
             # Offer an existing person only when something happened after
             # the date their page records. A page written last night and two
@@ -334,7 +390,7 @@ def evidence(conn, since: str) -> dict[str, object]:
             # woke the agent on every run for the rest of the window — this
             # job runs nightly, so one quiet correspondent cost thirty model
             # calls to be told thirty times that nothing had changed.
-            recorded = have[mark]
+            recorded = have[mark]["last_interaction"]
             # A page dated in the future would skip that person for as long as
             # the date stood — silently, and a typo or a clock skew is enough
             # to write one. Treat it as unknown, which means look.
@@ -344,34 +400,39 @@ def evidence(conn, since: str) -> dict[str, object]:
                 continue
         candidates.append({
             "sender": sender,
+            "source_key": key,
             "slug": mark,
             "messages": count,
             "last_interaction": last,
             "has_page": mark in have,
-            "page_records": have.get(mark) or None,
+            "page_records": (have[mark]["last_interaction"] or None)
+                            if mark in have else None,
         })
 
     # A person with no page at all is more valuable than one whose page is
     # merely a few bullets behind, so they go first within the bound.
     candidates.sort(key=lambda c: (c["has_page"], -c["messages"]))
     chosen = candidates[:MAX_PEOPLE]
-    wanted = {c["sender"] for c in chosen}
+    wanted = {c["source_key"] for c in chosen}
 
+    # Keyed by page slug, not by display name: two namesakes would otherwise
+    # write into one entry and the second would replace the first's history.
     interactions: dict[str, list[dict[str, str]]] = {}
-    for sender in wanted:
+    for key in wanted:
         rows = conn.execute(
             "SELECT source, event_at, addressing,"
             "       substr(COALESCE(subject, body), 1, 200)"
-            "  FROM items WHERE sender = ? AND event_at >= ?"
+            "  FROM items WHERE COALESCE(sender_key, sender) = ?"
+            "    AND event_at >= ?"
             "  ORDER BY event_at DESC LIMIT ?",
-            (sender, since, MAX_INTERACTIONS)).fetchall()
-        interactions[sender] = [
+            (key, since, MAX_INTERACTIONS)).fetchall()
+        interactions[names[key]] = [
             {"when": (event_at or "")[:10], "source": source,
              "addressing": addressing, "text": " ".join((text or "").split())}
             for source, event_at, addressing, text in rows]
 
     return {"people": chosen, "interactions": interactions,
-            "ambiguous_identity": ambiguous}
+            "shared_display_name": shared}
 
 
 def open_obligations(conn) -> list[dict[str, object]]:
@@ -532,9 +593,9 @@ def main() -> int:
         "seeded": seeded,
         "schema": str(memory_root().parent.parent / "schema.md"),
         "people": found["people"],
-        # Named rather than silently skipped: somebody whose page is never
-        # written should be able to find out why.
-        "ambiguous_identity": found["ambiguous_identity"],
+        # Namesakes get one page each, but the agent cannot tell them apart
+        # by name and should say which page is about whom.
+        "shared_display_name": found["shared_display_name"],
         "interactions": found["interactions"],
         "open_obligations": obligations,
         # Kept separate from `open_obligations` on purpose. One is what other

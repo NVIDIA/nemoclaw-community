@@ -100,12 +100,10 @@ those two apart.
 | `scripts/install.sh` | Installs the profile, inherits the runtime's model config, registers the jobs |
 | `scripts/register-jobs.sh` | Registers the seven scheduled jobs through the cron CLI. Re-runnable |
 | `profile/skills/` | Six skills: judging, review, memory writing, repair, consolidation, preference update. Retention needs none — it clears bodies and never wakes the agent |
->>>>>>> upstream/main
 | `fixtures/` | Eight synthetic messages, a seed memory, and one recorded model turn |
 
-Slack is connected through `scripts/setup-slack.sh`; a Microsoft Graph
-connector is still to come. Until a connector is set up, the scheduled jobs
-judge and re-judge whatever the store already holds.
+Slack is connected through `scripts/setup-slack.sh`. Until a connector is set
+up, the scheduled jobs judge and re-judge whatever the store already holds.
 
 ## Requirements
 
@@ -247,7 +245,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the twelve files report 484 tests in
+Expected result: every file ends with `OK`, the twelve files report 494 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -263,6 +261,7 @@ leave the loop exiting `0`.
 | Writer behavior, audit trail, caps across batches, correction idempotency, correction state transitions, displaced-row audit | `tests/test_apply_decisions.py` |
 | The walkthrough, and its central claims | `tests/test_walkthrough.py` |
 | Selector output, the wake gate, and the scheduler contract | `tests/test_selectors.py` |
+| What the memory job hands the agent: who is worth a page, stable identity across namesakes and renames, quiet days costing nothing, and corrections counted once | `tests/test_select_memory.py` |
 | Retention, exclusion, export and reset | `tests/test_lifecycle.py` |
 | The Slack collector: watermarks, partial failure, scope probing, thread discovery and rotation, the credential never reaching a stream, and the lifecycle controls applying to what it writes | `tests/test_ingest_slack.py` |
 
@@ -462,6 +461,16 @@ recipient lists are never stored. Ingest reduces them to a single `addressing`
 value — `direct`, `mentioned`, or `broadcast` — so the store never holds a
 copy of who else was on a thread. `normalize.py` does this today, and
 `tests/test_normalize.py` asserts it.
+
+One thing the store does keep, and should be said plainly rather than found
+in the schema: **each row carries the sender's stable identity** — their mail
+address, or their Slack user id — in `sender_key`. It is there because a
+display name cannot identify anybody, and a memory page named after one is
+overwritten by the next person who shares it. It is not kept for any other
+purpose: nothing matches on it but the memory job, and it is one column both
+sources agree on rather than a per-source pair. An excluded sender's identity
+is not stored either, because exclusion is applied inside `insert_items` and
+nothing about them is written at all.
 
 Four controls over what is kept ship alongside it, and they were in place
 before the collector that fills the store was. They apply to real Slack

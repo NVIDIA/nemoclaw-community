@@ -22,7 +22,7 @@ import sqlite3
 from pathlib import Path
 from typing import Callable
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # version -> callable applied to reach it. Forward only; there is no down path,
 # because a downgrade that drops a column loses data no backup can infer.
@@ -51,8 +51,25 @@ def _add_body_cleared_at(conn: sqlite3.Connection) -> None:
 
 # version -> callable applied to reach it. Forward only; there is no down path,
 # because a downgrade that drops a column loses data no backup can infer.
+def _add_sender_key(conn: sqlite3.Connection) -> None:
+    """v3: somewhere to keep who a sender is, not just what they are called.
+
+    Idempotent: an ALTER that has already happened is detected rather than
+    attempted, because a migration that fails on a store it already migrated
+    is a migration that only works once.
+
+    Existing rows keep NULL. Backfilling is not possible — the value was never
+    stored, and the display name it would have to be derived from is exactly
+    the thing that cannot identify anybody.
+    """
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(items)")}
+    if "sender_key" not in columns:
+        conn.execute("ALTER TABLE items ADD COLUMN sender_key TEXT")
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _add_body_cleared_at,
+    3: _add_sender_key,
 }
 
 

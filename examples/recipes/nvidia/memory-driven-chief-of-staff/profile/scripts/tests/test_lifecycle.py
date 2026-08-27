@@ -409,20 +409,45 @@ class TestExclusionSurvivesTheRealNormalizers(StoreCase):
         self.insert([slack_message_to_item(msg, channel, me, display)])
         self.assertEqual(len(self.rows()), 1)
 
-    def test_the_matching_values_are_never_stored(self):
-        """Matching material must not become a new thing the store holds."""
+    def test_an_excluded_senders_values_never_reach_the_store(self):
+        """The guarantee that survived the identity column.
+
+        The store now keeps one stable identity per sender, so an address is
+        no longer absent from every row — see `sender_key` in `schema.sql`.
+        What is still absolute is the exclusion boundary: matching happens
+        inside `insert_items`, before the write, so a sender the user excluded
+        contributes nothing at all, identity included.
+        """
+        self.write_rules(senders=["dana@agency.example", "U01RECRUIT"])
+        self.insert([graph_message_to_item(self.graph_message(),
+                                           "me@example.com"),
+                     slack_message_to_item(*self.slack_message())])
+        with sqlite3.connect(self.db) as conn:
+            everything = "".join(
+                str(v) for row in conn.execute("SELECT * FROM items")
+                for v in row)
+        self.assertEqual(self.rows(), [])
+        self.assertNotIn("dana@agency.example", everything)
+        self.assertNotIn("U01RECRUIT", everything)
+
+    def test_the_matching_fields_are_still_not_columns_of_their_own(self):
+        """One identity column, not a growing set of per-source ones.
+
+        `sender_address` and `sender_id` remain what they were — values the
+        normalizers compute for matching and drop. The identity that is kept
+        is a single column both sources agree on, so a rule, a page and a row
+        all mean the same thing by a sender.
+        """
         self.insert([graph_message_to_item(self.graph_message(),
                                            "me@example.com"),
                      slack_message_to_item(*self.slack_message())])
         with sqlite3.connect(self.db) as conn:
             columns = {r[1] for r in conn.execute("PRAGMA table_info(items)")}
-            everything = "".join(
-                str(v) for row in conn.execute("SELECT * FROM items")
-                for v in row)
+            keys = [r[0] for r in conn.execute(
+                "SELECT sender_key FROM items ORDER BY source_id")]
         self.assertNotIn("sender_address", columns)
         self.assertNotIn("sender_id", columns)
-        self.assertNotIn("dana@agency.example", everything)
-        self.assertNotIn("U01RECRUIT", everything)
+        self.assertEqual(keys, ["U01RECRUIT", "dana@agency.example"])
 
 
 class TestExportShowsEverythingItHolds(StoreCase):

@@ -93,6 +93,9 @@ def graph_message_to_item(msg: dict[str, Any], user_address: str) -> dict[str, A
         # has nothing to match without this — the address is exactly what the
         # user wrote the rule against.
         "sender_address": _address_of(msg.get("from")),
+        # The stable half. `sender` is the display name when there is one,
+        # which two different people can share; the address is theirs.
+        "sender_key": _address_of(msg.get("from")) or None,
         "subject": msg.get("subject"),
         "body": body.get("content"),
         "permalink": msg.get("webLink"),
@@ -137,6 +140,9 @@ def slack_message_to_item(
         # Slack user to a display name, which the person can change at will;
         # without the raw id a `U…` rule matches nothing.
         "sender_id": msg.get("user"),
+        # The stable half, for the same reason: a display name is something
+        # its owner can change, and two people can choose the same one.
+        "sender_key": msg.get("user") or None,
         "subject": None,
         "body": msg.get("text"),
         "permalink": msg.get("permalink"),
@@ -148,7 +154,8 @@ def slack_message_to_item(
 
 ITEM_COLUMNS = (
     "source_id", "source", "scope", "thread_ref", "event_at",
-    "sender", "subject", "body", "permalink", "addressing", "unread",
+    "sender", "sender_key", "subject", "body", "permalink", "addressing",
+    "unread",
 )
 
 

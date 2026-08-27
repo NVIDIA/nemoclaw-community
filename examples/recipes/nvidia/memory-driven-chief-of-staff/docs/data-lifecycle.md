@@ -46,7 +46,7 @@ What a cleared row keeps:
 
 | Kept | Gone |
 | --- | --- |
-| sender, subject, timestamp, addressing, state | the message body |
+| sender and their stable identity, subject, timestamp, addressing, state | the message body |
 | the obligation and the title the judging turn wrote | |
 | every event, with its actor and its before and after | |
 

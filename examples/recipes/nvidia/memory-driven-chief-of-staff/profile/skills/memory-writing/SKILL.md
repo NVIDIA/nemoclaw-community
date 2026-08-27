@@ -81,6 +81,7 @@ People pages require **all** of:
 ```yaml
 ---
 name: Full Name
+source_key: <copy `source_key` from the selector, exactly as given>
 role: Job title or function      # write "unknown" rather than omitting it
 relationship: How they relate to the user, 1-2 sentences
 importance: high | medium | low
@@ -88,6 +89,13 @@ last_interaction: YYYY-MM-DD
 interaction_frequency: daily | weekly | monthly | rare
 ---
 ```
+
+**Copy `source_key` verbatim and never invent one.** It is how the selector
+finds this page again — an address or a user id, not a name. Get it wrong and
+the page is orphaned: the next run finds nobody who matches it, writes a
+second page for the same person, and their history stays behind in the first.
+If the selector did not give you one for somebody, leave the field out rather
+than guessing.
 
 Attention pages require **all** of `type`, `updated`, **and `decay`** —
 `decay: daily` for `current_priorities.md`, `decay: weekly` for
@@ -108,6 +116,17 @@ Two ordering rules, for the same reason:
 Create one when the selector shows somebody at or above the threshold **and**
 the exchanges look like a working relationship rather than a feed. Two
 messages is the floor, not the test.
+
+**Use the `slug` the selector gives you as the filename.** It is chosen so
+that people who share a display name still get a page each; deriving your own
+from the name puts two of them in one file.
+
+`shared_display_name` lists the names that more than one person is using,
+with the pages that were allocated to them. When somebody appears there, say
+so in Relationship — the reader is going to open one of two identically
+titled pages and needs a sentence telling them which colleague this is. Their
+messages are already separated for you; `interactions` is keyed by page slug,
+not by name.
 
 Write a page when:
 
