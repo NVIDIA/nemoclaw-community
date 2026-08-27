@@ -20,6 +20,7 @@ from scripts.build_catalog import (
     extract_mermaid_sources,
     load_catalog,
     public_catalog,
+    render_industry_nav,
     render_detail_pages,
     render_readme_html,
     validate_detail_pages,
@@ -129,6 +130,16 @@ class CatalogBuildTests(unittest.TestCase):
 
         with self.assertRaisesRegex(CatalogError, "documented emoji and title"):
             load_catalog(root)
+
+    def test_industry_navigation_wraps_slash_labels_at_word_boundaries(self) -> None:
+        entries = load_catalog(
+            self._fixture_root({"industry": "Automotive/Transportation"})
+        )
+
+        self.assertIn(
+            "Automotive/<wbr>Transportation",
+            render_industry_nav(entries),
+        )
 
     def test_non_kebab_case_catalog_path_is_rejected(self) -> None:
         root = self._fixture_root({"path": "recipes/community/Bad Name"})

@@ -15,7 +15,7 @@
   --line: #353535;
   --line-strong: #656565;
   --tile-line: #4d692e;
-  --shell: 74rem;
+  --shell: clamp(74rem, 90vw, 120rem);
 }
 
 *,
@@ -455,6 +455,11 @@ h3 {
 .industry-tile:hover {
   border-color: var(--nvidia-green);
   background: var(--surface-hover);
+}
+
+.industry-tile > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .industry-tile-count {
@@ -990,7 +995,7 @@ h3 {
 
 .detail-content-layout {
   display: grid;
-  grid-template-columns: minmax(12rem, 0.3fr) minmax(0, 0.7fr);
+  grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr);
   gap: clamp(2.5rem, 7vw, 6rem);
   align-items: start;
 }
@@ -1349,10 +1354,102 @@ h3 {
   font-weight: 500;
 }
 
+@media (min-width: 90rem) {
+  .browse-grid-categories {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+  .browse-grid-industries {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .catalog-controls {
+    grid-template-columns:
+      minmax(22rem, 1.8fr)
+      minmax(18rem, 1fr)
+      minmax(17rem, 0.65fr);
+    align-items: end;
+  }
+
+  .control-summary {
+    grid-column: auto;
+    padding-top: 0;
+    padding-left: 1.25rem;
+    border-top: 0;
+    border-left: 1px solid var(--line);
+  }
+
+  .control-summary p,
+  .control-summary .reset-button {
+    white-space: nowrap;
+  }
+
+  .card-grid,
+  .catalog-results[data-view="industry"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .detail-hero-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(22rem, 26rem);
+  }
+}
+
+@media (min-width: 100rem) {
+  .browse-grid-industries {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 120rem) {
+  .card-grid,
+  .catalog-results[data-view="industry"] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 65rem) {
   .browse-grid-categories,
   .browse-grid-industries {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 56rem) {
+  .detail-hero-grid,
+  .detail-content-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-hero-grid {
+    align-items: start;
+  }
+
+  .detail-facts {
+    max-width: none;
+  }
+
+  .detail-content-layout {
+    gap: 2rem;
+  }
+
+  .detail-toc {
+    position: static;
+    max-height: none;
+    padding: 1rem;
+    border: 1px solid var(--line);
+    background: var(--surface);
+  }
+
+  .detail-toc-desktop {
+    display: none;
+  }
+
+  .detail-toc-mobile {
+    display: block;
+  }
+
+  .detail-toc-mobile nav {
+    margin-top: 0.75rem;
   }
 }
 
@@ -1362,9 +1459,7 @@ h3 {
   }
 
   .hero-support,
-  .discovery-header,
-  .detail-hero-grid,
-  .detail-content-layout {
+  .discovery-header {
     grid-template-columns: 1fr;
   }
 
@@ -1409,37 +1504,12 @@ h3 {
   .catalog-results[data-view="industry"] {
     grid-template-columns: 1fr;
   }
+}
 
-  .detail-hero-grid {
-    align-items: start;
-  }
-
-  .detail-facts {
-    max-width: 38rem;
-  }
-
-  .detail-content-layout {
-    gap: 2rem;
-  }
-
-  .detail-toc {
-    position: static;
-    max-height: none;
-    padding: 1rem;
-    border: 1px solid var(--line);
-    background: var(--surface);
-  }
-
-  .detail-toc-desktop {
-    display: none;
-  }
-
-  .detail-toc-mobile {
-    display: block;
-  }
-
-  .detail-toc-mobile nav {
-    margin-top: 0.75rem;
+@media (min-width: 45rem) and (max-width: 50rem) {
+  .card-grid,
+  .catalog-results[data-view="industry"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

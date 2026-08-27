@@ -758,7 +758,7 @@ def render_industry_nav(entries: list[CatalogEntry]) -> str:
                 f'<a class="industry-tile" data-empty="{str(counts[industry] == 0).lower()}" '
                 f'href="?view=industry&amp;industry={slugify(industry)}#catalog">',
                 f'  <span>{html.escape(INDUSTRY_EMOJIS[industry])} '
-                f'{html.escape(industry)}</span>',
+                f'{html.escape(industry).replace("/", "/<wbr>")}</span>',
                 f'  <span class="industry-tile-count" aria-label="{_plural(counts[industry])}">'
                 f'{counts[industry]}</span>',
                 "</a>",
