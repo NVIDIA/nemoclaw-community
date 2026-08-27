@@ -50,7 +50,7 @@ marks the message `(edited)`.
 | Verified on | The original assistant completed live on a Linux host with Slack, OpenClaw, NVIDIA inference, and public GitHub. The public-recipe lifecycle scripts have local/static verification only. |
 | Evidence level | local/static for this public recipe revision |
 | Support and maturity | Educational example with best-effort community support. See the repository [support policy](../../../../SUPPORT.md). |
-| External access, data, and actions | Sends Slack messages to Slack, public pull request data to the configured inference endpoint, and read-only requests to `api.github.com`. It does not write to GitHub. |
+| External access, data, and actions | Sends Slack messages to Slack, public pull request data to the configured inference endpoint, and read-only requests to `api.github.com`. It does not write to GitHub. The default Slack app is direct-message-only and reads no channel, public or private. |
 | Start here | [Prepare the Slack app and API key](#prepare-the-slack-app-and-api-key), then run the setup commands. |
 | Confirm success | [Verification](#verification) |
 
@@ -85,7 +85,9 @@ Creating or installing an app can require approval from a Slack workspace
 administrator. Complete that process before you run onboarding.
 
 1. In [Slack API Apps](https://api.slack.com/apps), create an app from
-   [`config/slack-app-manifest.yml`](config/slack-app-manifest.yml).
+   [`config/slack-app-manifest.yml`](config/slack-app-manifest.yml). This app is
+   direct-message-only: it can read and write direct messages with itself and
+   cannot read any channel, public or private.
 2. Generate an app-level token with `connections:write`. Save the `xapp-`
    value as `SLACK_APP_TOKEN`.
 3. Install the app to the workspace. Save the `xoxb-` bot token as
@@ -112,6 +114,23 @@ SLACK_ALLOWED_USERS="<your-slack-member-id>"
 Leaving `SLACK_ALLOWED_USERS` empty delegates direct-message authorization to
 the OpenClaw channel configuration. For a shared workspace, set an explicit
 member allowlist or review each pairing request before approval.
+
+### Optional: Answering In A Channel
+
+The recipe does not need a channel. If you want the assistant reachable from a
+shared channel, install from
+[`config/slack-app-manifest-channels.yml`](config/slack-app-manifest-channels.yml)
+instead, and accept a wider data boundary: `channels:history` lets the app read
+message history in public channels it is added to, because the runtime reads
+surrounding messages for context on a mention. That nearby conversation reaches
+the agent and therefore the configured inference provider.
+
+Slack grants history per app, not per channel, so the grant applies to every
+channel the app is added to. `SLACK_ALLOWED_CHANNELS` bounds which channels the
+runtime acts on, but it is a runtime control rather than a permission boundary;
+add the app to as few channels as possible. Private-channel history
+(`groups:history`) is commented out in that manifest and must be enabled
+deliberately.
 
 ## Start Here
 
@@ -282,7 +301,8 @@ pr-test-case-assistant/
 │   ├── slack-pr-brief.png
 │   └── slack-test-cases.png
 ├── config/
-│   └── slack-app-manifest.yml
+│   ├── slack-app-manifest.yml
+│   └── slack-app-manifest-channels.yml
 ├── docs/
 │   └── troubleshooting.md
 ├── policies/

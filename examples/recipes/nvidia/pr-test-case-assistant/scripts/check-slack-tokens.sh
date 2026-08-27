@@ -12,6 +12,10 @@
 #   ./scripts/check-slack-tokens.sh                          # both tokens; the usual case
 #   ./scripts/check-slack-tokens.sh --channel <CHANNEL_ID>   # only if you also use a channel
 #
+# Without --channel this expects the direct-message scopes of the default manifest, and warns if
+# the app holds channel-read scopes it does not need. With --channel it also expects the scopes
+# of the optional channel manifest.
+#
 # Tokens are read from the environment and passed to curl over stdin, so they do not appear
 # in the process table or your shell history. Nothing is written to disk.
 
@@ -24,9 +28,13 @@ CHANNEL=""
 FAILED=0
 WARNED=0
 
-# Scopes the bundled app manifest declares. An under-scoped app connects cleanly and then
-# never receives the mention, which is the failure that wastes an afternoon.
-REQUIRED_SCOPES="app_mentions:read chat:write channels:history channels:read groups:history im:history im:read im:write"
+# Scopes the default direct-message manifest declares. An under-scoped app connects cleanly and
+# then never receives the message, which is the failure that wastes an afternoon.
+REQUIRED_SCOPES="chat:write im:history im:read im:write"
+
+# Additional scopes only the optional channel manifest declares. Checked when --channel is used,
+# because a direct-message app is not expected to hold them.
+CHANNEL_SCOPES="app_mentions:read channels:history channels:read"
 
 usage() {
   cat <<'EOF'
@@ -101,15 +109,37 @@ if [ -n "${SLACK_BOT_TOKEN:-}" ]; then
 
     granted=$(grep -i '^x-oauth-scopes:' /tmp/.slackhdr.$$ 2>/dev/null | cut -d: -f2- | tr -d ' \r')
     if [ -n "$granted" ]; then
+      expected="$REQUIRED_SCOPES"
+      [ -n "$CHANNEL" ] && expected="$expected $CHANNEL_SCOPES"
+
       missing=""
-      for s in $REQUIRED_SCOPES; do
+      for s in $expected; do
         case ",$granted," in *",$s,"*) ;; *) missing="$missing $s" ;; esac
       done
       if [ -n "$missing" ]; then
         warn "missing scopes:$missing"
-        warn "the app will connect and then never see your mention. Add these, reinstall, re-run."
+        if [ -n "$CHANNEL" ]; then
+          warn "channel use needs the optional config/slack-app-manifest-channels.yml scopes."
+        fi
+        warn "the app will connect and then never see your message. Add these, reinstall, re-run."
+      elif [ -n "$CHANNEL" ]; then
+        pass "all scopes the channel manifest declares are granted"
       else
-        pass "all scopes the manifest declares are granted"
+        pass "all scopes the direct-message manifest declares are granted"
+      fi
+
+      # Report channel reach the default manifest does not ask for, so an over-scoped app is
+      # visible rather than silent.
+      if [ -z "$CHANNEL" ]; then
+        extra=""
+        for s in $CHANNEL_SCOPES groups:history; do
+          case ",$granted," in *",$s,"*) extra="$extra $s" ;; esac
+        done
+        if [ -n "$extra" ]; then
+          warn "granted beyond direct messages:$extra"
+          warn "this app can read channels it is added to. The recipe does not need that;"
+          warn "reinstall from config/slack-app-manifest.yml to drop it."
+        fi
       fi
     fi
   else
@@ -177,7 +207,7 @@ except Exception: print("")')
     case "$err" in
       channel_not_found) fail "not visible to this app. Check the ID, or invite the bot first." ;;
       missing_scope)     warn "cannot verify membership: conversations.info needs channels:read."
-                         warn "Apply the current manifest scopes, reinstall the app, and retry." ;;
+                         warn "Reinstall from config/slack-app-manifest-channels.yml and retry." ;;
       "")                fail "no response from Slack. Check egress from this host." ;;
       *)                 fail "conversations.info returned: $err" ;;
     esac

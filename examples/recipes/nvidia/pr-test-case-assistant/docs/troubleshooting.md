@@ -19,6 +19,8 @@ this recipe.
 | A direct message returns a pairing code | Run `bash scripts/slack-pair.sh approve <code>` on the host, or set `SLACK_ALLOWED_USERS` before onboarding. |
 | Slack answers `/... is not a valid command` and the assistant never sees the message | This app registers no slash commands, so Slack intercepts a leading `/`. Ask in plain language instead. |
 | A shared Slack app stops responding elsewhere | One app-level token supports one active Socket Mode connection. Use a dedicated Slack app for this recipe. |
+| The bot ignores an `@mention` in a channel | The default manifest is direct-message-only and receives no channel events. Use a direct message, or install `config/slack-app-manifest-channels.yml` and accept the wider read boundary. |
+| `channel resolve failed ... missing_scope` at startup | `SLACK_ALLOWED_CHANNELS` is set but the app lacks `channels:read`. Clear that variable for direct-message use, or install the channel manifest. |
 
 ## GitHub
 
