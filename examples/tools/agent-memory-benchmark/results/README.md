@@ -175,7 +175,12 @@ changed, and each run ships `answers.as-answered.jsonl` — the output as
 answered, save for the one substitution noted below — so the transform can be
 checked rather than believed.
 
-> 🔒 **One further substitution is applied but not listed.** It replaced an email
+> 🔒 **Two changes are deliberately outside that map.** The self-model run's
+> `run_id` was de-identified at publication; it names no answer row, so it is
+> not part of a map whose only job is to reproduce `answers.jsonl`, and each
+> report records it under `provenance_note.run_id_note`. The other:
+>
+> **One further substitution is applied but not listed.** It replaced an email
 > and URL domain that is a registrable `.com`, with a domain reserved by RFC 2606.
 > Publishing its pre-image would put a registrable domain back into a public
 > artifact, which is the boundary the corpus sanitization exists to hold — so it is

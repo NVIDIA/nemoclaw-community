@@ -117,3 +117,41 @@ def test_no_tracked_file_publishes_a_registrable_domain(kind):
         f"tracked files under {kind!r} publish domains that are not reserved and "
         f"are not declared real infrastructure: {offenders}. A registrable domain "
         f"in published material is one someone else can own.")
+
+
+# A filesystem path from the machine a run happened on is the same class of leak
+# as a registrable domain: it names something outside the fiction. One published
+# citation carried `/home/<user>/.../workspace/...`, which published a username,
+# a directory layout and an internal project name in one string.
+_ABSOLUTE_PATH = re.compile(r"(?:^|[\"'\s(\[])((?:/home/|/Users/|[A-Za-z]:\\\\Users\\\\)[^\"'\s,\]\)]+)")
+_HOME_SHORTHAND = re.compile(r"(?:^|[\"'\s(\[])(~/[^\"'\s,\]\)]+)")
+
+# Paths that are instructions to a reader rather than a record of a machine.
+DOCUMENTED_PATHS = {
+    "~/src/my-system/.venv/bin/python",  # the README's worked example of an env override
+}
+
+
+@pytest.mark.parametrize("kind", ["results", "everything else"])
+def test_no_tracked_file_publishes_a_path_from_someone_s_machine(kind):
+    """A published artifact must not carry the filesystem it was produced on."""
+    in_results = lambda p: p.parts[0] == "results"
+    scope = in_results if kind == "results" else (lambda p: not in_results(p))
+    offenders: dict[str, set[str]] = {}
+    for path in _tracked_files():
+        relative = path.relative_to(REPO)
+        if not scope(relative) or path == Path(__file__).resolve():
+            continue  # this file spells the patterns out; it matches itself
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, FileNotFoundError):
+            continue
+        found = {m.group(1) for m in _ABSOLUTE_PATH.finditer(text)}
+        found |= {m.group(1) for m in _HOME_SHORTHAND.finditer(text)}
+        found -= DOCUMENTED_PATHS
+        if found:
+            offenders[str(relative)] = found
+    assert not offenders, (
+        f"tracked files under {kind!r} publish absolute paths from a machine: "
+        f"{offenders}. A citation should name what it cites, relative to the "
+        f"corpus or the memory, not where the run happened to execute.")

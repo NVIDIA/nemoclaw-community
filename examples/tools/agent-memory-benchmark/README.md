@@ -182,7 +182,7 @@ point the proxy at.
 ```bash
 cd examples/tools/agent-memory-benchmark
 python3 -m pip install pytest
-python3 -m pytest tests/     # expected: 217 passed
+python3 -m pytest tests/     # expected: 219 passed
 ```
 
 Then run the whole pipeline against a fixture whose score is known in advance:
@@ -506,13 +506,13 @@ limits are stated where the numbers are.
 here exercises a live endpoint.
 
 ```bash
-python3 -m pytest tests/     # expected: 217 passed
+python3 -m pytest tests/     # expected: 219 passed
 ```
 
 **Expected result:**
 
 ```text
-217 passed
+219 passed
 ```
 
 **This verifies:** the runner, grader, report renderer and the ledger adapter's
