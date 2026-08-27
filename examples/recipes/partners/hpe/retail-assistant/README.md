@@ -2,7 +2,7 @@
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Provides role-aware retail operations through Telegram with Docker Compose or Helm deployment paths. |
+| Description | Helps store employees check inventory and sales or request transfers and reorders through role-aware Telegram conversations scoped to their assigned store. |
 | Industry | 🛍️ Retail/Consumer Packaged Goods |
 | Requirements | Telegram bot · tool-calling OpenAI-compatible LLM · Docker Compose or Kubernetes + Helm · demo identity mapping |
 | Contributor | HPE |

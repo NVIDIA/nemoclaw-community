@@ -2,7 +2,7 @@
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Runs scheduled, cited web monitoring with deduplication and auditable outputs. |
+| Description | Tracks what changed across chosen web topics and why it matters, producing scheduled, deduplicated Markdown digests and JSON changelogs with source citations. |
 | Industry | ✨ Other |
 | Requirements | Docker · NemoClaw · Tavily and inference provider API keys · one-time operator.admin approval |
 | Contributor | Tavily |

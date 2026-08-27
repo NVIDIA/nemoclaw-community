@@ -2,7 +2,7 @@
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Turns community signals into operating briefs and follow-up recommendations. |
+| Description | Helps developer community leaders align priorities with demand by turning available GitHub, GitLab, forum, Slack, email, and web signals into evidence-grounded briefs, gaps, and follow-up recommendations. |
 | Industry | ✨ Other |
 | Requirements | Single Linux host · Docker · OpenShell · inference provider API key · Slack or Outlook |
 

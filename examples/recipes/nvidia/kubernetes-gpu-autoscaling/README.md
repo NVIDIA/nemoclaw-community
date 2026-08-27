@@ -7,7 +7,7 @@
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Runs NemoClaw on Kubernetes with GPU-backed Ollama autoscaling. |
+| Description | Helps Kubernetes operators match GPU inference capacity to demand by pairing a CPU-only OpenShell sandbox with Ollama replicas that scale on utilization or latency and return to one after load. |
 | Industry | ☁️ Cloud Services |
 | Requirements | Kubernetes 1.25+ · Helm 3 · NVIDIA GPU Operator/DCGM · Metrics Server · Docker Buildx + registry · OpenShell + Agent Sandbox CRDs pinned in versions.env · OIDC or acknowledged isolated-eval exception · experimental |
 

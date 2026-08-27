@@ -5,7 +5,7 @@
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Queues long-running research from a sandbox to a host-side DeepAgents worker. |
+| Description | Adds asynchronous research to a sandbox, so users can queue long-running jobs on a host-side worker, monitor persistent task state, and return later for text or JSON results. |
 | Industry | ✨ Other |
 | Requirements | Docker Compose · dedicated OpenShell/NemoClaw sandbox · OpenAI-compatible inference endpoint + API key · no readiness guarantee |
 

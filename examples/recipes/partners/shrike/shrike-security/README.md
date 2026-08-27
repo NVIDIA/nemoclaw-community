@@ -6,7 +6,7 @@
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Checks OpenClaw tool calls against Shrike policy before they run. |
+| Description | Adds defense-in-depth action governance through an in-sandbox hook that checks each OpenClaw tool call against server-side Shrike policy and blocks prohibited or approval-required calls. |
 | Industry | ✨ Other |
 | Requirements | NemoClaw/OpenShell · Node.js + npm · inference provider · Shrike API key · in-sandbox defense-in-depth only |
 | Contributor | Shrike Security, Inc. |

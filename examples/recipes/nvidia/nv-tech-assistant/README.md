@@ -2,7 +2,7 @@
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Answers NVIDIA technical questions with citations from allowlisted sources. |
+| Description | Helps developers choose and troubleshoot NVIDIA technologies by searching allowlisted documentation, repositories, model catalogs, and forums for current, evidence-linked answers. |
 | Industry | 🖥️ Hardware/Semiconductor |
 | Requirements | Docker · NemoClaw · NVIDIA Endpoints API key · optional Brave Search · no offline corpus |
 

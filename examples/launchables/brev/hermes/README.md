@@ -2,7 +2,7 @@
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Creates a NemoClaw-managed Hermes sandbox on a fresh Brev CPU instance through a notebook. |
+| Description | Guides users from a fresh Brev CPU instance to a NemoClaw-managed Hermes sandbox through a notebook that installs prerequisites, runs onboarding, verifies API health, and provides terminal access. |
 | Industry | ☁️ Cloud Services |
 | Requirements | Linux Brev CPU instance · Docker · NVIDIA Build API key or compatible inference endpoint API key · billable Brev instance · best-effort support |
 | Environment | Brev |

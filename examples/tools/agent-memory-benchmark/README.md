@@ -22,7 +22,7 @@ evidence_level: local/static
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Measures memory-system accuracy and token cost on two synthetic email-and-chat corpora. |
+| Description | Measures the memory an agent builds from synthetic email and chat by asking 186 questions on one corpus and 96 on another, then reports accuracy by question type separately from ingest and answer token costs. |
 | Industry | ✨ Other |
 | Requirements | Python 3.9+ · pytest for the offline check · endpoint and adapter required only for live scoring |
 

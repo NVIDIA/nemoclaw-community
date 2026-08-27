@@ -5,7 +5,7 @@
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Audits web pages for accessibility and captures screenshots, PDFs, and network traces. |
+| Description | Helps web teams find WCAG issues through a dedicated sandbox and host-side real Chrome, returning rule-level findings with optional screenshots, PDFs, recordings, and network traces. |
 | Industry | 🌐 Consumer Internet |
 | Requirements | Docker 24+ with Compose · linux/amd64 or Docker Desktop emulation · dedicated OpenShell/NemoClaw sandbox |
 

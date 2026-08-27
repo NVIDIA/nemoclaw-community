@@ -2,7 +2,7 @@
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Screens x402 payment intents through a host-side maker/checker gate before signing or settlement. |
+| Description | Demonstrates a maker-checker gate for x402 payments: a sandboxed agent submits intents, while a host-side Blackwall verdict controls mock signing and settlement before any signature exists. |
 | Industry | 💳 Financial Services |
 | Requirements | Python 3 · Docker + OpenShell for sandbox checks · Blackwall service · simulated signing/no real money |
 | Contributor | BlueTier Operations |

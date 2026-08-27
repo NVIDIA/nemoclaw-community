@@ -7,7 +7,7 @@
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Reads public GitHub pull requests and drafts grounded feature test cases through Slack. |
+| Description | Helps quality engineers turn public GitHub pull request descriptions and bounded diffs into Slack briefs and proposed, unexecuted feature test cases with source evidence. |
 | Industry | ✨ Other |
 | Requirements | NemoClaw + Docker · Slack app with Socket Mode · Slack bot + app access tokens · inference provider API key · public GitHub only |
 

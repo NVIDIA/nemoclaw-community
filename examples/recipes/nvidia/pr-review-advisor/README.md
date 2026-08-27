@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Reviews exact pull request (PR) heads with Hermes, produces attested artifacts, and leaves publication to a maintainer. |
+| Description | Helps maintainers review exact pull request heads through staged, repository-aware Hermes analysis, producing attested JSON and Markdown findings for inspection before optional publication. |
 | Industry | ✨ Other |
 | Requirements | Linux + Docker · OpenShell 0.0.85 · Node.js 22.19+ · inference provider API key or existing provider · GitHub.com self-hosted runner for the generated workflow |
 

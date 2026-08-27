@@ -13,49 +13,49 @@ example README. Edit that README, then run
 
 | Example | Industry | Description |
 | --- | --- | --- |
-| [Agentic AI Learning Path](recipes/nvidia/agentic-ai-learning-path/README.md) | 🎓 Academia/Education | Runs the seven-module Build an Agent workshop in an OpenShell sandbox with an AI tutor. |
-| [Developer Community Chief of Staff](recipes/nvidia/developer-community-chief-of-staff/README.md) | ✨ Other | Turns community signals into operating briefs and follow-up recommendations. |
-| [Kubernetes GPU Autoscaling](recipes/nvidia/kubernetes-gpu-autoscaling/README.md) | ☁️ Cloud Services | Runs NemoClaw on Kubernetes with GPU-backed Ollama autoscaling. |
-| [Memory-Driven Chief of Staff](recipes/nvidia/memory-driven-chief-of-staff/README.md) | ✨ Other | Maintains and re-ranks a revisable local record of email and Slack inputs without writing back to source systems. |
-| [NV Tech Assistant](recipes/nvidia/nv-tech-assistant/README.md) | 🖥️ Hardware/Semiconductor | Answers NVIDIA technical questions with citations from allowlisted sources. |
-| [Payment Operations Hermes Assistant](recipes/nvidia/payment-ops-hermes/README.md) | 💳 Financial Services | Demonstrates payment screening, evidence preparation, and a platform-enforced human release boundary. |
-| [PR Review Advisor](recipes/nvidia/pr-review-advisor/README.md) | ✨ Other | Reviews exact pull request (PR) heads with Hermes, produces attested artifacts, and leaves publication to a maintainer. |
-| [PR Test Case Assistant](recipes/nvidia/pr-test-case-assistant/README.md) | ✨ Other | Reads public GitHub pull requests and drafts grounded feature test cases through Slack. |
+| [Agentic AI Learning Path](recipes/nvidia/agentic-ai-learning-path/README.md) | 🎓 Academia/Education | Helps learners work through the seven-module Build an Agent workshop in JupyterLab with an AI tutor that explains concepts, offers graduated hints, and checks progress inside an OpenShell sandbox. |
+| [Developer Community Chief of Staff](recipes/nvidia/developer-community-chief-of-staff/README.md) | ✨ Other | Helps developer community leaders align priorities with demand by turning available GitHub, GitLab, forum, Slack, email, and web signals into evidence-grounded briefs, gaps, and follow-up recommendations. |
+| [Kubernetes GPU Autoscaling](recipes/nvidia/kubernetes-gpu-autoscaling/README.md) | ☁️ Cloud Services | Helps Kubernetes operators match GPU inference capacity to demand by pairing a CPU-only OpenShell sandbox with Ollama replicas that scale on utilization or latency and return to one after load. |
+| [Memory-Driven Chief of Staff](recipes/nvidia/memory-driven-chief-of-staff/README.md) | ✨ Other | Builds a revisable local memory from email and Slack, then ranks obligations against the user's priorities while preserving pins and ignores without changing source systems. |
+| [NV Tech Assistant](recipes/nvidia/nv-tech-assistant/README.md) | 🖥️ Hardware/Semiconductor | Helps developers choose and troubleshoot NVIDIA technologies by searching allowlisted documentation, repositories, model catalogs, and forums for current, evidence-linked answers. |
+| [Payment Operations Hermes Assistant](recipes/nvidia/payment-ops-hermes/README.md) | 💳 Financial Services | Helps payment operators screen synthetic outbound payments, explain holds, and prepare review packets while OpenShell keeps final release authority with a human outside the Hermes sandbox. |
+| [PR Review Advisor](recipes/nvidia/pr-review-advisor/README.md) | ✨ Other | Helps maintainers review exact pull request heads through staged, repository-aware Hermes analysis, producing attested JSON and Markdown findings for inspection before optional publication. |
+| [PR Test Case Assistant](recipes/nvidia/pr-test-case-assistant/README.md) | ✨ Other | Helps quality engineers turn public GitHub pull request descriptions and bounded diffs into Slack briefs and proposed, unexecuted feature test cases with source evidence. |
 
 ## Partner Recipes
 
 | Contributor | Example | Industry | Description |
 | --- | --- | --- | --- |
-| BlueTier Operations | [x402 Payment Gate](recipes/partners/bluetier/x402-payment-gate/README.md) | 💳 Financial Services | Screens x402 payment intents through a host-side maker/checker gate before signing or settlement. |
-| HPE | [Retail Assistant](recipes/partners/hpe/retail-assistant/README.md) | 🛍️ Retail/Consumer Packaged Goods | Provides role-aware retail operations through Telegram with Docker Compose or Helm deployment paths. |
-| Shrike Security, Inc. | [Shrike Security Action Governance](recipes/partners/shrike/shrike-security/README.md) | ✨ Other | Checks OpenClaw tool calls against Shrike policy before they run. |
-| Tavily | [Watchtower](recipes/partners/tavily/watchtower/README.md) | ✨ Other | Runs scheduled, cited web monitoring with deduplication and auditable outputs. |
+| BlueTier Operations | [x402 Payment Gate](recipes/partners/bluetier/x402-payment-gate/README.md) | 💳 Financial Services | Demonstrates a maker-checker gate for x402 payments: a sandboxed agent submits intents, while a host-side Blackwall verdict controls mock signing and settlement before any signature exists. |
+| HPE | [Retail Assistant](recipes/partners/hpe/retail-assistant/README.md) | 🛍️ Retail/Consumer Packaged Goods | Helps store employees check inventory and sales or request transfers and reorders through role-aware Telegram conversations scoped to their assigned store. |
+| Shrike Security, Inc. | [Shrike Security Action Governance](recipes/partners/shrike/shrike-security/README.md) | ✨ Other | Adds defense-in-depth action governance through an in-sandbox hook that checks each OpenClaw tool call against server-side Shrike policy and blocks prohibited or approval-required calls. |
+| Tavily | [Watchtower](recipes/partners/tavily/watchtower/README.md) | ✨ Other | Tracks what changed across chosen web topics and why it matters, producing scheduled, deduplicated Markdown digests and JSON changelogs with source citations. |
 
 ## Community Recipes
 
 | Example | Industry | Description |
 | --- | --- | --- |
-| [Axe A11y Browser Auditor](recipes/community/axe-a11y-browser-auditor/README.md) | 🌐 Consumer Internet | Audits web pages for accessibility and captures screenshots, PDFs, and network traces. |
-| [Deep Research Worker](recipes/community/deep-research-worker/README.md) | ✨ Other | Queues long-running research from a sandbox to a host-side DeepAgents worker. |
+| [Axe A11y Browser Auditor](recipes/community/axe-a11y-browser-auditor/README.md) | 🌐 Consumer Internet | Helps web teams find WCAG issues through a dedicated sandbox and host-side real Chrome, returning rule-level findings with optional screenshots, PDFs, recordings, and network traces. |
+| [Deep Research Worker](recipes/community/deep-research-worker/README.md) | ✨ Other | Adds asynchronous research to a sandbox, so users can queue long-running jobs on a host-side worker, monitor persistent task state, and return later for text or JSON results. |
 
 ## NVIDIA Field Demos
 
 | Example | Industry | Description |
 | --- | --- | --- |
-| [DGX Station Blender and Omniverse](demos/field/blender-omniverse-dgx-station/README.md) | 🎬 Media & Entertainment | Controls Blender on DGX Station for OVRTX rendering and OVPhysX simulation. |
+| [DGX Station Blender and Omniverse](demos/field/blender-omniverse-dgx-station/README.md) | 🎬 Media & Entertainment | Lets users direct a specialized Hermes agent on DGX Station across Blender and NVIDIA Omniverse workflows, producing scene edits, OVRTX renders, native OVPhysX simulations, and replay evidence. |
 
 ## Launchables
 
 | Environment | Example | Industry | Description |
 | --- | --- | --- | --- |
-| Brev | [Hermes](launchables/brev/hermes/README.md) | ☁️ Cloud Services | Creates a NemoClaw-managed Hermes sandbox on a fresh Brev CPU instance through a notebook. |
+| Brev | [Hermes](launchables/brev/hermes/README.md) | ☁️ Cloud Services | Guides users from a fresh Brev CPU instance to a NemoClaw-managed Hermes sandbox through a notebook that installs prerequisites, runs onboarding, verifies API health, and provides terminal access. |
 
 ## Developer Tools
 
 | Example | Industry | Description |
 | --- | --- | --- |
-| [Agent Memory Benchmark](tools/agent-memory-benchmark/README.md) | ✨ Other | Measures memory-system accuracy and token cost on two synthetic email-and-chat corpora. |
-| [Harness Engineering Playground](tools/harness-engineering-playground/README.md) | ✨ Other | Provides an experimental command-line interface for evaluation-driven harness profile optimization. |
+| [Agent Memory Benchmark](tools/agent-memory-benchmark/README.md) | ✨ Other | Measures the memory an agent builds from synthetic email and chat by asking 186 questions on one corpus and 96 on another, then reports accuracy by question type separately from ingest and answer token costs. |
+| [Harness Engineering Playground](tools/harness-engineering-playground/README.md) | ✨ Other | Provides an experimental loop for tuning DeepAgents harness profiles against behavioral evaluations, keeping fixes that pass verification and rolling back rejected edits. |
 
 ## Contributing An Example
 

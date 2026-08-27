@@ -5,7 +5,7 @@
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Runs the seven-module Build an Agent workshop in an OpenShell sandbox with an AI tutor. |
+| Description | Helps learners work through the seven-module Build an Agent workshop in JupyterLab with an AI tutor that explains concepts, offers graduated hints, and checks progress inside an OpenShell sandbox. |
 | Industry | 🎓 Academia/Education |
 | Requirements | Linux · Docker · OpenShell · inference, NVIDIA, and Tavily API keys · Slack or Outlook · CPU-first; module 4 training is read-through |
 

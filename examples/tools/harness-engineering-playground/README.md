@@ -2,7 +2,7 @@
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Provides an experimental command-line interface for evaluation-driven harness profile optimization. |
+| Description | Provides an experimental loop for tuning DeepAgents harness profiles against behavioral evaluations, keeping fixes that pass verification and rolling back rejected edits. |
 | Industry | ✨ Other |
 | Requirements | Python 3.11+ · uv · DeepAgents submodule + extra · proposer and target-model API keys · experimental/not for production |
 
