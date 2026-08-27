@@ -29,6 +29,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import unittest.mock
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -92,6 +93,15 @@ class FakeGraph:
         self.still_present = False
         self.identity_lookups = 0
         self.rate_limit_forever = False
+        # The removal lookup answers before the rate-limit branch, so it needs
+        # knobs of its own to be made slow or made to fail.
+        self.rate_limit_lookups = False
+        self.lookup_status = None
+        # Throttle each request this many times, then let it through. Unlike
+        # `rate_limit_forever` this lets a tick make several requests, which
+        # is the only way a per-request bound and a per-tick one differ.
+        self.throttle_per_request = 0
+        self.throttled_since_success = 0
         outer = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -110,10 +120,25 @@ class FakeGraph:
                     # The "is it still in the mailbox" question, asked by
                     # `internetMessageId` when something leaves the folder.
                     outer.identity_lookups += 1
+                    if outer.lookup_status is not None:
+                        return outer._send(self, outer.lookup_status,
+                                           {"error": {"code": "x"}})
+                    if outer.rate_limit_lookups:
+                        body = json.dumps(
+                            {"error": {"code": "throttled"}}).encode()
+                        self.send_response(429)
+                        self.send_header("Retry-After", "1")
+                        self.send_header("Content-Length", str(len(body)))
+                        self.end_headers()
+                        self.wfile.write(body)
+                        return
                     hits = [{"id": "elsewhere"}] if outer.still_present else []
                     return outer._send(self, 200, {"value": hits})
 
-                if outer.rate_limit_forever:
+                throttling = outer.rate_limit_forever or (
+                    outer.throttled_since_success < outer.throttle_per_request)
+                if throttling:
+                    outer.throttled_since_success += 1
                     body = json.dumps({"error": {"code": "throttled"}}).encode()
                     self.send_response(429)
                     self.send_header("Retry-After", "1")
@@ -121,6 +146,7 @@ class FakeGraph:
                     self.end_headers()
                     self.wfile.write(body)
                     return
+                outer.throttled_since_success = 0
 
                 if outer.status_for_next is not None:
                     code = outer.status_for_next
@@ -213,6 +239,22 @@ class CollectorCase(unittest.TestCase):
             code = ingest_graph.main(args or [])
         self.stdout = buffer.getvalue()
         return code
+
+    def run_main_recording_waits(self, args=None):
+        """Run a tick, recording every sleep it asks for instead of taking it.
+
+        Taking them would make this test wait out the real budget, which is
+        two minutes by design. What is under test is the arithmetic across
+        requests, and that is visible without the waiting.
+        """
+        recorded: list[float] = []
+        real_sleep = ingest_graph.time.sleep
+        ingest_graph.time.sleep = recorded.append
+        try:
+            code = self.run_main(args)
+        finally:
+            ingest_graph.time.sleep = real_sleep
+        return code, recorded
 
     def report(self):
         return json.loads(self.stdout)
@@ -741,10 +783,99 @@ class TestFailuresCarryTheirDiagnosisInTheExitCode(CollectorCase):
         finally:
             ingest_graph.MAX_TOTAL_BACKOFF_SECONDS = 120
 
-    def test_the_throttling_bound_is_a_total_not_a_per_wait(self):
-        """Each individual wait was already bounded; the sum was not."""
-        self.assertLessEqual(ingest_graph.MAX_BACKOFF_SECONDS,
+    def test_the_waiting_bound_belongs_to_the_tick_not_the_request(self):
+        """The bound is what one run may spend waiting, in total.
+
+        Held per request it multiplied by the number of requests: a page
+        budget of ten turned a two-minute ceiling into twenty minutes in
+        `sleep`. Comparing the two constants — which is what this test used to
+        do — could not see that, and stayed green throughout.
+
+        Several pages, each throttled for a while and then served, so the
+        tick makes more than one request — which is the only arrangement in
+        which a per-request bound and a per-tick one differ at all. Each
+        request stays inside the per-request bound; together they do not.
+        """
+        self.serve([{"value": [message("m%d" % n)],
+                     "@odata.nextLink": "http://x/p%d" % n}
+                    for n in range(4)])
+        # Four requests at 40 seconds each: none of them alone exceeds the
+        # two-minute bound, and the four together exceed it by a third.
+        self.graph.throttle_per_request = 40
+        code, waits = self.run_main_recording_waits()
+        self.assertEqual(code, ingest_graph.EXIT_RATE_LIMIT)
+        self.assertLessEqual(sum(waits),
                              ingest_graph.MAX_TOTAL_BACKOFF_SECONDS)
+        # More than one request really was throttled, or the bound above is
+        # met by a tick that only ever made one.
+        self.assertGreater(len(waits), 40)
+
+    def test_the_budget_already_spent_is_not_refunded_by_a_new_request(self):
+        """The unit under the end-to-end test, stated directly."""
+        budget = ingest_graph.Budget(seconds=3)
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(unittest.mock.patch.object(
+                ingest_graph.time, "sleep", lambda s: None))
+            budget.spend(2)
+            with self.assertRaises(ingest_graph.GraphError) as caught:
+                budget.spend(2)
+        self.assertEqual(caught.exception.kind, "rate_limit")
+
+    def test_throttling_during_a_removal_lookup_is_bounded_too(self):
+        """The lookup is a Graph request like any other, and it is the one
+        made most often when something has been deleted."""
+        self.serve([{"value": [message("m1")],
+                     "@odata.deltaLink": "http://x/final"}])
+        self.run_main()
+        self.graph.queue({"value": [removed("m1")],
+                          "@odata.deltaLink": "http://x/final2"})
+        self.graph.rate_limit_lookups = True
+        code, waits = self.run_main_recording_waits()
+        self.assertEqual(code, ingest_graph.EXIT_RATE_LIMIT)
+        self.assertLessEqual(sum(waits),
+                             ingest_graph.MAX_TOTAL_BACKOFF_SECONDS)
+
+    def test_a_failed_removal_lookup_does_not_let_the_round_advance(self):
+        """A removal is reported once.
+
+        Reading a failed lookup as "it moved" finishes the round, advances the
+        cursor past the page that carried the removal, and nothing ever asks
+        again — the message stays in the store as though it were never
+        deleted. So the round has to stop instead.
+        """
+        self.serve([{"value": [message("m1")],
+                     "@odata.deltaLink": "http://x/final"}])
+        self.run_main()
+        before = self.state().get("delta")
+
+        self.graph.queue({"value": [removed("m1")],
+                          "@odata.deltaLink": "http://x/moved-on"})
+        self.graph.lookup_status = 500
+        self.assertEqual(self.run_main(), ingest_graph.EXIT_OTHER)
+        self.assertEqual(self.state().get("delta"), before,
+                         "the cursor advanced past an unresolved removal")
+        # rows() is (source_id, sender, body, deleted_at, body_cleared_at)
+        self.assertIsNone(self.rows()[0][3],
+                          "a message was tombstoned on a failed lookup")
+
+        # And the next tick, with the service answering, resolves it.
+        self.graph.lookup_status = None
+        self.graph.still_present = False
+        self.graph.queue({"value": [removed("m1")],
+                          "@odata.deltaLink": "http://x/final3"})
+        self.assertEqual(self.run_main(), 0)
+        self.assertIsNotNone(self.rows()[0][3])
+
+    def test_a_failed_removal_lookup_keeps_the_reason_it_failed(self):
+        """The exit code still has to say what went wrong; a credential that
+        expired mid-round is not the same operator problem as a timeout."""
+        self.serve([{"value": [message("m1")],
+                     "@odata.deltaLink": "http://x/final"}])
+        self.run_main()
+        self.graph.queue({"value": [removed("m1")],
+                          "@odata.deltaLink": "http://x/final2"})
+        self.graph.lookup_status = 401
+        self.assertEqual(self.run_main(), ingest_graph.EXIT_CREDENTIAL)
 
     def test_something_unrecognised_in_the_variable_is_refused(self):
         os.environ["MS_GRAPH_ACCESS_TOKEN"] = "not-a-token"

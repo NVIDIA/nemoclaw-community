@@ -527,9 +527,14 @@ Three things about the connectors themselves:
 - Attachments are not fetched. The collector stores a file-sharing message's
   text and never requests the file behind it.
 - For Microsoft Graph, an item deleted at the source is tombstoned locally and
-  its body cleared at once, because the delta query reports deletions
-  explicitly. The row stays: obligations and events hang off it, and removing
-  it would break the record of why something was ranked.
+  its body cleared at once. The delta query reports that a message left the
+  folder, which is not the same as reporting a deletion — filing it in Archive
+  reads identically — so the collector asks a second question, by
+  `internetMessageId`, and only a message the mailbox no longer holds anywhere
+  is tombstoned. If that question cannot be answered the round stops and the
+  next one asks again, rather than advancing past a removal it did not
+  resolve. The row stays: obligations and events hang off it, and removing it
+  would break the record of why something was ranked.
 - For Slack, that guarantee is not available. A deleted message stops appearing
   in `conversations.history`, and its absence from a bounded, paginated read
   cannot be told apart from it lying outside the window. Reliable notice

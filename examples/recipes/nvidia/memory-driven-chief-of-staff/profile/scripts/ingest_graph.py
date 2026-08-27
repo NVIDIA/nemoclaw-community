@@ -185,7 +185,47 @@ def save_state(state: dict[str, Any]) -> None:
         pass
 
 
-def call(path: str, token: str, *, absolute: bool = False) -> dict[str, Any]:
+class Budget:
+    """How long one tick may spend waiting, across every request it makes.
+
+    The bound belongs to the tick, not to the request. Held per request it
+    multiplies by however many requests the tick makes — a page budget of ten
+    turned a 120-second ceiling into twenty minutes of a scheduled job sitting
+    in `sleep`, which is not a bound anybody set and not one anybody would see
+    until it happened.
+
+    Passed explicitly rather than defaulted, so a call site that forgets it is
+    a `TypeError` here rather than a request quietly given a budget of its
+    own — which is the defect this replaces.
+    """
+
+    def __init__(self, seconds: float | None = None):
+        # Read at construction, not bound as a default argument: a default is
+        # evaluated once at import, so a test or an operator changing the
+        # constant afterwards would be silently ignored.
+        self.limit = (MAX_TOTAL_BACKOFF_SECONDS if seconds is None
+                      else seconds)
+        self.waited = 0.0
+
+    def spend(self, wait: float) -> None:
+        """Wait, or refuse because this tick has waited enough already.
+
+        Refusing is not failing: the cursor is not advanced, so the next tick
+        continues from the same place. A rate limit is the service asking for
+        patience on a timescale longer than one tick, and the answer to it is
+        to come back later rather than to hold the job open.
+        """
+        if self.waited + wait > self.limit:
+            raise GraphError(
+                "rate limited for longer than one tick may wait "
+                f"({int(self.waited)}s so far); the next tick continues "
+                "from where this one stopped", "rate_limit")
+        time.sleep(wait)
+        self.waited += wait
+
+
+def call(path: str, token: str, budget: Budget, *,
+         absolute: bool = False) -> dict[str, Any]:
     """One Graph GET, with the failures that need distinguishing.
 
     A 401 or 403 is the credential; a 429 is the service asking for patience;
@@ -202,7 +242,6 @@ def call(path: str, token: str, *, absolute: bool = False) -> dict[str, Any]:
         "Prefer": 'outlook.body-content-type="text"',
     })
     delay = 1.0
-    waited = 0.0
     while True:
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
@@ -221,13 +260,7 @@ def call(path: str, token: str, *, absolute: bool = False) -> dict[str, Any]:
                 if wait > MAX_BACKOFF_SECONDS:
                     raise GraphError("rate limited beyond the backoff bound",
                                      "rate_limit") from exc
-                if waited + wait > MAX_TOTAL_BACKOFF_SECONDS:
-                    raise GraphError(
-                        "rate limited for longer than one tick may wait "
-                        f"({int(waited)}s so far); the next tick continues "
-                        "from where this one stopped", "rate_limit") from exc
-                time.sleep(wait)
-                waited += wait
+                budget.spend(wait)
                 delay = min(delay * 2, MAX_BACKOFF_SECONDS)
                 continue
             raise GraphError("Graph returned HTTP %d" % exc.code) from exc
@@ -239,7 +272,8 @@ def call(path: str, token: str, *, absolute: bool = False) -> dict[str, Any]:
                              "other") from exc
 
 
-def identity(token: str, state: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+def identity(token: str, state: dict[str, Any],
+             budget: Budget) -> tuple[dict[str, Any], bool]:
     """Whose mailbox this is, checked every run. Returns it and whether it
     changed.
 
@@ -256,7 +290,8 @@ def identity(token: str, state: dict[str, Any]) -> tuple[dict[str, Any], bool]:
     credential presented for it. One request against a bounded budget, and
     the answer is the addressing input every message needs anyway.
     """
-    me = call("/me?$select=mail,userPrincipalName,displayName", token)
+    me = call("/me?$select=mail,userPrincipalName,displayName", token,
+              budget)
     address = me.get("mail") or me.get("userPrincipalName") or ""
     if not address:
         raise GraphError(
@@ -284,14 +319,22 @@ def first_round_url(days: int) -> str:
     return "/me/mailFolders/inbox/messages/delta?" + query
 
 
-def still_in_mailbox(source_id: str, token: str) -> bool:
+def still_in_mailbox(source_id: str, token: str, budget: Budget) -> bool:
     """Is this message somewhere else in the mailbox, or actually gone?
 
     Asked by `internetMessageId`, which a message keeps when it moves; the
-    per-folder id does not, so it cannot be used here. A failure to answer is
-    read as "still there", because the cost of being wrong in that direction
-    is a body kept a little longer, and the cost of the other is a body
-    cleared because a search timed out.
+    per-folder id does not, so it cannot be used here.
+
+    A failure to answer stops the round. Reading it as "still there" looked
+    like the safe direction — a body kept a little longer against a body
+    cleared because a search timed out — but "a little longer" was wrong. The
+    removal is only reported once. Treat it as a move and the round finishes,
+    the cursor advances past the page that carried it, and nothing ever asks
+    again: the message stays in the store as though it were never deleted,
+    permanently, and the person who deleted it is never told otherwise.
+
+    Stopping costs a re-read of pages this tick already handled, which is
+    idempotent, and the next tick asks the question again.
     """
     known = read_state().get("message_ids", {})
     internet_id = known.get(source_id)
@@ -303,9 +346,15 @@ def still_in_mailbox(source_id: str, token: str) -> bool:
     query = urllib.parse.quote(
         "internetMessageId eq '%s'" % internet_id.replace("'", "''"), safe="")
     try:
-        found = call("/me/messages?$filter=%s&$select=id&$top=1" % query, token)
-    except GraphError:
-        return True
+        found = call("/me/messages?$filter=%s&$select=id&$top=1" % query,
+                     token, budget)
+    except GraphError as exc:
+        # The class is carried through so the exit code still says whether
+        # this was the credential, a rate limit, or something else.
+        raise GraphError(
+            "could not establish whether a removed message was deleted or "
+            f"moved ({exc}); the round stops here rather than advancing past "
+            "a removal it did not resolve", exc.kind) from exc
     return bool(found.get("value"))
 
 
@@ -353,7 +402,7 @@ def commit(items: list[dict[str, Any]], removed: list[str]) -> tuple[int, int]:
 
 
 def collect(token: str, address: str, state: dict[str, Any],
-            days: int) -> dict[str, Any]:
+            days: int, budget: Budget) -> dict[str, Any]:
     """One synchronisation round, or as much of one as the budget allows.
 
     Three states, and which one this run is in decides where it starts:
@@ -379,7 +428,7 @@ def collect(token: str, address: str, state: dict[str, Any],
     delta_link = None
 
     while url and pages < REQUEST_BUDGET:
-        payload = call(url, token, absolute=absolute)
+        payload = call(url, token, budget, absolute=absolute)
         pages += 1
 
         batch = payload.get("value") or []
@@ -405,7 +454,7 @@ def collect(token: str, address: str, state: dict[str, Any],
         present = [m for m in batch if "@removed" not in m and m.get("id")]
 
         removals = [source_id for source_id in gone_ids
-                    if not still_in_mailbox(source_id, token)]
+                    if not still_in_mailbox(source_id, token, budget)]
         moved += len(gone_ids) - len(removals)
 
         # Remember each message's own identity, so a later removal can be
@@ -487,8 +536,13 @@ def main(argv: list[str] | None = None) -> int:
     token = (raw or "").strip()
     days = bounded_days("GRAPH_BACKFILL_DAYS", BACKFILL_DAYS)
 
+    # One budget for the whole tick, shared by every request it makes —
+    # the identity check, both rounds if the cursor expired, and every
+    # removal lookup in between.
+    budget = Budget()
+
     try:
-        who, mailbox_changed = identity(token, state)
+        who, mailbox_changed = identity(token, state, budget)
         if mailbox_changed:
             # A different account. Everything remembered describes the old
             # one: a delta cursor issued for its inbox, a resume link into
@@ -503,7 +557,8 @@ def main(argv: list[str] | None = None) -> int:
             state.pop("next", None)
         state["identity"] = who
         try:
-            report = collect(token, who["address"], state, days)
+            report = collect(token, who["address"], state, days,
+                             budget)
         except GraphError as exc:
             if exc.kind != "resync":
                 raise
@@ -515,7 +570,8 @@ def main(argv: list[str] | None = None) -> int:
                   file=sys.stderr)
             state.pop("delta", None)
             state.pop("next", None)
-            report = collect(token, who["address"], state, days)
+            report = collect(token, who["address"], state, days,
+                             budget)
             report["resynchronised"] = True
     except GraphError as exc:
         print(str(exc), file=sys.stderr)

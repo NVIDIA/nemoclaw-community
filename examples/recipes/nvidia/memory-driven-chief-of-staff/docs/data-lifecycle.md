@@ -166,8 +166,11 @@ that felt complete.
 ## Where the guarantee is weaker
 
 For Microsoft Graph, an item deleted at the source is tombstoned locally and
-its body cleared at once, because the delta query reports deletions
-explicitly.
+its body cleared at once. What the delta query reports is that a message left
+the tracked folder; a deletion and a move to Archive are indistinguishable in
+it, so the collector confirms by asking whether the mailbox still holds the
+message anywhere. A removal it cannot resolve stops the round instead of being
+guessed either way.
 
 Slack, which is the connector that ships, offers no such notice. A deleted
 message stops appearing in
