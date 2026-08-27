@@ -53,9 +53,12 @@ records forwarded calls.
 
 Two notes on the cost table. The agentic baseline's ingest cost is an embedding
 pass and nothing else, which is why its output tokens are zero; it does no
-reasoning at ingest time, which is the whole distinction being measured. And no
-dollar figure is reported for either run: `bench/pricing.py` has no entry for
-this model, so the report carries token counts and declines to invent a price.
+reasoning at ingest time, which is the whole distinction being measured. And the
+reports price only what `bench/pricing.py` knows. That embedding model has an
+entry, so the agentic ingest phase carries a real figure, $0.0034; the Nemotron
+model that answers in both runs has none, so every other phase reports token
+counts with a null price rather than inventing one. Read the tables in tokens,
+not dollars — the one priced phase is the cheapest thing either run did.
 
 ## What these numbers are not
 
@@ -77,9 +80,12 @@ below.
 
 ## The rename, and why the answers were transformed
 
-Publishing the corpus renamed a set of identifiers — a project, a class, a
-mailbox folder, a documentation path, an email domain, and four question ids.
-The stored answers were produced before that and use the old names.
+Publishing the corpus renamed 21 text identifiers and 4 question ids. The text
+side covers a project name and its lowercase form, several code symbols, a
+database filename, a workspace directory, a service module, a mailbox folder,
+six documentation paths, and an email domain; the full list, in the order it was
+applied, is in each `report.json` under `provenance_note.substitutions`. The
+stored answers were produced before that and use the old names.
 
 The same substitution applied to the corpus was applied to the answers, because
 an answer is derived from the corpus that produced it: a system reading the

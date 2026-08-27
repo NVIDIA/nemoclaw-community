@@ -327,7 +327,7 @@ proxy at.
 **Expected result:**
 
 ```text
-194 passed
+196 passed
 ```
 
 **This verifies:** the runner, grader, report renderer and the
@@ -343,7 +343,7 @@ The whole pipeline runs offline against a small fixture whose score is known in
 advance — no model, no network, no API key:
 
 ```bash
-python3 -m pytest tests/     # expected: 194 passed
+python3 -m pytest tests/     # expected: 196 passed
 ```
 
 `selftest/` holds a six-document corpus, six questions covering all four

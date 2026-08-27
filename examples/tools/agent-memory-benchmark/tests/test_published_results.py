@@ -288,3 +288,47 @@ def test_published_prose_states_no_cost_ratio_while_cost_is_not_comparable():
                 f"{found.group(0)!r}, but {', '.join(unproven)} set "
                 f"comparable_on_cost to false. Report each run's observed counts, "
                 f"or establish the accounting and flip the flag.")
+
+
+def test_every_price_a_report_carries_is_stated_in_the_prose():
+    """A priced figure in a report has to appear in the prose that describes it.
+
+    The README said no dollar figure was reported for either run. One was:
+    `bench/pricing.py` prices the embedding model the agentic baseline uses at
+    ingest, so that phase carried a real cost while every Nemotron phase stayed
+    null. Prose that rounds "mostly unpriced" down to "unpriced" is the same
+    defect as the cost ratio, one paragraph later.
+    """
+    readme = (REPO / "results" / "README.md").read_text(encoding="utf-8")
+    for run in RUNS:
+        cost = _report(run).get("cost", {})
+        for field, value in sorted(cost.items()):
+            if not field.endswith("_usd") or value is None:
+                continue
+            assert f"{value:g}" in readme or f"{value:.4f}" in readme, (
+                f"{run.name} reports {field}={value}, but results/README.md does "
+                f"not state it. Either state the figure or stop describing the "
+                f"run as carrying no price.")
+
+
+def test_the_readme_states_the_size_of_the_substitution_map():
+    """The prose count has to match the map the reports carry.
+
+    An earlier version enumerated the rename as "a project, a class, a mailbox
+    folder, a documentation path, an email domain", which reads as five
+    identifiers against a map of twenty-one. Understating a disclosure is the
+    same defect as omitting one.
+    """
+    readme = (REPO / "results" / "README.md").read_text(encoding="utf-8")
+    stated = re.search(r"renamed (\d+) text identifiers and (\d+) question ids", readme)
+    assert stated, (
+        "results/README.md no longer states the size of the substitution map in "
+        "the form 'renamed N text identifiers and M question ids'")
+    for run in RUNS:
+        subs = _report(run)["provenance_note"]["substitutions"]
+        assert int(stated.group(1)) == len(subs["text"]), (
+            f"{run.name} carries {len(subs['text'])} text substitutions, the "
+            f"README says {stated.group(1)}")
+        assert int(stated.group(2)) == len(subs["question_ids"]), (
+            f"{run.name} carries {len(subs['question_ids'])} question-id "
+            f"substitutions, the README says {stated.group(2)}")
