@@ -53,8 +53,13 @@ quickly.
    that person and write it in; if the selector does not name them, leave the
    field absent and note it — a page found by the wrong identity is worse than
    one found only by its filename. For `duplicate-identity`, do not merge and
-   do not pick: two pages claiming one identity means one of them is about
-   somebody else, and only the selector's evidence can say which.
+   do not pick. Two pages claiming one identity means either that one of them
+   is about somebody else, or that a merge copied the content across and left
+   the emptied page behind — and nothing on disk tells those apart, because
+   the page that looks redundant is the correct one in the second case and
+   the victim in the first. The memory job knows: it reports the pages a
+   confirmed link has joined, under `merge_into_slug`. Leave this to that
+   job.
 5. **Decay windows.** Any page past its `decay` window is flagged as stale in
    the log. **Do not delete it and do not silently refresh the date.** A page
    marked stale is still useful; a page whose date was quietly bumped is a

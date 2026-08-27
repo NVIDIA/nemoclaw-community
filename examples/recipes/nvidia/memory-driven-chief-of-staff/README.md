@@ -250,7 +250,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the fourteen files report 602 tests in
+Expected result: every file ends with `OK`, the fourteen files report 603 tests in
 total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
 loop reports the status of its last command, so a failing test would still
 leave the loop exiting `0`.
@@ -719,6 +719,16 @@ repository `.gitignore` covers it, so it never appears in `git status`. Remove
 it as well if you want the checkout byte-for-byte as you found it.
 
 ## Known limitations
+
+**A page keeps the name it was created with, even when the reason for that
+name goes away.** Two people who present the same display name each get a
+name ending in a digest, because neither can be given the readable one
+without deciding between them. If the user later confirms that two such
+identities are one person, that person is no longer ambiguous and could hold
+the readable name — but the page they already have keeps its digest. Renaming
+would mean rewriting the index entry and every link that points at it, which
+is a real risk taken for an appearance, and a page name that moves is how
+history gets lost. It is cosmetic and it is permanent.
 
 - Under the builtin scheduler the jobs fire only while a gateway is serving
   this profile, and registering them starts nothing. `hermes cron tick` runs

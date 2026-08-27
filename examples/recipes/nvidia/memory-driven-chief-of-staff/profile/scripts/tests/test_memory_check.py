@@ -195,6 +195,27 @@ class TestPersonIdentityIsChecked(unittest.TestCase):
                              "slack:U01DANA")
         self.assertEqual(check_identity(self.root), [])
 
+    def test_the_clash_does_not_say_which_page_to_delete(self):
+        """The two situations that wear this clash want opposite repairs, and
+        nothing on disk tells them apart.
+
+        A merge that copied the content across and left the emptied page
+        behind produces a page whose identities are all on another one. So
+        does a page that wrongly claims somebody else's address — and there
+        the "extra" page is the correct one. A subset test calls both a
+        leftover and sends the repair job to delete a real page. The evidence
+        that separates them is the confirmed link, which lives in the store
+        and not here, so this reports and refuses to choose.
+        """
+        self._set_identities(self.person, "email:sam.ruiz@example.com",
+                             "slack:U01SAM", "email:dana.okoro@example.com")
+        findings = check_identity(self.root)
+        self.assertEqual([f.kind for f in findings], ["duplicate-identity"])
+        detail = findings[0].detail
+        self.assertIn("somebody else", detail)
+        self.assertIn("left the emptied page behind", detail)
+        self.assertNotIn("delete", detail)
+
     def test_the_duplicate_report_does_not_depend_on_directory_order(self):
         """`glob` order is filesystem order. A finding that appears only on
         some machines is worse than no finding."""

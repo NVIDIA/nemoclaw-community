@@ -330,8 +330,12 @@ def check_identity(root: Path) -> list[Finding]:
             if text_form in seen:
                 findings.append(Finding(
                     "duplicate-identity", rel,
-                    f"identity {text_form} is also on {seen[text_form]}; one "
-                    "of them is about somebody else"))
+                    f"identity {text_form} is also on {seen[text_form]}. "
+                    "Either one of them is about somebody else, or a merge "
+                    "copied the content across and left the emptied page "
+                    "behind. Only the memory job knows which: it reports the "
+                    "pages a confirmed link has joined. Do not merge and do "
+                    "not pick on what is visible here."))
                 continue
             seen[text_form] = rel
     return findings
