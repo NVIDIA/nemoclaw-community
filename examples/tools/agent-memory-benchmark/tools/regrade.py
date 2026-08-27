@@ -32,9 +32,9 @@ REPO = Path(__file__).resolve().parents[1]
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", required=True, type=Path)
-    parser.add_argument("--gold", type=Path, default=REPO / "gold" / "answers.jsonl")
-    parser.add_argument("--questions", type=Path, default=REPO / "questions" / "questions.jsonl")
-    parser.add_argument("--corpus", type=Path, default=REPO / "corpus",
+    parser.add_argument("--gold", type=Path, default=REPO / "corpus_a" / "questions" / "answers.jsonl")
+    parser.add_argument("--questions", type=Path, default=REPO / "corpus_a" / "questions" / "questions.jsonl")
+    parser.add_argument("--corpus", type=Path, default=REPO / "corpus_a" / "corpus",
                         help="only used to fingerprint what the answers were graded against")
     args = parser.parse_args()
 

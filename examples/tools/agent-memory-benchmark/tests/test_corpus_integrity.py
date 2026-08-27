@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import json
 import sys
+
+import pytest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -19,20 +21,20 @@ def _jsonl(path: Path) -> list[dict]:
 
 
 def test_every_manifest_document_exists():
-    for row in _jsonl(REPO / "corpus" / "manifest.jsonl"):
-        assert (REPO / "corpus" / row["path"]).exists(), row["doc_id"]
+    for row in _jsonl(REPO / "corpus_a" / "corpus" / "manifest.jsonl"):
+        assert (REPO / "corpus_a" / "corpus" / row["path"]).exists(), row["doc_id"]
 
 
 def test_every_gold_citation_resolves_to_a_document():
-    known = {row["doc_id"] for row in _jsonl(REPO / "corpus" / "manifest.jsonl")}
-    for gold in _jsonl(REPO / "gold" / "answers.jsonl"):
+    known = {row["doc_id"] for row in _jsonl(REPO / "corpus_a" / "corpus" / "manifest.jsonl")}
+    for gold in _jsonl(REPO / "corpus_a" / "questions" / "answers.jsonl"):
         for source_id in gold.get("gold_source_ids", []):
             assert source_id in known, f"{gold['id']} cites missing document {source_id}"
 
 
 def test_questions_and_gold_are_one_to_one():
-    questions = {q["id"] for q in _jsonl(REPO / "questions" / "questions.jsonl")}
-    golds = {g["id"] for g in _jsonl(REPO / "gold" / "answers.jsonl")}
+    questions = {q["id"] for q in _jsonl(REPO / "corpus_a" / "questions" / "questions.jsonl")}
+    golds = {g["id"] for g in _jsonl(REPO / "corpus_a" / "questions" / "answers.jsonl")}
     assert questions == golds
 
 
@@ -42,7 +44,7 @@ def test_abstention_questions_have_no_accepted_answer():
     ``accept_as_decline`` is allowed and means "this phrasing rejects the
     question's premise", which is a way of declining, not an answer.
     """
-    for gold in _jsonl(REPO / "gold" / "answers.jsonl"):
+    for gold in _jsonl(REPO / "corpus_a" / "questions" / "answers.jsonl"):
         if gold["type"] == "abstention":
             assert gold["mode"] == "abstain"
             assert not gold.get("accept"), f"{gold['id']} cannot have a correct answer"
@@ -50,5 +52,32 @@ def test_abstention_questions_have_no_accepted_answer():
 
 
 def test_corpus_is_split_across_both_halves():
-    parts = {row["part"] for row in _jsonl(REPO / "corpus" / "manifest.jsonl")}
+    parts = {row["part"] for row in _jsonl(REPO / "corpus_a" / "corpus" / "manifest.jsonl")}
     assert parts == {"part_a", "part_b"}
+
+
+@pytest.mark.parametrize("corpus", [REPO / "corpus_a" / "corpus", REPO / "corpus_b" / "corpus"],
+                         ids=["corpus-a", "corpus-b"])
+def test_the_corpus_directory_holds_only_corpus(corpus):
+    """Anything inside a corpus directory is data an adapter will read.
+
+    The retrieval baselines walk the corpus root with `rglob("*.md")`, and a
+    third-party adapter cannot be assumed to skip anything either. A README
+    dropped in here became document 426 and changed the corpus fingerprint,
+    which is why corpus A's page lives in `docs/` instead.
+    """
+    allowed = {"manifest.jsonl", "counts.json", "CANARY.txt"}
+    for path in sorted(corpus.iterdir()):
+        if path.is_dir():
+            assert path.name in ("part_a", "part_b"), (
+                f"{path.relative_to(REPO)} is not a corpus half; adapters walk "
+                f"this directory and will read whatever is in it")
+            continue
+        assert path.name in allowed, (
+            f"{path.relative_to(REPO)} is not corpus data, but it sits where "
+            f"adapters read. Prose about a corpus belongs in docs/.")
+
+    for markdown in corpus.rglob("*.md"):
+        assert markdown.parent.name in ("email", "slack", "chat"), (
+            f"{markdown.relative_to(REPO)} would be ingested as a document; "
+            f"only documents may carry a .md extension inside a corpus")

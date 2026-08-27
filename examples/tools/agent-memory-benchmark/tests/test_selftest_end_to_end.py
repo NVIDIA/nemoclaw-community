@@ -15,6 +15,8 @@ No model, no network, no API key.
 from __future__ import annotations
 
 import json
+import html
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -102,3 +104,37 @@ def test_two_runs_of_the_same_adapter_produce_the_same_score(tmp_path):
     second = _run_adapter("oracle", tmp_path / "b")
     assert first["summary"] == second["summary"]
     assert first["fingerprint"] == second["fingerprint"]
+
+
+def test_the_screenshot_shows_what_the_self_test_actually_prints(tmp_path):
+    """The SVG is drawn by hand, so nothing stops it describing an older run.
+
+    It has already drifted once: it rendered `**1.0**` as `1.0`, and its test
+    count had to be edited by hand every time the suite grew. This runs the
+    self-test and requires every result line the image claims to appear in the
+    output, so the next drift fails here instead of shipping.
+    """
+    svg = (REPO / "docs" / "assets" / "offline-self-test.svg").read_text(encoding="utf-8")
+    claimed = [
+        html.unescape(m.group(1)).strip()
+        for m in re.finditer(r"<text[^>]*>(.*?)</text>", svg, re.S)
+    ]
+    result = subprocess.run(
+        [sys.executable, "-m", "bench.runner",
+         "--adapter", "selftest/oracle",
+         "--corpus", "selftest/corpus",
+         "--questions", "selftest/questions.jsonl",
+         "--gold", "selftest/gold.jsonl",
+         "--out", str(tmp_path)],
+        cwd=REPO, capture_output=True, text=True, timeout=300)
+    assert result.returncode == 0, result.stderr[-2000:]
+    printed = [line.strip() for line in result.stdout.splitlines()]
+
+    # Only the lines that assert a result. Chrome, the prompt, and the caption
+    # are the image being an image.
+    for line in claimed:
+        if not line.startswith("*") or line.startswith("* freshness recency-only"):
+            continue
+        assert line in printed, (
+            f"the screenshot claims {line!r}, which the self-test does not print. "
+            f"Re-render docs/assets/offline-self-test.svg from a real run.")

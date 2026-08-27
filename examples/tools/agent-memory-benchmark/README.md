@@ -1,45 +1,80 @@
-# mnemo — Agent Memory Benchmark
+---
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+name: agent-memory-benchmark
+display_name: mnemo — Agent Memory Benchmark
+category: Developer Tool
+provenance: NVIDIA
+language: python
+python_requires: ">=3.9"
+runtime_dependencies: none (Python standard library only)
+dev_dependencies: [pytest]
+entry_point: python3 -m bench.runner
+offline_check: python3 -m pytest tests/
+adapter_contract: docs/SUBMITTING.md
+corpora: [corpus_a/, corpus_b/]
+question_count: 186
+license: Apache-2.0
+evidence_level: local/static
+---
 
-mnemo is a NemoClaw Community example that measures the memory a system builds
-from a corpus: what it can answer afterwards, and what building it cost.
+# 🧠 mnemo — Agent Memory Benchmark
+
+![Python](https://img.shields.io/badge/python-3.9%2B-blue)
+![License](https://img.shields.io/badge/license-Apache--2.0-green)
+![Runtime deps](https://img.shields.io/badge/runtime%20deps-none-brightgreen)
+![Grading](https://img.shields.io/badge/grading-deterministic%20%E2%80%94%20no%20judge%20model-orange)
+![Offline self-test](https://img.shields.io/badge/offline%20self--test-included-blueviolet)
+
+**mnemo measures the memory a system builds from a corpus: what it can answer
+afterwards, and what building it cost.** Give it six weeks of one person's email
+and chat, let it build whatever memory it likes, then ask 186 questions and check
+the answers — with quality and cost reported separately and never blended.
 
 *Named for Mnemosyne, memory herself. The hard part is not remembering — it is
 remembering the right version: a later message overturns an earlier one, and a
 system worth using tells you the current answer, not the one it learned first.*
 
-**Does your ingestion produce memory you can actually answer from — and what did
-it cost you?**
+---
 
-Give a system six weeks of one person's email and chat. Let it build whatever
-memory it likes: a wiki, a vector store, a graph, a pile of summaries. Then ask
-it 186 questions about that corpus and check the answers.
+## 📑 Table of Contents
 
-Two numbers come out, and the benchmark refuses to collapse them into one:
+- [👀 What A Run Looks Like](#what-a-run-looks-like)
+- [📚 What Is In The Corpora](#what-is-in-the-corpora)
+- [❓ What It Asks](#what-it-asks)
+- [🚀 Getting Started](#getting-started)
+- [✨ Why It Is Built This Way](#why-it-is-built-this-way)
+- [🗂️ Project Structure](#project-structure)
+- [⚙️ Configuration](#configuration)
+- [🧩 Adding Your System](#adding-your-system)
+- [🔐 How The Runner Treats Your Adapter](#how-the-runner-treats-your-adapter)
+- [📊 Reading A Result](#reading-a-result)
+- [📈 Published Results](#published-results)
+- [✅ Verification](#verification)
+- [🩺 Troubleshooting](#troubleshooting)
+- [🧹 Cleanup](#cleanup)
+- [🔎 At A Glance](#at-a-glance)
+- [🏷️ Provenance And License](#provenance-and-license)
 
-* **quality** — did it answer correctly, keep up when a later message overturned
-  an earlier one, and admit when the corpus does not say?
-* **cost** — how many tokens went into building the memory, and how many into
-  each answer?
+---
 
-That split is the point. A system that reasons hard at ingest time should answer
-cheaply; a system that stores raw chunks pays on every question instead. Total
-cost of ownership is `ingest_tokens + N × per_question_tokens`, and where the two
-curves cross — at what N a heavy ingest pays for itself — is a question the
-accuracy-only benchmarks we looked at do not report. If you know of one that
-does, open an issue.
-
-## Screenshot
+## 👀 What A Run Looks Like
 
 ![Terminal session: the offline self-test scoring exactly 1.0 on every question type, followed by the test suite passing](docs/assets/offline-self-test.svg)
 
-The oracle adapter answers the six-document fixture correctly, so every type
-reads `1.0` and the freshness split reports `n/a` for the group this fixture
-does not annotate. The same command against `selftest/wrong` reports
-`accuracy overall: 0.0` with every type at `0.0`. Both run with no model, no
-network and no API key. The essential output, as searchable text:
+The whole pipeline running with no model and no network: the oracle adapter
+answers a six-document fixture, scores exactly `1.0` on every question type, and
+the benchmark's own test suite passes. Notice that `freshness` is split into two
+lines — a system must not only be current, it must resist a stale value that is
+still sitting in the corpus.
+
+The same output as text, so it is searchable and an agent can read it without
+parsing an image:
 
 ```text
-# selftest-oracle — none (offline fixture)
+$ python3 -m bench.runner --adapter selftest/oracle \
+      --corpus selftest/corpus --questions selftest/questions.jsonl \
+      --gold selftest/gold.jsonl
 
 * corpus: 6 docs (4 part_a / 2 part_b)
 * questions: 6 (graded deterministically: 6, deferred to judge: 0)
@@ -54,14 +89,454 @@ network and no API key. The essential output, as searchable text:
   * multi_source: 1.0
   * ordering: 1.0
   * single_hop: 1.0
-…
+  * freshness with a competing stale claim in corpus: 1.0
+  * freshness recency-only: n/a — not annotated for this corpus
 ```
 
-The block continues with the evidence diagnostics and a Cost section; on the
-offline fixture every token count is zero. A scored run against a real system
-produces the same shape with those filled in.
+---
 
-## At A Glance
+## 📚 What Is In The Corpora
+
+| | Documents | Period | Domain |
+| --- | ---: | --- | --- |
+| **Corpus A** (`corpus_a/`) — [details](corpus_a/README.md) | 425 — 200 emails, 225 channel-days of chat (559 messages) | 2026-04-16 → 2026-05-27 | a software platform-engineering team |
+| **Corpus B** (`corpus_b/`) — [details](corpus_b/README.md) | 173 — 100 emails, 73 channel-days (383 messages) | 2027-07-20 → 2027-09-24 | a construction program manager running three sites |
+
+Corpus B was written key-first and generated by a different model family, in a
+domain deliberately far from corpus A's, so that a result on one can be checked
+against the other. See [`corpus_b/README.md`](corpus_b/README.md) for how it was
+built and what its audit did and did not fix.
+
+**Both corpora are fully synthetic.** Every person, project, company, domain and
+address is invented, and every message body was generated from a fixed fictional
+cast defined before any document existed. Nothing was collected from a live
+account.
+
+Corpus A ships in two halves, and both are ingested **in order**:
+
+```text
+corpus_a/corpus/part_a/   2026-04-16 .. 2026-05-11
+corpus_a/corpus/part_b/   2026-05-12 .. 2026-05-27   # supersedes part_a in places
+```
+
+Two `ingest` calls, not one. Real memory has to survive being told something new
+that contradicts what it already believed — a launch date moves, a hire is made,
+a cost figure drops. Systems that can only rebuild from scratch may do so; their
+ingest token count will say so.
+
+---
+
+## ❓ What It Asks
+
+**Base set (155)**
+
+| Type | Count | What it catches |
+|---|---:|---|
+| `single_hop` | 30 | a fact stated in one document |
+| `multi_source` | 73 | a fact corroborated across several documents |
+| `disambiguation` | 15 | merging two things that only look alike, or splitting one that is not two |
+| `abstention` | 13 | answering confidently about something the corpus never says |
+| `freshness` | 12 | reporting a superseded value as if it were current |
+| `citation` | 12 | recalling a detail only one document carries; cited ids are a diagnostic, not accuracy |
+
+**Hard set (31)** — added because the base set stopped separating systems once a
+consolidating design answered all of it; the set could no longer measure an
+improvement.
+
+| Type | Count | What it catches |
+|---|---:|---|
+| `set_difference` | 6 | which member of a plausible set does *not* belong |
+| `as_of` | 6 | what was true *at a date*, not what is true now |
+| `constraint` | 5 | two or three conditions at once, each matching several candidates alone |
+| `chain_freshness` | 5 | a value that moved twice — where it started and where it ended |
+| `attribution` | 5 | who proposed something versus who carried it out |
+| `ordering` | 4 | placing events relative to each other rather than looking one up |
+
+> 🎯 `as_of` is the one type built to be adversarial to ingest-time
+> consolidation: a memory that keeps only the current value has thrown the
+> answer away.
+
+**All 186 are graded deterministically** — no judge model, no LLM anywhere in
+the scoring path. Answers are matched after normalizing case, punctuation and
+date spelling, against a per-mode rule set: `accept` / `reject` / `require_all`,
+plus `expected` for `boolean`, `sequence` for `ordering`, and
+`accept_as_decline` for `abstain`.
+
+Abstention questions have no correct answer. Something merely scheduled has not
+happened; a merge request that exists only as a reserved URL has not been
+reviewed. Confidently describing either is scored wrong, and saying "the corpus
+does not say" is scored right.
+
+---
+
+## 🚀 Getting Started
+
+**What you need.** Python 3.9 or later on macOS or Linux, and `pytest`. Nothing
+else — the harness itself imports only the standard library. The shipped adapter
+definitions invoke `python3`, which a default Windows install does not provide.
+Scoring a real system additionally needs an API key for whatever endpoint you
+point the proxy at.
+
+### 1. Check it works — offline, free, no API key
+
+> ✅ **Safe by default.** This path sends nothing over the network and costs
+> nothing.
+
+```bash
+cd examples/tools/agent-memory-benchmark
+python3 -m pip install pytest
+python3 -m pytest tests/     # expected: 205 passed
+```
+
+Then run the whole pipeline against a fixture whose score is known in advance:
+
+```bash
+python3 -m bench.runner \
+    --adapter selftest/oracle \
+    --corpus selftest/corpus \
+    --questions selftest/questions.jsonl \
+    --gold selftest/gold.jsonl
+```
+
+The oracle scores exactly `1.0`; its sibling `selftest/wrong` scores exactly
+`0.0`, wrong in a different way per grading mode. Any drift between the runner
+and the report moves a number the tests pin.
+
+### 2. Score a real system
+
+> ⚠️ **This spends money and sends data.** Corpus text and questions are sent to
+> the endpoint you point `--upstream` at, and you pay for those tokens. The
+> harness itself writes only under `results/` — but an adapter you add is not
+> sandboxed and can write anywhere your user can.
+
+```bash
+export OPENAI_API_KEY=<your key>
+python3 -m bench.runner --adapter adapters/naive_rag
+```
+
+The runner ingests both corpus halves in order, feeds
+`corpus_a/questions/questions.jsonl` to your system, grades the answers, and writes
+`report.json` + `summary.md` under `results/runs/`.
+
+| Baseline adapter | What it is |
+| --- | --- |
+| `adapters/naive_rag` | embedding index, single retrieval pass |
+| `adapters/agentic_rag` | embedding index; the model writes its own queries over up to three rounds |
+| `adapters/ledger_rag` | drives the [Memory-Driven Chief of Staff](../../recipes/nvidia/memory-driven-chief-of-staff/README.md) ledger; SQLite ingest needs no network |
+
+> 📌 **Read `ledger_rag`'s score carefully.** It measures candidate selection
+> over that ledger plus the model. It is *not* a score of the recipe's own
+> behaviour: the ledger is built for triage and ranking and has no
+> question-answering path, so the selection and the answer call belong to this
+> adapter, not the recipe. Nothing in the adapter writes to or changes the
+> recipe.
+
+---
+
+## ✨ Why It Is Built This Way
+
+- **Two numbers, never blended.** Quality (did it answer correctly?) and cost
+  (tokens at ingest, tokens per answer) are reported on separate axes. Total
+  cost of ownership is `ingest_tokens + N × per_question_tokens`; where those
+  curves cross is a question accuracy-only benchmarks do not answer.
+- **Deterministic grading — no judge model.** Answers are normalized for case,
+  punctuation and date spelling, then matched against an explicit rule set. A
+  benchmark whose scores move when the judge is upgraded cannot be compared
+  across years.
+- **Cost is measured, not self-reported.** The runner points `OPENAI_BASE_URL` /
+  `ANTHROPIC_BASE_URL` at a local proxy and counts what crosses the wire. A run
+  that declares proxy accounting and bypasses it is marked invalid.
+- **Any system can enter.** An adapter is a small JSON file naming two commands.
+  No harness change is needed to score a new memory design.
+- **Two corpora, two domains.** A result on one can be checked against the
+  other, so a design that happens to suit one domain cannot hide in the average.
+- **Runs offline.** A six-document fixture with a known score exercises the
+  whole pipeline with no model, no network and no API key.
+
+---
+
+## 🗂️ Project Structure
+
+```text
+agent-memory-benchmark/
+├── bench/                       the harness — no third-party imports
+│   ├── runner.py                orchestrates ingest → answer → grade → report
+│   ├── grader.py                deterministic scoring; denial scope, normalization
+│   ├── fingerprint.py           hashes corpus+questions+gold+scorer → comparability
+│   ├── proxy.py                 local proxy that counts tokens crossing the wire
+│   ├── normalize.py             case, punctuation and date-spelling normalization
+│   ├── answer_contract.py       what an adapter is told about the answer format
+│   ├── report.py                renders report.json into summary.md
+│   └── pricing.py               model → USD table; unknown model ⇒ null, never a guess
+├── corpus_a/                    corpus A — the default corpus
+│   ├── README.md                what it is, and why the split matters
+│   ├── corpus/                  425 documents in two dated halves
+│   │   ├── part_a/              2026-04-16 .. 2026-05-11
+│   │   ├── part_b/              2026-05-12 .. 2026-05-27 — supersedes part_a in places
+│   │   ├── manifest.jsonl       per-document provenance
+│   │   ├── counts.json          the document/message counts this README quotes
+│   │   └── CANARY.txt           a string that must not appear in any model output
+│   └── questions/               the questions and the answer key, kept out of corpus/
+│       ├── questions.jsonl      the 186 questions asked of every system
+│       ├── answers.jsonl        the answer key and its grading rules
+│       └── factual_*.json       the drafting drop lists, with reasons
+├── corpus_b/                    corpus B — a second domain, same shape as corpus_a/
+├── adapters/                    one directory per system under test
+│   ├── naive_rag/               ┐
+│   ├── agentic_rag/             ├ shipped baselines, each with an adapter.json
+│   ├── ledger_rag/              ┘
+│   └── _lib/                    shared helpers adapters may import
+├── selftest/                    six documents, six questions, two known-score adapters
+│   ├── oracle/                  answers everything correctly — scores exactly 1.0
+│   └── wrong/                   wrong in a different way per mode — scores exactly 0.0
+├── results/                     published reference runs — see results/README.md
+├── tools/regrade.py             re-score stored answers against the current rules
+├── docs/                        SUBMITTING.md, methodology.md, provenance.md
+└── tests/                       the benchmark's own tests
+```
+
+**Dependency files:** there are none to install for the harness — `bench/`
+imports only the Python standard library. The offline check needs `pytest`
+(`python3 -m pip install pytest`). An adapter for a third-party system declares
+its own requirements separately, inside its own directory.
+
+---
+
+## ⚙️ Configuration
+
+### `adapter.json` — the contract for a system under test
+
+Every adapter is one JSON file. Two commands are required; everything else has a
+default.
+
+```json
+{
+  "name": "my-system",
+  "model": "some-model-id",
+  "accounting": "proxy",
+  "ingest": ["my-cli", "ingest", "--corpus", "{corpus}", "--state", "{state}"],
+  "answer": ["my-cli", "answer", "--state", "{state}"],
+  "env": { "MY_SYSTEM_PYTHON": "python3" }
+}
+```
+
+Field reference — the shape the runner validates:
+
+```typescript
+interface AdapterConfig {
+  /** Filed under this name in the report. */
+  name: string;
+  /** The model id a result is filed under. Not resolved by the harness. */
+  model: string;
+  /** Argument arrays, never shell strings. {corpus} and {state} are substituted. */
+  ingest: string[];
+  answer: string[];
+  /**
+   * "proxy" (default) — calls go through the local proxy and are counted.
+   * "local"           — a locally-hosted model; nothing crosses the wire, and
+   *                     the run says so instead of reading as a cost of zero.
+   */
+  accounting?: "proxy" | "local";
+  /** Defaults for adapter-specific variables. Anything already exported wins. */
+  env?: Record<string, string>;
+}
+```
+
+> ⚠️ **A declared accounting mode is enforced.** A run is invalid if it declares
+> `proxy` and nothing crossed the proxy — the adapter either bypassed it or runs
+> a local model and should say so — and invalid if a forwarded request came back
+> without countable usage, because a cost nobody measured must not read as a cost
+> of zero. Only a fully counted run carries `comparable_on_cost: true`; a `local`
+> run stays valid and stays out of cost comparisons.
+
+### Environment variables
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | *(none)* | Required to score a real system; `MNEMO_API_KEY` is accepted instead. Not needed offline. |
+| `MNEMO_UPSTREAM` | `https://api.openai.com` | Where the accounting proxy forwards. Also `--upstream`. |
+| `MNEMO_EMBED_MODEL` | `text-embedding-3-small` | Embedding model for the retrieval baselines. |
+| `MNEMO_TIMEOUT_SECONDS` | `21600` (six hours) | Wall-clock budget **per phase call**. `0` waits indefinitely. Also `--timeout-seconds`. |
+| `MNEMO_RAG_WORKERS` | `6` | Answer-phase concurrency for `agentic_rag` and `ledger_rag`. |
+| `MNEMO_LEDGER_TOP_K` | `12` | Candidates `ledger_rag` selects per question. |
+
+The shipped baselines default to `gpt-4o` and `text-embedding-3-small`, so they
+run as printed. Point `--upstream` at any OpenAI-compatible gateway; model ids
+are often namespaced differently there, so set `model` in the adapter to the id
+that gateway expects.
+
+An adapter that needs a host-specific path declares it in its `env` block, and
+anything already exported wins — so nothing machine-specific has to be
+committed:
+
+```bash
+MY_SYSTEM_PYTHON=~/src/my-system/.venv/bin/python \
+    python3 -m bench.runner --adapter adapters/my_system
+```
+
+> ⏱️ The timeout applies to each phase *call*, and ingest is called twice, so a
+> default run can occupy up to eighteen hours before anything is killed.
+
+---
+
+## 🧩 Adding Your System
+
+1. Write an `adapter.json` as above.
+2. `answer` reads `questions.jsonl` on **stdin** and writes one JSON object per
+   line to **stdout**:
+
+```json
+{"id": "example-launch-date", "answer": "<your short answer>", "source_ids": ["E:2027-02-05T10-00-00__bbbb0002"]}
+```
+
+```typescript
+interface AnswerRow {
+  /** Must match the question id it answers. */
+  id: string;
+  /** A short, checkable answer. Blank or missing counts as "nothing was said". */
+  answer: string;
+  /** Optional. Buys the evidence diagnostics; omitting it costs nothing on accuracy. */
+  source_ids?: string[];
+}
+```
+
+3. Run it. Full instructions, including the path for a system that cannot be
+   wrapped in a command line: [`docs/SUBMITTING.md`](docs/SUBMITTING.md).
+
+---
+
+## 🔐 How The Runner Treats Your Adapter
+
+> ⚠️ **An adapter is local code you chose to run. It is not sandboxed.** It
+> executes with your user, your filesystem, and whatever credentials are in the
+> environment. Read an adapter before you run it, exactly as you would any
+> script from a repository.
+
+**Commands are argument arrays, never shell strings.** `["my-cli", "ingest",
+"--corpus", "{corpus}"]` is executed directly with no shell in between, so a
+path containing a space or a quote cannot become a second command.
+
+**The guards are against accidents, not against an adapter that goes looking.**
+The answer key is *not* out of reach: the benchmark root is on `PYTHONPATH` so
+adapters can import `adapters._lib`, and an adapter can use that to locate and
+read `corpus_a/questions/answers.jsonl` directly. `tests/test_isolation_is_not_a_sandbox.py`
+demonstrates exactly that. Treat a score as meaningful only for an adapter you
+trust — the benchmark measures memory, it does not police it. What the guards do
+provide:
+
+- Adapters are launched from a scratch directory, not from the benchmark root,
+  so a relative `open("corpus_a/questions/answers.jsonl")` finds nothing.
+- Before each phase starts, the runner checks the phase was not handed a path it
+  must not have. Ingest never receives the questions or the answer key; answer
+  never receives the answer key. A run that would violate this stops before the
+  adapter launches.
+- Each adapter runs in its own process group, so a timeout — or a Ctrl-C —
+  reaches the workers your adapter started, not just the adapter. A process that
+  ignores `SIGTERM` is killed ten seconds later. Without this, a hung run leaves
+  workers behind that keep the proxy open and keep spending tokens after the run
+  is over.
+
+---
+
+## 📊 Reading A Result
+
+Accuracy is reported **per question type, never as a single blended number**.
+Freshness is split further, into questions where the superseded value is also in
+the corpus (the system must resist it) and questions where it is not (a plain
+recency check). Evidence recall and citation coverage sit alongside accuracy and
+are never folded into it — they diagnose *how* a system found an answer, which is
+not the same as whether it was right.
+
+Why the two axes are never combined, and what deterministic grading cannot
+express: [`docs/methodology.md`](docs/methodology.md).
+
+Two reports are comparable only when their `fingerprint` blocks match — same
+corpus, same questions, same answer key, same normalization, same scorer.
+
+---
+
+## 📈 Published Results
+
+One pair of runs ships as a worked example: a self-model and an agentic
+retrieval baseline on corpus A, both on the same base model, both graded by the
+grader in this repository. The self-model answers better overall and on most
+question types, and worse on two: it refuses to answer far less reliably than
+the retrieval baseline, and it is slightly weaker at plain single-hop lookup.
+It also spends its tokens somewhere else — at ingest rather than per question —
+which the results page reports as two separate counts rather than one ratio,
+because neither run carries the forwarded-call record that would establish the
+two were counted the same way.
+
+Read [`results/README.md`](results/README.md) **before** the table there. Those
+runs are corpus A only, one base model, and their answers predate a rename at
+publication — all three limit what the numbers mean, and each is stated where
+the numbers are.
+
+---
+
+## ✅ Verification
+
+**Evidence level:** `local/static`. **Verified on** Python 3.9.6, macOS. Nothing
+here exercises a live endpoint.
+
+```bash
+python3 -m pytest tests/     # expected: 205 passed
+```
+
+**Expected result:**
+
+```text
+205 passed
+```
+
+**This verifies:** the runner, grader, report renderer and the ledger adapter's
+SQLite ingest agree with the shipped corpus, questions and answer key; the two
+fixture adapters still score exactly 1.0 and 0.0; and the claims the
+documentation makes about hashes, counts and domains still hold.
+
+**This does not verify:** any scored run against a live endpoint, the accounting
+proxy against real upstream traffic, a real model call from any adapter, or
+Windows.
+
+---
+
+## 🩺 Troubleshooting
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `No module named pytest` | `pytest` is a dev dependency and is not vendored. | `python3 -m pip install pytest` |
+| `No module named 'bench'` | `python3 -m bench.runner` was run from a different directory; `-m` resolves the package from the current one. | `cd examples/tools/agent-memory-benchmark` and re-run. |
+| Adapter command not found on Windows | The shipped adapters invoke `python3`, which a default Windows install does not provide. | Run on macOS or Linux, or under WSL. |
+| Run marked invalid: *declared proxy, nothing crossed it* | The adapter bypassed the proxy, or it runs a locally-hosted model. | Point the client at `OPENAI_BASE_URL`, or declare `"accounting": "local"`. |
+| Run marked invalid: *forwarded request without countable usage* | The upstream returned no usage block. | Use a gateway that returns usage; a cost nobody measured must not read as zero. |
+| USD is `null` in the report | `bench/pricing.py` has no entry for that model. | Expected. Token counts are still exact; the harness will not invent a price. |
+| Two reports refuse to be compared | Their `fingerprint` blocks differ — corpus, questions, key, normalization or scorer moved. | Re-score the stored answers: `python3 tools/regrade.py --run results/runs/<dir>` |
+| A phase hangs, then dies at six hours | The per-phase wall-clock budget. | Raise `MNEMO_TIMEOUT_SECONDS`, or set `0` to wait indefinitely. |
+| `results/` grew by hundreds of megabytes | Each run keeps whatever memory the system under test built. | Delete the run directory; see [Cleanup](#-cleanup). |
+
+---
+
+## 🧹 Cleanup
+
+Each run writes `results/runs/<timestamp>-<adapter>/`, holding the report, the
+verdicts, the answers, and whatever memory the system under test built — that
+last part can reach hundreds of megabytes. Delete the run directory to reclaim
+the space.
+
+Nothing outside that directory is modified by the harness — though an adapter is
+not sandboxed, so one you add can write elsewhere; see
+[How the runner treats your adapter](#-how-the-runner-treats-your-adapter).
+
+A generated run is **ignored**, not merely untracked, so `git add -A` after a run
+cannot sweep one in. Publishing a run means un-ignoring it by name in
+`.gitignore` — the deliberate act that put the two directories in `results/runs/`
+there.
+
+---
+
+## 🔎 At A Glance
+The information contract this repository asks every example to publish. The
+rows that change what you do are repeated above, where you need them.
 
 | Question | Answer |
 | --- | --- |
@@ -75,319 +550,24 @@ produces the same shape with those filled in.
 | Evidence level | local/static |
 | Support and maturity | Best-effort community support; see [SUPPORT.md](../../../SUPPORT.md). |
 | External access, data, and actions | Scoring a real system sends corpus text and questions to the endpoint you point `--upstream` at, and you pay for those tokens. The harness writes only under `results/`; an adapter you add is not sandboxed and can write anywhere your user can. The offline self-test sends nothing and costs nothing. |
-| Start here | [Checking it works](#checking-it-works) — offline; then [Running it](#running-it) for a scored run |
-| Confirm success | [Checking it works](#checking-it-works) |
+| Start here | [Getting Started](#-getting-started) — offline, no key required |
+| Confirm success | [Verification](#-verification) |
 
-## The corpora
+---
 
-**Corpus A** — 425 documents: 200 emails and 225 channel-days of chat (559
-messages), 2026-04-16 to 2026-05-27, a software platform-engineering team.
-
-**Corpus B** — 173 documents: 100 emails and 73 channel-days (383 messages),
-2027-07-20 to 2027-09-24, a construction program manager running three sites.
-Written key-first and generated by a different model family, in a domain
-deliberately far from corpus A's, so that a result on one can be checked against
-the other. See [`corpus_b/README.md`](corpus_b/README.md) for how it was built
-and what its audit did and did not fix.
-
-Both corpora are fully synthetic. Every person, project, company, domain and
-address in them is invented, and every message body was generated from a fixed
-fictional cast defined before any document existed. Nothing was collected from a
-live account.
-
-It ships in two halves, and both are ingested in order:
-
-```
-corpus/part_a/   2026-04-16 .. 2026-05-11
-corpus/part_b/   2026-05-12 .. 2026-05-27   # supersedes part_a in places
-```
-
-Two `ingest` calls, not one. Real memory has to survive being told something new
-that contradicts what it already believed — a launch date moves, a hire is made,
-a cost figure drops. Systems that can only rebuild from scratch may do so; their
-ingest token count will say so.
-
-## Running it
-
-```bash
-export OPENAI_API_KEY=<your key>
-python3 -m bench.runner --adapter adapters/naive_rag
-```
-
-The shipped baselines default to `gpt-4o` and `text-embedding-3-small`, so that
-runs as printed. To score a different model, set `model` in the adapter's
-`adapter.json` — that is the id a result is filed under — and
-`MNEMO_EMBED_MODEL` for the embedding model.
-
-The proxy forwards to `https://api.openai.com` by default; `--upstream` (or
-`MNEMO_UPSTREAM`) points it at any OpenAI-compatible gateway, where model ids
-are often namespaced differently. An adapter that needs a host-specific path
-declares it in its `env` block; anything already exported wins, so nothing
-machine-specific has to be committed:
-
-```bash
-MY_SYSTEM_PYTHON=~/src/my-system/.venv/bin/python \
-    python3 -m bench.runner --adapter adapters/my_system
-```
-
-The runner ingests both halves, feeds `questions/questions.jsonl` to your system,
-grades the answers, and writes `report.json` + `summary.md` under `results/runs/`.
-
-## Scoring a memory store that lives in this repository
-
-`adapters/ledger_rag/` drives the [Memory-Driven Chief of
-Staff](../../recipes/nvidia/memory-driven-chief-of-staff/README.md) ledger. It
-loads the corpus into that recipe's own `schema.sql`, then answers by selecting
-candidates out of the ledger and passing them to a model.
-
-**Read its score carefully.** What it measures is candidate selection over the
-ledger plus the model. It is not a score of the recipe's own behaviour: that
-ledger is built for triage and ranking and has no question-answering path, so
-the selection and the answer call belong to this adapter, not to the recipe.
-Nothing in the adapter writes to or changes the recipe. Treat a number from it
-as evidence that the harness can drive a memory store in this repository.
-
-Ingest is plain SQLite and needs no network, which is why the offline check
-covers it. Only the answer phase calls an endpoint.
-
-```bash
-python3 -m bench.runner --adapter adapters/ledger_rag
-```
-
-## Adding your system
-
-Write an `adapter.json` with two commands:
-
-```json
-{
-  "name": "my-system",
-  "model": "some-model-id",
-  "ingest": ["my-cli", "ingest", "--corpus", "{corpus}", "--state", "{state}"],
-  "answer": ["my-cli", "answer", "--state", "{state}"]
-}
-```
-
-`answer` reads `questions.jsonl` on stdin and writes one JSON object per line:
-
-```json
-{"id": "example-launch-date", "answer": "<your short answer>", "source_ids": ["E:2027-02-05T10-00-00__bbbb0002"]}
-```
-
-`source_ids` is optional. Supplying it gets you the evidence diagnostics;
-omitting it costs you nothing on the accuracy score.
-
-Full instructions, including the path for a system that cannot be wrapped in a
-command line: [`docs/SUBMITTING.md`](docs/SUBMITTING.md).
-
-**Token accounting is not self-reported.** The runner points `OPENAI_BASE_URL` /
-`ANTHROPIC_BASE_URL` at a local proxy and counts what crosses the wire.
-
-Every adapter declares which of those it intends, so silence can be read:
-
-```json
-{"accounting": "proxy"}   // the default: calls go through the proxy and are counted
-{"accounting": "local"}   // a locally-hosted model; nothing to count, and it says so
-```
-
-A run is invalid if it declares `proxy` and nothing crossed the proxy — the
-adapter either bypassed it or runs a local model and should say so — and
-invalid if a forwarded request came back without countable usage, because a
-cost nobody measured must not read as a cost of zero. Only a fully counted run
-carries `comparable_on_cost: true`; a `local` run stays valid and stays out of
-cost comparisons.
-
-### How the runner treats your adapter
-
-**Commands are argument arrays, never shell strings.** `["my-cli", "ingest",
-"--corpus", "{corpus}"]` is executed directly, with no shell in between, so a
-path containing a space or a quote cannot become a second command.
-
-**An adapter runs local code that you chose to run.** It is not sandboxed: it
-executes with your user, your filesystem, and whatever credentials are in the
-environment. Read an adapter before you run it, exactly as you would any script
-from a repository.
-
-The runner guards against *accidental* leakage, not against an adapter that
-goes looking. In particular the answer key is **not** out of reach: the
-benchmark root is on `PYTHONPATH` so adapters can import `adapters._lib`, and
-an adapter can use that to locate and read `gold/answers.jsonl` directly.
-`tests/test_isolation_is_not_a_sandbox.py` demonstrates it. Treat a score as
-meaningful only for an adapter you trust; the benchmark measures memory, it
-does not police it. What the guards do provide:
-
-- Adapters are launched from a scratch directory, not from the benchmark root,
-  so a relative `open("gold/answers.jsonl")` finds nothing.
-- Before each phase starts, the runner checks that the phase was not handed a
-  path it must not have. Ingest never receives the questions or the answer key;
-  answer never receives the answer key. A run that would violate this stops
-  before the adapter launches.
-
-**Every phase has a wall-clock budget.** `--timeout-seconds`, or
-`MNEMO_TIMEOUT_SECONDS` (default six hours, `0` to wait indefinitely). The
-budget applies to each phase *call*, and ingest is called twice, so a default
-run can occupy up to eighteen hours before anything is killed. Each adapter runs in its own process group, so a
-timeout — or a Ctrl-C — reaches the workers your adapter started and not just
-the adapter itself. A process that ignores `SIGTERM` is killed ten seconds
-later. Without this, a hung run leaves workers behind that keep the accounting
-proxy open and keep spending tokens after the run is over.
-
-## The questions
-
-**Base set (155).**
-
-| Type | Count | What it catches |
-|---|---:|---|
-| `single_hop` | 30 | a fact stated in one document |
-| `multi_source` | 73 | a fact corroborated across several documents |
-| `disambiguation` | 15 | merging two things that only look alike, or splitting one that is not two |
-| `abstention` | 13 | answering confidently about something the corpus never says |
-| `freshness` | 12 | reporting a superseded value as if it were current |
-| `citation` | 12 | recalling a detail only one document carries; cited ids are a diagnostic, not accuracy |
-
-**Hard set (31)**, added because the base set stopped separating systems once a
-consolidating design answered all of it — the set could no longer measure an
-improvement.
-
-| Type | Count | What it catches |
-|---|---:|---|
-| `set_difference` | 6 | which member of a plausible set does *not* belong |
-| `as_of` | 6 | what was true *at a date*, not what is true now |
-| `constraint` | 5 | two or three conditions at once, each matching several candidates alone |
-| `chain_freshness` | 5 | a value that moved twice — where it started and where it ended |
-| `attribution` | 5 | who proposed something versus who carried it out |
-| `ordering` | 4 | placing events relative to each other rather than looking one up |
-
-`as_of` is the one type built to be adversarial to ingest-time consolidation: a
-memory that keeps only the current value has thrown the answer away.
-
-**All 186 are graded deterministically** — no judge model, no LLM in the scoring
-path. Answers are matched after normalizing case, punctuation, and date spelling,
-against a per-mode rule set: `accept` / `reject` /
-`require_all`, plus `expected` for `boolean`, `sequence` for `ordering`, and
-`accept_as_decline` for `abstain`. That is a deliberate
-constraint: a benchmark whose scores move when the judge model is upgraded cannot
-be compared across years.
-
-Abstention questions have no correct answer. Something that was merely scheduled
-has not happened; a merge request that exists only as a reserved URL has not been
-reviewed. Confidently describing either is scored wrong, and saying "the corpus
-does not say" is scored right.
-
-## Reading a result
-
-Why the two axes are never combined, and what deterministic grading cannot
-express: [`docs/methodology.md`](docs/methodology.md).
-
-Accuracy is reported per question type, never as a single blended number.
-Freshness is split further, into questions where the superseded value is also in
-the corpus (the system must resist it) and questions where it is not (a plain
-recency check). Evidence recall and citation coverage are reported alongside
-accuracy but never folded into it — they diagnose *how* a system found an answer,
-which is not the same as whether it was right.
-
-## Layout
-
-```
-corpus/      the documents in two dated halves, plus a manifest, counts and canary
-corpus_b/    a second corpus, another domain, for cross-checking a result
-questions/   what gets asked
-gold/        the answer key, its grading rules, and the drafting drop lists
-bench/       runner, grader, accounting proxy, price table
-adapters/    one directory per system under test, including a ledger adapter
-selftest/    a six-document fixture plus two adapters whose scores are known
-docs/        how to submit, methodology, provenance, known limitations
-results/     one pair of reference runs on corpus A, and what they are not
-tools/       re-grade stored answers against the current rules
-tests/       the benchmark's own tests
-```
-
-## Results
-
-One pair of runs ships as a worked example: a self-model and an agentic
-retrieval baseline on corpus A, both on the same base model, both graded by the
-grader in this repository. The self-model answers better overall and on most
-question types, and worse on two: it refuses to answer far less reliably than
-the retrieval baseline, and it is slightly weaker at plain single-hop lookup.
-It also spends its tokens somewhere else — at ingest rather than per question —
-which the results page reports as two separate counts rather than one ratio,
-because neither run carries the forwarded-call record that would establish the
-two were counted the same way.
-
-Read [`results/README.md`](results/README.md) before the table there. Those runs
-are corpus A only, one base model, and their answers predate a rename at
-publication — all three limit what the numbers mean, and each is stated where
-the numbers are.
-
-## Prerequisites
-
-Python 3.9 or later, and `pip install pytest` to run the offline check below.
-Nothing else: the harness itself imports only the standard library. Scoring a
-real system additionally needs an API key for whatever endpoint you point the
-proxy at.
-
-## Checking it works
-
-**Evidence level:** local/static. Nothing here exercises a live endpoint.
-
-**Expected result:**
-
-```text
-201 passed
-```
-
-**This verifies:** the runner, grader, report renderer and the
-ledger adapter's SQLite ingest agree with the shipped corpus, questions and
-answer key; the two fixture adapters still score exactly 1.0 and 0.0; and the
-claims the documentation makes about hashes, counts and domains still hold.
-
-**This does not verify:** any scored run against a live endpoint, the
-accounting proxy against real upstream traffic, a real model call from any
-adapter, or Windows.
-
-The whole pipeline runs offline against a small fixture whose score is known in
-advance — no model, no network, no API key:
-
-```bash
-python3 -m pytest tests/     # expected: 201 passed
-```
-
-`selftest/` holds a six-document corpus, six questions covering all four
-grading modes, and two adapters: one that answers everything correctly and one
-that gets everything wrong, in a different way per mode. They score exactly
-1.0 and exactly 0.0, so any drift between the runner and the report moves a
-number the tests pin. Run one directly:
-
-```bash
-python3 -m bench.runner --adapter selftest/oracle \
-    --corpus selftest/corpus \
-    --questions selftest/questions.jsonl \
-    --gold selftest/gold.jsonl
-```
-
-## Cleanup
-
-Each run writes `results/runs/<timestamp>-<adapter>/`, which holds the report,
-the verdicts, the answers, and whatever memory the system under test built —
-that last part can reach hundreds of megabytes. Nothing outside that directory
-is modified by the harness — though an adapter is not sandboxed, so one you
-add can write elsewhere; see [How the runner treats your adapter](#how-the-runner-treats-your-adapter).
-Delete the run directory to reclaim the space. Generated run state stays out of version control; a result someone chose to publish is added explicitly, which is what `results/runs/` holds.
-
-## Provenance
+## 🏷️ Provenance And License
 
 Authored and maintained by NVIDIA, contributed under Apache-2.0.
 
 Both corpora are fully synthetic: every person, company, project, domain and
 address is invented, every message body was generated from a fixed fictional
 cast, and nothing was collected from a live account. The file and symbol names
-in corpus A's engineering threads describe its own fictional codebase. Every address sits under
-the RFC 2606 reserved `.example` top-level domain.
+in corpus A's engineering threads describe its own fictional codebase. Every
+address sits under the RFC 2606 reserved `.example` top-level domain.
 
 How the corpora were generated, what was screened before publication, and the
 content hashes that say whether two scores are comparable:
 [`docs/provenance.md`](docs/provenance.md).
 
-## License
-
-Apache-2.0 throughout — code, corpus, questions, and answer key alike, under the
-repository's [LICENSE](../../../LICENSE).
+**License:** Apache-2.0 throughout — code, corpus, questions and answer key
+alike, under the repository's [LICENSE](../../../LICENSE).

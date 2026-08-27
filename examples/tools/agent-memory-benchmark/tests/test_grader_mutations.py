@@ -25,7 +25,7 @@ from pathlib import Path
 from bench.grader import grade
 
 REPO = Path(__file__).resolve().parents[1]
-KEYS = ("gold/answers.jsonl", "corpus_b/questions/answers.jsonl",
+KEYS = ("corpus_a/questions/answers.jsonl", "corpus_b/questions/answers.jsonl",
         "corpus_c/questions/answers.jsonl", "corpus_d/questions/answers.jsonl")
 
 

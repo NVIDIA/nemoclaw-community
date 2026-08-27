@@ -1,14 +1,48 @@
-<!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
-<!-- SPDX-License-Identifier: Apache-2.0 -->
+---
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+name: agent-memory-benchmark-results
+display_name: Reference Results
+parent: ../README.md
+corpus: corpus A only
+base_models: 1
+runs: [agentic-rag_corpus-a_nemotron, self-model_corpus-a_nemotron]
+questions: 186
+reproducible_as_is: false
+cost_comparable: false
+license: Apache-2.0
+---
 
-# Reference results
+# 📈 Reference Results
+
+![Corpus](https://img.shields.io/badge/corpus-A%20only-yellow)
+![Base models](https://img.shields.io/badge/base%20models-1%20of%202%20asked%20for-yellow)
+![Reproducible](https://img.shields.io/badge/reproducible%20as--is-no-red)
+![Cost comparison](https://img.shields.io/badge/cost%20comparison-unsupported-red)
 
 One pair of runs on **corpus A only**, both on the same base model, both graded
 by the grader in this repository. They are here so a reader can see what the
 benchmark produces and check a number against the verdicts that produced it —
-not as a ranking, and not as a claim about either architecture in general.
+**not as a ranking, and not as a claim about either architecture in general.**
 
-## The two settings
+> ⚠️ Every badge above is a limitation, and each one is explained in
+> [What These Numbers Are Not](#-what-these-numbers-are-not). Read that section
+> before quoting anything from the tables.
+
+---
+
+## 📑 Table of Contents
+
+- [⚖️ The Two Settings](#️-the-two-settings)
+- [📊 Corpus A, NVIDIA Nemotron 3 Ultra](#-corpus-a-nvidia-nemotron-3-ultra)
+- [💰 Cost](#-cost)
+- [🚫 What These Numbers Are Not](#-what-these-numbers-are-not)
+- [🔤 The Rename, And Why The Answers Were Transformed](#-the-rename-and-why-the-answers-were-transformed)
+- [🗂️ Where The Files Are](#️-where-the-files-are)
+
+---
+
+## ⚖️ The Two Settings
 
 Both runs read the same 425 documents, answer the same 186 questions, are graded
 by the same answer key and the same grader, and answer with the same base model.
@@ -22,21 +56,24 @@ happens.**
 | What its memory is when questions start | the raw documents, plus the index | the record it wrote at ingest |
 | How it answers | writes its own search queries, retrieves, and repeats for up to three rounds | answers from the record |
 | Where the cost falls | per question, every question | once, up front |
-| Ships in this repository | yes — `adapters/agentic_rag/`, hashed into its report | no |
+| Ships in this repository | ✅ `adapters/agentic_rag/`, hashed into its report | ❌ |
 
 That last row is the important caveat about these numbers. The agentic baseline
 is code you can run: its adapter ships here and its report records the hash of
 the adapter that produced the run. The self-model is a system that exists
 elsewhere; only its outputs ship. Its rows are a data point, not something you
-can re-execute from this repository — `docs/SUBMITTING.md` describes the
-contract any consolidating system would implement to be scored the same way.
+can re-execute from this repository — [`docs/SUBMITTING.md`](../docs/SUBMITTING.md)
+describes the contract any consolidating system would implement to be scored the
+same way.
 
 The two rows of the cost table below follow directly from this table: a design
 that front-loads its reasoning and a design that defers it do not have one
-comparable "total", so ingest cost and per-question cost are reported
-separately and never summed.
+comparable "total", so ingest cost and per-question cost are reported separately
+and never summed.
 
-## Corpus A, NVIDIA Nemotron 3 Ultra
+---
+
+## 📊 Corpus A, NVIDIA Nemotron 3 Ultra
 
 | Metric | Agentic RAG | Self-model | Difference |
 | --- | ---: | ---: | ---: |
@@ -50,28 +87,40 @@ separately and never summed.
 | Single-hop lookup (30) | 86.7% | 83.3% | -3.3 pp |
 | Citation coverage (186) | 92.5% | 97.9% | +5.4 pp |
 
-Cost, which the benchmark reports separately and never blends into the above. Both runs
-predate the forwarded-call record the harness now keeps, so their reports mark cost as
-not comparable: the counts below are what each run observed, not a proven total.
+Two rows go the other way, and they are in the table above rather than left out
+of it. The retrieval baseline refuses to answer more reliably: it abstains
+correctly on every question where the corpus does not support an answer, while
+the self-model answers from its record in cases where the record does not
+actually establish the fact. It is also slightly better at plain single-hop
+lookup, where there is nothing to synthesise and the extra step through a
+consolidated record can only lose detail. **A design that reasons at ingest time
+buys its advantage on questions that need several documents joined, and pays for
+it on questions that need either one document or none.**
+
+---
+
+## 💰 Cost
+
+The benchmark reports cost separately and never blends it into accuracy.
 
 | | Agentic RAG | Self-model |
 | --- | ---: | ---: |
 | Ingest tokens | 169,852 | 182,760,709 |
 | Tokens per question | 14,509 | 241,240 |
 
-Read the two tables together, but not as a ratio. Each cost column is what that
-run observed for itself. Neither report carries a forwarded-call record, so
-nothing in these artifacts establishes that the two runs counted the same
-events — which is why both set `comparable_on_cost` to false, and why no
-multiple between the columns is stated here or in the reports.
+> 🚫 **Read the two tables together, but not as a ratio.** Each cost column is
+> what that run observed for itself. Neither report carries a forwarded-call
+> record, so nothing in these artifacts establishes that the two runs counted the
+> same events — which is why both set `comparable_on_cost` to false, and why no
+> multiple between the columns is stated here or in the reports.
 
 What each run's own counts do show is where it spends. The self-model does its
 reasoning while reading the corpus; the agentic baseline defers that to question
 time and spends per question instead. Whether that trade is worth making depends
 on how many questions the memory will ever be asked — a judgement
-`docs/methodology.md` declines to collapse into one number. A run that wants a
-defensible cost comparison has to be executed under the current harness, which
-records forwarded calls.
+[`docs/methodology.md`](../docs/methodology.md) declines to collapse into one
+number. A run that wants a defensible cost comparison has to be executed under
+the current harness, which records forwarded calls.
 
 Two notes on the cost table. The agentic baseline's ingest cost is an embedding
 pass and nothing else, which is why its output tokens are zero; it does no
@@ -79,38 +128,36 @@ reasoning at ingest time, which is the whole distinction being measured. And the
 reports price only what `bench/pricing.py` knows. That embedding model has an
 entry, so the agentic ingest phase carries a real figure, $0.0034; the Nemotron
 model that answers in both runs has none, so every other phase reports token
-counts with a null price rather than inventing one. Read the tables in tokens,
-not dollars — the one priced phase is the cheapest thing either run did.
+counts with a null price rather than inventing one. **Read the tables in tokens,
+not dollars** — the one priced phase is the cheapest thing either run did.
 
-Two rows go the other way, and they are in the table above rather than left
-out of it. The retrieval baseline refuses to answer more reliably: it abstains
-correctly on every question where the corpus does not support an answer, while
-the self-model answers from its record in cases where the record does not
-actually establish the fact. It is also slightly better at plain single-hop
-lookup, where there is nothing to synthesise and the extra step through a
-consolidated record can only lose detail. A design that reasons at ingest time
-buys its advantage on questions that need several documents joined, and pays
-for it on questions that need either one document or none.
+---
+## 🚫 What These Numbers Are Not
 
-## What these numbers are not
+### **Corpus A only.**
 
-**Corpus A only.** Corpus B ships with the benchmark and was not run on this
-model. Corpus B exists precisely because a result on one corpus is a result
-about that corpus — see [`corpus_b/README.md`](../corpus_b/README.md) — so the
-table above says nothing about how either design behaves on documents shaped
-differently. Do not read it as a general finding.
+Corpus B ships with the benchmark and was not run on this model. Corpus B exists
+precisely because a result on one corpus is a result about that corpus — see
+[`corpus_b/README.md`](../corpus_b/README.md) — so the table above says nothing
+about how either design behaves on documents shaped differently. Do not read it
+as a general finding.
 
-**One base model.** `docs/methodology.md` asks a submission to run at least two
-and publish the difference, on the grounds that an advantage appearing under one
-model and vanishing under another is not an architectural advantage. This is
+### **One base model.**
+
+[`docs/methodology.md`](../docs/methodology.md) asks a submission to run at least
+two and publish the difference, on the grounds that an advantage appearing under
+one model and vanishing under another is not an architectural advantage. This is
 one. Treat it as a worked example of the output format rather than as a
 submission that meets that bar.
 
-**Not reproducible as-is.** The systems answered against the corpus as it stood
-before publication, when a set of identifiers carried different names. See
-below.
+### **Not reproducible as-is.**
 
-## The rename, and why the answers were transformed
+The systems answered against the corpus as it stood before publication, when a
+set of identifiers carried different names. See below.
+
+---
+
+## 🔤 The Rename, And Why The Answers Were Transformed
 
 Publishing the corpus renamed 21 text identifiers and 4 question ids. The text
 side covers a project name and its lowercase form, several code symbols, a
@@ -135,20 +182,21 @@ What it changed, measured:
 
 The id map does more work than the text map. Four question ids were renamed at
 publication; without mapping them those four answers look absent, and an absent
-answer invalidates a run. That is the runner behaving correctly — it is also
-why a transformed result is weaker evidence than a fresh run.
+answer invalidates a run. That is the runner behaving correctly — it is also why
+a transformed result is weaker evidence than a fresh run.
 
-**This is not a run against the published corpus.** Reproducing these numbers
-means re-running the answer phase against what ships here. The full substitution
-map is in each `report.json` under `provenance_note`.
+> ⚠️ **This is not a run against the published corpus.** Reproducing these
+> numbers means re-running the answer phase against what ships here.
 
-## Where the files are
+---
 
-One directory per run, all siblings under `results/runs/`. Nothing nests: each
-run directory holds its own complete copy of the same five files, and neither
-run lives inside the other.
+## 🗂️ Where The Files Are
 
-```
+One directory per run, all siblings under `results/runs/`. **Nothing nests:**
+each run directory holds its own complete copy of the same five files, and
+neither run lives inside the other.
+
+```text
 results/
 ├── README.md                              this file
 └── runs/
@@ -174,3 +222,6 @@ Inside each one:
 Two reports are comparable only when their `fingerprint` blocks match — same
 corpus, same questions, same answer key, same normalization, same scorer. Both
 of these were graded at the fingerprint the repository carries today.
+
+> 🧪 A generated run is ignored by `.gitignore`, not merely untracked. The two
+> directories above are published deliberately, by name.

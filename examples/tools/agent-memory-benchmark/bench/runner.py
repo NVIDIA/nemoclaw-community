@@ -292,9 +292,9 @@ def _read_answers(path: Path) -> dict[str, dict]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--adapter", required=True, type=Path)
-    parser.add_argument("--questions", type=Path, default=REPO / "questions" / "questions.jsonl")
-    parser.add_argument("--gold", type=Path, default=REPO / "gold" / "answers.jsonl")
-    parser.add_argument("--corpus", type=Path, default=REPO / "corpus")
+    parser.add_argument("--questions", type=Path, default=REPO / "corpus_a" / "questions" / "questions.jsonl")
+    parser.add_argument("--gold", type=Path, default=REPO / "corpus_a" / "questions" / "answers.jsonl")
+    parser.add_argument("--corpus", type=Path, default=REPO / "corpus_a" / "corpus")
     parser.add_argument("--out", type=Path, default=None, help="run directory (default: results/runs/<ts>-<adapter>)")
     parser.add_argument("--state", type=Path, default=None, help="memory dir for the system under test")
     parser.add_argument("--upstream", default=DEFAULT_UPSTREAM)
@@ -337,7 +337,7 @@ def main() -> None:
     state_dir.mkdir(parents=True, exist_ok=True)
     answers_path = run_dir / "answers.jsonl"
     # Adapters run from here, not from the benchmark root: a relative open() of
-    # "gold/answers.jsonl" must not find the answer key.
+    # "corpus_a/questions/answers.jsonl" must not find the answer key.
     work_dir = run_dir / "work"
     work_dir.mkdir(parents=True, exist_ok=True)
 

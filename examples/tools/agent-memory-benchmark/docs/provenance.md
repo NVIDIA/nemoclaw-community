@@ -90,10 +90,10 @@ single-file artifact is hashed as its bytes alone, with no path framing
 
 | Artifact | Files | SHA-256 |
 | --- | ---: | --- |
-| `corpus/` (corpus A) | 428 | `12772a521d95bd777625924d8ec7b151d0d9c0e388f4dc4bafbd7540130cc9a9` |
+| `corpus_a/corpus/` (corpus A) | 428 | `12772a521d95bd777625924d8ec7b151d0d9c0e388f4dc4bafbd7540130cc9a9` |
 | `corpus_b/corpus/` (corpus B) | 176 | `ef57ca34e3937b5c4ae847428676550d3a036c5a73b7ed9ae3c6a038e9187e96` |
-| `questions/questions.jsonl` | 1 | `6d38f6c11edbefb4baa77b8014af1920c48ab65f3647a2bb10daa691e9259b06` |
-| `gold/answers.jsonl` | 1 | `55a66b80ff0f62d8b3a340dcbb9cc970a011922b1e509269c4402192f9504970` |
+| `corpus_a/questions/questions.jsonl` | 1 | `6d38f6c11edbefb4baa77b8014af1920c48ab65f3647a2bb10daa691e9259b06` |
+| `corpus_a/questions/answers.jsonl` | 1 | `55a66b80ff0f62d8b3a340dcbb9cc970a011922b1e509269c4402192f9504970` |
 | `corpus_b/questions/answers.jsonl` | 1 | `d2543be56bbf072b5c68b94f1939d16d0b7c6472812951acbc9913c803803671` |
 | `corpus_b/questions/questions.jsonl` | 1 | `e5d8414e712911e04d314ef2b5fa81caa0058e794eb95c12533f8cbe3d43f0d4` |
 
@@ -102,8 +102,8 @@ Recompute at any time:
 ```bash
 python3 -c "import sys; sys.path.insert(0, '.'); \
 from pathlib import Path; from bench.fingerprint import hash_tree, hash_file; \
-print(hash_tree(Path('corpus'))); \
-print(hash_file(Path('questions/questions.jsonl')))"
+print(hash_tree(Path('corpus_a/corpus'))); \
+print(hash_file(Path('corpus_a/questions/questions.jsonl')))"
 ```
 
 The `fingerprint` block also carries a `scorer` hash — of the modules that

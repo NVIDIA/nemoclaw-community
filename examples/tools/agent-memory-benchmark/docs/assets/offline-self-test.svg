@@ -15,7 +15,7 @@
   <text x="22" y="172" fill="#c9d1d9" xml:space="preserve">* questions: 6 (graded deterministically: 6, deferred to judge: 0)</text>
   <text x="22" y="192" fill="#c9d1d9" xml:space="preserve"></text>
   <text x="22" y="212" fill="#79c0ff" xml:space="preserve">## Quality</text>
-  <text x="22" y="232" fill="#ffa657" xml:space="preserve">* accuracy overall: 1.0</text>
+  <text x="22" y="232" fill="#ffa657" xml:space="preserve">* accuracy overall: **1.0**</text>
   <text x="22" y="252" fill="#c9d1d9" xml:space="preserve">  * [base] 1.0</text>
   <text x="22" y="272" fill="#c9d1d9" xml:space="preserve">  * [hard] 1.0</text>
   <text x="22" y="292" fill="#c9d1d9" xml:space="preserve">  * abstention: 1.0</text>
@@ -28,5 +28,5 @@
   <text x="22" y="432" fill="#8b949e" xml:space="preserve">  * freshness recency-only: n/a — not annotated for this corpus</text>
   <text x="22" y="452" fill="#c9d1d9" xml:space="preserve"></text>
   <text x="22" y="472" fill="#7ee787" xml:space="preserve">$ python3 -m pytest tests/</text>
-  <text x="22" y="492" fill="#7ee787" xml:space="preserve">201 passed in 31.28s</text>
+  <text x="22" y="492" fill="#7ee787" xml:space="preserve">205 passed in 31.28s</text>
 </svg>

@@ -30,12 +30,12 @@ def _script(tmp_path: Path, name: str, body: str) -> Path:
 
 
 def test_relative_read_of_the_answer_key_fails_from_the_work_directory(tmp_path):
-    """An adapter that opens "gold/answers.jsonl" must not find it.
+    """An adapter that opens "corpus_a/questions/answers.jsonl" must not find it.
 
     This is the defect the work directory exists to close: the runner used to
     launch adapters from the benchmark root, where that relative path resolves.
     """
-    assert (REPO / "gold" / "answers.jsonl").exists(), "precondition: the key is there to be found"
+    assert (REPO / "corpus_a" / "questions" / "answers.jsonl").exists(), "precondition: the key is there to be found"
     work = tmp_path / "work"
     work.mkdir()
     probe = _script(
@@ -50,23 +50,23 @@ def test_relative_read_of_the_answer_key_fails_from_the_work_directory(tmp_path)
 
 
 def test_a_phase_handed_the_answer_key_refuses_to_start():
-    gold = REPO / "gold" / "answers.jsonl"
+    gold = REPO / "corpus_a" / "questions" / "answers.jsonl"
     with pytest.raises(SystemExit) as excinfo:
         _assert_isolated(["run.py", "--gold", str(gold)], {}, "ingest", {"answer key": gold})
     assert "answer key" in str(excinfo.value)
 
 
 def test_a_phase_handed_the_answer_key_through_the_environment_refuses_to_start():
-    gold = REPO / "gold" / "answers.jsonl"
+    gold = REPO / "corpus_a" / "questions" / "answers.jsonl"
     with pytest.raises(SystemExit):
         _assert_isolated(["run.py"], {"SNEAKY": str(gold)}, "ingest", {"answer key": gold})
 
 
 def test_ingest_may_still_be_given_the_corpus_and_state():
-    gold = REPO / "gold" / "answers.jsonl"
-    questions = REPO / "questions" / "questions.jsonl"
+    gold = REPO / "corpus_a" / "questions" / "answers.jsonl"
+    questions = REPO / "corpus_a" / "questions" / "questions.jsonl"
     _assert_isolated(
-        ["run.py", "--corpus", str(REPO / "corpus" / "part_a"), "--state", "/tmp/state"],
+        ["run.py", "--corpus", str(REPO / "corpus_a" / "corpus" / "part_a"), "--state", "/tmp/state"],
         {"PATH": "/usr/bin"},
         "ingest",
         {"answer key": gold, "question set": questions},

@@ -4,7 +4,7 @@
 """What the isolation guards do not stop, demonstrated rather than described.
 
 The runner refuses to hand a phase the answer key, and launches adapters from a
-scratch directory so a relative open of `gold/answers.jsonl` finds nothing.
+scratch directory so a relative open of `corpus_a/questions/answers.jsonl` finds nothing.
 Neither of those makes the key unreachable: the benchmark root is on
 `PYTHONPATH` so adapters can import `adapters._lib`, and an adapter can use the
 same import to locate the key and read it.
@@ -29,7 +29,7 @@ PROBE = '''
 import json, sys
 from pathlib import Path
 import bench.runner as r          # PYTHONPATH is set by the runner
-key = Path(r.REPO) / "gold" / "answers.jsonl"
+key = Path(r.REPO) / "corpus_a" / "questions" / "answers.jsonl"
 print(json.dumps({"reachable": key.exists(), "path": str(key)}))
 '''
 
@@ -38,7 +38,7 @@ def test_the_guards_reject_a_phase_handed_the_key():
     """The half that does work: the key is never an argument or a variable."""
     from bench.runner import _assert_isolated
 
-    gold = REPO / "gold" / "answers.jsonl"
+    gold = REPO / "corpus_a" / "questions" / "answers.jsonl"
     for argv, env in ([["run.py", "--gold", str(gold)], {}], [["run.py"], {"K": str(gold)}]):
         try:
             _assert_isolated(argv, env, "ingest", {"answer key": gold})

@@ -166,7 +166,7 @@ against a newer table.
   the two are not fully separable by design.
 * **English questions and answers.**
 * **Contamination.** The corpus is public and will eventually be crawled. It
-  carries a canary string (`corpus/CANARY.txt`) so future contamination can be
+  carries a canary string (`corpus_a/corpus/CANARY.txt`) so future contamination can be
   detected rather than merely suspected.
 * **Deterministic grading rejects some correct answers.** A correct answer phrased
   entirely outside the `accept` set scores wrong. Per-question verdicts ship with

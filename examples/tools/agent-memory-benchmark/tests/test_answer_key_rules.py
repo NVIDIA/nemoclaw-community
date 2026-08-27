@@ -29,9 +29,9 @@ def _rows(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-QUESTIONS = _rows(REPO / "questions" / "questions.jsonl")
-GOLD = _rows(REPO / "gold" / "answers.jsonl")
-MANIFEST = _rows(REPO / "corpus" / "manifest.jsonl")
+QUESTIONS = _rows(REPO / "corpus_a" / "questions" / "questions.jsonl")
+GOLD = _rows(REPO / "corpus_a" / "questions" / "answers.jsonl")
+MANIFEST = _rows(REPO / "corpus_a" / "corpus" / "manifest.jsonl")
 DOC_IDS = {row["doc_id"] for row in MANIFEST}
 
 
@@ -131,8 +131,8 @@ def test_grading_the_same_answer_twice_gives_the_same_verdict(question_id):
 
 
 def test_the_fingerprint_is_stable_across_calls():
-    a = fingerprint(REPO / "corpus", REPO / "questions" / "questions.jsonl", REPO / "gold" / "answers.jsonl")
-    b = fingerprint(REPO / "corpus", REPO / "questions" / "questions.jsonl", REPO / "gold" / "answers.jsonl")
+    a = fingerprint(REPO / "corpus_a" / "corpus", REPO / "corpus_a" / "questions" / "questions.jsonl", REPO / "corpus_a" / "questions" / "answers.jsonl")
+    b = fingerprint(REPO / "corpus_a" / "corpus", REPO / "corpus_a" / "questions" / "questions.jsonl", REPO / "corpus_a" / "questions" / "answers.jsonl")
     assert a == b
 
 
@@ -151,10 +151,10 @@ def test_the_published_hashes_still_describe_what_ships():
     )
     assert published, "no hash table found in docs/provenance.md"
     computed = {
-        "corpus/": hash_tree(REPO / "corpus"),
+        "corpus_a/corpus/": hash_tree(REPO / "corpus_a" / "corpus"),
         "corpus_b/corpus/": hash_tree(REPO / "corpus_b" / "corpus"),
-        "questions/questions.jsonl": hash_file(REPO / "questions" / "questions.jsonl"),
-        "gold/answers.jsonl": hash_file(REPO / "gold" / "answers.jsonl"),
+        "corpus_a/questions/questions.jsonl": hash_file(REPO / "corpus_a" / "questions" / "questions.jsonl"),
+        "corpus_a/questions/answers.jsonl": hash_file(REPO / "corpus_a" / "questions" / "answers.jsonl"),
         "corpus_b/questions/questions.jsonl": hash_file(REPO / "corpus_b" / "questions" / "questions.jsonl"),
         "corpus_b/questions/answers.jsonl": hash_file(REPO / "corpus_b" / "questions" / "answers.jsonl"),
     }
@@ -171,7 +171,7 @@ def test_no_address_in_either_corpus_uses_a_registrable_domain():
 
     pattern = re.compile(r"[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})")
     offenders: set[str] = set()
-    for root in (REPO / "corpus", REPO / "corpus_b" / "corpus"):
+    for root in (REPO / "corpus_a" / "corpus", REPO / "corpus_b" / "corpus"):
         for path in root.rglob("*.md"):
             for domain in pattern.findall(path.read_text(encoding="utf-8")):
                 if not domain.lower().endswith(".example"):

@@ -8,7 +8,7 @@ gets you the cost numbers as well.
 Do this if your system cannot be wrapped in a command line, or you want a score
 without wiring anything up.
 
-**1. Read the corpus, in order.** `corpus/part_a/` first, then `corpus/part_b/`.
+**1. Read the corpus, in order.** `corpus_a/corpus/part_a/` first, then `corpus_a/corpus/part_b/`.
 Walk it recursively rather than hardcoding subdirectory names: corpus A files
 chat under `slack/` and corpus B under `chat/`, so a path-specific reader
 silently ingests zero chat documents on the second corpus. The `doc_id` in each
@@ -19,7 +19,7 @@ version is current. If your system has no notion of ingesting twice, ingest
 everything at once and say so — it changes what your ingest cost means, not
 whether your answers count.
 
-**2. Answer every question in `questions/questions.jsonl`**, each in a fresh
+**2. Answer every question in `corpus_a/questions/questions.jsonl`**, each in a fresh
 context. The questions are independent; answering question 40 with question 39
 still in the conversation is a different task and scores differently. Use this
 instruction verbatim, because every other submission does:

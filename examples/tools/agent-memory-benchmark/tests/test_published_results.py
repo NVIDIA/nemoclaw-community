@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
 import subprocess
 import sys
 from pathlib import Path
@@ -46,8 +48,8 @@ def test_every_run_carries_the_four_artifacts(run: Path):
 def test_the_fingerprint_matches_what_ships_today(run: Path):
     """A stored result graded against a corpus that has since changed is not a
     result about this repository."""
-    current = fingerprint(REPO / "corpus", REPO / "questions" / "questions.jsonl",
-                          REPO / "gold" / "answers.jsonl")
+    current = fingerprint(REPO / "corpus_a" / "corpus", REPO / "corpus_a" / "questions" / "questions.jsonl",
+                          REPO / "corpus_a" / "questions" / "answers.jsonl")
     stored = _report(run).get("fingerprint")
     assert stored, f"{run.name} has no fingerprint"
     for key in ("corpus", "questions", "gold", "scorer", "normalization"):
@@ -370,3 +372,37 @@ def test_the_results_page_names_every_type_the_self_model_loses():
             f"the self-model scores {ours:.1%} against {baseline:.1%} on "
             f"{kind!r}, and results/README.md does not report it. A table that "
             f"omits the losses is not a result.")
+
+
+def test_a_generated_run_is_ignored_and_a_published_one_is_not():
+    """The README says generated run state stays out of version control.
+
+    It did not: only `state/` and a couple of side files were ignored, so a run
+    directory was untracked rather than ignored and `git add -A` would commit
+    it. Untracked is not the same promise. Both halves are asserted here
+    because ignoring the whole of `results/runs/` would hide the published runs
+    instead.
+    """
+    git = shutil.which("git")
+    if git is None:
+        pytest.skip("git is not available; this asserts a .gitignore rule")
+
+    def ignored(path: Path) -> bool:
+        return subprocess.run(
+            [git, "check-ignore", "-q", str(path)], cwd=REPO,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+
+    probe = REPO / "results" / "runs" / "00000000T000000Z-gitignore-probe"
+    probe.mkdir(parents=True, exist_ok=True)
+    try:
+        (probe / "report.json").write_text("{}", encoding="utf-8")
+        assert ignored(probe / "report.json"), (
+            "a freshly generated run is not ignored, so `git add -A` after a run "
+            "would commit it; the README promises it stays out of version control")
+    finally:
+        shutil.rmtree(probe, ignore_errors=True)
+
+    for run in RUNS:
+        assert not ignored(run / "report.json"), (
+            f"{run.name} ships as a published result but is ignored, so the "
+            f"files in this PR are not the ones a checkout would get")
