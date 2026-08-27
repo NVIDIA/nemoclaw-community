@@ -125,6 +125,11 @@ this, and a page left behind is history attributed to nobody — it will not
 show up as a person again, because its identities now resolve to the page you
 kept.
 
+A person can appear in the handoff for this reason alone, with nothing new
+said since either page was written. That is not a mistake in the selector:
+both pages being current is exactly when a split sits there unnoticed, and no
+further message is needed for it to still be wrong. Do the merge.
+
 Merge by hand, not by concatenation. Recent Interactions is newest-first and
 has a ceiling; two lists spliced end to end are neither. Relationship and Key
 Context may disagree between the pages — say what is true now rather than

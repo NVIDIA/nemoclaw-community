@@ -141,6 +141,13 @@ class SelectorCase(unittest.TestCase):
         lines = [line for line in out.splitlines() if line.strip()]
         return out, lines[-1]
 
+    def current_attention(self):
+        today = datetime.now(timezone.utc).date().isoformat()
+        self.page("current_priorities", updated=today, decay="daily",
+                  kind="attention")
+        self.page("active_threads", updated=today, decay="weekly",
+                  kind="attention")
+
     def report(self):
         """The selector's report, parsed.
 
@@ -341,13 +348,6 @@ class TestACleanInstallIsInitialised(SelectorCase):
 class TestAQuietDayCostsNothing(SelectorCase):
     """The wake gate is what makes an idle tick free, and it was never firing."""
 
-    def current_attention(self):
-        today = datetime.now(timezone.utc).date().isoformat()
-        self.page("current_priorities", updated=today, decay="daily",
-                  kind="attention")
-        self.page("active_threads", updated=today, decay="weekly",
-                  kind="attention")
-
     def test_an_unchanged_correspondent_does_not_wake_the_agent(self):
         """Two messages from last week and a page written since is not work.
         Treating it as work kept the agent awake every half hour for the
@@ -487,13 +487,6 @@ class TestOnlyTheUserSaysWhatTheyChose(SelectorCase):
 
 class TestACorrectionIsEvidenceOnce(SelectorCase):
     """It woke the writer nightly for a month over one thing done once."""
-
-    def current_attention(self):
-        today = datetime.now(timezone.utc).date().isoformat()
-        self.page("current_priorities", updated=today, decay="daily",
-                  kind="attention")
-        self.page("active_threads", updated=today, decay="weekly",
-                  kind="attention")
 
     def applied(self, event_id):
         page = self.workspace / "memory" / "attention" / "current_priorities.md"
@@ -829,6 +822,62 @@ class TestConfirmingALinkDoesNotStrandAPage(SelectorCase):
         texts = {line["text"] for line in found["interactions"][person["slug"]]}
         self.assertTrue(any(x.startswith("mail") for x in texts), texts)
         self.assertTrue(any(x.startswith("slack") for x in texts), texts)
+
+    def test_a_pending_merge_is_work_when_both_pages_are_current(self):
+        """The case the freshness rule was built to skip, and the one case it
+        must not.
+
+        That rule asks whether a message has arrived which the page does not
+        account for. A pending merge answers no — both pages are current,
+        which is exactly when the split can sit there forever, because no new
+        message is required for it to still be true. Skipped here, the person
+        stays split indefinitely and nothing ever says so.
+        """
+        self.current_attention()
+        today = datetime.now(timezone.utc).date().isoformat()
+        self.two_written_pages()
+        # Both pages record the newest interaction there is.
+        self.page("dana_by_mail", updated=today, last_interaction=today,
+                  identities=["email:dana@example.com"])
+        self.page("dana_by_slack", updated=today, last_interaction=today,
+                  identities=["slack:U01DANA"])
+        self.link("email:dana@example.com", "slack:U01DANA")
+
+        found = self.report()
+        self.assertEqual(len(found["people"]), 1,
+                         "a person with a page still to merge was skipped as"
+                         " quiet")
+        self.assertEqual(len(found["people"][0]["merge_into_slug"]), 1)
+
+    def test_the_gate_wakes_for_a_pending_merge_and_nothing_else(self):
+        """Every other input current — attention pages fresh, no corrections,
+        no message since either page was written — and the merge alone has to
+        be enough. If the gate sleeps, nothing else in the schedule reports
+        the split."""
+        self.current_attention()
+        today = datetime.now(timezone.utc).date().isoformat()
+        self.two_written_pages()
+        self.page("dana_by_mail", updated=today, last_interaction=today,
+                  identities=["email:dana@example.com"])
+        self.page("dana_by_slack", updated=today, last_interaction=today,
+                  identities=["slack:U01DANA"])
+        self.link("email:dana@example.com", "slack:U01DANA")
+
+        out, last = self.run_selector()
+        self.assertNotIn("wakeAgent", out,
+                         "the job slept on a merge nothing else will do")
+
+    def test_a_quiet_person_with_nothing_to_merge_still_costs_nothing(self):
+        """The exemption is for pending merges, not a way around the rule."""
+        self.current_attention()
+        today = datetime.now(timezone.utc).date().isoformat()
+        for n in range(2):
+            self.arrive("Dana Okoro", "dana@example.com", days_ago=n + 5,
+                        body=f"mail{n}")
+        self.page("dana_okoro", updated=today, last_interaction=today,
+                  identities=["email:dana@example.com"])
+        _, last = self.run_selector()
+        self.assertEqual(json.loads(last), {"wakeAgent": False})
 
     def test_a_person_with_one_page_has_nothing_to_merge(self):
         """The field is present and empty rather than absent, so a reader

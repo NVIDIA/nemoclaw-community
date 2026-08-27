@@ -501,7 +501,15 @@ def evidence(conn, since: str) -> dict[str, object]:
             # to write one. Treat it as unknown, which means look.
             if recorded > today:
                 recorded = ""
-            if recorded and last and last <= recorded:
+            # A page still to be merged is work whether or not anything has
+            # been said since. The freshness rule asks "has a message arrived
+            # that this page does not account for", and a merge answers no —
+            # both pages are current, which is exactly the case where the
+            # split can sit there forever. Nothing else reports it, and no
+            # new message is required to arrive for it to still be true, so
+            # skipping here leaves the person split indefinitely and lets the
+            # wake gate sleep on it.
+            if recorded and last and last <= recorded and not extra.get(key):
                 continue
         candidates.append({
             "sender": sender,
