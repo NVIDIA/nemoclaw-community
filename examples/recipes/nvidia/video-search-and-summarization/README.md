@@ -134,21 +134,21 @@ this page. No VSS deployment, sandbox, notebook, or GPU host was involved.
 
 ```text
 $ python3 scripts/build_catalog.py --validate-metadata
-README catalog metadata is valid for 19 examples.
+README catalog metadata is valid for 18 examples.
 
 $ python3 scripts/build_catalog.py --write
-Built 19 catalog entries and detail pages in _site.
+Built 18 catalog entries and detail pages in _site.
 
 $ python3 scripts/build_catalog.py --check
-Catalog metadata and generated sources are valid: 19 examples across 6 categories.
+Catalog metadata and generated sources are valid: 18 examples across 7 browse groups.
 
 $ python3 -m unittest discover -s scripts/tests -p 'test_build_catalog.py'
-Ran 24 tests in 0.846s
+Ran 32 tests in 0.928s
 
 OK
 
 $ node --test scripts/tests/catalog.test.mjs
-# pass 11
+# pass 12
 # fail 0
 
 $ python3 scripts/check_license_headers.py --check
@@ -157,8 +157,8 @@ All 608 checked source files have SPDX headers.
 $ git diff --check
 ```
 
-`git diff --check` prints nothing when it passes. The file count reported by the
-license check reflects the repository at this revision.
+`git diff --check` prints nothing when it passes. The example, test, and file
+counts above reflect the repository at this revision.
 
 Each VSS file linked from this page was also confirmed to exist on the VSS
 `develop` branch. From a VSS clone with the `develop` branch fetched:
