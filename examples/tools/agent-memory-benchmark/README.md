@@ -1,22 +1,3 @@
----
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
-name: agent-memory-benchmark
-display_name: mnemo — Agent Memory Benchmark
-category: Developer Tool
-provenance: NVIDIA
-language: python
-python_requires: ">=3.9"
-runtime_dependencies: none (Python standard library only)
-dev_dependencies: [pytest]
-entry_point: python3 -m bench.runner
-offline_check: python3 -m pytest tests/
-adapter_contract: docs/SUBMITTING.md
-corpora: [corpus_a/, corpus_b/]
-question_count: 186  # corpus A; corpus B adds 96, see corpus_b/README.md
-license: Apache-2.0
-evidence_level: local/static
----
 
 # Agent Memory Benchmark
 
@@ -37,65 +18,43 @@ system worth using tells you the current answer, not the one it learned first.*
 
 ---
 
-## 📑 Table of Contents
+## Contents
 
-- [👀 What A Run Looks Like](#-what-a-run-looks-like)
-- [📚 What Is In The Corpora](#-what-is-in-the-corpora)
-- [❓ What It Asks](#-what-it-asks)
-- [🚀 Getting Started](#-getting-started)
-- [✨ Why It Is Built This Way](#-why-it-is-built-this-way)
-- [🗂️ Project Structure](#️-project-structure)
-- [⚙️ Configuration](#️-configuration)
-- [🧩 Adding Your System](#-adding-your-system)
-- [🔐 How The Runner Treats Your Adapter](#-how-the-runner-treats-your-adapter)
-- [📊 Reading A Result](#-reading-a-result)
-- [📈 Published Results](#-published-results)
-- [✅ Verification](#-verification)
-- [🩺 Troubleshooting](#-troubleshooting)
-- [🧹 Cleanup](#-cleanup)
-- [🔎 At A Glance](#-at-a-glance)
-- [🏷️ Provenance And License](#️-provenance-and-license)
+- [What A Run Looks Like](#what-a-run-looks-like)
+- [What Is In The Corpora](#what-is-in-the-corpora)
+- [What It Asks](#what-it-asks)
+- [Getting Started](#getting-started)
+- [Reading A Result](#reading-a-result)
+- [Published Results](#published-results)
+- [Troubleshooting](#troubleshooting)
+- [Cleanup](#cleanup)
+- [At A Glance](#at-a-glance)
+- [For Contributors](#for-contributors)
+  - [Project Structure](#project-structure)
+  - [Configuration](#configuration)
+  - [Adding Your System](#adding-your-system)
+  - [How The Runner Treats Your Adapter](#how-the-runner-treats-your-adapter)
+  - [Verification](#verification)
+- [Provenance And License](#provenance-and-license)
 
 ---
 
-## 👀 What A Run Looks Like
+## What A Run Looks Like
 
 ![Terminal session: the offline self-test scoring exactly 1.0 on every question type, followed by the test suite passing](docs/assets/offline-self-test.png)
 
 The whole pipeline running with no model and no network: the oracle adapter
-answers a six-document fixture, scores exactly `1.0` on every question type, and
-the benchmark's own test suite passes. Notice that `freshness` is split into two
-lines — a system must not only be current, it must resist a stale value that is
+answers a six-document fixture and scores exactly `1.0` on every question type,
+then the benchmark's own test suite passes. Notice that `freshness` is split
+into two lines — a system must not only be current, it must resist a stale value
 still sitting in the corpus.
 
-The same output as text, so it is searchable and an agent can read it without
-parsing an image:
-
-```text
-$ python3 -m bench.runner --adapter selftest/oracle \
-      --corpus selftest/corpus --questions selftest/questions.jsonl \
-      --gold selftest/gold.jsonl
-
-* corpus: 6 docs (4 part_a / 2 part_b)
-* questions: 6 (graded deterministically: 6, deferred to judge: 0)
-
-## Quality
-* accuracy overall: **1.0**
-  * [base] 1.0
-  * [hard] 1.0
-  * abstention: 1.0
-  * citation: 1.0
-  * freshness: 1.0
-  * multi_source: 1.0
-  * ordering: 1.0
-  * single_hop: 1.0
-  * freshness with a competing stale claim in corpus: 1.0
-  * freshness recency-only: n/a — not annotated for this corpus
-```
+Searchable form of what it prints: `accuracy overall: **1.0**`, every type at
+`1.0`, and `deferred to judge: 0`.
 
 ---
 
-## 📚 What Is In The Corpora
+## What Is In The Corpora
 
 | | Documents | Period | Domain |
 | --- | ---: | --- | --- |
@@ -126,7 +85,9 @@ ingest token count will say so.
 
 ---
 
-## ❓ What It Asks
+---
+
+## What It Asks
 
 **Base set (155)**
 
@@ -152,7 +113,7 @@ passes cannot measure an improvement.
 | `attribution` | 5 | who proposed something versus who carried it out |
 | `ordering` | 4 | placing events relative to each other rather than looking one up |
 
-> 🎯 `as_of` is the one type built to be adversarial to ingest-time
+> `as_of` is the one type built to be adversarial to ingest-time
 > consolidation: a memory that keeps only the current value has thrown the
 > answer away.
 
@@ -172,7 +133,9 @@ does not say" is scored right.
 
 ---
 
-## 🚀 Getting Started
+---
+
+## Getting Started
 
 **What you need.** Python 3.9 or later on macOS or Linux, and `pytest`. Nothing
 else — the harness itself imports only the standard library. The shipped adapter
@@ -182,13 +145,13 @@ point the proxy at.
 
 ### 1. Check it works — offline, free, no API key
 
-> ✅ **Safe by default.** This path sends nothing over the network and costs
+> **Safe by default.** This path sends nothing over the network and costs
 > nothing.
 
 ```bash
 cd examples/tools/agent-memory-benchmark
 python3 -m pip install pytest
-python3 -m pytest tests/     # expected: 225 passed
+python3 -m pytest tests/     # expected: 226 passed
 ```
 
 Then run the whole pipeline against a fixture whose score is known in advance:
@@ -227,7 +190,7 @@ The runner ingests both corpus halves in order, feeds
 | `adapters/agentic_rag` | embedding index; the model writes its own queries over up to three rounds |
 | `adapters/ledger_rag` | drives the [Memory-Driven Chief of Staff](../../recipes/nvidia/memory-driven-chief-of-staff/README.md) ledger; SQLite ingest needs no network |
 
-> 📌 **Read `ledger_rag`'s score carefully.** It measures candidate selection
+> **Read `ledger_rag`'s score carefully.** It measures candidate selection
 > over that ledger plus the model. It is *not* a score of the recipe's own
 > behaviour: the ledger is built for triage and ranking and has no
 > question-answering path, so the selection and the answer call belong to this
@@ -236,29 +199,123 @@ The runner ingests both corpus halves in order, feeds
 
 ---
 
-## ✨ Why It Is Built This Way
+---
 
-- **Two numbers, never blended.** Quality (did it answer correctly?) and cost
-  (tokens at ingest, tokens per answer) are reported on separate axes. Total
-  cost of ownership is `ingest_tokens + N × per_question_tokens`; where those
-  curves cross is a question accuracy-only benchmarks do not answer.
-- **Deterministic grading — no judge model.** Answers are normalized for case,
-  punctuation and date spelling, then matched against an explicit rule set. A
-  benchmark whose scores move when the judge is upgraded cannot be compared
-  across years.
-- **Cost is measured, not self-reported.** The runner points `OPENAI_BASE_URL` /
-  `ANTHROPIC_BASE_URL` at a local proxy and counts what crosses the wire. A run
-  that declares proxy accounting and bypasses it is marked invalid.
-- **Any system can enter.** An adapter is a small JSON file naming two commands.
-  No harness change is needed to score a new memory design.
-- **Two corpora, two domains.** A result on one can be checked against the
-  other, so a design that happens to suit one domain cannot hide in the average.
-- **Runs offline.** A six-document fixture with a known score exercises the
-  whole pipeline with no model, no network and no API key.
+## Reading A Result
+
+Accuracy is reported **per question type**. An overall figure is reported too,
+first, because a reader wants one — but it is an average over a question mix
+this benchmark chose, so the per-type rows are what a comparison should rest on.
+Freshness is split further, into questions where the superseded value is also in
+the corpus (the system must resist it) and questions where it is not (a plain
+recency check). Evidence recall and citation coverage sit alongside accuracy and
+are never folded into it — they diagnose *how* a system found an answer, which is
+not the same as whether it was right.
+
+Why the two axes are never combined, and what deterministic grading cannot
+express: [`docs/methodology.md`](docs/methodology.md).
+
+Two reports are comparable only when their `fingerprint` blocks match — same
+corpus, same questions, same answer key, same normalization, same scorer.
 
 ---
 
-## 🗂️ Project Structure
+---
+
+## Published Results
+
+One pair of runs ships as a worked example: a self-model and an agentic
+retrieval baseline on corpus A, both on the same base model, both graded by the
+grader in this repository. **In this pair of runs** the self-model scored higher
+overall and on most question types, and lower on two — `abstention`, where it
+answered 12 of 13 against the baseline's 13, and `single_hop`. Those are counts
+from these two runs; the artifacts do not include the self-model's memory, so
+they cannot say what caused any of it.
+It also spends its tokens differently: most of the self-model's fall in the
+ingest phase, most of the baseline's fall per question — though the self-model's
+per-question figure is the larger of the two. The results page reports the two
+counts separately rather than as one ratio, because neither run carries the
+forwarded-call record that would establish they counted the same events.
+
+Read [`results/README.md`](results/README.md) **before** the table there. Those
+runs are corpus A only, on one base model; their answers predate a rename at
+publication; and their accounting cannot support a cost comparison. All four
+limits are stated where the numbers are.
+
+---
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `No module named pytest` | `pytest` is a dev dependency and is not vendored. | `python3 -m pip install pytest` |
+| `No module named 'bench'` | `python3 -m bench.runner` was run from a different directory; `-m` resolves the package from the current one. | `cd examples/tools/agent-memory-benchmark` and re-run. |
+| Adapter command not found on Windows | The shipped adapters invoke `python3`, which a default Windows install does not provide. | Run on macOS or Linux, or under WSL. |
+| Run marked invalid: *declared proxy, nothing crossed it* | The adapter bypassed the proxy, or it runs a locally-hosted model. | Point the client at `OPENAI_BASE_URL`, or declare `"accounting": "local"`. |
+| Run marked invalid: *forwarded request without countable usage* | The upstream returned no usage block. | Use a gateway that returns usage; a cost nobody measured must not read as zero. |
+| Run marked invalid: *declared local but N requests crossed the proxy* | The adapter says it runs locally but its client still points at `OPENAI_BASE_URL`. | Stop routing through the proxy, or declare `"accounting": "proxy"`. |
+| Run marked invalid: *N of M questions received no answer* | One or more answer rows are missing, blank or non-string. An incomplete submission is not a lower score. | Emit one row per question; to decline, say so in the answer rather than leaving it empty. |
+| USD is `null` in the report | `bench/pricing.py` has no entry for that model. | Expected. Token counts are still exact; the harness will not invent a price. |
+| Two reports refuse to be compared | Their `fingerprint` blocks differ — corpus, questions, key, normalization or scorer moved. | Re-score the stored answers: `python3 tools/regrade.py --run results/runs/<dir>` |
+| A phase hangs, then dies at six hours | The per-phase wall-clock budget. | Raise `MNEMO_TIMEOUT_SECONDS`, or set `0` to wait indefinitely. |
+| `results/` grew by hundreds of megabytes | Each run keeps whatever memory the system under test built. | Delete the run directory; see [Cleanup](#cleanup). |
+
+---
+
+---
+
+## Cleanup
+
+Each run writes `results/runs/<timestamp>-<adapter>/`, holding the report, the
+verdicts, the answers, and whatever memory the system under test built — that
+last part can reach hundreds of megabytes. Delete the run directory to reclaim
+the space.
+
+By default nothing outside that directory is modified by the harness. `--out`
+and `--state` will write wherever you point them, and an adapter is not
+sandboxed, so one you add can write elsewhere; see
+[How the runner treats your adapter](#how-the-runner-treats-your-adapter).
+
+A generated run is **ignored**, not merely untracked, so `git add -A` after a run
+cannot sweep one in. Publishing a run means un-ignoring it by name in
+`.gitignore` — the deliberate act that put the two directories in `results/runs/`
+there.
+
+---
+
+---
+
+## At A Glance
+The information contract this repository asks every example to publish. The
+rows that change what you do are repeated above, where you need them.
+
+| Question | Answer |
+| --- | --- |
+| Category | Developer Tool |
+| Contributor or provenance | NVIDIA |
+| Use this when | You need to compare memory designs — consolidating, retrieval, or anything else — on the same corpus and the same questions. |
+| You will get | Accuracy per question type, plus ingest and per-answer token cost measured at a proxy rather than self-reported. |
+| Runs on | Any host with Python 3.9 or later, on macOS or Linux. The shipped adapter definitions invoke `python3`, which a default Windows install does not provide. |
+| Requires | `pytest` for the offline check. To score a real system: an API key for an OpenAI-compatible endpoint, and an adapter for the system under test. |
+| Verified on | Python 3.9.6 on macOS. Offline self-test and unit tests only; no scored run against a live endpoint is included as evidence here. |
+| Evidence level | local/static |
+| Support and maturity | Best-effort community support; see [SUPPORT.md](../../../SUPPORT.md). |
+| External access, data, and actions | Scoring a real system sends corpus text and questions to the endpoint you point `--upstream` at, and you pay for those tokens. The harness writes only under `results/`; an adapter you add is not sandboxed and can write anywhere your user can. The offline self-test sends nothing and costs nothing. |
+| Start here | [Getting Started](#getting-started) — offline, no key required |
+| Confirm success | [Verification](#verification) |
+
+---
+
+---
+
+## For Contributors
+
+Everything below is for someone adding a system, changing the harness, or
+verifying a claim. A reader who only wants to run the benchmark can stop here.
+
+### Project Structure
 
 ```text
 agent-memory-benchmark/
@@ -305,9 +362,9 @@ its own requirements separately, inside its own directory.
 
 ---
 
-## ⚙️ Configuration
+### Configuration
 
-### `adapter.json` — the contract for a system under test
+#### `adapter.json` — the contract for a system under test
 
 Every adapter is one JSON file. `name`, `ingest` and `answer` are required —
 omitting any of them is an uncaught `KeyError`, not a default. `model` is
@@ -365,7 +422,7 @@ interface AdapterConfig {
 > A `local` run that really is local stays valid, and stays out of cost
 > comparisons. Only a fully counted run carries `comparable_on_cost: true`.
 
-### Environment variables
+#### Environment variables
 
 | Variable | Default | What it does |
 | --- | --- | --- |
@@ -395,12 +452,12 @@ MY_SYSTEM_PYTHON=~/src/my-system/.venv/bin/python \
     python3 -m bench.runner --adapter adapters/my_system
 ```
 
-> ⏱️ The timeout applies to each phase *call*, and ingest is called twice, so a
+> The timeout applies to each phase *call*, and ingest is called twice, so a
 > default run can occupy up to eighteen hours before anything is killed.
 
 ---
 
-## 🧩 Adding Your System
+### Adding Your System
 
 1. Write an `adapter.json` as above.
 2. `answer` reads `questions.jsonl` on **stdin** and writes one JSON object per
@@ -431,7 +488,7 @@ interface AnswerRow {
 
 ---
 
-## 🔐 How The Runner Treats Your Adapter
+### How The Runner Treats Your Adapter
 
 > ⚠️ **An adapter is local code you chose to run. It is not sandboxed.** It
 > executes with your user, your filesystem, and whatever credentials are in the
@@ -465,60 +522,19 @@ provide:
 
 ---
 
-## 📊 Reading A Result
-
-Accuracy is reported **per question type**. An overall figure is reported too,
-first, because a reader wants one — but it is an average over a question mix
-this benchmark chose, so the per-type rows are what a comparison should rest on.
-Freshness is split further, into questions where the superseded value is also in
-the corpus (the system must resist it) and questions where it is not (a plain
-recency check). Evidence recall and citation coverage sit alongside accuracy and
-are never folded into it — they diagnose *how* a system found an answer, which is
-not the same as whether it was right.
-
-Why the two axes are never combined, and what deterministic grading cannot
-express: [`docs/methodology.md`](docs/methodology.md).
-
-Two reports are comparable only when their `fingerprint` blocks match — same
-corpus, same questions, same answer key, same normalization, same scorer.
-
----
-
-## 📈 Published Results
-
-One pair of runs ships as a worked example: a self-model and an agentic
-retrieval baseline on corpus A, both on the same base model, both graded by the
-grader in this repository. **In this pair of runs** the self-model scored higher
-overall and on most question types, and lower on two — `abstention`, where it
-answered 11 of 13 against the baseline's 13, and `single_hop`. Those are counts
-from these two runs; the artifacts do not include the self-model's memory, so
-they cannot say what caused any of it.
-It also spends its tokens differently: most of the self-model's fall in the
-ingest phase, most of the baseline's fall per question — though the self-model's
-per-question figure is the larger of the two. The results page reports the two
-counts separately rather than as one ratio, because neither run carries the
-forwarded-call record that would establish they counted the same events.
-
-Read [`results/README.md`](results/README.md) **before** the table there. Those
-runs are corpus A only, on one base model; their answers predate a rename at
-publication; and their accounting cannot support a cost comparison. All four
-limits are stated where the numbers are.
-
----
-
-## ✅ Verification
+### Verification
 
 **Evidence level:** `local/static`. **Verified on** Python 3.9.6, macOS. Nothing
 here exercises a live endpoint.
 
 ```bash
-python3 -m pytest tests/     # expected: 225 passed
+python3 -m pytest tests/     # expected: 226 passed
 ```
 
 **Expected result:**
 
 ```text
-225 passed
+226 passed
 ```
 
 **This verifies:** the runner, grader, report renderer and the ledger adapter's
@@ -532,65 +548,9 @@ Windows.
 
 ---
 
-## 🩺 Troubleshooting
-
-| Symptom | Cause | Fix |
-| --- | --- | --- |
-| `No module named pytest` | `pytest` is a dev dependency and is not vendored. | `python3 -m pip install pytest` |
-| `No module named 'bench'` | `python3 -m bench.runner` was run from a different directory; `-m` resolves the package from the current one. | `cd examples/tools/agent-memory-benchmark` and re-run. |
-| Adapter command not found on Windows | The shipped adapters invoke `python3`, which a default Windows install does not provide. | Run on macOS or Linux, or under WSL. |
-| Run marked invalid: *declared proxy, nothing crossed it* | The adapter bypassed the proxy, or it runs a locally-hosted model. | Point the client at `OPENAI_BASE_URL`, or declare `"accounting": "local"`. |
-| Run marked invalid: *forwarded request without countable usage* | The upstream returned no usage block. | Use a gateway that returns usage; a cost nobody measured must not read as zero. |
-| Run marked invalid: *declared local but N requests crossed the proxy* | The adapter says it runs locally but its client still points at `OPENAI_BASE_URL`. | Stop routing through the proxy, or declare `"accounting": "proxy"`. |
-| Run marked invalid: *N of M questions received no answer* | One or more answer rows are missing, blank or non-string. An incomplete submission is not a lower score. | Emit one row per question; to decline, say so in the answer rather than leaving it empty. |
-| USD is `null` in the report | `bench/pricing.py` has no entry for that model. | Expected. Token counts are still exact; the harness will not invent a price. |
-| Two reports refuse to be compared | Their `fingerprint` blocks differ — corpus, questions, key, normalization or scorer moved. | Re-score the stored answers: `python3 tools/regrade.py --run results/runs/<dir>` |
-| A phase hangs, then dies at six hours | The per-phase wall-clock budget. | Raise `MNEMO_TIMEOUT_SECONDS`, or set `0` to wait indefinitely. |
-| `results/` grew by hundreds of megabytes | Each run keeps whatever memory the system under test built. | Delete the run directory; see [Cleanup](#-cleanup). |
-
 ---
 
-## 🧹 Cleanup
-
-Each run writes `results/runs/<timestamp>-<adapter>/`, holding the report, the
-verdicts, the answers, and whatever memory the system under test built — that
-last part can reach hundreds of megabytes. Delete the run directory to reclaim
-the space.
-
-By default nothing outside that directory is modified by the harness. `--out`
-and `--state` will write wherever you point them, and an adapter is not
-sandboxed, so one you add can write elsewhere; see
-[How the runner treats your adapter](#-how-the-runner-treats-your-adapter).
-
-A generated run is **ignored**, not merely untracked, so `git add -A` after a run
-cannot sweep one in. Publishing a run means un-ignoring it by name in
-`.gitignore` — the deliberate act that put the two directories in `results/runs/`
-there.
-
----
-
-## 🔎 At A Glance
-The information contract this repository asks every example to publish. The
-rows that change what you do are repeated above, where you need them.
-
-| Question | Answer |
-| --- | --- |
-| Category | Developer Tool |
-| Contributor or provenance | NVIDIA |
-| Use this when | You need to compare memory designs — consolidating, retrieval, or anything else — on the same corpus and the same questions. |
-| You will get | Accuracy per question type, plus ingest and per-answer token cost measured at a proxy rather than self-reported. |
-| Runs on | Any host with Python 3.9 or later, on macOS or Linux. The shipped adapter definitions invoke `python3`, which a default Windows install does not provide. |
-| Requires | `pytest` for the offline check. To score a real system: an API key for an OpenAI-compatible endpoint, and an adapter for the system under test. |
-| Verified on | Python 3.9.6 on macOS. Offline self-test and unit tests only; no scored run against a live endpoint is included as evidence here. |
-| Evidence level | local/static |
-| Support and maturity | Best-effort community support; see [SUPPORT.md](../../../SUPPORT.md). |
-| External access, data, and actions | Scoring a real system sends corpus text and questions to the endpoint you point `--upstream` at, and you pay for those tokens. The harness writes only under `results/`; an adapter you add is not sandboxed and can write anywhere your user can. The offline self-test sends nothing and costs nothing. |
-| Start here | [Getting Started](#-getting-started) — offline, no key required |
-| Confirm success | [Verification](#-verification) |
-
----
-
-## 🏷️ Provenance And License
+## Provenance And License
 
 Authored and maintained by NVIDIA, contributed under Apache-2.0.
 

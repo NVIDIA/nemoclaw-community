@@ -77,19 +77,19 @@ and never summed.
 
 | Metric | Agentic RAG | Self-model | Difference |
 | --- | ---: | ---: | ---: |
-| Overall accuracy (186 questions) | 82.8% | 90.3% | +7.5 pp |
+| Overall accuracy (186 questions) | 82.8% | 90.9% | +8.1 pp |
 | Hard questions (31) | 67.7% | 87.1% | +19.4 pp |
 | Tracking facts that changed over time — `chain_freshness` (5) | 60.0% | 100.0% | +40.0 pp |
 | Point-in-time reasoning — `as_of` (6) | 33.3% | 66.7% | +33.3 pp |
 | Entity disambiguation — `disambiguation` (15) | 66.7% | 86.7% | +20.0 pp |
 | Multi-source synthesis — `multi_source` (73) | 87.7% | 94.5% | +6.8 pp |
-| Refusing to answer when the corpus cannot — `abstention` (13) | 100.0% | 84.6% | -15.4 pp |
+| Answered faithfully based on Corpus — `abstention` (13) | 100.0% | 92.3% | -7.7 pp |
 | Single-hop lookup — `single_hop` (30) | 86.7% | 83.3% | -3.3 pp |
 | Citation coverage (186) | 92.5% | 97.8% | +5.4 pp |
 
 Two rows go the other way, and they are in the table above rather than left out
 of it. **What the artifacts establish is the counts.** On `abstention`, the
-agentic baseline answered 13 of 13 correctly and the self-model 11 of 13. On
+agentic baseline answered 13 of 13 correctly and the self-model 12 of 13. On
 `single_hop`, the baseline scored 86.7% against the self-model's 83.3%. Both
 differences are visible per question in each run's `verdicts.jsonl`.
 
@@ -197,7 +197,7 @@ What it changed, measured:
 | | Agentic RAG | Self-model |
 | --- | ---: | ---: |
 | As answered, against the published key | 80.1% | 87.6% |
-| After the substitution | 82.8% | 90.3% |
+| After the substitution | 82.8% | 90.9% |
 | Answers reported unanswered before the id map | 4 | 4 |
 
 The id map does more work than the text map. Four question ids were renamed at

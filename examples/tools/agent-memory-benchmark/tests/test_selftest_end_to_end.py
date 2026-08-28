@@ -138,3 +138,25 @@ def test_the_screenshot_shows_what_the_self_test_actually_prints(tmp_path):
         assert line in printed, (
             f"the screenshot claims {line!r}, which the self-test does not print. "
             f"Re-render docs/assets/offline-self-test.svg from a real run.")
+
+
+def test_the_readme_image_has_a_checkable_source():
+    """The catalog forbids SVG in a README, so the picture cannot be the checked file.
+
+    Upstream switched the README to a PNG because `scripts/build_catalog.py`
+    allows only raster formats. A raster cannot be read back and compared with
+    the run it depicts, so the drift check reads the SVG instead. That only
+    means anything while the SVG still ships and still describes the same
+    output, which the check above enforces -- this one enforces that the pair
+    stays a pair.
+    """
+    readme = (REPO / "README.md").read_text(encoding="utf-8")
+    shown = re.findall(r"!\[[^\]]*\]\((docs/assets/[^)]+)\)", readme)
+    assert shown, "the README no longer shows the offline self-test image"
+    for reference in shown:
+        assert (REPO / reference).exists(), f"the README shows {reference}, missing"
+    if any(not r.endswith(".svg") for r in shown):
+        svg = REPO / "docs" / "assets" / "offline-self-test.svg"
+        assert svg.exists(), (
+            "the README shows a raster image and the SVG it was exported from is "
+            "gone, so nothing checks that the picture matches a real run")

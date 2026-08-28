@@ -6,10 +6,10 @@
 * questions: 186 (graded deterministically: 186, deferred to judge: 0)
 
 ## Quality
-* accuracy overall: **0.9032**
-  * [base] 0.9097
+* accuracy overall: **0.9086**
+  * [base] 0.9161
   * [hard] 0.871
-  * abstention: 0.8462
+  * abstention: 0.9231
   * as_of: 0.6667
   * attribution: 0.8
   * chain_freshness: 1.0

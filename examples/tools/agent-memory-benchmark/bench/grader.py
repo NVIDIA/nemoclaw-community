@@ -39,6 +39,15 @@ ABSTAIN_MARKERS = (
     "did not happen", "no record of", "nothing in the raw", "does not state",
     "doesn't state", "does not say", "doesn't say", "corpus only shows",
     "only reserved", "no opened", "never opened", "not reviewed",
+    # An event placed in the future has not happened, which is what an
+    # abstention question about it is asking. The list already carried the past
+    # forms -- "only planned", "has not happened" -- but not the present ones a
+    # system actually writes. The forbidden-claim check runs before this, so an
+    # answer that asserts the event went well cannot reach it by adding "was
+    # planned for" afterwards.
+    "is planned", "are planned", "planned for", "is scheduled", "are scheduled",
+    "scheduled for", "has yet to", "have yet to", "yet to be", "not taken place",
+    "is upcoming", "target date", "is targeted for",
 )
 
 YES_MARKERS = ("yes", "correct", "true", "that is right", "same person", "one person", "identical")
@@ -392,6 +401,11 @@ def _grade_abstain(answer: str, gold: dict) -> tuple[bool, str]:
         return False, f"asserted content the corpus does not support: {fabricated!r}"
     if _is_abstention(answer):
         return True, "correctly declined to assert"
+    # Distinguish the two ways an abstention item can be failed, because they are
+    # not the same behaviour and a reader of the verdicts should not have to
+    # guess which one happened. Fabrication is caught above, by the forbidden
+    # claim; what is left here is an answer that stayed inside the corpus but
+    # never signalled the gap.
     # Some questions are answerable by rejecting their premise instead of
     # declining ("ReviewBot is an automated sender, not a colleague"). These
     # markers are NOT a correct answer to the question as asked — an abstention
@@ -401,7 +415,9 @@ def _grade_abstain(answer: str, gold: dict) -> tuple[bool, str]:
         return True, f"rejected the question's premise ({premise!r})"
     if _denies_occurrence(answer):
         return True, "stated the thing has not happened, and asserted no outcome"
-    return False, "answered as if the fact were known (no abstention marker)"
+    return False, (
+        "answered from the corpus without signalling that it cannot support the "
+        "question")
 
 
 def _grade_ordering(answer: str, gold: dict) -> tuple[bool, str]:
