@@ -12,6 +12,7 @@ from pathlib import Path
 
 from scripts.build_catalog import (
     CATEGORY_DEFINITIONS,
+    CATALOG_METADATA_HEADING,
     COLLECTION_DEFINITIONS,
     CatalogError,
     INDUSTRY_EMOJIS,
@@ -274,7 +275,7 @@ class CatalogBuildTests(unittest.TestCase):
         with self.assertRaisesRegex(CatalogError, "Missing.*Description"):
             load_catalog(root)
 
-    def test_description_paragraph_before_catalog_table_is_rejected(self) -> None:
+    def test_catalog_table_requires_a_supported_position(self) -> None:
         root = self._fixture_root()
         readme = root / "examples" / "recipes" / "community" / "sample" / "README.md"
         content = readme.read_text(encoding="utf-8").replace(
@@ -284,8 +285,24 @@ class CatalogBuildTests(unittest.TestCase):
         )
         readme.write_text(content, encoding="utf-8")
 
-        with self.assertRaisesRegex(CatalogError, "title must be followed by"):
+        with self.assertRaisesRegex(CatalogError, "must follow the README title"):
             load_catalog(root)
+
+    def test_catalog_table_can_be_the_final_readme_section(self) -> None:
+        root = self._fixture_root()
+        readme = root / "examples" / "recipes" / "community" / "sample" / "README.md"
+        title, remainder = readme.read_text(encoding="utf-8").split("\n\n", 1)
+        table, body = remainder.split("\n\n", 1)
+        readme.write_text(
+            f"{title}\n\n{body.rstrip()}\n\n"
+            f"{CATALOG_METADATA_HEADING}\n\n{table}\n",
+            encoding="utf-8",
+        )
+
+        entry = load_catalog(root)[0]
+
+        self.assertEqual(entry.description, "Produces a small observable fixture result.")
+        self.assertEqual(entry.readme_body, "A small fixture.")
 
     def test_description_row_must_be_plain_text_and_at_most_300_characters(self) -> None:
         invalid_descriptions = (

@@ -1,11 +1,13 @@
+<!-- markdownlint-disable MD013 -->
 <!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- markdownlint-enable MD013 -->
 
 # Connecting a mailbox
 
-Fifteen minutes, most of it waiting for a sign-in page. What you end up with is
-a credential the sandbox never holds and a collector that reads your inbox and
-writes nothing back to it.
+Fifteen minutes, most of it waiting for a sign-in page. On the supported path,
+what you end up with is a credential the sandbox never holds and a collector
+that reads your inbox and writes nothing back to it.
 
 ## What holds the credential
 
@@ -20,12 +22,31 @@ encrypted token cache, which keeps a recipe self-contained at the cost of the
 refresh token living inside the sandbox — where an encrypted cache is a
 mitigation rather than a boundary.
 
-## The one thing that goes wrong
+## Request delegated permissions
 
 An application permission instead of a delegated one. `Mail.Read` exists in
 both flavours, and the application flavour reads every mailbox in the tenant.
 The collector refuses it — a token whose `/me` has no address is not a
 delegated token — but it is worth not requesting in the first place.
+
+## Provider provenance is an operator check in this version
+
+The provider profile in this checkout describes the intended boundary; it is
+not proof of which provider is active on a particular sandbox. The current
+collector reads `MS_GRAPH_ACCESS_TOKEN` from its environment and cannot identify
+the attached provider that supplied it.
+
+Before running setup or intake, list the sandbox's attached providers on the
+host and inspect each one:
+
+```bash
+openshell sandbox provider list <sandbox>
+openshell provider get <provider-name>
+```
+
+If an unrelated provider exposes `MS_GRAPH_ACCESS_TOKEN`, stop. Do not run the
+collector, even if that provider happens to hold a valid Outlook token. Use a
+dedicated sandbox or detach the conflicting provider first.
 
 ## Where each step runs
 
@@ -47,7 +68,8 @@ guessed.
 
 At the Microsoft Entra admin centre, register an application with:
 
-- **Delegated** `Mail.Read` and `offline_access`. Delegated, not application.
+- **Delegated** `Mail.Read`, `User.Read`, and `offline_access`. Delegated, not
+  application.
 - **Public client flows enabled** — the device-code flow needs it, and it is
   off by default.
 - No redirect URI. There is no browser on the machine running the collector,
@@ -69,6 +91,10 @@ It prints a short code and an address. Open the address anywhere you trust,
 enter the code, approve. The terminal waits; nothing is stored until you
 finish, and the refresh token that comes back goes to the gateway rather than
 into the sandbox.
+
+If setup reports that another attached provider exposes
+`MS_GRAPH_ACCESS_TOKEN`, treat the refusal as a hard stop. Detach the conflicting
+provider or use a dedicated sandbox before rerunning setup.
 
 ## 4. Choose how far back the first synchronisation reaches
 
@@ -94,7 +120,21 @@ A wider window costs a longer first synchronisation. Each tick spends a bounded
 number of requests and saves its place, so a first round over thirty days
 finishes across several ticks rather than in one.
 
-## 5. Verify
+## 5. Verify the effective provider, then the collector
+
+On the host, confirm that the attached Graph provider has type
+`memory-driven-cos-graph-user`, then export that profile and verify its Graph
+endpoint declares `access: read-only` and `enforcement: enforce`:
+
+```bash
+openshell sandbox provider list <sandbox>
+openshell provider get <provider-name>
+openshell provider profile export memory-driven-cos-graph-user
+```
+
+Do not infer those properties from `providers/graph-user.yaml`; the exported
+gateway profile is the effective policy. Do not proceed if a different provider
+also exposes `MS_GRAPH_ACCESS_TOKEN`.
 
 Inside the sandbox:
 
@@ -118,7 +158,7 @@ failure. `resumed: true` says this tick continued one.
 
 | Exit | Means |
 | --- | --- |
-| `0` | Collected, or never configured. Never configured is a state, not a fault |
+| `0` | Collected or unconfigured; unconfigured is not a fault |
 | `1` | Something else; the message says what |
 | `2` | The credential is missing, wrong, or was refused |
 | `3` | Rate limited before the work finished |

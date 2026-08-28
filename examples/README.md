@@ -5,7 +5,7 @@
 
 Examples are organized first by artifact type. Reusable recipes are organized
 again by contributor provenance. Industry is an independent discovery field.
-This file is generated from the catalog metadata block at the top of each
+This file is generated from the catalog metadata table in each
 example README. Edit that README, then run
 `python3 scripts/build_catalog.py --write` from the repository root.
 
@@ -58,7 +58,7 @@ Standalone utilities that help developers build, evaluate, inspect, or operate N
 
 | Example | Industry | Description |
 | --- | --- | --- |
-| [Agent Memory Benchmark](tools/agent-memory-benchmark/README.md) | ✨ Other | Measures the memory an agent builds from synthetic email and chat by asking 186 questions on one corpus and 96 on another, then reports accuracy by question type separately from ingest and answer token costs. |
+| [Agent Memory Benchmark](tools/agent-memory-benchmark/README.md) | ✨ Other | Measures memory built from synthetic email and chat, asks 186 questions on one corpus and 96 on a second, and reports accuracy by question type with ingest and answer token costs. |
 | [Harness Engineering Playground](tools/harness-engineering-playground/README.md) | ✨ Other | Provides an experimental loop for tuning DeepAgents harness profiles against behavioral evaluations, keeping fixes that pass verification and rolling back rejected edits. |
 
 ## Recipe Collections
