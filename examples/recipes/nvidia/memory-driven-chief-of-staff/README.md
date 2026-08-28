@@ -73,18 +73,15 @@ recipe complements Hermes memory and optional external memory providers.
 - [From Message Overload to the Work That Needs You](#from-message-overload-to-the-work-that-needs-you)
 - [Memory That Tracks Work, Not Just Preferences](#memory-that-tracks-work-not-just-preferences)
 - [How It Works](#how-it-works)
-- [Project Structure](#project-structure)
 - [Quick Start](#quick-start)
 - [Install in NemoClaw](#install-in-nemoclaw)
 - [Configuration](#configuration)
 - [Connect Messaging Providers](#connect-messaging-providers)
-- [API and Module Reference](#api-and-module-reference)
 - [Scheduled Operation](#scheduled-operation)
 - [Data Lifecycle and Privacy](#data-lifecycle-and-privacy)
-- [Verification](#verification)
 - [Troubleshooting and FAQ](#troubleshooting-and-faq)
 - [Limitations and Support](#limitations-and-support)
-- [Recipe Metadata](#recipe-metadata)
+- [For Contributors](#for-contributors)
 
 ## How It Works
 
@@ -137,90 +134,6 @@ code used by scheduled runs.
 | Intent gate | Proof in memory that the user chose the work; required for `high` |
 | Wake gate | The last non-empty selector line that tells Hermes not to call the model |
 | Envelope | Versioned JSON containing model decisions for the transactional writer |
-<!-- markdownlint-enable MD013 -->
-
-## Project Structure
-
-Paths below are relative to this recipe directory.
-
-<!-- markdownlint-disable MD013 -->
-```text
-memory-driven-chief-of-staff/
-├── README.md                         # Start here: setup, operation, and API contract
-├── profile/
-│   ├── distribution.yaml            # Version, Hermes requirement, owned paths
-│   ├── SOUL.md                       # Chief-of-staff persona and response boundary
-│   ├── schema.md                     # Memory page types, provenance, decay, ceilings
-│   ├── seed/                         # Initial index and attention pages for a new memory
-│   ├── scripts/
-│   │   ├── schema.sql                # Current v5 SQLite store schema
-│   │   ├── schema-v1.sql             # Frozen schemas used by migration tests
-│   │   ├── schema-v2.sql
-│   │   ├── schema-v3.sql
-│   │   ├── schema-v4.sql
-│   │   ├── _db.py                    # Profile-home, connection, and transaction boundary
-│   │   ├── identity.py               # Cross-provider identity relation resolver
-│   │   ├── link_identity.py          # User command for identity confirmations
-│   │   ├── normalize.py              # Source payloads to source-neutral item rows
-│   │   ├── ingest_graph.py           # Optional read-only Outlook mailbox collector
-│   │   ├── ingest_slack.py           # Optional read-only Slack collector
-│   │   ├── select_intake.py          # Intake batch selector and wake gate
-│   │   ├── select_review.py          # Review batch selector and wake gate
-│   │   ├── select_memory.py          # Evidence selector for scheduled wiki writing
-│   │   ├── apply_decisions.py        # Validates and commits agent envelopes
-│   │   ├── ranking.py                # Deterministic cap, reservation, and cascade
-│   │   ├── correct.py                # User pin, ignore, and unignore writer
-│   │   ├── walkthrough.py            # Offline end-to-end entry point
-│   │   ├── retention.py              # Scheduled message-body clearing
-│   │   ├── exclusions.py             # Sender, domain, and channel filtering
-│   │   ├── export_store.py           # Complete Markdown and JSON export
-│   │   ├── reset.py                  # Store, memory, and policy reset
-│   │   ├── migrate.py                # Forward-only store migration
-│   │   ├── memory_check.py           # Deterministic memory invariant checker
-│   │   └── tests/                    # 14 direct-execution unittest modules
-│   └── skills/
-│       ├── inbound-judging/          # New-message judgment instructions
-│       ├── obligation-review/        # Scheduled re-judgment instructions
-│       ├── memory-writing/            # Evidence-grounded people and attention pages
-│       ├── memory-repair/            # Safe invariant repair instructions
-│       ├── memory-consolidation/     # Bounded compaction instructions
-│       └── preference-update/        # Repeated-correction learning instructions
-├── fixtures/
-│   ├── README.md                     # Fixture schema, controls, and provenance
-│   ├── graph_messages.json           # Five synthetic Graph-shaped messages
-│   ├── slack_messages.json           # Three synthetic Slack-shaped messages
-│   ├── envelopes/intake.json         # Recorded intake model turn
-│   └── memory/                       # Synthetic seed memory for the walkthrough
-├── providers/
-│   ├── graph-user.yaml               # Read-only delegated Graph mailbox policy
-│   └── slack-user.yaml               # Read-only Slack endpoint and credential policy
-├── scripts/
-│   ├── install.sh                    # Sandbox: install profile and register jobs
-│   ├── register-jobs.sh              # Sandbox: idempotent Hermes cron registration
-│   ├── require-encrypted-storage.sh  # Shared connector storage prerequisite
-│   ├── require-linux.sh              # Shared scheduled-runtime platform check
-│   ├── setup-graph.sh                # Host: authorize and attach Outlook mailbox access
-│   ├── setup-slack.sh                # Host: authorize and attach rotating Slack token
-│   └── validate-provider-profile.sh  # Host: fail-closed provider policy validation
-└── docs/
-    ├── data-lifecycle.md             # Retention, exclusions, export, reset, migration
-    ├── encrypted-storage.md          # Required storage-encryption checks
-    ├── set-up-graph.md               # Full Outlook mailbox authorization walkthrough
-    ├── set-up-slack.md               # Full Slack authorization walkthrough
-    └── slack_app_manifest.json       # User-scoped Slack app manifest
-```
-<!-- markdownlint-enable MD013 -->
-
-### Dependencies
-
-<!-- markdownlint-disable MD013 -->
-| Dependency source | Path | Purpose |
-| --- | --- | --- |
-| Python package manifest | None | All Python modules use the standard library |
-| Recipe manifest | `profile/distribution.yaml` | Pins recipe version and Hermes 0.19.0+ |
-| SQLite schema | `profile/scripts/schema.sql` | Defines application state schema v5 |
-| Outlook provider policy | `providers/graph-user.yaml` | Declares the recipe's intended read-only delegated `graph.microsoft.com` boundary |
-| Slack provider policy | `providers/slack-user.yaml` | Declares the recipe's intended read-only `slack.com` boundary |
 <!-- markdownlint-enable MD013 -->
 
 ## Quick Start
@@ -613,105 +526,6 @@ Outlook collector exit codes are:
 | `3` | Microsoft Graph rate limit |
 | `4` | Token is not a delegated mailbox token with the required scopes |
 
-## API and Module Reference
-
-### Decision envelope
-
-`apply_decisions.py` reads one JSON document from standard input. The supported
-decisions are `CREATE`, `KEEP_OPEN`, `MARK_DONE`, and `SKIP`. A create or keep
-decision requires a rank, title, and intent-gate verdict.
-
-```json
-{
-  "version": 1,
-  "pass": "intake",
-  "decisions": [
-    {
-      "source_id": "msg-priorities-match",
-      "decision": "CREATE",
-      "rank": 1,
-      "intent_gated": true,
-      "title": "Review the migration plan",
-      "context": "Matches a current priority",
-      "urgency_reason": "Requested before the planning review",
-      "kind": "response",
-      "est_effort": "minutes"
-    },
-    {
-      "source_id": "msg-automated-noise",
-      "decision": "SKIP"
-    }
-  ],
-  "cursor": {
-    "source": "email",
-    "scope": "inbox",
-    "value": "synthetic-cursor"
-  }
-}
-```
-
-Run the writer against a saved envelope from the recipe root.
-
-```bash
-python3 profile/scripts/apply_decisions.py < /path/to/envelope.json
-```
-
-Valid optional values are:
-
-```yaml
-kind:
-  - response
-  - action
-  - null
-est_effort:
-  - minutes
-  - hours
-  - day
-  - multi_day
-  - null
-```
-
-### Module contracts
-
-<!-- markdownlint-disable MD013 -->
-| Module | Reads | Writes / returns |
-| --- | --- | --- |
-| `normalize.py` | Graph- or Slack-shaped source objects | Source-neutral item dictionaries; recipient lists become one addressing value |
-| `_db.py` | `HERMES_HOME`, `schema.sql` | Validated profile path, SQLite connection, transactions, automatic migration |
-| `ingest_graph.py` | Delegated Graph token and inbox delta | New Outlook message rows, resumable cursor state, and source-removal tombstones |
-| `ingest_slack.py` | Rotating Slack token and selected conversations | New Slack rows and per-conversation watermarks |
-| `select_intake.py` | Collectors and pending rows | JSON batch or a final wake-gate line |
-| `select_review.py` | Open obligations | Oldest-review-first JSON batch or a final wake-gate line |
-| `select_memory.py` | Message evidence, open obligations, and user corrections | Bounded memory-writing evidence or a final wake-gate line |
-| `apply_decisions.py` | Versioned JSON envelope on standard input | Items, obligations, cursor, and append-only events in one transaction |
-| `correct.py` | One user command | Pin/ignore state plus `actor='user'` audit events |
-| `identity.py` | Stored pairwise identity answers | Resolved identity groups, candidates, and conflicts |
-| `link_identity.py` | User confirmation or rejection | Durable relationship between two provider identities |
-| `ranking.py` | Open obligations and gate verdicts | Deterministic bounded tiers and positions |
-| `preferences.py` | User correction events | Bounded preference policy after the fixed threshold is met |
-| `memory_check.py` | Memory Markdown pages | Diagnostics and exit status; no model call |
-| `retention.py` | Store and `RETENTION_DAYS` | Clears expired bodies; keeps metadata, obligations, and history |
-| `export_store.py` | Store, memory, and policy | Complete Markdown and JSON export directory |
-| `reset.py` | Profile workspace | Removes store, memory, policy, and collection state after confirmation |
-| `migrate.py` | Existing store | Forward-only schema migration or compatibility check |
-<!-- markdownlint-enable MD013 -->
-
-### Store and migration commands
-
-```bash
-python3 profile/scripts/retention.py --dry-run
-python3 profile/scripts/retention.py
-python3 profile/scripts/export_store.py --to /path/to/export
-python3 profile/scripts/migrate.py --check
-python3 profile/scripts/migrate.py
-python3 profile/scripts/reset.py --dry-run
-python3 profile/scripts/reset.py --yes
-```
-
-`reset.py --yes` is destructive. Stop or pause the schedule first, export if
-needed, detach and revoke external credentials separately, and verify the
-profile named by `HERMES_HOME` before running it.
-
 ## Scheduled Operation
 
 `scripts/register-jobs.sh` is idempotent: it edits jobs with matching names
@@ -801,47 +615,6 @@ The store and memory directories are created with owner-only permissions. That
 does not protect a lost disk, disk image, or unencrypted backup. Before
 connecting Slack or Outlook, follow
 [docs/encrypted-storage.md](docs/encrypted-storage.md).
-
-## Verification
-
-This is an integration-level reference implementation. Its evidence includes
-an offline end-to-end walkthrough, deterministic tests, scheduled Linux
-validation, plus live Slack and Outlook collector and credential-rotation
-validation.
-
-### Offline acceptance walkthrough
-
-```bash
-export RECIPE_VERIFY_HOME="$(mktemp -d)"
-export HERMES_HOME="$RECIPE_VERIFY_HOME"
-python3 profile/scripts/walkthrough.py --fixtures fixtures
-```
-
-### Full test suite
-
-Run from the recipe root. Each test file is executed directly because some
-tests verify direct-execution behavior.
-
-```bash
-cd profile/scripts
-export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"
-export no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost"
-fail=0
-for t in tests/*.py; do python3 "$t" || fail=1; done
-echo "failed=$fail"
-cd ../..
-test "$fail" -eq 0
-```
-
-Expected result: every file ends with `OK`, the fourteen files report 603 tests
-in total, and the final line is `failed=0`. Do not shorten the loop with an
-early break; running every module is part of the documented check.
-
-The suite covers schema migration, memory invariants, concurrency and crash
-recovery, deterministic ranking, preference thresholds, normalization,
-transactional decisions, correction state transitions, the walkthrough,
-intake, review, and memory-writing selector wake gates, scheduler contracts,
-lifecycle controls, and Slack and Outlook collection/rotation behavior.
 
 ## Troubleshooting and FAQ
 
@@ -994,7 +767,236 @@ This NVIDIA-authored recipe was proposed and reviewed in
 Support is best effort under the repository [support policy](../../../../SUPPORT.md).
 Security reports should follow [SECURITY.md](../../../../SECURITY.md).
 
-## Recipe Metadata
+## For Contributors
+
+The following sections document the implementation, contracts, and evidence
+used to review or extend this recipe.
+
+### Project Structure
+
+Paths below are relative to this recipe directory.
+
+<!-- markdownlint-disable MD013 -->
+```text
+memory-driven-chief-of-staff/
+├── README.md                         # Start here: setup, operation, and API contract
+├── profile/
+│   ├── distribution.yaml            # Version, Hermes requirement, owned paths
+│   ├── SOUL.md                       # Chief-of-staff persona and response boundary
+│   ├── schema.md                     # Memory page types, provenance, decay, ceilings
+│   ├── seed/                         # Initial index and attention pages for a new memory
+│   ├── scripts/
+│   │   ├── schema.sql                # Current v5 SQLite store schema
+│   │   ├── schema-v1.sql             # Frozen schemas used by migration tests
+│   │   ├── schema-v2.sql
+│   │   ├── schema-v3.sql
+│   │   ├── schema-v4.sql
+│   │   ├── _db.py                    # Profile-home, connection, and transaction boundary
+│   │   ├── identity.py               # Cross-provider identity relation resolver
+│   │   ├── link_identity.py          # User command for identity confirmations
+│   │   ├── normalize.py              # Source payloads to source-neutral item rows
+│   │   ├── ingest_graph.py           # Optional read-only Outlook mailbox collector
+│   │   ├── ingest_slack.py           # Optional read-only Slack collector
+│   │   ├── select_intake.py          # Intake batch selector and wake gate
+│   │   ├── select_review.py          # Review batch selector and wake gate
+│   │   ├── select_memory.py          # Evidence selector for scheduled wiki writing
+│   │   ├── apply_decisions.py        # Validates and commits agent envelopes
+│   │   ├── ranking.py                # Deterministic cap, reservation, and cascade
+│   │   ├── correct.py                # User pin, ignore, and unignore writer
+│   │   ├── walkthrough.py            # Offline end-to-end entry point
+│   │   ├── retention.py              # Scheduled message-body clearing
+│   │   ├── exclusions.py             # Sender, domain, and channel filtering
+│   │   ├── export_store.py           # Complete Markdown and JSON export
+│   │   ├── reset.py                  # Store, memory, and policy reset
+│   │   ├── migrate.py                # Forward-only store migration
+│   │   ├── memory_check.py           # Deterministic memory invariant checker
+│   │   └── tests/                    # 14 direct-execution unittest modules
+│   └── skills/
+│       ├── inbound-judging/          # New-message judgment instructions
+│       ├── obligation-review/        # Scheduled re-judgment instructions
+│       ├── memory-writing/            # Evidence-grounded people and attention pages
+│       ├── memory-repair/            # Safe invariant repair instructions
+│       ├── memory-consolidation/     # Bounded compaction instructions
+│       └── preference-update/        # Repeated-correction learning instructions
+├── fixtures/
+│   ├── README.md                     # Fixture schema, controls, and provenance
+│   ├── graph_messages.json           # Five synthetic Graph-shaped messages
+│   ├── slack_messages.json           # Three synthetic Slack-shaped messages
+│   ├── envelopes/intake.json         # Recorded intake model turn
+│   └── memory/                       # Synthetic seed memory for the walkthrough
+├── providers/
+│   ├── graph-user.yaml               # Read-only delegated Graph mailbox policy
+│   └── slack-user.yaml               # Read-only Slack endpoint and credential policy
+├── scripts/
+│   ├── install.sh                    # Sandbox: install profile and register jobs
+│   ├── register-jobs.sh              # Sandbox: idempotent Hermes cron registration
+│   ├── require-encrypted-storage.sh  # Shared connector storage prerequisite
+│   ├── require-linux.sh              # Shared scheduled-runtime platform check
+│   ├── setup-graph.sh                # Host: authorize and attach Outlook mailbox access
+│   ├── setup-slack.sh                # Host: authorize and attach rotating Slack token
+│   └── validate-provider-profile.sh  # Host: fail-closed provider policy validation
+└── docs/
+    ├── data-lifecycle.md             # Retention, exclusions, export, reset, migration
+    ├── encrypted-storage.md          # Required storage-encryption checks
+    ├── set-up-graph.md               # Full Outlook mailbox authorization walkthrough
+    ├── set-up-slack.md               # Full Slack authorization walkthrough
+    └── slack_app_manifest.json       # User-scoped Slack app manifest
+```
+<!-- markdownlint-enable MD013 -->
+
+#### Dependencies
+
+<!-- markdownlint-disable MD013 -->
+| Dependency source | Path | Purpose |
+| --- | --- | --- |
+| Python package manifest | None | All Python modules use the standard library |
+| Recipe manifest | `profile/distribution.yaml` | Pins recipe version and Hermes 0.19.0+ |
+| SQLite schema | `profile/scripts/schema.sql` | Defines application state schema v5 |
+| Outlook provider policy | `providers/graph-user.yaml` | Declares the recipe's intended read-only delegated `graph.microsoft.com` boundary |
+| Slack provider policy | `providers/slack-user.yaml` | Declares the recipe's intended read-only `slack.com` boundary |
+<!-- markdownlint-enable MD013 -->
+
+### API and Module Reference
+
+#### Decision envelope
+
+`apply_decisions.py` reads one JSON document from standard input. The supported
+decisions are `CREATE`, `KEEP_OPEN`, `MARK_DONE`, and `SKIP`. A create or keep
+decision requires a rank, title, and intent-gate verdict.
+
+```json
+{
+  "version": 1,
+  "pass": "intake",
+  "decisions": [
+    {
+      "source_id": "msg-priorities-match",
+      "decision": "CREATE",
+      "rank": 1,
+      "intent_gated": true,
+      "title": "Review the migration plan",
+      "context": "Matches a current priority",
+      "urgency_reason": "Requested before the planning review",
+      "kind": "response",
+      "est_effort": "minutes"
+    },
+    {
+      "source_id": "msg-automated-noise",
+      "decision": "SKIP"
+    }
+  ],
+  "cursor": {
+    "source": "email",
+    "scope": "inbox",
+    "value": "synthetic-cursor"
+  }
+}
+```
+
+Run the writer against a saved envelope from the recipe root.
+
+```bash
+python3 profile/scripts/apply_decisions.py < /path/to/envelope.json
+```
+
+Valid optional values are:
+
+```yaml
+kind:
+  - response
+  - action
+  - null
+est_effort:
+  - minutes
+  - hours
+  - day
+  - multi_day
+  - null
+```
+
+#### Module contracts
+
+<!-- markdownlint-disable MD013 -->
+| Module | Reads | Writes / returns |
+| --- | --- | --- |
+| `normalize.py` | Graph- or Slack-shaped source objects | Source-neutral item dictionaries; recipient lists become one addressing value |
+| `_db.py` | `HERMES_HOME`, `schema.sql` | Validated profile path, SQLite connection, transactions, automatic migration |
+| `ingest_graph.py` | Delegated Graph token and inbox delta | New Outlook message rows, resumable cursor state, and source-removal tombstones |
+| `ingest_slack.py` | Rotating Slack token and selected conversations | New Slack rows and per-conversation watermarks |
+| `select_intake.py` | Collectors and pending rows | JSON batch or a final wake-gate line |
+| `select_review.py` | Open obligations | Oldest-review-first JSON batch or a final wake-gate line |
+| `select_memory.py` | Message evidence, open obligations, and user corrections | Bounded memory-writing evidence or a final wake-gate line |
+| `apply_decisions.py` | Versioned JSON envelope on standard input | Items, obligations, cursor, and append-only events in one transaction |
+| `correct.py` | One user command | Pin/ignore state plus `actor='user'` audit events |
+| `identity.py` | Stored pairwise identity answers | Resolved identity groups, candidates, and conflicts |
+| `link_identity.py` | User confirmation or rejection | Durable relationship between two provider identities |
+| `ranking.py` | Open obligations and gate verdicts | Deterministic bounded tiers and positions |
+| `preferences.py` | User correction events | Bounded preference policy after the fixed threshold is met |
+| `memory_check.py` | Memory Markdown pages | Diagnostics and exit status; no model call |
+| `retention.py` | Store and `RETENTION_DAYS` | Clears expired bodies; keeps metadata, obligations, and history |
+| `export_store.py` | Store, memory, and policy | Complete Markdown and JSON export directory |
+| `reset.py` | Profile workspace | Removes store, memory, policy, and collection state after confirmation |
+| `migrate.py` | Existing store | Forward-only schema migration or compatibility check |
+<!-- markdownlint-enable MD013 -->
+
+#### Store and migration commands
+
+```bash
+python3 profile/scripts/retention.py --dry-run
+python3 profile/scripts/retention.py
+python3 profile/scripts/export_store.py --to /path/to/export
+python3 profile/scripts/migrate.py --check
+python3 profile/scripts/migrate.py
+python3 profile/scripts/reset.py --dry-run
+python3 profile/scripts/reset.py --yes
+```
+
+`reset.py --yes` is destructive. Stop or pause the schedule first, export if
+needed, detach and revoke external credentials separately, and verify the
+profile named by `HERMES_HOME` before running it.
+
+### Verification
+
+This is an integration-level reference implementation. Its evidence includes
+an offline end-to-end walkthrough, deterministic tests, scheduled Linux
+validation, plus live Slack and Outlook collector and credential-rotation
+validation.
+
+#### Offline acceptance walkthrough
+
+```bash
+export RECIPE_VERIFY_HOME="$(mktemp -d)"
+export HERMES_HOME="$RECIPE_VERIFY_HOME"
+python3 profile/scripts/walkthrough.py --fixtures fixtures
+```
+
+#### Full test suite
+
+Run from the recipe root. Each test file is executed directly because some
+tests verify direct-execution behavior.
+
+```bash
+cd profile/scripts
+export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"
+export no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost"
+fail=0
+for t in tests/*.py; do python3 "$t" || fail=1; done
+echo "failed=$fail"
+cd ../..
+test "$fail" -eq 0
+```
+
+Expected result: every file ends with `OK`, the fourteen files report 603 tests
+in total, and the final line is `failed=0`. Do not shorten the loop with an
+early break; running every module is part of the documented check.
+
+The suite covers schema migration, memory invariants, concurrency and crash
+recovery, deterministic ranking, preference thresholds, normalization,
+transactional decisions, correction state transitions, the walkthrough,
+intake, review, and memory-writing selector wake gates, scheduler contracts,
+lifecycle controls, and Slack and Outlook collection/rotation behavior.
+
+### Recipe Metadata
 
 ```yaml
 name: memory-driven-chief-of-staff
