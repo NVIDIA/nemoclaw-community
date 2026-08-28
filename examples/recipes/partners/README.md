@@ -5,10 +5,7 @@
 
 Reusable NemoClaw agent workflows contributed by partner organizations, with attribution and implementation guidance preserved from each contributor.
 
-<!-- BEGIN GENERATED EXAMPLES -->
 ## Examples
-
-This list is generated from each example's README catalog metadata.
 
 | Example | Contributor | Industry | Description |
 | --- | --- | --- | --- |
@@ -16,5 +13,3 @@ This list is generated from each example's README catalog metadata.
 | [Retail Assistant](hpe/retail-assistant/README.md) | HPE | 🛍️ Retail/Consumer Packaged Goods | Helps store employees check inventory and sales or request transfers and reorders through role-aware Telegram conversations scoped to their assigned store. |
 | [Shrike Security Action Governance](shrike/shrike-security/README.md) | Shrike Security, Inc. | ✨ Other | Adds defense-in-depth action governance through an in-sandbox hook that checks each OpenClaw tool call against server-side Shrike policy and blocks prohibited or approval-required calls. |
 | [Watchtower](tavily/watchtower/README.md) | Tavily | ✨ Other | Tracks what changed across chosen web topics and why it matters, producing scheduled, deduplicated Markdown digests and JSON changelogs with source citations. |
-
-<!-- END GENERATED EXAMPLES -->

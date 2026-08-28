@@ -86,21 +86,19 @@ link to the example itself.
 After optional license comments, each canonical category and collection index
 README starts with its public H1 title and one concise description paragraph.
 Those authored fields supply the catalog tile label and information tooltip.
-The entire index must follow the standardized shape ending with these markers;
-no other sections are permitted:
+The entire index must follow this standardized shape; no other sections are
+permitted:
 
 ```markdown
-<!-- BEGIN GENERATED EXAMPLES -->
 ## Examples
 
 [Generated table or empty-state message.]
-<!-- END GENERATED EXAMPLES -->
 ```
 
 The build retains the authored title and description values while normalizing
-the index and regenerating the marked inventory. Do not edit that inventory by
-hand. Collection indexes group recipes by metadata without changing their
-canonical paths.
+the index and regenerating its inventory. Do not edit that inventory by hand.
+Collection indexes group recipes by metadata without changing their canonical
+paths.
 
 ## Naming
 

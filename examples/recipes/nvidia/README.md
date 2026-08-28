@@ -5,10 +5,7 @@
 
 Reusable agent workflows authored or maintained by NVIDIA, designed as practical starting points that developers can inspect, adapt, and deploy with NemoClaw.
 
-<!-- BEGIN GENERATED EXAMPLES -->
 ## Examples
-
-This list is generated from each example's README catalog metadata.
 
 | Example | Industry | Description |
 | --- | --- | --- |
@@ -20,5 +17,3 @@ This list is generated from each example's README catalog metadata.
 | [Payment Operations Hermes Assistant](payment-ops-hermes/README.md) | 💳 Financial Services | Helps payment operators screen synthetic outbound payments, explain holds, and prepare review packets while OpenShell keeps final release authority with a human outside the Hermes sandbox. |
 | [PR Review Advisor](pr-review-advisor/README.md) | ✨ Other | Helps maintainers review exact pull request heads through staged, repository-aware Hermes analysis, producing attested JSON and Markdown findings for inspection before optional publication. |
 | [PR Test Case Assistant](pr-test-case-assistant/README.md) | ✨ Other | Helps quality engineers turn public GitHub pull request descriptions and bounded diffs into Slack briefs and proposed, unexecuted feature test cases with source evidence. |
-
-<!-- END GENERATED EXAMPLES -->

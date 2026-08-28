@@ -43,11 +43,9 @@ Each of the five canonical categories and two collection views has an index
 README. Its H1 and opening description are the authored source for the browse
 label and information tooltip. The build retains those values while rewriting
 each index into its standardized shape and regenerating the inventory inside
-the `<!-- BEGIN GENERATED EXAMPLES -->` and
-`<!-- END GENERATED EXAMPLES -->` markers. No other index sections are
-permitted. Collection directories are indexes only; they never contain
-examples. The ignored `_site/` directory is disposable; do not edit it
-directly.
+the `## Examples` section. No other index sections are permitted. Collection
+directories are indexes only; they never contain examples. The ignored
+`_site/` directory is disposable; do not edit it directly.
 
 The generated HTML contains every example card. The local JavaScript module
 filters those cards in the browser, so the full category-organized catalog

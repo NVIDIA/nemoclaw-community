@@ -61,10 +61,8 @@ class CatalogBuildTests(unittest.TestCase):
             readme.write_text(
                 f"# {title}\n\n"
                 f"Describes the {title} browse group for fixture tests.\n\n"
-                "<!-- BEGIN GENERATED EXAMPLES -->\n"
                 "## Examples\n\n"
-                "Fixture membership.\n"
-                "<!-- END GENERATED EXAMPLES -->\n",
+                "Fixture membership.\n",
                 encoding="utf-8",
             )
 
@@ -149,18 +147,14 @@ class CatalogBuildTests(unittest.TestCase):
             "marked-up description": (
                 "# Community Recipes\n\n"
                 "Uses **marked-up** metadata.\n\n"
-                "<!-- BEGIN GENERATED EXAMPLES -->\n"
                 "## Examples\n"
-                "<!-- END GENERATED EXAMPLES -->\n"
             ),
             "Markdown block description": (
                 "# Community Recipes\n\n"
                 "---\n\n"
-                "<!-- BEGIN GENERATED EXAMPLES -->\n"
                 "## Examples\n"
-                "<!-- END GENERATED EXAMPLES -->\n"
             ),
-            "missing generated marker": (
+            "missing Examples heading": (
                 "# Community Recipes\n\n"
                 "A valid plain-text description.\n"
             ),
@@ -212,9 +206,17 @@ class CatalogBuildTests(unittest.TestCase):
         group_readmes = render_discovery_readmes(
             entries, categories, collections
         )
+        community_readme = group_readmes[
+            "examples/recipes/community/README.md"
+        ]
         self.assertIn(
             "[Sample Example](sample/README.md)",
-            group_readmes["examples/recipes/community/README.md"],
+            community_readme,
+        )
+        self.assertIn(
+            "A distinctive community description from the README source.\n\n"
+            "## Examples\n\n| Example | Industry | Description |",
+            community_readme,
         )
         self.assertIn(
             "_No examples are currently in this group._",

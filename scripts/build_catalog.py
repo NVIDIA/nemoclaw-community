@@ -460,8 +460,7 @@ CATALOG_FIELD_ORDER = (
     "Contributor",
     "Collection",
 )
-GENERATED_EXAMPLES_BEGIN = "<!-- BEGIN GENERATED EXAMPLES -->"
-GENERATED_EXAMPLES_END = "<!-- END GENERATED EXAMPLES -->"
+EXAMPLES_HEADING = "## Examples"
 
 
 def _skip_leading_readme_comments(lines: list[str], readme_path: str) -> int:
@@ -554,22 +553,10 @@ def _parse_discovery_readme(
         )
     while index < len(lines) and not lines[index].strip():
         index += 1
-    if index >= len(lines) or lines[index] != GENERATED_EXAMPLES_BEGIN:
+    if index >= len(lines) or lines[index] != EXAMPLES_HEADING:
         raise CatalogError(
-            f"Browse-group README requires {GENERATED_EXAMPLES_BEGIN}: {readme_path}"
-        )
-    end_indexes = [
-        offset
-        for offset, line in enumerate(lines[index + 1 :], start=index + 1)
-        if line == GENERATED_EXAMPLES_END
-    ]
-    if len(end_indexes) != 1:
-        raise CatalogError(
-            f"Browse-group README requires one {GENERATED_EXAMPLES_END}: {readme_path}"
-        )
-    if any(line.strip() for line in lines[end_indexes[0] + 1 :]):
-        raise CatalogError(
-            f"Browse-group README cannot contain content after its generated list: {readme_path}"
+            f"Browse-group README requires {EXAMPLES_HEADING!r} after its "
+            f"description: {readme_path}"
         )
     return title, description
 
@@ -938,10 +925,7 @@ def render_discovery_readmes(
             "",
             group.description,
             "",
-            GENERATED_EXAMPLES_BEGIN,
-            "## Examples",
-            "",
-            "This list is generated from each example's README catalog metadata.",
+            EXAMPLES_HEADING,
             "",
             *_render_markdown_entries(
                 members,
@@ -949,8 +933,6 @@ def render_discovery_readmes(
                 show_category=show_category,
                 show_contributor=show_contributor,
             ),
-            "",
-            GENERATED_EXAMPLES_END,
             "",
         ]
         rendered[group.readme_path] = "\n".join(lines)

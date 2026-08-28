@@ -353,21 +353,18 @@ community path.
 After optional license comments, each index README must start with its public
 H1 title, a blank line, and one concise plain-text description paragraph. The
 build reads those authored fields for the catalog tile and its information
-tooltip. The entire index must use this standardized shape, with no content
-after the closing marker:
+tooltip. The entire index must use this standardized shape:
 
 ```markdown
-<!-- BEGIN GENERATED EXAMPLES -->
 ## Examples
 
 [Generated table or empty-state message.]
-<!-- END GENERATED EXAMPLES -->
 ```
 
 The build retains the authored title and description values while normalizing
-the index structure and regenerating the marked example list. Change an
-individual example's root README metadata and regenerate the catalog instead
-of editing that list by hand.
+the index structure and regenerating the example list. No other sections are
+permitted. Change an individual example's root README metadata and regenerate
+the catalog instead of editing that list by hand.
 
 ## Catalog Metadata
 
