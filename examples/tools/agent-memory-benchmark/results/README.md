@@ -96,7 +96,7 @@ below.
 
 ## The Rename, And Why The Answers Were Transformed
 
-Publication renamed 20 text identifiers and 4 question IDs. Each `report.json`
+Publication renamed 20 text identifiers and 4 question ids. Each `report.json`
 lists the ordered substitutions under `provenance_note.substitutions`; stored
 answers predate those names.
 

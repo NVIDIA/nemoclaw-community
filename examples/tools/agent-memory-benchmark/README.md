@@ -507,6 +507,6 @@ evidence_level: local/static
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Benchmarks memory systems on synthetic email and chat, reporting answer accuracy and token cost. |
+| Description | Measures memory built from synthetic email and chat, asks 186 questions on one corpus and 96 on a second, and reports accuracy by question type with ingest and answer token costs. |
 | Industry | ✨ Other |
 | Requirements | Python 3.9+ · pytest for offline checks · endpoint and adapter for live scoring |

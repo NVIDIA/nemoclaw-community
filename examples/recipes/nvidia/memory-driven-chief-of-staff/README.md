@@ -557,8 +557,15 @@ the same nightly sequence.
 Jobs live in `$HERMES_HOME/cron/jobs.json`. The distribution does not own the
 `cron` path, so profile updates leave job definitions and run history unchanged.
 
-Jobs survive a reboot, but resume automatically only when the gateway runs as a
-service. Hermes collapses missed recurring runs into one run over current state.
+Jobs survive a reboot. Do they resume automatically?
+Only if the gateway was installed as a service with `gateway install`. A
+gateway started with `gateway run` is a foreground process and must be started
+again after a reboot.
+
+What happens to recurring runs missed while the gateway was down? One of them
+runs, not the entire backlog. Hermes advances the schedule and runs once over
+current state. A machine that was off for two days does not wake to ninety-six
+intake runs; it wakes to one and then resumes its half-hourly schedule.
 
 List or remove registered jobs inside the sandbox.
 
@@ -588,7 +595,7 @@ write operations.
 > supplies `MS_GRAPH_ACCESS_TOKEN`; it does not verify the provider name, type,
 > or policy at runtime. A different provider exposing the same key can therefore
 > bypass the setup-time refusal. Inspect the attached providers on your machine
-> do not run Graph intake unless the effective provider is the recipe's
+> and do not run Graph intake unless the effective provider is the recipe's
 > read-only, enforced profile.
 
 **Source-system behavior:** the shipped collectors read Slack and the signed-in
