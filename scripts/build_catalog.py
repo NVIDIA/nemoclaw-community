@@ -452,6 +452,7 @@ def discover_example_paths(
 
 CATALOG_TABLE_HEADER = "| Catalog field | Value |"
 CATALOG_TABLE_DIVIDER = "| --- | --- |"
+CATALOG_METADATA_HEADING = "## Catalog Metadata"
 CATALOG_FIELD_ORDER = (
     "Description",
     "Industry",
@@ -672,12 +673,33 @@ def parse_readme_metadata(
     index += 1
     if index >= len(lines) or lines[index].strip():
         raise CatalogError(f"README title must be followed by a blank line in {readme_path}.")
-    index += 1
-    if index >= len(lines) or lines[index] != CATALOG_TABLE_HEADER:
+    body_start = index + 1
+    table_indices = [
+        line_index
+        for line_index in range(body_start, len(lines))
+        if lines[line_index] == CATALOG_TABLE_HEADER
+    ]
+    if not table_indices:
         raise CatalogError(
-            f"README title must be followed by `{CATALOG_TABLE_HEADER}` in {readme_path}."
+            f"README requires `{CATALOG_TABLE_HEADER}` after the title or in a "
+            f"final `{CATALOG_METADATA_HEADING}` section in {readme_path}."
         )
-    index += 1
+    if len(table_indices) > 1:
+        raise CatalogError(f"Duplicate catalog metadata tables in {readme_path}.")
+    table_index = table_indices[0]
+    metadata_heading_index: int | None = None
+    if table_index != body_start:
+        metadata_heading_index = table_index - 2
+        if (
+            metadata_heading_index < body_start
+            or lines[metadata_heading_index] != CATALOG_METADATA_HEADING
+            or lines[metadata_heading_index + 1].strip()
+        ):
+            raise CatalogError(
+                f"Catalog metadata must follow the README title or appear in a "
+                f"final `{CATALOG_METADATA_HEADING}` section in {readme_path}."
+            )
+    index = table_index + 1
     if index >= len(lines) or lines[index] != CATALOG_TABLE_DIVIDER:
         raise CatalogError(
             f"README catalog table must use `{CATALOG_TABLE_DIVIDER}` in {readme_path}."
@@ -713,8 +735,20 @@ def parse_readme_metadata(
             f"README catalog metadata table must be followed by a blank line in "
             f"{readme_path}."
         )
+    if metadata_heading_index is not None and any(
+        line.strip() for line in lines[index:]
+    ):
+        raise CatalogError(
+            f"`{CATALOG_METADATA_HEADING}` must be the final README section in "
+            f"{readme_path}."
+        )
     while index < len(lines) and not lines[index].strip():
         index += 1
+
+    if metadata_heading_index is None:
+        readme_body = "\n".join(lines[index:]).strip()
+    else:
+        readme_body = "\n".join(lines[body_start:metadata_heading_index]).strip()
 
     description = fields["Description"]
     if len(description) > 300:
@@ -780,7 +814,7 @@ def parse_readme_metadata(
         category=category,
         contributor=contributor,
         upstream_url=upstream_url,
-        readme_body="\n".join(lines[index:]).strip(),
+        readme_body=readme_body,
     )
 
 
@@ -955,7 +989,7 @@ def render_readme(
         "",
         "Examples are organized first by artifact type. Reusable recipes are organized",
         "again by contributor provenance. Industry is an independent discovery field.",
-        "This file is generated from the catalog metadata block at the top of each",
+        "This file is generated from the catalog metadata table in each",
         "example README. Edit that README, then run",
         "`python3 scripts/build_catalog.py --write` from the repository root.",
         "",

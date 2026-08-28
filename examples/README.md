@@ -5,7 +5,7 @@
 
 Examples are organized first by artifact type. Reusable recipes are organized
 again by contributor provenance. Industry is an independent discovery field.
-This file is generated from the catalog metadata block at the top of each
+This file is generated from the catalog metadata table in each
 example README. Edit that README, then run
 `python3 scripts/build_catalog.py --write` from the repository root.
 

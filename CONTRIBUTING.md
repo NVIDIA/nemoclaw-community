@@ -372,13 +372,17 @@ Each example's root README is the single source for that example in the
 generated [Markdown catalog](examples/README.md), GitHub Pages cards, filters,
 detail pages, public `catalog.json` search index, and agent-oriented
 `llms.txt`. The build discovers example directories from the canonical
-taxonomy, derives kind and provenance from the path, and reads this exact
-opening block after any license header. Existing
-non-catalog YAML frontmatter may also precede the title and is ignored by
-catalog generation:
+taxonomy, derives kind and provenance from the path, and reads this exact table
+from the root README. Put it in a final `Catalog Metadata` section. Existing
+tables immediately after the title remain supported. Non-catalog YAML
+frontmatter may precede the title and is ignored by catalog generation:
 
 ```markdown
 # Recognizable Example Name
+
+[Explain the example and show how to run it.]
+
+## Catalog Metadata
 
 | Catalog field | Value |
 | --- | --- |
@@ -585,8 +589,9 @@ remaining validation.]
 
 - Put material credential, data-sharing, permission, cost, write, or
   destructive-action warnings before the command that triggers them.
-- Start with the exact title and catalog table, including its `Description`
-  outcome, documented in [Catalog Metadata](#catalog-metadata).
+- Start with the exact title. Put the catalog table, including its `Description`
+  outcome, in a final `Catalog Metadata` section as documented in
+  [Catalog Metadata](#catalog-metadata).
 - Use the canonical category independently from contributor or organizational
   provenance.
 - Preserve partner and community attribution.

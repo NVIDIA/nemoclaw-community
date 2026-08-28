@@ -5,12 +5,6 @@
 
 # Agent Memory Benchmark
 
-| Catalog field | Value |
-| --- | --- |
-| Description | Benchmarks memory systems on synthetic email and chat, reporting answer accuracy and token cost. |
-| Industry | ✨ Other |
-| Requirements | Python 3.9+ · pytest for offline checks · endpoint and adapter for live scoring |
-
 **mnemo measures what a memory system can answer after ingesting email and chat,
 and what ingesting and answering cost.** It reports quality and cost separately
 across two synthetic corpora.
@@ -508,3 +502,11 @@ question_count: 186  # corpus A; corpus B adds 96, see corpus_b/README.md
 license: Apache-2.0
 evidence_level: local/static
 ```
+
+## Catalog Metadata
+
+| Catalog field | Value |
+| --- | --- |
+| Description | Benchmarks memory systems on synthetic email and chat, reporting answer accuracy and token cost. |
+| Industry | ✨ Other |
+| Requirements | Python 3.9+ · pytest for offline checks · endpoint and adapter for live scoring |

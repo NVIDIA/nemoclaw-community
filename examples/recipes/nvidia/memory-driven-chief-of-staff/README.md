@@ -5,12 +5,6 @@
 
 # Memory-Driven Chief of Staff
 
-| Catalog field | Value |
-| --- | --- |
-| Description | Builds a revisable local memory from email and Slack, then ranks obligations against the user's priorities while preserving pins and ignores without changing source systems. |
-| Industry | ✨ Other |
-| Requirements | Python 3.10+ · scheduled use: Linux/WSL, Hermes 0.19+, and an inference provider API key · Slack and Microsoft Graph collectors optional |
-
 Turn NemoHermes into an attention bridge for inbound conversations. This recipe
 builds a source-backed work wiki and surfaces the decisions, replies, and
 follow-ups that require the user's attention.
@@ -1031,3 +1025,11 @@ source_connectors:
 evidence_level: integration
 license: Apache-2.0
 ```
+
+## Catalog Metadata
+
+| Catalog field | Value |
+| --- | --- |
+| Description | Builds a revisable local memory from email and Slack, then ranks obligations against the user's priorities while preserving pins and ignores without changing source systems. |
+| Industry | ✨ Other |
+| Requirements | Python 3.10+ · scheduled use: Linux/WSL, Hermes 0.19+, and an inference provider API key · Slack and Microsoft Graph collectors optional |
