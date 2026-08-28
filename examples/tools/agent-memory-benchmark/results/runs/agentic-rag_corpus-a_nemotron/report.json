@@ -129,7 +129,7 @@
   "note": "search rounds were capped at 3. Preserved so the cost of removing the cap is measurable rather than asserted; the uncapped run is agentic_rag_a_nemotron.",
   "fingerprint": {
     "algorithm": "sha256-v1",
-    "scorer": "79439146f5d7593cad9291e3d18ba581b9baaef5d821a6bff7f570051398a881",
+    "scorer": "da4305f52827bf5229c456c50b07fb1198fd55b86c4086800acdb0ecb9238f10",
     "normalization": {
       "default_year": "2026",
       "alt_years": [
@@ -142,7 +142,7 @@
     "gold": "55a66b80ff0f62d8b3a340dcbb9cc970a011922b1e509269c4402192f9504970"
   },
   "benchmark_revision": {
-    "commit": "16a470e84efa33712070ffcfc19e011ee7520fa6",
+    "commit": "9ce129b022061201c271931eadcf8b7d7b006868",
     "dirty": true
   },
   "provenance_note": {

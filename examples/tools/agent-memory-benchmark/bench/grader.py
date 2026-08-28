@@ -154,10 +154,10 @@ DENIAL_CUES = (
     # whether it completed successfully" was scored as asserting the phrase it
     # was declining to assert. A bare "no" is too broad to be a cue; these are
     # the shapes an abstention actually takes.
-    "no information", "no mention", "no record", "no indication", "no detail",
-    "no data", "not stated", "not mentioned", "not recorded", "not specified",
-    "does not say", "does not state", "does not mention", "does not indicate",
-    "nothing in the corpus", "not in the corpus", "silent on",
+    # The silence constructions are matched by SILENCE_PATTERNS instead of being
+    # listed here. Their bare forms are too broad: "there is no information gap
+    # and the figure is 50%" is not a refusal, and reading it as one denied a
+    # value that sentence asserts.
     # A denial can follow the value instead of preceding it. Anchoring these on
     # the copula keeps "is wrong" from matching a noun like "the wrong-way
     # valve", which asserts nothing.
@@ -283,6 +283,25 @@ def _clauses(answer: str) -> list[tuple[str, bool]]:
     return out
 
 
+# A claim that the source is silent, as opposed to a sentence that merely
+# contains "no data". The absence word must be followed by something saying
+# *what* is missing -- a preposition introducing the subject, a complement
+# clause, or a verb taken by "nothing in the corpus". Without that, "there is no
+# information gap and the figure is 50%" reads as a refusal and denies a value
+# the sentence asserts.
+_SILENCE = (
+    r"no (?:information|mention|record|indication|detail|data|evidence|reference)"
+    r"(?:\s+(?:in|from|within)\s+(?:the\s+)?\w+){0,2}"
+    r"\s+(?:about|on|regarding|as to|of|for|whether|that)\b",
+    r"nothing (?:in|within) the (?:corpus|record|documents)\b",
+    r"(?:does|do|did|could|can)\s+not\s+(?:say|state|mention|indicate|record|specify)\b",
+    r"(?:is|are|was|were)\s+not\s+(?:stated|mentioned|recorded|specified|documented)\b",
+    r"not in the corpus\b",
+    r"silent on\b",
+)
+SILENCE_PATTERNS: tuple = tuple(re.compile(p) for p in _SILENCE)
+
+
 # Substring matching found "is wrong" inside "th|is wrong| estimate", so a
 # correction was read as a denial. The comment claimed the copula anchored these
 # cues; only a boundary does. Both places that ask "is there a denial here" go
@@ -297,6 +316,10 @@ def _denial_cue(text: str) -> str | None:
     for cue, pattern in _CUE_PATTERNS:
         if pattern.search(lowered):
             return cue
+    for pattern in SILENCE_PATTERNS:
+        found = pattern.search(lowered)
+        if found:
+            return found.group(0)
     return None
 
 

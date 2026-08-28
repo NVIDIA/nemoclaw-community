@@ -17,6 +17,8 @@ from __future__ import annotations
 import json
 import html
 import re
+import shutil
+import tempfile
 import subprocess
 import sys
 from pathlib import Path
@@ -140,23 +142,46 @@ def test_the_screenshot_shows_what_the_self_test_actually_prints(tmp_path):
             f"Re-render docs/assets/offline-self-test.svg from a real run.")
 
 
-def test_the_readme_image_has_a_checkable_source():
-    """The catalog forbids SVG in a README, so the picture cannot be the checked file.
+def test_the_readme_raster_shows_the_same_run_as_the_svg():
+    """The picture a reader sees must carry the same numbers as the checked SVG.
 
-    Upstream switched the README to a PNG because `scripts/build_catalog.py`
-    allows only raster formats. A raster cannot be read back and compared with
-    the run it depicts, so the drift check reads the SVG instead. That only
-    means anything while the SVG still ships and still describes the same
-    output, which the check above enforces -- this one enforces that the pair
-    stays a pair.
+    `scripts/build_catalog.py` allows only raster formats in a README, so the
+    image on the page cannot be the SVG the drift check reads. An earlier
+    version of this test only asserted both files existed, and passed while the
+    PNG still showed a test count nearly a hundred behind the SVG.
+
+    Where OCR is available the two are compared directly. Where it is not, the
+    check falls back to requiring the raster to be no older than its source,
+    which is weaker but still catches an SVG edited without a re-export.
     """
     readme = (REPO / "README.md").read_text(encoding="utf-8")
     shown = re.findall(r"!\[[^\]]*\]\((docs/assets/[^)]+)\)", readme)
     assert shown, "the README no longer shows the offline self-test image"
+    svg = REPO / "docs" / "assets" / "offline-self-test.svg"
+    assert svg.exists(), (
+        "the README shows an exported image and the SVG it came from is gone, "
+        "so nothing checks that the picture matches a real run")
+
+    numbers = set(re.findall(r"(\d{2,4}) passed", svg.read_text(encoding="utf-8")))
+    assert numbers, "the SVG no longer states a test count"
+
     for reference in shown:
-        assert (REPO / reference).exists(), f"the README shows {reference}, missing"
-    if any(not r.endswith(".svg") for r in shown):
-        svg = REPO / "docs" / "assets" / "offline-self-test.svg"
-        assert svg.exists(), (
-            "the README shows a raster image and the SVG it was exported from is "
-            "gone, so nothing checks that the picture matches a real run")
+        raster = REPO / reference
+        assert raster.exists(), f"the README shows {reference}, which is missing"
+        if raster.suffix == ".svg":
+            continue
+        if shutil.which("tesseract") is None:
+            assert raster.stat().st_mtime >= svg.stat().st_mtime - 1, (
+                f"{reference} predates {svg.name}; re-export it. (Install "
+                f"tesseract for the stronger comparison.)")
+            continue
+        with tempfile.TemporaryDirectory() as work:
+            stem = Path(work) / "ocr"
+            subprocess.run(
+                ["tesseract", str(raster), str(stem), "--psm", "6"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+            read = stem.with_suffix(".txt").read_text(encoding="utf-8", errors="ignore")
+        assert any(f"{n} passed" in read for n in numbers), (
+            f"{reference} does not show the test count the SVG states "
+            f"({sorted(numbers)}); re-export the raster from {svg.name} so the "
+            f"picture a reader sees describes the run the suite checks.")

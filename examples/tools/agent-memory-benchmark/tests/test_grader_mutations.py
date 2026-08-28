@@ -216,6 +216,26 @@ DENIAL_SCOPE_CONTRACT = [
     ("and across a sentence break",
      {"mode": "string_any", "accept": ["2026-07-14"]},
      "No record of a review. The launch date is 2026-07-14.", True),
+    # A sentence that contains an absence word is not automatically a refusal.
+    # The first version of the silence cues read these as denials and took away
+    # a value the sentence asserts.
+    ("an absence word inside an ordinary phrase does not deny",
+     {"mode": "string_any", "accept": ["50%"]},
+     "There is no information gap and the figure is 50%.", True),
+    ("nor does it in another ordinary phrase",
+     {"mode": "string_any", "accept": ["50%"]},
+     "There is no data issue and the figure is 50%.", True),
+    ("nor when the absence word heads a different noun",
+     {"mode": "string_any", "accept": ["50%"]},
+     "No record keeping was needed; the figure is 50%.", True),
+    # The refusals those cues exist for still read as refusals.
+    ("a silence that says what is missing still denies it",
+     {"mode": "string_any", "accept": ["launch date"]},
+     "Nothing in the corpus records the launch date.", False),
+    ("and with the qualifier between the absence word and the subject",
+     {"mode": "string_any", "accept": ["completed successfully"]},
+     "There is no information in the corpus about whether it completed "
+     "successfully.", False),
 ]
 
 

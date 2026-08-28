@@ -157,11 +157,12 @@ def test_no_tracked_file_publishes_a_path_from_someone_s_machine(kind):
         f"corpus or the memory, not where the run happened to execute.")
 
 
-# An org/repo identifier is the third shape of the same leak. `hwinf-afe/cos`
-# reached a published answer because the model named its own source repository
-# while inventing a merge request -- the corpus never contained the string, so
-# the corpus-side rename could not have caught it, and neither the domain nor
-# the path guard looks for it.
+# An org/repo identifier is the third shape of the same leak. One reached a
+# published answer because the model named a source repository outside the
+# corpus while inventing a merge request. The corpus-side rename could not have
+# caught it -- the corpus never held the string -- and neither the domain nor
+# the path guard looks for this shape. The identifiers are not repeated here:
+# a guard that removes a name should not preserve it in its own comments.
 # Only where it is used as a repository reference: followed by a merge-request
 # or issue number, or by GitLab's /-/ path, or preceded by a host. A bare
 # `word/word` is prose -- "committed/stretch" and "interview/offer" both occur
@@ -171,11 +172,18 @@ _ORG_REPO = re.compile(
     r"([a-z][a-z0-9_-]{2,}/[a-z][a-z0-9_.-]{2,})"
     r"(?=[!#]\d|/-/)")
 
-# Repository paths this example legitimately names.
-KNOWN_REPOSITORIES = {
-    "platform-eng/atlas", "platform-eng/onboarding", "platform-eng/perf",
-    "platform-eng/compass", "platform-eng/quillon",
-}
+def _corpus_repositories() -> set[str]:
+    """The repositories corpus A actually names, read from the corpus.
+
+    Derived rather than listed. A hand-written allow-list drifts from the corpus
+    it is meant to describe, and an entry that is not in the corpus silently
+    permits a citation to something the corpus never mentioned.
+    """
+    corpus = " ".join(
+        path.read_text(encoding="utf-8", errors="ignore")
+        for path in (REPO / "corpus_a" / "corpus").rglob("*.md")).lower()
+    return {m.group(1) for m in
+            re.finditer(r"(?<![\w./-])([a-z][a-z0-9_-]{2,}/[a-z][a-z0-9_.-]{2,})", corpus)}
 
 
 def _repository_references(text: str) -> set[str]:
@@ -191,7 +199,7 @@ def test_no_published_result_names_a_repository_outside_the_fiction(kind):
         if relative.parts[0] != "results" or path.suffix != ".jsonl":
             continue
         text = path.read_text(encoding="utf-8")
-        found = _repository_references(text) - KNOWN_REPOSITORIES
+        found = _repository_references(text) - _corpus_repositories()
         if found:
             offenders[str(relative)] = found
     assert not offenders, (
@@ -203,12 +211,11 @@ def test_no_published_result_names_a_repository_outside_the_fiction(kind):
 def test_a_published_answer_names_only_things_the_corpus_contains():
     """A model can name an internal thing the corpus never held.
 
-    `hwinf-afe/cos!342` and four `atlas/solswarm!NNN` ids reached published
-    artifacts this way: the model invented merge requests and reached for its own
-    source repository while doing it. The corpus-side rename could not have
-    caught either, because the corpus never contained the string, and both were
-    in `source_ids` rather than the answer text -- the same field the
-    substitution itself originally missed.
+    Five ids across two runs reached published artifacts this way: the model
+    invented merge requests and named repositories outside the corpus while doing
+    it. The corpus-side rename could not have caught them, because the corpus
+    never held the strings, and both sat in `source_ids` rather than the answer
+    text -- the same field the substitution itself originally missed.
 
     This checks whole rows, not the answer field, for repository references.
     """
@@ -225,7 +232,7 @@ def test_a_published_answer_names_only_things_the_corpus_contains():
             for line in path.read_text(encoding="utf-8").splitlines():
                 if line.strip():
                     found |= _repository_references(line)
-            unknown = {f for f in found - KNOWN_REPOSITORIES if f.lower() not in corpus}
+            unknown = {f for f in found - _corpus_repositories() if f.lower() not in corpus}
             if unknown:
                 offenders[f"{run.name}/{name}"] = unknown
     assert not offenders, (

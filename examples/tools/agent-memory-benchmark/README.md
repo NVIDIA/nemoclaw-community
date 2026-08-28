@@ -28,7 +28,6 @@ across two synthetic corpora.
   - [How The Runner Treats Your Adapter](#how-the-runner-treats-your-adapter)
   - [Verification](#verification)
 - [Provenance And License](#provenance-and-license)
-- [Catalog Metadata](#catalog-metadata)
 
 ---
 
@@ -127,7 +126,7 @@ contract.
 ```bash
 cd examples/tools/agent-memory-benchmark
 python3 -m pip install pytest
-python3 -m pytest tests/     # expected: 226 passed
+python3 -m pytest tests/     # expected: 231 passed
 ```
 
 Then run the whole pipeline against a fixture whose score is known in advance:
@@ -445,13 +444,13 @@ The guards provide:
 here exercises a live endpoint.
 
 ```bash
-python3 -m pytest tests/     # expected: 226 passed
+python3 -m pytest tests/     # expected: 231 passed
 ```
 
 **Expected result:**
 
 ```text
-226 passed
+231 passed
 ```
 
 This verifies the runner, grader, report renderer, ledger ingest, fixtures, and
