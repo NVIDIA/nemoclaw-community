@@ -5,6 +5,22 @@
 
 # Video Search and Summarization
 
+| Catalog field | Value |
+| --- | --- |
+| Description | Helps video analysts and engineers deploy and operate NVIDIA VSS profiles by chat, using a sandboxed agent that runs the Compose deployment through a host-side MCP server and reports the result. |
+| Industry | ✨ Other |
+| Requirements | Linux GPU host · Docker with the NVIDIA runtime · Python 3.11+ for the notebooks · NGC API key · agent model provider · VSS repository develop branch · large container image and model pulls |
+
+## Screenshot
+
+![Agent chat reply that reports the VSS alerts profile deployed in verification mode, with a compose exit code of 0 and a list of 32 running VSS containers](assets/agent-deployed-alerts-profile.png)
+
+A user asked the agent to deploy the `alerts` profile in `verification` mode.
+The agent chained the deployment tools, then reported the profile, the mode, the
+compose exit code, and the container names. Notice that the deployment happens
+in the chat, not in a notebook cell. The capture comes from the VSS repository's
+own notebook documentation and contains no credentials or private host details.
+
 This NVIDIA-authored recipe gives a NemoClaw sandbox agent the skills and tools
 to deploy and operate the
 [NVIDIA AI Blueprint for Video Search and Summarization (VSS)](https://github.com/NVIDIA-AI-Blueprints/video-search-and-summarization/tree/develop)
@@ -28,7 +44,7 @@ instructions. This page gives the clone-and-deploy order and links to the VSS
 | You will get | A NemoClaw sandbox that holds the VSS skills, a host MCP server with nine VSS deployment tools, and a VSS profile deployed from chat. |
 | Runs on | A Linux GPU host. The documented path is a Brev launchable on a 2×RTX PRO 6000 SE AWS instance. |
 | Requires | The VSS repository `develop` branch, Docker with the NVIDIA runtime, Python 3.11 or newer for the notebooks, an NGC API key, and an agent model provider. The notebook preflight cells report what is missing. |
-| Verified on | Not yet verified for this README revision. The linked notebooks are the current `develop` versions. |
+| Verified on | Not yet verified on a GPU host. Completed verification is limited to the local catalog and documentation checks in [Verification](#verification). |
 | Evidence level | local/static |
 | Support and maturity | Educational example with best-effort community support. See the repository [support policy](../../../../SUPPORT.md). |
 | External access, data, and actions | Pulls container images from `nvcr.io`, pulls the NemoClaw installer from `raw.githubusercontent.com`, and sends agent prompts to the model provider that you choose. Deploys and removes Docker Compose stacks on the host. Container and model pulls consume disk and, for hosted models, incur provider cost. |
@@ -109,12 +125,89 @@ it writes to host disk.
 
 ## Verification
 
-- The MCP server: section 4 of `deploy_vss_orchestrator.ipynb` calls the
-  `profiles` tool over the streamable HTTP transport and reports whether the
-  server answered.
-- The sandbox, policy, and installed skills: section 3.8 of
-  `deploy_nemoclaw.ipynb`.
-- The deployment: the agent's reply to your deploy prompt in the Agent UI.
+**Evidence level:** local/static
+
+### Completed checks
+
+These commands ran from the root of this repository on the current revision of
+this page. No VSS deployment, sandbox, notebook, or GPU host was involved.
+
+```text
+$ python3 scripts/build_catalog.py --validate-metadata
+README catalog metadata is valid for 19 examples.
+
+$ python3 scripts/build_catalog.py --write
+Built 19 catalog entries and detail pages in _site.
+
+$ python3 scripts/build_catalog.py --check
+Catalog metadata and generated sources are valid: 19 examples across 6 categories.
+
+$ python3 -m unittest discover -s scripts/tests -p 'test_build_catalog.py'
+Ran 24 tests in 0.846s
+
+OK
+
+$ node --test scripts/tests/catalog.test.mjs
+# pass 11
+# fail 0
+
+$ python3 scripts/check_license_headers.py --check
+All 608 checked source files have SPDX headers.
+
+$ git diff --check
+```
+
+`git diff --check` prints nothing when it passes. The file count reported by the
+license check reflects the repository at this revision.
+
+Each VSS file linked from this page was also confirmed to exist on the VSS
+`develop` branch. From a VSS clone with the `develop` branch fetched:
+
+```text
+$ git ls-tree --name-only origin/develop \
+    deploy/docker/scripts/deploy_nemoclaw.ipynb \
+    deploy/docker/scripts/deploy_vss_orchestrator.ipynb \
+    deploy/docker/scripts/deploy_vss_launchable.ipynb \
+    deploy/docker/scripts/nemoclaw/README.md \
+    assets/vss_nemoclaw_policy.yaml \
+    skills
+assets/vss_nemoclaw_policy.yaml
+deploy/docker/scripts/deploy_nemoclaw.ipynb
+deploy/docker/scripts/deploy_vss_launchable.ipynb
+deploy/docker/scripts/deploy_vss_orchestrator.ipynb
+deploy/docker/scripts/nemoclaw/README.md
+skills
+```
+
+`git ls-tree` lists only the paths that exist, so a missing path would be
+absent from that output.
+
+**This verifies:** the catalog metadata block satisfies the repository catalog
+contract, the generated catalog matches this README, the license header and
+whitespace checks pass, and every VSS path linked from this page exists on the
+`develop` branch.
+
+**This does not verify:** any runtime behavior. Nothing here proves that the
+notebooks run, that the sandbox onboards, that the MCP server starts, that a VSS
+profile deploys, or that video search, summarization, or alert output is
+correct. The launchable instance, the hardware profiles, the credentials, and
+the container and model pulls were not exercised. Screenshot content was read
+from the VSS repository rather than reproduced on a host.
+
+### Expected result from a live run
+
+The result below is the outcome to expect on a GPU host. It has not been
+completed for this page. Until an end-to-end run is confirmed, treat it as
+expected, not as evidence.
+
+Run the notebook checks in this order, then record your own result:
+
+1. The sandbox, policy, and installed skills: section 3.8 of
+   `deploy_nemoclaw.ipynb`.
+2. The MCP server: section 4 of `deploy_vss_orchestrator.ipynb` calls the
+   `profiles` tool over the streamable HTTP transport and reports whether the
+   server answered.
+3. The deployment: the agent's reply to your deploy prompt in the Agent UI.
 
 **Expected result:** the reply names the profile and mode, reports a compose
 exit code of `0`, and lists the running containers, which include `vss-agent`,
@@ -122,8 +215,10 @@ exit code of `0`, and lists the running containers, which include `vss-agent`,
 `vss-behavior-analytics`, `vss-video-analytics-api`, and `vss-haproxy-ingress`.
 The VSS UI is served on port `7777`.
 
-**This verifies:** the sandbox agent reached the host MCP server, the MCP tools
-ran a Compose deployment, and the profile's containers started.
+**A completed live run would verify** that the sandbox agent reached the host
+MCP server, that the MCP tools ran a Compose deployment, and that the profile's
+containers started. Raise the evidence level in this section and in
+[At A Glance](#at-a-glance) only after that run is confirmed.
 
 ## Teardown
 
