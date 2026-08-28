@@ -195,22 +195,26 @@ rows exit with status `3` and explain the required state transition.
 
 ## Install in NemoClaw
 
-The scheduled path is Linux-only and requires a running NemoHermes sandbox.
+The scheduled jobs run inside a Linux NemoHermes sandbox. Your own computer is
+outside that sandbox and can use any platform supported by NemoHermes.
 
-The host and sandbox have different tools. Keep this boundary visible while
-following the steps below:
+This guide uses two command locations:
 
 <!-- markdownlint-disable MD013 -->
-| Phase | Run it on | CLI available there |
+| Location | What it means | CLI available there |
 | --- | --- | --- |
-| Check the sandbox, upload files, and configure messaging providers | Linux host | `nemohermes`, `openshell` |
-| Run `scripts/install.sh`, configure the Hermes profile, and manage jobs | Inside the NemoHermes sandbox | `hermes` |
+| Your machine, outside the sandbox | The terminal with the repository checkout that you use to manage NemoHermes | `nemohermes`, `openshell` |
+| NemoHermes sandbox | The isolated Linux environment where Hermes and the scheduled jobs run | `hermes` |
 <!-- markdownlint-enable MD013 -->
 
-`scripts/install.sh` is never a host command. The host is not expected to have
-`hermes` on `PATH`.
+The sandbox satisfies the recipe's Linux runtime requirement. The current
+provider setup helpers still require Linux or WSL on your machine; this is a
+helper-script limitation, not a recipe runtime requirement.
 
-### 1. Confirm and inspect a Hermes sandbox from the host
+`scripts/install.sh` always runs inside the sandbox. Your machine is not
+expected to have `hermes` on `PATH`.
+
+### 1. Confirm and inspect a Hermes sandbox from your machine
 
 If NemoClaw is not installed, follow the upstream
 [NemoClaw setup guide](https://github.com/NVIDIA/NemoClaw) and select Hermes,
@@ -236,7 +240,7 @@ identify which attached provider supplied it. Use a dedicated sandbox or
 detach the conflicting provider before installing or starting the scheduled
 runtime.
 
-### 2. Upload the recipe from the host
+### 2. Upload the recipe from your machine
 
 Run this from the cloned `nemoclaw-community` repository root.
 
@@ -247,7 +251,7 @@ nemohermes sandbox upload my-hermes \
 nemohermes my-hermes connect
 ```
 
-The upload is required: the sandbox cannot see the host checkout directly.
+The upload is required: the sandbox cannot see the checkout on your machine.
 After `connect` opens a shell, the remaining commands in this subsection run
 **inside the sandbox**.
 
@@ -321,15 +325,15 @@ successfully and reports that state.
 | `SLACK_USER_TOKEN` | OpenShell provider | Injected | Rotating user token | Collector credential; do not set manually on the supported path |
 | `MS_GRAPH_ACCESS_TOKEN` | OpenShell provider | Injected | Rotating delegated token | Outlook collector credential; the collector cannot currently attest which attached provider supplied it |
 | `GRAPH_BACKFILL_DAYS` | Scheduled runtime | No | `7`; integer `1..3650` | Initial Outlook mailbox synchronization window |
-| `GRAPH_CLIENT_ID` | Linux host Outlook setup | Yes | No default | Microsoft Entra application client ID |
-| `GRAPH_TENANT_ID` | Linux host Outlook setup | No | `common` | Microsoft Entra directory tenant ID |
-| `GRAPH_PROVIDER_NAME` | Linux host Outlook setup | No | `memory-driven-cos-graph` | Name used when creating the recipe provider; it does not resolve a conflicting attached provider that exposes the same credential key |
-| `SANDBOX_STORAGE_PATH` | Linux host provider setup | Yes | No default | Host path whose encryption status protects sandbox storage |
-| `OPENSHELL_SANDBOX_NAME` | Linux host provider setup | No | Falls back to `SANDBOX_NAME`, then `hermes` | Sandbox receiving the provider |
-| `SANDBOX_NAME` | Linux host provider setup | No | `hermes` | Compatibility fallback for the sandbox name |
-| `SLACK_PROVIDER_NAME` | Linux host Slack setup | No | `memory-driven-cos-slack-user` | OpenShell provider name |
-| `STORE_ENCRYPTION_ACKNOWLEDGED` | Linux host provider setup | No | `0`; unattended confirmation is `1` | Acknowledges an encryption result the script cannot prove |
-| `FORCE_REAUTH` | Linux host provider setup | No | `0`; replacement is `1` | Replaces an attached rotating provider credential |
+| `GRAPH_CLIENT_ID` | Outlook setup on your machine | Yes | No default | Microsoft Entra application client ID |
+| `GRAPH_TENANT_ID` | Outlook setup on your machine | No | `common` | Microsoft Entra directory tenant ID |
+| `GRAPH_PROVIDER_NAME` | Outlook setup on your machine | No | `memory-driven-cos-graph` | Name used when creating the recipe provider; it does not resolve a conflicting attached provider that exposes the same credential key |
+| `SANDBOX_STORAGE_PATH` | Provider setup on your machine | Yes | No default | Path whose encryption status protects sandbox storage |
+| `OPENSHELL_SANDBOX_NAME` | Provider setup on your machine | No | Falls back to `SANDBOX_NAME`, then `hermes` | Sandbox receiving the provider |
+| `SANDBOX_NAME` | Provider setup on your machine | No | `hermes` | Compatibility fallback for the sandbox name |
+| `SLACK_PROVIDER_NAME` | Slack setup on your machine | No | `memory-driven-cos-slack-user` | OpenShell provider name |
+| `STORE_ENCRYPTION_ACKNOWLEDGED` | Provider setup on your machine | No | `0`; unattended confirmation is `1` | Acknowledges an encryption result the script cannot prove |
+| `FORCE_REAUTH` | Provider setup on your machine | No | `0`; replacement is `1` | Replaces an attached rotating provider credential |
 <!-- markdownlint-enable MD013 -->
 
 Scheduled environment variables must reach the target profile. Persist a value
@@ -388,7 +392,8 @@ The `api_key` value is the non-secret routing marker configured during
 installation. OpenShell replaces it at egress; it is not a credential to rotate
 or hide.
 
-Provider setup now continues on the **Linux host**.
+Provider setup now continues on **your machine, outside the sandbox**. The
+current setup helpers require a Linux shell; use WSL on Windows.
 
 ### Slack
 
@@ -396,11 +401,11 @@ Slack setup is optional. Complete it only after placing the sandbox storage on
 an encrypted volume; owner-only permissions are access control, not encryption.
 See [docs/encrypted-storage.md](docs/encrypted-storage.md) first.
 
-Run the setup script from the recipe checkout on the **Linux host**, not inside
-the sandbox. The host has `openshell`; the sandbox has `hermes`.
+Run the setup script from the recipe checkout on **your machine**, not inside
+the sandbox. Your machine has `openshell`; the sandbox has `hermes`.
 
 ```bash
-export SANDBOX_STORAGE_PATH="<host-path-containing-sandbox-storage>"
+export SANDBOX_STORAGE_PATH="<path-containing-sandbox-storage>"
 export OPENSHELL_SANDBOX_NAME="my-hermes"
 bash scripts/setup-slack.sh
 ```
@@ -424,7 +429,7 @@ Static user tokens, bot tokens, and app tokens are refused. Attachments are not
 downloaded. Full setup and workspace-admin recovery steps are in
 [docs/set-up-slack.md](docs/set-up-slack.md).
 
-Verify the live collector from the host through the supported sandbox exec
+Verify the live collector from your machine through the supported sandbox exec
 path. Replace both placeholders.
 
 ```bash
@@ -451,10 +456,10 @@ Entra application with public-client flows enabled and delegated `Mail.Read`,
 `User.Read`, and `offline_access` permissions. Do not grant application-level
 mail permissions, which would authorize access beyond the signed-in mailbox.
 
-Run the device-code setup from the recipe checkout on the Linux host:
+Run the device-code setup from the recipe checkout on your machine:
 
 ```bash
-export SANDBOX_STORAGE_PATH="<host-path-containing-sandbox-storage>"
+export SANDBOX_STORAGE_PATH="<path-containing-sandbox-storage>"
 export OPENSHELL_SANDBOX_NAME="my-hermes"
 export GRAPH_CLIENT_ID="<entra-application-client-id>"
 export GRAPH_TENANT_ID="<entra-directory-tenant-id>"
@@ -484,7 +489,7 @@ never assumes that matching display names belong to the same person. The memory
 job reports likely matches as `identity_candidates`; only the user can confirm
 or reject them.
 
-Run the identity command from the Linux host through sandbox exec:
+Run the identity command from your machine through sandbox exec:
 
 ```bash
 nemohermes my-hermes exec \
@@ -507,7 +512,7 @@ error class. It does not place collector output in the model prompt or the
 scheduler log because that output can contain message text or authentication
 material. Run the collector directly to inspect its full error.
 
-Verify the collector from the host:
+Verify the collector from your machine:
 
 ```bash
 nemohermes my-hermes exec \
@@ -582,7 +587,7 @@ write operations.
 > this checkout. `ingest_graph.py` currently trusts whichever attached provider
 > supplies `MS_GRAPH_ACCESS_TOKEN`; it does not verify the provider name, type,
 > or policy at runtime. A different provider exposing the same key can therefore
-> bypass the setup-time refusal. Inspect the attached providers on the host and
+> bypass the setup-time refusal. Inspect the attached providers on your machine
 > do not run Graph intake unless the effective provider is the recipe's
 > read-only, enforced profile.
 
@@ -654,9 +659,9 @@ python3 profile/scripts/tests/test_ingest_graph.py
 
 ### The installer says the platform is unsupported
 
-The offline path runs on macOS, Linux, and WSL. The scheduled skills declare
-Linux support only, so `scripts/install.sh` refuses native macOS and Windows.
-Use a Linux NemoClaw sandbox or WSL for scheduling.
+The offline path runs on macOS, Linux, and WSL. Scheduled skills require the
+Linux environment inside a NemoHermes sandbox. If `scripts/install.sh` reports
+another platform, run it inside the sandbox rather than on your machine.
 
 ### The installer reports no model or API credential
 
@@ -693,13 +698,14 @@ Install and start the service, or use the foreground command shown in
 
 That is a supported state. The scheduler continues over existing store rows.
 Enable the source by running `scripts/setup-slack.sh` or
-`scripts/setup-graph.sh` on the Linux host, then run its collector with
+`scripts/setup-graph.sh` on your machine, then run its collector with
 `--recheck` through sandbox exec.
 
 ### Provider setup says `openshell` is missing
 
-The setup command is running inside the sandbox or on a host without OpenShell.
-Return to the Linux host checkout and confirm the CLI and sandbox name.
+The setup command is running inside the sandbox or on a machine without
+OpenShell. Return to the checkout on your machine and confirm the CLI and
+sandbox name.
 
 ```bash
 command -v openshell
@@ -724,9 +730,9 @@ required `Mail.Read` and `User.Read` scopes. Follow the recovery steps in
 
 ### Graph setup refuses an attached provider with the same credential key
 
-Treat the refusal as a provider collision. From the host, inspect and detach
-the conflicting provider or use a dedicated sandbox before starting Graph
-intake.
+Treat the refusal as a provider collision. From your machine, inspect and
+detach the conflicting provider or use a dedicated sandbox before starting
+Graph intake.
 
 ```bash
 openshell sandbox provider list my-hermes
@@ -744,7 +750,8 @@ read-write provider would make the platform-level write-refusal claim false.
 
 ## Limitations and Support
 
-- The scheduled path is Linux-only, including WSL.
+- Scheduled jobs require the Linux environment inside a NemoHermes sandbox.
+  The current provider setup helpers require Linux or WSL on your machine.
 - Recorded judgment turns test the workflow, not model quality.
 - Live connectors currently cover Slack and a Microsoft Outlook inbox through
   Microsoft Graph. Other messaging providers need their own collector and
@@ -832,9 +839,9 @@ memory-driven-chief-of-staff/
 │   ├── register-jobs.sh              # Sandbox: idempotent Hermes cron registration
 │   ├── require-encrypted-storage.sh  # Shared connector storage prerequisite
 │   ├── require-linux.sh              # Shared scheduled-runtime platform check
-│   ├── setup-graph.sh                # Host: authorize and attach Outlook mailbox access
-│   ├── setup-slack.sh                # Host: authorize and attach rotating Slack token
-│   └── validate-provider-profile.sh  # Host: fail-closed provider policy validation
+│   ├── setup-graph.sh                # Outside sandbox: authorize and attach Outlook access
+│   ├── setup-slack.sh                # Outside sandbox: authorize and attach a Slack token
+│   └── validate-provider-profile.sh  # Outside sandbox: validate provider policy
 └── docs/
     ├── data-lifecycle.md             # Retention, exclusions, export, reset, migration
     ├── encrypted-storage.md          # Required storage-encryption checks
@@ -1029,4 +1036,4 @@ license: Apache-2.0
 | --- | --- |
 | Description | Builds a revisable local memory from email and Slack, then ranks obligations against the user's priorities while preserving pins and ignores without changing source systems. |
 | Industry | ✨ Other |
-| Requirements | Python 3.10+ · scheduled use: Linux/WSL, Hermes 0.19+, and an inference provider API key · Slack and Microsoft Graph collectors optional |
+| Requirements | Python 3.10+ · scheduled use: a Linux NemoHermes sandbox, Hermes 0.19+, and an inference provider API key · provider setup helpers: Linux/WSL · Slack and Microsoft Graph collectors optional |
