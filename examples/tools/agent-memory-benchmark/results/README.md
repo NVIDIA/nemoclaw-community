@@ -77,19 +77,19 @@ and never summed.
 
 | Metric | Agentic RAG | Self-model | Difference |
 | --- | ---: | ---: | ---: |
-| Overall accuracy (186 questions) | 82.8% | 89.8% | +7.0 pp |
+| Overall accuracy (186 questions) | 82.8% | 90.3% | +7.5 pp |
 | Hard questions (31) | 67.7% | 87.1% | +19.4 pp |
 | Tracking facts that changed over time — `chain_freshness` (5) | 60.0% | 100.0% | +40.0 pp |
 | Point-in-time reasoning — `as_of` (6) | 33.3% | 66.7% | +33.3 pp |
 | Entity disambiguation — `disambiguation` (15) | 66.7% | 86.7% | +20.0 pp |
 | Multi-source synthesis — `multi_source` (73) | 87.7% | 94.5% | +6.8 pp |
-| Refusing to answer when the corpus cannot — `abstention` (13) | 100.0% | 76.9% | -23.1 pp |
+| Refusing to answer when the corpus cannot — `abstention` (13) | 100.0% | 84.6% | -15.4 pp |
 | Single-hop lookup — `single_hop` (30) | 86.7% | 83.3% | -3.3 pp |
 | Citation coverage (186) | 92.5% | 97.8% | +5.4 pp |
 
 Two rows go the other way, and they are in the table above rather than left out
 of it. **What the artifacts establish is the counts.** On `abstention`, the
-agentic baseline answered 13 of 13 correctly and the self-model 10 of 13. On
+agentic baseline answered 13 of 13 correctly and the self-model 11 of 13. On
 `single_hop`, the baseline scored 86.7% against the self-model's 83.3%. Both
 differences are visible per question in each run's `verdicts.jsonl`.
 
@@ -180,20 +180,24 @@ checked rather than believed.
 > not part of a map whose only job is to reproduce `answers.jsonl`, and each
 > report records it under `provenance_note.run_id_note`. The other:
 >
-> **One further substitution is applied but not listed.** It replaced an email
-> and URL domain that is a registrable `.com`, with a domain reserved by RFC 2606.
+> **Two further substitutions are applied but not listed.** One replaced an
+> email and URL domain that is a registrable `.com` with a domain reserved by
+> RFC 2606. The other replaced an internal source-repository identifier that a
+> model named in one answer — the corpus never contained it, so the corpus-side
+> rename could not reach it.
 > Publishing its pre-image would put a registrable domain back into a public
 > artifact, which is the boundary the corpus sanitization exists to hold — so it is
 > **pre-applied** in `answers.as-answered.jsonl` rather than left there and listed
-> for reversal. The published map therefore reproduces `answers.jsonl` from that
+> for reversal; publishing either pre-image would put back exactly what the
+> substitution removed. The published map therefore reproduces `answers.jsonl` from that
 > file exactly, and no artifact in this repository carries the domain.
 
 What it changed, measured:
 
 | | Agentic RAG | Self-model |
 | --- | ---: | ---: |
-| As answered, against the published key | 80.1% | 87.1% |
-| After the substitution | 82.8% | 89.8% |
+| As answered, against the published key | 80.1% | 87.6% |
+| After the substitution | 82.8% | 90.3% |
 | Answers reported unanswered before the id map | 4 | 4 |
 
 The id map does more work than the text map. Four question ids were renamed at

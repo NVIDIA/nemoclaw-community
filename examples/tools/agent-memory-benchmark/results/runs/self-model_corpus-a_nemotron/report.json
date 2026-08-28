@@ -92,9 +92,9 @@
     "questions": 186,
     "graded": 186,
     "deferred_to_judge": 0,
-    "accuracy_overall": 0.8978,
+    "accuracy_overall": 0.9032,
     "accuracy_by_type": {
-      "abstention": 0.7692,
+      "abstention": 0.8462,
       "as_of": 0.6667,
       "attribution": 0.8,
       "chain_freshness": 1.0,
@@ -108,7 +108,7 @@
       "single_hop": 0.8333
     },
     "accuracy_by_difficulty": {
-      "base": 0.9032,
+      "base": 0.9097,
       "hard": 0.871
     },
     "freshness_detail": {
@@ -127,7 +127,7 @@
   "corpus_name": "corpus_a",
   "fingerprint": {
     "algorithm": "sha256-v1",
-    "scorer": "067838533c09d47131b2420c60e148cb1d023b01249b3fad9eada7234c604f62",
+    "scorer": "3f45e97b0bda7f7882c259da398c31b519b4ce15b16f7afd38594fea0fe3536d",
     "normalization": {
       "default_year": "2026",
       "alt_years": [
@@ -140,13 +140,13 @@
     "gold": "55a66b80ff0f62d8b3a340dcbb9cc970a011922b1e509269c4402192f9504970"
   },
   "benchmark_revision": {
-    "commit": "96b924113a334bd94c09080379d11eb8fbfd6f2e",
+    "commit": "ab06577711b833d57be3122e01655d67b84a206a",
     "dirty": true
   },
   "provenance_note": {
     "answers_transformed": true,
     "why": "These answers were produced against the corpus before publication, when a set of identifiers carried different names. The same substitution applied to the corpus at publication was applied to the answers, because an answer is derived from the corpus it read: a system reading the published corpus would have written the published name. Nothing else was changed.",
-    "verify": "Applying substitutions.text then substitutions.question_ids to answers.as-answered.jsonl reproduces answers.jsonl exactly. One further substitution was applied at publication and is deliberately not listed: it replaced a registrable .com domain, and publishing its pre-image here would put that domain back into a public artifact. It is pre-applied in answers.as-answered.jsonl, so the map below still reproduces the rows.",
+    "verify": "Applying substitutions.text then substitutions.question_ids to answers.as-answered.jsonl reproduces answers.jsonl exactly. Two further substitutions were applied at publication and are deliberately not listed, because publishing their pre-image would put back into a public artifact exactly what they were applied to remove: one replaced a registrable .com domain, the others two internal source-repository identifiers a model named while inventing merge requests -- the corpus never held either string, so the corpus-side rename could not reach them. Both are pre-applied in answers.as-answered.jsonl, so the map below still reproduces the rows.",
     "substitutions": {
       "text": {
         "docs/sot/designs/": "docs/design/",
@@ -179,8 +179,8 @@
     },
     "not_a_rerun": "This is not a run against the published corpus. The systems never saw it. Reproducing these numbers requires re-running the answer phase.",
     "effect": {
-      "accuracy_as_answered": 0.871,
-      "accuracy_after_map": 0.8978,
+      "accuracy_as_answered": 0.8763,
+      "accuracy_after_map": 0.9032,
       "questions_reported_unanswered_before_id_map": 4,
       "note": "The id map matters more than the text map: four question ids were renamed at publication, and without mapping them those four answers are reported as unanswered, which invalidates the run."
     },

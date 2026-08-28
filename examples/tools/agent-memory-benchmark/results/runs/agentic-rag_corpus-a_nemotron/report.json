@@ -129,7 +129,7 @@
   "note": "search rounds were capped at 3. Preserved so the cost of removing the cap is measurable rather than asserted; the uncapped run is agentic_rag_a_nemotron.",
   "fingerprint": {
     "algorithm": "sha256-v1",
-    "scorer": "067838533c09d47131b2420c60e148cb1d023b01249b3fad9eada7234c604f62",
+    "scorer": "3f45e97b0bda7f7882c259da398c31b519b4ce15b16f7afd38594fea0fe3536d",
     "normalization": {
       "default_year": "2026",
       "alt_years": [
@@ -142,13 +142,13 @@
     "gold": "55a66b80ff0f62d8b3a340dcbb9cc970a011922b1e509269c4402192f9504970"
   },
   "benchmark_revision": {
-    "commit": "96b924113a334bd94c09080379d11eb8fbfd6f2e",
+    "commit": "ab06577711b833d57be3122e01655d67b84a206a",
     "dirty": true
   },
   "provenance_note": {
     "answers_transformed": true,
     "why": "These answers were produced against the corpus before publication, when a set of identifiers carried different names. The same substitution applied to the corpus at publication was applied to the answers, because an answer is derived from the corpus it read: a system reading the published corpus would have written the published name. Nothing else was changed.",
-    "verify": "Applying substitutions.text then substitutions.question_ids to answers.as-answered.jsonl reproduces answers.jsonl exactly. One further substitution was applied at publication and is deliberately not listed: it replaced a registrable .com domain, and publishing its pre-image here would put that domain back into a public artifact. It is pre-applied in answers.as-answered.jsonl, so the map below still reproduces the rows.",
+    "verify": "Applying substitutions.text then substitutions.question_ids to answers.as-answered.jsonl reproduces answers.jsonl exactly. Two further substitutions were applied at publication and are deliberately not listed, because publishing their pre-image would put back into a public artifact exactly what they were applied to remove: one replaced a registrable .com domain, the others two internal source-repository identifiers a model named while inventing merge requests -- the corpus never held either string, so the corpus-side rename could not reach them. Both are pre-applied in answers.as-answered.jsonl, so the map below still reproduces the rows.",
     "substitutions": {
       "text": {
         "docs/sot/designs/": "docs/design/",

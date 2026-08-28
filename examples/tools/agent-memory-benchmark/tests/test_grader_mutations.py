@@ -199,6 +199,23 @@ DENIAL_SCOPE_CONTRACT = [
      "Beacon eval methodology walkthrough.", True),
     ("the cue still denies when it is really there",
      {"mode": "string_any", "accept": ["50%"]}, "The figure is not 50%", False),
+    # A correct abstention names the thing it is declining to assert. Taken from
+    # the published self-model run, where this scored as an assertion and cost
+    # the answer its point.
+    ("saying the corpus is silent denies what the sentence goes on to name",
+     {"mode": "string_any", "accept": ["completed successfully"]},
+     "There is no information in the corpus about whether it completed "
+     "successfully or how it went.", False),
+    ("the same, with the other common phrasings",
+     {"mode": "string_any", "accept": ["50%"]},
+     "The corpus does not say whether the figure is 50%.", False),
+    # Both directions: a value after the silence still counts.
+    ("a value asserted after the silence is still asserted",
+     {"mode": "string_any", "accept": ["50%"]},
+     "There is no information about the rollout; the figure is 50%.", True),
+    ("and across a sentence break",
+     {"mode": "string_any", "accept": ["2026-07-14"]},
+     "No record of a review. The launch date is 2026-07-14.", True),
 ]
 
 

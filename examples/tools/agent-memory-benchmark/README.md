@@ -188,7 +188,7 @@ point the proxy at.
 ```bash
 cd examples/tools/agent-memory-benchmark
 python3 -m pip install pytest
-python3 -m pytest tests/     # expected: 219 passed
+python3 -m pytest tests/     # expected: 225 passed
 ```
 
 Then run the whole pipeline against a fixture whose score is known in advance:
@@ -490,7 +490,7 @@ One pair of runs ships as a worked example: a self-model and an agentic
 retrieval baseline on corpus A, both on the same base model, both graded by the
 grader in this repository. **In this pair of runs** the self-model scored higher
 overall and on most question types, and lower on two — `abstention`, where it
-answered 10 of 13 against the baseline's 13, and `single_hop`. Those are counts
+answered 11 of 13 against the baseline's 13, and `single_hop`. Those are counts
 from these two runs; the artifacts do not include the self-model's memory, so
 they cannot say what caused any of it.
 It also spends its tokens differently: most of the self-model's fall in the
@@ -512,13 +512,13 @@ limits are stated where the numbers are.
 here exercises a live endpoint.
 
 ```bash
-python3 -m pytest tests/     # expected: 219 passed
+python3 -m pytest tests/     # expected: 225 passed
 ```
 
 **Expected result:**
 
 ```text
-219 passed
+225 passed
 ```
 
 **This verifies:** the runner, grader, report renderer and the ledger adapter's

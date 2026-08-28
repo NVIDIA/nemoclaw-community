@@ -140,6 +140,15 @@ DENIAL_CUES = (
     "is not", "are not", "was not", "were not", "isn't", "aren't", "wasn't",
     "weren't", "no longer", "rather than", "instead of", "not ", "never ",
     "cannot", "can't", "don't", "doesn't", "didn't", "no evidence", "not the",
+    # Saying the corpus is silent is a denial of everything the sentence goes on
+    # to name. A correct abstention that read "there is no information about
+    # whether it completed successfully" was scored as asserting the phrase it
+    # was declining to assert. A bare "no" is too broad to be a cue; these are
+    # the shapes an abstention actually takes.
+    "no information", "no mention", "no record", "no indication", "no detail",
+    "no data", "not stated", "not mentioned", "not recorded", "not specified",
+    "does not say", "does not state", "does not mention", "does not indicate",
+    "nothing in the corpus", "not in the corpus", "silent on",
     # A denial can follow the value instead of preceding it. Anchoring these on
     # the copula keeps "is wrong" from matching a noun like "the wrong-way
     # valve", which asserts nothing.

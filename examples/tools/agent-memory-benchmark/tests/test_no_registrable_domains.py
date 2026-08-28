@@ -155,3 +155,81 @@ def test_no_tracked_file_publishes_a_path_from_someone_s_machine(kind):
         f"tracked files under {kind!r} publish absolute paths from a machine: "
         f"{offenders}. A citation should name what it cites, relative to the "
         f"corpus or the memory, not where the run happened to execute.")
+
+
+# An org/repo identifier is the third shape of the same leak. `hwinf-afe/cos`
+# reached a published answer because the model named its own source repository
+# while inventing a merge request -- the corpus never contained the string, so
+# the corpus-side rename could not have caught it, and neither the domain nor
+# the path guard looks for it.
+# Only where it is used as a repository reference: followed by a merge-request
+# or issue number, or by GitLab's /-/ path, or preceded by a host. A bare
+# `word/word` is prose -- "committed/stretch" and "interview/offer" both occur
+# in these answers.
+_ORG_REPO = re.compile(
+    r"(?:[a-z0-9.-]+\.[a-z]{2,}/)?"
+    r"([a-z][a-z0-9_-]{2,}/[a-z][a-z0-9_.-]{2,})"
+    r"(?=[!#]\d|/-/)")
+
+# Repository paths this example legitimately names.
+KNOWN_REPOSITORIES = {
+    "platform-eng/atlas", "platform-eng/onboarding", "platform-eng/perf",
+    "platform-eng/compass", "platform-eng/quillon",
+}
+
+
+def _repository_references(text: str) -> set[str]:
+    return {m.group(1) for m in _ORG_REPO.finditer(text)}
+
+
+@pytest.mark.parametrize("kind", ["results"])
+def test_no_published_result_names_a_repository_outside_the_fiction(kind):
+    """A published answer may name the fictional repositories and no others."""
+    offenders: dict[str, set[str]] = {}
+    for path in _tracked_files():
+        relative = path.relative_to(REPO)
+        if relative.parts[0] != "results" or path.suffix != ".jsonl":
+            continue
+        text = path.read_text(encoding="utf-8")
+        found = _repository_references(text) - KNOWN_REPOSITORIES
+        if found:
+            offenders[str(relative)] = found
+    assert not offenders, (
+        f"published results name repositories that are not part of the corpus: "
+        f"{offenders}. A model naming its own source repository in an answer is "
+        f"the corpus rename's blind spot, because the corpus never held the string.")
+
+
+def test_a_published_answer_names_only_things_the_corpus_contains():
+    """A model can name an internal thing the corpus never held.
+
+    `hwinf-afe/cos!342` and four `atlas/solswarm!NNN` ids reached published
+    artifacts this way: the model invented merge requests and reached for its own
+    source repository while doing it. The corpus-side rename could not have
+    caught either, because the corpus never contained the string, and both were
+    in `source_ids` rather than the answer text -- the same field the
+    substitution itself originally missed.
+
+    This checks whole rows, not the answer field, for repository references.
+    """
+    corpus = " ".join(
+        path.read_text(encoding="utf-8", errors="ignore")
+        for path in (REPO / "corpus_a" / "corpus").rglob("*.md")).lower()
+    offenders: dict[str, set[str]] = {}
+    for run in sorted((REPO / "results" / "runs").iterdir()):
+        for name in ("answers.jsonl", "answers.as-answered.jsonl"):
+            path = run / name
+            if not path.exists():
+                continue
+            found = set()
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    found |= _repository_references(line)
+            unknown = {f for f in found - KNOWN_REPOSITORIES if f.lower() not in corpus}
+            if unknown:
+                offenders[f"{run.name}/{name}"] = unknown
+    assert not offenders, (
+        f"published answers name repositories the corpus does not contain: "
+        f"{offenders}. A model naming a real internal repository while inventing "
+        f"an answer is outside the corpus rename's reach; add it to the "
+        f"pre-applied substitutions, not to the published map.")

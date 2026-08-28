@@ -111,9 +111,16 @@ def test_the_documented_counts_match_the_shipped_question_set():
     assert int(stated.group(1)) == len(QUESTIONS)
     assert int(stated.group(2)) == len(MANIFEST)
 
+    # Find this example's catalog row and read the numbers out of it, rather than
+    # matching the sentence around them. A maintainer reworded that sentence
+    # upstream -- "asks ... on a second" became "asking ... on another" -- and a
+    # regex pinned to the prose went red on main without a number having moved.
     catalog = (REPO.parents[1] / "README.md").read_text(encoding="utf-8")
-    row = re.search(r"asks (\d+) questions on one corpus and (\d+) on a second", catalog)
-    assert row, "the example catalog no longer states the question counts"
-    assert int(row.group(2)) == len(QUESTIONS), (
-        f"examples/README.md says {row.group(2)}; corpus B ships {len(QUESTIONS)}"
-    )
+    row = next((line for line in catalog.splitlines()
+                if "agent-memory-benchmark" in line and line.startswith("|")), None)
+    assert row, "the example catalog no longer lists this example"
+    counts = [int(n) for n in re.findall(r"\b(\d{2,4}) questions?\b|\band (\d{2,4})\b", row)
+              for n in ([n[0] or n[1]]) if n]
+    assert len(QUESTIONS) in counts, (
+        f"the catalog row states {counts}; corpus B ships {len(QUESTIONS)} questions. "
+        f"Row: {row.strip()[:160]}")
