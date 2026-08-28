@@ -411,6 +411,11 @@ class CatalogBuildTests(unittest.TestCase):
 
         self.assertEqual(len(detail_pages), len(entries))
         self.assertEqual(set(detail_pages), {entry.detail_path for entry in entries})
+        self.assertIn(
+            '<link rel="icon" type="image/png" sizes="64x64" '
+            'href="assets/nvidia-favicon.png">',
+            outputs.site_html,
+        )
         self.assertTrue(copied_assets)
         mermaid_pages = 0
         mermaid_diagrams = 0
@@ -426,6 +431,11 @@ class CatalogBuildTests(unittest.TestCase):
             self.assertIn('id="readme" tabindex="-1"', page)
             self.assertNotRegex(page, r'<(?:iframe|object|embed)\b')
             self.assertNotRegex(page, r'<img[^>]+src="https?://')
+            self.assertRegex(
+                page,
+                r'<link rel="icon" type="image/png" sizes="64x64" '
+                r'href="[^"]*assets/nvidia-favicon\.png">',
+            )
             diagram_count = page.count('class="language-mermaid"')
             source = (ROOT / entry.readme_path).read_text(encoding="utf-8")
             expected_diagram_count = len(

@@ -1893,6 +1893,9 @@ def render_detail_pages(
         replacements = {
             "{{META_DESCRIPTION}}": html.escape(entry.description, quote=True),
             "{{PAGE_TITLE}}": html.escape(readme_title),
+            "{{FAVICON_URL}}": _detail_relative(
+                entry, "assets/nvidia-favicon.png"
+            ),
             "{{STYLES_URL}}": _detail_relative(entry, "styles.css"),
             "{{LOGO_URL}}": _detail_relative(entry, "assets/nvidia-logo.png"),
             "{{CATALOG_URL}}": _detail_relative(entry, "index.html"),
@@ -2084,7 +2087,12 @@ def validate_generated_site(
         )
     if parser.scripts != [{"type": "module", "src": "catalog.mjs"}]:
         errors.append("Expected exactly one local module script: catalog.mjs.")
-    expected_resources = ["styles.css", "assets/nvidia-logo.png", "catalog.mjs"]
+    expected_resources = [
+        "assets/nvidia-favicon.png",
+        "styles.css",
+        "assets/nvidia-logo.png",
+        "catalog.mjs",
+    ]
     if parser.resources != expected_resources:
         errors.append(
             "Generated local page resources changed unexpectedly: "
@@ -2190,7 +2198,12 @@ def validate_generated_site(
     if "NemoClaw Community support is best-effort" not in site_html:
         errors.append("The catalog support boundary no longer matches SUPPORT.md.")
 
-    for relative in ("site/styles.css", "site/catalog.mjs", "site/assets/nvidia-logo.png"):
+    for relative in (
+        "site/styles.css",
+        "site/catalog.mjs",
+        "site/assets/nvidia-logo.png",
+        "site/assets/nvidia-favicon.png",
+    ):
         if not is_regular_repo_file(root, root / relative):
             errors.append(f"Missing required site source: {relative}")
     css = (root / "site" / "styles.css").read_text(encoding="utf-8")
@@ -2301,10 +2314,13 @@ def validate_detail_pages(
             errors.append("Detail page Content Security Policy changed unexpectedly.")
         expected_styles = _detail_relative(entry, "styles.css")
         expected_logo = _detail_relative(entry, "assets/nvidia-logo.png")
+        expected_favicon = _detail_relative(entry, "assets/nvidia-favicon.png")
         if expected_styles not in parser.resources:
             errors.append("Detail page is missing the shared stylesheet.")
         if expected_logo not in parser.resources:
             errors.append("Detail page is missing the local NVIDIA logo.")
+        if expected_favicon not in parser.resources:
+            errors.append("Detail page is missing the local NVIDIA favicon.")
         required_links = {
             entry.guide_url,
             _detail_relative(entry, "index.html"),
