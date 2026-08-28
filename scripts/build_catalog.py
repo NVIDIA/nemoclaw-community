@@ -1912,6 +1912,7 @@ class GeneratedHTMLValidator(HTMLParser):
         self.category_groups: list[dict[str, str]] = []
         self.category_info_controls: list[dict[str, str]] = []
         self.scripts: list[dict[str, str]] = []
+        self.anchors: list[dict[str, str]] = []
         self.links: set[str] = set()
         self.resources: list[str] = []
         self.labels_for: set[str] = set()
@@ -1938,6 +1939,7 @@ class GeneratedHTMLValidator(HTMLParser):
         if tag == "label" and values.get("for"):
             self.labels_for.add(values["for"])
         if tag == "a" and values.get("href"):
+            self.anchors.append(values)
             self.links.add(values["href"])
         if tag in {"iframe", "object", "embed"}:
             self.errors.append(f"Forbidden embedded resource element: {tag}")
@@ -2127,6 +2129,30 @@ def validate_generated_site(
     missing_links = required_links - parser.links
     if missing_links:
         errors.append("Missing required catalog links: " + ", ".join(sorted(missing_links)))
+    new_tab_links = {
+        "https://brev.nvidia.com/launchable/deploy?launchableID=env-3Azt0aYgVNFEuz7opyx3gscmowS": (
+            "Launch NemoClaw on Brev (opens in a new tab)"
+        ),
+        "https://github.com/NVIDIA/nemoclaw-community": (
+            "GitHub repository (opens in a new tab)"
+        ),
+    }
+    for href, expected_label in new_tab_links.items():
+        anchor = next(
+            (item for item in parser.anchors if item.get("href") == href),
+            None,
+        )
+        if anchor is None:
+            errors.append(f"Missing header link: {href}")
+            continue
+        rel = set(anchor.get("rel", "").split())
+        if anchor.get("target") != "_blank" or not {
+            "noopener",
+            "noreferrer",
+        }.issubset(rel):
+            errors.append(f"Header link must open safely in a new tab: {href}")
+        if anchor.get("aria-label") != expected_label:
+            errors.append(f"Header link must announce its new-tab behavior: {href}")
     if "NemoClaw Community support is best-effort" not in site_html:
         errors.append("The catalog support boundary no longer matches SUPPORT.md.")
 
