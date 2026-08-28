@@ -9,6 +9,16 @@ result line the SVG claims to appear in the output, so the picture cannot drift
 from the run it depicts.
 
 `offline-self-test.png` is exported from it, because `scripts/build_catalog.py`
-accepts only raster formats in a README and the catalog renders that image. A
-raster cannot be read back and compared, so **edit the SVG and re-export the
-PNG** -- never the PNG alone.
+accepts only raster formats in a README and that is the image a reader sees. The
+export records the SVG's SHA-256 in a PNG `tEXt` chunk, so a test can prove the
+two describe the same run without OCR and without file timestamps, which git
+does not preserve.
+
+**Edit the SVG, then re-export:**
+
+```bash
+python3 tools/export_selftest_image.py
+```
+
+Never edit the PNG alone, and do not re-export with a tool that drops the `tEXt`
+chunk — the test will say the raster records no source digest.
