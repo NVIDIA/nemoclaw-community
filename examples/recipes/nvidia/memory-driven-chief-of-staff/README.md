@@ -1,349 +1,540 @@
+<!-- markdownlint-disable MD013 -->
 <!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- markdownlint-enable MD013 -->
 
 # Memory-Driven Chief of Staff
 
-| Catalog field | Value |
-| --- | --- |
-| Description | Builds a revisable local memory from email and Slack, then ranks obligations against the user's priorities while preserving pins and ignores without changing source systems. |
-| Industry | ✨ Other |
-| Requirements | Python 3.10+ · scheduled use: Linux/WSL, Hermes 0.19+, and an inference provider API key · Slack and Microsoft Graph collectors optional |
+Turn NemoHermes into an attention bridge for inbound conversations. This recipe
+builds a source-backed work wiki and surfaces the decisions, replies, and
+follow-ups that require the user's attention.
 
-Memory-Driven Chief of Staff is a recipe that keeps a local, revisable record
-for each inbound email and Slack message. It re-judges those records on a
-schedule and re-ranks them under fixed caps, on jobs it registers with the
-runtime's scheduler. The user's own ignores and priority overrides change the
-ranking. The recipe never writes back to the
-source system.
+## From Message Overload to the Work That Needs You
 
-Three phases are here: the store with its tests and an offline walkthrough,
-the installer and scheduled jobs that run it without a person present, and a
-Slack collector that reads the messages the user receives. The first two need
-no account, no workspace and no network, and the walkthrough and the tests
-still need none. The collector is optional; until it is set up it reports
-itself unconfigured and the schedule runs over whatever the store holds. Only
-the scheduled path needs an inference endpoint, and only when a job finds
-work. A fixture corpus exercises the same code a
-live source would. Two recorded model turns stand in for the two steps that
-would otherwise need a model: the intake judgment, in
-`fixtures/envelopes/intake.json`, and the scheduled re-judgment, recorded
-inline in `profile/scripts/walkthrough.py`.
+Work arrives across threads and providers. NemoHermes rebuilds the context
+needed to understand what changed and where the user must step in.
 
-## Concepts
+With this recipe, you can ask NemoHermes questions such as:
 
-These terms appear throughout this document and in the code.
+> **What changed on this project since yesterday?**
+>
+> **Which conversations need a decision, response, or follow-up from me?**
+>
+> **What are the most important items on my todo list today?**
+>
+> **What should I know about this person or project, and how does it connect to
+> my work?**
 
+NemoHermes turns the same inbound stream into one continuous workflow:
+
+```text
+direct messages · group chats · channels · email
+                         │
+                         ▼
+              living, source-backed work wiki
+                │                         │
+                ▼                         ▼
+       “What changed?”          “Where do I need to act?”
+                │                         │
+                └────────────┬────────────┘
+                             ▼
+                ranked attention recommendations
+                             ▲
+                             │
+              user pins · ignores · corrections
+```
+
+Answers show what changed, where the user is needed, why an item matters, and
+which sources support it. A message can update the wiki without becoming a todo;
+an urgent broadcast can rank below work the user has chosen.
+
+## Memory That Tracks Work, Not Just Preferences
+
+[Hermes built-in memory](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/memory.md)
+stores compact preferences, environment facts, and lessons across sessions.
+
+This recipe tracks the work around the person in evolving, linked pages for
+people, projects, goals, patterns, concepts, and current attention. Its
+scheduled writer currently maintains people and attention pages from message
+evidence and user corrections. It also keeps the evidence behind non-obvious
+claims and the user's corrections to message-derived obligations.
+
+> **Hermes built-in memory:** “What should the agent know about me?”
+>
+> **This recipe's operational memory:** “What changed around my work, what is
+> the evidence, and where does my attention matter now?”
+
+General personalization stays compact. Operational memory can grow with the
+work while remaining linked, source-backed, schema-checked, and repairable. The
+recipe complements Hermes memory and optional external memory providers.
+
+## Table of Contents
+
+- [From Message Overload to the Work That Needs You](#from-message-overload-to-the-work-that-needs-you)
+- [Memory That Tracks Work, Not Just Preferences](#memory-that-tracks-work-not-just-preferences)
+- [How It Works](#how-it-works)
+- [Quick Start](#quick-start)
+- [Install in NemoClaw](#install-in-nemoclaw)
+- [Configuration](#configuration)
+- [Connect Messaging Providers](#connect-messaging-providers)
+- [Scheduled Operation](#scheduled-operation)
+- [Data Lifecycle and Privacy](#data-lifecycle-and-privacy)
+- [Troubleshooting and FAQ](#troubleshooting-and-faq)
+- [Limitations and Support](#limitations-and-support)
+- [For Contributors](#for-contributors)
+
+## How It Works
+
+Hermes built-in memory remains available for general identity, preferences,
+and learned facts. The recipe adds a workflow around three connected layers:
+
+1. **Inbound signals** bring new information from configured messaging
+   providers into a source-neutral format.
+2. **The work wiki** organizes durable context about people, projects, goals,
+   patterns, concepts, and current attention, with provenance and maintenance
+   rules. Its scheduled writer currently maintains people and attention pages,
+   and user-confirmed identity links connect the same person across providers.
+3. **The attention layer** uses that context to identify work that requires the
+   user's response, decision, or follow-up; recommend priorities; and preserve
+   the user's corrections over time.
+
+```text
+configured IM providers ──► normalized inbound signals
+                                      │
+                   ┌──────────────────┴─────────────────┐
+                   ▼                                    ▼
+        self-maintaining work wiki             attention recommendations
+ people · projects · goals · patterns        ranked obligations · todos
+                   │                                    ▲
+                   └──► sourced retrieval               │
+                                                        │
+                    user corrections ──► learned preferences
+
+Hermes built-in memory ──► general profile and cross-session context
+```
+
+The model does not write SQL. It returns a versioned JSON envelope;
+`apply_decisions.py` validates that envelope and applies it transactionally.
+The offline walkthrough substitutes recorded envelopes only at the two points
+where inference would otherwise be required. Everything downstream is the same
+code used by scheduled runs.
+
+### Core concepts
+
+<!-- markdownlint-disable MD013 -->
 | Term | Meaning |
 | --- | --- |
-| [Hermes](https://github.com/NousResearch/hermes-agent) | The agent runtime this recipe is packaged for. |
-| Profile | One Hermes configuration: a persona, a set of skills, and the user's own data. The [profile guide](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/profiles.md) describes the layout. |
-| Profile home | The directory holding one profile. The `HERMES_HOME` environment variable names it. |
-| Store | The SQLite database of messages, obligations, and an audit trail, at `$HERMES_HOME/workspace/ledger/state.db`. |
-| Memory | The Markdown pages describing the person, at `$HERMES_HOME/workspace/memory/`. |
-| Obligation | One message that needs an action, with a tier, a position, and its own history. |
-| Tier | The priority band an obligation sits in: `high`, `medium`, or `low`. |
-| Envelope | The JSON document a model turn returns: a list of decisions for the writer to apply. The recipe's recorded turns are envelopes. |
-| Addressing | Whether a message was aimed at the user: `direct`, `mentioned`, or `broadcast`. Ingest derives it from the recipient list, which is not stored. |
-| Pre-step | The script a scheduled job runs before its agent turn. Hermes calls it the `--script`; it decides what the turn sees, and whether there is one. |
-| Wake gate | The `{"wakeAgent": false}` line a pre-step prints when it found no work. Hermes reads only the last non-empty line, and skips the agent turn when that line is the gate. |
-| Intent gate | The rule that admits an obligation to the `high` tier only if the memory shows the user chose that work. External urgency alone does not qualify. |
-| Cascade | What happens to an un-gated row that ranked inside the top ten: it drops into the competition for `medium` rather than out of the list. |
-| Reservation | The rule that keeps `high` for gate-passing rows. If fewer pass than the cap allows, the tier stays smaller rather than being filled from the remainder. |
-| Gate verdict | The recorded per-message answer to the intent gate: whether the memory shows the user chose this work. Stored as `intent_gated`. |
+| Profile home | One Hermes profile directory, named by `HERMES_HOME` |
+| Hermes built-in memory | Bounded `USER.md` and `MEMORY.md` notes for general personalization and learned facts |
+| Work wiki | Schema-checked pages for people, projects, goals, patterns, concepts, and attention |
+| Provenance | Source, evidence date, and trust attached to non-obvious wiki claims |
+| Attention layer | Ranked recommendations for inbound work that may require the user's response, decision, or follow-up |
+| Obligation ledger | Message judgments, corrections, and audit history at `$HERMES_HOME/workspace/ledger/state.db` |
+| Obligation | A source message that still needs a response or action |
+| Intent gate | Proof in memory that the user chose the work; required for `high` |
+| Wake gate | The last non-empty selector line that tells Hermes not to call the model |
+| Envelope | Versioned JSON containing model decisions for the transactional writer |
+<!-- markdownlint-enable MD013 -->
 
-## Why it exists
+## Quick Start
 
-A personal assistant is only useful if it remembers one person accurately: who
-they work with, what they are accountable for, and what they have already
-decided. Hermes's built-in memory holds that as free-form notes in `MEMORY.md`
-and `USER.md`, under a fixed character budget. Nothing indexes a note, links it
-to related notes, ages it, or repairs it. As the budget fills, the agent is
-asked to consolidate by hand, and nothing detects a note that has quietly
-drifted out of date. Hermes also ships optional external memory providers; this
-recipe requires none of them, and keeps its own record local under a schema it
-can check.
+This offline walkthrough needs only Python 3.10+ on macOS, Linux, or WSL.
 
-A second kind of record is not a fact but a judgment about a message that
-another system owns. Examples: this message needs a reply, it ranks third this
-week, it is snoozed until Thursday, it was demoted because the user overrode
-the ranking twice. A mailbox has no field for a judgment like that. Writing one
-back into the mailbox would change the user's real data to store the
-assistant's opinion.
-
-The clearest consequence is how the recipe treats a message that announces its
-own urgency. A message whose subject reads `URGENT: expense policy
-attestation closes Friday`, matching nothing the person chose to work on, is
-capped at the middle tier. A quieter request that maps to
-their stated priorities is not. A ranking with no memory behind it cannot tell
-those two apart.
-
-## What is in this recipe
-
-| Path | What it is |
-| --- | --- |
-| `profile/distribution.yaml` | The manifest: what an install replaces, and what it leaves alone |
-| `profile/SOUL.md` | The persona, including the rule that answers come from the memory or not at all |
-| `profile/schema.md` | The memory contract: six page types, index rules, provenance, decay, growth ceilings |
-| `profile/scripts/schema.sql` | The store: items, obligations, an append-only audit trail, and source cursors |
-| `profile/scripts/ranking.py` | Cap-and-cascade tier assignment, deterministic |
-| `profile/scripts/memory_check.py` | Invariant detection over the memory, deterministic |
-| `profile/scripts/preferences.py` | Correction counting against a fixed threshold |
-| `profile/scripts/apply_decisions.py` | Applies model decisions; the model returns an envelope and never writes SQL |
-| `profile/scripts/migrate.py` | Schema versioning, forward-only, v1 through v5. Each step is idempotent; v5 rebuilds `items` to trade a hardcoded source list for a foreign key, and refuses rather than completing if the copy would lose a row |
-| `profile/scripts/normalize.py` | Source payloads to store rows, kept separate from the network calls |
-| `profile/scripts/_db.py` | Connection and transaction boundary |
-| `profile/scripts/correct.py` | The user's writer: pins, ignores, and the only source of `actor='user'` events |
-| `profile/scripts/identity.py` | Which identities are one person: pairwise answers, resolved with a disjoint set |
-| `profile/scripts/link_identity.py` | The user's other writer, and the only thing that answers "are these the same person?" |
-| `profile/scripts/load_fixtures.py` | Replays the fixtures through the real ingest path |
-| `profile/scripts/walkthrough.py` | The fixture walkthrough, end to end, with no credentials and no model |
-| `profile/scripts/select_intake.py` | The intake job's pre-step: what to judge, and whether to wake the model at all |
-| `profile/scripts/ingest_graph.py` | The mailbox collector: a delta synchronisation, resumable, with deletions reconciled |
-| `profile/scripts/ingest_slack.py` | The Slack collector: bounded conversation coverage, per-thread watermarks |
-| `profile/scripts/select_review.py` | The review job's pre-step: the stalest open obligations, oldest review first |
-| `profile/scripts/select_memory.py` | The memory-writing job's pre-step: recurring correspondents, and whether the attention pages have gone stale |
-| `profile/scripts/retention.py` | The retention job: clears message bodies past the window, keeps the record |
-| `profile/scripts/exclusions.py` | Senders, domains and channels that are never written, applied in `insert_items` |
-| `profile/scripts/export_store.py` | Writes the whole store and memory out as Markdown beside JSON |
-| `profile/scripts/reset.py` | Removes the store, the memory and the learned policy together |
-| `profile/seed/` | The pages a fresh memory starts from — copied in if missing, never overwritten |
-| `scripts/install.sh` | Installs the profile, inherits the runtime's model config, registers the jobs |
-| `scripts/register-jobs.sh` | Registers the seven scheduled jobs through the cron CLI. Re-runnable |
-| `profile/skills/` | Six skills: judging, review, memory writing, repair, consolidation, preference update. Retention needs none — it clears bodies and never wakes the agent |
-| `fixtures/` | Eight synthetic messages, a seed memory, and one recorded model turn |
-
-Slack is connected through `scripts/setup-slack.sh` and a mailbox through
-`scripts/setup-graph.sh`. Either can be set up alone; with neither, the
-scheduled jobs judge and re-judge whatever the store already holds.
-
-## Requirements
-
-- Python 3.10 or newer. Nothing else is needed for the fixture path.
-- The fixture path — everything under [Try it](#try-it) and
-  [Verify](#verify) — runs on Linux, macOS, or Windows under Windows Subsystem
-  for Linux. Every command is written for a POSIX shell.
-- **The scheduled path is Linux only**, including WSL. All six shipped skills
-  declare `platforms: [linux]`, and Hermes refuses to load a skill outside its
-  declared platforms. On macOS the jobs would still fire and the model would
-  still be called — with no skill attached and a "skill not found" notice in
-  its prompt. Registering them there buys a scheduled expense and no
-  assistant.
-- No credentials for the fixture path. The scheduled path is different: a
-  woken job runs an agent turn, so the profile it fires under needs a model it
-  can reach and a credential of its own. The installer carries over the model
-  settings and never a key, because a key is not a thing to copy — you set one
-  on the new profile with `hermes -p <profile> config set model.api_key`. It is
-  not inherited: a profile without one sends the literal placeholder
-  `no-key-required`, so every scheduled job would fail to authenticate. The
-  installer stops before registering any job when either the model or the
-  credential is missing.
-
-Nothing in the fixture path needs Hermes. Installing the profile and running
-it on a schedule does: `profile/distribution.yaml` declares
-`hermes_requires: ">=0.19.0"`. On 0.19.x the manifest's `distribution_owned`
-list is validated but not yet honored by the copy — the path-aware allowlist
-first shipped in 0.20.0 — which changes nothing for this recipe, because what
-it ships and what it declares are the same set, and a test keeps them so. The
-same 0.19.0 figure under [Where state lives](#where-state-lives) records the
-version the persistence claim was measured against.
-
-## Try it
-
-Run the walkthrough from the recipe root. It prints seven steps and exits `0`.
-From the repository root:
+### 1. Clone and enter the recipe
 
 ```bash
-cd examples/recipes/nvidia/memory-driven-chief-of-staff
-export HERMES_HOME=$(mktemp -d)
+git clone https://github.com/NVIDIA/nemoclaw-community.git
+cd nemoclaw-community/examples/recipes/nvidia/memory-driven-chief-of-staff
+```
+
+### 2. Create isolated local state and run the walkthrough
+
+```bash
+export RECIPE_TMP_HOME="$(mktemp -d)"
+export HERMES_HOME="$RECIPE_TMP_HOME"
 python3 profile/scripts/walkthrough.py --fixtures fixtures
 ```
 
-The seven steps:
+The command prints seven stages and exits with status `0`. The important
+outcomes are:
 
-1. **Collect.** The fixtures go through the same normalization and writer path
-   a connector will use. Nothing is judged yet. This is what ingestion alone
-   produces.
-2. **Judge.** The first recorded turn (`fixtures/envelopes/intake.json`) is
-   applied by the real writer. Three rows pass the intent gate, so the `high`
-   tier holds three rather than its maximum of ten. The tier is never padded.
-   The mandatory expense-attestation deadline ranks fourth and is capped at
-   `medium`, because the recorded verdict says the user never chose that work.
-   The step ends by re-running the shipped ranking over the same rows with the
-   gate verdicts withheld: the `high` tier then holds none, which is what the
-   reservation buys.
-3. **Correct.** The user pins a gate-passing row to the bottom tier. It leaves
-   the `high`
-   tier, because a pin outranks what the memory inferred, and the whole open
-   list is re-ranked around it.
-4. **Correct again.** A row is ignored outright and leaves the open list.
-5. **Re-judge.** The second recorded turn, written inline in the script rather
-   than in `fixtures/`, tries to restore the pinned row and cannot. An agent
-   pass never clears a user's pin.
-6. **Learn.** The recorded corrections are counted against the threshold that a
-   preference rule requires. Two corrections do not reach the threshold of
-   three. The walkthrough reports that rather than inventing a third.
-7. **Verify.** The memory is checked against its own schema. A required field
-   is then removed on purpose, so the check is seen to fail as well as pass,
-   and restored.
+- eight messages are ingested and two are skipped;
+- six obligations remain open;
+- exactly three memory-gated obligations enter `high`;
+- an urgent deadline unrelated to the user's chosen work stays in `medium`;
+- a user pin and ignore survive a later recorded review;
+- the memory checker is shown succeeding and failing on a deliberate defect.
 
-The two recorded turns are the only parts standing in for inference.
-Everything downstream of them is the shipped code. One consequence is worth
-being explicit about: the gate verdict on each row is part of the recorded
-intake turn, because deciding it means reading the memory, which needs a model.
-Deleting the seed memory therefore does not change the tiers this run
-prints. It does change step 7, which checks the memory itself. What
-the run does show is everything those verdicts feed into — the caps, the
-reservation, the cascade, the writer, the correction path and the re-ranking —
-and the contrast printed in step 2. For the ranking behavior itself, the
-evidence is `tests/test_ranking.py` and `tests/test_apply_decisions.py`, which
-drive the gate flags directly. The walkthrough states which parts are recorded
-on screen, and [`fixtures/README.md`](fixtures/README.md) states it again.
+### 3. Prove fixture ingestion is idempotent
 
-To watch ingestion by itself, and to confirm that it is idempotent, use a
-profile home the walkthrough has not already filled:
+Use a new profile home because the walkthrough has already populated the first
+one.
 
 ```bash
-export HERMES_HOME=$(mktemp -d)
+export RECIPE_TMP_HOME_2="$(mktemp -d)"
+export HERMES_HOME="$RECIPE_TMP_HOME_2"
 python3 profile/scripts/load_fixtures.py --fixtures fixtures
 python3 profile/scripts/load_fixtures.py --fixtures fixtures
 ```
 
-The first run reports `"added": 8` and the second reports `"added": 0`, because
-intake is keyed on the source's own identifier. Both runs must use the same
-profile home, or the second run has nothing to recognize.
+The first loader run reports `"added": 8`; the second reports `"added": 0`.
 
-The individual pieces are callable on their own, from the recipe root:
+### 4. Inspect or correct state
 
-```bash
-python3 profile/scripts/memory_check.py                     # invariants
-python3 profile/scripts/correct.py priority <source_id> low # pin a tier
-python3 profile/scripts/correct.py ignore <source_id>       # stop tracking
-python3 profile/scripts/correct.py unignore <source_id>     # track it again
-```
-
-`correct.py` needs `HERMES_HOME` to name an existing profile home, and creates
-or migrates the store there if it is absent. `memory_check.py` is the
-exception: with no `HERMES_HOME` it falls back to `workspace/memory` under the
-current directory, and it needs no store at all. Neither creates the profile
-home itself.
-
-A correction applies only where it means something, so on a populated store:
-
-- All three refuse an obligation that is `done` and exit `3`. A completed
-  obligation is history, and rewriting it would turn finished work into a
-  standing instruction.
-- `priority` also refuses an ignored row and exits `3`, printing the exact
-  `unignore` command that restores it, ready to copy. The walkthrough ignores
-  `msg-cc-only` in step 4, so a `priority` command against that row right
-  afterwards reaches this.
-- Repeating a correction that is already in force changes nothing. It prints
-  `"changed": false` and exits `0`.
-- With no matching obligation, `correct.py` exits `3`. With `HERMES_HOME`
-  unset it exits `1` with an unhandled `RuntimeError` naming the variable, and
-  `memory_check.py` exits `2` reporting that it found no memory.
-
-## Verify
-
-Run the test suite from `profile/scripts`. It needs no network and no
-credentials. From the recipe root:
+Replace the placeholder with a source identifier printed by the walkthrough.
 
 ```bash
-cd profile/scripts
-fail=0
-for t in tests/*.py; do python3 "$t" || fail=1; done
-echo "failed=$fail"
-cd ../..
-test "$fail" -eq 0
+python3 profile/scripts/memory_check.py
+python3 profile/scripts/correct.py priority msg-priorities-match low
+python3 profile/scripts/correct.py ignore msg-cc-only
+python3 profile/scripts/correct.py unignore msg-cc-only
 ```
 
-Expected result: every file ends with `OK`, the fourteen files report 603 tests in
-total, and the last line is `failed=0`. Do not use `|| break` here; a `for`
-loop reports the status of its last command, so a failing test would still
-leave the loop exiting `0`.
+Repeated corrections are no-ops. Corrections against completed or incompatible
+rows exit with status `3` and explain the required state transition.
 
-| What it covers | Where |
+## Install in NemoClaw
+
+The scheduled jobs run inside a Linux NemoHermes sandbox. Your own computer is
+outside that sandbox and can use any platform supported by NemoHermes.
+
+This guide uses two command locations:
+
+<!-- markdownlint-disable MD013 -->
+| Location | What it means | CLI available there |
+| --- | --- | --- |
+| Your machine, outside the sandbox | The terminal with the repository checkout that you use to manage NemoHermes | `nemohermes`, `openshell` |
+| NemoHermes sandbox | The isolated Linux environment where Hermes and the scheduled jobs run | `hermes` |
+<!-- markdownlint-enable MD013 -->
+
+The sandbox satisfies the recipe's Linux runtime requirement. The current
+provider setup helpers still require Linux or WSL on your machine; this is a
+helper-script limitation, not a recipe runtime requirement.
+
+`scripts/install.sh` always runs inside the sandbox. Your machine is not
+expected to have `hermes` on `PATH`.
+
+### 1. Confirm and inspect a Hermes sandbox from your machine
+
+If NemoClaw is not installed, follow the upstream
+[NemoClaw setup guide](https://github.com/NVIDIA/NemoClaw) and select Hermes,
+an inference provider, and a model during onboarding.
+
+```bash
+nemohermes my-hermes status
+openshell sandbox provider list my-hermes
+```
+
+Replace `my-hermes` in this section with your registered sandbox name.
+
+Before starting scheduled intake, inspect every provider already attached to
+the sandbox:
+
+```bash
+openshell provider get "<provider-name>"
+```
+
+Do not continue if an unrelated provider exposes `MS_GRAPH_ACCESS_TOKEN`.
+The current Graph collector can see the injected environment value but cannot
+identify which attached provider supplied it. Use a dedicated sandbox or
+detach the conflicting provider before installing or starting the scheduled
+runtime.
+
+### 2. Upload the recipe from your machine
+
+Run this from the cloned `nemoclaw-community` repository root.
+
+```bash
+nemohermes sandbox upload my-hermes \
+  examples/recipes/nvidia/memory-driven-chief-of-staff \
+  /sandbox/memory-driven-chief-of-staff
+nemohermes my-hermes connect
+```
+
+The upload is required: the sandbox cannot see the checkout on your machine.
+After `connect` opens a shell, the remaining commands in this subsection run
+**inside the sandbox**.
+
+### 3. Install the profile and jobs inside the sandbox
+
+```bash
+cd /sandbox/memory-driven-chief-of-staff
+export PROFILE_NAME="memory-driven-chief-of-staff"
+bash scripts/install.sh
+```
+
+The installer creates the target profile and copies only `model.default`,
+`model.provider`, and `model.base_url`. It never copies a credential. On a first
+run without a target-profile credential, it
+stops before registering jobs.
+
+In a NemoClaw-managed sandbox, set the non-secret OpenShell rewrite sentinel,
+then rerun the installer:
+
+```bash
+hermes -p "$PROFILE_NAME" config set model.api_key \
+  "sk-OPENSHELL-PROXY-REWRITE"
+bash scripts/install.sh
+```
+
+The sentinel is not an upstream API key. Hermes requires an `sk-` value before
+it sends a request, and OpenShell removes this marker and injects the managed
+inference credential at the egress boundary. Do not copy a real inference key
+into the recipe profile on the supported NemoClaw path.
+
+Use the explicit opt-out only for a genuinely keyless, non-NemoClaw endpoint;
+it is not a substitute for the rewrite sentinel.
+
+```bash
+ALLOW_NO_API_KEY=1 bash scripts/install.sh
+```
+
+### 4. Start and verify the scheduled runtime inside the sandbox
+
+```bash
+hermes -p "$PROFILE_NAME" gateway install
+hermes -p "$PROFILE_NAME" gateway start
+hermes -p "$PROFILE_NAME" cron status
+```
+
+On WSL without systemd, keep the gateway in the foreground instead.
+
+```bash
+hermes -p "$PROFILE_NAME" gateway run
+```
+
+At this point the schedule works over any rows already in the store. Slack and
+Outlook are independent and optional; each unconfigured collector exits
+successfully and reports that state.
+
+## Configuration
+
+### Environment variables
+
+<!-- markdownlint-disable MD013 -->
+| Name | Location | Required | Default / valid range | Meaning |
+| --- | --- | --- | --- | --- |
+| `HERMES_HOME` | Offline or sandbox | Yes for stateful scripts | No default | Existing Hermes profile home; state is written below `workspace/` |
+| `PROFILE_NAME` | Sandbox installer | No | `memory-driven-chief-of-staff` | Target profile for installation and cron registration |
+| `ALLOW_NO_API_KEY` | Sandbox installer | No | `0`; set to `1` only for a genuinely keyless non-NemoClaw endpoint | Explicit credential-check bypass; do not use for a managed NemoClaw route |
+| `INTAKE_SLICE` | Scheduled runtime | No | `25`; integer `1..200` | Maximum pending rows given to an intake turn |
+| `REVIEW_BATCH` | Scheduled runtime | No | `15`; integer `1..200` | Maximum open rows given to a review turn |
+| `INTAKE_SLACK_BUDGET` | Scheduled runtime | No | `10`; integer `1..200` | Maximum Slack history calls per intake tick |
+| `MEMORY_WINDOW_DAYS` | Scheduled runtime | No | `30`; integer `1..3650` | Evidence window used by the memory-writing selector |
+| `RETENTION_DAYS` | Scheduled runtime | No | `30`; integer `1..3650` | Age at which stored message bodies are cleared |
+| `SLACK_USER_TOKEN` | OpenShell provider | Injected | Rotating user token | Collector credential; do not set manually on the supported path |
+| `MS_GRAPH_ACCESS_TOKEN` | OpenShell provider | Injected | Rotating delegated token | Outlook collector credential; the collector cannot currently attest which attached provider supplied it |
+| `GRAPH_BACKFILL_DAYS` | Scheduled runtime | No | `7`; integer `1..3650` | Initial Outlook mailbox synchronization window |
+| `GRAPH_CLIENT_ID` | Outlook setup on your machine | Yes | No default | Microsoft Entra application client ID |
+| `GRAPH_TENANT_ID` | Outlook setup on your machine | No | `common` | Microsoft Entra directory tenant ID |
+| `GRAPH_PROVIDER_NAME` | Outlook setup on your machine | No | `memory-driven-cos-graph` | Name used when creating the recipe provider; it does not resolve a conflicting attached provider that exposes the same credential key |
+| `SANDBOX_STORAGE_PATH` | Provider setup on your machine | Yes | No default | Path whose encryption status protects sandbox storage |
+| `OPENSHELL_SANDBOX_NAME` | Provider setup on your machine | No | Falls back to `SANDBOX_NAME`, then `hermes` | Sandbox receiving the provider |
+| `SANDBOX_NAME` | Provider setup on your machine | No | `hermes` | Compatibility fallback for the sandbox name |
+| `SLACK_PROVIDER_NAME` | Slack setup on your machine | No | `memory-driven-cos-slack-user` | OpenShell provider name |
+| `STORE_ENCRYPTION_ACKNOWLEDGED` | Provider setup on your machine | No | `0`; unattended confirmation is `1` | Acknowledges an encryption result the script cannot prove |
+| `FORCE_REAUTH` | Provider setup on your machine | No | `0`; replacement is `1` | Replaces an attached rotating provider credential |
+<!-- markdownlint-enable MD013 -->
+
+Scheduled environment variables must reach the target profile. Persist a value
+through the profile environment file returned by Hermes rather than relying on
+a temporary shell export. See [docs/data-lifecycle.md](docs/data-lifecycle.md)
+for retention and memory settings, and
+[docs/set-up-graph.md](docs/set-up-graph.md) for Outlook backfill.
+
+### Public Slack channels
+
+Direct messages and group DMs are discovered automatically. Public channels
+are read only when explicitly listed at
+`$HERMES_HOME/workspace/slack_channels.json`.
+
+```json
+{
+  "channels": ["C0TEAM0001", "C0PROJECT2"]
+}
+```
+
+### Ingest exclusions
+
+Create `$HERMES_HOME/workspace/exclusions.json` to prevent matching rows from
+ever reaching the store. Matching is exact and case-insensitive; glob patterns
+are not supported. Invalid or unknown fields fail closed.
+
+```json
+{
+  "senders": ["recruiter@agency.example", "U01RECRUIT"],
+  "domains": ["agency.example"],
+  "channels": ["C0SALARY01", "D0PRIVATE1"]
+}
+```
+
+## Connect Messaging Providers
+
+Slack and Microsoft Outlook are independent, optional inputs. Configure either
+one or both after installing the recipe and setting any intake exclusions.
+Each setup script requires encrypted sandbox storage and attaches a read-only
+OpenShell provider to the NemoHermes sandbox.
+
+### Profile configuration
+
+The installer has already created the target profile from
+`profile/distribution.yaml`. Its model block should have this shape:
+
+```yaml
+model:
+  default: "<provider/model>"
+  provider: "<provider>"
+  base_url: "<https-endpoint>"
+  api_key: sk-OPENSHELL-PROXY-REWRITE
+```
+
+The `api_key` value is the non-secret routing marker configured during
+installation. OpenShell replaces it at egress; it is not a credential to rotate
+or hide.
+
+Provider setup now continues on **your machine, outside the sandbox**. The
+current setup helpers require a Linux shell; use WSL on Windows.
+
+### Slack
+
+Slack setup is optional. Complete it only after placing the sandbox storage on
+an encrypted volume; owner-only permissions are access control, not encryption.
+See [docs/encrypted-storage.md](docs/encrypted-storage.md) first.
+
+Run the setup script from the recipe checkout on **your machine**, not inside
+the sandbox. Your machine has `openshell`; the sandbox has `hermes`.
+
+```bash
+export SANDBOX_STORAGE_PATH="<path-containing-sandbox-storage>"
+export OPENSHELL_SANDBOX_NAME="my-hermes"
+bash scripts/setup-slack.sh
+```
+
+The script imports `docs/slack_app_manifest.json`, requests user scopes, checks
+the provider type and read-only policy, configures token rotation, and attaches
+the provider to the named sandbox. The required scopes are:
+
+```yaml
+user_scopes:
+  - im:read
+  - im:history
+  - mpim:read
+  - mpim:history
+  - channels:read
+  - channels:history
+  - users:read
+```
+
+Static user tokens, bot tokens, and app tokens are refused. Attachments are not
+downloaded. Full setup and workspace-admin recovery steps are in
+[docs/set-up-slack.md](docs/set-up-slack.md).
+
+Verify the live collector from your machine through the supported sandbox exec
+path. Replace both placeholders.
+
+```bash
+nemohermes my-hermes exec \
+  --workdir /sandbox/memory-driven-chief-of-staff \
+  -- env HERMES_HOME=/sandbox/.hermes/profiles/memory-driven-chief-of-staff \
+  python3 profile/scripts/ingest_slack.py --recheck
+```
+
+Collector exit codes are stable diagnostics:
+
+| Exit | Meaning |
 | --- | --- |
-| Schema versioning | `tests/test_migration.py` |
-| Invariant detection, idempotency, compaction detection | `tests/test_memory_check.py` |
-| Concurrency, crash recovery, reinstall survival, profile-home resolution, installation, failed-write cause reporting, skill-path anchoring and existence | `tests/test_durability.py` |
-| Bounded ranking, including user pins | `tests/test_ranking.py` |
-| Preference counting | `tests/test_preferences.py` |
-| Source normalization | `tests/test_normalize.py` |
-| Writer behavior, audit trail, caps across batches, correction idempotency, correction state transitions, displaced-row audit | `tests/test_apply_decisions.py` |
-| The walkthrough, and its central claims | `tests/test_walkthrough.py` |
-| Selector output, the wake gate, and the scheduler contract | `tests/test_selectors.py` |
-| Identity across connectors: composing answers, refusing to guess, and the user's command | `tests/test_identity.py` |
-| What the memory job hands the agent: who is worth a page, stable identity across namesakes and renames, quiet days costing nothing, and corrections counted once | `tests/test_select_memory.py` |
-| Retention, exclusion, export and reset | `tests/test_lifecycle.py` |
-| The Slack collector: watermarks, partial failure, scope probing, thread discovery and rotation, the credential never reaching a stream, and the lifecycle controls applying to what it writes | `tests/test_ingest_slack.py` |
-| The mailbox collector: delta synchronisation, resumption, deletions reconciled, the window bound, and the credential never reaching a stream | `tests/test_ingest_graph.py` |
+| `0` | Fetch succeeded, or Slack is intentionally unconfigured |
+| `1` | Other collector error |
+| `2` | Missing/wrong credential type or unreachable API |
+| `3` | Slack rate limit |
+| `4` | Required Slack scope missing |
 
-Four points are worth calling out.
+### Microsoft Outlook
 
-- `TestNoSourceMutation` in `tests/test_durability.py` scans every module for
-  the common shapes of an HTTP write — `requests.post`, a `.patch(` call, and
-  their siblings — and a companion test proves the scan fires on real
-  examples, including `urlopen(url, data=…)` and a `subprocess` call to
-  `curl`. Read it as a tripwire rather than a proof: it matches call shapes, so
-  a write spelled in some further way could still pass it. What actually holds
-  the property is enforced twice on the connector path: the provider profile
-  declares `slack.com` at `access: read-only` with `enforcement: enforce`, so
-  a write is refused at the egress boundary before any test runs, and the
-  collector reaches no other host.
-- `test_nothing_this_example_ships_lands_on_a_user_owned_path`, also in
-  `tests/test_durability.py`, asserts that nothing this recipe ships occupies a
-  user-owned name, and that the user-owned and distribution-owned sets stay
-  disjoint. Both directions fail, and neither is loud. Hermes never installs a
-  shipped path whose top-level name is user-owned, so a shipped `workspace`
-  would never land at all; and a store placed under a distribution-owned path
-  is removed and replaced on every update, because that is what installing a
-  distribution means.
-- `tests/test_walkthrough.py` runs the walkthrough and asserts its central
-  claims against the store the run produced: the gate bounding the top tier,
-  loud urgency staying out of it, the pin deciding the tier and surviving a
-  later pass, and both corrections being attributed to the user.
-- Several of its tests assert against the printed output instead, because what
-  is printed is itself a claim. They check six of them:
-  - the run names which part is recorded;
-  - it discloses both recorded turns;
-  - it says the gate verdict is recorded;
-  - it scopes the seed-memory claim to the tiers;
-  - it shows the top tier emptying without the gate;
-  - the memory check is seen to fail as well as pass.
+Outlook intake uses the Microsoft Graph inbox delta API. Register a Microsoft
+Entra application with public-client flows enabled and delegated `Mail.Read`,
+`User.Read`, and `offline_access` permissions. Do not grant application-level
+mail permissions, which would authorize access beyond the signed-in mailbox.
 
-  It does not assert every line the script prints.
-
-## Running it on a schedule
-
-Everything above runs by hand. To have it run on its own, install the profile
-into a Hermes runtime and register the jobs:
+Run the device-code setup from the recipe checkout on your machine:
 
 ```bash
-scripts/install.sh
+export SANDBOX_STORAGE_PATH="<path-containing-sandbox-storage>"
+export OPENSHELL_SANDBOX_NAME="my-hermes"
+export GRAPH_CLIENT_ID="<entra-application-client-id>"
+export GRAPH_TENANT_ID="<entra-directory-tenant-id>"
+bash scripts/setup-graph.sh
 ```
 
-From the recipe root. It does three things: `hermes profile install` for the
-distribution, a carry-over of the model settings so the new profile inherits a
-model, and `scripts/register-jobs.sh` for the schedule. `PROFILE_NAME`
-overrides the profile it installs into.
+If the script reports that another attached provider already exposes
+`MS_GRAPH_ACCESS_TOKEN`, treat that as a hard stop. Detach the conflicting
+provider or use a dedicated sandbox, then rerun setup. Do not run the Graph
+collector while the credential source is ambiguous.
 
-The carry-over is three named settings — `model.default`, `model.provider` and
-`model.base_url` — transferred through `hermes config set`. No file is copied
-and no key is: the `model:` block is documented to hold an inline `api_key`,
-and a copy would write that key into a second file. Set the key on the new
-profile instead. Each transfer fails closed and is read back off the target
-profile afterwards, so a setting that could not be written — or that reports
-success without sticking — ends the run rather than leaving a profile that
-took some of its configuration. The installer then checks both — that a model
-resolves and that a credential is present — and exits before registering any
-job if either is missing, rather than scheduling seven jobs that would each
-fail. If your endpoint genuinely needs no key, pass `ALLOW_NO_API_KEY=1` to
-say so.
+On the supported path, the gateway stores and refreshes the delegated
+credential, and the sandbox receives only an OpenShell placeholder. Confirm
+that the attached provider has type `memory-driven-cos-graph-user` and that its
+exported profile declares `access: read-only` with `enforcement: enforce` before
+running the collector. The initial synchronization covers seven days by default
+and resumes across intake ticks when more pages remain. Configure a different
+`GRAPH_BACKFILL_DAYS` in the profile environment file before the first
+synchronization. See [docs/set-up-graph.md](docs/set-up-graph.md) for the
+application registration, provider inspection, backfill, revocation, and
+recovery steps.
 
-Re-running it is safe: the registration looks each job up by name and edits it
-rather than adding another copy.
+### Link identities across providers
 
-Seven jobs are registered:
+Slack identifies a person by user ID, while email uses an address. The recipe
+never assumes that matching display names belong to the same person. The memory
+job reports likely matches as `identity_candidates`; only the user can confirm
+or reject them.
+
+Run the identity command from your machine through sandbox exec:
+
+```bash
+nemohermes my-hermes exec \
+  --workdir /sandbox/memory-driven-chief-of-staff \
+  -- env HERMES_HOME=/sandbox/.hermes/profiles/memory-driven-chief-of-staff \
+  python3 profile/scripts/link_identity.py same \
+    slack:U01DANA email:dana@example.com
+```
+
+Use `different` instead of `same` to reject a match. Confirmed relationships
+compose across providers. Rejected candidates are not proposed again. If saved
+answers conflict, the recipe reports `identity_conflicts` and changes nothing.
+Existing page names remain stable after identities are linked so that index
+entries and source-backed links do not move.
+
+### Collector failures
+
+When a collector fails, the intake batch records only its name, exit code, and
+error class. It does not place collector output in the model prompt or the
+scheduler log because that output can contain message text or authentication
+material. Run the collector directly to inspect its full error.
+
+Verify the collector from your machine:
+
+```bash
+nemohermes my-hermes exec \
+  --workdir /sandbox/memory-driven-chief-of-staff \
+  -- env HERMES_HOME=/sandbox/.hermes/profiles/memory-driven-chief-of-staff \
+  python3 profile/scripts/ingest_graph.py --recheck
+```
+
+Outlook collector exit codes are:
+
+| Exit | Meaning |
+| --- | --- |
+| `0` | Fetch succeeded, can resume, or Outlook is unconfigured |
+| `1` | Other collector error |
+| `2` | Missing, invalid, or refused credential |
+| `3` | Microsoft Graph rate limit |
+| `4` | Token is not a delegated mailbox token with the required scopes |
+
+## Scheduled Operation
+
+`scripts/register-jobs.sh` is idempotent: it edits jobs with matching names
+instead of creating duplicates.
 
 | Job | Schedule | Pre-step | Skill |
 | --- | --- | --- | --- |
@@ -355,499 +546,501 @@ Seven jobs are registered:
 | memory consolidation | daily 04:00 | — | `memory-consolidation` |
 | preference update | daily 04:30 | — | `preference-update` |
 
-**Where the memory comes from.** Three of the memory jobs maintain one and
-none of them creates it: repair checks invariants, consolidation compacts
-pages past their ceiling, preference-update writes the policy. The
-memory-writing job is what fills the gap. `select_memory.py` does the
-counting — who has been in touch inside the window, how often, who already has
-a page, which attention pages are past their decay window — and the skill
-decides who is worth a page and what it says. `MEMORY_WINDOW_DAYS` moves the
-window, which matters on a first run against a store that already holds
-months of history.
+Intake, review, and memory writing run their selector before an agent turn. If
+no work is available, the selector's final non-empty line is the wake gate and
+Hermes skips inference. Retention never wakes the agent. Memory writing runs
+before repair and consolidation so every new page is checked and compacted in
+the same nightly sequence.
 
-That job is load-bearing rather than decorative. `ranking.py` reserves `high`
-for work the person has *chosen*, and only `attention/` and `goals/` can
-answer that. With an empty memory nothing reaches the top tier and the
-assistant is left measuring how loudly the outside world is asking, which is
-the thing it exists not to do. Measured on a real mailbox: 952 collected
-messages produced obligations that were all `medium` or `low`, because no page
-could gate one higher.
+### Persistence and reboot behavior
 
-It writes people and attention pages only, and `schema.md` now carries a
-table saying which page types have a writer at all — `projects/`,
-`patterns/`, `concepts/` and `event_triggers.md` do not yet, and a rule about
-a page nothing creates is a rule about a page somebody would keep by hand.
-Naming that is the point: the schema previously said ingest checked
-`event_triggers.md` against every incoming message, which no shipped job has
-ever done.
+Jobs live in `$HERMES_HOME/cron/jobs.json`. The distribution does not own the
+`cron` path, so profile updates leave job definitions and run history unchanged.
 
-`goals/` is the one absence that is a decision. It gates the ranking job's
-top tier alongside `attention/`, so a goal inferred from somebody's inbox
-promotes work they never chose. The job also declines to invent a priority:
-when the evidence supports none it writes the page saying so, because a
-guessed priority produces the same failure by the same route.
+Jobs survive a reboot. Do they resume automatically?
+Only if the gateway was installed as a service with `gateway install`. A
+gateway started with `gateway run` is a foreground process and must be started
+again after a reboot.
 
-**An idle tick costs nothing.** Each of the first two jobs runs its pre-step
-script first, then one agent turn over that script's output. When the script
-finds no work it prints `{"wakeAgent": false}` as its last line, and Hermes
-skips the agent entirely — no model call, no delivery. That last-line detail
-is the whole mechanism: Hermes reads only the final non-empty line of the
-script's output, so a gate printed anywhere else is ignored and the model
-wakes. A test asserts the gate exactly the way the scheduler parses it, rather
-than looking for the string somewhere in the output.
+What happens to recurring runs missed while the gateway was down? One of them
+runs, not the entire backlog. Hermes advances the schedule and runs once over
+current state. A machine that was off for two days does not wake to ninety-six
+intake runs; it wakes to one and then resumes its half-hourly schedule.
 
-The intake pre-step also runs whichever collectors are present. Both ship
-with the recipe, and each reports `{"unconfigured": true}` until its setup
-script has run — `scripts/setup-slack.sh` or `scripts/setup-graph.sh` —
-exiting zero so an idle tick still costs nothing. They run in the same tick
-and independently: a mailbox credential that has expired does not stop Slack
-being read, and neither can hold the tick open, because each is bounded in
-requests and in the time it may spend waiting. Either way the tick carries on
-with whatever the store already holds.
-
-**Registering is not starting.** Under the builtin scheduler the jobs fire
-only while a gateway is serving the profile, and starting one takes two steps
-on Linux:
+List or remove registered jobs inside the sandbox.
 
 ```bash
-hermes -p memory-driven-chief-of-staff gateway install  # once
-hermes -p memory-driven-chief-of-staff gateway start
-hermes -p memory-driven-chief-of-staff cron status
+hermes -p memory-driven-chief-of-staff cron list
+JOB_ID="<copy-an-id-from-the-list>"
+hermes -p memory-driven-chief-of-staff cron remove "$JOB_ID"
 ```
 
-`gateway start` fails with "Gateway service is not installed" until `gateway
-install` has run. Where no service manager is available — WSL without
-systemd — run it in the foreground instead: `hermes -p
-memory-driven-chief-of-staff gateway run`.
-
-`cron status` says plainly whether the scheduler is running, and lists the
-active jobs and the next run. A registered job on a profile with no running
-gateway does not tick and reports nothing. Two paths do fire without one:
-`hermes cron tick` runs anything due once and exits, and an external cron
-provider takes over from the in-process ticker.
-
-**The job store is not part of the distribution.** `distribution.yaml` does not
-declare `cron`. An update replaces what it does declare — `SOUL.md`,
-`schema.md`, `skills`, `scripts` and the manifest — and leaves the jobs and
-their run history alone. This is worth being deliberate about: `profile
-update` lists `cron/` among the directories it overwrites, and it leaves ours
-alone only because the manifest never claims it. Measured, not assumed: seven
-jobs registered, `hermes profile update` run on Hermes 0.19.0, seven jobs
-still there with the same ids. A test asserts the manifest never claims `cron`
-or `workspace`.
-
-To undo, remove the jobs individually. Deleting the profile removes its
-`workspace` too, which is where the store and the memory live; removing the
-jobs does not. `profile delete` prompts unless given `-y`:
+Deleting the profile also deletes its workspace, store, and memory.
 
 ```bash
-hermes -p memory-driven-chief-of-staff cron remove <job-id>
 hermes profile delete memory-driven-chief-of-staff
 ```
 
-## Where state lives
+## Data Lifecycle and Privacy
 
-The store is at `$HERMES_HOME/workspace/ledger/state.db` and the memory is at
-`$HERMES_HOME/workspace/memory/`. Both sit under `workspace`, which a
-distribution install and update leave alone. That was measured rather than
-assumed: a row written there survived both `hermes profile install --force` and
-`hermes profile update` on Hermes 0.19.0.
+**Network boundary:** the offline walkthrough makes no network requests.
+Scheduled jobs call the configured inference endpoint only when work is found.
+The shipped provider profiles declare read-only access to `slack.com` and
+`graph.microsoft.com`, and the shipped collectors contain no source-system
+write operations.
 
-Both directories are created with owner-only permissions (`0700`). That is a
-filesystem access control rather than encryption. It stops another account on
-the same machine from reading the store. It does nothing against anyone who can
-read the disk.
+> **Runtime provenance limitation:** the effective network boundary is the
+> policy of the provider actually attached to the sandbox, not the YAML file in
+> this checkout. `ingest_graph.py` currently trusts whichever attached provider
+> supplies `MS_GRAPH_ACCESS_TOKEN`; it does not verify the provider name, type,
+> or policy at runtime. A different provider exposing the same key can therefore
+> bypass the setup-time refusal. Inspect the attached providers on your machine
+> and do not run Graph intake unless the effective provider is the recipe's
+> read-only, enforced profile.
 
-Once a connector is attached, the store holds message subjects, senders, and
-bodies. Before that happens, this recipe requires either an encrypted volume
-underneath `$HERMES_HOME` or an application-level encryption design. That
-requirement is separate from credential custody, which belongs to the runtime's
-own credential handling — Hermes keeps provider credentials outside
-`workspace` — and never to the store.
+**Source-system behavior:** the shipped collectors read Slack and the signed-in
+Outlook mailbox but do not post, reply, edit, delete, move, or mark messages as
+read. This describes the collector code; it is not a claim that an unrelated
+read-write provider attached to the same sandbox would refuse writes from other
+code.
 
-## Privacy
+- The offline fixtures are entirely synthetic and make no network request.
+- Recipient lists are reduced to `direct`, `mentioned`, or `broadcast` and are
+  never stored.
+- Message bodies are cleared after 30 days by default; metadata, obligation
+  state, and audit history remain.
+- Exclusions are enforced at the shared insert boundary, before a row reaches
+  the store.
+- Export includes the complete store, memory, and learned policy in Markdown
+  and JSON.
+- Slack content deleted at the source is not detected immediately because a
+  bounded history read cannot distinguish deletion from an older page. It ages
+  out through retention.
+- Outlook messages removed from the inbox are reconciled through Microsoft
+  Graph. A confirmed deletion is tombstoned and its body is cleared immediately;
+  the metadata, obligation, and audit history remain. A move to another folder
+  is not treated as a deletion.
+- Microsoft Graph files in `fixtures/` remain synthetic and exercise the same
+  normalization path without contacting a mailbox.
 
-The fixture path reaches no network and reads no real account. The Slack
-collector does both, once you have configured it, and everything below is
-written for that case rather than for the fixtures.
+The store and memory directories are created with owner-only permissions. That
+does not protect a lost disk, disk image, or unencrypted backup. Before
+connecting Slack or Outlook, follow
+[docs/encrypted-storage.md](docs/encrypted-storage.md).
 
-One reduction already ships, because it is part of the schema under review:
-recipient lists are never stored. Ingest reduces them to a single `addressing`
-value — `direct`, `mentioned`, or `broadcast` — so the store never holds a
-copy of who else was on a thread. `normalize.py` does this today, and
-`tests/test_normalize.py` asserts it.
+## Troubleshooting and FAQ
 
-One thing the store does keep, and should be said plainly rather than found
-in the schema: **each row carries the sender's stable identity** — their mail
-address, or their Slack user id — in `sender_key`. It is there because a
-display name cannot identify anybody, and a memory page named after one is
-overwritten by the next person who shares it. It is not kept for any other
-purpose: nothing matches on it but the memory job, and it is one column both
-sources agree on rather than a per-source pair. An excluded sender's identity
-is not stored either, because exclusion is applied inside `insert_items` and
-nothing about them is written at all.
+### `HERMES_HOME` is unset, missing, or points at the checkout
 
-**An upgraded store does not get this retroactively.** The value was never
-kept, and it cannot be recovered from a display name — deriving it that way is
-the mistake the field exists to prevent. So rows collected before the upgrade
-carry no identity, and the memory job does not guess at one: it counts them,
-reports the count as `messages_without_identity`, and writes nobody's page
-from them. Two things close the gap. Re-reading a message fills its identity
-in, so a rolling collection window keys the recent past within a window; and
-the job only looks thirty days back, so the gap is gone once the window has
-turned over. What is lost in between is that a person's pre-upgrade messages
-do not count toward whether they are worth a page — not that anything was
-attributed to the wrong person, which is the failure this refuses.
-
-Four controls over what is kept ship alongside it, and they were in place
-before the collector that fills the store was. They apply to real Slack
-messages exactly as they apply to the fixtures, because the collector writes
-through the same function every other writer does. The commands, the rules
-file and the exact boundaries are in
-[docs/data-lifecycle.md](docs/data-lifecycle.md); what follows is why they are
-drawn where they are.
-
-**Message bodies are cleared on a schedule.** `retention.py` runs daily and
-clears the text of anything past the window — thirty days by default,
-`RETENTION_DAYS` to change it. What stays is the record: sender, subject,
-timestamp, addressing, the obligation and its title, and every event with its
-actor. A month later you can still see that Dana asked about the cutover on the
-third, that it ranked high, and that you ignored it on the fifth. You cannot
-re-read Dana's words, which is the point. `body_cleared_at` marks a body that
-was cleared, so it is not confused with one that never existed.
-
-**Senders, domains and channels can be excluded at ingest.** Rules live in
-`workspace/exclusions.json` and are applied in `insert_items`, which is the one
-place every writer passes through — the fixture loader, the Slack collector,
-and anything added later — so an excluded message is never written by any of
-them. Filtering at display would leave the text on disk, which is no use to
-somebody excluding their doctor. A test drives the collector against a rule
-and asserts the row never appears, rather than reading the call chain and
-concluding it should not.
-
-**Everything can be exported and everything can be removed.**
-`export_store.py` writes the store and the memory as Markdown beside JSON —
-the first to read, the second to process — and omits nothing.
-`reset.py --yes` removes the store, the memory and the learned preference
-policy together, and reports each; a partial reset would answer the question
-wrongly. It also prints how to revoke the credential, which lives with the
-gateway rather than here, because somebody withdrawing consent wants both.
-
-Three things about the connectors themselves:
-
-- Attachments are not fetched. The collector stores a file-sharing message's
-  text and never requests the file behind it.
-- For Microsoft Graph, an item deleted at the source is tombstoned locally and
-  its body cleared at once. The delta query reports that a message left the
-  folder, which is not the same as reporting a deletion — filing it in Archive
-  reads identically — so the collector asks a second question, by
-  `internetMessageId`, and only a message the mailbox no longer holds anywhere
-  is tombstoned. If that question cannot be answered the round stops and the
-  next one asks again, rather than advancing past a removal it did not
-  resolve. If there is no identity to ask about — a row collected before the
-  connector stored one — the removal is left unresolved and counted, never
-  guessed: reading an absent identity as a deletion cleared the body of a
-  message that had only been filed away. The row stays: obligations and events hang off it, and removing it
-  would break the record of why something was ranked.
-- For Slack, that guarantee is not available. A deleted message stops appearing
-  in `conversations.history`, and its absence from a bounded, paginated read
-  cannot be told apart from it lying outside the window. Reliable notice
-  requires the Slack Events API, which this design does not use. Slack's legacy
-  Real Time Messaging (RTM) API carries the event too, but Slack states that
-  granular-permission apps cannot use it and that classic apps can no longer be
-  created, so it is not an option this collector could take. Slack content
-  therefore ages out on the scheduled body-clearing pass rather than at the
-  moment of deletion — the weaker guarantee, kept, rather than the stronger one
-  implied.
-
-## Fixtures
-
-The fixtures were written from scratch. The people, the company, the projects,
-and every message body are invented. Nothing is derived from a real mailbox or
-from an anonymized copy of one. See [`fixtures/README.md`](fixtures/README.md)
-for what each record is a control for.
-
-### Before a connector: encrypted storage
-
-The fixture path stores invented messages. A connector changes that — the store
-then holds real subjects, senders and bodies — so the profile home must sit on
-an encrypted volume before one is attached. Owner-only permissions are not
-encryption: they stop another account reading the file on a running system and
-do nothing for a disk that is lost, imaged, or backed up.
-
-`scripts/setup-slack.sh` checks what it can and refuses to attach a provider
-until the rest is confirmed. What it inspects is the **host** filesystem under
-the sandbox's storage, because `HERMES_HOME` inside a sandbox is an overlay
-with no block device behind it — encryption is not observable from in there.
-[`docs/encrypted-storage.md`](docs/encrypted-storage.md) has the verification
-commands per platform, and what to do when the answer is no.
-
-### Connecting Slack
-
-The scheduled intake reads whichever collectors are present in
-`profile/scripts/`. Slack is one of them, and it is read-only: direct
-messages, group DMs, and the public channels you name. It never posts.
+Stateful scripts require an existing profile-like directory and refuse a file,
+a missing path, or an occupied non-profile directory. For an offline run, make
+a fresh directory and export it first.
 
 ```bash
-bash scripts/setup-slack.sh
+export HERMES_HOME="$(mktemp -d)"
 ```
 
-Run it on the host, not in the sandbox — it needs `openshell`, which the
-sandbox does not have. It reuses a Slack credential already attached when it
-finds one, and otherwise walks you through authorizing the app. Full
-walkthrough, including what to do when a workspace admin grants less than the
-app asked for: [`docs/set-up-slack.md`](docs/set-up-slack.md).
+### The walkthrough refuses a second run
 
-Three things are deliberate. The recipe needs a **user** token, not a bot
-token — a bot cannot read your direct messages, and using one produces an
-assistant that quietly never sees them, so the collector checks the prefix and
-names the mistake. That token **rotates**: the gateway holds it and refreshes
-it every twelve hours, and a non-rotating one is refused, because a user token
-that never expires is a permanent key to your entire Slack. And public
-channels are read only when you **name** them in
-`workspace/slack_channels.json` — Slack allows one history request per minute
-for affected apps, so a workspace sweep cannot finish inside a scheduled tick,
-and reading every channel you happen to be in collects more than the job
-needs.
-
-Until this is set up the collector still runs — it ships with the recipe — but
-reports `{"unconfigured": true}` and exits zero, so the schedule runs over
-whatever is already in the store and an idle tick still costs nothing. That is
-a supported state, not a broken one.
-
-### Connecting a mailbox
-
-Microsoft Graph is the other collector, and it is read-only: the messages in
-your Inbox. It never sends, never replies, and never touches a draft.
+The walkthrough demonstrates a clean first run and rejects state that contains
+old corrections. Create a new temporary profile home.
 
 ```bash
-bash scripts/setup-graph.sh
+export HERMES_HOME="$(mktemp -d)"
+python3 profile/scripts/walkthrough.py --fixtures fixtures
 ```
 
-Run it on the host, not in the sandbox, for the same reason as Slack — it
-needs `openshell`. It walks you through Microsoft's device-code flow: a code
-to type into a browser on any machine, and a consent your tenant may require
-an administrator to approve. Full walkthrough:
-[`docs/set-up-graph.md`](docs/set-up-graph.md).
+### Collector tests try to reach the real network or report HTTP 503
 
-**The first synchronisation asks how far back to read.** The default is seven
-days; the prompt offers seven, fourteen or thirty, and takes any number you
-type instead. `GRAPH_BACKFILL_DAYS` sets it without the prompt. The window
-applies once — after the first round the collector tracks changes rather than
-re-reading, so a larger number costs a slower first sync and nothing after
-that.
-
-Two things are deliberate here as well. The scopes are **named** — `Mail.Read`,
-`User.Read`, `offline_access` — rather than `.default`, which would return
-whatever the application has already been granted and make the permission the
-recipe actually holds unknowable from the code. And `login.microsoftonline.com`
-is **not** in the sandbox's egress policy: the token exchange and every refresh
-belong to the gateway, so the collector holds a placeholder it cannot spend and
-cannot reach the endpoint that would turn it into a real one.
-
-Both connectors can be set up, or either one alone. They write into the same
-store and run in the same tick, independently — see [When a collector
-fails](#when-a-collector-fails) for what happens when one of them cannot.
-
-**A person is a set of identities, and only the user says which.** Slack
-identifies people by user id, mail by address, and a third connector will do
-it a third way; nothing in the data links them, because a shared display name
-is not evidence and the reason this recipe keeps a stable identity per sender
-at all is that guessing from a name puts two people on one page.
-
-So the memory job proposes and never decides. When identities share a handle
-— stronger, because a handle is unique within its own source — or a display
-name, they are reported as `identity_candidates` and each still gets its own
-page. The user answers whenever they get to it:
+The Slack and Outlook tests use local HTTP stand-ins at `127.0.0.1`. If your
+shell sets a proxy without a localhost bypass, the proxy can intercept those
+requests. The documented test command extends both `NO_PROXY` and `no_proxy`;
+for an individual test, apply the same bypass first.
 
 ```bash
-python3 profile/scripts/link_identity.py same slack:U01DANA email:dana@example.com
+export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"
+export no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost"
+python3 profile/scripts/tests/test_ingest_slack.py
+python3 profile/scripts/tests/test_ingest_graph.py
 ```
 
-and the next run reports them as one person. If each identity had already
-been written up, that run also names the other pages as `merge_into_slug`, so
-the agent folds them into one and removes what it emptied — a page nobody
-merged is history attributed to nobody, and it will not surface again on its
-own. **Nothing waits for that answer.** The job records what it noticed and exits; an unanswered
-question costs nothing, and a nightly job whose completion depends on when
-somebody read a message is a job that does not complete.
+### The installer says the platform is unsupported
 
-Answers are stored pairwise and composed, so confirming two pairs joins three
-identities without a third question, and a fourth connector is one more pair
-rather than a new shape. A rejection is recorded as durably as a
-confirmation, so a candidate the user has dismissed is not proposed again on
-every run. When answers stop agreeing with each other — two identities
-answered as different people, joined anyway by other confirmations since —
-that is reported as `identity_conflicts` and nothing is changed, because
-neither answer is knowably the wrong one.
+The offline path runs on macOS, Linux, and WSL. Scheduled skills require the
+Linux environment inside a NemoHermes sandbox. If `scripts/install.sh` reports
+another platform, run it inside the sandbox rather than on your machine.
 
-### When a collector fails
+### The installer reports no model or API credential
 
-A collector that exits non-zero, or prints something the selector cannot read,
-is recorded in the batch as a failure with its exit code and a stable error
-class, and the tick wakes the agent even when nothing is pending. An idle tick
-is free; a broken one must not be quiet.
-
-What nothing carries is the collector's own output. A collector is a
-subprocess talking to a mail or chat API, so its stderr can hold a bearer
-token, a signed URL, or someone's message body, and both of the places that
-wanted it are wrong: the batch is the agent's prompt, and the selector's own
-stderr is captured by the scheduler into the job log, where something
-transient becomes a file that outlives the token in it.
-
-So both get the same sanitized triple — which collector, what exit code, which
-error class. To read what a collector actually said, run it directly:
+The new profile receives three model routing settings but never a copied
+secret. Set `model.default` if the source profile had none. On NemoClaw, set the
+OpenShell rewrite sentinel as the target profile's `model.api_key`, then rerun
+the installer.
 
 ```bash
-HERMES_HOME="/path/to/profile" python3 profile/scripts/ingest_graph.py
+MODEL_ID="<provider/model>"
+hermes -p memory-driven-chief-of-staff \
+  config set model.default "$MODEL_ID"
+hermes -p memory-driven-chief-of-staff \
+  config set model.api_key "sk-OPENSHELL-PROXY-REWRITE"
+bash scripts/install.sh
 ```
 
-That prints to your terminal rather than to a file. The text is dropped rather
-than redacted on purpose: a pattern-matching redactor cannot promise it caught
-everything, and a stored log is the wrong place to discover that it did not.
+The sentinel is a non-secret routing marker. Do not use
+`ALLOW_NO_API_KEY=1` for a NemoClaw-managed inference route.
 
-## Cleanup
+### Jobs are registered but do not run
 
-The fixture path writes application state only inside the profile home passed
-to it:
+Registration does not start the scheduler. Check the gateway and cron status.
 
 ```bash
-rm -rf "$HERMES_HOME"
+hermes -p memory-driven-chief-of-staff gateway status
+hermes -p memory-driven-chief-of-staff cron status
 ```
 
-Each `mktemp -d` in this document creates a separate profile home. Remove each
-one you made, not only the last.
+Install and start the service, or use the foreground command shown in
+[Install in NemoClaw](#install-in-nemoclaw).
 
-Running the scripts also leaves a Python bytecode cache at
-`profile/scripts/__pycache__/` in the checkout, unless the interpreter is
-configured not to write one (`python3 -B`, or `PYTHONPYCACHEPREFIX`). The
-repository `.gitignore` covers it, so it never appears in `git status`. Remove
-it as well if you want the checkout byte-for-byte as you found it.
+### A collector reports `unconfigured`
 
-## Known limitations
+That is a supported state. The scheduler continues over existing store rows.
+Enable the source by running `scripts/setup-slack.sh` or
+`scripts/setup-graph.sh` on your machine, then run its collector with
+`--recheck` through sandbox exec.
 
-**A page keeps the name it was created with, even when the reason for that
-name goes away.** Two people who present the same display name each get a
-name ending in a digest, because neither can be given the readable one
-without deciding between them. If the user later confirms that two such
-identities are one person, that person is no longer ambiguous and could hold
-the readable name — but the page they already have keeps its digest. Renaming
-would mean rewriting the index entry and every link that points at it, which
-is a real risk taken for an appearance, and a page name that moves is how
-history gets lost. It is cosmetic and it is permanent.
+### Provider setup says `openshell` is missing
 
-- Under the builtin scheduler the jobs fire only while a gateway is serving
-  this profile, and registering them starts nothing. `hermes cron tick` runs
-  what is due once without one, and an external cron provider replaces the
-  in-process ticker entirely.
-- The scheduled path is Linux only, including WSL, because every shipped skill
-  declares `platforms: [linux]`. See [Requirements](#requirements).
-- The installer transfers three named model settings and no file, so nothing
-  it writes can carry a secret. It checks that a model resolves and that a
-  credential is present, and stops before registering anything if either is
-  missing. What it cannot do is prove the credential is *valid*: that is one
-  request to your provider away, and the installer does not make it. A wrong
-  key still installs cleanly and fails at the first scheduled run.
-- The walkthrough's two judgment steps are recorded envelopes rather than live
-  model turns. That is the limit of a fixture corpus, and the limit falls in a
-  specific place: the gate verdict is recorded, so this run cannot show the
-  memory producing it. Everything the verdicts feed into is the shipped code.
-- Compaction is detected but not performed here. Detection is mechanical and
-  testable. Deciding what to compact needs the skill, which needs a model.
-- The memory ships with a seed that passes its own checks. It illustrates the
-  schema; it is not a starting point for real use.
-- The audit trail records one row per obligation a correction displaces, and
-  `events` is append-only. That is deliberate — the store has to be able to
-  explain why a row moved — but the cost scales with the open list: on a
-  200-row list, one ignore writes a row for every obligation below the
-  corrected one: 199 when it sat at the top, none when it sat at the bottom.
-  A long-lived store with
-  a large open list will need a compaction path for `reranked` events, which
-  this phase does not provide.
-- Paths in the skills are written against `$HERMES_HOME` rather than relative
-  to a working directory. This is not a style choice. The agent's working
-  directory is not the profile home, so a relative path resolves to nothing.
-  An unreadable memory cannot be told apart from an empty one, so the failure
-  is silent: the agent answers confidently from nothing instead of reporting an
-  error.
+The setup command is running inside the sandbox or on a machine without
+OpenShell. Return to the checkout on your machine and confirm the CLI and
+sandbox name.
 
-## Intended users and support boundary
+```bash
+command -v openshell
+openshell sandbox list
+```
 
-One person's own work stream, on a machine they control. This is a recipe
-rather than a product. There is no support commitment, and catalog placement is
-for discovery rather than a maturity claim.
+### Slack is rate-limited or missing a scope
 
-## Dependencies
+The collector exits `3` for a rate limit and `4` for a missing scope. Reduce
+the named public channels or call budget for rate limits. For missing scopes,
+have the workspace administrator grant the manifest scopes, reinstall the app,
+and replace the rotating credential as described in
+[docs/set-up-slack.md](docs/set-up-slack.md).
 
-Standard library only. No module in this recipe imports a third-party Python
-package, so nothing is added to the repository's third-party notices.
+### Outlook synchronization is incomplete, rate-limited, or rejected
 
-## Sandbox and policy
+`"complete": false` means the bounded initial synchronization will resume on
+the next intake tick. Exit `3` means Microsoft Graph rate-limited the current
+round. Exit `4` means the token is not a delegated mailbox token with the
+required `Mail.Read` and `User.Read` scopes. Follow the recovery steps in
+[docs/set-up-graph.md](docs/set-up-graph.md).
 
-Every script except the Slack collector reaches no network. They read the
-recipe's files from the checkout and write application state only inside the
-profile home, and they also leave a Python bytecode cache beside the scripts —
-see [Cleanup](#cleanup). The six skill files a runtime loads add nothing to
-that.
+### Graph setup refuses an attached provider with the same credential key
 
-The collectors reach two hosts between them, `slack.com` and
-`graph.microsoft.com`, and only for reads. Each is declared in its provider
-profile — `providers/slack-user.yaml` and `providers/graph-user.yaml` — as
-`access: read-only` with `enforcement: enforce`, so the egress proxy refuses
-anything else, and refuses the other collector's host to each of them. The
-property is enforced by policy rather than promised by prose. Neither
-credential enters the sandbox: the gateway holds both and substitutes them at
-the boundary, so a collector handles a placeholder it cannot spend.
-`login.microsoftonline.com` is deliberately absent from the sandbox's
-allow-list — the token exchange is the gateway's, not the collector's.
+Treat the refusal as a provider collision. From your machine, inspect and
+detach the conflicting provider or use a dedicated sandbox before starting
+Graph intake.
 
-The scheduled path does reach one. A job that wakes runs an agent turn, and the
-runtime calls whichever inference provider it is configured for, over its own
-egress path — the recipe holds no credential and opens no connection itself.
-A job that does not wake makes no call at all.
+```bash
+openshell sandbox provider list my-hermes
+openshell provider get "<provider-name>"
+```
 
-Egress to a message source is here, and it is narrow: the Slack collector
-reaches `slack.com` and nothing else, the Graph collector reaches
-`graph.microsoft.com` and nothing else, each declared in its own provider
-profile at `access: read-only` with `enforcement: enforce`, so a write is
-refused at the boundary rather than caught by a test. The credential it uses is held by the
-gateway and substituted there — see
-[Connecting Slack](#connecting-slack).
+### Does the recipe modify Outlook or Slack?
 
-## Startup
+The shipped collectors do not. They normalize source records into a local
+SQLite store and contain no post, reply, move, delete, or mark-as-read calls.
+The shipped provider profiles also declare read-only access. However, verify
+the provider actually attached to the sandbox: the current Graph collector
+cannot attest which provider supplied `MS_GRAPH_ACCESS_TOKEN`, so a foreign
+read-write provider would make the platform-level write-refusal claim false.
 
-The scripts run on demand and need nothing started.
+## Limitations and Support
 
-The scheduled jobs need a gateway. Registration and firing are separate: a
-registered job on a profile with no running gateway does not run and reports
-nothing.
+- Scheduled jobs require the Linux environment inside a NemoHermes sandbox.
+  The current provider setup helpers require Linux or WSL on your machine.
+- Recorded judgment turns test the workflow, not model quality.
+- Live connectors currently cover Slack and a Microsoft Outlook inbox through
+  Microsoft Graph. Other messaging providers need their own collector and
+  OpenShell provider policy.
+- Graph credential provenance is not yet enforced at collector runtime. An
+  unrelated attached provider exposing `MS_GRAPH_ACCESS_TOKEN` can be used even
+  after `setup-graph.sh` refuses it. Use a dedicated sandbox or remove the
+  collision before enabling Graph intake.
+- Slack deletion is not observed immediately; retention clears old bodies.
+- The scheduled writer maintains people and attention pages. Other page types
+  have schemas but no automatic writer.
+- Memory compaction is model-guided. `memory_check.py` detects invariant and
+  ceiling violations but does not invent a safe consolidation.
+- Append-only reranking events are not compacted.
+- This is a reference recipe for one user's work stream on a machine they
+  control, not a hosted service or a production-readiness claim.
 
-### After a reboot
-
-Three separate questions, with three different answers.
-
-**Do the jobs survive?** Yes. They live in `$HERMES_HOME/cron/jobs.json`, which
-is ordinary disk state — not part of the distribution, so a profile update
-leaves it alone, and not tied to any process, so shutting everything down and
-starting again finds the same seven jobs with the same ids.
-
-**Do they start firing again on their own?** Only if the gateway was installed
-as a service. `hermes -p <profile> gateway install` registers one — a launchd
-agent on macOS, a systemd unit on Linux — and both are configured to come back
-after a reboot. `hermes -p <profile> gateway run` is a foreground process and
-is not: after a restart you run it again yourself. `cron status` tells you
-which situation you are in.
-
-**What about the runs that were missed while it was down?** One of them
-happens, not all of them. Hermes collapses a backlog rather than replaying it:
-when a recurring job's scheduled time is more than one period in the past, it
-fast-forwards to the next future occurrence and fires once now. A machine that
-was off for two days does not wake to ninety-six intake runs; it wakes to one,
-which judges whatever accumulated, and then resumes its half-hourly rhythm.
-That suits this recipe, whose jobs act on the current state of the store rather
-than on a history of events.
-
-## Provenance
-
-NVIDIA-authored. Proposed and reviewed in
+This NVIDIA-authored recipe was proposed and reviewed in
 [NemoClaw Community #122](https://github.com/NVIDIA/nemoclaw-community/issues/122).
+Support is best effort under the repository [support policy](../../../../SUPPORT.md).
+Security reports should follow [SECURITY.md](../../../../SECURITY.md).
+
+## For Contributors
+
+The following sections document the implementation, contracts, and evidence
+used to review or extend this recipe.
+
+### Project Structure
+
+Paths below are relative to this recipe directory.
+
+<!-- markdownlint-disable MD013 -->
+```text
+memory-driven-chief-of-staff/
+├── README.md                         # Start here: setup, operation, and API contract
+├── profile/
+│   ├── distribution.yaml            # Version, Hermes requirement, owned paths
+│   ├── SOUL.md                       # Chief-of-staff persona and response boundary
+│   ├── schema.md                     # Memory page types, provenance, decay, ceilings
+│   ├── seed/                         # Initial index and attention pages for a new memory
+│   ├── scripts/
+│   │   ├── schema.sql                # Current v5 SQLite store schema
+│   │   ├── schema-v1.sql             # Frozen schemas used by migration tests
+│   │   ├── schema-v2.sql
+│   │   ├── schema-v3.sql
+│   │   ├── schema-v4.sql
+│   │   ├── _db.py                    # Profile-home, connection, and transaction boundary
+│   │   ├── identity.py               # Cross-provider identity relation resolver
+│   │   ├── link_identity.py          # User command for identity confirmations
+│   │   ├── normalize.py              # Source payloads to source-neutral item rows
+│   │   ├── ingest_graph.py           # Optional read-only Outlook mailbox collector
+│   │   ├── ingest_slack.py           # Optional read-only Slack collector
+│   │   ├── select_intake.py          # Intake batch selector and wake gate
+│   │   ├── select_review.py          # Review batch selector and wake gate
+│   │   ├── select_memory.py          # Evidence selector for scheduled wiki writing
+│   │   ├── apply_decisions.py        # Validates and commits agent envelopes
+│   │   ├── ranking.py                # Deterministic cap, reservation, and cascade
+│   │   ├── correct.py                # User pin, ignore, and unignore writer
+│   │   ├── walkthrough.py            # Offline end-to-end entry point
+│   │   ├── retention.py              # Scheduled message-body clearing
+│   │   ├── exclusions.py             # Sender, domain, and channel filtering
+│   │   ├── export_store.py           # Complete Markdown and JSON export
+│   │   ├── reset.py                  # Store, memory, and policy reset
+│   │   ├── migrate.py                # Forward-only store migration
+│   │   ├── memory_check.py           # Deterministic memory invariant checker
+│   │   └── tests/                    # 14 direct-execution unittest modules
+│   └── skills/
+│       ├── inbound-judging/          # New-message judgment instructions
+│       ├── obligation-review/        # Scheduled re-judgment instructions
+│       ├── memory-writing/            # Evidence-grounded people and attention pages
+│       ├── memory-repair/            # Safe invariant repair instructions
+│       ├── memory-consolidation/     # Bounded compaction instructions
+│       └── preference-update/        # Repeated-correction learning instructions
+├── fixtures/
+│   ├── README.md                     # Fixture schema, controls, and provenance
+│   ├── graph_messages.json           # Five synthetic Graph-shaped messages
+│   ├── slack_messages.json           # Three synthetic Slack-shaped messages
+│   ├── envelopes/intake.json         # Recorded intake model turn
+│   └── memory/                       # Synthetic seed memory for the walkthrough
+├── providers/
+│   ├── graph-user.yaml               # Read-only delegated Graph mailbox policy
+│   └── slack-user.yaml               # Read-only Slack endpoint and credential policy
+├── scripts/
+│   ├── install.sh                    # Sandbox: install profile and register jobs
+│   ├── register-jobs.sh              # Sandbox: idempotent Hermes cron registration
+│   ├── require-encrypted-storage.sh  # Shared connector storage prerequisite
+│   ├── require-linux.sh              # Shared scheduled-runtime platform check
+│   ├── setup-graph.sh                # Outside sandbox: authorize and attach Outlook access
+│   ├── setup-slack.sh                # Outside sandbox: authorize and attach a Slack token
+│   └── validate-provider-profile.sh  # Outside sandbox: validate provider policy
+└── docs/
+    ├── data-lifecycle.md             # Retention, exclusions, export, reset, migration
+    ├── encrypted-storage.md          # Required storage-encryption checks
+    ├── set-up-graph.md               # Full Outlook mailbox authorization walkthrough
+    ├── set-up-slack.md               # Full Slack authorization walkthrough
+    └── slack_app_manifest.json       # User-scoped Slack app manifest
+```
+<!-- markdownlint-enable MD013 -->
+
+#### Dependencies
+
+<!-- markdownlint-disable MD013 -->
+| Dependency source | Path | Purpose |
+| --- | --- | --- |
+| Python package manifest | None | All Python modules use the standard library |
+| Recipe manifest | `profile/distribution.yaml` | Pins recipe version and Hermes 0.19.0+ |
+| SQLite schema | `profile/scripts/schema.sql` | Defines application state schema v5 |
+| Outlook provider policy | `providers/graph-user.yaml` | Declares the recipe's intended read-only delegated `graph.microsoft.com` boundary |
+| Slack provider policy | `providers/slack-user.yaml` | Declares the recipe's intended read-only `slack.com` boundary |
+<!-- markdownlint-enable MD013 -->
+
+### API and Module Reference
+
+#### Decision envelope
+
+`apply_decisions.py` reads one JSON document from standard input. The supported
+decisions are `CREATE`, `KEEP_OPEN`, `MARK_DONE`, and `SKIP`. A create or keep
+decision requires a rank, title, and intent-gate verdict.
+
+```json
+{
+  "version": 1,
+  "pass": "intake",
+  "decisions": [
+    {
+      "source_id": "msg-priorities-match",
+      "decision": "CREATE",
+      "rank": 1,
+      "intent_gated": true,
+      "title": "Review the migration plan",
+      "context": "Matches a current priority",
+      "urgency_reason": "Requested before the planning review",
+      "kind": "response",
+      "est_effort": "minutes"
+    },
+    {
+      "source_id": "msg-automated-noise",
+      "decision": "SKIP"
+    }
+  ],
+  "cursor": {
+    "source": "email",
+    "scope": "inbox",
+    "value": "synthetic-cursor"
+  }
+}
+```
+
+Run the writer against a saved envelope from the recipe root.
+
+```bash
+python3 profile/scripts/apply_decisions.py < /path/to/envelope.json
+```
+
+Valid optional values are:
+
+```yaml
+kind:
+  - response
+  - action
+  - null
+est_effort:
+  - minutes
+  - hours
+  - day
+  - multi_day
+  - null
+```
+
+#### Module contracts
+
+<!-- markdownlint-disable MD013 -->
+| Module | Reads | Writes / returns |
+| --- | --- | --- |
+| `normalize.py` | Graph- or Slack-shaped source objects | Source-neutral item dictionaries; recipient lists become one addressing value |
+| `_db.py` | `HERMES_HOME`, `schema.sql` | Validated profile path, SQLite connection, transactions, automatic migration |
+| `ingest_graph.py` | Delegated Graph token and inbox delta | New Outlook message rows, resumable cursor state, and source-removal tombstones |
+| `ingest_slack.py` | Rotating Slack token and selected conversations | New Slack rows and per-conversation watermarks |
+| `select_intake.py` | Collectors and pending rows | JSON batch or a final wake-gate line |
+| `select_review.py` | Open obligations | Oldest-review-first JSON batch or a final wake-gate line |
+| `select_memory.py` | Message evidence, open obligations, and user corrections | Bounded memory-writing evidence or a final wake-gate line |
+| `apply_decisions.py` | Versioned JSON envelope on standard input | Items, obligations, cursor, and append-only events in one transaction |
+| `correct.py` | One user command | Pin/ignore state plus `actor='user'` audit events |
+| `identity.py` | Stored pairwise identity answers | Resolved identity groups, candidates, and conflicts |
+| `link_identity.py` | User confirmation or rejection | Durable relationship between two provider identities |
+| `ranking.py` | Open obligations and gate verdicts | Deterministic bounded tiers and positions |
+| `preferences.py` | User correction events | Bounded preference policy after the fixed threshold is met |
+| `memory_check.py` | Memory Markdown pages | Diagnostics and exit status; no model call |
+| `retention.py` | Store and `RETENTION_DAYS` | Clears expired bodies; keeps metadata, obligations, and history |
+| `export_store.py` | Store, memory, and policy | Complete Markdown and JSON export directory |
+| `reset.py` | Profile workspace | Removes store, memory, policy, and collection state after confirmation |
+| `migrate.py` | Existing store | Forward-only schema migration or compatibility check |
+<!-- markdownlint-enable MD013 -->
+
+#### Store and migration commands
+
+```bash
+python3 profile/scripts/retention.py --dry-run
+python3 profile/scripts/retention.py
+python3 profile/scripts/export_store.py --to /path/to/export
+python3 profile/scripts/migrate.py --check
+python3 profile/scripts/migrate.py
+python3 profile/scripts/reset.py --dry-run
+python3 profile/scripts/reset.py --yes
+```
+
+`reset.py --yes` is destructive. Stop or pause the schedule first, export if
+needed, detach and revoke external credentials separately, and verify the
+profile named by `HERMES_HOME` before running it.
+
+### Verification
+
+This is an integration-level reference implementation. Its evidence includes
+an offline end-to-end walkthrough, deterministic tests, scheduled Linux
+validation, plus live Slack and Outlook collector and credential-rotation
+validation.
+
+#### Offline acceptance walkthrough
+
+```bash
+export RECIPE_VERIFY_HOME="$(mktemp -d)"
+export HERMES_HOME="$RECIPE_VERIFY_HOME"
+python3 profile/scripts/walkthrough.py --fixtures fixtures
+```
+
+#### Full test suite
+
+Run from the recipe root. Each test file is executed directly because some
+tests verify direct-execution behavior.
+
+```bash
+cd profile/scripts
+export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"
+export no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost"
+fail=0
+for t in tests/*.py; do python3 "$t" || fail=1; done
+echo "failed=$fail"
+cd ../..
+test "$fail" -eq 0
+```
+
+Expected result: every file ends with `OK`, the fourteen files report 610 tests
+in total, and the final line is `failed=0`. Do not shorten the loop with an
+early break; running every module is part of the documented check.
+
+The suite covers schema migration, memory invariants, concurrency and crash
+recovery, deterministic ranking, preference thresholds, normalization,
+transactional decisions, correction state transitions, the walkthrough,
+intake, review, and memory-writing selector wake gates, scheduler contracts,
+lifecycle controls, and Slack and Outlook collection/rotation behavior.
+
+### Recipe Metadata
+
+```yaml
+name: memory-driven-chief-of-staff
+version: "0.1.0"
+kind: nvidia-recipe
+status: reference-example
+target_runtime: NemoHermes
+tech_stack:
+  - "Python 3.10+"
+  - SQLite
+  - Bash
+  - "Hermes >=0.19.0"
+  - NemoClaw
+  - OpenShell
+entry_point: profile/scripts/walkthrough.py
+install_entry_point: scripts/install.sh
+configuration_manifest: profile/distribution.yaml
+state_root: "$HERMES_HOME/workspace"
+source_connectors:
+  available:
+    - Slack
+    - "Microsoft Outlook (via Microsoft Graph)"
+evidence_level: integration
+license: Apache-2.0
+```
+
+## Catalog Metadata
+
+| Catalog field | Value |
+| --- | --- |
+| Description | Builds a revisable local memory from email and Slack, then ranks obligations against the user's priorities while preserving pins and ignores without changing source systems. |
+| Industry | ✨ Other |
+| Requirements | Python 3.10+ · scheduled use: a Linux NemoHermes sandbox, Hermes 0.19+, and an inference provider API key · provider setup helpers: Linux/WSL · Slack and Microsoft Graph collectors optional |

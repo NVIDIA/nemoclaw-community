@@ -94,8 +94,23 @@ while read -r name; do
       | sed -n 's/^[[:space:]]*Type:[[:space:]]*//p')"
     if [[ "$type" != "$PROFILE_ID" ]]; then
       echo "     '$name' exposes $USABLE_KEY but is type '$type', not" >&2
-      echo "     '$PROFILE_ID'; refusing to reuse it. Remove it, or set" >&2
-      echo "     GRAPH_PROVIDER_NAME to a different name." >&2
+      echo "     '$PROFILE_ID'. Refusing to reuse it: this recipe's endpoint" >&2
+      echo "     policy is read-only and that provider carries its own." >&2
+      echo "" >&2
+      echo "     Renaming does not help. Two providers cannot both supply" >&2
+      echo "     $USABLE_KEY to one sandbox, so GRAPH_PROVIDER_NAME changes" >&2
+      echo "     nothing here — the clash is the key, not the name." >&2
+      echo "" >&2
+      echo "     Either detach '$name' from this sandbox, or attach this" >&2
+      echo "     recipe to a sandbox that does not have it:" >&2
+      echo "       openshell sandbox provider detach $SANDBOX $name" >&2
+      echo "       OPENSHELL_SANDBOX_NAME=<other> bash scripts/setup-graph.sh" >&2
+      echo "" >&2
+      echo "     Until then the collector still reads $USABLE_KEY on every" >&2
+      echo "     tick and will collect mail through '$name' — this refusal" >&2
+      echo "     stops the provider being registered, not the reading. From" >&2
+      echo "     inside the sandbox a credential carries no provenance, so" >&2
+      echo "     the collector cannot tell which provider supplied it." >&2
       exit 1
     fi
     if ! validate_profile "$type"; then
