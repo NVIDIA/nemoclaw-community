@@ -77,9 +77,9 @@ recipe complements Hermes memory and optional external memory providers.
 - [Quick Start](#quick-start)
 - [Install in NemoClaw](#install-in-nemoclaw)
 - [Configuration](#configuration)
+- [Connect Messaging Providers](#connect-messaging-providers)
 - [API and Module Reference](#api-and-module-reference)
 - [Scheduled Operation](#scheduled-operation)
-- [Connect Messaging Providers](#connect-messaging-providers)
 - [Data Lifecycle and Privacy](#data-lifecycle-and-privacy)
 - [Verification](#verification)
 - [Troubleshooting and FAQ](#troubleshooting-and-faq)
@@ -425,24 +425,6 @@ a temporary shell export. See [docs/data-lifecycle.md](docs/data-lifecycle.md)
 for retention and memory settings, and
 [docs/set-up-graph.md](docs/set-up-graph.md) for Outlook backfill.
 
-### Profile configuration
-
-The source of truth for installed files is `profile/distribution.yaml`.
-A conceptual target profile model block has this shape; use Hermes commands to
-set values rather than editing the file directly.
-
-```yaml
-model:
-  default: "<provider/model>"
-  provider: "<provider>"
-  base_url: "<https-endpoint>"
-  api_key: sk-OPENSHELL-PROXY-REWRITE
-```
-
-The `api_key` value above is the required non-secret routing marker for a
-NemoClaw-managed Hermes profile. OpenShell replaces it at egress; it is not a
-credential to rotate or hide.
-
 ### Public Slack channels
 
 Direct messages and group DMs are discovered automatically. Public channels
@@ -468,6 +450,168 @@ are not supported. Invalid or unknown fields fail closed.
   "channels": ["C0SALARY01", "D0PRIVATE1"]
 }
 ```
+
+## Connect Messaging Providers
+
+Slack and Microsoft Outlook are independent, optional inputs. Configure either
+one or both after installing the recipe and setting any intake exclusions.
+Each setup script requires encrypted sandbox storage and attaches a read-only
+OpenShell provider to the NemoHermes sandbox.
+
+### Profile configuration
+
+The installer has already created the target profile from
+`profile/distribution.yaml`. Its model block should have this shape:
+
+```yaml
+model:
+  default: "<provider/model>"
+  provider: "<provider>"
+  base_url: "<https-endpoint>"
+  api_key: sk-OPENSHELL-PROXY-REWRITE
+```
+
+The `api_key` value is the non-secret routing marker configured during
+installation. OpenShell replaces it at egress; it is not a credential to rotate
+or hide.
+
+Provider setup now continues on the **Linux host**.
+
+### Slack
+
+Slack setup is optional. Complete it only after placing the sandbox storage on
+an encrypted volume; owner-only permissions are access control, not encryption.
+See [docs/encrypted-storage.md](docs/encrypted-storage.md) first.
+
+Run the setup script from the recipe checkout on the **Linux host**, not inside
+the sandbox. The host has `openshell`; the sandbox has `hermes`.
+
+```bash
+export SANDBOX_STORAGE_PATH="<host-path-containing-sandbox-storage>"
+export OPENSHELL_SANDBOX_NAME="my-hermes"
+bash scripts/setup-slack.sh
+```
+
+The script imports `docs/slack_app_manifest.json`, requests user scopes, checks
+the provider type and read-only policy, configures token rotation, and attaches
+the provider to the named sandbox. The required scopes are:
+
+```yaml
+user_scopes:
+  - im:read
+  - im:history
+  - mpim:read
+  - mpim:history
+  - channels:read
+  - channels:history
+  - users:read
+```
+
+Static user tokens, bot tokens, and app tokens are refused. Attachments are not
+downloaded. Full setup and workspace-admin recovery steps are in
+[docs/set-up-slack.md](docs/set-up-slack.md).
+
+Verify the live collector from the host through the supported sandbox exec
+path. Replace both placeholders.
+
+```bash
+nemohermes my-hermes exec \
+  --workdir /sandbox/memory-driven-chief-of-staff \
+  -- env HERMES_HOME=/sandbox/.hermes/profiles/memory-driven-chief-of-staff \
+  python3 profile/scripts/ingest_slack.py --recheck
+```
+
+Collector exit codes are stable diagnostics:
+
+| Exit | Meaning |
+| --- | --- |
+| `0` | Fetch succeeded, or Slack is intentionally unconfigured |
+| `1` | Other collector error |
+| `2` | Missing/wrong credential type or unreachable API |
+| `3` | Slack rate limit |
+| `4` | Required Slack scope missing |
+
+### Microsoft Outlook
+
+Outlook intake uses the Microsoft Graph inbox delta API. Register a Microsoft
+Entra application with public-client flows enabled and delegated `Mail.Read`,
+`User.Read`, and `offline_access` permissions. Do not grant application-level
+mail permissions, which would authorize access beyond the signed-in mailbox.
+
+Run the device-code setup from the recipe checkout on the Linux host:
+
+```bash
+export SANDBOX_STORAGE_PATH="<host-path-containing-sandbox-storage>"
+export OPENSHELL_SANDBOX_NAME="my-hermes"
+export GRAPH_CLIENT_ID="<entra-application-client-id>"
+export GRAPH_TENANT_ID="<entra-directory-tenant-id>"
+bash scripts/setup-graph.sh
+```
+
+If the script reports that another attached provider already exposes
+`MS_GRAPH_ACCESS_TOKEN`, treat that as a hard stop. Detach the conflicting
+provider or use a dedicated sandbox, then rerun setup. Do not run the Graph
+collector while the credential source is ambiguous.
+
+On the supported path, the gateway stores and refreshes the delegated
+credential, and the sandbox receives only an OpenShell placeholder. Confirm
+that the attached provider has type `memory-driven-cos-graph-user` and that its
+exported profile declares `access: read-only` with `enforcement: enforce` before
+running the collector. The initial synchronization covers seven days by default
+and resumes across intake ticks when more pages remain. Configure a different
+`GRAPH_BACKFILL_DAYS` in the profile environment file before the first
+synchronization. See [docs/set-up-graph.md](docs/set-up-graph.md) for the
+application registration, provider inspection, backfill, revocation, and
+recovery steps.
+
+### Link identities across providers
+
+Slack identifies a person by user ID, while email uses an address. The recipe
+never assumes that matching display names belong to the same person. The memory
+job reports likely matches as `identity_candidates`; only the user can confirm
+or reject them.
+
+Run the identity command from the Linux host through sandbox exec:
+
+```bash
+nemohermes my-hermes exec \
+  --workdir /sandbox/memory-driven-chief-of-staff \
+  -- env HERMES_HOME=/sandbox/.hermes/profiles/memory-driven-chief-of-staff \
+  python3 profile/scripts/link_identity.py same \
+    slack:U01DANA email:dana@example.com
+```
+
+Use `different` instead of `same` to reject a match. Confirmed relationships
+compose across providers. Rejected candidates are not proposed again. If saved
+answers conflict, the recipe reports `identity_conflicts` and changes nothing.
+Existing page names remain stable after identities are linked so that index
+entries and source-backed links do not move.
+
+### Collector failures
+
+When a collector fails, the intake batch records only its name, exit code, and
+error class. It does not place collector output in the model prompt or the
+scheduler log because that output can contain message text or authentication
+material. Run the collector directly to inspect its full error.
+
+Verify the collector from the host:
+
+```bash
+nemohermes my-hermes exec \
+  --workdir /sandbox/memory-driven-chief-of-staff \
+  -- env HERMES_HOME=/sandbox/.hermes/profiles/memory-driven-chief-of-staff \
+  python3 profile/scripts/ingest_graph.py --recheck
+```
+
+Outlook collector exit codes are:
+
+| Exit | Meaning |
+| --- | --- |
+| `0` | Fetch succeeded, can resume, or Outlook is unconfigured |
+| `1` | Other collector error |
+| `2` | Missing, invalid, or refused credential |
+| `3` | Microsoft Graph rate limit |
+| `4` | Token is not a delegated mailbox token with the required scopes |
 
 ## API and Module Reference
 
@@ -610,149 +754,6 @@ Deleting the profile also deletes its workspace, store, and memory.
 ```bash
 hermes profile delete memory-driven-chief-of-staff
 ```
-
-## Connect Messaging Providers
-
-Slack and Microsoft Outlook are independent, optional inputs. Configure either
-one or both after installing the recipe. Each setup script runs on the
-**Linux host**, requires encrypted sandbox storage, and attaches a read-only
-OpenShell provider to the NemoHermes sandbox.
-
-### Slack
-
-Slack setup is optional. Complete it only after placing the sandbox storage on
-an encrypted volume; owner-only permissions are access control, not encryption.
-See [docs/encrypted-storage.md](docs/encrypted-storage.md) first.
-
-Run the setup script from the recipe checkout on the **Linux host**, not inside
-the sandbox. The host has `openshell`; the sandbox has `hermes`.
-
-```bash
-export SANDBOX_STORAGE_PATH="<host-path-containing-sandbox-storage>"
-export OPENSHELL_SANDBOX_NAME="my-hermes"
-bash scripts/setup-slack.sh
-```
-
-The script imports `docs/slack_app_manifest.json`, requests user scopes, checks
-the provider type and read-only policy, configures token rotation, and attaches
-the provider to the named sandbox. The required scopes are:
-
-```yaml
-user_scopes:
-  - im:read
-  - im:history
-  - mpim:read
-  - mpim:history
-  - channels:read
-  - channels:history
-  - users:read
-```
-
-Static user tokens, bot tokens, and app tokens are refused. Attachments are not
-downloaded. Full setup and workspace-admin recovery steps are in
-[docs/set-up-slack.md](docs/set-up-slack.md).
-
-Verify the live collector from the host through the supported sandbox exec
-path. Replace both placeholders.
-
-```bash
-nemohermes my-hermes exec \
-  --workdir /sandbox/memory-driven-chief-of-staff \
-  -- env HERMES_HOME=/sandbox/.hermes/profiles/memory-driven-chief-of-staff \
-  python3 profile/scripts/ingest_slack.py --recheck
-```
-
-Collector exit codes are stable diagnostics:
-
-| Exit | Meaning |
-| --- | --- |
-| `0` | Fetch succeeded, or Slack is intentionally unconfigured |
-| `1` | Other collector error |
-| `2` | Missing/wrong credential type or unreachable API |
-| `3` | Slack rate limit |
-| `4` | Required Slack scope missing |
-
-### Microsoft Outlook
-
-Outlook intake uses the Microsoft Graph inbox delta API. Register a Microsoft
-Entra application with public-client flows enabled and delegated `Mail.Read`,
-`User.Read`, and `offline_access` permissions. Do not grant application-level
-mail permissions, which would authorize access beyond the signed-in mailbox.
-
-Run the device-code setup from the recipe checkout on the Linux host:
-
-```bash
-export SANDBOX_STORAGE_PATH="<host-path-containing-sandbox-storage>"
-export OPENSHELL_SANDBOX_NAME="my-hermes"
-export GRAPH_CLIENT_ID="<entra-application-client-id>"
-export GRAPH_TENANT_ID="<entra-directory-tenant-id>"
-bash scripts/setup-graph.sh
-```
-
-If the script reports that another attached provider already exposes
-`MS_GRAPH_ACCESS_TOKEN`, treat that as a hard stop. Detach the conflicting
-provider or use a dedicated sandbox, then rerun setup. Do not run the Graph
-collector while the credential source is ambiguous.
-
-On the supported path, the gateway stores and refreshes the delegated
-credential, and the sandbox receives only an OpenShell placeholder. Confirm
-that the attached provider has type `memory-driven-cos-graph-user` and that its
-exported profile declares `access: read-only` with `enforcement: enforce` before
-running the collector. The initial synchronization covers seven days by default
-and resumes across intake ticks when more pages remain. Configure a different
-`GRAPH_BACKFILL_DAYS` in the profile environment file before the first
-synchronization. See [docs/set-up-graph.md](docs/set-up-graph.md) for the
-application registration, provider inspection, backfill, revocation, and
-recovery steps.
-
-### Link identities across providers
-
-Slack identifies a person by user ID, while email uses an address. The recipe
-never assumes that matching display names belong to the same person. The memory
-job reports likely matches as `identity_candidates`; only the user can confirm
-or reject them.
-
-Run the identity command from the Linux host through sandbox exec:
-
-```bash
-nemohermes my-hermes exec \
-  --workdir /sandbox/memory-driven-chief-of-staff \
-  -- env HERMES_HOME=/sandbox/.hermes/profiles/memory-driven-chief-of-staff \
-  python3 profile/scripts/link_identity.py same \
-    slack:U01DANA email:dana@example.com
-```
-
-Use `different` instead of `same` to reject a match. Confirmed relationships
-compose across providers. Rejected candidates are not proposed again. If saved
-answers conflict, the recipe reports `identity_conflicts` and changes nothing.
-Existing page names remain stable after identities are linked so that index
-entries and source-backed links do not move.
-
-### Collector failures
-
-When a collector fails, the intake batch records only its name, exit code, and
-error class. It does not place collector output in the model prompt or the
-scheduler log because that output can contain message text or authentication
-material. Run the collector directly to inspect its full error.
-
-Verify the collector from the host:
-
-```bash
-nemohermes my-hermes exec \
-  --workdir /sandbox/memory-driven-chief-of-staff \
-  -- env HERMES_HOME=/sandbox/.hermes/profiles/memory-driven-chief-of-staff \
-  python3 profile/scripts/ingest_graph.py --recheck
-```
-
-Outlook collector exit codes are:
-
-| Exit | Meaning |
-| --- | --- |
-| `0` | Fetch succeeded, can resume, or Outlook is unconfigured |
-| `1` | Other collector error |
-| `2` | Missing, invalid, or refused credential |
-| `3` | Microsoft Graph rate limit |
-| `4` | Token is not a delegated mailbox token with the required scopes |
 
 ## Data Lifecycle and Privacy
 
