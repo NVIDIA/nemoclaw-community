@@ -311,8 +311,6 @@ export HERMES_HOME="$(mktemp -d)"
 python3 profile/scripts/walkthrough.py --fixtures fixtures
 ```
 
-If you are already at the parent root, omit the directory change.
-
 ### The walkthrough says the profile home is not fresh
 
 The walkthrough requires fresh state because old corrections would change its

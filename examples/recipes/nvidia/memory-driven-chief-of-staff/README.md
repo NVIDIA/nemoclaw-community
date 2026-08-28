@@ -234,12 +234,6 @@ git clone https://github.com/NVIDIA/nemoclaw-community.git
 cd nemoclaw-community/examples/recipes/nvidia/memory-driven-chief-of-staff
 ```
 
-If you are already at the repository root, only run the second command.
-
-```bash
-cd examples/recipes/nvidia/memory-driven-chief-of-staff
-```
-
 ### 2. Create isolated local state and run the walkthrough
 
 ```bash
