@@ -12,7 +12,8 @@ interaction tests. It builds `_site/` from the discovered root READMEs and the
 sources under `site/`.
 
 See [Example Catalog Architecture](catalog-architecture.md) for the metadata,
-generation, README detail-page, URL filter, and public JSON contracts.
+generation, README detail-page, URL filter, public JSON, and `llms.txt`
+contracts.
 
 Matching pull requests attach the generated `_site/` directory as an
 `example-catalog-preview` artifact and do not deploy. A matching push to
@@ -21,8 +22,9 @@ deploys it with the `github-pages` environment.
 
 ## Build Locally
 
-After changing an example's opening catalog block, validate its format,
-regenerate the committed Markdown catalog, and build the site:
+After changing an example's opening catalog block or a category or collection
+index title or description, validate its format, regenerate the committed
+Markdown indexes, and build the site:
 
 ```bash
 python3 scripts/build_catalog.py --validate-metadata
@@ -66,12 +68,16 @@ because Pages was disabled, rerun that workflow from `main`.
 
 ## Verify The Deployment
 
-After deployment, verify the HTTPS page, the stylesheet, script, logo, and
-`catalog.json` under the `/nemoclaw-community/` project path. Exercise text
-search, both browse views, at least one category and industry filter, reset,
-browser Back, a copied filtered URL, category fragments, and representative
-compiled README detail pages, including local images and source links. Verify
-at least one Mermaid detail page renders its diagrams without remote requests,
-retains expandable source, and shows source when JavaScript is disabled. Then
-set the repository website field to
+After deployment, verify the HTTPS page, the stylesheet, script, logo,
+`catalog.json`, and `llms.txt` under the `/nemoclaw-community/` project path.
+Confirm that the five canonical category tiles and the Hackathon and
+Build-a-Claw collection tiles show their README-derived descriptions, and that
+the NemoClaw Brev link opens the external launchable. Exercise text search,
+both browse views, at least one category, collection, and industry filter,
+reset, browser Back, a copied filtered URL, category fragments, and
+representative compiled README detail pages, including local images, source
+links, and an upstream-project link when present. Verify at least one Mermaid
+detail page renders its diagrams without remote requests, retains expandable
+source, and shows source when JavaScript is disabled. Then set the repository
+website field to
 `https://nvidia.github.io/nemoclaw-community/`.

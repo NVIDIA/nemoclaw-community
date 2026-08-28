@@ -5,7 +5,9 @@
 
 NemoClaw Community is a collection of examples that showcase NemoClaw blueprints for constrained, inspectable agent workflows.
 
-[**Browse examples**](https://nvidia.github.io/nemoclaw-community/) · [**Contribute an example**](CONTRIBUTING.md#add-a-new-example)
+[**Launch NemoClaw on Brev**](https://brev.nvidia.com/launchable/deploy?launchableID=env-3Azt0aYgVNFEuz7opyx3gscmowS)
+· [**Browse examples**](https://nvidia.github.io/nemoclaw-community/)
+· [**Contribute an example**](CONTRIBUTING.md#add-a-new-example)
 
 NemoClaw is the blueprint layer for composing three things into a repeatable agent system:
 
@@ -13,18 +15,23 @@ NemoClaw is the blueprint layer for composing three things into a repeatable age
 - **Harness** — the agent runtime, skills, bridges, state, and workflow-specific behavior.
 - **OpenShell** — the sandbox, gateway, policy, provider, and networking substrate that runs the harness with explicit boundaries.
 
-Recipes and demos show how a model, harness, and OpenShell come together. The catalog also includes launchables and developer tools.
+Recipes and demos show how a model, harness, and OpenShell come together. The
+catalog also includes standalone developer tools.
 
 ## Reference Examples
 
 Examples are organized as reusable NVIDIA and partner recipes, community
-recipes, NVIDIA field demos, environment launchables, and standalone developer
-tools. Search the [web catalog](https://nvidia.github.io/nemoclaw-community/)
+recipes, NVIDIA field demos, and standalone developer tools. Hackathon and
+Build-a-Claw recipes remain in their provenance category and also appear in
+cross-cutting collection views. Search the
+[web catalog](https://nvidia.github.io/nemoclaw-community/)
 by example type or industry, browse the
 [source example catalog](examples/README.md), or consume the
 [machine-readable catalog](https://nvidia.github.io/nemoclaw-community/catalog.json).
-See the [catalog architecture](docs/catalog-architecture.md) for its metadata,
-generation, URL filter, and JSON contracts.
+Agent-oriented navigation is available in the generated
+[`llms.txt`](https://nvidia.github.io/nemoclaw-community/llms.txt). See the
+[catalog architecture](docs/catalog-architecture.md) for its metadata,
+generation, URL filter, JSON, and text-index contracts.
 
 Each example has its own prerequisites, credentials, setup, and limitations.
 Review the example README before setup.

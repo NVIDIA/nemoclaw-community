@@ -16,7 +16,7 @@ import posixpath
 import re
 import shutil
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
@@ -53,6 +53,7 @@ INDUSTRY_EMOJIS: dict[str, str] = {
 }
 INDUSTRIES: tuple[str, ...] = tuple(INDUSTRY_EMOJIS)
 
+PAGES_BASE_URL = "https://nvidia.github.io/nemoclaw-community/"
 PATH_SEGMENT_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 MERMAID_VERSION = "11.17.2"
 MERMAID_SHA256 = (
@@ -113,62 +114,85 @@ class Category:
     """One canonical artifact/provenance category."""
 
     id: str
-    title: str
     singular: str
-    description: str
     kind: str
     provenance: str | None = None
+    readme_path: str = ""
+    title: str = ""
+    description: str = ""
 
 
-CATEGORIES: tuple[Category, ...] = (
+CATEGORY_DEFINITIONS: tuple[Category, ...] = (
     Category(
         "nvidia-recipes",
-        "NVIDIA Recipes",
         "NVIDIA recipe",
-        "Reusable agent recipes authored or maintained by NVIDIA. Placement does not state a support or maturity level.",
         "recipe",
         "nvidia",
+        "examples/recipes/nvidia/README.md",
     ),
     Category(
         "partner-recipes",
-        "Partner Recipes",
         "Partner recipe",
-        "Reusable agent recipes contributed by named partner organizations. Partner attribution remains visible on each entry.",
         "recipe",
         "partner",
+        "examples/recipes/partners/README.md",
     ),
     Category(
         "community-recipes",
-        "Community Recipes",
         "Community recipe",
-        "Reusable agent recipes contributed independently without formal organizational provenance.",
         "recipe",
         "community",
+        "examples/recipes/community/README.md",
     ),
     Category(
         "nvidia-field-demos",
-        "NVIDIA Field Demos",
         "NVIDIA field demo",
-        "Bounded NVIDIA demonstrations for named hardware and software environments.",
         "demo",
-    ),
-    Category(
-        "launchables",
-        "Launchables",
-        "Launchable",
-        "Provisioning and onboarding paths for a specific environment.",
-        "launchable",
+        readme_path="examples/demos/field/README.md",
     ),
     Category(
         "developer-tools",
-        "Developer Tools",
         "Developer tool",
-        "Standalone development and evaluation utilities, separate from deployed agent blueprints.",
         "tool",
+        readme_path="examples/tools/README.md",
     ),
 )
 
-CATEGORY_BY_ID = {category.id: category for category in CATEGORIES}
+CATEGORY_DEFINITION_BY_ID = {
+    category.id: category for category in CATEGORY_DEFINITIONS
+}
+
+
+@dataclass(frozen=True)
+class Collection:
+    """One cross-cutting recipe collection and its browse presentation."""
+
+    id: str
+    browse_id: str
+    metadata_value: str
+    readme_path: str
+    title: str = ""
+    description: str = ""
+
+
+COLLECTION_DEFINITIONS: tuple[Collection, ...] = (
+    Collection(
+        "hackathon",
+        "hackathon-recipes",
+        "Hackathon",
+        "examples/collections/hackathon/README.md",
+    ),
+    Collection(
+        "build-a-claw",
+        "build-a-claw-recipes",
+        "Build-a-Claw",
+        "examples/collections/build-a-claw/README.md",
+    ),
+)
+
+COLLECTION_DEFINITION_BY_VALUE = {
+    collection.metadata_value: collection for collection in COLLECTION_DEFINITIONS
+}
 
 
 @dataclass(frozen=True)
@@ -180,10 +204,10 @@ class CatalogEntry:
     description: str
     industry: str
     requirements: str
-    collections: tuple[str, ...]
+    collections: tuple[Collection, ...]
     category: Category
     contributor: str | None = None
-    environment: str | None = None
+    upstream_url: str | None = None
     readme_body: str = ""
 
     @property
@@ -206,6 +230,10 @@ class CatalogEntry:
         return f"examples/{self.path}/"
 
     @property
+    def absolute_detail_url(self) -> str:
+        return f"{PAGES_BASE_URL}{self.detail_url}"
+
+    @property
     def id(self) -> str:
         return f"example-{slugify(self.title)}"
 
@@ -225,9 +253,11 @@ class CatalogEntry:
     def display_label(self) -> str:
         if self.category.id == "partner-recipes":
             return f"{self.category.singular} · {self.contributor}"
-        if self.category.id == "launchables":
-            return f"{self.category.singular} · {self.environment}"
         return self.category.singular
+
+    @property
+    def collection_ids(self) -> tuple[str, ...]:
+        return tuple(collection.id for collection in self.collections)
 
     @property
     def search_text(self) -> str:
@@ -239,8 +269,7 @@ class CatalogEntry:
             self.category.title,
             self.display_label,
             self.contributor or "",
-            self.environment or "",
-            " ".join(self.collections),
+            " ".join(collection.title for collection in self.collections),
         )
         return " ".join(value for value in values if value)
 
@@ -282,7 +311,10 @@ def is_regular_repo_file(root: Path, path: Path) -> bool:
     )
 
 
-def classify_path(path: str) -> Category:
+def classify_path(
+    path: str,
+    categories_by_id: dict[str, Category] | None = None,
+) -> Category:
     """Derive artifact kind and recipe provenance from canonical placement."""
 
     parts = PurePosixPath(path).parts
@@ -295,8 +327,6 @@ def classify_path(path: str) -> Category:
         category_id = "partner-recipes"
     elif len(parts) == 3 and parts[:2] == ("demos", "field"):
         category_id = "nvidia-field-demos"
-    elif len(parts) == 3 and parts[0] == "launchables":
-        category_id = "launchables"
     elif len(parts) == 2 and parts[0] == "tools":
         category_id = "developer-tools"
 
@@ -306,16 +336,19 @@ def classify_path(path: str) -> Category:
         raise CatalogError(
             f"Catalog path does not match the canonical example taxonomy: {path!r}"
         )
-    return CATEGORY_BY_ID[category_id]
+    return (categories_by_id or CATEGORY_DEFINITION_BY_ID)[category_id]
 
 
-def discover_example_paths(root: Path) -> set[str]:
+def discover_example_paths(
+    root: Path,
+    categories_by_id: dict[str, Category] | None = None,
+) -> set[str]:
     """Discover canonical example directories and require one safe root README."""
 
     examples = root / "examples"
     if not examples.is_dir() or examples.is_symlink():
         raise CatalogError("examples/ must be a regular directory.")
-    allowed_roots = {"demos", "launchables", "recipes", "tools"}
+    allowed_roots = {"collections", "demos", "recipes", "tools"}
     unexpected_roots = {
         child.name
         for child in examples.iterdir()
@@ -354,12 +387,43 @@ def discover_example_paths(root: Path) -> set[str]:
                 + ", ".join(sorted(unexpected_demo_roots))
             )
 
+    collections = examples / "collections"
+    if collections.is_dir():
+        expected_collection_roots = {
+            PurePosixPath(collection.readme_path).parent.name
+            for collection in COLLECTION_DEFINITIONS
+        }
+        unexpected_collection_roots = {
+            child.name
+            for child in collections.iterdir()
+            if child.is_dir() and child.name not in expected_collection_roots
+        }
+        if unexpected_collection_roots:
+            raise CatalogError(
+                "Unexpected recipe collection directories: "
+                + ", ".join(sorted(unexpected_collection_roots))
+            )
+        for collection_root in expected_collection_roots:
+            index = collections / collection_root
+            if not index.is_dir():
+                continue
+            unexpected_entries = sorted(
+                child.name for child in index.iterdir() if child.name != "README.md"
+            )
+            if unexpected_entries:
+                raise CatalogError(
+                    "Recipe collection directories may contain only README.md: "
+                    + ", ".join(
+                        f"examples/collections/{collection_root}/{name}"
+                        for name in unexpected_entries
+                    )
+                )
+
     patterns = (
         "recipes/nvidia/*",
         "recipes/community/*",
         "recipes/partners/*/*",
         "demos/field/*",
-        "launchables/*/*",
         "tools/*",
     )
     paths: set[str] = set()
@@ -368,7 +432,7 @@ def discover_example_paths(root: Path) -> set[str]:
             if not directory.is_dir():
                 continue
             path = directory.relative_to(examples).as_posix()
-            classify_path(path)
+            classify_path(path, categories_by_id)
             if path_uses_symlink(examples, directory):
                 raise CatalogError(
                     f"Example directory must not be a symlink: examples/{path}"
@@ -392,10 +456,12 @@ CATALOG_FIELD_ORDER = (
     "Description",
     "Industry",
     "Requirements",
+    "Upstream",
     "Contributor",
-    "Environment",
     "Collection",
 )
+GENERATED_EXAMPLES_BEGIN = "<!-- BEGIN GENERATED EXAMPLES -->"
+GENERATED_EXAMPLES_END = "<!-- END GENERATED EXAMPLES -->"
 
 
 def _skip_leading_readme_comments(lines: list[str], readme_path: str) -> int:
@@ -424,6 +490,106 @@ def _skip_leading_readme_comments(lines: list[str], readme_path: str) -> int:
     return index
 
 
+def _parse_discovery_readme(
+    root: Path,
+    definition: Category | Collection,
+) -> tuple[str, str]:
+    """Read one browse-group title and description from its index README."""
+
+    readme_path = definition.readme_path
+    readme = root / readme_path
+    if not is_regular_repo_file(root, readme):
+        raise CatalogError(f"Browse group requires a regular README.md: {readme_path}")
+    lines = readme.read_text(encoding="utf-8").splitlines()
+    index = _skip_leading_readme_comments(lines, readme_path)
+    if index >= len(lines):
+        raise CatalogError(f"Browse-group README is empty: {readme_path}")
+    title_match = re.fullmatch(r"# ([^#].*)", lines[index])
+    if title_match is None:
+        raise CatalogError(
+            f"Browse-group README must begin with one level-one title: {readme_path}"
+        )
+    title = title_match.group(1).strip()
+    if title != title_match.group(1) or len(title) > 100:
+        raise CatalogError(
+            f"Browse-group title must be trimmed and at most 100 characters: {readme_path}"
+        )
+    if any(ord(character) < 32 for character in title) or re.search(
+        r"[`*_~\[\]<>]", title
+    ):
+        raise CatalogError(f"Browse-group title must be plain text: {readme_path}")
+    expected_id = (
+        definition.id if isinstance(definition, Category) else definition.browse_id
+    )
+    if slugify(title) != expected_id:
+        raise CatalogError(
+            f"Browse-group title must slugify to {expected_id!r}: {readme_path}"
+        )
+
+    index += 1
+    if index >= len(lines) or lines[index].strip():
+        raise CatalogError(
+            f"Browse-group title must be followed by a blank line: {readme_path}"
+        )
+    index += 1
+    description_lines: list[str] = []
+    while index < len(lines) and lines[index].strip():
+        description_lines.append(lines[index].strip())
+        index += 1
+    description = " ".join(description_lines)
+    if not description:
+        raise CatalogError(f"Browse-group description is required: {readme_path}")
+    if len(description) > 300:
+        raise CatalogError(
+            f"Browse-group description must be at most 300 characters: {readme_path}"
+        )
+    if any(ord(character) < 32 for character in description) or re.search(
+        r"[`*_~\[\]<>]", description
+    ) or any(
+        re.match(r"(?:#{1,6}|>|[-+]|\d+[.)])(?:\s|$)|-{3,}$", line)
+        for line in description_lines
+    ):
+        raise CatalogError(
+            f"Browse-group description must be plain text: {readme_path}"
+        )
+    while index < len(lines) and not lines[index].strip():
+        index += 1
+    if index >= len(lines) or lines[index] != GENERATED_EXAMPLES_BEGIN:
+        raise CatalogError(
+            f"Browse-group README requires {GENERATED_EXAMPLES_BEGIN}: {readme_path}"
+        )
+    end_indexes = [
+        offset
+        for offset, line in enumerate(lines[index + 1 :], start=index + 1)
+        if line == GENERATED_EXAMPLES_END
+    ]
+    if len(end_indexes) != 1:
+        raise CatalogError(
+            f"Browse-group README requires one {GENERATED_EXAMPLES_END}: {readme_path}"
+        )
+    if any(line.strip() for line in lines[end_indexes[0] + 1 :]):
+        raise CatalogError(
+            f"Browse-group README cannot contain content after its generated list: {readme_path}"
+        )
+    return title, description
+
+
+def load_discovery_groups(
+    root: Path,
+) -> tuple[tuple[Category, ...], tuple[Collection, ...]]:
+    """Load authored browse-group presentation from canonical README indexes."""
+
+    categories: list[Category] = []
+    for definition in CATEGORY_DEFINITIONS:
+        title, description = _parse_discovery_readme(root, definition)
+        categories.append(replace(definition, title=title, description=description))
+    collections: list[Collection] = []
+    for definition in COLLECTION_DEFINITIONS:
+        title, description = _parse_discovery_readme(root, definition)
+        collections.append(replace(definition, title=title, description=description))
+    return tuple(categories), tuple(collections)
+
+
 def _parse_catalog_row(line: str, readme_path: str) -> tuple[str, str]:
     match = re.fullmatch(r"\| ([A-Za-z]+) \| ([^|]+) \|", line)
     if match is None:
@@ -441,8 +607,8 @@ def _parse_catalog_row(line: str, readme_path: str) -> tuple[str, str]:
             f"Catalog metadata field {field!r} must have a trimmed value in "
             f"{readme_path}."
         )
-    if any(ord(character) < 32 for character in value) or re.search(
-        r"[`*_~\[\]<>]", value
+    if any(ord(character) < 32 for character in value) or (
+        field != "Upstream" and re.search(r"[`*_~\[\]<>]", value)
     ):
         raise CatalogError(
             f"Catalog metadata field {field!r} must be plain text in {readme_path}."
@@ -450,10 +616,47 @@ def _parse_catalog_row(line: str, readme_path: str) -> tuple[str, str]:
     return field, value
 
 
-def parse_readme_metadata(root: Path, path: str) -> CatalogEntry:
+def _validate_upstream_url(value: str, readme_path: str) -> str:
+    """Require a safe absolute HTTPS URL for an optional upstream project."""
+
+    if (
+        len(value) > 2048
+        or any(character.isspace() for character in value)
+        or any(character in "<>" for character in value)
+    ):
+        raise CatalogError(
+            f"Upstream must be an absolute HTTPS URL in {readme_path}."
+        )
+    try:
+        parts = urlsplit(value)
+        hostname = parts.hostname
+        _ = parts.port
+    except ValueError as error:
+        raise CatalogError(
+            f"Upstream must be an absolute HTTPS URL in {readme_path}."
+        ) from error
+    if (
+        parts.scheme != "https"
+        or not parts.netloc
+        or not hostname
+        or parts.username is not None
+        or parts.password is not None
+    ):
+        raise CatalogError(
+            f"Upstream must be an absolute HTTPS URL without credentials in {readme_path}."
+        )
+    return value
+
+
+def parse_readme_metadata(
+    root: Path,
+    path: str,
+    categories_by_id: dict[str, Category] | None = None,
+    collections_by_value: dict[str, Collection] | None = None,
+) -> CatalogEntry:
     """Parse the required human-readable metadata block from one example README."""
 
-    category = classify_path(path)
+    category = classify_path(path, categories_by_id)
     readme_path = f"examples/{path}/README.md"
     readme = root / readme_path
     if not is_regular_repo_file(root, readme):
@@ -551,36 +754,33 @@ def parse_readme_metadata(root: Path, path: str) -> CatalogEntry:
             f"Requirements must be at most 240 characters in {readme_path}."
         )
 
+    upstream_url = fields.get("Upstream")
+    if upstream_url is not None:
+        upstream_url = _validate_upstream_url(upstream_url, readme_path)
+
     contributor = fields.get("Contributor")
-    environment = fields.get("Environment")
-    for field, value in (("Contributor", contributor), ("Environment", environment)):
-        if value is not None and len(value) > 100:
-            raise CatalogError(
-                f"{field} must be at most 100 characters in {readme_path}."
-            )
+    if contributor is not None and len(contributor) > 100:
+        raise CatalogError(
+            f"Contributor must be at most 100 characters in {readme_path}."
+        )
     if category.id == "partner-recipes" and contributor is None:
         raise CatalogError(f"Partner recipe {path!r} requires a Contributor row.")
     if category.id != "partner-recipes" and contributor is not None:
         raise CatalogError(f"Only partner recipes can set Contributor ({path!r}).")
-    if category.id == "launchables" and environment is None:
-        raise CatalogError(f"Launchable {path!r} requires an Environment row.")
-    if category.id != "launchables" and environment is not None:
-        raise CatalogError(f"Only launchables can set Environment ({path!r}).")
-    if environment is not None and slugify(environment) != PurePosixPath(path).parts[1]:
-        raise CatalogError(
-            f"Launchable Environment must match its path in {readme_path}."
-        )
 
-    collection = fields.get("Collection")
-    if collection is None:
-        collections: tuple[str, ...] = ()
-    elif collection == "Hackathon" and category.kind == "recipe":
-        collections = ("hackathon",)
-    elif collection == "Hackathon":
-        raise CatalogError("Only recipes can join the Hackathon collection.")
+    collection_value = fields.get("Collection")
+    collection_definitions = (
+        collections_by_value or COLLECTION_DEFINITION_BY_VALUE
+    )
+    if collection_value is None:
+        collections: tuple[Collection, ...] = ()
+    elif collection_value in collection_definitions and category.kind == "recipe":
+        collections = (collection_definitions[collection_value],)
+    elif collection_value in collection_definitions:
+        raise CatalogError("Only recipes can join a recipe collection.")
     else:
         raise CatalogError(
-            f"Unknown Collection value in {readme_path}: {collection!r}."
+            f"Unknown Collection value in {readme_path}: {collection_value!r}."
         )
 
     return CatalogEntry(
@@ -592,25 +792,45 @@ def parse_readme_metadata(root: Path, path: str) -> CatalogEntry:
         collections=collections,
         category=category,
         contributor=contributor,
-        environment=environment,
+        upstream_url=upstream_url,
         readme_body="\n".join(lines[index:]).strip(),
     )
 
 
-def load_catalog(root: Path) -> list[CatalogEntry]:
+def load_catalog(
+    root: Path,
+    categories: tuple[Category, ...] | None = None,
+    collections: tuple[Collection, ...] | None = None,
+) -> list[CatalogEntry]:
     """Discover examples and validate catalog metadata in their READMEs."""
 
-    paths = discover_example_paths(root)
+    if categories is None or collections is None:
+        loaded_categories, loaded_collections = load_discovery_groups(root)
+        categories = categories or loaded_categories
+        collections = collections or loaded_collections
+    categories_by_id = {category.id: category for category in categories}
+    collections_by_value = {
+        collection.metadata_value: collection for collection in collections
+    }
+    paths = discover_example_paths(root, categories_by_id)
     if not paths:
         raise CatalogError("No canonical example READMEs were discovered.")
-    entries = [parse_readme_metadata(root, path) for path in paths]
-    category_order = {category.id: index for index, category in enumerate(CATEGORIES)}
+    entries = [
+        parse_readme_metadata(
+            root,
+            path,
+            categories_by_id,
+            collections_by_value,
+        )
+        for path in paths
+    ]
+    category_order = {
+        category.id: index for index, category in enumerate(categories)
+    }
     def sort_key(entry: CatalogEntry) -> tuple[int, str, str, str]:
         qualifier = ""
         if entry.category.id == "partner-recipes":
             qualifier = (entry.contributor or "").casefold()
-        elif entry.category.id == "launchables":
-            qualifier = (entry.environment or "").casefold()
         return (
             category_order[entry.category.id],
             qualifier,
@@ -636,10 +856,115 @@ def _markdown_cell(value: str) -> str:
     return value.replace("\\", "\\\\").replace("|", "\\|").replace("\n", " ")
 
 
-def render_readme(entries: Iterable[CatalogEntry]) -> str:
+def group_entries(
+    entries: Iterable[CatalogEntry],
+    categories: Iterable[Category],
+) -> dict[str, list[CatalogEntry]]:
+    grouped = {category.id: [] for category in categories}
+    for entry in entries:
+        grouped[entry.category.id].append(entry)
+    return grouped
+
+
+def entries_for_collection(
+    entries: Iterable[CatalogEntry],
+    collection: Collection,
+) -> list[CatalogEntry]:
+    return [
+        entry for entry in entries if collection.id in entry.collection_ids
+    ]
+
+
+def _render_markdown_entries(
+    entries: list[CatalogEntry],
+    relative_to: PurePosixPath,
+    *,
+    show_category: bool = False,
+    show_contributor: bool = False,
+) -> list[str]:
+    if not entries:
+        return ["_No examples are currently in this group._"]
+    headers = ["Example"]
+    if show_category:
+        headers.append("Category")
+    if show_contributor:
+        headers.append("Contributor")
+    headers.extend(("Industry", "Description"))
+    lines = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join("---" for _ in headers) + " |",
+    ]
+    for entry in entries:
+        relative_readme = posixpath.relpath(entry.readme_path, relative_to.as_posix())
+        cells = [f"[{_markdown_cell(entry.title)}]({relative_readme})"]
+        if show_category:
+            cells.append(_markdown_cell(entry.category.title))
+        if show_contributor:
+            cells.append(_markdown_cell(entry.contributor or ""))
+        cells.extend(
+            (
+                _markdown_cell(entry.industry_label),
+                _markdown_cell(entry.description),
+            )
+        )
+        lines.append("| " + " | ".join(cells) + " |")
+    return lines
+
+
+def render_discovery_readmes(
+    entries: list[CatalogEntry],
+    categories: tuple[Category, ...],
+    collections: tuple[Collection, ...],
+) -> dict[str, str]:
+    """Render the generated membership list in every browse-group README."""
+
+    grouped = group_entries(entries, categories)
+    rendered: dict[str, str] = {}
+    groups: tuple[Category | Collection, ...] = (*categories, *collections)
+    for group in groups:
+        if isinstance(group, Category):
+            members = grouped[group.id]
+            show_category = False
+            show_contributor = group.id == "partner-recipes"
+        else:
+            members = entries_for_collection(entries, group)
+            show_category = True
+            show_contributor = False
+        lines = [
+            "<!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->",
+            "<!-- SPDX-License-Identifier: Apache-2.0 -->",
+            "",
+            f"# {group.title}",
+            "",
+            group.description,
+            "",
+            GENERATED_EXAMPLES_BEGIN,
+            "## Examples",
+            "",
+            "This list is generated from each example's README catalog metadata.",
+            "",
+            *_render_markdown_entries(
+                members,
+                PurePosixPath(group.readme_path).parent,
+                show_category=show_category,
+                show_contributor=show_contributor,
+            ),
+            "",
+            GENERATED_EXAMPLES_END,
+            "",
+        ]
+        rendered[group.readme_path] = "\n".join(lines)
+    return rendered
+
+
+def render_readme(
+    entries: list[CatalogEntry],
+    categories: tuple[Category, ...],
+    collections: tuple[Collection, ...],
+) -> str:
     """Render the human-readable source catalog from canonical metadata."""
 
-    grouped = group_entries(entries)
+    grouped = group_entries(entries, categories)
     lines = [
         "<!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->",
         "<!-- SPDX-License-Identifier: Apache-2.0 -->",
@@ -653,51 +978,41 @@ def render_readme(entries: Iterable[CatalogEntry]) -> str:
         "`python3 scripts/build_catalog.py --write` from the repository root.",
         "",
     ]
-    for category in CATEGORIES:
+    for category in categories:
         category_entries = grouped[category.id]
-        lines.extend((f"## {category.title}", ""))
-        if category.id == "partner-recipes":
-            lines.extend(
-                (
-                    "| Contributor | Example | Industry | Description |",
-                    "| --- | --- | --- | --- |",
-                )
+        category_link = posixpath.relpath(category.readme_path, "examples")
+        lines.extend(
+            (
+                f"## [{category.title}]({category_link})",
+                "",
+                category.description,
+                "",
+                *_render_markdown_entries(
+                    category_entries,
+                    PurePosixPath("examples"),
+                    show_contributor=category.id == "partner-recipes",
+                ),
+                "",
             )
-            for entry in category_entries:
-                lines.append(
-                    f"| {_markdown_cell(entry.contributor or '')} | "
-                    f"[{_markdown_cell(entry.title)}]({entry.path}/README.md) | "
-                    f"{_markdown_cell(entry.industry_label)} | "
-                    f"{_markdown_cell(entry.description)} |"
-                )
-        elif category.id == "launchables":
-            lines.extend(
-                (
-                    "| Environment | Example | Industry | Description |",
-                    "| --- | --- | --- | --- |",
-                )
+        )
+
+    lines.extend(("## Recipe Collections", ""))
+    for collection in collections:
+        collection_link = posixpath.relpath(collection.readme_path, "examples")
+        lines.extend(
+            (
+                f"### [{collection.title}]({collection_link})",
+                "",
+                collection.description,
+                "",
+                *_render_markdown_entries(
+                    entries_for_collection(entries, collection),
+                    PurePosixPath("examples"),
+                    show_category=True,
+                ),
+                "",
             )
-            for entry in category_entries:
-                lines.append(
-                    f"| {_markdown_cell(entry.environment or '')} | "
-                    f"[{_markdown_cell(entry.title)}]({entry.path}/README.md) | "
-                    f"{_markdown_cell(entry.industry_label)} | "
-                    f"{_markdown_cell(entry.description)} |"
-                )
-        else:
-            lines.extend(
-                (
-                    "| Example | Industry | Description |",
-                    "| --- | --- | --- |",
-                )
-            )
-            for entry in category_entries:
-                lines.append(
-                    f"| [{_markdown_cell(entry.title)}]({entry.path}/README.md) | "
-                    f"{_markdown_cell(entry.industry_label)} | "
-                    f"{_markdown_cell(entry.description)} |"
-                )
-        lines.append("")
+        )
 
     lines.extend(
         (
@@ -715,46 +1030,63 @@ def render_readme(entries: Iterable[CatalogEntry]) -> str:
     return "\n".join(lines)
 
 
-def group_entries(entries: Iterable[CatalogEntry]) -> dict[str, list[CatalogEntry]]:
-    grouped = {category.id: [] for category in CATEGORIES}
-    for entry in entries:
-        grouped[entry.category.id].append(entry)
-    return grouped
-
-
 def _plural(count: int, noun: str = "example") -> str:
     return f"{count} {noun if count == 1 else noun + 's'}"
 
 
-def render_category_nav(entries: list[CatalogEntry]) -> str:
-    grouped = group_entries(entries)
+def _render_category_tile(
+    browse_id: str,
+    title: str,
+    description: str,
+    count: int,
+    *,
+    is_collection: bool,
+) -> str:
+    tile_classes = "category-tile"
+    if is_collection:
+        tile_classes += " category-tile-collection"
+    collection_label = "\n      <small>Collection</small>" if is_collection else ""
+    info_id = f"{browse_id}-description"
+    return f'''<div class="{tile_classes}" data-empty="{str(count == 0).lower()}">
+  <a class="category-tile-link" href="?category={browse_id}#catalog">
+    <span class="category-name">{html.escape(title)}{collection_label}</span>
+    <span class="category-count">{_plural(count)} <span aria-hidden="true">→</span></span>
+  </a>
+  <div class="category-info" data-category-info>
+    <button type="button" aria-label="About {html.escape(title, quote=True)}" aria-controls="{info_id}" aria-expanded="false"><span aria-hidden="true">i</span></button>
+    <p id="{info_id}" role="tooltip">{html.escape(description)}</p>
+  </div>
+</div>'''
+
+
+def render_category_nav(
+    entries: list[CatalogEntry],
+    categories: tuple[Category, ...],
+    collections: tuple[Collection, ...],
+) -> str:
+    grouped = group_entries(entries, categories)
     tiles = []
-    for category in CATEGORIES:
+    for category in categories:
         count = len(grouped[category.id])
         tiles.append(
-            "\n".join(
-                (
-                    f'<a class="category-tile" href="?category={category.id}#catalog">',
-                    f'  <span class="category-name">{html.escape(category.title)}</span>',
-                    f'  <span class="category-count">{_plural(count)} <span aria-hidden="true">→</span></span>',
-                    "</a>",
-                )
+            _render_category_tile(
+                category.id,
+                category.title,
+                category.description,
+                count,
+                is_collection=False,
             )
         )
-    hackathon_count = sum("hackathon" in entry.collections for entry in entries)
-    tiles.append(
-        "\n".join(
-            (
-                '<a class="category-tile category-tile-collection" '
-                'href="?category=hackathon-recipes#catalog">',
-                '  <span class="category-name">Hackathon Recipes '
-                '<small>Collection</small></span>',
-                f'  <span class="category-count">{_plural(hackathon_count)} '
-                '<span aria-hidden="true">→</span></span>',
-                "</a>",
+    for collection in collections:
+        tiles.append(
+            _render_category_tile(
+                collection.browse_id,
+                collection.title,
+                collection.description,
+                len(entries_for_collection(entries, collection)),
+                is_collection=True,
             )
         )
-    )
     return "\n".join(tiles)
 
 
@@ -778,10 +1110,18 @@ def render_industry_nav(entries: list[CatalogEntry]) -> str:
     )
 
 
-def category_filter_options(entries: list[CatalogEntry]) -> str:
-    grouped = group_entries(entries)
-    recipe_categories = CATEGORIES[:3]
-    other_categories = CATEGORIES[3:]
+def category_filter_options(
+    entries: list[CatalogEntry],
+    categories: tuple[Category, ...],
+    collections: tuple[Collection, ...],
+) -> str:
+    grouped = group_entries(entries, categories)
+    recipe_categories = tuple(
+        category for category in categories if category.kind == "recipe"
+    )
+    other_categories = tuple(
+        category for category in categories if category.kind != "recipe"
+    )
     recipe_options = "\n".join(
         f'<option value="{category.id}">{html.escape(category.title)} '
         f'({len(grouped[category.id])})</option>'
@@ -792,7 +1132,11 @@ def category_filter_options(entries: list[CatalogEntry]) -> str:
         f'({len(grouped[category.id])})</option>'
         for category in other_categories
     )
-    hackathon_count = sum("hackathon" in entry.collections for entry in entries)
+    collection_options = "\n".join(
+        f'<option value="{collection.browse_id}">{html.escape(collection.title)} '
+        f'({len(entries_for_collection(entries, collection))})</option>'
+        for collection in collections
+    )
     return "\n".join(
         (
             f'<option value="all">All examples ({len(entries)})</option>',
@@ -800,7 +1144,7 @@ def category_filter_options(entries: list[CatalogEntry]) -> str:
             indent(recipe_options, 2),
             "</optgroup>",
             '<optgroup label="Collections">',
-            f'  <option value="hackathon-recipes">Hackathon recipes ({hackathon_count})</option>',
+            indent(collection_options, 2),
             "</optgroup>",
             '<optgroup label="Other example formats">',
             indent(other_options, 2),
@@ -823,9 +1167,9 @@ def industry_filter_options(entries: list[CatalogEntry]) -> str:
 
 
 def render_card(entry: CatalogEntry) -> str:
-    collections = " ".join(entry.collections)
+    collections = " ".join(entry.collection_ids)
     collection_tags = "".join(
-        f'<li class="tag tag-collection">{html.escape(collection.title())}</li>'
+        f'<li class="tag tag-collection">{html.escape(collection.metadata_value)}</li>'
         for collection in entry.collections
     )
     return f'''<article
@@ -856,10 +1200,13 @@ def render_card(entry: CatalogEntry) -> str:
 </article>'''
 
 
-def render_catalog_groups(entries: list[CatalogEntry]) -> str:
-    grouped = group_entries(entries)
+def render_catalog_groups(
+    entries: list[CatalogEntry],
+    categories: tuple[Category, ...],
+) -> str:
+    grouped = group_entries(entries, categories)
     sections = []
-    for category in CATEGORIES:
+    for category in categories:
         cards = "\n".join(render_card(entry) for entry in grouped[category.id])
         sections.append(
             f'''<section
@@ -888,18 +1235,29 @@ def indent(value: str, spaces: int) -> str:
     return "\n".join(prefix + line if line else line for line in value.splitlines())
 
 
-def render_site(entries: list[CatalogEntry], template: str) -> str:
+def render_site(
+    entries: list[CatalogEntry],
+    categories: tuple[Category, ...],
+    collections: tuple[Collection, ...],
+    template: str,
+) -> str:
     represented_industries = len({entry.industry for entry in entries})
     replacements = {
         "{{EXAMPLE_COUNT}}": str(len(entries)),
         "{{INDUSTRY_COUNT}}": str(len(INDUSTRIES)),
         "{{REPRESENTED_INDUSTRY_COUNT}}": str(represented_industries),
-        "{{CATEGORY_COUNT}}": str(len(CATEGORIES)),
-        "{{CATEGORY_NAV}}": indent(render_category_nav(entries), 14),
+        "{{BROWSE_GROUP_COUNT}}": str(len(categories) + len(collections)),
+        "{{CATEGORY_NAV}}": indent(
+            render_category_nav(entries, categories, collections), 14
+        ),
         "{{INDUSTRY_NAV}}": indent(render_industry_nav(entries), 14),
-        "{{CATEGORY_OPTIONS}}": indent(category_filter_options(entries), 18),
+        "{{CATEGORY_OPTIONS}}": indent(
+            category_filter_options(entries, categories, collections), 18
+        ),
         "{{INDUSTRY_OPTIONS}}": indent(industry_filter_options(entries), 18),
-        "{{CATALOG_GROUPS}}": indent(render_catalog_groups(entries), 8),
+        "{{CATALOG_GROUPS}}": indent(
+            render_catalog_groups(entries, categories), 8
+        ),
     }
     rendered = template
     for marker, value in replacements.items():
@@ -917,23 +1275,29 @@ def render_site(entries: list[CatalogEntry], template: str) -> str:
     return rendered
 
 
-def public_catalog(entries: list[CatalogEntry]) -> dict[str, Any]:
-    grouped = group_entries(entries)
+def public_catalog(
+    entries: list[CatalogEntry],
+    categories: tuple[Category, ...],
+    collections: tuple[Collection, ...],
+) -> dict[str, Any]:
+    grouped = group_entries(entries, categories)
     industry_counts = {industry: 0 for industry in INDUSTRIES}
     for entry in entries:
         industry_counts[entry.industry] += 1
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "source": "https://github.com/NVIDIA/nemoclaw-community/tree/main/examples",
         "categories": [
             {
                 "id": category.id,
                 "label": category.title,
+                "description": category.description,
                 "kind": category.kind,
                 "provenance": category.provenance,
                 "count": len(grouped[category.id]),
+                "source_path": category.readme_path,
             }
-            for category in CATEGORIES
+            for category in categories
         ],
         "industries": [
             {
@@ -946,10 +1310,14 @@ def public_catalog(entries: list[CatalogEntry]) -> dict[str, Any]:
         ],
         "collections": [
             {
-                "id": "hackathon",
-                "label": "Hackathon recipes",
-                "count": sum("hackathon" in entry.collections for entry in entries),
+                "id": collection.id,
+                "browse_id": collection.browse_id,
+                "label": collection.title,
+                "description": collection.description,
+                "count": len(entries_for_collection(entries, collection)),
+                "source_path": collection.readme_path,
             }
+            for collection in collections
         ],
         "examples": [
             {
@@ -968,9 +1336,9 @@ def public_catalog(entries: list[CatalogEntry]) -> dict[str, Any]:
                     "label": entry.category.title,
                 },
                 "contributor": entry.contributor,
-                "environment": entry.environment,
-                "collections": list(entry.collections),
+                "collections": list(entry.collection_ids),
                 "requirements": entry.requirements,
+                "upstream_url": entry.upstream_url,
                 "source_path": entry.readme_path,
                 "guide_url": entry.guide_url,
                 "detail_url": entry.detail_url,
@@ -980,16 +1348,59 @@ def public_catalog(entries: list[CatalogEntry]) -> dict[str, Any]:
     }
 
 
-def taxonomy_contract() -> dict[str, list[str]]:
+def render_llms(entries: list[CatalogEntry]) -> str:
+    """Render a concise website-navigation index for language-model clients."""
+
+    lines = [
+        "# NemoClaw Community",
+        "",
+        "> A catalog of constrained, inspectable agent recipes, field demos, and developer tools built with NemoClaw.",
+        "",
+        "Use the industry and category fields below to select an example. Requirements are short summaries; read the linked source guide before running an example.",
+        "",
+        "## Catalog data",
+        "",
+        f"- [Browse the catalog]({PAGES_BASE_URL})",
+        f"- [Machine-readable catalog]({PAGES_BASE_URL}catalog.json)",
+        "",
+        "## Examples",
+        "",
+    ]
+    for entry in entries:
+        lines.extend(
+            (
+                f"- [{entry.title}]({entry.absolute_detail_url})",
+                f"  - Description: {entry.description}",
+                f"  - Category: {entry.category.title}",
+                f"  - Industry: {entry.industry_label}",
+                f"  - Requirements: {entry.requirements}",
+                f"  - Source: [README]({entry.guide_url})",
+            )
+        )
+        if entry.collections:
+            lines.append(
+                "  - Collections: "
+                + ", ".join(collection.title for collection in entry.collections)
+            )
+        if entry.upstream_url:
+            lines.append(f"  - Upstream: [Project](<{entry.upstream_url}>)")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def taxonomy_contract() -> dict[str, Any]:
     """Return stable browser identifiers for cross-language contract tests."""
 
     return {
         "categories": [
             "all",
-            *(category.id for category in CATEGORIES[:3]),
-            "hackathon-recipes",
-            *(category.id for category in CATEGORIES[3:]),
+            *(category.id for category in CATEGORY_DEFINITIONS),
+            *(collection.browse_id for collection in COLLECTION_DEFINITIONS),
         ],
+        "collection_categories": {
+            collection.browse_id: collection.id
+            for collection in COLLECTION_DEFINITIONS
+        },
         "industries": ["all", *(slugify(industry) for industry in INDUSTRIES)],
     }
 
@@ -1436,19 +1847,23 @@ def render_detail_pages(
         )
         collection_tags = "".join(
             f'\n              <li class="tag tag-collection">'
-            f'{html.escape(collection.title())}</li>'
+            f'{html.escape(collection.metadata_value)}</li>'
             for collection in entry.collections
         )
         if entry.contributor:
             attribution_fact = (
                 f"<div><dt>Contributor</dt><dd>{html.escape(entry.contributor)}</dd></div>"
             )
-        elif entry.environment:
-            attribution_fact = (
-                f"<div><dt>Environment</dt><dd>{html.escape(entry.environment)}</dd></div>"
-            )
         else:
             attribution_fact = ""
+        upstream_fact = ""
+        if entry.upstream_url:
+            upstream_fact = (
+                "<div><dt>Upstream project</dt><dd>"
+                f'<a href="{html.escape(entry.upstream_url, quote=True)}">'
+                "View upstream project <span aria-hidden=\"true\">↗</span>"
+                "</a></dd></div>"
+            )
         diagram_scripts = ""
         if has_mermaid:
             mermaid_url = _detail_relative(
@@ -1472,6 +1887,7 @@ def render_detail_pages(
             "{{COLLECTION_TAGS}}": collection_tags,
             "{{CATEGORY}}": html.escape(entry.category.singular),
             "{{ATTRIBUTION_FACT}}": attribution_fact,
+            "{{UPSTREAM_FACT}}": upstream_fact,
             "{{REQUIREMENTS}}": html.escape(entry.requirements),
             "{{TABLE_OF_CONTENTS}}": toc_html,
             "{{README_HTML}}": indent(readme_html, 12),
@@ -1512,6 +1928,7 @@ class GeneratedHTMLValidator(HTMLParser):
         self.fragments: set[str] = set()
         self.cards: list[dict[str, str]] = []
         self.category_groups: list[dict[str, str]] = []
+        self.category_info_controls: list[dict[str, str]] = []
         self.scripts: list[dict[str, str]] = []
         self.links: set[str] = set()
         self.resources: list[str] = []
@@ -1555,6 +1972,10 @@ class GeneratedHTMLValidator(HTMLParser):
             self.cards.append(values)
         if tag == "section" and "data-catalog-category" in values:
             self.category_groups.append(values)
+        if tag == "button" and values.get("aria-controls", "").endswith(
+            "-description"
+        ):
+            self.category_info_controls.append(values)
         if tag == "script":
             self.scripts.append(values)
             self._inside_script = True
@@ -1586,7 +2007,13 @@ class GeneratedHTMLValidator(HTMLParser):
             self.errors.append("Inline script content is not allowed.")
 
 
-def validate_generated_site(root: Path, entries: list[CatalogEntry], site_html: str) -> None:
+def validate_generated_site(
+    root: Path,
+    entries: list[CatalogEntry],
+    categories: tuple[Category, ...],
+    collections: tuple[Collection, ...],
+    site_html: str,
+) -> None:
     parser = GeneratedHTMLValidator()
     parser.feed(site_html)
     errors = list(parser.errors)
@@ -1651,7 +2078,7 @@ def validate_generated_site(root: Path, entries: list[CatalogEntry], site_html: 
             "data-readme": entry.readme_path,
             "data-category": entry.category.id,
             "data-industry": entry.industry_id,
-            "data-collections": " ".join(entry.collections),
+            "data-collections": " ".join(entry.collection_ids),
         }
         for entry in entries
     ]
@@ -1666,7 +2093,7 @@ def validate_generated_site(root: Path, entries: list[CatalogEntry], site_html: 
             errors.append(f"Generated card ID does not match {entry.title}.")
         if card.get("aria-labelledby") != f"{entry.id}-title":
             errors.append(f"Generated card label does not match {entry.title}.")
-    for category in CATEGORIES:
+    for category in categories:
         category_attrs = next(
             (
                 attrs
@@ -1678,8 +2105,39 @@ def validate_generated_site(root: Path, entries: list[CatalogEntry], site_html: 
         if category_attrs is None or category_attrs.get("tabindex") != "-1":
             errors.append(f"Category fragment is not focusable: {category.id}")
 
+    browse_groups: tuple[Category | Collection, ...] = (*categories, *collections)
+    expected_info_controls = [
+        {
+            "aria-label": f"About {group.title}",
+            "aria-controls": (
+                f"{group.id}-description"
+                if isinstance(group, Category)
+                else f"{group.browse_id}-description"
+            ),
+            "aria-expanded": "false",
+            "type": "button",
+        }
+        for group in browse_groups
+    ]
+    actual_info_controls = [
+        {
+            key: control.get(key, "") for key in expected_info_controls[0]
+        }
+        for control in parser.category_info_controls
+    ] if expected_info_controls else []
+    if actual_info_controls != expected_info_controls:
+        errors.append("Browse-group information controls are incomplete or mislabeled.")
+    for control in actual_info_controls:
+        if control["aria-controls"] not in parser.ids:
+            errors.append(
+                "Browse-group information control has no description: "
+                + control["aria-controls"]
+            )
+
     required_links = {
         "catalog.json",
+        "llms.txt",
+        "https://brev.nvidia.com/launchable/deploy?launchableID=env-3Azt0aYgVNFEuz7opyx3gscmowS",
         "https://github.com/NVIDIA/nemoclaw-community/blob/main/CONTRIBUTING.md#add-a-new-example",
         "https://github.com/NVIDIA/nemoclaw-community/blob/main/SUPPORT.md",
         "https://github.com/NVIDIA/nemoclaw-community/blob/main/SECURITY.md",
@@ -1811,6 +2269,8 @@ def validate_detail_pages(
             "https://github.com/NVIDIA/nemoclaw-community/blob/main/SUPPORT.md",
             "https://github.com/NVIDIA/nemoclaw-community/blob/main/SECURITY.md",
         }
+        if entry.upstream_url:
+            required_links.add(entry.upstream_url)
         missing_links = required_links - parser.links
         if missing_links:
             errors.append(
@@ -1859,17 +2319,23 @@ def verified_mermaid_asset(root: Path) -> Path:
     return asset
 
 
-def expected_outputs(
-    root: Path,
-) -> tuple[
-    list[CatalogEntry],
-    str,
-    str,
-    str,
-    dict[str, str],
-    set[str],
-]:
-    entries = load_catalog(root)
+@dataclass(frozen=True)
+class CatalogOutputs:
+    entries: list[CatalogEntry]
+    categories: tuple[Category, ...]
+    collections: tuple[Collection, ...]
+    readme: str
+    discovery_readmes: dict[str, str]
+    site_html: str
+    catalog_json: str
+    llms_txt: str
+    detail_pages: dict[str, str]
+    copied_assets: set[str]
+
+
+def expected_outputs(root: Path) -> CatalogOutputs:
+    categories, collections = load_discovery_groups(root)
+    entries = load_catalog(root, categories, collections)
     template_path = root / "site" / "index.template.html"
     detail_template_path = root / "site" / "detail.template.html"
     try:
@@ -1877,38 +2343,71 @@ def expected_outputs(
         detail_template = detail_template_path.read_text(encoding="utf-8")
     except OSError as error:
         raise CatalogError(f"Unable to read site templates: {error}") from error
-    rendered_readme = render_readme(entries)
-    rendered_site = render_site(entries, template)
-    rendered_json = json.dumps(public_catalog(entries), indent=2, ensure_ascii=False) + "\n"
+    rendered_readme = render_readme(entries, categories, collections)
+    rendered_discovery_readmes = render_discovery_readmes(
+        entries, categories, collections
+    )
+    rendered_site = render_site(entries, categories, collections, template)
+    rendered_json = json.dumps(
+        public_catalog(entries, categories, collections),
+        indent=2,
+        ensure_ascii=False,
+    ) + "\n"
+    rendered_llms = render_llms(entries)
     detail_pages, copied_assets = render_detail_pages(root, entries, detail_template)
-    validate_generated_site(root, entries, rendered_site)
+    validate_generated_site(
+        root, entries, categories, collections, rendered_site
+    )
     validate_detail_pages(root, entries, detail_pages)
     if any('class="language-mermaid"' in page for page in detail_pages.values()):
         verified_mermaid_asset(root)
-    return (
-        entries,
-        rendered_readme,
-        rendered_site,
-        rendered_json,
-        detail_pages,
-        copied_assets,
+    return CatalogOutputs(
+        entries=entries,
+        categories=categories,
+        collections=collections,
+        readme=rendered_readme,
+        discovery_readmes=rendered_discovery_readmes,
+        site_html=rendered_site,
+        catalog_json=rendered_json,
+        llms_txt=rendered_llms,
+        detail_pages=detail_pages,
+        copied_assets=copied_assets,
     )
 
 
 def check_catalog(root: Path) -> list[CatalogEntry]:
-    entries, expected_readme, _, _, _, _ = expected_outputs(root)
+    outputs = expected_outputs(root)
+    check_generated_readmes(root, outputs)
+    return outputs.entries
+
+
+def check_generated_readmes(root: Path, outputs: CatalogOutputs) -> None:
+    """Require the root and browse-group indexes to match generated membership."""
+
     readme_path = root / "examples" / "README.md"
     actual_readme = readme_path.read_text(encoding="utf-8")
-    if actual_readme != expected_readme:
+    if actual_readme != outputs.readme:
         raise CatalogError(
             "examples/README.md is out of date. Run "
             "`python3 scripts/build_catalog.py --write`."
         )
-    return entries
+    stale_group_readmes = [
+        path
+        for path, expected in outputs.discovery_readmes.items()
+        if (root / path).read_text(encoding="utf-8") != expected
+    ]
+    if stale_group_readmes:
+        raise CatalogError(
+            "Browse-group README membership is out of date: "
+            + ", ".join(stale_group_readmes)
+            + ". Run `python3 scripts/build_catalog.py --write`."
+        )
 
 
-def write_readme(root: Path, content: str) -> None:
-    (root / "examples" / "README.md").write_text(content, encoding="utf-8")
+def write_readmes(root: Path, outputs: CatalogOutputs) -> None:
+    (root / "examples" / "README.md").write_text(outputs.readme, encoding="utf-8")
+    for path, content in outputs.discovery_readmes.items():
+        (root / path).write_text(content, encoding="utf-8")
 
 
 def build_site(
@@ -1916,6 +2415,7 @@ def build_site(
     output: Path,
     site_html: str,
     catalog_json: str,
+    llms_txt: str = "",
     detail_pages: dict[str, str] | None = None,
     copied_assets: set[str] | None = None,
 ) -> None:
@@ -1966,6 +2466,7 @@ def build_site(
     output.mkdir(parents=True)
     (output / "index.html").write_text(site_html, encoding="utf-8")
     (output / "catalog.json").write_text(catalog_json, encoding="utf-8")
+    (output / "llms.txt").write_text(llms_txt, encoding="utf-8")
     shutil.copy2(shared_files[0], output / "styles.css")
     shutil.copy2(shared_files[1], output / "catalog.mjs")
     shutil.copytree(site_assets, output / "assets")
@@ -2044,48 +2545,30 @@ def main(argv: list[str] | None = None) -> int:
                 f"README catalog metadata is valid for {len(entries)} examples."
             )
             return 0
-        (
-            entries,
-            readme,
-            site_html,
-            catalog_json,
-            detail_pages,
-            copied_assets,
-        ) = expected_outputs(root)
+        outputs = expected_outputs(root)
         if args.check:
-            actual_readme = (root / "examples" / "README.md").read_text(
-                encoding="utf-8"
-            )
-            if actual_readme != readme:
-                raise CatalogError(
-                    "examples/README.md is out of date. Run "
-                    "`python3 scripts/build_catalog.py --write`."
-                )
+            check_generated_readmes(root, outputs)
             print(
                 f"Catalog metadata and generated sources are valid: "
-                f"{len(entries)} examples across {len(CATEGORIES)} categories."
+                f"{len(outputs.entries)} examples across "
+                f"{len(outputs.categories) + len(outputs.collections)} browse groups."
             )
             return 0
         if args.write:
-            write_readme(root, readme)
+            write_readmes(root, outputs)
         else:
-            actual_readme = (root / "examples" / "README.md").read_text(
-                encoding="utf-8"
-            )
-            if actual_readme != readme:
-                raise CatalogError(
-                    "examples/README.md is out of date. Run with --write first."
-                )
+            check_generated_readmes(root, outputs)
         build_site(
             root,
             output,
-            site_html,
-            catalog_json,
-            detail_pages,
-            copied_assets,
+            outputs.site_html,
+            outputs.catalog_json,
+            outputs.llms_txt,
+            outputs.detail_pages,
+            outputs.copied_assets,
         )
         print(
-            f"Built {len(entries)} catalog entries and detail pages in "
+            f"Built {len(outputs.entries)} catalog entries and detail pages in "
             f"{output.relative_to(root)}."
         )
         return 0

@@ -15,9 +15,14 @@ downloaded at build time and served locally only on pages that contain diagrams.
 
 ```text
 example root READMEs ──┬─> examples/README.md
+                       ├─> category and collection README inventories
                        ├─> _site/index.html
                        ├─> _site/examples/<canonical-path>/index.html
-                       └─> _site/catalog.json
+                       ├─> _site/catalog.json
+                       └─> _site/llms.txt
+category and collection
+index README titles ───┬─> browse labels and information tooltips
+and descriptions       └─> category and collection data in catalog.json
 site/*.template.html ──┬─> generated HTML
 site/styles.css ───────┼─> _site/styles.css
 site/catalog.mjs ──────┼─> _site/catalog.mjs
@@ -26,11 +31,23 @@ Mermaid Tiny cache ────┴─> _site/assets/vendor/mermaid.tiny.js
 ```
 
 The standardized catalog block at the top of each example's root `README.md` is
-the canonical metadata source. [`scripts/build_catalog.py`](../scripts/build_catalog.py)
-discovers those READMEs from the repository taxonomy, validates their title,
-required `Description` table row, industry emoji and title, requirements, and
+the canonical example metadata source.
+[`scripts/build_catalog.py`](../scripts/build_catalog.py) discovers those
+READMEs from the repository taxonomy, validates their title, required
+`Description` table row, industry emoji and title, requirements, and
 conditional fields, then derives artifact kind and recipe provenance from each
-path. The ignored `_site/` directory is disposable; do not edit it directly.
+path. An optional `Upstream` field identifies a separate canonical public
+project that the example adapts.
+
+Each of the five canonical categories and two collection views has an index
+README. Its H1 and opening description are the authored source for the browse
+label and information tooltip. The build retains those values while rewriting
+each index into its standardized shape and regenerating the inventory inside
+the `<!-- BEGIN GENERATED EXAMPLES -->` and
+`<!-- END GENERATED EXAMPLES -->` markers. No other index sections are
+permitted. Collection directories are indexes only; they never contain
+examples. The ignored `_site/` directory is disposable; do not edit it
+directly.
 
 The generated HTML contains every example card. The local JavaScript module
 filters those cards in the browser, so the full category-organized catalog
@@ -68,14 +85,14 @@ publication, and never loaded from a CDN by a reader's browser.
 
 The catalog keeps these concepts separate:
 
-- `kind` is `recipe`, `demo`, `launchable`, or `tool` and comes from the
-  canonical path.
+- `kind` is `recipe`, `demo`, or `tool` and comes from the canonical path.
 - `provenance` is `nvidia`, `partner`, or `community`, applies only to recipes,
   and also comes from the canonical path.
 - `industry` is one required controlled emoji-and-title value on every example,
   independent of kind and provenance.
-- `collection` is an optional cross-cutting discovery field. `Hackathon` is a
-  collection; it does not replace kind, provenance, or contributor attribution.
+- `collection` is an optional cross-cutting recipe discovery field.
+  `Hackathon` and `Build-a-Claw` are collections; neither replaces kind,
+  provenance, canonical path, or contributor attribution.
 
 The build rejects unknown taxonomy roots, unsafe or invalid example paths,
 canonical example directories without a root README, malformed metadata
@@ -88,9 +105,9 @@ bookmarked, or created by another program:
 
 | Parameter | Values | Behavior |
 | --- | --- | --- |
-| `q` | Plain text | Case-insensitive whitespace-token AND search across title, description, requirements, category and provenance display text, industry, contributor, environment, and collections. |
+| `q` | Plain text | Case-insensitive whitespace-token AND search across title, description, requirements, category and provenance display text, industry, contributor, and collections. |
 | `view` | `category` or `industry` | Selects which discovery dimension is active. The default is `category`. |
-| `category` | `all`, `nvidia-recipes`, `partner-recipes`, `community-recipes`, `hackathon-recipes`, `nvidia-field-demos`, `launchables`, or `developer-tools` | Applies in category view. `hackathon-recipes` selects recipes carrying the `hackathon` collection. |
+| `category` | `all`, `nvidia-recipes`, `partner-recipes`, `community-recipes`, `nvidia-field-demos`, `developer-tools`, `hackathon-recipes`, or `build-a-claw-recipes` | Applies in category view. The final two values select recipes carrying the matching collection. |
 | `industry` | `all` or an industry ID published in `catalog.json` | Applies in industry view. |
 
 Examples:
@@ -103,23 +120,36 @@ https://nvidia.github.io/nemoclaw-community/?q=slack&category=nvidia-recipes
 Unknown values are removed and replaced with defaults. Search typing updates
 the current history entry; deliberate view and filter changes create history
 entries, so browser Back and Forward restore prior views. Existing category
-and example fragments remain valid.
+and example fragments for the supported taxonomy remain valid.
 
 ## Machine-Readable Catalog
 
 [`https://nvidia.github.io/nemoclaw-community/catalog.json`](https://nvidia.github.io/nemoclaw-community/catalog.json)
 publishes a deterministic JSON index containing:
 
-- category IDs, labels, kinds, provenance, and counts;
+- category IDs, labels, descriptions, kinds, provenance, and counts;
 - every allowed industry ID, label, emoji, and current count;
-- collection IDs and counts;
+- collection IDs, labels, descriptions, and counts;
 - each example's title, description, category, kind, recipe provenance,
-  industry, contributor or environment when applicable, collections,
-  requirements, source path, source guide URL, and local detail URL.
+  industry, contributor when applicable, collections, requirements, optional
+  upstream project URL, source path, source guide URL, and local detail URL.
 
 This is a static index rather than a server-side query API. A program can fetch
 it once and apply its own filters, or construct a browser URL using the query
 contract above.
+
+## Agent-Oriented Text Index
+
+[`https://nvidia.github.io/nemoclaw-community/llms.txt`](https://nvidia.github.io/nemoclaw-community/llms.txt)
+publishes the catalog overview, filter guidance, category and collection
+fields, and one concise record for every example. Each record includes the
+example's category, industry, requirements, detail page, source guide,
+collections, and optional upstream project.
+
+The build creates `llms.txt` directly from the same validated README data used
+for `catalog.json`; it is a second generated representation, not a metadata
+source or a file contributors edit. Programs that need typed fields and counts
+should continue to use `catalog.json`.
 
 ## Update And Verify
 

@@ -1,6 +1,6 @@
 ---
 name: nemoclaw-community-contributor-examples
-description: Guide NemoClaw Community contributors through classifying, naming, adding, moving, renaming, and reviewing repository examples. Use when work affects examples, recipes, partner contributions, field demos, launchables, developer tools, the example catalog, or example paths.
+description: Guide NemoClaw Community contributors through classifying, naming, adding, moving, renaming, and reviewing repository examples. Use when work affects examples, recipes, partner contributions, field demos, developer tools, catalog collections, category indexes, upstream links, or example paths.
 ---
 
 <!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->

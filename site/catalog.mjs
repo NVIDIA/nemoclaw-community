@@ -15,11 +15,16 @@ export const CATALOG_CATEGORIES = Object.freeze([
   "nvidia-recipes",
   "partner-recipes",
   "community-recipes",
-  "hackathon-recipes",
   "nvidia-field-demos",
-  "launchables",
   "developer-tools",
+  "hackathon-recipes",
+  "build-a-claw-recipes",
 ]);
+
+export const CATALOG_COLLECTION_CATEGORIES = Object.freeze({
+  "hackathon-recipes": "hackathon",
+  "build-a-claw-recipes": "build-a-claw",
+});
 
 export const CATALOG_INDUSTRIES = Object.freeze([
   "all",
@@ -145,10 +150,13 @@ export function serializeCatalogURLState(state = {}) {
 
 function splitCollections(value) {
   if (Array.isArray(value)) {
-    return value.map(normalizeSearchText).filter(Boolean);
+    return value.map((item) => normalizeWhitespace(item).toLocaleLowerCase("en-US"))
+      .filter(Boolean);
   }
 
-  return normalizeSearchText(value).split(/[\s,]+/u).filter(Boolean);
+  return normalizeWhitespace(value).toLocaleLowerCase("en-US")
+    .split(/[\s,]+/u)
+    .filter(Boolean);
 }
 
 function recordValue(record, key) {
@@ -166,9 +174,10 @@ export function matchesCatalogRecord(record, state = {}) {
   }
 
   if (canonical.view === "category" && canonical.category !== "all") {
-    if (canonical.category === "hackathon-recipes") {
+    const collection = CATALOG_COLLECTION_CATEGORIES[canonical.category];
+    if (collection) {
       const collections = splitCollections(recordValue(record, "collections"));
-      if (!collections.includes("hackathon")) {
+      if (!collections.includes(collection)) {
         return false;
       }
     } else if (recordValue(record, "category") !== canonical.category) {
@@ -209,6 +218,58 @@ function hashTarget(documentObject, locationObject) {
   }
 }
 
+export function initCategoryInfo(documentObject = globalThis.document) {
+  if (!documentObject?.querySelectorAll) {
+    return;
+  }
+
+  const containers = [...documentObject.querySelectorAll("[data-category-info]")];
+  if (containers.length === 0) {
+    return;
+  }
+  const close = (container) => {
+    container.dataset.open = "false";
+    container.querySelector("button")?.setAttribute("aria-expanded", "false");
+  };
+
+  for (const container of containers) {
+    const button = container.querySelector("button[aria-controls]");
+    if (!button) {
+      continue;
+    }
+    button.addEventListener("click", () => {
+      const opening = button.getAttribute("aria-expanded") !== "true";
+      for (const other of containers) {
+        close(other);
+      }
+      if (opening) {
+        container.dataset.dismissed = "false";
+        container.dataset.open = "true";
+        button.setAttribute("aria-expanded", "true");
+      } else {
+        container.dataset.dismissed = "true";
+      }
+    });
+    button.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        close(container);
+        container.dataset.dismissed = "true";
+      }
+    });
+    container.addEventListener?.("pointerleave", () => {
+      container.dataset.dismissed = "false";
+    });
+  }
+
+  documentObject.addEventListener?.("click", (event) => {
+    if (!event.target?.closest?.("[data-category-info]")) {
+      for (const container of containers) {
+        close(container);
+      }
+    }
+  });
+}
+
 export function initCatalog({
   documentObject = globalThis.document,
   windowObject = globalThis.window,
@@ -216,6 +277,8 @@ export function initCatalog({
   if (!documentObject || !windowObject) {
     return null;
   }
+
+  initCategoryInfo(documentObject);
 
   const controls = documentObject.getElementById("catalog-controls");
   const viewControls = documentObject.getElementById("catalog-view-controls");
