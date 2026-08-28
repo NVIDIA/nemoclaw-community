@@ -146,7 +146,6 @@ maturity.
 | --- | --- |
 | `example: recipe` | A complete reusable agent workflow is proposed or published. |
 | `example: demo` | A bounded field demonstration is proposed or published. |
-| `example: launchable` | Environment provisioning or onboarding is proposed or published. |
 | `example: tool` | A standalone developer or evaluation utility is proposed or published. |
 
 Apply at most one `example:*` label unless a coordinated catalog migration

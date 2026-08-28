@@ -8,10 +8,12 @@ import test from "node:test";
 
 import {
   CATALOG_CATEGORIES,
+  CATALOG_COLLECTION_CATEGORIES,
   CATALOG_INDUSTRIES,
   DEFAULT_CATALOG_STATE,
   canonicalizeCatalogState,
   initCatalog,
+  initCategoryInfo,
   matchesCatalogRecord,
   normalizeSearchText,
   parseCatalogURLState,
@@ -66,7 +68,7 @@ test("category view matches the exact recipe category", () => {
   );
 });
 
-test("hackathon recipes are selected through collections", () => {
+test("recipe collections select their matching membership", () => {
   const hackathonRecord = {
     category: "community-recipes",
     collections: ["hackathon", "featured"],
@@ -87,6 +89,20 @@ test("hackathon recipes are selected through collections", () => {
     matchesCatalogRecord(regularRecord, {
       view: "category",
       category: "hackathon-recipes",
+    }),
+    false,
+  );
+  assert.equal(
+    matchesCatalogRecord(
+      { category: "nvidia-recipes", collections: ["build-a-claw"] },
+      { view: "category", category: "build-a-claw-recipes" },
+    ),
+    true,
+  );
+  assert.equal(
+    matchesCatalogRecord(hackathonRecord, {
+      view: "category",
+      category: "build-a-claw-recipes",
     }),
     false,
   );
@@ -162,7 +178,66 @@ test("inactive facets are removed from URL state", () => {
 
 test("client facet identifiers match the README catalog builder", () => {
   assert.deepEqual(CATALOG_CATEGORIES, taxonomy.categories);
+  assert.deepEqual(
+    CATALOG_COLLECTION_CATEGORIES,
+    taxonomy.collection_categories,
+  );
   assert.deepEqual(CATALOG_INDUSTRIES, taxonomy.industries);
+});
+
+test("category information buttons toggle one description at a time", () => {
+  function informationControl() {
+    const listeners = new Map();
+    const containerListeners = new Map();
+    const attributes = new Map([["aria-expanded", "false"]]);
+    const button = {
+      addEventListener: (type, listener) => listeners.set(type, listener),
+      emit: (type, event) => listeners.get(type)?.(event),
+      getAttribute: (name) => attributes.get(name) ?? null,
+      setAttribute: (name, value) => attributes.set(name, value),
+    };
+    const container = {
+      dataset: {},
+      addEventListener: (type, listener) => containerListeners.set(type, listener),
+      emit: (type) => containerListeners.get(type)?.(),
+      querySelector: () => button,
+    };
+    return { attributes, button, container };
+  }
+
+  const first = informationControl();
+  const second = informationControl();
+  const documentListeners = new Map();
+  initCategoryInfo({
+    querySelectorAll: () => [first.container, second.container],
+    addEventListener: (type, listener) => documentListeners.set(type, listener),
+  });
+
+  first.button.emit("click");
+  assert.equal(first.container.dataset.open, "true");
+  assert.equal(first.attributes.get("aria-expanded"), "true");
+
+  first.button.emit("click");
+  assert.equal(first.container.dataset.open, "false");
+  assert.equal(first.container.dataset.dismissed, "true");
+  assert.equal(first.attributes.get("aria-expanded"), "false");
+
+  first.container.emit("pointerleave");
+  assert.equal(first.container.dataset.dismissed, "false");
+  first.button.emit("click");
+
+  second.button.emit("click");
+  assert.equal(first.container.dataset.open, "false");
+  assert.equal(second.container.dataset.open, "true");
+
+  second.button.emit("keydown", { key: "Escape" });
+  assert.equal(second.container.dataset.open, "false");
+  assert.equal(second.container.dataset.dismissed, "true");
+
+  second.button.emit("click");
+
+  documentListeners.get("click")({ target: { closest: () => null } });
+  assert.equal(second.container.dataset.open, "false");
 });
 
 function fakeControl(properties = {}) {

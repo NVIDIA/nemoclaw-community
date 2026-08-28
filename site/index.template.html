@@ -9,9 +9,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta
       name="description"
-      content="Search NemoClaw Community recipes, demos, launchables, and tools by example type or industry."
+      content="Search NemoClaw Community recipes, field demos, and developer tools by example type or industry."
     >
     <title>NemoClaw Community Example Catalog | NVIDIA</title>
+    <link rel="icon" type="image/png" sizes="64x64" href="assets/nvidia-favicon.png">
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
@@ -26,10 +27,28 @@
           <span class="brand-divider" aria-hidden="true"></span>
           <span class="product-name">NemoClaw Community</span>
         </div>
-        <a class="repository-link" href="https://github.com/NVIDIA/nemoclaw-community">
-          GitHub repository
-          <span aria-hidden="true">↗</span>
-        </a>
+        <nav class="header-links" aria-label="NemoClaw resources">
+          <a
+            class="repository-link"
+            href="https://brev.nvidia.com/launchable/deploy?launchableID=env-3Azt0aYgVNFEuz7opyx3gscmowS"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Launch NemoClaw on Brev (opens in a new tab)"
+          >
+            <span class="header-link-wide">Launch NemoClaw on Brev</span><span class="header-link-compact">Brev</span>
+            <span aria-hidden="true">↗</span>
+          </a>
+          <a
+            class="repository-link"
+            href="https://github.com/NVIDIA/nemoclaw-community"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="GitHub repository (opens in a new tab)"
+          >
+            <span class="header-link-wide">GitHub repository</span><span class="header-link-compact">GitHub</span>
+            <span aria-hidden="true">↗</span>
+          </a>
+        </nav>
       </div>
     </header>
 
@@ -40,8 +59,8 @@
           <div class="hero-support">
             <div class="hero-copy">
               <p class="hero-summary">
-                Explore reusable recipes, field demos, launchables, and developer
-                tools—then narrow the catalog by type, provenance, collection, or industry.
+                Explore reusable recipes, field demos, and developer tools—then
+                narrow the catalog by type, provenance, collection, or industry.
               </p>
               <nav class="hero-actions" aria-label="Catalog actions">
                 <a class="button button-primary" href="#catalog">Search examples <span aria-hidden="true">↓</span></a>
@@ -55,7 +74,7 @@
             </div>
             <dl class="hero-stats" aria-label="Catalog coverage">
               <div><dt>{{EXAMPLE_COUNT}}</dt><dd>Examples</dd></div>
-              <div><dt>{{CATEGORY_COUNT}}</dt><dd>Catalog categories</dd></div>
+              <div><dt>{{BROWSE_GROUP_COUNT}}</dt><dd>Catalog groupings</dd></div>
               <div><dt>{{REPRESENTED_INDUSTRY_COUNT}}</dt><dd>Industries represented</dd></div>
             </dl>
           </div>
@@ -130,7 +149,10 @@
               provenance, collections, and industries.
             </p>
           </div>
-          <a class="data-link" href="catalog.json">Use generated catalog JSON <span aria-hidden="true">→</span></a>
+          <nav class="data-links" aria-label="Machine-readable catalog resources">
+            <a class="data-link" href="catalog.json">Use generated catalog JSON <span aria-hidden="true">→</span></a>
+            <a class="data-link" href="llms.txt">Use agent navigation index <span aria-hidden="true">→</span></a>
+          </nav>
         </div>
 
         <div
@@ -203,6 +225,8 @@
           <a href="https://github.com/NVIDIA/nemoclaw-community">Repository</a>
           <a href="https://github.com/NVIDIA/nemoclaw-community/blob/main/SUPPORT.md">Support</a>
           <a href="https://github.com/NVIDIA/nemoclaw-community/blob/main/SECURITY.md">Security</a>
+          <a href="https://brev.nvidia.com/launchable/deploy?launchableID=env-3Azt0aYgVNFEuz7opyx3gscmowS">Launch NemoClaw on Brev</a>
+          <a href="llms.txt">Agent index</a>
           <a href="https://github.com/brevdev/nemoclaw-demos">Additional examples</a>
         </nav>
       </div>

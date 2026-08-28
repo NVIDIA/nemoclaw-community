@@ -80,6 +80,11 @@ echo "2/3  Carrying over the model settings"
 # that took `model.default` and silently dropped `provider` and `base_url`
 # passed both checks below and got all seven jobs registered, pointed at
 # whatever route it had left.
+# What a profile holds instead of a key when an OpenShell gateway substitutes
+# the credential at the boundary. A public constant, not a secret — it is only
+# ever compared against and echoed when it matches.
+GATEWAY_REWRITE_MARKER="sk-OPENSHELL-PROXY-REWRITE"
+
 carried=()
 for key in model.default model.provider model.base_url; do
   value="$(hermes config get "$key" 2>/dev/null | head -1 || true)"
@@ -150,6 +155,22 @@ if [[ -z "$credential" || "$credential" == *"not set"* ]]; then
     echo "Set one, then re-run this script:" >&2
     echo "  hermes -p $PROFILE config set model.api_key <key>" >&2
     echo "" >&2
+    # Neither of the two answers above is the right one behind a gateway that
+    # substitutes the credential at the boundary. There the profile holds a
+    # fixed rewrite marker rather than a key: a real key would be a secret
+    # written into a second config file for no reason, and no key at all
+    # sends `no-key-required`, which the endpoint rejects. The marker is a
+    # public constant, so it is echoed only when the profile these settings
+    # came from is already using exactly it — a real key never matches and
+    # is never printed.
+    source_key="$(hermes config get model.api_key 2>/dev/null | head -1 || true)"
+    if [[ "$source_key" == "$GATEWAY_REWRITE_MARKER" ]]; then
+      echo "This looks like a gateway-backed endpoint: the profile these" >&2
+      echo "settings came from holds the substitution marker rather than a" >&2
+      echo "key, and the gateway rewrites it at the boundary. Use the same:" >&2
+      echo "  hermes -p $PROFILE config set model.api_key $GATEWAY_REWRITE_MARKER" >&2
+      echo "" >&2
+    fi
     echo "If your endpoint needs no key, say so explicitly:" >&2
     echo "  ALLOW_NO_API_KEY=1 bash scripts/install.sh" >&2
     exit 1

@@ -1336,6 +1336,204 @@ esac
                           f"{name} never mentions the prerequisite")
 
 
+class TestTheInstallerNamesTheKeyThatWorks(unittest.TestCase):
+    """Behind a gateway that substitutes the credential, neither answer the
+    installer gave was the right one.
+
+    A real key would be a secret written into a second config file for no
+    reason, and no key at all sends `no-key-required`, which the endpoint
+    rejects — so `ALLOW_NO_API_KEY=1` produces a profile that passes this
+    check and then fails to authenticate on every scheduled run. Measured on
+    a NemoClaw host: the working profile beside it held the rewrite marker.
+
+    The marker is a public constant, so it is echoed only when the profile
+    these settings came from is already using exactly it. A real key never
+    matches, which is the half of this that must not regress.
+    """
+
+    RECIPE = HERE.parents[1]
+    MARKER = "sk-OPENSHELL-PROXY-REWRITE"
+
+    STUB = """#!/usr/bin/env bash
+store="${STUB_STORE:?}"; profile=""
+args=(); while [ $# -gt 0 ]; do
+  case "$1" in -p) profile="$2"; shift 2;; *) args+=("$1"); shift;; esac
+done
+set -- "${args[@]}"
+case "$1 $2" in
+  "profile show") echo "Path: ${STUB_HOME}"; exit 0;;
+  "profile install") echo "Installed"; exit 0;;
+  "config get")
+      if [ -z "$profile" ]; then
+        case "$3" in
+          model.default) echo "a/model";; model.provider) echo "custom";;
+          model.base_url) echo "https://inference.local/v1";;
+          model.api_key) echo "${STUB_SOURCE_KEY}";;
+        esac
+      else
+        v=$(grep "^$profile:$3=" "$store" 2>/dev/null | tail -1 | cut -d= -f2-)
+        [ -n "$v" ] && echo "$v" || echo "Config key not set: $3"
+      fi; exit 0;;
+  "config set") echo "$profile:$3=$4" >> "$store"; exit 0;;
+  *) exit 0;;
+esac
+"""
+
+    def run_install(self, folder, source_key):
+        """Run the installer with a `hermes` that answers from a script.
+
+        Small enough to be worth having: reaching the credential branch needs
+        `profile install`, `profile show` and `config get`/`set`, and nothing
+        after it, because the branch exits.
+        """
+        for name, body in (("hermes", self.STUB),
+                           ("uname", "#!/bin/sh\necho Linux\n")):
+            path = folder / name
+            path.write_text(body, encoding="utf-8")
+            path.chmod(0o755)
+        env = dict(os.environ)
+        env["PATH"] = f"{folder}{os.pathsep}{env['PATH']}"
+        env.update({"STUB_STORE": str(folder / "cfg"),
+                    "STUB_HOME": str(folder / "home"),
+                    "STUB_SOURCE_KEY": source_key,
+                    "PROFILE_NAME": "probe"})
+        (folder / "home").mkdir(exist_ok=True)
+        return subprocess.run(
+            ["bash", str(self.RECIPE / "scripts" / "install.sh")],
+            capture_output=True, text=True, cwd=str(self.RECIPE), env=env,
+            stdin=subprocess.DEVNULL)
+
+    def test_the_marker_is_named_when_that_is_what_the_endpoint_wants(self):
+        with tempfile.TemporaryDirectory() as folder:
+            proc = self.run_install(Path(folder), self.MARKER)
+        self.assertNotEqual(proc.returncode, 0, "it must still stop")
+        self.assertIn(self.MARKER, proc.stderr)
+        self.assertIn("config set model.api_key " + self.MARKER, proc.stderr)
+
+    def test_a_real_key_is_never_echoed(self):
+        """The check is an equality against a constant precisely so that this
+        cannot happen. A message that printed the source profile's key would
+        put a live credential in a terminal and a scrollback."""
+        secret = "sk-this-would-be-a-live-credential"
+        with tempfile.TemporaryDirectory() as folder:
+            proc = self.run_install(Path(folder), secret)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertNotIn(secret, proc.stderr + proc.stdout)
+        self.assertNotIn(self.MARKER, proc.stderr,
+                         "the gateway advice was offered where it does not"
+                         " apply")
+
+    def test_the_other_two_answers_are_still_offered(self):
+        """The marker is a third option, not a replacement: an endpoint that
+        wants a real key, and one that wants none, both still exist."""
+        with tempfile.TemporaryDirectory() as folder:
+            proc = self.run_install(Path(folder), self.MARKER)
+        self.assertIn("config set model.api_key <key>", proc.stderr)
+        self.assertIn("ALLOW_NO_API_KEY=1", proc.stderr)
+
+
+class TestTheMailboxRefusalSaysSomethingTrue(unittest.TestCase):
+    """A refusal that tells the user to do something ineffective.
+
+    On a machine where another recipe already supplies `MS_GRAPH_ACCESS_TOKEN`
+    to the same sandbox, `setup-graph.sh` refuses — correctly, because two
+    providers cannot both supply one key and this recipe's endpoint policy is
+    not the other one's. It then advised setting `GRAPH_PROVIDER_NAME` to a
+    different name, which changes nothing: the check reads the credential keys
+    of every attached provider and never consults that variable. Measured on a
+    real host, with and without it set, the output was identical.
+
+    These run the script, because the previous shape of this — reading the
+    source for the message — is what let the advice stay wrong.
+    """
+
+    RECIPE = HERE.parents[1]
+    SCRIPT = RECIPE / "scripts" / "setup-graph.sh"
+
+    def fake_openshell(self, folder):
+        """An `openshell` reporting a foreign provider holding the mail key.
+
+        `hermes-direct-outlook`, type `nemoclaw-outlook-email` — the shape a
+        machine running another Outlook recipe is actually in.
+        """
+        stub = folder / "openshell"
+        stub.write_text("""#!/usr/bin/env bash
+case "$1 $2" in
+  "sandbox provider") cat <<'LIST'
+NAME  TYPE  CREDENTIAL_KEYS
+hermes-direct-outlook  nemoclaw-outlook-email  1
+LIST
+  ;;
+  "provider get") printf 'Type: nemoclaw-outlook-email\nCredential keys: MS_GRAPH_ACCESS_TOKEN\n' ;;
+  *) exit 0 ;;
+esac
+""", encoding="utf-8")
+        stub.chmod(0o755)
+        # The scheduled path is Linux only and the script refuses elsewhere
+        # before reaching any of this. Reporting a Linux kernel is what lets
+        # the refusal under test be reached from a developer's machine; the
+        # guard itself has its own coverage above.
+        uname = folder / "uname"
+        uname.write_text("#!/bin/sh\necho Linux\n", encoding="utf-8")
+        uname.chmod(0o755)
+
+    def run_setup(self, folder, extra=None):
+        env = dict(os.environ)
+        env["PATH"] = f"{folder}{os.pathsep}{env['PATH']}"
+        env.update(extra or {})
+        return subprocess.run(
+            ["bash", str(self.SCRIPT)], capture_output=True, text=True,
+            cwd=str(self.RECIPE), env=env, stdin=subprocess.DEVNULL)
+
+    def base_env(self, folder):
+        return {"SANDBOX_STORAGE_PATH": str(folder),
+                "STORE_ENCRYPTION_ACKNOWLEDGED": "1"}
+
+    def test_the_foreign_provider_is_refused(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            self.fake_openshell(folder)
+            proc = self.run_setup(folder, self.base_env(folder))
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("nemoclaw-outlook-email", proc.stderr)
+
+    def test_renaming_the_provider_changes_nothing(self):
+        """The advice the message used to give. Run both ways and compare —
+        a message can only be wrong about this if the outcome is the same."""
+        outcomes = []
+        for extra in ({}, {"GRAPH_PROVIDER_NAME": "something-else"}):
+            with tempfile.TemporaryDirectory() as folder:
+                folder = Path(folder)
+                self.fake_openshell(folder)
+                env = self.base_env(folder)
+                env.update(extra)
+                proc = self.run_setup(folder, env)
+            outcomes.append((proc.returncode, "MS_GRAPH_ACCESS_TOKEN" in proc.stderr))
+        self.assertEqual(outcomes[0], outcomes[1],
+                         "renaming changed the outcome, so the old advice"
+                         " would have been right")
+        self.assertNotEqual(outcomes[0][0], 0)
+
+    def test_the_refusal_does_not_send_the_user_after_a_rename(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            self.fake_openshell(folder)
+            proc = self.run_setup(folder, self.base_env(folder))
+        self.assertIn("Renaming does not help", proc.stderr)
+        self.assertIn("detach", proc.stderr)
+
+    def test_the_refusal_says_the_collector_reads_it_anyway(self):
+        """The part a user has to know: refusing here stops a second
+        registration, not the reading. Inside the sandbox a credential names
+        the sandbox and the key and not the provider, so the collector cannot
+        tell which one handed it over."""
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            self.fake_openshell(folder)
+            proc = self.run_setup(folder, self.base_env(folder))
+        self.assertIn("still reads", proc.stderr)
+
+
 class TestTheEncryptionGateChecksAPathItWasGiven(unittest.TestCase):
     """The four tests above read the script; none of them runs it.
 

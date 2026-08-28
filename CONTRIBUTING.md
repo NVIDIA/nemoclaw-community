@@ -332,18 +332,57 @@ image/icon shapes, CSS imports, and CSS URL references. Do not load remote
 diagram resources. Readers can always expand the retained source, and the
 source remains visible when browser rendering is unavailable.
 
+## Category And Collection Indexes
+
+The catalog takes each browse tile's title and description from a standardized
+index README. The five canonical category indexes are:
+
+- `examples/recipes/nvidia/README.md`
+- `examples/recipes/partners/README.md`
+- `examples/recipes/community/README.md`
+- `examples/demos/field/README.md`
+- `examples/tools/README.md`
+
+Hackathon and Build-a-Claw are cross-cutting recipe collections, not example
+paths. Their index-only READMEs are
+`examples/collections/hackathon/README.md` and
+`examples/collections/build-a-claw/README.md`. Do not place examples under
+`examples/collections/`; keep each recipe in its canonical NVIDIA, partner, or
+community path.
+
+After optional license comments, each index README must start with its public
+H1 title, a blank line, and one concise plain-text description paragraph. The
+build reads those authored fields for the catalog tile and its information
+tooltip. The entire index must use this standardized shape:
+
+```markdown
+## Examples
+
+[Generated table or empty-state message.]
+```
+
+The build retains the authored title and description values while normalizing
+the index structure and regenerating the example list. No other sections are
+permitted. Change an individual example's root README metadata and regenerate
+the catalog instead of editing that list by hand.
+
 ## Catalog Metadata
 
-The root README is the single source for the generated
-[Markdown catalog](examples/README.md), GitHub Pages cards, filters, detail
-pages, and public `catalog.json` search index. The build discovers example
-directories from the canonical taxonomy, derives kind and provenance from the
-path, and reads this exact opening block after any license header. Existing
-non-catalog YAML frontmatter may also precede the title and is ignored by
-catalog generation:
+Each example's root README is the single source for that example in the
+generated [Markdown catalog](examples/README.md), GitHub Pages cards, filters,
+detail pages, public `catalog.json` search index, and agent-oriented
+`llms.txt`. The build discovers example directories from the canonical
+taxonomy, derives kind and provenance from the path, and reads this exact table
+from the root README. Put it in a final `Catalog Metadata` section. Existing
+tables immediately after the title remain supported. Non-catalog YAML
+frontmatter may precede the title and is ignored by catalog generation:
 
 ```markdown
 # Recognizable Example Name
+
+[Explain the example and show how to run it.]
+
+## Catalog Metadata
 
 | Catalog field | Value |
 | --- | --- |
@@ -352,10 +391,11 @@ catalog generation:
 | Requirements | Linux · Docker · required service or boundary |
 ```
 
-Add `Contributor` after `Requirements` for a partner recipe, `Environment` for
-a launchable, or `Collection | Hackathon` for a recipe accepted into that
-collection. Omit those rows when they do not apply. Do not add YAML frontmatter
-for catalog data; place all new catalog metadata in the Markdown table. The
+Add `Upstream` after `Requirements` when the example adapts a separate public
+project, `Contributor` for a partner recipe, or `Collection` with either
+`Hackathon` or `Build-a-Claw` for a recipe accepted into that collection. Omit
+rows that do not apply. Do not add YAML frontmatter for catalog data; place all
+new catalog metadata in the Markdown table. The
 [catalog architecture](docs/catalog-architecture.md) documents the complete
 generation and public query contract.
 
@@ -371,11 +411,13 @@ Follow these metadata rules:
 - `Requirements` is a short, factual summary of the main environment,
   dependency, and material operating boundary. It appears as “Requirements &
   limits” in catalog cards and detail pages and is limited to 240 characters.
-- `Contributor` is required only for partner recipes. `Environment` is required
-  only for launchables.
-- `Collection` is optional and currently accepts `Hackathon` only for recipes.
-  A hackathon recipe still keeps its NVIDIA, partner, or community provenance
-  and canonical recipe path.
+- `Upstream` is optional. Set it only when the example wraps, adapts, or extends
+  a separate canonical public project, and use an absolute HTTPS URL without
+  embedded credentials. Do not use it as a second source link to this example.
+- `Contributor` is required only for partner recipes.
+- `Collection` is optional and accepts exactly one of `Hackathon` or
+  `Build-a-Claw`, only for recipes. A collection recipe still keeps its NVIDIA,
+  partner, or community provenance and canonical recipe path.
 - The directory path remains the source for artifact kind and recipe
   provenance; do not repeat either in the catalog block.
 
@@ -465,9 +507,11 @@ authoring comments before submission.
 | Requirements | [Summarize the main environment, dependency, and material operating boundary.] |
 
 <!--
-For a partner recipe, add `| Contributor | [Organization] |` next. For a
-launchable, add `| Environment | [Environment] |`. For an accepted hackathon
-recipe, add `| Collection | Hackathon |`. Omit rows that do not apply.
+When applicable, add these rows after Requirements and in this order:
+`| Upstream | https://github.com/organization/project |` for a separate public
+project that this example adapts; `| Contributor | [Organization] |` for a
+partner recipe; and `| Collection | [Hackathon or Build-a-Claw] |` for an
+accepted collection recipe. Omit rows that do not apply.
 -->
 
 ## Screenshot
@@ -489,7 +533,7 @@ also preserve the essential expected output as searchable text.
 
 | Question | Answer |
 | --- | --- |
-| Category | [Choose one: NVIDIA Recipe, Partner Recipe, Community Recipe, Field Demo, Launchable, or Developer Tool] |
+| Category | [Choose one: NVIDIA Recipe, Partner Recipe, Community Recipe, Field Demo, or Developer Tool] |
 | Contributor or provenance | [Name the person or organization responsible for the example.] |
 | Use this when | [Name the specific user, scenario, or operational need.] |
 | You will get | [Name the observable workflow, output, artifact, or result.] |
@@ -545,8 +589,9 @@ remaining validation.]
 
 - Put material credential, data-sharing, permission, cost, write, or
   destructive-action warnings before the command that triggers them.
-- Start with the exact title and catalog table, including its `Description`
-  outcome, documented in [Catalog Metadata](#catalog-metadata).
+- Start with the exact title. Put the catalog table, including its `Description`
+  outcome, in a final `Catalog Metadata` section as documented in
+  [Catalog Metadata](#catalog-metadata).
 - Use the canonical category independently from contributor or organizational
   provenance.
 - Preserve partner and community attribution.

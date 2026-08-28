@@ -5,11 +5,13 @@
 
 Examples are organized first by artifact type. Reusable recipes are organized
 again by contributor provenance. Industry is an independent discovery field.
-This file is generated from the catalog metadata block at the top of each
+This file is generated from the catalog metadata table in each
 example README. Edit that README, then run
 `python3 scripts/build_catalog.py --write` from the repository root.
 
-## NVIDIA Recipes
+## [NVIDIA Recipes](recipes/nvidia/README.md)
+
+Reusable agent workflows authored or maintained by NVIDIA, designed as practical starting points that developers can inspect, adapt, and deploy with NemoClaw.
 
 | Example | Industry | Description |
 | --- | --- | --- |
@@ -23,40 +25,56 @@ example README. Edit that README, then run
 | [PR Test Case Assistant](recipes/nvidia/pr-test-case-assistant/README.md) | ✨ Other | Helps quality engineers turn public GitHub pull request descriptions and bounded diffs into Slack briefs and proposed, unexecuted feature test cases with source evidence. |
 | [Video Search and Summarization](recipes/nvidia/video-search-and-summarization/README.md) | ✨ Other | Helps video analysts and engineers deploy and operate NVIDIA VSS profiles by chat, using a sandboxed agent that runs the Compose deployment through a host-side MCP server and reports the result. |
 
-## Partner Recipes
+## [Partner Recipes](recipes/partners/README.md)
 
-| Contributor | Example | Industry | Description |
+Reusable NemoClaw agent workflows contributed by partner organizations, with attribution and implementation guidance preserved from each contributor.
+
+| Example | Contributor | Industry | Description |
 | --- | --- | --- | --- |
-| BlueTier Operations | [x402 Payment Gate](recipes/partners/bluetier/x402-payment-gate/README.md) | 💳 Financial Services | Demonstrates a maker-checker gate for x402 payments: a sandboxed agent submits intents, while a host-side Blackwall verdict controls mock signing and settlement before any signature exists. |
-| HPE | [Retail Assistant](recipes/partners/hpe/retail-assistant/README.md) | 🛍️ Retail/Consumer Packaged Goods | Helps store employees check inventory and sales or request transfers and reorders through role-aware Telegram conversations scoped to their assigned store. |
-| Shrike Security, Inc. | [Shrike Security Action Governance](recipes/partners/shrike/shrike-security/README.md) | ✨ Other | Adds defense-in-depth action governance through an in-sandbox hook that checks each OpenClaw tool call against server-side Shrike policy and blocks prohibited or approval-required calls. |
-| Tavily | [Watchtower](recipes/partners/tavily/watchtower/README.md) | ✨ Other | Tracks what changed across chosen web topics and why it matters, producing scheduled, deduplicated Markdown digests and JSON changelogs with source citations. |
+| [x402 Payment Gate](recipes/partners/bluetier/x402-payment-gate/README.md) | BlueTier Operations | 💳 Financial Services | Demonstrates a maker-checker gate for x402 payments: a sandboxed agent submits intents, while a host-side Blackwall verdict controls mock signing and settlement before any signature exists. |
+| [Retail Assistant](recipes/partners/hpe/retail-assistant/README.md) | HPE | 🛍️ Retail/Consumer Packaged Goods | Helps store employees check inventory and sales or request transfers and reorders through role-aware Telegram conversations scoped to their assigned store. |
+| [Shrike Security Action Governance](recipes/partners/shrike/shrike-security/README.md) | Shrike Security, Inc. | ✨ Other | Adds defense-in-depth action governance through an in-sandbox hook that checks each OpenClaw tool call against server-side Shrike policy and blocks prohibited or approval-required calls. |
+| [Watchtower](recipes/partners/tavily/watchtower/README.md) | Tavily | ✨ Other | Tracks what changed across chosen web topics and why it matters, producing scheduled, deduplicated Markdown digests and JSON changelogs with source citations. |
 
-## Community Recipes
+## [Community Recipes](recipes/community/README.md)
+
+Reusable NemoClaw agent workflows contributed independently by community members, offering practical starting points for adaptation and experimentation.
 
 | Example | Industry | Description |
 | --- | --- | --- |
 | [Axe A11y Browser Auditor](recipes/community/axe-a11y-browser-auditor/README.md) | 🌐 Consumer Internet | Helps web teams find WCAG issues through a dedicated sandbox and host-side real Chrome, returning rule-level findings with optional screenshots, PDFs, recordings, and network traces. |
 | [Deep Research Worker](recipes/community/deep-research-worker/README.md) | ✨ Other | Adds asynchronous research to a sandbox, so users can queue long-running jobs on a host-side worker, monitor persistent task state, and return later for text or JSON results. |
 
-## NVIDIA Field Demos
+## [NVIDIA Field Demos](demos/field/README.md)
+
+Bounded NemoClaw demonstrations built for specific NVIDIA field scenarios, hardware, or software environments rather than general-purpose deployment.
 
 | Example | Industry | Description |
 | --- | --- | --- |
 | [DGX Station Blender and Omniverse](demos/field/blender-omniverse-dgx-station/README.md) | 🎬 Media & Entertainment | Lets users direct a specialized Hermes agent on DGX Station across Blender and NVIDIA Omniverse workflows, producing scene edits, OVRTX renders, native OVPhysX simulations, and replay evidence. |
 
-## Launchables
+## [Developer Tools](tools/README.md)
 
-| Environment | Example | Industry | Description |
-| --- | --- | --- | --- |
-| Brev | [Hermes](launchables/brev/hermes/README.md) | ☁️ Cloud Services | Guides users from a fresh Brev CPU instance to a NemoClaw-managed Hermes sandbox through a notebook that installs prerequisites, runs onboarding, verifies API health, and provides terminal access. |
-
-## Developer Tools
+Standalone utilities that help developers build, evaluate, inspect, or operate NemoClaw agents without defining an end-user agent workflow.
 
 | Example | Industry | Description |
 | --- | --- | --- |
-| [Agent Memory Benchmark](tools/agent-memory-benchmark/README.md) | ✨ Other | Measures the memory an agent builds from synthetic email and chat by asking 186 questions on one corpus and 96 on another, then reports accuracy by question type separately from ingest and answer token costs. |
+| [Agent Memory Benchmark](tools/agent-memory-benchmark/README.md) | ✨ Other | Measures memory built from synthetic email and chat, asks 186 questions on one corpus and 96 on a second, and reports accuracy by question type with ingest and answer token costs. |
 | [Harness Engineering Playground](tools/harness-engineering-playground/README.md) | ✨ Other | Provides an experimental loop for tuning DeepAgents harness profiles against behavioral evaluations, keeping fixes that pass verification and rolling back rejected edits. |
+
+## Recipe Collections
+
+### [Hackathon Recipes](collections/hackathon/README.md)
+
+A curated collection of NemoClaw recipes created for or featured in hackathons, while each recipe remains organized by its contributor provenance.
+
+_No examples are currently in this group._
+
+### [Build-a-Claw Recipes](collections/build-a-claw/README.md)
+
+A curated collection of NemoClaw recipes created through the Build-a-Claw program, while each recipe remains organized by its contributor provenance.
+
+_No examples are currently in this group._
 
 ## Contributing An Example
 

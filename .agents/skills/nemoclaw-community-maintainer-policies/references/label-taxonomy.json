@@ -129,14 +129,6 @@
       "mutually_exclusive_group": "example_kind"
     },
     {
-      "name": "example: launchable",
-      "family": "example_kind",
-      "item_kinds": ["issue", "pull_request"],
-      "color": "1d76db",
-      "description": "Environment provisioning or onboarding proposed or published under examples/launchables.",
-      "mutually_exclusive_group": "example_kind"
-    },
-    {
       "name": "example: tool",
       "family": "example_kind",
       "item_kinds": ["issue", "pull_request"],
@@ -243,7 +235,7 @@
   "mutually_exclusive_groups": {
     "pr_type": ["bug-fix", "feature", "refactor", "chore"],
     "primary_blocking_need": ["needs: info", "needs: rebase"],
-    "example_kind": ["example: recipe", "example: demo", "example: launchable", "example: tool"],
+    "example_kind": ["example: recipe", "example: demo", "example: tool"],
     "provenance": ["provenance: nvidia", "provenance: partner", "provenance: community"]
   },
   "legacy_labels": ["bug", "enhancement", "documentation", "question", "duplicate", "invalid", "wontfix"],
