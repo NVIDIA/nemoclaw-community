@@ -187,15 +187,19 @@ def test_the_readme_raster_was_exported_from_the_svg_that_is_checked():
             f"Re-export it with `python3 tools/export_selftest_image.py`.")
 
 
-def test_the_readme_raster_shows_what_the_svg_states_where_ocr_is_available():
-    """A second, independent check on the same pair, when the tool is present.
+def test_the_readme_raster_shows_what_the_svg_states():
+    """Read the picture and require the test count the SVG states.
 
-    The digest proves provenance -- that this raster came from this SVG. It
-    cannot prove the export rendered what the SVG says. Where `tesseract` is
-    installed, read the picture and require the test count the SVG states.
+    Not optional, and not a fallback. A digest records what an exporter claimed;
+    only reading the image proves the pixels were re-rendered. While this check
+    skipped without `tesseract`, a digest could be attached to stale pixels and
+    every check that ran still passed -- so the guard that mattered was the one
+    a machine might not run.
     """
-    if shutil.which("tesseract") is None:
-        pytest.skip("tesseract is not installed; the digest check still applies")
+    assert shutil.which("tesseract") is not None, (
+        "tesseract is required to verify that docs/assets/offline-self-test.png "
+        "shows the run the suite checks. Install it (`brew install tesseract`, "
+        "`apt-get install tesseract-ocr`) and re-run.")
     sys.path.insert(0, str(REPO))
     from tools.export_selftest_image import PNG, SVG
 
@@ -209,3 +213,40 @@ def test_the_readme_raster_shows_what_the_svg_states_where_ocr_is_available():
     assert any(f"{n} passed" in read for n in numbers), (
         f"{PNG.name} does not show the test count the SVG states ({sorted(numbers)}); "
         f"re-export it with `python3 tools/export_selftest_image.py`.")
+
+
+def test_a_digest_cannot_vouch_for_pixels_that_were_not_rendered():
+    """Stamping stale content must not produce an image the guards accept.
+
+    This is the hole the stamp-only entry point opened: change the SVG, strip
+    the old chunk, attach the new digest, and the digest check passes over
+    pixels nobody re-rendered. The tool no longer offers that path, and reading
+    the image catches it even if something else attaches a stamp.
+    """
+    sys.path.insert(0, str(REPO))
+    import tools.export_selftest_image as exporter
+
+    assert not hasattr(exporter, "stamp"), (
+        "a stamp-in-place entry point is back; a digest must only be attached to "
+        "bytes that were just rendered")
+
+    original_svg = exporter.SVG.read_bytes()
+    original_png = exporter.PNG.read_bytes()
+    try:
+        exporter.SVG.write_bytes(original_svg.replace(b"passed", b"pxssed"))
+        forged = exporter._stamped(original_png, exporter.source_digest())
+        exporter.PNG.write_bytes(forged)
+        assert exporter.read_stamp() == exporter.source_digest(), (
+            "the forgery did not take; this test would prove nothing")
+        with tempfile.TemporaryDirectory() as work:
+            stem = Path(work) / "ocr"
+            if shutil.which("tesseract") is None:
+                pytest.fail("tesseract is required; see the test above")
+            subprocess.run(["tesseract", str(exporter.PNG), str(stem), "--psm", "6"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+            read = stem.with_suffix(".txt").read_text(encoding="utf-8", errors="ignore")
+        assert "pxssed" not in read, (
+            "the stale raster passed a content check it should have failed")
+    finally:
+        exporter.SVG.write_bytes(original_svg)
+        exporter.PNG.write_bytes(original_png)

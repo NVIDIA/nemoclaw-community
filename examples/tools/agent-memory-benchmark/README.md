@@ -126,7 +126,7 @@ contract.
 ```bash
 cd examples/tools/agent-memory-benchmark
 python3 -m pip install pytest
-python3 -m pytest tests/     # expected: 232 passed
+python3 -m pytest tests/     # expected: 233 passed
 ```
 
 Then run the whole pipeline against a fixture whose score is known in advance:
@@ -444,13 +444,13 @@ The guards provide:
 here exercises a live endpoint.
 
 ```bash
-python3 -m pytest tests/     # expected: 232 passed
+python3 -m pytest tests/     # expected: 233 passed
 ```
 
 **Expected result:**
 
 ```text
-232 passed
+233 passed
 ```
 
 This verifies the runner, grader, report renderer, ledger ingest, fixtures, and

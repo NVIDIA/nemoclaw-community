@@ -28,5 +28,5 @@
   <text x="22" y="432" fill="#8b949e" xml:space="preserve">  * freshness recency-only: n/a — not annotated for this corpus</text>
   <text x="22" y="452" fill="#c9d1d9" xml:space="preserve"></text>
   <text x="22" y="472" fill="#7ee787" xml:space="preserve">$ python3 -m pytest tests/</text>
-  <text x="22" y="492" fill="#7ee787" xml:space="preserve">232 passed in 31.28s</text>
+  <text x="22" y="492" fill="#7ee787" xml:space="preserve">233 passed in 31.28s</text>
 </svg>

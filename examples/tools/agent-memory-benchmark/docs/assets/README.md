@@ -20,5 +20,8 @@ does not preserve.
 python3 tools/export_selftest_image.py
 ```
 
-Never edit the PNG alone, and do not re-export with a tool that drops the `tEXt`
-chunk — the test will say the raster records no source digest.
+There is no way to attach a digest to an existing file: a stamp-in-place path
+would let one vouch for pixels nobody re-rendered. The digest records provenance;
+reading the image with `tesseract` proves the export shows what the SVG says, and
+that check is required rather than conditional. Install it with
+`brew install tesseract` or `apt-get install tesseract-ocr`.
