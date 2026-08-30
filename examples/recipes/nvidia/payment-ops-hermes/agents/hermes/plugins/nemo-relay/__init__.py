@@ -206,6 +206,45 @@ def _serialize_response_object(response: Any) -> Optional[dict]:
     return None
 
 
+
+
+# Axum default Json<Value> body limit is about 2 MiB.
+_MAX_PAYLOAD_BYTES = 1_500_000
+
+
+def _truncate_str(text: str, max_len: int = 4096) -> str:
+    if len(text) <= max_len:
+        return text
+    return text[:max_len] + "...[truncated]"
+
+
+def _estimate_size(payload: dict) -> int:
+    try:
+        return len(json.dumps(payload, default=str, ensure_ascii=False).encode("utf-8"))
+    except Exception:
+        return 0
+
+
+def _truncate_payload(payload: dict) -> dict:
+    size = _estimate_size(payload)
+    if size <= _MAX_PAYLOAD_BYTES:
+        return payload
+    payload = dict(payload)
+    request_body = (payload.get("request") or {}).get("body")
+    if isinstance(request_body, dict):
+        messages = request_body.get("messages")
+        if isinstance(messages, list):
+            budget = max(512, _MAX_PAYLOAD_BYTES // max(len(messages), 1) // 4)
+            for i, msg in enumerate(messages):
+                if isinstance(msg, dict) and isinstance(msg.get("content"), str):
+                    content = msg["content"]
+                    if len(content) > budget:
+                        messages[i] = {**msg, "content": _truncate_str(content, budget)}
+            payload["request"] = {**payload.get("request", {}), "body": {**request_body, "messages": messages}}
+    if _estimate_size(payload) > _MAX_PAYLOAD_BYTES:
+        payload["_truncated"] = True
+    return payload
+
 # ---------------------------------------------------------------------------
 # Forwarder
 # ---------------------------------------------------------------------------
@@ -218,6 +257,7 @@ def _forward(payload: dict) -> None:
     if client is None:
         return
     try:
+        payload = _truncate_payload(payload)
         client.post(f"{url}/hooks/hermes", json=payload)
     except Exception as exc:
         logger.debug("nemo-relay: forward to %s failed: %s", url, exc)
