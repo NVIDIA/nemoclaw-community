@@ -226,23 +226,35 @@ def _estimate_size(payload: dict) -> int:
 
 
 def _truncate_payload(payload: dict) -> dict:
-    size = _estimate_size(payload)
-    if size <= _MAX_PAYLOAD_BYTES:
+    if _estimate_size(payload) <= _MAX_PAYLOAD_BYTES:
         return payload
+
     payload = dict(payload)
-    request_body = (payload.get("request") or {}).get("body")
+    request = dict(payload.get("request") or {})
+    request_body = request.get("body")
     if isinstance(request_body, dict):
         messages = request_body.get("messages")
-        if isinstance(messages, list):
-            budget = max(512, _MAX_PAYLOAD_BYTES // max(len(messages), 1) // 4)
-            for i, msg in enumerate(messages):
-                if isinstance(msg, dict) and isinstance(msg.get("content"), str):
-                    content = msg["content"]
-                    if len(content) > budget:
-                        messages[i] = {**msg, "content": _truncate_str(content, budget)}
-            payload["request"] = {**payload.get("request", {}), "body": {**request_body, "messages": messages}}
+        if isinstance(messages, list) and messages:
+            max_len = 4096
+            while max_len >= 64 and _estimate_size(payload) > _MAX_PAYLOAD_BYTES:
+                for i, msg in enumerate(messages):
+                    if isinstance(msg, dict) and isinstance(msg.get("content"), str):
+                        content = msg["content"]
+                        if len(content) > max_len:
+                            messages[i] = {**msg, "content": _truncate_str(content, max_len)}
+                request["body"] = {**request_body, "messages": messages}
+                payload["request"] = request
+                max_len //= 2
+
     if _estimate_size(payload) > _MAX_PAYLOAD_BYTES:
-        payload["_truncated"] = True
+        payload = {
+            "_truncated": True,
+            "request": {
+                **request,
+                "body": {"messages": [{"role": "system", "content": "[payload truncated]"}]},
+            },
+        }
+
     return payload
 
 # ---------------------------------------------------------------------------
