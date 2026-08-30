@@ -109,8 +109,11 @@ does not say" is scored right.
 
 ## Getting Started
 
-Use Python 3.9+ on macOS or Linux and install `pytest`; the harness itself
-imports only the standard library. A real run also needs an API key for the
+Use Python 3.9+ on macOS or Linux, and install `pytest` and `tesseract`; the
+harness itself imports only the standard library. `tesseract` is required by two
+tests that read the README image and check it shows the run the suite verifies —
+without it those two fail rather than skip, because a check a machine might not
+run is not a check. A real run also needs an API key for the
 configured endpoint. The shipped adapters invoke `python3`, which a default
 Windows installation does not provide.
 
@@ -126,7 +129,8 @@ contract.
 ```bash
 cd examples/tools/agent-memory-benchmark
 python3 -m pip install pytest
-python3 -m pytest tests/     # expected: 233 passed
+brew install tesseract        # macOS; on Linux: apt-get install tesseract-ocr
+python3 -m pytest tests/      # expected: 234 passed
 ```
 
 Then run the whole pipeline against a fixture whose score is known in advance:
@@ -204,6 +208,7 @@ limits are stated where the numbers are.
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | `No module named pytest` | `pytest` is a dev dependency and is not vendored. | `python3 -m pip install pytest` |
+| Two image tests fail with *tesseract is required* | The README image is verified by reading it, so the tool is required rather than optional. | `brew install tesseract`, or `apt-get install tesseract-ocr` |
 | `No module named 'bench'` | `python3 -m bench.runner` was run from a different directory; `-m` resolves the package from the current one. | `cd examples/tools/agent-memory-benchmark` and re-run. |
 | Adapter command not found on Windows | The shipped adapters invoke `python3`, which a default Windows install does not provide. | Run on macOS or Linux, or under WSL. |
 | Run marked invalid: *declared proxy, nothing crossed it* | The adapter bypassed the proxy, or it runs a locally-hosted model. | Point the client at `OPENAI_BASE_URL`, or declare `"accounting": "local"`. |
@@ -279,7 +284,9 @@ agent-memory-benchmark/
 
 **Dependency files:** there are none to install for the harness — `bench/`
 imports only the Python standard library. The offline check needs `pytest`
-(`python3 -m pip install pytest`). An adapter for a third-party system declares
+(`python3 -m pip install pytest`) and `tesseract` (`brew install tesseract`, or
+`apt-get install tesseract-ocr`), the latter for the two tests that read the
+README image. An adapter for a third-party system declares
 its own requirements separately, inside its own directory.
 
 ---
@@ -444,13 +451,13 @@ The guards provide:
 here exercises a live endpoint.
 
 ```bash
-python3 -m pytest tests/     # expected: 233 passed
+python3 -m pytest tests/     # expected: 234 passed
 ```
 
 **Expected result:**
 
 ```text
-233 passed
+234 passed
 ```
 
 This verifies the runner, grader, report renderer, ledger ingest, fixtures, and
@@ -481,4 +488,4 @@ alike, under the repository's [LICENSE](../../../LICENSE).
 | --- | --- |
 | Description | Measures memory built from synthetic email and chat, asks 186 questions on one corpus and 96 on a second, and reports accuracy by question type with ingest and answer token costs. |
 | Industry | ✨ Other |
-| Requirements | Python 3.9+ · pytest for offline checks · endpoint and adapter for live scoring |
+| Requirements | Python 3.9+ · pytest and tesseract for offline checks · endpoint and adapter for live scoring |

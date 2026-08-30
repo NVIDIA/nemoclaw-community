@@ -11,6 +11,7 @@ was renamed would each change scores silently, so each is a test.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -248,3 +249,32 @@ def test_the_answer_contract_names_no_real_corpus_document():
     cited = {sid for g in GOLD for sid in (g.get("gold_source_ids") or [])}
     leaked = sorted(sid for sid in cited if sid in ANSWER_CONTRACT)
     assert not leaked, f"the answer contract names real corpus documents: {leaked}"
+
+
+def test_the_readme_lists_every_tool_the_suite_requires():
+    """A tool a test refuses to run without has to be in the setup instructions.
+
+    `tesseract` became required by the image checks while the README still said
+    the offline check needed only Python and pytest. Following the printed setup
+    on a clean machine produced two failures. Anything the suite asserts the
+    presence of must appear where a reader installs things.
+    """
+    # Only tools whose absence fails a test. `git` is probed too, but to skip
+    # rather than to fail -- a checkout always has it, and a reader is not asked
+    # to install it.
+    required = set()
+    for path in sorted((REPO / "tests").glob("*.py")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            found = re.search(r'shutil\.which\("([\w.-]+)"\)\s+is not None', line)
+            if found and line.lstrip().startswith("assert"):
+                required.add(found.group(1))
+    assert required, "no external tool requirement found; has the check moved?"
+
+    readme = (REPO / "README.md").read_text(encoding="utf-8")
+    setup = readme[readme.index("## Getting Started"):readme.index("## Reading A Result")]
+    for tool in sorted(required):
+        assert tool in setup, (
+            f"the suite requires {tool!r} but Getting Started never mentions it; "
+            f"a reader following the printed setup would land on a failure")
+        assert tool in readme[readme.index("| Requirements |"):], (
+            f"{tool!r} is missing from the catalog Requirements row")
