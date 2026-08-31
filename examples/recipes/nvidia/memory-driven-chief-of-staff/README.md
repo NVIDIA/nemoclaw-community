@@ -1000,7 +1000,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the fourteen files report 610 tests
+Expected result: every file ends with `OK`, the fourteen files report 628 tests
 in total, and the final line is `failed=0`. Do not shorten the loop with an
 early break; running every module is part of the documented check.
 

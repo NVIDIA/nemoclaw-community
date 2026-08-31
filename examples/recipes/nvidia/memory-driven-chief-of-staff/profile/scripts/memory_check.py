@@ -41,6 +41,30 @@ REQUIRED_FIELDS = {
 }
 INDEX_REQUIRED = ("type", "updated")
 
+# Page types the schema writes as a folder rather than a file, spelled
+# `<type>/<slug>/` in its own headings. Only these have sidecars, and only
+# here does a file that is not the page get skipped — an earlier form of this
+# skipped every nested file whose name did not match its folder, which made a
+# page nested anywhere else invisible to every check rather than merely
+# unindexed.
+FOLDER_SHAPED = frozenset({"projects"})
+
+# What the schema says a folder-shaped page's directory contains besides the
+# page itself. Named, because the schema names them:
+#
+#     projects/<slug>/
+#     ├── <slug>.md        # the current picture
+#     ├── log.md           # append-only history
+#     └── log.archive.md   # created when log.md rotates
+#
+# Reading "anything not named after the folder" as a sidecar instead is what
+# an earlier form of this did, and it deleted a real page from every check:
+# a project page written as `overview.md` reported nothing at all — no
+# missing field, no bad value, no broken link — where before it reported
+# four. A file here that is neither the page nor one of these is treated as
+# a page, so it is reported rather than swallowed.
+DECLARED_SIDECARS = frozenset({"log.md", "log.archive.md"})
+
 # Fields whose value must come from a fixed set, again from schema.md.
 ENUMS = {
     "importance": {"high", "medium", "low"},
@@ -95,10 +119,31 @@ def _pages(root: Path) -> list[Path]:
     Names beginning with a dot or `._` are not pages. The second form is an
     AppleDouble sidecar, which a macOS archive carries along and which is
     binary despite ending in `.md` — reading it as text is how this was found.
+
+    A folder-shaped page type holds one page and any number of sidecars, and
+    the page is the file named after its folder. `projects/<slug>/` carries
+    `<slug>.md` plus `log.md` and, once it rotates, `log.archive.md`. The
+    archive was treated as a page and so was reported `unindexed` and
+    `missing-frontmatter` for as long as it existed — a permanent pair of
+    findings produced by following the schema, on a file that is an
+    append-only history and is not supposed to carry frontmatter at all.
+    Naming the archive here would have fixed that one file and left the next
+    sidecar to rediscover it, so the rule is structural instead.
     """
-    return sorted(p for p in root.rglob("*.md")
-                  if p.name not in {"schema.md", "log.md", "index.md"}
-                  and not p.name.startswith("."))
+    def is_page(path: Path) -> bool:
+        if path.name.startswith(".") or path.name in {
+                "schema.md", "log.md", "index.md"}:
+            return False
+        parts = path.relative_to(root).parts
+        if parts[0] not in FOLDER_SHAPED or len(parts) < 3:
+            return True
+        # Inside a folder-shaped type: the page, plus the sidecars the schema
+        # declares. Anything else is checked, because a file here that is
+        # neither is far more likely to be a page under the wrong name than a
+        # sidecar nobody documented.
+        return path.name not in DECLARED_SIDECARS
+
+    return sorted(p for p in root.rglob("*.md") if is_page(p))
 
 
 def check_index(root: Path) -> list[Finding]:
@@ -120,6 +165,26 @@ def check_index(root: Path) -> list[Finding]:
         if not target.exists():
             findings.append(Finding("index-dangling", "index.md",
                                     f"entry points at missing {target.name}"))
+
+    # A section per validated page type, so there is somewhere to file the
+    # first page of each.
+    #
+    # This is the half of a schema change that a seed cannot deliver.
+    # `bootstrap` copies in what is missing and never overwrites — correctly,
+    # because the index is the user's — so a memory installed before a page
+    # type was added keeps the sections it was created with, and the people
+    # most likely to have content are exactly the people who never receive
+    # the new one. The seed is right for a fresh install and this is what
+    # reaches the rest.
+    present = set(re.findall(r"^##\s+(\w+)", index_text, re.M))
+    for kind in sorted({_page_type(p, root) for p in _pages(root)} - {None}):
+        heading = kind.capitalize()
+        if heading not in present:
+            findings.append(Finding(
+                "index-section-missing", "index.md",
+                f"pages of type {kind}/ exist and there is no `## {heading}`"
+                " section to file them under, so their entries have nowhere"
+                " to go"))
     return findings
 
 

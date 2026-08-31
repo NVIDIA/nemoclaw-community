@@ -301,7 +301,7 @@ updated: YYYY-MM-DD
 ```
 
 Sections, in this order: `## People` · `## Projects` · `## Patterns` ·
-`## Goals` · `## Attention`. One line per page: a relative link, then a
+`## Concepts` · `## Goals` · `## Attention`. One line per page: a relative link, then a
 half-line of what it holds and why someone would open it.
 
 An index entry pointing at a missing page, or a page with no index entry, is a

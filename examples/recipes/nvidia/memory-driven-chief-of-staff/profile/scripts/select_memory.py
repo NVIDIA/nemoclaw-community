@@ -44,8 +44,9 @@ from _db import ensure_store, write_txn
 # How many exchanges before somebody is worth a page.
 #
 # One message is an event, not a relationship. Two is the smallest number that
-# distinguishes a correspondent from a notification, and it is the threshold
-# the production system this recipe is adapted from uses.
+# distinguishes a correspondent from a notification. `schema.md` reasons the
+# same way about `concepts/` — one occurrence is noise, two earns a page —
+# though it counts distinct sources there rather than messages.
 PEOPLE_THRESHOLD = 2
 
 # How far back the evidence window reaches. The store holds more; the point of
@@ -102,12 +103,9 @@ def bounded_days(name: str, default: int) -> int:
 def seed_root():
     """The packaged pages a fresh memory starts from.
 
-    Shipped as files rather than assembled in code, the way the production
-    system this recipe is adapted from does it: its Stage-0 bootstrap copies
-    packaged seed pages into the workspace, idempotently and without
-    overwriting, and logs that it did. A page written by string concatenation
-    at runtime is a second, invisible copy of the schema that drifts from
-    `schema.md` the first time either changes.
+    Shipped as files rather than assembled in code. A page written by string
+    concatenation at runtime is a second, invisible copy of the schema that
+    drifts from `schema.md` the first time either changes.
     """
     return Path(__file__).resolve().parent.parent / "seed"
 
