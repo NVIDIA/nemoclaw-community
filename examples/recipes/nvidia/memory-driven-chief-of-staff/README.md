@@ -224,14 +224,11 @@ hermes -p "$PROFILE_NAME" config set model.api_key \
 bash scripts/install.sh
 ```
 
-The sentinel is not an upstream API key — it only needs to be non-empty. An
-empty `model.api_key` makes Hermes send the literal string `no-key-required`,
-which a real endpoint rejects; any non-empty value avoids that. The sentinel's
-`sk-`-shaped form is a naming convention for readability, not a format Hermes
-or OpenShell requires — real provider credentials do not all share that shape
-either. OpenShell removes this marker and injects the managed inference
-credential at the egress boundary. Do not copy a real inference key into the
-recipe profile on the supported NemoClaw path.
+The sentinel is not an upstream API key. Hermes requires an `sk-`-prefixed
+value before it sends a request, and OpenShell removes this marker and
+injects the managed inference credential at the egress boundary. Use the
+exact sentinel above rather than another placeholder — do not copy a real
+inference key into the recipe profile on the supported NemoClaw path.
 
 > **Not on NemoClaw, and your endpoint genuinely needs no key?** This opt-out
 > is not a substitute for the rewrite sentinel above — use it only for a
@@ -243,20 +240,40 @@ recipe profile on the supported NemoClaw path.
 
 ### 4. Start and verify the scheduled runtime inside the sandbox
 
-A NemoClaw sandbox runs as a Docker container with no systemd inside it, so
-`gateway install`/`gateway start` refuse there and point you back to
-`gateway run`. Start it in the background so it survives the connect shell
-exiting, then confirm the scheduler picked it up:
+NemoClaw's own supervisor launches and continuously respawns `hermes gateway
+run` for the sandbox's default profile automatically. This recipe installs
+as a separate, named profile (`memory-driven-chief-of-staff`), which that
+supervision does not cover — there is no NemoClaw-managed lifecycle for a
+second named-profile gateway today, so this step starts and tracks it by
+hand. Check first whether it is already running, to avoid starting a second,
+orphaned instance:
+
+```bash
+hermes -p "$PROFILE_NAME" cron status
+```
+
+If it reports the gateway is not running, start it in the background and
+record its PID. Unlike NemoClaw's own gateway, nothing restarts this one
+automatically — if it dies (crash, OOM, sandbox restart), cron stops firing
+until you notice and rerun this:
 
 ```bash
 nohup hermes -p "$PROFILE_NAME" gateway run > /tmp/gateway.log 2>&1 &
+echo $! > /tmp/mdcos-gateway.pid
 disown
 hermes -p "$PROFILE_NAME" cron status
 ```
 
-`cron status` should report the gateway running, its PID, and the next
-scheduled job. If it still reports the gateway is not running, check
-`/tmp/gateway.log` for a startup error.
+`cron status` should now report the gateway running, its PID (matching `cat
+/tmp/mdcos-gateway.pid`), and the next scheduled job. If it still reports not
+running, check `/tmp/gateway.log` for a startup error.
+
+To stop it later:
+
+```bash
+kill "$(cat /tmp/mdcos-gateway.pid)"
+rm -f /tmp/mdcos-gateway.pid
+```
 
 > **Running this outside a NemoClaw sandbox, on a host with systemd?** Any
 > environment without a running systemd — WSL included — still needs the
@@ -282,8 +299,8 @@ are host-side commands and are not available inside the sandbox.
 
 Nothing so far requires a provider — the profile, jobs, and gateway all work
 with an empty store. But an empty store is exactly what you will see if you
-open the dashboard or chat with it next: no messages ingested, nothing to
-rank. Check what is already attached first, from your machine:
+chat with it next: no messages ingested, nothing to rank. Check what is
+already attached first, from your machine:
 
 ```bash
 openshell sandbox provider list my-hermes
@@ -296,52 +313,29 @@ independent; connect one, both, or skip this step and use the
 [offline fixtures](#offline-walkthrough-no-deployment) instead to see the
 recipe's behavior without connecting anything.
 
-### 6. Chat with it from the web dashboard
+### 6. A note on the web dashboard
 
-This also runs from your machine — if you skipped step 5 and are still
-inside the sandbox shell from step 4, exit it (or open a separate terminal)
-first; `nemohermes` is a host-side command and is not available inside the
-sandbox. NemoClaw forwards a Hermes dashboard for the sandbox by default:
+`nemohermes hermes dashboard-url --quiet` (from your machine, not inside the
+sandbox) prints a URL for the Hermes dashboard NemoClaw forwards for the
+sandbox by default. That dashboard is launched isolated, under its own
+dedicated profile home, specifically so it does **not** unify with other
+profiles on the sandbox — it will not show this recipe's chat, memory, or
+store, regardless of any `?profile=` query parameter appended to it. The
+printed URL also carries a credential in its fragment; treat it like a
+password and use it as printed, not retyped or shared.
 
-```bash
-nemohermes hermes dashboard-url --quiet
-```
-
-This prints the forwarded URL, typically `http://127.0.0.1:18789/`. That
-dashboard is a machine-wide surface serving every profile on the sandbox, not
-just this recipe's — open this profile specifically by appending its name as
-a query parameter:
-
-```text
-http://127.0.0.1:18789/?profile=memory-driven-chief-of-staff
-```
-
-If you are on a remote host, either open a browser inside that same remote
-session, or forward the port to your local machine first:
+The verified way to talk to this recipe is the terminal, from inside the
+sandbox:
 
 ```bash
-ssh -L 18789:127.0.0.1:18789 <user>@<host>
+hermes -p memory-driven-chief-of-staff chat
 ```
 
-The dashboard's chat tab talks to the same live agent, memory, and store as
-`hermes -p memory-driven-chief-of-staff chat` in the terminal — it is a
-different front end, not a separate instance. Session auth is handled
-automatically for a normal browser load; no separate login step is required
-on the supported local-forward path.
-
-Closing the browser tab does not stop it — the dashboard is one shared
-process serving every profile on the sandbox, so it keeps running for the
-others. To actually stop it, reconnect to the sandbox first (`hermes` is not
-on the host's `PATH`, same as every other `hermes` command in this guide):
-
-```bash
-nemohermes hermes connect
-hermes dashboard --status   # see what is running first
-hermes dashboard --stop     # stops every dashboard/serve process on the sandbox
-```
-
-`--stop` is not scoped to this recipe's profile; it shuts down the shared
-dashboard for the whole sandbox.
+A dedicated web view scoped to this one profile is possible through Hermes's
+own `hermes dashboard --isolated`, run from inside the sandbox against this
+profile — but that path (port choice, forwarding it out of the sandbox, and
+its authentication flow) is not walked through end-to-end in this guide; see
+Hermes's own dashboard documentation before relying on it.
 
 ### Things to try
 
@@ -829,11 +823,18 @@ nemohermes my-hermes inference get
 ```
 
 This reports the configured provider and model, but sends no request, so it
-cannot tell you whether the key is valid. `nemohermes my-hermes status`
-cannot either: its reachability check counts HTTP `401`/`403` as
-"reachable," so a wrong key still reports as reachable. The only real proof
-is a successful response to an actual request — the simplest check for this
-recipe, inside the sandbox:
+cannot tell you whether the key is valid. The global `nemohermes status`
+(no sandbox name) cannot either — that reachability check counts HTTP
+`401`/`403` as "reachable." The named-sandbox form does validate it, because
+it sends one real inference request through the stored credential:
+
+```bash
+nemohermes my-hermes status
+```
+
+It reports `unauthorized` when that request is rejected with `401`/`403`.
+For a final, recipe-level confirmation, also try a real chat turn inside the
+sandbox:
 
 ```bash
 hermes -p memory-driven-chief-of-staff chat
@@ -861,7 +862,8 @@ variable name your provider expects (this differs by provider; NemoClaw's
 own credential rotation guide lists them). This updates the registered
 OpenShell provider and normally reuses the existing sandbox; it does not
 touch this recipe's installed profile or its scheduled jobs. Confirm the
-replacement the same way — a real request, not `inference get` or `status`.
+replacement the same way — `nemohermes my-hermes status` or a real request,
+not `inference get` or the global `status`.
 
 ### Jobs are registered but do not run
 
