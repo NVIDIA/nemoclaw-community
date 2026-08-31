@@ -74,7 +74,7 @@ recipe complements Hermes memory and optional external memory providers.
 - [Memory That Tracks Work, Not Just Preferences](#memory-that-tracks-work-not-just-preferences)
 - [How It Works](#how-it-works)
 - [Quick Start](#quick-start)
-- [Install in NemoClaw](#install-in-nemoclaw)
+- [Offline Walkthrough (No Deployment)](#offline-walkthrough-no-deployment)
 - [Configuration](#configuration)
 - [Connect Messaging Providers](#connect-messaging-providers)
 - [Scheduled Operation](#scheduled-operation)
@@ -138,62 +138,9 @@ code used by scheduled runs.
 
 ## Quick Start
 
-This offline walkthrough needs only Python 3.10+ on macOS, Linux, or WSL.
-
-### 1. Clone and enter the recipe
-
-```bash
-git clone https://github.com/NVIDIA/nemoclaw-community.git
-cd nemoclaw-community/examples/recipes/nvidia/memory-driven-chief-of-staff
-```
-
-### 2. Create isolated local state and run the walkthrough
-
-```bash
-export RECIPE_TMP_HOME="$(mktemp -d)"
-export HERMES_HOME="$RECIPE_TMP_HOME"
-python3 profile/scripts/walkthrough.py --fixtures fixtures
-```
-
-The command prints seven stages and exits with status `0`. The important
-outcomes are:
-
-- eight messages are ingested and two are skipped;
-- six obligations remain open;
-- exactly three memory-gated obligations enter `high`;
-- an urgent deadline unrelated to the user's chosen work stays in `medium`;
-- a user pin and ignore survive a later recorded review;
-- the memory checker is shown succeeding and failing on a deliberate defect.
-
-### 3. Prove fixture ingestion is idempotent
-
-Use a new profile home because the walkthrough has already populated the first
-one.
-
-```bash
-export RECIPE_TMP_HOME_2="$(mktemp -d)"
-export HERMES_HOME="$RECIPE_TMP_HOME_2"
-python3 profile/scripts/load_fixtures.py --fixtures fixtures
-python3 profile/scripts/load_fixtures.py --fixtures fixtures
-```
-
-The first loader run reports `"added": 8`; the second reports `"added": 0`.
-
-### 4. Inspect or correct state
-
-Replace the placeholder with a source identifier printed by the walkthrough.
-
-```bash
-python3 profile/scripts/memory_check.py
-python3 profile/scripts/correct.py priority msg-priorities-match low
-python3 profile/scripts/correct.py ignore msg-cc-only
-python3 profile/scripts/correct.py unignore msg-cc-only
-```
-
-Repeated corrections are no-ops. Corrections against completed or incompatible
-rows exit with status `3` and explain the required state transition.
-
-## Install in NemoClaw
+This is the path that ends with a running, scheduled assistant. It assumes an
+existing NemoClaw-managed Hermes sandbox; it does not cover NemoClaw
+onboarding itself.
 
 The scheduled jobs run inside a Linux NemoHermes sandbox. Your own computer is
 outside that sandbox and can use any platform supported by NemoHermes.
@@ -247,7 +194,7 @@ Run this from the cloned `nemoclaw-community` repository root.
 ```bash
 nemohermes sandbox upload my-hermes \
   examples/recipes/nvidia/memory-driven-chief-of-staff \
-  /sandbox/memory-driven-chief-of-staff
+  /sandbox
 nemohermes my-hermes connect
 ```
 
@@ -277,35 +224,217 @@ hermes -p "$PROFILE_NAME" config set model.api_key \
 bash scripts/install.sh
 ```
 
-The sentinel is not an upstream API key. Hermes requires an `sk-` value before
-it sends a request, and OpenShell removes this marker and injects the managed
-inference credential at the egress boundary. Do not copy a real inference key
-into the recipe profile on the supported NemoClaw path.
+The sentinel is not an upstream API key — it only needs to be non-empty. An
+empty `model.api_key` makes Hermes send the literal string `no-key-required`,
+which a real endpoint rejects; any non-empty value avoids that. The sentinel's
+`sk-`-shaped form is a naming convention for readability, not a format Hermes
+or OpenShell requires — real provider credentials do not all share that shape
+either. OpenShell removes this marker and injects the managed inference
+credential at the egress boundary. Do not copy a real inference key into the
+recipe profile on the supported NemoClaw path.
 
-Use the explicit opt-out only for a genuinely keyless, non-NemoClaw endpoint;
-it is not a substitute for the rewrite sentinel.
-
-```bash
-ALLOW_NO_API_KEY=1 bash scripts/install.sh
-```
+> **Not on NemoClaw, and your endpoint genuinely needs no key?** This opt-out
+> is not a substitute for the rewrite sentinel above — use it only for a
+> genuinely keyless, non-NemoClaw endpoint.
+>
+> ```bash
+> ALLOW_NO_API_KEY=1 bash scripts/install.sh
+> ```
 
 ### 4. Start and verify the scheduled runtime inside the sandbox
 
+A NemoClaw sandbox runs as a Docker container with no systemd inside it, so
+`gateway install`/`gateway start` refuse there and point you back to
+`gateway run`. Start it in the background so it survives the connect shell
+exiting, then confirm the scheduler picked it up:
+
 ```bash
-hermes -p "$PROFILE_NAME" gateway install
-hermes -p "$PROFILE_NAME" gateway start
+nohup hermes -p "$PROFILE_NAME" gateway run > /tmp/gateway.log 2>&1 &
+disown
 hermes -p "$PROFILE_NAME" cron status
 ```
 
-On WSL without systemd, keep the gateway in the foreground instead.
+`cron status` should report the gateway running, its PID, and the next
+scheduled job. If it still reports the gateway is not running, check
+`/tmp/gateway.log` for a startup error.
 
-```bash
-hermes -p "$PROFILE_NAME" gateway run
-```
+> **Running this outside a NemoClaw sandbox, on a host with systemd?** Any
+> environment without a running systemd — WSL included — still needs the
+> foreground command above. Only where systemd is actually running does
+> `gateway install` register it as a persistent service instead. See
+> [Persistence and reboot behavior](#persistence-and-reboot-behavior) for the
+> trade-off against `gateway run`.
+>
+> ```bash
+> hermes -p "$PROFILE_NAME" gateway install
+> hermes -p "$PROFILE_NAME" gateway start
+> ```
 
 At this point the schedule works over any rows already in the store. Slack and
 Outlook are independent and optional; each unconfigured collector exits
 successfully and reports that state.
+
+### 5. Connect a messaging provider
+
+Step 4 leaves you inside the sandbox shell. Exit it (or open a separate
+terminal on your machine) before continuing — `openshell` and `nemohermes`
+are host-side commands and are not available inside the sandbox.
+
+Nothing so far requires a provider — the profile, jobs, and gateway all work
+with an empty store. But an empty store is exactly what you will see if you
+open the dashboard or chat with it next: no messages ingested, nothing to
+rank. Check what is already attached first, from your machine:
+
+```bash
+openshell sandbox provider list my-hermes
+```
+
+If nothing there exposes `SLACK_USER_TOKEN` or `MS_GRAPH_ACCESS_TOKEN`,
+connect one now — see [Connect Messaging Providers](#connect-messaging-providers)
+below for the full Slack and Outlook setup. Both are optional and
+independent; connect one, both, or skip this step and use the
+[offline fixtures](#offline-walkthrough-no-deployment) instead to see the
+recipe's behavior without connecting anything.
+
+### 6. Chat with it from the web dashboard
+
+This also runs from your machine — if you skipped step 5 and are still
+inside the sandbox shell from step 4, exit it (or open a separate terminal)
+first; `nemohermes` is a host-side command and is not available inside the
+sandbox. NemoClaw forwards a Hermes dashboard for the sandbox by default:
+
+```bash
+nemohermes hermes dashboard-url --quiet
+```
+
+This prints the forwarded URL, typically `http://127.0.0.1:18789/`. That
+dashboard is a machine-wide surface serving every profile on the sandbox, not
+just this recipe's — open this profile specifically by appending its name as
+a query parameter:
+
+```text
+http://127.0.0.1:18789/?profile=memory-driven-chief-of-staff
+```
+
+If you are on a remote host, either open a browser inside that same remote
+session, or forward the port to your local machine first:
+
+```bash
+ssh -L 18789:127.0.0.1:18789 <user>@<host>
+```
+
+The dashboard's chat tab talks to the same live agent, memory, and store as
+`hermes -p memory-driven-chief-of-staff chat` in the terminal — it is a
+different front end, not a separate instance. Session auth is handled
+automatically for a normal browser load; no separate login step is required
+on the supported local-forward path.
+
+Closing the browser tab does not stop it — the dashboard is one shared
+process serving every profile on the sandbox, so it keeps running for the
+others. To actually stop it, reconnect to the sandbox first (`hermes` is not
+on the host's `PATH`, same as every other `hermes` command in this guide):
+
+```bash
+nemohermes hermes connect
+hermes dashboard --status   # see what is running first
+hermes dashboard --stop     # stops every dashboard/serve process on the sandbox
+```
+
+`--stop` is not scoped to this recipe's profile; it shuts down the shared
+dashboard for the whole sandbox.
+
+### Things to try
+
+Once real data is flowing, ask it the questions from the top of this
+document:
+
+> **What changed on this project since yesterday?**
+>
+> **Which conversations need a decision, response, or follow-up from me?**
+>
+> **What are the most important items on my todo list today?**
+>
+> **What should I know about this person or project, and how does it connect
+> to my work?**
+
+Then push on the ranking itself — this is where the intent gate shows up:
+
+- "Why is this ranked above that?"
+- "What's urgent right now that I haven't actually chosen to work on?"
+
+Ask it to ground a claim in evidence rather than answer from general recall:
+
+- "What should I know about [a real colleague]? How does it connect to my
+  current work?"
+- "What did [someone] say this week?"
+
+And after you correct something (`priority ... low` or `ignore ...` via
+`profile/scripts/correct.py`), ask again without re-explaining the
+correction — it should already be reflected.
+
+## Offline Walkthrough (No Deployment)
+
+This does not deploy the recipe or produce a running assistant. It runs the
+decision logic — ranking, the intent gate, correction durability, memory
+self-checks — entirely on your own machine against recorded fixtures, with no
+NemoClaw, no sandbox, no credentials, and no network access. Use it to verify
+the recipe's behavior before investing in a real deployment, or skip straight
+to [Quick Start](#quick-start) above if you already have a sandbox ready.
+
+It needs only Python 3.10+ on macOS, Linux, or WSL.
+
+### 1. Clone and enter the recipe
+
+```bash
+git clone https://github.com/NVIDIA/nemoclaw-community.git
+cd nemoclaw-community/examples/recipes/nvidia/memory-driven-chief-of-staff
+```
+
+### 2. Create isolated local state and run the walkthrough
+
+```bash
+export RECIPE_TMP_HOME="$(mktemp -d)"
+export HERMES_HOME="$RECIPE_TMP_HOME"
+python3 profile/scripts/walkthrough.py --fixtures fixtures
+```
+
+The command prints seven stages and exits with status `0`. The important
+outcomes are:
+
+- eight messages are ingested and two are skipped;
+- six obligations remain open;
+- exactly three memory-gated obligations enter `high`;
+- an urgent deadline unrelated to the user's chosen work stays in `medium`;
+- a user pin and ignore survive a later recorded review;
+- the memory checker is shown succeeding and failing on a deliberate defect.
+
+### 3. Prove fixture ingestion is idempotent
+
+Use a new profile home because the walkthrough has already populated the first
+one.
+
+```bash
+export RECIPE_TMP_HOME_2="$(mktemp -d)"
+export HERMES_HOME="$RECIPE_TMP_HOME_2"
+python3 profile/scripts/load_fixtures.py --fixtures fixtures
+python3 profile/scripts/load_fixtures.py --fixtures fixtures
+```
+
+The first loader run reports `"added": 8`; the second reports `"added": 0`.
+
+### 4. Inspect or correct state
+
+Replace the placeholder with a source identifier printed by the walkthrough.
+
+```bash
+python3 profile/scripts/memory_check.py
+python3 profile/scripts/correct.py priority msg-priorities-match low
+python3 profile/scripts/correct.py ignore msg-cc-only
+python3 profile/scripts/correct.py unignore msg-cc-only
+```
+
+Repeated corrections are no-ops. Corrections against completed or incompatible
+rows exit with status `3` and explain the required state transition.
 
 ## Configuration
 
@@ -689,6 +818,51 @@ bash scripts/install.sh
 The sentinel is a non-secret routing marker. Do not use
 `ALLOW_NO_API_KEY=1` for a NemoClaw-managed inference route.
 
+### How do I check whether my API key actually works, and replace it if not?
+
+The real key does not live in this recipe's profile — the sentinel above is
+not a credential. Check and rotate it at the NemoClaw/OpenShell layer, from
+your machine, not inside the sandbox:
+
+```bash
+nemohermes my-hermes inference get
+```
+
+This reports the configured provider and model, but sends no request, so it
+cannot tell you whether the key is valid. `nemohermes my-hermes status`
+cannot either: its reachability check counts HTTP `401`/`403` as
+"reachable," so a wrong key still reports as reachable. The only real proof
+is a successful response to an actual request — the simplest check for this
+recipe, inside the sandbox:
+
+```bash
+hermes -p memory-driven-chief-of-staff chat
+```
+
+A real reply means the key works; an authentication error means it does not.
+
+If it is wrong, replace it from your machine — do not edit the recipe
+profile's `model.api_key`, which only ever holds the non-secret rewrite
+sentinel. Export the replacement under the environment variable name your
+configured provider expects, then rerun onboarding for the existing sandbox:
+
+```bash
+printf 'New inference API key: ' >&2
+IFS= read -r -s PROVIDER_API_KEY_VAR_NAME
+printf '\n' >&2
+export PROVIDER_API_KEY_VAR_NAME
+nemohermes onboard --name my-hermes \
+  --non-interactive --yes --yes-i-accept-third-party-software
+unset PROVIDER_API_KEY_VAR_NAME
+```
+
+`PROVIDER_API_KEY_VAR_NAME` above is a placeholder — substitute the actual
+variable name your provider expects (this differs by provider; NemoClaw's
+own credential rotation guide lists them). This updates the registered
+OpenShell provider and normally reuses the existing sandbox; it does not
+touch this recipe's installed profile or its scheduled jobs. Confirm the
+replacement the same way — a real request, not `inference get` or `status`.
+
 ### Jobs are registered but do not run
 
 Registration does not start the scheduler. Check the gateway and cron status.
@@ -699,7 +873,7 @@ hermes -p memory-driven-chief-of-staff cron status
 ```
 
 Install and start the service, or use the foreground command shown in
-[Install in NemoClaw](#install-in-nemoclaw).
+[Quick Start](#quick-start).
 
 ### A collector reports `unconfigured`
 
