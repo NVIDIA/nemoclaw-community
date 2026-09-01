@@ -5,7 +5,7 @@ description: Inspect and remove only model-serving resources in the namespace ex
 
 # OpenShift LLM Deploy
 
-Use `OPENSHIFT_LLM_DELETE_API` only for the namespace in `OPENSHIFT_LLM_DELETE_NAMESPACE`. Authenticate with the bearer token at `/sandbox/.hermes/.sre-proxy-token`, and never print, return, log, or send that token anywhere else.
+Use `OPENSHIFT_LLM_DELETE_ENDPOINT` only for the namespace in `OPENSHIFT_LLM_DELETE_NAMESPACE`. Authenticate with the bearer token at `/sandbox/.hermes/.sre-proxy-token`, and never print, return, log, or send that token anywhere else.
 
 - Parse `OPENSHIFT_LLM_DELETE_ALLOWED_RESOURCES` and proceed only when the exact `apiGroup`, plural `resource`, and `name` tuple is present. This operator allowlist is the authorization boundary.
 - Before deletion, list the candidate model resources and verify they were created by this workflow.

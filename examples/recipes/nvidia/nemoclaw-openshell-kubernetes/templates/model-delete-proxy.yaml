@@ -50,9 +50,9 @@ spec:
             - name: PROXY_CLIENT_TOKEN_FILE
               value: /proxy-auth/token
             - name: PROXY_MAX_REQUEST_BYTES
-              value: {{ .Values.sre.proxy.maxRequestBytes | quote }}
+              value: {{ printf "%d" (int64 .Values.sre.proxy.maxRequestBytes) | quote }}
             - name: PROXY_MAX_RESPONSE_BYTES
-              value: {{ .Values.sre.proxy.maxResponseBytes | quote }}
+              value: {{ printf "%d" (int64 .Values.sre.proxy.maxResponseBytes) | quote }}
             - name: PROXY_REQUEST_TIMEOUT_SECONDS
               value: {{ .Values.sre.proxy.requestTimeoutSeconds | quote }}
           ports:

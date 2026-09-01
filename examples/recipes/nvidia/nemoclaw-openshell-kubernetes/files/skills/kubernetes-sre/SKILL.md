@@ -5,7 +5,7 @@ description: Inspect Kubernetes or OpenShift resources and perform only the muta
 
 # Kubernetes SRE
 
-Use `KUBERNETES_SRE_API` as the Kubernetes API base URL. Authenticate each request with `Authorization: Bearer $(cat /sandbox/.hermes/.sre-proxy-token)`. Never print, return, log, or send that token anywhere else; the proxy replaces it with its own Kubernetes ServiceAccount credential.
+Use `KUBERNETES_SRE_ENDPOINT` as the Kubernetes API base URL. Authenticate each request with `Authorization: Bearer $(cat /sandbox/.hermes/.sre-proxy-token)`. Never print, return, log, or send that token anywhere else; the proxy replaces it with its own Kubernetes ServiceAccount credential.
 
 1. Inspect current state before proposing any mutation.
 2. Prefer `GET` discovery, status, events, and logs. In safe mode, mutate only the `/scale` subresource of a namespaced Deployment or StatefulSet; full workload patches are forbidden.

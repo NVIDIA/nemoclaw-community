@@ -107,6 +107,33 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- default (printf "%s-sre-proxy-auth" (include "nemoclaw-openshell.fullname" .) | trunc 63 | trimSuffix "-") .Values.sre.proxy.authSecretRef.name -}}
 {{- end -}}
 
+{{- define "nemoclaw-openshell.openshiftSandboxUid" -}}
+{{- $uidConfig := .Values.openshell.server.openshift.sandboxUid -}}
+{{- $sandboxUid := $uidConfig.value -}}
+{{- if eq $sandboxUid nil -}}
+  {{- $namespace := lookup "v1" "Namespace" "" .Release.Namespace -}}
+  {{- if not $namespace -}}
+    {{- fail (printf "openshell.server.openshift.sandboxUid.enabled=true requires the release namespace %q to exist so Helm can resolve its openshift.io/sa.scc.uid-range annotation; pre-create the namespace or set openshell.server.openshift.sandboxUid.value only for offline rendering" .Release.Namespace) -}}
+  {{- end -}}
+  {{- $uidRange := index (default (dict) $namespace.metadata.annotations) "openshift.io/sa.scc.uid-range" | default "" -}}
+  {{- if not (regexMatch "^[0-9]+/[0-9]+$" $uidRange) -}}
+    {{- fail (printf "release namespace %q has no valid openshift.io/sa.scc.uid-range annotation" .Release.Namespace) -}}
+  {{- end -}}
+  {{- $parts := splitList "/" $uidRange -}}
+  {{- $rangeStart := atoi (index $parts 0) -}}
+  {{- $rangeSize := atoi (index $parts 1) -}}
+  {{- $offset := int $uidConfig.offset -}}
+  {{- if or (le $offset 0) (ge $offset $rangeSize) -}}
+    {{- fail (printf "openshell.server.openshift.sandboxUid.offset must be greater than zero and less than the namespace SCC UID-range size (%d)" $rangeSize) -}}
+  {{- end -}}
+  {{- $sandboxUid = add $rangeStart $offset -}}
+{{- end -}}
+{{- if le (int $sandboxUid) 0 -}}
+  {{- fail "openshell.server.openshift.sandboxUid.value must be a positive integer when set" -}}
+{{- end -}}
+{{- int $sandboxUid -}}
+{{- end -}}
+
 {{- define "nemoclaw-openshell.providerName" -}}
 {{- if .Values.agent.model.providerName -}}
 {{- .Values.agent.model.providerName -}}

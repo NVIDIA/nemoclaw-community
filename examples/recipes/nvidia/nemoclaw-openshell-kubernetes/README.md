@@ -5,7 +5,9 @@ A buildless Helm recipe that runs the official NemoClaw-managed Hermes image thr
 ## Pinned release inputs
 
 - NemoClaw/Hermes managed image: NemoClaw `v0.0.117`, Hermes `0.19.0`, immutable multi-architecture index digest in `values.yaml`
-- OpenShell chart and CLI: `v0.0.116`; gateway and supervisor use immutable multi-architecture index digests
+- OpenShell chart and CLI: `v0.0.116`; the dependency is vendored with narrow
+  OpenShift dual-CA and UID-isolation template fixes, while gateway and
+  supervisor images remain official immutable multi-architecture index digests
 - Helper image: immutable multi-architecture Python digest; the chart builds no proxy or bootstrap image
 
 No Dockerfile or image build is part of installation.
@@ -65,16 +67,42 @@ helm upgrade --install nemoclaw-hermes . \
   --wait --timeout 20m
 ```
 
-`values-openshift.yaml` sets `platform.openshift.enabled=true`, removes the gateway's pinned UID/GID so SCC allocation can work, and explicitly acknowledges a RoleBinding from only the generated sandbox ServiceAccount to `system:openshift:scc:privileged`. The chart never grants `cluster-admin`. Set `createPrivilegedSccBinding=false` only when an operator has pre-provisioned the equivalent SCC grant. Rendering fails if the OpenShift profile is selected but `security.openshift.io/v1` is unavailable.
+`values-openshift.yaml` sets `platform.openshift.enabled=true`, removes the
+portable UID/GID `1000`, and explicitly acknowledges a RoleBinding from only
+the generated sandbox ServiceAccount to `system:openshift:scc:privileged`. The
+chart never grants `cluster-admin`. Set `createPrivilegedSccBinding=false` only
+when an operator has pre-provisioned the equivalent SCC grant. Rendering fails
+if the OpenShift profile is selected but `security.openshift.io/v1` is
+unavailable.
 
 The OpenShift profile keeps user namespaces disabled and uses OpenShell's SCC
 range resolution instead. Combining two UID-mapping mechanisms with retained
 CSI subpath mounts is rejected at render time.
 
-The OpenShift seed path and OpenShell driver both resolve the start of the
-namespace SCC UID range, so retained state stays owner-only instead of falling
-back to world-readable or world-writable permissions. Kubernetes uses UID/GID
-`1000` for both paths.
+For a managed OpenShift gateway, the chart deliberately uses three IDs from the
+release Namespace's SCC range: range start for short-lived lifecycle/proxy
+workloads, start plus one for the gateway, and start plus two for the seed Job
+and Hermes Sandbox. The official NemoClaw entrypoint retains its
+`RLIMIT_NPROC=512` boundary, while Linux process accounting cannot combine the
+gateway's threads with Hermes under one host UID. Helm reads the range from the
+pre-created Namespace's `openshift.io/sa.scc.uid-range` annotation; therefore,
+create the Namespace before installation and leave both
+`openshell.server.openshift.gatewayUid.value=null` and
+`openshell.server.openshift.sandboxUid.value=null` for live installs. The explicit
+values exist only for deterministic offline rendering and must be set together
+to distinct, namespace-valid IDs. Existing-gateway mode does not inject a local
+UID into the external gateway's driver configuration. Kubernetes keeps UID/GID
+`1000` and performs no OpenShift lookup. The OpenShift seed Job leaves
+`fsGroup` unset so `restricted-v2` can inject the namespace-approved volume
+group; its explicit `runAsUser` and `runAsGroup` remain start plus two.
+
+The OpenShell supervisor changes the immutable image's `/sandbox` ownership to
+that injected UID but preserves its set-id mode bits. Before starting Hermes,
+the chart's fixed command refuses symbolic-link replacements, normalizes
+`/sandbox` to `0770` and `/sandbox/.hermes` to `0700`, then uses `exec` to make
+the official `/usr/local/bin/nemoclaw-start` the supervisor's direct child.
+This is a runtime compatibility step only; it does not build or replace the
+official image and does not weaken NemoClaw's own startup attestation.
 
 The profile does not expose the OpenShell gateway with an OpenShift Route: the
 bootstrap path is cluster-internal and mTLS-protected. Operators can configure
@@ -104,10 +132,11 @@ chart never replaces that protected directory or its NemoClaw configuration.
 
 Safe mode can read common non-secret cluster resources and patch/update only
 the `/scale` subresource of Deployments and StatefulSets. It cannot replace pod
-templates, read Secrets, mutate RBAC, exec/attach, or delete. The sandbox never
-receives a Kubernetes ServiceAccount token. It authenticates to a dedicated
-chart proxy with a random chart-managed bearer token stored in the retained
-Hermes state; the proxy then uses its own least-privilege ServiceAccount. Set
+templates, read Secrets, mutate RBAC, exec/attach, or delete. Hermes
+authenticates to a dedicated chart proxy with a random chart-managed bearer
+token stored in retained state; the SRE proxy's Kubernetes ServiceAccount token
+is mounted only in the proxy pod. The OpenShell supervisor separately uses its
+own short-lived projected identity token for gateway authentication. Set
 `sre.proxy.authSecretRef.name` to use an operator-provided Secret instead.
 
 `sre.rbac.mode=broad-no-delete` is a high-risk opt-in and requires `I_ACKNOWLEDGE_CLUSTER_WIDE_NO_DELETE`. It grants create/update/patch across API resources but still excludes all direct delete verbs and proxy DELETE requests. This mode can cause outages or indirect privilege escalation even without DELETE; it is not recommended for production.
@@ -149,14 +178,17 @@ Sandbox through OpenShell before retrying.
 Offline checks:
 
 ```bash
-helm dependency build --skip-refresh .
 helm lint . --set openshell.agentSandbox.preflight.enabled=false
 helm lint . -f values-openshift.yaml \
   --set platform.openshift.verifyApi=false \
+  --set openshell.server.openshift.gatewayUid.value=1001200001 \
+  --set openshell.server.openshift.sandboxUid.value=1001200002 \
   --set openshell.agentSandbox.preflight.enabled=false
 python3 -m unittest tests/test_chart.py
 helm template test . --api-versions agents.x-k8s.io/v1alpha1 >/tmp/rendered.yaml
 helm template test . -f values-openshift.yaml \
+  --set openshell.server.openshift.gatewayUid.value=1001200001 \
+  --set openshell.server.openshift.sandboxUid.value=1001200002 \
   --api-versions agents.x-k8s.io/v1alpha1 \
   --api-versions security.openshift.io/v1 >/tmp/rendered-openshift.yaml
 ```

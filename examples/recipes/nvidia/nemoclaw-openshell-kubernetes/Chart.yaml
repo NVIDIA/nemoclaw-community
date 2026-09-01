@@ -11,5 +11,4 @@ dependencies:
   - name: helm-chart
     alias: openshell
     version: "0.0.116"
-    repository: oci://ghcr.io/nvidia/openshell
     condition: openshell.enabled

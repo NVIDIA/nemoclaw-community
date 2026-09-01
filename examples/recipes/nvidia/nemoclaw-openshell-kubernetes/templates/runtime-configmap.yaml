@@ -7,10 +7,10 @@
   {{- $_ := set $agentEnv $key (toString $value) -}}
 {{- end -}}
 {{- if .Values.sre.enabled -}}
-  {{- $_ := set $agentEnv "KUBERNETES_SRE_API" (printf "http://%s.%s.svc.cluster.local:%d" (include "nemoclaw-openshell.sreProxyName" .) .Release.Namespace (int .Values.sre.proxy.port)) -}}
+  {{- $_ := set $agentEnv "KUBERNETES_SRE_ENDPOINT" (printf "http://%s.%s.svc.cluster.local:%d" (include "nemoclaw-openshell.sreProxyName" .) .Release.Namespace (int .Values.sre.proxy.port)) -}}
 {{- end -}}
 {{- if .Values.sre.openshiftLlmDeploy.deletion.enabled -}}
-  {{- $_ := set $agentEnv "OPENSHIFT_LLM_DELETE_API" (printf "http://%s.%s.svc.cluster.local:%d" (include "nemoclaw-openshell.modelDeleteProxyName" .) .Release.Namespace (int .Values.sre.proxy.port)) -}}
+  {{- $_ := set $agentEnv "OPENSHIFT_LLM_DELETE_ENDPOINT" (printf "http://%s.%s.svc.cluster.local:%d" (include "nemoclaw-openshell.modelDeleteProxyName" .) .Release.Namespace (int .Values.sre.proxy.port)) -}}
   {{- $_ := set $agentEnv "OPENSHIFT_LLM_DELETE_NAMESPACE" .Values.sre.openshiftLlmDeploy.deletion.namespace -}}
   {{- $_ := set $agentEnv "OPENSHIFT_LLM_DELETE_ALLOWED_RESOURCES" (toJson .Values.sre.openshiftLlmDeploy.deletion.allowedResources) -}}
 {{- end -}}
@@ -33,7 +33,8 @@
 {{- end -}}
 {{- $agentContainer := dict "resources" .Values.agent.sandbox.resources "volume_mounts" $mounts -}}
 {{- $volume := dict "name" "hermes-state" "persistent_volume_claim" (dict "claim_name" $claimName "read_only" false) -}}
-{{- $driverConfig := dict "kubernetes" (dict "pod" $pod "containers" (dict "agent" $agentContainer) "volumes" (list $volume)) -}}
+{{- $kubernetesDriver := dict "pod" $pod "containers" (dict "agent" $agentContainer) "volumes" (list $volume) -}}
+{{- $driverConfig := dict "kubernetes" $kubernetesDriver -}}
 {{- $imageDigest := last (splitList "@sha256:" .Values.agent.image.multiarch) -}}
 {{- $model := dict
       "providerName" (include "nemoclaw-openshell.providerName" .)
@@ -46,6 +47,7 @@
       "verifyEndpoint" .Values.agent.model.verifyEndpoint
 -}}
 {{- $policy := include "nemoclaw-openshell.policy" . -}}
+{{- $startupContract := "normalize-injected-uid-path-modes-v1" -}}
 {{- $configIdentity := dict
       "agentImage" .Values.agent.image.multiarch
       "agentEnv" $agentEnv
@@ -54,6 +56,7 @@
       "driverConfig" $driverConfig
       "policy" $policy
       "openshellMode" .Values.openshell.mode
+      "startupContract" $startupContract
 -}}
 {{- $configId := sha256sum (toJson $configIdentity) | trunc 63 -}}
 {{- $labels := dict
@@ -74,6 +77,7 @@
       "sandbox" .Values.agent.sandbox
       "driverConfig" $driverConfig
       "labels" $labels
+      "startupContract" $startupContract
 }}
 apiVersion: v1
 kind: ConfigMap

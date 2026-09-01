@@ -289,6 +289,35 @@
               "required": ["type"]
             }
           }
+        },
+        "server": {
+          "type": "object",
+          "properties": {
+            "openshift": {
+              "type": "object",
+              "properties": {
+                "gatewayUid": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {"type": "boolean"},
+                    "offset": {"type": "integer", "minimum": 1},
+                    "value": {"type": ["integer", "null"], "minimum": 1}
+                  },
+                  "required": ["enabled", "offset"]
+                },
+                "sandboxUid": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {"type": "boolean"},
+                    "offset": {"type": "integer", "minimum": 1},
+                    "value": {"type": ["integer", "null"], "minimum": 1}
+                  },
+                  "required": ["enabled", "offset"]
+                }
+              },
+              "required": ["gatewayUid", "sandboxUid"]
+            }
+          }
         }
       },
       "required": ["enabled", "mode", "existing", "image", "supervisor", "podSecurityContext", "securityContext"]

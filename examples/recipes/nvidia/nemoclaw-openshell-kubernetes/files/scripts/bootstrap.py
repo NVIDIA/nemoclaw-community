@@ -235,10 +235,22 @@ def create_sandbox() -> None:
     }
     for key, value in sorted(runtime_env.items()):
         arguments.extend(["--env", f"{key}={value}"])
-    # NemoClaw authenticates the OpenShell-supervised topology by proving that
-    # nemoclaw-start is the supervisor's exact direct child. A shell or env
-    # command wrapper breaks that fail-closed process-identity check.
-    arguments.extend(["--", "/usr/local/bin/nemoclaw-start"])
+    # The managed image ships /sandbox and /sandbox/.hermes with set-id modes
+    # for its root-separated container topology. OpenShell's injected-UID mode
+    # chowns those paths but intentionally preserves mode bits; NemoClaw's own
+    # boundary validator then rejects that mixed posture. Normalize only these
+    # immutable image roots after refusing symlinks. `exec` is load-bearing:
+    # nemoclaw-start must replace the transient shell and remain the
+    # supervisor's exact direct child for its fail-closed process attestation.
+    startup = (
+        "set -eu; "
+        "test -d /sandbox && test ! -L /sandbox && "
+        "test -d /sandbox/.hermes && test ! -L /sandbox/.hermes && "
+        "/usr/bin/chmod u=rwx,g=rwx,o=,g-s,o-t /sandbox && "
+        "/usr/bin/chmod u=rwx,g=,o=,g-s,o-t /sandbox/.hermes && "
+        "exec /usr/local/bin/nemoclaw-start"
+    )
+    arguments.extend(["--", "/bin/sh", "-c", startup])
     run(arguments)
 
 

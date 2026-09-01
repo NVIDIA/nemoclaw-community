@@ -19,6 +19,21 @@ openshell:
   securityContext:
     runAsUser: null
   server:
+    # Keep the long-lived gateway off the range-start UID and the Hermes UID.
+    # NemoClaw sets RLIMIT_NPROC=512 inside the sandbox, and Linux accounts
+    # that limit across every process sharing the same host UID. Helm resolves
+    # this UID from the pre-created namespace's SCC range during a live install.
+    openshift:
+      gatewayUid:
+        enabled: true
+        offset: 1
+        value: null
+      # Keep Hermes/seed state ownership separate from the SCC range-start UID
+      # used by short-lived lifecycle and proxy workloads and from gateway +1.
+      sandboxUid:
+        enabled: true
+        offset: 2
+        value: null
     # OpenShell resolves the namespace SCC UID range. User namespaces would
     # introduce a second identity mapping across retained CSI subpath mounts.
     enableUserNamespaces: false

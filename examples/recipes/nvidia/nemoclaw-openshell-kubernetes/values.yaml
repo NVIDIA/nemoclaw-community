@@ -213,6 +213,19 @@ openshell:
     healthPort: 8081
     metricsPort: 9090
   server:
+    openshift:
+      gatewayUid:
+        enabled: false
+        offset: 1
+        value: null
+      # Managed OpenShift installs assign Hermes a namespace-valid UID that is
+      # distinct from both the SCC range start and the long-lived gateway UID.
+      sandboxUid:
+        enabled: false
+        offset: 2
+        # Explicit values are for deterministic offline rendering only. Leave
+        # null on a live cluster so Helm resolves the release Namespace range.
+        value: null
     telemetryEnabled: true
     sandboxNamespace: ""
     sandboxImage: ghcr.io/nvidia/nemoclaw/hermes-sandbox@sha256:bcc2704ae28755fa0b9a1b5314f9438e614ca7a87e26ee401f32e3b6ecdf427d
@@ -233,6 +246,11 @@ openshell:
     # different value from /.well-known/openid-configuration.
     oidc:
       issuer: https://kubernetes.default.svc
+      # The official gateway image is Debian-based and exposes this public CA
+      # bundle. The vendored OpenShell chart combines it with kube-root-ca.crt
+      # via SSL_CERT_DIR, so private OIDC and public model endpoints both
+      # remain verified.
+      systemCaBundlePath: /etc/ssl/certs/ca-certificates.crt
       audience: openshell-cli
       jwksTtl: 3600
       # Kubernetes projected tokens expose the requested audience as an array.

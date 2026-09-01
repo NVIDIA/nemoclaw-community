@@ -1,6 +1,11 @@
 {{- if and .Values.lifecycle.seed.enabled (or (not .Release.IsUpgrade) .Values.lifecycle.seed.runOnUpgrade) }}
 {{- $seedSuffix := printf "-seed-%d" .Release.Revision }}
 {{- $seedPrefix := trunc (int (sub 63 (len $seedSuffix))) (include "nemoclaw-openshell.fullname" .) | trimSuffix "-" }}
+{{- $managedOpenShift := and .Values.platform.openshift.enabled (eq .Values.openshell.mode "managed") .Values.openshell.server.openshift.sandboxUid.enabled }}
+{{- $sandboxUid := 0 }}
+{{- if $managedOpenShift }}
+  {{- $sandboxUid = include "nemoclaw-openshell.openshiftSandboxUid" . | int }}
+{{- end }}
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 apiVersion: batch/v1
@@ -33,7 +38,13 @@ spec:
       securityContext:
         seccompProfile:
           type: RuntimeDefault
-        {{- if not .Values.platform.openshift.enabled }}
+        {{- if $managedOpenShift }}
+        runAsUser: {{ $sandboxUid }}
+        runAsGroup: {{ $sandboxUid }}
+        # restricted-v2 supplies the namespace-approved fsGroup. OpenShift may
+        # admit only that default group even when another UID-range member is
+        # valid for runAsUser/runAsGroup.
+        {{- else if not .Values.platform.openshift.enabled }}
         runAsUser: 1000
         runAsGroup: 1000
         fsGroup: 1000

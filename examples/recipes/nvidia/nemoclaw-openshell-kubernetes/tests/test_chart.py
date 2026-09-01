@@ -30,6 +30,18 @@ class ChartTest(unittest.TestCase):
         resolved = list(arguments)
         if arguments and arguments[0] == "template":
             resolved.extend(["--api-versions", "agents.x-k8s.io/v1alpha1"])
+        if any(argument.endswith("values-openshift.yaml") for argument in arguments) and not any(
+            "openshell.server.openshift.gatewayUid.value" in argument for argument in arguments
+        ):
+            resolved.extend(
+                ["--set", "openshell.server.openshift.gatewayUid.value=1001200001"]
+            )
+        if any(argument.endswith("values-openshift.yaml") for argument in arguments) and not any(
+            "openshell.server.openshift.sandboxUid.value" in argument for argument in arguments
+        ):
+            resolved.extend(
+                ["--set", "openshell.server.openshift.sandboxUid.value=1001200002"]
+            )
         return resolved
 
     def run_helm(self, *arguments: str) -> str:
@@ -111,6 +123,13 @@ class ChartTest(unittest.TestCase):
     def test_chart_lints(self) -> None:
         self.assertTrue(CHART_DIR.joinpath("Chart.yaml").is_file())
         self.run_helm("lint", str(CHART_DIR))
+
+    def test_vendored_openshell_dependency_is_self_contained(self) -> None:
+        chart_yaml = CHART_DIR.joinpath("Chart.yaml").read_text(encoding="utf-8")
+        self.assertTrue(CHART_DIR.joinpath("charts", "helm-chart", "Chart.yaml").is_file())
+        self.assertNotIn("repository: oci://ghcr.io/nvidia/openshell", chart_yaml)
+        self.assertFalse(CHART_DIR.joinpath("Chart.lock").exists())
+        self.assertEqual(list(CHART_DIR.joinpath("charts").glob("*.tgz")), [])
 
     def test_default_render_excludes_disallowed_resources(self) -> None:
         rendered = self.run_helm(
@@ -343,6 +362,10 @@ class ChartTest(unittest.TestCase):
             str(CHART_DIR),
             "--set",
             "platform.openshift.enabled=true",
+            "--set",
+            "openshell.server.openshift.gatewayUid.enabled=true",
+            "--set",
+            "openshell.server.openshift.gatewayUid.value=1001200001",
             "--api-versions",
             "security.openshift.io/v1",
             expected="openshell.podSecurityContext.fsGroup",
@@ -366,6 +389,70 @@ class ChartTest(unittest.TestCase):
         self.assertNotIn("fsGroup: 1000", rendered)
         self.assertNotIn("PORTABLE_UID_MODE", rendered)
         self.assertNotIn("enable_user_namespaces = true", rendered)
+
+    def test_openshift_profile_isolates_gateway_uid_from_sandbox_uid(self) -> None:
+        rendered = self.run_helm(
+            "template",
+            "nemoclaw-openshell-kubernetes-test",
+            str(CHART_DIR),
+            "--api-versions",
+            "security.openshift.io/v1",
+            "--values",
+            str(CHART_DIR / "values-openshift.yaml"),
+            "--set",
+            "openshell.server.openshift.gatewayUid.value=1001200001",
+            "--set",
+            "openshell.server.openshift.sandboxUid.value=1001200002",
+        )
+        gateway = self.rendered_from_source(
+            rendered,
+            "nemoclaw-openshell-kubernetes/charts/openshell/templates/statefulset.yaml",
+        )
+        gateway_config = self.rendered_from_source(
+            rendered,
+            "nemoclaw-openshell-kubernetes/charts/openshell/templates/gateway-config.yaml",
+        )
+        seed = self.rendered_from_source(
+            rendered,
+            "nemoclaw-openshell-kubernetes/templates/seed-job.yaml",
+        )
+        config = self.bootstrap_config(rendered)
+
+        self.assertIn("runAsUser: 1001200001", gateway)
+        self.assertNotIn("runAsUser: 1001200000", gateway)
+        self.assertIn("sandbox_uid                  = 1001200002", gateway_config)
+        self.assertIn("sandbox_gid                  = 1001200002", gateway_config)
+        self.assertNotIn("sandbox_uid", config["driverConfig"]["kubernetes"])
+        self.assertNotIn("sandbox_gid", config["driverConfig"]["kubernetes"])
+        self.assertIn("runAsUser: 1001200002", seed)
+        self.assertIn("runAsGroup: 1001200002", seed)
+        self.assertNotIn("fsGroup: 1001200002", seed)
+
+    def test_openshift_gateway_uid_lookup_requires_precreated_namespace(self) -> None:
+        self.assert_helm_rejected(
+            "template",
+            "nemoclaw-openshell-kubernetes-test",
+            str(CHART_DIR),
+            "--api-versions",
+            "security.openshift.io/v1",
+            "--values",
+            str(CHART_DIR / "values-openshift.yaml"),
+            "--set-json",
+            "openshell.server.openshift.gatewayUid.value=null",
+            expected="requires the release namespace",
+        )
+
+    def test_kubernetes_rejects_openshift_gateway_uid_resolution(self) -> None:
+        self.assert_helm_rejected(
+            "template",
+            "nemoclaw-openshell-kubernetes-test",
+            str(CHART_DIR),
+            "--set",
+            "openshell.server.openshift.gatewayUid.enabled=true",
+            "--set",
+            "openshell.server.openshift.gatewayUid.value=1001",
+            expected="requires platform.openshift.enabled=true",
+        )
 
     def test_openshift_rejects_user_namespaces_with_chart_persistence(self) -> None:
         self.assert_helm_rejected(
@@ -526,6 +613,28 @@ class ChartTest(unittest.TestCase):
         self.assertIn('user_role     = "openshell-cli"', gateway)
         self.assertNotIn("allow_unauthenticated_users = true", gateway)
 
+    def test_oidc_custom_ca_preserves_public_model_endpoint_trust(self) -> None:
+        """The OIDC CA supplements, rather than replaces, native public roots."""
+        rendered = self.run_helm(
+            "template",
+            "nemoclaw-openshell-kubernetes-test",
+            str(CHART_DIR),
+        )
+        gateway = self.rendered_from_source(
+            rendered,
+            "nemoclaw-openshell-kubernetes/charts/openshell/templates/statefulset.yaml",
+        )
+
+        self.assertRegex(
+            gateway,
+            r"name: SSL_CERT_FILE\s*\n\s+value: /etc/ssl/certs/ca-certificates\.crt",
+        )
+        self.assertRegex(
+            gateway,
+            r"name: SSL_CERT_DIR\s*\n\s+value: /etc/openshell-tls/oidc-ca",
+        )
+        self.assertIn("mountPath: /etc/openshell-tls/oidc-ca", gateway)
+
     def test_gateway_ingress_is_release_scoped(self) -> None:
         rendered = self.run_helm(
             "template",
@@ -613,7 +722,8 @@ class ChartTest(unittest.TestCase):
     def test_sandbox_startup_preserves_nemoclaw_process_identity(self) -> None:
         bootstrap = CHART_DIR.joinpath("files", "scripts", "bootstrap.py").read_text(encoding="utf-8")
         self.assertIn('arguments.extend(["--env", f"{key}={value}"])', bootstrap)
-        self.assertIn('arguments.extend(["--", "/usr/local/bin/nemoclaw-start"])', bootstrap)
+        self.assertIn('arguments.extend(["--", "/bin/sh", "-c", startup])', bootstrap)
+        self.assertIn('exec /usr/local/bin/nemoclaw-start', bootstrap)
         self.assertNotIn('arguments.append("env")', bootstrap)
         self.assertNotIn('"/bin/bash"', bootstrap)
 
@@ -681,7 +791,7 @@ class ChartTest(unittest.TestCase):
         )
         config = self.bootstrap_config(rendered)
         mounts = config["driverConfig"]["kubernetes"]["containers"]["agent"]["volume_mounts"]
-        self.assertNotIn("KUBERNETES_SRE_API", rendered)
+        self.assertNotIn("KUBERNETES_SRE_ENDPOINT", rendered)
         self.assertNotIn("kubernetes-sre-SKILL.md", rendered)
         self.assertNotIn("app.kubernetes.io/component: sre-proxy", rendered)
         self.assertNotIn("sre-proxy-auth", rendered)
@@ -704,7 +814,13 @@ class ChartTest(unittest.TestCase):
             rendered,
             "nemoclaw-openshell-kubernetes/templates/sre-proxy.yaml",
         )
+        network_policy = self.rendered_from_source(
+            rendered,
+            "nemoclaw-openshell-kubernetes/templates/networkpolicy.yaml",
+        )
         config = self.bootstrap_config(rendered)
+        self.assertIn("KUBERNETES_SRE_ENDPOINT", config["agentEnv"])
+        self.assertNotIn("KUBERNETES_SRE_API", config["agentEnv"])
         mounts = config["driverConfig"]["kubernetes"]["containers"]["agent"]["volume_mounts"]
         mounts_by_path = {mount["mount_path"]: mount for mount in mounts}
         self.assertNotIn('resources: ["*"]', rbac)
@@ -722,7 +838,12 @@ class ChartTest(unittest.TestCase):
         )
         self.assertIn("name: PROXY_ALLOWED_METHODS", proxy)
         self.assertIn("value: \"GET,PATCH\"", proxy)
+        self.assertIn("name: PROXY_MAX_REQUEST_BYTES\n              value: \"10485760\"", proxy)
+        self.assertIn("name: PROXY_MAX_RESPONSE_BYTES\n              value: \"33554432\"", proxy)
         self.assertNotIn("GET,DELETE", proxy)
+        self.assertIn("key: agents.x-k8s.io/sandbox-name-hash", network_policy)
+        self.assertIn("operator: Exists", network_policy)
+        self.assertNotIn("openshell.ai/managed-by: openshell", network_policy)
         self.assertIn("kubernetes-sre-SKILL.md", rendered)
         self.assertIn("/sandbox/.hermes/skills/kubernetes-sre", mounts_by_path)
         self.assertEqual(
@@ -779,6 +900,10 @@ class ChartTest(unittest.TestCase):
             rendered,
             "nemoclaw-openshell-kubernetes/templates/model-delete-rbac.yaml",
         )
+        proxy = self.rendered_from_source(
+            rendered,
+            "nemoclaw-openshell-kubernetes/templates/model-delete-proxy.yaml",
+        )
         self.assertIn("namespace: models-eval", rbac)
         self.assertIn('resources: ["inferenceservices"]', rbac)
         self.assertIn('resourceNames: ["owned-model"]', rbac)
@@ -786,7 +911,11 @@ class ChartTest(unittest.TestCase):
         self.assertNotIn("kind: ClusterRole", rbac)
         self.assertNotRegex(rbac, r"(?m)^\s*- persistentvolumeclaims\s*$")
         self.assertNotRegex(rbac, r"(?m)^\s*- secrets\s*$")
+        self.assertIn("name: PROXY_MAX_REQUEST_BYTES\n              value: \"10485760\"", proxy)
+        self.assertIn("name: PROXY_MAX_RESPONSE_BYTES\n              value: \"33554432\"", proxy)
         config = self.bootstrap_config(rendered)
+        self.assertIn("OPENSHIFT_LLM_DELETE_ENDPOINT", config["agentEnv"])
+        self.assertNotIn("OPENSHIFT_LLM_DELETE_API", config["agentEnv"])
         mounts = config["driverConfig"]["kubernetes"]["containers"]["agent"]["volume_mounts"]
         mounts_by_path = {mount["mount_path"]: mount for mount in mounts}
         self.assertIn("/sandbox/.hermes/skills/kubernetes-sre", mounts_by_path)
@@ -958,6 +1087,20 @@ class ChartTest(unittest.TestCase):
             main_body.index("verify_existing_sandbox()"),
             main_body.index("reconcile_provider()"),
         )
+
+    def test_bootstrap_hardens_injected_uid_paths_before_nemoclaw_start(self) -> None:
+        bootstrap = CHART_DIR.joinpath("files", "scripts", "bootstrap.py").read_text(encoding="utf-8")
+        self.assertIn("test -d /sandbox && test ! -L /sandbox", bootstrap)
+        self.assertIn("chmod u=rwx,g=rwx,o=,g-s,o-t /sandbox", bootstrap)
+        self.assertIn("chmod u=rwx,g=,o=,g-s,o-t /sandbox/.hermes", bootstrap)
+        self.assertIn("exec /usr/local/bin/nemoclaw-start", bootstrap)
+        rendered = self.run_helm(
+            "template",
+            "nemoclaw-openshell-kubernetes-test",
+            str(CHART_DIR),
+        )
+        config = self.bootstrap_config(rendered)
+        self.assertEqual(config["startupContract"], "normalize-injected-uid-path-modes-v1")
 
     def test_cluster_scoped_names_include_release_identity(self) -> None:
         arguments = (

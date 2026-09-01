@@ -17,8 +17,13 @@ spec:
   ingress:
     - from:
         - podSelector:
-            matchLabels:
-              openshell.ai/managed-by: openshell
+            # Agent Sandbox controllers label realized Pods with this hash.
+            # OpenShell metadata labels remain on the Sandbox CR and are not
+            # guaranteed to propagate to the Pod. The proxy bearer token is
+            # still the authorization boundary after this network admission.
+            matchExpressions:
+              - key: agents.x-k8s.io/sandbox-name-hash
+                operator: Exists
       ports:
         - protocol: TCP
           port: {{ .Values.sre.proxy.port }}
@@ -40,8 +45,9 @@ spec:
   ingress:
     - from:
         - podSelector:
-            matchLabels:
-              openshell.ai/managed-by: openshell
+            matchExpressions:
+              - key: agents.x-k8s.io/sandbox-name-hash
+                operator: Exists
       ports:
         - protocol: TCP
           port: {{ .Values.sre.proxy.port }}

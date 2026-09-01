@@ -17,6 +17,17 @@
 {{- if and $openshift.createPrivilegedSccBinding (ne $openshift.dangerousAcknowledgement "I_ACKNOWLEDGE_PRIVILEGED_SCC") -}}
 {{- fail "platform.openshift.dangerousAcknowledgement must equal I_ACKNOWLEDGE_PRIVILEGED_SCC before creating the privileged SCC binding" -}}
 {{- end -}}
+{{- $gatewayUid := .Values.openshell.server.openshift.gatewayUid -}}
+{{- if and $gatewayUid.enabled (not $openshift.enabled) -}}
+{{- fail "openshell.server.openshift.gatewayUid.enabled requires platform.openshift.enabled=true" -}}
+{{- end -}}
+{{- if and $openshift.enabled (eq .Values.openshell.mode "managed") (not $gatewayUid.enabled) -}}
+{{- fail "managed OpenShift mode requires openshell.server.openshift.gatewayUid.enabled=true to isolate the gateway from the Hermes sandbox process limit" -}}
+{{- end -}}
+{{- $sandboxUid := .Values.openshell.server.openshift.sandboxUid -}}
+{{- if and $sandboxUid.enabled (not $openshift.enabled) -}}
+{{- fail "openshell.server.openshift.sandboxUid.enabled requires platform.openshift.enabled=true" -}}
+{{- end -}}
 {{- if $openshift.enabled -}}
   {{- if and $openshift.verifyApi (not (.Capabilities.APIVersions.Has "security.openshift.io/v1")) -}}
   {{- fail "platform.openshift.enabled=true requires the security.openshift.io/v1 API; use the Kubernetes defaults on a standard Kubernetes cluster" -}}
@@ -29,6 +40,22 @@
   {{- end -}}
   {{- if .Values.openshell.server.enableUserNamespaces -}}
   {{- fail "OpenShift requires openshell.server.enableUserNamespaces=false because this chart uses SCC-resolved identity for retained PVC subpaths" -}}
+  {{- end -}}
+  {{- if eq .Values.openshell.mode "managed" -}}
+    {{- if not $sandboxUid.enabled -}}
+    {{- fail "managed OpenShift mode requires openshell.server.openshift.sandboxUid.enabled=true to isolate Hermes and preserve NemoClaw's process limit" -}}
+    {{- end -}}
+    {{- if eq (int $gatewayUid.offset) (int $sandboxUid.offset) -}}
+    {{- fail "managed OpenShift mode requires distinct gatewayUid.offset and sandboxUid.offset values" -}}
+    {{- end -}}
+    {{- $gatewayExplicit := ne $gatewayUid.value nil -}}
+    {{- $sandboxExplicit := ne $sandboxUid.value nil -}}
+    {{- if ne $gatewayExplicit $sandboxExplicit -}}
+    {{- fail "managed OpenShift mode requires gatewayUid.value and sandboxUid.value to both be null for live lookup or both be set for offline rendering" -}}
+    {{- end -}}
+    {{- if and $gatewayExplicit $sandboxExplicit (eq (int $gatewayUid.value) (int $sandboxUid.value)) -}}
+    {{- fail "managed OpenShift mode requires distinct gatewayUid.value and sandboxUid.value values" -}}
+    {{- end -}}
   {{- end -}}
 {{- end -}}
 {{- if eq .Values.openshell.mode "managed" -}}
@@ -96,7 +123,7 @@
   {{- if regexMatch "(?i)(secret|token|password|credential|api.?key)" $name -}}
   {{- fail (printf "agent.env.%s looks secret-bearing; use agent.model.apiKeySecretRef or a dedicated Secret reference" $name) -}}
   {{- end -}}
-  {{- if has $name (list "NEMOCLAW_SANDBOX_NAME" "NEMOCLAW_MODEL" "NEMOCLAW_INFERENCE_PROVIDER_ID" "NEMOCLAW_UPSTREAM_PROVIDER" "NEMOCLAW_INFERENCE_BASE_URL" "NEMOCLAW_INFERENCE_API" "NEMOCLAW_CONTEXT_WINDOW" "KUBERNETES_SRE_API" "OPENSHIFT_LLM_DELETE_API" "OPENSHIFT_LLM_DELETE_NAMESPACE" "OPENSHIFT_LLM_DELETE_ALLOWED_RESOURCES") -}}
+  {{- if has $name (list "NEMOCLAW_SANDBOX_NAME" "NEMOCLAW_MODEL" "NEMOCLAW_INFERENCE_PROVIDER_ID" "NEMOCLAW_UPSTREAM_PROVIDER" "NEMOCLAW_INFERENCE_BASE_URL" "NEMOCLAW_INFERENCE_API" "NEMOCLAW_CONTEXT_WINDOW" "KUBERNETES_SRE_ENDPOINT" "OPENSHIFT_LLM_DELETE_ENDPOINT" "OPENSHIFT_LLM_DELETE_NAMESPACE" "OPENSHIFT_LLM_DELETE_ALLOWED_RESOURCES") -}}
   {{- fail (printf "agent.env.%s is chart-managed; use its dedicated values field" $name) -}}
   {{- end -}}
 {{- end -}}
