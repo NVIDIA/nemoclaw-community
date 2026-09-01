@@ -74,9 +74,9 @@ recipe complements Hermes memory and optional external memory providers.
 - [Memory That Tracks Work, Not Just Preferences](#memory-that-tracks-work-not-just-preferences)
 - [How It Works](#how-it-works)
 - [Quick Start](#quick-start)
+- [Connect Messaging Providers](#connect-messaging-providers)
 - [Offline Walkthrough (No Deployment)](#offline-walkthrough-no-deployment)
 - [Configuration](#configuration)
-- [Connect Messaging Providers](#connect-messaging-providers)
 - [Scheduled Operation](#scheduled-operation)
 - [Data Lifecycle and Privacy](#data-lifecycle-and-privacy)
 - [Troubleshooting and FAQ](#troubleshooting-and-faq)
@@ -138,9 +138,11 @@ code used by scheduled runs.
 
 ## Quick Start
 
-This is the path that ends with a running, scheduled assistant. It assumes an
-existing NemoClaw-managed Hermes sandbox; it does not cover NemoClaw
-onboarding itself.
+This is the path that ends with a running, scheduled assistant. Steps 1
+through 5 are what you run, in order, to get there. Step 6 is optional —
+connect a real Slack or Outlook source instead of leaving the store empty.
+Step 7 runs nothing new; it explains how to look at what steps 1-5 already
+started.
 
 The scheduled jobs run inside a Linux NemoHermes sandbox. Your own computer is
 outside that sandbox and can use any platform supported by NemoHermes.
@@ -154,6 +156,14 @@ This guide uses two command locations:
 | NemoHermes sandbox | The isolated Linux environment where Hermes and the scheduled jobs run | `hermes` |
 <!-- markdownlint-enable MD013 -->
 
+A plain "gateway" in this guide always means Hermes's own `hermes gateway`
+process — the agent-serving process for a profile, started explicitly in
+step 5. That is a different system from the **OpenShell gateway**, the
+daemon that manages this sandbox's provider credentials and refresh-token
+rotation (see [docs/set-up-graph.md](docs/set-up-graph.md) and
+[docs/set-up-slack.md](docs/set-up-slack.md)); this guide always spells that
+one out by name.
+
 The sandbox satisfies the recipe's Linux runtime requirement. The current
 provider setup helpers still require Linux or WSL on your machine; this is a
 helper-script limitation, not a recipe runtime requirement.
@@ -161,11 +171,27 @@ helper-script limitation, not a recipe runtime requirement.
 `scripts/install.sh` always runs inside the sandbox. Your machine is not
 expected to have `hermes` on `PATH`.
 
-### 1. Confirm and inspect a Hermes sandbox from your machine
+### 1. Install prerequisites
 
-If NemoClaw is not installed, follow the upstream
-[NemoClaw setup guide](https://github.com/NVIDIA/NemoClaw) and select Hermes,
-an inference provider, and a model during onboarding.
+This recipe assumes an existing NemoClaw-managed Hermes sandbox; it does not
+cover NemoClaw onboarding itself. If NemoClaw is not installed, follow the
+upstream [NemoClaw setup guide](https://github.com/NVIDIA/NemoClaw) and select
+Hermes, an inference provider, and a model during onboarding. That installer
+also installs `openshell` as part of its own setup — Quick Start uses both
+`nemohermes` and `openshell` on your machine below, and neither needs a
+separate install.
+
+Then, on your machine (not inside the sandbox), clone this repository and
+enter it:
+
+```bash
+git clone https://github.com/NVIDIA/nemoclaw-community.git
+cd nemoclaw-community
+```
+
+The remaining Quick Start steps run from this checkout.
+
+### 2. Confirm and inspect a Hermes sandbox from your machine
 
 ```bash
 nemohermes my-hermes status
@@ -187,9 +213,9 @@ identify which attached provider supplied it. Use a dedicated sandbox or
 detach the conflicting provider before installing or starting the scheduled
 runtime.
 
-### 2. Upload the recipe from your machine
+### 3. Upload the recipe from your machine
 
-Run this from the cloned `nemoclaw-community` repository root.
+Run this from the `nemoclaw-community` checkout from step 1.
 
 ```bash
 nemohermes sandbox upload my-hermes \
@@ -202,7 +228,7 @@ The upload is required: the sandbox cannot see the checkout on your machine.
 After `connect` opens a shell, the remaining commands in this subsection run
 **inside the sandbox**.
 
-### 3. Install the profile and jobs inside the sandbox
+### 4. Install the profile and jobs inside the sandbox
 
 ```bash
 cd /sandbox/memory-driven-chief-of-staff
@@ -238,7 +264,7 @@ inference key into the recipe profile on the supported NemoClaw path.
 > ALLOW_NO_API_KEY=1 bash scripts/install.sh
 > ```
 
-### 4. Start and verify the scheduled runtime inside the sandbox
+### 5. Start and verify the scheduled runtime inside the sandbox
 
 NemoClaw's own supervisor launches and continuously respawns `hermes gateway
 run` for the sandbox's default profile automatically, logging to
@@ -270,9 +296,46 @@ disown
 hermes -p "$PROFILE_NAME" cron status
 ```
 
+Piece by piece: `umask 077` makes the log file the next line creates
+owner-only (`0600`), matching NemoClaw's own gateway log. `nohup … &`
+backgrounds the process and makes it immune to hangup, so it keeps running
+after you disconnect from the sandbox shell. The redirect targets
+`/tmp/mdcos-gateway.log` — named differently from NemoClaw's own
+`/tmp/gateway.log` specifically so the two logs don't collide, since NemoClaw
+already writes its managed profile's gateway output there. `disown` then
+drops the job from the shell's job table too, on top of what `nohup` already
+protects against. The final `cron status` re-runs the same check from above,
+now that the gateway should actually be up.
+
 `cron status` should now report the gateway running and the next scheduled
 job. If it still reports not running, check `/tmp/mdcos-gateway.log` for a
 startup error.
+
+The seven registered jobs drive distinct Hermes skills — intake runs
+`inbound-judging`, review runs `obligation-review`, and there are separate
+`memory-writing`, `memory-repair`, `memory-consolidation`, and
+`preference-update` skills; retention runs no skill at all. See
+[Scheduled Operation](#scheduled-operation) for the full schedule and
+job-to-skill table.
+
+The work wiki those skills write lives inside the sandbox at
+`$HERMES_HOME/workspace/memory/` — concretely
+`/sandbox/.hermes/profiles/$PROFILE_NAME/workspace/memory/` for this recipe's
+default profile name. The obligation ledger the intake and review jobs work
+from lives alongside it, at `$HERMES_HOME/workspace/ledger/state.db`.
+
+> **`cron status` shows the gateway running but no scheduled job?** The jobs
+> were never registered — for example if step 4 stopped at the credential
+> check before reaching its `3/3 Registering scheduled jobs` phase. Register
+> them directly; the script is idempotent, so rerunning it only updates
+> existing jobs in place rather than duplicating them:
+>
+> ```bash
+> bash scripts/register-jobs.sh
+> ```
+
+To remove every registered job at once instead of one at a time, see
+[Persistence and reboot behavior](#persistence-and-reboot-behavior).
 
 To stop it later, use Hermes's profile-scoped lifecycle command:
 
@@ -301,9 +364,9 @@ At this point the schedule works over any rows already in the store. Slack and
 Outlook are independent and optional; each unconfigured collector exits
 successfully and reports that state.
 
-### 5. Connect a messaging provider
+### 6. Connect a messaging provider (optional)
 
-Step 4 leaves you inside the sandbox shell. Exit it (or open a separate
+Step 5 leaves you inside the sandbox shell. Exit it (or open a separate
 terminal on your machine) before continuing — `openshell` and `nemohermes`
 are host-side commands and are not available inside the sandbox.
 
@@ -323,36 +386,68 @@ independent; connect one, both, or skip this step and use the
 [offline fixtures](#offline-walkthrough-no-deployment) instead to see the
 recipe's behavior without connecting anything.
 
-### 6. A note on the web dashboard
+### 7. A note on the web dashboard (reference — nothing to run)
 
-`nemohermes my-hermes dashboard-url --quiet` (from your machine, not inside
-the sandbox) prints a URL for the Hermes dashboard NemoClaw forwards for the
-sandbox by default. That dashboard is launched isolated, under its own
-dedicated profile home, specifically so it does **not** unify with other
-profiles on the sandbox — it will not show this recipe's chat, memory, or
-store, regardless of any `?profile=` query parameter appended to it. Hermes
-uses session auth for this dashboard, so the printed URL is a plain link, not
-a credential. Protect access to the forwarded endpoint through the sandbox's
-normal session controls, and do not expose it publicly.
+Nothing in this step is required to finish Quick Start; it explains what is
+already reachable from steps above and how to look at it.
 
-The verified way to talk to this recipe is the terminal, from inside the
-sandbox:
+From your machine, not inside the sandbox, this prints the URL for the
+Hermes dashboard NemoClaw already forwards for the sandbox by default —
+already reachable, with no forwarding step of your own:
+
+```bash
+nemohermes my-hermes dashboard-url --quiet
+```
+
+That dashboard is launched isolated, under its own dedicated `dashboard-home`
+profile, but the isolation is narrower than it sounds: it only walls off the
+pages that follow the profile switcher — **Config, API Keys, Skills, MCP, and
+starting a brand-new chat**. None of those will unify with this recipe's
+profile, with or without a `?profile=` query parameter.
+
+It does **not** wall off three other pages, which are sandbox-wide by design
+and not gated by the switcher or by `--isolated`:
+
+- **Sessions** — every session on the sandbox, across every profile,
+  including `memory-driven-chief-of-staff`'s and its cron-triggered runs.
+  Full-text search covers complete message content; expanding a session
+  loads its full history; **Resume** reopens it as a live chat against
+  *that session's own profile* (not `dashboard-home`); **Export** downloads
+  it as JSON; **Delete**/**Prune** remove it.
+- **Cron** — every registered job across every profile, with its full prompt
+  text, schedule, delivery target, and Pause/Resume/Edit/Trigger-now/Delete.
+- **Profiles** — a management card for every profile, including this one
+  (model, skill count, gateway state, description), with **Rename** and
+  **Delete** — deleting from here removes the workspace, store, and memory
+  the same as `hermes profile delete` does. See
+  [Persistence and reboot behavior](#persistence-and-reboot-behavior).
+
+So the `dashboard-url` forward already gives read — and destructive — access
+to this recipe's session history and cron jobs, whether or not anything else
+in this step is ever run. Hermes uses session auth for this dashboard, so the
+printed URL is a plain link, not a credential, but treat it as sensitive
+regardless: protect access to it through the sandbox's normal session
+controls, and do not expose it publicly.
+
+If you don't have that URL handy, or want to confirm the forward is still
+alive, query it directly from your machine instead of rerunning
+`dashboard-url`:
+
+```bash
+openshell forward list
+```
+
+This lists every active port forward for the sandbox, including the
+dashboard's — read the port from there and open `http://127.0.0.1:<port>`
+in a browser.
+
+Prefer the terminal to the browser? This is the verified way to talk to this
+recipe directly, from inside the sandbox — no dashboard, no forwarding,
+nothing above needed:
 
 ```bash
 hermes -p memory-driven-chief-of-staff chat
 ```
-
-For a dedicated web view scoped to this one profile instead, run this inside
-the sandbox:
-
-```bash
-hermes -p "$PROFILE_NAME" dashboard --isolated
-```
-
-This starts a server dedicated to this profile rather than routing to the
-shared machine-level one above. It is not forwarded out of the sandbox by
-default; see Hermes's own dashboard documentation for its port and access
-options before exposing it.
 
 ### Things to try
 
@@ -382,6 +477,182 @@ Ask it to ground a claim in evidence rather than answer from general recall:
 And after you correct something (`priority ... low` or `ignore ...` via
 `profile/scripts/correct.py`), ask again without re-explaining the
 correction — it should already be reflected.
+
+## Connect Messaging Providers
+
+Slack and Microsoft Outlook are independent, optional inputs. Configure either
+one or both after installing the recipe and setting any intake exclusions.
+Each setup script requires encrypted sandbox storage and attaches a read-only
+OpenShell provider to the NemoHermes sandbox.
+
+Both setup scripts require `SANDBOX_STORAGE_PATH`: the **host-side** path
+where this sandbox's storage actually lives, not a path inside the sandbox
+and not `$HOME`. Once a connector is attached, real message subjects,
+senders, and bodies land in the store, and that requires the underlying
+volume to be encrypted — a check `require-encrypted-storage.sh` cannot make
+from inside the sandbox, since `HERMES_HOME` there is an overlay filesystem
+with no block device behind it. There is no default: where the sandbox's
+storage actually lives depends on the driver. For the Docker driver, discover
+it with `docker info --format '{{.DockerRootDir}}'` (commonly
+`/var/lib/docker` on a stock install, but not guaranteed — always verify
+rather than assume). See [docs/encrypted-storage.md](docs/encrypted-storage.md)
+for the VM and Kubernetes drivers and how to verify the volume is encrypted.
+
+### Profile configuration
+
+The installer has already created the target profile from
+`profile/distribution.yaml`. Its model block should have this shape:
+
+```yaml
+model:
+  default: "<provider/model>"
+  provider: "<provider>"
+  base_url: "<https-endpoint>"
+  api_key: sk-OPENSHELL-PROXY-REWRITE
+```
+
+The `api_key` value is the non-secret routing marker configured during
+installation. OpenShell replaces it at egress; it is not a credential to rotate
+or hide.
+
+Provider setup now continues on **your machine, outside the sandbox**. The
+current setup helpers require a Linux shell; use WSL on Windows.
+
+### Slack
+
+Slack setup is optional. Complete it only after placing the sandbox storage on
+an encrypted volume; owner-only permissions are access control, not encryption.
+See [docs/encrypted-storage.md](docs/encrypted-storage.md) first.
+
+Run the setup script from the recipe checkout on **your machine**, not inside
+the sandbox. Your machine has `openshell`; the sandbox has `hermes`.
+
+```bash
+export SANDBOX_STORAGE_PATH="<path-containing-sandbox-storage>"
+export OPENSHELL_SANDBOX_NAME="my-hermes"
+bash scripts/setup-slack.sh
+```
+
+The script imports `docs/slack_app_manifest.json`, requests user scopes, checks
+the provider type and read-only policy, configures token rotation, and attaches
+the provider to the named sandbox. The required scopes are:
+
+```yaml
+user_scopes:
+  - im:read
+  - im:history
+  - mpim:read
+  - mpim:history
+  - channels:read
+  - channels:history
+  - users:read
+```
+
+Static user tokens, bot tokens, and app tokens are refused. Attachments are not
+downloaded. Full setup and workspace-admin recovery steps are in
+[docs/set-up-slack.md](docs/set-up-slack.md).
+
+Verify the live collector from your machine through the supported sandbox exec
+path. Replace both placeholders.
+
+```bash
+nemohermes my-hermes exec \
+  --workdir /sandbox/memory-driven-chief-of-staff \
+  -- env HERMES_HOME=/sandbox/.hermes/profiles/memory-driven-chief-of-staff \
+  python3 profile/scripts/ingest_slack.py --recheck
+```
+
+Collector exit codes are stable diagnostics:
+
+| Exit | Meaning |
+| --- | --- |
+| `0` | Fetch succeeded, or Slack is intentionally unconfigured |
+| `1` | Other collector error |
+| `2` | Missing/wrong credential type or unreachable API |
+| `3` | Slack rate limit |
+| `4` | Required Slack scope missing |
+
+### Microsoft Outlook
+
+Outlook intake uses the Microsoft Graph inbox delta API. Register a Microsoft
+Entra application with public-client flows enabled and delegated `Mail.Read`,
+`User.Read`, and `offline_access` permissions. Do not grant application-level
+mail permissions, which would authorize access beyond the signed-in mailbox.
+
+Run the device-code setup from the recipe checkout on your machine:
+
+```bash
+export SANDBOX_STORAGE_PATH="<path-containing-sandbox-storage>"
+export OPENSHELL_SANDBOX_NAME="my-hermes"
+export GRAPH_CLIENT_ID="<entra-application-client-id>"
+export GRAPH_TENANT_ID="<entra-directory-tenant-id>"
+bash scripts/setup-graph.sh
+```
+
+If the script reports that another attached provider already exposes
+`MS_GRAPH_ACCESS_TOKEN`, treat that as a hard stop. Detach the conflicting
+provider or use a dedicated sandbox, then rerun setup. Do not run the Graph
+collector while the credential source is ambiguous.
+
+On the supported path, the OpenShell gateway stores and refreshes the
+delegated credential, and the sandbox receives only an OpenShell placeholder. Confirm
+that the attached provider has type `memory-driven-cos-graph-user` and that its
+exported profile declares `access: read-only` with `enforcement: enforce` before
+running the collector. The initial synchronization covers seven days by default
+and resumes across intake ticks when more pages remain. Configure a different
+`GRAPH_BACKFILL_DAYS` in the profile environment file before the first
+synchronization. See [docs/set-up-graph.md](docs/set-up-graph.md) for the
+application registration, provider inspection, backfill, revocation, and
+recovery steps.
+
+### Link identities across providers
+
+Slack identifies a person by user ID, while email uses an address. The recipe
+never assumes that matching display names belong to the same person. The memory
+job reports likely matches as `identity_candidates`; only the user can confirm
+or reject them.
+
+Run the identity command from your machine through sandbox exec:
+
+```bash
+nemohermes my-hermes exec \
+  --workdir /sandbox/memory-driven-chief-of-staff \
+  -- env HERMES_HOME=/sandbox/.hermes/profiles/memory-driven-chief-of-staff \
+  python3 profile/scripts/link_identity.py same \
+    slack:U01DANA email:dana@example.com
+```
+
+Use `different` instead of `same` to reject a match. Confirmed relationships
+compose across providers. Rejected candidates are not proposed again. If saved
+answers conflict, the recipe reports `identity_conflicts` and changes nothing.
+Existing page names remain stable after identities are linked so that index
+entries and source-backed links do not move.
+
+### Collector failures
+
+When a collector fails, the intake batch records only its name, exit code, and
+error class. It does not place collector output in the model prompt or the
+scheduler log because that output can contain message text or authentication
+material. Run the collector directly to inspect its full error.
+
+Verify the collector from your machine:
+
+```bash
+nemohermes my-hermes exec \
+  --workdir /sandbox/memory-driven-chief-of-staff \
+  -- env HERMES_HOME=/sandbox/.hermes/profiles/memory-driven-chief-of-staff \
+  python3 profile/scripts/ingest_graph.py --recheck
+```
+
+Outlook collector exit codes are:
+
+| Exit | Meaning |
+| --- | --- |
+| `0` | Fetch succeeded, can resume, or Outlook is unconfigured |
+| `1` | Other collector error |
+| `2` | Missing, invalid, or refused credential |
+| `3` | Microsoft Graph rate limit |
+| `4` | Token is not a delegated mailbox token with the required scopes |
 
 ## Offline Walkthrough (No Deployment)
 
@@ -508,169 +779,6 @@ are not supported. Invalid or unknown fields fail closed.
 }
 ```
 
-## Connect Messaging Providers
-
-Slack and Microsoft Outlook are independent, optional inputs. Configure either
-one or both after installing the recipe and setting any intake exclusions.
-Each setup script requires encrypted sandbox storage and attaches a read-only
-OpenShell provider to the NemoHermes sandbox.
-
-### Profile configuration
-
-The installer has already created the target profile from
-`profile/distribution.yaml`. Its model block should have this shape:
-
-```yaml
-model:
-  default: "<provider/model>"
-  provider: "<provider>"
-  base_url: "<https-endpoint>"
-  api_key: sk-OPENSHELL-PROXY-REWRITE
-```
-
-The `api_key` value is the non-secret routing marker configured during
-installation. OpenShell replaces it at egress; it is not a credential to rotate
-or hide.
-
-Provider setup now continues on **your machine, outside the sandbox**. The
-current setup helpers require a Linux shell; use WSL on Windows.
-
-### Slack
-
-Slack setup is optional. Complete it only after placing the sandbox storage on
-an encrypted volume; owner-only permissions are access control, not encryption.
-See [docs/encrypted-storage.md](docs/encrypted-storage.md) first.
-
-Run the setup script from the recipe checkout on **your machine**, not inside
-the sandbox. Your machine has `openshell`; the sandbox has `hermes`.
-
-```bash
-export SANDBOX_STORAGE_PATH="<path-containing-sandbox-storage>"
-export OPENSHELL_SANDBOX_NAME="my-hermes"
-bash scripts/setup-slack.sh
-```
-
-The script imports `docs/slack_app_manifest.json`, requests user scopes, checks
-the provider type and read-only policy, configures token rotation, and attaches
-the provider to the named sandbox. The required scopes are:
-
-```yaml
-user_scopes:
-  - im:read
-  - im:history
-  - mpim:read
-  - mpim:history
-  - channels:read
-  - channels:history
-  - users:read
-```
-
-Static user tokens, bot tokens, and app tokens are refused. Attachments are not
-downloaded. Full setup and workspace-admin recovery steps are in
-[docs/set-up-slack.md](docs/set-up-slack.md).
-
-Verify the live collector from your machine through the supported sandbox exec
-path. Replace both placeholders.
-
-```bash
-nemohermes my-hermes exec \
-  --workdir /sandbox/memory-driven-chief-of-staff \
-  -- env HERMES_HOME=/sandbox/.hermes/profiles/memory-driven-chief-of-staff \
-  python3 profile/scripts/ingest_slack.py --recheck
-```
-
-Collector exit codes are stable diagnostics:
-
-| Exit | Meaning |
-| --- | --- |
-| `0` | Fetch succeeded, or Slack is intentionally unconfigured |
-| `1` | Other collector error |
-| `2` | Missing/wrong credential type or unreachable API |
-| `3` | Slack rate limit |
-| `4` | Required Slack scope missing |
-
-### Microsoft Outlook
-
-Outlook intake uses the Microsoft Graph inbox delta API. Register a Microsoft
-Entra application with public-client flows enabled and delegated `Mail.Read`,
-`User.Read`, and `offline_access` permissions. Do not grant application-level
-mail permissions, which would authorize access beyond the signed-in mailbox.
-
-Run the device-code setup from the recipe checkout on your machine:
-
-```bash
-export SANDBOX_STORAGE_PATH="<path-containing-sandbox-storage>"
-export OPENSHELL_SANDBOX_NAME="my-hermes"
-export GRAPH_CLIENT_ID="<entra-application-client-id>"
-export GRAPH_TENANT_ID="<entra-directory-tenant-id>"
-bash scripts/setup-graph.sh
-```
-
-If the script reports that another attached provider already exposes
-`MS_GRAPH_ACCESS_TOKEN`, treat that as a hard stop. Detach the conflicting
-provider or use a dedicated sandbox, then rerun setup. Do not run the Graph
-collector while the credential source is ambiguous.
-
-On the supported path, the gateway stores and refreshes the delegated
-credential, and the sandbox receives only an OpenShell placeholder. Confirm
-that the attached provider has type `memory-driven-cos-graph-user` and that its
-exported profile declares `access: read-only` with `enforcement: enforce` before
-running the collector. The initial synchronization covers seven days by default
-and resumes across intake ticks when more pages remain. Configure a different
-`GRAPH_BACKFILL_DAYS` in the profile environment file before the first
-synchronization. See [docs/set-up-graph.md](docs/set-up-graph.md) for the
-application registration, provider inspection, backfill, revocation, and
-recovery steps.
-
-### Link identities across providers
-
-Slack identifies a person by user ID, while email uses an address. The recipe
-never assumes that matching display names belong to the same person. The memory
-job reports likely matches as `identity_candidates`; only the user can confirm
-or reject them.
-
-Run the identity command from your machine through sandbox exec:
-
-```bash
-nemohermes my-hermes exec \
-  --workdir /sandbox/memory-driven-chief-of-staff \
-  -- env HERMES_HOME=/sandbox/.hermes/profiles/memory-driven-chief-of-staff \
-  python3 profile/scripts/link_identity.py same \
-    slack:U01DANA email:dana@example.com
-```
-
-Use `different` instead of `same` to reject a match. Confirmed relationships
-compose across providers. Rejected candidates are not proposed again. If saved
-answers conflict, the recipe reports `identity_conflicts` and changes nothing.
-Existing page names remain stable after identities are linked so that index
-entries and source-backed links do not move.
-
-### Collector failures
-
-When a collector fails, the intake batch records only its name, exit code, and
-error class. It does not place collector output in the model prompt or the
-scheduler log because that output can contain message text or authentication
-material. Run the collector directly to inspect its full error.
-
-Verify the collector from your machine:
-
-```bash
-nemohermes my-hermes exec \
-  --workdir /sandbox/memory-driven-chief-of-staff \
-  -- env HERMES_HOME=/sandbox/.hermes/profiles/memory-driven-chief-of-staff \
-  python3 profile/scripts/ingest_graph.py --recheck
-```
-
-Outlook collector exit codes are:
-
-| Exit | Meaning |
-| --- | --- |
-| `0` | Fetch succeeded, can resume, or Outlook is unconfigured |
-| `1` | Other collector error |
-| `2` | Missing, invalid, or refused credential |
-| `3` | Microsoft Graph rate limit |
-| `4` | Token is not a delegated mailbox token with the required scopes |
-
 ## Scheduled Operation
 
 `scripts/register-jobs.sh` is idempotent: it edits jobs with matching names
@@ -715,9 +823,29 @@ JOB_ID="<copy-an-id-from-the-list>"
 hermes -p memory-driven-chief-of-staff cron remove "$JOB_ID"
 ```
 
+There is no single `cron` subcommand that removes every job at once — `cron
+list` prints a table for a person, not machine-readable output. To remove all
+of them, read each job's id from the profile's own job store instead, the same
+file `register-jobs.sh` itself reads to stay idempotent, and remove them in a
+loop:
+
+```bash
+PROFILE_HOME="$(hermes profile show memory-driven-chief-of-staff \
+  | sed -n 's/^Path:[[:space:]]*//p')"
+python3 -c '
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as handle:
+    data = json.load(handle)
+for job in data.get("jobs", []):
+    print(job["id"])
+' "$PROFILE_HOME/cron/jobs.json" | while read -r JOB_ID; do
+  hermes -p memory-driven-chief-of-staff cron remove "$JOB_ID"
+done
+```
+
 Deleting the profile also deletes its workspace, store, and memory — but not
 a gateway process already running against it. If you started one by hand
-(step 4 of Quick Start), stop it with the profile-scoped lifecycle command,
+(step 5 of Quick Start), stop it with the profile-scoped lifecycle command,
 then delete the profile:
 
 ```bash
