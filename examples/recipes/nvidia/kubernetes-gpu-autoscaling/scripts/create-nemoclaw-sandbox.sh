@@ -10,8 +10,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-# shellcheck source=../versions.env
-source "${CHART_DIR}/versions.env"
+REPO_ROOT="$(cd "${CHART_DIR}/../../../.." && pwd)"
+# shellcheck source=../../../../../scripts/example_dependencies.sh
+source "${REPO_ROOT}/scripts/example_dependencies.sh"
+load_example_dependencies "${CHART_DIR}"
 # shellcheck source=hpa-common.sh
 source "${SCRIPT_DIR}/hpa-common.sh"
 
@@ -65,9 +67,8 @@ fi
   || fail "NEMOCLAW_SANDBOX_NAME must be a 2-63 character lowercase Kubernetes-style name"
 hpa_common_verify_target_node 1 || exit 1
 
-ACTUAL_OPENSHELL_VERSION="$(openshell --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)"
-[[ "${ACTUAL_OPENSHELL_VERSION}" == "${OPENSHELL_VERSION}" ]] \
-  || fail "OpenShell CLI ${OPENSHELL_VERSION} is required; found ${ACTUAL_OPENSHELL_VERSION:-unknown}"
+require_example_dependency_version \
+  "OpenShell CLI" "${OPENSHELL_VERSION}" openshell --version
 openshell status >/dev/null
 
 IFS=$'\t' read -r DEPLOYED_INFERENCE_SECRET DEPLOYED_INFERENCE_SECRET_KEY < <(
@@ -83,11 +84,11 @@ INFERENCE_SECRET_KEY="${INFERENCE_API_SECRET_KEY:-${DEPLOYED_INFERENCE_SECRET_KE
 
 SOURCE_ROOT="$(mktemp -d)"
 trap 'rm -rf -- "${SOURCE_ROOT}"' EXIT
-git clone --quiet --depth 1 --branch "${NEMOCLAW_VERSION}" \
+git clone --quiet --depth 1 --branch "${NEMOCLAW_INSTALL_TAG}" \
   https://github.com/NVIDIA/NemoClaw.git "${SOURCE_ROOT}/nemoclaw"
 ACTUAL_NEMOCLAW_COMMIT="$(git -C "${SOURCE_ROOT}/nemoclaw" rev-parse HEAD)"
-[[ "${ACTUAL_NEMOCLAW_COMMIT}" == "${NEMOCLAW_COMMIT}" ]] \
-  || fail "NemoClaw ${NEMOCLAW_VERSION} resolved to unexpected commit ${ACTUAL_NEMOCLAW_COMMIT}"
+[[ "${ACTUAL_NEMOCLAW_COMMIT}" == "${NEMOCLAW_INSTALL_REF}" ]] \
+  || fail "NemoClaw ${NEMOCLAW_INSTALL_TAG} resolved to unexpected commit ${ACTUAL_NEMOCLAW_COMMIT}"
 POLICY_FILE="${SOURCE_ROOT}/nemoclaw/nemoclaw-blueprint/policies/openclaw-sandbox.yaml"
 [[ -f "${POLICY_FILE}" ]] || fail "NemoClaw release policy is missing"
 

@@ -15,6 +15,25 @@ data:
     # NOTE: no "set -e" — the NemoClaw installer emits transient errors
     # (connection refused) during the gateway boot race. Errors handled explicitly.
 
+    # The deployment template injects values resolved from the example-root
+    # dependencies.toml through helm/deploy.sh. Refuse an incomplete install.
+    if ! [[ "${NEMOCLAW_INSTALL_TAG:-}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      echo "[Config] ERROR: NEMOCLAW_INSTALL_TAG must be set to vX.Y.Z."
+      exit 1
+    fi
+    if ! [[ "${NEMOCLAW_INSTALL_REF:-}" =~ ^[0-9a-f]{40}$ ]]; then
+      echo "[Config] ERROR: NEMOCLAW_INSTALL_REF must be a 40-character commit."
+      exit 1
+    fi
+    if ! [[ "${NEMOCLAW_AGENT:-}" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+      echo "[Config] ERROR: NEMOCLAW_AGENT must name a valid NemoClaw harness."
+      exit 1
+    fi
+    if ! [[ "${OPENSHELL_VERSION:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      echo "[Config] ERROR: OPENSHELL_VERSION must be set to X.Y.Z."
+      exit 1
+    fi
+
     # ═══════════════════════════════════════════════════════════════
     # NemoClaw Kubernetes startup script
     # Runs inside the workspace (node:22) sidecar container.
@@ -186,7 +205,15 @@ data:
       # from the DinD daemon's filesystem (not the workspace's). Paths like
       # /usr/local/bin/ and /root/.local/state/ don't exist on DinD.
       echo "[4/4] Phase 1: Installing NemoClaw CLI..."
-      curl -fsSL https://nvidia.com/nemoclaw.sh | bash -s -- --fresh 2>&1 || true
+      curl -fsSL https://nvidia.com/nemoclaw.sh | env \
+        NEMOCLAW_INSTALL_REF="$NEMOCLAW_INSTALL_REF" \
+        NEMOCLAW_INSTALL_TAG="$NEMOCLAW_INSTALL_TAG" \
+        NEMOCLAW_AGENT="$NEMOCLAW_AGENT" \
+        OPENSHELL_VERSION="$OPENSHELL_VERSION" \
+        NEMOCLAW_OPENSHELL_MIN_VERSION="$OPENSHELL_VERSION" \
+        NEMOCLAW_OPENSHELL_MAX_VERSION="$OPENSHELL_VERSION" \
+        NEMOCLAW_OPENSHELL_PIN_VERSION="$OPENSHELL_VERSION" \
+        bash -s -- --fresh 2>&1 || true
 
       # ─── Phase 2: Pre-start gateway compat container ourselves ───────
       # The gateway binary (glibc 2.39) must run inside an ubuntu:24.04
@@ -204,7 +231,7 @@ data:
 
         # Write gateway config TOML with shared-volume paths
         mkdir -p /var/run/nemoclaw-state
-        cat > /var/run/nemoclaw-state/openshell-gateway.toml << 'GWTOML'
+        cat > /var/run/nemoclaw-state/openshell-gateway.toml << GWTOML
     [openshell]
     version = 1
 
@@ -214,7 +241,7 @@ data:
     [openshell.drivers.docker]
     grpc_endpoint = "http://127.0.0.1:8080"
     network_name = "openshell-docker"
-    supervisor_image = "ghcr.io/nvidia/openshell/supervisor:0.0.44"
+    supervisor_image = "ghcr.io/nvidia/openshell/supervisor:${OPENSHELL_VERSION}"
     supervisor_bin = "/var/run/openshell-sandbox"
     GWTOML
 
@@ -235,7 +262,7 @@ data:
           -e OPENSHELL_DOCKER_NETWORK_NAME=openshell-docker \
           -e OPENSHELL_GRPC_ENDPOINT=http://127.0.0.1:8080 \
           -e OPENSHELL_SERVER_PORT=8080 \
-          -e OPENSHELL_DOCKER_SUPERVISOR_IMAGE=ghcr.io/nvidia/openshell/supervisor:0.0.44 \
+          -e OPENSHELL_DOCKER_SUPERVISOR_IMAGE="ghcr.io/nvidia/openshell/supervisor:${OPENSHELL_VERSION}" \
           -e OPENSHELL_DOCKER_SUPERVISOR_BIN=/var/run/openshell-sandbox \
           ubuntu:24.04 /opt/nemoclaw/openshell-gateway 2>&1
 

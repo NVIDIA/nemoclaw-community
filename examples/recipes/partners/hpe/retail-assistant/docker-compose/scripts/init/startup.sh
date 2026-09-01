@@ -10,6 +10,23 @@
 # NemoClaw Docker-Compose startup script
 # Runs inside the workspace (ubuntu:24.04) container.
 # Uses host Docker socket directly (no DinD).
+
+if ! [[ "${NEMOCLAW_INSTALL_TAG:-}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "[Config] ERROR: deploy.sh must resolve NEMOCLAW_INSTALL_TAG from dependencies.toml."
+  exit 1
+fi
+if ! [[ "${NEMOCLAW_INSTALL_REF:-}" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "[Config] ERROR: deploy.sh must resolve NEMOCLAW_INSTALL_REF from dependencies.toml."
+  exit 1
+fi
+if ! [[ "${NEMOCLAW_AGENT:-}" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
+  echo "[Config] ERROR: deploy.sh must resolve a valid NEMOCLAW_AGENT from dependencies.toml."
+  exit 1
+fi
+if ! [[ "${OPENSHELL_VERSION:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "[Config] ERROR: deploy.sh must resolve OPENSHELL_VERSION from dependencies.toml."
+  exit 1
+fi
 # ═══════════════════════════════════════════════════════════════
 
 # ─── Helper: resolve the workspace container IP ───────────────
@@ -213,15 +230,24 @@ if nemoclaw "${NEMOCLAW_SANDBOX_NAME:-retail-demo-assistant}" status >/dev/null 
   echo "[4/4] Sandbox already exists, skipping installer."
   INSTALL_OK=true
 else
-  # Use NemoClaw v0.0.50 (latest tagged release, commit 14b2be2)
-  _INSTALL_CMD="curl -fsSL https://nvidia.com/nemoclaw.sh | NEMOCLAW_INSTALL_REF=14b2be2933ca8e001f66575a1e7bb4f166f401d8 bash -s -- --fresh"
+  run_nemoclaw_installer() {
+    curl -fsSL https://nvidia.com/nemoclaw.sh | env \
+      NEMOCLAW_INSTALL_REF="$NEMOCLAW_INSTALL_REF" \
+      NEMOCLAW_INSTALL_TAG="$NEMOCLAW_INSTALL_TAG" \
+      NEMOCLAW_AGENT="$NEMOCLAW_AGENT" \
+      OPENSHELL_VERSION="$OPENSHELL_VERSION" \
+      NEMOCLAW_OPENSHELL_MIN_VERSION="$OPENSHELL_VERSION" \
+      NEMOCLAW_OPENSHELL_MAX_VERSION="$OPENSHELL_VERSION" \
+      NEMOCLAW_OPENSHELL_PIN_VERSION="$OPENSHELL_VERSION" \
+      bash -s -- --fresh
+  }
 
   # ─── First attempt ─────────────────────────────────────────
   # The installer installs CLI + binaries, then runs onboard.
   # Onboard will likely FAIL because the gateway tries to bind-mount
   # openshell-sandbox from the HOST filesystem where it doesn't exist yet.
   echo "[4/4] First installer attempt (installs CLI + binaries)..."
-  eval "$_INSTALL_CMD" || true
+  run_nemoclaw_installer || true
 
   # ─── Fix #9: Copy binaries to host-visible shared volume ───
   if [ -f /usr/local/bin/openshell-gateway ] && [ -f /usr/local/bin/openshell-sandbox ]; then
@@ -281,7 +307,7 @@ else
 
     # Retry the full installer — it detects the running gateway and skips starting one
     echo "[4/4] Retrying installer with gateway pre-started..."
-    if eval "$_INSTALL_CMD"; then
+    if run_nemoclaw_installer; then
       INSTALL_OK=true
     else
       if nemoclaw "${NEMOCLAW_SANDBOX_NAME:-retail-demo-assistant}" status >/dev/null 2>&1; then

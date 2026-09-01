@@ -16,7 +16,7 @@ Experimental community recipe: a CPU-only NemoClaw/OpenClaw sandbox (OpenShell) 
 
 **New here?** Start with [Quick start](#quick-start). Teardown: [Uninstall](#uninstall).
 
-Pins in `versions.env`: NemoClaw `v0.0.104`, OpenShell `0.0.85`, Agent Sandbox `v0.5.0`.
+`dependencies.toml` selects NemoClaw and the deployment components; the shared helper resolves its exact commit, OpenClaw version, and compatible OpenShell version.
 
 ## Architecture
 
@@ -73,7 +73,7 @@ Cluster baseline matches the [NemoClaw GPU autoscaling chart](https://github.com
 - Metrics Server (on MicroK8s, `install-hpa.sh` can enable it; elsewhere install it first)
 - For the OpenShell sandbox path only:
   - Docker Buildx + a registry every node can pull from (to build/push the sandbox image)
-  - OpenShell CLI matching `versions.env` (for example `uv tool install "openshell==${OPENSHELL_VERSION}"`)
+  - OpenShell CLI resolved from `dependencies.toml` (for example `uv tool install "openshell==${OPENSHELL_VERSION}"`)
   - Agent Sandbox controller (manual `kubectl apply` of the pinned manifest — `install-openshell-k8s.sh` does **not** install it)
   - OIDC issuer/client for the default OpenShell path, **or** the documented unauthenticated eval exception
 
@@ -108,7 +108,8 @@ From an empty clone to a working sandbox. Run from `examples/recipes/nvidia/kube
 ```bash
 git clone https://github.com/NVIDIA/nemoclaw-community.git
 cd nemoclaw-community/examples/recipes/nvidia/kubernetes-gpu-autoscaling
-source versions.env
+source ../../../../scripts/example_dependencies.sh
+load_example_dependencies .
 uv tool install "openshell==${OPENSHELL_VERSION}"
 openshell --version
 ```
@@ -144,7 +145,8 @@ Optional QA test (ask the model a real question): [Call inference](#call-inferen
 ### 4. Agent Sandbox, image, OpenShell
 
 ```bash
-source versions.env
+source ../../../../scripts/example_dependencies.sh
+load_example_dependencies .
 kubectl apply -f \
   "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/${AGENT_SANDBOX_VERSION}/manifest.yaml"
 
@@ -406,4 +408,4 @@ Does **not** remove shared Prometheus, Adapter, Envoy Gateway, DCGM ServiceMonit
 - First Ollama start and sandbox image pulls depend on registry access.
 - Installer mutates shared cluster components — review with the cluster admin.
 
-Third-party notices: [THIRD-PARTY-NOTICES](../../../../THIRD-PARTY-NOTICES). Update pins in `versions.env` as one compatibility contract, then rebuild the sandbox image and recreate the sandbox.
+Third-party notices: [THIRD-PARTY-NOTICES](../../../../THIRD-PARTY-NOTICES). Update `dependencies.toml` as one compatibility contract, then rebuild the sandbox image and recreate the sandbox.

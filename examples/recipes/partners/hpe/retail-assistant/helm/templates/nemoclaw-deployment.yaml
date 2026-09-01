@@ -5,6 +5,10 @@
 # NemoClaw on Kubernetes — Deployment
 # Uses official installer with Docker-in-Docker for sandbox isolation.
 # Prerequisites: kubectl create namespace nemoclaw
+{{ $nemoclawInstallTag := required "versions.nemoclawInstallTag is required; use helm/deploy.sh or set it explicitly" .Values.versions.nemoclawInstallTag }}
+{{ $nemoclawInstallRef := required "versions.nemoclawInstallRef is required; use helm/deploy.sh or set it explicitly" .Values.versions.nemoclawInstallRef }}
+{{ $nemoclawAgent := required "versions.nemoclawAgent is required; use helm/deploy.sh or set it explicitly" .Values.versions.nemoclawAgent }}
+{{ $openshellVersion := required "versions.openshellVersion is required; use helm/deploy.sh or set it explicitly" .Values.versions.openshellVersion }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -77,6 +81,15 @@ spec:
               value: "skip"
             - name: NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE
               value: "1"
+            # Stack contract resolved from the example-root dependencies.toml.
+            - name: NEMOCLAW_INSTALL_TAG
+              value: {{ $nemoclawInstallTag | quote }}
+            - name: NEMOCLAW_INSTALL_REF
+              value: {{ $nemoclawInstallRef | quote }}
+            - name: NEMOCLAW_AGENT
+              value: {{ $nemoclawAgent | quote }}
+            - name: OPENSHELL_VERSION
+              value: {{ $openshellVersion | quote }}
             - name: CHAT_UI_URL
               value: "{{ .Values.ingress.host }}"
             {{- if .Values.telegram.enabled }}

@@ -37,9 +37,10 @@ INGRESS_HOST="${INGRESS_HOST:-}"
 # Bump deliberately: `helm search repo <repo>/<chart> --versions` to pick a new version.
 PROM_CHART_VERSION="${PROM_CHART_VERSION:-87.19.0}"
 ADAPTER_CHART_VERSION="${ADAPTER_CHART_VERSION:-5.3.0}"
-# shellcheck disable=SC1091
-source "${CHART_DIR}/versions.env"
-ENVOY_GATEWAY_CHART_VERSION="${ENVOY_GATEWAY_CHART_VERSION:-v1.8.3}"
+REPO_ROOT="$(cd "${CHART_DIR}/../../../.." && pwd)"
+# shellcheck source=../../../../../scripts/example_dependencies.sh
+source "${REPO_ROOT}/scripts/example_dependencies.sh"
+load_example_dependencies "${CHART_DIR}"
 DEPLOYMENT="${DEPLOYMENT:-$(RELEASE="${RELEASE}" CHART_NAME=nemoclaw-gpu hpa_common_metrics_proxy_deployment)}"
 HPA_NAME="${HPA_NAME:-${DEPLOYMENT}}"
 HPA_VALUES="${HPA_VALUES:-${CHART_DIR}/values.yaml}"

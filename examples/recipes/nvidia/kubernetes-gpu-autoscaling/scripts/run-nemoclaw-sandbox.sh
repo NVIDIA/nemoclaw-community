@@ -10,8 +10,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-# shellcheck source=../versions.env
-source "${CHART_DIR}/versions.env"
+REPO_ROOT="$(cd "${CHART_DIR}/../../../.." && pwd)"
+# shellcheck source=../../../../../scripts/example_dependencies.sh
+source "${REPO_ROOT}/scripts/example_dependencies.sh"
+load_example_dependencies "${CHART_DIR}"
 
 fail() {
   echo "ERROR: $*" >&2
@@ -19,9 +21,8 @@ fail() {
 }
 
 command -v openshell >/dev/null 2>&1 || fail "missing command: openshell"
-ACTUAL_OPENSHELL_VERSION="$(openshell --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)"
-[[ "${ACTUAL_OPENSHELL_VERSION}" == "${OPENSHELL_VERSION}" ]] \
-  || fail "OpenShell CLI ${OPENSHELL_VERSION} is required; found ${ACTUAL_OPENSHELL_VERSION:-unknown}"
+require_example_dependency_version \
+  "OpenShell CLI" "${OPENSHELL_VERSION}" openshell --version
 
 SANDBOX_NAME="${NEMOCLAW_SANDBOX_NAME:-nemoclaw-onprem}"
 openshell sandbox get "${SANDBOX_NAME}" >/dev/null 2>&1 \

@@ -9,7 +9,7 @@
 | --- | --- |
 | Description | Helps Kubernetes operators match GPU inference capacity to demand by pairing a CPU-only OpenShell sandbox with Ollama replicas that scale on utilization or latency and return to one after load. |
 | Industry | ☁️ Cloud Services |
-| Requirements | Kubernetes 1.25+ · Helm 3 · NVIDIA GPU Operator/DCGM · Metrics Server · Docker Buildx + registry · OpenShell + Agent Sandbox CRDs pinned in versions.env · OIDC or acknowledged isolated-eval exception · experimental |
+| Requirements | Kubernetes 1.25+ · Helm 3 · NVIDIA GPU Operator/DCGM · Metrics Server · Docker Buildx + registry · OpenShell + Agent Sandbox CRDs pinned in dependencies.toml · OIDC or acknowledged isolated-eval exception · experimental |
 
 This experimental community recipe demonstrates a cost-efficient architecture that runs a single OpenClaw agent securely inside a CPU-only OpenShell sandbox while independently autoscaling the GPU-backed Ollama model for inference. Because GPU inference is the primary compute and cost bottleneck, Kubernetes HPA dynamically adjusts Ollama capacity from one to multiple replicas as demand changes—maintaining responsiveness during traffic spikes while releasing idle GPU resources when demand falls.
 
@@ -24,7 +24,7 @@ Kubernetes HPA scales only those Ollama pods (1 GPU each) using a Pods **`Averag
 
 **New here?** Start with [Quick start](#quick-start). Teardown: [Uninstall](#uninstall).
 
-Keep the versions in `versions.env` align with NemoClaw blueprint: NemoClaw `v0.0.104`, OpenShell `0.0.85`, Agent Sandbox `v0.5.0`. NemoClaw blueprint only accepts a specific OpenShell range, and OpenShell’s K8s path pins Agent Sandbox. When upstream NemoClaw moves on: bump all three together in `versions.env`, rebuild/push a new sandbox image tag, re-apply Agent Sandbox if needed, reinstall/restart OpenShell, recreate the sandbox, then re-run verify + HPA checks to `MAX_REPLICAS` (allocatable GPUs).
+`dependencies.toml` selects NemoClaw and the deployment components. The shared dependency helper resolves NemoClaw's exact commit, OpenClaw version, and compatible OpenShell version from that release. When upstream NemoClaw moves on: bump its version and any deployment pins together, rebuild/push a new sandbox image tag, re-apply Agent Sandbox if needed, reinstall/restart OpenShell, recreate the sandbox, then re-run verify + HPA checks to `MAX_REPLICAS` (allocatable GPUs).
 
 ## Architecture
 
@@ -92,7 +92,7 @@ Live-tested on [**Brev: AWS Instance**](https://brev.nvidia.com) with a single-n
 - Allocatable `nvidia.com/gpu`; nodes labeled `nvidia.com/gpu.present=true`
 - NVIDIA GPU Operator + DCGM Exporter (MicroK8s: `install-hpa.sh` can `microk8s enable gpu`)
 - Metrics Server (MicroK8s: installer can enable)
-- OpenShell path only: Docker Buildx + a registry nodes can pull (MicroK8s: [local registry](#microk8s-local-registry) on `:32000`); OpenShell CLI matching `versions.env`; Agent Sandbox CRDs (apply the pinned manifest yourself); OIDC **or** the unauthenticated eval exception
+- OpenShell path only: Docker Buildx + a registry nodes can pull (MicroK8s: [local registry](#microk8s-local-registry) on `:32000`); OpenShell CLI resolved from `dependencies.toml`; Agent Sandbox CRDs (apply the pinned manifest yourself); OIDC **or** the unauthenticated eval exception
 
 ```bash
 kubectl get nodes \
@@ -112,7 +112,8 @@ From an empty clone to a working sandbox. Run from `examples/recipes/nvidia/kube
 ```bash
 git clone https://github.com/NVIDIA/nemoclaw-community.git
 cd nemoclaw-community/examples/recipes/nvidia/kubernetes-gpu-autoscaling
-source versions.env
+source ../../../../scripts/example_dependencies.sh
+load_example_dependencies .
 uv tool install "openshell==${OPENSHELL_VERSION}"
 openshell --version
 ```
@@ -156,13 +157,14 @@ Optional example test: [Example test](#example-test).
 ### 4. Agent Sandbox, image, OpenShell
 
 ```bash
-source versions.env
+source ../../../../scripts/example_dependencies.sh
+load_example_dependencies .
 kubectl apply -f \
   "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/${AGENT_SANDBOX_VERSION}/manifest.yaml"
 
 # MicroK8s local registry (validated path) — see [MicroK8s local registry](#microk8s-local-registry)
 microk8s enable registry   # if not already on
-export NEMOCLAW_SANDBOX_IMAGE=localhost:32000/nemoclaw-k8s:${NEMOCLAW_VERSION}
+export NEMOCLAW_SANDBOX_IMAGE=localhost:32000/nemoclaw-k8s:${NEMOCLAW_INSTALL_TAG}
 # Or any registry nodes can pull: export NEMOCLAW_SANDBOX_IMAGE=registry.example.com/team/nemoclaw-k8s:v0.0.104
 ./scripts/build-nemoclaw-sandbox-image.sh
 
@@ -184,7 +186,7 @@ kubectl -n nemoclaw-sandboxes port-forward service/openshell 8080:8080
 Terminal 2 — client TLS + gateway (OIDC flags in [OpenShell details](#openshell-details)), then:
 
 ```bash
-export NEMOCLAW_SANDBOX_IMAGE=localhost:32000/nemoclaw-k8s:${NEMOCLAW_VERSION}
+export NEMOCLAW_SANDBOX_IMAGE=localhost:32000/nemoclaw-k8s:${NEMOCLAW_INSTALL_TAG}
 export INFERENCE_MODEL=llama3.2:3b   # must match the GPU chart model
 ./scripts/create-nemoclaw-sandbox.sh
 ./scripts/verify-nemoclaw-sandbox.sh   # example: "In one sentence, what is an AI agent sandbox?" — see [Example test](#example-test)
@@ -457,8 +459,9 @@ microk8s enable registry
 # Docker must allow the insecure registry (daemon.json insecure-registries:
 # ["localhost:32000","127.0.0.1:32000"] — then restart Docker).
 
-source versions.env
-export NEMOCLAW_SANDBOX_IMAGE=localhost:32000/nemoclaw-k8s:${NEMOCLAW_VERSION}
+source ../../../../scripts/example_dependencies.sh
+load_example_dependencies .
+export NEMOCLAW_SANDBOX_IMAGE=localhost:32000/nemoclaw-k8s:${NEMOCLAW_INSTALL_TAG}
 ./scripts/build-nemoclaw-sandbox-image.sh
 
 # If a node cannot pull, pre-load into containerd:

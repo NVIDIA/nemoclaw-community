@@ -322,7 +322,11 @@ export NEMOCLAW_VLLM_LOCAL_TOKEN=none_needed
 export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
 unset NEMOCLAW_VLLM_MODEL
 
+source "$COMMUNITY_REPO/scripts/example_dependencies.sh"
+load_example_dependencies "$GUIDE_REPO"
 curl -fsSL https://www.nvidia.com/nemoclaw.sh | \
+  NEMOCLAW_INSTALL_REF="$NEMOCLAW_INSTALL_REF" \
+  NEMOCLAW_INSTALL_TAG="$NEMOCLAW_INSTALL_TAG" \
   NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 bash
 
 NODE_BIN="$(dirname "$(bash -lc 'command -v node')")"

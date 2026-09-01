@@ -1,6 +1,6 @@
 # NemoClaw Retail Demo — Docker Compose
 
-Deploys a fully automated NemoClaw retail assistant (v0.0.50) with Telegram integration, a FastAPI retail backend, PostgreSQL with RBAC, and a local or remote vLLM inference endpoint. A single `docker compose up` produces a working Telegram bot with no manual steps.
+Deploys a fully automated NemoClaw retail assistant with Telegram integration, a FastAPI retail backend, PostgreSQL with RBAC, and a local or remote vLLM inference endpoint. A single `./deploy.sh up` produces a working Telegram bot with no manual steps. NemoClaw, OpenShell, and the selected harness resolve from the root [`dependencies.toml`](../dependencies.toml).
 
 > For common documentation (LLM endpoint setup, identity files, adding users, database schema), see the [root README](../README.md).
 
@@ -15,6 +15,7 @@ Deploys a fully automated NemoClaw retail assistant (v0.0.50) with Telegram inte
 ```
 docker-compose/
 ├── .env                          # Environment variables (edit before deploying)
+├── deploy.sh                     # Resolves dependencies, then runs Docker Compose
 ├── docker-compose.yaml           # Service definitions
 ├── api/                          # FastAPI retail API
 │   ├── Dockerfile
@@ -113,7 +114,7 @@ employee_id,first_name,last_name,role,store_id,email
 Then redeploy:
 
 ```bash
-docker compose down -v && docker compose up -d
+./deploy.sh down -v && ./deploy.sh up -d
 ```
 
 > ⚠️ **The `-v` flag is required.** Without it, the existing PostgreSQL volume is reused and the seed scripts never run — the new `TelegramAuth` row is never inserted and the user cannot authenticate.
@@ -126,7 +127,7 @@ docker compose down -v && docker compose up -d
 cd docker-compose
 cp .env.example .env   # if starting fresh
 # Edit .env with your values
-docker compose up -d
+./deploy.sh up -d
 ```
 
 The `workspace` container's `startup.sh` handles everything automatically:
@@ -137,7 +138,7 @@ The `workspace` container's `startup.sh` handles everything automatically:
 4. Verifies host Docker socket is available
 5. Prunes stale Docker build cache
 6. Exports Telegram channel config as base64 build args
-7. Runs the NemoClaw v0.0.50 installer (`--fresh`)
+7. Runs the NemoClaw release, harness, and resolved OpenShell version from `../dependencies.toml` (`--fresh`)
 8. If Fix #9 applies (gateway binary path issue), copies binaries to shared volume and pre-starts the gateway container
 9. Waits for the sandbox container to be running
 10. Applies post-deploy fixes:
@@ -151,16 +152,16 @@ The `workspace` container's `startup.sh` handles everything automatically:
     - **Fix 7**: restarts openclaw with `kill -9` for a clean Telegram poller
     - **Fix 8**: verifies end-to-end inference
 
-The first time, `docker compose up` builds the **OpenShell sandbox** — a persistent container named `openshell-retail-demo-assistant-<suffix>`. **Allow 15–20 minutes** for a fresh deploy.
+The first time, `./deploy.sh up` builds the **OpenShell sandbox** — a persistent container named `openshell-retail-demo-assistant-<suffix>`. **Allow 15–20 minutes** for a fresh deploy.
 
 ### Updating configuration (fast restart, ~2 min)
 
 If you only need to change `.env` variables (model URL, Telegram user IDs, `OPENCLAW_*` tuning):
 
 ```bash
-docker compose down   # sandbox container is preserved
+./deploy.sh down   # sandbox container is preserved
 # Edit .env
-docker compose up -d  # workspace restarts, re-applies all configuration
+./deploy.sh up -d  # workspace restarts, re-applies all configuration
 ```
 
 ### Full rebuild
@@ -168,9 +169,9 @@ docker compose up -d  # workspace restarts, re-applies all configuration
 Required when changing `openclaw.json` structure, network policy, or identity files:
 
 ```bash
-docker compose down
+./deploy.sh down
 docker rm -f $(docker ps -aq --filter "name=openshell-retail-demo-assistant")
-docker compose up -d  # full rebuild — allow 10–15 minutes
+./deploy.sh up -d  # full rebuild — allow 10–15 minutes
 ```
 
 > Find the sandbox container: `docker ps -a | grep openshell-retail-demo`
@@ -202,7 +203,7 @@ Message your bot on Telegram:
 ### Tear down
 
 ```bash
-docker compose down -v   # -v removes database volume
+./deploy.sh down -v   # -v removes database volume
 ```
 
 ## Troubleshooting
@@ -212,7 +213,7 @@ docker compose down -v   # -v removes database volume
 | `socat-8000 ERROR: socat failed again` | Endpoint unreachable. Check `OPENAI_BASE_URL` and that the model server is running. |
 | `Docker not available via host socket` | Check `/var/run/docker.sock` is accessible on the host. |
 | `[Fix9] Pre-starting gateway container...` | Normal — gateway binary workaround. |
-| `Sandbox not created after second attempt` | Check `docker logs nemoclaw-openshell-gateway`. Try `docker compose down -v` and retry. |
+| `Sandbox not created after second attempt` | Check `docker logs nemoclaw-openshell-gateway`. Try `./deploy.sh down -v` and retry. |
 | `WARNING: Retail API relay failed to start` | Python relay failed. Check sandbox is healthy: `docker ps`. |
 | `Inference verification failed` | socat proxy died or provider URL wrong. Check `ss -tlnp \| grep 8000`. |
 | Bot not responding on Telegram | Verify `TELEGRAM_BOT_TOKEN` and that the Telegram ID is in both `TELEGRAM_USER_ID` and `TelegramAuth.csv`. |

@@ -1,6 +1,14 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# Resolved from ../dependencies.toml by deploy.sh. A direct Helm invocation
+# must provide all four values explicitly; the template fails otherwise.
+versions:
+    nemoclawInstallTag: ""
+    nemoclawInstallRef: ""
+    nemoclawAgent: ""
+    openshellVersion: ""
+
 workspace:
     openaiBaseUrl: "http://ip:port/v1"
     socatInferencePort: 8000

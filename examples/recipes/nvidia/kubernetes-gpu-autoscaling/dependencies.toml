@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+schema_version = 1
+
+[stack]
+distribution = "nemoclaw"
+version = "v0.0.104"
+harness = "openclaw"
+
+[deployment]
+agent_sandbox_version = "v0.5.0"
+envoy_gateway_chart_version = "v1.8.3"

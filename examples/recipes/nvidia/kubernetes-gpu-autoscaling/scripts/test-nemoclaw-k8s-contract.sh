@@ -6,11 +6,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-# shellcheck source=../versions.env
-source "${CHART_DIR}/versions.env"
+REPO_ROOT="$(cd "${CHART_DIR}/../../../.." && pwd)"
+# shellcheck source=../../../../../scripts/example_dependencies.sh
+source "${REPO_ROOT}/scripts/example_dependencies.sh"
+load_example_dependencies "${CHART_DIR}"
 
-[[ "${NEMOCLAW_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-[[ "${NEMOCLAW_COMMIT}" =~ ^[0-9a-f]{40}$ ]]
+[[ "${NEMOCLAW_INSTALL_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+[[ "${NEMOCLAW_AGENT}" == "openclaw" ]]
+[[ "${NEMOCLAW_INSTALL_REF}" =~ ^[0-9a-f]{40}$ ]]
 [[ "${OPENSHELL_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
 [[ "${AGENT_SANDBOX_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
 

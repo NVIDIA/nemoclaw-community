@@ -5,6 +5,18 @@
 
 set -uo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+EXAMPLE_ROOT="$(dirname "$SCRIPT_DIR")"
+REPO_ROOT="$(cd "$EXAMPLE_ROOT/../../../.." && pwd)"
+DEPENDENCY_HELPER="$REPO_ROOT/scripts/example_dependencies.sh"
+if [ ! -r "$DEPENDENCY_HELPER" ]; then
+  echo "missing $DEPENDENCY_HELPER" >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+source "$DEPENDENCY_HELPER"
+load_example_dependencies "$EXAMPLE_ROOT" || exit 1
+
 MIN_FREE_GIB="${MIN_FREE_GIB:-600}"
 STORAGE_PATH="${STORAGE_PATH:-$HOME}"
 OV_GITHUB_REPO="${OV_GITHUB_REPO:-NVIDIA-Omniverse/omniverse-labs}"
@@ -79,6 +91,10 @@ section() {
 has_command() {
   command -v "$1" >/dev/null 2>&1
 }
+
+if ! require_example_harness hermes >/dev/null 2>&1; then
+  fail "dependencies.toml must select the Hermes agent for this demo"
+fi
 
 port_is_listening() {
   local port="$1"
@@ -408,6 +424,13 @@ if has_command docker && docker info >/dev/null 2>&1; then
 fi
 
 if has_command nemohermes; then
+  installed_nemoclaw="$(example_dependency_version nemohermes --version)"
+  if [ -n "$installed_nemoclaw" ] \
+    && [ "${installed_nemoclaw#v}" = "${NEMOCLAW_INSTALL_TAG#v}" ]; then
+    pass "NemoClaw $installed_nemoclaw matches dependencies.toml"
+  else
+    fail "NemoClaw ${installed_nemoclaw:-unknown} does not match $NEMOCLAW_INSTALL_TAG"
+  fi
   sandbox_names="$(nemohermes list --json 2>/dev/null | sed -n 's/^[[:space:]]*"name": "\([^"]*\)".*/\1/p' || true)"
   if [ -n "$sandbox_names" ]; then
     while IFS= read -r sandbox_name; do
@@ -418,6 +441,16 @@ if has_command nemohermes; then
   fi
 else
   warn "nemohermes is not installed yet; existing sandbox registry was not checked"
+fi
+
+if has_command openshell; then
+  installed_openshell="$(example_dependency_version openshell --version)"
+  if [ -n "$installed_openshell" ] \
+    && [ "${installed_openshell#v}" = "${OPENSHELL_VERSION#v}" ]; then
+    pass "OpenShell $installed_openshell matches the NemoClaw dependency contract"
+  else
+    fail "OpenShell ${installed_openshell:-unknown} does not match $OPENSHELL_VERSION"
+  fi
 fi
 
 section "Desktop and guide paths"

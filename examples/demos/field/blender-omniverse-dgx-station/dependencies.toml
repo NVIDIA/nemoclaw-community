@@ -1,8 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+schema_version = 1
 
-apiVersion: v2
-name: nemoclaw
-description: A deployment for Nvidia Nemoclaw
-type: application
-version: 0.1.0
+[stack]
+distribution = "nemoclaw"
+version = "v0.0.83"
+harness = "hermes"

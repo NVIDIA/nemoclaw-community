@@ -34,10 +34,11 @@ source "$DIR/_lib.sh"
 
 command -v nemoclaw >/dev/null || { echo "nemoclaw not in PATH" >&2; exit 1; }
 command -v git      >/dev/null || { echo "git not in PATH" >&2; exit 1; }
+load_dependencies
+require_nemoclaw_contract
 
-# 1) Resolve the installed NemoClaw version + derived tag / base-image ref.
-NEMOCLAW_VERSION="$(nemoclaw --version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
-[[ -n "$NEMOCLAW_VERSION" ]] || { echo "could not determine nemoclaw version" >&2; exit 1; }
+# 1) Use the validated example contract for the source tag and base image.
+NEMOCLAW_VERSION="$NEMOCLAW_INSTALL_TAG"
 BASE_IMAGE_REF="${NEMOCLAW_SANDBOX_BASE_IMAGE_REF:-ghcr.io/nvidia/nemoclaw/sandbox-base:${NEMOCLAW_VERSION}}"
 echo "NemoClaw $NEMOCLAW_VERSION — baking plugin against base image $BASE_IMAGE_REF"
 
@@ -63,6 +64,12 @@ else
   echo "Cloning $REPO_URL @ $NEMOCLAW_VERSION (set NEMOCLAW_SOURCE_DIR to skip)"
   git clone --depth 1 --branch "$NEMOCLAW_VERSION" "$REPO_URL" "$WORK_DIR"
 fi
+
+ACTUAL_NEMOCLAW_COMMIT="$(git -C "$WORK_DIR" rev-parse HEAD)"
+[[ "$ACTUAL_NEMOCLAW_COMMIT" == "$NEMOCLAW_INSTALL_REF" ]] || {
+  echo "NemoClaw $NEMOCLAW_VERSION resolved to unexpected commit $ACTUAL_NEMOCLAW_COMMIT" >&2
+  exit 1
+}
 
 CONTEXT_DOCKERFILE="$WORK_DIR/Dockerfile"
 [[ -f "$CONTEXT_DOCKERFILE" ]] || { echo "no Dockerfile in build context $WORK_DIR" >&2; exit 1; }

@@ -9,8 +9,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-# shellcheck source=../versions.env
-source "${CHART_DIR}/versions.env"
+REPO_ROOT="$(cd "${CHART_DIR}/../../../.." && pwd)"
+# shellcheck source=../../../../../scripts/example_dependencies.sh
+source "${REPO_ROOT}/scripts/example_dependencies.sh"
+load_example_dependencies "${CHART_DIR}"
 # shellcheck source=hpa-common.sh
 source "${SCRIPT_DIR}/hpa-common.sh"
 

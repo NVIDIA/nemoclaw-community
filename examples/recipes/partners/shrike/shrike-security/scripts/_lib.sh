@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-FileCopyrightText: Copyright (c) 2026, Shrike Security, Inc. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+# shellcheck shell=bash
 #
 # Shared helpers for the shrike-security scripts. Source this from each script.
 # Not meant to run on its own — no shebang.
@@ -16,6 +17,35 @@ load_env() {
   # shellcheck disable=SC1091
   . "$EXAMPLE_DIR/.env"
   set +a
+}
+
+load_dependencies() {
+  local repo_root dependency_helper
+  repo_root="$(cd "$EXAMPLE_DIR/../../../../.." && pwd)"
+  dependency_helper="$repo_root/scripts/example_dependencies.sh"
+  [[ -r "$dependency_helper" ]] || {
+    echo "error: missing $dependency_helper" >&2
+    exit 1
+  }
+  # shellcheck source=/dev/null
+  source "$dependency_helper"
+  load_example_dependencies "$EXAMPLE_DIR"
+}
+
+require_nemoclaw_contract() {
+  require_example_harness openclaw || return
+  require_example_dependency_version NemoClaw "$NEMOCLAW_INSTALL_TAG" \
+    nemoclaw --version || return
+  if command -v openshell >/dev/null 2>&1; then
+    require_example_dependency_version OpenShell "$OPENSHELL_VERSION" \
+      openshell --version || return
+  fi
+}
+
+require_openclaw_contract() {
+  local sandbox="$1"
+  require_example_dependency_version "OpenClaw in sandbox '$sandbox'" \
+    "$OPENCLAW_VERSION" openshell sandbox exec --name "$sandbox" -- openclaw --version
 }
 
 # Fail loud if the named variable is unset or empty. Second arg is an

@@ -27,13 +27,18 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$DIR/_lib.sh"
 
+load_dependencies
 if ! command -v nemoclaw >/dev/null; then
-  echo "nemoclaw not in PATH — install it first (the acceptance variable must be on the bash side of the pipe):" >&2
-  echo "  curl -fsSL https://www.nvidia.com/nemoclaw.sh | NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 bash" >&2
+  echo "nemoclaw not in PATH — install the exact tested stack first:" >&2
+  echo "  curl -fsSL https://www.nvidia.com/nemoclaw.sh \\" >&2
+  echo "    | NEMOCLAW_INSTALL_REF=$NEMOCLAW_INSTALL_REF \\" >&2
+  echo "      NEMOCLAW_INSTALL_TAG=$NEMOCLAW_INSTALL_TAG \\" >&2
+  echo "      NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 bash" >&2
   echo "Then open a new terminal (or 'source ~/.bashrc') and re-run this script." >&2
   exit 1
 fi
 command -v openshell >/dev/null || { echo "openshell not in PATH — is the gateway installed?" >&2; exit 1; }
+require_nemoclaw_contract
 
 # Shrike governance: the key is required to obtain enforce verdicts.
 require_var SHRIKE_API_KEY "get a key at https://shrikesecurity.com/signup"
@@ -79,8 +84,10 @@ upsert_cred "$SHRIKE_PROVIDER_NAME" "$SHRIKE_PROFILE_ID" "SHRIKE_API_KEY=$SHRIKE
 # 3) Onboard the sandbox with the checked-in agent manifest.
 export NEMOCLAW_NON_INTERACTIVE=1
 export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
+export NEMOCLAW_AGENT
 export NEMOCLAW_SANDBOX_NAME
 if sandbox_exists "$NEMOCLAW_SANDBOX_NAME"; then
+  require_openclaw_contract "$NEMOCLAW_SANDBOX_NAME"
   echo "Sandbox '$NEMOCLAW_SANDBOX_NAME' already exists — profile + provider refreshed above."
   # Ensure the provider is attached even on a re-run (idempotent).
   attach_provider

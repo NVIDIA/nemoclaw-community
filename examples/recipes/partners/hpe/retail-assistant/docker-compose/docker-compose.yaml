@@ -75,6 +75,12 @@ services:
       NEMOCLAW_SANDBOX_NAME: ${NEMOCLAW_SANDBOX_NAME}
       NEMOCLAW_POLICY_MODE: "skip"
       NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE: "1"
+      # Resolved from ../dependencies.toml by deploy.sh. Requiring these here
+      # prevents an unpinned direct `docker compose` invocation.
+      NEMOCLAW_INSTALL_TAG: ${NEMOCLAW_INSTALL_TAG:?run ./deploy.sh}
+      NEMOCLAW_INSTALL_REF: ${NEMOCLAW_INSTALL_REF:?run ./deploy.sh}
+      NEMOCLAW_AGENT: ${NEMOCLAW_AGENT:?run ./deploy.sh}
+      OPENSHELL_VERSION: ${OPENSHELL_VERSION:?run ./deploy.sh}
       CHAT_UI_URL: ${CHAT_UI_URL:-}
       # Telegram
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}

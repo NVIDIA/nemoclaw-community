@@ -22,6 +22,8 @@ Built on the **NVIDIA NemoClaw open-source agentic framework**, the assistant is
 
 Each approach has its own README with deployment-specific instructions. This file covers everything common to both.
 
+The root [`dependencies.toml`](dependencies.toml) is the single platform contract for both approaches. The Compose and Helm wrappers resolve it through the repository's dependency helper before deploying, so NemoClaw, OpenShell, and harness versions are not copied into deployment configuration.
+
 ## Architecture
 
 The diagram below shows the Docker Compose deployment. The Helm/Kubernetes deployment follows the same logical flow but replaces Docker socket management with K8s sidecars and service DNS.

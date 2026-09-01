@@ -15,11 +15,13 @@ A one-shot `postgres-seed` Job populates the database with synthetic retail data
 ## Install
 
 ```bash
-helm install retail-assistant ./helm \
+./helm/deploy.sh retail-assistant \
   --namespace nemoclaw \
   --create-namespace \
   -f my-values.yaml
 ```
+
+`deploy.sh` resolves the example-root [`dependencies.toml`](../dependencies.toml) through the repository dependency helper and passes its exact NemoClaw commit, harness, and OpenShell selections to Helm. Calling the chart directly remains possible only when all four `versions.*` values are provided explicitly; otherwise template rendering fails with a clear error.
 
 ## Key Values
 
@@ -27,6 +29,7 @@ Edit `values.yaml` or pass overrides with `--set`:
 
 | Value | Description |
 |---|---|
+| `versions.*` | Injected by `deploy.sh` from resolved `../dependencies.toml`; do not duplicate these pins in `values.yaml` |
 | `workspace.openaiBaseUrl` | OpenAI-compatible base URL incl. `/v1` (e.g. `http://ip:port/v1`) |
 | `workspace.socatInferencePort` | Port for the inference socat proxy. Default `8000`. Change if port 8000 is busy on the node. |
 | `workspace.model` | Model name (e.g. `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8`) |
@@ -45,7 +48,7 @@ Edit `values.yaml` or pass overrides with `--set`:
 ## Upgrade
 
 ```bash
-helm upgrade retail-assistant ./helm \
+./helm/deploy.sh retail-assistant \
   --namespace nemoclaw \
   -f my-values.yaml
 ```
@@ -82,7 +85,7 @@ employee_id,first_name,last_name,role,store_id,email
 Then upgrade the release to reseed the database:
 
 ```bash
-helm upgrade retail-assistant ./helm --namespace nemoclaw -f my-values.yaml
+./helm/deploy.sh retail-assistant --namespace nemoclaw -f my-values.yaml
 ```
 
 > ⚠️ If the PostgreSQL PVC already exists with old data, delete it first so the seed job runs fresh:

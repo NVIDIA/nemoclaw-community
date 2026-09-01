@@ -63,8 +63,8 @@ lifecycle scripts; the recipe targets the public NemoClaw/OpenShell CLIs.
 
 ## Prerequisites and supported environments
 
-- NemoClaw installed with a working OpenShell gateway (`nemoclaw`, `openshell`
-  on `PATH`). Install: `curl -fsSL https://www.nvidia.com/nemoclaw.sh | NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 bash`
+- The repository's exact tested NemoClaw/OpenShell stack (`nemoclaw`,
+  `openshell` on `PATH`), installed with the contract-driven command below.
 - An inference provider (NVIDIA-hosted `build` endpoints, or any OpenAI-compatible endpoint).
 - A Shrike API key (free tier available): <https://shrikesecurity.com/signup>
 - On the host: `node` + `npm` (to build the plugin) and `curl`.
@@ -128,6 +128,14 @@ silently circumvent the integrity shield.
 ## Setup and configuration
 
 ```bash
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+source "$REPO_ROOT/scripts/example_dependencies.sh"
+load_example_dependencies "$PWD"
+curl -fsSL https://www.nvidia.com/nemoclaw.sh \
+  | NEMOCLAW_INSTALL_REF="$NEMOCLAW_INSTALL_REF" \
+    NEMOCLAW_INSTALL_TAG="$NEMOCLAW_INSTALL_TAG" \
+    NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 bash
+
 cp .env.example .env      # set SHRIKE_API_KEY + your inference provider vars
 ```
 
