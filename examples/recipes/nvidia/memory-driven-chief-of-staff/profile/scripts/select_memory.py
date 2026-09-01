@@ -548,16 +548,25 @@ def evidence(conn, since: str) -> dict[str, object]:
         for who in group:
             rows += conn.execute(
                 "SELECT source, event_at, addressing,"
-                "       substr(COALESCE(subject, body), 1, 200)"
+                "       substr(subject, 1, 200), substr(body, 1, 200)"
                 "  FROM items WHERE source = ? AND sender_key = ?"
                 "    AND event_at >= ?"
                 "  ORDER BY event_at DESC LIMIT ?",
                 (who.source, who.key, since, MAX_INTERACTIONS)).fetchall()
         rows.sort(key=lambda r: r[1] or "", reverse=True)
+        # Subject and body are kept apart rather than folded into one field
+        # with `COALESCE(subject, body)`: a mail with a subject hides its
+        # body behind it that way, and the body is exactly where a name and a
+        # request are likely to be. Slack has no subject and always carries
+        # `None` here; the empty string that produces is the correct reading,
+        # not a gap to paper over.
         interactions[mark] = [
             {"when": (event_at or "")[:10], "source": source,
-             "addressing": addressing, "text": " ".join((text or "").split())}
-            for source, event_at, addressing, text in rows[:MAX_INTERACTIONS]]
+             "addressing": addressing,
+             "subject": " ".join((subject or "").split()),
+             "body": " ".join((body or "").split())}
+            for source, event_at, addressing, subject, body
+            in rows[:MAX_INTERACTIONS]]
 
     return {"people": chosen, "interactions": interactions,
             "shared_display_name": shared,

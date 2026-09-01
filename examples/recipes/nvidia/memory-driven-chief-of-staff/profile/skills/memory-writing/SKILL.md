@@ -202,7 +202,10 @@ Write a page when:
   `mentioned` — this person writes to the user rather than past them, or
 - They are in the user's reporting chain, where the memory already records
   it, or
-- They are addressed by name and asked for something.
+- One of the interactions you were given names the user and asks the user
+  for something, in that message's own `subject` or `body` — not in anything
+  you infer about whether the user answered — and that interaction's
+  `addressing` is `direct` or `mentioned`.
 
 Do **not** write a page for:
 

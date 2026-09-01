@@ -181,6 +181,71 @@ class TestTheContractDoesNotContradictTheChecker(unittest.TestCase):
         self.assertIn("unindexed", self.kinds(),
                       "an undeclared file in a project folder was swallowed")
 
+    def test_a_reserved_name_at_the_wrong_depth_is_still_checked(self):
+        """The exemption is positional, not just nominal.
+
+        A file merely named `log.md`, outside the root and outside a
+        project folder's own top level, shares a sidecar's name without
+        being in the position the schema puts one there. `patterns/log.md`
+        and a project sidecar nested one level deeper than the schema
+        allows both used to disappear from every check by name alone.
+        """
+        (self.root / "patterns").mkdir()
+        (self.root / "patterns" / "log.md").write_text(
+            "scratch\n", encoding="utf-8")
+        unindexed = {f.path for f in check_index(self.root)
+                    if f.kind == "unindexed"}
+        self.assertIn("patterns/log.md", unindexed,
+                      "a file merely named log.md, not the memory root's own,"
+                      " was swallowed")
+
+        nested = self.root / "projects" / "billing_migration" / "nested"
+        nested.mkdir()
+        (nested / "log.archive.md").write_text("scratch\n", encoding="utf-8")
+        unindexed = {f.path for f in check_index(self.root)
+                    if f.kind == "unindexed"}
+        self.assertIn("projects/billing_migration/nested/log.archive.md",
+                      unindexed,
+                      "a sidecar name nested deeper than the schema puts one"
+                      " was swallowed")
+
+    def test_a_page_linked_under_the_wrong_section_is_found(self):
+        """A link merely present in the document is not the same as filed
+        where it belongs.
+
+        A concept page linked under `## People`, with an empty `## Concepts`
+        heading added after `## Attention`, used to pass: heading presence
+        and link presence were each checked without regard to where either
+        one actually sat.
+        """
+        (self.root / "concepts").mkdir(exist_ok=True)
+        (self.root / "concepts" / "cutover.md").write_text(
+            "---\ntype: concept\nupdated: 2026-08-20\n---\n\n# Cutover\n",
+            encoding="utf-8")
+        index = self.root / "index.md"
+        original = index.read_text(encoding="utf-8")
+
+        misfiled = original.replace(
+            "## People\n",
+            "## People\n\n- [Cutover](concepts/cutover.md) — the window\n",
+            1).rstrip() + "\n\n## Concepts\n"
+        index.write_text(misfiled, encoding="utf-8")
+        found = {f.kind for f in check_all(self.root, self.TODAY)}
+        self.assertIn("index-misfiled", found)
+        self.assertIn("index-out-of-order", found)
+
+        # Filed under its own section, in schema order, both clear.
+        fixed = original.replace(
+            "## Attention",
+            "## Concepts\n\n- [Cutover](concepts/cutover.md) — the window\n"
+            "\n## Attention", 1)
+        index.write_text(fixed, encoding="utf-8")
+        after = {f.kind for f in check_all(self.root, self.TODAY)}
+        self.assertNotIn("index-misfiled", after)
+        self.assertNotIn("index-out-of-order", after)
+        self.assertNotIn("index-section-missing", after)
+        self.assertNotIn("unindexed", after)
+
     def test_a_project_page_under_the_wrong_name_is_still_checked(self):
         """The shape that most needs reporting, and the one the first rule
         was silent about. `projects/` has no writer, so these pages come from
@@ -296,11 +361,16 @@ class TestTheContractDoesNotContradictTheChecker(unittest.TestCase):
 
         Reported rather than rewritten: the repair job adds the heading,
         which is the path that already exists for a memory that has drifted
-        from its contract.
+        from its contract. Added where `schema.md` orders it, not merely
+        appended — `## Concepts` after `## Attention` clears
+        `index-section-missing` and fails `index-out-of-order` instead, which
+        is not a repair.
         """
         # The shipped fixture index is already the "before" state: it was
         # written when the order had no `## Concepts`, which is the same
-        # position every installed memory is in.
+        # position every installed memory is in. `## Attention` is the only
+        # existing section that schema order puts after `## Concepts`, so
+        # that is where the heading belongs.
         index = self.root / "index.md"
         self.assertNotIn("## Concepts", index.read_text(encoding="utf-8"))
         (self.root / "concepts").mkdir(exist_ok=True)
@@ -312,12 +382,15 @@ class TestTheContractDoesNotContradictTheChecker(unittest.TestCase):
         self.assertIn("index-section-missing", found)
 
         index.write_text(
-            index.read_text(encoding="utf-8").rstrip()
-            + "\n\n## Concepts\n\n- [Cutover](concepts/cutover.md) — the"
-              " window\n", encoding="utf-8")
+            index.read_text(encoding="utf-8").replace(
+                "## Attention",
+                "## Concepts\n\n- [Cutover](concepts/cutover.md) — the"
+                " window\n\n## Attention", 1), encoding="utf-8")
         after = {f.kind for f in check_all(self.root, self.TODAY)}
         self.assertNotIn("index-section-missing", after)
         self.assertNotIn("unindexed", after)
+        self.assertNotIn("index-out-of-order", after)
+        self.assertNotIn("index-misfiled", after)
 
     def test_bootstrap_does_not_reach_an_existing_index(self):
         """Stated as a fact this file depends on rather than a wish.

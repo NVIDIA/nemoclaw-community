@@ -36,18 +36,27 @@ drifts.
 Cheap and mechanical first, so a run that is going to find nothing finds it
 quickly.
 
-1. **Index against filesystem.** Every page has an index entry and every entry
-   points at a page that exists. Resolve a mismatch in the direction that
-   loses nothing: add the missing entry rather than delete the page, and
-   remove an entry only when its target is genuinely gone.
+1. **Index against filesystem.** Every page has an index entry, every entry
+   points at a page that exists, and each entry sits under the `## Section`
+   for its own page type. Resolve a mismatch in the direction that loses
+   nothing: for `unindexed`, add the missing entry; for `index-dangling`,
+   remove an entry only when its target is genuinely gone; for
+   `index-misfiled`, **move** the existing line into its own type's section
+   rather than adding a second entry — the page already has one, it is just
+   filed under the wrong heading.
 2. **Index sections.** `index-section-missing` means a validated page type
    has no `## Section` to be filed under, so the first page of that type
    would be reported unindexed with no entry that could clear it. Add the
-   heading in the order `schema.md` fixes, and add nothing else — an empty
-   section is the correct state until a page of that type exists. This is
-   what reaches a memory installed before the type was added: the seed only
-   supplies a fresh install, and bootstrap never overwrites an index the
-   user owns.
+   heading in the position `schema.md` fixes — immediately before whichever
+   required section, already present, comes next in that order — and add
+   nothing else: an empty section is the correct state until a page of that
+   type exists. This is what reaches a memory installed before the type was
+   added: the seed only supplies a fresh install, and bootstrap never
+   overwrites an index the user owns.
+   `index-out-of-order` means a `## Section` heading exists but not where
+   `schema.md` puts it relative to the others. Move the heading — and
+   everything filed under it — to its correct position; do not add a second
+   heading for the same section.
 3. **Links resolve.** Every relative link between pages lands somewhere. A
    broken link to a person becomes a stub page with `importance: low`; a
    broken link to anything else is removed and noted. Record which you chose.

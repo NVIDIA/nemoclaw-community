@@ -63,7 +63,20 @@ FOLDER_SHAPED = frozenset({"projects"})
 # missing field, no bad value, no broken link — where before it reported
 # four. A file here that is neither the page nor one of these is treated as
 # a page, so it is reported rather than swallowed.
+#
+# Exemption is by *position*, not by name alone: a file only counts as one of
+# these if it sits at the exact depth the schema puts it at,
+# `projects/<slug>/log.md`. A name match anywhere else — `patterns/log.md`,
+# `projects/<slug>/nested/log.archive.md` — is a page under a reserved name,
+# not the sidecar the schema means, and is checked like any other page.
 DECLARED_SIDECARS = frozenset({"log.md", "log.archive.md"})
+
+# What the schema writes at the memory root besides the pages themselves: the
+# entry point, the append-only job log, and the schema document, were it ever
+# placed inside the live memory. Exempt only as the root's own direct child —
+# `log.md` two directories down is not this file, it is a reserved name
+# collision.
+ROOT_SPECIALS = frozenset({"schema.md", "index.md", "log.md"})
 
 # Fields whose value must come from a fixed set, again from schema.md.
 ENUMS = {
@@ -131,23 +144,50 @@ def _pages(root: Path) -> list[Path]:
     sidecar to rediscover it, so the rule is structural instead.
     """
     def is_page(path: Path) -> bool:
-        if path.name.startswith(".") or path.name in {
-                "schema.md", "log.md", "index.md"}:
+        if path.name.startswith("."):
             return False
         parts = path.relative_to(root).parts
-        if parts[0] not in FOLDER_SHAPED or len(parts) < 3:
-            return True
-        # Inside a folder-shaped type: the page, plus the sidecars the schema
-        # declares. Anything else is checked, because a file here that is
-        # neither is far more likely to be a page under the wrong name than a
-        # sidecar nobody documented.
-        return path.name not in DECLARED_SIDECARS
+        if len(parts) == 1:
+            return parts[0] not in ROOT_SPECIALS
+        # Inside a folder-shaped type, at exactly the depth the schema puts a
+        # sidecar: the page, plus the sidecars the schema declares. Anything
+        # else — including a reserved name at any other depth — is checked,
+        # because it is far more likely to be a page under the wrong name or
+        # in the wrong place than a sidecar nobody documented.
+        if (len(parts) == 3 and parts[0] in FOLDER_SHAPED
+                and path.name in DECLARED_SIDECARS):
+            return False
+        return True
 
     return sorted(p for p in root.rglob("*.md") if is_page(p))
 
 
+# Sections, in schema order. `REQUIRED_FIELDS`'s own key order already
+# matches `schema.md`'s "Sections, in this order" list (a test compares
+# them), so a page type's rank is looked up here rather than kept in a
+# second constant that could drift from the first.
+_INDEX_RANK = {kind.capitalize(): i for i, kind in enumerate(REQUIRED_FIELDS)}
+
+HEADING = re.compile(r"^##[ \t]+(\w+)[ \t]*\n", re.M)
+
+
+def _index_sections(text: str) -> list[tuple[str, int, int]]:
+    """Ordered `(heading, body_start, body_end)` spans.
+
+    A section's body is the text between its own heading line and the next
+    `## ` heading, or the end of the file for the last one — the range an
+    entry's link has to fall inside to count as filed under that heading,
+    rather than merely present somewhere in the document.
+    """
+    matches = list(HEADING.finditer(text))
+    return [(m.group(1), m.end(),
+             matches[i + 1].start() if i + 1 < len(matches) else len(text))
+            for i, m in enumerate(matches)]
+
+
 def check_index(root: Path) -> list[Finding]:
-    """Every page is indexed and every index entry resolves."""
+    """Every page is indexed, every entry resolves, and each is filed under
+    its own type's section, which appears where `schema.md` orders it."""
     index = root / "index.md"
     findings: list[Finding] = []
     if not index.exists():
@@ -156,11 +196,39 @@ def check_index(root: Path) -> list[Finding]:
     index_text = _read(index)
     if index_text is None:
         return [Finding("unreadable", "index.md", "not valid UTF-8 text")]
-    listed = {(index.parent / t).resolve() for t in LINK.findall(index_text)}
+
+    sections = _index_sections(index_text)
+    present = {heading for heading, _, _ in sections}
+
+    # Every linked target, and which section's span its own link line falls
+    # inside — a link can be present in the document and still not be filed
+    # where it belongs. The first occurrence wins when a target is linked
+    # more than once.
+    listed: set[Path] = set()
+    filed_under: dict[Path, str | None] = {}
+    for match in LINK.finditer(index_text):
+        target = (index.parent / match.group(1)).resolve()
+        listed.add(target)
+        heading = next((h for h, start, end in sections
+                        if start <= match.start() < end), None)
+        filed_under.setdefault(target, heading)
+
     for page in _pages(root):
-        if page.resolve() not in listed:
-            findings.append(Finding("unindexed", str(page.relative_to(root)),
+        rel = str(page.relative_to(root))
+        target = page.resolve()
+        if target not in listed:
+            findings.append(Finding("unindexed", rel,
                                     "page has no entry in index.md"))
+            continue
+        kind = _page_type(page, root)
+        expected = kind.capitalize() if kind else None
+        if expected in _INDEX_RANK and filed_under.get(target) != expected:
+            actual = filed_under.get(target) or "no section"
+            findings.append(Finding(
+                "index-misfiled", rel,
+                f"linked under `## {actual}` instead of its own"
+                f" `## {expected}` section"))
+
     for target in sorted(listed):
         if not target.exists():
             findings.append(Finding("index-dangling", "index.md",
@@ -176,7 +244,6 @@ def check_index(root: Path) -> list[Finding]:
     # most likely to have content are exactly the people who never receive
     # the new one. The seed is right for a fresh install and this is what
     # reaches the rest.
-    present = set(re.findall(r"^##\s+(\w+)", index_text, re.M))
     for kind in sorted({_page_type(p, root) for p in _pages(root)} - {None}):
         heading = kind.capitalize()
         if heading not in present:
@@ -185,6 +252,24 @@ def check_index(root: Path) -> list[Finding]:
                 f"pages of type {kind}/ exist and there is no `## {heading}`"
                 " section to file them under, so their entries have nowhere"
                 " to go"))
+
+    # Order, independent of whether every section is present. A heading that
+    # exists is still wrong if the schema puts it earlier than one that
+    # already precedes it in the file — a set of heading names cannot see
+    # this, only their positions relative to each other can.
+    furthest_rank, furthest_heading = -1, None
+    for heading, _, _ in sections:
+        rank = _INDEX_RANK.get(heading)
+        if rank is None:
+            continue
+        if rank < furthest_rank:
+            findings.append(Finding(
+                "index-out-of-order", "index.md",
+                f"`## {heading}` comes after `## {furthest_heading}`, but"
+                f" schema.md orders it before `## {furthest_heading}`"))
+        else:
+            furthest_rank, furthest_heading = rank, heading
+
     return findings
 
 
