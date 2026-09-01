@@ -1,0 +1,72 @@
+{
+  "checked_at": "2026-08-31T23:25:48Z",
+  "nemoclaw_stacks": {
+    "v0.0.103": {
+      "commit": "db31c286129e878c3356eed49f76ab259561e47e",
+      "harnesses": {
+        "hermes": "0.19.0",
+        "openclaw": "2026.7.1"
+      },
+      "openshell": "0.0.85"
+    },
+    "v0.0.104": {
+      "commit": "f389c9d872775006ae069473f58250fa8f3ad40f",
+      "harnesses": {
+        "hermes": "0.19.0",
+        "openclaw": "2026.7.1"
+      },
+      "openshell": "0.0.85"
+    },
+    "v0.0.109": {
+      "commit": "d027b770d7130685d020964c4811211baf3d5f31",
+      "harnesses": {
+        "hermes": "0.19.0",
+        "openclaw": "2026.7.1"
+      },
+      "openshell": "0.0.101"
+    },
+    "v0.0.50": {
+      "commit": "14b2be2933ca8e001f66575a1e7bb4f166f401d8",
+      "harnesses": {
+        "hermes": "2026.5.16",
+        "openclaw": "2026.5.18"
+      },
+      "openshell": "0.0.44"
+    },
+    "v0.0.83": {
+      "commit": "45b1cb5a01f3408743c8479772af4ad9d4a91fc8",
+      "harnesses": {
+        "hermes": "0.18.0",
+        "openclaw": "2026.6.10"
+      },
+      "openshell": "0.0.72"
+    }
+  },
+  "releases": {
+    "hermes-agent": {
+      "component_version": "0.21.0",
+      "published_on": "2026-08-31",
+      "tag": "v2026.8.31",
+      "url": "https://github.com/NousResearch/hermes-agent/releases/tag/v2026.8.31"
+    },
+    "nemoclaw": {
+      "component_version": "0.0.109",
+      "published_on": "2026-08-14",
+      "tag": "v0.0.109",
+      "url": "https://github.com/NVIDIA/NemoClaw/tree/v0.0.109"
+    },
+    "openclaw": {
+      "component_version": "2026.8.1",
+      "published_on": "2026-08-31",
+      "tag": "v2026.8.1",
+      "url": "https://github.com/openclaw/openclaw/releases/tag/v2026.8.1"
+    },
+    "openshell": {
+      "component_version": "0.0.116",
+      "published_on": "2026-08-28",
+      "tag": "v0.0.116",
+      "url": "https://github.com/NVIDIA/OpenShell/releases/tag/v0.0.116"
+    }
+  },
+  "schema_version": 1
+}

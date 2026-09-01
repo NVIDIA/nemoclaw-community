@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "thresholds": {
+    "dependency_warning_days": 30,
+    "dependency_overdue_days": 60,
+    "review_overdue_days": 120,
+    "deprecation_days": 240
+  },
+  "dependencies": {
+    "hermes-agent": {
+      "label": "Hermes Agent",
+      "repository": "NousResearch/hermes-agent",
+      "source": "releases"
+    },
+    "nemoclaw": {
+      "label": "NemoClaw",
+      "repository": "NVIDIA/NemoClaw",
+      "source": "tag-channel",
+      "channel": "lkg"
+    },
+    "openclaw": {
+      "label": "OpenClaw",
+      "repository": "openclaw/openclaw",
+      "source": "releases"
+    },
+    "openshell": {
+      "label": "OpenShell",
+      "repository": "NVIDIA/OpenShell",
+      "source": "releases"
+    }
+  }
+}
