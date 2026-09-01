@@ -78,7 +78,10 @@ def reconcile_proxy_token(enabled: bool) -> None:
     if not enabled:
         PROXY_TOKEN_DESTINATION.unlink(missing_ok=True)
         return
-    if PROXY_TOKEN_SOURCE.is_symlink() or not PROXY_TOKEN_SOURCE.is_file():
+    # Kubernetes Secret volumes use atomic-writer symlinks for every projected
+    # key. The source path is fixed and comes from this pod's read-only Secret
+    # volume, so validate the resolved regular file and bounded content below.
+    if not PROXY_TOKEN_SOURCE.is_file():
         raise SystemExit("invalid SRE proxy token source")
     token = PROXY_TOKEN_SOURCE.read_bytes()
     if not token or len(token) > 4096:

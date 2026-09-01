@@ -642,6 +642,37 @@ class ChartTest(unittest.TestCase):
             self.assertEqual(stat.S_IMODE((state / "hermes").stat().st_mode), 0o700)
             self.assertEqual(stat.S_IMODE((state / "workspace").stat().st_mode), 0o700)
 
+    def test_seed_accepts_kubernetes_secret_projection_symlink(self) -> None:
+        script = CHART_DIR / "files" / "scripts" / "seed.py"
+        spec = importlib.util.spec_from_file_location("nemoclaw_seed_symlink", script)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        os.environ["RELEASE_ID"] = "test/release"
+        os.environ["RELEASE_REVISION"] = "1"
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            state = root / "state"
+            hermes = state / "hermes"
+            state.mkdir()
+            hermes.mkdir()
+            projected_data = root / "..2026_09_01_20_34_00.000000000"
+            projected_data.write_bytes(b"proxy-token")
+            projected_token = root / "token"
+            projected_token.symlink_to(projected_data.name)
+
+            module.STATE = state
+            module.MARKER = state / ".nemoclaw-helm-owner.json"
+            module.PROXY_TOKEN_SOURCE = projected_token
+            module.PROXY_TOKEN_DESTINATION = hermes / ".sre-proxy-token"
+            module.RELEASE = "test/release"
+            module.reconcile_proxy_token(True)
+
+            self.assertEqual(module.PROXY_TOKEN_DESTINATION.read_bytes(), b"proxy-token")
+            self.assertEqual(stat.S_IMODE(module.PROXY_TOKEN_DESTINATION.stat().st_mode), 0o600)
+
     def test_default_excludes_sre_delivery_and_rbac(self) -> None:
         rendered = self.run_helm(
             "template",
