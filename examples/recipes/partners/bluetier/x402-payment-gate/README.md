@@ -204,7 +204,7 @@ the store or hammer the verdict service without limit.
 | `scripts/blackwall_client.py` | Stdlib advisory client (`should_sign`: GO→sign, STOP→refuse, else escalate). |
 | `scripts/demo_verdicts.py` | Standalone four-scenario live verdict walkthrough. |
 | `policy.yaml` | Complete sandbox policy: inference + advisory verdict + intent routes; **no rail route**. |
-| `Dockerfile` | Reproducible sandbox image: pinned Hermes base + baked skill. Built with the recipe root as context (`--from <recipe-root>`), so its `COPY` paths resolve; `.dockerignore` trims that context. |
+| `Dockerfile` | Reproducible sandbox image: pinned Hermes base + baked skill. `bring-up.sh` stages it in the recipe root so its `COPY` paths resolve; `.dockerignore` trims that context. |
 | `scripts/bring-up.sh` · `verify.sh` · `tear-down.sh` | Lifecycle (above). |
 
 ## Production notes and limits

@@ -23,11 +23,17 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 EXAMPLE_DIR = SCRIPT_DIR.parent
+REPO_ROOT = EXAMPLE_DIR.parents[3]
+sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(SCRIPT_DIR))
 
 import inference_preflight  # noqa: E402
 import slack_socket_preflight  # noqa: E402
 import tavily_search_preflight  # noqa: E402
+from scripts.example_dependencies import (  # noqa: E402
+    DependencyContractError,
+    resolve_example_stack,
+)
 from lib.configuration import (  # noqa: E402
     DEFAULTS,
     GATEWAY_ENDPOINTS,
@@ -44,7 +50,22 @@ from lib.configuration import (  # noqa: E402
     resolved_values,
 )
 
-EXPECTED_OPENSHELL_VERSION = "0.0.85"
+
+def resolve_expected_openshell_version() -> str:
+    """Resolve the exact CLI pin through the repository dependency contract."""
+
+    try:
+        value = resolve_example_stack(EXAMPLE_DIR).openshell_version
+    except DependencyContractError as error:
+        raise RuntimeError(f"Could not resolve dependencies.toml: {error}") from error
+    if not isinstance(value, str) or re.fullmatch(r"\d+\.\d+\.\d+", value) is None:
+        raise RuntimeError(
+            "dependencies.toml did not resolve an exact OpenShell version"
+        )
+    return value
+
+
+EXPECTED_OPENSHELL_VERSION = resolve_expected_openshell_version()
 SLACK_ID_RE = re.compile(r"^[UW][A-Z0-9]{8,}$")
 
 

@@ -22,6 +22,10 @@ const DEFAULT_ASSET_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../..",
 );
+const SHARED_DEPENDENCY_FILES = [
+  "example_dependencies.py",
+  "example_dependencies.sh",
+];
 
 export function collectRuntimeAssets(assetRoot = DEFAULT_ASSET_ROOT) {
   const sourceRoot = path.resolve(assetRoot);
@@ -38,6 +42,13 @@ export function collectRuntimeAssets(assetRoot = DEFAULT_ASSET_ROOT) {
     if (fs.existsSync(source)) {
       walkAssetDirectory(sourceRoot, source, sourceFiles);
     }
+  }
+  for (const name of SHARED_DEPENDENCY_FILES) {
+    const relative = `scripts/${name}`;
+    if (sourceFiles.some((entry) => entry.relative === relative)) {
+      throw new CliError(`package runtime cannot override shared ${relative}`);
+    }
+    sourceFiles.push({ relative, source: resolveSharedDependency(name) });
   }
 
   const relativeFiles = new Set(
@@ -82,6 +93,20 @@ export function collectRuntimeAssets(assetRoot = DEFAULT_ASSET_ROOT) {
     });
   }
   return { sourceRoot, assets };
+}
+
+function resolveSharedDependency(name) {
+  const candidates = [
+    path.join(DEFAULT_ASSET_ROOT, "installer", "shared", name),
+    path.resolve(DEFAULT_ASSET_ROOT, "../../../..", "scripts", name),
+  ];
+  const source = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!source) {
+    throw new CliError(
+      `package runtime is missing shared dependency resolver ${name}`,
+    );
+  }
+  return source;
 }
 
 function walkAssetDirectory(sourceRoot, directory, files) {

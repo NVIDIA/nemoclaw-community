@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-ARG BASE_IMAGE=ghcr.io/nvidia/nemoclaw/hermes-sandbox-base@sha256:f76a2ed0509570b1ce5380327c7ebe2e120e97f524e9271e145d2ea34c83ba5e
+ARG BASE_IMAGE=
 
 FROM ${BASE_IMAGE} AS nemo-relay-builder
 ARG NEMO_RELAY_CLI_VERSION=0.3.0
@@ -20,8 +20,9 @@ RUN mkdir -p /out/bin \
 FROM ${BASE_IMAGE}
 USER root
 
-ARG HERMES_UPGRADE_VERSION=v2026.5.16
-ARG HERMES_UPGRADE_TARBALL_SHA256=c0a554050a50ee9a62f3fa5cd288a167ba5640c42d647d100cdea084b7294143
+ARG HERMES_REF=
+ARG HERMES_VERSION=
+ARG HERMES_TARBALL_SHA256=
 ARG UV_INSTALL_VERSION=0.11.8
 RUN set -eu \
     && apt-get update -qq \
@@ -31,12 +32,13 @@ RUN set -eu \
     && UV_BIN="" \
     && for candidate in /root/.local/bin/uv /root/.cargo/bin/uv; do [ ! -x "$candidate" ] || { UV_BIN="$candidate"; break; }; done \
     && install -m 755 "$UV_BIN" /usr/local/bin/uv \
-    && curl -fsSL "https://github.com/NousResearch/hermes-agent/archive/refs/tags/${HERMES_UPGRADE_VERSION}.tar.gz" -o /tmp/hermes.tgz \
-    && echo "${HERMES_UPGRADE_TARBALL_SHA256}  /tmp/hermes.tgz" | sha256sum -c - \
+    && curl -fsSL "https://github.com/NousResearch/hermes-agent/archive/refs/tags/${HERMES_REF}.tar.gz" -o /tmp/hermes.tgz \
+    && echo "${HERMES_TARBALL_SHA256}  /tmp/hermes.tgz" | sha256sum -c - \
     && find /opt/hermes -mindepth 1 -maxdepth 1 -not -name '.venv' -exec rm -rf {} + \
     && tar -xzf /tmp/hermes.tgz -C /opt/hermes --strip-components=1 \
     && rm /tmp/hermes.tgz \
     && cd /opt/hermes \
+    && test "$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)" = "$HERMES_VERSION" \
     && UV_PROJECT_ENVIRONMENT=/opt/hermes/.venv uv sync \
        --extra messaging --extra web --extra cli --extra edge-tts --no-dev \
     && uv pip install --python /opt/hermes/.venv/bin/python \

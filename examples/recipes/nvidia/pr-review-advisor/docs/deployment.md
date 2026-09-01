@@ -29,7 +29,7 @@ derives the group name but cannot create or configure this organization
 setting. Install the runner application as a service after the group policy is
 in place. The host supplies:
 
-- Docker and exact OpenShell `0.0.85`;
+- Docker and the exact OpenShell version selected by `dependencies.toml`;
 - a dedicated OpenShell gateway, inference provider/route, and advisor sandbox;
 - the `self-hosted`, `linux`, and `nemoclaw` runner labels;
 - private advisor lifecycle state and memory snapshots outside the checkout;

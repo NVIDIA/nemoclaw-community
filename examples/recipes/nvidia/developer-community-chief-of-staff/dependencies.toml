@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+schema_version = 1
+
+[stack]
+distribution = "direct"
+harness = "hermes"
+harness_version = "0.20.0"
+harness_ref = "03fa32c92dd445eb64c7f67434dd91b32c40701d"
+openshell_version = "0.0.85"
+base_image = "ghcr.io/nvidia/nemoclaw/hermes-sandbox-base@sha256:57c091ab9b31c924eac0050e66c834c37df875154a254964302a31b119b50b96"
+harness_sha256 = "771337de8e7779ac4039c14632db44f4b05e27679320cfa96d3aac3507cea12e"

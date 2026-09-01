@@ -4,7 +4,7 @@
 | --- | --- |
 | Description | Helps payment operators screen synthetic outbound payments, explain holds, and prepare review packets while OpenShell keeps final release authority with a human outside the Hermes sandbox. |
 | Industry | 💳 Financial Services |
-| Requirements | Linux · Docker Compose · OpenShell 0.0.53 · OpenAI-compatible inference API key · synthetic data only |
+| Requirements | Linux · Docker Compose · OpenShell · OpenAI-compatible inference API key · synthetic data only |
 
 ![NVIDIA](assets/nvidia_header.png)
 
@@ -153,7 +153,7 @@ them.
 
 - Linux x86_64 or aarch64 host
 - Docker with the Compose plugin
-- OpenShell `0.0.53` with a running local gateway
+- The OpenShell version selected by `dependencies.toml`, with a running local gateway
 - An OpenAI-compatible inference key
 
 No Python virtual environment or host-side Python package installation is
@@ -163,7 +163,9 @@ Install the pinned OpenShell CLI and local gateway if the host does not already
 provide them:
 
 ```console
-$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION=v0.0.53 sh
+$ source ../../../../scripts/example_dependencies.sh
+$ load_example_dependencies .
+$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION="v${OPENSHELL_VERSION#v}" sh
 ```
 
 This example downloads additional third-party open source components during

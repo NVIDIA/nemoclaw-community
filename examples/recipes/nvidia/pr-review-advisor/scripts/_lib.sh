@@ -17,6 +17,29 @@ STATE_DIR=""
 # shellcheck disable=SC2034
 SNAPSHOT_DIR=""
 REVIEW_ADVISOR_ENV_KEYS="|"
+REVIEW_ADVISOR_DEPENDENCIES_LOADED=0
+
+load_runtime_dependencies() {
+  [[ "$REVIEW_ADVISOR_DEPENDENCIES_LOADED" == 0 ]] || return 0
+  require_command python3
+  local dependency_helper dependency_parser repo_root
+  dependency_helper="$SCRIPT_DIR/example_dependencies.sh"
+  if [[ ! -f "$dependency_helper" ]]; then
+    repo_root="$(cd "$EXAMPLE_DIR/../../../.." && pwd)"
+    dependency_helper="$repo_root/scripts/example_dependencies.sh"
+  fi
+  dependency_parser="$(dirname "$dependency_helper")/example_dependencies.py"
+  if [[ -L "$dependency_helper" || ! -f "$dependency_helper" \
+      || -L "$dependency_parser" || ! -f "$dependency_parser" ]]; then
+    echo "Dependency resolver must contain regular non-symlink .sh and .py files" >&2
+    return 1
+  fi
+  # shellcheck disable=SC1090
+  source "$dependency_helper"
+  load_example_dependencies "$EXAMPLE_DIR"
+  require_example_harness hermes
+  REVIEW_ADVISOR_DEPENDENCIES_LOADED=1
+}
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -411,13 +434,14 @@ scrub_external_secrets() {
 
 openshell_preflight() {
   require_command openshell
+  load_runtime_dependencies
   local version
   version="$(command openshell -V 2>/dev/null)" || {
     echo "Could not determine the OpenShell version" >&2
     return 1
   }
-  [[ "$version" == "openshell 0.0.85" ]] || {
-    echo "Review advisor requires exactly openshell 0.0.85 (found: $version)" >&2
+  [[ "$version" == "openshell $OPENSHELL_VERSION" ]] || {
+    echo "Review advisor requires exactly openshell $OPENSHELL_VERSION (found: $version)" >&2
     return 1
   }
 }
@@ -676,6 +700,7 @@ from pathlib import Path
 root = Path(sys.argv[1])
 install_id, repository, model = sys.argv[2:]
 single_files = (
+    "dependencies.toml",
     "agents/hermes/Dockerfile",
     "agents/hermes/generate-config.ts",
     "agents/hermes/start.sh",

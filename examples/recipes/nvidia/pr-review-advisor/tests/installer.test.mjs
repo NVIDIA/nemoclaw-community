@@ -251,6 +251,19 @@ test("init reads a trusted commit, generates a safe profile, and is idempotent",
     fs.readFileSync(installedReviewScript, "utf8"),
     /Stable installed-runtime contract/,
   );
+  assert.equal(
+    fs.readFileSync(path.join(installRoot, "runtime/dependencies.toml"), "utf8"),
+    fs.readFileSync(path.join(fixture.assets, "dependencies.toml"), "utf8"),
+  );
+  for (const name of ["example_dependencies.py", "example_dependencies.sh"]) {
+    assert.equal(
+      fs.readFileSync(path.join(installRoot, "runtime/scripts", name), "utf8"),
+      fs.readFileSync(
+        path.resolve(PACKAGE_ROOT, "../../../..", "scripts", name),
+        "utf8",
+      ),
+    );
+  }
   validateWithRuntimeParser(path.join(installRoot, "profile.generated.yaml"));
   validateWithRuntimeParser(path.join(installRoot, "profile.yaml"));
 
@@ -1230,11 +1243,14 @@ test("npm package contains the complete runtime and excludes bytecode and secret
   const files = new Set(metadata.files.map((entry) => entry.path));
   for (const required of [
     ".env.example",
+    "dependencies.toml",
     "LICENSE",
     "README.md",
     "docs/deployment.md",
     "docs/memory-and-privacy.md",
     "installer/bin/cli.mjs",
+    "installer/shared/example_dependencies.py",
+    "installer/shared/example_dependencies.sh",
     "scripts/snapshot-manifest.py",
     "scripts/review.sh",
     "agents/hermes/plugins/review-advisor/runtime.py",
@@ -1316,6 +1332,11 @@ function createFixture(t) {
     "scripts/review.sh",
     "#!/bin/sh\n# SPDX-License-Identifier: Apache-2.0\nset -eu\nexit 0\n",
     0o755,
+  );
+  write(
+    assets,
+    "dependencies.toml",
+    fs.readFileSync(path.join(PACKAGE_ROOT, "dependencies.toml"), "utf8"),
   );
   write(
     assets,

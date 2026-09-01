@@ -5,10 +5,15 @@
 # NemoClaw Hermes base from the latest published tag v0.0.94 at
 # d87acc16b04c065ddc26c294a6c3af6795a43d7b (Hermes v2026.7.1 / package
 # v0.18.0). Update this digest only after reviewing a newer published tag.
-ARG BASE_IMAGE=ghcr.io/nvidia/nemoclaw/hermes-sandbox-base@sha256:fa05221f5c7bcafea7e263c84e5d06f87e37d1ccb78dc28c113f1a4066aa544c
+ARG BASE_IMAGE=
 FROM ${BASE_IMAGE}
+ARG HERMES_VERSION=
 
 USER root
+
+RUN test "$(/opt/hermes/.venv/bin/python -c \
+      'from importlib.metadata import version; print(version("hermes-agent"))')" \
+    = "$HERMES_VERSION"
 
 COPY agents/hermes/generate-config.ts /opt/review-advisor/generate-config.ts
 COPY agents/hermes/start.sh /usr/local/bin/review-advisor-start

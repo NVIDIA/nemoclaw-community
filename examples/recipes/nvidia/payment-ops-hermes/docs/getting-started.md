@@ -9,8 +9,10 @@ If OpenShell is not already installed, install the pinned version used by this
 example:
 
 ```bash
+source ../../../../scripts/example_dependencies.sh
+load_example_dependencies .
 curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh \
-  | OPENSHELL_VERSION=v0.0.53 sh
+  | OPENSHELL_VERSION="v${OPENSHELL_VERSION#v}" sh
 ```
 
 ```bash

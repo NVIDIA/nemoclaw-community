@@ -18,7 +18,7 @@ enabled = true
 output_directory = "/tmp/atif"
 filename_template = "hermes-atif-{session_id}.json"
 agent_name = "Developer Community Chief of Staff"
-agent_version = "0.20.0"
+agent_version = "@@HERMES_VERSION@@"
 @@ATIF_STORAGE_BLOCK@@
 
 [components.config.opentelemetry]

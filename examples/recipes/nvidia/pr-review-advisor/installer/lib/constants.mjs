@@ -16,7 +16,12 @@ export const MAX_EVIDENCE_TOTAL_BYTES = 2 * 1024 * 1024;
 export const MAX_EVIDENCE_LINES = 80;
 export const MAX_RUNTIME_FILE_BYTES = 4 * 1024 * 1024;
 
-export const REQUIRED_RUNTIME_FILES = ["scripts/review.sh"];
+export const REQUIRED_RUNTIME_FILES = [
+  "dependencies.toml",
+  "scripts/example_dependencies.py",
+  "scripts/example_dependencies.sh",
+  "scripts/review.sh",
+];
 
 export const RUNTIME_ASSET_ROOTS = [
   "agents/hermes",
@@ -30,6 +35,7 @@ export const RUNTIME_ASSET_ROOTS = [
 
 export const RUNTIME_ASSET_FILES = [
   ".env.example",
+  "dependencies.toml",
   "LICENSE",
   "README.md",
   "policy.yaml",

@@ -20,6 +20,7 @@
   },
   "files": [
     ".env.example",
+    "dependencies.toml",
     "agents/hermes/Dockerfile",
     "agents/hermes/*.md",
     "agents/hermes/*.py",
@@ -39,6 +40,8 @@
     "tests/*.py"
   ],
   "scripts": {
+    "prepack": "node installer/bin/package-dependencies.mjs prepare",
+    "postpack": "node installer/bin/package-dependencies.mjs clean",
     "test": "npm run test:installer && npm run test:runtime",
     "test:installer": "node --test tests/installer.test.mjs",
     "test:runtime": "python3 -m pytest -q tests"

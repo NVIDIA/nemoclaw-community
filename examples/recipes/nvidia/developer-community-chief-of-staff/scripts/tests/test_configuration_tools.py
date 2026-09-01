@@ -381,6 +381,12 @@ def successful_runner(
 
 
 class ConsolidatedPreflightTest(TestCase):
+    def test_openshell_version_comes_from_dependency_contract(self) -> None:
+        self.assertEqual(
+            PREFLIGHT.resolve_expected_openshell_version(),
+            PREFLIGHT.EXPECTED_OPENSHELL_VERSION,
+        )
+
     def make_env(self, directory: str, values: dict[str, str] | None = None) -> Path:
         path = Path(directory) / ".env"
         ca_bundle = Path(directory) / "ca-certificates.crt"

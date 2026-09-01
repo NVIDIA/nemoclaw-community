@@ -22,7 +22,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 load_env
+REPO_ROOT="$(cd "$EXAMPLE_DIR/../../../.." && pwd)"
+# shellcheck source=../../../../../scripts/example_dependencies.sh
+source "$REPO_ROOT/scripts/example_dependencies.sh"
+load_example_dependencies "$EXAMPLE_DIR"
+require_example_harness hermes
 require_command openshell
+require_example_dependency_version \
+  "OpenShell" "$OPENSHELL_VERSION" openshell --version
 
 staged="$EXAMPLE_DIR/.Dockerfile.staged"
 trap 'rm -f "$staged"' EXIT
@@ -32,6 +39,10 @@ model="${NEMOCLAW_MODEL:-${FINANCE_MODEL:-nvidia/nemotron-3-super-120b-a12b}}"
 project="${NEMO_RELAY_PROJECT_NAME:-finguard-payment-ops}"
 endpoint="${PHOENIX_COLLECTOR_ENDPOINT:-http://host.openshell.internal:6006/v1/traces}"
 sed -i \
+  -e "s|^ARG BASE_IMAGE=.*|ARG BASE_IMAGE=$NEMOCLAW_BASE_IMAGE|" \
+  -e "s|^ARG HERMES_REF=.*|ARG HERMES_REF=$HERMES_REF|" \
+  -e "s|^ARG HERMES_VERSION=.*|ARG HERMES_VERSION=$HERMES_VERSION|" \
+  -e "s|^ARG HERMES_TARBALL_SHA256=.*|ARG HERMES_TARBALL_SHA256=$HERMES_TARBALL_SHA256|" \
   -e "s|^ARG NEMOCLAW_MODEL=.*|ARG NEMOCLAW_MODEL=$model|" \
   -e "s|^ARG NEMO_RELAY_PROJECT_NAME=.*|ARG NEMO_RELAY_PROJECT_NAME=\"$project\"|" \
   -e "s|^ARG PHOENIX_COLLECTOR_ENDPOINT=.*|ARG PHOENIX_COLLECTOR_ENDPOINT=\"$endpoint\"|" \

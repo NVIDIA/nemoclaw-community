@@ -40,6 +40,9 @@ def _installed_lib(tmp_path: Path, env_text: str, mode: int) -> tuple[Path, Path
         ),
     )
     scripts = runtime / "scripts"
+    repository_root = _EXAMPLE_ROOT.parents[3]
+    for name in ("example_dependencies.py", "example_dependencies.sh"):
+        shutil.copy2(repository_root / "scripts" / name, scripts / name)
     copied = scripts / "_lib.sh"
     (install / "config.yaml").write_text(
         'schema_version: 1\nrepository: "example/project"\n'
@@ -1282,3 +1285,24 @@ def test_mutating_lifecycle_commands_share_the_review_lock() -> None:
     assert "--lock-held requires the inherited lifecycle lock" in sandbox
     assert "assert_runtime_fingerprint" in sandbox
     assert "acquire_review_lock" in tear_down
+
+
+def test_shared_dependency_reader_works_in_source_and_package(tmp_path: Path) -> None:
+    lib, _env_file = _installed_lib(tmp_path, "", 0o600)
+    packaged = _source(
+        lib,
+        tmp_path / "home",
+        'HERMES_VERSION=9.9.9; load_runtime_dependencies; printf "%s %s\\n" "$HERMES_VERSION" "$OPENSHELL_VERSION"',
+    )
+    source = _source(
+        _LIB,
+        tmp_path / "source-home",
+        'load_runtime_dependencies; printf "%s %s\\n" "$HERMES_VERSION" "$OPENSHELL_VERSION"',
+    )
+
+    assert packaged.returncode == 0, packaged.stderr
+    assert source.returncode == 0, source.stderr
+    assert packaged.stdout == source.stdout == "0.18.0 0.0.85\n"
+    assert "import tomllib" not in (lib.parent / "example_dependencies.py").read_text(
+        encoding="utf-8"
+    )

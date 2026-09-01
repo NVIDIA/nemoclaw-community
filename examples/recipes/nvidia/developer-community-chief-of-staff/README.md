@@ -275,11 +275,13 @@ itself). The session UUID for Outlook gets produced *between* them, so the order
 
 ```console
 $ git clone https://github.com/NVIDIA/nemoclaw-community.git && cd examples/recipes/nvidia/developer-community-chief-of-staff/
-$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION=v0.0.85 sh
+$ source ../../../../scripts/example_dependencies.sh
+$ load_example_dependencies .
+$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION="v${OPENSHELL_VERSION#v}" sh
 ```
 
-OpenShell `v0.0.85` matches the supported version in the NemoClaw `v0.0.105`
-release that publishes this example's pinned Hermes sandbox base image.
+The dependency contract selects the OpenShell version validated with this
+example's pinned Hermes sandbox base image.
 
 The package-managed installer starts a local gateway service for you. This
 example assumes that default path and targets the `openshell` gateway at

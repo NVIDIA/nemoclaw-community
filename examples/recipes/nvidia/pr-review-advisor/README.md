@@ -9,7 +9,7 @@ SPDX-License-Identifier: Apache-2.0
 | --- | --- |
 | Description | Helps maintainers review exact pull request heads through staged, repository-aware Hermes analysis, producing attested JSON and Markdown findings for inspection before optional publication. |
 | Industry | ✨ Other |
-| Requirements | Linux + Docker · OpenShell 0.0.85 · Node.js 22.19+ · inference provider API key or existing provider · GitHub.com self-hosted runner for the generated workflow |
+| Requirements | Linux + Docker · OpenShell · Node.js 22.19+ · inference provider API key or existing provider · GitHub.com self-hosted runner for the generated workflow |
 
 This first-party NemoClaw turns Hermes and Nemotron 3 Ultra into a reusable,
 repository-aware pull-request review advisor. Its first-party design combines
@@ -87,7 +87,7 @@ configuration meet their requirements.
 ## Requirements
 
 - Linux host with Docker
-- OpenShell `0.0.85` and a reachable local gateway
+- The OpenShell version selected by `dependencies.toml` and a reachable local gateway
 - Git, Node.js 22.19.0 or newer, Python 3, and curl
 - GitHub.com when using the generated workflow, acceptance-context fetcher, or
   optional publisher; these v0.1 integrations do not support GitHub Enterprise

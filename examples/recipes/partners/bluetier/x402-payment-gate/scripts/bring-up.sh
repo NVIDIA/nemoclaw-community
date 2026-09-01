@@ -10,16 +10,15 @@
 #      via the host.openshell.internal route in policy.yaml), and the host-only
 #      APPROVE listener (127.0.0.1:8791; the sandbox has no route to it)
 #   2. optional local image sanity build — OpenShell builds the real image
-#      itself from the recipe-root Dockerfile via --from in phase 3; this is
+#      itself from a staged Dockerfile in the recipe root in phase 3; this is
 #      only a fast local fail-early check and is skipped without docker
-#   3. sandbox — `openshell sandbox create --from <recipe-root>` with
+#   3. sandbox — `openshell sandbox create --from <staged-Dockerfile>` with
 #      policy.yaml applied WHOLE (inference routes + blackwall advisory routes +
 #      release-gate SUBMIT route; no rail route, no approve route). This is what
 #      the security boundary needs: verify.sh exercises the denied edge via
 #      `sandbox exec` and does NOT require the Hermes agent runtime to be up.
-#      NOTE: --from takes the recipe ROOT (the Dockerfile's directory), because
-#      OpenShell uses that directory as the Docker build context and the
-#      Dockerfile COPYs from recipe-root-relative paths (agents/, scripts/).
+#      The staged Dockerfile stays in the recipe root, so OpenShell uses that
+#      directory as the build context and its recipe-relative COPYs resolve.
 #
 # Requires: python3. openshell for phase 3 (and docker only for the optional
 # phase-2 sanity build); without them the host boundary still comes up and
@@ -28,9 +27,26 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXAMPLE_DIR="$(dirname "$DIR")"
+REPO_ROOT="$(cd "$EXAMPLE_DIR/../../../../.." && pwd)"
+# shellcheck source=../../../../../../scripts/example_dependencies.sh
+source "$REPO_ROOT/scripts/example_dependencies.sh"
+load_example_dependencies "$EXAMPLE_DIR"
+require_example_harness hermes
 RUN="$EXAMPLE_DIR/.run"
 SANDBOX_NAME="${SANDBOX_NAME:-x402-gate-demo}"
 IMAGE_TAG="${IMAGE_TAG:-x402-payment-gate-sandbox}"
+STAGED_DOCKERFILE="$EXAMPLE_DIR/.Dockerfile.staged"
+[[ ! -L "$STAGED_DOCKERFILE" && ( ! -e "$STAGED_DOCKERFILE" || -f "$STAGED_DOCKERFILE" ) ]] || {
+  echo "Refusing unsafe staged Dockerfile path: $STAGED_DOCKERFILE" >&2
+  exit 1
+}
+trap 'rm -f "$STAGED_DOCKERFILE"' EXIT
+cp "$EXAMPLE_DIR/Dockerfile" "$STAGED_DOCKERFILE"
+sed -i.bak \
+  -e "s|^ARG BASE_IMAGE=.*|ARG BASE_IMAGE=$NEMOCLAW_BASE_IMAGE|" \
+  -e "s|^ARG HERMES_VERSION=.*|ARG HERMES_VERSION=$HERMES_VERSION|" \
+  "$STAGED_DOCKERFILE"
+rm -f "${STAGED_DOCKERFILE}.bak"
 mkdir -p "$RUN"
 
 echo "== 1/3 host services (the CHECKER side) =="
@@ -105,13 +121,13 @@ curl -sS -m 5 "$GATE_URL/healthz" >/dev/null && echo "  release gate: healthy (S
 
 echo
 echo "== 2/3 optional local image sanity build =="
-# OpenShell builds the sandbox image itself from the recipe-root Dockerfile via
-# the `--from` flag in phase 3 (see below) -- there is NO separate `--image`
+# OpenShell builds the sandbox image itself from the staged Dockerfile via the
+# `--from` flag in phase 3 (see below) -- there is NO separate `--image`
 # step. This phase is only a fast, local fail-early check that the Dockerfile
 # builds; it is entirely optional and skipped when docker is absent. Build
-# context is the recipe root (matching --from), so the COPY paths resolve.
+# context is the recipe root, so the COPY paths resolve.
 if command -v docker >/dev/null 2>&1; then
-  if (cd "$EXAMPLE_DIR" && docker build -t "$IMAGE_TAG" .); then
+  if docker build -t "$IMAGE_TAG" -f "$STAGED_DOCKERFILE" "$EXAMPLE_DIR"; then
     echo "  Dockerfile builds cleanly ($IMAGE_TAG). OpenShell will build its own"
     echo "  copy from --from in phase 3."
   else
@@ -139,6 +155,8 @@ if ! command -v openshell >/dev/null 2>&1; then
   echo "  the full sandbox + denied-edge test."
   exit 0
 fi
+require_example_dependency_version \
+  "OpenShell" "$OPENSHELL_VERSION" openshell --version
 # A sandbox with this name may have been built from an OLDER checkout, and
 # reusing it (only re-applying policy) would run stale Dockerfile/skill/client
 # content -- which verify.sh, exercising the sandbox over curl/exec, cannot
@@ -153,10 +171,9 @@ if openshell sandbox list 2>/dev/null | grep -qE "^\s*$SANDBOX_NAME\s"; then
     sleep 1
   done
 fi
-# OpenShell builds the image from the recipe-root Dockerfile (--from points at
-# the recipe root so that directory is the build context and the Dockerfile's
-# COPY paths resolve), applies the whole policy, and reaches Ready. This is the
-# v0.0.85+ contract (--from <path>, not --image <tag>).
+# OpenShell builds the image from a staged Dockerfile in the recipe root. That
+# keeps the recipe root as the build context so its COPY paths resolve while
+# letting dependencies.toml select the immutable base image.
 #
 # `create` provisions the sandbox and then tries to attach an interactive
 # session; run from a script (no controlling TTY) that attach fails with an
@@ -166,7 +183,7 @@ fi
 # A genuine build/policy failure instead shows up as an Error phase, which the
 # poll detects and reports immediately.
 openshell sandbox create \
-  --from "$EXAMPLE_DIR" \
+  --from "$STAGED_DOCKERFILE" \
   --name "$SANDBOX_NAME" \
   --policy "$EXAMPLE_DIR/policy.yaml" </dev/null || true
 echo "  waiting for sandbox to reach Ready..."

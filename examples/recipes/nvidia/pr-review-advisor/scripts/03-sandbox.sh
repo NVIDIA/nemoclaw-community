@@ -27,6 +27,7 @@ scrub_external_secrets
 load_env
 require_command openshell
 require_command python3
+load_runtime_dependencies
 validate_name "$NEMOCLAW_SANDBOX_NAME"
 validate_port "$HERMES_FORWARD_PORT"
 
@@ -130,6 +131,8 @@ staged="$EXAMPLE_DIR/.Dockerfile.staged.${REVIEW_ADVISOR_INSTALL_ID}"
 cp "$EXAMPLE_DIR/agents/hermes/Dockerfile" "$staged"
 chmod 600 "$staged"
 sed -i.bak \
+  -e "s|^ARG BASE_IMAGE=.*|ARG BASE_IMAGE=$NEMOCLAW_BASE_IMAGE|" \
+  -e "s|^ARG HERMES_VERSION=.*|ARG HERMES_VERSION=$HERMES_VERSION|" \
   -e "s|^ARG NEMOCLAW_MODEL=.*|ARG NEMOCLAW_MODEL=$NEMOCLAW_MODEL|" \
   -e "s|^ARG REVIEW_ADVISOR_RUNTIME_FINGERPRINT=.*|ARG REVIEW_ADVISOR_RUNTIME_FINGERPRINT=$REVIEW_ADVISOR_RUNTIME_FINGERPRINT|" \
   "$staged"

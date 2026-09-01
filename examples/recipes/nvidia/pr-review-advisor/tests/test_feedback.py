@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 _EXAMPLE_ROOT = Path(__file__).resolve().parents[1]
+_REPOSITORY_ROOT = _EXAMPLE_ROOT.parents[3]
 _FEEDBACK = _EXAMPLE_ROOT / "scripts" / "feedback.sh"
 _LIB = _EXAMPLE_ROOT / "scripts" / "_lib.sh"
 _RECORD_FEEDBACK = _EXAMPLE_ROOT / "agents" / "hermes" / "record-feedback.py"
@@ -435,6 +436,8 @@ def test_feedback_uploads_only_the_curated_lesson_and_candidate_provenance(
         ignore=shutil.ignore_patterns(".pytest_cache", "__pycache__", "*.pyc"),
     )
     scripts = runtime / "scripts"
+    for name in ("example_dependencies.py", "example_dependencies.sh"):
+        shutil.copy2(_REPOSITORY_ROOT / "scripts" / name, scripts / name)
     (install / "config.yaml").write_text(
         _config_text("example/project"),
         encoding="utf-8",

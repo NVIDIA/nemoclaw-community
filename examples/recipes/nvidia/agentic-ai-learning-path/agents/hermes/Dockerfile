@@ -11,17 +11,17 @@
 # sandbox hardening and system packages. Its Hermes 0.19.0 installation is
 # replaced below because native Relay 0.7 support landed on Hermes main after
 # the latest Hermes release.
-ARG BASE_IMAGE=ghcr.io/nvidia/nemoclaw/hermes-sandbox-base@sha256:57c091ab9b31c924eac0050e66c834c37df875154a254964302a31b119b50b96
-ARG HERMES_COMMIT=03fa32c92dd445eb64c7f67434dd91b32c40701d
-ARG HERMES_TARBALL_SHA256=771337de8e7779ac4039c14632db44f4b05e27679320cfa96d3aac3507cea12e
-ARG HERMES_SEMVER=0.20.0
+ARG BASE_IMAGE=
+ARG HERMES_REF=
+ARG HERMES_TARBALL_SHA256=
+ARG HERMES_VERSION=
 ARG HERMES_UV_EXTRAS="anthropic messaging web pty mcp"
 
 # ── Stage 0: build the pinned native Hermes + Relay runtime ─────────────────
 FROM ${BASE_IMAGE} AS hermes-builder
-ARG HERMES_COMMIT
+ARG HERMES_REF
 ARG HERMES_TARBALL_SHA256
-ARG HERMES_SEMVER
+ARG HERMES_VERSION
 ARG HERMES_UV_EXTRAS
 
 # The commit archive and its dependency lock are checksum-pinned. Hermes owns
@@ -32,7 +32,7 @@ COPY agents/hermes/nemo-relay/hermes-dependencies.patch /tmp/hermes-dependencies
 RUN --mount=type=secret,id=github_token,required=false \
     set -eu \
     && update-ca-certificates \
-    && HERMES_URL="https://github.com/NousResearch/hermes-agent/archive/${HERMES_COMMIT}.tar.gz" \
+    && HERMES_URL="https://github.com/NousResearch/hermes-agent/archive/${HERMES_REF}.tar.gz" \
     && if [ -s /run/secrets/github_token ]; then \
          curl -L --proto '=https' --tlsv1.2 -sSf \
            -H "Authorization: Bearer $(cat /run/secrets/github_token)" \
@@ -50,7 +50,7 @@ RUN --mount=type=secret,id=github_token,required=false \
     && rm -rf /opt/hermes/tests \
     && git -C /opt/hermes apply --check --unidiff-zero /tmp/hermes-dependencies.patch \
     && git -C /opt/hermes apply --unidiff-zero /tmp/hermes-dependencies.patch \
-    && test "$(sed -n 's/^version = "\(.*\)"/\1/p' /opt/hermes/pyproject.toml | head -1)" = "$HERMES_SEMVER" \
+    && test "$(sed -n 's/^version = "\(.*\)"/\1/p' /opt/hermes/pyproject.toml | head -1)" = "$HERMES_VERSION" \
     && python3 -c 'import pathlib, tomllib; lock=tomllib.loads(pathlib.Path("/opt/hermes/uv.lock").read_text()); relay=next(p for p in lock["package"] if p["name"] == "nemo-relay"); assert relay["version"] == "0.7.2", relay' \
     && rm /tmp/hermes.tar.gz /tmp/hermes.tar.gz.sha256 \
        /tmp/hermes-dependencies.patch
@@ -67,7 +67,7 @@ RUN set -eu \
     && uv sync --python /usr/bin/python3.13 --frozen --no-dev "$@" --no-cache \
     && uv pip check --python /opt/hermes/.venv/bin/python \
     && /opt/hermes/.venv/bin/python -c \
-       'from importlib.metadata import version; expected={"aiohttp":"3.14.3","cryptography":"50.0.0","hermes-agent":"0.20.0","mcp":"1.28.1","nemo-relay":"0.7.2","pillow":"12.3.0","starlette":"1.3.1","tornado":"6.5.7"}; actual={name:version(name) for name in expected}; assert actual == expected, actual' \
+       'from importlib.metadata import version; import sys; expected={"aiohttp":"3.14.3","cryptography":"50.0.0","hermes-agent":sys.argv[1],"mcp":"1.28.1","nemo-relay":"0.7.2","pillow":"12.3.0","starlette":"1.3.1","tornado":"6.5.7"}; actual={name:version(name) for name in expected}; assert actual == expected, actual' "$HERMES_VERSION" \
     && npm ci --prefer-offline --no-audit --no-fund \
     && npm run build --workspace ui-tui \
     && npm run build --workspace web \
@@ -84,6 +84,7 @@ RUN set -eu \
 
 # ── Main sandbox image ─────────────────────────────────────────────────────
 FROM ${BASE_IMAGE}
+ARG HERMES_VERSION
 
 USER root
 RUN rm -rf /opt/hermes
@@ -93,7 +94,7 @@ RUN ln -sfn /opt/hermes/.venv/bin/hermes /usr/local/bin/hermes \
     && ln -sfn /opt/hermes/.venv/bin/hermes-acp /usr/local/bin/hermes-acp \
     && /usr/local/bin/hermes --version \
     && /opt/hermes/.venv/bin/python -c \
-       'from importlib.metadata import version; expected={"aiohttp":"3.14.3","cryptography":"50.0.0","hermes-agent":"0.20.0","mcp":"1.28.1","nemo-relay":"0.7.2","pillow":"12.3.0","starlette":"1.3.1","tornado":"6.5.7"}; actual={name:version(name) for name in expected}; assert actual == expected, actual' \
+       'from importlib.metadata import version; import sys; expected={"aiohttp":"3.14.3","cryptography":"50.0.0","hermes-agent":sys.argv[1],"mcp":"1.28.1","nemo-relay":"0.7.2","pillow":"12.3.0","starlette":"1.3.1","tornado":"6.5.7"}; actual={name:version(name) for name in expected}; assert actual == expected, actual' "$HERMES_VERSION" \
     && test -s /opt/hermes/ui-tui/dist/entry.js \
     && test -s /opt/hermes/hermes_cli/web_dist/index.html
 
@@ -214,7 +215,8 @@ RUN mkdir -p /etc/nemo-relay/config \
          -v phoenix_enabled="${PHOENIX_ENABLED}" \
          -v phoenix_endpoint="${PHOENIX_ENDPOINT}" \
          -v phoenix_project="${PHOENIX_PROJECT_NAME}" \
-         '{ gsub(/@@ATIF_STORAGE_BLOCK@@/, atif_block); gsub(/@@PHOENIX_ENABLED@@/, phoenix_enabled); gsub(/@@PHOENIX_ENDPOINT@@/, phoenix_endpoint); gsub(/@@PHOENIX_PROJECT_NAME@@/, phoenix_project); print }' \
+         -v hermes_version="${HERMES_VERSION}" \
+         '{ gsub(/@@ATIF_STORAGE_BLOCK@@/, atif_block); gsub(/@@PHOENIX_ENABLED@@/, phoenix_enabled); gsub(/@@PHOENIX_ENDPOINT@@/, phoenix_endpoint); gsub(/@@PHOENIX_PROJECT_NAME@@/, phoenix_project); gsub(/@@HERMES_VERSION@@/, hermes_version); print }' \
          /tmp/nemo-relay-plugins.toml.in \
        > /etc/nemo-relay/config/plugins.toml \
     && rm /tmp/nemo-relay-plugins.toml.in \

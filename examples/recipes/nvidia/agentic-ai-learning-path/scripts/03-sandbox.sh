@@ -16,8 +16,15 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$DIR/_lib.sh"
 
 load_env
+REPO_ROOT="$(cd "$EXAMPLE_DIR/../../../.." && pwd)"
+# shellcheck source=../../../../../scripts/example_dependencies.sh
+source "$REPO_ROOT/scripts/example_dependencies.sh"
+load_example_dependencies "$EXAMPLE_DIR"
+require_example_harness hermes
 assert_messaging_config
 command -v openshell >/dev/null || { echo "openshell not in PATH" >&2; exit 1; }
+require_example_dependency_version \
+  "OpenShell" "$OPENSHELL_VERSION" openshell --version
 
 STAGED_DOCKERFILE="$EXAMPLE_DIR/.Dockerfile.staged"
 STAGED_POLICY="$EXAMPLE_DIR/.policy.staged.yaml"
@@ -79,6 +86,10 @@ bash "$DIR/stage-enterprise-cas.sh"
 # --from <Dockerfile>` doesn't expose --build-arg passthrough. Values must
 # not contain `|` (the sed delimiter).
 declare -A DOCKERFILE_ARGS=(
+  [BASE_IMAGE]="$NEMOCLAW_BASE_IMAGE"
+  [HERMES_REF]="$HERMES_REF"
+  [HERMES_TARBALL_SHA256]="$HERMES_TARBALL_SHA256"
+  [HERMES_VERSION]="$HERMES_VERSION"
   [NEMOCLAW_MESSAGING_CHANNELS_B64]="$CHANNELS_B64"
   [NEMOCLAW_SLACK_RICH_BLOCKS]="$NEMOCLAW_SLACK_RICH_BLOCKS"
   [GITHUB_READONLY_REPO]="$GITHUB_READONLY_REPO"
