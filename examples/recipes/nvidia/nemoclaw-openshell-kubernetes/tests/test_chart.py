@@ -825,6 +825,21 @@ class ChartTest(unittest.TestCase):
         self.assertLessEqual(len(sandbox_name), 19)
         self.assertRegex(sandbox_name, r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 
+    def test_sre_proxy_auth_secret_has_a_kubernetes_api_header(self) -> None:
+        rendered = self.run_helm(
+            "template",
+            "nemoclaw-openshell-kubernetes-test",
+            str(CHART_DIR),
+            "--set",
+            "sre.enabled=true",
+        )
+        secret = self.rendered_from_source(
+            rendered,
+            "nemoclaw-openshell-kubernetes/templates/proxy-auth-secret.yaml",
+        )
+        self.assertRegex(secret, r"(?m)^apiVersion: v1$")
+        self.assertRegex(secret, r"(?m)^kind: Secret$")
+
     def test_sre_proxy_uses_bearer_authenticated_forwarder(self) -> None:
         rendered = self.run_helm(
             "template",
