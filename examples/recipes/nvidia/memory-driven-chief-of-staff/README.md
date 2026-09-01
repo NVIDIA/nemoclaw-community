@@ -241,24 +241,28 @@ inference key into the recipe profile on the supported NemoClaw path.
 ### 4. Start and verify the scheduled runtime inside the sandbox
 
 NemoClaw's own supervisor launches and continuously respawns `hermes gateway
-run` for the sandbox's default profile automatically. This recipe installs
-as a separate, named profile (`memory-driven-chief-of-staff`), which that
+run` for the sandbox's default profile automatically, logging to
+`/tmp/gateway.log` under a `0600` file it owns. This recipe installs as a
+separate, named profile (`memory-driven-chief-of-staff`), which that
 supervision does not cover — there is no NemoClaw-managed lifecycle for a
 second named-profile gateway today, so this step starts and tracks it by
-hand. Check first whether it is already running, to avoid starting a second,
-orphaned instance:
+hand, deliberately kept isolated from the managed one: a distinct log path,
+and identity checked before anything is killed. Check first whether it is
+already running, to avoid starting a second, orphaned instance:
 
 ```bash
 hermes -p "$PROFILE_NAME" cron status
 ```
 
-If it reports the gateway is not running, start it in the background and
-record its PID. Unlike NemoClaw's own gateway, nothing restarts this one
-automatically — if it dies (crash, OOM, sandbox restart), cron stops firing
-until you notice and rerun this:
+If it reports the gateway is not running, start it in the background,
+logging to its own path — reusing `/tmp/gateway.log` would collide with
+NemoClaw's managed one — and record its PID. Unlike NemoClaw's own gateway,
+nothing restarts this one automatically — if it dies (crash, OOM, sandbox
+restart), cron stops firing until you notice and rerun this:
 
 ```bash
-nohup hermes -p "$PROFILE_NAME" gateway run > /tmp/gateway.log 2>&1 &
+nohup hermes -p "$PROFILE_NAME" gateway run \
+  > /tmp/mdcos-gateway.log 2>&1 &
 echo $! > /tmp/mdcos-gateway.pid
 disown
 hermes -p "$PROFILE_NAME" cron status
@@ -266,14 +270,24 @@ hermes -p "$PROFILE_NAME" cron status
 
 `cron status` should now report the gateway running, its PID (matching `cat
 /tmp/mdcos-gateway.pid`), and the next scheduled job. If it still reports not
-running, check `/tmp/gateway.log` for a startup error.
+running, check `/tmp/mdcos-gateway.log` for a startup error.
 
-To stop it later:
+To stop it later, confirm the recorded PID is still this gateway before
+killing it — a reused or stale PID file could otherwise point at an
+unrelated process:
 
 ```bash
-kill "$(cat /tmp/mdcos-gateway.pid)"
+GW_PID="$(cat /tmp/mdcos-gateway.pid 2>/dev/null || true)"
+if [[ -n "$GW_PID" ]] && ps -p "$GW_PID" -o args= | grep -q "gateway run"; then
+  kill "$GW_PID"
+else
+  echo "No matching gateway process for PID $GW_PID; not killing anything." >&2
+fi
 rm -f /tmp/mdcos-gateway.pid
 ```
+
+Stop the gateway this way before [deleting the profile](#persistence-and-reboot-behavior)
+— removing the profile does not stop a process running against it.
 
 > **Running this outside a NemoClaw sandbox, on a host with systemd?** Any
 > environment without a running systemd — WSL included — still needs the
@@ -315,14 +329,15 @@ recipe's behavior without connecting anything.
 
 ### 6. A note on the web dashboard
 
-`nemohermes hermes dashboard-url --quiet` (from your machine, not inside the
-sandbox) prints a URL for the Hermes dashboard NemoClaw forwards for the
+`nemohermes my-hermes dashboard-url --quiet` (from your machine, not inside
+the sandbox) prints a URL for the Hermes dashboard NemoClaw forwards for the
 sandbox by default. That dashboard is launched isolated, under its own
 dedicated profile home, specifically so it does **not** unify with other
 profiles on the sandbox — it will not show this recipe's chat, memory, or
-store, regardless of any `?profile=` query parameter appended to it. The
-printed URL also carries a credential in its fragment; treat it like a
-password and use it as printed, not retyped or shared.
+store, regardless of any `?profile=` query parameter appended to it. Hermes
+uses session auth for this dashboard, so the printed URL is a plain link, not
+a credential; it is still an unauthenticated-looking URL that grants access
+to whoever holds it, so avoid sharing it over an insecure channel.
 
 The verified way to talk to this recipe is the terminal, from inside the
 sandbox:
@@ -331,11 +346,17 @@ sandbox:
 hermes -p memory-driven-chief-of-staff chat
 ```
 
-A dedicated web view scoped to this one profile is possible through Hermes's
-own `hermes dashboard --isolated`, run from inside the sandbox against this
-profile — but that path (port choice, forwarding it out of the sandbox, and
-its authentication flow) is not walked through end-to-end in this guide; see
-Hermes's own dashboard documentation before relying on it.
+For a dedicated web view scoped to this one profile instead, run this inside
+the sandbox:
+
+```bash
+hermes -p "$PROFILE_NAME" dashboard --isolated
+```
+
+This starts a server dedicated to this profile rather than routing to the
+shared machine-level one above. It is not forwarded out of the sandbox by
+default; see Hermes's own dashboard documentation for its port and access
+options before exposing it.
 
 ### Things to try
 
@@ -698,7 +719,10 @@ JOB_ID="<copy-an-id-from-the-list>"
 hermes -p memory-driven-chief-of-staff cron remove "$JOB_ID"
 ```
 
-Deleting the profile also deletes its workspace, store, and memory.
+Deleting the profile also deletes its workspace, store, and memory — but not
+a gateway process already running against it. If you started one by hand
+(step 4 of Quick Start), stop it first using the identity-checked kill
+sequence there, then delete the profile:
 
 ```bash
 hermes profile delete memory-driven-chief-of-staff
