@@ -18,7 +18,11 @@ contracts.
 Matching pull requests attach the generated `_site/` directory as an
 `example-catalog-preview` artifact and do not deploy. A matching push to
 `main`, or a manual run from `main`, uploads that generated directory and
-deploys it with the `github-pages` environment.
+deploys it with the `github-pages` environment. A weekly scheduled run refreshes
+the registered projects' latest stable releases, resolves every pinned
+NemoClaw tag to its harness and OpenShell contract, and rebuilds the computed
+maintenance statuses. If an upstream lookup fails, the build fails before
+deployment and the last successful Pages site remains in place.
 
 ## Build Locally
 
@@ -30,8 +34,14 @@ Markdown indexes, and build the site:
 python3 scripts/build_catalog.py --validate-metadata
 python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
 python3 scripts/fetch_catalog_assets.py
+python3 scripts/fetch_maintenance_releases.py
 python3 scripts/build_catalog.py --write
 ```
+
+Maintenance uses the latest committed change under each example, so build from
+a full clone; shallow history is rejected. The release refresh updates the
+checked-in snapshot without editing example metadata and fails closed if a
+previously resolved NemoClaw tag moves to another commit.
 
 Validate without changing files and rebuild the ignored `_site/` directory:
 
@@ -74,9 +84,11 @@ Confirm that the five canonical category tiles and the Hackathon and
 Build-a-Claw collection tiles show their README-derived descriptions, and that
 the NemoClaw Brev link opens the external launchable. Exercise text search,
 both browse views, at least one category, collection, and industry filter,
+maintenance status (including the default exclusion of deprecated examples),
 reset, browser Back, a copied filtered URL, category fragments, and
 representative compiled README detail pages, including local images, source
-links, and an upstream-project link when present. Verify at least one Mermaid
+links, the At-a-glance maintenance disclosure, and an upstream-project link
+when present. Verify at least one Mermaid
 detail page renders its diagrams without remote requests, retains expandable
 source, and shows source when JavaScript is disabled. Then set the repository
 website field to

@@ -64,12 +64,12 @@ Directory placement answers what an artifact is and, for a recipe, where its
 contribution came from. It does not encode every way a reader may discover the
 example.
 
-Record the one primary industry, any accepted cross-cutting collection, and an
-optional upstream project in the standardized catalog block at the top of the
-example's root `README.md`.
-Use the exact emoji-and-title values documented in
-[`CONTRIBUTING.md`](../../../../CONTRIBUTING.md#catalog-metadata). Industry does
-not change kind, provenance, support, or maturity.
+Record discovery metadata in the standardized table in the example's root
+`README.md`. Industry does not change kind, provenance, support, or maturity;
+omitted lifecycle means `Active`. Follow the controlled values, maintenance
+rules, and executable `dependencies.toml` contract in
+[`CONTRIBUTING.md`](../../../../CONTRIBUTING.md#catalog-metadata) and
+[`CONTRIBUTING.md`](../../../../CONTRIBUTING.md#dependency-maintenance-inputs).
 
 `Hackathon` and `Build-a-Claw` are collections, not artifact kinds or
 provenance. A collection entry that is a reusable workflow remains a recipe

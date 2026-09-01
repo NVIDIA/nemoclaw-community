@@ -368,9 +368,9 @@ the catalog instead of editing that list by hand.
 
 ## Catalog Metadata
 
-Each example's root README is the single source for that example in the
-generated [Markdown catalog](examples/README.md), GitHub Pages cards, filters,
-detail pages, public `catalog.json` search index, and agent-oriented
+Each example's root README is the source for its descriptive catalog metadata
+in the generated [Markdown catalog](examples/README.md), GitHub Pages cards,
+filters, detail pages, public `catalog.json` search index, and agent-oriented
 `llms.txt`. The build discovers example directories from the canonical
 taxonomy, derives kind and provenance from the path, and reads this exact table
 from the root README. Put it in a final `Catalog Metadata` section. Existing
@@ -391,11 +391,10 @@ frontmatter may precede the title and is ignored by catalog generation:
 | Requirements | Linux · Docker · required service or boundary |
 ```
 
-Add `Upstream` after `Requirements` when the example adapts a separate public
-project, `Contributor` for a partner recipe, or `Collection` with either
-`Hackathon` or `Build-a-Claw` for a recipe accepted into that collection. Omit
-rows that do not apply. Do not add YAML frontmatter for catalog data; place all
-new catalog metadata in the Markdown table. The
+After `Requirements`, add optional rows in this order: `Lifecycle`, `Reviewed`,
+`Upstream`, `Contributor`, and `Collection`. Omit rows that do not apply. Do not
+add YAML frontmatter for catalog data; place all new catalog metadata in the
+Markdown table. The
 [catalog architecture](docs/catalog-architecture.md) documents the complete
 generation and public query contract.
 
@@ -411,6 +410,17 @@ Follow these metadata rules:
 - `Requirements` is a short, factual summary of the main environment,
   dependency, and material operating boundary. It appears as “Requirements &
   limits” in catalog cards and detail pages and is limited to 240 characters.
+- `Lifecycle` is optional and accepts exactly `Active`, `Stable`, or
+  `Deprecated`; omitting it means `Active`. Author `Stable` for a maintained
+  example that should change infrequently, and `Deprecated` only when
+  maintainers intentionally retain it for reference instead of recommending it
+  for new use. Automatic deprecation does not rewrite this authored value.
+- `Reviewed` is optional and uses an exact `YYYY-MM-DD` date. Set it only after
+  a focused maintenance review of the example's setup, documented behavior,
+  known limitations, and detected compatibility dependencies. It is not a test
+  result, runtime verification date, evidence level, or substitute for the
+  verification claims in the README. When it is absent, catalog maintenance
+  uses repository activity as its freshness signal.
 - `Upstream` is optional. Set it only when the example wraps, adapts, or extends
   a separate canonical public project, and use an absolute HTTPS URL without
   embedded credentials. Do not use it as a second source link to this example.
@@ -420,6 +430,89 @@ Follow these metadata rules:
   partner, or community provenance and canonical recipe path.
 - The directory path remains the source for artifact kind and recipe
   provenance; do not repeat either in the catalog block.
+
+Do not author the public maintenance status. The catalog computes the strongest
+state from lifecycle, the optional `Reviewed` date, committed example activity,
+detected dependency releases, and `scripts/catalog-maintenance.json`. A focused
+review can advance `Reviewed`; a dependency release can require review but
+cannot deprecate an example by itself. By default, a relevant release is
+`Review soon` for 30 days, `Review due` through day 59, and `Review overdue`
+after 60 days; inactivity becomes overdue at 120 days and deprecated at 240.
+The strongest applicable signal wins, and the JSON policy owns these values.
+
+### Dependency Maintenance Inputs
+
+A locally executable example that owns an exact, tested NemoClaw, OpenShell,
+Hermes Agent, or OpenClaw target must provide one `dependencies.toml` at its
+root and consume it through `scripts/example_dependencies.sh`. This file is an
+implementation input, not display metadata: changing it must change what the
+example installs or what its preflight accepts. Do not repeat these versions in
+the README or a second version file.
+
+For a stock NemoClaw stack, declare only the exact NemoClaw release and selected
+harness:
+
+```toml
+schema_version = 1
+
+[stack]
+distribution = "nemoclaw"
+version = "v0.0.109"
+harness = "hermes"
+```
+
+The resolver reads that exact release's `agents/<agent>/manifest.yaml` and
+`nemoclaw-blueprint/blueprint.yaml` at its immutable commit. Those upstream
+contracts supply the harness and exact OpenShell versions shown on the site. A
+release with a true OpenShell compatibility range fails closed rather than
+pretending every install uses one version. Do not add duplicate harness or
+OpenShell pins to a NemoClaw-native stack.
+
+Use `distribution = "direct"` only when the example actually builds or validates
+components outside the NemoClaw installer. A direct stack must pin its harness
+version. Pin OpenShell only when it is used; omission displays `N/A`. Keep the
+immutable base image in the same stack table. A Hermes source checkout must
+declare its source ref and archive checksum together, while a base-image-only
+build needs neither:
+
+```toml
+schema_version = 1
+
+[stack]
+distribution = "direct"
+harness = "hermes"
+harness_version = "0.20.0"
+harness_ref = "03fa32c92dd445eb64c7f67434dd91b32c40701d"
+openshell_version = "0.0.85"
+base_image = "ghcr.io/nvidia/nemoclaw/hermes-sandbox-base@sha256:57c091ab9b31c924eac0050e66c834c37df875154a254964302a31b119b50b96"
+harness_sha256 = "771337de8e7779ac4039c14632db44f4b05e27679320cfa96d3aac3507cea12e"
+```
+
+Setup scripts load the validated, shell-escaped contract like this:
+
+```bash
+source "$REPO_ROOT/scripts/example_dependencies.sh"
+load_example_dependencies "$EXAMPLE_DIR"
+```
+
+For NemoClaw-native stacks, the helper exports the resolved immutable commit as
+`NEMOCLAW_INSTALL_REF`; it also exports only allowlisted install and validation
+values. Kubernetes deployment recipes may additionally use `[deployment]`
+`agent_sandbox_version` and `envoy_gateway_chart_version`.
+
+Keep contracts portable: use only `schema_version = 1`, the documented flat
+tables, full-line comments, and quoted string values. The same restricted parser
+runs in local setup and CI, including the repository's Python 3.10 baseline.
+
+Omit the manifest for documentation-only upstream deployments and standalone
+tools that do not own a local platform install. Standalone tools show
+`Harness: N/A` and `OpenShell: N/A`. Also omit the manifest when an existing
+recipe intentionally accepts whatever platform the operator installed and has
+no exact, tested stack contract. Do not infer a pin from commit dates or the
+current latest release. Those recipe pages show `Harness: Not declared` and
+`OpenShell: Not declared` rather than claiming an unverified stack; add the
+contract when the recipe adopts and tests an exact install or preflight target.
+For a declared stack, `OpenShell: N/A` means that stack does not use OpenShell.
 
 Choose one of these exact industry values, including its emoji:
 
@@ -447,9 +540,10 @@ Choose one of these exact industry values, including its emoji:
 
 The `Validate example README metadata` GitHub check rejects missing root
 READMEs, invalid paths, malformed opening blocks, unknown fields, duplicate
-titles, and values outside the controlled industry and collection lists. Run it
-locally with `python3 scripts/build_catalog.py --validate-metadata`. Do not edit
-generated catalog rows or deployed cards by hand.
+titles, invalid lifecycle or review values, and values outside the controlled
+industry, dependency, and collection lists. Run it locally with
+`python3 scripts/build_catalog.py --validate-metadata`. Do not edit generated
+catalog rows or deployed cards by hand.
 
 ## Example README Template
 
@@ -508,10 +602,13 @@ authoring comments before submission.
 
 <!--
 When applicable, add these rows after Requirements and in this order:
+`| Lifecycle | [Stable or Deprecated] |` when Active is not appropriate;
+`| Reviewed | YYYY-MM-DD |` after a focused maintenance review;
 `| Upstream | https://github.com/organization/project |` for a separate public
-project that this example adapts; `| Contributor | [Organization] |` for a
-partner recipe; and `| Collection | [Hackathon or Build-a-Claw] |` for an
-accepted collection recipe. Omit rows that do not apply.
+project that this example adapts; `| Contributor |
+[Organization] |` for a partner recipe; and `| Collection | [Hackathon or
+Build-a-Claw] |` for an accepted collection recipe. Omit rows that do not
+apply. Reviewed is maintenance metadata, not verification evidence.
 -->
 
 ## Screenshot

@@ -28,16 +28,23 @@ site/styles.css ───────┼─> _site/styles.css
 site/catalog.mjs ──────┼─> _site/catalog.mjs
 site/diagrams.mjs ─────┼─> _site/diagrams.mjs
 Mermaid Tiny cache ────┴─> _site/assets/vendor/mermaid.tiny.js
+maintenance policy,
+release snapshot,
+Git history, and executable
+dependencies.toml ─────────> resolved harness/runtime facts and computed status
+                             in HTML, JSON, and llms.txt
 ```
 
 The standardized catalog block at the top of each example's root `README.md` is
-the canonical example metadata source.
+the canonical descriptive metadata source.
 [`scripts/build_catalog.py`](../scripts/build_catalog.py) discovers those
 READMEs from the repository taxonomy, validates their title, required
-`Description` table row, industry emoji and title, requirements, and
-conditional fields, then derives artifact kind and recipe provenance from each
-path. An optional `Upstream` field identifies a separate canonical public
-project that the example adapts.
+`Description` table row, industry emoji and title, requirements, lifecycle,
+and conditional fields, then derives artifact kind and recipe provenance from
+each path. An optional `Reviewed` field provides a human maintenance-review
+date. A locally executable platform example uses one root `dependencies.toml`
+as its setup or preflight input. An optional `Upstream` field identifies a
+separate canonical public project that the example adapts.
 
 Each of the five canonical categories and two collection views has an index
 README. Its H1 and opening description are the authored source for the browse
@@ -88,6 +95,12 @@ The catalog keeps these concepts separate:
   and also comes from the canonical path.
 - `industry` is one required controlled emoji-and-title value on every example,
   independent of kind and provenance.
+- `lifecycle` is an optional authored value: `Active`, `Stable`, or
+  `Deprecated`. Omission means `Active`; it never belongs in an example path.
+- `reviewed` is an optional focused maintenance-review date, not runtime
+  verification evidence.
+- `stack` is the resolved harness and OpenShell composition derived from an
+  executable example's root `dependencies.toml`.
 - `collection` is an optional cross-cutting recipe discovery field.
   `Hackathon` and `Build-a-Claw` are collections; neither replaces kind,
   provenance, canonical path, or contributor attribution.
@@ -96,6 +109,30 @@ The build rejects unknown taxonomy roots, unsafe or invalid example paths,
 canonical example directories without a root README, malformed metadata
 blocks, duplicate titles, and values outside the controlled vocabulary.
 
+## Computed Maintenance Status
+
+Contributors may author a lifecycle exception and a focused `Reviewed` date;
+they never author the public status. An executable example may also expose one
+root `dependencies.toml` that its setup consumes. Native contracts pin a
+NemoClaw release and harness, then resolve the exact harness and OpenShell
+versions from that release; direct contracts pin the components and immutable
+artifacts they install. Tools show `N/A`, while platform examples without a
+verified executable contract show `Not declared`. The catalog does not infer a
+model because many examples choose one only at deployment time. The full
+authoring and validation contract lives in
+[`CONTRIBUTING.md`](../CONTRIBUTING.md#dependency-maintenance-inputs).
+
+The builder takes the latest committed change under each example (or a later
+focused `Reviewed` date), compares declared components with the checked-in
+stable-release snapshot, and applies the thresholds in
+`scripts/catalog-maintenance.json`. The strongest signal wins: dependency
+updates progress from `Review soon` to `Review due` and `Review overdue`;
+inactivity becomes `Review overdue` and then `Deprecated`; an explicitly
+deprecated lifecycle is immediately red. Dependency updates alone never
+deprecate an example, and automatic deprecation never rewrites its README.
+Exact definitions and contributor guidance live in
+[`CONTRIBUTING.md`](../CONTRIBUTING.md#catalog-metadata).
+
 ## Browser Search Contract
 
 Catalog state is encoded in the URL so a filtered view can be copied,
@@ -103,10 +140,11 @@ bookmarked, or created by another program:
 
 | Parameter | Values | Behavior |
 | --- | --- | --- |
-| `q` | Plain text | Case-insensitive whitespace-token AND search across title, description, requirements, category and provenance display text, industry, contributor, and collections. |
+| `q` | Plain text | Case-insensitive whitespace-token AND search across title, description, requirements, category and provenance display text, industry, lifecycle, maintenance status, direct dependencies, contributor, and collections. |
 | `view` | `category` or `industry` | Selects which discovery dimension is active. The default is `category`. |
 | `category` | `all`, `nvidia-recipes`, `partner-recipes`, `community-recipes`, `nvidia-field-demos`, `developer-tools`, `hackathon-recipes`, or `build-a-claw-recipes` | Applies in category view. The final two values select recipes carrying the matching collection. |
 | `industry` | `all` or an industry ID published in `catalog.json` | Applies in industry view. |
+| `maintenance` | `maintained`, `all`, `current`, `review-soon`, `review-due`, `review-overdue`, or `deprecated` | Applies independently of the active browse view. The default `maintained` value includes every nondeprecated status. |
 
 Examples:
 
@@ -129,8 +167,11 @@ publishes a deterministic JSON index containing:
 - every allowed industry ID, label, emoji, and current count;
 - collection IDs, labels, descriptions, and counts;
 - each example's title, description, category, kind, recipe provenance,
-  industry, contributor when applicable, collections, requirements, optional
-  upstream project URL, source path, source guide URL, and local detail URL.
+  industry, lifecycle, optional reviewed date, resolved stack facts, computed
+  maintenance status, contributor when applicable, collections, requirements,
+  optional upstream project URL, source path, source guide URL, and local detail
+  URL; and
+- tracked upstream release sources and the dates used for status calculation.
 
 This is a static index rather than a server-side query API. A program can fetch
 it once and apply its own filters, or construct a browser URL using the query
@@ -141,23 +182,25 @@ contract above.
 [`https://nvidia.github.io/nemoclaw-community/llms.txt`](https://nvidia.github.io/nemoclaw-community/llms.txt)
 publishes the catalog overview, filter guidance, category and collection
 fields, and one concise record for every example. Each record includes the
-example's category, industry, requirements, detail page, source guide,
-collections, and optional upstream project.
+example's category, industry, requirements, lifecycle, detected dependencies,
+computed maintenance status, detail page, source guide, collections, and
+optional upstream project.
 
-The build creates `llms.txt` directly from the same validated README data used
-for `catalog.json`; it is a second generated representation, not a metadata
-source or a file contributors edit. Programs that need typed fields and counts
-should continue to use `catalog.json`.
+The build creates `llms.txt` from the same validated catalog entries used for
+`catalog.json`; it is a second generated representation, not a metadata source
+or a file contributors edit. Programs that need typed fields and counts should
+continue to use `catalog.json`.
 
 ## Update And Verify
 
-After adding or changing an example README catalog block, validate its format,
-then regenerate the committed Markdown catalog and local site:
+After changing an example README catalog block or `dependencies.toml`, validate
+the inputs, then regenerate the committed Markdown catalog and local site:
 
 ```bash
 python3 scripts/build_catalog.py --validate-metadata
 python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
 python3 scripts/fetch_catalog_assets.py
+python3 scripts/fetch_maintenance_releases.py
 python3 scripts/build_catalog.py --write
 ```
 
@@ -165,7 +208,7 @@ Run the same checks used by the Pages workflow:
 
 ```bash
 python3 scripts/build_catalog.py --check
-python3 -m unittest discover -s scripts/tests -p 'test_build_catalog.py'
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 node --test scripts/tests/catalog.test.mjs
 ```
 
