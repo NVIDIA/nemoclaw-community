@@ -1241,3 +1241,6 @@ license: Apache-2.0
 | Description | Builds a revisable local memory from email and Slack, then ranks obligations against the user's priorities while preserving pins and ignores without changing source systems. |
 | Industry | ✨ Other |
 | Requirements | Python 3.10+ · scheduled use: a Linux NemoHermes sandbox, Hermes 0.19+, and an inference provider API key · provider setup helpers: Linux/WSL · Slack and Microsoft Graph collectors optional |
+| NemoClaw | Unpinned |
+| Harness | Hermes >=0.19.0 |
+| OpenShell | Unpinned |

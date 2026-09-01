@@ -18,9 +18,15 @@ on:
       - ".agents/skills/nemoclaw-community-contributor-examples/references/example-taxonomy.md"
       - "examples/**"
       - "scripts/build_catalog.py"
+      - "scripts/catalog-maintenance.json"
+      - "scripts/catalog_maintenance.py"
+      - "scripts/example_stack_facts.py"
+      - "scripts/nemoclaw-release-contracts.json"
       - "scripts/fetch_catalog_assets.py"
       - "scripts/catalog-requirements.txt"
       - "scripts/tests/test_build_catalog.py"
+      - "scripts/tests/test_catalog_maintenance.py"
+      - "scripts/tests/test_example_stack_facts.py"
       - "scripts/tests/catalog.test.mjs"
       - "site/**"
   push:
@@ -37,11 +43,19 @@ on:
       - ".agents/skills/nemoclaw-community-contributor-examples/references/example-taxonomy.md"
       - "examples/**"
       - "scripts/build_catalog.py"
+      - "scripts/catalog-maintenance.json"
+      - "scripts/catalog_maintenance.py"
+      - "scripts/example_stack_facts.py"
+      - "scripts/nemoclaw-release-contracts.json"
       - "scripts/fetch_catalog_assets.py"
       - "scripts/catalog-requirements.txt"
       - "scripts/tests/test_build_catalog.py"
+      - "scripts/tests/test_catalog_maintenance.py"
+      - "scripts/tests/test_example_stack_facts.py"
       - "scripts/tests/catalog.test.mjs"
       - "site/**"
+  schedule:
+    - cron: "17 6 * * *"
   workflow_dispatch:
 
 permissions:
@@ -75,6 +89,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -94,7 +109,11 @@ jobs:
         run: python3 scripts/build_catalog.py --check
 
       - name: Run catalog build tests
-        run: python3 -m unittest discover -s scripts/tests -p 'test_build_catalog.py'
+        run: >-
+          python3 -m unittest
+          scripts.tests.test_build_catalog
+          scripts.tests.test_catalog_maintenance
+          scripts.tests.test_example_stack_facts
 
       - name: Run catalog interaction tests
         run: node --test scripts/tests/catalog.test.mjs
@@ -112,6 +131,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:

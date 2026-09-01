@@ -10,6 +10,9 @@
 | Description | Helps quality engineers turn public GitHub pull request descriptions and bounded diffs into Slack briefs and proposed, unexecuted feature test cases with source evidence. |
 | Industry | ✨ Other |
 | Requirements | NemoClaw + Docker · Slack app with Socket Mode · Slack bot + app access tokens · inference provider API key · public GitHub only |
+| NemoClaw | Unpinned |
+| Harness | OpenClaw Unpinned |
+| OpenShell | Unpinned |
 
 This NVIDIA-authored recipe runs an OpenClaw assistant in a NemoClaw sandbox.
 People send it a Slack direct message with a public GitHub repository or pull

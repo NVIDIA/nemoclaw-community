@@ -10,6 +10,7 @@ import {
   CATALOG_CATEGORIES,
   CATALOG_COLLECTION_CATEGORIES,
   CATALOG_INDUSTRIES,
+  CATALOG_MAINTENANCE,
   DEFAULT_CATALOG_STATE,
   canonicalizeCatalogState,
   initCatalog,
@@ -129,6 +130,19 @@ test("industry view matches an exact industry slug", () => {
   );
 });
 
+test("maintenance defaults to nondeprecated examples and supports exact states", () => {
+  const current = { maintenance: "current" };
+  const deprecated = { maintenance: "deprecated" };
+
+  assert.equal(matchesCatalogRecord(current), true);
+  assert.equal(matchesCatalogRecord(deprecated), false);
+  assert.equal(matchesCatalogRecord(deprecated, { maintenance: "all" }), true);
+  assert.equal(
+    matchesCatalogRecord(current, { maintenance: "review-due" }),
+    false,
+  );
+});
+
 test("invalid URL values canonicalize to defaults", () => {
   assert.deepEqual(
     parseCatalogURLState("?q=%20GPU%20%20cloud%20&view=map&category=unknown&industry=finance"),
@@ -183,6 +197,7 @@ test("client facet identifiers match the README catalog builder", () => {
     taxonomy.collection_categories,
   );
   assert.deepEqual(CATALOG_INDUSTRIES, taxonomy.industries);
+  assert.deepEqual(CATALOG_MAINTENANCE, taxonomy.maintenance);
 });
 
 test("category information buttons toggle one description at a time", () => {
@@ -265,6 +280,7 @@ function fakeCatalogDOM() {
       category: "nvidia-recipes",
       industry: "financial-services",
       collections: "",
+      maintenance: "current",
       search: "payment operations",
     },
   });
@@ -273,6 +289,7 @@ function fakeCatalogDOM() {
       category: "partner-recipes",
       industry: "financial-services",
       collections: "",
+      maintenance: "current",
       search: "x402 payment",
     },
   });
@@ -293,6 +310,7 @@ function fakeCatalogDOM() {
   const partnerGroup = group("partner-recipes", [partnerCard]);
   const category = fakeControl({ value: "all" });
   const industry = fakeControl({ value: "all" });
+  const maintenance = fakeControl({ value: "maintained" });
   const categoryWrapper = fakeControl({
     dataset: { filterFor: "category" },
     querySelectorAll: () => [category],
@@ -315,6 +333,7 @@ function fakeCatalogDOM() {
     "catalog-view-industry": fakeControl(),
     "catalog-category": category,
     "catalog-industry": industry,
+    "catalog-maintenance": maintenance,
     "catalog-reset": fakeControl(),
     "catalog-status": fakeControl({ textContent: "" }),
     "catalog-empty": fakeControl({ hidden: true }),

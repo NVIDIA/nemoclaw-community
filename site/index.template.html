@@ -191,6 +191,21 @@
             </div>
           </div>
 
+          <div class="filter-control">
+            <label for="catalog-maintenance">Maintenance</label>
+            <div class="select-shell">
+              <select id="catalog-maintenance">
+                <option value="maintained">Maintained examples</option>
+                <option value="all">All maintenance states</option>
+                <option value="current">Current</option>
+                <option value="review-soon">Review soon</option>
+                <option value="review-due">Review due</option>
+                <option value="review-overdue">Review overdue</option>
+                <option value="deprecated">Deprecated</option>
+              </select>
+            </div>
+          </div>
+
           <div class="control-summary">
             <p id="catalog-status" role="status" aria-live="polite">{{EXAMPLE_COUNT}} examples shown</p>
             <button class="reset-button" id="catalog-reset" type="button" disabled>Reset filters</button>

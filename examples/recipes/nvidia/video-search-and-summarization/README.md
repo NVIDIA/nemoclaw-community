@@ -10,6 +10,9 @@
 | Description | Helps video analysts and engineers deploy and operate NVIDIA VSS profiles by chat, using a sandboxed agent that runs the Compose deployment through a host-side MCP server and reports the result. |
 | Industry | ✨ Other |
 | Requirements | Linux GPU host · Docker with the NVIDIA runtime · Python 3.11+ for the notebooks · NGC API key · agent model provider · VSS repository develop branch · large container image and model pulls |
+| NemoClaw | Unpinned |
+| Harness | Unknown |
+| OpenShell | Unpinned |
 
 ## Screenshot
 

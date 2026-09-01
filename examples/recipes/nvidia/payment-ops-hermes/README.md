@@ -5,6 +5,9 @@
 | Description | Helps payment operators screen synthetic outbound payments, explain holds, and prepare review packets while OpenShell keeps final release authority with a human outside the Hermes sandbox. |
 | Industry | 💳 Financial Services |
 | Requirements | Linux · Docker Compose · OpenShell 0.0.53 · OpenAI-compatible inference API key · synthetic data only |
+| NemoClaw | N/A |
+| Harness | Hermes 0.14.0 |
+| OpenShell | 0.0.53 |
 
 ![NVIDIA](assets/nvidia_header.png)
 
