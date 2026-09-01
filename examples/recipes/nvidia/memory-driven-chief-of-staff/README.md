@@ -533,9 +533,11 @@ export OPENSHELL_SANDBOX_NAME="my-hermes"
 bash scripts/setup-slack.sh
 ```
 
-The script imports `docs/slack_app_manifest.json`, requests user scopes, checks
-the provider type and read-only policy, configures token rotation, and attaches
-the provider to the named sandbox. The required scopes are:
+The script imports
+[docs/slack_app_manifest.json](docs/slack_app_manifest.json), requests user
+scopes, checks the provider type and read-only policy, configures token
+rotation, and attaches the provider to the named sandbox. The required scopes
+are:
 
 ```yaml
 user_scopes:

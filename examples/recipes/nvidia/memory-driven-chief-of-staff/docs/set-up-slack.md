@@ -89,9 +89,16 @@ refuses can cost you the whole install rather than that one scope.
 
 ## 2. Hand it to the gateway
 
-**On the host**, from the recipe root:
+**On the host**, from the recipe root. `SANDBOX_STORAGE_PATH` is required
+every time this script runs — including a `FORCE_REAUTH=1` re-run below —
+because the storage-encryption check in [step 0](#0-encrypted-storage) is
+step 1 of the script itself, before anything else. `OPENSHELL_SANDBOX_NAME`
+defaults to `hermes` if omitted; set it explicitly when your sandbox uses
+another name:
 
 ```bash
+export SANDBOX_STORAGE_PATH="<path-containing-sandbox-storage>"
+export OPENSHELL_SANDBOX_NAME="my-hermes"
 bash scripts/setup-slack.sh
 ```
 
@@ -127,9 +134,12 @@ provider, configures rotation, and attaches it to your sandbox. Attaching works
 on a sandbox that already exists; it does not have to be rebuilt.
 
 To replace the credential later — after regenerating the app's tokens, or if
-the refresh chain broke:
+the refresh chain broke — `SANDBOX_STORAGE_PATH` is still required, for the
+same reason as above:
 
 ```bash
+export SANDBOX_STORAGE_PATH="<path-containing-sandbox-storage>"
+export OPENSHELL_SANDBOX_NAME="my-hermes"
 FORCE_REAUTH=1 bash scripts/setup-slack.sh
 ```
 
