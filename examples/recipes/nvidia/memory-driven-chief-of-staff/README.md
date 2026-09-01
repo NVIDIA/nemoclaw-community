@@ -245,10 +245,11 @@ run` for the sandbox's default profile automatically, logging to
 `/tmp/gateway.log` under a `0600` file it owns. This recipe installs as a
 separate, named profile (`memory-driven-chief-of-staff`), which that
 supervision does not cover — there is no NemoClaw-managed lifecycle for a
-second named-profile gateway today, so this step starts and tracks it by
-hand, deliberately kept isolated from the managed one: a distinct log path,
-and identity checked before anything is killed. Check first whether it is
-already running, to avoid starting a second, orphaned instance:
+second named-profile gateway today, so this step starts it manually. Hermes
+records runtime state for the named profile, and its profile-scoped stop
+command validates that runtime identity before it signals the process. The
+separate log path below avoids colliding with the managed gateway's log. Check
+first whether the named-profile gateway is already running:
 
 ```bash
 hermes -p "$PROFILE_NAME" cron status
@@ -256,38 +257,33 @@ hermes -p "$PROFILE_NAME" cron status
 
 If it reports the gateway is not running, start it in the background,
 logging to its own path — reusing `/tmp/gateway.log` would collide with
-NemoClaw's managed one — and record its PID. Unlike NemoClaw's own gateway,
-nothing restarts this one automatically — if it dies (crash, OOM, sandbox
-restart), cron stops firing until you notice and rerun this:
+NemoClaw's managed one — and make the new log owner-only. Unlike NemoClaw's
+own gateway, nothing restarts this one automatically. If it dies because of a
+crash, an out-of-memory event, or a sandbox restart, cron stops firing until
+you rerun this command:
 
 ```bash
-nohup hermes -p "$PROFILE_NAME" gateway run \
+umask 077
+nohup hermes gateway run --profile "$PROFILE_NAME" \
   > /tmp/mdcos-gateway.log 2>&1 &
-echo $! > /tmp/mdcos-gateway.pid
 disown
 hermes -p "$PROFILE_NAME" cron status
 ```
 
-`cron status` should now report the gateway running, its PID (matching `cat
-/tmp/mdcos-gateway.pid`), and the next scheduled job. If it still reports not
-running, check `/tmp/mdcos-gateway.log` for a startup error.
+`cron status` should now report the gateway running and the next scheduled
+job. If it still reports not running, check `/tmp/mdcos-gateway.log` for a
+startup error.
 
-To stop it later, confirm the recorded PID is still this gateway before
-killing it — a reused or stale PID file could otherwise point at an
-unrelated process:
+To stop it later, use Hermes's profile-scoped lifecycle command:
 
 ```bash
-GW_PID="$(cat /tmp/mdcos-gateway.pid 2>/dev/null || true)"
-if [[ -n "$GW_PID" ]] && ps -p "$GW_PID" -o args= | grep -q "gateway run"; then
-  kill "$GW_PID"
-else
-  echo "No matching gateway process for PID $GW_PID; not killing anything." >&2
-fi
-rm -f /tmp/mdcos-gateway.pid
+hermes gateway stop --profile "$PROFILE_NAME"
 ```
 
-Stop the gateway this way before [deleting the profile](#persistence-and-reboot-behavior)
-— removing the profile does not stop a process running against it.
+Hermes scopes the stop to the selected profile and checks its recorded runtime
+identity instead of trusting a shell PID file. Stop the gateway before
+[deleting the profile](#persistence-and-reboot-behavior) because removing the
+profile does not stop a process that is already running against it.
 
 > **Running this outside a NemoClaw sandbox, on a host with systemd?** Any
 > environment without a running systemd — WSL included — still needs the
@@ -297,8 +293,8 @@ Stop the gateway this way before [deleting the profile](#persistence-and-reboot-
 > trade-off against `gateway run`.
 >
 > ```bash
-> hermes -p "$PROFILE_NAME" gateway install
-> hermes -p "$PROFILE_NAME" gateway start
+> hermes gateway install --profile "$PROFILE_NAME"
+> hermes gateway start --profile "$PROFILE_NAME"
 > ```
 
 At this point the schedule works over any rows already in the store. Slack and
@@ -336,8 +332,8 @@ dedicated profile home, specifically so it does **not** unify with other
 profiles on the sandbox — it will not show this recipe's chat, memory, or
 store, regardless of any `?profile=` query parameter appended to it. Hermes
 uses session auth for this dashboard, so the printed URL is a plain link, not
-a credential; it is still an unauthenticated-looking URL that grants access
-to whoever holds it, so avoid sharing it over an insecure channel.
+a credential. Protect access to the forwarded endpoint through the sandbox's
+normal session controls, and do not expose it publicly.
 
 The verified way to talk to this recipe is the terminal, from inside the
 sandbox:
@@ -721,10 +717,11 @@ hermes -p memory-driven-chief-of-staff cron remove "$JOB_ID"
 
 Deleting the profile also deletes its workspace, store, and memory — but not
 a gateway process already running against it. If you started one by hand
-(step 4 of Quick Start), stop it first using the identity-checked kill
-sequence there, then delete the profile:
+(step 4 of Quick Start), stop it with the profile-scoped lifecycle command,
+then delete the profile:
 
 ```bash
+hermes gateway stop --profile memory-driven-chief-of-staff
 hermes profile delete memory-driven-chief-of-staff
 ```
 
@@ -894,7 +891,7 @@ not `inference get` or the global `status`.
 Registration does not start the scheduler. Check the gateway and cron status.
 
 ```bash
-hermes -p memory-driven-chief-of-staff gateway status
+hermes gateway status --profile memory-driven-chief-of-staff
 hermes -p memory-driven-chief-of-staff cron status
 ```
 
