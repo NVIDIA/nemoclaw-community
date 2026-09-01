@@ -25,7 +25,7 @@ recipes, NVIDIA field demos, and standalone developer tools. Hackathon and
 Build-a-Claw recipes remain in their provenance category and also appear in
 cross-cutting collection views. Search the
 [web catalog](https://nvidia.github.io/nemoclaw-community/)
-by example type or industry, browse the
+by example type, industry, or maintenance status, browse the
 [source example catalog](examples/README.md), or consume the
 [machine-readable catalog](https://nvidia.github.io/nemoclaw-community/catalog.json).
 Agent-oriented navigation is available in the generated

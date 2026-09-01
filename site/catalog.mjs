@@ -6,6 +6,7 @@ export const DEFAULT_CATALOG_STATE = Object.freeze({
   view: "category",
   category: "all",
   industry: "all",
+  maintenance: "maintained",
 });
 
 export const CATALOG_VIEWS = Object.freeze(["category", "industry"]);
@@ -51,9 +52,27 @@ export const CATALOG_INDUSTRIES = Object.freeze([
   "other",
 ]);
 
+export const CATALOG_MAINTENANCE_STATES = Object.freeze([
+  "maintained",
+  "all",
+  "current",
+  "review-soon",
+  "review-due",
+  "review-overdue",
+  "deprecated",
+]);
+
+const maintainedMaintenanceValues = new Set([
+  "current",
+  "review-soon",
+  "review-due",
+  "review-overdue",
+]);
+
 const viewValues = new Set(CATALOG_VIEWS);
 const categoryValues = new Set(CATALOG_CATEGORIES);
 const industryValues = new Set(CATALOG_INDUSTRIES);
+const maintenanceValues = new Set(CATALOG_MAINTENANCE_STATES);
 
 export function normalizeWhitespace(value) {
   return String(value ?? "").trim().replace(/\s+/gu, " ");
@@ -101,6 +120,11 @@ export function canonicalizeCatalogState(state = {}) {
         DEFAULT_CATALOG_STATE.industry,
       )
       : DEFAULT_CATALOG_STATE.industry,
+    maintenance: allowedOrDefault(
+      state.maintenance,
+      maintenanceValues,
+      DEFAULT_CATALOG_STATE.maintenance,
+    ),
   };
 }
 
@@ -125,6 +149,7 @@ export function parseCatalogURLState(source = "") {
     view: params.get("view") ?? DEFAULT_CATALOG_STATE.view,
     category: params.get("category") ?? DEFAULT_CATALOG_STATE.category,
     industry: params.get("industry") ?? DEFAULT_CATALOG_STATE.industry,
+    maintenance: params.get("maintenance") ?? DEFAULT_CATALOG_STATE.maintenance,
   });
 }
 
@@ -143,6 +168,9 @@ export function serializeCatalogURLState(state = {}) {
   }
   if (canonical.industry !== DEFAULT_CATALOG_STATE.industry) {
     params.set("industry", canonical.industry);
+  }
+  if (canonical.maintenance !== DEFAULT_CATALOG_STATE.maintenance) {
+    params.set("maintenance", canonical.maintenance);
   }
 
   return params.toString();
@@ -189,6 +217,21 @@ export function matchesCatalogRecord(record, state = {}) {
     canonical.view === "industry"
     && canonical.industry !== "all"
     && recordValue(record, "industry") !== canonical.industry
+  ) {
+    return false;
+  }
+
+  const maintenance = recordValue(record, "maintenance");
+  if (
+    canonical.maintenance === "maintained"
+    && !maintainedMaintenanceValues.has(maintenance)
+  ) {
+    return false;
+  }
+  if (
+    canonical.maintenance !== "maintained"
+    && canonical.maintenance !== "all"
+    && maintenance !== canonical.maintenance
   ) {
     return false;
   }
@@ -287,6 +330,7 @@ export function initCatalog({
   const industryView = documentObject.getElementById("catalog-view-industry");
   const category = documentObject.getElementById("catalog-category");
   const industry = documentObject.getElementById("catalog-industry");
+  const maintenance = documentObject.getElementById("catalog-maintenance");
   const reset = documentObject.getElementById("catalog-reset");
   const status = documentObject.getElementById("catalog-status");
   const empty = documentObject.getElementById("catalog-empty");
@@ -302,6 +346,7 @@ export function initCatalog({
     || !industryView
     || !category
     || !industry
+    || !maintenance
     || !reset
     || !status
     || !empty
@@ -321,6 +366,7 @@ export function initCatalog({
     search.value = state.q;
     category.value = state.category;
     industry.value = state.industry;
+    maintenance.value = state.maintenance;
     setViewControlState(categoryView, state.view === "category");
     setViewControlState(industryView, state.view === "industry");
     categoryPanel.hidden = state.view !== "category";
@@ -366,6 +412,9 @@ export function initCatalog({
       }
     } else if (targetCard) {
       next.q = "";
+      if (targetCard.dataset.maintenance === "deprecated") {
+        next.maintenance = "all";
+      }
       if (
         next.view === "category"
         && next.category !== "all"
@@ -463,6 +512,10 @@ export function initCatalog({
 
   industry.addEventListener("change", () => {
     commit({ ...state, industry: industry.value }, "push");
+  });
+
+  maintenance.addEventListener("change", () => {
+    commit({ ...state, maintenance: maintenance.value }, "push");
   });
 
   reset.addEventListener("click", () => {

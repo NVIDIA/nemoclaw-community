@@ -15,6 +15,11 @@
   --line: #353535;
   --line-strong: #656565;
   --tile-line: #4d692e;
+  --status-current: #76b900;
+  --status-review-soon: #f4c15d;
+  --status-review-due: #e0a43a;
+  --status-review-overdue: #c96f24;
+  --status-deprecated: #e06a63;
   --shell: clamp(74rem, 90vw, 120rem);
 }
 
@@ -601,7 +606,9 @@ h3 {
 
 .catalog-controls {
   display: grid;
-  grid-template-columns: minmax(16rem, 1.7fr) minmax(16rem, 1fr);
+  grid-template-columns:
+    minmax(16rem, 1.7fr)
+    repeat(2, minmax(13rem, 1fr));
   gap: 1rem 1.25rem;
   padding-block: 1.25rem;
   padding-inline: 1.25rem;
@@ -824,6 +831,56 @@ h3 {
   font-weight: 500;
   letter-spacing: 0.02em;
   line-height: 1.25;
+}
+
+.maintenance-badge {
+  --maintenance-accent: var(--line-strong);
+  --maintenance-fill: transparent;
+  display: inline-flex;
+  min-height: 1.45rem;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.35rem;
+  align-self: flex-start;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid #4a4a4a;
+  border-radius: 999px;
+  margin: 0 0 0.65rem;
+  background: #1c1c1c;
+  color: #d8d8d8;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.maintenance-badge::before {
+  width: 0.45rem;
+  height: 0.45rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--maintenance-accent);
+  content: "";
+}
+
+[data-maintenance="current"] .maintenance-badge {
+  --maintenance-accent: var(--status-current);
+}
+
+[data-maintenance="review-soon"] .maintenance-badge {
+  --maintenance-accent: var(--status-review-soon);
+}
+
+[data-maintenance="review-due"] .maintenance-badge {
+  --maintenance-accent: var(--status-review-due);
+}
+
+[data-maintenance="review-overdue"] .maintenance-badge {
+  --maintenance-accent: var(--status-review-overdue);
+}
+
+[data-maintenance="deprecated"] .maintenance-badge {
+  --maintenance-accent: var(--status-deprecated);
 }
 
 .example-card h3 {
@@ -1068,6 +1125,178 @@ h3 {
 
 .detail-facts dd {
   margin: 0;
+  color: var(--ink-soft);
+}
+
+.harness-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.harness-mark {
+  display: inline-grid;
+  min-width: 1.45rem;
+  height: 1.45rem;
+  padding-inline: 0.24rem;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 0.3rem;
+  background: var(--surface-raised);
+  color: var(--ink);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.harness-mark-hermes {
+  border-color: #76b900;
+}
+
+.harness-mark-openclaw {
+  border-color: #7ca9d6;
+}
+
+.stack-version {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.detail-facts .maintenance-fact {
+  --maintenance-accent: var(--line-strong);
+  --maintenance-fill: transparent;
+  position: relative;
+  padding-inline: 0.7rem;
+  border-radius: 0.25rem;
+  background: var(--maintenance-fill);
+  box-shadow: inset 3px 0 0 var(--maintenance-accent);
+}
+
+.detail-facts .maintenance-fact[data-maintenance="current"] {
+  --maintenance-accent: var(--status-current);
+  --maintenance-fill: #1d2518;
+}
+
+.detail-facts .maintenance-fact[data-maintenance="review-soon"] {
+  --maintenance-accent: var(--status-review-soon);
+  --maintenance-fill: #272318;
+}
+
+.detail-facts .maintenance-fact[data-maintenance="review-due"] {
+  --maintenance-accent: var(--status-review-due);
+  --maintenance-fill: #2a2117;
+}
+
+.detail-facts .maintenance-fact[data-maintenance="review-overdue"] {
+  --maintenance-accent: var(--status-review-overdue);
+  --maintenance-fill: #2d1d15;
+}
+
+.detail-facts .maintenance-fact[data-maintenance="deprecated"] {
+  --maintenance-accent: var(--status-deprecated);
+  --maintenance-fill: #2b1919;
+}
+
+.detail-facts .maintenance-fact dd {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding-right: 2rem;
+}
+
+.maintenance-fact .maintenance-badge {
+  min-height: 1.35rem;
+  padding: 0.12rem 0.45rem;
+  margin: 0;
+  font-size: 0.65rem;
+}
+
+.maintenance-info {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+}
+
+.maintenance-info summary {
+  display: grid;
+  width: 1.55rem;
+  height: 1.55rem;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: var(--ink-soft);
+  cursor: help;
+  list-style: none;
+}
+
+.maintenance-info summary::-webkit-details-marker {
+  display: none;
+}
+
+.maintenance-info summary > span {
+  display: grid;
+  width: 1.15rem;
+  height: 1.15rem;
+  place-items: center;
+  border: 1px solid var(--maintenance-accent);
+  border-radius: 50%;
+  font-size: 0.58rem;
+  font-weight: 700;
+}
+
+.maintenance-info summary:hover > span,
+.maintenance-info summary:focus-visible > span {
+  border-color: var(--nvidia-green);
+  color: var(--ink);
+}
+
+.maintenance-popover {
+  position: absolute;
+  z-index: 8;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  display: none;
+  width: min(22rem, calc(100vw - 4rem));
+  padding: 0.9rem;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-raised);
+  box-shadow: 0 0.75rem 2rem rgb(0 0 0 / 40%);
+  color: var(--ink);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.maintenance-info[open] + .maintenance-popover,
+.maintenance-info:hover + .maintenance-popover,
+.maintenance-info:has(summary:focus-visible) + .maintenance-popover {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.maintenance-popover-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.maintenance-popover-copy {
+  color: var(--ink-soft);
+}
+
+.maintenance-popover-meta {
+  display: grid;
+  gap: 0.1rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--line);
+}
+
+.maintenance-popover-meta strong {
+  font-size: 0.68rem;
+  letter-spacing: 0.01em;
+}
+
+.maintenance-popover-meta > span {
   color: var(--ink-soft);
 }
 
@@ -1458,9 +1687,10 @@ h3 {
 
   .catalog-controls {
     grid-template-columns:
-      minmax(22rem, 1.8fr)
-      minmax(18rem, 1fr)
-      minmax(17rem, 0.65fr);
+      minmax(20rem, 1.8fr)
+      minmax(14rem, 1fr)
+      minmax(14rem, 1fr)
+      minmax(13rem, 0.65fr);
     align-items: end;
   }
 
@@ -1677,6 +1907,16 @@ h3 {
   .detail-facts dl div {
     grid-template-columns: 1fr;
     gap: 0.2rem;
+  }
+
+  .detail-facts .maintenance-fact dd {
+    flex-wrap: wrap;
+  }
+
+  .maintenance-popover {
+    position: static;
+    width: 100%;
+    margin-top: 0.35rem;
   }
 }
 

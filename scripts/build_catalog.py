@@ -9,18 +9,52 @@ from __future__ import annotations
 
 import argparse
 import base64
+import datetime as dt
 import hashlib
 import html
 import json
+import os
 import posixpath
 import re
 import shutil
+import subprocess
 import sys
 from dataclasses import dataclass, replace
 from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
+
+try:
+    from scripts.catalog_maintenance_policy import (
+        MaintenancePolicy,
+        MaintenancePolicyError,
+        load_maintenance_policy_file,
+    )
+    from scripts.example_dependencies import (
+        MANIFEST_NAME as DEPENDENCY_MANIFEST_NAME,
+        DependencyContract,
+        DependencyContractError,
+        HARNESS_LABELS,
+        ResolvedStack,
+        load_dependency_contract,
+        resolve_dependency_contract,
+    )
+except ModuleNotFoundError:  # Direct execution from the scripts directory.
+    from catalog_maintenance_policy import (  # type: ignore[no-redef]
+        MaintenancePolicy,
+        MaintenancePolicyError,
+        load_maintenance_policy_file,
+    )
+    from example_dependencies import (  # type: ignore[no-redef]
+        MANIFEST_NAME as DEPENDENCY_MANIFEST_NAME,
+        DependencyContract,
+        DependencyContractError,
+        HARNESS_LABELS,
+        ResolvedStack,
+        load_dependency_contract,
+        resolve_dependency_contract,
+    )
 
 try:
     import markdown
@@ -52,6 +86,31 @@ INDUSTRY_EMOJIS: dict[str, str] = {
     "Other": "✨",
 }
 INDUSTRIES: tuple[str, ...] = tuple(INDUSTRY_EMOJIS)
+
+HARNESS_PRESENTATION: dict[str, dict[str, str]] = {
+    "hermes": {
+        "label": HARNESS_LABELS["hermes"],
+        "mark": "H",
+        "url": "https://github.com/NousResearch/hermes-agent",
+    },
+    "openclaw": {
+        "label": HARNESS_LABELS["openclaw"],
+        "mark": "OC",
+        "url": "https://github.com/openclaw/openclaw",
+    },
+}
+
+LIFECYCLES: tuple[str, ...] = ("Active", "Stable", "Deprecated")
+MAINTENANCE_STATUSES: dict[str, str] = {
+    "current": "Current",
+    "review-soon": "Review soon",
+    "review-due": "Review due",
+    "review-overdue": "Review overdue",
+    "deprecated": "Deprecated",
+}
+MAINTENANCE_POLICY_PATH = Path("scripts/catalog-maintenance.json")
+MAINTENANCE_RELEASES_PATH = Path("scripts/catalog-maintenance-releases.json")
+MAX_DEPENDENCY_CONSUMER_BYTES = 1_000_000
 
 PAGES_BASE_URL = "https://nvidia.github.io/nemoclaw-community/"
 PATH_SEGMENT_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
@@ -196,6 +255,39 @@ COLLECTION_DEFINITION_BY_VALUE = {
 
 
 @dataclass(frozen=True)
+class MaintenanceRelease:
+    """Latest stable upstream release observed by the scheduled catalog build."""
+
+    tag: str
+    component_version: str
+    published_on: dt.date
+    url: str
+
+
+@dataclass(frozen=True)
+class MaintenanceSnapshot:
+    """Validated release-feed data used for one deterministic catalog build."""
+
+    checked_at: str
+    checked_on: dt.date
+    releases: dict[str, MaintenanceRelease]
+    nemoclaw_stacks: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class MaintenanceStatus:
+    """One example's computed public maintenance signal."""
+
+    id: str
+    label: str
+    explanation: str
+    effective_on: dt.date
+    activity_source: str
+    as_of: dt.date
+    checked_on: dt.date
+
+
+@dataclass(frozen=True)
 class CatalogEntry:
     """Validated README metadata plus taxonomy derived from its path."""
 
@@ -204,11 +296,17 @@ class CatalogEntry:
     description: str
     industry: str
     requirements: str
+    lifecycle: str
+    reviewed_on: dt.date | None
+    dependency_contract: DependencyContract | None
+    stack: ResolvedStack | None
     collections: tuple[Collection, ...]
     category: Category
     contributor: str | None = None
     upstream_url: str | None = None
     readme_body: str = ""
+    last_content_change_on: dt.date | None = None
+    maintenance: MaintenanceStatus | None = None
 
     @property
     def readme_path(self) -> str:
@@ -260,6 +358,25 @@ class CatalogEntry:
         return tuple(collection.id for collection in self.collections)
 
     @property
+    def dependency_ids(self) -> tuple[str, ...]:
+        if self.stack is None:
+            return ()
+        if self.stack.distribution == "nemoclaw":
+            return ("nemoclaw",)
+        dependencies = [
+            "hermes-agent" if self.stack.harness == "hermes" else "openclaw"
+        ]
+        if self.stack.openshell_version is not None:
+            dependencies.append("openshell")
+        return tuple(dependencies)
+
+    @property
+    def stack_status(self) -> str:
+        if self.stack is not None:
+            return "declared"
+        return "not-applicable" if self.category.kind == "tool" else "not-declared"
+
+    @property
     def search_text(self) -> str:
         values = (
             self.title,
@@ -270,12 +387,174 @@ class CatalogEntry:
             self.display_label,
             self.contributor or "",
             " ".join(collection.title for collection in self.collections),
+            self.lifecycle,
+            " ".join(self.dependency_ids),
+            self.stack.harness_version if self.stack else "",
+            self.stack.openshell_version if self.stack else "",
+            self.stack.harness if self.stack else "",
+            self.maintenance.label if self.maintenance else "",
         )
         return " ".join(value for value in values if value)
 
 
 class CatalogError(ValueError):
     """Raised when source metadata or generated output is invalid."""
+
+
+def _read_json_object(path: Path, label: str) -> dict[str, Any]:
+    """Read one UTF-8 JSON object with a targeted catalog error."""
+
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise CatalogError(f"Unable to read {label} from {path}: {error}") from error
+    if not isinstance(value, dict):
+        raise CatalogError(f"{label} must contain one JSON object: {path}")
+    return value
+
+
+def load_maintenance_policy(root: Path) -> MaintenancePolicy:
+    """Load the single global maintenance policy without network access."""
+
+    try:
+        return load_maintenance_policy_file(root / MAINTENANCE_POLICY_PATH)
+    except MaintenancePolicyError as error:
+        raise CatalogError(str(error)) from error
+
+
+def _parse_iso_date(value: Any, context: str) -> dt.date:
+    if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        raise CatalogError(f"{context} must use YYYY-MM-DD.")
+    try:
+        return dt.date.fromisoformat(value)
+    except ValueError as error:
+        raise CatalogError(f"{context} must be a real calendar date.") from error
+
+
+def load_maintenance_snapshot(
+    root: Path,
+    policy: MaintenancePolicy,
+    path: Path | None = None,
+) -> MaintenanceSnapshot:
+    """Load the latest official release observations for a catalog build."""
+
+    snapshot_path = path or (root / MAINTENANCE_RELEASES_PATH)
+    if not snapshot_path.is_absolute():
+        snapshot_path = root / snapshot_path
+    snapshot_path = snapshot_path.absolute()
+    if (
+        snapshot_path.is_symlink()
+        or not snapshot_path.is_file()
+        or not snapshot_path.resolve().is_relative_to(root.resolve())
+    ):
+        raise CatalogError(
+            f"Maintenance release snapshot must be a regular file inside the repository: "
+            f"{snapshot_path}"
+        )
+    value = _read_json_object(snapshot_path, "catalog maintenance release snapshot")
+    if value.get("schema_version") != 1:
+        raise CatalogError("Maintenance release snapshot schema_version must be 1.")
+    checked_at = value.get("checked_at")
+    if not isinstance(checked_at, str):
+        raise CatalogError("Maintenance release snapshot checked_at must be an ISO timestamp.")
+    try:
+        parsed_checked_at = dt.datetime.fromisoformat(checked_at.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise CatalogError(
+            "Maintenance release snapshot checked_at must be an ISO timestamp."
+        ) from error
+    if parsed_checked_at.tzinfo is None:
+        raise CatalogError("Maintenance release snapshot checked_at requires a timezone.")
+    releases_value = value.get("releases")
+    nemoclaw_stacks = value.get("nemoclaw_stacks")
+    if not isinstance(releases_value, dict):
+        raise CatalogError("Maintenance release snapshot requires a releases object.")
+    if not isinstance(nemoclaw_stacks, dict):
+        raise CatalogError(
+            "Maintenance release snapshot requires a nemoclaw_stacks object."
+        )
+
+    expected_ids = set(policy.dependencies_by_id)
+    if set(releases_value) != expected_ids:
+        missing = sorted(expected_ids - set(releases_value))
+        unknown = sorted(set(releases_value) - expected_ids)
+        details = []
+        if missing:
+            details.append("missing " + ", ".join(missing))
+        if unknown:
+            details.append("unknown " + ", ".join(unknown))
+        raise CatalogError(
+            "Maintenance release snapshot does not match the policy registry: "
+            + "; ".join(details)
+            + "."
+        )
+
+    releases: dict[str, MaintenanceRelease] = {}
+    for dependency_id in sorted(expected_ids):
+        record = releases_value[dependency_id]
+        if not isinstance(record, dict):
+            raise CatalogError(
+                f"Maintenance release {dependency_id!r} must be an object."
+            )
+        if set(record) != {"tag", "component_version", "published_on", "url"}:
+            raise CatalogError(
+                f"Maintenance release {dependency_id!r} has invalid fields."
+            )
+        definition = policy.dependencies_by_id[dependency_id]
+        tag = record.get("tag")
+        component_version = record.get("component_version")
+        url = record.get("url")
+        if (
+            not isinstance(tag, str)
+            or not tag
+            or len(tag) > 100
+            or any(ord(character) < 32 for character in tag)
+        ):
+            raise CatalogError(
+                f"Maintenance release {dependency_id!r} has an invalid tag."
+            )
+        if (
+            not isinstance(component_version, str)
+            or re.fullmatch(r"[0-9]+(?:\.[0-9]+){1,3}", component_version) is None
+        ):
+            raise CatalogError(
+                f"Maintenance release {dependency_id!r} has an invalid component_version."
+            )
+        if not isinstance(url, str) or not url.startswith(
+            f"https://github.com/{definition.repository}/"
+        ):
+            raise CatalogError(
+                f"Maintenance release {dependency_id!r} must link to its GitHub repository."
+            )
+        published_on = _parse_iso_date(
+            record.get("published_on"),
+            f"Maintenance release {dependency_id!r} published_on",
+        )
+        if published_on > parsed_checked_at.astimezone(dt.timezone.utc).date():
+            raise CatalogError(
+                f"Maintenance release {dependency_id!r} cannot be newer than checked_at."
+            )
+        releases[dependency_id] = MaintenanceRelease(
+            tag=tag,
+            component_version=component_version,
+            published_on=published_on,
+            url=url,
+        )
+    return MaintenanceSnapshot(
+        checked_at=checked_at,
+        checked_on=parsed_checked_at.astimezone(dt.timezone.utc).date(),
+        releases=releases,
+        nemoclaw_stacks=nemoclaw_stacks,
+    )
+
+
+def catalog_as_of_date(value: str | None = None) -> dt.date:
+    """Return the UTC date used for age thresholds, with a testable override."""
+
+    configured = value or os.environ.get("CATALOG_AS_OF_DATE")
+    if configured:
+        return _parse_iso_date(configured, "Catalog as-of date")
+    return dt.datetime.now(dt.timezone.utc).date()
 
 
 def slugify(value: str) -> str:
@@ -457,6 +736,8 @@ CATALOG_FIELD_ORDER = (
     "Description",
     "Industry",
     "Requirements",
+    "Lifecycle",
+    "Reviewed",
     "Upstream",
     "Contributor",
     "Collection",
@@ -636,6 +917,63 @@ def _validate_upstream_url(value: str, readme_path: str) -> str:
     return value
 
 
+def _dependency_contract_has_consumer(root: Path, example_root: Path) -> bool:
+    """Return whether implementation code consumes the root dependency contract."""
+
+    for candidate in example_root.rglob("*.sh"):
+        relative = candidate.relative_to(example_root)
+        if (
+            any(part in {"test", "tests"} for part in relative.parts)
+            or not is_regular_repo_file(root, candidate)
+            or candidate.stat().st_size > MAX_DEPENDENCY_CONSUMER_BYTES
+        ):
+            continue
+        try:
+            content = candidate.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        implementation = "\n".join(
+            line
+            for line in content.splitlines()
+            if not line.lstrip().startswith("#")
+        )
+        if (
+            "example_dependencies.sh" in implementation
+            and re.search(r"(?m)^\s*(?:source|\.)\s+", implementation)
+            and re.search(
+                r"(?m)^\s*load_example_dependencies(?:\s|$)", implementation
+            )
+        ):
+            return True
+    return False
+
+
+def load_example_dependency_contract(
+    root: Path, path: str
+) -> DependencyContract | None:
+    """Load one dependency contract that controls example implementation."""
+
+    example_root = root / "examples" / path
+    manifest_path = example_root / DEPENDENCY_MANIFEST_NAME
+    if not manifest_path.exists():
+        return None
+    if not is_regular_repo_file(root, manifest_path):
+        raise CatalogError(
+            f"Dependency contract must be a regular file: "
+            f"examples/{path}/{DEPENDENCY_MANIFEST_NAME}."
+        )
+    try:
+        contract = load_dependency_contract(manifest_path)
+    except DependencyContractError as error:
+        raise CatalogError(str(error)) from error
+    if not _dependency_contract_has_consumer(root, example_root):
+        raise CatalogError(
+            f"Dependency contract {manifest_path} is catalog-only; an implementation "
+            "file must consume it through the shared dependency loader."
+        )
+    return contract
+
+
 def parse_readme_metadata(
     root: Path,
     path: str,
@@ -775,6 +1113,25 @@ def parse_readme_metadata(
             f"Requirements must be at most 240 characters in {readme_path}."
         )
 
+    lifecycle = fields.get("Lifecycle", "Active")
+    if lifecycle not in LIFECYCLES:
+        raise CatalogError(
+            f"Lifecycle must be one of {', '.join(LIFECYCLES)} in {readme_path}; "
+            f"got {lifecycle!r}."
+        )
+
+    reviewed_value = fields.get("Reviewed")
+    reviewed_on = (
+        _parse_iso_date(reviewed_value, f"Reviewed in {readme_path}")
+        if reviewed_value is not None
+        else None
+    )
+
+    # The root dependency contract is both an installer input and the catalog's
+    # compatibility source. Keeping those concerns on one file prevents display
+    # metadata from drifting away from what an example actually runs.
+    dependency_contract = load_example_dependency_contract(root, path)
+
     upstream_url = fields.get("Upstream")
     if upstream_url is not None:
         upstream_url = _validate_upstream_url(upstream_url, readme_path)
@@ -810,6 +1167,10 @@ def parse_readme_metadata(
         description=description,
         industry=industry,
         requirements=requirements,
+        lifecycle=lifecycle,
+        reviewed_on=reviewed_on,
+        dependency_contract=dependency_contract,
+        stack=None,
         collections=collections,
         category=category,
         contributor=contributor,
@@ -871,6 +1232,293 @@ def load_catalog(
         seen_titles.add(entry.title.casefold())
         seen_ids.add(entry.id)
     return entries
+
+
+def _run_git(
+    root: Path,
+    arguments: list[str],
+    *,
+    allow_failure: bool = False,
+) -> str | None:
+    """Run Git without a shell and return text, optionally treating failure as absent."""
+
+    result = subprocess.run(
+        ["git", "--literal-pathspecs", *arguments],
+        cwd=root,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+    )
+    if result.returncode:
+        if allow_failure:
+            return None
+        detail = result.stderr.strip() or "unknown Git error"
+        raise CatalogError(f"Unable to inspect example history: {detail}")
+    return result.stdout
+
+
+def last_content_change_on(
+    root: Path,
+    entry: CatalogEntry,
+    as_of: dt.date,
+) -> dt.date:
+    """Find the latest committed change anywhere in an example directory."""
+
+    inside = _run_git(root, ["rev-parse", "--is-inside-work-tree"], allow_failure=True)
+    if inside is None or inside.strip() != "true":
+        raise CatalogError("Catalog maintenance status requires a Git worktree.")
+    shallow = _run_git(root, ["rev-parse", "--is-shallow-repository"])
+    if shallow is None or shallow.strip() != "false":
+        raise CatalogError(
+            "Catalog maintenance status requires full Git history; check out with "
+            "fetch-depth: 0."
+        )
+    timestamp = _run_git(
+        root,
+        ["log", "-1", "--format=%cI", "--", f"examples/{entry.path}"],
+    )
+    if timestamp is None or not timestamp.strip():
+        raise CatalogError(f"No committed history was found for {entry.readme_path}.")
+    try:
+        changed_at = dt.datetime.fromisoformat(timestamp.strip()).astimezone(
+            dt.timezone.utc
+        ).date()
+    except ValueError as error:
+        raise CatalogError(
+            f"Unable to parse Git history for {entry.readme_path}."
+        ) from error
+    if changed_at > as_of:
+        raise CatalogError(
+            f"Last content change for {entry.readme_path} is after the "
+            f"catalog as-of date {as_of.isoformat()}."
+        )
+    return changed_at
+
+
+def _maintenance_status_for_entry(
+    entry: CatalogEntry,
+    policy: MaintenancePolicy,
+    snapshot: MaintenanceSnapshot,
+    as_of: dt.date,
+) -> MaintenanceStatus:
+    if entry.last_content_change_on is None:
+        raise CatalogError(f"Missing content history for {entry.readme_path}.")
+    if entry.reviewed_on is not None and entry.reviewed_on > as_of:
+        raise CatalogError(
+            f"Reviewed date in {entry.readme_path} cannot be after {as_of.isoformat()}."
+        )
+    if snapshot.checked_on > as_of:
+        raise CatalogError(
+            "Maintenance release snapshot cannot be newer than the catalog as-of date."
+        )
+
+    if entry.reviewed_on is not None and entry.reviewed_on > entry.last_content_change_on:
+        effective_on = entry.reviewed_on
+        activity_source = "maintenance review"
+    else:
+        effective_on = entry.last_content_change_on
+        activity_source = "committed example change"
+    age_days = (as_of - effective_on).days
+
+    def version_tuple(value: str) -> tuple[int, ...]:
+        parts = tuple(int(part) for part in value.removeprefix("v").split("."))
+        return parts + (0,) * (4 - len(parts))
+
+    dependency_updates: list[str] = []
+    update_labels: dict[str, str] = {}
+    if entry.stack is not None:
+        if entry.stack.distribution == "nemoclaw":
+            assert entry.dependency_contract is not None
+            assert entry.stack.distribution_version is not None
+            nemoclaw_release = snapshot.releases["nemoclaw"]
+            if (
+                version_tuple(entry.stack.distribution_version)
+                < version_tuple(nemoclaw_release.tag)
+            ):
+                try:
+                    current_lkg_stack = resolve_dependency_contract(
+                        replace(entry.dependency_contract, version=nemoclaw_release.tag),
+                        {"nemoclaw_stacks": snapshot.nemoclaw_stacks},
+                    )
+                except DependencyContractError as error:
+                    raise CatalogError(str(error)) from error
+                changed_components: list[str] = []
+                if entry.stack.harness_version != current_lkg_stack.harness_version:
+                    changed_components.append(entry.stack.harness_label)
+                if (
+                    entry.stack.openshell_version
+                    != current_lkg_stack.openshell_version
+                ):
+                    changed_components.append("OpenShell")
+                if changed_components and nemoclaw_release.published_on >= effective_on:
+                    dependency_updates.append("nemoclaw")
+                    update_labels["nemoclaw"] = " / ".join(changed_components)
+        else:
+            agent_id = (
+                "hermes-agent" if entry.stack.harness == "hermes" else "openclaw"
+            )
+            agent_release = snapshot.releases[agent_id]
+            if (
+                version_tuple(entry.stack.harness_version)
+                < version_tuple(agent_release.component_version)
+                and agent_release.published_on >= effective_on
+            ):
+                dependency_updates.append(agent_id)
+                update_labels[agent_id] = entry.stack.harness_label
+            if entry.stack.openshell_version is not None:
+                openshell_release = snapshot.releases["openshell"]
+                if (
+                    version_tuple(entry.stack.openshell_version)
+                    < version_tuple(openshell_release.component_version)
+                    and openshell_release.published_on >= effective_on
+                ):
+                    dependency_updates.append("openshell")
+                    update_labels["openshell"] = "OpenShell"
+    dependency_age_days = {
+        dependency_id: (as_of - snapshot.releases[dependency_id].published_on).days
+        for dependency_id in dependency_updates
+    }
+
+    def dependency_labels(minimum_age: int = 0) -> tuple[str, ...]:
+        return tuple(
+            update_labels.get(
+                dependency_id, policy.dependencies_by_id[dependency_id].label
+            )
+            for dependency_id in dependency_updates
+            if dependency_age_days[dependency_id] >= minimum_age
+        )
+
+    available_labels = dependency_labels()
+    due_labels = dependency_labels(policy.dependency_warning_days)
+    overdue_labels = dependency_labels(policy.dependency_overdue_days)
+
+    def named_releases(labels: tuple[str, ...]) -> tuple[str, str]:
+        return ", ".join(labels), "has" if len(labels) == 1 else "have"
+
+    def status(status_id: str, explanation: str) -> MaintenanceStatus:
+        return MaintenanceStatus(
+            id=status_id,
+            label=MAINTENANCE_STATUSES[status_id],
+            explanation=explanation,
+            effective_on=effective_on,
+            activity_source=activity_source,
+            as_of=as_of,
+            checked_on=snapshot.checked_on,
+        )
+
+    if entry.lifecycle == "Deprecated":
+        return status(
+            "deprecated",
+            (
+                "This example is retained for reference and is hidden from default "
+                "catalog results."
+            ),
+        )
+
+    if age_days >= policy.deprecation_days:
+        return status(
+            "deprecated",
+            (
+                f"Automatically deprecated after {age_days} days without committed "
+                "maintenance or a focused review; hidden from default catalog results."
+            ),
+        )
+
+    activity_overdue = age_days >= policy.review_overdue_days
+    if activity_overdue or overdue_labels:
+        if overdue_labels and activity_overdue:
+            dependency_names, dependency_verb = named_releases(overdue_labels)
+            explanation = (
+                f"Maintenance review is overdue: activity was {age_days} days ago, and "
+                f"{dependency_names} {dependency_verb} exceeded the "
+                f"{policy.dependency_overdue_days}-day dependency review window."
+            )
+        elif overdue_labels:
+            dependency_names, dependency_verb = named_releases(overdue_labels)
+            explanation = (
+                f"Update review is overdue: {dependency_names} {dependency_verb} "
+                f"exceeded the {policy.dependency_overdue_days}-day dependency "
+                "review window."
+            )
+        else:
+            explanation = (
+                f"Maintenance review is overdue because the latest maintenance activity "
+                f"was {age_days} days ago."
+            )
+        return status("review-overdue", explanation)
+
+    if due_labels:
+        dependency_names, dependency_verb = named_releases(due_labels)
+        return status(
+            "review-due",
+            (
+                f"Update review is due: {dependency_names} {dependency_verb} been "
+                f"available for at least {policy.dependency_warning_days} days."
+            ),
+        )
+
+    if available_labels:
+        dependency_names = ", ".join(available_labels)
+        update_noun = "A tracked update" if len(available_labels) == 1 else "Tracked updates"
+        update_verb = "is" if len(available_labels) == 1 else "are"
+        return status(
+            "review-soon",
+            (
+                f"Review soon: {update_noun.lower()} from {dependency_names} {update_verb} "
+                f"inside the {policy.dependency_warning_days}-day review window."
+            ),
+        )
+
+    if entry.lifecycle == "Stable":
+        explanation = (
+            "This stable example is within its maintenance interval, with no tracked "
+            "dependency update detected."
+        )
+    elif entry.dependency_ids:
+        explanation = "No tracked platform dependency update was detected."
+    else:
+        explanation = "This example is within its periodic maintenance interval."
+    return status("current", explanation)
+
+
+def enrich_catalog_maintenance(
+    root: Path,
+    entries: list[CatalogEntry],
+    policy: MaintenancePolicy,
+    snapshot: MaintenanceSnapshot,
+    as_of: dt.date,
+) -> list[CatalogEntry]:
+    """Attach deterministic Git activity and computed maintenance status."""
+
+    enriched: list[CatalogEntry] = []
+    for entry in entries:
+        try:
+            stack = (
+                resolve_dependency_contract(
+                    entry.dependency_contract,
+                    {"nemoclaw_stacks": snapshot.nemoclaw_stacks},
+                )
+                if entry.dependency_contract is not None
+                else None
+            )
+        except DependencyContractError as error:
+            raise CatalogError(str(error)) from error
+        with_history = replace(
+            entry,
+            stack=stack,
+            last_content_change_on=last_content_change_on(root, entry, as_of),
+        )
+        enriched.append(
+            replace(
+                with_history,
+                maintenance=_maintenance_status_for_entry(
+                    with_history, policy, snapshot, as_of
+                ),
+            )
+        )
+    return enriched
 
 
 def _markdown_cell(value: str) -> str:
@@ -1182,7 +1830,35 @@ def industry_filter_options(entries: list[CatalogEntry]) -> str:
     return "\n".join(options)
 
 
+def maintenance_filter_options(entries: list[CatalogEntry]) -> str:
+    """Render the computed maintenance facet and default maintained subset."""
+
+    counts = {status: 0 for status in MAINTENANCE_STATUSES}
+    for entry in entries:
+        if entry.maintenance is None:
+            raise CatalogError(f"Missing maintenance status for {entry.readme_path}.")
+        counts[entry.maintenance.id] += 1
+    maintained_count = sum(
+        count for status_id, count in counts.items() if status_id != "deprecated"
+    )
+    return "\n".join(
+        (
+            f'<option value="maintained">Maintained examples ({maintained_count})</option>',
+            f'<option value="all">All statuses ({len(entries)})</option>',
+            f'<option value="current">Current ({counts["current"]})</option>',
+            f'<option value="review-soon">Review soon '
+            f'({counts["review-soon"]})</option>',
+            f'<option value="review-due">Review due ({counts["review-due"]})</option>',
+            f'<option value="review-overdue">Review overdue '
+            f'({counts["review-overdue"]})</option>',
+            f'<option value="deprecated">Deprecated ({counts["deprecated"]})</option>',
+        )
+    )
+
+
 def render_card(entry: CatalogEntry) -> str:
+    if entry.maintenance is None:
+        raise CatalogError(f"Missing maintenance status for {entry.readme_path}.")
     collections = " ".join(entry.collection_ids)
     collection_tags = "".join(
         f'<li class="tag tag-collection">{html.escape(collection.metadata_value)}</li>'
@@ -1197,6 +1873,7 @@ def render_card(entry: CatalogEntry) -> str:
   data-readme="{html.escape(entry.readme_path, quote=True)}"
   data-category="{entry.category.id}"
   data-industry="{entry.industry_id}"
+  data-maintenance="{entry.maintenance.id}"
   data-collections="{html.escape(collections, quote=True)}"
   data-search="{html.escape(entry.search_text, quote=True)}"
   tabindex="-1"
@@ -1271,6 +1948,9 @@ def render_site(
             category_filter_options(entries, categories, collections), 18
         ),
         "{{INDUSTRY_OPTIONS}}": indent(industry_filter_options(entries), 18),
+        "{{MAINTENANCE_OPTIONS}}": indent(
+            maintenance_filter_options(entries), 18
+        ),
         "{{CATALOG_GROUPS}}": indent(
             render_catalog_groups(entries, categories), 8
         ),
@@ -1295,14 +1975,63 @@ def public_catalog(
     entries: list[CatalogEntry],
     categories: tuple[Category, ...],
     collections: tuple[Collection, ...],
+    policy: MaintenancePolicy,
+    snapshot: MaintenanceSnapshot,
+    as_of: dt.date,
 ) -> dict[str, Any]:
     grouped = group_entries(entries, categories)
+    for entry in entries:
+        if entry.maintenance is None or entry.last_content_change_on is None:
+            raise CatalogError(f"Missing maintenance status for {entry.readme_path}.")
     industry_counts = {industry: 0 for industry in INDUSTRIES}
     for entry in entries:
         industry_counts[entry.industry] += 1
+
     return {
-        "schema_version": 3,
+        "schema_version": 6,
         "source": "https://github.com/NVIDIA/nemoclaw-community/tree/main/examples",
+        "maintenance": {
+            "as_of": as_of.isoformat(),
+            "dependencies_checked_at": snapshot.checked_at,
+            "thresholds": {
+                "dependency_warning_days": policy.dependency_warning_days,
+                "dependency_overdue_days": policy.dependency_overdue_days,
+                "review_overdue_days": policy.review_overdue_days,
+                "deprecation_days": policy.deprecation_days,
+            },
+            "states": [
+                {
+                    "id": status_id,
+                    "label": label,
+                    "count": sum(
+                        entry.maintenance is not None
+                        and entry.maintenance.id == status_id
+                        for entry in entries
+                    ),
+                }
+                for status_id, label in MAINTENANCE_STATUSES.items()
+            ],
+            "dependencies": [
+                {
+                    "id": dependency.id,
+                    "label": dependency.label,
+                    "repository": dependency.repository,
+                    "source": dependency.source,
+                    "channel": dependency.channel,
+                    "latest": {
+                        "tag": snapshot.releases[dependency.id].tag,
+                        "component_version": snapshot.releases[
+                            dependency.id
+                        ].component_version,
+                        "published_on": snapshot.releases[
+                            dependency.id
+                        ].published_on.isoformat(),
+                        "url": snapshot.releases[dependency.id].url,
+                    },
+                }
+                for dependency in policy.dependencies
+            ],
+        },
         "categories": [
             {
                 "id": category.id,
@@ -1354,6 +2083,36 @@ def public_catalog(
                 "contributor": entry.contributor,
                 "collections": list(entry.collection_ids),
                 "requirements": entry.requirements,
+                "stack": (
+                    {
+                        "status": entry.stack_status,
+                        "harness": {
+                            "id": entry.stack.harness,
+                            "label": HARNESS_PRESENTATION[entry.stack.harness]["label"],
+                            "version": entry.stack.harness_version,
+                            "url": HARNESS_PRESENTATION[entry.stack.harness]["url"],
+                        },
+                        "openshell": {
+                            "version": entry.stack.openshell_version,
+                            "url": "https://github.com/NVIDIA/OpenShell",
+                        },
+                    }
+                    if entry.stack is not None
+                    else {"status": entry.stack_status}
+                ),
+                "maintenance": {
+                    "status": entry.maintenance.id,
+                    "label": entry.maintenance.label,
+                    "lifecycle": entry.lifecycle,
+                    "last_content_change": entry.last_content_change_on.isoformat(),
+                    "reviewed": (
+                        entry.reviewed_on.isoformat() if entry.reviewed_on else None
+                    ),
+                    "effective_date": entry.maintenance.effective_on.isoformat(),
+                    "activity_source": entry.maintenance.activity_source,
+                    "dependencies_checked_on": entry.maintenance.checked_on.isoformat(),
+                    "explanation": entry.maintenance.explanation,
+                },
                 "upstream_url": entry.upstream_url,
                 "source_path": entry.readme_path,
                 "guide_url": entry.guide_url,
@@ -1372,7 +2131,7 @@ def render_llms(entries: list[CatalogEntry]) -> str:
         "",
         "> A catalog of constrained, inspectable agent recipes, field demos, and developer tools built with NemoClaw.",
         "",
-        "Use the industry and category fields below to select an example. Requirements are short summaries; read the linked source guide before running an example.",
+        "Use the industry, category, and maintenance fields below to select an example. Requirements are short summaries; read the linked source guide before running an example.",
         "",
         "## Catalog data",
         "",
@@ -1383,6 +2142,8 @@ def render_llms(entries: list[CatalogEntry]) -> str:
         "",
     ]
     for entry in entries:
+        if entry.maintenance is None:
+            raise CatalogError(f"Missing maintenance status for {entry.readme_path}.")
         lines.extend(
             (
                 f"- [{entry.title}]({entry.absolute_detail_url})",
@@ -1390,9 +2151,25 @@ def render_llms(entries: list[CatalogEntry]) -> str:
                 f"  - Category: {entry.category.title}",
                 f"  - Industry: {entry.industry_label}",
                 f"  - Requirements: {entry.requirements}",
+                f"  - Maintenance: {entry.maintenance.label} ({entry.lifecycle}); "
+                f"{entry.maintenance.explanation}",
+                f"  - Maintenance activity: {entry.maintenance.effective_on.isoformat()} "
+                f"({entry.maintenance.activity_source})",
                 f"  - Source: [README]({entry.guide_url})",
             )
         )
+        if entry.stack is not None:
+            lines.append(
+                f"  - Harness: {entry.stack.harness_label} "
+                f"{entry.stack.harness_version}"
+            )
+            lines.append(
+                "  - OpenShell: "
+                + (entry.stack.openshell_version or "N/A")
+            )
+        else:
+            value = "N/A" if entry.stack_status == "not-applicable" else "Not declared"
+            lines.extend((f"  - Harness: {value}", f"  - OpenShell: {value}"))
         if entry.collections:
             lines.append(
                 "  - Collections: "
@@ -1418,6 +2195,11 @@ def taxonomy_contract() -> dict[str, Any]:
             for collection in COLLECTION_DEFINITIONS
         },
         "industries": ["all", *(slugify(industry) for industry in INDUSTRIES)],
+        "maintenance": [
+            "maintained",
+            "all",
+            *MAINTENANCE_STATUSES,
+        ],
     }
 
 
@@ -1858,6 +2640,8 @@ def render_detail_pages(
     copied_assets: set[str] = set()
     pages: dict[str, str] = {}
     for entry in entries:
+        if entry.maintenance is None:
+            raise CatalogError(f"Missing maintenance status for {entry.readme_path}.")
         readme_title, readme_html, toc_html, has_mermaid = render_readme_html(
             root, entry, catalog_by_readme, copied_assets
         )
@@ -1890,6 +2674,61 @@ def render_detail_pages(
                 f'    <script src="{mermaid_url}" integrity="{MERMAID_SRI}"></script>\n'
                 f'    <script type="module" src="{diagrams_url}"></script>'
             )
+        stack_facts = (
+            '<div class="stack-fact"><dt>Harness</dt><dd>Not declared</dd></div>'
+            '<div class="stack-fact"><dt>OpenShell</dt><dd>Not declared</dd></div>'
+        )
+        if entry.stack_status == "not-applicable":
+            stack_facts = (
+                '<div class="stack-fact"><dt>Harness</dt><dd>N/A</dd></div>'
+                '<div class="stack-fact"><dt>OpenShell</dt><dd>N/A</dd></div>'
+            )
+        if entry.stack is not None:
+            presentation = HARNESS_PRESENTATION[entry.stack.harness]
+            openshell_version = entry.stack.openshell_version
+            openshell_fact = (
+                '<a href="https://github.com/NVIDIA/OpenShell">'
+                f'{html.escape(openshell_version)}</a>'
+                if openshell_version is not None
+                else "N/A"
+            )
+            stack_facts = (
+                '<div class="stack-fact"><dt>Harness</dt><dd>'
+                f'<a class="harness-identity" href="{presentation["url"]}">'
+                f'<span class="harness-mark harness-mark-{entry.stack.harness}" '
+                f'aria-hidden="true">{presentation["mark"]}</span>'
+                f'<span>{html.escape(presentation["label"])} '
+                f'<span class="stack-version">{html.escape(entry.stack.harness_version)}'
+                '</span></span></a></dd></div>'
+                '<div class="stack-fact"><dt>OpenShell</dt><dd>'
+                f'{openshell_fact}</dd></div>'
+            )
+        maintenance_fact = (
+            f'<div class="maintenance-fact" data-maintenance="{entry.maintenance.id}">'
+            '<dt id="maintenance-status-title">Maintenance</dt><dd>'
+            f'<span class="maintenance-badge">'
+            f'{html.escape(entry.maintenance.label)}</span>'
+            '<details class="maintenance-info">'
+            '<summary aria-label="Maintenance status details" '
+            'aria-controls="maintenance-details">'
+            '<span aria-hidden="true">i</span></summary></details>'
+            '<span class="maintenance-popover" id="maintenance-details" '
+            'role="region" aria-label="Maintenance activity">'
+            '<span class="maintenance-popover-title">Maintenance activity</span>'
+            f'<span class="maintenance-popover-copy">'
+            f'{html.escape(entry.maintenance.explanation)}</span>'
+            '<span class="maintenance-popover-meta">'
+            '<strong>Last maintenance activity</strong>'
+            f'<span>{entry.maintenance.effective_on.isoformat()} · '
+            f'{html.escape(entry.maintenance.activity_source)}</span></span>'
+            '<span class="maintenance-popover-meta">'
+            '<strong>Status calculated</strong>'
+            f'<span>{entry.maintenance.as_of.isoformat()}</span></span>'
+            '<span class="maintenance-popover-meta">'
+            '<strong>Dependencies checked through</strong>'
+            f'<span>{entry.maintenance.checked_on.isoformat()}</span></span>'
+            "</span></dd></div>"
+        )
         replacements = {
             "{{META_DESCRIPTION}}": html.escape(entry.description, quote=True),
             "{{PAGE_TITLE}}": html.escape(readme_title),
@@ -1907,7 +2746,9 @@ def render_detail_pages(
             "{{CATEGORY}}": html.escape(entry.category.singular),
             "{{ATTRIBUTION_FACT}}": attribution_fact,
             "{{UPSTREAM_FACT}}": upstream_fact,
+            "{{STACK_FACTS}}": stack_facts,
             "{{REQUIREMENTS}}": html.escape(entry.requirements),
+            "{{MAINTENANCE_FACT}}": maintenance_fact,
             "{{TABLE_OF_CONTENTS}}": toc_html,
             "{{README_HTML}}": indent(readme_html, 12),
             "{{DIAGRAM_SCRIPTS}}": diagram_scripts,
@@ -2049,6 +2890,7 @@ def validate_generated_site(
         "catalog-view-industry",
         "catalog-category",
         "catalog-industry",
+        "catalog-maintenance",
         "catalog-reset",
         "catalog-status",
         "catalog-empty",
@@ -2079,6 +2921,7 @@ def validate_generated_site(
         "catalog-view-industry",
         "catalog-category",
         "catalog-industry",
+        "catalog-maintenance",
     }
     missing_labels = required_labels - parser.labels_for
     if missing_labels:
@@ -2104,6 +2947,9 @@ def validate_generated_site(
             "data-readme": entry.readme_path,
             "data-category": entry.category.id,
             "data-industry": entry.industry_id,
+            "data-maintenance": (
+                entry.maintenance.id if entry.maintenance else ""
+            ),
             "data-collections": " ".join(entry.collection_ids),
         }
         for entry in entries
@@ -2247,7 +3093,14 @@ def validate_detail_pages(
         for landmark in ("main", "footer"):
             if parser.tag_counts.get(landmark) != 1:
                 errors.append(f"Detail page must contain one {landmark} landmark.")
-        required_ids = {"detail-title", "facts-title", "toc-title", "readme"}
+        required_ids = {
+            "detail-title",
+            "facts-title",
+            "maintenance-details",
+            "maintenance-status-title",
+            "toc-title",
+            "readme",
+        }
         missing_ids = required_ids - parser.ids
         if missing_ids:
             errors.append(
@@ -2337,6 +3190,16 @@ def validate_detail_pages(
             )
         if "NemoClaw Community support is best-effort" not in page:
             errors.append("Detail-page support text no longer matches SUPPORT.md.")
+        if entry.maintenance is None or (
+            f'data-maintenance="{entry.maintenance.id}"' not in page
+            or entry.maintenance.explanation not in html.unescape(page)
+            or '<dt id="maintenance-status-title">Maintenance</dt>' not in page
+            or '<details class="maintenance-info">' not in page
+            or 'class="maintenance-banner"' in page
+        ):
+            errors.append(
+                "Detail page is missing its At-a-glance maintenance status."
+            )
         if ">Fit<" in page or ">Fit:" in page:
             errors.append("Detail page still exposes the ambiguous Fit label.")
         if errors:
@@ -2389,11 +3252,27 @@ class CatalogOutputs:
     llms_txt: str
     detail_pages: dict[str, str]
     copied_assets: set[str]
+    maintenance_policy: MaintenancePolicy
+    maintenance_snapshot: MaintenanceSnapshot
+    as_of: dt.date
 
 
-def expected_outputs(root: Path) -> CatalogOutputs:
+def expected_outputs(
+    root: Path,
+    maintenance_releases_path: Path | None = None,
+    as_of: dt.date | None = None,
+) -> CatalogOutputs:
     categories, collections = load_discovery_groups(root)
-    entries = load_catalog(root, categories, collections)
+    policy = load_maintenance_policy(root)
+    snapshot = load_maintenance_snapshot(root, policy, maintenance_releases_path)
+    as_of = as_of or catalog_as_of_date()
+    entries = enrich_catalog_maintenance(
+        root,
+        load_catalog(root, categories, collections),
+        policy,
+        snapshot,
+        as_of,
+    )
     template_path = root / "site" / "index.template.html"
     detail_template_path = root / "site" / "detail.template.html"
     try:
@@ -2407,7 +3286,7 @@ def expected_outputs(root: Path) -> CatalogOutputs:
     )
     rendered_site = render_site(entries, categories, collections, template)
     rendered_json = json.dumps(
-        public_catalog(entries, categories, collections),
+        public_catalog(entries, categories, collections, policy, snapshot, as_of),
         indent=2,
         ensure_ascii=False,
     ) + "\n"
@@ -2430,6 +3309,9 @@ def expected_outputs(root: Path) -> CatalogOutputs:
         llms_txt=rendered_llms,
         detail_pages=detail_pages,
         copied_assets=copied_assets,
+        maintenance_policy=policy,
+        maintenance_snapshot=snapshot,
+        as_of=as_of,
     )
 
 
@@ -2589,6 +3471,18 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print the generated browser taxonomy contract as JSON.",
     )
+    parser.add_argument(
+        "--maintenance-releases",
+        type=Path,
+        help=(
+            "Use a validated release snapshot inside the repository instead of "
+            "scripts/catalog-maintenance-releases.json."
+        ),
+    )
+    parser.add_argument(
+        "--as-of",
+        help="Calculate maintenance status on this YYYY-MM-DD date.",
+    )
     args = parser.parse_args(argv)
     root = find_repo_root()
     output = root / "_site"
@@ -2603,7 +3497,11 @@ def main(argv: list[str] | None = None) -> int:
                 f"README catalog metadata is valid for {len(entries)} examples."
             )
             return 0
-        outputs = expected_outputs(root)
+        outputs = expected_outputs(
+            root,
+            args.maintenance_releases,
+            catalog_as_of_date(args.as_of),
+        )
         if args.check:
             check_generated_readmes(root, outputs)
             print(

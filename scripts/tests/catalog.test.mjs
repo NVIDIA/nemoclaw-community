@@ -10,6 +10,7 @@ import {
   CATALOG_CATEGORIES,
   CATALOG_COLLECTION_CATEGORIES,
   CATALOG_INDUSTRIES,
+  CATALOG_MAINTENANCE_STATES,
   DEFAULT_CATALOG_STATE,
   canonicalizeCatalogState,
   initCatalog,
@@ -47,7 +48,10 @@ test("search normalization collapses whitespace and ignores case and accents", (
 });
 
 test("search uses whitespace-token AND matching", () => {
-  const record = { search: "GPU autoscaling for Kubernetes clusters" };
+  const record = {
+    maintenance: "current",
+    search: "GPU autoscaling for Kubernetes clusters",
+  };
 
   assert.equal(matchesCatalogRecord(record, { q: "gpu kubernetes" }), true);
   assert.equal(matchesCatalogRecord(record, { q: "gpu finance" }), false);
@@ -56,7 +60,11 @@ test("search uses whitespace-token AND matching", () => {
 });
 
 test("category view matches the exact recipe category", () => {
-  const record = { category: "partner-recipes", search: "assistant" };
+  const record = {
+    category: "partner-recipes",
+    maintenance: "current",
+    search: "assistant",
+  };
 
   assert.equal(
     matchesCatalogRecord(record, { view: "category", category: "partner-recipes" }),
@@ -72,10 +80,12 @@ test("recipe collections select their matching membership", () => {
   const hackathonRecord = {
     category: "community-recipes",
     collections: ["hackathon", "featured"],
+    maintenance: "current",
   };
   const regularRecord = {
     category: "community-recipes",
     collections: "featured",
+    maintenance: "current",
   };
 
   assert.equal(
@@ -94,7 +104,11 @@ test("recipe collections select their matching membership", () => {
   );
   assert.equal(
     matchesCatalogRecord(
-      { category: "nvidia-recipes", collections: ["build-a-claw"] },
+      {
+        category: "nvidia-recipes",
+        collections: ["build-a-claw"],
+        maintenance: "current",
+      },
       { view: "category", category: "build-a-claw-recipes" },
     ),
     true,
@@ -109,7 +123,11 @@ test("recipe collections select their matching membership", () => {
 });
 
 test("industry view matches an exact industry slug", () => {
-  const record = { industry: "financial-services", search: "risk review" };
+  const record = {
+    industry: "financial-services",
+    maintenance: "current",
+    search: "risk review",
+  };
 
   assert.equal(
     matchesCatalogRecord(record, {
@@ -156,9 +174,80 @@ test("URL serialization omits defaults and uses a stable parameter order", () =>
       view: "industry",
       category: "partner-recipes",
       industry: "cloud-services",
+      maintenance: "deprecated",
     }),
-    "q=GPU+cloud&view=industry&industry=cloud-services",
+    "q=GPU+cloud&view=industry&industry=cloud-services&maintenance=deprecated",
   );
+});
+
+test("maintenance state defaults to maintained and rejects unknown values", () => {
+  assert.deepEqual(CATALOG_MAINTENANCE_STATES, [
+    "maintained",
+    "all",
+    "current",
+    "review-soon",
+    "review-due",
+    "review-overdue",
+    "deprecated",
+  ]);
+  assert.equal(parseCatalogURLState("").maintenance, "maintained");
+  assert.equal(parseCatalogURLState("?maintenance=unknown").maintenance, "maintained");
+  assert.equal(serializeCatalogURLState({ maintenance: "maintained" }), "");
+  assert.equal(
+    serializeCatalogURLState({ maintenance: "review-due" }),
+    "maintenance=review-due",
+  );
+  assert.equal(
+    serializeCatalogURLState({ maintenance: "review-soon" }),
+    "maintenance=review-soon",
+  );
+  assert.equal(
+    serializeCatalogURLState({ maintenance: "review-overdue" }),
+    "maintenance=review-overdue",
+  );
+});
+
+test("maintenance filtering hides deprecated examples by default", () => {
+  const current = { maintenance: "current", search: "assistant" };
+  const reviewSoon = { maintenance: "review-soon", search: "assistant" };
+  const reviewDue = { maintenance: "review-due", search: "assistant" };
+  const reviewOverdue = { maintenance: "review-overdue", search: "assistant" };
+  const deprecated = { maintenance: "deprecated", search: "assistant" };
+
+  assert.equal(matchesCatalogRecord(current), true);
+  assert.equal(matchesCatalogRecord(reviewSoon), true);
+  assert.equal(matchesCatalogRecord(reviewDue), true);
+  assert.equal(matchesCatalogRecord(reviewOverdue), true);
+  assert.equal(matchesCatalogRecord(deprecated), false);
+  assert.equal(matchesCatalogRecord(deprecated, { maintenance: "all" }), true);
+  assert.equal(matchesCatalogRecord(current, { maintenance: "current" }), true);
+  assert.equal(matchesCatalogRecord(reviewDue, { maintenance: "current" }), false);
+  assert.equal(
+    matchesCatalogRecord(deprecated, { maintenance: "deprecated" }),
+    true,
+  );
+});
+
+test("maintenance composes with search, category, and industry filters", () => {
+  const record = {
+    category: "partner-recipes",
+    industry: "financial-services",
+    maintenance: "review-due",
+    search: "payment operations assistant",
+  };
+
+  assert.equal(matchesCatalogRecord(record, {
+    q: "payment assistant",
+    view: "category",
+    category: "partner-recipes",
+    maintenance: "review-due",
+  }), true);
+  assert.equal(matchesCatalogRecord(record, {
+    q: "payment assistant",
+    view: "industry",
+    industry: "financial-services",
+    maintenance: "current",
+  }), false);
 });
 
 test("inactive facets are removed from URL state", () => {
@@ -183,6 +272,7 @@ test("client facet identifiers match the README catalog builder", () => {
     taxonomy.collection_categories,
   );
   assert.deepEqual(CATALOG_INDUSTRIES, taxonomy.industries);
+  assert.deepEqual(CATALOG_MAINTENANCE_STATES, taxonomy.maintenance);
 });
 
 test("category information buttons toggle one description at a time", () => {
@@ -265,16 +355,33 @@ function fakeCatalogDOM() {
       category: "nvidia-recipes",
       industry: "financial-services",
       collections: "",
+      maintenance: "current",
       search: "payment operations",
     },
+    matches: (selector) => selector === "[data-catalog-entry]",
+    closest: () => null,
   });
   const partnerCard = fakeControl({
     dataset: {
       category: "partner-recipes",
       industry: "financial-services",
       collections: "",
+      maintenance: "review-due",
       search: "x402 payment",
     },
+    matches: (selector) => selector === "[data-catalog-entry]",
+    closest: () => null,
+  });
+  const deprecatedCard = fakeControl({
+    dataset: {
+      category: "partner-recipes",
+      industry: "financial-services",
+      collections: "",
+      maintenance: "deprecated",
+      search: "legacy payment",
+    },
+    matches: (selector) => selector === "[data-catalog-entry]",
+    closest: () => null,
   });
 
   function group(category, cards) {
@@ -290,9 +397,10 @@ function fakeCatalogDOM() {
   }
 
   const nvidiaGroup = group("nvidia-recipes", [nvidiaCard]);
-  const partnerGroup = group("partner-recipes", [partnerCard]);
+  const partnerGroup = group("partner-recipes", [partnerCard, deprecatedCard]);
   const category = fakeControl({ value: "all" });
   const industry = fakeControl({ value: "all" });
+  const maintenance = fakeControl({ value: "maintained" });
   const categoryWrapper = fakeControl({
     dataset: { filterFor: "category" },
     querySelectorAll: () => [category],
@@ -315,13 +423,16 @@ function fakeCatalogDOM() {
     "catalog-view-industry": fakeControl(),
     "catalog-category": category,
     "catalog-industry": industry,
+    "catalog-maintenance": maintenance,
     "catalog-reset": fakeControl(),
     "catalog-status": fakeControl({ textContent: "" }),
     "catalog-empty": fakeControl({ hidden: true }),
     "catalog-results": fakeControl({
       dataset: {},
       querySelectorAll(selector) {
-        if (selector === "[data-catalog-entry]") return [nvidiaCard, partnerCard];
+        if (selector === "[data-catalog-entry]") {
+          return [nvidiaCard, partnerCard, deprecatedCard];
+        }
         if (selector === "[data-catalog-category]") return [nvidiaGroup, partnerGroup];
         return [];
       },
@@ -329,6 +440,7 @@ function fakeCatalogDOM() {
     "browse-category-panel": categoryPanel,
     "browse-industry-panel": industryPanel,
     "nvidia-recipes": nvidiaGroup,
+    "deprecated-example": deprecatedCard,
   };
   const location = {
     pathname: "/nemoclaw-community/",
@@ -353,7 +465,14 @@ function fakeCatalogDOM() {
   const documentObject = {
     getElementById: (id) => elements[id] ?? null,
   };
-  return { documentObject, windowObject, elements, nvidiaCard, partnerCard };
+  return {
+    documentObject,
+    windowObject,
+    elements,
+    nvidiaCard,
+    partnerCard,
+    deprecatedCard,
+  };
 }
 
 test("an explicit view change clears a reconciled category fragment", () => {
@@ -379,4 +498,43 @@ test("an explicit view change clears a reconciled category fragment", () => {
   assert.equal(fixture.elements["browse-industry-panel"].hidden, false);
   assert.equal(fixture.nvidiaCard.hidden, false);
   assert.equal(fixture.partnerCard.hidden, false);
+  assert.equal(fixture.deprecatedCard.hidden, true);
+});
+
+test("a deprecated card fragment is revealed without losing the fragment", () => {
+  const fixture = fakeCatalogDOM();
+  fixture.windowObject.location.search = "?maintenance=current";
+  fixture.windowObject.location.hash = "#deprecated-example";
+
+  const catalog = initCatalog(fixture);
+
+  assert.deepEqual(catalog.getState(), {
+    ...DEFAULT_CATALOG_STATE,
+    maintenance: "all",
+  });
+  assert.equal(fixture.deprecatedCard.hidden, false);
+  assert.equal(fixture.windowObject.location.search, "?maintenance=all");
+  assert.equal(fixture.windowObject.location.hash, "#deprecated-example");
+});
+
+test("maintenance control updates the catalog and reset restores maintained", () => {
+  const fixture = fakeCatalogDOM();
+  fixture.windowObject.location.search = "";
+  fixture.windowObject.location.hash = "";
+  const catalog = initCatalog(fixture);
+
+  fixture.elements["catalog-maintenance"].value = "deprecated";
+  fixture.elements["catalog-maintenance"].emit("change");
+
+  assert.equal(catalog.getState().maintenance, "deprecated");
+  assert.equal(fixture.nvidiaCard.hidden, true);
+  assert.equal(fixture.partnerCard.hidden, true);
+  assert.equal(fixture.deprecatedCard.hidden, false);
+  assert.equal(fixture.windowObject.location.search, "?maintenance=deprecated");
+
+  fixture.elements["catalog-reset"].emit("click");
+
+  assert.deepEqual(catalog.getState(), DEFAULT_CATALOG_STATE);
+  assert.equal(fixture.deprecatedCard.hidden, true);
+  assert.equal(fixture.elements["catalog-maintenance"].value, "maintained");
 });

@@ -146,7 +146,7 @@
             <h2 id="catalog-title">Find an example</h2>
             <p>
               Search titles, descriptions, requirements, contributors, types,
-              provenance, collections, and industries.
+              provenance, collections, industries, and maintenance status.
             </p>
           </div>
           <nav class="data-links" aria-label="Machine-readable catalog resources">
@@ -187,6 +187,15 @@
             <div class="select-shell">
               <select id="catalog-industry" disabled>
 {{INDUSTRY_OPTIONS}}
+              </select>
+            </div>
+          </div>
+
+          <div class="filter-control">
+            <label for="catalog-maintenance">Maintenance status</label>
+            <div class="select-shell">
+              <select id="catalog-maintenance">
+{{MAINTENANCE_OPTIONS}}
               </select>
             </div>
           </div>

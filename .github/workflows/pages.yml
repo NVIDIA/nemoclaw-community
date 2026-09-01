@@ -4,6 +4,8 @@
 name: Example catalog Pages
 
 on:
+  schedule:
+    - cron: "17 8 * * 1"
   pull_request:
     branches:
       - main
@@ -18,9 +20,17 @@ on:
       - ".agents/skills/nemoclaw-community-contributor-examples/references/example-taxonomy.md"
       - "examples/**"
       - "scripts/build_catalog.py"
+      - "scripts/catalog_maintenance_policy.py"
+      - "scripts/example_dependencies.py"
+      - "scripts/example_dependencies.sh"
       - "scripts/fetch_catalog_assets.py"
+      - "scripts/fetch_maintenance_releases.py"
+      - "scripts/catalog-maintenance.json"
+      - "scripts/catalog-maintenance-releases.json"
       - "scripts/catalog-requirements.txt"
       - "scripts/tests/test_build_catalog.py"
+      - "scripts/tests/test_example_dependencies.py"
+      - "scripts/tests/test_fetch_maintenance_releases.py"
       - "scripts/tests/catalog.test.mjs"
       - "site/**"
   push:
@@ -37,9 +47,17 @@ on:
       - ".agents/skills/nemoclaw-community-contributor-examples/references/example-taxonomy.md"
       - "examples/**"
       - "scripts/build_catalog.py"
+      - "scripts/catalog_maintenance_policy.py"
+      - "scripts/example_dependencies.py"
+      - "scripts/example_dependencies.sh"
       - "scripts/fetch_catalog_assets.py"
+      - "scripts/fetch_maintenance_releases.py"
+      - "scripts/catalog-maintenance.json"
+      - "scripts/catalog-maintenance-releases.json"
       - "scripts/catalog-requirements.txt"
       - "scripts/tests/test_build_catalog.py"
+      - "scripts/tests/test_example_dependencies.py"
+      - "scripts/tests/test_fetch_maintenance_releases.py"
       - "scripts/tests/catalog.test.mjs"
       - "site/**"
   workflow_dispatch:
@@ -75,6 +93,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -94,7 +113,7 @@ jobs:
         run: python3 scripts/build_catalog.py --check
 
       - name: Run catalog build tests
-        run: python3 -m unittest discover -s scripts/tests -p 'test_build_catalog.py'
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 
       - name: Run catalog interaction tests
         run: node --test scripts/tests/catalog.test.mjs
@@ -112,10 +131,18 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Refresh tracked platform releases
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          python3 scripts/fetch_maintenance_releases.py
+          --output .cache/catalog/maintenance-releases.json
 
       - name: Install catalog build dependency
         run: python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
@@ -124,7 +151,9 @@ jobs:
         run: python3 scripts/fetch_catalog_assets.py
 
       - name: Build generated catalog
-        run: python3 scripts/build_catalog.py
+        run: >-
+          python3 scripts/build_catalog.py
+          --maintenance-releases .cache/catalog/maintenance-releases.json
 
       - name: Upload pull request preview
         if: github.event_name == 'pull_request'
