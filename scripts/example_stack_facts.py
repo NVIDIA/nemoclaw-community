@@ -112,6 +112,12 @@ def _version_kind(value: str) -> str:
     return "invalid"
 
 
+def _normalized_exact(value: str) -> str:
+    """Return one comparison form for exact versions with an optional v prefix."""
+
+    return value[1:] if value.startswith("v") else value
+
+
 def parse_stack_declaration(
     nemoclaw: str,
     harness: str,
@@ -226,6 +232,7 @@ def _release_contracts() -> tuple[dict[str, dict[str, object]], dict[str, str]]:
         ):
             raise ValueError(f"invalid harness version in release contract for {tag}")
         aliases[tag] = tag
+        aliases[tag.removeprefix("v")] = tag
         aliases[str(record["commit"])] = tag
     return document, aliases
 
@@ -289,6 +296,8 @@ def _merge_version(
 ) -> tuple[str | None, str]:
     declaration_kind = _version_kind(declared)
     exact_detected = {value for value in detected if _version_kind(value) == "exact"}
+    normalized_detected = {_normalized_exact(value) for value in exact_detected}
+    normalized_declared = _normalized_exact(declared)
     mutable_detected = detected - exact_detected
     if declaration_kind == "n-a":
         if detected:
@@ -307,8 +316,8 @@ def _merge_version(
             return declared, "conflict"
         reasons.append(f"{label} is not pinned to one exact version.")
         return declared, "unpinned"
-    if mutable_detected or len(exact_detected) > 1 or (
-        exact_detected and declared not in exact_detected
+    if mutable_detected or len(normalized_detected) > 1 or (
+        normalized_detected and normalized_declared not in normalized_detected
     ):
         reasons.append(
             f"{label} {declared} in the README conflicts with implementation evidence: "
@@ -316,7 +325,7 @@ def _merge_version(
             + "."
         )
         return declared, "conflict"
-    if declared in exact_detected:
+    if normalized_declared in normalized_detected:
         reasons.append(f"{label} {declared} is confirmed by implementation evidence.")
         return declared, "confirmed"
     reasons.append(f"{label} {declared} is declared in the README but not statically confirmed.")

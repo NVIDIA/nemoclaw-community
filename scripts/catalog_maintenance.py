@@ -20,8 +20,9 @@ STATUS_DETAILS = (
     ("review-soon", "Review soon", "light-orange"),
     ("review-due", "Review due", "orange"),
     ("review-overdue", "Review overdue", "dark-orange"),
-    ("deprecated", "Deprecated", "red"),
+    ("review-critical", "Review critical", "red"),
 )
+DEPRECATED_STATUS = ("deprecated", "Deprecated", "red")
 STATUS_IDS = tuple(status_id for status_id, _label, _tone in STATUS_DETAILS)
 LIFECYCLES = {"Active", "Deprecated"}
 ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
@@ -116,18 +117,23 @@ def compute_status(
         raise MaintenancePolicyError("Maintenance dates cannot be after today.")
 
     if lifecycle == "Deprecated":
-        band = policy.bands[-1]
-        summary = "Explicitly deprecated by lifecycle metadata."
-    else:
-        activity = max(committed, reviewed) if reviewed is not None else committed
-        age = (current_day - activity).days
-        band = next(
-            candidate
-            for candidate in reversed(policy.bands)
-            if age >= candidate.minimum_days
+        status_id, label, tone = DEPRECATED_STATUS
+        return MaintenanceStatus(
+            status_id,
+            label,
+            "Explicitly deprecated by lifecycle metadata.",
+            tone,
         )
-        summary = (
-            "Latest committed change or focused review was "
-            f"{age} day{'s' if age != 1 else ''} ago."
-        )
+
+    activity = max(committed, reviewed) if reviewed is not None else committed
+    age = (current_day - activity).days
+    band = next(
+        candidate
+        for candidate in reversed(policy.bands)
+        if age >= candidate.minimum_days
+    )
+    summary = (
+        "Latest committed change or focused review was "
+        f"{age} day{'s' if age != 1 else ''} ago."
+    )
     return MaintenanceStatus(band.id, band.label, summary, band.tone)

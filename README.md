@@ -81,7 +81,11 @@ the age each day from the thresholds in
 | 30–59 days | `Review soon` |
 | 60–119 days | `Review due` |
 | 120–239 days | `Review overdue` |
-| 240 days or more | `Deprecated` |
+| 240 days or more | `Review critical` |
+
+Only an explicit `Lifecycle` value of `Deprecated` produces the `Deprecated`
+status. The default catalog view hides explicitly deprecated examples; age
+alone does not hide an example.
 
 See [Runtime Stack Discovery](CONTRIBUTING.md#runtime-stack-discovery) for the
 recognized variables and contributor contract. See the

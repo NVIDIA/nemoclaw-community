@@ -3,5 +3,5 @@
   "review-soon": 30,
   "review-due": 60,
   "review-overdue": 120,
-  "deprecated": 240
+  "review-critical": 240
 }

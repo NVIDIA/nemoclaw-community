@@ -376,16 +376,13 @@ generated [Markdown catalog](examples/README.md), GitHub Pages cards, filters,
 detail pages, public `catalog.json` search index, and agent-oriented
 `llms.txt`. The build discovers example directories from the canonical
 taxonomy, derives kind and provenance from the path, and reads this exact table
-from the root README. Put it in a final `Catalog Metadata` section. Existing
-tables immediately after the title remain supported. Non-catalog YAML
-frontmatter may precede the title and is ignored by catalog generation:
+from the root README. Put it immediately after the level-one title. Existing
+final `Catalog Metadata` sections remain supported as a legacy placement.
+Non-catalog YAML frontmatter may precede the title and is ignored by catalog
+generation:
 
 ```markdown
 # Recognizable Example Name
-
-[Explain the example and show how to run it.]
-
-## Catalog Metadata
 
 | Catalog field | Value |
 | --- | --- |
@@ -395,6 +392,8 @@ frontmatter may precede the title and is ignored by catalog generation:
 | NemoClaw | v0.0.104 |
 | Harness | OpenClaw 2026.7.1 |
 | OpenShell | 0.0.85 |
+
+[Explain the example and show how to run it.]
 ```
 
 After `OpenShell`, add optional rows in this order: `Lifecycle`, `Reviewed`,
@@ -451,11 +450,12 @@ committed change anywhere under the example or a later `Reviewed` date. This
 is a repository-activity heuristic: documentation and asset changes count just
 like runtime changes. The age bands are `Current` through day 29, `Review soon`
 through day 59, `Review due` through day 119, `Review overdue` through day 239,
-and `Deprecated` from day 240. The thresholds live in
+and `Review critical` from day 240. The thresholds live in
 `scripts/catalog-maintenance.json`, and the daily
 Pages build refreshes the site. An authored `Deprecated` lifecycle applies
-immediately; an automatic status never rewrites the README. These signals
-describe repository change activity, not support, quality, or runtime health.
+immediately and is the only status hidden by the default catalog view. An
+automatic status never rewrites the README. These signals describe repository
+change activity, not support, quality, or runtime health.
 
 ### Runtime Stack Discovery
 

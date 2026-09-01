@@ -1182,21 +1182,36 @@ h3 {
   z-index: 3;
   top: 0.45rem;
   right: 0.55rem;
-  display: grid;
+  display: block;
   width: 1.2rem;
   height: 1.2rem;
-  place-items: center;
   border: 1px solid #858585;
   border-radius: 50%;
   color: #e5e5e5;
-  cursor: help;
   font-size: 0.68rem;
   font-style: normal;
   font-weight: 700;
   line-height: 1;
 }
 
-.fact-info:focus-visible {
+.fact-info summary {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+
+.fact-info summary::-webkit-details-marker {
+  display: none;
+}
+
+.fact-info summary::marker {
+  content: "";
+}
+
+.fact-info summary:focus-visible {
   outline-width: 2px;
   outline-offset: 2px;
 }
@@ -1228,15 +1243,11 @@ h3 {
   margin-top: 0.35rem;
 }
 
-.fact-info:hover .fact-popover,
-.fact-info:focus .fact-popover,
-.fact-info:focus-within .fact-popover {
+.fact-info[open] .fact-popover {
   display: block;
 }
 
-.fact-info:hover,
-.fact-info:focus,
-.fact-info:focus-within {
+.fact-info[open] {
   z-index: 5;
 }
 

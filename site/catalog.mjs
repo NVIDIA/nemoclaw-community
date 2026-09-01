@@ -59,6 +59,7 @@ export const CATALOG_MAINTENANCE = Object.freeze([
   "review-soon",
   "review-due",
   "review-overdue",
+  "review-critical",
   "deprecated",
 ]);
 

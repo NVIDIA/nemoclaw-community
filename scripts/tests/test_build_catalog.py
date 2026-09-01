@@ -544,6 +544,20 @@ class CatalogBuildTests(unittest.TestCase):
                 facts_panel.count('class="status-dot" aria-hidden="true"'),
                 2,
             )
+            self.assertEqual(facts_panel.count('<details class="fact-info">'), 2)
+            self.assertIn(
+                '<summary aria-label="About stack metadata">', facts_panel
+            )
+            self.assertIn(
+                '<summary aria-label="About maintenance status">', facts_panel
+            )
+            self.assertNotIn('role="tooltip"', facts_panel)
+            self.assertNotIn('tabindex="0"', facts_panel)
+            self.assertIn(
+                "This reflects repository activity only, not support, quality, "
+                "or runtime health.",
+                facts_panel,
+            )
             self.assertIn("Maintenance", page)
             self.assertIn(f"stack-status-{entry.stack.status}", page)
             self.assertIn(f"maintenance-tone-{entry.maintenance.tone}", page)

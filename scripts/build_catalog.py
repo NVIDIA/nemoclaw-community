@@ -1687,6 +1687,7 @@ def taxonomy_contract() -> dict[str, Any]:
             "review-soon",
             "review-due",
             "review-overdue",
+            "review-critical",
             "deprecated",
         ],
     }
@@ -2126,16 +2127,13 @@ def _display_stack_value(value: str | None, status: str) -> str:
     return '<span class="fact-unknown">Unknown</span>'
 
 
-def _fact_info(entry: CatalogEntry, suffix: str, label: str, lines: list[str]) -> str:
-    tooltip_id = f"{entry.id}-{suffix}-details"
+def _fact_info(label: str, lines: list[str]) -> str:
     content = "".join(f"<span>{html.escape(line)}</span>" for line in lines)
     return (
-        f'<span class="fact-info" tabindex="0" '
-        f'aria-label="{html.escape(label, quote=True)}" '
-        f'aria-describedby="{tooltip_id}">'
-        '<span aria-hidden="true">i</span>'
-        f'<span class="fact-popover" id="{tooltip_id}" role="tooltip">'
-        f"{content}</span></span>"
+        '<details class="fact-info">'
+        f'<summary aria-label="{html.escape(label, quote=True)}">'
+        '<span aria-hidden="true">i</span></summary>'
+        f'<div class="fact-popover">{content}</div></details>'
     )
 
 
@@ -2185,7 +2183,7 @@ def render_stack_facts(entry: CatalogEntry) -> str:
         if evidence
         else "Evidence: no standardized runtime source found."
     )
-    info = _fact_info(entry, "stack", "About stack metadata", details)
+    info = _fact_info("About stack metadata", details)
     status_value = (
         '<span class="status-label"><span class="status-dot" '
         f'aria-hidden="true"></span>{html.escape(status_label)}</span>'
@@ -2206,10 +2204,11 @@ def render_maintenance_fact(entry: CatalogEntry) -> str:
         status.summary,
         f"Last committed change: {entry.last_activity.isoformat()}.",
         f"Lifecycle: {entry.lifecycle}.",
+        "This reflects repository activity only, not support, quality, or runtime health.",
     ]
     if entry.reviewed is not None:
         details.insert(2, f"Focused review: {entry.reviewed.isoformat()}.")
-    info = _fact_info(entry, "maintenance", "About maintenance status", details)
+    info = _fact_info("About maintenance status", details)
     status_value = (
         '<span class="status-label"><span class="status-dot" '
         f'aria-hidden="true"></span>{html.escape(status.label)}</span>'

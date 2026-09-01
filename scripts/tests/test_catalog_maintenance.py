@@ -36,7 +36,13 @@ class CatalogMaintenanceTests(unittest.TestCase):
     def test_default_policy_has_five_monotonic_bands(self) -> None:
         self.assertEqual(
             [band.id for band in self.policy.bands],
-            ["current", "review-soon", "review-due", "review-overdue", "deprecated"],
+            [
+                "current",
+                "review-soon",
+                "review-due",
+                "review-overdue",
+                "review-critical",
+            ],
         )
         self.assertEqual(
             [band.minimum_days for band in self.policy.bands], [0, 30, 60, 120, 240]
@@ -57,8 +63,8 @@ class CatalogMaintenanceTests(unittest.TestCase):
             119: "review-due",
             120: "review-overdue",
             239: "review-overdue",
-            240: "deprecated",
-            900: "deprecated",
+            240: "review-critical",
+            900: "review-critical",
         }
         for age, expected in cases.items():
             with self.subTest(age=age):

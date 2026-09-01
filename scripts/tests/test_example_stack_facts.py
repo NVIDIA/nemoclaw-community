@@ -97,6 +97,27 @@ class ExampleStackFactsTests(unittest.TestCase):
         self.assertEqual(facts.status, "confirmed")
         self.assertEqual(facts.harness.name, "LangChain Deep Agents Code")
 
+    def test_nemoclaw_release_allows_mixed_v_prefixes(self) -> None:
+        self.write(
+            "Dockerfile",
+            "ARG NEMOCLAW_VERSION=0.0.104\n"
+            "ARG NEMOCLAW_AGENT=openclaw\n",
+        )
+
+        facts = self.facts("v0.0.104", "OpenClaw 2026.7.1", "v0.0.85")
+
+        self.assertEqual(facts.status, "confirmed")
+        self.assertEqual(facts.nemoclaw.status, "confirmed")
+        self.assertEqual(facts.openshell.status, "confirmed")
+
+    def test_direct_component_allows_mixed_v_prefixes(self) -> None:
+        self.write("Dockerfile", "ARG OPENSHELL_VERSION=v0.0.85\n")
+
+        facts = self.facts("N/A", "N/A", "0.0.85")
+
+        self.assertEqual(facts.status, "confirmed")
+        self.assertEqual(facts.openshell.status, "confirmed")
+
     def test_direct_harness_can_mix_confirmed_and_readme_only_values(self) -> None:
         self.write(
             "agents/hermes/Dockerfile",

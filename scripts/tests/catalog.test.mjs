@@ -132,11 +132,17 @@ test("industry view matches an exact industry slug", () => {
 
 test("maintenance defaults to nondeprecated examples and supports exact states", () => {
   const current = { maintenance: "current" };
+  const reviewCritical = { maintenance: "review-critical" };
   const deprecated = { maintenance: "deprecated" };
 
   assert.equal(matchesCatalogRecord(current), true);
+  assert.equal(matchesCatalogRecord(reviewCritical), true);
   assert.equal(matchesCatalogRecord(deprecated), false);
   assert.equal(matchesCatalogRecord(deprecated, { maintenance: "all" }), true);
+  assert.equal(
+    matchesCatalogRecord(reviewCritical, { maintenance: "review-critical" }),
+    true,
+  );
   assert.equal(
     matchesCatalogRecord(current, { maintenance: "review-due" }),
     false,

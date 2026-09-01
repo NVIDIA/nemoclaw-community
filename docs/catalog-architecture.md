@@ -35,8 +35,9 @@ Git history, Lifecycle,
 and Reviewed ──────────────> computed maintenance status
 ```
 
-The standardized catalog block in each example's root `README.md` is the
-canonical example metadata source.
+The standardized catalog block immediately after the level-one title in each
+example's root `README.md` is the canonical metadata source. A final
+`Catalog Metadata` section remains supported as a legacy placement.
 [`scripts/build_catalog.py`](../scripts/build_catalog.py) discovers those
 READMEs from the repository taxonomy, validates their title, required
 `Description` table row, industry emoji and title, requirements, and
@@ -136,13 +137,14 @@ anywhere under the example or a later review. This is deliberately a
 repository-activity heuristic: documentation and asset changes count as well
 as runtime changes. The age-only bands are `Current` through
 day 29, `Review soon` through day 59, `Review due` through day 119, `Review
-overdue` through day 239, and `Deprecated` from day 240. An authored
-`Deprecated` lifecycle applies immediately; computed deprecation never edits
-the README. Thresholds are maintained in `scripts/catalog-maintenance.json`,
-and the scheduled Pages workflow refreshes them daily. The build requires full
-Git history; a newly added, uncommitted example temporarily uses the build date
-for local preview. Maintenance status is independent of stack verification and
-is not a support or runtime-health claim.
+overdue` through day 239, and `Review critical` from day 240. An authored
+`Deprecated` lifecycle applies immediately and is the only status hidden by
+the default catalog view. Computed maintenance never edits the README.
+Thresholds are maintained in `scripts/catalog-maintenance.json`, and the
+scheduled Pages workflow refreshes them daily. The build requires full Git
+history; a newly added, uncommitted example temporarily uses the build date for
+local preview. Maintenance status is independent of stack verification and is
+not a support or runtime-health claim.
 
 ## Browser Search Contract
 
@@ -155,7 +157,7 @@ bookmarked, or created by another program:
 | `view` | `category` or `industry` | Selects which discovery dimension is active. The default is `category`. |
 | `category` | `all`, `nvidia-recipes`, `partner-recipes`, `community-recipes`, `nvidia-field-demos`, `developer-tools`, `hackathon-recipes`, or `build-a-claw-recipes` | Applies in category view. The final two values select recipes carrying the matching collection. |
 | `industry` | `all` or an industry ID published in `catalog.json` | Applies in industry view. |
-| `maintenance` | `maintained`, `all`, `current`, `review-soon`, `review-due`, `review-overdue`, or `deprecated` | Applies independently of the active browse view. `maintained` includes every nondeprecated status. |
+| `maintenance` | `maintained`, `all`, `current`, `review-soon`, `review-due`, `review-overdue`, `review-critical`, or `deprecated` | Applies independently of the active browse view. `maintained` includes every status except explicit deprecation. |
 
 Examples:
 
