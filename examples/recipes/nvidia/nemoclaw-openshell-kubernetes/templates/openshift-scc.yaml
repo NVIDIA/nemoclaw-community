@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- if and .Values.platform.openshift.enabled .Values.platform.openshift.createPrivilegedSccBinding }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "nemoclaw-openshell.fullname" . }}-sandbox-privileged-scc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+  annotations:
+    nemoclaw.nvidia.com/security-impact: privileged-scc-for-openshell-sandbox-only
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:privileged
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "nemoclaw-openshell.sandboxServiceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

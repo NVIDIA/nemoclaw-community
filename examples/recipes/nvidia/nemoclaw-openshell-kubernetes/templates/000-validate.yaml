@@ -1,0 +1,164 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- $openshift := .Values.platform.openshift -}}
+{{- if and .Release.IsUpgrade .Values.lifecycle.seed.runOnUpgrade (ne .Values.lifecycle.seed.dangerousAcknowledgement "I_ACKNOWLEDGE_SANDBOX_STOPPED") -}}
+{{- fail "lifecycle.seed.dangerousAcknowledgement must equal I_ACKNOWLEDGE_SANDBOX_STOPPED before remounting the Hermes PVC during an upgrade" -}}
+{{- end -}}
+{{- $issuerDiscovery := .Values.platform.serviceAccountIssuerDiscovery -}}
+{{- if and $issuerDiscovery.createPublicBinding (ne $issuerDiscovery.dangerousAcknowledgement "I_ACKNOWLEDGE_PUBLIC_OIDC_DISCOVERY") -}}
+{{- fail "platform.serviceAccountIssuerDiscovery.dangerousAcknowledgement must equal I_ACKNOWLEDGE_PUBLIC_OIDC_DISCOVERY before granting unauthenticated read access to OIDC discovery and public JWKS endpoints" -}}
+{{- end -}}
+{{- if and $issuerDiscovery.createPublicBinding (ne .Values.lifecycle.bootstrap.authentication.mode "serviceAccountToken") -}}
+{{- fail "platform.serviceAccountIssuerDiscovery.createPublicBinding is only valid with serviceAccountToken bootstrap authentication" -}}
+{{- end -}}
+{{- if and $openshift.createPrivilegedSccBinding (not $openshift.enabled) -}}
+{{- fail "platform.openshift.createPrivilegedSccBinding requires platform.openshift.enabled=true" -}}
+{{- end -}}
+{{- if and $openshift.createPrivilegedSccBinding (ne $openshift.dangerousAcknowledgement "I_ACKNOWLEDGE_PRIVILEGED_SCC") -}}
+{{- fail "platform.openshift.dangerousAcknowledgement must equal I_ACKNOWLEDGE_PRIVILEGED_SCC before creating the privileged SCC binding" -}}
+{{- end -}}
+{{- if $openshift.enabled -}}
+  {{- if and $openshift.verifyApi (not (.Capabilities.APIVersions.Has "security.openshift.io/v1")) -}}
+  {{- fail "platform.openshift.enabled=true requires the security.openshift.io/v1 API; use the Kubernetes defaults on a standard Kubernetes cluster" -}}
+  {{- end -}}
+  {{- if ne .Values.openshell.podSecurityContext.fsGroup nil -}}
+  {{- fail "OpenShift requires openshell.podSecurityContext.fsGroup=null so the SCC can allocate a permitted group" -}}
+  {{- end -}}
+  {{- if ne .Values.openshell.securityContext.runAsUser nil -}}
+  {{- fail "OpenShift requires openshell.securityContext.runAsUser=null so the SCC can allocate a permitted UID" -}}
+  {{- end -}}
+  {{- if .Values.openshell.server.enableUserNamespaces -}}
+  {{- fail "OpenShift requires openshell.server.enableUserNamespaces=false because this chart uses SCC-resolved identity for retained PVC subpaths" -}}
+  {{- end -}}
+{{- end -}}
+{{- if eq .Values.openshell.mode "managed" -}}
+  {{- if not .Values.openshell.enabled -}}
+  {{- fail "openshell.enabled must be true when openshell.mode=managed" -}}
+  {{- end -}}
+  {{- if and .Values.openshell.server.sandboxNamespace (ne .Values.openshell.server.sandboxNamespace .Release.Namespace) -}}
+  {{- fail "managed mode requires openshell.server.sandboxNamespace to be empty or equal the Helm release namespace because the Sandbox mounts the release PVC and reaches namespace-local proxies" -}}
+  {{- end -}}
+  {{- if ne .Values.lifecycle.bootstrap.authentication.mode "serviceAccountToken" -}}
+  {{- fail "managed Kubernetes OpenShell requires lifecycle.bootstrap.authentication.mode=serviceAccountToken because mTLS is transport-only for the Kubernetes driver" -}}
+  {{- end -}}
+  {{- if .Values.openshell.server.auth.allowUnauthenticatedUsers -}}
+  {{- fail "openshell.server.auth.allowUnauthenticatedUsers must remain false for managed production gateways" -}}
+  {{- end -}}
+{{- else if eq .Values.openshell.mode "existing" -}}
+  {{- if .Values.openshell.enabled -}}
+  {{- fail "openshell.enabled must be false when openshell.mode=existing" -}}
+  {{- end -}}
+  {{- if not .Values.openshell.existing.endpoint -}}
+  {{- fail "openshell.existing.endpoint is required when openshell.mode=existing" -}}
+  {{- end -}}
+  {{- if not (hasPrefix "https://" .Values.openshell.existing.endpoint) -}}
+  {{- fail "openshell.existing.endpoint must use https:// because bootstrap provider registration is credential-bearing" -}}
+  {{- end -}}
+  {{- if not .Values.openshell.existing.clientTLSSecretName -}}
+  {{- fail "openshell.existing.clientTLSSecretName is required when openshell.mode=existing" -}}
+  {{- end -}}
+{{- else -}}
+{{- fail "openshell.mode must be managed or existing" -}}
+{{- end -}}
+{{- $bootstrapAuth := .Values.lifecycle.bootstrap.authentication -}}
+{{- if not (has $bootstrapAuth.mode (list "serviceAccountToken" "clientTLS")) -}}
+{{- fail "lifecycle.bootstrap.authentication.mode must be serviceAccountToken or clientTLS" -}}
+{{- end -}}
+{{- if eq $bootstrapAuth.mode "serviceAccountToken" -}}
+  {{- if not .Values.openshell.server.oidc.issuer -}}
+  {{- fail "openshell.server.oidc.issuer is required for ServiceAccount token bootstrap authentication" -}}
+  {{- end -}}
+  {{- if not .Values.openshell.server.oidc.audience -}}
+  {{- fail "openshell.server.oidc.audience is required for ServiceAccount token bootstrap authentication" -}}
+  {{- end -}}
+  {{- if or
+        (ne .Values.openshell.server.oidc.rolesClaim "aud")
+        (ne .Values.openshell.server.oidc.adminRole .Values.openshell.server.oidc.audience)
+        (ne .Values.openshell.server.oidc.userRole .Values.openshell.server.oidc.audience) -}}
+  {{- fail "ServiceAccount token bootstrap requires rolesClaim=aud and both OpenShell roles equal to openshell.server.oidc.audience" -}}
+  {{- end -}}
+  {{- if and (eq .Values.openshell.server.oidc.issuer "https://kubernetes.default.svc") (ne .Values.openshell.server.oidc.caConfigMapName "kube-root-ca.crt") -}}
+  {{- fail "the in-cluster Kubernetes OIDC issuer requires openshell.server.oidc.caConfigMapName=kube-root-ca.crt" -}}
+  {{- end -}}
+{{- end -}}
+{{- if not .Values.persistence.enabled -}}
+{{- fail "persistence.enabled must remain true because Hermes state and installed skills require durable storage" -}}
+{{- end -}}
+{{- if hasPrefix "http://" .Values.agent.model.baseUrl -}}
+  {{- if not .Values.agent.model.allowInsecureHttp -}}
+  {{- fail "agent.model.allowInsecureHttp must be true before using a plaintext http:// model endpoint" -}}
+  {{- end -}}
+  {{- if ne .Values.agent.model.insecureHttpAcknowledgement "I_ACKNOWLEDGE_PLAINTEXT_MODEL_CREDENTIALS" -}}
+  {{- fail "agent.model.insecureHttpAcknowledgement must equal I_ACKNOWLEDGE_PLAINTEXT_MODEL_CREDENTIALS for a plaintext model endpoint" -}}
+  {{- end -}}
+{{- end -}}
+{{- range $name, $_ := .Values.agent.env -}}
+  {{- if regexMatch "(?i)(secret|token|password|credential|api.?key)" $name -}}
+  {{- fail (printf "agent.env.%s looks secret-bearing; use agent.model.apiKeySecretRef or a dedicated Secret reference" $name) -}}
+  {{- end -}}
+  {{- if has $name (list "NEMOCLAW_SANDBOX_NAME" "NEMOCLAW_MODEL" "NEMOCLAW_INFERENCE_PROVIDER_ID" "NEMOCLAW_UPSTREAM_PROVIDER" "NEMOCLAW_INFERENCE_BASE_URL" "NEMOCLAW_INFERENCE_API" "NEMOCLAW_CONTEXT_WINDOW" "KUBERNETES_SRE_API" "OPENSHIFT_LLM_DELETE_API" "OPENSHIFT_LLM_DELETE_NAMESPACE" "OPENSHIFT_LLM_DELETE_ALLOWED_RESOURCES") -}}
+  {{- fail (printf "agent.env.%s is chart-managed; use its dedicated values field" $name) -}}
+  {{- end -}}
+{{- end -}}
+{{- if and .Values.sre.enabled (eq .Values.sre.rbac.mode "broad-no-delete") (ne .Values.sre.rbac.dangerousAcknowledgement "I_ACKNOWLEDGE_CLUSTER_WIDE_NO_DELETE") -}}
+{{- fail "sre.rbac.dangerousAcknowledgement must equal I_ACKNOWLEDGE_CLUSTER_WIDE_NO_DELETE for broad-no-delete mode" -}}
+{{- end -}}
+{{- if not (has .Values.sre.rbac.mode (list "safe" "broad-no-delete")) -}}
+{{- fail "sre.rbac.mode must be safe or broad-no-delete" -}}
+{{- end -}}
+{{- $deletion := .Values.sre.openshiftLlmDeploy.deletion -}}
+{{- if and $deletion.enabled (not .Values.sre.enabled) -}}
+{{- fail "sre.openshiftLlmDeploy.deletion.enabled requires sre.enabled=true" -}}
+{{- end -}}
+{{- if and $deletion.enabled (not .Values.sre.openshiftLlmDeploy.enabled) -}}
+{{- fail "sre.openshiftLlmDeploy.deletion.enabled requires sre.openshiftLlmDeploy.enabled=true" -}}
+{{- end -}}
+{{- if and $deletion.enabled (not $deletion.namespace) -}}
+{{- fail "sre.openshiftLlmDeploy.deletion.namespace is required when namespace-scoped model deletion is enabled" -}}
+{{- end -}}
+{{- if and $deletion.enabled (eq (len $deletion.allowedResources) 0) -}}
+{{- fail "sre.openshiftLlmDeploy.deletion.allowedResources must contain at least one exact apiGroup/resource/name tuple" -}}
+{{- end -}}
+{{- if and $deletion.enabled (ne $deletion.dangerousAcknowledgement "I_ACKNOWLEDGE_NAMESPACE_MODEL_DELETE") -}}
+{{- fail "sre.openshiftLlmDeploy.deletion.dangerousAcknowledgement must equal I_ACKNOWLEDGE_NAMESPACE_MODEL_DELETE" -}}
+{{- end }}
+{{- $supportedDeletes := list
+      "serving.kserve.io/inferenceservices"
+      "serving.kserve.io/servingruntimes"
+      "nim.opendatahub.io/nimservices"
+      "nim.opendatahub.io/nimcaches"
+      "nim.opendatahub.io/nimpipelines"
+      "apps/deployments"
+      "apps/statefulsets"
+      "apps/replicasets"
+      "batch/jobs"
+      "/services"
+      "/configmaps"
+      "/persistentvolumeclaims"
+      "/secrets"
+      "route.openshift.io/routes"
+      "networking.k8s.io/ingresses"
+-}}
+{{- range $resource := $deletion.allowedResources -}}
+  {{- $tuple := printf "%s/%s" $resource.apiGroup $resource.resource -}}
+  {{- if not (has $tuple $supportedDeletes) -}}
+  {{- fail (printf "unsupported model deletion tuple %s" $tuple) -}}
+  {{- end -}}
+  {{- if and (eq $resource.resource "persistentvolumeclaims") (not $deletion.deletePVCs) -}}
+  {{- fail "persistentvolumeclaims in allowedResources requires deletion.deletePVCs=true" -}}
+  {{- end -}}
+  {{- if and (eq $resource.resource "secrets") (not $deletion.deleteSecrets) -}}
+  {{- fail "secrets in allowedResources requires deletion.deleteSecrets=true" -}}
+  {{- end -}}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nemoclaw-openshell.fullname" . }}-contract
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+data:
+  platform: {{ ternary "openshift" "kubernetes" $openshift.enabled | quote }}
+  openshellMode: {{ .Values.openshell.mode | quote }}
+  agentImage: {{ .Values.agent.image.multiarch | quote }}

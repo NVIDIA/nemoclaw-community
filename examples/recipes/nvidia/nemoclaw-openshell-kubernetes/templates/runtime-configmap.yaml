@@ -1,0 +1,109 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- $fullname := include "nemoclaw-openshell.fullname" . -}}
+{{- $claimName := include "nemoclaw-openshell.stateClaimName" . -}}
+{{- $agentEnv := dict -}}
+{{- range $key, $value := .Values.agent.env -}}
+  {{- $_ := set $agentEnv $key (toString $value) -}}
+{{- end -}}
+{{- if .Values.sre.enabled -}}
+  {{- $_ := set $agentEnv "KUBERNETES_SRE_API" (printf "http://%s.%s.svc.cluster.local:%d" (include "nemoclaw-openshell.sreProxyName" .) .Release.Namespace (int .Values.sre.proxy.port)) -}}
+{{- end -}}
+{{- if .Values.sre.openshiftLlmDeploy.deletion.enabled -}}
+  {{- $_ := set $agentEnv "OPENSHIFT_LLM_DELETE_API" (printf "http://%s.%s.svc.cluster.local:%d" (include "nemoclaw-openshell.modelDeleteProxyName" .) .Release.Namespace (int .Values.sre.proxy.port)) -}}
+  {{- $_ := set $agentEnv "OPENSHIFT_LLM_DELETE_NAMESPACE" .Values.sre.openshiftLlmDeploy.deletion.namespace -}}
+  {{- $_ := set $agentEnv "OPENSHIFT_LLM_DELETE_ALLOWED_RESOURCES" (toJson .Values.sre.openshiftLlmDeploy.deletion.allowedResources) -}}
+{{- end -}}
+{{- $pod := dict "node_selector" .Values.agent.sandbox.nodeSelector "tolerations" .Values.agent.sandbox.tolerations -}}
+{{- if .Values.agent.sandbox.runtimeClassName -}}
+  {{- $_ := set $pod "runtime_class_name" .Values.agent.sandbox.runtimeClassName -}}
+{{- end -}}
+{{- if .Values.agent.sandbox.priorityClassName -}}
+  {{- $_ := set $pod "priority_class_name" .Values.agent.sandbox.priorityClassName -}}
+{{- end -}}
+{{- $mounts := list
+      (dict "name" "hermes-state" "mount_path" "/sandbox/workspace" "sub_path" "workspace" "read_only" false)
+-}}
+{{- if .Values.sre.enabled -}}
+  {{- $mounts = append $mounts (dict "name" "hermes-state" "mount_path" "/sandbox/.hermes/skills/kubernetes-sre" "sub_path" "hermes/skills/kubernetes-sre" "read_only" true) -}}
+  {{- $mounts = append $mounts (dict "name" "hermes-state" "mount_path" "/sandbox/.hermes/.sre-proxy-token" "sub_path" "hermes/.sre-proxy-token" "read_only" true) -}}
+{{- end -}}
+{{- if .Values.sre.openshiftLlmDeploy.deletion.enabled -}}
+  {{- $mounts = append $mounts (dict "name" "hermes-state" "mount_path" "/sandbox/.hermes/skills/openshift-llm-deploy" "sub_path" "hermes/skills/openshift-llm-deploy" "read_only" true) -}}
+{{- end -}}
+{{- $agentContainer := dict "resources" .Values.agent.sandbox.resources "volume_mounts" $mounts -}}
+{{- $volume := dict "name" "hermes-state" "persistent_volume_claim" (dict "claim_name" $claimName "read_only" false) -}}
+{{- $driverConfig := dict "kubernetes" (dict "pod" $pod "containers" (dict "agent" $agentContainer) "volumes" (list $volume)) -}}
+{{- $imageDigest := last (splitList "@sha256:" .Values.agent.image.multiarch) -}}
+{{- $model := dict
+      "providerName" (include "nemoclaw-openshell.providerName" .)
+      "providerType" .Values.agent.model.providerType
+      "name" .Values.agent.model.name
+      "baseUrl" .Values.agent.model.baseUrl
+      "api" .Values.agent.model.api
+      "contextWindow" .Values.agent.model.contextWindow
+      "requestTimeoutSeconds" .Values.agent.model.requestTimeoutSeconds
+      "verifyEndpoint" .Values.agent.model.verifyEndpoint
+-}}
+{{- $policy := include "nemoclaw-openshell.policy" . -}}
+{{- $configIdentity := dict
+      "agentImage" .Values.agent.image.multiarch
+      "agentEnv" $agentEnv
+      "model" $model
+      "sandbox" .Values.agent.sandbox
+      "driverConfig" $driverConfig
+      "policy" $policy
+      "openshellMode" .Values.openshell.mode
+-}}
+{{- $configId := sha256sum (toJson $configIdentity) | trunc 63 -}}
+{{- $labels := dict
+      "nemoclaw.nvidia.com/release" (.Release.Name | trunc 63 | trimSuffix "-")
+      "nemoclaw.nvidia.com/image-id" ($imageDigest | trunc 32)
+      "nemoclaw.nvidia.com/config-id" $configId
+      "nemoclaw.nvidia.com/managed-by" "helm"
+-}}
+{{- if eq .Values.openshell.mode "existing" -}}
+  {{- $_ := set $labels "nemoclaw.nvidia.com/release-id" (printf "%s/%s" .Release.Namespace .Release.Name | sha256sum | trunc 32) -}}
+{{- end -}}
+{{- $config := dict
+      "releaseId" (printf "%s/%s" .Release.Namespace .Release.Name)
+      "sandboxName" (include "nemoclaw-openshell.agentName" .)
+      "agentImage" .Values.agent.image.multiarch
+      "agentEnv" $agentEnv
+      "model" $model
+      "sandbox" .Values.agent.sandbox
+      "driverConfig" $driverConfig
+      "labels" $labels
+}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullname }}-runtime
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+data:
+  stage_cli.py: |
+    {{- .Files.Get "files/scripts/stage_cli.py" | nindent 4 }}
+  seed.py: |
+    {{- .Files.Get "files/scripts/seed.py" | nindent 4 }}
+  wait_seed.py: |
+    {{- .Files.Get "files/scripts/wait_seed.py" | nindent 4 }}
+  bootstrap.py: |
+    {{- .Files.Get "files/scripts/bootstrap.py" | nindent 4 }}
+  {{- if .Values.sre.enabled }}
+  api_proxy.py: |
+    {{- .Files.Get "files/scripts/api_proxy.py" | nindent 4 }}
+  {{- end }}
+  bootstrap-config.json: |
+    {{- $config | toPrettyJson | nindent 4 }}
+  {{- if .Values.sre.enabled }}
+  kubernetes-sre-SKILL.md: |
+    {{- .Files.Get "files/skills/kubernetes-sre/SKILL.md" | nindent 4 }}
+  {{- end }}
+  {{- if .Values.sre.openshiftLlmDeploy.deletion.enabled }}
+  openshift-llm-deploy-SKILL.md: |
+    {{- .Files.Get "files/skills/openshift-llm-deploy/SKILL.md" | nindent 4 }}
+  {{- end }}
+  policy.yaml: |
+    {{- $policy | nindent 4 }}

@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- if .Values.sre.openshiftLlmDeploy.deletion.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "nemoclaw-openshell.modelDeleteProxyName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "nemoclaw-openshell.modelDeleteProxyName" . }}
+  namespace: {{ .Values.sre.openshiftLlmDeploy.deletion.namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+rules:
+  # Discovery remains read-only and deliberately excludes Secret/PVC content.
+  - apiGroups: ["serving.kserve.io"]
+    resources: ["inferenceservices", "servingruntimes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["nim.opendatahub.io"]
+    resources: ["nimservices", "nimcaches", "nimpipelines"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["services", "configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["route.openshift.io"]
+    resources: ["routes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch"]
+  # Each destructive authorization is an exact operator-approved
+  # API-group/resource/name tuple. Namespace scope alone is not ownership.
+  {{- range .Values.sre.openshiftLlmDeploy.deletion.allowedResources }}
+  - apiGroups: [{{ .apiGroup | quote }}]
+    resources: [{{ .resource | quote }}]
+    resourceNames: [{{ .name | quote }}]
+    verbs: ["delete"]
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "nemoclaw-openshell.modelDeleteProxyName" . }}
+  namespace: {{ .Values.sre.openshiftLlmDeploy.deletion.namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "nemoclaw-openshell.modelDeleteProxyName" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "nemoclaw-openshell.modelDeleteProxyName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

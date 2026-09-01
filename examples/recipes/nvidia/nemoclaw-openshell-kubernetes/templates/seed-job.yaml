@@ -1,0 +1,120 @@
+{{- if and .Values.lifecycle.seed.enabled (or (not .Release.IsUpgrade) .Values.lifecycle.seed.runOnUpgrade) }}
+{{- $seedSuffix := printf "-seed-%d" .Release.Revision }}
+{{- $seedPrefix := trunc (int (sub 63 (len $seedSuffix))) (include "nemoclaw-openshell.fullname" .) | trimSuffix "-" }}
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: batch/v1
+kind: Job
+metadata:
+  # This Job is deliberately a normal Helm resource, not a post-install hook.
+  # Its Pod is the first consumer that allows WaitForFirstConsumer storage
+  # classes to bind the retained state PVC before Helm runs post-install hooks.
+  name: {{ printf "%s%s" $seedPrefix $seedSuffix }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+spec:
+  backoffLimit: {{ .Values.lifecycle.seed.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.lifecycle.seed.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.lifecycle.seed.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemoclaw-openshell.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: state-seed
+      {{- if .Values.platform.openshift.enabled }}
+      annotations:
+        openshift.io/required-scc: restricted-v2
+      {{- end }}
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "nemoclaw-openshell.lifecycleServiceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        {{- if not .Values.platform.openshift.enabled }}
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: seed
+          image: {{ .Values.artifacts.utilityImage | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/python3", "-B", "/runtime/seed.py"]
+          env:
+            - name: RELEASE_ID
+              value: {{ printf "%s/%s" .Release.Namespace .Release.Name | quote }}
+            - name: RELEASE_REVISION
+              value: {{ .Release.Revision | quote }}
+            - name: SRE_ENABLED
+              value: {{ .Values.sre.enabled | quote }}
+            - name: MODEL_DELETE_ENABLED
+              value: {{ .Values.sre.openshiftLlmDeploy.deletion.enabled | quote }}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: state
+              mountPath: /state
+            - name: runtime
+              mountPath: /runtime
+              readOnly: true
+            {{- if or .Values.sre.enabled .Values.sre.openshiftLlmDeploy.deletion.enabled }}
+            - name: skill-source
+              mountPath: /source
+              readOnly: true
+            {{- end }}
+            {{- if .Values.sre.enabled }}
+            - name: proxy-auth
+              mountPath: /proxy-auth
+              readOnly: true
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: {{ include "nemoclaw-openshell.stateClaimName" . }}
+        - name: runtime
+          configMap:
+            name: {{ include "nemoclaw-openshell.fullname" . }}-runtime
+            defaultMode: 0444
+            items:
+              - key: seed.py
+                path: seed.py
+        {{- if or .Values.sre.enabled .Values.sre.openshiftLlmDeploy.deletion.enabled }}
+        - name: skill-source
+          configMap:
+            name: {{ include "nemoclaw-openshell.fullname" . }}-runtime
+            defaultMode: 0444
+            items:
+              {{- if .Values.sre.enabled }}
+              - key: kubernetes-sre-SKILL.md
+                path: kubernetes-sre/SKILL.md
+              {{- end }}
+              {{- if .Values.sre.openshiftLlmDeploy.deletion.enabled }}
+              - key: openshift-llm-deploy-SKILL.md
+                path: openshift-llm-deploy/SKILL.md
+              {{- end }}
+        {{- end }}
+        {{- if .Values.sre.enabled }}
+        - name: proxy-auth
+          secret:
+            secretName: {{ include "nemoclaw-openshell.proxyAuthSecretName" . }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.sre.proxy.authSecretRef.key | quote }}
+                path: token
+        {{- end }}
+        - name: tmp
+          emptyDir: {}
+{{- end }}

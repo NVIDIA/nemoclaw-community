@@ -1,0 +1,216 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- $seedRuns := and .Values.lifecycle.seed.enabled (or (not .Release.IsUpgrade) .Values.lifecycle.seed.runOnUpgrade) }}
+{{- if .Values.lifecycle.bootstrap.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "nemoclaw-openshell.fullname" . }}-bootstrap
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "10"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.lifecycle.bootstrap.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.lifecycle.bootstrap.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.lifecycle.bootstrap.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemoclaw-openshell.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: bootstrap
+      {{- if .Values.platform.openshift.enabled }}
+      annotations:
+        openshift.io/required-scc: restricted-v2
+      {{- end }}
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "nemoclaw-openshell.lifecycleServiceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        {{- if not .Values.platform.openshift.enabled }}
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        {{- if $seedRuns }}
+        - name: wait-for-state-seed
+          image: {{ .Values.artifacts.utilityImage | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/python3", "-B", "/runtime/wait_seed.py"]
+          env:
+            - name: RELEASE_ID
+              value: {{ printf "%s/%s" .Release.Namespace .Release.Name | quote }}
+            - name: RELEASE_REVISION
+              value: {{ .Release.Revision | quote }}
+            - name: SEED_WAIT_TIMEOUT_SECONDS
+              value: {{ .Values.lifecycle.seed.activeDeadlineSeconds | quote }}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: runtime
+              mountPath: /runtime
+              readOnly: true
+            # Some CSI drivers require a read-write device mount while running
+            # filesystem permission and resize setup. Only this init container
+            # receives the state volume; the bootstrap container cannot access it.
+            - name: state
+              mountPath: /state
+            - name: tmp
+              mountPath: /tmp
+        {{- end }}
+
+        - name: stage-openshell-cli
+          image: {{ .Values.artifacts.utilityImage | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/python3", "-B", "/runtime/stage_cli.py"]
+          env:
+            - name: OPENSHELL_CLI_VERSION
+              value: {{ .Values.artifacts.openshellCli.version | quote }}
+            - name: OPENSHELL_CLI_AMD64_URL
+              value: {{ .Values.artifacts.openshellCli.amd64.url | quote }}
+            - name: OPENSHELL_CLI_AMD64_SHA256
+              value: {{ .Values.artifacts.openshellCli.amd64.sha256 | quote }}
+            - name: OPENSHELL_CLI_ARM64_URL
+              value: {{ .Values.artifacts.openshellCli.arm64.url | quote }}
+            - name: OPENSHELL_CLI_ARM64_SHA256
+              value: {{ .Values.artifacts.openshellCli.arm64.sha256 | quote }}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: runtime
+              mountPath: /runtime
+              readOnly: true
+            - name: tools
+              mountPath: /tools
+            - name: tmp
+              mountPath: /tmp
+      containers:
+        - name: bootstrap
+          image: {{ .Values.artifacts.utilityImage | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/python3", "-B", "/runtime/bootstrap.py"]
+          env:
+            - name: OPENSHELL_GATEWAY
+              value: {{ include "nemoclaw-openshell.gatewayName" . | quote }}
+            - name: OPENSHELL_GATEWAY_ENDPOINT
+              value: {{ include "nemoclaw-openshell.gatewayEndpoint" . | quote }}
+            - name: OPENSHELL_WORKSPACE
+              value: default
+            - name: XDG_CONFIG_HOME
+              value: /cli-config
+            - name: OPENSHELL_CLIENT_TLS_SOURCE
+              value: /client-tls
+            - name: OPENSHELL_BOOTSTRAP_AUTH_MODE
+              value: {{ .Values.lifecycle.bootstrap.authentication.mode | quote }}
+            {{- if eq .Values.lifecycle.bootstrap.authentication.mode "serviceAccountToken" }}
+            - name: OPENSHELL_OIDC_ISSUER
+              value: {{ .Values.openshell.server.oidc.issuer | quote }}
+            - name: OPENSHELL_OIDC_AUDIENCE
+              value: {{ .Values.openshell.server.oidc.audience | quote }}
+            - name: OPENSHELL_SERVICE_ACCOUNT_TOKEN
+              value: /var/run/secrets/openshell-bootstrap/token
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_SERVICE_ACCOUNT
+              value: {{ include "nemoclaw-openshell.lifecycleServiceAccountName" . | quote }}
+            {{- end }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.agent.model.apiKeySecretRef.name }}
+                  key: {{ .Values.agent.model.apiKeySecretRef.key }}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: runtime
+              mountPath: /runtime
+              readOnly: true
+            - name: tools
+              mountPath: /tools
+              readOnly: true
+            - name: cli-config
+              mountPath: /cli-config
+            - name: client-tls
+              mountPath: /client-tls
+              readOnly: true
+            {{- if eq .Values.lifecycle.bootstrap.authentication.mode "serviceAccountToken" }}
+            - name: openshell-bootstrap-token
+              mountPath: /var/run/secrets/openshell-bootstrap
+              readOnly: true
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: runtime
+          configMap:
+            name: {{ include "nemoclaw-openshell.fullname" . }}-runtime
+            defaultMode: 0444
+            items:
+              - key: wait_seed.py
+                path: wait_seed.py
+              - key: stage_cli.py
+                path: stage_cli.py
+              - key: bootstrap.py
+                path: bootstrap.py
+              - key: bootstrap-config.json
+                path: bootstrap-config.json
+              - key: policy.yaml
+                path: policy.yaml
+        - name: tools
+          emptyDir: {}
+        - name: cli-config
+          emptyDir: {}
+        - name: client-tls
+          secret:
+            secretName: {{ include "nemoclaw-openshell.clientTLSSecretName" . }}
+            defaultMode: 0400
+            items:
+              - key: ca.crt
+                path: ca.crt
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key
+        {{- if $seedRuns }}
+        - name: state
+          persistentVolumeClaim:
+            claimName: {{ include "nemoclaw-openshell.stateClaimName" . }}
+        {{- end }}
+        {{- if eq .Values.lifecycle.bootstrap.authentication.mode "serviceAccountToken" }}
+        - name: openshell-bootstrap-token
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  audience: {{ .Values.openshell.server.oidc.audience | quote }}
+                  expirationSeconds: {{ .Values.lifecycle.bootstrap.authentication.tokenExpirationSeconds }}
+                  path: token
+        {{- end }}
+        - name: tmp
+          emptyDir: {}
+{{- end }}

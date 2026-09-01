@@ -1,0 +1,277 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Kubernetes is the default platform. OpenShift behavior is opt-in and is never
+# inferred from API discovery so that the rendered release remains deterministic.
+platform:
+  # OpenShell's OIDC client fetches discovery/JWKS without Kubernetes API
+  # credentials. Kubernetes permits administrators to expose these public-key
+  # endpoints to unauthenticated relying parties. This is opt-in and narrow.
+  serviceAccountIssuerDiscovery:
+    createPublicBinding: false
+    dangerousAcknowledgement: ""
+  openshift:
+    enabled: false
+    # Fail install/template when the OpenShift security API is unavailable.
+    # Set false only for offline `helm lint`, which cannot inject API versions.
+    verifyApi: true
+    # Creates only the privileged SCC RoleBinding required by the OpenShell
+    # sandbox supervisor. It never grants cluster-admin.
+    createPrivilegedSccBinding: false
+    dangerousAcknowledgement: ""
+
+imagePullSecrets: []
+
+agent:
+  image:
+    # Official multi-architecture NemoClaw-managed Hermes v0.0.117 image.
+    multiarch: ghcr.io/nvidia/nemoclaw/hermes-sandbox@sha256:bcc2704ae28755fa0b9a1b5314f9438e614ca7a87e26ee401f32e3b6ecdf427d
+    pullPolicy: IfNotPresent
+  model:
+    # Empty derives a release-scoped name. Existing-gateway mode also includes
+    # a namespace/release hash so shared gateways do not cross-mutate providers.
+    # Any explicit override must be globally unique within that gateway.
+    providerName: ""
+    providerType: openai
+    name: nvidia/nemotron-3-super-120b-a12b
+    baseUrl: https://integrate.api.nvidia.com/v1
+    # Plain HTTP sends the model credential without transport encryption and
+    # is rejected unless both fields below explicitly acknowledge that risk.
+    allowInsecureHttp: false
+    insecureHttpAcknowledgement: ""
+    api: openai-completions
+    contextWindow: 131072
+    requestTimeoutSeconds: 300
+    verifyEndpoint: true
+    apiKeySecretRef:
+      name: model-api-key
+      key: api-key
+  # Non-secret environment variables passed to Hermes. Secret-like names are
+  # rejected; use model.apiKeySecretRef for the model credential.
+  env: {}
+  sandbox:
+    # Empty derives a name within OpenShell's 19-character limit. On a shared
+    # existing gateway the default is namespace-scoped. Explicit overrides must
+    # be globally unique within that gateway.
+    name: ""
+    cpu: "2"
+    memory: 8Gi
+    runtimeClassName: ""
+    nodeSelector: {}
+    tolerations: []
+    priorityClassName: ""
+    resources:
+      requests: {}
+      limits: {}
+
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 5Gi
+  retainOnDelete: true
+
+# The upstream OpenShell StatefulSet does not currently expose a StorageClass
+# value for its SQLite volumeClaimTemplate. The umbrella chart pre-creates the
+# claims by their deterministic StatefulSet names so clusters without a default
+# StorageClass can still deploy. An empty storageClass inherits
+# persistence.storageClass, then falls back to the cluster default.
+gatewayPersistence:
+  enabled: true
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 1Gi
+  retainOnDelete: true
+
+artifacts:
+  # Buildless helper used to stage the architecture-specific OpenShell CLI and
+  # run authenticated API proxies. This helper is an immutable multi-arch digest.
+  utilityImage: docker.io/library/python:3.13.7-slim@sha256:5f55cdf0c5d9dc1a415637a5ccc4a9e18663ad203673173b8cda8f8dcacef689
+  openshellCli:
+    version: 0.0.116
+    amd64:
+      url: https://github.com/NVIDIA/OpenShell/releases/download/v0.0.116/openshell-x86_64-unknown-linux-musl.tar.gz
+      sha256: 4fb4476d80a1875a0b83547ec3aba999cf0a2e2d75f95f2f709b622e2103520e
+    arm64:
+      url: https://github.com/NVIDIA/OpenShell/releases/download/v0.0.116/openshell-aarch64-unknown-linux-musl.tar.gz
+      sha256: 7a949c48d1e000cd280869eea1e203e24816b9cfefc575b68a8b72b939cb3f43
+
+lifecycle:
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+  seed:
+    enabled: true
+    # Normal upgrades must not remount the live sandbox RWO PVC. To reseed
+    # chart-managed skills, stop/delete the sandbox first and explicitly opt in.
+    runOnUpgrade: false
+    dangerousAcknowledgement: ""
+    backoffLimit: 2
+    activeDeadlineSeconds: 300
+    ttlSecondsAfterFinished: 600
+  bootstrap:
+    enabled: true
+    backoffLimit: 3
+    activeDeadlineSeconds: 900
+    ttlSecondsAfterFinished: 600
+    authentication:
+      # Managed Kubernetes gateways use a short-lived projected ServiceAccount
+      # token as the OpenShell OIDC bearer identity. Existing gateways can use
+      # clientTLS when their operator has enabled mTLS user authentication.
+      mode: serviceAccountToken
+      tokenExpirationSeconds: 900
+  sanity:
+    enabled: false
+    command:
+      - hermes
+      - --version
+
+sre:
+  enabled: false
+  rbac:
+    # safe: read common non-secret resources cluster-wide and scale only
+    # Deployments/StatefulSets. Full workload patches are intentionally denied.
+    # broad-no-delete: all API groups/resources/verbs except delete operations.
+    mode: safe
+    dangerousAcknowledgement: ""
+  proxy:
+    port: 8001
+    # Empty name creates a random chart-managed Secret and preserves it across
+    # upgrades with Helm lookup. Set a name to reference an operator Secret.
+    authSecretRef:
+      name: ""
+      key: token
+    maxRequestBytes: 10485760
+    maxResponseBytes: 33554432
+    requestTimeoutSeconds: 30
+  openshiftLlmDeploy:
+    enabled: false
+    deletion:
+      enabled: false
+      namespace: ""
+      deletePVCs: false
+      deleteSecrets: false
+      # Exact API-group/resource/name tuples authorized for deletion. The chart
+      # has no implicit ownership heuristic, so this must be operator supplied.
+      allowedResources: []
+      dangerousAcknowledgement: ""
+
+networkPolicy:
+  enabled: true
+
+# Official OpenShell chart. Managed mode installs it; existing mode consumes an
+# already-running gateway and requires openshell.enabled=false.
+openshell:
+  enabled: true
+  mode: managed
+  existing:
+    endpoint: ""
+    name: existing-openshell
+    clientTLSSecretName: openshell-client-tls
+  image:
+    repository: ghcr.io/nvidia/openshell/gateway
+    pullPolicy: IfNotPresent
+    tag: "0.0.116@sha256:05cf77bbb022a739aed6f22daa0e7e164415f4ab273b5f84319e46d91eb8f645"
+  supervisor:
+    image:
+      repository: ghcr.io/nvidia/openshell/supervisor
+      pullPolicy: IfNotPresent
+      tag: "0.0.116@sha256:c8c42aef16c200063e32cbf72e553e4ead027085427b555efafd95063ecead42"
+    sideloadMethod: init-container
+    topology: combined
+  serviceAccount:
+    create: true
+    annotations: {}
+    name: ""
+  sandboxServiceAccount:
+    create: true
+    annotations: {}
+    name: ""
+  podSecurityContext:
+    fsGroup: 1000
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
+    seccompProfile:
+      type: RuntimeDefault
+    capabilities:
+      drop:
+        - ALL
+  agentSandbox:
+    preflight:
+      enabled: true
+  networkPolicy:
+    enabled: true
+  service:
+    type: ClusterIP
+    port: 8080
+    healthPort: 8081
+    metricsPort: 9090
+  server:
+    telemetryEnabled: true
+    sandboxNamespace: ""
+    sandboxImage: ghcr.io/nvidia/nemoclaw/hermes-sandbox@sha256:bcc2704ae28755fa0b9a1b5314f9438e614ca7a87e26ee401f32e3b6ecdf427d
+    sandboxImagePullPolicy: IfNotPresent
+    workspaceDefaultStorageSize: 5Gi
+    workspaceStorageClass: ""
+    defaultRuntimeClassName: ""
+    enableUserNamespaces: false
+    appArmorProfile: Unconfined
+    policyValidationFailureMode: fail_closed
+    drivers:
+      kubernetes:
+        workspaceMode: shared
+    auth:
+      allowUnauthenticatedUsers: false
+    # The Kubernetes API ServiceAccount issuer is the portable default for
+    # bootstrap authentication. Override issuer on clusters that publish a
+    # different value from /.well-known/openid-configuration.
+    oidc:
+      issuer: https://kubernetes.default.svc
+      audience: openshell-cli
+      jwksTtl: 3600
+      # Kubernetes projected tokens expose the requested audience as an array.
+      # Mapping that same validated audience to both OpenShell roles works
+      # around the 0.0.116 chart's inability to render explicit empty roles.
+      rolesClaim: aud
+      adminRole: openshell-cli
+      userRole: openshell-cli
+      scopesClaim: ""
+      caConfigMapName: kube-root-ca.crt
+    tls:
+      certSecretName: openshell-server-tls
+      clientCaSecretName: openshell-server-client-ca
+      clientTlsSecretName: openshell-client-tls
+    credentialStorage:
+      existingSecret: ""
+    credentialDrivers:
+      kubernetesSecrets:
+        enabled: false
+        namespace: ""
+        allowReferenceNamespace: false
+        rbac:
+          create: true
+      vault:
+        enabled: false
+        address: ""
+        mount: secret
+        kvVersion: "2"
+        authMethod: kubernetes
+        role: ""
+        kubernetesAuthMount: kubernetes
+        serviceAccountTokenPath: /var/run/secrets/kubernetes.io/serviceaccount/token
+        tokenPath: ""
+        timeoutSecs: ""
+  pkiInitJob:
+    enabled: true
+    serverDnsNames: []
+    serverIpAddresses: []
+  certManager:
+    enabled: false
+  openshiftRoute:
+    enabled: false

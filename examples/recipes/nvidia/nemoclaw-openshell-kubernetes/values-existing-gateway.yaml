@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Use an operator-managed OpenShell gateway instead of installing the dependency.
+# Default sandbox and model-provider names include a hash of namespace/release.
+# If overriding either name, keep it globally unique within the shared gateway.
+openshell:
+  enabled: false
+  mode: existing
+  existing:
+    endpoint: https://openshell.example.svc.cluster.local:8080
+    name: existing-openshell
+    clientTLSSecretName: openshell-client-tls
+
+lifecycle:
+  bootstrap:
+    authentication:
+      mode: clientTLS

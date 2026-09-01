@@ -1,0 +1,97 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- if .Values.sre.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "nemoclaw-openshell.sreProxyName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "nemoclaw-openshell.clusterResourceName" . }}-sre
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+  annotations:
+    nemoclaw.nvidia.com/delete-access: "false"
+    nemoclaw.nvidia.com/rbac-mode: {{ .Values.sre.rbac.mode | quote }}
+rules:
+  {{- if eq .Values.sre.rbac.mode "broad-no-delete" }}
+  # High-risk opt-in. Explicit enumeration intentionally excludes delete,
+  # deletecollection, bind, escalate, impersonate, approve, sign, and use.
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "patch", "update"]
+  - nonResourceURLs: ["/healthz", "/livez", "/readyz", "/version", "/apis", "/apis/*", "/api", "/api/*"]
+    verbs: ["get"]
+  {{- else }}
+  - apiGroups: [""]
+    resources:
+      - namespaces
+      - nodes
+      - pods
+      - pods/log
+      - services
+      - endpoints
+      - events
+      - configmaps
+      - persistentvolumeclaims
+      - persistentvolumes
+      - resourcequotas
+      - limitranges
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  # Safe mutations are restricted to scale subresources. Full controller
+  # patches can replace images, commands, or ServiceAccounts and are excluded.
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale", "statefulsets/scale"]
+    verbs: ["get", "patch", "update"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["route.openshift.io"]
+    resources: ["routes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps.openshift.io"]
+    resources: ["deploymentconfigs"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["serving.kserve.io"]
+    resources: ["inferenceservices", "servingruntimes", "clusterservingruntimes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["nim.opendatahub.io"]
+    resources: ["nimservices", "nimcaches", "nimpipelines"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
+  - nonResourceURLs: ["/healthz", "/livez", "/readyz", "/version", "/apis", "/apis/*", "/api", "/api/*"]
+    verbs: ["get"]
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "nemoclaw-openshell.clusterResourceName" . }}-sre
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "nemoclaw-openshell.clusterResourceName" . }}-sre
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "nemoclaw-openshell.sreProxyName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

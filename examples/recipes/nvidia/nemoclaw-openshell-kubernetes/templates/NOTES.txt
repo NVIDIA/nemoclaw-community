@@ -1,0 +1,23 @@
+NemoClaw Hermes is configured through OpenShell.
+
+Platform: {{ ternary "OpenShift" "Kubernetes" .Values.platform.openshift.enabled }}
+Sandbox: {{ include "nemoclaw-openshell.agentName" . }}
+Immutable agent image: {{ .Values.agent.image.multiarch }}
+
+Inspect:
+  openshell sandbox get {{ include "nemoclaw-openshell.agentName" . }}
+
+The chart intentionally does not render a Sandbox object and does not delete the
+sandbox or retained Hermes PVC during uninstall. Use OpenShell for reviewed
+sandbox lifecycle operations.
+{{- if .Values.sre.enabled }}
+
+SRE mode: {{ .Values.sre.rbac.mode }} (DELETE denied)
+Safe mode writes are limited to Deployment/StatefulSet scale subresources.
+Proxy access requires the chart-managed sandbox bearer token.
+{{- end }}
+{{- if not .Values.platform.openshift.enabled }}
+
+The operator must ensure the Sandbox namespace's admission policy permits the
+OpenShell combined supervisor; the chart does not modify namespace PSA labels.
+{{- end }}

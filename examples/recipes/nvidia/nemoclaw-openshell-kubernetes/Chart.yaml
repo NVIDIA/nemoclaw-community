@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v2
+name: nemoclaw-openshell-kubernetes
+description: Run the official NemoClaw-managed Hermes image through OpenShell on Kubernetes
+type: application
+version: 0.1.1
+appVersion: "0.0.117"
+dependencies:
+  - name: helm-chart
+    alias: openshell
+    version: "0.0.116"
+    repository: oci://ghcr.io/nvidia/openshell
+    condition: openshell.enabled

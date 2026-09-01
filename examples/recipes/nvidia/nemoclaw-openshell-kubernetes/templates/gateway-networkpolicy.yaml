@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- if and .Values.networkPolicy.enabled (eq .Values.openshell.mode "managed") }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "nemoclaw-openshell.fullname" . }}-gateway-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: openshell
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        # Projected ServiceAccount OIDC bootstrap caller. A podSelector without
+        # a namespaceSelector is deliberately restricted to this namespace.
+        - podSelector:
+            matchLabels:
+              {{- include "nemoclaw-openshell.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: bootstrap
+        # Agent Sandbox controller Pods authenticate with gateway-minted JWTs.
+        # The controller does not currently copy OpenShell labels from the
+        # Sandbox object to its Pod, but it always adds this selector label.
+        - podSelector:
+            matchExpressions:
+              - key: agents.x-k8s.io/sandbox-name-hash
+                operator: Exists
+      ports:
+        - protocol: TCP
+          port: {{ .Values.openshell.service.port }}
+{{- end }}

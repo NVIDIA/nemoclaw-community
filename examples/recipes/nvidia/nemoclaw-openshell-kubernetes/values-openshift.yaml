@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Explicit OpenShift profile. The acknowledgement is required because the
+# OpenShell combined supervisor currently needs privileged SCC.
+platform:
+  serviceAccountIssuerDiscovery:
+    createPublicBinding: true
+    dangerousAcknowledgement: I_ACKNOWLEDGE_PUBLIC_OIDC_DISCOVERY
+  openshift:
+    enabled: true
+    createPrivilegedSccBinding: true
+    dangerousAcknowledgement: I_ACKNOWLEDGE_PRIVILEGED_SCC
+
+# OpenShift SCC allocates namespace-valid IDs. Do not pin Kubernetes UID/GID.
+openshell:
+  podSecurityContext:
+    fsGroup: null
+  securityContext:
+    runAsUser: null
+  server:
+    # OpenShell resolves the namespace SCC UID range. User namespaces would
+    # introduce a second identity mapping across retained CSI subpath mounts.
+    enableUserNamespaces: false

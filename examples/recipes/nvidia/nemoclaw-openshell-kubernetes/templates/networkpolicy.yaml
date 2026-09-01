@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- if and .Values.networkPolicy.enabled .Values.sre.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "nemoclaw-openshell.sreProxyName" . }}-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: sre-proxy
+      {{- include "nemoclaw-openshell.selectorLabels" . | nindent 6 }}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              openshell.ai/managed-by: openshell
+      ports:
+        - protocol: TCP
+          port: {{ .Values.sre.proxy.port }}
+{{- if .Values.sre.openshiftLlmDeploy.deletion.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "nemoclaw-openshell.modelDeleteProxyName" . }}-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: model-delete-proxy
+      {{- include "nemoclaw-openshell.selectorLabels" . | nindent 6 }}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              openshell.ai/managed-by: openshell
+      ports:
+        - protocol: TCP
+          port: {{ .Values.sre.proxy.port }}
+{{- end }}
+{{- end }}
