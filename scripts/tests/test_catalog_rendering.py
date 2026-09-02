@@ -88,6 +88,14 @@ class CatalogRenderingTests(CatalogFixtureMixin, unittest.TestCase):
         self.assertEqual(options.count('value="build-a-claw"'), 1)
         self.assertNotIn('value="build-a-claw-demos"', options)
         self.assertNotIn('value="build-a-claw-recipes"', options)
+        self.assertLess(
+            navigation.index('?category=build-a-claw#catalog'),
+            navigation.index('?category=hackathon-recipes#catalog'),
+        )
+        self.assertLess(
+            options.index('value="build-a-claw"'),
+            options.index('value="hackathon-recipes"'),
+        )
         self.assertIn(
             '<div class="category-tile" data-empty="false">\n'
             '  <a class="category-tile-link" '

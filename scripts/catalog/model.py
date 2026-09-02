@@ -125,17 +125,17 @@ class Collection:
 
 COLLECTION_DEFINITIONS: tuple[Collection, ...] = (
     Collection(
-        "hackathon",
-        "hackathon-recipes",
-        "Hackathon",
-        "examples/collections/hackathon/README.md",
-    ),
-    Collection(
         "build-a-claw",
         "build-a-claw",
         "Build-a-Claw",
         "examples/collections/build-a-claw/README.md",
         automatic_category_ids=("build-a-claw-demos",),
+    ),
+    Collection(
+        "hackathon",
+        "hackathon-recipes",
+        "Hackathon",
+        "examples/collections/hackathon/README.md",
     ),
 )
 

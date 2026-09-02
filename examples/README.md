@@ -72,12 +72,6 @@ Standalone utilities that help developers build, evaluate, inspect, or operate N
 
 ## Collections
 
-### [Hackathon Recipes](collections/hackathon/README.md)
-
-A curated collection of NemoClaw recipes created for or featured in hackathons, while each recipe remains organized by its contributor provenance.
-
-_No examples are currently in this group._
-
 ### [Build-a-Claw](collections/build-a-claw/README.md)
 
 Guided demos, tutorials, and reusable recipes created through the Build-a-Claw program, while every example keeps its canonical type, path, and contributor provenance.
@@ -85,6 +79,12 @@ Guided demos, tutorials, and reusable recipes created through the Build-a-Claw p
 | Example | Category | Industry | Description |
 | --- | --- | --- | --- |
 | [Build-a-Claw Tutorial](demos/build-a-claw/tutorial/README.md) | Build-a-Claw Demos | 🎓 Academia/Education | Presents an author-maintained Build-a-Claw guide as a five-part tutorial with progress tracking, responsive media, and copyable highlighted code. |
+
+### [Hackathon Recipes](collections/hackathon/README.md)
+
+A curated collection of NemoClaw recipes created for or featured in hackathons, while each recipe remains organized by its contributor provenance.
+
+_No examples are currently in this group._
 
 ## Contributing An Example
 

@@ -71,6 +71,19 @@ class CatalogPipelineTests(CatalogFixtureMixin, unittest.TestCase):
             'href="assets/nvidia-favicon.png">',
             outputs.site_html,
         )
+        header = outputs.site_html.split('<header class="site-header">', 1)[1].split(
+            "</header>", 1
+        )[0]
+        hero_actions = outputs.site_html.split(
+            '<nav class="hero-actions"', 1
+        )[1].split("</nav>", 1)[0]
+        self.assertNotIn("Build-a-Claw tutorial", header)
+        self.assertIn(
+            '<a class="button button-tertiary" '
+            'href="examples/demos/build-a-claw/tutorial/">',
+            hero_actions,
+        )
+        self.assertIn("Getting Started", hero_actions)
         self.assertTrue(copied_assets)
         mermaid_pages = 0
         mermaid_diagrams = 0

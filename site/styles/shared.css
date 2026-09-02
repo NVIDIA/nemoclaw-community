@@ -244,6 +244,18 @@ h3 {
   border-color: #ffffff;
   background: rgb(255 255 255 / 5%);
 }
+
+.button-tertiary {
+  gap: 0.35rem;
+  padding-inline: 0.5rem;
+  color: #dedede;
+}
+
+.button-tertiary:hover {
+  color: #ffffff;
+  text-decoration: underline;
+  text-underline-offset: 0.22rem;
+}
 /* Metadata shared by catalog cards and detail pages */
 
 .provenance {

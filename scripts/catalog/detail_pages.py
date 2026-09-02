@@ -228,7 +228,7 @@ def render_detail_pages(
                 "{{PAGE_TITLE}}": 2,
                 "{{SOURCE_URL}}": 2,
                 "{{TABLE_OF_CONTENTS}}": 2,
-                "{{TUTORIAL_URL}}": 2,
+                "{{TUTORIAL_URL}}": 1,
             }
             expected_count = expected_counts.get(marker, 1)
             if rendered.count(marker) != expected_count:
