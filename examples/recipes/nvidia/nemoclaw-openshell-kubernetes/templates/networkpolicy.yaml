@@ -1,6 +1,6 @@
+{{- if and .Values.networkPolicy.enabled .Values.sre.enabled }}
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-{{- if and .Values.networkPolicy.enabled .Values.sre.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

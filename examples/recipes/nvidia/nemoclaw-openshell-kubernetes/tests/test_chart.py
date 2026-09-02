@@ -4,6 +4,7 @@
 """Render-level safety checks for the NemoClaw OpenShell chart."""
 
 from pathlib import Path
+import base64
 import importlib.util
 import json
 import os
@@ -11,7 +12,9 @@ import re
 import stat
 import subprocess
 import tempfile
+import time
 import unittest
+from unittest import mock
 
 
 CHART_DIR = Path(__file__).resolve().parents[1]
@@ -600,18 +603,321 @@ class ChartTest(unittest.TestCase):
         )
 
         self.assertIn("automountServiceAccountToken: false", bootstrap)
-        self.assertIn('audience: "openshell-cli"', bootstrap)
+        self.assertIn("name: kubernetes-api-token", bootstrap)
         self.assertIn("expirationSeconds: 900", bootstrap)
         self.assertIn("path: token", bootstrap)
-        self.assertIn("mountPath: /var/run/secrets/openshell-bootstrap", bootstrap)
+        self.assertIn("mountPath: /var/run/secrets/openshell-token-request", bootstrap)
         self.assertIn("mountPath: /client-tls", bootstrap)
         self.assertNotIn("mountPath: /cli-config/openshell/gateways/", bootstrap)
         self.assertIn('issuer        = "https://kubernetes.default.svc"', gateway)
         self.assertIn('audience      = "openshell-cli"', gateway)
         self.assertIn('roles_claim   = "aud"', gateway)
-        self.assertIn('admin_role    = "openshell-cli"', gateway)
+        self.assertIn('admin_role    = "openshell-admin"', gateway)
         self.assertIn('user_role     = "openshell-cli"', gateway)
         self.assertNotIn("allow_unauthenticated_users = true", gateway)
+
+    def test_bootstrap_can_mint_only_its_own_short_lived_admin_token(self) -> None:
+        rendered = self.run_helm(
+            "template",
+            "nemoclaw-openshell-kubernetes-test",
+            str(CHART_DIR),
+        )
+        rbac = self.rendered_from_source(
+            rendered,
+            "nemoclaw-openshell-kubernetes/templates/lifecycle-tokenrequest-rbac.yaml",
+        )
+
+        self.assertIn('resources: ["serviceaccounts/token"]', rbac)
+        self.assertIn(
+            'resourceNames: ["nemoclaw-openshell-kubernetes-test-lifecycle"]',
+            rbac,
+        )
+        self.assertIn('verbs: ["create"]', rbac)
+        self.assertNotIn("ClusterRole", rbac)
+
+    def test_operator_client_is_opt_in(self) -> None:
+        rendered = self.run_helm(
+            "template",
+            "nemoclaw-openshell-kubernetes-test",
+            str(CHART_DIR),
+        )
+        self.assertNotIn("templates/operator-client.yaml", rendered)
+        self.assertNotIn("app.kubernetes.io/component: operator-client", rendered)
+
+    def test_templates_emit_only_valid_resource_manifests(self) -> None:
+        rendered_profiles = {
+            "defaults": self.run_helm(
+                "template",
+                "nemoclaw-openshell-kubernetes-test",
+                str(CHART_DIR),
+            ),
+            "operator-sre": self.run_helm(
+                "template",
+                "nemoclaw-openshell-kubernetes-test",
+                str(CHART_DIR),
+                "--set",
+                "operatorClient.enabled=true",
+                "--set",
+                "sre.enabled=true",
+            ),
+        }
+        empty_sources: list[str] = []
+        invalid_sources: list[str] = []
+        for profile, rendered in rendered_profiles.items():
+            for document in rendered.split("\n---\n"):
+                source = next(
+                    (line for line in document.splitlines() if line.startswith("# Source:")),
+                    None,
+                )
+                if source is None:
+                    continue
+                meaningful = [
+                    line
+                    for line in document.splitlines()
+                    if line.strip()
+                    and line.strip() != "---"
+                    and not line.lstrip().startswith("#")
+                ]
+                qualified_source = f"{profile}: {source}"
+                if not meaningful:
+                    empty_sources.append(qualified_source)
+                elif not meaningful[0].startswith("apiVersion:"):
+                    invalid_sources.append(qualified_source)
+        self.assertFalse(
+            empty_sources,
+            msg=(
+                "Helm 4 server validation rejects comment-only manifests:\n"
+                + "\n".join(empty_sources)
+            ),
+        )
+        self.assertFalse(
+            invalid_sources,
+            msg=(
+                "Helm 4 server validation requires apiVersion as the first resource field:\n"
+                + "\n".join(invalid_sources)
+            ),
+        )
+
+    def test_operator_client_renders_attach_only_user_session(self) -> None:
+        rendered = self.run_helm(
+            "template",
+            "nemoclaw-openshell-kubernetes-test",
+            str(CHART_DIR),
+            "--set",
+            "operatorClient.enabled=true",
+            "--set",
+            "sre.enabled=true",
+        )
+        client = self.rendered_from_source(
+            rendered,
+            "nemoclaw-openshell-kubernetes/templates/operator-client.yaml",
+        )
+        gateway_policy = self.rendered_from_source(
+            rendered,
+            "nemoclaw-openshell-kubernetes/templates/gateway-networkpolicy.yaml",
+        )
+        config = self.bootstrap_config(rendered)
+
+        self.assertIn("kind: ServiceAccount", client)
+        self.assertIn("kind: StatefulSet", client)
+        self.assertIn("automountServiceAccountToken: false", client)
+        self.assertIn('audience: "openshell-cli"', client)
+        self.assertIn("expirationSeconds: 3600", client)
+        self.assertIn("stdin: true", client)
+        self.assertIn("tty: true", client)
+        self.assertIn("/tools/hermes-chat", client)
+        self.assertIn("readOnlyRootFilesystem: true", client)
+        self.assertIn("allowPrivilegeEscalation: false", client)
+        self.assertIn('drop: ["ALL"]', client)
+        self.assertNotIn("model-api-key", client)
+        self.assertNotIn("sre-proxy-auth", client)
+        self.assertNotIn("pods/exec", client)
+        self.assertIn("app.kubernetes.io/component: operator-client", gateway_policy)
+        self.assertTrue(config["operatorClient"]["enabled"])
+        self.assertEqual(
+            config["operatorClient"]["subject"],
+            "system:serviceaccount:default:nemoclaw-openshell-kubernetes-test-operator-client",
+        )
+
+    def test_operator_client_name_reserves_statefulset_suffix_budget(self) -> None:
+        rendered = self.run_helm(
+            "template",
+            "nemoclaw-hermes-sre",
+            str(CHART_DIR),
+            "--set",
+            "operatorClient.enabled=true",
+        )
+        client = self.rendered_from_source(
+            rendered,
+            "nemoclaw-openshell-kubernetes/templates/operator-client.yaml",
+        )
+        match = re.search(r"kind: StatefulSet\nmetadata:\n  name: ([^\n]+)", client)
+        self.assertIsNotNone(match)
+        statefulset_name = match.group(1)
+        self.assertLessEqual(
+            len(statefulset_name),
+            52,
+            msg="StatefulSet names must reserve 11 characters for the revision-hash label",
+        )
+
+    def test_operator_client_rejects_existing_gateway_mode(self) -> None:
+        self.assert_helm_rejected(
+            "template",
+            "nemoclaw-openshell-kubernetes-test",
+            str(CHART_DIR),
+            "-f",
+            str(CHART_DIR / "values-existing-gateway.yaml"),
+            "--set",
+            "operatorClient.enabled=true",
+            expected="operatorClient.enabled requires openshell.mode=managed",
+        )
+
+    def test_token_bootstrap_requires_explicit_external_lifecycle_service_account(self) -> None:
+        for name in (None, "default"):
+            arguments = [
+                "template",
+                "nemoclaw-openshell-kubernetes-test",
+                str(CHART_DIR),
+                "--set",
+                "operatorClient.enabled=true",
+                "--set",
+                "lifecycle.serviceAccount.create=false",
+            ]
+            if name is not None:
+                arguments.extend(["--set", f"lifecycle.serviceAccount.name={name}"])
+            with self.subTest(name=name):
+                self.assert_helm_rejected(
+                    arguments[0],
+                    *arguments[1:],
+                    expected=(
+                        "serviceAccountToken bootstrap with lifecycle.serviceAccount.create=false "
+                        "requires an explicit non-default lifecycle.serviceAccount.name"
+                    ),
+                )
+
+    def test_disabled_operator_client_removes_stale_workspace_membership(self) -> None:
+        script = CHART_DIR / "files" / "scripts" / "bootstrap.py"
+        config = {
+            "openshellMode": "managed",
+            "operatorClient": {
+                "enabled": False,
+                "workspace": "default",
+                "subject": "system:serviceaccount:demo:release-operator-client",
+            }
+        }
+        spec = importlib.util.spec_from_file_location("nemoclaw_bootstrap_membership", script)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        with mock.patch("pathlib.Path.read_text", return_value=json.dumps(config)):
+            spec.loader.exec_module(module)
+
+        absent = subprocess.CompletedProcess(
+            args=[],
+            returncode=1,
+            stdout="",
+            stderr="workspace member not found",
+        )
+        with mock.patch.object(module, "run", return_value=absent) as run:
+            module.reconcile_operator_client_member()
+
+        run.assert_called_once_with(
+            [
+                "workspace",
+                "member",
+                "remove",
+                "--workspace",
+                "default",
+                "--subject",
+                "system:serviceaccount:demo:release-operator-client",
+            ],
+            check=False,
+            capture=True,
+        )
+
+    def test_operator_client_documents_single_operator_boundary(self) -> None:
+        readme = CHART_DIR.joinpath("README.md").read_text(encoding="utf-8")
+        notes = CHART_DIR.joinpath("templates", "NOTES.txt").read_text(encoding="utf-8")
+        for document in (readme, notes):
+            self.assertIn("one trusted operator", document)
+            self.assertIn("mutually untrusted users", document)
+
+    def test_operator_client_documents_oc_attach_disconnect_behavior(self) -> None:
+        readme = CHART_DIR.joinpath("README.md").read_text(encoding="utf-8")
+        self.assertNotIn("Ctrl-P", readme)
+        self.assertNotIn("Ctrl-Q", readme)
+        self.assertIn("`oc attach` does not provide a detach-key option", readme)
+        self.assertIn("`Ctrl-C` ends the current Hermes session", readme)
+
+    def test_operator_client_builds_only_a_hermes_sandbox_command(self) -> None:
+        script = CHART_DIR / "files" / "scripts" / "operator_client.py"
+        self.assertTrue(script.is_file(), "operator client runtime is missing")
+        spec = importlib.util.spec_from_file_location("nemoclaw_operator_client", script)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "OPENSHELL_SANDBOX_NAME": "release-hermes",
+                "OPENSHELL_WORKSPACE": "default",
+                "HERMES_SKILLS": "kubernetes-sre",
+            },
+            clear=True,
+        ):
+            interactive = module.hermes_command([])
+            oneshot = module.hermes_command(["--oneshot", "count pods"])
+
+        self.assertEqual(
+            interactive,
+            [
+                "/tools/openshell",
+                "sandbox",
+                "exec",
+                "--name",
+                "release-hermes",
+                "--workdir",
+                "/sandbox/workspace",
+                "--timeout",
+                "0",
+                "--tty",
+                "--",
+                "hermes",
+                "--skills",
+                "kubernetes-sre",
+            ],
+        )
+        self.assertIn("--no-tty", oneshot)
+        self.assertNotIn("--tty", oneshot)
+        self.assertEqual(oneshot[-2:], ["--oneshot", "count pods"])
+
+    def test_operator_client_rejects_an_admin_bearer_token(self) -> None:
+        script = CHART_DIR / "files" / "scripts" / "operator_client.py"
+        self.assertTrue(script.is_file(), "operator client runtime is missing")
+        spec = importlib.util.spec_from_file_location("nemoclaw_operator_client_token", script)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        claims = {
+            "iss": "https://kubernetes.default.svc",
+            "sub": "system:serviceaccount:demo:release-operator-client",
+            "aud": ["openshell-cli", "openshell-admin"],
+            "exp": int(time.time()) + 900,
+        }
+        encoded = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("=")
+        token = f"header.{encoded}.signature"
+        with self.assertRaisesRegex(SystemExit, "must not contain the OpenShell admin role"):
+            module.validate_token(
+                token,
+                issuer="https://kubernetes.default.svc",
+                audience="openshell-cli",
+                admin_role="openshell-admin",
+                subject="system:serviceaccount:demo:release-operator-client",
+            )
 
     def test_oidc_custom_ca_preserves_public_model_endpoint_trust(self) -> None:
         """The OIDC CA supplements, rather than replaces, native public roots."""

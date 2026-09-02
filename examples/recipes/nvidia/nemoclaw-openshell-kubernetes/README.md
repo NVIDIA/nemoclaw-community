@@ -47,6 +47,53 @@ only when `agent.model.allowInsecureHttp=true` and
 `agent.model.insecureHttpAcknowledgement=I_ACKNOWLEDGE_PLAINTEXT_MODEL_CREDENTIALS`;
 that mode can expose the model credential on the network.
 
+## In-cluster Hermes chat (no local OpenShell binary)
+
+Set `operatorClient.enabled=true` during installation or upgrade to create one
+attach-only in-cluster client for the existing OpenShell-managed Hermes
+Sandbox. The client downloads the pinned OpenShell release artifact in an init
+container, verifies its SHA-256 digest, and always starts the fixed
+`openshell sandbox exec ... hermes` command. It does not contain Hermes,
+NemoClaw, model credentials, or SRE credentials itself.
+
+```bash
+helm upgrade --install nemoclaw-hermes . \
+  --namespace nemoclaw-hermes \
+  --set operatorClient.enabled=true \
+  --reuse-values \
+  --wait --timeout 20m
+
+oc -n nemoclaw-hermes attach -it \
+  statefulset/nemoclaw-hermes-nemoclaw-openshell-kubernetes-operator-client \
+  -c hermes-chat
+```
+
+The equivalent Kubernetes command is `kubectl attach`. Helm prints the exact
+StatefulSet name for the release because long release names are truncated.
+`oc attach` does not provide a detach-key option. To disconnect without ending
+Hermes, close only the local terminal or terminate only the local `oc` process;
+the client Pod continues running. `Ctrl-C` ends the current Hermes session, and
+the client immediately starts a fresh session for the next attach.
+
+Assign each client to one trusted operator at a time. One StatefulSet exposes
+one persistent Hermes TTY, so do not share it among mutually untrusted users;
+use a separate release/client identity per user when session isolation is
+required.
+
+The chart does not grant end-user RBAC. A user who is not already a namespace
+administrator needs only `get` on `pods` and `create` on `pods/attach` for this
+namespace. Do not grant `pods/exec`: attach is intentionally limited to the
+fixed client process, while exec would let a user invoke arbitrary binaries in
+the client container. Keep the release in a namespace where untrusted users
+cannot create workloads or spoof chart pod labels.
+
+The client uses a rotating, short-lived ServiceAccount token with only the
+OpenShell user audience. A separate Pod-bound token is minted only inside the
+bootstrap Job for lifecycle administration; the client refuses to start if
+its token includes that admin audience. The feature is supported only with the
+chart-managed gateway, where bootstrap can create the scoped workspace
+membership.
+
 ## Platform selection
 
 Kubernetes is the default. It pins UID/GID `1000` for the gateway and chart Jobs and renders no OpenShift SCC references.

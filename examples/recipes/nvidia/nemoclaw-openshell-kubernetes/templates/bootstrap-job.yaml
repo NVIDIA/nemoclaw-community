@@ -126,12 +126,26 @@ spec:
               value: {{ .Values.openshell.server.oidc.issuer | quote }}
             - name: OPENSHELL_OIDC_AUDIENCE
               value: {{ .Values.openshell.server.oidc.audience | quote }}
-            - name: OPENSHELL_SERVICE_ACCOUNT_TOKEN
-              value: /var/run/secrets/openshell-bootstrap/token
+            - name: OPENSHELL_OIDC_ADMIN_ROLE
+              value: {{ .Values.openshell.server.oidc.adminRole | quote }}
+            - name: OPENSHELL_ADMIN_TOKEN_EXPIRATION_SECONDS
+              value: {{ .Values.lifecycle.bootstrap.authentication.tokenExpirationSeconds | quote }}
+            - name: KUBERNETES_API_TOKEN
+              value: /var/run/secrets/openshell-token-request/token
+            - name: KUBERNETES_API_CA
+              value: /var/run/secrets/openshell-token-request/ca.crt
             - name: POD_NAMESPACE
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
             - name: POD_SERVICE_ACCOUNT
               value: {{ include "nemoclaw-openshell.lifecycleServiceAccountName" . | quote }}
             {{- end }}
@@ -159,8 +173,8 @@ spec:
               mountPath: /client-tls
               readOnly: true
             {{- if eq .Values.lifecycle.bootstrap.authentication.mode "serviceAccountToken" }}
-            - name: openshell-bootstrap-token
-              mountPath: /var/run/secrets/openshell-bootstrap
+            - name: kubernetes-api-token
+              mountPath: /var/run/secrets/openshell-token-request
               readOnly: true
             {{- end }}
             - name: tmp
@@ -202,14 +216,18 @@ spec:
             claimName: {{ include "nemoclaw-openshell.stateClaimName" . }}
         {{- end }}
         {{- if eq .Values.lifecycle.bootstrap.authentication.mode "serviceAccountToken" }}
-        - name: openshell-bootstrap-token
+        - name: kubernetes-api-token
           projected:
             defaultMode: 0440
             sources:
               - serviceAccountToken:
-                  audience: {{ .Values.openshell.server.oidc.audience | quote }}
                   expirationSeconds: {{ .Values.lifecycle.bootstrap.authentication.tokenExpirationSeconds }}
                   path: token
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
         {{- end }}
         - name: tmp
           emptyDir: {}

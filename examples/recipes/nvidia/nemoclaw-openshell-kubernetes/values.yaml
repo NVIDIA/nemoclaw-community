@@ -130,6 +130,24 @@ lifecycle:
       - hermes
       - --version
 
+# Optional in-cluster terminal for the existing Hermes sandbox. The container
+# starts a fixed OpenShell sandbox-exec command, so users need only `oc attach`
+# or `kubectl attach`; the chart never grants pods/exec access.
+operatorClient:
+  enabled: false
+  tokenExpirationSeconds: 3600
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
 sre:
   enabled: false
   rbac:
@@ -253,11 +271,11 @@ openshell:
       systemCaBundlePath: /etc/ssl/certs/ca-certificates.crt
       audience: openshell-cli
       jwksTtl: 3600
-      # Kubernetes projected tokens expose the requested audience as an array.
-      # Mapping that same validated audience to both OpenShell roles works
-      # around the 0.0.116 chart's inability to render explicit empty roles.
+      # Kubernetes ServiceAccount tokens expose audiences as an array. The
+      # lifecycle Job requests both values below for short-lived admin work;
+      # the optional operator client receives only the user audience.
       rolesClaim: aud
-      adminRole: openshell-cli
+      adminRole: openshell-admin
       userRole: openshell-cli
       scopesClaim: ""
       caConfigMapName: kube-root-ca.crt

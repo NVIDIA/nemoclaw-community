@@ -22,6 +22,14 @@ spec:
             matchLabels:
               {{- include "nemoclaw-openshell.selectorLabels" . | nindent 14 }}
               app.kubernetes.io/component: bootstrap
+        {{- if .Values.operatorClient.enabled }}
+        # Attach-only operator terminal. Its projected token maps to the
+        # OpenShell user role; lifecycle admin is a separate audience.
+        - podSelector:
+            matchLabels:
+              {{- include "nemoclaw-openshell.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: operator-client
+        {{- end }}
         # Agent Sandbox controller Pods authenticate with gateway-minted JWTs.
         # The controller does not currently copy OpenShell labels from the
         # Sandbox object to its Pod, but it always adds this selector label.

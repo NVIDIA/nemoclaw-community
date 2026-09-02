@@ -171,6 +171,27 @@
       },
       "required": ["serviceAccount", "seed", "bootstrap", "sanity"]
     },
+    "operatorClient": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "tokenExpirationSeconds": {"type": "integer", "minimum": 600, "maximum": 3600},
+        "podAnnotations": {"type": "object", "additionalProperties": {"type": "string"}},
+        "nodeSelector": {"type": "object", "additionalProperties": {"type": "string"}},
+        "tolerations": {"type": "array", "items": {"type": "object"}},
+        "affinity": {"type": "object"},
+        "resources": {
+          "type": "object",
+          "properties": {
+            "requests": {"type": "object"},
+            "limits": {"type": "object"}
+          },
+          "required": ["requests", "limits"]
+        }
+      },
+      "required": ["enabled", "tokenExpirationSeconds", "podAnnotations", "nodeSelector", "tolerations", "affinity", "resources"]
+    },
     "sre": {
       "type": "object",
       "properties": {
@@ -323,7 +344,7 @@
       "required": ["enabled", "mode", "existing", "image", "supervisor", "podSecurityContext", "securityContext"]
     }
   },
-  "required": ["platform", "agent", "persistence", "gatewayPersistence", "artifacts", "lifecycle", "sre", "networkPolicy", "openshell"],
+  "required": ["platform", "agent", "persistence", "gatewayPersistence", "artifacts", "lifecycle", "operatorClient", "sre", "networkPolicy", "openshell"],
   "definitions": {
     "download": {
       "type": "object",

@@ -87,11 +87,20 @@
 {{- else -}}
 {{- fail "openshell.mode must be managed or existing" -}}
 {{- end -}}
+{{- if and .Values.operatorClient.enabled (ne .Values.openshell.mode "managed") -}}
+{{- fail "operatorClient.enabled requires openshell.mode=managed so the chart can enforce its OIDC role and workspace contract" -}}
+{{- end -}}
 {{- $bootstrapAuth := .Values.lifecycle.bootstrap.authentication -}}
 {{- if not (has $bootstrapAuth.mode (list "serviceAccountToken" "clientTLS")) -}}
 {{- fail "lifecycle.bootstrap.authentication.mode must be serviceAccountToken or clientTLS" -}}
 {{- end -}}
 {{- if eq $bootstrapAuth.mode "serviceAccountToken" -}}
+  {{- $externalLifecycleServiceAccount := trim .Values.lifecycle.serviceAccount.name -}}
+  {{- if and
+        (not .Values.lifecycle.serviceAccount.create)
+        (or (not $externalLifecycleServiceAccount) (eq $externalLifecycleServiceAccount "default")) -}}
+  {{- fail "serviceAccountToken bootstrap with lifecycle.serviceAccount.create=false requires an explicit non-default lifecycle.serviceAccount.name" -}}
+  {{- end -}}
   {{- if not .Values.openshell.server.oidc.issuer -}}
   {{- fail "openshell.server.oidc.issuer is required for ServiceAccount token bootstrap authentication" -}}
   {{- end -}}
@@ -100,13 +109,20 @@
   {{- end -}}
   {{- if or
         (ne .Values.openshell.server.oidc.rolesClaim "aud")
-        (ne .Values.openshell.server.oidc.adminRole .Values.openshell.server.oidc.audience)
         (ne .Values.openshell.server.oidc.userRole .Values.openshell.server.oidc.audience) -}}
-  {{- fail "ServiceAccount token bootstrap requires rolesClaim=aud and both OpenShell roles equal to openshell.server.oidc.audience" -}}
+  {{- fail "ServiceAccount token authentication requires rolesClaim=aud and userRole equal to openshell.server.oidc.audience" -}}
+  {{- end -}}
+  {{- if or
+        (not .Values.openshell.server.oidc.adminRole)
+        (eq .Values.openshell.server.oidc.adminRole .Values.openshell.server.oidc.audience) -}}
+  {{- fail "ServiceAccount token authentication requires a non-empty OpenShell adminRole distinct from the user audience" -}}
   {{- end -}}
   {{- if and (eq .Values.openshell.server.oidc.issuer "https://kubernetes.default.svc") (ne .Values.openshell.server.oidc.caConfigMapName "kube-root-ca.crt") -}}
   {{- fail "the in-cluster Kubernetes OIDC issuer requires openshell.server.oidc.caConfigMapName=kube-root-ca.crt" -}}
   {{- end -}}
+{{- end -}}
+{{- if and .Values.operatorClient.enabled .Values.openshell.server.oidc.scopesClaim -}}
+{{- fail "operatorClient.enabled requires openshell.server.oidc.scopesClaim to remain empty because Kubernetes projected tokens carry one audience" -}}
 {{- end -}}
 {{- if not .Values.persistence.enabled -}}
 {{- fail "persistence.enabled must remain true because Hermes state and installed skills require durable storage" -}}

@@ -8,9 +8,12 @@ import base64
 import json
 import os
 from pathlib import Path
+import ssl
 import subprocess
 import time
-from urllib.parse import urlparse
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, urlparse
+from urllib.request import Request, urlopen
 
 
 CLI = "/tools/openshell"
@@ -62,6 +65,89 @@ def jwt_claims(token: str) -> dict[str, object]:
     return claims
 
 
+def read_bounded_projected_token(path_value: str, description: str) -> str:
+    """Read one kubelet-projected token without following it outside its volume."""
+    token_path = Path(path_value)
+    token_root = token_path.parent.resolve(strict=True)
+    try:
+        resolved_token_path = token_path.resolve(strict=True)
+        resolved_token_path.relative_to(token_root)
+    except (FileNotFoundError, RuntimeError, ValueError) as error:
+        raise SystemExit(f"{description} escapes its mounted volume") from error
+    if not resolved_token_path.is_file():
+        raise SystemExit(f"{description} path is invalid")
+    token = resolved_token_path.read_text(encoding="utf-8").strip()
+    if not token or len(token) > 1024 * 1024:
+        raise SystemExit(f"{description} has an invalid size")
+    return token
+
+
+def request_admin_token() -> str:
+    """Mint a Pod-bound, multi-audience token for lifecycle-only admin work."""
+    api_token = read_bounded_projected_token(
+        os.environ["KUBERNETES_API_TOKEN"],
+        "projected Kubernetes API token",
+    )
+    namespace = os.environ["POD_NAMESPACE"]
+    service_account = os.environ["POD_SERVICE_ACCOUNT"]
+    audience = os.environ["OPENSHELL_OIDC_AUDIENCE"]
+    admin_role = os.environ["OPENSHELL_OIDC_ADMIN_ROLE"]
+    if not admin_role or admin_role == audience:
+        raise SystemExit("OpenShell admin role must be non-empty and distinct from the user audience")
+
+    host = os.environ["KUBERNETES_SERVICE_HOST"]
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    port = os.environ.get("KUBERNETES_SERVICE_PORT_HTTPS", "443")
+    endpoint = (
+        f"https://{host}:{port}/api/v1/namespaces/{quote(namespace, safe='')}"
+        f"/serviceaccounts/{quote(service_account, safe='')}/token"
+    )
+    payload = json.dumps(
+        {
+            "apiVersion": "authentication.k8s.io/v1",
+            "kind": "TokenRequest",
+            "spec": {
+                "audiences": [audience, admin_role],
+                "expirationSeconds": int(os.environ["OPENSHELL_ADMIN_TOKEN_EXPIRATION_SECONDS"]),
+                "boundObjectRef": {
+                    "apiVersion": "v1",
+                    "kind": "Pod",
+                    "name": os.environ["POD_NAME"],
+                    "uid": os.environ["POD_UID"],
+                },
+            },
+        },
+        separators=(",", ":"),
+    ).encode()
+    request = Request(
+        endpoint,
+        data=payload,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_token}",
+            "Content-Type": "application/json",
+        },
+    )
+    context = ssl.create_default_context(cafile=os.environ["KUBERNETES_API_CA"])
+    try:
+        with urlopen(request, timeout=30, context=context) as response:  # noqa: S310 - fixed in-cluster API endpoint.
+            body = response.read(1024 * 1024 + 1)
+    except HTTPError as error:
+        raise SystemExit(f"Kubernetes TokenRequest failed with HTTP {error.code}") from error
+    except URLError as error:
+        raise SystemExit("Kubernetes TokenRequest could not reach the API server") from error
+    if len(body) > 1024 * 1024:
+        raise SystemExit("Kubernetes TokenRequest response exceeds 1 MiB")
+    try:
+        token = json.loads(body)["status"]["token"]
+    except (KeyError, TypeError, json.JSONDecodeError) as error:
+        raise SystemExit("Kubernetes TokenRequest returned an invalid response") from error
+    if not isinstance(token, str) or not token or len(token) > 1024 * 1024:
+        raise SystemExit("Kubernetes TokenRequest returned an invalid token")
+    return token
+
+
 def configure_cli_authentication() -> None:
     """Configure the released CLI for either OIDC bearer auth or operator mTLS."""
     mode = os.environ.get("OPENSHELL_BOOTSTRAP_AUTH_MODE", "clientTLS")
@@ -70,21 +156,11 @@ def configure_cli_authentication() -> None:
     if mode != "serviceAccountToken":
         raise SystemExit(f"unsupported OpenShell bootstrap authentication mode: {mode}")
 
-    token_path = Path(os.environ["OPENSHELL_SERVICE_ACCOUNT_TOKEN"])
-    token_root = token_path.parent.resolve(strict=True)
-    try:
-        resolved_token_path = token_path.resolve(strict=True)
-        resolved_token_path.relative_to(token_root)
-    except (FileNotFoundError, RuntimeError, ValueError) as error:
-        raise SystemExit("projected ServiceAccount token escapes its mounted volume") from error
-    if not resolved_token_path.is_file():
-        raise SystemExit("projected ServiceAccount token path is invalid")
-    token = resolved_token_path.read_text(encoding="utf-8").strip()
-    if not token or len(token) > 1024 * 1024:
-        raise SystemExit("projected ServiceAccount token has an invalid size")
+    token = request_admin_token()
 
     issuer = os.environ["OPENSHELL_OIDC_ISSUER"]
     audience = os.environ["OPENSHELL_OIDC_AUDIENCE"]
+    admin_role = os.environ["OPENSHELL_OIDC_ADMIN_ROLE"]
     namespace = os.environ["POD_NAMESPACE"]
     service_account = os.environ["POD_SERVICE_ACCOUNT"]
     claims = jwt_claims(token)
@@ -96,6 +172,8 @@ def configure_cli_authentication() -> None:
         raise SystemExit("projected ServiceAccount token issuer does not match openshell.server.oidc.issuer")
     if audience not in token_audience:
         raise SystemExit("projected ServiceAccount token audience does not match openshell.server.oidc.audience")
+    if admin_role not in token_audience:
+        raise SystemExit("lifecycle ServiceAccount token does not contain the OpenShell admin role")
     if claims.get("sub") != expected_subject:
         raise SystemExit("projected ServiceAccount token subject does not match the lifecycle ServiceAccount")
     expires_at = claims.get("exp")
@@ -174,6 +252,39 @@ def reconcile_provider() -> None:
     if not CONFIG["model"]["verifyEndpoint"]:
         inference.append("--no-verify")
     run(inference)
+
+
+def reconcile_operator_client_member() -> None:
+    """Reconcile the terminal identity's workspace-user access, never admin."""
+    client = CONFIG.get("operatorClient") or {}
+    if CONFIG.get("openshellMode") != "managed":
+        return
+    arguments = [
+        "workspace",
+        "member",
+        "add" if client.get("enabled") else "remove",
+        "--workspace",
+        client["workspace"],
+        "--subject",
+        client["subject"],
+    ]
+    if client.get("enabled"):
+        arguments.extend(["--role", "user"])
+    result = run(arguments, check=False, capture=True)
+    output = f"{result.stdout}\n{result.stderr}".strip()
+    if result.returncode == 0:
+        action = "granted" if client.get("enabled") else "removed"
+        print(f"{action} OpenShell workspace-user access for {client['subject']}")
+        return
+    lowered = output.lower()
+    if client.get("enabled"):
+        if "already exists" in lowered or "already_exists" in lowered:
+            print(f"OpenShell workspace membership already exists for {client['subject']}")
+            return
+    elif "not found" in lowered or "not_found" in lowered or "does not exist" in lowered:
+        print(f"OpenShell workspace membership is already absent for {client['subject']}")
+        return
+    raise SystemExit(f"failed to reconcile operator client workspace membership: {output[-1000:]}")
 
 
 def verify_existing_sandbox() -> bool:
@@ -263,6 +374,7 @@ def main() -> None:
     # name collision on a shared gateway fails without changing another
     # release's inference configuration.
     reconcile_provider()
+    reconcile_operator_client_member()
     if not existing_sandbox:
         create_sandbox()
         print(f"created sandbox {CONFIG['sandboxName']} from immutable image {CONFIG['agentImage']}")

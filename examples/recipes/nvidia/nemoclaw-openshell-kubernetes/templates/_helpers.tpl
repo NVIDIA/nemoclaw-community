@@ -56,6 +56,24 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- end -}}
 
+{{- define "nemoclaw-openshell.operatorClientName" -}}
+{{- $fullname := include "nemoclaw-openshell.fullname" . -}}
+{{- $candidate := printf "%s-operator-client" $fullname -}}
+{{- if le (len $candidate) 52 -}}
+{{- $candidate -}}
+{{- else -}}
+{{- printf "%s-%s-operator-client" ($fullname | trunc 27 | trimSuffix "-") ($fullname | sha256sum | trunc 8) -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "nemoclaw-openshell.operatorClientServiceAccountName" -}}
+{{- include "nemoclaw-openshell.operatorClientName" . -}}
+{{- end -}}
+
+{{- define "nemoclaw-openshell.operatorClientSubject" -}}
+{{- printf "system:serviceaccount:%s:%s" .Release.Namespace (include "nemoclaw-openshell.operatorClientServiceAccountName" .) -}}
+{{- end -}}
+
 {{- define "nemoclaw-openshell.gatewayName" -}}
 {{- if eq .Values.openshell.mode "existing" -}}
 {{- .Values.openshell.existing.name -}}

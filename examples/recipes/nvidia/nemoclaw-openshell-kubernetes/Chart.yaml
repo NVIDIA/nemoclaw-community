@@ -5,7 +5,7 @@ apiVersion: v2
 name: nemoclaw-openshell-kubernetes
 description: Run the official NemoClaw-managed Hermes image through OpenShell on Kubernetes
 type: application
-version: 0.1.1
+version: 0.1.2
 appVersion: "0.0.117"
 dependencies:
   - name: helm-chart

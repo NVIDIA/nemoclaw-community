@@ -6,6 +6,19 @@ Immutable agent image: {{ .Values.agent.image.multiarch }}
 
 Inspect:
   openshell sandbox get {{ include "nemoclaw-openshell.agentName" . }}
+{{- if .Values.operatorClient.enabled }}
+
+Start an actual Hermes chat without installing OpenShell locally:
+  {{ ternary "oc" "kubectl" .Values.platform.openshift.enabled }} -n {{ .Release.Namespace }} attach -it statefulset/{{ include "nemoclaw-openshell.operatorClientName" . }} -c hermes-chat
+
+The caller needs pods/get and pods/attach, but not pods/exec. The chart does not
+create an end-user RoleBinding.
+Assign this client to one trusted operator only. Do not share one client among
+mutually untrusted users; deploy separate release/client identities instead.
+{{- else }}
+
+In-cluster chat client: disabled (set operatorClient.enabled=true)
+{{- end }}
 
 The chart intentionally does not render a Sandbox object and does not delete the
 sandbox or retained Hermes PVC during uninstall. Use OpenShell for reviewed
