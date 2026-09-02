@@ -5,6 +5,9 @@
 | Description | Helps developer community leaders align priorities with demand by turning available GitHub, GitLab, forum, Slack, email, and web signals into evidence-grounded briefs, gaps, and follow-up recommendations. |
 | Industry | ✨ Other |
 | Requirements | Single Linux host · Docker · OpenShell · inference provider API key · Slack or Outlook |
+| NemoClaw | N/A |
+| Harness | Hermes 0.20.0 |
+| OpenShell | 0.0.85 |
 
 ![NVIDIA](assets/nvidia_header.png)
 

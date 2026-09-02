@@ -5,6 +5,9 @@
 | Description | Helps store employees check inventory and sales or request transfers and reorders through role-aware Telegram conversations scoped to their assigned store. |
 | Industry | 🛍️ Retail/Consumer Packaged Goods |
 | Requirements | Telegram bot · tool-calling OpenAI-compatible LLM · Docker Compose or Kubernetes + Helm · demo identity mapping |
+| NemoClaw | Unpinned |
+| Harness | OpenClaw Unpinned |
+| OpenShell | Unpinned |
 | Contributor | HPE |
 
 This example was built by HPE AI & Data Technical consultants: Paula Serna and Sergio Donís; and is presented as-is. See credits for contact information.

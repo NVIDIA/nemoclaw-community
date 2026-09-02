@@ -9,6 +9,9 @@
 | Description | Adds defense-in-depth action governance through an in-sandbox hook that checks each OpenClaw tool call against server-side Shrike policy and blocks prohibited or approval-required calls. |
 | Industry | ✨ Other |
 | Requirements | NemoClaw/OpenShell · Node.js + npm · inference provider · Shrike API key · in-sandbox defense-in-depth only |
+| NemoClaw | >=v0.0.76 |
+| Harness | OpenClaw Unpinned |
+| OpenShell | Unpinned |
 | Contributor | Shrike Security, Inc. |
 
 Govern what an OpenClaw agent is allowed to **do**. This recipe installs a

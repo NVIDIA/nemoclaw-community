@@ -252,7 +252,10 @@ python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
 python3 scripts/fetch_catalog_assets.py
 python3 scripts/build_catalog.py --validate-metadata
 python3 scripts/build_catalog.py --check
-python3 -m unittest discover -s scripts/tests -p 'test_build_catalog.py'
+python3 -m unittest \
+  scripts.tests.test_build_catalog \
+  scripts.tests.test_catalog_maintenance \
+  scripts.tests.test_example_stack_facts
 node --test scripts/tests/catalog.test.mjs
 ```
 
@@ -373,29 +376,30 @@ generated [Markdown catalog](examples/README.md), GitHub Pages cards, filters,
 detail pages, public `catalog.json` search index, and agent-oriented
 `llms.txt`. The build discovers example directories from the canonical
 taxonomy, derives kind and provenance from the path, and reads this exact table
-from the root README. Put it in a final `Catalog Metadata` section. Existing
-tables immediately after the title remain supported. Non-catalog YAML
-frontmatter may precede the title and is ignored by catalog generation:
+from the root README. Put it immediately after the level-one title. Existing
+final `Catalog Metadata` sections remain supported as a legacy placement.
+Non-catalog YAML frontmatter may precede the title and is ignored by catalog
+generation:
 
 ```markdown
 # Recognizable Example Name
-
-[Explain the example and show how to run it.]
-
-## Catalog Metadata
 
 | Catalog field | Value |
 | --- | --- |
 | Description | Performs a concrete job and produces an observable result. |
 | Industry | ✨ Other |
 | Requirements | Linux · Docker · required service or boundary |
+| NemoClaw | v0.0.104 |
+| Harness | OpenClaw 2026.7.1 |
+| OpenShell | 0.0.85 |
+
+[Explain the example and show how to run it.]
 ```
 
-Add `Upstream` after `Requirements` when the example adapts a separate public
-project, `Contributor` for a partner recipe, or `Collection` with either
-`Hackathon` or `Build-a-Claw` for a recipe accepted into that collection. Omit
-rows that do not apply. Do not add YAML frontmatter for catalog data; place all
-new catalog metadata in the Markdown table. The
+After `OpenShell`, add optional rows in this order: `Lifecycle`, `Reviewed`,
+`Upstream`, `Contributor`, and `Collection`. Omit rows that do not apply. Do
+not add YAML frontmatter for catalog data; place all new catalog metadata in
+the Markdown table. The
 [catalog architecture](docs/catalog-architecture.md) documents the complete
 generation and public query contract.
 
@@ -411,6 +415,26 @@ Follow these metadata rules:
 - `Requirements` is a short, factual summary of the main environment,
   dependency, and material operating boundary. It appears as “Requirements &
   limits” in catalog cards and detail pages and is limited to 240 characters.
+- `NemoClaw` is the exact or ranged CLI/bootstrap version that creates the
+  example's stack, or `Unpinned`, `Unknown`, or `N/A`. Use `N/A` only when the
+  example runs a prebuilt or direct harness stack without invoking NemoClaw.
+- `Harness` is `Hermes`, `OpenClaw`, `LangChain Deep Agents`, or
+  `LangChain Deep Agents Code` followed by an exact/ranged version,
+  `Unpinned`, or `Unknown`. Use `N/A` only when no harness runs as part of the
+  example. When several harnesses participate, declare the one that performs
+  the example's primary agent workload and describe the others in the body.
+- `OpenShell` is an exact/ranged version, `Unpinned`, `Unknown`, or `N/A`. Use
+  `N/A` only when no supported path uses OpenShell.
+- For multiple supported deployment paths, use an exact version only when all
+  paths use it. Use `Unpinned` when any path selects a mutable version, and
+  `Unknown` when a used component or its version cannot be established.
+- `Lifecycle` is optional and accepts exactly `Active` or `Deprecated`;
+  omitting it means `Active`. Use `Deprecated` only when the
+  example is intentionally retained for reference instead of recommended for
+  new use.
+- `Reviewed` is an optional `YYYY-MM-DD` date for a focused review of setup,
+  documented behavior, and known limitations. It is maintenance metadata, not
+  a verification result or evidence level.
 - `Upstream` is optional. Set it only when the example wraps, adapts, or extends
   a separate canonical public project, and use an absolute HTTPS URL without
   embedded credentials. Do not use it as a second source link to this example.
@@ -420,6 +444,58 @@ Follow these metadata rules:
   partner, or community provenance and canonical recipe path.
 - The directory path remains the source for artifact kind and recipe
   provenance; do not repeat either in the catalog block.
+
+Do not author the public maintenance status. It is computed from the latest
+committed change anywhere under the example or a later `Reviewed` date. This
+is a repository-activity heuristic: documentation and asset changes count just
+like runtime changes. The age bands are `Current` through day 29, `Review soon`
+through day 59, `Review due` through day 119, `Review overdue` through day 239,
+and `Review critical` from day 240. The thresholds live in
+`scripts/catalog-maintenance.json`, and the daily
+Pages build refreshes the site. An authored `Deprecated` lifecycle applies
+immediately and is the only status hidden by the default catalog view. An
+automatic status never rewrites the README. These signals describe repository
+change activity, not support, quality, or runtime health.
+
+### Runtime Stack Discovery
+
+The three README rows are the human fallback; they do not confirm what the
+implementation installs. The catalog performs a deliberately small static
+check of root `Dockerfile*` or `agents/*/Dockerfile*` files.
+
+It recognizes `NEMOCLAW_VERSION`, `NEMOCLAW_COMMIT`,
+`NEMOCLAW_INSTALL_TAG`, `NEMOCLAW_INSTALL_REF`, `NEMOCLAW_AGENT`,
+`HERMES_VERSION`, `HERMES_SEMVER`, `OPENCLAW_VERSION`,
+`DEEPAGENTS_VERSION`, `DEEP_AGENTS_VERSION`,
+`LANGCHAIN_DEEP_AGENTS_CODE_VERSION`, and `OPENSHELL_VERSION`. Put standard
+runtime values in the Dockerfile that installs the stack:
+
+```dockerfile
+ARG NEMOCLAW_VERSION=v0.0.104
+ARG NEMOCLAW_COMMIT=f389c9d872775006ae069473f58250fa8f3ad40f
+ARG NEMOCLAW_AGENT=openclaw
+ARG OPENSHELL_VERSION=0.0.85
+```
+
+Do not add a catalog-only version file. Nested or custom deployment layouts
+intentionally remain README-only until they adopt a root Dockerfile
+convention.
+
+An exact NemoClaw tag or commit listed in
+`scripts/nemoclaw-release-contracts.json` can supply its stock harness and
+OpenShell versions once the selected harness is known. An explicit harness
+pin overrides the stock harness. Any explicit value must agree with the
+README and inferred values. Contract harness values are installed CLI/package
+versions, not source-tag aliases. Add a release contract only after checking
+the exact upstream commit, harness package metadata, and OpenShell constraint.
+
+The UI reports `Confirmed` when applicable exact values agree with a standard
+contract, `Unconfirmed` when exact values exist only in the README, `Unpinned`
+for ranges or mutable installs, `Unknown` when a used component or version is
+not established, `Conflict` for disagreement, and `N/A` only when the
+component does not participate. Unsupported layouts fall back instead of
+being guessed. These labels describe version evidence, not quality or
+support. Model discovery remains out of scope.
 
 Choose one of these exact industry values, including its emoji:
 
@@ -505,14 +581,21 @@ authoring comments before submission.
 | Description | [For an intended user, explain the concrete job and observable result.] |
 | Industry | [Choose one exact emoji-and-title pair from Catalog Metadata.] |
 | Requirements | [Summarize the main environment, dependency, and material operating boundary.] |
+| NemoClaw | [Exact/ranged version, Unpinned, Unknown, or N/A.] |
+| Harness | [Harness name plus exact/ranged version, Unpinned, Unknown, or N/A.] |
+| OpenShell | [Exact/ranged version, Unpinned, Unknown, or N/A.] |
 
 <!--
-When applicable, add these rows after Requirements and in this order:
+When applicable, add these rows after OpenShell and in this order:
+`| Lifecycle | [Active or Deprecated] |` for an intentional lifecycle
+exception; `| Reviewed | YYYY-MM-DD |` after a focused maintenance review;
 `| Upstream | https://github.com/organization/project |` for a separate public
 project that this example adapts; `| Contributor | [Organization] |` for a
 partner recipe; and `| Collection | [Hackathon or Build-a-Claw] |` for an
 accepted collection recipe. Omit rows that do not apply.
 -->
+
+[Introduce the intended user, problem, and result.]
 
 ## Screenshot
 
@@ -548,7 +631,7 @@ also preserve the essential expected output as searchable text.
 
 <!--
 Use the canonical category exactly. Keep category separate from contributor
-provenance. The opening catalog block is authoritative for industry and
+provenance. The catalog block is authoritative for industry and
 collection; do not repeat those fields here. Neither changes category,
 provenance, or directory placement.
 
@@ -583,6 +666,7 @@ then link the alternatives.]
 
 **This does not verify:** [State material boundaries, skipped live systems, or
 remaining validation.]
+
 ````
 
 ### Required Authoring Rules
@@ -590,7 +674,7 @@ remaining validation.]
 - Put material credential, data-sharing, permission, cost, write, or
   destructive-action warnings before the command that triggers them.
 - Start with the exact title. Put the catalog table, including its `Description`
-  outcome, in a final `Catalog Metadata` section as documented in
+  outcome, immediately after the level-one title as documented in
   [Catalog Metadata](#catalog-metadata).
 - Use the canonical category independently from contributor or organizational
   provenance.

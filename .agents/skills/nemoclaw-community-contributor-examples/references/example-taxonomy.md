@@ -65,11 +65,21 @@ contribution came from. It does not encode every way a reader may discover the
 example.
 
 Record the one primary industry, any accepted cross-cutting collection, and an
-optional upstream project in the standardized catalog block at the top of the
-example's root `README.md`.
+optional upstream project in the standardized catalog block in the example's
+root `README.md`.
 Use the exact emoji-and-title values documented in
 [`CONTRIBUTING.md`](../../../../CONTRIBUTING.md#catalog-metadata). Industry does
-not change kind, provenance, support, or maturity.
+not change kind, provenance, support, or maturity. `Lifecycle` and `Reviewed`
+are optional maintenance metadata; omission means an active example whose age
+comes from committed activity.
+
+Every example also declares NemoClaw, harness, and OpenShell values in that
+table. They are fallbacks, not proof. The catalog confirms them only from the
+small set of root runtime conventions documented in
+[`CONTRIBUTING.md`](../../../../CONTRIBUTING.md#runtime-stack-discovery). An
+exact reviewed NemoClaw release may supply its stock harness and OpenShell
+versions. Custom layouts remain `Unconfirmed`, `Unpinned`, or `Unknown` until
+standardized; these labels do not mean unsupported or broken.
 
 `Hackathon` and `Build-a-Claw` are collections, not artifact kinds or
 provenance. A collection entry that is a reusable workflow remains a recipe

@@ -8,6 +8,9 @@
 | Description | Adds asynchronous research to a sandbox, so users can queue long-running jobs on a host-side worker, monitor persistent task state, and return later for text or JSON results. |
 | Industry | ✨ Other |
 | Requirements | Docker Compose · dedicated OpenShell/NemoClaw sandbox · OpenAI-compatible inference endpoint + API key · no readiness guarantee |
+| NemoClaw | Unpinned |
+| Harness | LangChain Deep Agents 0.7.5 |
+| OpenShell | Unpinned |
 
 Deep Research Worker is a community recipe for asynchronous, long-horizon
 research with a NemoClaw-managed sandbox. It installs a `deep-research` skill

@@ -9,18 +9,49 @@ from __future__ import annotations
 
 import argparse
 import base64
+import datetime as dt
 import hashlib
 import html
 import json
 import posixpath
 import re
 import shutil
+import subprocess
 import sys
 from dataclasses import dataclass, replace
 from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
+
+if __package__:
+    from .catalog_maintenance import (
+        LIFECYCLES,
+        MaintenancePolicyError,
+        MaintenanceStatus,
+        compute_status,
+        load_policy,
+    )
+    from .example_stack_facts import (
+        StackDeclaration,
+        StackFacts,
+        extract_example_stack_facts,
+        parse_stack_declaration,
+    )
+else:
+    from catalog_maintenance import (  # type: ignore[no-redef]
+        LIFECYCLES,
+        MaintenancePolicyError,
+        MaintenanceStatus,
+        compute_status,
+        load_policy,
+    )
+    from example_stack_facts import (  # type: ignore[no-redef]
+        StackDeclaration,
+        StackFacts,
+        extract_example_stack_facts,
+        parse_stack_declaration,
+    )
 
 try:
     import markdown
@@ -209,6 +240,12 @@ class CatalogEntry:
     contributor: str | None = None
     upstream_url: str | None = None
     readme_body: str = ""
+    lifecycle: str = "Active"
+    reviewed: dt.date | None = None
+    last_activity: dt.date | None = None
+    stack_declaration: StackDeclaration | None = None
+    stack: StackFacts | None = None
+    maintenance: MaintenanceStatus | None = None
 
     @property
     def readme_path(self) -> str:
@@ -261,6 +298,23 @@ class CatalogEntry:
 
     @property
     def search_text(self) -> str:
+        stack_values: tuple[str, ...] = ()
+        if self.stack is not None:
+            stack_values = tuple(
+                value
+                for component in (
+                    self.stack.nemoclaw,
+                    self.stack.harness,
+                    self.stack.openshell,
+                )
+                if component.status != "not-applicable"
+                for value in (
+                    component.name,
+                    component.version,
+                    component.status,
+                )
+                if value
+            ) + (self.stack.status,)
         values = (
             self.title,
             self.description,
@@ -270,6 +324,9 @@ class CatalogEntry:
             self.display_label,
             self.contributor or "",
             " ".join(collection.title for collection in self.collections),
+            self.lifecycle,
+            self.maintenance.label if self.maintenance else "",
+            *stack_values,
         )
         return " ".join(value for value in values if value)
 
@@ -457,6 +514,11 @@ CATALOG_FIELD_ORDER = (
     "Description",
     "Industry",
     "Requirements",
+    "NemoClaw",
+    "Harness",
+    "OpenShell",
+    "Lifecycle",
+    "Reviewed",
     "Upstream",
     "Contributor",
     "Collection",
@@ -595,8 +657,13 @@ def _parse_catalog_row(line: str, readme_path: str) -> tuple[str, str]:
             f"Catalog metadata field {field!r} must have a trimmed value in "
             f"{readme_path}."
         )
+    stack_field = field in {"NemoClaw", "Harness", "OpenShell"}
+    marked_up = re.search(
+        r"[`*_\[\]]" if stack_field else r"[`*_~\[\]<>]",
+        value,
+    )
     if any(ord(character) < 32 for character in value) or (
-        field != "Upstream" and re.search(r"[`*_~\[\]<>]", value)
+        field != "Upstream" and marked_up
     ):
         raise CatalogError(
             f"Catalog metadata field {field!r} must be plain text in {readme_path}."
@@ -724,7 +791,14 @@ def parse_readme_metadata(
             + ", ".join(CATALOG_FIELD_ORDER)
             + "."
         )
-    missing_fields = {"Description", "Industry", "Requirements"} - set(fields)
+    missing_fields = {
+        "Description",
+        "Industry",
+        "Requirements",
+        "NemoClaw",
+        "Harness",
+        "OpenShell",
+    } - set(fields)
     if missing_fields:
         raise CatalogError(
             f"Missing catalog metadata fields in {readme_path}: "
@@ -775,6 +849,31 @@ def parse_readme_metadata(
             f"Requirements must be at most 240 characters in {readme_path}."
         )
 
+    try:
+        stack_declaration = parse_stack_declaration(
+            fields["NemoClaw"],
+            fields["Harness"],
+            fields["OpenShell"],
+        )
+    except ValueError as error:
+        raise CatalogError(f"Invalid runtime stack metadata in {readme_path}: {error}.") from error
+
+    lifecycle = fields.get("Lifecycle", "Active")
+    if lifecycle not in LIFECYCLES:
+        raise CatalogError(
+            f"Lifecycle must be Active or Deprecated in {readme_path}."
+        )
+    reviewed: dt.date | None = None
+    if reviewed_value := fields.get("Reviewed"):
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", reviewed_value) is None:
+            raise CatalogError(f"Reviewed must use YYYY-MM-DD in {readme_path}.")
+        try:
+            reviewed = dt.date.fromisoformat(reviewed_value)
+        except ValueError as error:
+            raise CatalogError(
+                f"Reviewed must be a valid calendar date in {readme_path}."
+            ) from error
+
     upstream_url = fields.get("Upstream")
     if upstream_url is not None:
         upstream_url = _validate_upstream_url(upstream_url, readme_path)
@@ -815,6 +914,9 @@ def parse_readme_metadata(
         contributor=contributor,
         upstream_url=upstream_url,
         readme_body=readme_body,
+        lifecycle=lifecycle,
+        reviewed=reviewed,
+        stack_declaration=stack_declaration,
     )
 
 
@@ -871,6 +973,118 @@ def load_catalog(
         seen_titles.add(entry.title.casefold())
         seen_ids.add(entry.id)
     return entries
+
+
+def latest_committed_activity(root: Path, entry: CatalogEntry) -> dt.date | None:
+    """Return the last committed change date for one example."""
+
+    if not (root / ".git").exists():
+        raise CatalogError(
+            "Catalog maintenance status requires Git history; build from a "
+            "full Git checkout."
+        )
+
+    def run_git(arguments: list[str], operation: str) -> str:
+        try:
+            result = subprocess.run(
+                ["git", *arguments],
+                cwd=root,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise CatalogError(
+                f"Unable to {operation} for {entry.path}: {error}"
+            ) from error
+        if result.returncode != 0:
+            detail = result.stderr.strip() or f"git exited {result.returncode}"
+            raise CatalogError(
+                f"Unable to {operation} for {entry.path}: {detail}"
+            )
+        return result.stdout.strip()
+
+    relative_path = f"examples/{entry.path}"
+    value = run_git(
+        ["log", "-1", "--format=%ct", "--", relative_path],
+        "read committed activity",
+    )
+    if not value:
+        status = run_git(
+            [
+                "status",
+                "--porcelain",
+                "--untracked-files=all",
+                "--",
+                relative_path,
+            ],
+            "inspect uncommitted activity",
+        )
+        if status:
+            return None
+        raise CatalogError(
+            f"No Git history found for {entry.path}; use a full-history checkout."
+        )
+    try:
+        return dt.datetime.fromtimestamp(
+            int(value), tz=dt.timezone.utc
+        ).date()
+    except (OSError, OverflowError, ValueError) as error:
+        raise CatalogError(
+            f"Git returned an invalid activity timestamp for {entry.path}: {value!r}."
+        ) from error
+
+
+def enrich_catalog(
+    root: Path,
+    entries: list[CatalogEntry],
+    *,
+    today: dt.date | None = None,
+    activity_dates: dict[str, dt.date] | None = None,
+) -> list[CatalogEntry]:
+    """Add read-only runtime stack facts and computed maintenance status."""
+
+    current_day = today or dt.datetime.now(dt.timezone.utc).date()
+    policy_path = root / "scripts" / "catalog-maintenance.json"
+    try:
+        policy = load_policy(policy_path) if policy_path.is_file() else load_policy()
+        enriched: list[CatalogEntry] = []
+        for entry in entries:
+            committed_on = (
+                activity_dates.get(entry.path)
+                if activity_dates is not None and entry.path in activity_dates
+                else latest_committed_activity(root, entry)
+            )
+            # A newly added, uncommitted example uses the build date for preview.
+            committed_on = committed_on or current_day
+            if entry.stack_declaration is None:
+                raise CatalogError(f"Missing runtime stack declaration for {entry.path}.")
+            try:
+                stack = extract_example_stack_facts(
+                    root / "examples" / entry.path,
+                    entry.stack_declaration,
+                )
+            except (OSError, ValueError) as error:
+                raise CatalogError(f"Invalid runtime stack contract: {error}") from error
+            maintenance = compute_status(
+                policy,
+                committed_on=committed_on,
+                reviewed_on=entry.reviewed,
+                today=current_day,
+                lifecycle=entry.lifecycle,
+            )
+            enriched.append(
+                replace(
+                    entry,
+                    last_activity=committed_on,
+                    stack=stack,
+                    maintenance=maintenance,
+                )
+            )
+        return enriched
+    except MaintenancePolicyError as error:
+        raise CatalogError(f"Invalid catalog maintenance policy: {error}") from error
 
 
 def _markdown_cell(value: str) -> str:
@@ -1184,6 +1398,7 @@ def industry_filter_options(entries: list[CatalogEntry]) -> str:
 
 def render_card(entry: CatalogEntry) -> str:
     collections = " ".join(entry.collection_ids)
+    maintenance_id = entry.maintenance.id if entry.maintenance else "current"
     collection_tags = "".join(
         f'<li class="tag tag-collection">{html.escape(collection.metadata_value)}</li>'
         for collection in entry.collections
@@ -1198,6 +1413,7 @@ def render_card(entry: CatalogEntry) -> str:
   data-category="{entry.category.id}"
   data-industry="{entry.industry_id}"
   data-collections="{html.escape(collections, quote=True)}"
+  data-maintenance="{maintenance_id}"
   data-search="{html.escape(entry.search_text, quote=True)}"
   tabindex="-1"
 >
@@ -1301,7 +1517,7 @@ def public_catalog(
     for entry in entries:
         industry_counts[entry.industry] += 1
     return {
-        "schema_version": 3,
+        "schema_version": 4,
         "source": "https://github.com/NVIDIA/nemoclaw-community/tree/main/examples",
         "categories": [
             {
@@ -1354,6 +1570,15 @@ def public_catalog(
                 "contributor": entry.contributor,
                 "collections": list(entry.collection_ids),
                 "requirements": entry.requirements,
+                "lifecycle": entry.lifecycle,
+                "reviewed": entry.reviewed.isoformat() if entry.reviewed else None,
+                "last_activity": (
+                    entry.last_activity.isoformat() if entry.last_activity else None
+                ),
+                "stack": entry.stack.as_dict() if entry.stack else None,
+                "maintenance": (
+                    entry.maintenance.to_dict() if entry.maintenance else None
+                ),
                 "upstream_url": entry.upstream_url,
                 "source_path": entry.readme_path,
                 "guide_url": entry.guide_url,
@@ -1390,9 +1615,46 @@ def render_llms(entries: list[CatalogEntry]) -> str:
                 f"  - Category: {entry.category.title}",
                 f"  - Industry: {entry.industry_label}",
                 f"  - Requirements: {entry.requirements}",
+                f"  - Lifecycle: {entry.lifecycle}",
                 f"  - Source: [README]({entry.guide_url})",
             )
         )
+        if entry.stack:
+            nemoclaw_version = (
+                entry.stack.nemoclaw.version
+                or (
+                    "N/A"
+                    if entry.stack.nemoclaw.status == "not-applicable"
+                    else "Unknown"
+                )
+            )
+            harness_na = entry.stack.harness.status == "not-applicable"
+            harness_name = entry.stack.harness.name or (
+                "N/A" if harness_na else "Unknown"
+            )
+            harness_version = (
+                entry.stack.harness.version
+                or ("N/A" if harness_na else "Unknown")
+            )
+            openshell_version = (
+                entry.stack.openshell.version
+                or (
+                    "N/A"
+                    if entry.stack.openshell.status == "not-applicable"
+                    else "Unknown"
+                )
+            )
+            lines.extend(
+                (
+                    f"  - NemoClaw version: {nemoclaw_version}",
+                    f"  - Harness: {harness_name}",
+                    f"  - Harness version: {harness_version}",
+                    f"  - OpenShell version: {openshell_version}",
+                    f"  - Stack verification: {entry.stack.status}",
+                )
+            )
+        if entry.maintenance:
+            lines.append(f"  - Maintenance: {entry.maintenance.label}")
         if entry.collections:
             lines.append(
                 "  - Collections: "
@@ -1418,6 +1680,16 @@ def taxonomy_contract() -> dict[str, Any]:
             for collection in COLLECTION_DEFINITIONS
         },
         "industries": ["all", *(slugify(industry) for industry in INDUSTRIES)],
+        "maintenance": [
+            "maintained",
+            "all",
+            "current",
+            "review-soon",
+            "review-due",
+            "review-overdue",
+            "review-critical",
+            "deprecated",
+        ],
     }
 
 
@@ -1847,6 +2119,106 @@ def _detail_relative(entry: CatalogEntry, target: str) -> str:
     return posixpath.relpath(target, detail_dir)
 
 
+def _display_stack_value(value: str | None, status: str) -> str:
+    if status == "not-applicable":
+        return "N/A"
+    if value:
+        return html.escape(value)
+    return '<span class="fact-unknown">Unknown</span>'
+
+
+def _fact_info(label: str, lines: list[str]) -> str:
+    content = "".join(f"<span>{html.escape(line)}</span>" for line in lines)
+    return (
+        '<details class="fact-info">'
+        f'<summary aria-label="{html.escape(label, quote=True)}">'
+        '<span aria-hidden="true">i</span></summary>'
+        f'<div class="fact-popover">{content}</div></details>'
+    )
+
+
+def render_stack_facts(entry: CatalogEntry) -> str:
+    stack = entry.stack
+    if stack is None:
+        return ""
+    if stack.harness.status == "not-applicable":
+        harness = "N/A"
+    elif stack.harness.name:
+        harness = " ".join(
+            (
+                html.escape(stack.harness.name),
+                _display_stack_value(stack.harness.version, stack.harness.status),
+            )
+        )
+    else:
+        harness = _display_stack_value(stack.harness.version, stack.harness.status)
+    openshell_version = _display_stack_value(
+        stack.openshell.version,
+        stack.openshell.status,
+    )
+    status_label = {
+        "confirmed": "Confirmed",
+        "unconfirmed": "Unconfirmed",
+        "unpinned": "Unpinned",
+        "unknown": "Unknown",
+        "conflict": "Conflict",
+        "not-applicable": "Not applicable",
+    }[stack.status]
+    details = [
+        re.sub(
+            r" from NemoClaw v?\d+(?:\.\d+){2,3}",
+            " from background release metadata",
+            reason,
+        )
+        for reason in stack.reasons
+        if not reason.startswith("NemoClaw")
+    ] or ["All displayed runtime stack facts were confirmed."]
+    if len(stack.evidence_paths) > 3:
+        evidence = ", ".join(stack.evidence_paths[:2])
+        evidence += f", and {len(stack.evidence_paths) - 2} more standardized files"
+    else:
+        evidence = ", ".join(stack.evidence_paths)
+    details.append(
+        f"Evidence: {evidence}."
+        if evidence
+        else "Evidence: no standardized runtime source found."
+    )
+    info = _fact_info("About stack metadata", details)
+    status_value = (
+        '<span class="status-label"><span class="status-dot" '
+        f'aria-hidden="true"></span>{html.escape(status_label)}</span>'
+    )
+    return (
+        f"<div><dt>Harness</dt><dd>{harness}</dd></div>"
+        f"<div><dt>OpenShell</dt><dd>{openshell_version}</dd></div>"
+        f'<div class="stack-status-fact stack-status-{stack.status}">'
+        f"<dt>Stack verification</dt><dd>{status_value}{info}</dd></div>"
+    )
+
+
+def render_maintenance_fact(entry: CatalogEntry) -> str:
+    status = entry.maintenance
+    if status is None or entry.last_activity is None:
+        return ""
+    details = [
+        status.summary,
+        f"Last committed change: {entry.last_activity.isoformat()}.",
+        f"Lifecycle: {entry.lifecycle}.",
+        "This reflects repository activity only, not support, quality, or runtime health.",
+    ]
+    if entry.reviewed is not None:
+        details.insert(2, f"Focused review: {entry.reviewed.isoformat()}.")
+    info = _fact_info("About maintenance status", details)
+    status_value = (
+        '<span class="status-label"><span class="status-dot" '
+        f'aria-hidden="true"></span>{html.escape(status.label)}</span>'
+    )
+    return (
+        f'<div class="maintenance-fact maintenance-tone-{status.tone}">'
+        f"<dt>Maintenance</dt><dd>{status_value}{info}</dd></div>"
+    )
+
+
 def render_detail_pages(
     root: Path,
     entries: list[CatalogEntry],
@@ -1907,7 +2279,9 @@ def render_detail_pages(
             "{{CATEGORY}}": html.escape(entry.category.singular),
             "{{ATTRIBUTION_FACT}}": attribution_fact,
             "{{UPSTREAM_FACT}}": upstream_fact,
+            "{{STACK_FACTS}}": render_stack_facts(entry),
             "{{REQUIREMENTS}}": html.escape(entry.requirements),
+            "{{MAINTENANCE_FACT}}": render_maintenance_fact(entry),
             "{{TABLE_OF_CONTENTS}}": toc_html,
             "{{README_HTML}}": indent(readme_html, 12),
             "{{DIAGRAM_SCRIPTS}}": diagram_scripts,
@@ -2049,6 +2423,7 @@ def validate_generated_site(
         "catalog-view-industry",
         "catalog-category",
         "catalog-industry",
+        "catalog-maintenance",
         "catalog-reset",
         "catalog-status",
         "catalog-empty",
@@ -2079,6 +2454,7 @@ def validate_generated_site(
         "catalog-view-industry",
         "catalog-category",
         "catalog-industry",
+        "catalog-maintenance",
     }
     missing_labels = required_labels - parser.labels_for
     if missing_labels:
@@ -2105,6 +2481,9 @@ def validate_generated_site(
             "data-category": entry.category.id,
             "data-industry": entry.industry_id,
             "data-collections": " ".join(entry.collection_ids),
+            "data-maintenance": (
+                entry.maintenance.id if entry.maintenance else "current"
+            ),
         }
         for entry in entries
     ]
@@ -2391,9 +2770,20 @@ class CatalogOutputs:
     copied_assets: set[str]
 
 
-def expected_outputs(root: Path) -> CatalogOutputs:
+def expected_outputs(
+    root: Path,
+    *,
+    today: dt.date | None = None,
+    activity_dates: dict[str, dt.date] | None = None,
+) -> CatalogOutputs:
     categories, collections = load_discovery_groups(root)
     entries = load_catalog(root, categories, collections)
+    entries = enrich_catalog(
+        root,
+        entries,
+        today=today,
+        activity_dates=activity_dates,
+    )
     template_path = root / "site" / "index.template.html"
     detail_template_path = root / "site" / "detail.template.html"
     try:

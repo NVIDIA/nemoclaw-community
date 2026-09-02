@@ -8,6 +8,9 @@
 | Description | Helps learners work through the seven-module Build an Agent workshop in JupyterLab with an AI tutor that explains concepts, offers graduated hints, and checks progress inside an OpenShell sandbox. |
 | Industry | 🎓 Academia/Education |
 | Requirements | Linux · Docker · OpenShell · inference, NVIDIA, and Tavily API keys · Slack or Outlook · CPU-first; module 4 training is read-through |
+| NemoClaw | N/A |
+| Harness | Hermes 0.20.0 |
+| OpenShell | Unpinned |
 | Upstream | https://github.com/brevdev/workshop-build-an-agent |
 
 [NVIDIA's **Build an Agent** workshop](https://github.com/brevdev/workshop-build-an-agent)

@@ -5,10 +5,13 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import html
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from scripts.build_catalog import (
     CATEGORY_DEFINITIONS,
@@ -23,6 +26,7 @@ from scripts.build_catalog import (
     check_catalog,
     expected_outputs,
     extract_mermaid_sources,
+    latest_committed_activity,
     load_catalog,
     load_discovery_groups,
     public_catalog,
@@ -79,6 +83,9 @@ class CatalogBuildTests(unittest.TestCase):
             "description": "Produces a small observable fixture result.",
             "industry": "Other",
             "requirements": "Python 3 · local/static",
+            "nemoclaw": "N/A",
+            "harness": "N/A",
+            "openshell": "N/A",
         }
         if record:
             values.update(record)
@@ -91,8 +98,17 @@ class CatalogBuildTests(unittest.TestCase):
             f"| Description | {values['description']} |",
             f"| Industry | {industry_cell} |",
             f"| Requirements | {values['requirements']} |",
+            f"| NemoClaw | {values['nemoclaw']} |",
+            f"| Harness | {values['harness']} |",
+            f"| OpenShell | {values['openshell']} |",
         ]
-        for field in ("Upstream", "Contributor", "Collection"):
+        for field in (
+            "Lifecycle",
+            "Reviewed",
+            "Upstream",
+            "Contributor",
+            "Collection",
+        ):
             value = values.get(field.casefold())
             if value:
                 rows.append(f"| {field} | {value} |")
@@ -244,6 +260,62 @@ class CatalogBuildTests(unittest.TestCase):
         with self.assertRaisesRegex(CatalogError, "Example README is empty"):
             load_catalog(root)
 
+    def test_committed_activity_requires_a_git_checkout(self) -> None:
+        root = self._fixture_root()
+        entry = load_catalog(root)[0]
+
+        with self.assertRaisesRegex(CatalogError, "requires Git history"):
+            latest_committed_activity(root, entry)
+
+    def test_committed_activity_uses_a_utc_epoch(self) -> None:
+        root = self._fixture_root()
+        (root / ".git").mkdir()
+        entry = load_catalog(root)[0]
+
+        with patch("scripts.build_catalog.subprocess.run") as run:
+            run.return_value = SimpleNamespace(
+                returncode=0,
+                stdout="1788136200\n",
+                stderr="",
+            )
+            activity = latest_committed_activity(root, entry)
+
+        self.assertEqual(activity, dt.date(2026, 8, 31))
+        self.assertIn("--format=%ct", run.call_args.args[0])
+
+    def test_uncommitted_new_example_uses_the_build_date(self) -> None:
+        root = self._fixture_root()
+        (root / ".git").mkdir()
+        entry = load_catalog(root)[0]
+
+        with patch("scripts.build_catalog.subprocess.run") as run:
+            run.side_effect = (
+                SimpleNamespace(returncode=0, stdout="", stderr=""),
+                SimpleNamespace(
+                    returncode=0,
+                    stdout=f"?? examples/{entry.path}/README.md\n",
+                    stderr="",
+                ),
+            )
+            activity = latest_committed_activity(root, entry)
+
+        self.assertIsNone(activity)
+        self.assertEqual(run.call_count, 2)
+        self.assertIn("status", run.call_args.args[0])
+
+    def test_clean_example_without_history_requires_a_full_checkout(self) -> None:
+        root = self._fixture_root()
+        (root / ".git").mkdir()
+        entry = load_catalog(root)[0]
+
+        with patch("scripts.build_catalog.subprocess.run") as run:
+            run.side_effect = (
+                SimpleNamespace(returncode=0, stdout="", stderr=""),
+                SimpleNamespace(returncode=0, stdout="", stderr=""),
+            )
+            with self.assertRaisesRegex(CatalogError, "full-history checkout"):
+                latest_committed_activity(root, entry)
+
     def test_path_derives_kind_and_recipe_provenance(self) -> None:
         entry = load_catalog(self._fixture_root())[0]
 
@@ -274,6 +346,17 @@ class CatalogBuildTests(unittest.TestCase):
 
         with self.assertRaisesRegex(CatalogError, "Missing.*Description"):
             load_catalog(root)
+
+    def test_runtime_stack_rows_are_required_and_strict(self) -> None:
+        for field, value in (
+            ("NemoClaw", "latest"),
+            ("Harness", "AnyAgent 1.0.0"),
+            ("OpenShell", "current"),
+        ):
+            with self.subTest(field=field):
+                root = self._fixture_root({field.casefold(): value})
+                with self.assertRaisesRegex(CatalogError, "runtime stack metadata"):
+                    load_catalog(root)
 
     def test_catalog_table_requires_a_supported_position(self) -> None:
         root = self._fixture_root()
@@ -315,6 +398,25 @@ class CatalogBuildTests(unittest.TestCase):
 
                 with self.assertRaisesRegex(CatalogError, message):
                     load_catalog(root)
+
+    def test_optional_lifecycle_and_review_date_are_strict(self) -> None:
+        entry = load_catalog(
+            self._fixture_root(
+                {"lifecycle": "Active", "reviewed": "2026-08-01"}
+            )
+        )[0]
+        self.assertEqual(entry.lifecycle, "Active")
+        self.assertEqual(entry.reviewed.isoformat(), "2026-08-01")
+
+        for record in (
+            {"lifecycle": "Stable"},
+            {"lifecycle": "Archived"},
+            {"reviewed": "2026-02-30"},
+            {"reviewed": "August 1, 2026"},
+        ):
+            with self.subTest(record=record):
+                with self.assertRaises(CatalogError):
+                    load_catalog(self._fixture_root(record))
 
     def test_industry_navigation_wraps_slash_labels_at_word_boundaries(self) -> None:
         entries = load_catalog(
@@ -399,6 +501,9 @@ class CatalogBuildTests(unittest.TestCase):
             "Produces a small observable fixture result.",
         )
         self.assertEqual(example["requirements"], "Python 3 · local/static")
+        self.assertEqual(example["lifecycle"], "Active")
+        self.assertIsNone(example["stack"])
+        self.assertIsNone(example["maintenance"])
         self.assertEqual(
             example["detail_url"], "examples/recipes/community/sample/"
         )
@@ -427,6 +532,35 @@ class CatalogBuildTests(unittest.TestCase):
                 page,
             )
             self.assertIn("Requirements &amp; limits", page)
+            facts_panel = page.split('<aside class="detail-facts"', 1)[1].split(
+                "</aside>", 1
+            )[0]
+            self.assertIn("<dt>Harness</dt>", facts_panel)
+            self.assertIn("<dt>OpenShell</dt>", facts_panel)
+            self.assertNotIn("<dt>NemoClaw</dt>", facts_panel)
+            self.assertNotIn("<dt>Harness version</dt>", facts_panel)
+            self.assertNotRegex(facts_panel, r"NemoClaw v?\d")
+            self.assertEqual(
+                facts_panel.count('class="status-dot" aria-hidden="true"'),
+                2,
+            )
+            self.assertEqual(facts_panel.count('<details class="fact-info">'), 2)
+            self.assertIn(
+                '<summary aria-label="About stack metadata">', facts_panel
+            )
+            self.assertIn(
+                '<summary aria-label="About maintenance status">', facts_panel
+            )
+            self.assertNotIn('role="tooltip"', facts_panel)
+            self.assertNotIn('tabindex="0"', facts_panel)
+            self.assertIn(
+                "This reflects repository activity only, not support, quality, "
+                "or runtime health.",
+                facts_panel,
+            )
+            self.assertIn("Maintenance", page)
+            self.assertIn(f"stack-status-{entry.stack.status}", page)
+            self.assertIn(f"maintenance-tone-{entry.maintenance.tone}", page)
             self.assertNotIn("Catalog field", page)
             self.assertIn('id="readme" tabindex="-1"', page)
             self.assertNotRegex(page, r'<(?:iframe|object|embed)\b')
@@ -450,6 +584,18 @@ class CatalogBuildTests(unittest.TestCase):
                 self.assertIn("diagrams.mjs", page)
             else:
                 self.assertNotIn("<script", page)
+        generated_index = public_catalog(
+            entries,
+            outputs.categories,
+            outputs.collections,
+        )
+        self.assertEqual(generated_index["schema_version"], 4)
+        self.assertTrue(
+            all(example["stack"] for example in generated_index["examples"])
+        )
+        self.assertTrue(
+            all(example["maintenance"] for example in generated_index["examples"])
+        )
         self.assertGreater(mermaid_pages, 0)
         self.assertGreater(mermaid_diagrams, 0)
 
@@ -623,7 +769,6 @@ class CatalogBuildTests(unittest.TestCase):
 
     def test_readme_compiler_rejects_missing_fragments(self) -> None:
         root = self._fixture_root(body="[Missing](README.md#not-present)\n")
-        example = root / "examples" / "recipes" / "community" / "sample"
         entry = load_catalog(root)[0]
         with self.assertRaisesRegex(CatalogError, "unresolved local fragments"):
             render_readme_html(root, entry, {entry.readme_path: entry}, set())
