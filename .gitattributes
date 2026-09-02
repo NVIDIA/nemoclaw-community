@@ -1,0 +1,2 @@
+# Preserve the author-maintained tutorial's Markdown hard breaks.
+examples/demos/build-a-claw/tutorial/build-a-claw_getting_started_guide.md whitespace=-blank-at-eol

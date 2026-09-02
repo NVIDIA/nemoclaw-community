@@ -21,9 +21,9 @@ catalog also includes standalone developer tools.
 ## Reference Examples
 
 Examples are organized as reusable NVIDIA and partner recipes, community
-recipes, NVIDIA field demos, and standalone developer tools. Hackathon and
-Build-a-Claw recipes remain in their provenance category and also appear in
-cross-cutting collection views. Search the
+recipes, NVIDIA field demos, and standalone developer tools. The Build-a-Claw
+view brings its guided demos, tutorials, and tagged recipes together without
+changing their canonical paths or contributor provenance. Search the
 [web catalog](https://nvidia.github.io/nemoclaw-community/)
 by example type or industry, browse the
 [source example catalog](examples/README.md), or consume the

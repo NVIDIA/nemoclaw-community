@@ -1594,6 +1594,370 @@ h3 {
   margin-block: 2rem;
 }
 
+/* Reusable, progressively enhanced Markdown tutorial presentation. */
+.tutorial-page .detail-hero-grid {
+  grid-template-columns: minmax(0, 72rem);
+  justify-content: center;
+}
+
+.tutorial-page .detail-heading {
+  max-width: 72rem;
+}
+
+.tutorial-page .detail-content-layout {
+  grid-template-columns: minmax(13rem, 17rem) minmax(0, 72rem);
+  justify-content: center;
+}
+
+.tutorial-content {
+  overflow-wrap: anywhere;
+}
+
+.tutorial-page.tutorial-is-paged .detail-content-layout {
+  grid-template-columns: minmax(0, 72rem);
+  gap: 0;
+}
+
+.tutorial-page.tutorial-is-paged .detail-toc {
+  display: none;
+}
+
+.tutorial-progress {
+  padding: clamp(1rem, 2.5vw, 1.4rem);
+  margin-bottom: clamp(2rem, 4vw, 3rem);
+  border: 1px solid var(--line);
+  border-radius: 0.45rem;
+  background: var(--surface);
+}
+
+.tutorial-progress-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.tutorial-progress-counter,
+.tutorial-progress-title {
+  margin: 0;
+}
+
+.tutorial-progress-counter {
+  flex: 0 0 auto;
+  color: var(--nvidia-green);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tutorial-progress-title {
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: right;
+}
+
+.tutorial-progress-meter {
+  display: block;
+  width: 100%;
+  height: 0.42rem;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  appearance: none;
+  background: var(--line);
+  color: var(--nvidia-green);
+}
+
+.tutorial-progress-meter::-webkit-progress-bar {
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.tutorial-progress-meter::-webkit-progress-value {
+  border-radius: 999px;
+  background: var(--nvidia-green);
+}
+
+.tutorial-progress-meter::-moz-progress-bar {
+  border-radius: 999px;
+  background: var(--nvidia-green);
+}
+
+.tutorial-content .tutorial-progress-steps {
+  display: flex;
+  padding: 0;
+  margin: 1.15rem 0 0;
+  gap: 0.4rem;
+  list-style: none;
+}
+
+.tutorial-content .tutorial-progress-steps li {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+}
+
+.tutorial-progress-steps a {
+  display: flex;
+  width: 100%;
+  min-height: 5.8rem;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.4rem;
+  padding: 0.5rem 0.3rem;
+  border: 1px solid transparent;
+  border-radius: 0.32rem;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  line-height: 1.25;
+  text-align: center;
+  text-decoration: none;
+}
+
+.tutorial-progress-link-label {
+  max-width: 12ch;
+}
+
+.tutorial-progress-steps a:hover {
+  color: var(--ink);
+}
+
+.tutorial-progress-number {
+  display: grid;
+  width: 1.55rem;
+  height: 1.55rem;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.tutorial-progress-steps .is-complete .tutorial-progress-number,
+.tutorial-progress-steps a[aria-current="step"] .tutorial-progress-number {
+  border-color: var(--nvidia-green);
+  background: var(--nvidia-green);
+  color: #111111;
+}
+
+.tutorial-progress-steps a[aria-current="step"] {
+  color: var(--ink);
+}
+
+.tutorial-progress-steps a[aria-current="step"] .tutorial-progress-link-label {
+  font-weight: 600;
+}
+
+.tutorial-step > h2 {
+  padding-top: 0;
+  margin-top: 0;
+  border-top: 0;
+  /* Leave the generated progress panel visible for direct part fragments. */
+  scroll-margin-top: 16.5rem;
+}
+
+.tutorial-pagination {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 1.5rem;
+  margin-top: 3rem;
+  border-top: 1px solid var(--line);
+}
+
+.tutorial-content .tutorial-page-link {
+  display: inline-flex;
+  min-width: 6.5rem;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--nvidia-green);
+  border-radius: 0.35rem;
+  background: var(--nvidia-green);
+  color: #111111;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+}
+
+.tutorial-content .tutorial-page-link:hover {
+  border-color: #8bd000;
+  background: #8bd000;
+  color: #111111;
+}
+
+.tutorial-page-link[hidden] {
+  display: none;
+}
+
+.tutorial-page-next {
+  margin-left: auto;
+  text-align: right;
+}
+
+.tutorial-page .detail-toc a {
+  padding-inline: 0.65rem 0.4rem;
+  border-left: 2px solid transparent;
+}
+
+.tutorial-page .detail-toc a.is-active,
+.tutorial-page .detail-toc a[aria-current="location"] {
+  border-left-color: var(--nvidia-green);
+  background: rgb(118 185 0 / 9%);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.tutorial-code-block {
+  max-width: 100%;
+  margin-bottom: 1rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: #0d0d0d;
+}
+
+.tutorial-code-toolbar {
+  display: flex;
+  min-height: 2.55rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.35rem 0.55rem 0.35rem 0.85rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-raised);
+}
+
+.tutorial-code-language {
+  color: #d6d6d6;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.tutorial-content .tutorial-code-block > pre,
+.tutorial-content .tutorial-code-block > .codehilite > pre,
+.tutorial-content .tutorial-code-block > .highlight > pre {
+  min-height: 0;
+  padding: 1rem;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.tutorial-code-block > .codehilite,
+.tutorial-code-block > .highlight {
+  min-width: 0;
+  margin: 0;
+}
+
+.tutorial-copy-button {
+  display: inline-flex;
+  min-width: 4rem;
+  min-height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 0.28rem;
+  background: var(--surface);
+  color: var(--ink-soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.tutorial-copy-button:hover {
+  border-color: var(--nvidia-green);
+  color: var(--ink);
+}
+
+.tutorial-copy-button[data-state="copied"] {
+  border-color: var(--status-green);
+  color: var(--status-green);
+}
+
+.tutorial-copy-button[data-state="error"] {
+  border-color: var(--status-red);
+  color: var(--status-red);
+}
+
+.tutorial-content .codehilite :is(.c, .c1, .ch, .cm, .cs) {
+  color: #8f9a8b;
+}
+
+.tutorial-content .codehilite :is(.k, .kc, .kd, .kn, .kp, .kr, .kt) {
+  color: #d99bea;
+}
+
+.tutorial-content .codehilite :is(
+  .s, .s1, .s2, .sa, .sb, .sc, .sd, .se, .sh, .si, .sr, .ss, .sx
+) {
+  color: #e5c07b;
+}
+
+.tutorial-content .codehilite :is(.nb, .nf, .nt) {
+  color: #6fc5d8;
+}
+
+.tutorial-content .codehilite :is(.nv, .vi, .vm) {
+  color: #efaa68;
+}
+
+.tutorial-content .codehilite :is(.m, .mb, .mf, .mh, .mi, .mo) {
+  color: #b8a1e3;
+}
+
+.tutorial-content .codehilite :is(.o, .ow) {
+  color: #8fcf58;
+}
+
+.tutorial-content .codehilite .err {
+  color: #ff7676;
+}
+
+.tutorial-content iframe,
+.tutorial-content video,
+.tutorial-content audio {
+  display: block;
+  max-width: 100%;
+  margin-block: 1.5rem;
+}
+
+.tutorial-content iframe,
+.tutorial-content video {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  background: #0d0d0d;
+}
+
+.tutorial-content iframe {
+  aspect-ratio: var(--tutorial-media-ratio, 16 / 9);
+  height: auto;
+  max-height: 80vh;
+}
+
+.tutorial-content video {
+  height: auto;
+  max-height: 80vh;
+}
+
+.tutorial-content audio {
+  width: min(100%, 42rem);
+}
+
 .site-footer {
   background: var(--page);
   color: var(--ink);
@@ -1708,6 +2072,41 @@ h3 {
   .detail-hero-grid,
   .detail-content-layout {
     grid-template-columns: 1fr;
+  }
+
+  .tutorial-page .detail-content-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tutorial-progress-summary {
+    display: block;
+  }
+
+  .tutorial-progress-title {
+    margin-top: 0.2rem;
+    text-align: left;
+  }
+
+  .tutorial-progress-steps a {
+    min-height: 5.2rem;
+    padding: 0.4rem 0.3rem;
+    font-size: 0.65rem;
+  }
+
+  .tutorial-step > h2 {
+    scroll-margin-top: 15.75rem;
+  }
+
+  .tutorial-content .tutorial-progress-steps {
+    padding-bottom: 0.3rem;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+  }
+
+  .tutorial-content .tutorial-progress-steps li {
+    flex: 1 0 6.5rem;
+    scroll-snap-align: center;
   }
 
   .detail-hero-grid {

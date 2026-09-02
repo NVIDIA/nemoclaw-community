@@ -7,9 +7,10 @@
 
 The NemoClaw Community catalog is a generated static site hosted by GitHub
 Pages. It has no application server, database, remote JavaScript, or package
-runtime. One pinned, pure-Python Markdown package compiles example READMEs into
-static detail pages. A pinned, hash-verified Mermaid Tiny browser asset is
-downloaded at build time and served locally only on pages that contain diagrams.
+runtime. Pinned Python-Markdown and Pygments packages compile example READMEs
+and highlight tutorial code into static detail pages. A pinned, hash-verified
+Mermaid Tiny browser asset is downloaded at build time and served locally only
+on pages that contain diagrams.
 
 ## Source And Outputs
 
@@ -20,12 +21,15 @@ example root READMEs ──┬─> examples/README.md
                        ├─> _site/examples/<canonical-path>/index.html
                        ├─> _site/catalog.json
                        └─> _site/llms.txt
+optional Build-a-Claw ──> themed tutorial body, navigation, and copy controls
+tutorial Markdown
 category and collection
 index README titles ───┬─> browse labels and information tooltips
 and descriptions       └─> category and collection data in catalog.json
 site/*.template.html ──┬─> generated HTML
 site/styles.css ───────┼─> _site/styles.css
 site/catalog.mjs ──────┼─> _site/catalog.mjs
+site/tutorial.mjs ─────┼─> _site/tutorial.mjs
 site/diagrams.mjs ─────┼─> _site/diagrams.mjs
 Mermaid Tiny cache ────┴─> _site/assets/vendor/mermaid.tiny.js
 README stack rows plus
@@ -47,26 +51,39 @@ optional `Upstream` field identifies a separate canonical public project that
 the example adapts. The required NemoClaw, harness, and OpenShell rows provide
 a readable fallback while standard runtime files provide confirmation.
 
-Each of the five canonical categories and two collection views has an index
-README. Its H1 and opening description are the authored source for the browse
-label and information tooltip. The build retains those values while rewriting
-each index into its standardized shape and regenerating the inventory inside
-the `## Examples` section. No other index sections are permitted. Collection
-directories are indexes only; they never contain examples. The ignored
-`_site/` directory is disposable; do not edit it directly.
+A Build-a-Claw demo can include one top-level Markdown file in addition to its
+README. The README continues to supply catalog metadata; the additional file
+supplies the detail-page tutorial body. Rendering extracts its first level-one
+heading as the page title and turns each later level-one heading into a paged
+step with progress plus Previous and Next navigation. Nested headings stay
+within their step. Fenced code is highlighted at build time and gains a copy
+control. The full document remains the no-JavaScript fallback, and none of
+these transformations write back to the source. The build formats the document
+but does not execute or validate its commands.
+
+Each of the six canonical categories and two collections has an index README.
+The browsable indexes supply the website label and information tooltip from
+their H1 and opening description; the Build-a-Claw collection supplies the one
+combined browse group for its demos, tutorials, and tagged recipes. The build
+retains those values while rewriting each index into its standardized shape
+and regenerating the inventory inside the `## Examples` section. No other
+index sections are permitted. Collection directories are indexes only; they
+never contain examples. The ignored `_site/` directory is disposable; do not
+edit it directly.
 
 The generated HTML contains every example card. The local JavaScript module
 filters those cards in the browser, so the full category-organized catalog
 remains readable when JavaScript is unavailable. GitHub Pages only serves the
 generated files.
 
-Each card links to a static detail page. The build extracts the source README
+Each card links to a static detail page. The build extracts the source-document
 title, compiles headings, tables, lists, links, code, and images, and renders
-the result inside the shared site theme. Detail pages without Mermaid remain
-script-free. Pages with supported Mermaid fences load the pinned local Tiny
-runtime and progressively replace each fence with a themed diagram. The
-original source stays in an expandable disclosure and is the no-JavaScript or
-render-error fallback.
+the result inside the shared site theme. Normal detail pages without Mermaid
+remain script-free. Tutorial pages load one local progressive-enhancement
+module for code-copy controls and paged navigation. Pages with supported
+Mermaid fences load the pinned local Tiny runtime and progressively replace
+each fence with a themed diagram. The original diagram source stays in an
+expandable disclosure and is the no-JavaScript or render-error fallback.
 
 The README compiler sanitizes its HTML output. Same-page heading fragments stay
 local, links to another catalog README use its local detail route, and other
@@ -74,7 +91,11 @@ repository files or directories link to GitHub. Only referenced local images
 in GIF, JPEG, PNG, or WebP format are copied into `_site/`, with type, size,
 path, and symlink checks. SVG images are rejected because Pages would otherwise
 serve contributed active documents from the site origin. Remote README images
-become outbound links instead of third-party page resources.
+become outbound links instead of third-party page resources. Tutorial pages
+can display HTTPS images and supported YouTube or LinkedIn frames from their
+author-maintained Markdown. Those frames receive restricted attributes, lazy
+loading, and a tutorial-specific Content Security Policy; all tutorial scripts
+still come from this repository.
 
 Mermaid publication uses a deliberately narrow subset: flowcharts, graphs,
 sequence diagrams, and state diagrams. The build caps source size and diagram
@@ -102,9 +123,10 @@ The catalog keeps these concepts separate:
   verification evidence.
 - `stack` merges required README declarations with a small static check of
   standardized runtime files.
-- `collection` is an optional cross-cutting recipe discovery field.
-  `Hackathon` and `Build-a-Claw` are collections; neither replaces kind,
-  provenance, canonical path, or contributor attribution.
+- `collection` is a cross-cutting discovery field. Recipes opt in through
+  metadata; Build-a-Claw demos and tutorials receive Build-a-Claw membership
+  from their canonical path. A collection never replaces kind, provenance,
+  canonical path, or contributor attribution.
 
 The build rejects unknown taxonomy roots, unsafe or invalid example paths,
 canonical example directories without a root README, malformed metadata
@@ -155,7 +177,7 @@ bookmarked, or created by another program:
 | --- | --- | --- |
 | `q` | Plain text | Case-insensitive whitespace-token AND search across title, description, requirements, category and provenance display text, industry, lifecycle, maintenance status, stack values and verification, contributor, and collections. |
 | `view` | `category` or `industry` | Selects which discovery dimension is active. The default is `category`. |
-| `category` | `all`, `nvidia-recipes`, `partner-recipes`, `community-recipes`, `nvidia-field-demos`, `developer-tools`, `hackathon-recipes`, or `build-a-claw-recipes` | Applies in category view. The final two values select recipes carrying the matching collection. |
+| `category` | `all`, `nvidia-recipes`, `partner-recipes`, `community-recipes`, `nvidia-field-demos`, `developer-tools`, `hackathon-recipes`, or `build-a-claw` | Applies in category view. `hackathon-recipes` selects tagged recipes; `build-a-claw` combines its canonical demos/tutorials with tagged recipes. |
 | `industry` | `all` or an industry ID published in `catalog.json` | Applies in industry view. |
 | `maintenance` | `maintained`, `all`, `current`, `review-soon`, `review-due`, `review-overdue`, `review-critical`, or `deprecated` | Applies independently of the active browse view. `maintained` includes every status except explicit deprecation. |
 

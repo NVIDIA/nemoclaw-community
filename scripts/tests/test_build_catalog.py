@@ -23,6 +23,7 @@ from scripts.build_catalog import (
     MERMAID_VERSION,
     PAGES_BASE_URL,
     build_site,
+    category_filter_options,
     check_catalog,
     expected_outputs,
     extract_mermaid_sources,
@@ -30,6 +31,7 @@ from scripts.build_catalog import (
     load_catalog,
     load_discovery_groups,
     public_catalog,
+    render_catalog_groups,
     render_category_nav,
     render_discovery_readmes,
     render_llms,
@@ -53,9 +55,10 @@ class CatalogBuildTests(unittest.TestCase):
         "partner-recipes": "Partner Recipes",
         "community-recipes": "Community Recipes",
         "nvidia-field-demos": "NVIDIA Field Demos",
+        "build-a-claw-demos": "Build-a-Claw Demos",
         "developer-tools": "Developer Tools",
         "hackathon": "Hackathon Recipes",
-        "build-a-claw": "Build-a-Claw Recipes",
+        "build-a-claw": "Build-a-Claw",
     }
 
     def _write_fixture_discovery_readmes(self, root: Path) -> None:
@@ -208,7 +211,7 @@ class CatalogBuildTests(unittest.TestCase):
 
         navigation = render_category_nav(entries, categories, collections)
         self.assertIn("A distinctive community description", navigation)
-        self.assertIn("Build-a-Claw Recipes", navigation)
+        self.assertIn("Build-a-Claw", navigation)
         self.assertIn('data-empty="true"', navigation)
         index = public_catalog(entries, categories, collections)
         community = next(
@@ -322,6 +325,104 @@ class CatalogBuildTests(unittest.TestCase):
         self.assertEqual(entry.category.kind, "recipe")
         self.assertEqual(entry.category.provenance, "community")
         self.assertEqual(entry.industry, "Other")
+
+    def test_build_a_claw_demo_path_derives_demo_kind(self) -> None:
+        entry = load_catalog(
+            self._fixture_root({"path": "demos/build-a-claw/tutorial"})
+        )[0]
+
+        self.assertEqual(entry.category.id, "build-a-claw-demos")
+        self.assertEqual(entry.category.kind, "demo")
+        self.assertIsNone(entry.category.provenance)
+        self.assertEqual(entry.collection_ids, ("build-a-claw",))
+        self.assertFalse(entry.is_tutorial)
+        self.assertEqual(entry.content_path, entry.readme_path)
+
+    def test_build_a_claw_has_one_combined_website_browse_group(self) -> None:
+        root = self._fixture_root({"path": "demos/build-a-claw/tutorial"})
+        categories, collections = load_discovery_groups(root)
+        entries = load_catalog(root, categories, collections)
+
+        navigation = render_category_nav(entries, categories, collections)
+        options = category_filter_options(entries, categories, collections)
+        groups = render_catalog_groups(entries, categories, collections)
+        self.assertEqual(navigation.count("?category=build-a-claw#catalog"), 1)
+        self.assertNotIn("?category=build-a-claw-demos", navigation)
+        self.assertNotIn("?category=build-a-claw-recipes", navigation)
+        self.assertEqual(options.count('value="build-a-claw"'), 1)
+        self.assertNotIn('value="build-a-claw-demos"', options)
+        self.assertNotIn('value="build-a-claw-recipes"', options)
+        self.assertIn(
+            '<div class="category-tile" data-empty="false">\n'
+            '  <a class="category-tile-link" '
+            'href="?category=build-a-claw#catalog">',
+            navigation,
+        )
+        self.assertIn(
+            '<span class="category-name">Build-a-Claw</span>', navigation
+        )
+        self.assertIn(">Build-a-Claw</h2>", groups)
+        self.assertNotIn(">Build-a-Claw Demos</h2>", groups)
+
+        index = public_catalog(entries, categories, collections)
+        build_a_claw = next(
+            collection
+            for collection in index["collections"]
+            if collection["id"] == "build-a-claw"
+        )
+        self.assertEqual(build_a_claw["count"], 1)
+        self.assertEqual(index["examples"][0]["collections"], ["build-a-claw"])
+
+    def test_build_a_claw_tutorial_uses_one_authored_markdown_source(self) -> None:
+        root = self._fixture_root({"path": "demos/build-a-claw/tutorial"})
+        tutorial = (
+            root / "examples/demos/build-a-claw/tutorial/getting-started.md"
+        )
+        source = (
+            b"# Authored Tutorial\n\n[TOC]\n\n# Part One\n\n## First Step\n\n"
+            b"```text\n# Preserved in code\n[TOC]\n```\n\n"
+            b"```bash\necho \"$HOME\" # highlighted command\n```\n\n"
+            b"![Remote image](https://images.example.com/tutorial.png)\n\n"
+            b'<iframe src="https://www.youtube.com/embed/video" '
+            b'title="Tutorial video" allowfullscreen></iframe>\n'
+        )
+        tutorial.write_bytes(source)
+
+        entry = load_catalog(root)[0]
+        title, body, toc, _ = render_readme_html(
+            root, entry, {entry.readme_path: entry}, set()
+        )
+
+        self.assertTrue(entry.is_tutorial)
+        self.assertEqual(entry.content_path, entry.tutorial_path)
+        self.assertEqual(title, "Authored Tutorial")
+        self.assertIn('<h2 id="part-one">Part One</h2>', body)
+        self.assertIn('<h3 id="first-step">First Step</h3>', body)
+        self.assertIn("# Preserved in code", body)
+        self.assertIn('<code class="language-text">', body)
+        self.assertIn('<code class="language-bash">', body)
+        self.assertIn('<span class="nb">echo</span>', body)
+        self.assertNotIn('<div class="toc">', body)
+        self.assertIn('href="#first-step"', toc)
+        self.assertIn('src="https://images.example.com/tutorial.png"', body)
+        self.assertIn('src="https://www.youtube.com/embed/video"', body)
+        self.assertEqual(tutorial.read_bytes(), source)
+
+    def test_build_a_claw_tutorial_source_is_singular_and_not_symlinked(self) -> None:
+        root = self._fixture_root({"path": "demos/build-a-claw/tutorial"})
+        directory = root / "examples/demos/build-a-claw/tutorial"
+        (directory / "one.md").write_text("# One\n", encoding="utf-8")
+        (directory / "two.md").write_text("# Two\n", encoding="utf-8")
+        with self.assertRaisesRegex(CatalogError, "at most one"):
+            load_catalog(root)
+
+        root = self._fixture_root({"path": "demos/build-a-claw/tutorial"})
+        directory = root / "examples/demos/build-a-claw/tutorial"
+        target = root / "outside.md"
+        target.write_text("# Outside\n", encoding="utf-8")
+        (directory / "tutorial.md").symlink_to(target)
+        with self.assertRaisesRegex(CatalogError, "non-symlinked"):
+            load_catalog(root)
 
     def test_unknown_industry_is_rejected(self) -> None:
         root = self._fixture_root({"industry": "Software"})
@@ -535,6 +636,7 @@ class CatalogBuildTests(unittest.TestCase):
             facts_panel = page.split('<aside class="detail-facts"', 1)[1].split(
                 "</aside>", 1
             )[0]
+            facts_attributes = facts_panel.split(">", 1)[0]
             self.assertIn("<dt>Harness</dt>", facts_panel)
             self.assertIn("<dt>OpenShell</dt>", facts_panel)
             self.assertNotIn("<dt>NemoClaw</dt>", facts_panel)
@@ -563,17 +665,26 @@ class CatalogBuildTests(unittest.TestCase):
             self.assertIn(f"maintenance-tone-{entry.maintenance.tone}", page)
             self.assertNotIn("Catalog field", page)
             self.assertIn('id="readme" tabindex="-1"', page)
-            self.assertNotRegex(page, r'<(?:iframe|object|embed)\b')
-            self.assertNotRegex(page, r'<img[^>]+src="https?://')
+            if entry.is_tutorial:
+                self.assertIn(" hidden", facts_attributes)
+                self.assertRegex(page, r'<iframe\b')
+                self.assertRegex(page, r'<img[^>]+src="https://')
+                self.assertIn('<div class="codehilite">', page)
+                self.assertIn('<code class="language-bash">', page)
+                self.assertIn("tutorial.mjs", page)
+            else:
+                self.assertNotIn(" hidden", facts_attributes)
+                self.assertNotRegex(page, r'<(?:iframe|object|embed)\b')
+                self.assertNotRegex(page, r'<img[^>]+src="https?://')
             self.assertRegex(
                 page,
                 r'<link rel="icon" type="image/png" sizes="64x64" '
                 r'href="[^"]*assets/nvidia-favicon\.png">',
             )
             diagram_count = page.count('class="language-mermaid"')
-            source = (ROOT / entry.readme_path).read_text(encoding="utf-8")
+            source = (ROOT / entry.content_path).read_text(encoding="utf-8")
             expected_diagram_count = len(
-                extract_mermaid_sources(source, entry.readme_path)
+                extract_mermaid_sources(source, entry.content_path)
             )
             self.assertEqual(diagram_count, expected_diagram_count)
             mermaid_diagrams += diagram_count
@@ -582,7 +693,7 @@ class CatalogBuildTests(unittest.TestCase):
                 self.assertIn("mermaid.tiny.js", page)
                 self.assertIn('type="module"', page)
                 self.assertIn("diagrams.mjs", page)
-            else:
+            elif not entry.is_tutorial:
                 self.assertNotIn("<script", page)
         generated_index = public_catalog(
             entries,
@@ -698,6 +809,29 @@ class CatalogBuildTests(unittest.TestCase):
                 {entry.readme_path: entry},
                 set(),
             )
+
+    def test_tutorial_compiler_rejects_unsupported_iframes(self) -> None:
+        for source in (
+            "http://www.youtube.com/embed/video",
+            "https://example.com/embed/video",
+        ):
+            with self.subTest(source=source):
+                root = self._fixture_root(
+                    {"path": "demos/build-a-claw/tutorial"}
+                )
+                tutorial = root / "examples/demos/build-a-claw/tutorial/guide.md"
+                tutorial.write_text(
+                    "# Tutorial\n\n"
+                    f'<iframe src="{source}" title="Video"></iframe>\n',
+                    encoding="utf-8",
+                )
+                entry = load_catalog(root)[0]
+                with self.assertRaisesRegex(
+                    CatalogError, "Unsupported tutorial iframe source"
+                ):
+                    render_readme_html(
+                        root, entry, {entry.readme_path: entry}, set()
+                    )
 
     def test_readme_compiler_rejects_unsafe_links(self) -> None:
         unsafe_links = (

@@ -14,7 +14,9 @@ This is the canonical placement and naming policy for content under
   supported versions, integrations, deployment status, industry, and program
   collections in documentation and catalog metadata.
 - Use directory placement for discovery, not as a support-level claim.
-- Keep each example independently deployable.
+- Keep each runnable example independently deployable. A documentation-only
+  tutorial must identify its canonical source and state that it has no runtime
+  deployment.
 
 ## Directory Structure
 
@@ -25,15 +27,17 @@ examples/
 │   ├── partners/<organization>/
 │   └── community/
 ├── demos/
-│   └── field/
+│   ├── field/
+│   └── build-a-claw/
 ├── tools/
 └── collections/
     ├── hackathon/README.md
     └── build-a-claw/README.md
 ```
 
-The five category directories have index READMEs at `recipes/nvidia/`,
-`recipes/partners/`, `recipes/community/`, `demos/field/`, and `tools/`.
+The six category directories have index READMEs at `recipes/nvidia/`,
+`recipes/partners/`, `recipes/community/`, `demos/field/`,
+`demos/build-a-claw/`, and `tools/`.
 Collection directories contain only their index README; examples remain in a
 canonical category path. Git does not preserve empty directories, so an empty
 category is represented by its index README.
@@ -44,6 +48,7 @@ category is represented by its index README.
 | --- | --- | --- |
 | `recipes` | The example is a complete, reusable agent workflow intended for adaptation. | It is primarily a presentation script, environment bootstrap, or development utility. |
 | `demos/field` | The artifact is optimized for a bounded field demonstration on named hardware or software. | It is intended as a reusable enterprise workflow. |
+| `demos/build-a-claw` | The artifact is a guided Build-a-Claw demonstration or tutorial. | It is a reusable workflow that belongs in a provenance-based recipe path. |
 | `tools` | The artifact is a standalone developer or evaluation utility rather than a deployed agent blueprint. | It produces the end-user agent workflow itself. |
 
 ## Recipe Provenance
@@ -86,6 +91,11 @@ provenance. A collection entry that is a reusable workflow remains a recipe
 under its NVIDIA, partner, or community provenance path. The corresponding
 `examples/collections/` directories are indexes only; do not place examples
 there or use a collection to erase contributor attribution.
+
+Build-a-Claw demos and tutorials use `demos/build-a-claw/` and join the
+Build-a-Claw collection automatically. Recipes opt in through their metadata.
+The website presents both through one Build-a-Claw browse group without
+changing their canonical artifact type, path, or provenance.
 
 Set `Upstream` only when an example wraps, adapts, or extends a separate
 canonical public project. Use an absolute HTTPS URL. Do not use it as a second

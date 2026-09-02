@@ -19,12 +19,12 @@ export const CATALOG_CATEGORIES = Object.freeze([
   "nvidia-field-demos",
   "developer-tools",
   "hackathon-recipes",
-  "build-a-claw-recipes",
+  "build-a-claw",
 ]);
 
 export const CATALOG_COLLECTION_CATEGORIES = Object.freeze({
   "hackathon-recipes": "hackathon",
-  "build-a-claw-recipes": "build-a-claw",
+  "build-a-claw": "build-a-claw",
 });
 
 export const CATALOG_INDUSTRIES = Object.freeze([

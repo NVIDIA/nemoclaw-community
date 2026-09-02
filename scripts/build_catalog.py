@@ -58,6 +58,11 @@ try:
 except ModuleNotFoundError:  # Report a targeted build error when dependencies are absent.
     markdown = None
 
+try:
+    import pygments
+except ModuleNotFoundError:  # Tutorial code highlighting is an optional build path.
+    pygments = None
+
 
 INDUSTRY_EMOJIS: dict[str, str] = {
     "Academia/Education": "🎓",
@@ -85,6 +90,7 @@ INDUSTRY_EMOJIS: dict[str, str] = {
 INDUSTRIES: tuple[str, ...] = tuple(INDUSTRY_EMOJIS)
 
 PAGES_BASE_URL = "https://nvidia.github.io/nemoclaw-community/"
+FEATURED_TUTORIAL_URL = "examples/demos/build-a-claw/tutorial/"
 PATH_SEGMENT_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 MERMAID_VERSION = "11.17.2"
 MERMAID_SHA256 = (
@@ -138,6 +144,16 @@ DETAIL_CONTENT_SECURITY_POLICY = (
     "object-src 'none'; frame-src 'self'; worker-src 'none'; base-uri 'none'; "
     "form-action 'none'"
 )
+TUTORIAL_CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' https:; font-src 'self'; connect-src 'none'; "
+    "object-src 'none'; frame-src https://www.linkedin.com https://www.youtube.com; "
+    "worker-src 'none'; base-uri 'none'; form-action 'none'"
+)
+TUTORIAL_IFRAME_PATHS = {
+    "www.linkedin.com": "/embed/",
+    "www.youtube.com": "/embed/",
+}
 
 
 @dataclass(frozen=True)
@@ -151,6 +167,7 @@ class Category:
     readme_path: str = ""
     title: str = ""
     description: str = ""
+    browse: bool = True
 
 
 CATEGORY_DEFINITIONS: tuple[Category, ...] = (
@@ -182,6 +199,13 @@ CATEGORY_DEFINITIONS: tuple[Category, ...] = (
         readme_path="examples/demos/field/README.md",
     ),
     Category(
+        "build-a-claw-demos",
+        "Build-a-Claw demo",
+        "demo",
+        readme_path="examples/demos/build-a-claw/README.md",
+        browse=False,
+    ),
+    Category(
         "developer-tools",
         "Developer tool",
         "tool",
@@ -196,7 +220,7 @@ CATEGORY_DEFINITION_BY_ID = {
 
 @dataclass(frozen=True)
 class Collection:
-    """One cross-cutting recipe collection and its browse presentation."""
+    """One cross-cutting discovery collection and its browse presentation."""
 
     id: str
     browse_id: str
@@ -204,6 +228,7 @@ class Collection:
     readme_path: str
     title: str = ""
     description: str = ""
+    automatic_category_ids: tuple[str, ...] = ()
 
 
 COLLECTION_DEFINITIONS: tuple[Collection, ...] = (
@@ -215,9 +240,10 @@ COLLECTION_DEFINITIONS: tuple[Collection, ...] = (
     ),
     Collection(
         "build-a-claw",
-        "build-a-claw-recipes",
+        "build-a-claw",
         "Build-a-Claw",
         "examples/collections/build-a-claw/README.md",
+        automatic_category_ids=("build-a-claw-demos",),
     ),
 )
 
@@ -240,6 +266,7 @@ class CatalogEntry:
     contributor: str | None = None
     upstream_url: str | None = None
     readme_body: str = ""
+    tutorial_path: str | None = None
     lifecycle: str = "Active"
     reviewed: dt.date | None = None
     last_activity: dt.date | None = None
@@ -256,6 +283,21 @@ class CatalogEntry:
         return (
             "https://github.com/NVIDIA/nemoclaw-community/blob/main/"
             f"{self.readme_path}"
+        )
+
+    @property
+    def is_tutorial(self) -> bool:
+        return self.tutorial_path is not None
+
+    @property
+    def content_path(self) -> str:
+        return self.tutorial_path or self.readme_path
+
+    @property
+    def content_url(self) -> str:
+        return (
+            "https://github.com/NVIDIA/nemoclaw-community/blob/main/"
+            f"{self.content_path}"
         )
 
     @property
@@ -384,6 +426,8 @@ def classify_path(
         category_id = "partner-recipes"
     elif len(parts) == 3 and parts[:2] == ("demos", "field"):
         category_id = "nvidia-field-demos"
+    elif len(parts) == 3 and parts[:2] == ("demos", "build-a-claw"):
+        category_id = "build-a-claw-demos"
     elif len(parts) == 2 and parts[0] == "tools":
         category_id = "developer-tools"
 
@@ -433,10 +477,11 @@ def discover_example_paths(
 
     demos = examples / "demos"
     if demos.is_dir():
+        allowed_demo_roots = {"build-a-claw", "field"}
         unexpected_demo_roots = {
             child.name
             for child in demos.iterdir()
-            if child.is_dir() and child.name != "field"
+            if child.is_dir() and child.name not in allowed_demo_roots
         }
         if unexpected_demo_roots:
             raise CatalogError(
@@ -457,7 +502,7 @@ def discover_example_paths(
         }
         if unexpected_collection_roots:
             raise CatalogError(
-                "Unexpected recipe collection directories: "
+                "Unexpected collection directories: "
                 + ", ".join(sorted(unexpected_collection_roots))
             )
         for collection_root in expected_collection_roots:
@@ -469,7 +514,7 @@ def discover_example_paths(
             )
             if unexpected_entries:
                 raise CatalogError(
-                    "Recipe collection directories may contain only README.md: "
+                    "Collection directories may contain only README.md: "
                     + ", ".join(
                         f"examples/collections/{collection_root}/{name}"
                         for name in unexpected_entries
@@ -481,6 +526,7 @@ def discover_example_paths(
         "recipes/community/*",
         "recipes/partners/*/*",
         "demos/field/*",
+        "demos/build-a-claw/*",
         "tools/*",
     )
     paths: set[str] = set()
@@ -505,6 +551,35 @@ def discover_example_paths(
                 )
             paths.add(path)
     return paths
+
+
+def discover_tutorial_path(root: Path, path: str, category: Category) -> str | None:
+    """Return one optional top-level Markdown tutorial for a Build-a-Claw demo."""
+
+    if category.id != "build-a-claw-demos":
+        return None
+    directory = root / "examples" / path
+    candidates = sorted(
+        (
+            candidate
+            for candidate in directory.iterdir()
+            if candidate.name != "README.md"
+            and candidate.suffix.casefold() == ".md"
+        ),
+        key=lambda candidate: candidate.name.casefold(),
+    )
+    for candidate in candidates:
+        if not is_regular_repo_file(root, candidate):
+            raise CatalogError(
+                "Build-a-Claw tutorial source must be a regular, non-symlinked "
+                f"repository file: {candidate.relative_to(root).as_posix()}"
+            )
+    if len(candidates) > 1:
+        raise CatalogError(
+            "Build-a-Claw demo may contain at most one top-level tutorial Markdown "
+            f"file besides README.md: examples/{path}"
+        )
+    return candidates[0].relative_to(root).as_posix() if candidates else None
 
 
 CATALOG_TABLE_HEADER = "| Catalog field | Value |"
@@ -712,6 +787,7 @@ def parse_readme_metadata(
     """Parse the required human-readable metadata block from one example README."""
 
     category = classify_path(path, categories_by_id)
+    tutorial_path = discover_tutorial_path(root, path, category)
     readme_path = f"examples/{path}/README.md"
     readme = root / readme_path
     if not is_regular_repo_file(root, readme):
@@ -892,16 +968,21 @@ def parse_readme_metadata(
     collection_definitions = (
         collections_by_value or COLLECTION_DEFINITION_BY_VALUE
     )
-    if collection_value is None:
-        collections: tuple[Collection, ...] = ()
-    elif collection_value in collection_definitions and category.kind == "recipe":
-        collections = (collection_definitions[collection_value],)
-    elif collection_value in collection_definitions:
-        raise CatalogError("Only recipes can join a recipe collection.")
-    else:
+    if (
+        collection_value is not None
+        and collection_value not in collection_definitions
+    ):
         raise CatalogError(
             f"Unknown Collection value in {readme_path}: {collection_value!r}."
         )
+    if collection_value is not None and category.kind != "recipe":
+        raise CatalogError("Only recipes can declare a Collection row.")
+    collections = tuple(
+        collection
+        for collection in collection_definitions.values()
+        if collection.metadata_value == collection_value
+        or category.id in collection.automatic_category_ids
+    )
 
     return CatalogEntry(
         path=path,
@@ -914,6 +995,7 @@ def parse_readme_metadata(
         contributor=contributor,
         upstream_url=upstream_url,
         readme_body=readme_body,
+        tutorial_path=tutorial_path,
         lifecycle=lifecycle,
         reviewed=reviewed,
         stack_declaration=stack_declaration,
@@ -1226,7 +1308,7 @@ def render_readme(
             )
         )
 
-    lines.extend(("## Recipe Collections", ""))
+    lines.extend(("## Collections", ""))
     for collection in collections:
         collection_link = posixpath.relpath(collection.readme_path, "examples")
         lines.extend(
@@ -1250,9 +1332,10 @@ def render_readme(
             "",
             "Read [CONTRIBUTING.md](../CONTRIBUTING.md) and the canonical",
             "[example taxonomy and naming policy](../.agents/skills/nemoclaw-community-contributor-examples/references/example-taxonomy.md).",
-            "Examples must remain independently deployable and must document their",
+            "Runnable examples must remain independently deployable and must document their",
             "prerequisites, credentials, policies, startup behavior, verification, and",
-            "teardown behavior. Add structured catalog metadata as described in the",
+            "teardown behavior. Documentation-only tutorials must identify their canonical",
+            "content source. Add structured catalog metadata as described in the",
             "[contributor guide](../CONTRIBUTING.md#catalog-metadata).",
             "",
         )
@@ -1297,6 +1380,8 @@ def render_category_nav(
     grouped = group_entries(entries, categories)
     tiles = []
     for category in categories:
+        if not category.browse:
+            continue
         count = len(grouped[category.id])
         tiles.append(
             _render_category_tile(
@@ -1314,7 +1399,7 @@ def render_category_nav(
                 collection.title,
                 collection.description,
                 len(entries_for_collection(entries, collection)),
-                is_collection=True,
+                is_collection=collection.id != "build-a-claw",
             )
         )
     return "\n".join(tiles)
@@ -1347,10 +1432,14 @@ def category_filter_options(
 ) -> str:
     grouped = group_entries(entries, categories)
     recipe_categories = tuple(
-        category for category in categories if category.kind == "recipe"
+        category
+        for category in categories
+        if category.kind == "recipe" and category.browse
     )
     other_categories = tuple(
-        category for category in categories if category.kind != "recipe"
+        category
+        for category in categories
+        if category.kind != "recipe" and category.browse
     )
     recipe_options = "\n".join(
         f'<option value="{category.id}">{html.escape(category.title)} '
@@ -1435,10 +1524,19 @@ def render_card(entry: CatalogEntry) -> str:
 def render_catalog_groups(
     entries: list[CatalogEntry],
     categories: tuple[Category, ...],
+    collections: tuple[Collection, ...],
 ) -> str:
     grouped = group_entries(entries, categories)
     sections = []
     for category in categories:
+        presentation: Category | Collection = next(
+            (
+                collection
+                for collection in collections
+                if category.id in collection.automatic_category_ids
+            ),
+            category,
+        )
         cards = "\n".join(render_card(entry) for entry in grouped[category.id])
         sections.append(
             f'''<section
@@ -1450,8 +1548,8 @@ def render_catalog_groups(
 >
   <div class="shell group-layout">
     <header class="group-heading">
-      <h2 id="{category.id}-title">{html.escape(category.title)}</h2>
-      <p>{html.escape(category.description)}</p>
+      <h2 id="{category.id}-title">{html.escape(presentation.title)}</h2>
+      <p>{html.escape(presentation.description)}</p>
     </header>
     <div class="card-grid">
 {indent(cards, 6)}
@@ -1478,7 +1576,10 @@ def render_site(
         "{{EXAMPLE_COUNT}}": str(len(entries)),
         "{{INDUSTRY_COUNT}}": str(len(INDUSTRIES)),
         "{{REPRESENTED_INDUSTRY_COUNT}}": str(represented_industries),
-        "{{BROWSE_GROUP_COUNT}}": str(len(categories) + len(collections)),
+        "{{BROWSE_GROUP_COUNT}}": str(
+            sum(category.browse for category in categories) + len(collections)
+        ),
+        "{{TUTORIAL_URL}}": FEATURED_TUTORIAL_URL,
         "{{CATEGORY_NAV}}": indent(
             render_category_nav(entries, categories, collections), 14
         ),
@@ -1488,13 +1589,16 @@ def render_site(
         ),
         "{{INDUSTRY_OPTIONS}}": indent(industry_filter_options(entries), 18),
         "{{CATALOG_GROUPS}}": indent(
-            render_catalog_groups(entries, categories), 8
+            render_catalog_groups(entries, categories, collections), 8
         ),
     }
     rendered = template
     for marker, value in replacements.items():
         count = rendered.count(marker)
-        expected_count = 2 if marker == "{{EXAMPLE_COUNT}}" else 1
+        expected_count = 2 if marker in {
+            "{{EXAMPLE_COUNT}}",
+            "{{TUTORIAL_URL}}",
+        } else 1
         if count != expected_count:
             raise CatalogError(
                 f"Expected {expected_count} {marker} marker(s) in "
@@ -1672,7 +1776,11 @@ def taxonomy_contract() -> dict[str, Any]:
     return {
         "categories": [
             "all",
-            *(category.id for category in CATEGORY_DEFINITIONS),
+            *(
+                category.id
+                for category in CATEGORY_DEFINITIONS
+                if category.browse
+            ),
             *(collection.browse_id for collection in COLLECTION_DEFINITIONS),
         ],
         "collection_categories": {
@@ -1754,6 +1862,104 @@ def extract_mermaid_sources(content: str, readme_path: str) -> tuple[str, ...]:
     return tuple(sources)
 
 
+def prepare_tutorial_markdown(source: str, source_path: str) -> tuple[str, str]:
+    """Remove tutorial chrome and demote headings without changing fenced code."""
+
+    title: str | None = None
+    output: list[str] = []
+    fence: tuple[str, int] | None = None
+    for line in source.splitlines(keepends=True):
+        ending = "\r\n" if line.endswith("\r\n") else "\n" if line.endswith("\n") else ""
+        content = line[: -len(ending)] if ending else line
+        if fence:
+            if re.fullmatch(
+                rf" {{0,3}}{re.escape(fence[0])}{{{fence[1]},}}[ \t]*", content
+            ):
+                fence = None
+            output.append(line)
+            continue
+        opening = re.match(r"^ {0,3}(?P<fence>`{3,}|~{3,})", content)
+        if opening:
+            marker = opening.group("fence")
+            fence = (marker[0], len(marker))
+            output.append(line)
+            continue
+        if re.fullmatch(r"[ \t]*\[TOC\][ \t]*", content, re.IGNORECASE):
+            continue
+        heading = re.fullmatch(
+            r"(?P<indent> {0,3})(?P<marks>#{1,6})[ \t]+(?P<text>.*)", content
+        )
+        if not heading:
+            output.append(line)
+            continue
+        marks = heading.group("marks")
+        if title is None and len(marks) == 1:
+            title = re.sub(r"[ \t]+#+[ \t]*$", "", heading.group("text")).strip()
+            if not title:
+                raise CatalogError(f"Tutorial title must not be empty in {source_path}.")
+            continue
+        marks = marks + "#" if len(marks) < 6 else marks
+        output.append(
+            f"{heading.group('indent')}{marks} {heading.group('text')}{ending}"
+        )
+    if title is None:
+        raise CatalogError(
+            f"Tutorial Markdown requires one level-one title in {source_path}."
+        )
+    return title, "".join(output)
+
+
+def tutorial_fence_languages(source: str, source_path: str) -> tuple[str, ...]:
+    """Return one safe display language for each tutorial fence in source order."""
+
+    languages: list[str] = []
+    fence: tuple[str, int, str] | None = None
+    for line in source.splitlines():
+        if fence:
+            if re.fullmatch(
+                rf" {{0,3}}{re.escape(fence[0])}{{{fence[1]},}}[ \t]*", line
+            ):
+                languages.append(fence[2])
+                fence = None
+            continue
+        opening = re.fullmatch(
+            r" {0,3}(?P<fence>`{3,}|~{3,})(?P<info>[^`\r\n]*)", line
+        )
+        if not opening:
+            continue
+        marker = opening.group("fence")
+        info = opening.group("info").strip()
+        language = info.split(maxsplit=1)[0].casefold() if info else "text"
+        if re.fullmatch(r"[a-z0-9_+.-]+", language) is None:
+            language = "text"
+        fence = (marker[0], len(marker), language)
+    if fence:
+        raise CatalogError(f"Tutorial code fence is not closed in {source_path}.")
+    return tuple(languages)
+
+
+def annotate_tutorial_code_languages(
+    rendered: str,
+    languages: tuple[str, ...],
+    source_path: str,
+) -> str:
+    """Restore fence languages after build-time syntax highlighting."""
+
+    marker = '<div class="codehilite"><pre><span></span><code>'
+    if rendered.count(marker) != len(languages):
+        raise CatalogError(
+            f"Tutorial code fence/render count mismatch for {source_path}."
+        )
+    for language in languages:
+        rendered = rendered.replace(
+            marker,
+            '<div class="codehilite"><pre><span></span>'
+            f'<code class="language-{language}">',
+            1,
+        )
+    return rendered
+
+
 class ReadmeHTMLSanitizer(HTMLParser):
     """Allow the Markdown subset used by example READMEs and rewrite local URLs."""
 
@@ -1774,11 +1980,13 @@ class ReadmeHTMLSanitizer(HTMLParser):
         "h5",
         "h6",
         "hr",
+        "iframe",
         "img",
         "li",
         "ol",
         "p",
         "pre",
+        "span",
         "strong",
         "table",
         "tbody",
@@ -1800,6 +2008,7 @@ class ReadmeHTMLSanitizer(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.root = root
         self.entry = entry
+        self.tutorial_mode = entry.is_tutorial
         self.catalog_by_readme = catalog_by_readme
         self.copied_assets = copied_assets
         self.output: list[str] = []
@@ -1807,7 +2016,8 @@ class ReadmeHTMLSanitizer(HTMLParser):
         self.ids: set[str] = set()
         self.fragments: set[str] = set()
         self._open_tags: list[str] = []
-        self._source_dir = PurePosixPath(entry.readme_path).parent.as_posix()
+        self._source_path = entry.content_path
+        self._source_dir = PurePosixPath(self._source_path).parent.as_posix()
         self._detail_dir = PurePosixPath(entry.detail_path).parent.as_posix()
 
     def _repo_target(self, raw_path: str) -> str | None:
@@ -1844,7 +2054,7 @@ class ReadmeHTMLSanitizer(HTMLParser):
                 f"README link target does not exist in the repository: {value}"
             )
             return "#"
-        if target == self.entry.readme_path:
+        if target == self._source_path:
             rewritten_path = ""
             if parts.fragment:
                 self.fragments.add(unquote(parts.fragment))
@@ -1864,6 +2074,14 @@ class ReadmeHTMLSanitizer(HTMLParser):
     def _rewrite_src(self, value: str) -> str:
         parts = urlsplit(value)
         if parts.scheme:
+            if (
+                self.tutorial_mode
+                and parts.scheme == "https"
+                and parts.hostname
+                and parts.username is None
+                and parts.password is None
+            ):
+                return value
             self.errors.append(
                 f"Remote README images must render as outbound links: {value}"
             )
@@ -1925,6 +2143,35 @@ class ReadmeHTMLSanitizer(HTMLParser):
                     else:
                         safe.append((name, values[name]))
             safe.extend((("loading", "lazy"), ("decoding", "async")))
+            if urlsplit(src or "").scheme:
+                safe.append(("referrerpolicy", "no-referrer"))
+        elif tag == "iframe":
+            source = values.get("src", "")
+            parts = urlsplit(source)
+            prefix = TUTORIAL_IFRAME_PATHS.get(parts.hostname or "")
+            if (
+                not self.tutorial_mode
+                or parts.scheme != "https"
+                or parts.username is not None
+                or parts.password is not None
+                or prefix is None
+                or not parts.path.startswith(prefix)
+            ):
+                self.errors.append(f"Unsupported tutorial iframe source: {source}")
+            title = values.get("title", "").strip()
+            if not title:
+                self.errors.append("Tutorial iframe is missing a meaningful title.")
+            safe.extend(
+                (
+                    ("src", source),
+                    ("title", title),
+                    ("loading", "lazy"),
+                    ("referrerpolicy", "strict-origin-when-cross-origin"),
+                    ("sandbox", "allow-scripts allow-same-origin allow-presentation"),
+                )
+            )
+            if "allowfullscreen" in values:
+                safe.append(("allowfullscreen", ""))
         elif tag in {"h2", "h3", "h4", "h5", "h6"}:
             heading_id = values.get("id")
             if not heading_id:
@@ -1952,16 +2199,34 @@ class ReadmeHTMLSanitizer(HTMLParser):
                 self.errors.append("README ordered-list start must be numeric.")
         elif tag == "abbr" and values.get("title"):
             safe.append(("title", values["title"]))
+        elif tag == "span":
+            class_name = values.get("class", "")
+            if class_name and re.fullmatch(
+                r"[A-Za-z][A-Za-z0-9_-]*(?: [A-Za-z][A-Za-z0-9_-]*)*",
+                class_name,
+            ):
+                safe.append(("class", class_name))
+            elif class_name:
+                self.errors.append(
+                    f"Unexpected tutorial highlight class: {class_name}"
+                )
         elif tag == "div":
-            if values.get("class") == "toc":
-                safe.append(("class", "toc"))
+            class_name = values.get("class")
+            if class_name == "toc" or (
+                self.tutorial_mode and class_name == "codehilite"
+            ):
+                safe.append(("class", class_name))
             else:
                 self.errors.append(
-                    "Only the generated README table-of-contents div is allowed."
+                    "Unexpected generated README div class."
                 )
 
         allowed_names = {name for name, _ in safe}
         ignored_generated = {"class"} if tag == "div" else set()
+        if tag == "iframe":
+            ignored_generated.update(
+                {"allow", "allowfullscreen", "frameborder", "height", "width"}
+            )
         unexpected = set(values) - allowed_names - ignored_generated
         if unexpected:
             self.errors.append(
@@ -1976,10 +2241,13 @@ class ReadmeHTMLSanitizer(HTMLParser):
         attrs: list[tuple[str, str | None]],
         self_closing: bool,
     ) -> None:
+        if tag in {"iframe", "span"} and not self.tutorial_mode:
+            self.errors.append(f"Unsupported README HTML element: {tag}")
+            return
         if tag not in self.ALLOWED_TAGS:
             self.errors.append(f"Unsupported README HTML element: {tag}")
             return
-        if tag == "img":
+        if tag == "img" and not self.tutorial_mode:
             values = {name: value or "" for name, value in attrs}
             source = values.get("src", "")
             source_parts = urlsplit(source)
@@ -2059,26 +2327,59 @@ def render_readme_html(
             "`python3 -m pip install --require-hashes -r "
             "scripts/catalog-requirements.txt`."
         )
-    source = (root / entry.readme_path).read_text(encoding="utf-8")
-    mermaid_sources = extract_mermaid_sources(source, entry.readme_path)
+    try:
+        source = (root / entry.content_path).read_text(encoding="utf-8")
+    except UnicodeDecodeError as error:
+        raise CatalogError(
+            f"Example source must be valid UTF-8: {entry.content_path}"
+        ) from error
+    if entry.is_tutorial:
+        if pygments is None:
+            raise CatalogError(
+                "Tutorial pages require the pinned Pygments package. Run "
+                "`python3 -m pip install --require-hashes -r "
+                "scripts/catalog-requirements.txt`."
+            )
+        page_title, markdown_body = prepare_tutorial_markdown(
+            source, entry.content_path
+        )
+        toc_depth = "2-4"
+    else:
+        page_title, markdown_body, toc_depth = entry.title, entry.readme_body, "2-3"
+    mermaid_sources = extract_mermaid_sources(source, entry.content_path)
     from markdown.extensions.tables import TableExtension
 
+    extensions: list[Any] = [
+        "fenced_code",
+        TableExtension(use_align_attribute=True),
+        "sane_lists",
+        "toc",
+    ]
+    extension_configs: dict[str, Any] = {
+        "toc": {
+            "slugify": github_heading_slug,
+            "toc_depth": toc_depth,
+        }
+    }
+    if entry.is_tutorial:
+        extensions.append("codehilite")
+        extension_configs["codehilite"] = {
+            "guess_lang": False,
+            "noclasses": False,
+            "use_pygments": True,
+        }
     renderer = markdown.Markdown(
-        extensions=[
-            "fenced_code",
-            TableExtension(use_align_attribute=True),
-            "sane_lists",
-            "toc",
-        ],
-        extension_configs={
-            "toc": {
-                "slugify": github_heading_slug,
-                "toc_depth": "2-3",
-            }
-        },
+        extensions=extensions,
+        extension_configs=extension_configs,
         output_format="html5",
     )
-    rendered_body = renderer.convert(entry.readme_body)
+    rendered_body = renderer.convert(markdown_body)
+    if entry.is_tutorial:
+        rendered_body = annotate_tutorial_code_languages(
+            rendered_body,
+            tutorial_fence_languages(markdown_body, entry.content_path),
+            entry.content_path,
+        )
     body_sanitizer = ReadmeHTMLSanitizer(
         root, entry, catalog_by_readme, copied_assets
     )
@@ -2095,7 +2396,7 @@ def render_readme_html(
         if unresolved_toc:
             raise CatalogError(
                 f"Generated README table of contents has unresolved fragments for "
-                f"{entry.readme_path}: "
+                f"{entry.content_path}: "
                 + ", ".join(sorted(unresolved_toc))
             )
     else:
@@ -2103,15 +2404,15 @@ def render_readme_html(
     unresolved_fragments = body_sanitizer.fragments - body_sanitizer.ids
     if unresolved_fragments:
         raise CatalogError(
-            f"README has unresolved local fragments for {entry.readme_path}: "
+            f"README has unresolved local fragments for {entry.content_path}: "
             + ", ".join(sorted(unresolved_fragments))
         )
     rendered_mermaid_count = safe_body.count('class="language-mermaid"')
     if rendered_mermaid_count != len(mermaid_sources):
         raise CatalogError(
-            f"Mermaid source/render count mismatch for {entry.readme_path}."
+            f"Mermaid source/render count mismatch for {entry.content_path}."
         )
-    return entry.title, safe_body, safe_toc, bool(mermaid_sources)
+    return page_title, safe_body, safe_toc, bool(mermaid_sources)
 
 
 def _detail_relative(entry: CatalogEntry, target: str) -> str:
@@ -2262,29 +2563,49 @@ def render_detail_pages(
                 f'    <script src="{mermaid_url}" integrity="{MERMAID_SRI}"></script>\n'
                 f'    <script type="module" src="{diagrams_url}"></script>'
             )
+        page_scripts = diagram_scripts
+        if entry.is_tutorial:
+            tutorial_script = (
+                f'    <script type="module" '
+                f'src="{_detail_relative(entry, "tutorial.mjs")}"></script>'
+            )
+            page_scripts = "\n".join(filter(None, (page_scripts, tutorial_script)))
         replacements = {
+            "{{CONTENT_SECURITY_POLICY}}": html.escape(
+                TUTORIAL_CONTENT_SECURITY_POLICY
+                if entry.is_tutorial
+                else DETAIL_CONTENT_SECURITY_POLICY,
+                quote=True,
+            ),
             "{{META_DESCRIPTION}}": html.escape(entry.description, quote=True),
             "{{PAGE_TITLE}}": html.escape(readme_title),
+            "{{PAGE_CLASS}}": " tutorial-page" if entry.is_tutorial else "",
             "{{FAVICON_URL}}": _detail_relative(
                 entry, "assets/nvidia-favicon.png"
             ),
             "{{STYLES_URL}}": _detail_relative(entry, "styles.css"),
             "{{LOGO_URL}}": _detail_relative(entry, "assets/nvidia-logo.png"),
             "{{CATALOG_URL}}": _detail_relative(entry, "index.html"),
-            "{{SOURCE_URL}}": html.escape(entry.guide_url, quote=True),
+            "{{TUTORIAL_URL}}": _detail_relative(
+                entry, f"{FEATURED_TUTORIAL_URL}index.html"
+            ),
+            "{{SOURCE_URL}}": html.escape(entry.content_url, quote=True),
             "{{DISPLAY_LABEL}}": html.escape(entry.display_label),
             "{{DESCRIPTION}}": html.escape(entry.description),
             "{{INDUSTRY}}": html.escape(entry.industry_label),
             "{{COLLECTION_TAGS}}": collection_tags,
             "{{CATEGORY}}": html.escape(entry.category.singular),
+            "{{FACTS_ATTRIBUTES}}": " hidden" if entry.is_tutorial else "",
             "{{ATTRIBUTION_FACT}}": attribution_fact,
             "{{UPSTREAM_FACT}}": upstream_fact,
             "{{STACK_FACTS}}": render_stack_facts(entry),
             "{{REQUIREMENTS}}": html.escape(entry.requirements),
             "{{MAINTENANCE_FACT}}": render_maintenance_fact(entry),
             "{{TABLE_OF_CONTENTS}}": toc_html,
-            "{{README_HTML}}": indent(readme_html, 12),
-            "{{DIAGRAM_SCRIPTS}}": diagram_scripts,
+            "{{CONTENT_LABEL}}": "Tutorial" if entry.is_tutorial else "Example guide",
+            "{{CONTENT_CLASS}}": " tutorial-content" if entry.is_tutorial else "",
+            "{{README_HTML}}": readme_html,
+            "{{PAGE_SCRIPTS}}": page_scripts,
         }
         rendered = template
         for marker, value in replacements.items():
@@ -2294,6 +2615,7 @@ def render_detail_pages(
                 "{{PAGE_TITLE}}": 2,
                 "{{SOURCE_URL}}": 2,
                 "{{TABLE_OF_CONTENTS}}": 2,
+                "{{TUTORIAL_URL}}": 2,
             }
             expected_count = expected_counts.get(marker, 1)
             if rendered.count(marker) != expected_count:
@@ -2314,8 +2636,9 @@ def render_detail_pages(
 class GeneratedHTMLValidator(HTMLParser):
     """Small dependency-free safety and accessibility check for generated HTML."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, tutorial_mode: bool = False) -> None:
         super().__init__(convert_charrefs=True)
+        self.tutorial_mode = tutorial_mode
         self.errors: list[str] = []
         self.ids: set[str] = set()
         self.fragments: set[str] = set()
@@ -2352,8 +2675,20 @@ class GeneratedHTMLValidator(HTMLParser):
         if tag == "a" and values.get("href"):
             self.anchors.append(values)
             self.links.add(values["href"])
-        if tag in {"iframe", "object", "embed"}:
+        if tag in {"object", "embed"} or (tag == "iframe" and not self.tutorial_mode):
             self.errors.append(f"Forbidden embedded resource element: {tag}")
+        if tag == "iframe" and self.tutorial_mode:
+            source = values.get("src", "")
+            parts = urlsplit(source)
+            prefix = TUTORIAL_IFRAME_PATHS.get(parts.hostname or "")
+            if (
+                parts.scheme != "https"
+                or prefix is None
+                or not parts.path.startswith(prefix)
+                or values.get("sandbox")
+                != "allow-scripts allow-same-origin allow-presentation"
+            ):
+                self.errors.append(f"Unsafe tutorial iframe: {source}")
         if tag == "img" and not values.get("alt"):
             self.errors.append("Every catalog image must have non-empty alt text.")
         element_id = values.get("id")
@@ -2388,7 +2723,13 @@ class GeneratedHTMLValidator(HTMLParser):
             resource = values.get("src") or values.get("href") or ""
             if resource:
                 self.resources.append(resource)
-            if resource.startswith(("http://", "https://", "//")):
+            remote_tutorial_image = (
+                self.tutorial_mode and tag == "img" and resource.startswith("https://")
+            )
+            if (
+                resource.startswith(("http://", "https://", "//"))
+                and not remote_tutorial_image
+            ):
                 self.errors.append(f"Remote page resource is not allowed: {resource}")
         if tag == "form" and values.get("action"):
             self.errors.append("The catalog filter form must not submit externally.")
@@ -2510,7 +2851,10 @@ def validate_generated_site(
         if category_attrs is None or category_attrs.get("tabindex") != "-1":
             errors.append(f"Category fragment is not focusable: {category.id}")
 
-    browse_groups: tuple[Category | Collection, ...] = (*categories, *collections)
+    browse_groups: tuple[Category | Collection, ...] = (
+        *(category for category in categories if category.browse),
+        *collections,
+    )
     expected_info_controls = [
         {
             "aria-label": f"About {group.title}",
@@ -2607,7 +2951,7 @@ def validate_detail_pages(
         raise CatalogError("Generated detail-page paths do not match the catalog.")
     parsers: dict[str, GeneratedHTMLValidator] = {}
     for entry in entries:
-        parser = GeneratedHTMLValidator()
+        parser = GeneratedHTMLValidator(tutorial_mode=entry.is_tutorial)
         parser.feed(detail_pages[entry.detail_path])
         parsers[entry.detail_path] = parser
 
@@ -2664,8 +3008,9 @@ def validate_detail_pages(
                     f"{href}"
                 )
         has_mermaid = 'class="language-mermaid"' in page
+        expected_scripts: list[dict[str, str]] = []
         if has_mermaid:
-            expected_scripts = [
+            expected_scripts.extend([
                 {
                     "src": _detail_relative(
                         entry, "assets/vendor/mermaid.tiny.js"
@@ -2676,20 +3021,25 @@ def validate_detail_pages(
                     "type": "module",
                     "src": _detail_relative(entry, "diagrams.mjs"),
                 },
-            ]
-            if parser.scripts != expected_scripts:
-                errors.append(
-                    "Mermaid detail pages must contain only the pinned local "
-                    "runtime and diagram module."
-                )
-            for script in expected_scripts:
-                if script["src"] not in parser.resources:
-                    errors.append(
-                        f"Mermaid detail page is missing {script['src']}."
-                    )
-        elif parser.scripts:
-            errors.append("Detail pages without Mermaid must not contain scripts.")
-        if parser.content_security_policies != [DETAIL_CONTENT_SECURITY_POLICY]:
+            ])
+        if entry.is_tutorial:
+            expected_scripts.append(
+                {
+                    "type": "module",
+                    "src": _detail_relative(entry, "tutorial.mjs"),
+                }
+            )
+        if parser.scripts != expected_scripts:
+            errors.append("Detail-page local scripts changed unexpectedly.")
+        for script in expected_scripts:
+            if script["src"] not in parser.resources:
+                errors.append(f"Detail page is missing {script['src']}.")
+        expected_policy = (
+            TUTORIAL_CONTENT_SECURITY_POLICY
+            if entry.is_tutorial
+            else DETAIL_CONTENT_SECURITY_POLICY
+        )
+        if parser.content_security_policies != [expected_policy]:
             errors.append("Detail page Content Security Policy changed unexpectedly.")
         expected_styles = _detail_relative(entry, "styles.css")
         expected_logo = _detail_relative(entry, "assets/nvidia-logo.png")
@@ -2701,7 +3051,7 @@ def validate_detail_pages(
         if expected_favicon not in parser.resources:
             errors.append("Detail page is missing the local NVIDIA favicon.")
         required_links = {
-            entry.guide_url,
+            entry.content_url,
             _detail_relative(entry, "index.html"),
             "https://github.com/NVIDIA/nemoclaw-community/blob/main/SUPPORT.md",
             "https://github.com/NVIDIA/nemoclaw-community/blob/main/SECURITY.md",
@@ -2731,6 +3081,10 @@ def validate_detail_pages(
         ):
             if not is_regular_repo_file(root, root / relative):
                 raise CatalogError(f"Missing required diagram source: {relative}")
+    if any(entry.is_tutorial for entry in entries) and not is_regular_repo_file(
+        root, root / "site" / "tutorial.mjs"
+    ):
+        raise CatalogError("Missing required tutorial source: site/tutorial.mjs")
 
 
 def verified_mermaid_asset(root: Path) -> Path:
@@ -2873,10 +3227,16 @@ def build_site(
         raise CatalogError("Catalog output is restricted to the generated _site directory.")
     if output.is_symlink():
         raise CatalogError("Refusing to replace a symlinked _site directory.")
-    shared_files = (
+    has_tutorial = any(
+        'class="detail-page tutorial-page"' in page
+        for page in (detail_pages or {}).values()
+    )
+    shared_files = [
         root / "site" / "styles.css",
         root / "site" / "catalog.mjs",
-    )
+    ]
+    if has_tutorial:
+        shared_files.append(root / "site" / "tutorial.mjs")
     for source in shared_files:
         if not is_regular_repo_file(root, source):
             raise CatalogError(
@@ -2917,6 +3277,8 @@ def build_site(
     (output / "llms.txt").write_text(llms_txt, encoding="utf-8")
     shutil.copy2(shared_files[0], output / "styles.css")
     shutil.copy2(shared_files[1], output / "catalog.mjs")
+    if has_tutorial:
+        shutil.copy2(shared_files[2], output / "tutorial.mjs")
     shutil.copytree(site_assets, output / "assets")
     if has_mermaid:
         assert mermaid_asset is not None
@@ -2996,10 +3358,13 @@ def main(argv: list[str] | None = None) -> int:
         outputs = expected_outputs(root)
         if args.check:
             check_generated_readmes(root, outputs)
+            browse_groups = sum(
+                category.browse for category in outputs.categories
+            ) + len(outputs.collections)
             print(
                 f"Catalog metadata and generated sources are valid: "
                 f"{len(outputs.entries)} examples across "
-                f"{len(outputs.categories) + len(outputs.collections)} browse groups."
+                f"{browse_groups} browse groups."
             )
             return 0
         if args.write:

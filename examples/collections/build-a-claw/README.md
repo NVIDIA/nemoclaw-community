@@ -1,10 +1,12 @@
 <!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# Build-a-Claw Recipes
+# Build-a-Claw
 
-A curated collection of NemoClaw recipes created through the Build-a-Claw program, while each recipe remains organized by its contributor provenance.
+Guided demos, tutorials, and reusable recipes created through the Build-a-Claw program, while every example keeps its canonical type, path, and contributor provenance.
 
 ## Examples
 
-_No examples are currently in this group._
+| Example | Category | Industry | Description |
+| --- | --- | --- | --- |
+| [Build-a-Claw Tutorial](../../demos/build-a-claw/tutorial/README.md) | Build-a-Claw Demos | 🎓 Academia/Education | Presents an author-maintained Build-a-Claw guide as a five-part tutorial with progress tracking, responsive media, and copyable highlighted code. |

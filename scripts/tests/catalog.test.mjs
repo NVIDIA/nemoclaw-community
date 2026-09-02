@@ -22,6 +22,12 @@ import {
   tokenizeQuery,
 } from "../../site/catalog.mjs";
 import { decodeSandboxSource } from "../../site/diagrams.mjs";
+import {
+  addCopyButtons,
+  initActiveToc,
+  initTutorial,
+  initTutorialPaging,
+} from "../../site/tutorial.mjs";
 
 const taxonomy = JSON.parse(execFileSync(
   "python3",
@@ -40,6 +46,13 @@ test("Mermaid sandbox documents decode Unicode as UTF-8", () => {
     decodeSandboxSource(`data:text/html;charset=UTF-8;base64,${payload}`),
     source,
   );
+});
+
+test("tutorial enhancements remain available as a local module", () => {
+  assert.equal(typeof addCopyButtons, "function");
+  assert.equal(typeof initActiveToc, "function");
+  assert.equal(typeof initTutorial, "function");
+  assert.equal(typeof initTutorialPaging, "function");
 });
 
 test("search normalization collapses whitespace and ignores case and accents", () => {
@@ -69,7 +82,7 @@ test("category view matches the exact recipe category", () => {
   );
 });
 
-test("recipe collections select their matching membership", () => {
+test("collections select their matching membership", () => {
   const hackathonRecord = {
     category: "community-recipes",
     collections: ["hackathon", "featured"],
@@ -96,14 +109,14 @@ test("recipe collections select their matching membership", () => {
   assert.equal(
     matchesCatalogRecord(
       { category: "nvidia-recipes", collections: ["build-a-claw"] },
-      { view: "category", category: "build-a-claw-recipes" },
+      { view: "category", category: "build-a-claw" },
     ),
     true,
   );
   assert.equal(
     matchesCatalogRecord(hackathonRecord, {
       view: "category",
-      category: "build-a-claw-recipes",
+      category: "build-a-claw",
     }),
     false,
   );

@@ -70,8 +70,8 @@ because Pages was disabled, rerun that workflow from `main`.
 
 After deployment, verify the HTTPS page, the stylesheet, script, logo,
 `catalog.json`, and `llms.txt` under the `/nemoclaw-community/` project path.
-Confirm that the five canonical category tiles and the Hackathon and
-Build-a-Claw collection tiles show their README-derived descriptions, and that
+Confirm that the category tiles plus the Hackathon and unified Build-a-Claw
+collection tiles show their README-derived descriptions, and that
 the NemoClaw Brev link opens the external launchable. Exercise text search,
 both browse views, at least one category, collection, and industry filter,
 reset, browser Back, a copied filtered URL, category fragments, and

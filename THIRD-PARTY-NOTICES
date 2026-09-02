@@ -212,6 +212,12 @@ Package: Python-Markdown
 License: BSD-3-Clause
 URL: https://github.com/Python-Markdown/markdown
 
+Package: Pygments
+Version: 2.21.0
+License: BSD-2-Clause
+URL: https://github.com/pygments/pygments
+Notes: Used at catalog build time to syntax-highlight tutorial code blocks.
+
 Package: pydantic
 License: MIT
 URL: https://github.com/pydantic/pydantic

@@ -3,7 +3,8 @@
 Thank you for your interest in improving NemoClaw Community.
 
 This repository contains NemoClaw examples and developer tools. You can deploy
-each example independently.
+each runnable example independently. Documentation-only tutorials state that
+they have no runtime deployment.
 
 By participating, you agree to follow our
 [Code of Conduct](CODE_OF_CONDUCT.md).
@@ -146,8 +147,10 @@ Follow the selected example's instructions for these items:
 - Cleanup and teardown.
 - Known limitations.
 
-Keep each example independently deployable. Do not make an example depend on
-private files, internal systems, or local state from another example.
+Keep each runnable example independently deployable. Do not make an example
+depend on private files, internal systems, or local state from another example.
+For a documentation-only tutorial, identify its one canonical content source
+and mark runtime components as `N/A`.
 
 ## Contribution Requirements
 
@@ -305,6 +308,10 @@ Document this information for a new example:
 - Its known limitations.
 - Its third-party dependencies and license obligations.
 
+For a documentation-only Build-a-Claw tutorial, omit runtime-only sections
+that do not apply. State that no deployment is required, identify the canonical
+Markdown source, and document how to build and verify its published page.
+
 Give readers one recommended start command or action. If the example has
 multiple deployment paths, name the lowest-risk or most generally applicable
 entry point first and link the alternatives. Do not add an empty `setup.sh`
@@ -338,20 +345,24 @@ source remains visible when browser rendering is unavailable.
 ## Category And Collection Indexes
 
 The catalog takes each browse tile's title and description from a standardized
-index README. The five canonical category indexes are:
+index README. The six canonical category indexes are:
 
 - `examples/recipes/nvidia/README.md`
 - `examples/recipes/partners/README.md`
 - `examples/recipes/community/README.md`
 - `examples/demos/field/README.md`
+- `examples/demos/build-a-claw/README.md`
 - `examples/tools/README.md`
 
-Hackathon and Build-a-Claw are cross-cutting recipe collections, not example
-paths. Their index-only READMEs are
+Hackathon and Build-a-Claw are cross-cutting discovery collections, not
+example paths. Their index-only READMEs are
 `examples/collections/hackathon/README.md` and
 `examples/collections/build-a-claw/README.md`. Do not place examples under
 `examples/collections/`; keep each recipe in its canonical NVIDIA, partner, or
-community path.
+community path. Guided Build-a-Claw demos and tutorials live under
+`examples/demos/build-a-claw/` and join the Build-a-Claw collection
+automatically. The website presents one Build-a-Claw browse group while these
+paths continue to identify each artifact's type and provenance.
 
 After optional license comments, each index README must start with its public
 H1 title, a blank line, and one concise plain-text description paragraph. The
@@ -368,6 +379,26 @@ The build retains the authored title and description values while normalizing
 the index structure and regenerating the example list. No other sections are
 permitted. Change an individual example's root README metadata and regenerate
 the catalog instead of editing that list by hand.
+
+### Build-a-Claw Tutorial Markdown
+
+A Build-a-Claw demo can provide one top-level Markdown file next to its
+`README.md`. When that file is present, the README remains the catalog metadata
+and overview source, while GitHub Pages renders the additional file as the
+tutorial. A directory with no additional Markdown keeps the normal README
+detail page. More than one additional top-level Markdown file is ambiguous and
+fails the catalog build.
+
+The tutorial renderer uses the first level-one heading as the page title. Each
+later level-one heading starts one tutorial step; nested headings remain on that
+step. The published page adds progress plus Previous and Next navigation, while
+the complete document remains readable when JavaScript is unavailable. It also
+adds copy controls and build-time syntax highlighting to fenced code. Put each
+fence at the start of a line and give it an explicit language such as `bash`,
+`yaml`, or `text`; indented fences are not supported. The renderer suppresses a
+standalone `[TOC]` marker because it creates its own navigation. These changes
+affect generated HTML only. The build does not rewrite the Markdown source, run
+its commands, or validate its technical claims.
 
 ## Catalog Metadata
 
@@ -441,7 +472,9 @@ Follow these metadata rules:
 - `Contributor` is required only for partner recipes.
 - `Collection` is optional and accepts exactly one of `Hackathon` or
   `Build-a-Claw`, only for recipes. A collection recipe still keeps its NVIDIA,
-  partner, or community provenance and canonical recipe path.
+  partner, or community provenance and canonical recipe path. Build-a-Claw
+  demos and tutorials receive that collection from their canonical path and
+  must not declare the row.
 - The directory path remains the source for artifact kind and recipe
   provenance; do not repeat either in the catalog block.
 
@@ -616,7 +649,7 @@ also preserve the essential expected output as searchable text.
 
 | Question | Answer |
 | --- | --- |
-| Category | [Choose one: NVIDIA Recipe, Partner Recipe, Community Recipe, Field Demo, or Developer Tool] |
+| Category | [Choose one: NVIDIA Recipe, Partner Recipe, Community Recipe, Field Demo, Build-a-Claw Demo, or Developer Tool] |
 | Contributor or provenance | [Name the person or organization responsible for the example.] |
 | Use this when | [Name the specific user, scenario, or operational need.] |
 | You will get | [Name the observable workflow, output, artifact, or result.] |
