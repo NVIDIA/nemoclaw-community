@@ -326,13 +326,21 @@ from lives alongside it, at `$HERMES_HOME/workspace/ledger/state.db`.
 
 > **`cron status` shows the gateway running but no scheduled job?** The jobs
 > were never registered — for example if step 4 stopped at the credential
-> check before reaching its `3/3 Registering scheduled jobs` phase. Register
-> them directly; the script is idempotent, so rerunning it only updates
-> existing jobs in place rather than duplicating them:
+> check before reaching its `3/3 Registering scheduled jobs` phase. Do not
+> run `register-jobs.sh` directly to fix that: it checks only the platform
+> and that the profile exists, not that a credential is set, so it would
+> schedule all seven jobs against a profile that fails authentication on
+> every run. Verify the credential first, then rerun the installer, which
+> registers jobs as its own last step once the credential check passes:
 >
 > ```bash
-> bash scripts/register-jobs.sh
+> hermes -p "$PROFILE_NAME" config get model.api_key
+> bash scripts/install.sh
 > ```
+>
+> Once you know the credential is already set, `bash scripts/register-jobs.sh`
+> on its own is safe to resync job definitions — it is idempotent, so
+> rerunning it updates existing jobs in place rather than duplicating them.
 
 To remove every registered job at once instead of one at a time, see
 [Persistence and reboot behavior](#persistence-and-reboot-behavior).
@@ -344,9 +352,10 @@ hermes gateway stop --profile "$PROFILE_NAME"
 ```
 
 Hermes scopes the stop to the selected profile and checks its recorded runtime
-identity instead of trusting a shell PID file. Stop the gateway before
-[deleting the profile](#persistence-and-reboot-behavior) because removing the
-profile does not stop a process that is already running against it.
+identity instead of trusting a shell PID file. Deleting the profile already
+stops this gateway and its related backends as part of deletion — an
+explicit stop first is not required, but it is harmless and can make
+[teardown](#persistence-and-reboot-behavior) easier to verify.
 
 > **Running this outside a NemoClaw sandbox, on a host with systemd?** Any
 > environment without a running systemd — WSL included — still needs the
@@ -399,47 +408,39 @@ already reachable, with no forwarding step of your own:
 nemohermes my-hermes dashboard-url --quiet
 ```
 
-That dashboard is launched isolated, under its own dedicated `dashboard-home`
-profile, but the isolation is narrower than it sounds: it only walls off the
-pages that follow the profile switcher — **Config, API Keys, Skills, MCP, and
-starting a brand-new chat**. None of those will unify with this recipe's
-profile, with or without a `?profile=` query parameter.
+That dashboard is a **machine-level** surface: a profile switcher lets it
+manage any profile on the sandbox, including this recipe's
+`memory-driven-chief-of-staff`. `--isolated` (used when NemoClaw launches
+this dashboard) changes only how the `hermes dashboard` command routes on
+launch — whether it reuses an already-running shared server or starts its
+own — not what a running dashboard's pages can reach. Selecting this
+recipe's profile, through the switcher or a
+`?profile=memory-driven-chief-of-staff` URL, routes **Config, API Keys,
+Skills, MCP, Models, and Chat** to it — including starting a brand-new chat
+session as it, from the browser. **Sessions** is likewise scoped to whichever
+profile is currently selected, rather than showing every profile at once.
 
-It does **not** wall off three other pages, which are sandbox-wide by design
-and not gated by the switcher or by `--isolated`:
+**Cron** and **Profiles** are the two pages that are not scoped by the
+switcher:
 
-- **Sessions** — every session on the sandbox, across every profile,
-  including `memory-driven-chief-of-staff`'s and its cron-triggered runs.
-  Full-text search covers complete message content; expanding a session
-  loads its full history; **Resume** reopens it as a live chat against
-  *that session's own profile* (not `dashboard-home`); **Export** downloads
-  it as JSON; **Delete**/**Prune** remove it.
-- **Cron** — every registered job across every profile, with its full prompt
-  text, schedule, delivery target, and Pause/Resume/Edit/Trigger-now/Delete.
-- **Profiles** — a management card for every profile, including this one
+- **Cron** defaults to showing every registered job across every profile,
+  with its full prompt text, schedule, delivery target, and
+  Pause/Resume/Edit/Trigger-now/Delete.
+- **Profiles** always lists every profile globally as a management card
   (model, skill count, gateway state, description), with **Rename** and
   **Delete** — deleting from here removes the workspace, store, and memory
   the same as `hermes profile delete` does. See
   [Persistence and reboot behavior](#persistence-and-reboot-behavior).
 
-So the `dashboard-url` forward already gives read — and destructive — access
-to this recipe's session history and cron jobs, whether or not anything else
-in this step is ever run. Hermes uses session auth for this dashboard, so the
-printed URL is a plain link, not a credential, but treat it as sensitive
-regardless: protect access to it through the sandbox's normal session
-controls, and do not expose it publicly.
+So this one forwarded URL already gives you full access to this recipe's
+profile once you select it — chat, config, sessions, plus the always-visible
+cron jobs and destructive profile management — with no extra step. Hermes
+uses session auth for this dashboard, so the printed URL is a plain link, not
+a credential, but treat it as sensitive regardless: protect access to it
+through the sandbox's normal session controls, and do not expose it publicly.
 
-If you don't have that URL handy, or want to confirm the forward is still
-alive, query it directly from your machine instead of rerunning
-`dashboard-url`:
-
-```bash
-openshell forward list
-```
-
-This lists every active port forward for the sandbox, including the
-dashboard's — read the port from there and open `http://127.0.0.1:<port>`
-in a browser.
+If you don't have that URL handy, it is safe to rerun the command above at
+any time.
 
 Prefer the terminal to the browser? This is the verified way to talk to this
 recipe directly, from inside the sandbox — no dashboard, no forwarding,
@@ -845,10 +846,11 @@ for job in data.get("jobs", []):
 done
 ```
 
-Deleting the profile also deletes its workspace, store, and memory — but not
-a gateway process already running against it. If you started one by hand
-(step 5 of Quick Start), stop it with the profile-scoped lifecycle command,
-then delete the profile:
+Deleting the profile also deletes its workspace, store, and memory. Hermes
+already stops the profile's gateway and related backends as part of
+deletion, so a separate stop is not required — but if you started one by
+hand (step 5 of Quick Start), stopping it explicitly first is harmless and
+makes teardown easier to verify:
 
 ```bash
 hermes gateway stop --profile memory-driven-chief-of-staff
