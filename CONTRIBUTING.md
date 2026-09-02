@@ -255,11 +255,8 @@ python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
 python3 scripts/fetch_catalog_assets.py
 python3 scripts/build_catalog.py --validate-metadata
 python3 scripts/build_catalog.py --check
-python3 -m unittest \
-  scripts.tests.test_build_catalog \
-  scripts.tests.test_catalog_maintenance \
-  scripts.tests.test_example_stack_facts
-node --test scripts/tests/catalog.test.mjs
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+node --test scripts/tests/*.test.mjs
 ```
 
 Run the documented setup, syntax, unit, configuration, and teardown-safe checks.

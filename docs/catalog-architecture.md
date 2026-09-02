@@ -26,11 +26,9 @@ tutorial Markdown
 category and collection
 index README titles ───┬─> browse labels and information tooltips
 and descriptions       └─> category and collection data in catalog.json
-site/*.template.html ──┬─> generated HTML
-site/styles.css ───────┼─> _site/styles.css
-site/catalog.mjs ──────┼─> _site/catalog.mjs
-site/tutorial.mjs ─────┼─> _site/tutorial.mjs
-site/diagrams.mjs ─────┼─> _site/diagrams.mjs
+site/templates/*.html ─┬─> generated HTML
+site/styles/*.css ─────┼─> _site/styles/*.css
+site/scripts/*.mjs ────┼─> _site/scripts/*.mjs
 Mermaid Tiny cache ────┴─> _site/assets/vendor/mermaid.tiny.js
 README stack rows plus
 standard runtime Dockerfiles ─> stack values and verification in HTML, JSON,
@@ -42,14 +40,22 @@ and Reviewed ──────────────> computed maintenance st
 The standardized catalog block immediately after the level-one title in each
 example's root `README.md` is the canonical metadata source. A final
 `Catalog Metadata` section remains supported as a legacy placement.
-[`scripts/build_catalog.py`](../scripts/build_catalog.py) discovers those
-READMEs from the repository taxonomy, validates their title, required
-`Description` table row, industry emoji and title, requirements, and
+[`scripts/build_catalog.py`](../scripts/build_catalog.py) is the stable
+command-line entry point. Its focused modules under `scripts/catalog/`
+discover those READMEs from the repository taxonomy, validate their title,
+required `Description` table row, industry emoji and title, requirements, and
 conditional fields, then derives artifact kind and recipe provenance from each
 path. Optional `Lifecycle` and `Reviewed` fields inform maintenance status; an
 optional `Upstream` field identifies a separate canonical public project that
 the example adapts. The required NemoClaw, harness, and OpenShell rows provide
 a readable fallback while standard runtime files provide confirmation.
+
+The compiler follows a one-way pipeline: `sources.py` reads repository inputs;
+`listings.py`, `markdown.py`, and `detail_pages.py` render them; `validation.py`
+checks the generated result; and `pipeline.py` coordinates publication.
+`model.py` contains the shared data model. Presentation sources follow the
+parallel layout documented in [`site/README.md`](../site/README.md): templates,
+page-specific styles, native browser modules, and static assets.
 
 A Build-a-Claw demo can include one top-level Markdown file in addition to its
 README. The README continues to supply catalog metadata; the additional file
@@ -79,8 +85,10 @@ generated files.
 Each card links to a static detail page. The build extracts the source-document
 title, compiles headings, tables, lists, links, code, and images, and renders
 the result inside the shared site theme. Normal detail pages without Mermaid
-remain script-free. Tutorial pages load one local progressive-enhancement
-module for code-copy controls and paged navigation. Pages with supported
+remain script-free and load only the shared and detail stylesheets. Tutorial
+pages additionally load isolated tutorial styles and one local
+progressive-enhancement module for code-copy controls and paged navigation.
+Pages with supported
 Mermaid fences load the pinned local Tiny runtime and progressively replace
 each fence with a themed diagram. The original diagram source stays in an
 expandable disclosure and is the no-JavaScript or render-error fallback.
@@ -242,11 +250,8 @@ Run the same checks used by the Pages workflow:
 
 ```bash
 python3 scripts/build_catalog.py --check
-python3 -m unittest \
-  scripts.tests.test_build_catalog \
-  scripts.tests.test_catalog_maintenance \
-  scripts.tests.test_example_stack_facts
-node --test scripts/tests/catalog.test.mjs
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+node --test scripts/tests/*.test.mjs
 ```
 
 For local browser verification, follow the

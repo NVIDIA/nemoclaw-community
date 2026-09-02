@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+// Progressive enhancement for tutorial paging, navigation, and code copying.
+
 const HEADING_SELECTOR = "h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]";
 const PART_HEADING_SELECTOR = "h2[id]";
 
@@ -32,9 +34,6 @@ function codeLanguage(block, surface) {
       .find((name) => name.startsWith("language-"));
     if (className) {
       return className.slice("language-".length).toLowerCase();
-    }
-    if (candidate?.dataset?.language) {
-      return candidate.dataset.language.toLowerCase();
     }
   }
   return "";
@@ -69,7 +68,6 @@ export function addCopyButtons(article) {
 
     const parent = block.parentElement;
     const surface = parent?.classList.contains("codehilite")
-      || parent?.classList.contains("highlight")
       ? parent
       : block;
     if (surface.closest?.(".tutorial-code-block")) {
@@ -352,10 +350,15 @@ export function initTutorialPaging(article) {
     return true;
   };
 
-  const showFragment = ({ focus = false, scroll = false } = {}) => {
-    const identifier = currentFragment(windowObject);
+  const revealFragment = (
+    identifier,
+    { fallbackIndex, focus = false, scroll = false } = {},
+  ) => {
     const targetIndex = stepByTarget.get(identifier);
-    const index = targetIndex ?? 0;
+    const index = targetIndex ?? fallbackIndex;
+    if (index === undefined) {
+      return;
+    }
     showStep(index);
     if (!focus && !scroll) {
       return;
@@ -378,28 +381,16 @@ export function initTutorialPaging(article) {
     });
   };
 
-  const revealLinkTarget = (link) => {
-    const identifier = fragmentId(link);
-    const index = stepByTarget.get(identifier);
-    if (index === undefined) {
-      return;
-    }
-    showStep(index);
-    const target = documentObject.getElementById(identifier);
-    const scrollTarget = target === steps[index].heading
-      ? progress.navigation
-      : target;
-    windowObject.requestAnimationFrame(() => {
-      if (target) {
-        scrollTarget?.scrollIntoView({ block: "start" });
-        target.tabIndex = -1;
-        target.focus({ preventScroll: true });
-      }
-    });
-  };
+  const showFragment = (options = {}) => revealFragment(
+    currentFragment(windowObject),
+    { ...options, fallbackIndex: 0 },
+  );
 
   for (const link of article.querySelectorAll('a[href^="#"]')) {
-    link.addEventListener("click", () => revealLinkTarget(link));
+    link.addEventListener(
+      "click",
+      () => revealFragment(fragmentId(link), { focus: true, scroll: true }),
+    );
   }
   windowObject.addEventListener(
     "hashchange",

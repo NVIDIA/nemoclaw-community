@@ -18,16 +18,14 @@ on:
       - ".agents/skills/nemoclaw-community-contributor-examples/references/example-taxonomy.md"
       - "examples/**"
       - "scripts/build_catalog.py"
+      - "scripts/catalog/**"
       - "scripts/catalog-maintenance.json"
       - "scripts/catalog_maintenance.py"
       - "scripts/example_stack_facts.py"
       - "scripts/nemoclaw-release-contracts.json"
       - "scripts/fetch_catalog_assets.py"
       - "scripts/catalog-requirements.txt"
-      - "scripts/tests/test_build_catalog.py"
-      - "scripts/tests/test_catalog_maintenance.py"
-      - "scripts/tests/test_example_stack_facts.py"
-      - "scripts/tests/catalog.test.mjs"
+      - "scripts/tests/**"
       - "site/**"
   push:
     branches:
@@ -43,16 +41,14 @@ on:
       - ".agents/skills/nemoclaw-community-contributor-examples/references/example-taxonomy.md"
       - "examples/**"
       - "scripts/build_catalog.py"
+      - "scripts/catalog/**"
       - "scripts/catalog-maintenance.json"
       - "scripts/catalog_maintenance.py"
       - "scripts/example_stack_facts.py"
       - "scripts/nemoclaw-release-contracts.json"
       - "scripts/fetch_catalog_assets.py"
       - "scripts/catalog-requirements.txt"
-      - "scripts/tests/test_build_catalog.py"
-      - "scripts/tests/test_catalog_maintenance.py"
-      - "scripts/tests/test_example_stack_facts.py"
-      - "scripts/tests/catalog.test.mjs"
+      - "scripts/tests/**"
       - "site/**"
   schedule:
     - cron: "17 6 * * *"
@@ -108,15 +104,11 @@ jobs:
       - name: Check generated catalog sources
         run: python3 scripts/build_catalog.py --check
 
-      - name: Run catalog build tests
-        run: >-
-          python3 -m unittest
-          scripts.tests.test_build_catalog
-          scripts.tests.test_catalog_maintenance
-          scripts.tests.test_example_stack_facts
+      - name: Run Python tests
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 
       - name: Run catalog interaction tests
-        run: node --test scripts/tests/catalog.test.mjs
+        run: node --test scripts/tests/*.test.mjs
 
       - name: Check license headers
         run: python3 scripts/check_license_headers.py --check
