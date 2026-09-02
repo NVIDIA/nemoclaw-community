@@ -149,8 +149,8 @@ Follow the selected example's instructions for these items:
 
 Keep each runnable example independently deployable. Do not make an example
 depend on private files, internal systems, or local state from another example.
-For a documentation-only tutorial, identify its one canonical content source
-and mark runtime components as `N/A`.
+For a documentation-only tutorial, keep its canonical content in an adjacent
+root `tutorial.md` and mark runtime components as `N/A`.
 
 ## Contribution Requirements
 
@@ -305,9 +305,10 @@ Document this information for a new example:
 - Its known limitations.
 - Its third-party dependencies and license obligations.
 
-For a documentation-only Build-a-Claw tutorial, omit runtime-only sections
-that do not apply. State that no deployment is required, identify the canonical
-Markdown source, and document how to build and verify its published page.
+For a documentation-only tutorial, omit runtime-only sections that do not
+apply. State that no deployment is required, identify the root `tutorial.md` as
+the canonical content source, and document how to build and verify its
+published page.
 
 Give readers one recommended start command or action. If the example has
 multiple deployment paths, name the lowest-risk or most generally applicable
@@ -377,14 +378,14 @@ the index structure and regenerating the example list. No other sections are
 permitted. Change an individual example's root README metadata and regenerate
 the catalog instead of editing that list by hand.
 
-### Build-a-Claw Tutorial Markdown
+### Tutorial Markdown
 
-A Build-a-Claw demo can provide one top-level Markdown file next to its
-`README.md`. When that file is present, the README remains the catalog metadata
-and overview source, while GitHub Pages renders the additional file as the
-tutorial. A directory with no additional Markdown keeps the normal README
-detail page. More than one additional top-level Markdown file is ambiguous and
-fails the catalog build.
+Any canonical example can place an exact lowercase `tutorial.md` beside its
+root `README.md`. The README remains the catalog metadata and overview source,
+while GitHub Pages renders `tutorial.md` as that entry's tutorial detail page.
+Without `tutorial.md`, the entry keeps its normal README detail page. Other
+Markdown files do not enable tutorial rendering, and an incorrectly cased
+variant such as `Tutorial.md` fails validation.
 
 The tutorial renderer uses the first level-one heading as the page title. Each
 later level-one heading starts one tutorial step; nested headings remain on that

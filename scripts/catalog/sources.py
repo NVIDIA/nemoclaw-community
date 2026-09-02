@@ -222,33 +222,33 @@ def discover_example_paths(
     return paths
 
 
-def discover_tutorial_path(root: Path, path: str, category: Category) -> str | None:
-    """Return one optional top-level Markdown tutorial for a Build-a-Claw demo."""
+def discover_tutorial_path(root: Path, path: str) -> str | None:
+    """Return an example's optional, conventionally named tutorial source."""
 
-    if category.id != "build-a-claw-demos":
-        return None
     directory = root / "examples" / path
-    candidates = sorted(
-        (
-            candidate
-            for candidate in directory.iterdir()
-            if candidate.name != "README.md"
-            and candidate.suffix.casefold() == ".md"
-        ),
-        key=lambda candidate: candidate.name.casefold(),
-    )
-    for candidate in candidates:
-        if not is_regular_repo_file(root, candidate):
-            raise CatalogError(
-                "Build-a-Claw tutorial source must be a regular, non-symlinked "
-                f"repository file: {candidate.relative_to(root).as_posix()}"
-            )
-    if len(candidates) > 1:
+    tutorial = directory / "tutorial.md"
+    case_variants = [
+        candidate
+        for candidate in directory.iterdir()
+        if candidate.name.casefold() == "tutorial.md"
+        and candidate.name != "tutorial.md"
+    ]
+    if case_variants:
         raise CatalogError(
-            "Build-a-Claw demo may contain at most one top-level tutorial Markdown "
-            f"file besides README.md: examples/{path}"
+            "Tutorial source must be named exactly `tutorial.md`: "
+            + ", ".join(
+                candidate.relative_to(root).as_posix()
+                for candidate in sorted(case_variants)
+            )
         )
-    return candidates[0].relative_to(root).as_posix() if candidates else None
+    if not tutorial.exists() and not tutorial.is_symlink():
+        return None
+    if not is_regular_repo_file(root, tutorial):
+        raise CatalogError(
+            "Tutorial source must be a regular, non-symlinked repository file: "
+            f"{tutorial.relative_to(root).as_posix()}"
+        )
+    return tutorial.relative_to(root).as_posix()
 
 
 CATALOG_TABLE_HEADER = "| Catalog field | Value |"
@@ -456,7 +456,7 @@ def parse_readme_metadata(
     """Parse the required human-readable metadata block from one example README."""
 
     category = classify_path(path, categories_by_id)
-    tutorial_path = discover_tutorial_path(root, path, category)
+    tutorial_path = discover_tutorial_path(root, path)
     readme_path = f"examples/{path}/README.md"
     readme = root / readme_path
     if not is_regular_repo_file(root, readme):

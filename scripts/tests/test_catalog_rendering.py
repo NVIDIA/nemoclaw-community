@@ -109,11 +109,9 @@ class CatalogRenderingTests(CatalogFixtureMixin, unittest.TestCase):
         self.assertEqual(build_a_claw["count"], 1)
         self.assertEqual(index["examples"][0]["collections"], ["build-a-claw"])
 
-    def test_build_a_claw_tutorial_uses_one_authored_markdown_source(self) -> None:
-        root = self._fixture_root({"path": "demos/build-a-claw/tutorial"})
-        tutorial = (
-            root / "examples/demos/build-a-claw/tutorial/getting-started.md"
-        )
+    def test_tutorial_md_uses_one_authored_markdown_source(self) -> None:
+        root = self._fixture_root()
+        tutorial = root / "examples/recipes/community/sample/tutorial.md"
         source = (
             b"# Authored Tutorial\n\n[TOC]\n\n# Part One\n\n## First Step\n\n"
             b"```text\n# Preserved in code\n[TOC]\n```\n\n"

@@ -75,10 +75,8 @@ class CatalogValidationTests(CatalogFixtureMixin, unittest.TestCase):
             "https://example.com/embed/video",
         ):
             with self.subTest(source=source):
-                root = self._fixture_root(
-                    {"path": "demos/build-a-claw/tutorial"}
-                )
-                tutorial = root / "examples/demos/build-a-claw/tutorial/guide.md"
+                root = self._fixture_root()
+                tutorial = root / "examples/recipes/community/sample/tutorial.md"
                 tutorial.write_text(
                     "# Tutorial\n\n"
                     f'<iframe src="{source}" title="Video"></iframe>\n',

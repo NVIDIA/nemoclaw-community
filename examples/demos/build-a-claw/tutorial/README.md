@@ -18,9 +18,9 @@ guided, web-friendly format.
 
 ## Tutorial Source
 
-[`build-a-claw_getting_started_guide.md`](build-a-claw_getting_started_guide.md)
-is the single source for the tutorial content. The catalog compiles that file
-directly so its maintainer never has to update a second copy.
+[`tutorial.md`](tutorial.md) is the single source for the tutorial content. Its
+exact filename activates the catalog's tutorial renderer, which compiles the
+file directly so its maintainer never has to update a second copy.
 
 ## Published Tutorial
 

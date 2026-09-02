@@ -192,8 +192,9 @@ def render_readme(
             "[example taxonomy and naming policy](../.agents/skills/nemoclaw-community-contributor-examples/references/example-taxonomy.md).",
             "Runnable examples must remain independently deployable and must document their",
             "prerequisites, credentials, policies, startup behavior, verification, and",
-            "teardown behavior. Documentation-only tutorials must identify their canonical",
-            "content source. Add structured catalog metadata as described in the",
+            "teardown behavior. Documentation-only tutorials keep their canonical content",
+            "in a root `tutorial.md` beside `README.md`. Add structured catalog metadata as",
+            "described in the",
             "[contributor guide](../CONTRIBUTING.md#catalog-metadata).",
             "",
         )

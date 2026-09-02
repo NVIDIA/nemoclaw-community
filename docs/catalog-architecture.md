@@ -21,8 +21,7 @@ example root READMEs ──┬─> examples/README.md
                        ├─> _site/examples/<canonical-path>/index.html
                        ├─> _site/catalog.json
                        └─> _site/llms.txt
-optional Build-a-Claw ──> themed tutorial body, navigation, and copy controls
-tutorial Markdown
+optional root tutorial.md ─> themed tutorial body, navigation, and copy controls
 category and collection
 index README titles ───┬─> browse labels and information tooltips
 and descriptions       └─> category and collection data in catalog.json
@@ -57,15 +56,17 @@ checks the generated result; and `pipeline.py` coordinates publication.
 parallel layout documented in [`site/README.md`](../site/README.md): templates,
 page-specific styles, native browser modules, and static assets.
 
-A Build-a-Claw demo can include one top-level Markdown file in addition to its
-README. The README continues to supply catalog metadata; the additional file
-supplies the detail-page tutorial body. Rendering extracts its first level-one
-heading as the page title and turns each later level-one heading into a paged
-step with progress plus Previous and Next navigation. Nested headings stay
-within their step. Fenced code is highlighted at build time and gains a copy
-control. The full document remains the no-JavaScript fallback, and none of
-these transformations write back to the source. The build formats the document
-but does not execute or validate its commands.
+Any discovered example can place an exact lowercase `tutorial.md` beside its
+root README. The README continues to supply catalog metadata and the overview;
+`tutorial.md` supplies that entry's detail-page tutorial body without changing
+its category, provenance, or collections. Other Markdown files are ignored for
+tutorial discovery. Rendering extracts the tutorial's first level-one heading
+as the page title and turns each later level-one heading into a paged step with
+progress plus Previous and Next navigation. Nested headings stay within their
+step. Fenced code is highlighted at build time and gains a copy control. The
+full document remains the no-JavaScript fallback, and none of these
+transformations write back to the source. The build formats the document but
+does not execute or validate its commands.
 
 Each of the six canonical categories and two collections has an index README.
 The browsable indexes supply the website label and information tooltip from

@@ -15,8 +15,8 @@ This is the canonical placement and naming policy for content under
   collections in documentation and catalog metadata.
 - Use directory placement for discovery, not as a support-level claim.
 - Keep each runnable example independently deployable. A documentation-only
-  tutorial must identify its canonical source and state that it has no runtime
-  deployment.
+  tutorial keeps its canonical content in a root `tutorial.md` beside its
+  `README.md` and states that it has no runtime deployment.
 
 ## Directory Structure
 
@@ -72,6 +72,8 @@ example.
 Record the one primary industry, any accepted cross-cutting collection, and an
 optional upstream project in the standardized catalog block in the example's
 root `README.md`.
+An exact lowercase root `tutorial.md` opts the same catalog entry into tutorial
+presentation; it does not change kind, provenance, or collection membership.
 Use the exact emoji-and-title values documented in
 [`CONTRIBUTING.md`](../../../../CONTRIBUTING.md#catalog-metadata). Industry does
 not change kind, provenance, support, or maturity. `Lifecycle` and `Reviewed`

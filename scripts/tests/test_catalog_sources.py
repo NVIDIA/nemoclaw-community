@@ -150,16 +150,29 @@ class CatalogSourcesTests(CatalogFixtureMixin, unittest.TestCase):
         self.assertFalse(entry.is_tutorial)
         self.assertEqual(entry.content_path, entry.readme_path)
 
-    def test_build_a_claw_tutorial_source_is_singular_and_not_symlinked(self) -> None:
-        root = self._fixture_root({"path": "demos/build-a-claw/tutorial"})
-        directory = root / "examples/demos/build-a-claw/tutorial"
-        (directory / "one.md").write_text("# One\n", encoding="utf-8")
-        (directory / "two.md").write_text("# Two\n", encoding="utf-8")
-        with self.assertRaisesRegex(CatalogError, "at most one"):
+    def test_tutorial_source_uses_exact_name_and_is_not_symlinked(self) -> None:
+        root = self._fixture_root()
+        directory = root / "examples/recipes/community/sample"
+        (directory / "guide.md").write_text("# Guide\n", encoding="utf-8")
+        self.assertFalse(load_catalog(root)[0].is_tutorial)
+
+        tutorial = directory / "tutorial.md"
+        tutorial.write_text("# Tutorial\n", encoding="utf-8")
+        entry = load_catalog(root)[0]
+        self.assertTrue(entry.is_tutorial)
+        self.assertEqual(
+            entry.tutorial_path,
+            "examples/recipes/community/sample/tutorial.md",
+        )
+
+        root = self._fixture_root()
+        directory = root / "examples/recipes/community/sample"
+        (directory / "Tutorial.md").write_text("# Tutorial\n", encoding="utf-8")
+        with self.assertRaisesRegex(CatalogError, "named exactly `tutorial.md`"):
             load_catalog(root)
 
-        root = self._fixture_root({"path": "demos/build-a-claw/tutorial"})
-        directory = root / "examples/demos/build-a-claw/tutorial"
+        root = self._fixture_root()
+        directory = root / "examples/recipes/community/sample"
         target = root / "outside.md"
         target.write_text("# Outside\n", encoding="utf-8")
         (directory / "tutorial.md").symlink_to(target)
