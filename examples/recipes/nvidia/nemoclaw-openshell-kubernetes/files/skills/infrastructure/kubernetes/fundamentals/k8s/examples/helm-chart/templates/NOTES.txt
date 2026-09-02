@@ -1,0 +1,90 @@
+{{- $fullName := include "webapp.fullname" . -}}
+===========================================================================
+  {{ .Chart.Name }} {{ .Chart.Version }} has been {{ .Release.IsUpgrade | ternary "upgraded" "installed" }}.
+  App version: {{ .Chart.AppVersion }}
+  Release:     {{ .Release.Name }}
+  Namespace:   {{ .Release.Namespace }}
+===========================================================================
+
+--- Accessing the Application ---
+
+{{- if .Values.ingress.enabled }}
+
+Your application is available via Ingress:
+{{- range .Values.ingress.hosts }}
+  {{- range .paths }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host | default "HOSTNAME" }}{{ .path }}
+  {{- end }}
+{{- end }}
+
+{{- if .Values.ingress.tls }}
+TLS is enabled. Ensure your certificate Secret(s) exist:
+{{- range .Values.ingress.tls }}
+  - Secret: {{ .secretName }}  (hosts: {{ join ", " .hosts }})
+{{- end }}
+{{- end }}
+
+{{- else if contains "LoadBalancer" .Values.service.type }}
+
+Your service is exposed as a LoadBalancer. It may take a few minutes for the
+external IP to be provisioned. Watch for it with:
+
+  kubectl get svc {{ $fullName }} -n {{ .Release.Namespace }} -w
+
+Once the EXTERNAL-IP is available, access the application at:
+
+  export SERVICE_IP=$(kubectl get svc {{ $fullName }} -n {{ .Release.Namespace }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  echo "http://${SERVICE_IP}:{{ .Values.service.port }}"
+
+{{- else if contains "NodePort" .Values.service.type }}
+
+Your service is exposed as a NodePort. Access it with:
+
+  export NODE_PORT=$(kubectl get svc {{ $fullName }} -n {{ .Release.Namespace }} -o jsonpath='{.spec.ports[0].nodePort}')
+  export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+  echo "http://${NODE_IP}:${NODE_PORT}"
+
+{{- else }}
+
+Your service is type ClusterIP and is only reachable from within the cluster.
+Use port-forwarding to access it locally:
+
+  kubectl port-forward svc/{{ $fullName }} {{ .Values.service.port }}:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+
+Then open: http://localhost:{{ .Values.service.port }}
+
+{{- end }}
+
+--- Checking Pod Status ---
+
+  kubectl get pods -l "{{ include "webapp.selectorLabels" . | replace ": " "=" | replace "\n" "," }}" -n {{ .Release.Namespace }}
+
+--- Viewing Logs ---
+
+  kubectl logs -l "app.kubernetes.io/name={{ include "webapp.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -n {{ .Release.Namespace }} -f
+
+--- Running Helm Tests ---
+
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+
+{{- if .Values.autoscaling.enabled }}
+
+--- Autoscaling ---
+
+HPA is enabled ({{ .Values.autoscaling.minReplicas }}-{{ .Values.autoscaling.maxReplicas }} replicas).
+Monitor scaling activity:
+
+  kubectl get hpa {{ $fullName }} -n {{ .Release.Namespace }} -w
+
+{{- end }}
+
+{{- if .Values.monitoring.serviceMonitor.enabled }}
+
+--- Monitoring ---
+
+A ServiceMonitor has been created. Prometheus should discover the
+{{ $fullName }} target within the next scrape cycle.
+
+  kubectl get servicemonitor {{ $fullName }} -n {{ .Release.Namespace }}
+
+{{- end }}

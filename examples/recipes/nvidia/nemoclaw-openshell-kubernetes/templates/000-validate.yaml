@@ -139,7 +139,7 @@
   {{- if regexMatch "(?i)(secret|token|password|credential|api.?key)" $name -}}
   {{- fail (printf "agent.env.%s looks secret-bearing; use agent.model.apiKeySecretRef or a dedicated Secret reference" $name) -}}
   {{- end -}}
-  {{- if has $name (list "NEMOCLAW_SANDBOX_NAME" "NEMOCLAW_MODEL" "NEMOCLAW_INFERENCE_PROVIDER_ID" "NEMOCLAW_UPSTREAM_PROVIDER" "NEMOCLAW_INFERENCE_BASE_URL" "NEMOCLAW_INFERENCE_API" "NEMOCLAW_CONTEXT_WINDOW" "KUBERNETES_SRE_ENDPOINT" "OPENSHIFT_LLM_DELETE_ENDPOINT" "OPENSHIFT_LLM_DELETE_NAMESPACE" "OPENSHIFT_LLM_DELETE_ALLOWED_RESOURCES") -}}
+  {{- if has $name (list "NEMOCLAW_SANDBOX_NAME" "NEMOCLAW_MODEL" "NEMOCLAW_INFERENCE_PROVIDER_ID" "NEMOCLAW_UPSTREAM_PROVIDER" "NEMOCLAW_INFERENCE_BASE_URL" "NEMOCLAW_INFERENCE_API" "NEMOCLAW_CONTEXT_WINDOW" "KUBERNETES_SRE_ENDPOINT" "KUBECONFIG" "SRE_KUBECONFIG" "MODEL_DELETE_KUBECONFIG" "METRICS_KUBECONFIG" "OPENSHIFT_LLM_TARGET_NAMESPACE" "OPENSHIFT_LLM_HF_SECRET_NAME" "OPENSHIFT_LLM_HF_SECRET_KEY" "OPENSHIFT_LLM_RUNNER_SERVICE_ACCOUNT" "MONITORING_ENABLED" "MONITORING_NAMESPACE" "MONITORING_SERVICE" "MONITORING_SERVICE_PORT" "OPENSHIFT_LLM_DELETE_ENDPOINT" "OPENSHIFT_LLM_DELETE_NAMESPACE" "OPENSHIFT_LLM_DELETE_ALLOWED_RESOURCES") -}}
   {{- fail (printf "agent.env.%s is chart-managed; use its dedicated values field" $name) -}}
   {{- end -}}
 {{- end -}}
@@ -148,6 +148,22 @@
 {{- end -}}
 {{- if not (has .Values.sre.rbac.mode (list "safe" "broad-no-delete")) -}}
 {{- fail "sre.rbac.mode must be safe or broad-no-delete" -}}
+{{- end -}}
+{{- $proxyTls := .Values.sre.proxy.tlsSecretRef -}}
+{{- if or (eq $proxyTls.caKey $proxyTls.certKey) (eq $proxyTls.caKey $proxyTls.privateKeyKey) (eq $proxyTls.certKey $proxyTls.privateKeyKey) -}}
+{{- fail "sre.proxy.tlsSecretRef caKey, certKey, and privateKeyKey must be distinct" -}}
+{{- end -}}
+{{- if and .Values.sre.openshiftLlmDeploy.enabled (not .Values.sre.enabled) -}}
+{{- fail "sre.openshiftLlmDeploy.enabled requires sre.enabled=true" -}}
+{{- end -}}
+{{- if and .Values.sre.openshiftLlmDeploy.metrics.enabled (not .Values.sre.openshiftLlmDeploy.enabled) -}}
+{{- fail "sre.openshiftLlmDeploy.metrics.enabled requires sre.openshiftLlmDeploy.enabled=true" -}}
+{{- end -}}
+{{- if and .Values.sre.openshiftLlmDeploy.enabled (ne .Values.sre.rbac.mode "broad-no-delete") -}}
+{{- fail "sre.openshiftLlmDeploy.enabled requires sre.rbac.mode=broad-no-delete because model deployment creates and patches workloads" -}}
+{{- end -}}
+{{- if and .Values.sre.openshiftLlmDeploy.enabled (not .Values.sre.openshiftLlmDeploy.modelRunnerServiceAccount.create) (not .Values.sre.openshiftLlmDeploy.modelRunnerServiceAccount.name) -}}
+{{- fail "sre.openshiftLlmDeploy.modelRunnerServiceAccount.name is required when create=false" -}}
 {{- end -}}
 {{- $deletion := .Values.sre.openshiftLlmDeploy.deletion -}}
 {{- if and $deletion.enabled (not .Values.sre.enabled) -}}
@@ -159,6 +175,9 @@
 {{- if and $deletion.enabled (not $deletion.namespace) -}}
 {{- fail "sre.openshiftLlmDeploy.deletion.namespace is required when namespace-scoped model deletion is enabled" -}}
 {{- end -}}
+{{- if and $deletion.enabled (ne $deletion.namespace (include "nemoclaw-openshell.modelDeployNamespace" .)) -}}
+{{- fail "sre.openshiftLlmDeploy.deletion.namespace must equal the model deployment target namespace" -}}
+{{- end -}}
 {{- if and $deletion.enabled (eq (len $deletion.allowedResources) 0) -}}
 {{- fail "sre.openshiftLlmDeploy.deletion.allowedResources must contain at least one exact apiGroup/resource/name tuple" -}}
 {{- end -}}
@@ -166,6 +185,7 @@
 {{- fail "sre.openshiftLlmDeploy.deletion.dangerousAcknowledgement must equal I_ACKNOWLEDGE_NAMESPACE_MODEL_DELETE" -}}
 {{- end }}
 {{- $supportedDeletes := list
+      "nvidia.com/dynamographdeployments"
       "serving.kserve.io/inferenceservices"
       "serving.kserve.io/servingruntimes"
       "nim.opendatahub.io/nimservices"
@@ -178,7 +198,6 @@
       "/services"
       "/configmaps"
       "/persistentvolumeclaims"
-      "/secrets"
       "route.openshift.io/routes"
       "networking.k8s.io/ingresses"
 -}}
@@ -190,9 +209,9 @@
   {{- if and (eq $resource.resource "persistentvolumeclaims") (not $deletion.deletePVCs) -}}
   {{- fail "persistentvolumeclaims in allowedResources requires deletion.deletePVCs=true" -}}
   {{- end -}}
-  {{- if and (eq $resource.resource "secrets") (not $deletion.deleteSecrets) -}}
-  {{- fail "secrets in allowedResources requires deletion.deleteSecrets=true" -}}
-  {{- end -}}
+{{- end }}
+{{- if $deletion.deleteSecrets -}}
+{{- fail "sre.openshiftLlmDeploy.deletion.deleteSecrets cannot be enabled; the external model credential Secret is never deleted by Hermes" -}}
 {{- end }}
 apiVersion: v1
 kind: ConfigMap

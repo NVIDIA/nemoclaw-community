@@ -1,0 +1,8 @@
+# Source and test material is kept in Git for review, but packaged releases
+# carry only the verified archive chunks under files/sre-skills.part-*.
+files/skills/
+files/sre-skills.tar.xz
+tests/
+__pycache__/
+*.pyc
+.DS_Store

@@ -2,17 +2,37 @@
 # SPDX-License-Identifier: Apache-2.0
 {{- $fullname := include "nemoclaw-openshell.fullname" . -}}
 {{- $claimName := include "nemoclaw-openshell.stateClaimName" . -}}
+{{- $sreBundleDigest := "" -}}
+{{- $sreBundleManifestDigest := "" -}}
+{{- if .Values.sre.enabled -}}
+  {{- $sreBundleDigest = .Files.Get "files/sre-skills.tar.xz.sha256" | trim -}}
+  {{- $sreBundleManifestDigest = .Files.Get "files/sre-skills.manifest.sha256" | trim -}}
+{{- end -}}
 {{- $agentEnv := dict -}}
 {{- range $key, $value := .Values.agent.env -}}
   {{- $_ := set $agentEnv $key (toString $value) -}}
 {{- end -}}
 {{- if .Values.sre.enabled -}}
-  {{- $_ := set $agentEnv "KUBERNETES_SRE_ENDPOINT" (printf "http://%s.%s.svc.cluster.local:%d" (include "nemoclaw-openshell.sreProxyName" .) .Release.Namespace (int .Values.sre.proxy.port)) -}}
+  {{- $_ := set $agentEnv "KUBERNETES_SRE_ENDPOINT" (printf "https://%s.%s.svc.cluster.local:%d" (include "nemoclaw-openshell.sreProxyName" .) .Release.Namespace (int .Values.sre.proxy.port)) -}}
+  {{- $_ := set $agentEnv "KUBECONFIG" "/sandbox/.hermes/sre-kubeconfig" -}}
+  {{- $_ := set $agentEnv "SRE_KUBECONFIG" "/sandbox/.hermes/sre-kubeconfig" -}}
+{{- end -}}
+{{- if .Values.sre.openshiftLlmDeploy.enabled -}}
+  {{- $_ := set $agentEnv "OPENSHIFT_LLM_TARGET_NAMESPACE" (include "nemoclaw-openshell.modelDeployNamespace" .) -}}
+  {{- $_ := set $agentEnv "OPENSHIFT_LLM_RUNNER_SERVICE_ACCOUNT" (include "nemoclaw-openshell.modelRunnerServiceAccountName" .) -}}
+  {{- $_ := set $agentEnv "MONITORING_NAMESPACE" .Values.sre.openshiftLlmDeploy.metrics.namespace -}}
+  {{- $_ := set $agentEnv "MONITORING_SERVICE" .Values.sre.openshiftLlmDeploy.metrics.service -}}
+  {{- $_ := set $agentEnv "MONITORING_SERVICE_PORT" (toString .Values.sre.openshiftLlmDeploy.metrics.port) -}}
+  {{- $_ := set $agentEnv "MONITORING_ENABLED" (toString .Values.sre.openshiftLlmDeploy.metrics.enabled) -}}
+{{- end -}}
+{{- if .Values.sre.openshiftLlmDeploy.metrics.enabled -}}
+  {{- $_ := set $agentEnv "METRICS_KUBECONFIG" "/sandbox/.hermes/metrics-kubeconfig" -}}
 {{- end -}}
 {{- if .Values.sre.openshiftLlmDeploy.deletion.enabled -}}
-  {{- $_ := set $agentEnv "OPENSHIFT_LLM_DELETE_ENDPOINT" (printf "http://%s.%s.svc.cluster.local:%d" (include "nemoclaw-openshell.modelDeleteProxyName" .) .Release.Namespace (int .Values.sre.proxy.port)) -}}
+  {{- $_ := set $agentEnv "OPENSHIFT_LLM_DELETE_ENDPOINT" (printf "https://%s.%s.svc.cluster.local:%d" (include "nemoclaw-openshell.modelDeleteProxyName" .) .Release.Namespace (int .Values.sre.proxy.port)) -}}
   {{- $_ := set $agentEnv "OPENSHIFT_LLM_DELETE_NAMESPACE" .Values.sre.openshiftLlmDeploy.deletion.namespace -}}
   {{- $_ := set $agentEnv "OPENSHIFT_LLM_DELETE_ALLOWED_RESOURCES" (toJson .Values.sre.openshiftLlmDeploy.deletion.allowedResources) -}}
+  {{- $_ := set $agentEnv "MODEL_DELETE_KUBECONFIG" "/sandbox/.hermes/model-delete-kubeconfig" -}}
 {{- end -}}
 {{- $pod := dict "node_selector" .Values.agent.sandbox.nodeSelector "tolerations" .Values.agent.sandbox.tolerations -}}
 {{- if .Values.agent.sandbox.runtimeClassName -}}
@@ -25,11 +45,21 @@
       (dict "name" "hermes-state" "mount_path" "/sandbox/workspace" "sub_path" "workspace" "read_only" false)
 -}}
 {{- if .Values.sre.enabled -}}
+  {{- $mounts = append $mounts (dict "name" "hermes-state" "mount_path" "/sandbox/.hermes/skills/devops" "sub_path" "hermes/skills/devops" "read_only" true) -}}
+  {{- $mounts = append $mounts (dict "name" "hermes-state" "mount_path" "/sandbox/.hermes/skills/infrastructure" "sub_path" "hermes/skills/infrastructure" "read_only" true) -}}
   {{- $mounts = append $mounts (dict "name" "hermes-state" "mount_path" "/sandbox/.hermes/skills/kubernetes-sre" "sub_path" "hermes/skills/kubernetes-sre" "read_only" true) -}}
   {{- $mounts = append $mounts (dict "name" "hermes-state" "mount_path" "/sandbox/.hermes/.sre-proxy-token" "sub_path" "hermes/.sre-proxy-token" "read_only" true) -}}
+  {{- $mounts = append $mounts (dict "name" "hermes-state" "mount_path" "/sandbox/.hermes/sre-kubeconfig" "sub_path" "hermes/sre-kubeconfig" "read_only" true) -}}
+  {{- $mounts = append $mounts (dict "name" "hermes-state" "mount_path" "/chart-bin" "sub_path" "hermes/bin" "read_only" true) -}}
+{{- end -}}
+{{- if .Values.sre.openshiftLlmDeploy.enabled -}}
+  {{- $mounts = append $mounts (dict "name" "hermes-state" "mount_path" "/sandbox/.hermes/skills/openshift-llm-deploy" "sub_path" "hermes/skills/openshift-llm-deploy" "read_only" true) -}}
 {{- end -}}
 {{- if .Values.sre.openshiftLlmDeploy.deletion.enabled -}}
-  {{- $mounts = append $mounts (dict "name" "hermes-state" "mount_path" "/sandbox/.hermes/skills/openshift-llm-deploy" "sub_path" "hermes/skills/openshift-llm-deploy" "read_only" true) -}}
+  {{- $mounts = append $mounts (dict "name" "hermes-state" "mount_path" "/sandbox/.hermes/model-delete-kubeconfig" "sub_path" "hermes/model-delete-kubeconfig" "read_only" true) -}}
+{{- end -}}
+{{- if .Values.sre.openshiftLlmDeploy.metrics.enabled -}}
+  {{- $mounts = append $mounts (dict "name" "hermes-state" "mount_path" "/sandbox/.hermes/metrics-kubeconfig" "sub_path" "hermes/metrics-kubeconfig" "read_only" true) -}}
 {{- end -}}
 {{- $agentContainer := dict "resources" .Values.agent.sandbox.resources "volume_mounts" $mounts -}}
 {{- $volume := dict "name" "hermes-state" "persistent_volume_claim" (dict "claim_name" $claimName "read_only" false) -}}
@@ -56,6 +86,8 @@
       "driverConfig" $driverConfig
       "policy" $policy
       "openshellMode" .Values.openshell.mode
+      "sreBundleSha256" $sreBundleDigest
+      "sreBundleManifestSha256" $sreBundleManifestDigest
       "startupContract" $startupContract
 -}}
 {{- $configId := sha256sum (toJson $configIdentity) | trunc 63 -}}
@@ -83,6 +115,8 @@
       "driverConfig" $driverConfig
       "labels" $labels
       "openshellMode" .Values.openshell.mode
+      "sreBundleSha256" $sreBundleDigest
+      "sreBundleManifestSha256" $sreBundleManifestDigest
       "startupContract" $startupContract
       "operatorClient" $operatorClient
 }}
@@ -112,13 +146,5 @@ data:
   {{- end }}
   bootstrap-config.json: |
     {{- $config | toPrettyJson | nindent 4 }}
-  {{- if .Values.sre.enabled }}
-  kubernetes-sre-SKILL.md: |
-    {{- .Files.Get "files/skills/kubernetes-sre/SKILL.md" | nindent 4 }}
-  {{- end }}
-  {{- if .Values.sre.openshiftLlmDeploy.deletion.enabled }}
-  openshift-llm-deploy-SKILL.md: |
-    {{- .Files.Get "files/skills/openshift-llm-deploy/SKILL.md" | nindent 4 }}
-  {{- end }}
   policy.yaml: |
     {{- $policy | nindent 4 }}

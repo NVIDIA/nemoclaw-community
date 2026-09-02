@@ -1,0 +1,25 @@
+{{- if .Values.sre.enabled }}
+{{- $root := . }}
+{{- $bundle := .Files.Get "files/sre-skills.parts.json" | fromJson }}
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- range $index, $part := $bundle.parts }}
+{{- if gt $index 0 }}
+---
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nemoclaw-openshell.sreSkillsPartName" (dict "root" $root "index" $index) }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: sre-skills
+  annotations:
+    nemoclaw.nvidia.com/archive-sha256: {{ $root.Files.Get "files/sre-skills.tar.xz.sha256" | trim | quote }}
+    nemoclaw.nvidia.com/manifest-sha256: {{ $root.Files.Get "files/sre-skills.manifest.sha256" | trim | quote }}
+    nemoclaw.nvidia.com/part-sha256: {{ $part.sha256 | quote }}
+binaryData:
+  {{ $part.name }}: {{ $root.Files.Get (printf "files/%s" $part.name) | b64enc | quote }}
+{{- end }}
+{{- end }}

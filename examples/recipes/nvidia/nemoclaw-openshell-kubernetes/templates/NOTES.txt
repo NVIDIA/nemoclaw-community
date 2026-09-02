@@ -28,6 +28,10 @@ sandbox lifecycle operations.
 SRE mode: {{ .Values.sre.rbac.mode }} (DELETE denied)
 Safe mode writes are limited to Deployment/StatefulSet scale subresources.
 Proxy access requires the chart-managed sandbox bearer token.
+Verified SRE skill bundle: enabled
+{{- if .Values.sre.openshiftLlmDeploy.enabled }}
+OpenShift/Kubernetes LLM deployment skill: enabled (external Secret reference only)
+{{- end }}
 {{- end }}
 {{- if not .Values.platform.openshift.enabled }}
 

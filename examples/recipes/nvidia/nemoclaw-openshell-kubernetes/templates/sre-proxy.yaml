@@ -47,8 +47,18 @@ spec:
               value: {{ .Values.sre.proxy.port | quote }}
             - name: PROXY_ALLOWED_METHODS
               value: {{ ternary "GET,POST,PUT,PATCH" "GET,PATCH" (eq .Values.sre.rbac.mode "broad-no-delete") | quote }}
+            - name: PROXY_POLICY
+              value: general
+            {{- if .Values.sre.openshiftLlmDeploy.enabled }}
+            - name: PROXY_SERVICE_PROXY_NAMESPACE
+              value: {{ include "nemoclaw-openshell.modelDeployNamespace" . | quote }}
+            {{- end }}
             - name: PROXY_CLIENT_TOKEN_FILE
               value: /proxy-auth/token
+            - name: PROXY_TLS_CERT_FILE
+              value: /proxy-tls/tls.crt
+            - name: PROXY_TLS_KEY_FILE
+              value: /proxy-tls/tls.key
             - name: PROXY_MAX_REQUEST_BYTES
               value: {{ printf "%d" (int64 .Values.sre.proxy.maxRequestBytes) | quote }}
             - name: PROXY_MAX_RESPONSE_BYTES
@@ -56,7 +66,7 @@ spec:
             - name: PROXY_REQUEST_TIMEOUT_SECONDS
               value: {{ .Values.sre.proxy.requestTimeoutSeconds | quote }}
           ports:
-            - name: http
+            - name: https
               containerPort: {{ .Values.sre.proxy.port }}
               protocol: TCP
           securityContext:
@@ -79,6 +89,9 @@ spec:
             - name: proxy-auth
               mountPath: /proxy-auth
               readOnly: true
+            - name: proxy-tls
+              mountPath: /proxy-tls
+              readOnly: true
       volumes:
         - name: runtime
           configMap:
@@ -94,6 +107,15 @@ spec:
             items:
               - key: {{ .Values.sre.proxy.authSecretRef.key | quote }}
                 path: token
+        - name: proxy-tls
+          secret:
+            secretName: {{ include "nemoclaw-openshell.proxyTlsSecretName" . }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.sre.proxy.tlsSecretRef.certKey | quote }}
+                path: tls.crt
+              - key: {{ .Values.sre.proxy.tlsSecretRef.privateKeyKey | quote }}
+                path: tls.key
 ---
 apiVersion: v1
 kind: Service
@@ -108,8 +130,8 @@ spec:
     {{- include "nemoclaw-openshell.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: sre-proxy
   ports:
-    - name: http
+    - name: https
       port: {{ .Values.sre.proxy.port }}
-      targetPort: http
+      targetPort: https
       protocol: TCP
 {{- end }}

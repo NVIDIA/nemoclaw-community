@@ -1,0 +1,61 @@
+# =============================================================================
+# Development Environment
+# =============================================================================
+# Minimal resources, single replicas, no autoscaling, no monitoring stack.
+
+namespace: webapp-dev
+
+# ---------------------------------------------------------------------------
+# Web Application
+# ---------------------------------------------------------------------------
+webapp:
+  replicaCount: 1
+  imageTag: "latest"
+  logLevel: "debug"
+  resources:
+    requestsCpu: 50m
+    requestsMemory: 64Mi
+    limitsCpu: 200m
+    limitsMemory: 256Mi
+  ingress:
+    enabled: true
+    host: webapp.dev.internal
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 2
+
+# ---------------------------------------------------------------------------
+# PostgreSQL
+# ---------------------------------------------------------------------------
+postgresql:
+  storageSize: 5Gi
+  resources:
+    requestsCpu: 100m
+    requestsMemory: 256Mi
+    limitsCpu: 500m
+    limitsMemory: 512Mi
+
+# ---------------------------------------------------------------------------
+# Redis
+# ---------------------------------------------------------------------------
+redis:
+  architecture: standalone
+  replicaCount: 0
+  storageSize: 1Gi
+  resources:
+    requestsCpu: 50m
+    requestsMemory: 64Mi
+    limitsCpu: 200m
+    limitsMemory: 128Mi
+
+# ---------------------------------------------------------------------------
+# Monitoring (disabled in dev)
+# ---------------------------------------------------------------------------
+monitoring:
+  enabled: false
+  retention: "6h"
+  storageSize: 5Gi
+  grafana:
+    ingressEnabled: false
+    host: grafana.dev.internal

@@ -1,0 +1,29 @@
+{{- if and .Values.sre.enabled .Values.sre.openshiftLlmDeploy.enabled .Values.sre.openshiftLlmDeploy.metrics.enabled }}
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "nemoclaw-openshell.metricsProxyName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+automountServiceAccountToken: true
+{{- if .Values.platform.openshift.enabled }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "nemoclaw-openshell.clusterResourceName" . }}-metrics
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-monitoring-view
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "nemoclaw-openshell.metricsProxyName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- end }}

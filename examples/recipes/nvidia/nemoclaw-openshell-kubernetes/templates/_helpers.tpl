@@ -121,8 +121,34 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-model-delete-proxy" (include "nemoclaw-openshell.fullname" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "nemoclaw-openshell.metricsProxyName" -}}
+{{- printf "%s-metrics-proxy" (include "nemoclaw-openshell.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "nemoclaw-openshell.metricsCaConfigMapName" -}}
+{{- default (printf "%s-metrics-service-ca" (include "nemoclaw-openshell.fullname" .) | trunc 63 | trimSuffix "-") .Values.sre.openshiftLlmDeploy.metrics.caConfigMapRef.name -}}
+{{- end -}}
+
+{{- define "nemoclaw-openshell.modelDeployNamespace" -}}
+{{- default .Release.Namespace .Values.sre.openshiftLlmDeploy.targetNamespace -}}
+{{- end -}}
+
+{{- define "nemoclaw-openshell.modelRunnerServiceAccountName" -}}
+{{- default (printf "%s-llm-runner" (include "nemoclaw-openshell.fullname" .) | trunc 63 | trimSuffix "-") .Values.sre.openshiftLlmDeploy.modelRunnerServiceAccount.name -}}
+{{- end -}}
+
 {{- define "nemoclaw-openshell.proxyAuthSecretName" -}}
 {{- default (printf "%s-sre-proxy-auth" (include "nemoclaw-openshell.fullname" .) | trunc 63 | trimSuffix "-") .Values.sre.proxy.authSecretRef.name -}}
+{{- end -}}
+
+{{- define "nemoclaw-openshell.proxyTlsSecretName" -}}
+{{- default (printf "%s-proxy-tls" (include "nemoclaw-openshell.fullname" .) | trunc 63 | trimSuffix "-") .Values.sre.proxy.tlsSecretRef.name -}}
+{{- end -}}
+
+{{- define "nemoclaw-openshell.sreSkillsPartName" -}}
+{{- $suffix := printf "-sre-skills-%03d" (int .index) -}}
+{{- $prefix := include "nemoclaw-openshell.fullname" .root | trunc (int (sub 63 (len $suffix))) | trimSuffix "-" -}}
+{{- printf "%s%s" $prefix $suffix -}}
 {{- end -}}
 
 {{- define "nemoclaw-openshell.openshiftSandboxUid" -}}
@@ -167,7 +193,11 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{- define "nemoclaw-openshell.policy" -}}
-{{ .Files.Get "files/policy.yaml" -}}
+{{- $basePolicy := .Files.Get "files/policy.yaml" -}}
+{{- if .Values.sre.enabled -}}
+  {{- $basePolicy = replace "  read_only:\n" "  read_only:\n    - /chart-bin\n" $basePolicy -}}
+{{- end -}}
+{{ $basePolicy -}}
 {{- if .Values.sre.enabled }}
   kubernetes_sre:
     name: kubernetes_sre
@@ -175,6 +205,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
       - host: {{ printf "%s.%s.svc.cluster.local" (include "nemoclaw-openshell.sreProxyName" .) .Release.Namespace }}
         port: {{ .Values.sre.proxy.port }}
         protocol: rest
+        # Preserve the chart proxy's private-CA TLS session. OpenShell still
+        # enforces exact host/port/binary policy; the chart proxy enforces L7.
+        tls: skip
         enforcement: enforce
         rules:
           - allow: { method: GET, path: "/**" }
@@ -188,6 +221,8 @@ app.kubernetes.io/instance: {{ .Release.Name }}
       - { path: /usr/local/bin/curl }
       - { path: /usr/bin/python3* }
       - { path: /opt/hermes/.venv/bin/python }
+      - { path: /chart-bin/oc }
+      - { path: /chart-bin/kubectl }
 {{- end }}
 {{- if .Values.sre.openshiftLlmDeploy.deletion.enabled }}
   openshift_llm_delete:
@@ -196,6 +231,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
       - host: {{ printf "%s.%s.svc.cluster.local" (include "nemoclaw-openshell.modelDeleteProxyName" .) .Release.Namespace }}
         port: {{ .Values.sre.proxy.port }}
         protocol: rest
+        tls: skip
         enforcement: enforce
         rules:
           - allow: { method: GET, path: "/**" }
@@ -205,5 +241,58 @@ app.kubernetes.io/instance: {{ .Release.Name }}
       - { path: /usr/local/bin/curl }
       - { path: /usr/bin/python3* }
       - { path: /opt/hermes/.venv/bin/python }
+      - { path: /chart-bin/oc }
+      - { path: /chart-bin/kubectl }
+{{- end }}
+{{- if .Values.sre.openshiftLlmDeploy.metrics.enabled }}
+  cluster_metrics:
+    name: cluster_metrics
+    endpoints:
+      - host: {{ printf "%s.%s.svc.cluster.local" (include "nemoclaw-openshell.metricsProxyName" .) .Release.Namespace }}
+        port: {{ .Values.sre.proxy.port }}
+        protocol: rest
+        tls: skip
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/**" }
+    binaries:
+      - { path: /chart-bin/oc }
+      - { path: /chart-bin/kubectl }
+{{- end }}
+{{- if .Values.sre.openshiftLlmDeploy.enabled }}
+  model_release_metadata:
+    name: model_release_metadata
+    endpoints:
+      - host: api.github.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/repos/vllm-project/vllm/releases/latest" }
+          - allow: { method: GET, path: "/repos/ai-dynamo/dynamo/releases/latest" }
+      - host: github.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/vllm-project/vllm/releases/latest" }
+          - allow: { method: GET, path: "/vllm-project/vllm/releases/tag/**" }
+      - host: hub.docker.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/v2/repositories/vllm/vllm-openai/tags/**" }
+      - host: nvcr.io
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/proxy_auth" }
+          - allow: { method: GET, path: "/v2/nvidia/ai-dynamo/vllm-runtime/manifests/**" }
+          - allow: { method: GET, path: "/v2/nvidia/ai-dynamo/tensorrtllm-runtime/manifests/**" }
+    binaries:
+      - { path: /usr/bin/curl }
+      - { path: /usr/local/bin/curl }
 {{- end }}
 {{- end -}}

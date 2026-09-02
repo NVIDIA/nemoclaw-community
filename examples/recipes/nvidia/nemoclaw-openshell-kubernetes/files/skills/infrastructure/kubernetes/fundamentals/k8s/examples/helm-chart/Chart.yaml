@@ -1,0 +1,30 @@
+apiVersion: v2
+name: webapp
+description: A production-grade web application Helm chart
+type: application
+version: 1.2.0
+appVersion: "3.5.1"
+
+keywords:
+  - web
+  - application
+  - production
+
+home: https://github.com/example-org/webapp
+sources:
+  - https://github.com/example-org/webapp
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+dependencies: []
+# Uncomment to add chart dependencies:
+# - name: postgresql
+#   version: "~15.5"
+#   repository: https://charts.bitnami.com/bitnami
+#   condition: postgresql.enabled
+# - name: redis
+#   version: "~19.0"
+#   repository: https://charts.bitnami.com/bitnami
+#   condition: redis.enabled

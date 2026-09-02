@@ -149,7 +149,14 @@ operatorClient:
       memory: 256Mi
 
 sre:
+  # Installs the reviewed DevOps/Infrastructure/Kubernetes SRE bundle and its
+  # chart-managed, policy-constrained Kubernetes API access path.
   enabled: false
+  cli:
+    # Existing public multi-architecture image; only oc/kubectl are copied
+    # into the retained state volume. The chart builds no helper image.
+    image: quay.io/openshift/origin-cli@sha256:ebd858bafa7fe3bf04eda2753d47f74be9608c867f41567cea4af1b1b4189fac
+    pullPolicy: IfNotPresent
   rbac:
     # safe: read common non-secret resources cluster-wide and scale only
     # Deployments/StatefulSets. Full workload patches are intentionally denied.
@@ -163,15 +170,64 @@ sre:
     authSecretRef:
       name: ""
       key: token
+    # Empty name creates and preserves a chart-managed private CA and serving
+    # certificate. Set a name to use an operator-managed kubernetes.io/tls
+    # Secret whose certificate covers every chart proxy Service DNS name.
+    tlsSecretRef:
+      name: ""
+      caKey: ca.crt
+      certKey: tls.crt
+      privateKeyKey: tls.key
     maxRequestBytes: 10485760
     maxResponseBytes: 33554432
     requestTimeoutSeconds: 30
   openshiftLlmDeploy:
     enabled: false
+    # Empty uses the Helm release namespace. Set an explicit namespace only
+    # when Helm is authorized to create the model-runner ServiceAccount there.
+    targetNamespace: ""
+    modelRunnerServiceAccount:
+      create: true
+      name: ""
+    # Reference only. The chart never reads or copies this Secret. A future
+    # model-download Job receives the selected key through secretKeyRef.
+    hfTokenSecretRef:
+      name: hf-token
+      key: HF_TOKEN
+    metrics:
+      # Creates a separate read-only, exact-service proxy. On OpenShift it
+      # binds cluster-monitoring-view; keep disabled unless telemetry is needed.
+      enabled: false
+      namespace: openshift-monitoring
+      service: thanos-querier
+      port: 9091
+      # OpenShift creates an injected service-CA ConfigMap when name is empty.
+      # Standard Kubernetes uses system roots unless an explicit ConfigMap is
+      # supplied for the HTTPS Prometheus Service certificate.
+      caConfigMapRef:
+        name: ""
+        key: service-ca.crt
+    dynamo:
+      enabled: true
+      apiVersion: nvidia.com/v1beta1
+      vllmRuntimeImage: nvcr.io/nvidia/ai-dynamo/vllm-runtime:1.4.1@sha256:a6bb45ad652f01d08b5a18b54b9fa9e80584ce18ee1ba1e5a760a8f228872fe5
+      vllmRuntimeVersion: "1.4.1"
+      tensorrtllmRuntimeImage: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.4.1@sha256:535640569a28a94a373ffb091d7bea40a84cc7d46cee56b25a487b2472e12668
+      tensorrtllmRuntimeVersion: "1.4.1"
+      standardVllmImage: docker.io/vllm/vllm-openai:v0.27.1@sha256:0a51ea5b4ae2dc5d81890e5173f54203d2a3ae0cfffe51b8fd2afd4391bfd967
+      # Only exact model IDs with reviewed, immutable images belong here.
+      modelRuntimeOverrides: {}
+      observationTimeoutSeconds: 150
+      downloadObservationTimeoutSeconds: 300
+      downloadTimeoutSeconds: 7200
+      verificationTimeoutSeconds: 300
+      terminalTimeoutSeconds: 420
+      imagePullSecretName: ""
     deletion:
       enabled: false
       namespace: ""
       deletePVCs: false
+      # Reserved false: model credentials remain human-managed.
       deleteSecrets: false
       # Exact API-group/resource/name tuples authorized for deletion. The chart
       # has no implicit ownership heuristic, so this must be operator supplied.

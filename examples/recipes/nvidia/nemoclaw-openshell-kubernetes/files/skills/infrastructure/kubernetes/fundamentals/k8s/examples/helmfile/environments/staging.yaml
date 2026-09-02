@@ -1,0 +1,62 @@
+# =============================================================================
+# Staging Environment
+# =============================================================================
+# Mirrors production sizing at reduced scale. Monitoring disabled by default
+# but can be enabled for debugging.
+
+namespace: webapp-staging
+
+# ---------------------------------------------------------------------------
+# Web Application
+# ---------------------------------------------------------------------------
+webapp:
+  replicaCount: 2
+  imageTag: "v3.5.1-rc.1"
+  logLevel: "info"
+  resources:
+    requestsCpu: 100m
+    requestsMemory: 128Mi
+    limitsCpu: 500m
+    limitsMemory: 512Mi
+  ingress:
+    enabled: true
+    host: webapp.staging.example.com
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+
+# ---------------------------------------------------------------------------
+# PostgreSQL
+# ---------------------------------------------------------------------------
+postgresql:
+  storageSize: 20Gi
+  resources:
+    requestsCpu: 250m
+    requestsMemory: 512Mi
+    limitsCpu: "1"
+    limitsMemory: 1Gi
+
+# ---------------------------------------------------------------------------
+# Redis
+# ---------------------------------------------------------------------------
+redis:
+  architecture: replication
+  replicaCount: 1
+  storageSize: 5Gi
+  resources:
+    requestsCpu: 100m
+    requestsMemory: 128Mi
+    limitsCpu: 500m
+    limitsMemory: 256Mi
+
+# ---------------------------------------------------------------------------
+# Monitoring (disabled in staging by default)
+# ---------------------------------------------------------------------------
+monitoring:
+  enabled: false
+  retention: "24h"
+  storageSize: 20Gi
+  grafana:
+    ingressEnabled: false
+    host: grafana.staging.example.com

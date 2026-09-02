@@ -173,9 +173,31 @@ Use `values-existing-gateway.yaml`, set the real HTTPS endpoint/name, and pre-cr
 
 The default has no SRE skill, Kubernetes API proxy, or SRE RBAC. Enable the safe profile with `-f values-sre-safe.yaml`.
 
-Enabled chart-managed skills and the proxy credential are mounted as narrow,
-read-only subpaths below the official image's existing `.hermes` directory. The
-chart never replaces that protected directory or its NemoClaw configuration.
+Every reviewed `devops`, `infrastructure`, and `kubernetes-sre` skill
+entrypoint is shipped with executable scripts, templates, workflows, tools, and
+runtime resources as one deterministic xz/tar bundle split into size-bounded
+ConfigMap chunks. Auxiliary upstream documentation and examples are retained in
+Git for review but omitted from the release archive so Helm's release record
+stays safely below Kubernetes' object-size limit.
+The optional hardened `openshift-llm-deploy` tree is carried in the same bundle
+but installed only when its value is enabled. Each chunk, the reconstructed
+archive, its manifest, and every payload have SHA-256 verification. Resources
+render only when `sre.enabled=true`; the seed Job reassembles the chunks in
+memory, rejects links, traversal, unexpected roots, binary/cache artifacts, and
+digest mismatches, then stages the selected trees on the retained state volume.
+Mounted skills, proxy credential, kubeconfig, and bundled `oc`/`kubectl`
+clients are narrow read-only subpaths below the official image's existing
+`.hermes` directory. The chart never replaces that protected directory or
+builds a custom image.
+
+The legacy chart's functional `devops` and `infrastructure` libraries are
+included. Its `misc` tree and the host-level `manage-skills` prompt are
+deliberately excluded because they contain the deferred SkillSpector workflow
+or dynamic skill management. The obsolete nested OpenShift model skill is
+replaced by the chart-local hardened `openshift-llm-deploy` copy. Decorative
+binary assets and cache/VCS artifacts are not runtime skill inputs. The bundle
+builder injects the same cluster-safety contract into every packaged
+`SKILL.md`; the source files remain reviewable and unmodified by packaging.
 
 Safe mode can read common non-secret cluster resources and patch/update only
 the `/scale` subresource of Deployments and StatefulSets. It cannot replace pod
@@ -186,15 +208,69 @@ is mounted only in the proxy pod. The OpenShell supervisor separately uses its
 own short-lived projected identity token for gateway authentication. Set
 `sre.proxy.authSecretRef.name` to use an operator-provided Secret instead.
 
-`sre.rbac.mode=broad-no-delete` is a high-risk opt-in and requires `I_ACKNOWLEDGE_CLUSTER_WIDE_NO_DELETE`. It grants create/update/patch across API resources but still excludes all direct delete verbs and proxy DELETE requests. This mode can cause outages or indirect privilege escalation even without DELETE; it is not recommended for production.
+All sandbox-to-proxy traffic uses CA-verified HTTPS because Kubernetes clients
+will not send bearer credentials to plaintext HTTP servers. By default Helm
+creates and preserves a private CA plus a serving certificate covering the SRE,
+metrics, and model-deletion Service DNS names. Set
+`sre.proxy.tlsSecretRef.name` to use an operator-managed
+`kubernetes.io/tls` Secret containing the configured `ca.crt`, `tls.crt`, and
+`tls.key` keys. Rotating an external CA requires the documented stopped-Sandbox
+reseed so the private kubeconfigs receive the new public CA; never use
+`--insecure-skip-tls-verify`.
+
+NemoClaw routes Hermes egress through OpenShell's forward proxy. The chart marks
+only its exact internal SRE, metrics, and model-deletion Service endpoints with
+OpenShell `tls: skip`, preserving end-to-end private-CA TLS rather than allowing
+OpenShell to replace the serving certificate. OpenShell still enforces exact
+host, port, and binary policy; the authenticated chart proxies enforce the
+allowed HTTP methods and resource paths, and NetworkPolicy limits the Sandbox
+to those proxy workloads. The CLI binaries remain immutable files copied from
+the digest-pinned public OpenShift CLI image.
+
+`sre.rbac.mode=broad-no-delete` is a high-risk opt-in and requires `I_ACKNOWLEDGE_CLUSTER_WIDE_NO_DELETE`. It grants create/update/patch across API resources but still excludes all direct delete verbs and proxy DELETE requests. The proxy additionally rejects Secret, ServiceAccount-token, exec, attach, port-forward, pod-proxy, and node-proxy paths. This mode can still cause outages or indirect privilege escalation without DELETE; it is not recommended for production.
+
+Enable the complete model-deployment skill separately. The chart references an
+existing Hugging Face Secret by name/key; neither Helm nor Hermes reads, copies,
+changes, or deletes that Secret. The one-time downloader receives the key only
+through `secretKeyRef` and has no mounted ServiceAccount token.
+
+```yaml
+sre:
+  enabled: true
+  rbac:
+    mode: broad-no-delete
+    dangerousAcknowledgement: I_ACKNOWLEDGE_CLUSTER_WIDE_NO_DELETE
+  openshiftLlmDeploy:
+    enabled: true
+    targetNamespace: nemoclaw-hermes
+    hfTokenSecretRef:
+      name: hf-token
+      key: HF_TOKEN
+```
+
+On OpenShift, a Dynamo workload may require `anyuid`. The skill reports the
+exact human-run `oc adm policy add-scc-to-user` command after an admission
+failure; the skill and chart never grant that SCC or `cluster-admin`.
+
+Measured Prometheus/Thanos telemetry is another explicit opt-in with
+`sre.openshiftLlmDeploy.metrics.enabled=true`. It creates a separate proxy
+identity that can issue only `GET` to the configured monitoring Service's
+`query`/`query_range` paths. On OpenShift that identity receives the built-in
+read-only `cluster-monitoring-view` role and trusts an automatically injected
+OpenShift service CA; it has no workload mutation or Secret access. Standard
+Kubernetes clusters must point the values at a compatible HTTPS Prometheus
+Service and set `metrics.caConfigMapRef.name` when its certificate is not
+anchored in the utility image's system roots. The proxy connects directly to
+that exact Service DNS name because Kubernetes API Service proxying strips the
+authorization credential required by OpenShift monitoring.
 
 Namespace-scoped model deletion is a separate opt-in under
 `sre.openshiftLlmDeploy.deletion`. It requires an exact namespace,
 `I_ACKNOWLEDGE_NAMESPACE_MODEL_DELETE`, and at least one exact
 `apiGroup`/plural `resource`/`name` tuple in `allowedResources`. Every delete
 RBAC rule uses Kubernetes `resourceNames`; namespace scope or skill prose is
-never treated as ownership. PVCs and Secrets additionally require their
-separate flags, and Secret contents are not granted read access. No
+never treated as ownership. PVCs additionally require `deletePVCs=true` and a
+separate cache-removal confirmation. Secret deletion is always rejected and no
 cluster-scoped delete is granted.
 
 ```yaml
@@ -232,6 +308,7 @@ helm lint . -f values-openshift.yaml \
   --set openshell.server.openshift.sandboxUid.value=1001200002 \
   --set openshell.agentSandbox.preflight.enabled=false
 python3 -m unittest tests/test_chart.py
+python3 scripts/build-sre-skills-bundle.py
 helm template test . --api-versions agents.x-k8s.io/v1alpha1 >/tmp/rendered.yaml
 helm template test . -f values-openshift.yaml \
   --set openshell.server.openshift.gatewayUid.value=1001200001 \
@@ -239,3 +316,18 @@ helm template test . -f values-openshift.yaml \
   --api-versions agents.x-k8s.io/v1alpha1 \
   --api-versions security.openshift.io/v1 >/tmp/rendered-openshift.yaml
 ```
+
+Rebuild the bundle only after reviewing the allowlisted source trees. The
+builder requires the core skill entrypoints; includes every nested `SKILL.md`
+plus allowlisted runtime-support directories; rejects empty, non-UTF-8,
+oversized, or symlinked files; ignores hidden/cache artifacts and excluded
+roots; emits size-bounded chunks; and produces byte-identical output for
+identical inputs.
+
+Enabling SRE or changing this bundle on an existing release is an explicit
+reseed operation because the retained RWO volume can already be mounted by the
+running Sandbox. Stop and remove that Sandbox through OpenShell, then upgrade
+with `lifecycle.seed.runOnUpgrade=true` and
+`lifecycle.seed.dangerousAcknowledgement=I_ACKNOWLEDGE_SANDBOX_STOPPED`. The
+bundle digest is part of the Sandbox configuration identity so a stale running
+Sandbox cannot be presented as using the new skill bundle.

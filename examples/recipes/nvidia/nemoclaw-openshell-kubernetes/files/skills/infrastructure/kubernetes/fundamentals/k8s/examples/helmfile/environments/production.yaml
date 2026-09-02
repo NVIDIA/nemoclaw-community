@@ -1,0 +1,61 @@
+# =============================================================================
+# Production Environment
+# =============================================================================
+# Full-scale deployment with autoscaling, monitoring, and HA configurations.
+
+namespace: webapp-production
+
+# ---------------------------------------------------------------------------
+# Web Application
+# ---------------------------------------------------------------------------
+webapp:
+  replicaCount: 3
+  imageTag: "v3.5.1"
+  logLevel: "warn"
+  resources:
+    requestsCpu: 250m
+    requestsMemory: 256Mi
+    limitsCpu: "1"
+    limitsMemory: 1Gi
+  ingress:
+    enabled: true
+    host: webapp.example.com
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+
+# ---------------------------------------------------------------------------
+# PostgreSQL
+# ---------------------------------------------------------------------------
+postgresql:
+  storageSize: 100Gi
+  resources:
+    requestsCpu: "1"
+    requestsMemory: 2Gi
+    limitsCpu: "4"
+    limitsMemory: 8Gi
+
+# ---------------------------------------------------------------------------
+# Redis
+# ---------------------------------------------------------------------------
+redis:
+  architecture: replication
+  replicaCount: 3
+  storageSize: 20Gi
+  resources:
+    requestsCpu: 250m
+    requestsMemory: 256Mi
+    limitsCpu: "1"
+    limitsMemory: 1Gi
+
+# ---------------------------------------------------------------------------
+# Monitoring (enabled in production)
+# ---------------------------------------------------------------------------
+monitoring:
+  enabled: true
+  retention: "30d"
+  storageSize: 100Gi
+  grafana:
+    ingressEnabled: true
+    host: grafana.example.com

@@ -1,0 +1,203 @@
+# =============================================================================
+# Helmfile - Multi-environment Application Stack
+# =============================================================================
+# Manages the full application stack: webapp, PostgreSQL, Redis, and monitoring.
+#
+# Usage:
+#   helmfile -e dev apply          # Deploy to development
+#   helmfile -e staging diff       # Preview staging changes
+#   helmfile -e production apply   # Deploy to production
+#   helmfile -e dev destroy        # Tear down development
+
+# ---------------------------------------------------------------------------
+# Helm Repositories
+# ---------------------------------------------------------------------------
+repositories:
+  - name: bitnami
+    url: https://charts.bitnami.com/bitnami
+  - name: prometheus-community
+    url: https://prometheus-community.github.io/helm-charts
+
+# ---------------------------------------------------------------------------
+# Environments
+# ---------------------------------------------------------------------------
+# Each environment loads a variables file that sets values like replica counts,
+# resource sizes, and domain names. These variables are referenced in the
+# releases section below with {{ .Values.<key> }}.
+environments:
+  dev:
+    values:
+      - environments/dev.yaml
+  staging:
+    values:
+      - environments/staging.yaml
+  production:
+    values:
+      - environments/production.yaml
+
+# ---------------------------------------------------------------------------
+# Global Defaults
+# ---------------------------------------------------------------------------
+helmDefaults:
+  wait: true
+  waitForJobs: true
+  timeout: 600
+  createNamespace: true
+  cleanupOnFail: true
+
+# ---------------------------------------------------------------------------
+# Releases
+# ---------------------------------------------------------------------------
+releases:
+  # =========================================================================
+  # PostgreSQL (Bitnami)
+  # =========================================================================
+  - name: postgresql
+    namespace: {{ .Values.namespace }}
+    chart: bitnami/postgresql
+    version: 15.5.38
+    values:
+      - auth:
+          database: webapp
+          username: webapp
+          existingSecret: postgresql-credentials
+      - primary:
+          persistence:
+            size: {{ .Values.postgresql.storageSize }}
+          resources:
+            requests:
+              cpu: {{ .Values.postgresql.resources.requestsCpu }}
+              memory: {{ .Values.postgresql.resources.requestsMemory }}
+            limits:
+              cpu: {{ .Values.postgresql.resources.limitsCpu }}
+              memory: {{ .Values.postgresql.resources.limitsMemory }}
+      - metrics:
+          enabled: {{ .Values.monitoring.enabled }}
+          serviceMonitor:
+            enabled: {{ .Values.monitoring.enabled }}
+
+  # =========================================================================
+  # Redis (Bitnami)
+  # =========================================================================
+  - name: redis
+    namespace: {{ .Values.namespace }}
+    chart: bitnami/redis
+    version: 19.6.4
+    values:
+      - architecture: {{ .Values.redis.architecture }}
+      - auth:
+          existingSecret: redis-credentials
+      - master:
+          persistence:
+            size: {{ .Values.redis.storageSize }}
+          resources:
+            requests:
+              cpu: {{ .Values.redis.resources.requestsCpu }}
+              memory: {{ .Values.redis.resources.requestsMemory }}
+            limits:
+              cpu: {{ .Values.redis.resources.limitsCpu }}
+              memory: {{ .Values.redis.resources.limitsMemory }}
+      - replica:
+          replicaCount: {{ .Values.redis.replicaCount }}
+      - metrics:
+          enabled: {{ .Values.monitoring.enabled }}
+          serviceMonitor:
+            enabled: {{ .Values.monitoring.enabled }}
+
+  # =========================================================================
+  # Web Application (Local Chart)
+  # =========================================================================
+  - name: webapp
+    namespace: {{ .Values.namespace }}
+    chart: ../helm-chart
+    # Depend on backing services being ready before deploying the app.
+    needs:
+      - {{ .Values.namespace }}/postgresql
+      - {{ .Values.namespace }}/redis
+    values:
+      # Shared values applied to every environment
+      - values/webapp-common.yaml
+      # Environment-specific overrides
+      - replicaCount: {{ .Values.webapp.replicaCount }}
+      - image:
+          tag: {{ .Values.webapp.imageTag }}
+      - resources:
+          requests:
+            cpu: {{ .Values.webapp.resources.requestsCpu }}
+            memory: {{ .Values.webapp.resources.requestsMemory }}
+          limits:
+            cpu: {{ .Values.webapp.resources.limitsCpu }}
+            memory: {{ .Values.webapp.resources.limitsMemory }}
+      - ingress:
+          enabled: {{ .Values.webapp.ingress.enabled }}
+          hosts:
+            - host: {{ .Values.webapp.ingress.host }}
+              paths:
+                - path: /
+                  pathType: Prefix
+          tls:
+            - secretName: webapp-tls
+              hosts:
+                - {{ .Values.webapp.ingress.host }}
+      - autoscaling:
+          enabled: {{ .Values.webapp.autoscaling.enabled }}
+          minReplicas: {{ .Values.webapp.autoscaling.minReplicas }}
+          maxReplicas: {{ .Values.webapp.autoscaling.maxReplicas }}
+      - monitoring:
+          serviceMonitor:
+            enabled: {{ .Values.monitoring.enabled }}
+      - env:
+          - name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: postgresql-credentials
+                key: uri
+          - name: REDIS_URL
+            valueFrom:
+              secretKeyRef:
+                name: redis-credentials
+                key: uri
+          - name: LOG_LEVEL
+            value: {{ .Values.webapp.logLevel }}
+
+  # =========================================================================
+  # Prometheus Stack (Production Only)
+  # =========================================================================
+  - name: kube-prometheus-stack
+    namespace: monitoring
+    chart: prometheus-community/kube-prometheus-stack
+    version: 65.1.0
+    installed: {{ .Values.monitoring.enabled }}
+    needs:
+      - {{ .Values.namespace }}/webapp
+    values:
+      - prometheus:
+          prometheusSpec:
+            retention: {{ .Values.monitoring.retention }}
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  accessModes: ["ReadWriteOnce"]
+                  resources:
+                    requests:
+                      storage: {{ .Values.monitoring.storageSize }}
+            # Scrape ServiceMonitors across all namespaces
+            serviceMonitorSelectorNilUsesHelmValues: false
+            serviceMonitorNamespaceSelector: {}
+      - grafana:
+          enabled: true
+          adminPassword: ""  # Use existing secret in production
+          persistence:
+            enabled: true
+            size: 10Gi
+          ingress:
+            enabled: {{ .Values.monitoring.grafana.ingressEnabled }}
+            ingressClassName: nginx
+            hosts:
+              - {{ .Values.monitoring.grafana.host }}
+            tls:
+              - secretName: grafana-tls
+                hosts:
+                  - {{ .Values.monitoring.grafana.host }}
+      - alertmanager:
+          enabled: true

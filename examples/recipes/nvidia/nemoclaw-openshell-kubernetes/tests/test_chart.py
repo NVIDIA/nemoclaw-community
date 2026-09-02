@@ -5,12 +5,16 @@
 
 from pathlib import Path
 import base64
+import hashlib
 import importlib.util
+import io
 import json
+import lzma
 import os
 import re
 import stat
 import subprocess
+import tarfile
 import tempfile
 import time
 import unittest
@@ -22,6 +26,73 @@ INTERNAL_REGISTRY_MARKERS = (
     "localhost:32000",
     "urm.nvidia.com",
 )
+
+ALLOWED_SRE_BUNDLE_ROOTS = {
+    "devops",
+    "infrastructure",
+    "kubernetes-sre",
+    "openshift-llm-deploy",
+}
+REQUIRED_SRE_BUNDLE_FILES = {
+    "devops/SKILL.md",
+    "infrastructure/SKILL.md",
+    "infrastructure/sre/SKILL.md",
+    "kubernetes-sre/SKILL.md",
+    "openshift-llm-deploy/SKILL.md",
+}
+RUNTIME_SUPPORT_DIRECTORIES = {
+    "scripts",
+    "templates",
+    "tools",
+    "workflows",
+    "resources",
+}
+LEGAL_FILENAMES = {
+    "LICENSE",
+    "LICENSE.md",
+    "NOTICE",
+    "NOTICE.md",
+    "SOURCE_NOTICES.md",
+}
+EXCLUDED_SRE_BUNDLE_PREFIXES = {
+    "devops/automation/manage-skills/",
+    "infrastructure/openshift/",
+}
+RUNTIME_SAFETY_MARKER = "<!-- nemoclaw-runtime-safety-v1 -->"
+
+
+def reviewed_skill_source_files() -> set[str]:
+    source = CHART_DIR / "files" / "skills"
+    reviewed: set[str] = set()
+    for path in source.rglob("*"):
+        relative = path.relative_to(source)
+        name = relative.as_posix()
+        if not path.is_file() or not relative.parts:
+            continue
+        if relative.parts[0] not in ALLOWED_SRE_BUNDLE_ROOTS:
+            continue
+        if any(part.startswith(".") or part == "__pycache__" for part in relative.parts):
+            continue
+        if name.endswith(".pyc") or any(
+            name.startswith(prefix) for prefix in EXCLUDED_SRE_BUNDLE_PREFIXES
+        ):
+            continue
+        lowered_parts = {part.lower() for part in relative.parts}
+        if not (
+            relative.name == "SKILL.md"
+            or relative.name in LEGAL_FILENAMES
+            or lowered_parts.intersection(RUNTIME_SUPPORT_DIRECTORIES)
+            or (
+                relative.parts[0] == "openshift-llm-deploy"
+                and "references" in lowered_parts
+            )
+        ):
+            continue
+        reviewed.add(name)
+    return reviewed
+
+
+EXPECTED_SRE_BUNDLE_FILES = reviewed_skill_source_files()
 
 
 class ChartTest(unittest.TestCase):
@@ -122,6 +193,70 @@ class ChartTest(unittest.TestCase):
             body_lines.append(line[4:])
         body = "\n".join(body_lines)
         return json.loads(body)
+
+    @staticmethod
+    def write_test_skill_bundle(
+        destination: Path,
+        *,
+        files: dict[str, bytes] | None = None,
+        extra_members: list[tarfile.TarInfo] | None = None,
+        corrupt_manifest: bool = False,
+    ) -> tuple[str, str, str]:
+        """Create a one-part test bundle and return its trust metadata."""
+        if destination.name != "sre-skills.part-000":
+            raise AssertionError("test bundle part must use the production naming contract")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        payloads = files or {
+            name: f"fixture for {name}\n".encode("utf-8")
+            for name in EXPECTED_SRE_BUNDLE_FILES
+        }
+        manifest_lines = [
+            f"{hashlib.sha256(payloads[name]).hexdigest()}  {name}"
+            for name in sorted(payloads)
+        ]
+        if corrupt_manifest:
+            manifest_lines[0] = "0" * 64 + manifest_lines[0][64:]
+        manifest = ("\n".join(manifest_lines) + "\n").encode("utf-8")
+        uncompressed = io.BytesIO()
+        with tarfile.open(fileobj=uncompressed, mode="w", format=tarfile.USTAR_FORMAT) as archive:
+            for name in sorted(payloads):
+                info = tarfile.TarInfo(name)
+                info.size = len(payloads[name])
+                info.mode = 0o644
+                archive.addfile(info, io.BytesIO(payloads[name]))
+            info = tarfile.TarInfo("MANIFEST.sha256")
+            info.size = len(manifest)
+            info.mode = 0o644
+            archive.addfile(info, io.BytesIO(manifest))
+            for member in extra_members or []:
+                archive.addfile(member, io.BytesIO(b"payload") if member.isfile() else None)
+        destination.write_bytes(
+            lzma.compress(
+                uncompressed.getvalue(),
+                format=lzma.FORMAT_XZ,
+                preset=9 | lzma.PRESET_EXTREME,
+            )
+        )
+        payload = destination.read_bytes()
+        parts_json = json.dumps(
+            {
+                "parts": [
+                    {
+                        "name": destination.name,
+                        "sha256": hashlib.sha256(payload).hexdigest(),
+                        "size": len(payload),
+                    }
+                ],
+                "version": 1,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return (
+            hashlib.sha256(payload).hexdigest(),
+            hashlib.sha256(manifest).hexdigest(),
+            parts_json,
+        )
 
     def test_chart_lints(self) -> None:
         self.assertTrue(CHART_DIR.joinpath("Chart.yaml").is_file())
@@ -261,6 +396,10 @@ class ChartTest(unittest.TestCase):
             "sre.enabled=true",
             "--set",
             "sre.openshiftLlmDeploy.enabled=true",
+            "--set-string",
+            "sre.rbac.mode=broad-no-delete",
+            "--set-string",
+            "sre.rbac.dangerousAcknowledgement=I_ACKNOWLEDGE_CLUSTER_WIDE_NO_DELETE",
             "--set",
             "sre.openshiftLlmDeploy.deletion.enabled=true",
             expected="sre.openshiftLlmDeploy.deletion.namespace",
@@ -519,6 +658,7 @@ class ChartTest(unittest.TestCase):
         )
         self.assertIn("name: nemoclaw-openshell-kubernetes-test-seed-1", seed)
         self.assertNotIn("helm.sh/hook:", seed)
+        self.assertIn("restartPolicy: Never", seed)
         self.assertIn('name: RELEASE_REVISION\n              value: "1"', seed)
 
     def test_normal_upgrade_does_not_remount_live_sandbox_pvc(self) -> None:
@@ -1058,6 +1198,49 @@ class ChartTest(unittest.TestCase):
             self.assertEqual(stat.S_IMODE((state / "hermes").stat().st_mode), 0o700)
             self.assertEqual(stat.S_IMODE((state / "workspace").stat().st_mode), 0o700)
 
+    def test_seed_refuses_unowned_existing_skill_before_claiming_pvc(self) -> None:
+        script = CHART_DIR / "files" / "scripts" / "seed.py"
+        spec = importlib.util.spec_from_file_location("nemoclaw_seed_unowned", script)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        with mock.patch.dict(
+            os.environ,
+            {
+                "RELEASE_ID": "test/release",
+                "RELEASE_REVISION": "1",
+                "SRE_ENABLED": "false",
+                "OPENSHIFT_LLM_DEPLOY_ENABLED": "false",
+                "MODEL_DELETE_ENABLED": "false",
+                "METRICS_ENABLED": "false",
+            },
+            clear=False,
+        ):
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / "state"
+            skill = state / "hermes" / "skills" / "kubernetes-sre" / "SKILL.md"
+            skill.parent.mkdir(parents=True)
+            skill.write_text("operator-owned\n", encoding="utf-8")
+
+            module.STATE = state
+            module.MARKER = state / ".nemoclaw-helm-owner.json"
+            module.PROXY_TOKEN_DESTINATION = state / "hermes" / ".sre-proxy-token"
+            module.SRE_KUBECONFIG_DESTINATION = state / "hermes" / "sre-kubeconfig"
+            module.MODEL_DELETE_KUBECONFIG_DESTINATION = (
+                state / "hermes" / "model-delete-kubeconfig"
+            )
+            module.METRICS_KUBECONFIG_DESTINATION = state / "hermes" / "metrics-kubeconfig"
+            module.RELEASE = "test/release"
+            module.RELEASE_REVISION = 1
+
+            with self.assertRaisesRegex(SystemExit, "refusing to replace unowned"):
+                module.main()
+
+            self.assertEqual(skill.read_text(encoding="utf-8"), "operator-owned\n")
+            self.assertFalse(module.MARKER.exists())
+
     def test_seed_accepts_kubernetes_secret_projection_symlink(self) -> None:
         script = CHART_DIR / "files" / "scripts" / "seed.py"
         spec = importlib.util.spec_from_file_location("nemoclaw_seed_symlink", script)
@@ -1089,6 +1272,40 @@ class ChartTest(unittest.TestCase):
             self.assertEqual(module.PROXY_TOKEN_DESTINATION.read_bytes(), b"proxy-token")
             self.assertEqual(stat.S_IMODE(module.PROXY_TOKEN_DESTINATION.stat().st_mode), 0o600)
 
+    def test_seed_embeds_runtime_token_in_private_proxy_kubeconfig(self) -> None:
+        script = CHART_DIR / "files" / "scripts" / "seed.py"
+        spec = importlib.util.spec_from_file_location("nemoclaw_seed_kubeconfig", script)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        os.environ["RELEASE_ID"] = "test/release"
+        os.environ["RELEASE_REVISION"] = "1"
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / "state"
+            hermes = state / "hermes"
+            hermes.mkdir(parents=True)
+            destination = hermes / "sre-kubeconfig"
+            module.STATE = state
+            module.MARKER = state / ".nemoclaw-helm-owner.json"
+            module.RELEASE = "test/release"
+
+            module.write_kubeconfig(
+                destination,
+                "https://sre-proxy.test.svc.cluster.local:8443",
+                "test",
+                "runtime-proxy-token",
+                b"test-proxy-ca",
+            )
+
+            content = destination.read_text(encoding="utf-8")
+            self.assertIn("    certificate-authority-data: dGVzdC1wcm94eS1jYQ==", content)
+            self.assertNotIn("insecure-skip-tls-verify", content)
+            self.assertIn('    token: "runtime-proxy-token"', content)
+            self.assertNotIn("tokenFile:", content)
+            self.assertEqual(stat.S_IMODE(destination.stat().st_mode), 0o600)
+
     def test_default_excludes_sre_delivery_and_rbac(self) -> None:
         rendered = self.run_helm(
             "template",
@@ -1097,12 +1314,412 @@ class ChartTest(unittest.TestCase):
         )
         config = self.bootstrap_config(rendered)
         mounts = config["driverConfig"]["kubernetes"]["containers"]["agent"]["volume_mounts"]
-        self.assertNotIn("KUBERNETES_SRE_ENDPOINT", rendered)
-        self.assertNotIn("kubernetes-sre-SKILL.md", rendered)
+        self.assertNotIn("KUBERNETES_SRE_ENDPOINT", config["agentEnv"])
+        self.assertNotIn("SRE_KUBECONFIG", config["agentEnv"])
+        self.assertNotIn("templates/sre-skills-bundle.yaml", rendered)
+        self.assertNotIn("stage-sre-cli", rendered)
         self.assertNotIn("app.kubernetes.io/component: sre-proxy", rendered)
         self.assertNotIn("sre-proxy-auth", rendered)
+        self.assertNotIn("authenticated-internal-api-proxy-tls", rendered)
         self.assertEqual([mount["mount_path"] for mount in mounts], ["/sandbox/workspace"])
         self.assertNotIn("/sandbox/.hermes", [mount["mount_path"] for mount in mounts])
+
+    def test_sre_renders_verified_bundle_cli_and_proxy_kubeconfig(self) -> None:
+        rendered = self.run_helm(
+            "template",
+            "nemoclaw-openshell-kubernetes-test",
+            str(CHART_DIR),
+            "--set",
+            "sre.enabled=true",
+        )
+        bundle = self.rendered_from_source(
+            rendered,
+            "nemoclaw-openshell-kubernetes/templates/sre-skills-bundle.yaml",
+        )
+        seed = self.rendered_from_source(
+            rendered,
+            "nemoclaw-openshell-kubernetes/templates/seed-job.yaml",
+        )
+        runtime = self.rendered_from_source(
+            rendered,
+            "nemoclaw-openshell-kubernetes/templates/runtime-configmap.yaml",
+        )
+        config = self.bootstrap_config(rendered)
+        mounts = {
+            mount["mount_path"]: mount
+            for mount in config["driverConfig"]["kubernetes"]["containers"]["agent"]["volume_mounts"]
+        }
+
+        self.assertIn("binaryData:", bundle)
+        self.assertIn("sre-skills.part-000:", bundle)
+        self.assertIn("sre-skills.part-001:", bundle)
+        self.assertIn("nemoclaw.nvidia.com/archive-sha256:", bundle)
+        self.assertIn("nemoclaw.nvidia.com/manifest-sha256:", bundle)
+        self.assertIn("nemoclaw.nvidia.com/part-sha256:", bundle)
+        self.assertIn("name: stage-sre-cli", seed)
+        self.assertIn(
+            "quay.io/openshift/origin-cli@sha256:ebd858bafa7fe3bf04eda2753d47f74be9608c867f41567cea4af1b1b4189fac",
+            seed,
+        )
+        self.assertIn("name: SRE_BUNDLE_SHA256", seed)
+        self.assertIn("name: SRE_BUNDLE_MANIFEST_SHA256", seed)
+        self.assertIn("name: SRE_BUNDLE_PARTS_JSON", seed)
+        self.assertIn("projected:", seed)
+        self.assertIn("mountPath: /skills-bundle", seed)
+        self.assertIn("mountPath: /cli-staging", seed)
+        self.assertIn("mountPath: /proxy-tls-ca", seed)
+        self.assertIn("path: ca.crt", seed)
+        self.assertIn("https://", seed)
+        self.assertNotIn("http://", seed)
+        self.assertIn("SRE_KUBECONFIG", config["agentEnv"])
+        self.assertRegex(
+            runtime,
+            r"(?s)kubernetes_sre:.*?protocol: rest.*?tls: skip",
+        )
+        self.assertEqual(
+            config["sreBundleSha256"],
+            (CHART_DIR / "files" / "sre-skills.tar.xz.sha256")
+            .read_text(encoding="utf-8")
+            .strip(),
+        )
+        self.assertIn("/chart-bin", mounts)
+        self.assertTrue(mounts["/chart-bin"]["read_only"])
+        self.assertIn("/sandbox/.hermes/sre-kubeconfig", mounts)
+        self.assertIn("/sandbox/.hermes/skills/devops", mounts)
+        self.assertIn("/sandbox/.hermes/skills/infrastructure", mounts)
+        self.assertNotIn("/sandbox/.hermes/skills/openshift-llm-deploy", mounts)
+        runtime_template = (CHART_DIR / "templates" / "runtime-configmap.yaml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"sreBundleSha256" $sreBundleDigest', runtime_template)
+        self.assertIn(
+            '"sreBundleManifestSha256" $sreBundleManifestDigest',
+            runtime_template,
+        )
+
+    def test_full_model_skill_requires_broad_no_delete_mode(self) -> None:
+        self.assert_helm_rejected(
+            "template",
+            "nemoclaw-openshell-kubernetes-test",
+            str(CHART_DIR),
+            "--set",
+            "sre.enabled=true",
+            "--set",
+            "sre.openshiftLlmDeploy.enabled=true",
+            expected="sre.rbac.mode=broad-no-delete",
+        )
+
+        rendered = self.run_helm(
+            "template",
+            "nemoclaw-openshell-kubernetes-test",
+            str(CHART_DIR),
+            "--set",
+            "sre.enabled=true",
+            "--set",
+            "sre.openshiftLlmDeploy.enabled=true",
+            "--set-string",
+            "sre.rbac.mode=broad-no-delete",
+            "--set-string",
+            "sre.rbac.dangerousAcknowledgement=I_ACKNOWLEDGE_CLUSTER_WIDE_NO_DELETE",
+        )
+        config = self.bootstrap_config(rendered)
+        mounts = {
+            mount["mount_path"]: mount
+            for mount in config["driverConfig"]["kubernetes"]["containers"]["agent"]["volume_mounts"]
+        }
+        self.assertIn("/sandbox/.hermes/skills/openshift-llm-deploy", mounts)
+        self.assertEqual(
+            config["agentEnv"]["KUBECONFIG"],
+            "/sandbox/.hermes/sre-kubeconfig",
+        )
+
+    def test_full_model_skill_keeps_secret_references_out_of_process_environment(self) -> None:
+        rendered = self.run_helm(
+            "template",
+            "nemoclaw-openshell-kubernetes-test",
+            str(CHART_DIR),
+            "--set",
+            "sre.enabled=true",
+            "--set",
+            "sre.openshiftLlmDeploy.enabled=true",
+            "--set-string",
+            "sre.rbac.mode=broad-no-delete",
+            "--set-string",
+            "sre.rbac.dangerousAcknowledgement=I_ACKNOWLEDGE_CLUSTER_WIDE_NO_DELETE",
+        )
+        config = self.bootstrap_config(rendered)
+
+        self.assertNotIn("OPENSHIFT_LLM_HF_SECRET_NAME", config["agentEnv"])
+        self.assertNotIn("OPENSHIFT_LLM_HF_SECRET_KEY", config["agentEnv"])
+        seed = self.rendered_from_source(
+            rendered,
+            "nemoclaw-openshell-kubernetes/templates/seed-job.yaml",
+        )
+        self.assertIn("name: HF_TOKEN_INTAKE_JSON", seed)
+
+    def test_committed_sre_bundle_has_exact_reviewed_contents_and_manifest(self) -> None:
+        parts_index_file = CHART_DIR / "files" / "sre-skills.parts.json"
+        digest_file = CHART_DIR / "files" / "sre-skills.tar.xz.sha256"
+        manifest_digest_file = CHART_DIR / "files" / "sre-skills.manifest.sha256"
+        self.assertTrue(parts_index_file.is_file(), "committed SRE parts index is missing")
+        self.assertTrue(digest_file.is_file(), "committed SRE archive digest is missing")
+        self.assertTrue(
+            manifest_digest_file.is_file(),
+            "committed SRE manifest digest is missing",
+        )
+        self.assertTrue(REQUIRED_SRE_BUNDLE_FILES.issubset(EXPECTED_SRE_BUNDLE_FILES))
+        parts_index = json.loads(parts_index_file.read_text(encoding="utf-8"))
+        self.assertEqual(set(parts_index), {"parts", "version"})
+        self.assertEqual(parts_index["version"], 1)
+        self.assertGreater(len(parts_index["parts"]), 1)
+        bundle_payloads: list[bytes] = []
+        for index, part in enumerate(parts_index["parts"]):
+            self.assertEqual(part["name"], f"sre-skills.part-{index:03d}")
+            payload = CHART_DIR.joinpath("files", part["name"]).read_bytes()
+            self.assertEqual(len(payload), part["size"])
+            self.assertLessEqual(len(payload), 500_000)
+            self.assertEqual(hashlib.sha256(payload).hexdigest(), part["sha256"])
+            bundle_payloads.append(payload)
+        bundle = b"".join(bundle_payloads)
+        self.assertEqual(
+            hashlib.sha256(bundle).hexdigest(),
+            digest_file.read_text(encoding="utf-8").strip(),
+        )
+        with tarfile.open(fileobj=io.BytesIO(bundle), mode="r:xz") as archive:
+            members = archive.getmembers()
+            files = {member.name for member in members if member.isfile()}
+            self.assertTrue(all(member.isfile() for member in members))
+            self.assertTrue(all(not member.issym() and not member.islnk() for member in members))
+            self.assertEqual(files, EXPECTED_SRE_BUNDLE_FILES | {"MANIFEST.sha256"})
+            manifest = archive.extractfile("MANIFEST.sha256")
+            self.assertIsNotNone(manifest)
+            manifest_payload = manifest.read()
+            self.assertEqual(
+                hashlib.sha256(manifest_payload).hexdigest(),
+                manifest_digest_file.read_text(encoding="utf-8").strip(),
+            )
+            entries = manifest_payload.decode("utf-8").splitlines()
+            self.assertEqual(
+                {line.split("  ", 1)[1] for line in entries},
+                EXPECTED_SRE_BUNDLE_FILES,
+            )
+            for line in entries:
+                expected, name = line.split("  ", 1)
+                payload = archive.extractfile(name)
+                self.assertIsNotNone(payload)
+                self.assertEqual(hashlib.sha256(payload.read()).hexdigest(), expected)
+        self.assertIn("devops/SKILL.md", EXPECTED_SRE_BUNDLE_FILES)
+        self.assertIn("infrastructure/SKILL.md", EXPECTED_SRE_BUNDLE_FILES)
+        self.assertIn("infrastructure/sre/SKILL.md", EXPECTED_SRE_BUNDLE_FILES)
+        source_skill_files = {
+            path.relative_to(CHART_DIR / "files" / "skills").as_posix()
+            for root in (
+                CHART_DIR / "files" / "skills" / "devops",
+                CHART_DIR / "files" / "skills" / "infrastructure",
+            )
+            for path in root.rglob("SKILL.md")
+            if not any(
+                path.relative_to(CHART_DIR / "files" / "skills")
+                .as_posix()
+                .startswith(prefix)
+                for prefix in EXCLUDED_SRE_BUNDLE_PREFIXES
+            )
+        }
+        self.assertTrue(source_skill_files.issubset(files))
+        self.assertTrue(
+            any(name.startswith("devops/") and "/scripts/" in name for name in files)
+        )
+        self.assertTrue(
+            any(name.startswith("infrastructure/") and "/templates/" in name for name in files)
+        )
+        self.assertNotIn(
+            "infrastructure/kubernetes/kubernetes-skill/docs/package-lock.json",
+            files,
+        )
+        self.assertNotIn("devops/automation/manage-skills/SKILL.md", files)
+        with tarfile.open(fileobj=io.BytesIO(bundle), mode="r:xz") as archive:
+            for name in source_skill_files | {
+                "kubernetes-sre/SKILL.md",
+                "openshift-llm-deploy/SKILL.md",
+            }:
+                payload = archive.extractfile(name)
+                self.assertIsNotNone(payload)
+                skill_text = payload.read().decode("utf-8")
+                self.assertIn(RUNTIME_SAFETY_MARKER, skill_text)
+                self.assertIn("Never build or publish custom images", skill_text)
+                self.assertIn("never use mutable image tags", skill_text)
+        self.assertFalse(any("skillspector" in name.lower() for name in files))
+        self.assertFalse(any("managed-skill-install" in name for name in files))
+        self.assertFalse(any(name.startswith("infrastructure/openshift/") for name in files))
+        self.assertFalse(any("__pycache__" in name or name.endswith(".pyc") for name in files))
+
+    def test_bundled_skills_have_valid_unique_hermes_metadata(self) -> None:
+        skills = CHART_DIR / "files" / "skills"
+        names: dict[str, Path] = {}
+        skill_files = sorted(
+            path
+            for root in (skills / "devops", skills / "infrastructure")
+            for path in root.rglob("SKILL.md")
+        )
+        self.assertGreater(len(skill_files), 100)
+        for path in skill_files:
+            content = path.read_text(encoding="utf-8")
+            frontmatter = re.match(r"\A---\n(.*?)\n---\n", content, re.DOTALL)
+            self.assertIsNotNone(frontmatter, f"missing frontmatter: {path}")
+            name_match = re.search(
+                r"(?m)^name:\s*([a-z][a-z0-9_-]*)\s*$",
+                frontmatter.group(1),
+            )
+            description_match = re.search(r"(?m)^description:\s*\S", frontmatter.group(1))
+            self.assertIsNotNone(name_match, f"invalid skill name: {path}")
+            self.assertIsNotNone(description_match, f"missing skill description: {path}")
+            name = name_match.group(1)
+            self.assertNotIn(name, names, f"duplicate skill name in {path} and {names.get(name)}")
+            names[name] = path
+
+    def test_seed_validates_bundle_and_rejects_unsafe_archives(self) -> None:
+        script = CHART_DIR / "files" / "scripts" / "seed.py"
+        spec = importlib.util.spec_from_file_location("nemoclaw_seed_bundle", script)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        os.environ["RELEASE_ID"] = "test/release"
+        os.environ["RELEASE_REVISION"] = "1"
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertTrue(hasattr(module, "load_sre_bundle"), "seed bundle loader is missing")
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            valid_root = root / "valid"
+            valid = valid_root / "sre-skills.part-000"
+            digest, manifest_digest, parts_json = self.write_test_skill_bundle(valid)
+            loaded = module.load_sre_bundle(
+                valid_root,
+                digest,
+                manifest_digest,
+                parts_json,
+            )
+            self.assertEqual(set(loaded), EXPECTED_SRE_BUNDLE_FILES)
+
+            projection = root / "projection"
+            revision = projection / "..2026_09_02_17_00_00.000000000"
+            revision.mkdir(parents=True)
+            projected_payload = revision / "sre-skills.part-000"
+            projected_payload.write_bytes(valid.read_bytes())
+            (projection / "..data").symlink_to(revision.name)
+            projected_key = projection / "sre-skills.part-000"
+            projected_key.symlink_to("..data/sre-skills.part-000")
+            projected = module.load_sre_bundle(
+                projection,
+                digest,
+                manifest_digest,
+                parts_json,
+            )
+            self.assertEqual(set(projected), EXPECTED_SRE_BUNDLE_FILES)
+
+            escaping_root = root / "escaping"
+            escaping_root.mkdir()
+            (escaping_root / "sre-skills.part-000").symlink_to(valid)
+            with self.assertRaisesRegex(SystemExit, "invalid SRE bundle part"):
+                module.load_sre_bundle(
+                    escaping_root,
+                    digest,
+                    manifest_digest,
+                    parts_json,
+                )
+
+            with self.assertRaisesRegex(SystemExit, "archive SHA-256 mismatch"):
+                module.load_sre_bundle(
+                    valid_root,
+                    "0" * 64,
+                    manifest_digest,
+                    parts_json,
+                )
+
+            corrupt_root = root / "corrupt"
+            corrupt = corrupt_root / "sre-skills.part-000"
+            corrupt_digest, corrupt_manifest_digest, corrupt_parts_json = self.write_test_skill_bundle(
+                corrupt,
+                corrupt_manifest=True,
+            )
+            with self.assertRaisesRegex(SystemExit, "manifest SHA-256 mismatch"):
+                module.load_sre_bundle(
+                    corrupt_root,
+                    corrupt_digest,
+                    corrupt_manifest_digest,
+                    corrupt_parts_json,
+                )
+
+            traversal_root = root / "traversal"
+            traversal = traversal_root / "sre-skills.part-000"
+            traversal_member = tarfile.TarInfo("../escape")
+            traversal_member.size = len(b"payload")
+            traversal_digest, traversal_manifest_digest, traversal_parts_json = self.write_test_skill_bundle(
+                traversal,
+                extra_members=[traversal_member],
+            )
+            with self.assertRaisesRegex(SystemExit, "unsafe archive member"):
+                module.load_sre_bundle(
+                    traversal_root,
+                    traversal_digest,
+                    traversal_manifest_digest,
+                    traversal_parts_json,
+                )
+
+            linked_root = root / "linked"
+            linked = linked_root / "sre-skills.part-000"
+            link_member = tarfile.TarInfo("openshift-llm-deploy/scripts/link")
+            link_member.type = tarfile.SYMTYPE
+            link_member.linkname = "/etc/passwd"
+            link_digest, link_manifest_digest, link_parts_json = self.write_test_skill_bundle(
+                linked,
+                extra_members=[link_member],
+            )
+            with self.assertRaisesRegex(SystemExit, "unsafe archive member"):
+                module.load_sre_bundle(
+                    linked_root,
+                    link_digest,
+                    link_manifest_digest,
+                    link_parts_json,
+                )
+
+    def test_seed_installs_and_replaces_read_only_skill_directories(self) -> None:
+        script = CHART_DIR / "files" / "scripts" / "seed.py"
+        spec = importlib.util.spec_from_file_location("nemoclaw_seed_reconcile", script)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        os.environ["RELEASE_ID"] = "test/release"
+        os.environ["RELEASE_REVISION"] = "1"
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / "state"
+            skills = state / "hermes" / "skills"
+            skills.mkdir(parents=True)
+            module.STATE = state
+            module.MARKER = state / ".nemoclaw-helm-owner.json"
+            module.RELEASE = "test/release"
+            module.RELEASE_REVISION = 1
+            payloads = {
+                name: f"payload:{name}\n".encode("utf-8")
+                for name in EXPECTED_SRE_BUNDLE_FILES
+            }
+
+            module.reconcile_sre_skills(True, False, payloads)
+            installed = skills / "kubernetes-sre" / "SKILL.md"
+            self.assertTrue(installed.is_file())
+            self.assertEqual(stat.S_IMODE(installed.parent.stat().st_mode), 0o555)
+            for name in ("devops", "infrastructure"):
+                root = skills / name
+                self.assertTrue(root.joinpath("SKILL.md").is_file())
+                self.assertEqual(stat.S_IMODE(root.stat().st_mode), 0o555)
+
+            module.write_owner_marker()
+            payloads["kubernetes-sre/SKILL.md"] = b"updated\n"
+            module.reconcile_sre_skills(True, False, payloads)
+            self.assertEqual(installed.read_bytes(), b"updated\n")
+            self.assertEqual(stat.S_IMODE(installed.parent.stat().st_mode), 0o555)
 
     def test_safe_sre_proxy_has_no_delete_or_secret_access(self) -> None:
         rendered = self.run_helm(
@@ -1120,11 +1737,18 @@ class ChartTest(unittest.TestCase):
             rendered,
             "nemoclaw-openshell-kubernetes/templates/sre-proxy.yaml",
         )
+        tls_secret = self.rendered_from_source(
+            rendered,
+            "nemoclaw-openshell-kubernetes/templates/proxy-tls-secret.yaml",
+        )
         network_policy = self.rendered_from_source(
             rendered,
             "nemoclaw-openshell-kubernetes/templates/networkpolicy.yaml",
         )
         config = self.bootstrap_config(rendered)
+        proxy_script = (CHART_DIR / "files" / "scripts" / "api_proxy.py").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("KUBERNETES_SRE_ENDPOINT", config["agentEnv"])
         self.assertNotIn("KUBERNETES_SRE_API", config["agentEnv"])
         mounts = config["driverConfig"]["kubernetes"]["containers"]["agent"]["volume_mounts"]
@@ -1146,12 +1770,24 @@ class ChartTest(unittest.TestCase):
         self.assertIn("value: \"GET,PATCH\"", proxy)
         self.assertIn("name: PROXY_MAX_REQUEST_BYTES\n              value: \"10485760\"", proxy)
         self.assertIn("name: PROXY_MAX_RESPONSE_BYTES\n              value: \"33554432\"", proxy)
+        self.assertIn("name: PROXY_TLS_CERT_FILE", proxy)
+        self.assertIn("value: /proxy-tls/tls.crt", proxy)
+        self.assertIn("name: PROXY_TLS_KEY_FILE", proxy)
+        self.assertIn("value: /proxy-tls/tls.key", proxy)
+        self.assertIn("mountPath: /proxy-tls", proxy)
+        self.assertIn("type: kubernetes.io/tls", tls_secret)
+        self.assertIn('"ca.crt":', tls_secret)
+        self.assertIn("ssl.PROTOCOL_TLS_SERVER", proxy_script)
+        self.assertIn("context.wrap_socket(server.socket, server_side=True)", proxy_script)
         self.assertNotIn("GET,DELETE", proxy)
         self.assertIn("key: agents.x-k8s.io/sandbox-name-hash", network_policy)
         self.assertIn("operator: Exists", network_policy)
         self.assertNotIn("openshell.ai/managed-by: openshell", network_policy)
-        self.assertIn("kubernetes-sre-SKILL.md", rendered)
+        self.assertIn("sre-skills.part-000:", rendered)
+        self.assertNotIn("kubernetes-sre-SKILL.md", rendered)
         self.assertIn("/sandbox/.hermes/skills/kubernetes-sre", mounts_by_path)
+        self.assertIn("/sandbox/.hermes/skills/devops", mounts_by_path)
+        self.assertIn("/sandbox/.hermes/skills/infrastructure", mounts_by_path)
         self.assertEqual(
             mounts_by_path["/sandbox/.hermes/skills/kubernetes-sre"]["sub_path"],
             "hermes/skills/kubernetes-sre",
@@ -1159,6 +1795,31 @@ class ChartTest(unittest.TestCase):
         self.assertIn("/sandbox/.hermes/.sre-proxy-token", mounts_by_path)
         self.assertTrue(mounts_by_path["/sandbox/.hermes/.sre-proxy-token"]["read_only"])
         self.assertNotIn("/sandbox/.hermes", mounts_by_path)
+
+    def test_sre_policy_allows_only_read_access_to_chart_cli_mount(self) -> None:
+        sre_rendered = self.run_helm(
+            "template",
+            "nemoclaw-openshell-kubernetes-test",
+            str(CHART_DIR),
+            "--set",
+            "sre.enabled=true",
+        )
+        default_rendered = self.run_helm(
+            "template",
+            "nemoclaw-openshell-kubernetes-test",
+            str(CHART_DIR),
+        )
+
+        sre_runtime = self.rendered_from_source(
+            sre_rendered,
+            "nemoclaw-openshell-kubernetes/templates/runtime-configmap.yaml",
+        )
+        default_runtime = self.rendered_from_source(
+            default_rendered,
+            "nemoclaw-openshell-kubernetes/templates/runtime-configmap.yaml",
+        )
+        self.assertIn("      read_only:\n        - /chart-bin\n", sre_runtime)
+        self.assertNotIn("      read_only:\n        - /chart-bin\n", default_runtime)
 
     def test_broad_sre_is_explicit_and_still_has_no_delete_verb(self) -> None:
         rendered = self.run_helm(
@@ -1189,8 +1850,14 @@ class ChartTest(unittest.TestCase):
             "sre.enabled=true",
             "--set",
             "sre.openshiftLlmDeploy.enabled=true",
+            "--set-string",
+            "sre.rbac.mode=broad-no-delete",
+            "--set-string",
+            "sre.rbac.dangerousAcknowledgement=I_ACKNOWLEDGE_CLUSTER_WIDE_NO_DELETE",
             "--set",
             "sre.openshiftLlmDeploy.deletion.enabled=true",
+            "--set-string",
+            "sre.openshiftLlmDeploy.targetNamespace=models-eval",
             "--set-string",
             "sre.openshiftLlmDeploy.deletion.namespace=models-eval",
             "--set-string",
@@ -1237,8 +1904,14 @@ class ChartTest(unittest.TestCase):
             "sre.enabled=true",
             "--set",
             "sre.openshiftLlmDeploy.enabled=true",
+            "--set-string",
+            "sre.rbac.mode=broad-no-delete",
+            "--set-string",
+            "sre.rbac.dangerousAcknowledgement=I_ACKNOWLEDGE_CLUSTER_WIDE_NO_DELETE",
             "--set",
             "sre.openshiftLlmDeploy.deletion.enabled=true",
+            "--set-string",
+            "sre.openshiftLlmDeploy.targetNamespace=models-eval",
             "--set-string",
             "sre.openshiftLlmDeploy.deletion.namespace=models-eval",
             "--set-string",
@@ -1345,6 +2018,263 @@ class ChartTest(unittest.TestCase):
             with self.subTest(target=target):
                 with self.assertRaises(ValueError):
                     module.validate_request_target(target)
+
+    def test_api_proxy_rejection_closes_connection_before_unread_body(self) -> None:
+        script = CHART_DIR / "files" / "scripts" / "api_proxy.py"
+        spec = importlib.util.spec_from_file_location("nemoclaw_api_proxy_reject", script)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        class Handler:
+            command = "DELETE"
+            close_connection = False
+            wfile = io.BytesIO()
+
+            def __init__(self) -> None:
+                self.status = 0
+                self.headers: dict[str, str] = {}
+
+            def send_response(self, status: int) -> None:
+                self.status = status
+
+            def send_header(self, name: str, value: str) -> None:
+                self.headers[name] = value
+
+            def end_headers(self) -> None:
+                return None
+
+        handler = Handler()
+        module.ProxyHandler.reject(handler, 405, "method_not_allowed")
+        self.assertTrue(handler.close_connection)
+        self.assertEqual(handler.status, 405)
+        self.assertEqual(handler.headers["Connection"], "close")
+        self.assertEqual(handler.wfile.getvalue(), b'{"error":"method_not_allowed"}\n')
+
+    def test_api_proxy_blocks_sensitive_general_paths_and_exactly_scopes_delete(self) -> None:
+        script = CHART_DIR / "files" / "scripts" / "api_proxy.py"
+        spec = importlib.util.spec_from_file_location("nemoclaw_api_proxy_policy", script)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        self.assertTrue(
+            module.request_allowed(
+                "/apis/apps/v1/namespaces/models/deployments/example", "PATCH", "general"
+            )
+        )
+        for target in (
+            "/api/v1/namespaces/models/secrets",
+            "/api/v1/namespaces/models/secrets/credential/unexpected",
+            "/api/v1/namespaces/models/serviceaccounts/privileged/token",
+            "/api/v1/namespaces/models/pods/example/exec",
+            "/api/v1/namespaces/models/pods/example/ephemeralcontainers",
+            "/api/v1/nodes/worker/proxy",
+        ):
+            with self.subTest(target=target):
+                self.assertFalse(module.request_allowed(target, "GET", "general"))
+
+        with mock.patch.dict(
+            os.environ,
+            {"PROXY_SERVICE_PROXY_NAMESPACE": "models"},
+            clear=False,
+        ):
+            self.assertTrue(
+                module.request_allowed(
+                    "/api/v1/namespaces/models/services/http:model:8000/proxy/health",
+                    "GET",
+                    "general",
+                )
+            )
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "PROXY_SERVICE_NAMESPACE": "openshift-monitoring",
+                "PROXY_SERVICE_NAME": "thanos-querier",
+                "PROXY_SERVICE_PORT": "9091",
+                "PROXY_SERVICE_SCHEME": "https",
+            },
+            clear=False,
+        ):
+            metrics_path = "/api/v1/query?query=up"
+            self.assertTrue(
+                module.request_allowed(metrics_path, "GET", "exact-service-proxy")
+            )
+            self.assertEqual(
+                module.direct_service_url(metrics_path),
+                "https://thanos-querier.openshift-monitoring.svc:9091/api/v1/query?query=up",
+            )
+            self.assertFalse(
+                module.request_allowed(
+                    "/api/v1/labels?match[]=up",
+                    "GET",
+                    "exact-service-proxy",
+                )
+            )
+            self.assertFalse(
+                module.request_allowed(
+                    "/api/v1/namespaces/openshift-monitoring/services/https:thanos-querier:9091/proxy/api/v1/query?query=up",
+                    "GET",
+                    "exact-service-proxy",
+                )
+            )
+            self.assertFalse(
+                module.request_allowed(metrics_path, "POST", "exact-service-proxy")
+            )
+            self.assertFalse(
+                module.request_allowed(
+                    "/api/v1/namespaces/other/services/http:model:8000/proxy/health",
+                    "GET",
+                    "general",
+                )
+            )
+
+        allowlist = json.dumps(
+            [{"apiGroup": "apps", "resource": "deployments", "name": "owned-model"}]
+        )
+        with mock.patch.dict(
+            os.environ,
+            {
+                "PROXY_DELETE_NAMESPACE": "models",
+                "PROXY_DELETE_ALLOWED_RESOURCES": allowlist,
+            },
+            clear=False,
+        ):
+            self.assertTrue(
+                module.request_allowed(
+                    "/apis/apps/v1/namespaces/models/deployments/owned-model",
+                    "DELETE",
+                    "exact-delete",
+                )
+            )
+            self.assertFalse(
+                module.request_allowed(
+                    "/apis/apps/v1/namespaces/models/deployments/other",
+                    "DELETE",
+                    "exact-delete",
+                )
+            )
+            self.assertFalse(
+                module.request_allowed(
+                    "/apis/apps/v1/namespaces/other/deployments/owned-model",
+                    "DELETE",
+                    "exact-delete",
+                )
+            )
+            self.assertFalse(
+                module.request_allowed(
+                    "/apis/apps/v1/namespaces/models/deployments",
+                    "DELETE",
+                    "exact-delete",
+                )
+            )
+
+    def test_model_skill_uses_external_secret_reference_without_webui_cleanup(self) -> None:
+        template = CHART_DIR / "files" / "skills" / "openshift-llm-deploy" / "templates" / "model-download-job.yaml"
+        payload = template.read_text(encoding="utf-8")
+        self.assertIn("serviceAccountName: ${MODEL_RUNNER_SERVICE_ACCOUNT}", payload)
+        self.assertIn("automountServiceAccountToken: false", payload)
+        self.assertIn("key: ${HF_SECRET_KEY}", payload)
+        self.assertNotIn("DELETE_TOKEN_AFTER_DOWNLOAD", payload)
+        self.assertNotIn("/var/run/secrets/kubernetes.io/serviceaccount", payload)
+        self.assertNotIn("masked", payload.lower())
+
+        deployer = (template.parents[1] / "scripts" / "deploy-model.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("OPENSHIFT_LLM_TARGET_NAMESPACE", deployer)
+        self.assertIn("OPENSHIFT_LLM_RUNNER_SERVICE_ACCOUNT", deployer)
+        self.assertNotIn("DELETE_TOKEN_AFTER_DOWNLOAD", deployer)
+        self.assertNotIn("masked token", deployer.lower())
+
+        verifier = (template.parents[1] / "scripts" / "verify-openai-endpoint.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("service-proxy", verifier)
+        self.assertNotIn("port-forward", verifier)
+
+    def test_metrics_proxy_is_an_exact_read_only_opt_in(self) -> None:
+        rendered = self.run_helm(
+            "template",
+            "nemoclaw-openshell-kubernetes-test",
+            str(CHART_DIR),
+            "--set",
+            "sre.enabled=true",
+            "--set-string",
+            "sre.rbac.mode=broad-no-delete",
+            "--set-string",
+            "sre.rbac.dangerousAcknowledgement=I_ACKNOWLEDGE_CLUSTER_WIDE_NO_DELETE",
+            "--set",
+            "sre.openshiftLlmDeploy.enabled=true",
+            "--set",
+            "sre.openshiftLlmDeploy.metrics.enabled=true",
+        )
+        proxy = self.rendered_from_source(
+            rendered,
+            "nemoclaw-openshell-kubernetes/templates/metrics-proxy.yaml",
+        )
+        rbac = self.rendered_from_source(
+            rendered,
+            "nemoclaw-openshell-kubernetes/templates/metrics-rbac.yaml",
+        )
+        runtime = self.rendered_from_source(
+            rendered,
+            "nemoclaw-openshell-kubernetes/templates/runtime-configmap.yaml",
+        )
+        config = self.bootstrap_config(rendered)
+        self.assertIn("value: exact-service-proxy", proxy)
+        self.assertIn("value: GET", proxy)
+        self.assertNotIn("PATCH", proxy)
+        self.assertNotIn('resources: ["services/proxy"]', rbac)
+        self.assertNotIn("kind: Role", rbac)
+        self.assertNotIn("kind: ClusterRoleBinding", rbac)
+        self.assertEqual(
+            config["agentEnv"]["METRICS_KUBECONFIG"],
+            "/sandbox/.hermes/metrics-kubeconfig",
+        )
+        self.assertRegex(
+            runtime,
+            r"(?s)cluster_metrics:.*?protocol: rest\s+tls: skip",
+        )
+
+        openshift_rendered = self.run_helm(
+            "template",
+            "nemoclaw-openshell-kubernetes-test",
+            str(CHART_DIR),
+            "--values",
+            str(CHART_DIR / "values-openshift.yaml"),
+            "--set",
+            "sre.enabled=true",
+            "--set-string",
+            "sre.rbac.mode=broad-no-delete",
+            "--set-string",
+            "sre.rbac.dangerousAcknowledgement=I_ACKNOWLEDGE_CLUSTER_WIDE_NO_DELETE",
+            "--set",
+            "sre.openshiftLlmDeploy.enabled=true",
+            "--set",
+            "sre.openshiftLlmDeploy.metrics.enabled=true",
+            "--api-versions",
+            "security.openshift.io/v1",
+        )
+        openshift_proxy = self.rendered_from_source(
+            openshift_rendered,
+            "nemoclaw-openshell-kubernetes/templates/metrics-proxy.yaml",
+        )
+        service_ca = self.rendered_from_source(
+            openshift_rendered,
+            "nemoclaw-openshell-kubernetes/templates/metrics-service-ca.yaml",
+        )
+        openshift_rbac = self.rendered_from_source(
+            openshift_rendered,
+            "nemoclaw-openshell-kubernetes/templates/metrics-rbac.yaml",
+        )
+        self.assertIn("name: PROXY_UPSTREAM_CA_FILE", openshift_proxy)
+        self.assertIn("mountPath: /upstream-ca", openshift_proxy)
+        self.assertIn('service.beta.openshift.io/inject-cabundle: "true"', service_ca)
+        self.assertIn("kind: ClusterRoleBinding", openshift_rbac)
 
     def test_existing_gateway_mode_does_not_install_openshell_subchart(self) -> None:
         rendered = self.run_helm(

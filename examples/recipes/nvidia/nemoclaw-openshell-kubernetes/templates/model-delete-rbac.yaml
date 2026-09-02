@@ -18,29 +18,8 @@ metadata:
   labels:
     {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
 rules:
-  # Discovery remains read-only and deliberately excludes Secret/PVC content.
-  - apiGroups: ["serving.kserve.io"]
-    resources: ["inferenceservices", "servingruntimes"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["nim.opendatahub.io"]
-    resources: ["nimservices", "nimcaches", "nimpipelines"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["apps"]
-    resources: ["deployments", "statefulsets", "replicasets"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["batch"]
-    resources: ["jobs"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: [""]
-    resources: ["services", "configmaps"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["route.openshift.io"]
-    resources: ["routes"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["networking.k8s.io"]
-    resources: ["ingresses"]
-    verbs: ["get", "list", "watch"]
-  # Each destructive authorization is an exact operator-approved
+  # Inventory uses the separate general no-delete proxy. This identity has
+  # only exact destructive authorizations supplied by the operator.
   # API-group/resource/name tuple. Namespace scope alone is not ownership.
   {{- range .Values.sre.openshiftLlmDeploy.deletion.allowedResources }}
   - apiGroups: [{{ .apiGroup | quote }}]

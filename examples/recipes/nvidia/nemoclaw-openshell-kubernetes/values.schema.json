@@ -196,6 +196,18 @@
       "type": "object",
       "properties": {
         "enabled": {"type": "boolean"},
+        "cli": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "image": {
+              "type": "string",
+              "pattern": "^quay\\.io/openshift/origin-cli@sha256:[a-f0-9]{64}$"
+            },
+            "pullPolicy": {"type": "string", "enum": ["IfNotPresent", "Always", "Never"]}
+          },
+          "required": ["image", "pullPolicy"]
+        },
         "rbac": {
           "type": "object",
           "properties": {
@@ -216,23 +228,166 @@
               },
               "required": ["name", "key"]
             },
+            "tlsSecretRef": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {"type": "string", "pattern": "^(|[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?)$"},
+                "caKey": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,253}$"},
+                "certKey": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,253}$"},
+                "privateKeyKey": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,253}$"}
+              },
+              "required": ["name", "caKey", "certKey", "privateKeyKey"]
+            },
             "maxRequestBytes": {"type": "integer", "minimum": 1024, "maximum": 134217728},
             "maxResponseBytes": {"type": "integer", "minimum": 1024, "maximum": 134217728},
             "requestTimeoutSeconds": {"type": "integer", "minimum": 1, "maximum": 300}
           },
-          "required": ["port", "authSecretRef", "maxRequestBytes", "maxResponseBytes", "requestTimeoutSeconds"]
+          "required": ["port", "authSecretRef", "tlsSecretRef", "maxRequestBytes", "maxResponseBytes", "requestTimeoutSeconds"]
         },
         "openshiftLlmDeploy": {
           "type": "object",
           "properties": {
             "enabled": {"type": "boolean"},
+            "targetNamespace": {
+              "type": "string",
+              "pattern": "^(|[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)$"
+            },
+            "modelRunnerServiceAccount": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "create": {"type": "boolean"},
+                "name": {
+                  "type": "string",
+                  "pattern": "^(|[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?)$"
+                }
+              },
+              "required": ["create", "name"]
+            },
+            "hfTokenSecretRef": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$"
+                },
+                "key": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,253}$"}
+              },
+              "required": ["name", "key"]
+            },
+            "metrics": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {"type": "boolean"},
+                "namespace": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
+                },
+                "service": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
+                },
+                "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+                "caConfigMapRef": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {"type": "string", "pattern": "^(|[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?)$"},
+                    "key": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,253}$"}
+                  },
+                  "required": ["name", "key"]
+                }
+              },
+              "required": ["enabled", "namespace", "service", "port", "caConfigMapRef"]
+            },
+            "dynamo": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {"type": "boolean"},
+                "apiVersion": {"const": "nvidia.com/v1beta1"},
+                "vllmRuntimeImage": {
+                  "type": "string",
+                  "pattern": "^.+@sha256:[a-f0-9]{64}$"
+                },
+                "vllmRuntimeVersion": {
+                  "type": "string",
+                  "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([.-][A-Za-z0-9.-]+)?$"
+                },
+                "tensorrtllmRuntimeImage": {
+                  "type": "string",
+                  "pattern": "^.+@sha256:[a-f0-9]{64}$"
+                },
+                "tensorrtllmRuntimeVersion": {
+                  "type": "string",
+                  "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([.-][A-Za-z0-9.-]+)?$"
+                },
+                "standardVllmImage": {
+                  "type": "string",
+                  "pattern": "^.+@sha256:[a-f0-9]{64}$"
+                },
+                "modelRuntimeOverrides": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "standardVllmImage": {
+                        "type": "string",
+                        "pattern": "^.+@sha256:[a-f0-9]{64}$"
+                      },
+                      "dynamoVllmRuntimeImage": {
+                        "type": "string",
+                        "pattern": "^.+@sha256:[a-f0-9]{64}$"
+                      },
+                      "dynamoTrtllmRuntimeImage": {
+                        "type": "string",
+                        "pattern": "^.+@sha256:[a-f0-9]{64}$"
+                      },
+                      "dynamoRuntimeVersionOverride": {
+                        "type": "string",
+                        "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([.-][A-Za-z0-9.-]+)?$"
+                      }
+                    }
+                  }
+                },
+                "observationTimeoutSeconds": {"type": "integer", "minimum": 30, "maximum": 3600},
+                "downloadObservationTimeoutSeconds": {"type": "integer", "minimum": 30, "maximum": 3600},
+                "downloadTimeoutSeconds": {"type": "integer", "minimum": 300, "maximum": 86400},
+                "verificationTimeoutSeconds": {"type": "integer", "minimum": 30, "maximum": 3600},
+                "terminalTimeoutSeconds": {"type": "integer", "minimum": 60, "maximum": 7200},
+                "imagePullSecretName": {
+                  "type": "string",
+                  "pattern": "^(|[a-z0-9]([-a-z0-9.]{0,61}[a-z0-9])?)$"
+                }
+              },
+              "required": [
+                "enabled",
+                "apiVersion",
+                "vllmRuntimeImage",
+                "vllmRuntimeVersion",
+                "tensorrtllmRuntimeImage",
+                "tensorrtllmRuntimeVersion",
+                "standardVllmImage",
+                "modelRuntimeOverrides",
+                "observationTimeoutSeconds",
+                "downloadObservationTimeoutSeconds",
+                "downloadTimeoutSeconds",
+                "verificationTimeoutSeconds",
+                "terminalTimeoutSeconds",
+                "imagePullSecretName"
+              ]
+            },
             "deletion": {
               "type": "object",
               "properties": {
                 "enabled": {"type": "boolean"},
                 "namespace": {"type": "string", "pattern": "^(|[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)$"},
                 "deletePVCs": {"type": "boolean"},
-                "deleteSecrets": {"type": "boolean"},
+                "deleteSecrets": {"type": "boolean", "const": false},
                 "allowedResources": {
                   "type": "array",
                   "uniqueItems": true,
@@ -243,7 +398,7 @@
                       "apiGroup": {"type": "string", "pattern": "^(|[a-z0-9]([-a-z0-9.]*[a-z0-9])?)$"},
                       "resource": {
                         "type": "string",
-                        "enum": ["inferenceservices", "servingruntimes", "nimservices", "nimcaches", "nimpipelines", "deployments", "statefulsets", "replicasets", "jobs", "services", "configmaps", "persistentvolumeclaims", "secrets", "routes", "ingresses"]
+                        "enum": ["dynamographdeployments", "inferenceservices", "servingruntimes", "nimservices", "nimcaches", "nimpipelines", "deployments", "statefulsets", "replicasets", "jobs", "services", "configmaps", "persistentvolumeclaims", "routes", "ingresses"]
                       },
                       "name": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$"}
                     },
@@ -255,10 +410,18 @@
               "required": ["enabled", "namespace", "deletePVCs", "deleteSecrets", "allowedResources", "dangerousAcknowledgement"]
             }
           },
-          "required": ["enabled", "deletion"]
+          "required": [
+            "enabled",
+            "targetNamespace",
+            "modelRunnerServiceAccount",
+            "hfTokenSecretRef",
+            "metrics",
+            "dynamo",
+            "deletion"
+          ]
         }
       },
-      "required": ["enabled", "rbac", "proxy", "openshiftLlmDeploy"]
+      "required": ["enabled", "cli", "rbac", "proxy", "openshiftLlmDeploy"]
     },
     "networkPolicy": {
       "type": "object",
