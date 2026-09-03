@@ -202,10 +202,12 @@ Write a page when:
   `mentioned` — this person writes to the user rather than past them, or
 - They are in the user's reporting chain, where the memory already records
   it, or
-- One of the interactions you were given names the user and asks the user
-  for something, in that message's own `subject` or `body` — not in anything
-  you infer about whether the user answered — and that interaction's
-  `addressing` is `direct` or `mentioned`.
+- One of the interactions you were given has `addressing` at `direct` or
+  `mentioned`, and that message's own `subject` or `body` — not anything you
+  infer about whether the user answered — asks for something. Judge only
+  whether the message itself contains a request; the selector gives you no
+  name or address for the user to compare the text against, so do not judge
+  whether the message names the user.
 
 Do **not** write a page for:
 

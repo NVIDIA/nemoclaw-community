@@ -246,6 +246,82 @@ class TestTheContractDoesNotContradictTheChecker(unittest.TestCase):
         self.assertNotIn("index-section-missing", after)
         self.assertNotIn("unindexed", after)
 
+    def test_a_fenced_or_commented_sample_index_entry_is_not_real_content(self):
+        """A code fence or an HTML comment can quote what a heading or a
+        link looks like without making it real index content — a reader
+        showing an example is not the same as filing the entry.
+        """
+        (self.root / "concepts").mkdir(exist_ok=True)
+        (self.root / "concepts" / "cutover.md").write_text(
+            "---\ntype: concept\nupdated: 2026-08-20\n---\n\n# Cutover\n",
+            encoding="utf-8")
+        index = self.root / "index.md"
+        original = index.read_text(encoding="utf-8")
+
+        decorated = original.rstrip() + (
+            "\n\n```markdown\n## Concepts\n```\n"
+            "\n<!-- example: [Cutover](concepts/cutover.md) -->\n")
+        index.write_text(decorated, encoding="utf-8")
+
+        found = {f.kind for f in check_all(self.root, self.TODAY)}
+        self.assertIn("index-section-missing", found,
+                      "a heading quoted inside a code fence satisfied the check")
+        self.assertIn("unindexed", found,
+                      "a link quoted inside an HTML comment satisfied the check")
+
+    def test_a_duplicate_misfiled_link_is_found_even_after_a_correct_one(self):
+        """A target linked twice — once correctly, once from the wrong
+        section — is still a misfiled entry. Checking only the first
+        occurrence, in document order, missed exactly this duplicate: the
+        correct one came first and hid the wrong one that followed it.
+        """
+        (self.root / "concepts").mkdir(exist_ok=True)
+        (self.root / "concepts" / "cutover.md").write_text(
+            "---\ntype: concept\nupdated: 2026-08-20\n---\n\n# Cutover\n",
+            encoding="utf-8")
+        index = self.root / "index.md"
+        original = index.read_text(encoding="utf-8")
+
+        # Correctly filed under a fresh ## Concepts section (which comes
+        # before ## Attention in document order), then duplicated under
+        # ## Attention — the first, correct occurrence would hide the
+        # second if only the first were checked.
+        doubled = original.replace(
+            "## Attention",
+            "## Concepts\n\n- [Cutover](concepts/cutover.md) — the window\n"
+            "\n## Attention", 1)
+        doubled = doubled.replace(
+            "## Attention\n",
+            "## Attention\n\n- [Cutover, again](concepts/cutover.md) —"
+            " duplicate\n", 1)
+        index.write_text(doubled, encoding="utf-8")
+
+        found = {f.kind for f in check_all(self.root, self.TODAY)}
+        self.assertIn("index-misfiled", found,
+                      "a correct first occurrence hid a misfiled duplicate")
+
+    def test_index_section_missing_and_misfiled_fire_together_for_the_same_type(self):
+        """When a page's type has no section yet but the page is already
+        linked somewhere else, both findings fire together — that pairing
+        is what tells the repair job to move the existing entry rather than
+        leave the new section empty.
+        """
+        (self.root / "concepts").mkdir(exist_ok=True)
+        (self.root / "concepts" / "cutover.md").write_text(
+            "---\ntype: concept\nupdated: 2026-08-20\n---\n\n# Cutover\n",
+            encoding="utf-8")
+        index = self.root / "index.md"
+        index.write_text(
+            index.read_text(encoding="utf-8").replace(
+                "## People\n",
+                "## People\n\n- [Cutover](concepts/cutover.md) — the"
+                " window\n", 1),
+            encoding="utf-8")
+
+        found = {f.kind for f in check_all(self.root, self.TODAY)}
+        self.assertIn("index-section-missing", found)
+        self.assertIn("index-misfiled", found)
+
     def test_a_project_page_under_the_wrong_name_is_still_checked(self):
         """The shape that most needs reporting, and the one the first rule
         was silent about. `projects/` has no writer, so these pages come from
@@ -550,6 +626,17 @@ class TestNoInstructionAsksAnUnanswerableQuestion(unittest.TestCase):
         reasonably try to infer it."""
         text = self.SKILL.read_text(encoding="utf-8")
         self.assertIn("inbound messages only", text)
+
+    def test_the_third_rule_does_not_compare_against_an_unsupplied_identity(self):
+        """"Names the user" asked the agent to check a message's text
+        against the user's own name or address, and the selector supplies
+        neither per interaction — there is nothing to compare the text
+        against. The rule is bound to `addressing` and the message's own
+        text only, the same discipline the other two rules already follow.
+        """
+        block = self.rules_block().lower()
+        self.assertNotIn("interactions you were given names the user", block)
+        self.assertIn("gives you no\n  name or address for the user to compare", block)
 
 
 class TestPersonIdentityIsChecked(unittest.TestCase):

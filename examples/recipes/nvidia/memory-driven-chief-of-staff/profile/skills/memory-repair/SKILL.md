@@ -48,10 +48,14 @@ quickly.
    has no `## Section` to be filed under, so the first page of that type
    would be reported unindexed with no entry that could clear it. Add the
    heading in the position `schema.md` fixes — immediately before whichever
-   required section, already present, comes next in that order — and add
-   nothing else: an empty section is the correct state until a page of that
-   type exists. This is what reaches a memory installed before the type was
-   added: the seed only supplies a fresh install, and bootstrap never
+   required section, already present, comes next in that order. Check
+   whether `index-misfiled` also fired for a page of this type: if it did,
+   that page already has an entry, filed under whatever section existed
+   before this one did — move it into the section you just added rather than
+   leaving the new section empty. Only when no `index-misfiled` finding names
+   this type is an empty section the correct state, and only until a page of
+   that type exists. This is what reaches a memory installed before the type
+   was added: the seed only supplies a fresh install, and bootstrap never
    overwrites an index the user owns.
    `index-out-of-order` means a `## Section` heading exists but not where
    `schema.md` puts it relative to the others. Move the heading — and

@@ -170,6 +170,26 @@ _INDEX_RANK = {kind.capitalize(): i for i, kind in enumerate(REQUIRED_FIELDS)}
 
 HEADING = re.compile(r"^##[ \t]+(\w+)[ \t]*\n", re.M)
 
+# A fenced block (```...```) or an HTML comment can quote what a section or
+# an entry looks like without being one — documentation showing the shape of
+# an index, not the index itself. Blanked to spaces rather than deleted, so
+# every character offset `_index_sections` and `LINK.finditer` compute stays
+# valid against the original text; newlines are kept so `re.M` anchors still
+# land on the right lines.
+FENCED_CODE = re.compile(r"^```[^\n]*\n.*?\n```[ \t]*$", re.M | re.S)
+HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
+
+
+def _blank(match: re.Match) -> str:
+    return "".join(ch if ch == "\n" else " " for ch in match.group(0))
+
+
+def _strip_non_content(text: str) -> str:
+    """Blank fenced code blocks and HTML comments before scanning for
+    headings or links, so a sample heading or link quoted inside one can no
+    longer be mistaken for real index content."""
+    return HTML_COMMENT.sub(_blank, FENCED_CODE.sub(_blank, text))
+
 
 def _index_sections(text: str) -> list[tuple[str, int, int]]:
     """Ordered `(heading, body_start, body_end)` spans.
@@ -197,21 +217,28 @@ def check_index(root: Path) -> list[Finding]:
     if index_text is None:
         return [Finding("unreadable", "index.md", "not valid UTF-8 text")]
 
-    sections = _index_sections(index_text)
+    # Fenced code and HTML comments can quote what a heading or a link looks
+    # like without being real index content; scan the blanked copy so a
+    # sample can never satisfy these checks. Character offsets are unchanged
+    # by blanking, so they still line up with `sections`' spans below.
+    scan_text = _strip_non_content(index_text)
+    sections = _index_sections(scan_text)
     present = {heading for heading, _, _ in sections}
 
-    # Every linked target, and which section's span its own link line falls
-    # inside — a link can be present in the document and still not be filed
-    # where it belongs. The first occurrence wins when a target is linked
-    # more than once.
+    # Every linked target, and which section's span each of its occurrences
+    # falls inside — a link can be present in the document and still not be
+    # filed where it belongs. Every occurrence is kept, not just the first:
+    # a target linked once correctly and once from the wrong section is
+    # still a misfiled entry, and checking only the first occurrence missed
+    # exactly that duplicate.
     listed: set[Path] = set()
-    filed_under: dict[Path, str | None] = {}
-    for match in LINK.finditer(index_text):
+    filed_under: dict[Path, list[str | None]] = {}
+    for match in LINK.finditer(scan_text):
         target = (index.parent / match.group(1)).resolve()
         listed.add(target)
         heading = next((h for h, start, end in sections
                         if start <= match.start() < end), None)
-        filed_under.setdefault(target, heading)
+        filed_under.setdefault(target, []).append(heading)
 
     for page in _pages(root):
         rel = str(page.relative_to(root))
@@ -222,8 +249,9 @@ def check_index(root: Path) -> list[Finding]:
             continue
         kind = _page_type(page, root)
         expected = kind.capitalize() if kind else None
-        if expected in _INDEX_RANK and filed_under.get(target) != expected:
-            actual = filed_under.get(target) or "no section"
+        occurrences = filed_under.get(target, [])
+        if expected in _INDEX_RANK and any(h != expected for h in occurrences):
+            actual = next(h for h in occurrences if h != expected) or "no section"
             findings.append(Finding(
                 "index-misfiled", rel,
                 f"linked under `## {actual}` instead of its own"
