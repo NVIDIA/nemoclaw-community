@@ -239,8 +239,6 @@ def render_category_nav(
     grouped = group_entries(entries, categories)
     tiles = []
     for category in categories:
-        if not category.browse:
-            continue
         count = len(grouped[category.id])
         tiles.append(
             _render_category_tile(
@@ -293,12 +291,12 @@ def category_filter_options(
     recipe_categories = tuple(
         category
         for category in categories
-        if category.kind == "recipe" and category.browse
+        if category.kind == "recipe"
     )
     other_categories = tuple(
         category
         for category in categories
-        if category.kind != "recipe" and category.browse
+        if category.kind != "recipe"
     )
     recipe_options = "\n".join(
         f'<option value="{category.id}">{html.escape(category.title)} '
@@ -383,19 +381,10 @@ def render_card(entry: CatalogEntry) -> str:
 def render_catalog_groups(
     entries: list[CatalogEntry],
     categories: tuple[Category, ...],
-    collections: tuple[Collection, ...],
 ) -> str:
     grouped = group_entries(entries, categories)
     sections = []
     for category in categories:
-        presentation: Category | Collection = next(
-            (
-                collection
-                for collection in collections
-                if category.id in collection.automatic_category_ids
-            ),
-            category,
-        )
         cards = "\n".join(render_card(entry) for entry in grouped[category.id])
         sections.append(
             f'''<section
@@ -407,8 +396,8 @@ def render_catalog_groups(
 >
   <div class="shell group-layout">
     <header class="group-heading">
-      <h2 id="{category.id}-title">{html.escape(presentation.title)}</h2>
-      <p>{html.escape(presentation.description)}</p>
+      <h2 id="{category.id}-title">{html.escape(category.title)}</h2>
+      <p>{html.escape(category.description)}</p>
     </header>
     <div class="card-grid">
 {indent(cards, 6)}
@@ -435,9 +424,7 @@ def render_site(
         "{{EXAMPLE_COUNT}}": str(len(entries)),
         "{{INDUSTRY_COUNT}}": str(len(INDUSTRIES)),
         "{{REPRESENTED_INDUSTRY_COUNT}}": str(represented_industries),
-        "{{BROWSE_GROUP_COUNT}}": str(
-            sum(category.browse for category in categories) + len(collections)
-        ),
+        "{{BROWSE_GROUP_COUNT}}": str(len(categories) + len(collections)),
         "{{TUTORIAL_URL}}": FEATURED_TUTORIAL_URL,
         "{{CATEGORY_NAV}}": indent(
             render_category_nav(entries, categories, collections), 14
@@ -448,7 +435,7 @@ def render_site(
         ),
         "{{INDUSTRY_OPTIONS}}": indent(industry_filter_options(entries), 18),
         "{{CATALOG_GROUPS}}": indent(
-            render_catalog_groups(entries, categories, collections), 8
+            render_catalog_groups(entries, categories), 8
         ),
     }
     rendered = template
@@ -633,11 +620,7 @@ def taxonomy_contract() -> dict[str, Any]:
     return {
         "categories": [
             "all",
-            *(
-                category.id
-                for category in CATEGORY_DEFINITIONS
-                if category.browse
-            ),
+            *(category.id for category in CATEGORY_DEFINITIONS),
             *(collection.browse_id for collection in COLLECTION_DEFINITIONS),
         ],
         "collection_categories": {

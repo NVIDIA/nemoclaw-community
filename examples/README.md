@@ -51,15 +51,8 @@ Bounded NemoClaw demonstrations built for specific NVIDIA field scenarios, hardw
 
 | Example | Industry | Description |
 | --- | --- | --- |
+| [Build-a-Claw Tutorial](demos/field/build-a-claw-tutorial/README.md) | 🎓 Academia/Education | Guides DGX Spark users through serving local multimodal models with llama.cpp, connecting an agent harness, and trying coding, vision, browser, messaging, and speech workflows. |
 | [DGX Station Blender and Omniverse](demos/field/blender-omniverse-dgx-station/README.md) | 🎬 Media & Entertainment | Lets users direct a specialized Hermes agent on DGX Station across Blender and NVIDIA Omniverse workflows, producing scene edits, OVRTX renders, native OVPhysX simulations, and replay evidence. |
-
-## [Build-a-Claw Demos](demos/build-a-claw/README.md)
-
-Guided Build-a-Claw demonstrations and tutorials that help participants learn, assemble, and present agent workflows.
-
-| Example | Industry | Description |
-| --- | --- | --- |
-| [Build-a-Claw Tutorial](demos/build-a-claw/tutorial/README.md) | 🎓 Academia/Education | Presents an author-maintained Build-a-Claw guide as a five-part tutorial with progress tracking, responsive media, and copyable highlighted code. |
 
 ## [Developer Tools](tools/README.md)
 
@@ -78,7 +71,7 @@ Guided demos, tutorials, and reusable recipes created through the Build-a-Claw p
 
 | Example | Category | Industry | Description |
 | --- | --- | --- | --- |
-| [Build-a-Claw Tutorial](demos/build-a-claw/tutorial/README.md) | Build-a-Claw Demos | 🎓 Academia/Education | Presents an author-maintained Build-a-Claw guide as a five-part tutorial with progress tracking, responsive media, and copyable highlighted code. |
+| [Build-a-Claw Tutorial](demos/field/build-a-claw-tutorial/README.md) | NVIDIA Field Demos | 🎓 Academia/Education | Guides DGX Spark users through serving local multimodal models with llama.cpp, connecting an agent harness, and trying coding, vision, browser, messaging, and speech workflows. |
 
 ### [Hackathon Recipes](collections/hackathon/README.md)
 

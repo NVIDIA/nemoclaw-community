@@ -116,13 +116,7 @@ class GeneratedHTMLValidator(HTMLParser):
             resource = values.get("src") or values.get("href") or ""
             if resource:
                 self.resources.append(resource)
-            remote_tutorial_image = (
-                self.tutorial_mode and tag == "img" and resource.startswith("https://")
-            )
-            if (
-                resource.startswith(("http://", "https://", "//"))
-                and not remote_tutorial_image
-            ):
+            if resource.startswith(("http://", "https://", "//")):
                 self.errors.append(f"Remote page resource is not allowed: {resource}")
         if tag == "form" and values.get("action"):
             self.errors.append("The catalog filter form must not submit externally.")
@@ -246,7 +240,7 @@ def validate_generated_site(
             errors.append(f"Category fragment is not focusable: {category.id}")
 
     browse_groups: tuple[Category | Collection, ...] = (
-        *(category for category in categories if category.browse),
+        *categories,
         *collections,
     )
     expected_info_controls = [

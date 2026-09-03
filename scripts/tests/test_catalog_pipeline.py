@@ -80,7 +80,7 @@ class CatalogPipelineTests(CatalogFixtureMixin, unittest.TestCase):
         self.assertNotIn("Build-a-Claw tutorial", header)
         self.assertIn(
             '<a class="button button-tertiary" '
-            'href="examples/demos/build-a-claw/tutorial/">',
+            'href="examples/demos/field/build-a-claw-tutorial/">',
             hero_actions,
         )
         self.assertIn("Getting Started", hero_actions)
@@ -128,9 +128,11 @@ class CatalogPipelineTests(CatalogFixtureMixin, unittest.TestCase):
             self.assertNotIn("Catalog field", page)
             self.assertIn('id="readme" tabindex="-1"', page)
             if entry.is_tutorial:
-                self.assertIn(" hidden", facts_attributes)
+                self.assertNotIn(" hidden", facts_attributes)
                 self.assertRegex(page, r'<iframe\b')
-                self.assertRegex(page, r'<img[^>]+src="https://')
+                self.assertNotRegex(page, r'<img[^>]+src="https?://')
+                self.assertIn('class="readme-image-link"', page)
+                self.assertIn('rel="noreferrer"', page)
                 self.assertIn('<div class="codehilite">', page)
                 self.assertIn('<code class="language-bash">', page)
                 self.assertIn("tutorial.css", page)

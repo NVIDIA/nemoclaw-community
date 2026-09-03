@@ -11,7 +11,10 @@ from scripts.catalog.detail_pages import render_detail_pages
 from scripts.catalog.markdown import render_readme_html
 from scripts.catalog.model import CatalogError
 from scripts.catalog.sources import load_catalog
-from scripts.catalog.validation import validate_detail_pages
+from scripts.catalog.validation import (
+    GeneratedHTMLValidator,
+    validate_detail_pages,
+)
 
 from scripts.tests.catalog_test_support import CatalogFixtureMixin, ROOT
 
@@ -89,6 +92,39 @@ class CatalogValidationTests(CatalogFixtureMixin, unittest.TestCase):
                     render_readme_html(
                         root, entry, {entry.readme_path: entry}, set()
                     )
+
+    def test_tutorial_compiler_requires_explicit_valid_fence_languages(self) -> None:
+        invalid_fences = {
+            "missing": ("```", "requires an explicit language"),
+            "invalid": ("```{.bash}", "has invalid language"),
+        }
+        for case, (opening, error) in invalid_fences.items():
+            with self.subTest(case=case):
+                root = self._fixture_root()
+                tutorial = root / "examples/recipes/community/sample/tutorial.md"
+                tutorial.write_text(
+                    f"# Tutorial\n\n{opening}\necho unsafe\n```\n",
+                    encoding="utf-8",
+                )
+                entry = load_catalog(root)[0]
+
+                with self.assertRaisesRegex(CatalogError, error):
+                    render_readme_html(
+                        root, entry, {entry.readme_path: entry}, set()
+                    )
+
+    def test_generated_tutorial_rejects_remote_image_resources(self) -> None:
+        parser = GeneratedHTMLValidator(tutorial_mode=True)
+        parser.feed(
+            '<img src="https://images.example.com/tutorial.png" '
+            'alt="Remote tutorial image">'
+        )
+
+        self.assertIn(
+            "Remote page resource is not allowed: "
+            "https://images.example.com/tutorial.png",
+            parser.errors,
+        )
 
     def test_readme_compiler_rejects_unsafe_links(self) -> None:
         unsafe_links = (

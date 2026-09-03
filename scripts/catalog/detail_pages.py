@@ -208,7 +208,6 @@ def render_detail_pages(
             "{{INDUSTRY}}": html.escape(entry.industry_label),
             "{{COLLECTION_TAGS}}": collection_tags,
             "{{CATEGORY}}": html.escape(entry.category.singular),
-            "{{FACTS_ATTRIBUTES}}": " hidden" if entry.is_tutorial else "",
             "{{ATTRIBUTION_FACT}}": attribution_fact,
             "{{UPSTREAM_FACT}}": upstream_fact,
             "{{STACK_FACTS}}": render_stack_facts(entry),

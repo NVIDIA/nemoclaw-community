@@ -9,4 +9,4 @@ Guided demos, tutorials, and reusable recipes created through the Build-a-Claw p
 
 | Example | Category | Industry | Description |
 | --- | --- | --- | --- |
-| [Build-a-Claw Tutorial](../../demos/build-a-claw/tutorial/README.md) | Build-a-Claw Demos | 🎓 Academia/Education | Presents an author-maintained Build-a-Claw guide as a five-part tutorial with progress tracking, responsive media, and copyable highlighted code. |
+| [Build-a-Claw Tutorial](../../demos/field/build-a-claw-tutorial/README.md) | NVIDIA Field Demos | 🎓 Academia/Education | Guides DGX Spark users through serving local multimodal models with llama.cpp, connecting an agent harness, and trying coding, vision, browser, messaging, and speech workflows. |

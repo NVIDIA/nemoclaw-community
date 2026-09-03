@@ -82,9 +82,7 @@ def main(argv: list[str] | None = None) -> int:
         outputs = expected_outputs(root)
         if args.check:
             check_generated_readmes(root, outputs)
-            browse_groups = sum(
-                category.browse for category in outputs.categories
-            ) + len(outputs.collections)
+            browse_groups = len(outputs.categories) + len(outputs.collections)
             print(
                 f"Catalog metadata and generated sources are valid: "
                 f"{len(outputs.entries)} examples across "

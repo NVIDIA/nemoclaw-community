@@ -46,7 +46,7 @@ INDUSTRY_EMOJIS: dict[str, str] = {
 INDUSTRIES: tuple[str, ...] = tuple(INDUSTRY_EMOJIS)
 
 PAGES_BASE_URL = "https://nvidia.github.io/nemoclaw-community/"
-FEATURED_TUTORIAL_URL = "examples/demos/build-a-claw/tutorial/"
+FEATURED_TUTORIAL_URL = "examples/demos/field/build-a-claw-tutorial/"
 
 @dataclass(frozen=True)
 class Category:
@@ -59,7 +59,6 @@ class Category:
     readme_path: str = ""
     title: str = ""
     description: str = ""
-    browse: bool = True
 
 
 CATEGORY_DEFINITIONS: tuple[Category, ...] = (
@@ -91,13 +90,6 @@ CATEGORY_DEFINITIONS: tuple[Category, ...] = (
         readme_path="examples/demos/field/README.md",
     ),
     Category(
-        "build-a-claw-demos",
-        "Build-a-Claw demo",
-        "demo",
-        readme_path="examples/demos/build-a-claw/README.md",
-        browse=False,
-    ),
-    Category(
         "developer-tools",
         "Developer tool",
         "tool",
@@ -120,7 +112,6 @@ class Collection:
     readme_path: str
     title: str = ""
     description: str = ""
-    automatic_category_ids: tuple[str, ...] = ()
 
 
 COLLECTION_DEFINITIONS: tuple[Collection, ...] = (
@@ -129,7 +120,6 @@ COLLECTION_DEFINITIONS: tuple[Collection, ...] = (
         "build-a-claw",
         "Build-a-Claw",
         "examples/collections/build-a-claw/README.md",
-        automatic_category_ids=("build-a-claw-demos",),
     ),
     Collection(
         "hackathon",

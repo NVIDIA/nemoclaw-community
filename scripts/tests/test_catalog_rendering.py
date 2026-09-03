@@ -75,13 +75,18 @@ class CatalogRenderingTests(CatalogFixtureMixin, unittest.TestCase):
         )
 
     def test_build_a_claw_has_one_combined_website_browse_group(self) -> None:
-        root = self._fixture_root({"path": "demos/build-a-claw/tutorial"})
+        root = self._fixture_root(
+            {
+                "path": "demos/field/build-a-claw-tutorial",
+                "collection": "Build-a-Claw",
+            }
+        )
         categories, collections = load_discovery_groups(root)
         entries = load_catalog(root, categories, collections)
 
         navigation = render_category_nav(entries, categories, collections)
         options = category_filter_options(entries, categories, collections)
-        groups = render_catalog_groups(entries, categories, collections)
+        groups = render_catalog_groups(entries, categories)
         self.assertEqual(navigation.count("?category=build-a-claw#catalog"), 1)
         self.assertNotIn("?category=build-a-claw-demos", navigation)
         self.assertNotIn("?category=build-a-claw-recipes", navigation)
@@ -105,7 +110,7 @@ class CatalogRenderingTests(CatalogFixtureMixin, unittest.TestCase):
         self.assertIn(
             '<span class="category-name">Build-a-Claw</span>', navigation
         )
-        self.assertIn(">Build-a-Claw</h2>", groups)
+        self.assertIn(">NVIDIA Field Demos</h2>", groups)
         self.assertNotIn(">Build-a-Claw Demos</h2>", groups)
 
         index = public_catalog(entries, categories, collections)
@@ -146,9 +151,36 @@ class CatalogRenderingTests(CatalogFixtureMixin, unittest.TestCase):
         self.assertIn('<span class="nb">echo</span>', body)
         self.assertNotIn('<div class="toc">', body)
         self.assertIn('href="#first-step"', toc)
-        self.assertIn('src="https://images.example.com/tutorial.png"', body)
+        self.assertNotIn('src="https://images.example.com/tutorial.png"', body)
+        self.assertIn(
+            'class="readme-image-link" '
+            'href="https://images.example.com/tutorial.png" rel="noreferrer"',
+            body,
+        )
+        self.assertIn("View external image from images.example.com", body)
         self.assertIn('src="https://www.youtube.com/embed/video"', body)
         self.assertEqual(tutorial.read_bytes(), source)
+
+    def test_tutorial_detail_keeps_at_a_glance_before_commands(self) -> None:
+        root = self._fixture_root()
+        tutorial = root / "examples/recipes/community/sample/tutorial.md"
+        tutorial.write_text(
+            "# Tutorial\n\n# Start\n\n```bash\necho ready\n```\n",
+            encoding="utf-8",
+        )
+        entry = load_catalog(root)[0]
+        template = (ROOT / "site" / "templates" / "detail.html").read_text(
+            encoding="utf-8"
+        )
+
+        pages, _ = render_detail_pages(root, [entry], template)
+        page = pages[entry.detail_path]
+        facts_start = page.index('<aside class="detail-facts"')
+        facts_open = page[facts_start : page.index(">", facts_start)]
+
+        self.assertNotIn("hidden", facts_open)
+        self.assertIn("Requirements &amp; limits", page)
+        self.assertLess(facts_start, page.index('<article class="readme-content'))
 
     def test_industry_navigation_wraps_slash_labels_at_word_boundaries(self) -> None:
         entries = load_catalog(

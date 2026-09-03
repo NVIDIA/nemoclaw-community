@@ -150,7 +150,8 @@ Follow the selected example's instructions for these items:
 Keep each runnable example independently deployable. Do not make an example
 depend on private files, internal systems, or local state from another example.
 For a documentation-only tutorial, keep its canonical content in an adjacent
-root `tutorial.md` and mark runtime components as `N/A`.
+root `tutorial.md`. Declare the primary runtime documented by the tutorial, and
+use `N/A` only for components that do not participate.
 
 ## Contribution Requirements
 
@@ -343,24 +344,22 @@ source remains visible when browser rendering is unavailable.
 ## Category And Collection Indexes
 
 The catalog takes each browse tile's title and description from a standardized
-index README. The six canonical category indexes are:
+index README. The five canonical category indexes are:
 
 - `examples/recipes/nvidia/README.md`
 - `examples/recipes/partners/README.md`
 - `examples/recipes/community/README.md`
 - `examples/demos/field/README.md`
-- `examples/demos/build-a-claw/README.md`
 - `examples/tools/README.md`
 
 Hackathon and Build-a-Claw are cross-cutting discovery collections, not
 example paths. Their index-only READMEs are
 `examples/collections/hackathon/README.md` and
 `examples/collections/build-a-claw/README.md`. Do not place examples under
-`examples/collections/`; keep each recipe in its canonical NVIDIA, partner, or
-community path. Guided Build-a-Claw demos and tutorials live under
-`examples/demos/build-a-claw/` and join the Build-a-Claw collection
-automatically. The website presents one Build-a-Claw browse group while these
-paths continue to identify each artifact's type and provenance.
+`examples/collections/`; keep each example in its canonical category path.
+Recipes and demos opt into a collection through README metadata. The website
+presents each collection as one browse group without changing an example's
+artifact type, path, or provenance.
 
 After optional license comments, each index README must start with its public
 H1 title, a blank line, and one concise plain-text description paragraph. The
@@ -397,6 +396,14 @@ fence at the start of a line and give it an explicit language such as `bash`,
 standalone `[TOC]` marker because it creates its own navigation. These changes
 affect generated HTML only. The build does not rewrite the Markdown source, run
 its commands, or validate its technical claims.
+
+Prefer reviewed local images whose publication rights and attribution are
+known. The tutorial renderer never loads a remote image automatically. It
+replaces a credential-free HTTPS image with an outbound no-referrer link that
+names the external host. Remote bytes remain mutable and outside this
+repository's availability and provenance boundary. YouTube and LinkedIn are
+the only supported iframe hosts. Disclose those external connections before
+the first embedded frame; generated frames use lazy loading and a sandbox.
 
 ## Catalog Metadata
 
@@ -468,11 +475,9 @@ Follow these metadata rules:
   a separate canonical public project, and use an absolute HTTPS URL without
   embedded credentials. Do not use it as a second source link to this example.
 - `Contributor` is required only for partner recipes.
-- `Collection` is optional and accepts exactly one of `Hackathon` or
-  `Build-a-Claw`, only for recipes. A collection recipe still keeps its NVIDIA,
-  partner, or community provenance and canonical recipe path. Build-a-Claw
-  demos and tutorials receive that collection from their canonical path and
-  must not declare the row.
+- `Collection` is optional for recipes and demos and accepts exactly one of
+  `Hackathon` or `Build-a-Claw`. A collection entry keeps its canonical
+  artifact type, path, and provenance.
 - The directory path remains the source for artifact kind and recipe
   provenance; do not repeat either in the catalog block.
 
@@ -623,7 +628,7 @@ exception; `| Reviewed | YYYY-MM-DD |` after a focused maintenance review;
 `| Upstream | https://github.com/organization/project |` for a separate public
 project that this example adapts; `| Contributor | [Organization] |` for a
 partner recipe; and `| Collection | [Hackathon or Build-a-Claw] |` for an
-accepted collection recipe. Omit rows that do not apply.
+accepted collection recipe or demo. Omit rows that do not apply.
 -->
 
 [Introduce the intended user, problem, and result.]
@@ -647,7 +652,7 @@ also preserve the essential expected output as searchable text.
 
 | Question | Answer |
 | --- | --- |
-| Category | [Choose one: NVIDIA Recipe, Partner Recipe, Community Recipe, Field Demo, Build-a-Claw Demo, or Developer Tool] |
+| Category | [Choose one: NVIDIA Recipe, Partner Recipe, Community Recipe, Field Demo, or Developer Tool] |
 | Contributor or provenance | [Name the person or organization responsible for the example.] |
 | Use this when | [Name the specific user, scenario, or operational need.] |
 | You will get | [Name the observable workflow, output, artifact, or result.] |

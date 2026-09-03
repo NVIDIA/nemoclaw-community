@@ -95,8 +95,6 @@ def classify_path(
         category_id = "partner-recipes"
     elif len(parts) == 3 and parts[:2] == ("demos", "field"):
         category_id = "nvidia-field-demos"
-    elif len(parts) == 3 and parts[:2] == ("demos", "build-a-claw"):
-        category_id = "build-a-claw-demos"
     elif len(parts) == 2 and parts[0] == "tools":
         category_id = "developer-tools"
 
@@ -146,7 +144,7 @@ def discover_example_paths(
 
     demos = examples / "demos"
     if demos.is_dir():
-        allowed_demo_roots = {"build-a-claw", "field"}
+        allowed_demo_roots = {"field"}
         unexpected_demo_roots = {
             child.name
             for child in demos.iterdir()
@@ -195,7 +193,6 @@ def discover_example_paths(
         "recipes/community/*",
         "recipes/partners/*/*",
         "demos/field/*",
-        "demos/build-a-claw/*",
         "tools/*",
     )
     paths: set[str] = set()
@@ -644,13 +641,12 @@ def parse_readme_metadata(
         raise CatalogError(
             f"Unknown Collection value in {readme_path}: {collection_value!r}."
         )
-    if collection_value is not None and category.kind != "recipe":
-        raise CatalogError("Only recipes can declare a Collection row.")
+    if collection_value is not None and category.kind not in {"recipe", "demo"}:
+        raise CatalogError("Only recipes and demos can declare a Collection row.")
     collections = tuple(
         collection
         for collection in collection_definitions.values()
         if collection.metadata_value == collection_value
-        or category.id in collection.automatic_category_ids
     )
 
     return CatalogEntry(

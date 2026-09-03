@@ -68,7 +68,7 @@ full document remains the no-JavaScript fallback, and none of these
 transformations write back to the source. The build formats the document but
 does not execute or validate its commands.
 
-Each of the six canonical categories and two collections has an index README.
+Each of the five canonical categories and two collections has an index README.
 The browsable indexes supply the website label and information tooltip from
 their H1 and opening description; the Build-a-Claw collection supplies the one
 combined browse group for its demos, tutorials, and tagged recipes. The build
@@ -100,11 +100,12 @@ repository files or directories link to GitHub. Only referenced local images
 in GIF, JPEG, PNG, or WebP format are copied into `_site/`, with type, size,
 path, and symlink checks. SVG images are rejected because Pages would otherwise
 serve contributed active documents from the site origin. Remote README images
-become outbound links instead of third-party page resources. Tutorial pages
-can display HTTPS images and supported YouTube or LinkedIn frames from their
-author-maintained Markdown. Those frames receive restricted attributes, lazy
-loading, and a tutorial-specific Content Security Policy; all tutorial scripts
-still come from this repository.
+become outbound links that name the external host and suppress the referrer;
+the reader must choose to open them. Tutorial pages can display supported
+YouTube or LinkedIn frames from their author-maintained Markdown. Those frames
+receive restricted attributes, lazy loading, and a tutorial-specific Content
+Security Policy. The policy permits local images only, and all tutorial scripts
+come from this repository.
 
 Mermaid publication uses a deliberately narrow subset: flowcharts, graphs,
 sequence diagrams, and state diagrams. The build caps source size and diagram
@@ -132,10 +133,9 @@ The catalog keeps these concepts separate:
   verification evidence.
 - `stack` merges required README declarations with a small static check of
   standardized runtime files.
-- `collection` is a cross-cutting discovery field. Recipes opt in through
-  metadata; Build-a-Claw demos and tutorials receive Build-a-Claw membership
-  from their canonical path. A collection never replaces kind, provenance,
-  canonical path, or contributor attribution.
+- `collection` is a cross-cutting discovery field. Recipes and demos opt in
+  through metadata. A collection never replaces kind, provenance, canonical
+  path, or contributor attribution.
 
 The build rejects unknown taxonomy roots, unsafe or invalid example paths,
 canonical example directories without a root README, malformed metadata

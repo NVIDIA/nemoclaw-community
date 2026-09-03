@@ -138,17 +138,28 @@ class CatalogSourcesTests(CatalogFixtureMixin, unittest.TestCase):
         self.assertEqual(entry.category.provenance, "community")
         self.assertEqual(entry.industry, "Other")
 
-    def test_build_a_claw_demo_path_derives_demo_kind(self) -> None:
+    def test_field_demo_can_join_build_a_claw_collection(self) -> None:
         entry = load_catalog(
-            self._fixture_root({"path": "demos/build-a-claw/tutorial"})
+            self._fixture_root(
+                {
+                    "path": "demos/field/build-a-claw-tutorial",
+                    "collection": "Build-a-Claw",
+                }
+            )
         )[0]
 
-        self.assertEqual(entry.category.id, "build-a-claw-demos")
+        self.assertEqual(entry.category.id, "nvidia-field-demos")
         self.assertEqual(entry.category.kind, "demo")
         self.assertIsNone(entry.category.provenance)
         self.assertEqual(entry.collection_ids, ("build-a-claw",))
         self.assertFalse(entry.is_tutorial)
         self.assertEqual(entry.content_path, entry.readme_path)
+
+    def test_build_a_claw_is_not_a_canonical_demo_root(self) -> None:
+        root = self._fixture_root({"path": "demos/build-a-claw/tutorial"})
+
+        with self.assertRaisesRegex(CatalogError, "Unexpected demo taxonomy"):
+            load_catalog(root)
 
     def test_tutorial_source_uses_exact_name_and_is_not_symlinked(self) -> None:
         root = self._fixture_root()
@@ -308,6 +319,14 @@ class CatalogSourcesTests(CatalogFixtureMixin, unittest.TestCase):
 
         self.assertEqual(entry.category.provenance, "community")
         self.assertEqual(entry.collection_ids, ("build-a-claw",))
+
+    def test_developer_tool_cannot_declare_a_collection(self) -> None:
+        root = self._fixture_root(
+            {"path": "tools/sample", "collection": "Build-a-Claw"}
+        )
+
+        with self.assertRaisesRegex(CatalogError, "Only recipes and demos"):
+            load_catalog(root)
 
     def test_upstream_requires_credential_free_absolute_https(self) -> None:
         accepted = "https://example.com/project?view=source#readme"

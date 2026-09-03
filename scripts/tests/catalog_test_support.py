@@ -24,7 +24,6 @@ class CatalogFixtureMixin:
         "partner-recipes": "Partner Recipes",
         "community-recipes": "Community Recipes",
         "nvidia-field-demos": "NVIDIA Field Demos",
-        "build-a-claw-demos": "Build-a-Claw Demos",
         "developer-tools": "Developer Tools",
         "hackathon": "Hackathon Recipes",
         "build-a-claw": "Build-a-Claw",

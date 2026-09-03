@@ -82,7 +82,7 @@ DETAIL_CONTENT_SECURITY_POLICY = (
 )
 TUTORIAL_CONTENT_SECURITY_POLICY = (
     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-    "img-src 'self' https:; font-src 'self'; connect-src 'none'; "
+    "img-src 'self'; font-src 'self'; connect-src 'none'; "
     "object-src 'none'; frame-src https://www.linkedin.com https://www.youtube.com; "
     "worker-src 'none'; base-uri 'none'; form-action 'none'"
 )
@@ -205,7 +205,7 @@ def tutorial_fence_languages(source: str, source_path: str) -> tuple[str, ...]:
 
     languages: list[str] = []
     fence: tuple[str, int, str] | None = None
-    for line in source.splitlines():
+    for line_number, line in enumerate(source.splitlines(), start=1):
         if fence:
             if re.fullmatch(
                 rf" {{0,3}}{re.escape(fence[0])}{{{fence[1]},}}[ \t]*", line
@@ -214,15 +214,24 @@ def tutorial_fence_languages(source: str, source_path: str) -> tuple[str, ...]:
                 fence = None
             continue
         opening = re.fullmatch(
-            r" {0,3}(?P<fence>`{3,}|~{3,})(?P<info>[^`\r\n]*)", line
+            r" {0,3}(?P<fence>`{3,}|~{3,})(?P<info>.*)", line
         )
         if not opening:
             continue
         marker = opening.group("fence")
         info = opening.group("info").strip()
-        language = info.split(maxsplit=1)[0].casefold() if info else "text"
-        if re.fullmatch(r"[a-z0-9_+.-]+", language) is None:
-            language = "text"
+        if not info:
+            raise CatalogError(
+                "Tutorial code fence requires an explicit language in "
+                f"{source_path}:{line_number}. Use a language such as `bash`, "
+                "`yaml`, or `text`."
+            )
+        if re.fullmatch(r"[A-Za-z0-9_+.-]+", info) is None:
+            raise CatalogError(
+                f"Tutorial code fence has invalid language {info!r} in "
+                f"{source_path}:{line_number}."
+            )
+        language = info.casefold()
         fence = (marker[0], len(marker), language)
     if fence:
         raise CatalogError(f"Tutorial code fence is not closed in {source_path}.")
@@ -365,14 +374,6 @@ class ReadmeHTMLSanitizer(HTMLParser):
     def _rewrite_src(self, value: str) -> str:
         parts = urlsplit(value)
         if parts.scheme:
-            if (
-                self.tutorial_mode
-                and parts.scheme == "https"
-                and parts.hostname
-                and parts.username is None
-                and parts.password is None
-            ):
-                return value
             self.errors.append(
                 f"Remote README images must render as outbound links: {value}"
             )
@@ -538,21 +539,31 @@ class ReadmeHTMLSanitizer(HTMLParser):
         if tag not in self.ALLOWED_TAGS:
             self.errors.append(f"Unsupported README HTML element: {tag}")
             return
-        if tag == "img" and not self.tutorial_mode:
+        if tag == "img":
             values = {name: value or "" for name, value in attrs}
             source = values.get("src", "")
             source_parts = urlsplit(source)
             if source_parts.scheme or source_parts.netloc:
                 alt = values.get("alt", "").strip()
-                if source_parts.scheme != "https" or source_parts.netloc == "":
-                    self.errors.append(f"Remote README image must use HTTPS: {source}")
+                if (
+                    source_parts.scheme != "https"
+                    or source_parts.hostname is None
+                    or source_parts.username is not None
+                    or source_parts.password is not None
+                ):
+                    self.errors.append(
+                        "Remote README image must use credential-free HTTPS: "
+                        f"{source}"
+                    )
                     return
                 if not alt:
                     self.errors.append("Remote README image is missing meaningful alt text.")
                     return
+                host = html.escape(source_parts.hostname)
                 self.output.append(
                     '<a class="readme-image-link" href="'
-                    f'{html.escape(source, quote=True)}">View image: '
+                    f'{html.escape(source, quote=True)}" rel="noreferrer">'
+                    f'View external image from {host}: '
                     f'{html.escape(alt)} <span aria-hidden="true">↗</span></a>'
                 )
                 return

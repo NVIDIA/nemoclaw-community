@@ -9,4 +9,5 @@ Bounded NemoClaw demonstrations built for specific NVIDIA field scenarios, hardw
 
 | Example | Industry | Description |
 | --- | --- | --- |
+| [Build-a-Claw Tutorial](build-a-claw-tutorial/README.md) | 🎓 Academia/Education | Guides DGX Spark users through serving local multimodal models with llama.cpp, connecting an agent harness, and trying coding, vision, browser, messaging, and speech workflows. |
 | [DGX Station Blender and Omniverse](blender-omniverse-dgx-station/README.md) | 🎬 Media & Entertainment | Lets users direct a specialized Hermes agent on DGX Station across Blender and NVIDIA Omniverse workflows, producing scene edits, OVRTX renders, native OVPhysX simulations, and replay evidence. |
