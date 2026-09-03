@@ -38,9 +38,17 @@ class TestInvariants(unittest.TestCase):
 
     def test_a_broken_link_is_found(self):
         p = self.root / "people" / "dana_okoro.md"
-        p.write_text(p.read_text("utf-8").replace(
+        original = p.read_text("utf-8")
+        p.write_text(original.replace(
             "../projects/billing_migration/billing_migration.md",
             "../projects/gone/gone.md"), encoding="utf-8")
+        self.assertIn("broken-link", self.kinds(check_links(self.root)))
+
+        # CommonMark permits a soft line ending inside link text. Page prose
+        # is not constrained to the index's one-entry-per-line shape.
+        p.write_text(original + (
+            "\n[See the missing\nproject](../projects/gone/gone.md)\n"),
+            encoding="utf-8")
         self.assertIn("broken-link", self.kinds(check_links(self.root)))
 
     def test_a_page_past_its_decay_window_is_reported_not_corrected(self):
@@ -269,6 +277,307 @@ class TestTheContractDoesNotContradictTheChecker(unittest.TestCase):
         self.assertIn("unindexed", found,
                       "a link quoted inside an HTML comment satisfied the check")
 
+        # All three are valid Markdown fences. The first implementation only
+        # recognized an unindented run of exactly three backticks, so each of
+        # these could put a fake section and entry in the schema's exact order
+        # and make the checker certify an index with no navigable content.
+        variants = (
+            ("tilde", "~~~markdown", "~~~"),
+            ("indented", "   ```markdown", "   ```"),
+            ("longer backtick", "````markdown", "````"),
+        )
+        for name, opener, closer in variants:
+            with self.subTest(fence=name):
+                decorated = original.replace(
+                    "## Attention",
+                    f"Fence sample:\n{opener}\n## Concepts\n"
+                    "- [Cutover](concepts/cutover.md) — the window\n"
+                    f"{closer}\n\n## Attention",
+                    1)
+                index.write_text(decorated, encoding="utf-8")
+                found = {f.kind for f in check_all(self.root, self.TODAY)}
+                self.assertIn(
+                    "index-section-missing", found,
+                    f"a heading quoted inside a {name} fence satisfied the check")
+                self.assertIn(
+                    "unindexed", found,
+                    f"a link quoted inside a {name} fence satisfied the check")
+
+        # A fence nested in another Markdown container keeps that container's
+        # source prefix. Its links are not top-level index entries even when a
+        # real section heading exists outside the sample.
+        containers = (
+            ("block quote",
+             "> ```markdown\n> - [Cutover](concepts/cutover.md)\n> ```"),
+            ("list item",
+             "- Example only:\n  ```markdown\n"
+             "  - [Cutover](concepts/cutover.md)\n  ```"),
+        )
+        for name, sample in containers:
+            with self.subTest(container=name):
+                decorated = original.replace(
+                    "## Attention",
+                    "## Concepts\n\n" + sample + "\n\n## Attention",
+                    1)
+                index.write_text(decorated, encoding="utf-8")
+                found = {f.kind for f in check_all(self.root, self.TODAY)}
+                self.assertIn(
+                    "index-unparseable", found,
+                    f"a link in a {name} container was silently certified")
+
+        # Fence markers inside a comment are not fences. If the two constructs
+        # are stripped in separate passes, this unmatched marker can hide the
+        # real section and entry that follow the comment.
+        decorated = original.replace(
+            "## Attention",
+            "<!-- quoted fence:\n```\n-->\n\n"
+            "## Concepts\n\n- [Cutover](concepts/cutover.md) — the window\n\n"
+            "## Attention",
+            1)
+        index.write_text(decorated, encoding="utf-8")
+        found = {f.kind for f in check_all(self.root, self.TODAY)}
+        self.assertNotIn("index-section-missing", found)
+        self.assertNotIn("unindexed", found)
+
+        # The inverse ordering matters too: an unmatched comment marker inside
+        # a fence is code, not the start of a comment that consumes real index
+        # content after the closing fence.
+        decorated = original.replace(
+            "## Attention",
+            "```markdown\n<!--\n```\n\n"
+            "## Concepts\n\n- [Cutover](concepts/cutover.md) — the window\n\n"
+            "## Attention",
+            1)
+        index.write_text(decorated, encoding="utf-8")
+        found = {f.kind for f in check_all(self.root, self.TODAY)}
+        self.assertNotIn("index-section-missing", found)
+        self.assertNotIn("unindexed", found)
+
+        # Like an unclosed fence, an unclosed HTML comment runs through EOF.
+        # A fake section and entry inside it cannot satisfy the checker.
+        decorated = original.rstrip() + (
+            "\n\n<!-- sample\n## Concepts\n"
+            "- [Cutover](concepts/cutover.md) — the window\n")
+        index.write_text(decorated, encoding="utf-8")
+        found = {f.kind for f in check_all(self.root, self.TODAY)}
+        self.assertIn("index-section-missing", found)
+        self.assertIn("unindexed", found)
+
+        # Masking inline code must preserve source position: content after a
+        # visible code span is not suddenly a line-start heading or entry.
+        decorated = original.replace(
+            "## Attention",
+            "`x`## Concepts\n`x`- [Cutover](concepts/cutover.md)\n\n"
+            "## Attention", 1)
+        index.write_text(decorated, encoding="utf-8")
+        found = {f.kind for f in check_all(self.root, self.TODAY)}
+        self.assertIn("index-section-missing", found)
+        self.assertIn("unindexed", found)
+
+    def test_schema_permitted_index_entry_spellings_stay_accepted(self):
+        """The checker must not turn parser hardening into a migration.
+
+        The schema requires a relative link first, not a particular bullet or
+        separator. Existing user-owned indexes may therefore use any of these
+        spellings, all of which the earlier source-link scan accepted.
+        """
+        (self.root / "concepts").mkdir(exist_ok=True)
+        (self.root / "concepts" / "cutover.md").write_text(
+            "---\ntype: concept\nupdated: 2026-08-20\n---\n\n# Cutover\n",
+            encoding="utf-8")
+        index = self.root / "index.md"
+        original = index.read_text(encoding="utf-8")
+        forms = (
+            "[Cutover](concepts/cutover.md) — the window",
+            "[](concepts/cutover.md) — an empty but valid label",
+            "[Cutover\\*](concepts/cutover.md) — an escaped label character",
+            "- [Cutover](concepts/cutover.md) — the window",
+            "-    [Cutover](concepts/cutover.md) — four columns of padding",
+            "1. [Cutover](concepts/cutover.md) — the window",
+            "   + [Cutover](concepts/cutover.md) — the window",
+            "[Cutover](concepts/cutover.md): the window",
+        )
+        for entry in forms:
+            with self.subTest(entry=entry):
+                index.write_text(original.replace(
+                    "## Attention",
+                    f"## Concepts\n\n{entry}\n\n## Attention", 1),
+                    encoding="utf-8")
+                kinds = {f.kind for f in check_index(self.root)}
+                self.assertFalse(
+                    kinds & {"unindexed", "index-misfiled",
+                             "index-section-missing", "index-unparseable"})
+
+        # Five columns after a list marker make the apparent link indented
+        # code, not inline list content. It must not certify a navigable entry.
+        index.write_text(original.replace(
+            "## Attention",
+            "## Concepts\n\n-     [Cutover](concepts/cutover.md)\n\n"
+            "## Attention", 1), encoding="utf-8")
+        self.assertEqual(
+            [f.kind for f in check_index(self.root)], ["index-unparseable"])
+
+        # Bare destinations containing whitespace are not Markdown links;
+        # path normalization must not let them alias the real page.
+        for whitespace in (" ", "\t"):
+            with self.subTest(destination_whitespace=repr(whitespace)):
+                index.write_text(original.replace(
+                    "## Attention",
+                    "## Concepts\n\n- [Cutover](ghost" + whitespace
+                    + "/../concepts/cutover.md)\n\n## Attention", 1),
+                    encoding="utf-8")
+                self.assertIn(
+                    "unindexed", {f.kind for f in check_index(self.root)})
+
+        # Escaping the apparent label closer means CommonMark does not render
+        # this source as the link the simple shape superficially resembles.
+        index.write_text(original.replace(
+            "## Attention",
+            "## Concepts\n\n- [Cutover\\](concepts/cutover.md)\n\n"
+            "## Attention", 1), encoding="utf-8")
+        self.assertIn("unindexed",
+                      {f.kind for f in check_index(self.root)})
+
+    def test_container_literals_cannot_change_top_level_index_state(self):
+        """A nested unclosed construct ends with its Markdown container.
+
+        In particular it must neither certify a fake entry nor consume a real,
+        dedented section and entry that follow it.
+        """
+        (self.root / "concepts").mkdir(exist_ok=True)
+        (self.root / "concepts" / "cutover.md").write_text(
+            "---\ntype: concept\nupdated: 2026-08-20\n---\n\n# Cutover\n",
+            encoding="utf-8")
+        index = self.root / "index.md"
+        original = index.read_text(encoding="utf-8")
+        samples = (
+            "- Example only:\n  ```markdown\n"
+            "  - [Cutover](concepts/cutover.md)\n",
+            "> ```markdown\n> <!--\n"
+            "> - [Cutover](concepts/cutover.md)\n> ```\n",
+            "    <!-- literal in indented code\n",
+            "A literal marker: `<!--`\n",
+            "An escaped marker: \\<!--\n",
+            "Latency < 5 ms and affinity <3 are ordinary text.\n",
+        )
+        for position, sample in enumerate(samples):
+            with self.subTest(sample=sample.splitlines()[0]):
+                index.write_text(original.replace(
+                    "## Attention",
+                    sample + "\n## Concepts\n\n"
+                    "- [Cutover](concepts/cutover.md) — the window\n\n"
+                    "## Attention", 1), encoding="utf-8")
+                kinds = {f.kind for f in check_index(self.root)}
+                if position < 2:
+                    self.assertEqual(kinds, {"index-unparseable"})
+                else:
+                    self.assertFalse(
+                        kinds & {"unindexed", "index-section-missing",
+                                 "index-unparseable"})
+
+        # An ordered marker other than 1 cannot interrupt a paragraph. These
+        # apparent entries are lazy continuations of the preceding container,
+        # so the subset parser must refuse to guess that they are top-level.
+        lazy_samples = (
+            "> sample paragraph\n2. [Cutover](concepts/cutover.md)",
+            "- sample paragraph\n2. [Cutover](concepts/cutover.md)",
+            "ordinary paragraph\n2. [Cutover](concepts/cutover.md)",
+            "<https://example.com>\n2. [Cutover](concepts/cutover.md)",
+            "ordinary paragraph\n2. text <?pi\n"
+            "[Cutover](concepts/cutover.md)\n?>",
+            "ordinary paragraph\n2. text <!--\n"
+            "[Cutover](concepts/cutover.md)\n-->",
+        )
+        for sample in lazy_samples:
+            with self.subTest(lazy=sample.splitlines()[0]):
+                index.write_text(original.replace(
+                    "## Attention",
+                    "## Concepts\n\n" + sample + "\n\n## Attention", 1),
+                    encoding="utf-8")
+                self.assertEqual(
+                    [f.kind for f in check_index(self.root)],
+                    ["index-unparseable"])
+
+    def test_ambiguous_raw_html_fails_closed(self):
+        """Unsupported raw HTML cannot supply apparently valid index data.
+
+        Returning only the parse finding prevents unattended repair from
+        adding or moving entries based on a partial view of a user-owned file.
+        """
+        (self.root / "concepts").mkdir(exist_ok=True)
+        (self.root / "concepts" / "cutover.md").write_text(
+            "---\ntype: concept\nupdated: 2026-08-20\n---\n\n# Cutover\n",
+            encoding="utf-8")
+        index = self.root / "index.md"
+        original = index.read_text(encoding="utf-8")
+        raw_openers = (
+            "<div>",
+            "<script>not markdown",
+            '<x-note data-x="a>b">',
+            "Intro <?pi",
+            'Intro <span title="',
+        )
+        for opener in raw_openers:
+            with self.subTest(opener=opener):
+                index.write_text(original.replace(
+                    "## Attention",
+                    f"{opener}\n## Concepts\n"
+                    "- [Cutover](concepts/cutover.md) — sample only\n\n"
+                    "## Attention", 1), encoding="utf-8")
+                findings = check_index(self.root)
+                self.assertEqual(
+                    [f.kind for f in findings], ["index-unparseable"])
+                self.assertIn(
+                    "make no automatic index repair", findings[0].detail)
+
+    def test_noncontent_index_links_do_not_report_as_broken(self):
+        """Link validation and structural validation use the same view."""
+        index = self.root / "index.md"
+        original = index.read_text(encoding="utf-8")
+        index.write_text(original + (
+            "\n```markdown\n- [Gone](people/gone.md)\n```\n"
+            "\n<!--\n- [Also gone](people/also-gone.md)\n-->\n"),
+            encoding="utf-8")
+        self.assertNotIn("broken-link", self.kinds(check_links(self.root)))
+
+        # Markdown-looking characters inside a URI autolink remain part of
+        # that autolink; they are not a second, relative Markdown link.
+        index.write_text(original + (
+            "\nSee <http:x[Gone](people/gone.md)>\n"), encoding="utf-8")
+        self.assertNotIn("broken-link", self.kinds(check_links(self.root)))
+
+        index.write_text(original + (
+            "\nLiteral: \\[Gone](people/gone.md)\n"), encoding="utf-8")
+        self.assertNotIn("broken-link", self.kinds(check_links(self.root)))
+
+        # Visible links in unsupported containers cannot disappear from link
+        # validation. The structural parser fails closed instead of silently
+        # treating them like fenced/commented examples.
+        index.write_text(index.read_text(encoding="utf-8") + (
+            "\n- Notes:\n  - [Gone](people/gone.md)\n"),
+            encoding="utf-8")
+        self.assertEqual(
+            [f.kind for f in check_index(self.root)], ["index-unparseable"])
+
+        # A blank line does not end a list item when the following content is
+        # still indented to that item's content column.
+        for nested in ("  [Gone](people/gone.md)",
+                       "  - [Gone](people/gone.md)"):
+            with self.subTest(nested=nested):
+                index.write_text(
+                    "## People\n\n- [Dana](people/dana_okoro.md)\n\n"
+                    + nested + "\n", encoding="utf-8")
+                self.assertEqual(
+                    [f.kind for f in check_index(self.root)],
+                    ["index-unparseable"])
+
+        # A visible link in ordinary prose is not an index entry, but it still
+        # participates in the check that every navigable relative link exists.
+        index.write_text(original + (
+            "\nA note continues here with [Gone](people/gone.md).\n"),
+            encoding="utf-8")
+        self.assertIn("broken-link", self.kinds(check_links(self.root)))
+
     def test_a_duplicate_misfiled_link_is_found_even_after_a_correct_one(self):
         """A target linked twice — once correctly, once from the wrong
         section — is still a misfiled entry. Checking only the first
@@ -467,6 +776,18 @@ class TestTheContractDoesNotContradictTheChecker(unittest.TestCase):
         self.assertNotIn("unindexed", after)
         self.assertNotIn("index-out-of-order", after)
         self.assertNotIn("index-misfiled", after)
+
+        # The scheduled repair agent must be told to perform the same complete
+        # repair this test just demonstrated. `index-section-missing` can pair
+        # with `unindexed` rather than `index-misfiled` when no entry exists at
+        # all; guidance that discusses only the latter leaves the new section
+        # empty and the page unreachable.
+        repair = (HERE.parents[1] / "profile" / "skills" / "memory-repair"
+                  / "SKILL.md").read_text(encoding="utf-8")
+        start = repair.index("2. **Index sections.**")
+        section = repair[start:repair.index("\n3. **Links resolve.**", start)]
+        self.assertIn("`index-misfiled`", section)
+        self.assertIn("`unindexed`", section)
 
     def test_bootstrap_does_not_reach_an_existing_index(self):
         """Stated as a fact this file depends on rather than a wish.

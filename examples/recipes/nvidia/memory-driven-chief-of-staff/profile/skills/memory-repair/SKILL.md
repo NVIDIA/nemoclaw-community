@@ -43,20 +43,20 @@ quickly.
    remove an entry only when its target is genuinely gone; for
    `index-misfiled`, **move** the existing line into its own type's section
    rather than adding a second entry — the page already has one, it is just
-   filed under the wrong heading.
+   filed under the wrong heading. For `index-unparseable`, preserve the index,
+   report the ambiguity, and make no index edits: the checker deliberately
+   withholds derived findings when it cannot prove which content is top-level.
 2. **Index sections.** `index-section-missing` means a validated page type
    has no `## Section` to be filed under, so the first page of that type
    would be reported unindexed with no entry that could clear it. Add the
    heading in the position `schema.md` fixes — immediately before whichever
-   required section, already present, comes next in that order. Check
-   whether `index-misfiled` also fired for a page of this type: if it did,
-   that page already has an entry, filed under whatever section existed
-   before this one did — move it into the section you just added rather than
-   leaving the new section empty. Only when no `index-misfiled` finding names
-   this type is an empty section the correct state, and only until a page of
-   that type exists. This is what reaches a memory installed before the type
-   was added: the seed only supplies a fresh install, and bootstrap never
-   overwrites an index the user owns.
+   required section, already present, comes next in that order. Then reconcile
+   every page of that type in the same pass: move each existing entry named by
+   `index-misfiled`, and add an entry for each page named by `unindexed`. Do
+   not leave the section empty: this finding is emitted only because at least
+   one page of the type already exists. This is what reaches a memory installed
+   before the type was added: the seed only supplies a fresh install, and
+   bootstrap never overwrites an index the user owns.
    `index-out-of-order` means a `## Section` heading exists but not where
    `schema.md` puts it relative to the others. Move the heading — and
    everything filed under it — to its correct position; do not add a second

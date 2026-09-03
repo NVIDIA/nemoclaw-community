@@ -21,7 +21,22 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.S)
-LINK = re.compile(r"\[[^\]]*\]\(([^)]+\.md)\)")
+# Bare Markdown link destinations cannot contain whitespace, controls, angle
+# brackets, or parentheses. Keeping this grammar shared between entry and
+# link checks prevents a malformed destination from being normalized by
+# `Path.resolve()` onto a real page and falsely treated as navigable.
+LINK_TARGET = r"([^\s()<>\x00-\x1f\x7f]+\.md)"
+# Labels may be empty and may contain CommonMark backslash escapes. An escaped
+# closing bracket is consumed as label content, so it cannot be mistaken for
+# the delimiter that starts the destination.
+INDEX_LINK_LABEL = r"(?:\\[^\r\n]|[^\[\]\\\r\n])*"
+PAGE_LINK_LABEL = r"(?:\\.|[^\[\]\\])*"
+# Memory-page prose may wrap a link label over a soft line ending. Index
+# entries are one physical line by contract and use the narrower pattern.
+LINK = re.compile(
+    r"\[" + PAGE_LINK_LABEL + r"\]\(" + LINK_TARGET + r"\)", re.S)
+INDEX_LINK = re.compile(
+    r"\[" + INDEX_LINK_LABEL + r"\]\(" + LINK_TARGET + r"\)")
 FOOTNOTE = re.compile(r"\^\[[^\]]+\]")
 INFERRED = re.compile(r"\(inferred\)", re.I)
 
@@ -168,41 +183,415 @@ def _pages(root: Path) -> list[Path]:
 # second constant that could drift from the first.
 _INDEX_RANK = {kind.capitalize(): i for i, kind in enumerate(REQUIRED_FIELDS)}
 
-HEADING = re.compile(r"^##[ \t]+(\w+)[ \t]*\n", re.M)
+# `index.md` is data, not an arbitrary Markdown article. Parse the two
+# top-level constructs its contract names rather than searching all source
+# text for link-shaped strings. The accepted entry forms deliberately remain
+# broad: the schema requires a relative link first, but does not require a
+# particular list marker or description separator.
+HEADING_LINE = re.compile(r"^ {0,3}##[ \t]+(\w+)[ \t]*$")
+BARE_ENTRY_LINE = re.compile(
+    r"^ {0,3}\[" + INDEX_LINK_LABEL + r"\]\(" + LINK_TARGET + r"\).*$")
+MARKED_ENTRY_LINE = re.compile(
+    r"^( {0,3})([-+*]|[0-9]{1,9}[.)])([ \t]+)"
+    r"\[" + INDEX_LINK_LABEL + r"\]\(" + LINK_TARGET + r"\).*$")
+LIST_ITEM = re.compile(
+    r"^( {0,3})([-+*]|[0-9]{1,9}[.)])([ \t]+|$)")
+BLOCK_QUOTE = re.compile(r"^ {0,3}>")
+FENCE_LINE = re.compile(r"^ {0,3}(`{3,}|~{3,})([^\r\n]*)$")
+COMMENT_BLOCK = re.compile(r"^ {0,3}<!--")
+# A small contract checker must not guess where an arbitrary raw HTML block
+# ends. Any top-level line beginning with an HTML-like opener is therefore
+# ambiguous unless it is a positively recognized URI/email autolink. Literal
+# comparisons such as ``latency < 5`` are ordinary text. HTML comments are
+# handled separately before this guard.
+HTML_LIKE_LINE = re.compile(r"^ {0,3}(?:</?[A-Za-z]|<\?|<!)")
+HTML_LIKE_TOKEN = re.compile(r"(?:</?[A-Za-z]|<\?|<!)")
+AUTOLINK_LINE = re.compile(
+    r"^ {0,3}<(?:(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^ <>]*)|"
+    r"(?:[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@"
+    r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?))>")
+AUTOLINK_TOKEN = re.compile(AUTOLINK_LINE.pattern.removeprefix(r"^ {0,3}"))
 
-# A fenced block (```...```) or an HTML comment can quote what a section or
-# an entry looks like without being one — documentation showing the shape of
-# an index, not the index itself. Blanked to spaces rather than deleted, so
-# every character offset `_index_sections` and `LINK.finditer` compute stays
-# valid against the original text; newlines are kept so `re.M` anchors still
-# land on the right lines.
-FENCED_CODE = re.compile(r"^```[^\n]*\n.*?\n```[ \t]*$", re.M | re.S)
-HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
+
+@dataclass(frozen=True)
+class _ParsedIndex:
+    headings: tuple[str, ...]
+    entries: tuple[tuple[str, str | None], ...]
+    links: tuple[str, ...]
+    error: str | None = None
 
 
-def _blank(match: re.Match) -> str:
-    return "".join(ch if ch == "\n" else " " for ch in match.group(0))
+def _indent_width(line: str, initial: int = 0) -> int:
+    """Leading indentation in Markdown columns (tabs stop every four)."""
+    width = initial
+    for ch in line:
+        if ch == " ":
+            width += 1
+        elif ch == "\t":
+            width += 4 - (width % 4)
+        else:
+            break
+    return width
 
 
-def _strip_non_content(text: str) -> str:
-    """Blank fenced code blocks and HTML comments before scanning for
-    headings or links, so a sample heading or link quoted inside one can no
-    longer be mistaken for real index content."""
-    return HTML_COMMENT.sub(_blank, FENCED_CODE.sub(_blank, text))
+def _list_content_indent(match: re.Match) -> int:
+    """The continuation indentation established by a list marker."""
+    marker_end = match.end(2)
+    width_after_padding = _indent_width(match.group(3), marker_end)
+    padding = width_after_padding - marker_end
+    return marker_end + (padding if 1 <= padding <= 4 else 1)
 
 
-def _index_sections(text: str) -> list[tuple[str, int, int]]:
-    """Ordered `(heading, body_start, body_end)` spans.
+def _list_marker_kind(match: re.Match) -> str:
+    marker = match.group(2)
+    return marker if marker in "-+*" else marker[-1]
 
-    A section's body is the text between its own heading line and the next
-    `## ` heading, or the end of the file for the last one — the range an
-    entry's link has to fall inside to count as filed under that heading,
-    rather than merely present somewhere in the document.
+
+def _list_marker_interrupts_paragraph(match: re.Match) -> bool:
+    """Whether this list marker may interrupt a CommonMark paragraph."""
+    marker = match.group(2)
+    return not marker[0].isdigit() or int(marker[:-1]) == 1
+
+
+def _entry_target(line: str) -> str | None:
+    """Return a schema entry target without accepting list-item code.
+
+    CommonMark permits one to four columns of padding between a list marker
+    and its inline content. Five or more makes the apparent link an indented
+    code block, so it cannot be an index entry.
     """
-    matches = list(HEADING.finditer(text))
-    return [(m.group(1), m.end(),
-             matches[i + 1].start() if i + 1 < len(matches) else len(text))
-            for i, m in enumerate(matches)]
+    bare = BARE_ENTRY_LINE.match(line)
+    if bare:
+        return bare.group(1)
+    marked = MARKED_ENTRY_LINE.match(line)
+    if not marked:
+        return None
+    marker_end = marked.end(2)
+    padding = _indent_width(marked.group(3), marker_end) - marker_end
+    return marked.group(4) if 1 <= padding <= 4 else None
+
+
+def _raw_html_or_ambiguous(line: str) -> bool:
+    return bool(HTML_LIKE_LINE.match(line) and not AUTOLINK_LINE.match(line))
+
+
+def _definite_block_start(line: str) -> bool:
+    """A construct that cannot be a lazy paragraph continuation."""
+    item = LIST_ITEM.match(line)
+    return bool(HEADING_LINE.match(line) or FENCE_LINE.match(line)
+                or COMMENT_BLOCK.match(line)
+                or (item and _list_marker_interrupts_paragraph(item))
+                or _raw_html_or_ambiguous(line))
+
+
+def _inline_content(line: str) -> tuple[str, str | None]:
+    """Blank same-line code spans and comments before reading links.
+
+    A comment that begins in ordinary inline content and does not close on
+    that line is valid enough Markdown to be ambiguous to this deliberately
+    small parser. Report that ambiguity instead of allowing a later line to
+    be mistaken for top-level index data. Backslash-escaped markers and
+    markers inside a closed code span remain literal.
+    """
+    visible = list(line)
+    i = 0
+    while i < len(line):
+        if line[i] == "\\" and i + 1 < len(line):
+            visible[i] = " "
+            visible[i + 1] = " "
+            i += 2
+            continue
+        if line[i] == "`":
+            end = i + 1
+            while end < len(line) and line[end] == "`":
+                end += 1
+            marker = line[i:end]
+            close = -1
+            candidate = end
+            while candidate < len(line):
+                candidate = line.find("`", candidate)
+                if candidate < 0:
+                    break
+                run_end = candidate + 1
+                while run_end < len(line) and line[run_end] == "`":
+                    run_end += 1
+                if run_end - candidate == len(marker):
+                    close = candidate
+                    break
+                candidate = run_end
+            if close >= 0:
+                for pos in range(i, close + len(marker)):
+                    visible[pos] = " "
+                i = close + len(marker)
+                continue
+            return line, "a multiline or unmatched code span obscures structure"
+        if line.startswith("<!--", i):
+            close = line.find("-->", i + 4)
+            if close < 0:
+                return line, "a multiline inline HTML comment obscures structure"
+            close += 3
+            for pos in range(i, close):
+                visible[pos] = " "
+            i = close
+            continue
+        if line[i] == "<":
+            autolink = AUTOLINK_TOKEN.match(line, i)
+            if autolink:
+                for pos in range(i, autolink.end()):
+                    visible[pos] = " "
+                i = autolink.end()
+                continue
+            if HTML_LIKE_TOKEN.match(line, i):
+                return line, "inline HTML or an angle marker obscures structure"
+        i += 1
+    return "".join(visible), None
+
+
+def _parse_index(text: str) -> _ParsedIndex:
+    """Read the top-level headings and entries in an index safely.
+
+    Fences and comments are interpreted only after a line is known to be at
+    top level. That matters for an installed, user-owned index: a fence or
+    comment marker inside a list example, block quote, inline code span, or
+    indented code block must not hide real content that follows its container.
+    If a lazy continuation or raw HTML makes top-level ownership ambiguous,
+    parsing fails closed so repair cannot add duplicate entries from a partial
+    view of the file.
+    """
+    lines = text.splitlines()
+    headings: list[str] = []
+    entries: list[tuple[str, str | None]] = []
+    links: list[str] = []
+    current_heading: str | None = None
+    fence_char: str | None = None
+    fence_length = 0
+    in_comment = False
+    in_indented_code = False
+    list_indent: int | None = None
+    list_marker_indent = 0
+    list_marker_kind: str | None = None
+    list_saw_blank = False
+    quote_may_continue = False
+    paragraph_may_continue = False
+
+    # YAML frontmatter is not index content.
+    frontmatter_end = 0
+    frontmatter = FRONTMATTER.match(text)
+    if frontmatter:
+        frontmatter_end = text[:frontmatter.end()].count("\n")
+
+    i = 0
+    while i < len(lines):
+        line = lines[i].rstrip("\r")
+        if i < frontmatter_end:
+            i += 1
+            continue
+
+        if fence_char is not None:
+            close = FENCE_LINE.match(line)
+            if close:
+                marker, trailing = close.groups()
+                if (marker[0] == fence_char and len(marker) >= fence_length
+                        and not trailing.strip(" \t")):
+                    fence_char = None
+                    fence_length = 0
+            i += 1
+            continue
+
+        if in_comment:
+            if "-->" in line:
+                in_comment = False
+            i += 1
+            continue
+
+        if in_indented_code:
+            if not line.strip() or _indent_width(line) >= 4:
+                i += 1
+                continue
+            in_indented_code = False
+            continue
+
+        if list_indent is not None:
+            if not line.strip():
+                list_saw_blank = True
+                i += 1
+                continue
+            indent = _indent_width(line)
+            sibling = LIST_ITEM.match(line)
+            if list_saw_blank:
+                if indent >= list_indent:
+                    if INDEX_LINK.search(line):
+                        return _ParsedIndex(
+                            tuple(headings), tuple(entries), tuple(links),
+                            "a visible link is nested in a list container")
+                    i += 1
+                    continue
+                list_indent = None
+                continue
+            if sibling and _indent_width(sibling.group(1)) <= list_marker_indent:
+                if (_list_marker_kind(sibling) == list_marker_kind
+                        or _list_marker_interrupts_paragraph(sibling)):
+                    list_indent = None
+                    continue
+                if INDEX_LINK.search(line):
+                    return _ParsedIndex(
+                        tuple(headings), tuple(entries), tuple(links),
+                        "a link-shaped line may be a lazy list continuation")
+                i += 1
+                continue
+            if indent >= list_indent:
+                if INDEX_LINK.search(line):
+                    return _ParsedIndex(
+                        tuple(headings), tuple(entries), tuple(links),
+                        "a visible link is nested in a list container")
+                i += 1
+                continue
+            if _definite_block_start(line) or list_saw_blank:
+                list_indent = None
+                continue
+            if INDEX_LINK.search(line):
+                return _ParsedIndex(
+                    tuple(headings), tuple(entries), tuple(links),
+                    "a visible link may be a lazy list continuation")
+            # Ordinary lazy paragraph continuation remains inside the item.
+            i += 1
+            continue
+
+        if BLOCK_QUOTE.match(line):
+            if INDEX_LINK.search(line):
+                return _ParsedIndex(
+                    tuple(headings), tuple(entries), tuple(links),
+                    "a visible link is nested in a block quote")
+            quote_may_continue = True
+            i += 1
+            continue
+        if quote_may_continue:
+            if not line.strip():
+                quote_may_continue = False
+                i += 1
+                continue
+            if _definite_block_start(line):
+                quote_may_continue = False
+                continue
+            if INDEX_LINK.search(line):
+                return _ParsedIndex(
+                    tuple(headings), tuple(entries), tuple(links),
+                    "a visible link may be a lazy block quote continuation")
+            i += 1
+            continue
+
+        if paragraph_may_continue:
+            if not line.strip():
+                paragraph_may_continue = False
+                i += 1
+                continue
+            item = LIST_ITEM.match(line)
+            if item and not _list_marker_interrupts_paragraph(item):
+                visible_line, inline_error = _inline_content(line)
+                if inline_error:
+                    return _ParsedIndex(
+                        tuple(headings), tuple(entries), tuple(links),
+                        inline_error)
+                if INDEX_LINK.search(visible_line):
+                    return _ParsedIndex(
+                        tuple(headings), tuple(entries), tuple(links),
+                        "a link-shaped line may continue a paragraph")
+                i += 1
+                continue
+            if _raw_html_or_ambiguous(line):
+                return _ParsedIndex(
+                    tuple(headings), tuple(entries), tuple(links),
+                    "raw HTML may continue a paragraph")
+            if (HEADING_LINE.match(line) or FENCE_LINE.match(line)
+                    or COMMENT_BLOCK.match(line) or BLOCK_QUOTE.match(line)
+                    or (item and _list_marker_interrupts_paragraph(item))):
+                paragraph_may_continue = False
+                continue
+            # A bare link first on its physical line remains an accepted
+            # schema entry. Other ordinary source continues the paragraph.
+            if not _entry_target(line):
+                visible_line, inline_error = _inline_content(line)
+                if inline_error:
+                    return _ParsedIndex(
+                        tuple(headings), tuple(entries), tuple(links),
+                        inline_error)
+                links.extend(INDEX_LINK.findall(visible_line))
+                i += 1
+                continue
+            paragraph_may_continue = False
+
+        if _indent_width(line) >= 4:
+            in_indented_code = True
+            i += 1
+            continue
+
+        fence = FENCE_LINE.match(line)
+        if fence:
+            marker, info = fence.groups()
+            if marker[0] == "~" or "`" not in info:
+                fence_char = marker[0]
+                fence_length = len(marker)
+                i += 1
+                continue
+
+        if COMMENT_BLOCK.match(line):
+            in_comment = "-->" not in line
+            i += 1
+            continue
+
+        if _raw_html_or_ambiguous(line):
+            return _ParsedIndex(tuple(headings), tuple(entries), tuple(links),
+                                "raw HTML can hide index structure")
+
+        visible_line, inline_error = _inline_content(line)
+        if inline_error:
+            return _ParsedIndex(tuple(headings), tuple(entries), tuple(links),
+                                inline_error)
+
+        # Structural tokens must begin at their original source position.
+        # Masking an earlier code span or comment must not turn the spaces it
+        # leaves behind into the permitted indentation before a heading/link.
+        heading = HEADING_LINE.match(line)
+        if heading:
+            current_heading = heading.group(1)
+            headings.append(current_heading)
+            i += 1
+            continue
+
+        target = _entry_target(line)
+        if target:
+            entries.append((target, current_heading))
+            links.extend(INDEX_LINK.findall(visible_line))
+            item = LIST_ITEM.match(line)
+            if item:
+                list_marker_indent = _indent_width(item.group(1))
+                list_marker_kind = _list_marker_kind(item)
+                list_indent = _list_content_indent(item)
+                list_saw_blank = False
+            i += 1
+            continue
+
+        item = LIST_ITEM.match(line)
+        if item:
+            # A non-entry list item is a container. Its indented children may
+            # contain examples, but they cannot declare top-level index data.
+            if INDEX_LINK.search(visible_line):
+                return _ParsedIndex(
+                    tuple(headings), tuple(entries), tuple(links),
+                    "a list item contains a link that is not an index entry")
+            list_marker_indent = _indent_width(item.group(1))
+            list_marker_kind = _list_marker_kind(item)
+            list_indent = _list_content_indent(item)
+            list_saw_blank = False
+            i += 1
+            continue
+
+        links.extend(INDEX_LINK.findall(visible_line))
+        if line.strip():
+            paragraph_may_continue = True
+        i += 1
+
+    return _ParsedIndex(tuple(headings), tuple(entries), tuple(links))
 
 
 def check_index(root: Path) -> list[Finding]:
@@ -217,13 +606,13 @@ def check_index(root: Path) -> list[Finding]:
     if index_text is None:
         return [Finding("unreadable", "index.md", "not valid UTF-8 text")]
 
-    # Fenced code and HTML comments can quote what a heading or a link looks
-    # like without being real index content; scan the blanked copy so a
-    # sample can never satisfy these checks. Character offsets are unchanged
-    # by blanking, so they still line up with `sections`' spans below.
-    scan_text = _strip_non_content(index_text)
-    sections = _index_sections(scan_text)
-    present = {heading for heading, _, _ in sections}
+    parsed = _parse_index(index_text)
+    if parsed.error:
+        return [Finding(
+            "index-unparseable", "index.md",
+            "cannot verify top-level structure safely: " + parsed.error
+            + "; preserve the file and make no automatic index repair")]
+    present = set(parsed.headings)
 
     # Every linked target, and which section's span each of its occurrences
     # falls inside — a link can be present in the document and still not be
@@ -233,11 +622,9 @@ def check_index(root: Path) -> list[Finding]:
     # exactly that duplicate.
     listed: set[Path] = set()
     filed_under: dict[Path, list[str | None]] = {}
-    for match in LINK.finditer(scan_text):
-        target = (index.parent / match.group(1)).resolve()
+    for relative, heading in parsed.entries:
+        target = (index.parent / relative).resolve()
         listed.add(target)
-        heading = next((h for h, start, end in sections
-                        if start <= match.start() < end), None)
         filed_under.setdefault(target, []).append(heading)
 
     for page in _pages(root):
@@ -286,7 +673,7 @@ def check_index(root: Path) -> list[Finding]:
     # already precedes it in the file — a set of heading names cannot see
     # this, only their positions relative to each other can.
     furthest_rank, furthest_heading = -1, None
-    for heading, _, _ in sections:
+    for heading in parsed.headings:
         rank = _INDEX_RANK.get(heading)
         if rank is None:
             continue
@@ -304,7 +691,7 @@ def check_index(root: Path) -> list[Finding]:
 def check_links(root: Path) -> list[Finding]:
     """Relative links between pages resolve."""
     findings: list[Finding] = []
-    for page in _pages(root) + [root / "index.md"]:
+    for page in _pages(root):
         if not page.exists():
             continue
         text = _read(page)
@@ -316,6 +703,22 @@ def check_links(root: Path) -> list[Finding]:
             if not (page.parent / target).resolve().exists():
                 findings.append(Finding("broken-link", str(page.relative_to(root)),
                                         f"link to {target} does not resolve"))
+
+    # Index links use the same parse as index structure. Scanning its raw
+    # source here would reintroduce false findings for fenced and commented
+    # examples that `check_index` correctly excludes. If parsing failed,
+    # `check_index` already reports the authoritative fail-closed finding.
+    index = root / "index.md"
+    if index.exists():
+        text = _read(index)
+        if text is not None:
+            parsed = _parse_index(text)
+            if not parsed.error:
+                for target in parsed.links:
+                    if not (index.parent / target).resolve().exists():
+                        findings.append(Finding(
+                            "broken-link", "index.md",
+                            f"link to {target} does not resolve"))
     return findings
 
 
