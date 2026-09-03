@@ -1,0 +1,129 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# Render every ${...} placeholder before applying. TensorRT-LLM requires a
+# model-specific, upstream-validated engine configuration path; do not use
+# this template for an arbitrary Hugging Face model.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ${RELEASE}-model-cache
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/name: dynamo
+    app.kubernetes.io/instance: ${RELEASE}
+    app.kubernetes.io/managed-by: hermes
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: ${STORAGE_CLASS}
+  resources:
+    requests:
+      storage: ${PVC_SIZE}
+---
+apiVersion: nvidia.com/v1beta1
+kind: DynamoGraphDeployment
+metadata:
+  name: ${RELEASE}
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/name: dynamo
+    app.kubernetes.io/instance: ${RELEASE}
+    app.kubernetes.io/managed-by: hermes
+    app.kubernetes.io/component: inference
+spec:
+  backendFramework: trtllm
+  components:
+    - name: Frontend
+      type: frontend
+      replicas: 1
+      podTemplate:
+        metadata:
+          labels:
+            app.kubernetes.io/instance: ${RELEASE}
+            app.kubernetes.io/component: frontend
+        spec:
+          nodeSelector:
+            kubernetes.io/hostname: ${NODE_NAME}
+          imagePullSecrets: ${DYNAMO_IMAGE_PULL_SECRETS}
+          containers:
+            - name: main
+              image: ${DYNAMO_TRTLLM_IMAGE}
+              imagePullPolicy: IfNotPresent
+              command: ["python3", "-m", "dynamo.frontend"]
+              args:
+                - --model-name
+                - ${SERVED_MODEL_NAME}
+                - --http-host
+                - 0.0.0.0
+                - --http-port
+                - "8000"
+              env:
+                - name: HF_HOME
+                  value: /models
+                - name: HF_HUB_CACHE
+                  value: /models/hub
+              ports:
+                - name: http
+                  containerPort: 8000
+              readinessProbe:
+                httpGet:
+                  path: /health
+                  port: http
+                periodSeconds: 10
+                timeoutSeconds: 5
+                failureThreshold: 6
+              volumeMounts:
+                - name: model-cache
+                  mountPath: /models
+          volumes:
+            - name: model-cache
+              persistentVolumeClaim:
+                claimName: ${RELEASE}-model-cache
+    - name: TensorRTLLMWorker
+      type: worker
+      replicas: 1
+      podTemplate:
+        metadata:
+          labels:
+            app.kubernetes.io/instance: ${RELEASE}
+            app.kubernetes.io/component: worker
+        spec:
+          nodeSelector:
+            kubernetes.io/hostname: ${NODE_NAME}
+          imagePullSecrets: ${DYNAMO_IMAGE_PULL_SECRETS}
+          containers:
+            - name: main
+              image: ${DYNAMO_TRTLLM_IMAGE}
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/sh", "-ec"]
+              args:
+                - |
+                  exec python3 -m dynamo.trtllm \
+                    --model-path "/models/model" \
+                    --served-model-name "${SERVED_MODEL_NAME}" \
+                    ${TRTLLM_ENGINE_ARGS}
+              env:
+                - name: HF_HOME
+                  value: /models
+                - name: HF_HUB_CACHE
+                  value: /models/hub
+                - name: HF_HUB_ENABLE_HF_TRANSFER
+                  value: "1"
+              resources:
+                requests:
+                  memory: ${MEMORY_REQUEST}
+                  nvidia.com/gpu: "${GPU_COUNT}"
+                limits:
+                  memory: ${MEMORY_LIMIT}
+                  nvidia.com/gpu: "${GPU_COUNT}"
+              volumeMounts:
+                - name: model-cache
+                  mountPath: /models
+          volumes:
+            - name: model-cache
+              persistentVolumeClaim:
+                claimName: ${RELEASE}-model-cache
+  env:
+    - name: HF_HOME
+      value: /models
+    - name: HF_HUB_CACHE
+      value: /models/hub

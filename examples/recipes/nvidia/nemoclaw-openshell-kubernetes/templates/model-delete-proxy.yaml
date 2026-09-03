@@ -1,0 +1,137 @@
+{{- if .Values.sre.openshiftLlmDeploy.deletion.enabled }}
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nemoclaw-openshell.modelDeleteProxyName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+    app.kubernetes.io/component: model-delete-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "nemoclaw-openshell.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: model-delete-proxy
+  template:
+    metadata:
+      annotations:
+        checksum/api-proxy: {{ .Files.Get "files/scripts/api_proxy.py" | sha256sum }}
+      labels:
+        {{- include "nemoclaw-openshell.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: model-delete-proxy
+    spec:
+      serviceAccountName: {{ include "nemoclaw-openshell.modelDeleteProxyName" . }}
+      automountServiceAccountToken: true
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        {{- if not .Values.platform.openshift.enabled }}
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: proxy
+          image: {{ .Values.artifacts.utilityImage | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/python3", "-B", "/runtime/api_proxy.py"]
+          env:
+            - name: PROXY_PORT
+              value: {{ .Values.sre.proxy.port | quote }}
+            - name: PROXY_ALLOWED_METHODS
+              value: DELETE
+            - name: PROXY_POLICY
+              value: exact-delete
+            - name: PROXY_DELETE_NAMESPACE
+              value: {{ .Values.sre.openshiftLlmDeploy.deletion.namespace | quote }}
+            - name: PROXY_DELETE_ALLOWED_RESOURCES
+              value: {{ .Values.sre.openshiftLlmDeploy.deletion.allowedResources | toJson | quote }}
+            - name: PROXY_CLIENT_TOKEN_FILE
+              value: /proxy-auth/token
+            - name: PROXY_TLS_CERT_FILE
+              value: /proxy-tls/tls.crt
+            - name: PROXY_TLS_KEY_FILE
+              value: /proxy-tls/tls.key
+            - name: PROXY_MAX_REQUEST_BYTES
+              value: {{ printf "%d" (int64 .Values.sre.proxy.maxRequestBytes) | quote }}
+            - name: PROXY_MAX_RESPONSE_BYTES
+              value: {{ printf "%d" (int64 .Values.sre.proxy.maxResponseBytes) | quote }}
+            - name: PROXY_REQUEST_TIMEOUT_SECONDS
+              value: {{ .Values.sre.proxy.requestTimeoutSeconds | quote }}
+          ports:
+            - name: https
+              containerPort: {{ .Values.sre.proxy.port }}
+              protocol: TCP
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          volumeMounts:
+            - name: runtime
+              mountPath: /runtime
+              readOnly: true
+            - name: proxy-auth
+              mountPath: /proxy-auth
+              readOnly: true
+            - name: proxy-tls
+              mountPath: /proxy-tls
+              readOnly: true
+      volumes:
+        - name: runtime
+          configMap:
+            name: {{ include "nemoclaw-openshell.fullname" . }}-runtime
+            defaultMode: 0444
+            items:
+              - key: api_proxy.py
+                path: api_proxy.py
+        - name: proxy-auth
+          secret:
+            secretName: {{ include "nemoclaw-openshell.proxyAuthSecretName" . }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.sre.proxy.authSecretRef.key | quote }}
+                path: token
+        - name: proxy-tls
+          secret:
+            secretName: {{ include "nemoclaw-openshell.proxyTlsSecretName" . }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.sre.proxy.tlsSecretRef.certKey | quote }}
+                path: tls.crt
+              - key: {{ .Values.sre.proxy.tlsSecretRef.privateKeyKey | quote }}
+                path: tls.key
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nemoclaw-openshell.modelDeleteProxyName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "nemoclaw-openshell.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: model-delete-proxy
+  ports:
+    - name: https
+      port: {{ .Values.sre.proxy.port }}
+      targetPort: https
+      protocol: TCP
+{{- end }}

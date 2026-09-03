@@ -1,0 +1,233 @@
+{{- if and .Values.lifecycle.seed.enabled (or (not .Release.IsUpgrade) .Values.lifecycle.seed.runOnUpgrade) }}
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- $seedSuffix := printf "-seed-%d" .Release.Revision }}
+{{- $seedPrefix := trunc (int (sub 63 (len $seedSuffix))) (include "nemoclaw-openshell.fullname" .) | trimSuffix "-" }}
+{{- $managedOpenShift := and .Values.platform.openshift.enabled (eq .Values.openshell.mode "managed") .Values.openshell.server.openshift.sandboxUid.enabled }}
+{{- $sandboxUid := 0 }}
+{{- if $managedOpenShift }}
+  {{- $sandboxUid = include "nemoclaw-openshell.openshiftSandboxUid" . | int }}
+{{- end }}
+{{- $sreBundleDigest := .Files.Get "files/sre-skills.tar.xz.sha256" | trim }}
+{{- $sreBundleManifestDigest := .Files.Get "files/sre-skills.manifest.sha256" | trim }}
+{{- $sreBundlePartsJson := .Files.Get "files/sre-skills.parts.json" | trim }}
+{{- $sreBundleParts := $sreBundlePartsJson | fromJson }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  # This Job is deliberately a normal Helm resource, not a post-install hook.
+  # Its Pod is the first consumer that allows WaitForFirstConsumer storage
+  # classes to bind the retained state PVC before Helm runs post-install hooks.
+  name: {{ printf "%s%s" $seedPrefix $seedSuffix }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+spec:
+  backoffLimit: {{ .Values.lifecycle.seed.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.lifecycle.seed.activeDeadlineSeconds }}
+  ttlSecondsAfterFinished: {{ .Values.lifecycle.seed.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "nemoclaw-openshell.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: state-seed
+      {{- if .Values.platform.openshift.enabled }}
+      annotations:
+        openshift.io/required-scc: restricted-v2
+      {{- end }}
+    spec:
+      # Preserve each failed attempt until the Job TTL expires so operators can
+      # read the exact seed error instead of losing it to container restarts.
+      restartPolicy: Never
+      serviceAccountName: {{ include "nemoclaw-openshell.lifecycleServiceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        {{- if $managedOpenShift }}
+        runAsUser: {{ $sandboxUid }}
+        runAsGroup: {{ $sandboxUid }}
+        # restricted-v2 supplies the namespace-approved fsGroup. OpenShift may
+        # admit only that default group even when another UID-range member is
+        # valid for runAsUser/runAsGroup.
+        {{- else if not .Values.platform.openshift.enabled }}
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.sre.enabled }}
+      initContainers:
+        - name: stage-sre-cli
+          image: {{ .Values.artifacts.utilityImage | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/python3", "-B", "/runtime/stage_sre_cli.py"]
+          env:
+            - name: OPENSHIFT_CLI_VERSION
+              value: {{ .Values.sre.cli.version | quote }}
+            - name: OPENSHIFT_CLI_AMD64_URL
+              value: {{ .Values.sre.cli.amd64.url | quote }}
+            - name: OPENSHIFT_CLI_AMD64_SHA256
+              value: {{ .Values.sre.cli.amd64.sha256 | quote }}
+            - name: OPENSHIFT_CLI_ARM64_URL
+              value: {{ .Values.sre.cli.arm64.url | quote }}
+            - name: OPENSHIFT_CLI_ARM64_SHA256
+              value: {{ .Values.sre.cli.arm64.sha256 | quote }}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 512Mi
+          volumeMounts:
+            - name: runtime
+              mountPath: /runtime
+              readOnly: true
+            - name: cli-staging
+              mountPath: /cli-staging
+      {{- end }}
+      containers:
+        - name: seed
+          image: {{ .Values.artifacts.utilityImage | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/python3", "-B", "/runtime/seed.py"]
+          env:
+            - name: RELEASE_ID
+              value: {{ printf "%s/%s" .Release.Namespace .Release.Name | quote }}
+            - name: RELEASE_REVISION
+              value: {{ .Release.Revision | quote }}
+            - name: SRE_ENABLED
+              value: {{ .Values.sre.enabled | quote }}
+            - name: OPENSHIFT_LLM_DEPLOY_ENABLED
+              value: {{ .Values.sre.openshiftLlmDeploy.enabled | quote }}
+            - name: MODEL_DELETE_ENABLED
+              value: {{ .Values.sre.openshiftLlmDeploy.deletion.enabled | quote }}
+            - name: METRICS_ENABLED
+              value: {{ .Values.sre.openshiftLlmDeploy.metrics.enabled | quote }}
+            - name: RELEASE_NAMESPACE
+              value: {{ ternary (include "nemoclaw-openshell.modelDeployNamespace" .) .Release.Namespace .Values.sre.openshiftLlmDeploy.enabled | quote }}
+            {{- if .Values.sre.enabled }}
+            - name: SRE_BUNDLE_SHA256
+              value: {{ $sreBundleDigest | quote }}
+            - name: SRE_BUNDLE_MANIFEST_SHA256
+              value: {{ $sreBundleManifestDigest | quote }}
+            - name: SRE_BUNDLE_PARTS_JSON
+              value: {{ $sreBundlePartsJson | quote }}
+            - name: SRE_PROXY_ENDPOINT
+              value: {{ printf "https://%s.%s.svc.cluster.local:%d" (include "nemoclaw-openshell.sreProxyName" .) .Release.Namespace (int .Values.sre.proxy.port) | quote }}
+            {{- end }}
+            {{- if .Values.sre.openshiftLlmDeploy.enabled }}
+            - name: DYNAMO_DEFAULTS_JSON
+              value: {{ .Values.sre.openshiftLlmDeploy.dynamo | toJson | quote }}
+            - name: HF_TOKEN_INTAKE_JSON
+              value: {{ dict
+                "enabled" false
+                "namespace" (include "nemoclaw-openshell.modelDeployNamespace" .)
+                "secretName" .Values.sre.openshiftLlmDeploy.hfTokenSecretRef.name
+                "secretKey" .Values.sre.openshiftLlmDeploy.hfTokenSecretRef.key
+                "deleteAfterDownload" false
+                "requireTokenForHuggingFaceModels" true
+                "modelRunnerServiceAccount" (include "nemoclaw-openshell.modelRunnerServiceAccountName" .)
+                | toJson | quote }}
+            {{- end }}
+            {{- if .Values.sre.openshiftLlmDeploy.deletion.enabled }}
+            - name: MODEL_DELETE_PROXY_ENDPOINT
+              value: {{ printf "https://%s.%s.svc.cluster.local:%d" (include "nemoclaw-openshell.modelDeleteProxyName" .) .Release.Namespace (int .Values.sre.proxy.port) | quote }}
+            - name: MODEL_DELETE_NAMESPACE
+              value: {{ .Values.sre.openshiftLlmDeploy.deletion.namespace | quote }}
+            {{- end }}
+            {{- if .Values.sre.openshiftLlmDeploy.metrics.enabled }}
+            - name: METRICS_PROXY_ENDPOINT
+              value: {{ printf "https://%s.%s.svc.cluster.local:%d" (include "nemoclaw-openshell.metricsProxyName" .) .Release.Namespace (int .Values.sre.proxy.port) | quote }}
+            - name: METRICS_NAMESPACE
+              value: {{ .Values.sre.openshiftLlmDeploy.metrics.namespace | quote }}
+            {{- end }}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: state
+              mountPath: /state
+            - name: runtime
+              mountPath: /runtime
+              readOnly: true
+            {{- if .Values.sre.enabled }}
+            - name: skills-bundle
+              mountPath: /skills-bundle
+              readOnly: true
+            - name: cli-staging
+              mountPath: /cli-staging
+              readOnly: true
+            {{- end }}
+            {{- if .Values.sre.enabled }}
+            - name: proxy-auth
+              mountPath: /proxy-auth
+              readOnly: true
+            - name: proxy-tls-ca
+              mountPath: /proxy-tls-ca
+              readOnly: true
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: {{ include "nemoclaw-openshell.stateClaimName" . }}
+        - name: runtime
+          configMap:
+            name: {{ include "nemoclaw-openshell.fullname" . }}-runtime
+            defaultMode: 0444
+            items:
+              - key: seed.py
+                path: seed.py
+              {{- if .Values.sre.enabled }}
+              - key: stage_sre_cli.py
+                path: stage_sre_cli.py
+              {{- end }}
+        {{- if .Values.sre.enabled }}
+        - name: skills-bundle
+          projected:
+            defaultMode: 0444
+            sources:
+              {{- range $index, $part := $sreBundleParts.parts }}
+              - configMap:
+                  name: {{ include "nemoclaw-openshell.sreSkillsPartName" (dict "root" $ "index" $index) }}
+                  items:
+                    - key: {{ $part.name }}
+                      path: {{ $part.name }}
+              {{- end }}
+        - name: cli-staging
+          emptyDir: {}
+        {{- end }}
+        {{- if .Values.sre.enabled }}
+        - name: proxy-auth
+          secret:
+            secretName: {{ include "nemoclaw-openshell.proxyAuthSecretName" . }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.sre.proxy.authSecretRef.key | quote }}
+                path: token
+        - name: proxy-tls-ca
+          secret:
+            secretName: {{ include "nemoclaw-openshell.proxyTlsSecretName" . }}
+            defaultMode: 0444
+            items:
+              - key: {{ .Values.sre.proxy.tlsSecretRef.caKey | quote }}
+                path: ca.crt
+        {{- end }}
+        - name: tmp
+          emptyDir: {}
+{{- end }}

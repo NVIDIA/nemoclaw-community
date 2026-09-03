@@ -1,0 +1,260 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img" aria-labelledby="title desc">
+  <title id="title">NemoClaw and Hermes on Kubernetes or OpenShift</title>
+  <desc id="desc">A simplified workflow showing an end user deploying the Helm chart, OpenShell running the NemoClaw-managed Hermes agent, remote inference, and an optional SRE connection to the cluster API.</desc>
+
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#030506"/>
+      <stop offset="0.55" stop-color="#0b0f11"/>
+      <stop offset="1" stop-color="#030405"/>
+    </linearGradient>
+    <radialGradient id="centerGlow" cx="52%" cy="43%" r="67%">
+      <stop offset="0" stop-color="#273035" stop-opacity="0.68"/>
+      <stop offset="0.58" stop-color="#101518" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="surface" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#20272b"/>
+      <stop offset="0.55" stop-color="#111619"/>
+      <stop offset="1" stop-color="#080b0d"/>
+    </linearGradient>
+    <linearGradient id="limeSurface" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#263616"/>
+      <stop offset="1" stop-color="#0d1408"/>
+    </linearGradient>
+    <linearGradient id="cyanSurface" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#12323b"/>
+      <stop offset="1" stop-color="#071419"/>
+    </linearGradient>
+    <linearGradient id="amberSurface" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#30270d"/>
+      <stop offset="1" stop-color="#151105"/>
+    </linearGradient>
+    <pattern id="dotGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.1" fill="#a6adb1" opacity="0.12"/>
+    </pattern>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="9" stdDeviation="10" flood-color="#000" flood-opacity="0.72"/>
+    </filter>
+    <filter id="limeGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="3.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="cyanGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrowLime" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0 0 L12 6 L0 12 Z" fill="#a6e22a"/>
+    </marker>
+    <marker id="arrowCyan" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0 0 L12 6 L0 12 Z" fill="#20d6ee"/>
+    </marker>
+    <style>
+      text { font-family: Inter, "Helvetica Neue", Arial, sans-serif; fill: #f5f7f8; }
+      .title { font-size: 52px; font-weight: 800; letter-spacing: 1.1px; }
+      .subtitle { font-size: 25px; font-weight: 600; fill: #a6e22a; }
+      .section { font-size: 25px; font-weight: 800; letter-spacing: .5px; }
+      .name { font-size: 27px; font-weight: 750; }
+      .body { font-size: 18px; font-weight: 550; fill: #c5ccd0; }
+      .small { font-size: 15px; font-weight: 550; fill: #adb6ba; }
+      .micro { font-size: 13px; font-weight: 650; fill: #aeb7bb; letter-spacing: .2px; }
+      .lime { fill: #a6e22a; }
+      .cyan { fill: #20d6ee; }
+      .amber { fill: #ffc23d; }
+      .lime-flow { fill: none; stroke: #a6e22a; stroke-width: 4; marker-end: url(#arrowLime); }
+      .cyan-flow { fill: none; stroke: #20d6ee; stroke-width: 4; marker-end: url(#arrowCyan); }
+      .dashed { stroke-dasharray: 10 8; }
+    </style>
+  </defs>
+
+  <rect width="1920" height="1080" fill="url(#background)"/>
+  <rect width="1920" height="1080" fill="url(#centerGlow)"/>
+  <rect width="1920" height="1080" fill="url(#dotGrid)" opacity="0.55"/>
+
+  <text x="960" y="64" text-anchor="middle" class="title">NEMOCLAW + HERMES</text>
+  <text x="960" y="104" text-anchor="middle" class="subtitle">One Helm chart for Kubernetes or OpenShift — optional SRE capabilities</text>
+
+  <!-- Platform selectors -->
+  <g transform="translate(735 126)">
+    <rect width="210" height="34" rx="17" fill="#17220c" stroke="#a6e22a"/>
+    <text x="105" y="23" text-anchor="middle" class="micro lime">KUBERNETES DEFAULT</text>
+  </g>
+  <g transform="translate(960 126)">
+    <rect width="225" height="34" rx="17" fill="#241012" stroke="#e7585f"/>
+    <text x="112.5" y="23" text-anchor="middle" class="micro" fill="#ff7d83">OPENSHIFT PROFILE</text>
+  </g>
+
+  <!-- Cluster boundary -->
+  <g filter="url(#shadow)">
+    <rect x="336" y="181" width="1228" height="617" rx="28" fill="#111619" fill-opacity="0.86" stroke="#707a7f" stroke-width="1.7"/>
+    <rect x="336" y="181" width="1228" height="617" rx="28" fill="url(#dotGrid)" opacity="0.78"/>
+  </g>
+  <text x="950" y="220" text-anchor="middle" class="section">KUBERNETES / OPENSHIFT CLUSTER</text>
+  <text x="950" y="247" text-anchor="middle" class="small">Helm automates seed/bootstrap; the pre-installed Agent Sandbox controller creates the pod.</text>
+
+  <!-- End user -->
+  <g transform="translate(42 280)" filter="url(#shadow)">
+    <rect width="255" height="330" rx="22" fill="url(#surface)" stroke="#a6e22a" stroke-width="2.2"/>
+    <circle cx="127.5" cy="70" r="37" fill="#16210c" stroke="#a6e22a" stroke-width="2.5"/>
+    <circle cx="127.5" cy="58" r="12" fill="none" stroke="#a6e22a" stroke-width="3"/>
+    <path d="M102 97 C106 78 149 78 153 97" fill="none" stroke="#a6e22a" stroke-width="3"/>
+    <text x="127.5" y="137" text-anchor="middle" class="section lime">END USER</text>
+
+    <rect x="25" y="164" width="205" height="57" rx="12" fill="#0d1308" stroke="#657174"/>
+    <path d="M43 184 l14-8 14 8 -14 8 z M43 184 v13 l14 8 14-8v-13" fill="none" stroke="#a6e22a" stroke-width="2"/>
+    <text x="84" y="188" class="body">Deploy</text>
+    <text x="84" y="208" class="small lime">helm install</text>
+
+    <rect x="25" y="235" width="205" height="57" rx="12" fill="#07171b" stroke="#657174"/>
+    <rect x="42" y="251" width="31" height="23" rx="3" fill="none" stroke="#20d6ee" stroke-width="2"/>
+    <path d="M49 258 l6 5 -6 5 M59 268 h9" fill="none" stroke="#20d6ee" stroke-width="2"/>
+    <text x="84" y="259" class="body">Connect</text>
+    <text x="84" y="279" class="small cyan">oc / kubectl attach</text>
+
+    <text x="127.5" y="317" text-anchor="middle" class="micro">No local OpenShell binary</text>
+  </g>
+
+  <!-- Helm chart -->
+  <g transform="translate(385 285)" filter="url(#shadow)">
+    <rect width="275" height="228" rx="20" fill="url(#limeSurface)" stroke="#a6e22a" stroke-width="2.2"/>
+    <path d="M39 52 l30-17 30 17 -30 17 z M39 52 v31 l30 17 30-17V52 M69 69 v31" fill="none" stroke="#a6e22a" stroke-width="3"/>
+    <text x="137.5" y="129" text-anchor="middle" class="name">Helm Chart</text>
+    <text x="137.5" y="160" text-anchor="middle" class="body">Runtime + seed/bootstrap</text>
+    <text x="137.5" y="186" text-anchor="middle" class="small">managed or existing gateway</text>
+    <text x="137.5" y="208" text-anchor="middle" class="small">client optional (managed only)</text>
+  </g>
+
+  <!-- OpenShell gateway -->
+  <g transform="translate(718 285)" filter="url(#shadow)">
+    <rect width="300" height="228" rx="20" fill="url(#limeSurface)" stroke="#a6e22a" stroke-width="2.2"/>
+    <rect x="105" y="35" width="90" height="68" rx="8" fill="#0b1107" stroke="#a6e22a" stroke-width="3"/>
+    <path d="M125 55 l14 13 -14 13 M149 81 h25" fill="none" stroke="#a6e22a" stroke-width="4"/>
+    <circle cx="188" cy="96" r="16" fill="#142008" stroke="#a6e22a" stroke-width="2"/>
+    <path d="M188 85 v22 M177 96 h22" stroke="#a6e22a" stroke-width="2"/>
+    <text x="150" y="137" text-anchor="middle" class="name">OpenShell Gateway</text>
+    <text x="150" y="168" text-anchor="middle" class="body">Policy and credentials</text>
+    <text x="150" y="193" text-anchor="middle" class="small">managed or existing gateway</text>
+    <text x="150" y="215" text-anchor="middle" class="small">creates and controls the Sandbox</text>
+  </g>
+
+  <!-- NemoClaw + Hermes Sandbox -->
+  <g transform="translate(1072 255)" filter="url(#limeGlow)">
+    <rect width="430" height="288" rx="25" fill="#081007" stroke="#a6e22a" stroke-width="3" stroke-dasharray="12 8"/>
+  </g>
+  <text x="1287" y="292" text-anchor="middle" class="micro lime">OPENSHELL-MANAGED SANDBOX</text>
+  <g transform="translate(1112 315)">
+    <rect width="350" height="174" rx="18" fill="url(#limeSurface)" stroke="#a6e22a" stroke-width="2"/>
+    <circle cx="175" cy="53" r="30" fill="#17250c" stroke="#a6e22a" stroke-width="2"/>
+    <circle cx="164" cy="43" r="5" fill="#a6e22a"/>
+    <circle cx="186" cy="43" r="5" fill="#a6e22a"/>
+    <circle cx="157" cy="58" r="5" fill="#a6e22a"/>
+    <circle cx="193" cy="58" r="5" fill="#a6e22a"/>
+    <path d="M163 67 q12 13 24 0 q-3-13-12-13t-12 13z" fill="#a6e22a"/>
+    <text x="175" y="108" text-anchor="middle" class="name">NemoClaw-managed</text>
+    <text x="175" y="139" text-anchor="middle" class="name">Hermes Agent</text>
+    <text x="175" y="163" text-anchor="middle" class="small">OpenShell supervisor + persistent state</text>
+  </g>
+  <text x="1287" y="520" text-anchor="middle" class="small">This is the agent users chat with</text>
+
+  <!-- Deployment and runtime paths -->
+  <path d="M297 472 C340 472 342 399 374 399" class="lime-flow"/>
+  <text x="334" y="433" text-anchor="middle" class="micro lime">helm install</text>
+
+  <path d="M660 337 C682 320 694 320 707 337" class="lime-flow dashed"/>
+  <text x="684" y="305" text-anchor="middle" class="micro lime">deploys + configures</text>
+
+  <path d="M297 544 C463 586 612 576 707 473" class="cyan-flow"/>
+  <text x="508" y="566" text-anchor="middle" class="micro cyan">chat/task via in-cluster client</text>
+
+  <path d="M1018 399 H1061" class="lime-flow"/>
+  <text x="1040" y="380" text-anchor="middle" class="micro lime">create + exec</text>
+
+  <!-- Remote LLM -->
+  <g transform="translate(1631 310)" filter="url(#shadow)">
+    <rect width="247" height="230" rx="22" fill="url(#cyanSurface)" stroke="#20d6ee" stroke-width="2.2"/>
+    <path d="M62 84 c-20 0-27-26-9-37 3-24 38-29 48-10 19-8 41 7 35 27 22 5 22 37-3 37H62c-18 0-19-17 0-17z" fill="#0b242b" stroke="#20d6ee" stroke-width="3"/>
+    <circle cx="87" cy="73" r="5" fill="#20d6ee"/>
+    <circle cx="108" cy="73" r="5" fill="#20d6ee"/>
+    <path d="M98 55 v36 M79 82 h38" stroke="#20d6ee" stroke-width="2" opacity=".9"/>
+    <text x="123.5" y="145" text-anchor="middle" class="name">Remote LLM</text>
+    <text x="123.5" y="177" text-anchor="middle" class="body">HTTPS model endpoint</text>
+    <text x="123.5" y="205" text-anchor="middle" class="small">Secret stays outside Hermes</text>
+  </g>
+  <path d="M1502 399 H1620" class="cyan-flow"/>
+  <text x="1560" y="378" text-anchor="middle" class="micro cyan">policy-controlled inference</text>
+
+  <!-- Optional SRE branch -->
+  <g filter="url(#cyanGlow)">
+    <rect x="550" y="608" width="930" height="163" rx="22" fill="#07161a" stroke="#20d6ee" stroke-width="2.5" stroke-dasharray="12 8"/>
+  </g>
+  <g transform="translate(578 624)">
+    <rect width="54" height="28" rx="14" fill="#11191c" stroke="#20d6ee"/>
+    <circle cx="15" cy="14" r="9" fill="#7f898d"/>
+    <text x="71" y="21" class="section cyan">OPTIONAL SRE</text>
+    <rect x="282" width="155" height="28" rx="14" fill="#08232a" stroke="#20d6ee"/>
+    <text x="359.5" y="20" text-anchor="middle" class="micro cyan">sre.enabled=true</text>
+  </g>
+  <text x="1448" y="646" text-anchor="end" class="micro cyan">OFF BY DEFAULT • SAME HERMES AGENT</text>
+
+  <g transform="translate(590 669)">
+    <rect width="210" height="65" rx="13" fill="url(#cyanSurface)" stroke="#20d6ee"/>
+    <path d="M18 28 l22-12 22 12 -22 12 z M18 28 v17 l22 12 22-12V28" fill="none" stroke="#20d6ee" stroke-width="2"/>
+    <text x="76" y="30" class="body">SRE Skills</text>
+    <text x="76" y="52" class="small">added to Hermes</text>
+  </g>
+
+  <g transform="translate(885 669)">
+    <rect width="250" height="65" rx="13" fill="url(#cyanSurface)" stroke="#20d6ee"/>
+    <path d="M20 20 h37 v30 h-37 z M28 29 h21 M28 39 h16" fill="none" stroke="#20d6ee" stroke-width="2"/>
+    <circle cx="53" cy="49" r="7" fill="#071419" stroke="#a6e22a" stroke-width="2"/>
+    <text x="72" y="28" class="body">Policy + RBAC</text>
+    <text x="72" y="51" class="body">API Proxy (HTTPS)</text>
+  </g>
+
+  <g transform="translate(1220 669)">
+    <rect width="215" height="65" rx="13" fill="url(#cyanSurface)" stroke="#20d6ee"/>
+    <circle cx="40" cy="32.5" r="20" fill="none" stroke="#20d6ee" stroke-width="2"/>
+    <path d="M40 14 v37 M22 32.5 h36 M27 20 l26 25 M53 20 L27 45" stroke="#20d6ee" stroke-width="1.5"/>
+    <text x="76" y="30" class="body">Cluster API</text>
+    <text x="76" y="52" class="small">Kubernetes / OpenShift</text>
+  </g>
+
+  <path d="M800 702 H874" class="cyan-flow"/>
+  <text x="837" y="684" text-anchor="middle" class="micro cyan">guarded call</text>
+  <path d="M1135 702 H1209" class="cyan-flow"/>
+  <path d="M1287 543 V606" class="cyan-flow dashed"/>
+
+  <text x="580" y="756" class="micro cyan">Safe: read-mostly + scaling; no Secrets, RBAC changes, exec/attach, or DELETE</text>
+  <text x="1448" y="756" text-anchor="end" class="micro amber">Separate opt-in: allowlisted model deletion</text>
+
+  <!-- Bottom guardrails -->
+  <g transform="translate(42 838)" filter="url(#shadow)">
+    <rect width="575" height="76" rx="16" fill="#11180d" stroke="#a6e22a"/>
+    <circle cx="38" cy="38" r="22" fill="#1a290c" stroke="#a6e22a" stroke-width="2"/>
+    <path d="M27 38 l8 8 15-19" fill="none" stroke="#a6e22a" stroke-width="3"/>
+    <text x="76" y="34" class="body lime">BUILDLESS DEPLOYMENT</text>
+    <text x="76" y="57" class="small">Official digest-pinned images • no custom build</text>
+  </g>
+
+  <g transform="translate(672 838)" filter="url(#shadow)">
+    <rect width="575" height="76" rx="16" fill="#07171b" stroke="#20d6ee"/>
+    <rect x="18" y="21" width="40" height="34" rx="6" fill="#081419" stroke="#20d6ee" stroke-width="2"/>
+    <path d="M27 21 v-7 a11 11 0 0 1 22 0 v7" fill="none" stroke="#20d6ee" stroke-width="2"/>
+    <circle cx="38" cy="38" r="4" fill="#20d6ee"/>
+    <text x="76" y="34" class="body cyan">SECRETS BY REFERENCE</text>
+    <text x="76" y="57" class="small">Model API key is never stored in Helm values</text>
+  </g>
+
+  <g transform="translate(1302 838)" filter="url(#shadow)">
+    <rect width="576" height="76" rx="16" fill="url(#amberSurface)" stroke="#ffc23d"/>
+    <path d="M18 18 h42 v27 c0 17-13 27-21 31-9-4-21-14-21-31z" fill="#2b2106" stroke="#ffc23d" stroke-width="2"/>
+    <path d="M28 40 l8 8 15-20" fill="none" stroke="#ffc23d" stroke-width="3"/>
+    <text x="76" y="34" class="body amber">SRE IS OPTIONAL</text>
+    <text x="76" y="57" class="small">No automatic cluster-admin or unrestricted delete</text>
+  </g>
+
+  <text x="960" y="968" text-anchor="middle" class="body">Simple workflow: deploy the chart, attach to Hermes, and enable SRE only when cluster operations are needed.</text>
+  <text x="960" y="1004" text-anchor="middle" class="small">OpenShift profile adds Sandbox SCC, identity/OIDC, and UID/GID settings; Kubernetes remains the default platform.</text>
+</svg>

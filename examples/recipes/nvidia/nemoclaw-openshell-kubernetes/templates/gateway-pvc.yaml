@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- $workload := default dict .Values.openshell.workload -}}
+{{- $workloadKind := default "statefulset" $workload.kind -}}
+{{- if and .Values.gatewayPersistence.enabled .Values.openshell.enabled (eq .Values.openshell.mode "managed") (eq $workloadKind "statefulset") }}
+{{- $root := . -}}
+{{- $storageClass := default .Values.persistence.storageClass .Values.gatewayPersistence.storageClass -}}
+{{- range $ordinal := until (int (default 1 .Values.openshell.replicaCount)) }}
+{{- if gt $ordinal 0 }}
+---
+{{- end }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ printf "openshell-data-%s-%d" (include "nemoclaw-openshell.gatewayName" $root) $ordinal | trunc 253 | trimSuffix "-" }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: openshell-database
+  {{- if $root.Values.gatewayPersistence.retainOnDelete }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
+spec:
+  accessModes:
+    {{- toYaml $root.Values.gatewayPersistence.accessModes | nindent 4 }}
+  {{- if $storageClass }}
+  storageClassName: {{ $storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $root.Values.gatewayPersistence.size }}
+{{- end }}
+{{- end }}

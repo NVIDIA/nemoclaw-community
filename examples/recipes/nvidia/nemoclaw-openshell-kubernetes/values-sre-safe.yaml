@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Optional read-mostly SRE skill. DELETE is denied by RBAC and the API proxy.
+sre:
+  enabled: true
+  rbac:
+    mode: safe

@@ -1,0 +1,120 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Sandbox policy for the Hermes Agent, synchronized from NemoClaw v0.0.117.
+# Principle: deny by default, allow only what is needed for core functionality.
+
+version: 1
+
+filesystem_policy:
+  include_workdir: true
+  read_only:
+    - /usr
+    - /lib
+    - /opt/hermes
+    - /proc
+    - /dev/urandom
+    - /app
+    - /run/nemoclaw/managed-startup-ca-bundle.pem
+    - /run/nemoclaw/managed-startup-runtime.env
+    - /var/lib/nemoclaw/runtime-state-mutation
+    - /etc
+    - /var/log
+    - /var/lib/dpkg
+  read_write:
+    - /sandbox
+    - /tmp
+    - /dev/null
+    - /dev/pts
+    - /run/nemoclaw/runtime-state-mutation-startup
+    - /sandbox/.hermes
+
+landlock:
+  compatibility: best_effort
+
+process:
+  run_as_user: sandbox
+  run_as_group: sandbox
+
+network_policies:
+  managed_inference:
+    name: managed_inference
+    endpoints:
+      - host: inference.local
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: POST, path: "/v1/chat/completions" }
+          - allow: { method: POST, path: "/v1/messages" }
+          - allow: { method: POST, path: "/v1/responses" }
+          - allow: { method: POST, path: "/v1/completions" }
+          - allow: { method: POST, path: "/v1/embeddings" }
+          - allow: { method: GET, path: "/v1/models" }
+          - allow: { method: GET, path: "/v1/models/**" }
+    binaries:
+      - { path: /usr/local/bin/hermes }
+      - { path: /usr/bin/python3.11 }
+      - { path: /opt/hermes/.venv/bin/python }
+
+  nvidia:
+    name: nvidia
+    endpoints:
+      - host: integrate.api.nvidia.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: POST, path: "/v1/chat/completions" }
+          - allow: { method: POST, path: "/v1/completions" }
+          - allow: { method: POST, path: "/v1/embeddings" }
+          - allow: { method: GET, path: "/v1/models" }
+          - allow: { method: GET, path: "/v1/models/**" }
+    binaries:
+      - { path: /usr/local/bin/hermes }
+      - { path: /usr/bin/python3* }
+      - { path: /opt/hermes/.venv/bin/python }
+
+  nous_research:
+    name: nous_research
+    endpoints:
+      - host: nousresearch.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/**" }
+          - allow: { method: POST, path: "/**" }
+      - host: hermes-agent.nousresearch.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/**" }
+          - allow: { method: POST, path: "/**" }
+    binaries:
+      - { path: /usr/local/bin/hermes }
+      - { path: /usr/bin/python3* }
+      - { path: /opt/hermes/.venv/bin/python }
+
+  pypi:
+    name: pypi
+    endpoints:
+      - host: pypi.org
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/**" }
+      - host: files.pythonhosted.org
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/**" }
+    binaries:
+      - { path: /usr/bin/curl }
+      - { path: /usr/local/bin/pip3 }
+      - { path: /usr/local/bin/curl }
+      - { path: /usr/bin/python3* }
+      - { path: /opt/hermes/.venv/bin/python }

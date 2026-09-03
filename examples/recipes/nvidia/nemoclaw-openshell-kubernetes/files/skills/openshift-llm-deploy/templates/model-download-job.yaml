@@ -1,0 +1,104 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# Render every ${...} placeholder before applying. This is an agent template,
+# not a ready-to-apply manifest. The downloader is the only model-serving
+# resource that receives HF_TOKEN. The referenced Secret is externally managed;
+# the Job cannot read it through the Kubernetes API or modify/delete it.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ${RELEASE}-model-cache
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/name: model-download
+    app.kubernetes.io/instance: ${RELEASE}
+    app.kubernetes.io/managed-by: hermes
+    app.kubernetes.io/component: inference
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: ${STORAGE_CLASS}
+  resources:
+    requests:
+      storage: ${PVC_SIZE}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${RELEASE}-model-download
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/name: model-download
+    app.kubernetes.io/instance: ${RELEASE}
+    app.kubernetes.io/managed-by: hermes
+    app.kubernetes.io/component: inference
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: ${DOWNLOAD_TIMEOUT_SECONDS}
+  ttlSecondsAfterFinished: 60
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: model-download
+        app.kubernetes.io/instance: ${RELEASE}
+        app.kubernetes.io/managed-by: hermes
+        app.kubernetes.io/component: inference
+    spec:
+      serviceAccountName: ${MODEL_RUNNER_SERVICE_ACCOUNT}
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      imagePullSecrets: ${DOWNLOAD_IMAGE_PULL_SECRETS}
+      nodeSelector:
+        kubernetes.io/hostname: ${NODE_NAME}
+      containers:
+        - name: model-download
+          image: ${DOWNLOAD_IMAGE}
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "-c"]
+          args:
+            - |
+              import json
+              import os
+              from pathlib import Path
+
+              from huggingface_hub import snapshot_download
+
+              model_id = os.environ["MODEL_ID"]
+              model_dir = Path("/models/model")
+              hf_token = os.environ.pop("HF_TOKEN", "")
+
+              download_error = None
+              try:
+                  snapshot_download(repo_id=model_id, local_dir=str(model_dir), token=hf_token)
+                  if not (model_dir / "config.json").is_file():
+                      raise RuntimeError("download completed without config.json")
+                  (model_dir / ".hermes-model-ready").write_text(json.dumps({"model": model_id}) + "\n", encoding="utf-8")
+                  print("MODEL_DOWNLOAD_RESULT=ready")
+              except Exception as exc:
+                  download_error = exc
+                  print(f"MODEL_DOWNLOAD_RESULT=failed:{type(exc).__name__}")
+              finally:
+                  hf_token = ""
+                  os.environ.pop("HF_TOKEN", None)
+              if download_error is not None:
+                  raise download_error
+          env:
+            - name: MODEL_ID
+              value: ${MODEL_ID}
+            - name: HF_HOME
+              value: /models
+            - name: HF_HUB_CACHE
+              value: /models/hub
+            - name: HF_HUB_DISABLE_TELEMETRY
+              value: "1"
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ${HF_SECRET_NAME}
+                  key: ${HF_SECRET_KEY}
+          volumeMounts:
+            - name: model-cache
+              mountPath: /models
+      volumes:
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: ${RELEASE}-model-cache

@@ -1,0 +1,43 @@
+THIRD-PARTY SOFTWARE NOTICES
+
+This Helm chart vendors and modifies the following third-party component.
+
+-------------------------------------------------------------------------------
+
+Project: NVIDIA OpenShell Helm chart
+Version: 0.0.116
+Source: https://github.com/NVIDIA/OpenShell
+OCI artifact: oci://ghcr.io/nvidia/openshell/helm-chart:0.0.116
+OCI manifest digest: sha256:df55cd1538bdfb7836834c30dfcf8373b85ffea83bbfd70d50dbe69407a0d2b3
+Upstream chart archive SHA-256: 323c490ea6be2ffe6bd2022f70b7aa205c45a53af009bd9549fd29bd41b49571
+License: Apache-2.0 (see LICENSE)
+
+The vendored chart differs from the upstream artifact only in these files:
+
+- Chart.yaml: SPDX attribution metadata.
+- templates/_gateway-workload.tpl: dedicated OpenShift gateway UID/GID.
+- templates/_helpers.tpl: OpenShift Sandbox UID/GID resolution and validation.
+- templates/gateway-config.yaml: resolved Sandbox UID/GID driver settings.
+- templates/route.yaml: license comments kept inside the Route feature gate.
+- values.yaml: OpenShift UID isolation and dual-CA configuration values.
+
+The recipe also references, but does not vendor, these immutable artifacts:
+
+- NVIDIA NemoClaw managed Hermes sandbox image (NemoClaw Apache-2.0 components;
+  Hermes Agent MIT): https://github.com/NVIDIA/NemoClaw and
+  https://github.com/NousResearch/hermes-agent
+- NVIDIA OpenShell CLI 0.0.116 (Apache-2.0):
+  https://github.com/NVIDIA/OpenShell
+- Python 3.13.7 slim utility image (Python Software Foundation License and
+  included Debian component licenses): https://hub.docker.com/_/python
+- OpenShift Client 4.20.28 archives containing oc and kubectl (Apache-2.0):
+  https://github.com/openshift/oc and
+  https://mirror.openshift.com/pub/openshift-v4/
+- NVIDIA Dynamo vLLM and TensorRT-LLM runtime images (Apache-2.0 and included
+  component licenses): https://github.com/ai-dynamo/dynamo and
+  https://github.com/NVIDIA/TensorRT-LLM
+- vLLM OpenAI server image (Apache-2.0 and included component licenses):
+  https://github.com/vllm-project/vllm
+
+The repository-root THIRD-PARTY-NOTICES records the same referenced projects
+for repository-level attribution and review.

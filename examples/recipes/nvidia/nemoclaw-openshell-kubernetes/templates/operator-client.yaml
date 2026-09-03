@@ -1,0 +1,206 @@
+{{- if .Values.operatorClient.enabled }}
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- $name := include "nemoclaw-openshell.operatorClientName" . -}}
+{{- $skills := list -}}
+{{- if .Values.sre.enabled -}}
+  {{- $skills = append $skills "kubernetes-sre" -}}
+{{- end -}}
+{{- if .Values.sre.openshiftLlmDeploy.enabled -}}
+  {{- $skills = append $skills "openshift-llm-deploy" -}}
+{{- end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "nemoclaw-openshell.operatorClientServiceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+    app.kubernetes.io/component: operator-client
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+    app.kubernetes.io/component: operator-client
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "nemoclaw-openshell.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: operator-client
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        {{- include "nemoclaw-openshell.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: operator-client
+      {{- if or .Values.platform.openshift.enabled .Values.operatorClient.podAnnotations }}
+      annotations:
+        {{- if .Values.platform.openshift.enabled }}
+        openshift.io/required-scc: restricted-v2
+        {{- end }}
+        {{- with .Values.operatorClient.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "nemoclaw-openshell.operatorClientServiceAccountName" . }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 5
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        {{- if not .Values.platform.openshift.enabled }}
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: stage-openshell-cli
+          image: {{ .Values.artifacts.utilityImage | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/python3", "-B", "/runtime/stage_cli.py"]
+          env:
+            - name: OPENSHELL_CLI_VERSION
+              value: {{ .Values.artifacts.openshellCli.version | quote }}
+            - name: OPENSHELL_CLI_AMD64_URL
+              value: {{ .Values.artifacts.openshellCli.amd64.url | quote }}
+            - name: OPENSHELL_CLI_AMD64_SHA256
+              value: {{ .Values.artifacts.openshellCli.amd64.sha256 | quote }}
+            - name: OPENSHELL_CLI_ARM64_URL
+              value: {{ .Values.artifacts.openshellCli.arm64.url | quote }}
+            - name: OPENSHELL_CLI_ARM64_SHA256
+              value: {{ .Values.artifacts.openshellCli.arm64.sha256 | quote }}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: runtime
+              mountPath: /runtime
+              readOnly: true
+            - name: tools
+              mountPath: /tools
+            - name: tmp
+              mountPath: /tmp
+      containers:
+        - name: hermes-chat
+          image: {{ .Values.artifacts.utilityImage | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/tools/hermes-chat"]
+          stdin: true
+          tty: true
+          env:
+            - name: HOME
+              value: /tmp
+            - name: XDG_CONFIG_HOME
+              value: /cli-config
+            - name: OPENSHELL_GATEWAY
+              value: {{ include "nemoclaw-openshell.gatewayName" . | quote }}
+            - name: OPENSHELL_GATEWAY_ENDPOINT
+              value: {{ include "nemoclaw-openshell.gatewayEndpoint" . | quote }}
+            - name: OPENSHELL_WORKSPACE
+              value: default
+            - name: OPENSHELL_SANDBOX_NAME
+              value: {{ include "nemoclaw-openshell.agentName" . | quote }}
+            - name: OPENSHELL_CLIENT_TLS_SOURCE
+              value: /client-tls
+            - name: OPENSHELL_SERVICE_ACCOUNT_TOKEN
+              value: /var/run/secrets/openshell-operator/token
+            - name: OPENSHELL_OIDC_ISSUER
+              value: {{ .Values.openshell.server.oidc.issuer | quote }}
+            - name: OPENSHELL_OIDC_AUDIENCE
+              value: {{ .Values.openshell.server.oidc.audience | quote }}
+            - name: OPENSHELL_OIDC_ADMIN_ROLE
+              value: {{ .Values.openshell.server.oidc.adminRole | quote }}
+            - name: OPENSHELL_OIDC_SUBJECT
+              value: {{ include "nemoclaw-openshell.operatorClientSubject" . | quote }}
+            - name: HERMES_SKILLS
+              value: {{ join "," $skills | quote }}
+          resources:
+            {{- toYaml .Values.operatorClient.resources | nindent 12 }}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tools
+              mountPath: /tools
+              readOnly: true
+            - name: runtime
+              mountPath: /tools/hermes-chat
+              subPath: operator_client.py
+              readOnly: true
+            - name: cli-config
+              mountPath: /cli-config
+            - name: client-tls
+              mountPath: /client-tls
+              readOnly: true
+            - name: operator-token
+              mountPath: /var/run/secrets/openshell-operator
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: runtime
+          configMap:
+            name: {{ include "nemoclaw-openshell.fullname" . }}-runtime
+            defaultMode: 0555
+            items:
+              - key: stage_cli.py
+                path: stage_cli.py
+              - key: operator_client.py
+                path: operator_client.py
+        - name: tools
+          emptyDir: {}
+        - name: cli-config
+          emptyDir: {}
+        - name: client-tls
+          secret:
+            secretName: {{ include "nemoclaw-openshell.clientTLSSecretName" . }}
+            defaultMode: 0400
+            items:
+              - key: ca.crt
+                path: ca.crt
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key
+        - name: operator-token
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  audience: {{ .Values.openshell.server.oidc.audience | quote }}
+                  expirationSeconds: {{ .Values.operatorClient.tokenExpirationSeconds }}
+                  path: token
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.operatorClient.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operatorClient.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operatorClient.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

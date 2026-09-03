@@ -1,0 +1,80 @@
+{{- if and .Values.networkPolicy.enabled .Values.sre.enabled }}
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "nemoclaw-openshell.sreProxyName" . }}-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: sre-proxy
+      {{- include "nemoclaw-openshell.selectorLabels" . | nindent 6 }}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            # Agent Sandbox controllers label realized Pods with this hash.
+            # OpenShell metadata labels remain on the Sandbox CR and are not
+            # guaranteed to propagate to the Pod. The proxy bearer token is
+            # still the authorization boundary after this network admission.
+            matchExpressions:
+              - key: agents.x-k8s.io/sandbox-name-hash
+                operator: Exists
+      ports:
+        - protocol: TCP
+          port: {{ .Values.sre.proxy.port }}
+{{- if .Values.sre.openshiftLlmDeploy.deletion.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "nemoclaw-openshell.modelDeleteProxyName" . }}-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: model-delete-proxy
+      {{- include "nemoclaw-openshell.selectorLabels" . | nindent 6 }}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: agents.x-k8s.io/sandbox-name-hash
+                operator: Exists
+      ports:
+        - protocol: TCP
+          port: {{ .Values.sre.proxy.port }}
+{{- end }}
+{{- if .Values.sre.openshiftLlmDeploy.metrics.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "nemoclaw-openshell.metricsProxyName" . }}-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: metrics-proxy
+      {{- include "nemoclaw-openshell.selectorLabels" . | nindent 6 }}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: agents.x-k8s.io/sandbox-name-hash
+                operator: Exists
+      ports:
+        - protocol: TCP
+          port: {{ .Values.sre.proxy.port }}
+{{- end }}
+{{- end }}

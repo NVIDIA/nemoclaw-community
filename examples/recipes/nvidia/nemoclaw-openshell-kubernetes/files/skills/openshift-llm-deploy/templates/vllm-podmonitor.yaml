@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# Render every ${...} placeholder before applying. This is an agent template,
+# not a ready-to-apply manifest.
+#
+# Makes OpenShift user-workload monitoring scrape standard vLLM model pods so
+# serving telemetry (queue depth, KV-cache usage, time-to-first-token,
+# tokens/sec, prefix cache hits) becomes queryable alongside DCGM GPU telemetry.
+# One PodMonitor covers every standard vLLM Deployment in the namespace.
+#
+# Requires enableUserWorkload: true in the cluster-monitoring-config ConfigMap.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: vllm-model-metrics
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/managed-by: hermes
+spec:
+  selector:
+    matchExpressions:
+      # Covers every standard vLLM deployment in the namespace rather than
+      # pinning a single release.
+      - key: app.kubernetes.io/name
+        operator: In
+        values: ["vllm"]
+  podMetricsEndpoints:
+    # vLLM serves /metrics on the same HTTP port (8000).
+    - port: http
+      path: /metrics
+      scheme: http
+      interval: 30s
+      scrapeTimeout: 10s

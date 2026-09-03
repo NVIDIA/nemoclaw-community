@@ -1,0 +1,561 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "imagePullSecrets": {"type": "array", "items": {"type": "object"}},
+    "platform": {
+      "type": "object",
+      "properties": {
+        "serviceAccountIssuerDiscovery": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "createPublicBinding": {"type": "boolean"},
+            "dangerousAcknowledgement": {"type": "string"}
+          },
+          "required": ["createPublicBinding", "dangerousAcknowledgement"]
+        },
+        "openshift": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "verifyApi": {"type": "boolean"},
+            "createPrivilegedSccBinding": {"type": "boolean"},
+            "dangerousAcknowledgement": {"type": "string"}
+          },
+          "required": ["enabled", "verifyApi", "createPrivilegedSccBinding"]
+        }
+      },
+      "required": ["serviceAccountIssuerDiscovery", "openshift"]
+    },
+    "agent": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": "object",
+          "properties": {
+            "multiarch": {
+              "type": "string",
+              "pattern": "^ghcr\\.io/nvidia/nemoclaw/hermes-sandbox@sha256:[a-f0-9]{64}$"
+            },
+            "pullPolicy": {"type": "string", "enum": ["IfNotPresent", "Always", "Never"]}
+          },
+          "required": ["multiarch", "pullPolicy"]
+        },
+        "model": {
+          "type": "object",
+          "properties": {
+            "providerName": {
+              "type": "string",
+              "pattern": "^(|[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)$",
+              "description": "Optional gateway-global provider name. Empty derives a namespace-scoped identity in existing-gateway mode."
+            },
+            "providerType": {"const": "openai"},
+            "name": {"type": "string", "minLength": 1, "maxLength": 256},
+            "baseUrl": {"type": "string", "pattern": "^https?://[^[:space:]]+$"},
+            "allowInsecureHttp": {"type": "boolean"},
+            "insecureHttpAcknowledgement": {"type": "string"},
+            "api": {"type": "string", "enum": ["openai-completions", "openai-responses", "anthropic-messages"]},
+            "contextWindow": {"type": "integer", "minimum": 64000},
+            "requestTimeoutSeconds": {"type": "integer", "minimum": 1, "maximum": 3600},
+            "verifyEndpoint": {"type": "boolean"},
+            "apiKeySecretRef": {
+              "type": "object",
+              "properties": {
+                "name": {"type": "string", "minLength": 1, "maxLength": 253},
+                "key": {"type": "string", "minLength": 1, "maxLength": 253}
+              },
+              "required": ["name", "key"]
+            }
+          },
+          "required": ["providerType", "name", "baseUrl", "allowInsecureHttp", "insecureHttpAcknowledgement", "api", "contextWindow", "requestTimeoutSeconds", "verifyEndpoint", "apiKeySecretRef"]
+        },
+        "env": {
+          "type": "object",
+          "propertyNames": {"pattern": "^[A-Z_][A-Z0-9_]*$"},
+          "additionalProperties": {"type": "string", "maxLength": 4096}
+        },
+        "sandbox": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^(|[a-z0-9]([-a-z0-9]{0,17}[a-z0-9])?)$",
+              "description": "Optional gateway-global sandbox name. Empty derives a namespace-scoped identity in existing-gateway mode."
+            },
+            "cpu": {"type": "string", "minLength": 1},
+            "memory": {"type": "string", "minLength": 1},
+            "runtimeClassName": {"type": "string"},
+            "nodeSelector": {"type": "object", "additionalProperties": {"type": "string"}},
+            "tolerations": {"type": "array", "items": {"type": "object"}},
+            "priorityClassName": {"type": "string"},
+            "resources": {"type": "object"}
+          },
+          "required": ["cpu", "memory", "resources"]
+        }
+      },
+      "required": ["image", "model", "env", "sandbox"]
+    },
+    "persistence": {
+      "type": "object",
+      "properties": {
+        "enabled": {"const": true},
+        "existingClaim": {"type": "string"},
+        "storageClass": {"type": "string"},
+        "accessModes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "enum": ["ReadWriteOnce", "ReadWriteMany", "ReadOnlyMany", "ReadWriteOncePod"]}
+        },
+        "size": {"type": "string", "pattern": "^[1-9][0-9]*(Mi|Gi|Ti)$"},
+        "retainOnDelete": {"type": "boolean"}
+      },
+      "required": ["enabled", "accessModes", "size", "retainOnDelete"]
+    },
+    "gatewayPersistence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "storageClass": {"type": "string"},
+        "accessModes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "enum": ["ReadWriteOnce", "ReadWriteMany", "ReadOnlyMany", "ReadWriteOncePod"]}
+        },
+        "size": {"type": "string", "pattern": "^[1-9][0-9]*(Mi|Gi|Ti)$"},
+        "retainOnDelete": {"type": "boolean"}
+      },
+      "required": ["enabled", "storageClass", "accessModes", "size", "retainOnDelete"]
+    },
+    "artifacts": {
+      "type": "object",
+      "properties": {
+        "utilityImage": {"type": "string", "pattern": "^.+@sha256:[a-f0-9]{64}$"},
+        "openshellCli": {
+          "type": "object",
+          "properties": {
+            "version": {"const": "0.0.116"},
+            "amd64": {"$ref": "#/definitions/download"},
+            "arm64": {"$ref": "#/definitions/download"}
+          },
+          "required": ["version", "amd64", "arm64"]
+        }
+      },
+      "required": ["utilityImage", "openshellCli"]
+    },
+    "lifecycle": {
+      "type": "object",
+      "properties": {
+        "serviceAccount": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "create": {"type": "boolean"},
+            "name": {"type": "string", "pattern": "^(|[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?)$"},
+            "annotations": {"type": "object", "additionalProperties": {"type": "string"}}
+          },
+          "required": ["create", "name", "annotations"]
+        },
+        "seed": {"$ref": "#/definitions/seedLifecycle"},
+        "bootstrap": {"$ref": "#/definitions/bootstrapLifecycle"},
+        "sanity": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "command": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+          },
+          "required": ["enabled", "command"]
+        }
+      },
+      "required": ["serviceAccount", "seed", "bootstrap", "sanity"]
+    },
+    "operatorClient": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "tokenExpirationSeconds": {"type": "integer", "minimum": 600, "maximum": 3600},
+        "podAnnotations": {"type": "object", "additionalProperties": {"type": "string"}},
+        "nodeSelector": {"type": "object", "additionalProperties": {"type": "string"}},
+        "tolerations": {"type": "array", "items": {"type": "object"}},
+        "affinity": {"type": "object"},
+        "resources": {
+          "type": "object",
+          "properties": {
+            "requests": {"type": "object"},
+            "limits": {"type": "object"}
+          },
+          "required": ["requests", "limits"]
+        }
+      },
+      "required": ["enabled", "tokenExpirationSeconds", "podAnnotations", "nodeSelector", "tolerations", "affinity", "resources"]
+    },
+    "sre": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "cli": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+            "amd64": {"$ref": "#/definitions/download"},
+            "arm64": {"$ref": "#/definitions/download"}
+          },
+          "required": ["version", "amd64", "arm64"]
+        },
+        "rbac": {
+          "type": "object",
+          "properties": {
+            "mode": {"type": "string", "enum": ["safe", "broad-no-delete"]},
+            "dangerousAcknowledgement": {"type": "string"}
+          },
+          "required": ["mode", "dangerousAcknowledgement"]
+        },
+        "proxy": {
+          "type": "object",
+          "properties": {
+            "port": {"type": "integer", "minimum": 1024, "maximum": 65535},
+            "authSecretRef": {
+              "type": "object",
+              "properties": {
+                "name": {"type": "string", "pattern": "^(|[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?)$"},
+                "key": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,253}$"}
+              },
+              "required": ["name", "key"]
+            },
+            "tlsSecretRef": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {"type": "string", "pattern": "^(|[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?)$"},
+                "caKey": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,253}$"},
+                "certKey": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,253}$"},
+                "privateKeyKey": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,253}$"}
+              },
+              "required": ["name", "caKey", "certKey", "privateKeyKey"]
+            },
+            "maxRequestBytes": {"type": "integer", "minimum": 1024, "maximum": 134217728},
+            "maxResponseBytes": {"type": "integer", "minimum": 1024, "maximum": 134217728},
+            "requestTimeoutSeconds": {"type": "integer", "minimum": 1, "maximum": 300}
+          },
+          "required": ["port", "authSecretRef", "tlsSecretRef", "maxRequestBytes", "maxResponseBytes", "requestTimeoutSeconds"]
+        },
+        "openshiftLlmDeploy": {
+          "type": "object",
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "targetNamespace": {
+              "type": "string",
+              "pattern": "^(|[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)$"
+            },
+            "modelRunnerServiceAccount": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "create": {"type": "boolean"},
+                "name": {
+                  "type": "string",
+                  "pattern": "^(|[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?)$"
+                }
+              },
+              "required": ["create", "name"]
+            },
+            "hfTokenSecretRef": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$"
+                },
+                "key": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,253}$"}
+              },
+              "required": ["name", "key"]
+            },
+            "metrics": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {"type": "boolean"},
+                "namespace": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
+                },
+                "service": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$"
+                },
+                "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+                "caConfigMapRef": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": {"type": "string", "pattern": "^(|[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?)$"},
+                    "key": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,253}$"}
+                  },
+                  "required": ["name", "key"]
+                }
+              },
+              "required": ["enabled", "namespace", "service", "port", "caConfigMapRef"]
+            },
+            "dynamo": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {"type": "boolean"},
+                "apiVersion": {"const": "nvidia.com/v1beta1"},
+                "vllmRuntimeImage": {
+                  "type": "string",
+                  "pattern": "^.+@sha256:[a-f0-9]{64}$"
+                },
+                "vllmRuntimeVersion": {
+                  "type": "string",
+                  "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([.-][A-Za-z0-9.-]+)?$"
+                },
+                "tensorrtllmRuntimeImage": {
+                  "type": "string",
+                  "pattern": "^.+@sha256:[a-f0-9]{64}$"
+                },
+                "tensorrtllmRuntimeVersion": {
+                  "type": "string",
+                  "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([.-][A-Za-z0-9.-]+)?$"
+                },
+                "standardVllmImage": {
+                  "type": "string",
+                  "pattern": "^.+@sha256:[a-f0-9]{64}$"
+                },
+                "modelRuntimeOverrides": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "standardVllmImage": {
+                        "type": "string",
+                        "pattern": "^.+@sha256:[a-f0-9]{64}$"
+                      },
+                      "dynamoVllmRuntimeImage": {
+                        "type": "string",
+                        "pattern": "^.+@sha256:[a-f0-9]{64}$"
+                      },
+                      "dynamoTrtllmRuntimeImage": {
+                        "type": "string",
+                        "pattern": "^.+@sha256:[a-f0-9]{64}$"
+                      },
+                      "dynamoRuntimeVersionOverride": {
+                        "type": "string",
+                        "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([.-][A-Za-z0-9.-]+)?$"
+                      }
+                    }
+                  }
+                },
+                "observationTimeoutSeconds": {"type": "integer", "minimum": 30, "maximum": 3600},
+                "downloadObservationTimeoutSeconds": {"type": "integer", "minimum": 30, "maximum": 3600},
+                "downloadTimeoutSeconds": {"type": "integer", "minimum": 300, "maximum": 86400},
+                "verificationTimeoutSeconds": {"type": "integer", "minimum": 30, "maximum": 3600},
+                "terminalTimeoutSeconds": {"type": "integer", "minimum": 60, "maximum": 7200},
+                "imagePullSecretName": {
+                  "type": "string",
+                  "pattern": "^(|[a-z0-9]([-a-z0-9.]{0,61}[a-z0-9])?)$"
+                }
+              },
+              "required": [
+                "enabled",
+                "apiVersion",
+                "vllmRuntimeImage",
+                "vllmRuntimeVersion",
+                "tensorrtllmRuntimeImage",
+                "tensorrtllmRuntimeVersion",
+                "standardVllmImage",
+                "modelRuntimeOverrides",
+                "observationTimeoutSeconds",
+                "downloadObservationTimeoutSeconds",
+                "downloadTimeoutSeconds",
+                "verificationTimeoutSeconds",
+                "terminalTimeoutSeconds",
+                "imagePullSecretName"
+              ]
+            },
+            "deletion": {
+              "type": "object",
+              "properties": {
+                "enabled": {"type": "boolean"},
+                "namespace": {"type": "string", "pattern": "^(|[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)$"},
+                "deletePVCs": {"type": "boolean"},
+                "deleteSecrets": {"type": "boolean", "const": false},
+                "allowedResources": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "apiGroup": {"type": "string", "pattern": "^(|[a-z0-9]([-a-z0-9.]*[a-z0-9])?)$"},
+                      "resource": {
+                        "type": "string",
+                        "enum": ["dynamographdeployments", "inferenceservices", "servingruntimes", "nimservices", "nimcaches", "nimpipelines", "deployments", "statefulsets", "replicasets", "jobs", "services", "configmaps", "persistentvolumeclaims", "routes", "ingresses"]
+                      },
+                      "name": {"type": "string", "pattern": "^[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$"}
+                    },
+                    "required": ["apiGroup", "resource", "name"]
+                  }
+                },
+                "dangerousAcknowledgement": {"type": "string"}
+              },
+              "required": ["enabled", "namespace", "deletePVCs", "deleteSecrets", "allowedResources", "dangerousAcknowledgement"]
+            }
+          },
+          "required": [
+            "enabled",
+            "targetNamespace",
+            "modelRunnerServiceAccount",
+            "hfTokenSecretRef",
+            "metrics",
+            "dynamo",
+            "deletion"
+          ]
+        }
+      },
+      "required": ["enabled", "cli", "rbac", "proxy", "openshiftLlmDeploy"]
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": {"enabled": {"type": "boolean"}},
+      "required": ["enabled"]
+    },
+    "openshell": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "mode": {"type": "string", "enum": ["managed", "existing"]},
+        "existing": {
+          "type": "object",
+          "properties": {
+            "endpoint": {"type": "string", "pattern": "^(|https://[^[:space:]]+)$"},
+            "name": {"type": "string", "minLength": 1},
+            "clientTLSSecretName": {"type": "string", "minLength": 1}
+          }
+        },
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": {"const": "ghcr.io/nvidia/openshell/gateway"},
+            "tag": {"const": "0.0.116@sha256:05cf77bbb022a739aed6f22daa0e7e164415f4ab273b5f84319e46d91eb8f645"}
+          }
+        },
+        "supervisor": {
+          "type": "object",
+          "properties": {
+            "topology": {"const": "combined"},
+            "sideloadMethod": {"const": "init-container"},
+            "image": {
+              "type": "object",
+              "properties": {
+                "repository": {"const": "ghcr.io/nvidia/openshell/supervisor"},
+                "tag": {"const": "0.0.116@sha256:c8c42aef16c200063e32cbf72e553e4ead027085427b555efafd95063ecead42"}
+              }
+            }
+          }
+        },
+        "podSecurityContext": {"type": "object", "properties": {"fsGroup": {"type": ["integer", "null"]}}},
+        "securityContext": {
+          "type": "object",
+          "properties": {
+            "runAsUser": {"type": ["integer", "null"]},
+            "seccompProfile": {
+              "type": "object",
+              "properties": {"type": {"const": "RuntimeDefault"}},
+              "required": ["type"]
+            }
+          }
+        },
+        "server": {
+          "type": "object",
+          "properties": {
+            "openshift": {
+              "type": "object",
+              "properties": {
+                "gatewayUid": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {"type": "boolean"},
+                    "offset": {"type": "integer", "minimum": 1},
+                    "value": {"type": ["integer", "null"], "minimum": 1}
+                  },
+                  "required": ["enabled", "offset"]
+                },
+                "sandboxUid": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {"type": "boolean"},
+                    "offset": {"type": "integer", "minimum": 1},
+                    "value": {"type": ["integer", "null"], "minimum": 1}
+                  },
+                  "required": ["enabled", "offset"]
+                }
+              },
+              "required": ["gatewayUid", "sandboxUid"]
+            }
+          }
+        }
+      },
+      "required": ["enabled", "mode", "existing", "image", "supervisor", "podSecurityContext", "securityContext"]
+    }
+  },
+  "required": ["platform", "agent", "persistence", "gatewayPersistence", "artifacts", "lifecycle", "operatorClient", "sre", "networkPolicy", "openshell"],
+  "definitions": {
+    "download": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": {"type": "string", "pattern": "^https://"},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      },
+      "required": ["url", "sha256"]
+    },
+    "jobLifecycle": {
+      "type": "object",
+      "properties": {
+        "enabled": {"const": true},
+        "backoffLimit": {"type": "integer", "minimum": 0, "maximum": 10},
+        "activeDeadlineSeconds": {"type": "integer", "minimum": 60, "maximum": 3600},
+        "ttlSecondsAfterFinished": {"type": "integer", "minimum": 0}
+      },
+      "required": ["enabled", "backoffLimit", "activeDeadlineSeconds", "ttlSecondsAfterFinished"]
+    },
+    "seedLifecycle": {
+      "type": "object",
+      "properties": {
+        "enabled": {"const": true},
+        "runOnUpgrade": {"type": "boolean"},
+        "dangerousAcknowledgement": {"type": "string"},
+        "backoffLimit": {"type": "integer", "minimum": 0, "maximum": 10},
+        "activeDeadlineSeconds": {"type": "integer", "minimum": 60, "maximum": 3600},
+        "ttlSecondsAfterFinished": {"type": "integer", "minimum": 0}
+      },
+      "required": ["enabled", "runOnUpgrade", "dangerousAcknowledgement", "backoffLimit", "activeDeadlineSeconds", "ttlSecondsAfterFinished"]
+    },
+    "bootstrapLifecycle": {
+      "type": "object",
+      "properties": {
+        "enabled": {"const": true},
+        "backoffLimit": {"type": "integer", "minimum": 0, "maximum": 10},
+        "activeDeadlineSeconds": {"type": "integer", "minimum": 60, "maximum": 3600},
+        "ttlSecondsAfterFinished": {"type": "integer", "minimum": 0},
+        "authentication": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {"type": "string", "enum": ["serviceAccountToken", "clientTLS"]},
+            "tokenExpirationSeconds": {"type": "integer", "minimum": 600, "maximum": 3600}
+          },
+          "required": ["mode", "tokenExpirationSeconds"]
+        }
+      },
+      "required": ["enabled", "backoffLimit", "activeDeadlineSeconds", "ttlSecondsAfterFinished", "authentication"]
+    }
+  }
+}

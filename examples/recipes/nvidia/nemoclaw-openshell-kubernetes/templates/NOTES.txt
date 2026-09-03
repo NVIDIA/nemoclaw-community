@@ -1,0 +1,40 @@
+NemoClaw Hermes is configured through OpenShell.
+
+Platform: {{ ternary "OpenShift" "Kubernetes" .Values.platform.openshift.enabled }}
+Sandbox: {{ include "nemoclaw-openshell.agentName" . }}
+Immutable agent image: {{ .Values.agent.image.multiarch }}
+
+Inspect:
+  openshell sandbox get {{ include "nemoclaw-openshell.agentName" . }}
+{{- if .Values.operatorClient.enabled }}
+
+Start an actual Hermes chat without installing OpenShell locally:
+  {{ ternary "oc" "kubectl" .Values.platform.openshift.enabled }} -n {{ .Release.Namespace }} attach -it statefulset/{{ include "nemoclaw-openshell.operatorClientName" . }} -c hermes-chat
+
+The caller needs pods/get and pods/attach, but not pods/exec. The chart does not
+create an end-user RoleBinding.
+Assign this client to one trusted operator only. Do not share one client among
+mutually untrusted users; deploy separate release/client identities instead.
+{{- else }}
+
+In-cluster chat client: disabled (set operatorClient.enabled=true)
+{{- end }}
+
+The chart intentionally does not render a Sandbox object and does not delete the
+sandbox or retained Hermes PVC during uninstall. Use OpenShell for reviewed
+sandbox lifecycle operations.
+{{- if .Values.sre.enabled }}
+
+SRE mode: {{ .Values.sre.rbac.mode }} (DELETE denied)
+Safe mode writes are limited to Deployment/StatefulSet scale subresources.
+Proxy access requires the chart-managed sandbox bearer token.
+Verified SRE skill bundle: enabled
+{{- if .Values.sre.openshiftLlmDeploy.enabled }}
+OpenShift/Kubernetes LLM deployment skill: enabled (external Secret reference only)
+{{- end }}
+{{- end }}
+{{- if not .Values.platform.openshift.enabled }}
+
+The operator must ensure the Sandbox namespace's admission policy permits the
+OpenShell combined supervisor; the chart does not modify namespace PSA labels.
+{{- end }}
