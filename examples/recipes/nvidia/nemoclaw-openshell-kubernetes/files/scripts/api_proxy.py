@@ -25,6 +25,25 @@ DEFAULT_TLS_PRIVATE_KEY = Path("/proxy-tls/tls.key")
 ALLOWED_PATH_ROOTS = ("/api", "/apis", "/version", "/healthz", "/livez", "/readyz")
 
 
+def decoded_path_segment(raw_segment: str) -> str:
+    """Fully decode one bounded segment while forbidding structural changes."""
+    decoded = raw_segment
+    for _ in range(8):
+        expanded = unquote(decoded)
+        if expanded == decoded:
+            break
+        decoded = expanded
+    else:
+        raise ValueError("over-encoded path segment is forbidden")
+    if decoded in {".", ".."}:
+        raise ValueError("dot path segments are forbidden")
+    if "/" in decoded or "\\" in decoded:
+        raise ValueError("encoded path separators are forbidden")
+    if any(ord(character) < 0x20 or ord(character) == 0x7F for character in decoded):
+        raise ValueError("control characters in path segments are forbidden")
+    return decoded
+
+
 def read_bounded(path: Path, maximum: int = 4096) -> str:
     """Read a small token file without accepting empty or oversized content."""
     data = path.read_bytes()
@@ -57,9 +76,8 @@ def validate_request_target(raw_target: str) -> str:
         raise ValueError("request target must be an absolute Kubernetes API path")
     if parsed.path.startswith("//"):
         raise ValueError("network-path references are forbidden")
-    decoded_segments = unquote(parsed.path).split("/")
-    if any(segment in {".", ".."} for segment in decoded_segments):
-        raise ValueError("dot path segments are forbidden")
+    for raw_segment in parsed.path.split("/"):
+        decoded_path_segment(raw_segment)
     if not any(parsed.path == root or parsed.path.startswith(f"{root}/") for root in ALLOWED_PATH_ROOTS):
         raise ValueError("request target is outside the Kubernetes API")
     return urlunsplit(("", "", parsed.path, parsed.query, ""))
@@ -69,7 +87,7 @@ def resource_target(
     target: str,
 ) -> tuple[str, str | None, str, str | None, str | None, tuple[str, ...]] | None:
     """Return API resource identity and any path below its subresource."""
-    parts = [unquote(part) for part in urlsplit(target).path.split("/") if part]
+    parts = [decoded_path_segment(part) for part in urlsplit(target).path.split("/") if part]
     if len(parts) >= 2 and parts[0] == "api":
         api_group = ""
         cursor = 2
@@ -78,6 +96,12 @@ def resource_target(
         cursor = 3
     else:
         return None
+    # Kubernetes still accepts the legacy watch URL form where `watch`
+    # appears between the API version and the resource path. Normalize it
+    # before applying the resource/subresource deny rules so it cannot shift
+    # `secrets`, service-account tokens, or pod exec into the name position.
+    if cursor < len(parts) and parts[cursor] == "watch":
+        cursor += 1
     if cursor >= len(parts):
         return None
     namespace = None
@@ -114,6 +138,10 @@ def exact_delete_allowlist() -> set[tuple[str, str, str]]:
 
 def request_allowed(target: str, method: str, policy: str) -> bool:
     """Enforce proxy-specific restrictions beyond Kubernetes RBAC."""
+    try:
+        target = validate_request_target(target)
+    except ValueError:
+        return False
     parsed = resource_target(target)
     method = method.upper()
     if policy == "exact-service-proxy":

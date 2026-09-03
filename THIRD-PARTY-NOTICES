@@ -15,6 +15,10 @@ Image: python:3.12-slim
 License: Python Software Foundation License and Debian component licenses
 URL: https://hub.docker.com/_/python
 
+Image: python:3.13.7-slim
+License: Python Software Foundation License and Debian component licenses
+URL: https://hub.docker.com/_/python
+
 Image: python:3.11-slim
 License: Python Software Foundation License and Debian component licenses
 URL: https://hub.docker.com/_/python
@@ -30,6 +34,18 @@ URL: https://github.com/astral-sh/uv
 Image: vllm/vllm-openai
 License: Apache-2.0 and included component licenses
 URL: https://github.com/vllm-project/vllm
+
+Image: nvcr.io/nvidia/ai-dynamo/vllm-runtime
+License: Apache-2.0 and included component licenses
+URL: https://github.com/ai-dynamo/dynamo
+
+Image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime
+License: Apache-2.0 and included component licenses
+URL: https://github.com/ai-dynamo/dynamo
+
+Project: NVIDIA TensorRT-LLM (included in the Dynamo TensorRT-LLM runtime)
+License: Apache-2.0 and included component licenses
+URL: https://github.com/NVIDIA/TensorRT-LLM
 
 Image: node:22-bookworm-slim
 License: MIT and included Debian component licenses
@@ -436,6 +452,12 @@ URL: https://github.com/kubernetes-sigs/agent-sandbox
 Project: Kubernetes and kubectl
 License: Apache-2.0
 URL: https://github.com/kubernetes/kubernetes
+
+Project: OpenShift Client (oc and the accompanying kubectl binary)
+Version: 4.20.28
+License: Apache-2.0
+URL: https://github.com/openshift/oc
+Release archives: https://mirror.openshift.com/pub/openshift-v4/
 
 Project: Helm
 License: Apache-2.0

@@ -1,8 +1,9 @@
 # Metrics query reference
 
-The SRE runtime queries monitoring through the Kubernetes API service proxy.
-It never accepts a monitoring bearer token, disables TLS verification, or
-opens a local port-forward.
+The SRE runtime sends direct Prometheus query paths to the chart's dedicated
+metrics proxy. That proxy owns the fixed upstream Service identity and never
+accepts a monitoring bearer token, disables TLS verification, or opens a local
+port-forward.
 
 Use `scripts/query-metrics.sh --query '<promql>'` for OpenShift's
 `openshift-monitoring/thanos-querier`. Standard Kubernetes clusters need a

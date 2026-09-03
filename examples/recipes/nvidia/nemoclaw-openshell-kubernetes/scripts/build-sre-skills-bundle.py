@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Build the reviewed SRE/DevOps skill bundle reproducibly."""
+"""Build the focused, first-party SRE skill bundle reproducibly."""
 
 from __future__ import annotations
 
@@ -14,22 +14,14 @@ from pathlib import Path, PurePosixPath
 import tarfile
 
 
-ALLOWED_ROOTS = frozenset(
-    {"devops", "infrastructure", "kubernetes-sre", "openshift-llm-deploy"}
-)
+ALLOWED_ROOTS = frozenset({"kubernetes-sre", "openshift-llm-deploy"})
 REQUIRED_FILES = frozenset(
     {
-        "devops/SKILL.md",
-        "infrastructure/SKILL.md",
-        "infrastructure/sre/SKILL.md",
         "kubernetes-sre/SKILL.md",
         "openshift-llm-deploy/SKILL.md",
     }
 )
-EXCLUDED_PREFIXES = (
-    "devops/automation/manage-skills/",
-    "infrastructure/openshift/",
-)
+EXCLUDED_PREFIXES: tuple[str, ...] = ()
 RUNTIME_SUPPORT_DIRECTORIES = frozenset(
     {"scripts", "templates", "tools", "workflows", "resources"}
 )

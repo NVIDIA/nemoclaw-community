@@ -200,13 +200,11 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "image": {
-              "type": "string",
-              "pattern": "^quay\\.io/openshift/origin-cli@sha256:[a-f0-9]{64}$"
-            },
-            "pullPolicy": {"type": "string", "enum": ["IfNotPresent", "Always", "Never"]}
+            "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+            "amd64": {"$ref": "#/definitions/download"},
+            "arm64": {"$ref": "#/definitions/download"}
           },
-          "required": ["image", "pullPolicy"]
+          "required": ["version", "amd64", "arm64"]
         },
         "rbac": {
           "type": "object",
@@ -511,6 +509,7 @@
   "definitions": {
     "download": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "url": {"type": "string", "pattern": "^https://"},
         "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}

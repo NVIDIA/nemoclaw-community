@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 # Apply a DynamoGraphDeployment, surface a bounded diagnosis on failure, and
 # fall back to standard vLLM only after a confirmed Dynamo incompatibility or
 # runtime failure. A long model download remains a pending state, not a failure.

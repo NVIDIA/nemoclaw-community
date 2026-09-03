@@ -6,7 +6,7 @@
 {{- if .Values.sre.enabled -}}
   {{- $skills = append $skills "kubernetes-sre" -}}
 {{- end -}}
-{{- if .Values.sre.openshiftLlmDeploy.deletion.enabled -}}
+{{- if .Values.sre.openshiftLlmDeploy.enabled -}}
   {{- $skills = append $skills "openshift-llm-deploy" -}}
 {{- end }}
 apiVersion: v1

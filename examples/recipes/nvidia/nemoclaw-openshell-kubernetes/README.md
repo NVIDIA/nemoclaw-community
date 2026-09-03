@@ -1,8 +1,57 @@
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+
 # NemoClaw OpenShell Kubernetes
 
-A buildless Helm recipe that runs the official NemoClaw-managed Hermes image through the official OpenShell gateway on Kubernetes or OpenShift. It does not include Hermes WebUI, SkillSpector, or NemoClaw recipe delivery.
+| Catalog field | Value |
+| --- | --- |
+| Description | Deploys a buildless NemoClaw-managed Hermes agent behind OpenShell on Kubernetes or OpenShift, with in-cluster chat and optional policy-bounded SRE skills. |
+| Industry | ✨ Other |
+| Requirements | Kubernetes 1.33+ or OpenShift 4.20+ · Helm 3.14+ · Agent Sandbox controller · RWO StorageClass · model API-key Secret · privileged sandbox admission |
+| NemoClaw | v0.0.117 |
+| Harness | Hermes 0.19.0 |
+| OpenShell | 0.0.116 |
+| Reviewed | 2026-09-03 |
+| Upstream | https://github.com/NVIDIA/NemoClaw |
+
+A buildless Helm recipe that runs the official NemoClaw-managed Hermes image
+through the official OpenShell gateway on Kubernetes or OpenShift. It does not
+include Hermes WebUI, SkillSpector, or NemoClaw recipe delivery.
+
+## Screenshot
+
+![Sanitized local Helm validation showing the chart checks passing](docs/images/nemoclaw-openshell-kubernetes-validation.png)
+
+This sanitized terminal capture shows the chart's reproducible local validation
+result. The exact commands and searchable expected output are preserved in
+[Verification](#verification).
+
+## Architecture
 
 ![NemoClaw OpenShell Kubernetes architecture](docs/images/nemoclaw-openshell-kubernetes-architecture.png)
+
+The end user attaches to the in-cluster client with `kubectl` or `oc`; OpenShell
+creates and confines the NemoClaw-managed Hermes Sandbox. The Kubernetes SRE
+skill and its policy-bounded API proxy are absent unless explicitly enabled.
+
+## At A Glance
+
+| Question | Answer |
+| --- | --- |
+| Category | NVIDIA Recipe |
+| Contributor or provenance | NVIDIA |
+| Use this when | A Kubernetes or OpenShift operator wants a NemoClaw-managed Hermes agent without building an image or installing a local chat client. |
+| You will get | An OpenShell gateway, a sandboxed Hermes agent, optional in-cluster chat, and optional policy-bounded SRE skills. |
+| Runs on | Kubernetes 1.33+ or OpenShift 4.20+ with an Agent Sandbox controller and a ReadWriteOnce StorageClass. |
+| Requires | Helm 3.14+, privileged sandbox admission, and a pre-created model API-key Secret. |
+| Verified on | OpenShift 4.20.28 on amd64 with Kubernetes 1.33.12 and Agent Sandbox controller 0.1.0. SRE-enabled and disabled modes were deployed live. Standard Kubernetes was rendered and tested only. |
+| Evidence level | Live end-to-end for OpenShift; local/static for standard Kubernetes. |
+| Support and maturity | Experimental Kubernetes deployment path with best-effort community support. See the repository [support policy](../../../../SUPPORT.md). |
+| External access, data, and actions | Pulls pinned images from public registries and downloads checksum-pinned OpenShell and OpenShift CLI archives. Sends prompts to the configured model endpoint and may incur provider cost. Installation creates workloads, RBAC, NetworkPolicies, and retained PVCs. Optional SRE modes add cluster reads, scaling, or explicitly allowlisted model deletion. |
+| Start here | [Prerequisites](#prerequisites) |
+| Confirm success | [Verification](#verification) |
 
 ## Pinned release inputs
 
@@ -10,9 +59,16 @@ A buildless Helm recipe that runs the official NemoClaw-managed Hermes image thr
 - OpenShell chart and CLI: `v0.0.116`; the dependency is vendored with narrow
   OpenShift dual-CA and UID-isolation template fixes, while gateway and
   supervisor images remain official immutable multi-architecture index digests
+- OpenShift Client: `4.20.28`; official amd64 and arm64 archives are selected
+  by node architecture and verified against pinned SHA-256 checksums
 - Helper image: immutable multi-architecture Python digest; the chart builds no proxy or bootstrap image
 
 No Dockerfile or image build is part of installation.
+
+For a cluster outside the documented client-version skew, override
+`sre.cli.version` plus both architecture URLs and checksums together with the
+matching official OpenShift Client release. The chart never accepts an
+unverified archive.
 
 Hermes `0.21.0` is the newer standalone upstream release, but the latest
 published NemoClaw-managed Hermes image remains `v0.0.117` with Hermes `0.19.0`.
@@ -169,36 +225,28 @@ upstream StatefulSet and is retained by default.
 
 ## Existing OpenShell gateway
 
-Use `values-existing-gateway.yaml`, set the real HTTPS endpoint/name, and pre-create the referenced client mTLS Secret (`ca.crt`, `tls.crt`, `tls.key`) in the release namespace. Managed and existing modes are mutually exclusive. The default sandbox and model-provider names include a namespace/release identity hash so multiple namespaces can safely share one gateway. Any explicit `agent.sandbox.name` or `agent.model.providerName` override must remain globally unique within that gateway; bootstrap verifies sandbox ownership before mutating provider configuration.
+Use `values-existing-gateway.yaml`, set the real HTTPS endpoint/name, and pre-create the referenced client mTLS Secret (`ca.crt`, `tls.crt`, `tls.key`) in the release namespace. Managed and existing modes are mutually exclusive. The default sandbox and model-provider names include a namespace/release identity hash so multiple namespaces can safely share one gateway. Any explicit `agent.sandbox.name` or `agent.model.providerName` override must remain globally unique within that gateway. If a provider already exists but no matching chart-owned sandbox proves ownership, bootstrap fails closed and requires operator review instead of changing that provider.
 
 ## Optional SRE skill
 
 The default has no SRE skill, Kubernetes API proxy, or SRE RBAC. Enable the safe profile with `-f values-sre-safe.yaml`.
 
-Every reviewed `devops`, `infrastructure`, and `kubernetes-sre` skill
-entrypoint is shipped with executable scripts, templates, workflows, tools, and
-runtime resources as one deterministic xz/tar bundle split into size-bounded
-ConfigMap chunks. Auxiliary upstream documentation and examples are retained in
-Git for review but omitted from the release archive so Helm's release record
-stays safely below Kubernetes' object-size limit.
-The optional hardened `openshift-llm-deploy` tree is carried in the same bundle
-but installed only when its value is enabled. Each chunk, the reconstructed
-archive, its manifest, and every payload have SHA-256 verification. Resources
-render only when `sre.enabled=true`; the seed Job reassembles the chunks in
-memory, rejects links, traversal, unexpected roots, binary/cache artifacts, and
-digest mismatches, then stages the selected trees on the retained state volume.
+The chart ships two focused, NVIDIA-authored skill trees: `kubernetes-sre` and
+the separately enabled `openshift-llm-deploy`. They are packaged as one
+deterministic xz/tar bundle split into size-bounded ConfigMap chunks. The broad
+third-party DevOps and infrastructure corpus is deliberately not distributed
+by this chart; it requires separate source, license, and runtime review.
+
+Each chunk, the reconstructed archive, its manifest, and every payload have
+SHA-256 verification. Resources render only when `sre.enabled=true`; the seed
+Job reassembles the chunks in memory, rejects links, traversal, unexpected
+roots, binary/cache artifacts, and digest mismatches, then stages the selected
+trees on the retained state volume.
 Mounted skills, proxy credential, kubeconfig, and bundled `oc`/`kubectl`
 clients are narrow read-only subpaths below the official image's existing
 `.hermes` directory. The chart never replaces that protected directory or
 builds a custom image.
-
-The legacy chart's functional `devops` and `infrastructure` libraries are
-included. Its `misc` tree and the host-level `manage-skills` prompt are
-deliberately excluded because they contain the deferred SkillSpector workflow
-or dynamic skill management. The obsolete nested OpenShift model skill is
-replaced by the chart-local hardened `openshift-llm-deploy` copy. Decorative
-binary assets and cache/VCS artifacts are not runtime skill inputs. The bundle
-builder injects the same cluster-safety contract into every packaged
+The bundle builder injects the same cluster-safety contract into every packaged
 `SKILL.md`; the source files remain reviewable and unmodified by packaging.
 
 Safe mode can read common non-secret cluster resources and patch/update only
@@ -226,8 +274,9 @@ OpenShell `tls: skip`, preserving end-to-end private-CA TLS rather than allowing
 OpenShell to replace the serving certificate. OpenShell still enforces exact
 host, port, and binary policy; the authenticated chart proxies enforce the
 allowed HTTP methods and resource paths, and NetworkPolicy limits the Sandbox
-to those proxy workloads. The CLI binaries remain immutable files copied from
-the digest-pinned public OpenShift CLI image.
+to those proxy workloads. The CLI binaries remain immutable files extracted
+from the official architecture-specific OpenShift Client archive only after
+SHA-256 verification.
 
 `sre.rbac.mode=broad-no-delete` is a high-risk opt-in and requires `I_ACKNOWLEDGE_CLUSTER_WIDE_NO_DELETE`. It grants create/update/patch across API resources but still excludes all direct delete verbs and proxy DELETE requests. The proxy additionally rejects Secret, ServiceAccount-token, exec, attach, port-forward, pod-proxy, and node-proxy paths. This mode can still cause outages or indirect privilege escalation without DELETE; it is not recommended for production.
 
@@ -290,7 +339,7 @@ sre:
           name: my-model
 ```
 
-## Lifecycle and verification
+## Lifecycle
 
 The Hermes state PVC is retained by default. A sandbox created through the
 OpenShell API is intentionally not a Helm-owned manifest, so `helm uninstall`
@@ -300,7 +349,22 @@ mode. An upgrade fails closed when an existing Sandbox has a different image or
 configuration identity; inspect persisted state and explicitly recreate that
 Sandbox through OpenShell before retrying.
 
-Offline checks:
+## Verification
+
+**Evidence level:** live end-to-end for the OpenShift path; local/static for
+standard Kubernetes.
+
+The completed OpenShift evaluation exercised both configurations:
+
+- With SRE enabled, all chart workloads became Ready with zero restarts.
+  Hermes returned `SRE_AGENT_OK`; allowed cluster and metrics reads succeeded,
+  while Secret access and DELETE were denied.
+- After a fresh installation with SRE disabled, all chart workloads became
+  Ready with zero restarts. Hermes returned `HERMES_NO_SRE_FINAL_OK`; SRE
+  skills, kubeconfigs, proxies, and RBAC were absent, and the external model
+  Secret was preserved.
+
+Run the local/static checks from this chart directory:
 
 ```bash
 helm lint . --set openshell.agentSandbox.preflight.enabled=false
@@ -311,6 +375,7 @@ helm lint . -f values-openshift.yaml \
   --set openshell.agentSandbox.preflight.enabled=false
 python3 -m unittest tests/test_chart.py
 python3 scripts/build-sre-skills-bundle.py
+python3 ../../../../scripts/check_license_headers.py --check
 helm template test . --api-versions agents.x-k8s.io/v1alpha1 >/tmp/rendered.yaml
 helm template test . -f values-openshift.yaml \
   --set openshell.server.openshift.gatewayUid.value=1001200001 \
@@ -318,6 +383,22 @@ helm template test . -f values-openshift.yaml \
   --api-versions agents.x-k8s.io/v1alpha1 \
   --api-versions security.openshift.io/v1 >/tmp/rendered-openshift.yaml
 ```
+
+**Expected result:**
+
+```text
+All 703 checked source files have SPDX headers.
+Ran 93 tests
+OK
+```
+
+**This verifies:** chart schema and rendering for both platform profiles,
+deterministic SRE-bundle integrity, policy/RBAC guardrails, package contents,
+and the documented OpenShift evaluation workflow.
+
+**This does not verify:** a live standard Kubernetes deployment,
+existing-gateway mode, broad-no-delete mode, namespace-scoped model deletion,
+production scale, or availability.
 
 Rebuild the bundle only after reviewing the allowlisted source trees. The
 builder requires the core skill entrypoints; includes every nested `SKILL.md`
@@ -333,3 +414,46 @@ with `lifecycle.seed.runOnUpgrade=true` and
 `lifecycle.seed.dangerousAcknowledgement=I_ACKNOWLEDGE_SANDBOX_STOPPED`. The
 bundle digest is part of the Sandbox configuration identity so a stale running
 Sandbox cannot be presented as using the new skill bundle.
+
+## Teardown
+
+Deleting the Sandbox destroys its active Hermes sessions. Inspect the exact
+name first, then perform this reviewed lifecycle action before uninstalling the
+release:
+
+```bash
+openshell sandbox get <sandbox-name>
+openshell sandbox delete <sandbox-name>
+helm uninstall nemoclaw-hermes --namespace nemoclaw-hermes
+```
+
+The Hermes workspace and gateway PVCs are retained by default. Inventory and
+back up their contents before separately deleting any retained claim; the chart
+does not remove them automatically.
+
+## Known Limitations
+
+- The OpenShell Kubernetes path is experimental and requires privileged
+  Sandbox admission prepared by the cluster operator.
+- OpenShift requires the explicit `values-openshift.yaml` profile; platform
+  auto-detection is intentionally disabled.
+- The in-cluster attach client is for one trusted operator. Use separate
+  releases for mutually untrusted users.
+- The attach client is supported only with the chart-managed gateway.
+- Standard Kubernetes has local/static render coverage but has not been
+  exercised live by this contribution.
+- `broad-no-delete` can still cause outages or indirect privilege escalation
+  and is not recommended for production.
+
+## Provenance and Support
+
+This NVIDIA-authored recipe adapts the official NemoClaw, Hermes, and OpenShell
+release artifacts without building custom images. It is experimental and
+provided with best-effort community support under the repository
+[support policy](../../../../SUPPORT.md).
+
+## Third-Party Dependencies
+
+See this chart's [third-party notices](THIRD-PARTY-NOTICES) and the repository
+[third-party notices](../../../../THIRD-PARTY-NOTICES) for upstream licenses,
+versions, immutable artifacts, and local modifications.

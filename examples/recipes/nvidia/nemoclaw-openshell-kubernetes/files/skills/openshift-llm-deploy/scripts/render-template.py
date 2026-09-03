@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 """Render the tightly-scoped model-serving templates without shell escaping."""
 
 from __future__ import annotations
@@ -6,12 +8,23 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shlex
 import tempfile
 from pathlib import Path
 
 
 PLACEHOLDER = re.compile(r"\$\{([A-Z][A-Z0-9_]*)\}")
 KEY = re.compile(r"^[A-Z][A-Z0-9_]*$")
+MULTILINE_VALUES = {
+    "NODE_SELECTOR_BLOCK": re.compile(
+        r"^nodeSelector:\n        kubernetes\.io/hostname: [a-z0-9](?:[-a-z0-9.]{0,251}[a-z0-9])?$"
+    ),
+    "VLLM_ARGS": re.compile(
+        r'^- --tensor-parallel-size\n            - "[1-9][0-9]*"\n'
+        r'            - --trust-remote-code\n'
+        r'            - --max-model-len\n            - "[1-9][0-9]*"$'
+    ),
+}
 
 
 def parse_assignment(value: str) -> tuple[str, str]:
@@ -22,6 +35,22 @@ def parse_assignment(value: str) -> tuple[str, str]:
         raise argparse.ArgumentTypeError(f"invalid placeholder key: {key}")
     if "\x00" in replacement:
         raise argparse.ArgumentTypeError(f"replacement for {key} contains NUL")
+    if "\r" in replacement or "\n" in replacement:
+        validator = MULTILINE_VALUES.get(key)
+        if validator is None or validator.fullmatch(replacement) is None:
+            raise argparse.ArgumentTypeError(
+                f"replacement for {key} contains an invalid line break"
+            )
+    if key == "TRTLLM_ENGINE_ARGS":
+        if len(replacement) > 4096:
+            raise argparse.ArgumentTypeError("TRTLLM_ENGINE_ARGS exceeds 4096 bytes")
+        try:
+            arguments = shlex.split(replacement, posix=True)
+        except ValueError as error:
+            raise argparse.ArgumentTypeError("invalid TRTLLM_ENGINE_ARGS quoting") from error
+        if not arguments or len(arguments) > 128 or any(len(argument) > 1024 for argument in arguments):
+            raise argparse.ArgumentTypeError("invalid TRTLLM_ENGINE_ARGS argument count or size")
+        replacement = shlex.join(arguments)
     return key, replacement
 
 

@@ -1,6 +1,7 @@
 {{- if .Values.openshiftRoute.enabled }}
 # SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+# Modified for this recipe: keep this metadata inside the Route feature gate.
 
 {{- if .Values.server.disableTls }}
 {{- fail "openshiftRoute.enabled=true requires TLS (server.disableTls must be false) \u2014 a passthrough Route forwards encrypted traffic by SNI, so the gateway must terminate its own TLS." }}

@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 # Verify an OpenAI-compatible endpoint through the Kubernetes Service proxy.
 # This works with the chart's bounded HTTP API proxy and needs no streaming tunnel.
 set -eu

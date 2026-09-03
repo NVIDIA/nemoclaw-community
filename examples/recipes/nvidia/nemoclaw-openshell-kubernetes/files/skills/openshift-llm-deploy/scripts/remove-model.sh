@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 # Inventory through the general no-delete proxy. Destructive calls use only the
 # separate namespace-scoped proxy and exact operator-approved resource names.
 set -eu

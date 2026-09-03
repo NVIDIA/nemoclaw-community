@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Modified for this recipe: validate and resolve a dedicated OpenShift Sandbox UID/GID.
 {{/*
 Expand the name of the chart.
 */}}

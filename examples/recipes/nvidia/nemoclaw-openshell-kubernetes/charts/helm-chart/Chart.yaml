@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Modified for this recipe: preserve license metadata in the vendored chart.
 apiVersion: v2
 appVersion: 0.0.116
 description: runtime environment for autonomous agents

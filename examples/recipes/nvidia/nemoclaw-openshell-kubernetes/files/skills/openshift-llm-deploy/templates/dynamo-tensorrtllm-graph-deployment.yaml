@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 # Render every ${...} placeholder before applying. TensorRT-LLM requires a
 # model-specific, upstream-validated engine configuration path; do not use
 # this template for an arbitrary Hugging Face model.

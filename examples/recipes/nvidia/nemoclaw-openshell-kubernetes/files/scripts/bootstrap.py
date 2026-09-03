@@ -230,11 +230,38 @@ def wait_for_gateway() -> None:
     raise SystemExit(f"OpenShell gateway was not ready: {last_error}")
 
 
-def reconcile_provider() -> None:
+def reports_not_found(result: subprocess.CompletedProcess[str]) -> bool:
+    """Recognize only explicit CLI not-found responses, never generic failures."""
+    output = f"{result.stdout}\n{result.stderr}".lower()
+    return any(
+        marker in output
+        for marker in ("not found", "not_found", "does not exist", "code: notfound")
+    )
+
+
+def inspect_provider(existing_sandbox: bool) -> bool:
+    """Return provider existence only when this release can safely own it."""
     name = CONFIG["model"]["providerName"]
-    common = ["--credential", "OPENAI_API_KEY", "--config", f"OPENAI_BASE_URL={CONFIG['model']['baseUrl']}"]
     existing = run(["provider", "get", name], check=False, capture=True)
     if existing.returncode == 0:
+        if not existing_sandbox:
+            raise SystemExit(
+                f"provider {name} already exists but this release has no owned sandbox; "
+                "refusing to mutate a provider whose ownership cannot be proven; "
+                "an interrupted first install may require an administrator to remove "
+                "this exact orphaned provider before retrying"
+            )
+        return True
+    if reports_not_found(existing):
+        return False
+    output = f"{existing.stdout}\n{existing.stderr}".strip()
+    raise SystemExit(f"failed to determine provider ownership safely: {output[-1000:]}")
+
+
+def reconcile_provider(provider_exists: bool) -> None:
+    name = CONFIG["model"]["providerName"]
+    common = ["--credential", "OPENAI_API_KEY", "--config", f"OPENAI_BASE_URL={CONFIG['model']['baseUrl']}"]
+    if provider_exists:
         run(["provider", "update", name, *common])
     else:
         run(["provider", "create", "--name", name, "--type", CONFIG["model"]["providerType"], *common])
@@ -290,7 +317,10 @@ def reconcile_operator_client_member() -> None:
 def verify_existing_sandbox() -> bool:
     result = run(["sandbox", "get", CONFIG["sandboxName"], "--output", "json"], check=False, capture=True)
     if result.returncode != 0:
-        return False
+        if reports_not_found(result):
+            return False
+        output = f"{result.stdout}\n{result.stderr}".strip()
+        raise SystemExit(f"failed to determine sandbox ownership safely: {output[-1000:]}")
     detail = json.loads(result.stdout)
     labels = detail.get("labels") or {}
     required = CONFIG["labels"]
@@ -373,11 +403,18 @@ def main() -> None:
     # Ownership is checked before provider mutation so an accidental explicit
     # name collision on a shared gateway fails without changing another
     # release's inference configuration.
-    reconcile_provider()
-    reconcile_operator_client_member()
+    provider_exists = inspect_provider(existing_sandbox)
+    # Reconcile the release-scoped provider before creating a missing Sandbox.
+    # If another tenant creates the provider after inspection, the create
+    # command fails before this release has created a Sandbox. If Sandbox
+    # creation later fails, retries deliberately stop on the orphaned provider
+    # and require explicit administrator cleanup rather than claiming it based
+    # only on the presence of a same-named Sandbox.
+    reconcile_provider(provider_exists)
     if not existing_sandbox:
         create_sandbox()
         print(f"created sandbox {CONFIG['sandboxName']} from immutable image {CONFIG['agentImage']}")
+    reconcile_operator_client_member()
 
 
 if __name__ == "__main__":

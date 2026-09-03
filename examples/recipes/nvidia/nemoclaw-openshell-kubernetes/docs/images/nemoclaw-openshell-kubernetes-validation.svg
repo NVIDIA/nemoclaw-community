@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="900" viewBox="0 0 900 900" role="img" aria-labelledby="title description">
+  <title id="title">NemoClaw OpenShell Kubernetes local validation</title>
+  <desc id="description">Sanitized terminal capture showing Helm lint and 93 chart tests passing.</desc>
+  <rect width="900" height="900" fill="#08111f"/>
+  <rect x="38" y="38" width="824" height="824" rx="18" fill="#0d1b2b" stroke="#41546b" stroke-width="2"/>
+  <rect x="38" y="38" width="824" height="62" rx="18" fill="#17283b"/>
+  <rect x="38" y="82" width="824" height="18" fill="#17283b"/>
+  <circle cx="70" cy="69" r="8" fill="#ff6b6b"/>
+  <circle cx="96" cy="69" r="8" fill="#ffd166"/>
+  <circle cx="122" cy="69" r="8" fill="#59d98e"/>
+  <text x="170" y="76" fill="#d6e4f2" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17">nemoclaw-openshell-kubernetes · local/static validation</text>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16">
+    <text x="68" y="144" fill="#59d98e">$</text>
+    <text x="90" y="144" fill="#f4f7fb">helm lint . \</text>
+    <text x="90" y="174" fill="#f4f7fb">--set openshell.agentSandbox.preflight.enabled=false</text>
+    <text x="68" y="214" fill="#b9c9d9">==&gt; Linting .</text>
+    <text x="68" y="244" fill="#8fb3d9">[INFO] Chart.yaml: icon is recommended</text>
+    <text x="68" y="282" fill="#59d98e">1 chart(s) linted, 0 chart(s) failed</text>
+
+    <text x="68" y="340" fill="#59d98e">$</text>
+    <text x="90" y="340" fill="#f4f7fb">python3 -m unittest tests/test_chart.py</text>
+    <text x="68" y="378" fill="#8fb3d9" font-size="12">.......................................................................................</text>
+    <text x="68" y="406" fill="#8fb3d9">----------------------------------------------------------------------</text>
+    <text x="68" y="444" fill="#f4f7fb">Ran 93 tests in 6.241s</text>
+    <text x="68" y="482" fill="#59d98e">OK</text>
+
+    <text x="68" y="540" fill="#59d98e">$</text>
+    <text x="90" y="540" fill="#f4f7fb">helm package . --destination /private/tmp</text>
+    <text x="68" y="578" fill="#b9c9d9">Successfully packaged chart</text>
+    <text x="68" y="616" fill="#59d98e">Package size: 132887 bytes</text>
+
+    <text x="68" y="684" fill="#59d98e">PASS</text>
+    <text x="122" y="684" fill="#f4f7fb">Helm · tests · package-content boundary</text>
+  </g>
+
+  <line x1="68" y1="756" x2="832" y2="756" stroke="#31455b" stroke-width="2"/>
+  <text x="68" y="798" fill="#70879d" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14">Sanitized capture · 2026-09-03</text>
+  <text x="68" y="824" fill="#70879d" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="14">No credentials or cluster identifiers</text>
+</svg>

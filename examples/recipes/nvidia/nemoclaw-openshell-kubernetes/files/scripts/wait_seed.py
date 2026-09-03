@@ -29,7 +29,10 @@ def main() -> None:
                 raise SystemExit("invalid chart ownership marker JSON") from error
             if marker.get("schema") != 1 or marker.get("release") != expected_release:
                 raise SystemExit("PVC is owned by another Helm release")
-            if marker.get("revision") == expected_revision:
+            status = marker.get("status", "ready")
+            if status not in {"seeding", "ready"}:
+                raise SystemExit("invalid chart ownership marker status")
+            if marker.get("revision") == expected_revision and status == "ready":
                 print(f"seed Job completed for Helm revision {expected_revision}")
                 return
         time.sleep(2)

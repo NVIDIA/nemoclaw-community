@@ -38,19 +38,14 @@ MAX_BUNDLE_PARTS = 16
 MAX_MEMBER_BYTES = 2_097_152
 MAX_EXPANDED_BYTES = 8_388_608
 MAX_ARCHIVE_MEMBERS = 1025
-ALLOWED_SRE_BUNDLE_ROOTS = frozenset(
-    {"devops", "infrastructure", "kubernetes-sre", "openshift-llm-deploy"}
-)
+ALLOWED_SRE_BUNDLE_ROOTS = frozenset({"kubernetes-sre", "openshift-llm-deploy"})
 REQUIRED_SRE_BUNDLE_FILES = frozenset(
     {
-        "devops/SKILL.md",
-        "infrastructure/SKILL.md",
-        "infrastructure/sre/SKILL.md",
         "kubernetes-sre/SKILL.md",
         "openshift-llm-deploy/SKILL.md",
     }
 )
-EXCLUDED_SRE_BUNDLE_PREFIXES = ("infrastructure/openshift/",)
+EXCLUDED_SRE_BUNDLE_PREFIXES: tuple[str, ...] = ()
 
 
 def checked_directory(path: Path) -> None:
@@ -78,6 +73,8 @@ def existing_owner() -> dict[str, object] | None:
     data = json.loads(MARKER.read_text(encoding="utf-8"))
     if data.get("schema") != 1 or data.get("release") != RELEASE:
         raise SystemExit("PVC is owned by another Helm release")
+    if data.get("status", "ready") not in {"seeding", "ready"}:
+        raise SystemExit("invalid chart ownership marker status")
     return data
 
 
@@ -100,15 +97,42 @@ def atomic_write(destination: Path, payload: bytes, mode: int) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def write_owner_marker() -> None:
+def write_owner_marker(status: str = "ready") -> None:
+    if status not in {"seeding", "ready"}:
+        raise ValueError("invalid ownership marker status")
     payload = (
         json.dumps(
-            {"schema": 1, "release": RELEASE, "revision": RELEASE_REVISION},
+            {
+                "schema": 1,
+                "release": RELEASE,
+                "revision": RELEASE_REVISION,
+                "status": status,
+            },
             sort_keys=True,
         )
         + "\n"
     ).encode("utf-8")
     atomic_write(MARKER, payload, 0o644)
+
+
+def claim_state_for_reconciliation() -> None:
+    """Establish retry-safe ownership without adopting pre-existing content."""
+    if existing_owner() is None:
+        managed_paths = (
+            *(STATE / "hermes" / "skills" / name for name in ALLOWED_SRE_BUNDLE_ROOTS),
+            *(STATE / "hermes" / "skills" / name for name in ("devops", "infrastructure")),
+            STATE / "hermes" / "bin",
+            PROXY_TOKEN_DESTINATION,
+            SRE_KUBECONFIG_DESTINATION,
+            MODEL_DELETE_KUBECONFIG_DESTINATION,
+            METRICS_KUBECONFIG_DESTINATION,
+        )
+        occupied = next((path for path in managed_paths if path.exists() or path.is_symlink()), None)
+        if occupied is not None:
+            raise SystemExit(f"refusing to replace unowned chart path: {occupied}")
+    # A pending marker lets the same release recover after any later mutation,
+    # while wait_seed.py refuses to treat this revision as complete.
+    write_owner_marker("seeding")
 
 
 def safe_member_name(name: str) -> bool:
@@ -421,10 +445,11 @@ def reconcile_sre_skills(
             target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             target.write_bytes(payload)
             target.chmod(0o555 if "/scripts/" in f"/{name}" else 0o444)
-        destinations = {
-            name: skills_root / name
-            for name in ("devops", "infrastructure", "kubernetes-sre")
-        }
+        # Remove skill trees shipped by pre-merge chart revisions. They are no
+        # longer part of the reviewed bundle and must not survive an upgrade.
+        for legacy_skill in ("devops", "infrastructure"):
+            replace_owned_directory(None, skills_root / legacy_skill)
+        destinations = {"kubernetes-sre": skills_root / "kubernetes-sre"}
         model_destination = skills_root / "openshift-llm-deploy"
         for name, destination in destinations.items():
             replace_owned_directory(staging / name, destination)
@@ -638,7 +663,7 @@ def main() -> None:
     checked_directory(STATE / "hermes")
     checked_directory(STATE / "hermes" / "skills")
     checked_directory(STATE / "workspace")
-    existing_owner()
+    claim_state_for_reconciliation()
     sre_enabled = os.environ.get("SRE_ENABLED") == "true"
     model_skill_enabled = os.environ.get("OPENSHIFT_LLM_DEPLOY_ENABLED") == "true"
     model_delete_enabled = os.environ.get("MODEL_DELETE_ENABLED") == "true"
@@ -662,7 +687,7 @@ def main() -> None:
         proxy_token,
         proxy_ca,
     )
-    write_owner_marker()
+    write_owner_marker("ready")
     print("seeded chart-owned Hermes state")
 
 

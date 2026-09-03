@@ -1,4 +1,6 @@
 {{- if and .Values.lifecycle.seed.enabled (or (not .Release.IsUpgrade) .Values.lifecycle.seed.runOnUpgrade) }}
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 {{- $seedSuffix := printf "-seed-%d" .Release.Revision }}
 {{- $seedPrefix := trunc (int (sub 63 (len $seedSuffix))) (include "nemoclaw-openshell.fullname" .) | trimSuffix "-" }}
 {{- $managedOpenShift := and .Values.platform.openshift.enabled (eq .Values.openshell.mode "managed") .Values.openshell.server.openshift.sandboxUid.enabled }}
@@ -10,8 +12,6 @@
 {{- $sreBundleManifestDigest := .Files.Get "files/sre-skills.manifest.sha256" | trim }}
 {{- $sreBundlePartsJson := .Files.Get "files/sre-skills.parts.json" | trim }}
 {{- $sreBundleParts := $sreBundlePartsJson | fromJson }}
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -62,20 +62,20 @@ spec:
       {{- if .Values.sre.enabled }}
       initContainers:
         - name: stage-sre-cli
-          image: {{ .Values.sre.cli.image | quote }}
-          imagePullPolicy: {{ .Values.sre.cli.pullPolicy }}
-          command: ["/bin/sh", "-ec"]
-          args:
-            - |
-              oc_path="$(command -v oc)"
-              kubectl_path="$(command -v kubectl || true)"
-              test -n "$oc_path" && test -x "$oc_path"
-              if [ -z "$kubectl_path" ]; then
-                kubectl_path="$oc_path"
-              fi
-              cp -L "$oc_path" /cli-staging/oc
-              cp -L "$kubectl_path" /cli-staging/kubectl
-              chmod 0555 /cli-staging/oc /cli-staging/kubectl
+          image: {{ .Values.artifacts.utilityImage | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/python3", "-B", "/runtime/stage_sre_cli.py"]
+          env:
+            - name: OPENSHIFT_CLI_VERSION
+              value: {{ .Values.sre.cli.version | quote }}
+            - name: OPENSHIFT_CLI_AMD64_URL
+              value: {{ .Values.sre.cli.amd64.url | quote }}
+            - name: OPENSHIFT_CLI_AMD64_SHA256
+              value: {{ .Values.sre.cli.amd64.sha256 | quote }}
+            - name: OPENSHIFT_CLI_ARM64_URL
+              value: {{ .Values.sre.cli.arm64.url | quote }}
+            - name: OPENSHIFT_CLI_ARM64_SHA256
+              value: {{ .Values.sre.cli.arm64.sha256 | quote }}
           securityContext:
             runAsNonRoot: true
             allowPrivilegeEscalation: false
@@ -85,11 +85,14 @@ spec:
           resources:
             requests:
               cpu: 10m
-              memory: 32Mi
+              memory: 64Mi
             limits:
               cpu: 250m
-              memory: 256Mi
+              memory: 512Mi
           volumeMounts:
+            - name: runtime
+              mountPath: /runtime
+              readOnly: true
             - name: cli-staging
               mountPath: /cli-staging
       {{- end }}
@@ -190,6 +193,10 @@ spec:
             items:
               - key: seed.py
                 path: seed.py
+              {{- if .Values.sre.enabled }}
+              - key: stage_sre_cli.py
+                path: stage_sre_cli.py
+              {{- end }}
         {{- if .Values.sre.enabled }}
         - name: skills-bundle
           projected:

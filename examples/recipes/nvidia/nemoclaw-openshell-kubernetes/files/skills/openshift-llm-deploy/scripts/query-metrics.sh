@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 # Query OpenShift Thanos through the chart's exact-target HTTPS proxy.
 set -eu
 
@@ -51,7 +53,10 @@ from urllib.parse import quote
 print(quote(sys.argv[1], safe=""))
 PY
 )
-path="/api/v1/namespaces/$monitoring_namespace/services/https:$service:$port/proxy/api/v1/query?query=$encoded"
+# The kubeconfig already targets the chart's exact-service metrics proxy. That
+# proxy owns the fixed upstream Service identity and accepts only these direct
+# Prometheus API paths; never let a caller supply a Kubernetes Service path.
+path="/api/v1/query?query=$encoded"
 if ! oc --kubeconfig "$METRICS_KUBECONFIG" get --raw "$path"; then
   cat >&2 <<'EOF'
 query-metrics: monitoring query failed. On OpenShift, verify that the SRE

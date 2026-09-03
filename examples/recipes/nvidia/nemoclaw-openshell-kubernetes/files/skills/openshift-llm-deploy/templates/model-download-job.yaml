@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 # Render every ${...} placeholder before applying. This is an agent template,
 # not a ready-to-apply manifest. The downloader is the only model-serving
 # resource that receives HF_TOKEN. The referenced Secret is externally managed;

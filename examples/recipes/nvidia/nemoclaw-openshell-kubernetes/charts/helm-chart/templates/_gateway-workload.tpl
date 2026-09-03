@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+# Modified for this recipe: resolve a dedicated OpenShift gateway UID/GID.
 
 {{/*
 Gateway pod template shared by the StatefulSet and Deployment workload shapes.

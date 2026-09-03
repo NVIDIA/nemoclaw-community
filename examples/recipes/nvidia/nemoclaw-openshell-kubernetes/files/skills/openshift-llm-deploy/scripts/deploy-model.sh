@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 # Render and run one chart-governed Dynamo-first deployment. This wrapper keeps
 # manifest construction out of model-generated shell commands.
 set -eu
@@ -79,6 +81,88 @@ if [ -z "$namespace" ] || [ -z "$release" ] || [ -z "$model" ] || [ -z "$node" ]
   [ -z "$platform" ]; then
   emit_failure 'missing-required-deployment-input' 'Collect the missing deployment values, then run this wrapper once. Do not render a manifest manually.'
 fi
+
+# Validate every user-controlled scalar before reading cluster state or
+# rendering YAML. The renderer separately rejects multiline scalar values, but
+# this early boundary prevents hostile input from reaching even read-only oc
+# discovery calls.
+validation_reason=$(python3 - \
+  "$namespace" "$release" "$model" "$node" "$gpus" "$storage_class" \
+  "$pvc_size" "$memory_request" "$memory_limit" "$hf_secret" "$platform" \
+  "$max_model_len" "$deployment_mode" "$dynamo_backend" "$trtllm_engine_args" <<'PY'
+import re
+import sys
+
+(
+    namespace,
+    release,
+    model,
+    node,
+    gpus,
+    storage_class,
+    pvc_size,
+    memory_request,
+    memory_limit,
+    hf_secret,
+    platform,
+    max_model_len,
+    deployment_mode,
+    dynamo_backend,
+    trtllm_engine_args,
+) = sys.argv[1:]
+
+values = {
+    "namespace": namespace,
+    "release": release,
+    "model": model,
+    "node": node,
+    "gpus": gpus,
+    "storage-class": storage_class,
+    "pvc-size": pvc_size,
+    "memory-request": memory_request,
+    "memory-limit": memory_limit,
+    "hf-secret": hf_secret,
+    "platform": platform,
+    "max-model-len": max_model_len,
+    "deployment-mode": deployment_mode,
+    "dynamo-backend": dynamo_backend,
+    "trtllm-engine-args": trtllm_engine_args,
+}
+for field, value in values.items():
+    if any(ord(character) < 0x20 or ord(character) == 0x7F for character in value):
+        print(f"invalid-{field}")
+        raise SystemExit(0)
+
+dns_label = re.compile(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?")
+dns_subdomain = re.compile(r"[a-z0-9](?:[-a-z0-9.]{0,251}[a-z0-9])?")
+quantity = re.compile(r"[1-9][0-9]*(?:Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|K)?")
+
+checks = (
+    ("invalid-namespace", len(namespace) <= 63 and dns_label.fullmatch(namespace)),
+    ("invalid-release-name", len(release) <= 40 and dns_label.fullmatch(release)),
+    ("invalid-node-name", len(node) <= 253 and dns_subdomain.fullmatch(node)),
+    ("invalid-storage-class", len(storage_class) <= 253 and dns_subdomain.fullmatch(storage_class)),
+    ("invalid-pvc-size", quantity.fullmatch(pvc_size)),
+    ("invalid-memory-request", quantity.fullmatch(memory_request)),
+    ("invalid-memory-limit", quantity.fullmatch(memory_limit)),
+    ("invalid-hf-secret", len(hf_secret) <= 253 and dns_subdomain.fullmatch(hf_secret)),
+    ("invalid-gpu-count", gpus.isascii() and gpus.isdigit() and 1 <= int(gpus) <= 1024),
+    (
+        "invalid-max-model-len",
+        max_model_len.isascii()
+        and max_model_len.isdigit()
+        and 1 <= int(max_model_len) <= 2_147_483_647,
+    ),
+    ("invalid-trtllm-engine-args", len(trtllm_engine_args) <= 4096),
+)
+for reason, valid in checks:
+    if not valid:
+        print(reason)
+        raise SystemExit(0)
+PY
+) || emit_failure 'deployment-input-validation-failed' 'The chart input validator failed. Reconcile the Helm release before retrying.'
+[ -z "$validation_reason" ] || \
+  emit_failure "$validation_reason" 'Use a single-line value of the documented Kubernetes type; manifest fragments and control characters are refused.'
 
 case "$platform" in openshift|kubernetes) ;; *) emit_failure 'invalid-platform' 'Use openshift or kubernetes.' ;; esac
 case "$deployment_mode" in dynamo|standard-vllm) ;; *) emit_failure 'invalid-deployment-mode' 'Use dynamo or standard-vllm.' ;; esac

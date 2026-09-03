@@ -165,9 +165,10 @@ yourself:
 "$SKILL_ROOT/scripts/query-metrics.sh" --query 'PROMQL'
 ```
 
-Both scripts reach Thanos through the Kubernetes API service proxy. They do
-not open a port-forward, accept a monitoring token, query the monitoring
-Route, or disable certificate verification.
+Both scripts call the chart's exact-target metrics proxy using only a direct
+Prometheus query path. The proxy owns the fixed Thanos/Prometheus Service
+identity; the scripts do not open a port-forward, accept a monitoring token,
+query the monitoring Route, or disable certificate verification.
 
 Read `references/metrics.md` for the PromQL recipe table and label reference
 before composing a non-obvious query.

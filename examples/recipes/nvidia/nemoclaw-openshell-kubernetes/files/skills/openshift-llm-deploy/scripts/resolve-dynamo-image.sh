@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 # Resolve only official Dynamo backend images and preserve chart defaults on
 # any release-metadata or registry-verification failure.
 set -eu

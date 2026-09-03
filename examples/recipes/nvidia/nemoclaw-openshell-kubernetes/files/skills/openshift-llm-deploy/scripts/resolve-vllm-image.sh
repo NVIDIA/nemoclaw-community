@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 # Resolve a standard vLLM image without deriving image tags from model names.
 # Priority:
 #   1. Exact, chart-owned standardVllmImage model override

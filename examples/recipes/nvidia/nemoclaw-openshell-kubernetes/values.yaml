@@ -149,14 +149,20 @@ operatorClient:
       memory: 256Mi
 
 sre:
-  # Installs the reviewed DevOps/Infrastructure/Kubernetes SRE bundle and its
-  # chart-managed, policy-constrained Kubernetes API access path.
+  # Installs the focused Kubernetes SRE skill and its chart-managed,
+  # policy-constrained Kubernetes API access path.
   enabled: false
   cli:
-    # Existing public multi-architecture image; only oc/kubectl are copied
-    # into the retained state volume. The chart builds no helper image.
-    image: quay.io/openshift/origin-cli@sha256:ebd858bafa7fe3bf04eda2753d47f74be9608c867f41567cea4af1b1b4189fac
-    pullPolicy: IfNotPresent
+    # Official, checksum-pinned OpenShift client archives. The existing
+    # multi-architecture utility image verifies and stages oc/kubectl; this
+    # chart builds no helper image.
+    version: 4.20.28
+    amd64:
+      url: https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/4.20.28/openshift-client-linux.tar.gz
+      sha256: 6250bbbbdb46c5c4dfc8c1b083a349938bec8546cbb88d226a410a2e0d5d9bbe
+    arm64:
+      url: https://mirror.openshift.com/pub/openshift-v4/arm64/clients/ocp/4.20.28/openshift-client-linux.tar.gz
+      sha256: 47582d3d77e34a5f4cebbb9dc266978b1501618e05de9b133e3904fa5960570a
   rbac:
     # safe: read common non-secret resources cluster-wide and scale only
     # Deployments/StatefulSets. Full workload patches are intentionally denied.

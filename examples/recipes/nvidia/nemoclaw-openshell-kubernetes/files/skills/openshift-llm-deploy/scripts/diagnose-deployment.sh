@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 # Collect a bounded, credential-safe diagnosis for a model deployment. This is
 # intentionally read-only so Hermes can show a useful cause instead of an
 # opaque terminal failure.

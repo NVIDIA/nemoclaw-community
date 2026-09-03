@@ -1,1 +1,0 @@
-# storage-networking Guide
