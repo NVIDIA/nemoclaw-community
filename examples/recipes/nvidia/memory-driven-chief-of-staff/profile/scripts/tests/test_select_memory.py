@@ -219,6 +219,40 @@ class TestWhoIsWorthAsking(SelectorCase):
                              select_memory.MAX_INTERACTIONS)
 
 
+class TestSubjectDoesNotHideTheBody(SelectorCase):
+    """`subject` and `body` reach the writer as two fields, not one picked by
+    `COALESCE(subject, body)`.
+
+    A generic reply subject is present on nearly every mail in a thread, so
+    coalescing let it win every time and hid a body that might be the only
+    place a name and a request actually appear.
+    """
+
+    def test_a_generic_subject_does_not_hide_the_body(self):
+        self.add("Dana Okoro", days_ago=1, subject="RE: sync",
+                 body="Dana here — could you approve the budget by Friday?")
+        self.add("Dana Okoro", days_ago=2, subject="RE: sync", body="b2")
+        lines = self.report()["interactions"]["dana_okoro"]
+        bodies = {line["body"] for line in lines}
+        self.assertIn(
+            "Dana here — could you approve the budget by Friday?", bodies,
+            "the body carrying the actual request was missing from the"
+            " payload")
+        self.assertTrue(all(line["subject"] == "RE: sync" for line in lines))
+
+    def test_a_row_with_no_subject_still_carries_its_body(self):
+        """Slack rows store `subject: NULL`; the empty string that produces
+        must not be mistaken for a missing body."""
+        self.add("Dana Okoro", days_ago=1, source="slack", subject=None,
+                 body="could you approve the budget?")
+        self.add("Dana Okoro", days_ago=2, source="slack", subject=None,
+                 body="b2")
+        lines = self.report()["interactions"]["dana_okoro"]
+        self.assertTrue(any(line["body"] == "could you approve the budget?"
+                            for line in lines))
+        self.assertTrue(all(line["subject"] == "" for line in lines))
+
+
 class TestIdentityIsStable(SelectorCase):
     """A page name is a durable identity, so two people must never share one."""
 
@@ -602,7 +636,11 @@ class TestAPersonIsWhoTheyAreNotWhatTheyAreCalled(SelectorCase):
             "receivedDateTime": iso(days_ago),
             "from": {"emailAddress": {"name": name, "address": address}},
             "toRecipients": [{"emailAddress": {"address": "user@example.com"}}],
-            "subject": body, "bodyPreview": body, "isRead": False,
+            # `body` nests under `content`, the shape Graph actually returns
+            # and the only one `graph_message_to_item` reads; `bodyPreview`
+            # is a real Graph field too, but not this one, and setting only
+            # it left every synthetic message's stored body silently NULL.
+            "subject": body, "body": {"content": body}, "isRead": False,
         }
         item = normalize.graph_message_to_item(msg, "user@example.com")
         with sqlite3.connect(self.db) as conn:
@@ -638,7 +676,7 @@ class TestAPersonIsWhoTheyAreNotWhatTheyAreCalled(SelectorCase):
                         body=f"second{n}")
         found = self.report()
         for mark, seen in found["interactions"].items():
-            texts = {line["text"] for line in seen}
+            texts = {line["body"] for line in seen}
             self.assertTrue(
                 all(x.startswith("first") for x in texts)
                 or all(x.startswith("second") for x in texts),
@@ -757,7 +795,11 @@ class TestConfirmingALinkDoesNotStrandAPage(SelectorCase):
             "receivedDateTime": iso(days_ago),
             "from": {"emailAddress": {"name": name, "address": address}},
             "toRecipients": [{"emailAddress": {"address": "user@example.com"}}],
-            "subject": body, "bodyPreview": body, "isRead": False,
+            # `body` nests under `content`, the shape Graph actually returns
+            # and the only one `graph_message_to_item` reads; `bodyPreview`
+            # is a real Graph field too, but not this one, and setting only
+            # it left every synthetic message's stored body silently NULL.
+            "subject": body, "body": {"content": body}, "isRead": False,
         }
         with sqlite3.connect(self.db) as conn:
             normalize.insert_items(
@@ -819,7 +861,7 @@ class TestConfirmingALinkDoesNotStrandAPage(SelectorCase):
         found = self.report()
         person = found["people"][0]
         self.assertEqual(person["messages"], 4)
-        texts = {line["text"] for line in found["interactions"][person["slug"]]}
+        texts = {line["body"] for line in found["interactions"][person["slug"]]}
         self.assertTrue(any(x.startswith("mail") for x in texts), texts)
         self.assertTrue(any(x.startswith("slack") for x in texts), texts)
 
@@ -936,7 +978,11 @@ class TestUpgradingDoesNotSplitAPerson(SelectorCase):
             "receivedDateTime": iso(days_ago),
             "from": {"emailAddress": {"name": name, "address": address}},
             "toRecipients": [{"emailAddress": {"address": "user@example.com"}}],
-            "subject": body, "bodyPreview": body, "isRead": False,
+            # `body` nests under `content`, the shape Graph actually returns
+            # and the only one `graph_message_to_item` reads; `bodyPreview`
+            # is a real Graph field too, but not this one, and setting only
+            # it left every synthetic message's stored body silently NULL.
+            "subject": body, "body": {"content": body}, "isRead": False,
         }
         item = normalize.graph_message_to_item(msg, "user@example.com")
         with sqlite3.connect(self.db) as conn:

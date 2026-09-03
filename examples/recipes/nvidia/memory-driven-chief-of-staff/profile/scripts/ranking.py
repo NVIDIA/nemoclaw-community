@@ -7,7 +7,7 @@ The model decides ORDER (which row matters more) because that needs judgment.
 This module decides TIER (who gets high / medium / low) because that is
 arithmetic, and arithmetic in a prompt is advisory rather than enforced.
 
-Rules mirror the production system this recipe is adapted from:
+The rules this module enforces:
 
   * hard caps: at most 10 rows at `high`, at most 10 at `medium`
   * `high` is intent-gated: a row reaches it only if the user has signalled

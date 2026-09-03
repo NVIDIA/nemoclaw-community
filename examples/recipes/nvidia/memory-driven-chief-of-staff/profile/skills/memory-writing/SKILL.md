@@ -172,18 +172,53 @@ titled pages and needs a sentence telling them which colleague this is. Their
 messages are already separated for you; `interactions` is keyed by page slug,
 not by name.
 
+**The store holds inbound messages only.** Neither collector keeps what the
+user sent: the mail connector reads the inbox and nothing else, and the Slack
+one drops every message the user wrote. So you cannot see whether they
+replied, and you must not infer it — an answer you cannot check is worse here
+than an absence you can.
+
+What you are given instead is `addressing` on each interaction. It describes
+how the **user** was treated by that message, not how its sender was: a mail
+naming the user as a To recipient, or a direct message, is `direct`; an
+@-mention in a channel is `mentioned`; being copied, or reading a channel
+post, is `broadcast`. It says the sender aimed the message at the user. It
+says nothing about whether the user answered.
+
+It is also coarser for mail than for Slack. Mail yields `direct` or
+`broadcast` and never `mentioned`, so on the mail side this is a
+To-versus-not test and not much more — a machine that addresses the user by
+name scores the same as a colleague who writes to them. `direct` is a
+necessary condition for a page and not a sufficient one; the exclusions below
+still have to be applied to everything that passes it.
+
+Judge on the interactions you were handed and no more. They are that
+person's most recent and they are capped, so a claim about *all* of
+somebody's messages is one you are not holding the evidence for.
+
 Write a page when:
 
-- The user has exchanged messages with them in both directions, or
-- They are in the user's reporting chain, or
-- They are addressed by name and asked for something.
+- At least two of the interactions you were given are `direct` or
+  `mentioned` — this person writes to the user rather than past them, or
+- They are in the user's reporting chain, where the memory already records
+  it, or
+- One of the interactions you were given has `addressing` at `direct` or
+  `mentioned`, and that message's own `subject` or `body` — not anything you
+  infer about whether the user answered — asks for something. Judge only
+  whether the message itself contains a request; the selector gives you no
+  name or address for the user to compare the text against, so do not judge
+  whether the message names the user.
 
 Do **not** write a page for:
 
-- Senders the user never replies to, however frequent.
-- Mailing lists, digests, and broadcast announcements.
-- Anything the selector's evidence shows as one-directional notification
-  traffic, even if it carries a human name.
+- Senders whose interactions here are all `broadcast`, however many there
+  are.
+- Anything automated, whatever its `addressing`. A ticket system, a build,
+  an alert and a calendar notice all reach the user by name and none of them
+  is a working relationship.
+- Mailing lists, digests, and announcements.
+- Anything the selector's evidence shows as notification traffic, even if it
+  carries a human name.
 
 `importance` is about working proximity, not seniority — the schema says so
 and it is easy to get backwards. Somebody whose silence would block the user's
@@ -269,11 +304,9 @@ People pages and the two attention pages. That is the whole scope, and the
 schema's writer table says the same thing so the two cannot drift.
 
 `projects/`, `patterns/` and `concepts/` have no writer at all yet. They are
-not excluded on principle — the production system this recipe is adapted from
-writes project pages from ingested mail, under an admission contract strict
-enough to be worth adopting rather than working around. They are simply not
-in this job, and a page type with no writer is worth naming as such rather
-than leaving a reader to infer it from silence.
+not excluded on principle — they are simply not in this job, and a page type
+with no writer is worth naming as such rather than leaving a reader to infer
+it from silence. Where that work is planned is tracked in issue #156.
 
 `goals/` is different: see below.
 
