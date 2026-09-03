@@ -2,6 +2,8 @@
 
 A buildless Helm recipe that runs the official NemoClaw-managed Hermes image through the official OpenShell gateway on Kubernetes or OpenShift. It does not include Hermes WebUI, SkillSpector, or NemoClaw recipe delivery.
 
+![NemoClaw OpenShell Kubernetes architecture](docs/images/nemoclaw-openshell-kubernetes-architecture.png)
+
 ## Pinned release inputs
 
 - NemoClaw/Hermes managed image: NemoClaw `v0.0.117`, Hermes `0.19.0`, immutable multi-architecture index digest in `values.yaml`
