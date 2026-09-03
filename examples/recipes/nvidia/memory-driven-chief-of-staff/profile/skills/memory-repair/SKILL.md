@@ -36,18 +36,39 @@ drifts.
 Cheap and mechanical first, so a run that is going to find nothing finds it
 quickly.
 
-1. **Index against filesystem.** Every page has an index entry and every entry
-   points at a page that exists. Resolve a mismatch in the direction that
-   loses nothing: add the missing entry rather than delete the page, and
-   remove an entry only when its target is genuinely gone.
-2. **Links resolve.** Every relative link between pages lands somewhere. A
+1. **Index against filesystem.** Every page has an index entry, every entry
+   points at a page that exists, and each entry sits under the `## Section`
+   for its own page type. Resolve a mismatch in the direction that loses
+   nothing: for `unindexed`, add the missing entry; for `index-dangling`,
+   remove an entry only when its target is genuinely gone; for
+   `index-misfiled`, **move** the existing line into its own type's section
+   rather than adding a second entry — the page already has one, it is just
+   filed under the wrong heading. For `index-unparseable`, preserve the index,
+   report the ambiguity, and make no index edits: the checker deliberately
+   withholds derived findings when it cannot prove which content is top-level.
+2. **Index sections.** `index-section-missing` means a validated page type
+   has no `## Section` to be filed under, so the first page of that type
+   would be reported unindexed with no entry that could clear it. Add the
+   heading in the position `schema.md` fixes — immediately before whichever
+   required section, already present, comes next in that order. Then reconcile
+   every page of that type in the same pass: move each existing entry named by
+   `index-misfiled`, and add an entry for each page named by `unindexed`. Do
+   not leave the section empty: this finding is emitted only because at least
+   one page of the type already exists. This is what reaches a memory installed
+   before the type was added: the seed only supplies a fresh install, and
+   bootstrap never overwrites an index the user owns.
+   `index-out-of-order` means a `## Section` heading exists but not where
+   `schema.md` puts it relative to the others. Move the heading — and
+   everything filed under it — to its correct position; do not add a second
+   heading for the same section.
+3. **Links resolve.** Every relative link between pages lands somewhere. A
    broken link to a person becomes a stub page with `importance: low`; a
    broken link to anything else is removed and noted. Record which you chose.
-3. **Frontmatter completeness.** Every page carries the keys its type
+4. **Frontmatter completeness.** Every page carries the keys its type
    requires. A missing `updated` is filled from the newest dated content on
    the page, never from today — today would assert a freshness the page has
    not earned.
-4. **Person identity.** Every people page carries a `source_key`, and no two
+5. **Person identity.** Every people page carries a `source_key`, and no two
    carry the same one. **Never derive one from the page.** For
    `missing-identity`, take the value from the memory job's `source_key` for
    that person and write it in; if the selector does not name them, leave the
@@ -60,15 +81,15 @@ quickly.
    the victim in the first. The memory job knows: it reports the pages a
    confirmed link has joined, under `merge_into_slug`. Leave this to that
    job.
-5. **Decay windows.** Any page past its `decay` window is flagged as stale in
+6. **Decay windows.** Any page past its `decay` window is flagged as stale in
    the log. **Do not delete it and do not silently refresh the date.** A page
    marked stale is still useful; a page whose date was quietly bumped is a
    lie.
-6. **Provenance.** Claims on `patterns/` pages carry a footnote or an
+7. **Provenance.** Claims on `patterns/` pages carry a footnote or an
    `(inferred)` marker. A page with neither is flagged. Never invent a
    footnote to satisfy the check — an unsupported claim should be visible, not
    dressed up.
-7. **Section ceilings.** Pages past the limits in the schema's growth-control
+8. **Section ceilings.** Pages past the limits in the schema's growth-control
    table are reported for the consolidation job. Repair does not compact;
    those are different jobs on purpose, because compaction needs judgment and
    repair should be safe enough to run unattended.
