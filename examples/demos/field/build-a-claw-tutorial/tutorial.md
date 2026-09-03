@@ -567,10 +567,14 @@ Do a full research and find all source code around openclaw, find the painpoints
 Read the ping pong file on my Desktop, and refine and make it 10 x better! Make it exciting. Save the results back on Desktop and report back to me.
 ```
 
-This prompt may fail depends if you have approved the sessions (when it ask for spawn): Run the following command to approve them before re-running it.
+When OpenClaw reports a pending device request, list the requests, review the
+device identity and requested role and scopes, then approve that exact request
+before you retry the prompt.
 
 ```bash
-openclaw devices approve
+openclaw devices list
+OPENCLAW_REQUEST_ID="paste-the-reviewed-request-id-here"
+openclaw devices approve "$OPENCLAW_REQUEST_ID"
 ```
 ![Neon-Cyber-Pong-04-07-2026_10_49_PM](https://hackmd.io/_uploads/H1XA2wQn-g.jpg)
 
@@ -724,9 +728,16 @@ Done. :+1:  You can now text the chatbot, and you will see a new session under t
 
 ## Control your web browser and Do anything!
 
-Enable control with debugging on Chromium
+Enable control with debugging on Chromium. Use a dedicated profile for remote
+debugging, and keep that profile free of sensitive logins or browsing data.
+
 ```bash
-/snap/bin/chromium  --remote-debugging-port=9222   --remote-debugging-address=127.0.0.1 
+CHROMIUM_DEBUG_PROFILE="$HOME/snap/chromium/common/openclaw-debug-profile"
+install -d -m 700 "$CHROMIUM_DEBUG_PROFILE"
+/snap/bin/chromium \
+  --user-data-dir="$CHROMIUM_DEBUG_PROFILE" \
+  --remote-debugging-address=127.0.0.1 \
+  --remote-debugging-port=9222
 ```
 
 Update the openclaw.json file.
@@ -967,6 +978,8 @@ https://hackmd.io/ZvP9JnFETmuDuB0CQESukw
 - [ ] ~/.openclaw/devices/paired.json (paired device tokens)
 - [ ] ~/.openclaw/exec-approvals.json (exec socket token)
 - [ ] ~/.openclaw/openclaw.json (rename token per machine)
-- [ ] Remove chromium lock file `rm ~/snap/chromium/common/chromium/Singleton*` 
+- [ ] Close the Chromium instance started for this tutorial. If you no longer
+  need its dedicated profile, remove it with
+  `rm -rf -- "$HOME/snap/chromium/common/openclaw-debug-profile"`.
 - [ ] Clear Hermes session history / active chats
 - [ ] Review `~/.hermes/config.yaml` and `~/.hermes/.env` for local secrets or personal identifiers
