@@ -3,12 +3,13 @@
 #
 # Additive preset: let one bot reach NVIDIA RT-VLM (the vision model from the
 # VSS blueprint) on the OpenShell bridge. No other bot gets this; that is the
-# point. The port must match VSS_PORT in examples/vss/.env.
+# point. This is a template: __VSS_PORT__ is filled from the port in
+# VSS_BASE_URL (swarm.env) when `swarm` applies it, so the policy always
+# matches the endpoint the bot is configured to call.
 #
-#   nemoclaw <sandbox> policy-add --from-file examples/policies/nemoclaw-vss.yaml --yes
-#
-# Applied automatically to the bot named nemoclaw-vss when this file is copied
-# to policies/nemoclaw-vss.yaml (see examples/README.md).
+# To apply by hand, replace __VSS_PORT__ first:
+#   sed 's/__VSS_PORT__/8018/' examples/policies/nemoclaw-vss.yaml > /tmp/vss.yaml
+#   nemoclaw <sandbox> policy-add --from-file /tmp/vss.yaml --yes
 preset:
   name: vss-rtvlm
   description: Reach RT-VLM on the bridge
@@ -16,7 +17,7 @@ network_policies:
   vss-rtvlm:
     name: vss-rtvlm
     endpoints:
-      - { host: host.openshell.internal, port: 8018, tls: skip }
+      - { host: host.openshell.internal, port: __VSS_PORT__, tls: skip }
     binaries:
       - { path: /sandbox/.hermes/hermes-agent/venv/bin/python }
       - { path: /sandbox/.hermes/hermes-agent/venv/bin/* }

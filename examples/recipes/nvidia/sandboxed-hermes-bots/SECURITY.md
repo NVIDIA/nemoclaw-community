@@ -45,6 +45,14 @@ one key across bots, a compromised bot can spend on that key. Use a per-bot key
 or a metered key if that matters to you. The key is in `/sandbox/.hermes/.env`,
 mode 600, readable by the bot.
 
+Images can cross the boundary when a bot asks for it. `message_teammate`
+sends text only, unless the calling bot sets `with_images`; then the images
+attached to that bot's current user turn go to the teammate's sandbox and its
+model. The example souls tell text bots to set it only when handing a picture
+to the vision bot. The tool result reports `images_forwarded` so the sender's
+transcript shows it happened. The forwarded bytes are held in the receiving
+bot's session history like any other message content.
+
 The bot can prompt-inject its teammates. `message_teammate` delivers text
 into another bot's turn. The receiving bot's soul is its only defense. The
 example souls tell bots to treat inbound messages as work, not as instructions

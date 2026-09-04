@@ -15,10 +15,26 @@ host_profile_state() {
 }
 
 # host_profile_ensure NAME PORT KEY SOUL(optional)
+# A host profile with our bot's name that this tool did not create belongs to
+# the operator. Refuse to reconfigure or delete it.
+_profile_marker() { printf '%s/.hermes/profiles/%s/.swarm-owner' "$HOME" "$1"; }
+host_profile_owned() { [[ -f "$(_profile_marker "$1")" ]]; }
+
 host_profile_ensure() {
   local name="$1" port="$2" key="$3" soul="$4"
-  hermes profile list 2>/dev/null | strip_ansi | awk '{print $1}' | grep -qx "$name" \
-    || hermes profile create "$name" >/dev/null 2>&1 || true
+  if hermes profile list 2>/dev/null | strip_ansi | awk '{print $1}' | grep -qx "$name"; then
+    if ! host_profile_owned "$name"; then
+      # Legacy adoption: the profile already points at this bot's sandbox port.
+      if grep -qs "base_url: http://$HOST_API_ADDR:$port/v1" "$HOME/.hermes/profiles/$name/config.yaml"; then
+        touch "$(_profile_marker "$name")"
+      else
+        die "a Hermes profile named $name already exists and was not created by this deployment; refusing to reconfigure it"
+      fi
+    fi
+  else
+    hermes profile create "$name" >/dev/null 2>&1 || die "could not create host profile $name"
+    touch "$(_profile_marker "$name")"
+  fi
   local prov
   prov=$(jq -cn --arg url "http://$HOST_API_ADDR:$port/v1" \
     '{name:"sandbox", base_url:$url, key_env:"SANDBOX_API_KEY", models:["hermes-agent"], default_model:"hermes-agent"}')
@@ -115,6 +131,10 @@ except Exception:
 
 host_profile_remove() {
   local name="$1"
+  if hermes profile list 2>/dev/null | strip_ansi | awk '{print $1}' | grep -qx "$name" && ! host_profile_owned "$name"; then
+    warn "host profile $name was not created by this deployment; leaving it"
+    return 0
+  fi
   host_gateway_stop "$name"
   if hermes profile delete -y "$name" >/dev/null 2>&1; then ok "host profile $name deleted"
   else rm -rf "$HOME/.hermes/profiles/$name"; dim "host profile dir removed"; fi

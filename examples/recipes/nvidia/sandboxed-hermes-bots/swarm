@@ -15,7 +15,9 @@
 #   swarm traces NAME        recent spans for one bot at the collector
 #   swarm doctor             preflight plus desktop hints
 #   swarm presubmit          gate before a public push (no host needed)
-#   swarm down [--yes]       remove every bot in BOTS (sandboxes, profiles, keys)
+#   swarm down [--yes] [--all]
+#                            remove the bots in BOTS (sandboxes, profiles, keys);
+#                            --all also removes bots created with swarm add
 #
 # Run it from the host that runs OpenShell, as the user who owns ~/.hermes.
 set -euo pipefail
@@ -92,6 +94,9 @@ cmd_up() {
   if [[ "$TRACING" == "on" ]]; then
     log "tracing collector"
     tracing_collector_ensure
+  else
+    log "tracing off"
+    tracing_collector_remove
   fi
   local b
   for b in $BOTS; do
@@ -133,6 +138,8 @@ cmd_add() {
   [[ "$TRACING" == "on" ]] && tracing_collector_ensure
   bot_create "$name" "$soul"
   mesh_sync
+  log "reconciling the rest of the fleet"
+  bot_reconcile_others "$name"
   verify_bot "$name"
   host_desktop_hint
 }
@@ -144,17 +151,40 @@ cmd_rm() {
     read -r -p "remove bot $name, its sandbox, profile, and key? [y/N] " a
     [[ "$a" == y || "$a" == Y ]] || { dim "aborted"; return 0; }
   fi
-  bot_destroy "$name"
+  bot_destroy "$name" || die "bot $name was not fully removed; see above. Nothing else was touched."
   mesh_forget "$name"
+  bot_reconcile_others "$name"
 }
 
+# Removes the bots named in BOTS and nothing else. A bot created with
+# `swarm add` is outside BOTS and stays; `swarm rm NAME` removes it. `--all`
+# widens the scope to every bot this tool created (every key in SWARM_STATE)
+# and is the only way to remove an added bot without naming it.
 cmd_down() {
-  local yes="${1:-}" b
-  if [[ "$yes" != "--yes" ]]; then
-    read -r -p "remove every bot ($BOTS)? [y/N] " a
+  local yes="" all="" a b scope
+  for a in "$@"; do
+    case "$a" in
+      --yes) yes=1 ;;
+      --all) all=1 ;;
+      *) die "usage: swarm down [--yes] [--all]" ;;
+    esac
+  done
+  if [[ -n "$all" ]]; then scope=$(bot_list | tr '\n' ' '); else scope="$BOTS"; fi
+  local extra=""
+  for b in $(bot_list); do [[ " $BOTS " == *" $b "* ]] || extra+="$b "; done
+  if [[ -z "$yes" ]]; then
+    read -r -p "remove ${all:+every bot this tool created}${all:-the bots in BOTS} ($scope)? [y/N] " a
     [[ "$a" == y || "$a" == Y ]] || { dim "aborted"; return 0; }
   fi
-  for b in $(bot_list); do bot_destroy "$b"; mesh_forget "$b"; done
+  local failed=0
+  for b in $scope; do
+    bot_exists "$b" || { dim "$b: not present"; continue; }
+    bot_destroy "$b" || { failed=1; continue; }
+    mesh_forget "$b"
+  done
+  [[ -z "$all" && -n "$extra" ]] && dim "kept (not in BOTS): $extra; use swarm rm NAME or swarm down --all"
+  (( failed )) && die "one or more bots were not fully removed; their state was kept for recovery"
+  return 0
 }
 
 # swarm key [vss]: store a secret the way preflight wants it. Prompts with echo

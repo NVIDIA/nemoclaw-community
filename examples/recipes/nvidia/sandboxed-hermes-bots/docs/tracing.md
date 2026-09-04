@@ -42,7 +42,12 @@ Once per host it starts the collector from
 `LANGSMITH_PROJECT`. If not, they go to the collector's debug log and counters,
 which is enough to prove the pipeline works.
 
-`TRACING=off` in `swarm.env` turns the whole thing off.
+`TRACING=off` in `swarm.env`, then `./swarm up`, turns the whole thing off: the
+Relay configuration is removed from every bot and each gateway restarted, and
+the collector container is removed. The OTLP egress rule stays in each policy
+because OpenShell policies are add-only; with Relay off, nothing uses it. Spans
+already exported to LangSmith are outside this tool's reach. Setting `TRACING`
+in the shell environment does nothing: `swarm.env` is read after it and wins.
 
 ## Checking it works
 

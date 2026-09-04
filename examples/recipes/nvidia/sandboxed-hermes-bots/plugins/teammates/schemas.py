@@ -30,9 +30,13 @@ MESSAGE_TEAMMATE = {
                     "they cannot see your conversation history."
                 ),
             },
-            "without_images": {
+            "with_images": {
                 "type": "boolean",
-                "description": "Set true to NOT forward the current turn's attached images.",
+                "description": (
+                    "Set true to forward the images attached to the current user turn along with "
+                    "this message. Off by default: pixels stay in this sandbox unless you choose to "
+                    "send them. Use it only when the teammate needs to see the image to answer."
+                ),
             },
         },
         "required": ["teammate", "message"],

@@ -16,23 +16,71 @@ sandbox_container() { docker ps --format '{{.Names}}' | grep "^openshell-$1-" | 
 # sandbox_create NAME POLICY.yaml
 # `openshell sandbox create` has been seen to block long after the sandbox is
 # Ready, so it is bounded and the readiness poll below is the real gate.
+# Ownership. OpenShell has no label API for sandboxes, so a sandbox this tool
+# created is marked twice: a file under $SWARM_STATE/owned/ (host side, mode
+# 700 directory) and a marker file inside the sandbox holding the same random
+# token. Both must exist and agree. A same-named sandbox that fails the check
+# is someone else's, and every mutating path refuses it.
+_owned_dir() { printf '%s/owned' "$SWARM_STATE"; }
+sandbox_owned() {
+  local sb="$1" f tok inside
+  f="$(_owned_dir)/$sb"; [[ -s "$f" ]] || return 1
+  tok=$(cat "$f")
+  inside=$(sbx "$sb" 'cat /sandbox/.hermes/.swarm-owner 2>/dev/null' 30 | tail -1)
+  [[ -n "$inside" && "$inside" == "$tok" ]]
+}
+_sandbox_mark_owned() {
+  local sb="$1" tok
+  mkdir -p "$(_owned_dir)"; chmod 700 "$(_owned_dir)"
+  tok=$(openssl rand -hex 16)
+  (umask 077; printf '%s' "$tok" > "$(_owned_dir)/$sb")
+  sbx "$sb" "printf '%s' '$tok' > /sandbox/.hermes/.swarm-owner && chmod 600 /sandbox/.hermes/.swarm-owner && echo OWN-OK" 60 \
+    | grep -q OWN-OK || die "could not write ownership marker into $sb"
+}
+
+# One-time adoption for fleets built before ownership markers existed: the
+# sandbox has no marker on either side, this tool holds its key and port, and
+# the api_server inside answers to that key. Nothing else qualifies.
+sandbox_adopt_legacy() {
+  local sb="$1" name="$2" port key code
+  [[ -s "$(_owned_dir)/$sb" ]] && return 1
+  [[ -n "$(sbx "$sb" 'cat /sandbox/.hermes/.swarm-owner 2>/dev/null' 30 | tail -1)" ]] && return 1
+  port=$(bot_port "$name" 2>/dev/null) || return 1
+  [[ -s "$(bot_key_file "$name")" ]] || return 1
+  key=$(read_secret "$(bot_key_file "$name")")
+  code=$(http_code "http://$HOST_API_ADDR:$port/v1/models" -H "Authorization: Bearer $key")
+  [[ "$code" == 200 ]] || return 1
+  _sandbox_mark_owned "$sb"
+  dim "adopted $sb: built by an earlier version of this tool, now marked as owned"
+}
+
 sandbox_create() {
-  local sb="$1" pol="$2" i phase
+  local sb="$1" pol="$2" i phase created=""
   if sandbox_exists "$sb"; then
-    dim "sandbox $sb exists ($(sandbox_phase "$sb"))"
+    if sandbox_owned "$sb"; then
+      dim "sandbox $sb exists ($(sandbox_phase "$sb")), created by this deployment"
+    else
+      die "a sandbox named $sb already exists and was not created by this deployment. Refusing to reconfigure it. Set SANDBOX_PREFIX in swarm.env to use different names, or remove it yourself if it is yours."
+    fi
   else
     timeout 180 openshell sandbox create --name "$sb" --from "$(image_tag)" \
       --policy "$pol" --memory "$SANDBOX_MEMORY" --cpu "$SANDBOX_CPU" >/dev/null 2>&1 || true
+    created=1
   fi
   for ((i = 0; i < 30; i++)); do
     phase=$(sandbox_phase "$sb")
-    [[ "$phase" == Ready ]] && { ok "sandbox $sb Ready"; return 0; }
+    if [[ "$phase" == Ready ]]; then
+      [[ -n "$created" ]] && _sandbox_mark_owned "$sb"
+      ok "sandbox $sb Ready"; return 0
+    fi
     [[ "$phase" == Error ]] && die "sandbox $sb entered Error; see: docker logs \$(docker ps -a --filter name=$sb -q | head -1)"
     sleep 6
   done
   die "sandbox $sb not Ready after 3 min (phase: ${phase:-none})"
 }
 
+# Returns non-zero while the sandbox still exists, so callers can stop before
+# discarding the state needed to manage it.
 sandbox_delete() {
   local sb="$1"
   sandbox_exists "$sb" || return 0
@@ -42,7 +90,8 @@ sandbox_delete() {
     sandbox_exists "$sb" || { ok "sandbox $sb deleted"; return 0; }
     sleep 3
   done
-  warn "sandbox $sb still listed after delete"
+  fail "sandbox $sb still listed after delete (phase: $(sandbox_phase "$sb"))"
+  return 1
 }
 
 # sbx SANDBOX SCRIPT [timeout_s]

@@ -20,9 +20,13 @@ _TIMEOUT_S = 300
 _HERMES_HOME = os.environ.get("HERMES_HOME") or os.path.join(
     os.path.expanduser("~"), ".hermes"
 )
-# Images attached to the sender's current turn are forwarded to the teammate
-# as image_url parts. Cap so one handoff cannot carry an album.
+# Images attached to the sender's current turn can be forwarded to the teammate
+# as image_url parts when the call sets with_images. Off by default. Cap so one
+# handoff cannot carry an album.
 _MAX_FORWARD_IMAGES = 4
+# An ask that is about a picture. Used only to decide whether to append the
+# "no image is attached" notice when nothing was forwarded.
+_RE_MENTIONS_IMAGE = re.compile(r"\b(image|picture|photo|photograph|screenshot|attached|attachment|see|look)\b", re.I)
 _RE_PATH_HINT = re.compile(
     r"\[Image attached(?: at)?:[^\]]*\]|MEDIA:\S+|(?<![\w/])/(?:tmp|sandbox|home|Users|var)/\S+\.(?:png|jpe?g|gif|webp)\b",
     re.IGNORECASE,
@@ -191,14 +195,19 @@ def message_teammate(args: dict, **kwargs) -> str:
         )
 
     url = f"{peers[teammate]['url']}/v1/chat/completions"
-    images = [] if args.get("without_images") else _images_in_current_turn(str(kwargs.get("session_id") or ""))
-    if not images and _RE_PATH_HINT.search(message):
-        # The sender's model copied a file path or MEDIA: token into the ask
-        # but no image is riding along. Say so plainly, or a vision teammate
-        # will describe a picture it never saw.
-        message = _RE_PATH_HINT.sub("an image", message)
-        message = re.sub(r"[ \t]{2,}", " ", message).strip()
-        message += "\n\n[No image is attached to this message. If the question is about an image, say you were not given it.]"
+    # Opt-in. Images cross the sandbox boundary only when the sender's model
+    # asks for it, and the result says how many went.
+    images = _images_in_current_turn(str(kwargs.get("session_id") or "")) if args.get("with_images") else []
+    if not images:
+        # No image is riding along. If the ask talks about one anyway (a copied
+        # path, a MEDIA: token, or just the word "image"), say so in the message
+        # itself, or a vision teammate will describe a picture it never saw.
+        if _RE_PATH_HINT.search(message):
+            message = _RE_PATH_HINT.sub("an image", message)
+            message = re.sub(r"[ \t]{2,}", " ", message).strip()
+        if _RE_MENTIONS_IMAGE.search(message):
+            message += ("\n\n[No image is attached to this message. Answer that you were not given an "
+                        "image; do not guess what it shows.]")
     if images:
         # Hermes appends "[Image attached at: /host/path]" hints to the text
         # when it attaches an image natively. That path is on the sender's

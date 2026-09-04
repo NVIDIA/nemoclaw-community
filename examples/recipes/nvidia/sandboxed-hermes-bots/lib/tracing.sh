@@ -41,10 +41,17 @@ collector_running() { [[ "$(docker inspect -f '{{.State.Running}}' "$COLLECTOR_N
 
 # Ensure the collector runs with the current config. Recreated when the
 # rendered config changes (e.g. a LangSmith key appeared).
+collector_owned() {
+  [[ -n "$(docker inspect -f '{{index .Config.Labels "swarm.config"}}' "$COLLECTOR_NAME" 2>/dev/null)" ]]
+}
+
 tracing_collector_ensure() {
   local cfg; cfg=$(_collector_render)
   local want have
   want=$(sha16 "$cfg")
+  if docker inspect "$COLLECTOR_NAME" >/dev/null 2>&1 && ! collector_owned; then
+    die "a container named $COLLECTOR_NAME exists and was not created by this deployment; refusing to replace it. Stop it or set TRACING=off."
+  fi
   have=$(docker inspect -f '{{index .Config.Labels "swarm.config"}}' "$COLLECTOR_NAME" 2>/dev/null || true)
   if collector_running && [[ "$have" == "$want" ]]; then
     ok "collector $COLLECTOR_NAME running on $BRIDGE_IP:$OTLP_PORT"
@@ -99,6 +106,27 @@ echo 'HERMES_NEMO_RELAY_PLUGINS_TOML=/sandbox/.hermes/relay-plugins.toml' >> /sa
   ok "relay config written for $name"
   # The gateway reads the env at start; restart so this run exports.
   bot_start "$name" "$(bot_port "$name")" >/dev/null
+}
+
+# Undo tracing_enable_bot: drop the env var that activates Relay and remove
+# the toml so nothing can re-read it. The OTLP egress rule stays in the policy
+# (OpenShell policy changes are add-only); with Relay off nothing uses it.
+# Caller restarts the gateway.
+tracing_disable_bot() {
+  local name="$1" sb
+  sb=$(sandbox_of "$name")
+  sbx "$sb" "sed -i '/^HERMES_NEMO_RELAY_PLUGINS_TOML=/d' /sandbox/.hermes/.env; rm -f /sandbox/.hermes/relay-plugins.toml; echo ENV-OK" 60 \
+    | grep -q ENV-OK || die "could not clear relay env in $sb"
+  rm -f "$SWARM_STATE/relay/$name.relay-plugins.toml"
+  ok "relay disabled for $name"
+}
+
+# Stop and remove the collector this tool created. Spans already exported to
+# LangSmith are outside our reach; the local debug log goes with the container.
+tracing_collector_remove() {
+  docker inspect "$COLLECTOR_NAME" >/dev/null 2>&1 || return 0
+  collector_owned || { warn "container $COLLECTOR_NAME is not ours; leaving it"; return 0; }
+  docker rm -f "$COLLECTOR_NAME" >/dev/null 2>&1 && ok "collector $COLLECTOR_NAME removed"
 }
 
 # True when Relay plugins came up in the bot's Hermes process. The line is

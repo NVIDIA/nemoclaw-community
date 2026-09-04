@@ -159,10 +159,15 @@ Open a new login shell here so your user picks up the `docker` group and
 `~/.local/bin` is on your PATH. On a Mac, also start Colima:
 `colima start --cpu 6 --memory 14`.
 
-**3. Get the code.**
+**3. Get the code.** Clone the repository this README is in and change into
+this example's directory. Reading this on GitHub, that is the path in the
+address bar; the two published locations are the NemoClaw Community catalog
+under `examples/recipes/nvidia/sandboxed-hermes-bots/` and the upstream at
+`PicoNVIDIA/sandboxed-bots` under `nemoclaw-hermes-swarm/`. Run what you
+cloned; do not mix a README from one with a tree from the other.
 
 ```bash
-git clone https://github.com/PicoNVIDIA/sandboxed-bots && cd sandboxed-bots/nemoclaw-hermes-swarm
+git clone <this repository> && cd <this example directory>
 ```
 
 **4. Make your config.** The example already points at the NVIDIA inference
@@ -357,8 +362,22 @@ rm -rf ~/.swarm
 ```
 
 A bot added with `swarm add` is not in `BOTS` and needs its own
-`./swarm rm NAME --yes`. The RT-VLM container is managed separately:
-`docker compose -f examples/vss/compose.yml down`.
+`./swarm rm NAME --yes`; `./swarm down --all --yes` removes every bot this
+tool created, added or not.
+
+The RT-VLM container is managed separately and does not need the NGC key to
+stop:
+
+```bash
+docker compose -f examples/vss/compose.yml down
+```
+
+That keeps the two named volumes holding about 16 GB of downloaded weights,
+so the next start is fast. To remove them as well:
+
+```bash
+docker compose -f examples/vss/compose.yml down --volumes
+```
 
 ## Let your own agent run this
 
@@ -387,9 +406,11 @@ left them optional: `nemoclaw-vision`, whose model accepts images, and
 They are worth a look even if you never run them, because they show the
 policy story with something you can see. Only the vision bot's model gets
 pixels. Only the vss bot's egress reaches the video model. When the reviewer is
-handed a photo it cannot read, it asks the vision bot in plain language and
-relays the answer. No image data crosses a sandbox boundary; only questions
-and answers do.
+handed a photo it cannot read, it asks the vision bot and relays the answer.
+Text crosses the boundary in both directions. The image itself crosses only
+when the asking bot sets `with_images` on that one `message_teammate` call,
+which its soul tells it to do for exactly this case, and the tool result
+reports how many images went. Nothing is forwarded by default.
 
 Two lines in `swarm.env` and `swarm add` for the first; one container on a
 GPU plus the same for the second. [examples/README.md](examples/README.md)

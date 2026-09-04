@@ -11,9 +11,19 @@
 # sandboxes whose policy names it and from nothing off-host.
 #
 #   cp .env.example .env; edit; docker compose up -d
+#
+# The image is pinned by digest to the build that was tested (published to the
+# develop-latest tag on 2026-09-03). To try a newer build, set
+# VSS_RT_VLM_IMAGE in .env to another digest and re-run the checks in
+# examples/README.md; the tag itself moves and is not used here.
+#
+# Teardown never needs the NGC key: `docker compose down` reads .env for
+# interpolation only, and NGC_API_KEY has a harmless default so an empty .env
+# does not stop it. The key is still required at `up`, where the entrypoint
+# checks it before downloading weights.
 services:
   rtvi-vlm:
-    image: ${VSS_RT_VLM_IMAGE:-ghcr.io/nvidia-ai-blueprints/vss/vss-rt-vlm:develop-latest}
+    image: ${VSS_RT_VLM_IMAGE:-ghcr.io/nvidia-ai-blueprints/vss/vss-rt-vlm@sha256:2b10ba38ac93d648d4b50c32294197ff014dfa85c79ac824a98e172dc31eba05}
     container_name: vss-rtvi-vlm
     user: "1001:1001"
     shm_size: 16gb
@@ -31,7 +41,7 @@ services:
     environment:
       MODEL_PATH: "${VSS_MODEL_PATH:-ngc:nim/nvidia/cosmos3-nano-reasoner:bf16-final}"
       VLM_MODEL_TO_USE: "${VSS_MODEL_TO_USE:-cosmos-reason3}"
-      NGC_API_KEY: "${NGC_API_KEY:?put your NGC key in .env}"
+      NGC_API_KEY: "${NGC_API_KEY:-}"
       NVIDIA_VISIBLE_DEVICES: "${VSS_GPU:-0}"
       # Standalone: no Kafka, Redis, or OTel peers.
       KAFKA_ENABLED: "false"

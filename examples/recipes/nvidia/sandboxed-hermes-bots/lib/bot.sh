@@ -14,6 +14,14 @@ bot_list() {
   for f in "$SWARM_STATE"/keys/*.key; do [[ -f "$f" ]] && basename "$f" .key; done | sort
 }
 bot_exists() { [[ -s "$(bot_key_file "$1")" ]] && sandbox_exists "$(sandbox_of "$1")"; }
+# A sandbox with our name that we did not create. Restore and destroy refuse it.
+bot_foreign() {
+  local sb; sb=$(sandbox_of "$1")
+  sandbox_exists "$sb" || return 1
+  sandbox_owned "$sb" && return 1
+  sandbox_adopt_legacy "$sb" "$1" && return 1
+  return 0
+}
 
 bot_port() {
   local f; f=$(bot_port_file "$1")
@@ -56,18 +64,30 @@ bot_create() {
   bot_install_extras "$name"
   bot_start "$name" "$port"
   host_profile_ensure "$name" "$port" "$key" "$soul"
-  [[ "$TRACING" == "on" ]] && tracing_enable_bot "$name"
+  if [[ "$TRACING" == "on" ]]; then tracing_enable_bot "$name"; fi
   bot_wait_api "$name" "$port" "$key"
 }
 
 # Role-specific reach: policies/<bot>.yaml is an additive preset applied when
 # present. This is how the researcher gets GitHub and the reviewer does not.
+# A preset may carry __VSS_PORT__; it is rendered from VSS_BASE_URL so the
+# egress rule and the endpoint the bot calls cannot drift apart.
 bot_policy_extras() {
-  local name="$1" f
+  local name="$1" f rendered port
   f=$(bot_policy_file "$name")
   [[ -n "$f" ]] || return 0
-  policy_add "$(sandbox_of "$name")" "$f"
-  ok "extra policy applied: ${f#$SWARM_ROOT/}"
+  if grep -q '__VSS_PORT__' "$f"; then
+    [[ -n "${VSS_BASE_URL:-}" ]] || { warn "policy ${f#$SWARM_ROOT/} needs VSS_BASE_URL in swarm.env; not applied"; return 0; }
+    port="${VSS_BASE_URL##*:}"; port="${port%%/*}"
+    [[ "$port" =~ ^[0-9]+$ ]] || die "VSS_BASE_URL must include an explicit port (got $VSS_BASE_URL)"
+    rendered="$SWARM_STATE/policies/$(sandbox_of "$name")-vss.yaml"
+    sed "s/__VSS_PORT__/$port/" "$f" > "$rendered"
+    policy_add "$(sandbox_of "$name")" "$rendered"
+    ok "extra policy applied: ${f#$SWARM_ROOT/} (port $port from VSS_BASE_URL)"
+  else
+    policy_add "$(sandbox_of "$name")" "$f"
+    ok "extra policy applied: ${f#$SWARM_ROOT/}"
+  fi
 }
 
 # Write model/provider, api_server, SOUL, and the inference key into the sandbox.
@@ -139,23 +159,22 @@ bot_write_soul() {
 # it stays true as bots are added: a text bot learns that nemoclaw-vision can
 # look at images and nemoclaw-vss can watch video, and is told to ask rather
 # than apologise. Empty when there is nothing to say.
+# Iterates the live inventory (bot_list), not the static BOTS value, so a bot
+# added later with `swarm add` is known to the bots that were already there.
 _soul_teammates_section() {
   local me="$1" b lines=""
-  for b in $BOTS; do
+  for b in $(bot_list); do
     [[ "$b" == "$me" ]] && continue
     case "$(bot_short "$b")" in
-      vision) [[ "$(bot_vision "$me")" == on ]] || lines+="- $b can look at images. If a message has an image attached and you cannot see it, do not say so and stop: send $b a message_teammate asking what is in it, then answer from their description with attribution.
+      vision) [[ "$(bot_vision "$me")" == true ]] || lines+="- $b can look at images. If a message has an image attached and you cannot see it, do not say so and stop: send $b a message_teammate with with_images set to true asking what is in it, then answer from their description with attribution. That flag sends the image itself to $b's sandbox; use it only for that purpose.
 " ;;
-      vss)    lines+="- $b can watch video files and clips. For any question about what happens in a video, ask $b via message_teammate and work from their timestamped findings.
+      vss)    lines+="- $b can watch video files and clips. For any question about what happens in a video, ask $b via message_teammate and work from their timestamped findings. Do not look for the file yourself: it is not in your sandbox and never will be. Pass the name exactly as the user wrote it; $b resolves it.
 " ;;
     esac
   done
   [[ -n "$lines" ]] || return 0
   printf -- '- Ask a teammate for what you cannot do yourself:\n%s' "$lines" | sed 's/^- \(nemoclaw\)/  - \1/'
   printf -- '  Ask once: one message_teammate call, then wait for the reply. Do not fire two\n  asks at the same teammate in parallel; the second one arrives without the image.\n'
-  # $lines ends in a newline that heredoc substitution strips; put it back so
-  # the rule that follows starts on its own line.
-  printf '\n'
 }
 
 _soul_runtime_section() {
@@ -170,7 +189,8 @@ rather than guessing around it.
 
 ## Rules
 - Never invent a source, URL, number, or quote. Label inference as inference.
-$(_soul_teammates_section "$1")- Give the result in this message rather than promising it later; a turn is one
+$(_soul_teammates_section "$1")
+- Give the result in this message rather than promising it later; a turn is one
   request and one reply.
 EOF
 }
@@ -205,6 +225,7 @@ bot_wait_api() {
 # After a reboot: sandbox exists, nothing is running. Bring it back.
 bot_restore() {
   local name="$1" port key
+  bot_foreign "$name" && die "sandbox $(sandbox_of "$name") exists but was not created by this deployment; refusing to reconfigure it"
   port=$(bot_port "$name") || die "no stored port for $name in $SWARM_STATE/keys"
   key=$(read_secret "$(bot_key_file "$name")")
   [[ "$(sandbox_phase "$(sandbox_of "$name")")" == Ready ]] || die "sandbox $(sandbox_of "$name") is not Ready"
@@ -213,30 +234,63 @@ bot_restore() {
   # Re-write the soul and per-bot extras too: editing a soul or swarm.env's
   # VSS_* lines and re-running `swarm up` is how those changes land.
   bot_write_soul "$name" "$(bot_soul_file "$name")" 2>/dev/null || true
+  bot_policy_extras "$name"
   bot_env_extras "$name"
   bot_files_extras "$name"
   bot_toolset_extras "$name"
   bot_start "$name" "$port"
   host_profile_ensure "$name" "$port" "$key" ""
-  # Re-apply tracing every time: policy-add and the env write are idempotent,
-  # and this is how a bot created with tracing off picks it up later.
-  [[ "$TRACING" == "on" ]] && tracing_enable_bot "$name"
+  # Reconcile tracing every time, in both directions: a bot created with
+  # tracing off picks it up later, and a bot created with it on stops
+  # exporting after TRACING=off. Each helper restarts the gateway itself.
+  if [[ "$TRACING" == "on" ]]; then tracing_enable_bot "$name"
+  else tracing_disable_bot "$name"; bot_start "$name" "$port" >/dev/null; fi
   bot_wait_api "$name" "$port" "$key" || true
 }
 
+# ── reconcile ────────────────────────────────────────────────────────────────
+# After the fleet changes (add/rm), everything that was generated from the
+# fleet inventory is regenerated on every other bot: the teammate section of
+# the soul, and the host profile's dropbox plugin and env. The gateway is
+# restarted so the new soul is read. Called by cmd_add and cmd_rm.
+bot_reconcile_others() {
+  local changed="$1" b port key
+  for b in $(bot_list); do
+    [[ "$b" == "$changed" ]] && continue
+    bot_exists "$b" || continue
+    port=$(bot_port "$b") || continue
+    key=$(read_secret "$(bot_key_file "$b")")
+    bot_write_soul "$b" "$(bot_soul_file "$b")" 2>/dev/null || true
+    host_profile_ensure "$b" "$port" "$key" "" >/dev/null
+    bot_start "$b" "$port" >/dev/null
+    dim "reconciled $b (soul, host profile)"
+  done
+}
+
 # ── destroy ──────────────────────────────────────────────────────────────────
+# Order matters: the sandbox goes first, and only if it is really gone do the
+# key, port, policies, and host profile follow. A sandbox that will not delete
+# keeps everything needed to retry or to manage it by hand, and this returns
+# non-zero so callers stop. Refuses to touch a sandbox this tool did not create.
 bot_destroy() {
   local name="$1" sb port
   sb=$(sandbox_of "$name")
   port=$(bot_port "$name" || true)
   log "removing bot $name"
+  if sandbox_exists "$sb" && ! sandbox_owned "$sb"; then
+    fail "sandbox $sb exists but was not created by this deployment; leaving it and $name's state untouched"
+    return 1
+  fi
   [[ -n "$port" ]] && pkill_pattern "forward service --target-port $port "
   pkill_pattern "sandbox exec -n $sb .* gateway run"
+  if ! sandbox_delete "$sb"; then
+    fail "kept $name's key, port, policies, and host profile so the sandbox can still be managed; retry with: swarm rm $name"
+    return 1
+  fi
   host_profile_remove "$name"
-  sandbox_delete "$sb"
   rm -f "$(bot_key_file "$name")" "$(bot_port_file "$name")" \
         "$SWARM_STATE/policies/$sb"*.yaml "$SWARM_STATE/policies/"*"-peer-$name.yaml" \
-        "$SWARM_STATE/relay/$name."* "$SWARM_STATE/logs/$name-"*.log
+        "$SWARM_STATE/relay/$name."* "$SWARM_STATE/logs/$name-"*.log "$SWARM_STATE/owned/$sb"
   ok "bot $name removed"
 }
 

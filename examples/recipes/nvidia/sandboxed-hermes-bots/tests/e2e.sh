@@ -225,5 +225,161 @@ else
   dim "nemoclaw-vss not present; skipped"
 fi
 
+# ── 12. lifecycle: add reconciles, down respects BOTS, ownership, failed delete ──
+# Uses a throwaway bot so the fleet above is never disturbed. Skipped with
+# SWARM_TEST_LIFECYCLE=off (it costs about four minutes).
+if [[ "${SWARM_TEST_LIFECYCLE:-on}" == on ]]; then
+  section "12. lifecycle"
+  tb=nemoclaw-zz-lifecycle; tsb=$(sandbox_of "$tb"); anchor="${BOTS_FOUND[0]}"
+  bot_exists "$tb" 2>/dev/null && "$SWARM_ROOT/swarm" rm "$tb" --yes >/dev/null 2>&1
+
+  # add: the new bot exists, and the EXISTING bots were reconciled (soul lists it, gateway restarted)
+  before=$(sbx "$(sandbox_of "$anchor")" 'stat -c %Y /sandbox/.hermes/SOUL.md' 30 | tail -1)
+  "$SWARM_ROOT/swarm" add "$tb" --role "You are a lifecycle test bot. Reply with exactly what you are asked." >/dev/null 2>&1
+  check "add: $tb created and Ready" "$(sandbox_phase "$tsb")" Ready
+  check "add: ownership marker written (host)" "$(test -s "$SWARM_STATE/owned/$tsb" && echo yes || echo no)" yes
+  check "add: ownership marker written (sandbox)" "$(sbx "$tsb" 'test -s /sandbox/.hermes/.swarm-owner && echo yes || echo no' 30 | tail -1)" yes
+  after=$(sbx "$(sandbox_of "$anchor")" 'stat -c %Y /sandbox/.hermes/SOUL.md' 30 | tail -1)
+  check "add: existing bot $anchor soul was rewritten" "$([[ "$after" -gt "$before" ]] && echo yes || echo no)" yes
+  check "add: $anchor peers include $tb" "$(mesh_peers_of "$anchor" | grep -cx "$tb")" 1
+  check "add: $anchor host profile has dropbox marker state" "$(test -f "$HOME/.hermes/profiles/$anchor/.swarm-owner" && echo yes || echo no)" yes
+
+  # down (default scope) must NOT remove a bot outside BOTS
+  "$SWARM_ROOT/swarm" down --yes >/dev/null 2>&1 || true
+  check "down: $tb (not in BOTS) survives swarm down" "$(sandbox_phase "$tsb")" Ready
+  # ...and the BOTS bots need to come back for the rest of the suite
+  "$SWARM_ROOT/swarm" up >/dev/null 2>&1 || true
+  check "up: $anchor restored after down" "$(sandbox_phase "$(sandbox_of "$anchor")")" Ready
+
+  # ownership: a foreign sandbox with our name is refused by create/restore/destroy
+  fk=$(bot_key_file "$tb"); fp=$(bot_port_file "$tb")
+  mv "$SWARM_STATE/owned/$tsb" "$SWARM_STATE/owned/$tsb.bak"
+  check "ownership: restore refuses a sandbox without our marker" \
+    "$( (bot_restore "$tb" >/dev/null 2>&1 && echo ran) || echo refused)" refused
+  check "ownership: destroy refuses it and keeps the key" \
+    "$( (bot_destroy "$tb" >/dev/null 2>&1 && echo ran) || { test -s "$fk" && echo refused-kept; })" refused-kept
+  check "ownership: sandbox untouched" "$(sandbox_phase "$tsb")" Ready
+  mv "$SWARM_STATE/owned/$tsb.bak" "$SWARM_STATE/owned/$tsb"
+
+  # failed delete keeps state: simulate by making `openshell sandbox delete` a no-op
+  mkdir -p /tmp/swarm-fakebin; cat > /tmp/swarm-fakebin/openshell <<'EOS'
+#!/usr/bin/env bash
+if [[ "$1 $2" == "sandbox delete" ]]; then exit 0; fi
+exec "$(command -v -p openshell 2>/dev/null || ls /usr/local/bin/openshell "$HOME/.local/bin/openshell" 2>/dev/null | head -1)" "$@"
+EOS
+  chmod +x /tmp/swarm-fakebin/openshell
+  check "failed delete: bot_destroy returns non-zero" \
+    "$( (PATH="/tmp/swarm-fakebin:$PATH" bot_destroy "$tb" >/dev/null 2>&1 && echo ok) || echo nonzero)" nonzero
+  check "failed delete: key kept" "$(test -s "$fk" && echo yes || echo no)" yes
+  check "failed delete: port kept" "$(test -s "$fp" && echo yes || echo no)" yes
+  check "failed delete: host profile kept" "$(hermes profile list 2>/dev/null | strip_ansi | awk '{print $1}' | grep -cx "$tb")" 1
+  rm -rf /tmp/swarm-fakebin
+
+  # real removal, then the others are reconciled back
+  "$SWARM_ROOT/swarm" rm "$tb" --yes >/dev/null 2>&1
+  check "rm: $tb gone" "$(sandbox_exists "$tsb" && echo present || echo gone)" gone
+  check "rm: key removed" "$(test -s "$fk" && echo yes || echo no)" no
+  check "rm: $anchor peers no longer include $tb" "$(mesh_peers_of "$anchor" | grep -cx "$tb")" 0
+  check "rm: ownership marker removed" "$(test -e "$SWARM_STATE/owned/$tsb" && echo yes || echo no)" no
+else
+  dim "lifecycle section skipped (SWARM_TEST_LIFECYCLE=off)"
+fi
+
+# ── 13. tracing opt-out ───────────────────────────────────────────────────────
+if [[ "${TRACING:-on}" == on && "${SWARM_TEST_LIFECYCLE:-on}" == on ]]; then
+  section "13. tracing opt-out"
+  anchor="${BOTS_FOUND[0]}"; asb=$(sandbox_of "$anchor")
+  check "tracing on: relay env present in $anchor" "$(sbx "$asb" 'grep -c HERMES_NEMO_RELAY_PLUGINS_TOML /sandbox/.hermes/.env' 30 | tail -1)" 1
+  # swarm.env is sourced after the environment, so the file value wins; turning
+  # tracing off is an edit to swarm.env, which is what this does on a copy.
+  offenv=$(mktemp /tmp/swarm-off.XXXXXX); sed 's/^TRACING=.*/TRACING=off/' "$ENV_FILE" > "$offenv"
+  grep -q '^TRACING=off' "$offenv" || printf 'TRACING=off\n' >> "$offenv"
+  SWARM_ENV="$offenv" "$SWARM_ROOT/swarm" up >/dev/null 2>&1 || true
+  rm -f "$offenv"
+  check "tracing off: relay env removed from $anchor" "$(sbx "$asb" 'grep -c HERMES_NEMO_RELAY_PLUGINS_TOML /sandbox/.hermes/.env' 30 | tail -1)" 0
+  check "tracing off: relay toml removed" "$(sbx "$asb" 'test -f /sandbox/.hermes/relay-plugins.toml && echo yes || echo no' 30 | tail -1)" no
+  check "tracing off: collector container removed" "$(docker inspect swarm-otel >/dev/null 2>&1 && echo present || echo gone)" gone
+  "$SWARM_ROOT/swarm" up >/dev/null 2>&1 || true
+  check "tracing on again: relay env restored" "$(sbx "$asb" 'grep -c HERMES_NEMO_RELAY_PLUGINS_TOML /sandbox/.hermes/.env' 30 | tail -1)" 1
+  check "tracing on again: collector running" "$(docker inspect -f '{{.State.Running}}' swarm-otel 2>/dev/null)" true
+fi
+
+# ── 14. image forwarding is opt-in ────────────────────────────────────────────
+# The property lives in the plugin: without with_images nothing crosses, with
+# it exactly the turn's images do. Proved two ways. First, in-sandbox, by
+# calling the plugin's own function against a fake teammate that counts the
+# image parts it receives (no model in the loop, so no soul can add the flag).
+# Second, live: after the reviewer's model handles a photo, the number of
+# results that report a forwarded image never exceeds the number of calls that
+# set the flag. Both Python probes travel as base64 to avoid quoting layers.
+if bot_exists nemoclaw-vision 2>/dev/null && (( ${#BOTS_FOUND[@]} >= 2 )); then
+  section "14. image forwarding is opt-in"
+  other="${BOTS_FOUND[0]}"; [[ "$other" == nemoclaw-vision ]] && other="${BOTS_FOUND[1]}"
+  osb=$(sandbox_of "$other")
+  probe=$(cat <<'PY'
+import json, sys, threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+sys.path.insert(0, "/sandbox/.hermes/plugins")
+import teammates.tools as t
+got = []
+class H(BaseHTTPRequestHandler):
+    def do_POST(self):
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        parts = body["messages"][-1]["content"]
+        got.append(sum(1 for p in (parts if isinstance(parts, list) else []) if p.get("type") == "image_url"))
+        self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers()
+        self.wfile.write(json.dumps({"choices": [{"message": {"content": "ok"}}], "usage": {"total_tokens": 1}}).encode())
+    def log_message(self, *a): pass
+srv = HTTPServer(("127.0.0.1", 0), H); threading.Thread(target=srv.serve_forever, daemon=True).start()
+port = srv.server_address[1]
+t._load_peers = lambda: {"fake": {"url": "http://127.0.0.1:%d" % port, "note": ""}}
+t._peer_key = lambda n: "k"
+t.remember_turn_images("s", [{"type": "text", "text": "q"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}])
+r1 = json.loads(t.message_teammate({"teammate": "fake", "message": "what colour is the attached image?"}, session_id="s"))
+r2 = json.loads(t.message_teammate({"teammate": "fake", "message": "what colour is the attached image?", "with_images": True}, session_id="s"))
+print("default_images_sent", got[0], "default_reported", r1.get("images_forwarded", 0))
+print("optin_images_sent", got[1], "optin_reported", r2.get("images_forwarded", 0))
+PY
+)
+  pb=$(printf '%s' "$probe" | b64)
+  out=$(sbx "$osb" "printf '%s' '$pb' | base64 -d > /sandbox/p14.py && \$H /sandbox/p14.py; rm -f /sandbox/p14.py" 120 | grep -E "^(default|optin)_")
+  check "plugin: default call sends 0 image parts" "$(awk '/^default_images_sent/{print $2}' <<<"$out")" 0
+  check "plugin: default call reports 0 forwarded" "$(awk '/^default_images_sent/{print $4}' <<<"$out")" 0
+  check "plugin: with_images sends 1 image part" "$(awk '/^optin_images_sent/{print $2}' <<<"$out")" 1
+  check "plugin: with_images reports 1 forwarded" "$(awk '/^optin_images_sent/{print $4}' <<<"$out")" 1
+
+  img=$(mktemp /tmp/swarm-red.XXXXXX.png)
+  python3 - "$img" <<'PY'
+import struct, zlib, sys
+W=H=16; rows=[bytes([0])+bytes([255,0,0])*W for _ in range(H)]
+def ch(t,d): return struct.pack(">I",len(d))+t+d+struct.pack(">I",zlib.crc32(t+d)&0xffffffff)
+open(sys.argv[1],"wb").write(b"\x89PNG\r\n\x1a\n"+ch(b"IHDR",struct.pack(">IIBBBBB",W,H,8,2,0,0,0))+ch(b"IDAT",zlib.compress(b"".join(rows)))+ch(b"IEND",b""))
+PY
+  T0=$(date +%s); sleep 1
+  timeout 300 hermes -p "$other" chat --image "$img" -q "what colour is this image? ask nemoclaw-vision (probe $RANDOM)" >/dev/null 2>&1
+  rm -f "$img"
+  audit_py=$(cat <<'PY'
+import sqlite3, json, sys, re
+since = float(sys.argv[1]); c = sqlite3.connect("/sandbox/.hermes/state.db")
+calls = flagged = forwarded = 0
+for role, content, tools in c.execute("select role,content,tool_calls from messages where timestamp > ? order by id", (since,)):
+    if tools:
+        for t in json.loads(tools):
+            a = t["function"].get("arguments", "{}"); a = json.loads(a) if isinstance(a, str) else a
+            inner = a.get("arguments", a) if isinstance(a, dict) else {}
+            if isinstance(inner, dict) and "teammate" in inner:
+                calls += 1; flagged += 1 if inner.get("with_images") else 0
+    if role == "tool":
+        m = re.search(r'"images_forwarded":\s*(\d+)', content or "")
+        if m and int(m.group(1)) > 0: forwarded += 1
+print("calls", calls, "flagged", flagged, "forwarded_results", forwarded)
+PY
+)
+  ab=$(printf '%s' "$audit_py" | b64)
+  audit=$(sbx "$osb" "printf '%s' '$ab' | base64 -d > /sandbox/a14.py && \$H /sandbox/a14.py $T0; rm -f /sandbox/a14.py" 60 | grep '^calls')
+  check "live: a teammate call was made" "$(awk '{print ($2>0)?"yes":"no"}' <<<"$audit")" yes
+  check "live: forwarded results never exceed flagged calls" "$(awk '{print ($6<=$4)?"yes":"no"}' <<<"$audit")" yes
+fi
+
 printf '\n  ==============================================\n  SUMMARY: %d passed, %d failed\n  ==============================================\n' "$PASS" "$FAIL"
 (( FAIL == 0 ))
