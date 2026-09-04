@@ -17,6 +17,8 @@ After a Brev reconnect or VM resume, run `bash scripts/bring-up.sh` again. The
 command is idempotent and reuses a healthy sandbox. If Brev preserved the
 sandbox record but OpenShell reports its phase as `Error`, use
 `bash scripts/bring-up.sh --recover-error` to replace only that failed sandbox.
+The same command replaces a `Ready` sandbox whose Hermes/Relay versions or
+native Relay configuration do not match this example.
 
 If a public endpoint returns `503`, verify its service locally first with
 `curl -fsS http://127.0.0.1:6006` or

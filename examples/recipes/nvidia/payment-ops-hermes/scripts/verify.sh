@@ -17,12 +17,9 @@ curl -fsS http://127.0.0.1:8780/released >/dev/null && pass "mock payment rail" 
 curl -fsS http://127.0.0.1:8800 >/dev/null && pass "FinGuard UI" || fail "FinGuard UI"
 curl -fsS http://127.0.0.1:8642/health >/dev/null && pass "Hermes host forward" || fail "Hermes host forward"
 
-openshell sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" -- curl -fsS http://127.0.0.1:4040/healthz >/dev/null \
-  && pass "NeMo Relay sidecar" || fail "NeMo Relay sidecar"
-openshell sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" -- curl -fsS http://127.0.0.1:18642/health >/dev/null \
-  && pass "Hermes API" || fail "Hermes API"
-openshell sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" -- test -r /etc/nemo-relay/plugins.toml \
-  && pass "NeMo Relay configuration" || fail "NeMo Relay configuration"
+sandbox_workload_healthy \
+  && pass "Hermes 0.20.6 with valid native NeMo Relay 0.7.2 configuration" \
+  || fail "Hermes and native NeMo Relay stack"
 
 if openshell sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" -- curl -fsS --connect-timeout 3 \
   -X POST https://payments-rail.internal/release -d '{"payment_id":"WIRE-1007"}' >/dev/null 2>&1; then

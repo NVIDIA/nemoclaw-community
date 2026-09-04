@@ -10,8 +10,8 @@ It checks:
 
 - all six bundled payment decisions;
 - Phoenix, the mock rail, and the FinGuard UI;
-- NeMo Relay and Hermes health inside the sandbox;
-- the rendered Relay plugin configuration;
+- Hermes health and pinned version inside the sandbox;
+- the native NeMo Relay version and valid configuration;
 - denial of payment-rail access from the sandbox.
 
 ## Offline-only checks
@@ -38,12 +38,18 @@ hold. UI-driven host decisions emit audit spans under service
 `finguard-host-checker`, distinct from NeMo Relay's agent spans.
 
 In the UI, exercise screening and **Agent: Release** before checking Phoenix.
-Those actions call Hermes and produce Relay evidence. Merely loading the queue
-or ledger intentionally does not create a trace.
+Those actions call Hermes and produce live turn, LLM, and tool spans. Merely
+loading the queue or ledger intentionally does not create a trace. The
+top-level Agent span remains open until native session finalization.
 
-## Relay logs and traces
+## Relay configuration and traces
 
 ```bash
-openshell sandbox exec --name payment-ops -- tail -50 /tmp/nemo-relay.log
+openshell sandbox exec --name payment-ops -- \
+  sed -n '1,160p' /etc/nemo-relay/config/plugins.toml
 bash scripts/download-traces.sh
 ```
+
+ATIF is session-boundary evidence, not per-request output. The download command
+copies only trajectories Hermes has already finalized and may find none while
+the API session remains active.

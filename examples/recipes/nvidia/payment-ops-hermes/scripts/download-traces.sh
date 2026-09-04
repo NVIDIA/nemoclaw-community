@@ -12,4 +12,4 @@ require_command openshell
 destination="${1:-$EXAMPLE_DIR/.tmp/atif}"
 mkdir -p "$destination"
 openshell sandbox download "$NEMOCLAW_SANDBOX_NAME" /sandbox/atif "$destination"
-echo "ATIF traces downloaded to: $destination"
+echo "ATIF directory downloaded to: $destination (only finalized sessions create files)"

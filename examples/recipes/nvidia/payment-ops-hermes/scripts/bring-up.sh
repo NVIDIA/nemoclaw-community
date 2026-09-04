@@ -49,7 +49,7 @@ echo "═══ Phase 3/5: Gateway and inference ═══"
 bash "$DIR/01-gateway.sh"
 bash "$DIR/02-provider.sh"
 echo
-echo "═══ Phase 4/5: Hermes + NeMo Relay sandbox ═══"
+echo "═══ Phase 4/5: Hermes sandbox with native NeMo Relay ═══"
 if [[ "$recover_error" == 1 ]]; then
   bash "$DIR/03-sandbox.sh" --recover-error
 else

@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Native NeMo Relay config loaded in-process by Hermes core through
+# HERMES_NEMO_RELAY_PLUGINS_TOML.
+
+version = 1
+
+[[components]]
+kind = "observability"
+enabled = true
+
+[components.config]
+version = 3
+
+[components.config.atif]
+enabled = true
+output_directory = "/sandbox/atif"
+filename_template = "hermes-atif-{session_id}.json"
+agent_name = "FinGuard Payment Operations Assistant"
+
+[components.config.opentelemetry]
+enabled = true
+
+[[components.config.opentelemetry.endpoints]]
+type = "openinference"
+transport = "http_binary"
+endpoint = "http://host.openshell.internal:6006/v1/traces"
+service_name = "finguard-payment-ops"
+timeout_millis = 3000
+
+[components.config.opentelemetry.endpoints.resource_attributes]
+"openinference.project.name" = "finguard-payment-ops"
+"nemo.claw.example" = "finguard-payment-ops"

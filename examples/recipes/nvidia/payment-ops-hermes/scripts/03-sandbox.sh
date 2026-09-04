@@ -29,12 +29,8 @@ trap 'rm -f "$staged"' EXIT
 cp "$EXAMPLE_DIR/agents/hermes/Dockerfile" "$staged"
 
 model="${NEMOCLAW_MODEL:-${FINANCE_MODEL:-nvidia/nemotron-3-super-120b-a12b}}"
-project="${NEMO_RELAY_PROJECT_NAME:-finguard-payment-ops}"
-endpoint="${PHOENIX_COLLECTOR_ENDPOINT:-http://host.openshell.internal:6006/v1/traces}"
 sed -i \
   -e "s|^ARG NEMOCLAW_MODEL=.*|ARG NEMOCLAW_MODEL=$model|" \
-  -e "s|^ARG NEMO_RELAY_PROJECT_NAME=.*|ARG NEMO_RELAY_PROJECT_NAME=\"$project\"|" \
-  -e "s|^ARG PHOENIX_COLLECTOR_ENDPOINT=.*|ARG PHOENIX_COLLECTOR_ENDPOINT=\"$endpoint\"|" \
   "$staged"
 
 phase="$(sandbox_phase)"
@@ -45,12 +41,12 @@ case "${phase,,}" in
     if sandbox_workload_healthy; then
       echo "Reusing healthy sandbox: $NEMOCLAW_SANDBOX_NAME"
       openshell policy set --policy "$EXAMPLE_DIR/policy.yaml" --wait "$NEMOCLAW_SANDBOX_NAME"
-      echo "Sandbox ready: $NEMOCLAW_SANDBOX_NAME (Relay + Hermes healthy)"
+      echo "Sandbox ready: $NEMOCLAW_SANDBOX_NAME (Hermes healthy; native Relay stack valid)"
       exit 0
     fi
     if [[ "$recover_error" != 1 ]]; then
-      echo "Sandbox $NEMOCLAW_SANDBOX_NAME is Ready, but Relay or Hermes is unhealthy." >&2
-      echo "Inspect it before recovery, or run:" >&2
+      echo "Sandbox $NEMOCLAW_SANDBOX_NAME is Ready, but does not match the required native Hermes and Relay stack." >&2
+      echo "Inspect it before replacement, or run:" >&2
       echo "  bash scripts/bring-up.sh --recover-error" >&2
       exit 1
     fi
@@ -116,13 +112,10 @@ for _ in $(seq 1 240); do
 done
 
 if [[ "$ready" == 1 ]]; then
-  echo "Sandbox infrastructure ready; waiting for NeMo Relay and Hermes..."
+  echo "Sandbox infrastructure ready; waiting for Hermes and the native NeMo Relay stack..."
   workload_ready=0
   for _ in $(seq 1 180); do
-    if openshell sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" -- \
-         curl -fsS http://127.0.0.1:4040/healthz >/dev/null 2>&1 \
-       && openshell sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" -- \
-         curl -fsS http://127.0.0.1:18642/health >/dev/null 2>&1; then
+    if sandbox_workload_healthy; then
       workload_ready=1
       break
     fi
@@ -141,11 +134,9 @@ wait "$create_pid" 2>/dev/null || true
 if [[ "$workload_ready" != 1 ]]; then
   echo "Sandbox workload did not become healthy." >&2
   openshell sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" -- \
-    tail -80 /tmp/nemo-relay.log 2>/dev/null || true
-  openshell sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" -- \
     tail -120 /tmp/hermes.log 2>/dev/null || true
   exit 1
 fi
 
 openshell policy set --policy "$EXAMPLE_DIR/policy.yaml" --wait "$NEMOCLAW_SANDBOX_NAME"
-echo "Sandbox ready: $NEMOCLAW_SANDBOX_NAME (Relay + Hermes healthy)"
+echo "Sandbox ready: $NEMOCLAW_SANDBOX_NAME (Hermes healthy; native Relay stack valid)"
