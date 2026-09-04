@@ -7,10 +7,10 @@
 | --- | --- |
 | Description | Helps learners work through the seven-module Build an Agent workshop in JupyterLab with an AI tutor that explains concepts, offers graduated hints, and checks progress inside an OpenShell sandbox. |
 | Industry | 🎓 Academia/Education |
-| Requirements | Linux · Docker · OpenShell · inference, NVIDIA, and Tavily API keys · Slack or Outlook · CPU-first; module 4 training is read-through |
+| Requirements | Linux · Docker · OpenShell 0.0.106 · inference, NVIDIA, and Tavily API keys · Slack or Outlook · CPU-first; module 4 training is read-through |
 | NemoClaw | N/A |
-| Harness | Hermes 0.20.0 |
-| OpenShell | Unpinned |
+| Harness | Hermes 0.20.6 |
+| OpenShell | 0.0.106 |
 | Upstream | https://github.com/brevdev/workshop-build-an-agent |
 
 [NVIDIA's **Build an Agent** workshop](https://github.com/brevdev/workshop-build-an-agent)
@@ -72,14 +72,19 @@ cannot run inside a sandbox and is only relevant for non-NemoClaw installs.
 
 This example is self-contained. Its deployment — vendored verbatim from the
 [Developer Community Chief of Staff](../developer-community-chief-of-staff/README.md)
-recipe at `21bd3cb` (NemoClaw v0.0.105 base, Hermes 0.20.0, native NeMo
-Relay integration; minus that example's autoheal machinery, its script
+recipe at `21bd3cb` (minus that example's autoheal machinery, its script
 tests, and its product docs) — stands up an OpenShell gateway on a single
 host, running a Hermes agent inside a `hermes-direct` sandbox with L7 egress
 allowlists, credential placeholders, Landlock/seccomp enforcement, and
 enterprise messaging channels. `bash scripts/bring-up.sh` creates the
 sandbox; the vendored copies may diverge deliberately from the
 chief-of-staff recipe over time.
+
+The deployment now inherits the immutable Hermes sandbox base published by
+[NemoClaw's Hermes 0.20.6 upgrade](https://github.com/NVIDIA/NemoClaw/pull/10595).
+That base includes Hermes `0.20.6` and its native NeMo Relay `0.7.2`
+dependency, so this recipe adds no separate Hermes or Relay installation,
+dependency patch, Relay transport bridge, or Relay process.
 
 The vendored agent image also carries the source recipe's in-image skills,
 including the NVTeam role-lens personas: those are added by that Community
@@ -107,7 +112,7 @@ notes).
 
 ## Prerequisites
 
-- A Linux host with Docker and the OpenShell CLI, v2 providers enabled:
+- A Linux host with Docker and the OpenShell CLI v0.0.106, v2 providers enabled:
   `openshell settings set --global --key providers_v2_enabled --value true --yes`.
 - `cp .env.example .env`, then fill in an inference key (`COMPATIBLE_API_KEY`)
   and at least one messaging channel — Slack (`SLACK_BOT_TOKEN` +

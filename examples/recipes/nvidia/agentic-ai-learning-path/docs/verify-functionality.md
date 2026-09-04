@@ -417,7 +417,7 @@ appears in the sandbox:
 
 ```console
 $ openshell sandbox exec --name hermes-direct -- sh -lc \
-    'find /tmp/atif -maxdepth 1 -type f -name "hermes-atif-*.json" -print'
+    'find /sandbox/atif -maxdepth 1 -type f -name "hermes-atif-*.json" -print'
 ```
 
 With `ATIF_EXPORT_MODE=relay` and the MinIO backend, confirm one new object
@@ -430,7 +430,7 @@ $ docker run --rm --network=host \
 ```
 
 A successful remote delivery does not create a duplicate local file. If the
-remote POST fails, NeMo Relay `0.7.2` writes a recovery copy to `/tmp/atif/`.
+remote POST fails, NeMo Relay `0.7.2` writes a recovery copy to `/sandbox/atif/`.
 See [atif-export.md](atif-export.md) for the request contract and diagnostics.
 
 ---

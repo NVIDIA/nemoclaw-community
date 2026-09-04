@@ -212,8 +212,8 @@ class ExampleStackFactsTests(unittest.TestCase):
             states,
             Counter(
                 {
-                    "unconfirmed": 7,
-                    "unpinned": 10,
+                    "unconfirmed": 8,
+                    "unpinned": 9,
                     "unknown": 1,
                     "not-applicable": 1,
                 }
