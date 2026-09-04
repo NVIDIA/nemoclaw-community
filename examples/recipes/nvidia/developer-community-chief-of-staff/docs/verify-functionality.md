@@ -487,8 +487,8 @@ a deterministic baseline before adding ML.
 > Use River. Before planning, I must choose exactly one V0 outcome: reduce setup abandonment, reduce time to first success, or improve recovery completion. No supplied evidence favors one. Ask me to choose before continuing.
 
 **Expected:** River uses Hermes's normal clarification tool with three concise,
-mutually exclusive choices. The recipe's compatibility layer presents the
-choices as Block Kit buttons.
+mutually exclusive choices. Hermes's native Slack adapter presents the choices
+as Block Kit buttons.
 **Verify:** Slack shows three one-tap outcome buttons plus `Other`. Clicking one
 replaces the controls with the selected answer and the agent continues the
 normal turn. The click does not approve, publish, deploy, or perform another
@@ -509,7 +509,7 @@ appears in the sandbox:
 
 ```console
 $ openshell sandbox exec --name hermes-direct -- sh -lc \
-    'find /tmp/atif -maxdepth 1 -type f -name "hermes-atif-*.json" -print'
+    'find /sandbox/atif -maxdepth 1 -type f -name "hermes-atif-*.json" -print'
 ```
 
 With `ATIF_EXPORT_MODE=relay` and the MinIO backend, confirm one new object
@@ -522,7 +522,7 @@ $ docker run --rm --network=host \
 ```
 
 A successful remote delivery does not create a duplicate local file. If the
-remote POST fails, NeMo Relay `0.7.2` writes a recovery copy to `/tmp/atif/`.
+remote POST fails, NeMo Relay `0.7.2` writes a recovery copy to `/sandbox/atif/`.
 See [atif-export.md](atif-export.md) for the request contract and diagnostics.
 
 ---

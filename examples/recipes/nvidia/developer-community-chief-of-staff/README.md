@@ -6,8 +6,8 @@
 | Industry | ✨ Other |
 | Requirements | Single Linux host · Docker · OpenShell · inference provider API key · Slack or Outlook |
 | NemoClaw | N/A |
-| Harness | Hermes 0.20.0 |
-| OpenShell | 0.0.85 |
+| Harness | Hermes 0.20.6 |
+| OpenShell | 0.0.106 |
 
 ![NVIDIA](assets/nvidia_header.png)
 
@@ -95,10 +95,9 @@ flowchart LR
                 direction LR
 
                 agent["Hermes Agent\n+ Slack messaging channel"]
-                relayRuntime["native NeMo Relay\n(in-process Hermes plugin)"]
+                relayRuntime["native NeMo Relay\n(in-process integration)"]
                 outlookBridge["outlook-bridge\nMS Graph poller"]
-                atifBridge["atif-bridge\n127.0.0.1:18444\nHTTP→HTTPS shim"]
-                traceDisk[("/tmp/atif/\n(local or recovery)")]
+                traceDisk[("/sandbox/atif/\n(local or recovery)")]
 
                 subgraph sourceSkills["Source Skills"]
                     direction LR
@@ -130,9 +129,8 @@ flowchart LR
                 agent -->|"tool call\nskill dispatch"| webSkills
                 agent -->|"in-process\nscope events"| relayRuntime
                 relayRuntime -.->|"file write\nlocal or recovery"| traceDisk
-                relayRuntime -->|"HTTP POST /atif\ncompleted trajectory"| atifBridge
+                relayRuntime -->|"HTTPS POST /atif\ncompleted trajectory ·\nbearer placeholder"| l7
                 relayRuntime -->|"OTLP HTTP POST\ntelemetry traces"| l7
-                atifBridge -->|"HTTPS POST /atif\nbearer placeholder"| l7
                 outlookBridge -->|"HTTPS GET/POST\nmail poll · reply"| l7
                 agent <-->|"WSS socket-mode\nmessaging channel"| l7
                 agent -->|"HTTPS POST\nLLM request"| privacyRouter
@@ -182,7 +180,6 @@ flowchart LR
 
     style agent         fill:#dbeafe,stroke:#3b82f6,stroke-width:1.5px
     style relayRuntime  fill:#fef9e7,stroke:#f39c12,stroke-width:2px
-    style atifBridge    fill:#fef0e7,stroke:#e67e22,stroke-width:2px
     style atifRelay     fill:#fef0e7,stroke:#e67e22,stroke-width:2px
     style outlookBridge fill:#fef0e7,stroke:#e67e22,stroke-width:2px
     style traceDisk     fill:#fef9e7,stroke:#f39c12,stroke-width:1px
@@ -214,7 +211,7 @@ flowchart LR
 - Compatible-endpoint inference egress is required for the agent's LLM calls — it's not a research/data-ingestion path.
 - The ETL containers are non-agentic — fixed scraper logic on an hourly interval, no LLM involvement.
 - The PostgREST bridge exposes a read-only HTTP API on host port `3100`, and the sandbox reaches it through `host.openshell.internal` without any live forum egress.
-- Hermes runs NeMo Relay in process through its native plugin integration, with no separate Relay installation or process.
+- Hermes runs NeMo Relay in process through its native integration, with no separate Relay installation or process.
 
 ## Agent skills
 
@@ -278,11 +275,11 @@ itself). The session UUID for Outlook gets produced *between* them, so the order
 
 ```console
 $ git clone https://github.com/NVIDIA/nemoclaw-community.git && cd examples/recipes/nvidia/developer-community-chief-of-staff/
-$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION=v0.0.85 sh
+$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION=v0.0.106 sh
 ```
 
-OpenShell `v0.0.85` matches the supported version in the NemoClaw `v0.0.105`
-release that publishes this example's pinned Hermes sandbox base image.
+OpenShell `v0.0.106` matches the supported version for this example's pinned
+NemoClaw Hermes sandbox base image.
 
 The package-managed installer starts a local gateway service for you. This
 example assumes that default path and targets the `openshell` gateway at
@@ -442,7 +439,7 @@ Use `hermes chat --tui --continue` only after a TUI session exists. The image
 contains the TUI bundle and does not need an `npm install` at runtime.
 
 Hermes includes NeMo Relay as a normal runtime dependency. In the default local
-export mode, a finalized session is written to `/tmp/atif/`. If
+export mode, a finalized session is written to `/sandbox/atif/`. If
 `PHOENIX_COLLECTOR_ENDPOINT` is set, `03-sandbox.sh` additionally bakes the
 endpoint into the image so OpenInference traces stream into Phoenix at
 `http://localhost:6006`.
@@ -474,15 +471,15 @@ uninstall instructions.
 
 ## What this example owns
 
-- **Owns** (in this directory): `agents/hermes/` (the full Hermes asset tree, staged
-  here for convenience), `policy.yaml` (sandbox network/filesystem policy template), `extras/`,
+- **Owns** (in this directory): `agents/hermes/` (recipe-specific Hermes
+  integration assets), `policy.yaml` (sandbox network/filesystem policy template), `extras/`,
   `.env`, and `scripts/`:
   - `00-host-services.sh` — host-side stack lifecycle (phoenix, postgres, ETLs, postgrest, and minio + atif-export-relay when `ATIF_EXPORT_MODE=relay`). Idempotent; safe to invoke directly for `up` or `down`.
   - `01-gateway.sh` / `02-providers.sh` / `03-sandbox.sh` — sandbox-side phase scripts called by the bring-up orchestrator.
   - `bring-up.sh` — orchestrator: invokes `00-host-services.sh up` (phase 1/4) followed by 01 → 02 → 03 (phases 2-4/4). `00-host-services.sh` is idempotent, so re-running `bring-up.sh` on an already-up host stack is a no-op for those services and only re-runs the sandbox-side phases.
   - `tear-down.sh` — removes the sandbox and per-sandbox providers; preserves host services. Add `--stop-host-services` to also stop them (volumes preserved) or `--purge-host-services` to stop and wipe named volumes.
   - `snapshot.sh` / `restore.sh` — explicit Hermes state preservation across tear-down/bring-up cycles.
-  - `download-traces.sh` — pull ATIF trace records from `/tmp/atif/` inside the sandbox into a host-side tarball. See [Capturing ATIF traces](#capturing-atif-traces) for the env knobs.
+  - `download-traces.sh` — pull ATIF trace records from `/sandbox/atif/` inside the sandbox into a host-side tarball. See [Capturing ATIF traces](#capturing-atif-traces) for the env knobs.
   - `host-tls-proxy.py` — optional plain-HTTP forwarder for hosts where the sandbox can't validate the inference endpoint's TLS chain (corporate VPN, split-horizon DNS, mkcert). See [docs/host-tls-proxy.md](docs/host-tls-proxy.md).
   - `autoheal/` — optional user-systemd installer, watchdog, response monitor,
     sanity checker, and unit templates. See [docs/auto-heal.md](docs/auto-heal.md).
@@ -492,16 +489,17 @@ uninstall instructions.
   doesn't expose `--build-arg`, and we patch the GitHub read-only repo scope
   from `.env` before applying the policy.
 
-The example's Dockerfile drops the upstream `COPY nemoclaw-blueprint/` step —
-nothing in the Hermes runtime reads `/sandbox/.nemoclaw/blueprints/`, so this
-example is **fully self-contained** and never needs a NemoClaw checkout.
+This example is **fully self-contained**: its Dockerfile layers recipe-owned
+configuration, skills, bridges, and startup behavior onto the immutable base
+and never needs a NemoClaw checkout.
 
-The Dockerfile inherits the pinned NemoClaw `v0.0.105` Hermes sandbox base, then
-installs a pinned Hermes source revision
-(`03fa32c92dd445eb64c7f67434dd91b32c40701d`, package `0.20.0`) with NeMo
-Relay `0.7.2`. Hermes's native `observability/nemo_relay` plugin handles scopes
-and export in process, so the image needs no separate Relay installation or
-process.
+The Dockerfile inherits an immutable Hermes sandbox base published by
+[NemoClaw's Hermes 0.20.6 upgrade](https://github.com/NVIDIA/NemoClaw/pull/10595).
+That base already contains the checksum-pinned Hermes `v2026.8.27` release
+(package `0.20.6`), whose native dependency lock selects NeMo Relay `0.7.2`.
+Hermes core handles Relay scopes and export in process through the standard
+configuration selected by `HERMES_NEMO_RELAY_PLUGINS_TOML`; this recipe adds
+no separate Hermes or Relay installation, dependency patch, or process.
 
 Setting `PHOENIX_COLLECTOR_ENDPOINT` is a separate opt-in for live
 OpenInference egress: when present, `03-sandbox.sh` bakes the URL into the
@@ -512,7 +510,7 @@ on host port `6006`.
 ### Capturing ATIF traces
 
 In local mode, NeMo Relay writes an ATIF (Agent Trajectory Format) record to
-`/tmp/atif/` when Hermes finalizes a session and closes its top-level Agent
+`/sandbox/atif/` when Hermes finalizes a session and closes its top-level Agent
 scope. Finalization happens on an explicit `/new` or `/reset`, CLI/TUI exit, or
 configured gateway expiry—not after every conversational turn. That directory
 is ephemeral—it lives on the sandbox's writable layer and is destroyed by
@@ -525,7 +523,7 @@ trajectories to S3-compatible storage via a host-side relay. The sandbox never h
 AWS credentials; OpenShell's provider store manages a per-sandbox bearer
 token instead. A successful remote POST does not also create a local file. If
 all configured remote targets fail, NeMo Relay `0.7.2` writes a recovery copy
-to `/tmp/atif/`. See [docs/atif-export.md](docs/atif-export.md) for setup, IAM
+to `/sandbox/atif/`. See [docs/atif-export.md](docs/atif-export.md) for setup, IAM
 template, and the auth model.
 
 ```console
@@ -545,17 +543,17 @@ overridden at the call site:
 
 | Env var | Default | What it controls |
 |---|---|---|
-| `SANDBOX_NAME` | `hermes-direct` | Which OpenShell sandbox to pull `/tmp/atif/` from. Shared with the rest of the example's scripts (defined in `_lib.sh`). |
+| `SANDBOX_NAME` | `hermes-direct` | Which OpenShell sandbox to pull `/sandbox/atif/` from. Shared with the rest of the example's scripts (defined in `_lib.sh`). |
 | `TRACES_DIR` | `$EXAMPLE_DIR/.traces` | Host-side directory the tarball is written to. |
 
-If `/tmp/atif/` is empty when the script runs (for example, no session has
+If `/sandbox/atif/` is empty when the script runs (for example, no session has
 finalized, or remote export succeeded), the script still emits a
 valid empty tarball whose manifest carries an explanatory `note` — downstream
 tooling never has to special-case "no file."
 
 **Lifecycle note**: no automatic rotation — files accumulate until
 sandbox teardown. For long-lived sessions, prune manually inside the
-sandbox, e.g. `find /tmp/atif -type f -mtime +7 -delete`.
+sandbox, e.g. `find /sandbox/atif -type f -mtime +7 -delete`.
 
 ## Prerequisites
 
@@ -592,7 +590,7 @@ bearer header; the OpenShell L7 proxy substitutes a live token on egress.
 | `<sandbox>-github` | `nemoclaw-github` | `GITHUB_TOKEN` | Optional but recommended. Enables authenticated live GitHub REST reads. The sandbox receives only the OpenShell placeholder; `policy.yaml` further limits use to repository-scoped `GET` routes from approved binaries. |
 | `<sandbox>-gitlab` | `nemoclaw-gitlab` | `GITLAB_TOKEN` | Optional. Enables authenticated GitLab REST reads. `policy.yaml` expands a separate GET-only path allowlist for every project in `GITLAB_READONLY_PROJECTS`; sensitive project endpoints remain blocked. |
 | `<sandbox>-tavily-search` | `nemoclaw-tavily-search` | `TAVILY_API_KEY` | Optional and disabled when the key is absent. Setup validates the key before provider creation. Request-body placeholder rewriting supports Hermes's native `web_search`; provider and sandbox policies allow only `POST /search` from `/opt/hermes/.venv/bin/python`. |
-| `<sandbox>-atif-export-relay` | `nemoclaw-atif-export-relay` | `ATIF_RELAY_AUTH_TOKEN` | Created and attached only when `ATIF_EXPORT_MODE=relay`. Allows the Python ATIF bridge to send `POST /atif` to the configured host relay; the provider owns the endpoint, path, binary, private-IP, and credential restrictions. |
+| `<sandbox>-atif-export-relay` | `nemoclaw-atif-export-relay` | `ATIF_RELAY_AUTH_TOKEN` | Created and attached only when `ATIF_EXPORT_MODE=relay`. Allows native NeMo Relay to send `POST /atif` to the configured host relay; the provider owns the endpoint, path, binary, private-IP, and credential restrictions. |
 
 The `compatible-endpoint` provider is **not** prefixed with the sandbox name — it's a
 shared inference provider attached via `--provider compatible-endpoint` on sandbox
@@ -735,12 +733,12 @@ runners, members, writes, `glab`, and `git` remain blocked.
 | `SOURCE_ETL_GITHUB_ENABLED` | `0` | Set to `1` to start the host-side GitHub mirror. A live-read `GITHUB_TOKEN` alone does not enable the ETL. |
 | `SOURCE_ETL_GITHUB_REPO` | `NVIDIA/NemoClaw` | Host-side GitHub mirror repository for source-etls. This is independent of the live GitHub allowlist. |
 | `OUTLOOK_LOGIN_CACHE` | `1` | Controls the Microsoft refresh-token cache at `.bootstrap/cache/ms-graph-token.json`. `1` = use the cache (auto-refresh on staleness, ~90 days). `0` = skip the cache entirely (device-code every bring-up, nothing on disk; use on shared workstations or security-sensitive contexts). `2` = force device-code login and rewrite the cache. The gateway-side encrypted credential copy is unaffected by this knob. |
-| `PHOENIX_COLLECTOR_ENDPOINT` | (none) | Set to e.g. `http://host.openshell.internal:6006/v1/traces` to stream OpenInference traces to a Phoenix collector. ATIF export is independent: local mode writes completed scopes to `/tmp/atif/`; relay mode sends them remotely and uses `/tmp/atif/` only for recovery after all remote targets fail. |
+| `PHOENIX_COLLECTOR_ENDPOINT` | (none) | Set to e.g. `http://host.openshell.internal:6006/v1/traces` to stream OpenInference traces to a Phoenix collector. ATIF export is independent: local mode writes completed scopes to `/sandbox/atif/`; relay mode sends them remotely and uses `/sandbox/atif/` only for recovery after all remote targets fail. |
 | `PHOENIX_PROJECT_NAME` | `default` | Sets `openinference.project.name` on every exported span so Phoenix routes traces to a named project. Override per-build to keep multiple deployments separate in the same Phoenix instance. |
 
 ## Verification (what success looks like)
 
-The plumbing checks below confirm that the bridge and skill scripts are wired
+The plumbing checks below confirm that the integrations and skill scripts are wired
 correctly. For an end-to-end walkthrough that exercises each skill through
 Slack DM and Outlook email, see
 [docs/verify-functionality.md](docs/verify-functionality.md). The optional
@@ -796,7 +794,7 @@ $ bash scripts/tear-down.sh
 ```
 
 Removes the sandbox, the Outlook/GitHub/Slack/Tavily providers, and any leftover
-staged Dockerfile/policy files. **Does not** destroy the gateway or stop host services
+staged Dockerfile/policy files. **Does not** unregister the gateway or stop host services
 (phoenix, postgres, ETLs, postgrest) by default — those are
 typically long-lived. Opt-in flags (mutually exclusive):
 
@@ -805,7 +803,7 @@ typically long-lived. Opt-in flags (mutually exclusive):
 
 Manual cleanup for less-common operations:
 
-- `openshell gateway destroy --name "${OPENSHELL_GATEWAY:-openshell}"` — destroy the gateway (substitute `snap-docker` if you registered it under that name).
+- `openshell gateway remove "${OPENSHELL_GATEWAY:-openshell}"` — unregister the gateway from the CLI (substitute `snap-docker` if you registered it under that name). The package manager owns the local gateway service lifecycle.
 - `openshell provider delete compatible-endpoint` — remove the shared inference provider.
 
 To stop *just* the host services without removing the sandbox:

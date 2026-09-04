@@ -15,7 +15,7 @@
 // Sets what's required for Hermes to run inside OpenShell:
 //   - Model and inference endpoint (Hermes calls OpenShell's `inference.local`
 //     route, bound to the `compatible-endpoint` provider by `openshell inference set`)
-//   - API server on internal port (socat forwards to public port)
+//   - API server on the OpenShell-forwarded port
 //   - Messaging platform tokens (if configured during onboard)
 //   - Agent defaults (terminal, memory, skills, display)
 //   - Slack-facing UX tweaks (less mid-turn chatter, no browser tool exposure)
@@ -97,7 +97,7 @@ function main(): void {
   }
 
   const config: Record<string, unknown> = {
-    _config_version: 34,
+    _config_version: 39,
     model: {
       default: model,
       provider: "custom",
@@ -112,7 +112,7 @@ function main(): void {
       max_turns: 30,
       reasoning_effort: "medium",
       // Config migration v30 -> v32 disables the previous implicit
-      // verify-on-stop behavior. Generated configs start at v34, so preserve
+      // verify-on-stop behavior. Generated configs start at v39, so preserve
       // that migrated value explicitly instead of inheriting "auto".
       verify_on_stop: false,
     },
@@ -147,11 +147,12 @@ function main(): void {
       mode: "off",
       timeout: 60,
     },
-    // Hermes owns Relay's provider, tool, and session lifecycles in-process.
-    // The bundled plugin loads the immutable plugins.toml selected by
-    // HERMES_NEMO_RELAY_PLUGINS_TOML; no shell hooks or Relay daemon are used.
+    // Hermes core owns Relay's provider, tool, and session lifecycles
+    // in-process and loads the immutable plugins.toml selected by
+    // HERMES_NEMO_RELAY_PLUGINS_TOML. Relay is intentionally not listed as a
+    // Hermes plugin; that legacy plugin was removed in config schema v38.
     plugins: {
-      enabled: ["nemoclaw", "observability/nemo_relay"],
+      enabled: ["nemoclaw"],
     },
   };
 
@@ -186,15 +187,13 @@ function main(): void {
     config.platforms = platformsConfig;
   }
 
-  // API server — internal port only.
-  // Hermes binds to 127.0.0.1 regardless of config (upstream bug).
-  // socat in start.sh forwards 0.0.0.0:8642 -> 127.0.0.1:18642.
+  // OpenShell forwards this API server port from the sandbox.
   const platforms = (config.platforms ?? {}) as Record<string, unknown>;
   platforms.api_server = {
     enabled: true,
     extra: {
-      port: 18642,
-      host: "127.0.0.1",
+      port: 8642,
+      host: "0.0.0.0",
     },
   };
   config.platforms = platforms;
@@ -209,8 +208,8 @@ function main(): void {
   // route, which injects the bearer at the gateway. The key never enters
   // the sandbox env.
   const envLines: string[] = [
-    "API_SERVER_PORT=18642",
-    "API_SERVER_HOST=127.0.0.1",
+    "API_SERVER_PORT=8642",
+    "API_SERVER_HOST=0.0.0.0",
     // Internal API key used by the Outlook bridge to authenticate local API
     // requests and support X-Hermes-Session-Id continuation.
     "API_SERVER_KEY=nemoclaw-internal",

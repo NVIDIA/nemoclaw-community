@@ -106,7 +106,7 @@ A `200 OK` with a model list means the proxy and upstream are both working. A `5
 After `bring-up.sh`, confirm the sandbox can reach it through the Docker bridge:
 
 ```console
-$ openshell sandbox exec hermes-direct curl -sf http://host.openshell.internal:18080/v1/models | head -20
+$ openshell sandbox exec --name hermes-direct -- curl -sf http://host.openshell.internal:18080/v1/models | head -20
 ```
 
 ## Troubleshooting

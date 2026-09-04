@@ -40,7 +40,7 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 # ── ATIF remote-export probe (computed once) ────────────────────
 # The Dockerfile emits an HTTP storage block only for relay mode. This probe
-# authoritatively gates the TLS bridge and placeholder Authorization header.
+# authoritatively gates the placeholder Authorization header.
 ATIF_REMOTE_ENABLED=0
 if grep -q '^\[\[components\.config\.atif\.storage\]\]' /etc/nemo-relay/config/plugins.toml 2>/dev/null; then
   ATIF_REMOTE_ENABLED=1
@@ -108,9 +108,6 @@ esac
 NEMOCLAW_CMD=("$@")
 CHAT_UI_URL="${CHAT_UI_URL:-http://127.0.0.1:8642}"
 PUBLIC_PORT=8642
-# Hermes binds to 127.0.0.1 regardless of config (upstream bug).
-# Run it on an internal port and use socat to expose on PUBLIC_PORT.
-INTERNAL_PORT=18642
 
 # Hermes writes state files (PID, state.db, .channel_directory) directly into
 # HERMES_HOME. We cannot point it at the immutable /sandbox/.hermes dir.
@@ -192,90 +189,8 @@ start_gateway_log_stream() {
   GATEWAY_LOG_TAIL_PID=$!
 }
 
-# ── socat forwarder ──────────────────────────────────────────────
-# Hermes API server binds to 127.0.0.1 regardless of config (upstream bug).
-# OpenShell needs the port accessible on 0.0.0.0 for port forwarding.
-# socat bridges 0.0.0.0:PUBLIC_PORT → 127.0.0.1:INTERNAL_PORT.
-SOCAT_PID=""
-start_socat_forwarder() {
-  if ! command -v socat >/dev/null 2>&1; then
-    echo "[gateway] socat not available — port forwarding from host may not work" >&2
-    return
-  fi
-  local attempts=0
-  while [ "$attempts" -lt 30 ]; do
-    if ss -tln 2>/dev/null | grep -q "127.0.0.1:${INTERNAL_PORT}"; then
-      break
-    fi
-    sleep 1
-    attempts=$((attempts + 1))
-  done
-  nohup socat TCP-LISTEN:"${PUBLIC_PORT}",bind=0.0.0.0,fork,reuseaddr \
-    TCP:127.0.0.1:"${INTERNAL_PORT}" >/dev/null 2>&1 &
-  SOCAT_PID=$!
-  echo "[gateway] socat forwarder 0.0.0.0:${PUBLIC_PORT} → 127.0.0.1:${INTERNAL_PORT} (pid $SOCAT_PID)" >&2
-}
-
 # PATCHES_DIR is referenced by PYTHONPATH below + the _PROXY_ENV_FILE export.
 PATCHES_DIR="/usr/local/lib/nemoclaw-patches"
-
-# ── ATIF protocol-bridge sidecar ──────────────────────────────────
-# Tiny HTTP→HTTPS shim that lets native NeMo Relay reach the host
-# atif-export-relay over TLS. OpenShell's generated L7 leaf certificate lacks
-# the serverAuth EKU, which rustls rejects (OpenShell
-# `crates/openshell-sandbox/src/l7/tls.rs:115-135`).
-# The bridge re-emits each request as HTTPS via Python's ssl module
-# (OpenSSL backend), which accepts certs without that EKU — same property
-# that lets curl, Python requests, git, and other Hermes outbound traffic work
-# through the same L7 proxy today. Relay POSTs to the bridge over loopback
-# HTTP; the bridge talks HTTPS upstream; the L7 proxy substitutes the
-# Authorization placeholder during that hop. The real bearer stays in the L7
-# proxy process only.
-ATIF_BRIDGE_PID=""
-start_atif_bridge() {
-  # Only start when the probe at the top found remote ATIF storage.
-  [ "$ATIF_REMOTE_ENABLED" = "1" ] || return 0
-  # Readability suffices — we invoke as `python3 <path>`, so the file
-  # doesn't need the executable bit (and Dockerfile's `chmod -R a+rX`
-  # deliberately doesn't set +x on regular files).
-  if ! [ -r /usr/local/lib/nemoclaw-bridges/atif/atif-bridge.py ]; then
-    echo "[atif-bridge] /usr/local/lib/nemoclaw-bridges/atif/atif-bridge.py not readable, skipping" >&2
-    return 0
-  fi
-  # Scrub credential-shaped env vars before handing off to the bridge.
-  # Defense in depth: bridge.py also refuses to start if any of these are
-  # set. Belt-and-suspenders so a future start.sh regression can't silently
-  # leak a bearer into the bridge's process memory.
-  local scrub=(
-    -u ATIF_RELAY_AUTH_TOKEN
-    -u ATIF_RELAY_AUTHORIZATION
-    -u GITHUB_TOKEN
-    -u TAVILY_API_KEY
-    -u MS_GRAPH_ACCESS_TOKEN
-    -u SLACK_BOT_TOKEN
-  )
-  nohup env "${scrub[@]}" \
-    ATIF_BRIDGE_UPSTREAM_URL="${ATIF_RELAY_ENDPOINT:-https://host.openshell.internal:18443}" \
-    python3 /usr/local/lib/nemoclaw-bridges/atif/atif-bridge.py \
-    >>/tmp/atif-bridge.log 2>&1 &
-  ATIF_BRIDGE_PID=$!
-  local attempts=0
-  while [ "$attempts" -lt 30 ]; do
-    if curl -sf "http://127.0.0.1:18444/healthz" >/dev/null 2>&1; then
-      echo "[atif-bridge] healthy on 127.0.0.1:18444 (pid $ATIF_BRIDGE_PID)" >&2
-      return 0
-    fi
-    sleep 0.5
-    attempts=$((attempts + 1))
-  done
-  # Fail-hard: if the bridge isn't up, every trace upload would return
-  # ECONNREFUSED. Quieter than a silent telemetry loss.
-  echo "[atif-bridge] FATAL: bridge did not become healthy within 15s (pid $ATIF_BRIDGE_PID)" >&2
-  echo "[atif-bridge] --- last 30 lines of /tmp/atif-bridge.log ---" >&2
-  tail -n 30 /tmp/atif-bridge.log >&2 2>/dev/null || echo "[atif-bridge] (log unreadable)" >&2
-  echo "[atif-bridge] --- end log ---" >&2
-  exit 1
-}
 
 # Outlook bridge PID (populated at launch).
 OUTLOOK_BRIDGE_PID=""
@@ -314,14 +229,12 @@ prepare_runtime() {
   prepare_restricted_log /tmp/gateway.log 600
   # shellcheck disable=SC2119
   validate_tmp_permissions
-  mkdir -p /tmp/atif
+  mkdir -p /sandbox/atif
   if [ ! -r /etc/nemo-relay/config/plugins.toml ]; then
     echo "[nemo-relay] FATAL: native config missing: /etc/nemo-relay/config/plugins.toml" | tee -a /tmp/gateway.log >&2
     exit 1
   fi
   echo "[nemo-relay] native config ready (plugins.toml=/etc/nemo-relay/config/plugins.toml)" | tee -a /tmp/gateway.log >&2
-  # The bridge must be up before Hermes creates Relay's HTTP exporter.
-  start_atif_bridge
 }
 
 # Launch the Hermes gateway with the standard env block.
@@ -349,14 +262,11 @@ wire_post_launch_supervision() {
   start_gateway_log_stream
 
   SANDBOX_CHILD_PIDS=("$GATEWAY_PID")
-  [ -n "${ATIF_BRIDGE_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$ATIF_BRIDGE_PID")
   [ -n "${GATEWAY_LOG_TAIL_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$GATEWAY_LOG_TAIL_PID")
   # shellcheck disable=SC2034  # read by cleanup_on_signal from sandbox-init.sh
   SANDBOX_WAIT_PID="$GATEWAY_PID"
   trap cleanup_on_signal SIGTERM SIGINT
 
-  start_socat_forwarder
-  [ -n "${SOCAT_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$SOCAT_PID")
   start_outlook_bridge
   [ -n "${OUTLOOK_BRIDGE_PID:-}" ] && SANDBOX_CHILD_PIDS+=("$OUTLOOK_BRIDGE_PID")
   print_dashboard_urls
@@ -400,9 +310,9 @@ export MS_GRAPH_ACCESS_TOKEN="${MS_GRAPH_ACCESS_TOKEN:-openshell:resolve:env:MS_
 
 # Relay's native HTTP storage reads a standard Authorization value from this
 # env var. OpenShell substitutes the scoped placeholder only at the L7 egress
-# boundary; neither Hermes, Relay, nor the bridge receives the real token.
+# boundary; Hermes and Relay receive only the placeholder, never the real token.
 if [ "$ATIF_REMOTE_ENABLED" = "1" ]; then
-  export ATIF_RELAY_AUTHORIZATION="${ATIF_RELAY_AUTHORIZATION:-Bearer openshell:resolve:env:ATIF_RELAY_AUTH_TOKEN}"
+  export ATIF_RELAY_AUTHORIZATION="${ATIF_RELAY_AUTHORIZATION:-Bearer ${ATIF_RELAY_AUTH_TOKEN:-openshell:resolve:env:ATIF_RELAY_AUTH_TOKEN}}"
 fi
 
 # SECURITY FIX: Write proxy + tool env to a standalone file via
@@ -429,7 +339,6 @@ export SLACK_BOT_TOKEN="${SLACK_BOT_TOKEN:-openshell:resolve:env:SLACK_BOT_TOKEN
 export GITHUB_READONLY_REPOS="${GITHUB_READONLY_REPOS}"
 export GITHUB_READONLY_REPO="${GITHUB_READONLY_REPO}"
 export MS_GRAPH_ACCESS_TOKEN="${MS_GRAPH_ACCESS_TOKEN:-openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN}"
-export PATH="/usr/local/lib/nemoclaw/bin:\$PATH"
 export HERMES_TUI_THEME=dark
 export HERMES_DISABLE_LAZY_INSTALLS=1
 PROXYEOF
@@ -469,7 +378,7 @@ TUIENVEOF
   done
   if [ "$ATIF_REMOTE_ENABLED" = "1" ]; then
     cat <<'RELAYENVEOF'
-export ATIF_RELAY_AUTHORIZATION="${ATIF_RELAY_AUTHORIZATION:-Bearer openshell:resolve:env:ATIF_RELAY_AUTH_TOKEN}"
+export ATIF_RELAY_AUTHORIZATION="${ATIF_RELAY_AUTHORIZATION:-Bearer ${ATIF_RELAY_AUTH_TOKEN:-openshell:resolve:env:ATIF_RELAY_AUTH_TOKEN}}"
 RELAYENVEOF
   fi
 } | emit_sandbox_sourced_file "$_PROXY_ENV_FILE"

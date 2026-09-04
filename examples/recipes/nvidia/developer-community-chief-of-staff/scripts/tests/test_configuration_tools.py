@@ -367,7 +367,7 @@ def successful_runner(
     args = list(command)
     stdout = ""
     if args == ["openshell", "--version"]:
-        stdout = "openshell 0.0.85\n"
+        stdout = "openshell 0.0.106\n"
     elif args == [
         "openshell",
         "settings",

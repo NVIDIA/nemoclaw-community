@@ -44,7 +44,7 @@ from lib.configuration import (  # noqa: E402
     resolved_values,
 )
 
-EXPECTED_OPENSHELL_VERSION = "0.0.85"
+EXPECTED_OPENSHELL_VERSION = "0.0.106"
 SLACK_ID_RE = re.compile(r"^[UW][A-Z0-9]{8,}$")
 
 

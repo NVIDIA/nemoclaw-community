@@ -38,10 +38,6 @@ host_gateway_ok() {
   curl -fsS --max-time 5 http://127.0.0.1:8642/health >/dev/null 2>&1
 }
 
-sandbox_container() {
-  docker ps --format '{{.Names}}' | grep "^openshell-${AUTOHEAL_SANDBOX_NAME}" | head -n1 || true
-}
-
 unit_is_installed() {
   systemctl --user cat "$1" >/dev/null 2>&1
 }
