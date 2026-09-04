@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+name: vss
+version: 1.0.0
+description: Put a video in front of NVIDIA RT-VLM (from the VSS blueprint) and get text back
+author: nemoclaw-hermes-swarm example
+provides_tools:
+- vss_describe_video
+- vss_ask_video

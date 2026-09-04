@@ -1,0 +1,57 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# OpenTelemetry Collector for the swarm. Receives NeMo Relay spans from every
+# bot sandbox over the OpenShell bridge and fans them out.
+#
+# Rendered by lib/tracing.sh: the LangSmith exporter block is appended only
+# when a key file exists, and the key reaches the container as an environment
+# variable at start, never as a file the sandboxes could read.
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        # 0.0.0.0 so the bridge (172.18.0.1) can reach it; sandboxes have their
+        # own network namespace and cannot reach host loopback.
+        endpoint: 0.0.0.0:__OTLP_PORT__
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 256
+
+  # Relay exports a span when its scope closes. The enclosing hermes.session
+  # scope stays open as long as the gateway runs, so top-level turn spans arrive
+  # with a parent the backend never sees. Clearing that parent gives every trace
+  # a renderable root; children keep their real parents.
+  transform/root:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          - set(parent_span_id.string, "0000000000000000") where name == "hermes.turn"
+          - set(parent_span_id.string, "0000000000000000") where name == "hermes.task_run"
+
+exporters:
+  debug:
+    # detailed prints attributes, which is how `swarm traces NAME` filters by bot.
+    verbosity: detailed
+__LANGSMITH_EXPORTER__
+
+service:
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [transform/root, batch]
+      exporters: [__EXPORTERS__]

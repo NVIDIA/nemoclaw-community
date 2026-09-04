@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+name: dropbox
+version: 1.0.0
+description: Host-side. A video dropped into Desktop lands in the vss bot's sandbox by name.
+author: nemoclaw-hermes-swarm example

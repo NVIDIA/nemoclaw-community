@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Additive preset: let one bot reach NVIDIA RT-VLM (the vision model from the
+# VSS blueprint) on the OpenShell bridge. No other bot gets this; that is the
+# point. The port must match VSS_PORT in examples/vss/.env.
+#
+#   nemoclaw <sandbox> policy-add --from-file examples/policies/nemoclaw-vss.yaml --yes
+#
+# Applied automatically to the bot named nemoclaw-vss when this file is copied
+# to policies/nemoclaw-vss.yaml (see examples/README.md).
+preset:
+  name: vss-rtvlm
+  description: Reach RT-VLM on the bridge
+network_policies:
+  vss-rtvlm:
+    name: vss-rtvlm
+    endpoints:
+      - { host: host.openshell.internal, port: 8018, tls: skip }
+    binaries:
+      - { path: /sandbox/.hermes/hermes-agent/venv/bin/python }
+      - { path: /sandbox/.hermes/hermes-agent/venv/bin/* }
+      - { path: /usr/bin/curl }
+      - { path: /bin/sh }

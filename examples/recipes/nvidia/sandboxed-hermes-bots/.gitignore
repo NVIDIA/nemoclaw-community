@@ -1,0 +1,6 @@
+swarm.env
+secrets/
+logs/
+*.key
+*.port
+__pycache__/

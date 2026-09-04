@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# swarm — run Hermes bots in NemoClaw sandboxes.
+#
+#   swarm key                store the inference key (prompts, no echo, mode 600)
+#   swarm up                 preflight, image, collector, every bot in BOTS, mesh, status
+#                            (idempotent: the same command restores a fleet after a reboot)
+#   swarm add NAME [--soul FILE | --role "text"]
+#   swarm rm NAME [--yes]
+#   swarm ls [--json]
+#   swarm status             health ladder per bot
+#   swarm test               end-to-end suite
+#   swarm traces NAME        recent spans for one bot at the collector
+#   swarm doctor             preflight plus desktop hints
+#   swarm presubmit          gate before a public push (no host needed)
+#   swarm down [--yes]       remove every bot in BOTS (sandboxes, profiles, keys)
+#
+# Run it from the host that runs OpenShell, as the user who owns ~/.hermes.
+set -euo pipefail
+
+SWARM_ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+export SWARM_ROOT
+
+# Run from anywhere, including a Hermes agent's terminal tool. That environment
+# gets three things wrong for us, all fixed here before anything else runs:
+#  - HOME is rewritten to <profile>/home, so ~/.secrets, ~/.swarm, and ~/.hermes
+#    all resolve into a private tree the operator never set up. Use the real
+#    home of the invoking user.
+#  - HERMES_HOME/HERMES_PROFILE point at the agent's own profile, under which
+#    `hermes profile list` shows only "default" and every host-profile step
+#    silently targets the wrong tree.
+#  - openshell/nemoclaw/hermes live in ~/.local/bin, which non-login shells do
+#    not have on PATH.
+_real_home=$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f6 || true)   # Linux
+[[ -n "$_real_home" ]] || _real_home=$(dscl . -read "/Users/$(id -un)" NFSHomeDirectory 2>/dev/null | awk '{print $2}')   # macOS
+[[ -d "${_real_home:-}" ]] && export HOME="$_real_home"
+unset HERMES_HOME HERMES_PROFILE
+export PATH="/opt/homebrew/bin:$HOME/.local/bin:$PATH"
+
+usage() { sed -n '5,19p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+
+# ── config ───────────────────────────────────────────────────────────────────
+ENV_FILE="${SWARM_ENV:-$SWARM_ROOT/swarm.env}"
+[[ "${1:-}" == "presubmit" ]] && exec "$SWARM_ROOT/tests/presubmit.sh"
+if [[ ! -f "$ENV_FILE" ]]; then
+  if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || -z "${1:-}" ]]; then usage; exit 2; fi
+  printf 'swarm: no config at %s\n  fix: cp %s/swarm.env.example %s\n  (the example works as-is with the NVIDIA inference API; edit it for another endpoint)\n' \
+    "$ENV_FILE" "$SWARM_ROOT" "$ENV_FILE" >&2
+  exit 2
+fi
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+set +a
+
+for v in INFERENCE_BASE_URL INFERENCE_MODEL INFERENCE_KEY_FILE HERMES_REF BOTS \
+         API_PORT_BASE BRIDGE_IP SWARM_STATE; do
+  [[ -n "${!v:-}" ]] || { printf 'swarm: %s is empty in %s\n' "$v" "$ENV_FILE" >&2; exit 2; }
+done
+: "${INFERENCE_CONTEXT_LENGTH:=131072}" "${INFERENCE_MAX_TOKENS:=8192}"
+# Where api_servers are published for the HOST side (Desktop, host profiles,
+# tests). On Linux the OpenShell bridge is a host interface, so bind there and
+# nothing on the LAN can reach it. On macOS the bridge lives inside the Colima
+# or Docker Desktop VM and is not reachable from the Mac, so publish on
+# loopback instead. Sandboxes always reach each other via the bridge.
+if [[ -z "${HOST_API_ADDR:-}" ]]; then
+  if [[ "$(uname -s)" == Darwin ]]; then HOST_API_ADDR=127.0.0.1; else HOST_API_ADDR="$BRIDGE_IP"; fi
+fi
+export HOST_API_ADDR
+: "${SANDBOX_PREFIX:=}" "${SANDBOX_MEMORY:=8Gi}" "${SANDBOX_CPU:=4}" "${TRACING:=on}" "${OTLP_PORT:=4319}"
+: "${LANGSMITH_PROJECT:=hermes-swarm}" "${LANGSMITH_ENDPOINT:=https://api.smith.langchain.com/otel}"
+INFERENCE_KEY_FILE="${INFERENCE_KEY_FILE/#\~/$HOME}"
+LANGSMITH_KEY_FILE="${LANGSMITH_KEY_FILE:-}"; LANGSMITH_KEY_FILE="${LANGSMITH_KEY_FILE/#\~/$HOME}"
+SWARM_STATE="${SWARM_STATE/#\~/$HOME}"
+export INFERENCE_KEY_FILE LANGSMITH_KEY_FILE SWARM_STATE
+
+# ── modules ──────────────────────────────────────────────────────────────────
+for m in common preflight image policy sandbox bot extras host mesh tracing verify; do
+  # shellcheck disable=SC1090
+  source "$SWARM_ROOT/lib/$m.sh"
+done
+state_init
+
+# ── commands ─────────────────────────────────────────────────────────────────
+cmd_up() {
+  log "preflight"
+  preflight_run || die "preflight failed; fix the items above and re-run"
+  log "image"
+  image_ensure
+  if [[ "$TRACING" == "on" ]]; then
+    log "tracing collector"
+    tracing_collector_ensure
+  fi
+  local b
+  for b in $BOTS; do
+    if bot_exists "$b"; then
+      log "bot $b: restoring"
+      bot_restore "$b"
+    else
+      log "bot $b: creating"
+      bot_create "$b" "$(bot_soul_file "$b")"
+    fi
+  done
+  log "mesh"
+  mesh_sync
+  log "status"
+  verify_all
+  host_desktop_hint
+}
+
+cmd_add() {
+  local name="${1:-}"; shift || true
+  valid_name "$name" || die "usage: swarm add NAME [--soul FILE | --role \"text\"]  (lowercase, digits, dashes)"
+  local soul="" role=""
+  while (($#)); do
+    case "$1" in
+      --soul) soul="$2"; shift 2 ;;
+      --role) role="$2"; shift 2 ;;
+      *) die "unknown flag: $1" ;;
+    esac
+  done
+  bot_exists "$name" && die "bot $name already exists (swarm rm $name first, or swarm up to restore it)"
+  if [[ -z "$soul" && -z "$role" ]]; then
+    soul=$(bot_soul_file "$name")
+  fi
+  if [[ -n "$role" ]]; then
+    soul="$SWARM_STATE/souls/$name.md"; mkdir -p "$(dirname "$soul")"
+    printf '# %s\n\n%s\n' "${name^}" "$role" > "$soul"
+  fi
+  image_ensure
+  [[ "$TRACING" == "on" ]] && tracing_collector_ensure
+  bot_create "$name" "$soul"
+  mesh_sync
+  verify_bot "$name"
+  host_desktop_hint
+}
+
+cmd_rm() {
+  local name="${1:-}" yes="${2:-}"
+  valid_name "$name" || die "usage: swarm rm NAME [--yes]"
+  if [[ "$yes" != "--yes" ]]; then
+    read -r -p "remove bot $name, its sandbox, profile, and key? [y/N] " a
+    [[ "$a" == y || "$a" == Y ]] || { dim "aborted"; return 0; }
+  fi
+  bot_destroy "$name"
+  mesh_forget "$name"
+}
+
+cmd_down() {
+  local yes="${1:-}" b
+  if [[ "$yes" != "--yes" ]]; then
+    read -r -p "remove every bot ($BOTS)? [y/N] " a
+    [[ "$a" == y || "$a" == Y ]] || { dim "aborted"; return 0; }
+  fi
+  for b in $(bot_list); do bot_destroy "$b"; mesh_forget "$b"; done
+}
+
+# swarm key [vss]: store a secret the way preflight wants it. Prompts with echo
+# off, so the token never lands in shell history or a screen recording.
+cmd_key() {
+  local which="${1:-inference}" file
+  case "$which" in
+    inference) file="$INFERENCE_KEY_FILE" ;;
+    vss|ngc)   file="${NGC_KEY_FILE:-$HOME/.secrets/ngc.key}" ;;
+    *) die "usage: swarm key [inference|vss]" ;;
+  esac
+  local tok
+  read -r -s -p "paste your $which API key (input hidden): " tok || true; printf '\n'
+  tok=$(printf '%s' "$tok" | tr -d '[:space:]')
+  [[ -n "$tok" ]] || die "no key entered"
+  (umask 077; mkdir -p "$(dirname "$file")"; printf '%s' "$tok" > "$file")
+  chmod 600 "$file"
+  ok "saved to $file (mode 600)"
+  if [[ "$which" == inference ]]; then
+    local code
+    code=$(http_code "$INFERENCE_BASE_URL/models" -H "Authorization: Bearer $tok" 2>/dev/null | tr -dc '0-9' | tail -c 3) || true
+    case "${code:-000}" in
+      200) ok "endpoint $INFERENCE_BASE_URL accepts it" ;;
+      401|403) die "endpoint returned $code; that key is not valid for $INFERENCE_BASE_URL" ;;
+      000) warn "could not reach $INFERENCE_BASE_URL from here; swarm doctor will retry" ;;
+      *) warn "endpoint answered http $code; swarm doctor will look closer" ;;
+    esac
+  fi
+}
+
+cmd_ls()      { bot_table "${1:-}"; }
+cmd_status()  { verify_all; }
+cmd_test()    { exec "$SWARM_ROOT/tests/e2e.sh"; }
+cmd_traces()  { tracing_show "${1:?usage: swarm traces NAME}"; }
+cmd_doctor()  { preflight_run; host_desktop_hint; }
+cmd_presubmit() { exec "$SWARM_ROOT/tests/presubmit.sh"; }
+
+case "${1:-}" in
+  key)     shift; cmd_key "$@" ;;
+  up)      shift; cmd_up "$@" ;;
+  add)     shift; cmd_add "$@" ;;
+  rm)      shift; cmd_rm "$@" ;;
+  ls)      shift; cmd_ls "$@" ;;
+  status)  shift; cmd_status "$@" ;;
+  test)    shift; cmd_test "$@" ;;
+  traces)  shift; cmd_traces "$@" ;;
+  doctor)  shift; cmd_doctor "$@" ;;
+  presubmit) shift; cmd_presubmit "$@" ;;
+  down)    shift; cmd_down "$@" ;;
+  -h|--help|help|"") usage; exit 0 ;;
+  *) usage; die "unknown command: $1" ;;
+esac
