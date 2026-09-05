@@ -25,7 +25,7 @@ if openshell sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" -- curl -fsS --connect
   -X POST https://payments-rail.internal/release -d '{"payment_id":"WIRE-1007"}' >/dev/null 2>&1; then
   fail "payment rail unexpectedly reachable from sandbox"
 else
-  pass "payment rail denied from sandbox"
+  pass "payment rail unreachable from sandbox"
 fi
 
 echo "FinGuard deployment verified."

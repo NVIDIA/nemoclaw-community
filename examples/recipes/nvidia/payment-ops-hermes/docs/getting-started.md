@@ -66,9 +66,10 @@ bash scripts/bring-up.sh --recover-error
 This recovery uses cached image layers. A browser or SSH timeout by itself does
 not require sandbox replacement.
 
-The same recovery command replaces a `Ready` sandbox that predates the required
-Hermes `0.20.6` and native Relay `0.7.2` image. Bring-up reports that mismatch
-instead of silently reusing the legacy sidecar workload.
+The same recovery command replaces a `Ready` sandbox when the required Hermes
+`0.20.6` or native Relay `0.7.2` version is absent, or when the native Relay
+configuration is missing or invalid. Bring-up reports that condition instead
+of silently reusing the legacy sidecar workload.
 
 ## 4. Verify
 
