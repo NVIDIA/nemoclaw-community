@@ -1,0 +1,8 @@
+# The corpora are fixed data. A trailing double-space is a markdown hard
+# line break inside a message body, and the answer key cites these documents
+# by content, so they must stay byte-stable. Exempt them from whitespace
+# normalization and checking rather than reformat them.
+corpus/**    -whitespace
+corpus_b/**  -whitespace
+gold/**      -whitespace
+questions/** -whitespace

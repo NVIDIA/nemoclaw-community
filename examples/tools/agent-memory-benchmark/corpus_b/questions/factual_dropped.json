@@ -1,0 +1,156 @@
+[
+  {
+    "id": "b-fact-006",
+    "type": "single_hop",
+    "difficulty": "base",
+    "question": "What is the tower crane daily rate at Harbor Point?",
+    "mode": "string_any",
+    "accept": [
+      "$2,400",
+      "$2,400/day",
+      "$2,400 a day"
+    ],
+    "gold_source_ids": [
+      "E:2027-07-26T15-49-00__96d71cdd"
+    ],
+    "notes": "drawn from E:2027-07-26T15-49-00__96d71cdd; answer also appears in 0 other documents",
+    "drop_reason": "answer is a superseded value; ambiguous without a date"
+  },
+  {
+    "id": "b-fact-008",
+    "type": "single_hop",
+    "difficulty": "base",
+    "question": "What status did Evelyn report for the Harbor Point elevator certificate?",
+    "mode": "string_any",
+    "accept": [
+      "Still nothing",
+      "nothing",
+      "Still nothing on the Harbor Point elevator certificate"
+    ],
+    "gold_source_ids": [
+      "E:2027-09-15T16-20-00__276301c5"
+    ],
+    "notes": "drawn from E:2027-09-15T16-20-00__276301c5; answer also appears in 0 other documents",
+    "drop_reason": "names someone outside the cast: ['evelyn']"
+  },
+  {
+    "id": "b-fact-016",
+    "type": "single_hop",
+    "difficulty": "base",
+    "question": "How many packages were outstanding on the Ridgeway closeout register?",
+    "mode": "string_any",
+    "accept": [
+      "11",
+      "11 packages outstanding",
+      "11 packages"
+    ],
+    "gold_source_ids": [
+      "E:2027-08-09T09-13-00__ce3cfcf7"
+    ],
+    "notes": "drawn from E:2027-08-09T09-13-00__ce3cfcf7; answer also appears in 0 other documents",
+    "drop_reason": "answer is a superseded value; ambiguous without a date"
+  },
+  {
+    "id": "b-fact-017",
+    "type": "single_hop",
+    "difficulty": "base",
+    "question": "What start date was given for Nadia Correa?",
+    "mode": "string_any",
+    "accept": [
+      "5 october",
+      "5 October"
+    ],
+    "gold_source_ids": [
+      "S:C300LEAD001_group_dm@2027-09-17"
+    ],
+    "notes": "drawn from S:C300LEAD001_group_dm@2027-09-17; answer also appears in 0 other documents",
+    "drop_reason": "names someone outside the cast: ['nadia']"
+  },
+  {
+    "id": "b-fact-033",
+    "type": "single_hop",
+    "difficulty": "base",
+    "question": "What commitment term was booked for the Harbor Point cost plan?",
+    "mode": "string_any",
+    "accept": [
+      "11 September to 9 November"
+    ],
+    "gold_source_ids": [
+      "E:2027-09-12T11-45-00__c991db08"
+    ],
+    "notes": "drawn from E:2027-09-12T11-45-00__c991db08; answer also appears in 0 other documents",
+    "drop_reason": "answer is a superseded value; ambiguous without a date"
+  },
+  {
+    "id": "b-fact-043",
+    "type": "single_hop",
+    "difficulty": "base",
+    "question": "How many outstanding items was Ridgeway down to on the register as of August 30, 2027?",
+    "mode": "string_any",
+    "accept": [
+      "7"
+    ],
+    "gold_source_ids": [
+      "S:C300RIDG001_channel@2027-08-30"
+    ],
+    "notes": "drawn from S:C300RIDG001_channel@2027-08-30; answer also appears in 0 other documents",
+    "drop_reason": "answer is a superseded value; ambiguous without a date"
+  },
+  {
+    "id": "b-fact-048",
+    "type": "single_hop",
+    "difficulty": "base",
+    "question": "What date is the harbor electrical final booked for?",
+    "mode": "string_any",
+    "accept": [
+      "10 november",
+      "10 November"
+    ],
+    "gold_source_ids": [
+      "S:C300HARB001_channel@2027-08-12"
+    ],
+    "notes": "drawn from S:C300HARB001_channel@2027-08-12; answer also appears in 0 other documents",
+    "drop_reason": "answer is a superseded value; ambiguous without a date"
+  },
+  {
+    "id": "b-fact-064",
+    "type": "single_hop",
+    "difficulty": "base",
+    "question": "What date is the Harbor Point electrical final inspection scheduled for?",
+    "mode": "string_any",
+    "accept": [
+      "2027-11-10"
+    ],
+    "gold_source_ids": [
+      "E:2027-09-24T16-26-00__6d6d6918"
+    ],
+    "notes": "drawn from E:2027-09-24T16-26-00__6d6d6918; answer also appears in 0 other documents",
+    "drop_reason": "answer is a superseded value; ambiguous without a date"
+  },
+  {
+    "id": "b-fact-065",
+    "type": "single_hop",
+    "difficulty": "base",
+    "question": "For Harbor Point's SitePulse daily digest on September 4, 2027, how many deliveries were received?",
+    "mode": "string_any",
+    "accept": [
+      "6",
+      "6 deliveries received"
+    ],
+    "gold_source_ids": [
+      "E:2027-09-04T08-21-00__c9fbb4fc"
+    ],
+    "notes": "drawn from E:2027-09-04T08-21-00__c9fbb4fc; answer also appears in 0 other documents",
+    "drop_reason": "answer is a superseded value; ambiguous without a date"
+  },
+  {
+    "id": "b-fact-056",
+    "question": "Who has Camden Row day-to-day site-side oversight?",
+    "reason": "withdrawn during review; the reason was not recorded at the time"
+  },
+  {
+    "id": "b-fact-021",
+    "question": "Who sent the HPS steel delivery update?",
+    "drop_reason": "gold citation has no body, so the fact it asks about is not in the corpus; the accept value was a truncated sender name that matched the real one by substring"
+  }
+]

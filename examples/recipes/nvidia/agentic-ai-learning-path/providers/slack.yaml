@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+id: nemoclaw-slack
+display_name: NemoClaw Slack
+description: Slack bot — Web API (bot token) + Socket Mode (app token)
+category: messaging
+credentials:
+  - name: bot_token
+    description: Slack bot user OAuth token (xoxb-)
+    env_vars: [SLACK_BOT_TOKEN]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+  - name: app_token
+    description: Slack app-level token (xapp-)
+    env_vars: [SLACK_APP_TOKEN]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+endpoints:
+  - host: slack.com
+    port: 443
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+  - host: api.slack.com
+    port: 443
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+  - host: hooks.slack.com
+    port: 443
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+  - host: wss-primary.slack.com
+    port: 443
+    protocol: rest
+    access: full
+    enforcement: enforce
+  - host: wss-backup.slack.com
+    port: 443
+    protocol: rest
+    access: full
+    enforcement: enforce
+binaries:
+  - /opt/hermes/.venv/bin/python
+  - /opt/hermes/.venv/bin/hermes
+  - /usr/local/bin/hermes
+  - /usr/bin/python3
+  - /usr/bin/python3.13
+  - /usr/bin/curl
+  - /usr/local/bin/curl

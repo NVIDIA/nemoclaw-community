@@ -8,12 +8,15 @@ This is the canonical placement and naming policy for content under
 
 ## Principles
 
-- Classify first by artifact type: recipe, demo, launchable, or tool.
+- Classify first by artifact type: recipe, demo, or tool.
 - For recipes, classify second by contributor provenance.
 - Encode stable navigation in paths. Keep mutable attributes such as maturity,
-  supported versions, integrations, and deployment status in documentation.
+  supported versions, integrations, deployment status, industry, and program
+  collections in documentation and catalog metadata.
 - Use directory placement for discovery, not as a support-level claim.
-- Keep each example independently deployable.
+- Keep each runnable example independently deployable. A documentation-only
+  tutorial keeps its canonical content in a root `tutorial.md` beside its
+  `README.md` and states that it has no runtime deployment.
 
 ## Directory Structure
 
@@ -25,12 +28,17 @@ examples/
 │   └── community/
 ├── demos/
 │   └── field/
-├── launchables/<environment>/
-└── tools/
+├── tools/
+└── collections/
+    ├── hackathon/README.md
+    └── build-a-claw/README.md
 ```
 
-Git does not preserve empty directories. Create a category when its first
-example lands; document reserved categories in `examples/README.md`.
+The five category directories have index READMEs at `recipes/nvidia/`,
+`recipes/partners/`, `recipes/community/`, `demos/field/`, and `tools/`.
+Collection directories contain only their index README; examples remain in a
+canonical category path. Git does not preserve empty directories, so an empty
+category is represented by its index README.
 
 ## Classification
 
@@ -38,7 +46,6 @@ example lands; document reserved categories in `examples/README.md`.
 | --- | --- | --- |
 | `recipes` | The example is a complete, reusable agent workflow intended for adaptation. | It is primarily a presentation script, environment bootstrap, or development utility. |
 | `demos/field` | The artifact is optimized for a bounded field demonstration on named hardware or software. | It is intended as a reusable enterprise workflow. |
-| `launchables` | The artifact's primary purpose is provisioning or onboarding in a specific environment. | The environment is only one deployment option for a broader recipe. |
 | `tools` | The artifact is a standalone developer or evaluation utility rather than a deployed agent blueprint. | It produces the end-user agent workflow itself. |
 
 ## Recipe Provenance
@@ -52,6 +59,60 @@ example lands; document reserved categories in `examples/README.md`.
 Using an NVIDIA model, GPU, SDK, or service does not by itself make a recipe an
 NVIDIA recipe. Determine provenance from explicit README attribution or
 repository history.
+
+## Discovery Metadata
+
+Directory placement answers what an artifact is and, for a recipe, where its
+contribution came from. It does not encode every way a reader may discover the
+example.
+
+Record the one primary industry, any accepted cross-cutting collection, and an
+optional upstream project in the standardized catalog block in the example's
+root `README.md`.
+An exact lowercase root `tutorial.md` opts the same catalog entry into tutorial
+presentation; it does not change kind, provenance, or collection membership.
+Use the exact emoji-and-title values documented in
+[`CONTRIBUTING.md`](../../../../CONTRIBUTING.md#catalog-metadata). Industry does
+not change kind, provenance, support, or maturity. `Lifecycle` and `Reviewed`
+are optional maintenance metadata; omission means an active example whose age
+comes from committed activity.
+
+Every example also declares NemoClaw, harness, and OpenShell values in that
+table. They are fallbacks, not proof. The catalog confirms them only from the
+small set of root runtime conventions documented in
+[`CONTRIBUTING.md`](../../../../CONTRIBUTING.md#runtime-stack-discovery). An
+exact reviewed NemoClaw release may supply its stock harness and OpenShell
+versions. Custom layouts remain `Unconfirmed`, `Unpinned`, or `Unknown` until
+standardized; these labels do not mean unsupported or broken.
+
+`Hackathon` and `Build-a-Claw` are collections, not artifact kinds or
+provenance. Recipes and demos opt in through their metadata while remaining in
+their canonical category path. The corresponding `examples/collections/`
+directories are indexes only; do not place examples there or use a collection
+to erase artifact type or contributor attribution.
+
+Set `Upstream` only when an example wraps, adapts, or extends a separate
+canonical public project. Use an absolute HTTPS URL. Do not use it as a second
+link to the example itself.
+
+## Category And Collection Indexes
+
+After optional license comments, each canonical category and collection index
+README starts with its public H1 title and one concise description paragraph.
+Those authored fields supply the catalog tile label and information tooltip.
+The entire index must follow this standardized shape; no other sections are
+permitted:
+
+```markdown
+## Examples
+
+[Generated table or empty-state message.]
+```
+
+The build retains the authored title and description values while normalizing
+the index and regenerating its inventory. Do not edit that inventory by hand.
+Collection indexes group examples by metadata without changing their canonical
+paths.
 
 ## Naming
 
@@ -68,17 +129,11 @@ Prefer `developer-community-chief-of-staff` over
 `personal-community-sentiment-triage`: the former describes the workflow's
 coordination and intelligence outcome rather than one analysis technique.
 
-## Current Catalog Mapping
+## Current Catalog
 
-| Example | Canonical path |
-| --- | --- |
-| Developer Community Chief of Staff | `examples/recipes/nvidia/developer-community-chief-of-staff/` |
-| Payment Operations Hermes Assistant | `examples/recipes/nvidia/payment-ops-hermes/` |
-| HPE Retail Assistant | `examples/recipes/partners/hpe/retail-assistant/` |
-| Tavily Watchtower | `examples/recipes/partners/tavily/watchtower/` |
-| DGX Station Blender and Omniverse | `examples/demos/field/blender-omniverse-dgx-station/` |
-| Hermes Brev Launchable | `examples/launchables/brev/hermes/` |
-| Harness Engineering Playground | `examples/tools/harness-engineering-playground/` |
+Use the generated [`examples/README.md`](../../../../examples/README.md) for
+the current example-to-path mapping. Do not duplicate that inventory in policy
+documentation; each example's root README is its structured source of truth.
 
 ## Public Repository Boundary
 

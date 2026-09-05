@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Run artifacts. A run writes report.json, summary.md, answers.jsonl and
+# verdicts.jsonl, plus whatever memory the system under test built. The memory
+# can reach hundreds of megabytes and is not evidence about a score, so it is
+# never tracked; a run you want to publish is added explicitly.
+# A generated run is ignored, not merely untracked: `git add -A` after a run
+# would otherwise sweep one in. Publishing a run means un-ignoring it here by
+# name, which is the deliberate act the README describes.
+results/runs/*
+!results/runs/agentic-rag_corpus-a_nemotron/
+!results/runs/self-model_corpus-a_nemotron/
+results/runs/*/state/
+results/runs/*/proxy_errors.log
+results/runs/*/answer_clones/
+results/leaderboard.md

@@ -1,0 +1,39 @@
+{
+  "source": "Synthetic Slack conversations.history responses",
+  "source_url": "https://docs.slack.dev/reference/methods/conversations.history",
+  "created": "2026-08-18",
+  "license": "Apache-2.0",
+  "record_count": 3,
+  "note": "Written from scratch for this example; no real workspace was read. Keyed by channel, because a Slack timestamp is unique only within its channel and the collector builds source_id from both. Channel types are included so the normalizer can tell a direct message from a broadcast.",
+  "channels": [
+    {"id": "D0DIRECT01", "type": "im"},
+    {"id": "C0TEAM0001", "type": "channel"}
+  ],
+  "history": {
+    "D0DIRECT01": {
+      "ok": true,
+      "messages": [
+        {
+          "ts": "1787055600.000100",
+          "user": "U0DANA0001",
+          "text": "Also — did the finance team ever send you the Q3 headcount sheet? I need it for the same deadline."
+        }
+      ]
+    },
+    "C0TEAM0001": {
+      "ok": true,
+      "messages": [
+        {
+          "ts": "1787056200.000200",
+          "user": "U0SAM00001",
+          "text": "<@U0AVERY001> can you sanity-check the rollback plan in the migration doc before Thursday?"
+        },
+        {
+          "ts": "1787056800.000300",
+          "user": "U0PRIYA001",
+          "text": "Reminder that the office wifi maintenance is tonight from 22:00. No action needed from anyone."
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1a1f1a" stroke-width="1"/>
+    </pattern>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#76b900"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#f87171"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="520" fill="#0b0d0b"/>
+  <rect width="1200" height="520" fill="url(#grid)"/>
+
+  <text x="48" y="56" fill="#e5e7eb" font-size="26" font-weight="700">Inside one sandbox</text>
+
+  <rect x="48" y="96" width="1104" height="380" rx="14" fill="none" stroke="#374151" stroke-width="1.5" stroke-dasharray="8 5"/>
+  <text x="68" y="120" fill="#9ca3af" font-size="12" letter-spacing="2">HOST</text>
+
+  <!-- sandbox -->
+  <rect x="80" y="140" width="600" height="310" rx="12" fill="rgba(118,185,0,0.06)" stroke="#76b900" stroke-width="2"/>
+  <text x="100" y="170" fill="#76b900" font-size="14" font-weight="700" letter-spacing="1.5">NEMOCLAW-REVIEWER</text>
+  <text x="100" y="192" fill="#9ca3af" font-size="12">own PID, network, mount namespaces</text>
+
+  <rect x="100" y="212" width="270" height="100" rx="8" fill="#0f140f" stroke="#2d3a2d"/>
+  <text x="116" y="240" fill="#e5e7eb" font-size="15" font-weight="700">files</text>
+  <text x="116" y="268" fill="#76b900" font-size="13">/sandbox  rw</text>
+  <text x="116" y="292" fill="#f87171" font-size="13">host home  ✕</text>
+
+  <rect x="390" y="212" width="270" height="100" rx="8" fill="#0f140f" stroke="#2d3a2d"/>
+  <text x="406" y="240" fill="#e5e7eb" font-size="15" font-weight="700">process</text>
+  <text x="406" y="268" fill="#d1d5db" font-size="13">Hermes + tools</text>
+  <text x="406" y="292" fill="#f87171" font-size="13">no privileged caps  ✕</text>
+
+  <rect x="100" y="330" width="560" height="52" rx="8" fill="#0f140f" stroke="#2d3a2d"/>
+  <text x="116" y="363" fill="#e5e7eb" font-size="15" font-weight="700">holds</text>
+  <text x="200" y="363" fill="#d1d5db" font-size="13">its own api key · the model key · teammates' keys</text>
+
+  <rect x="100" y="396" width="560" height="40" rx="8" fill="#0f140f" stroke="#2d3a2d"/>
+  <text x="116" y="423" fill="#e5e7eb" font-size="15" font-weight="700">egress</text>
+  <text x="200" y="423" fill="#d1d5db" font-size="13">deny by default</text>
+
+  <!-- arrows -->
+  <line x1="680" y1="250" x2="790" y2="250" stroke="#76b900" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <rect x="794" y="226" width="330" height="48" rx="8" fill="#111611" stroke="#374151"/>
+  <text x="810" y="256" fill="#e5e7eb" font-size="14" font-weight="700">model endpoint</text>
+  <text x="1108" y="256" fill="#76b900" font-size="13" text-anchor="end">✓</text>
+
+  <line x1="680" y1="312" x2="790" y2="312" stroke="#76b900" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <rect x="794" y="288" width="330" height="48" rx="8" fill="#111611" stroke="#374151"/>
+  <text x="810" y="318" fill="#e5e7eb" font-size="14" font-weight="700">nemoclaw-researcher</text>
+  <text x="1108" y="318" fill="#76b900" font-size="13" text-anchor="end">✓</text>
+
+  <line x1="680" y1="374" x2="790" y2="374" stroke="#76b900" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <rect x="794" y="350" width="330" height="48" rx="8" fill="#111611" stroke="#374151"/>
+  <text x="810" y="380" fill="#e5e7eb" font-size="14" font-weight="700">trace collector</text>
+  <text x="1108" y="380" fill="#76b900" font-size="13" text-anchor="end">✓</text>
+
+  <line x1="680" y1="436" x2="790" y2="436" stroke="#f87171" stroke-width="2.5" stroke-dasharray="5 4" marker-end="url(#arrow-red)"/>
+  <rect x="794" y="412" width="330" height="48" rx="8" fill="#111611" stroke="#7f1d1d"/>
+  <text x="810" y="442" fill="#e5e7eb" font-size="14" font-weight="700">everything else</text>
+  <text x="1108" y="442" fill="#f87171" font-size="13" text-anchor="end">403</text>
+
+  <text x="48" y="504" fill="#9ca3af" font-size="14">Same host, different reach. That asymmetry is the point.</text>
+</svg>

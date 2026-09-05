@@ -1,0 +1,6 @@
+{"id": "st-freshness", "type": "freshness", "difficulty": "base", "requires_citation": false, "question": "What is the current Quarry rollout percentage?"}
+{"id": "st-require-all", "type": "multi_source", "difficulty": "base", "requires_citation": false, "question": "What is the Quarry budget, and did it change?"}
+{"id": "st-abstain", "type": "abstention", "difficulty": "base", "requires_citation": false, "question": "On what date did the Quarry security review complete?"}
+{"id": "st-boolean", "type": "single_hop", "difficulty": "base", "requires_citation": false, "question": "Does Quarry use the queue?"}
+{"id": "st-ordering", "type": "ordering", "difficulty": "hard", "requires_citation": false, "question": "Place the Quarry milestones in order."}
+{"id": "st-citation", "type": "citation", "difficulty": "base", "requires_citation": true, "question": "What does Quarry read through?"}

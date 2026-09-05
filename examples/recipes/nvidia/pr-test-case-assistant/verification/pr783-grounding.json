@@ -1,0 +1,343 @@
+{
+  "repo": "NVIDIA/NeMo-Relay",
+  "pr": 783,
+  "title": "feat(ffi): add OTLP log and metric bindings",
+  "author": "bbednarski9",
+  "changed_files": 13,
+  "additions": 3471,
+  "deletions": 35,
+  "cited": 55,
+  "verbatim": 53,
+  "results": [
+    {
+      "identifier": "FfiOpenTelemetryLogSubscriber",
+      "category": "opaque handle types",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "FfiOpenTelemetryMetricSubscriber",
+      "category": "opaque handle types",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "FfiOpenTelemetrySubscriber",
+      "category": "opaque handle types",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "NEMO_RELAY_METRIC_KIND_COUNTER",
+      "category": "metric kind constants",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "NEMO_RELAY_METRIC_KIND_UP_DOWN_COUNTER",
+      "category": "metric kind constants",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "NEMO_RELAY_METRIC_KIND_GAUGE",
+      "category": "metric kind constants",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "NEMO_RELAY_METRIC_KIND_HISTOGRAM",
+      "category": "metric kind constants",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "NEMO_RELAY_LOG_SEVERITY_TRACE",
+      "category": "log severity constants",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "NEMO_RELAY_LOG_SEVERITY_DEBUG",
+      "category": "log severity constants",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "NEMO_RELAY_LOG_SEVERITY_INFO",
+      "category": "log severity constants",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "NEMO_RELAY_LOG_SEVERITY_WARN",
+      "category": "log severity constants",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "NEMO_RELAY_LOG_SEVERITY_ERROR",
+      "category": "log severity constants",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "NEMO_RELAY_METRIC_VALUE_TYPE_U64",
+      "category": "value type constants",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "NEMO_RELAY_METRIC_VALUE_TYPE_I64",
+      "category": "value type constants",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "NEMO_RELAY_METRIC_VALUE_TYPE_F64",
+      "category": "value type constants",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "NemoRelayMetricMeasurement",
+      "category": "type names",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "NemoRelayMetricKind",
+      "category": "type names",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "NemoRelayMetricValueType",
+      "category": "type names",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "nemo_relay_otel_log_subscriber_create",
+      "category": "C functions",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "nemo_relay_otel_log_subscriber_register",
+      "category": "C functions",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "nemo_relay_otel_log_subscriber_force_flush",
+      "category": "C functions",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "nemo_relay_otel_log_subscriber_runtime_diagnostics_json",
+      "category": "C functions",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "nemo_relay_otel_log_subscriber_shutdown",
+      "category": "C functions",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "nemo_relay_otel_log_subscriber_deregister",
+      "category": "C functions",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "nemo_relay_string_free",
+      "category": "C functions",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "nemo_relay_metric",
+      "category": "C functions",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "name",
+      "category": "struct fields",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "kind",
+      "category": "struct fields",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "value_type",
+      "category": "struct fields",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "u64_value",
+      "category": "struct fields",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "i64_value",
+      "category": "struct fields",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "f64_value",
+      "category": "struct fields",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "unit",
+      "category": "struct fields",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "description",
+      "category": "struct fields",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "attributes_json",
+      "category": "struct fields",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "boundaries",
+      "category": "struct fields",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "boundaries_len",
+      "category": "struct fields",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "NemoRelayStatus",
+      "category": "status values",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "NullPointer",
+      "category": "status values",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "InvalidArg",
+      "category": "status values",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "\"http_binary\"",
+      "category": "string literals",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "\"grpc\"",
+      "category": "string literals",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "\"trace\"",
+      "category": "string literals",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "\"error\"",
+      "category": "string literals",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "NewOpenTelemetryLogSubscriber",
+      "category": "Go symbols",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "NewOpenTelemetryMetricSubscriber",
+      "category": "Go symbols",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "EmitMetric",
+      "category": "Go symbols",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "MetricMeasurement",
+      "category": "Go symbols",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "Register",
+      "category": "Go symbols",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "ForceFlush",
+      "category": "Go symbols",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "Shutdown",
+      "category": "Go symbols",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "EventV2",
+      "category": "Go symbols",
+      "in_diff": false,
+      "note": ""
+    },
+    {
+      "identifier": "crates/ffi/nemo_relay.h",
+      "category": "file paths",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "go/nemo_relay/nemo_relay.go",
+      "category": "file paths",
+      "in_diff": true,
+      "note": ""
+    },
+    {
+      "identifier": "libnemo_relay.so",
+      "category": "build artefacts",
+      "in_diff": false,
+      "note": ""
+    }
+  ]
+}

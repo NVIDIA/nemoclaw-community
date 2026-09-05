@@ -1,0 +1,47 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Forward-looking placeholder. NOT imported by scripts/02-providers.sh today.
+#
+# The active inference path uses OpenShell's built-in `nvidia` v2 profile via
+# `openshell inference set` (see 02-providers.sh) — that's the only way to get
+# cluster-inference hardening (streaming timeout, header sanitization, model
+# enforcement, gateway-side credential injection) on OpenShell ≤ 0.0.50.
+#
+# When OpenShell ships "Inference mounting from attached providers"
+# (docs/sandboxes/providers-v2.mdx:73 — auto-creates inference.local routes
+# from inference_capable v2 profiles), switch 02-providers.sh's inference
+# block from `--type nvidia` to `--type nemoclaw-compatible-endpoint` and
+# add this file to the per-file `provider profile import` loop. The shape
+# below is already correct; only the wiring in 02-providers.sh changes.
+
+id: nemoclaw-compatible-endpoint
+display_name: NemoClaw Inference (OpenAI-compatible)
+description: OpenAI-compatible inference endpoint; agent calls the upstream host directly with provider-injected API key
+category: inference
+inference_capable: true
+credentials:
+  - name: api_key
+    description: API key for the OpenAI-compatible inference endpoint
+    env_vars: [OPENAI_API_KEY, COMPATIBLE_API_KEY]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+endpoints:
+  - host: integrate.api.nvidia.com
+    port: 443
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+  - host: inference-api.nvidia.com
+    port: 443
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+binaries:
+  - /opt/hermes/.venv/bin/python
+  - /opt/hermes/.venv/bin/hermes
+  - /usr/local/bin/hermes
+  - /usr/bin/python3
+  - /usr/bin/python3.13
+  - /usr/bin/curl

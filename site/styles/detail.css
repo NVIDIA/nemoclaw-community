@@ -1,0 +1,673 @@
+/*
+ * SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* Detail-page hero and facts */
+
+.detail-hero {
+  padding-block: clamp(2.5rem, 5vw, 4.25rem);
+  border-bottom: 1px solid var(--line);
+}
+.detail-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(19rem, 0.65fr);
+  gap: clamp(2.5rem, 5vw, 4.5rem);
+  align-items: end;
+}
+
+.back-link {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 1.75rem;
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+  text-decoration: none;
+}
+
+.back-link:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.detail-heading h1 {
+  max-width: 22ch;
+  margin-bottom: 0.85rem;
+  font-size: clamp(2rem, 4vw, 3.35rem);
+  font-weight: 500;
+  line-height: 1.06;
+  letter-spacing: -0.035em;
+}
+
+.detail-summary {
+  max-width: 46rem;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: clamp(1rem, 2vw, 1.15rem);
+  line-height: 1.65;
+}
+
+.detail-tags {
+  margin-top: 1.25rem;
+}
+
+.detail-facts {
+  padding: 1.1rem;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--nvidia-green);
+  background: var(--surface);
+}
+
+.detail-facts h2 {
+  margin-bottom: 0.85rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.detail-facts dl {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.detail-facts dl > div {
+  display: grid;
+  grid-template-columns: minmax(6rem, 0.7fr) minmax(0, 1.3fr);
+  gap: 1rem;
+  padding-block: 0.62rem;
+  border-top: 1px solid var(--line);
+}
+
+.detail-facts .maintenance-fact,
+.detail-facts .stack-status-fact {
+  position: relative;
+  margin-inline: -0.65rem;
+  padding-inline: 0.65rem;
+  border-radius: 0.3rem;
+}
+
+.detail-facts .maintenance-fact dd,
+.detail-facts .stack-status-fact dd {
+  padding-right: 1.8rem;
+}
+
+.stack-status-fact dt {
+  white-space: nowrap;
+}
+
+.status-label {
+  position: relative;
+}
+
+.status-dot {
+  position: absolute;
+  top: 50%;
+  left: -0.67rem;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: #969696;
+  transform: translateY(-50%);
+}
+
+.maintenance-tone-green .status-dot,
+.stack-status-confirmed .status-dot {
+  background: var(--status-green);
+}
+
+.maintenance-tone-light-orange .status-dot,
+.stack-status-unconfirmed .status-dot {
+  background: var(--status-light-orange);
+}
+
+.maintenance-tone-orange .status-dot,
+.stack-status-unknown .status-dot {
+  background: var(--status-orange);
+}
+
+.maintenance-tone-dark-orange .status-dot,
+.stack-status-unpinned .status-dot {
+  background: var(--status-dark-orange);
+}
+
+.maintenance-tone-red .status-dot,
+.stack-status-conflict .status-dot {
+  background: var(--status-red);
+}
+
+.maintenance-tone-green {
+  background: var(--status-green-bg);
+  box-shadow: inset 3px 0 var(--status-green);
+}
+
+.maintenance-tone-light-orange {
+  background: var(--status-light-orange-bg);
+  box-shadow: inset 3px 0 var(--status-light-orange);
+}
+
+.maintenance-tone-orange {
+  background: var(--status-orange-bg);
+  box-shadow: inset 3px 0 var(--status-orange);
+}
+
+.maintenance-tone-dark-orange {
+  background: var(--status-dark-orange-bg);
+  box-shadow: inset 3px 0 var(--status-dark-orange);
+}
+
+.maintenance-tone-red {
+  background: var(--status-red-bg);
+  box-shadow: inset 3px 0 var(--status-red);
+}
+
+.stack-status-unknown {
+  background: var(--status-orange-bg);
+  box-shadow: inset 3px 0 var(--status-orange);
+}
+
+.stack-status-confirmed {
+  background: var(--status-green-bg);
+  box-shadow: inset 3px 0 var(--status-green);
+}
+
+.stack-status-unconfirmed {
+  background: var(--status-light-orange-bg);
+  box-shadow: inset 3px 0 var(--status-light-orange);
+}
+
+.stack-status-unpinned {
+  background: var(--status-dark-orange-bg);
+  box-shadow: inset 3px 0 var(--status-dark-orange);
+}
+
+.stack-status-conflict {
+  background: var(--status-red-bg);
+  box-shadow: inset 3px 0 var(--status-red);
+}
+
+.fact-unknown {
+  color: #d1d1d1;
+  font-style: italic;
+}
+
+.fact-info {
+  position: absolute;
+  z-index: 3;
+  top: 0.45rem;
+  right: 0.55rem;
+  display: block;
+  width: 1.2rem;
+  height: 1.2rem;
+  border: 1px solid #858585;
+  border-radius: 50%;
+  color: #e5e5e5;
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.fact-info summary {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+
+.fact-info summary::-webkit-details-marker {
+  display: none;
+}
+
+.fact-info summary::marker {
+  content: "";
+}
+
+.fact-info summary:focus-visible {
+  outline-width: 2px;
+  outline-offset: 2px;
+}
+
+.fact-popover {
+  position: absolute;
+  z-index: 4;
+  top: calc(100% + 0.55rem);
+  right: 0;
+  display: none;
+  width: min(20rem, calc(100vw - 3rem));
+  padding: 0.8rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 0.35rem;
+  background: #101010;
+  box-shadow: 0 0.75rem 2rem rgb(0 0 0 / 35%);
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.fact-popover > span {
+  display: block;
+}
+
+.fact-popover > span + span {
+  margin-top: 0.35rem;
+}
+
+.fact-info[open] .fact-popover {
+  display: block;
+}
+
+.fact-info[open] {
+  z-index: 5;
+}
+
+.detail-facts dt,
+.detail-facts dd {
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.detail-facts dt {
+  color: #dedede;
+  font-weight: 600;
+}
+
+.detail-facts dd {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.detail-source {
+  width: 100%;
+  margin-top: 1rem;
+}
+
+/* Compiled README layout and typography */
+
+.detail-content {
+  padding-block: 3rem 4.5rem;
+}
+
+.detail-content-layout {
+  display: grid;
+  grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr);
+  gap: clamp(2.5rem, 7vw, 6rem);
+  align-items: start;
+}
+
+.detail-toc {
+  position: sticky;
+  top: 1.5rem;
+  max-height: calc(100vh - 3rem);
+  overflow: auto;
+  padding-right: 1rem;
+}
+
+.detail-toc-mobile {
+  display: none;
+}
+
+.detail-toc h2 {
+  margin-bottom: 0.85rem;
+  color: #dedede;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.detail-toc ul {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.detail-toc ul ul {
+  padding-left: 0.8rem;
+  margin-top: 0.2rem;
+}
+
+.detail-toc li + li {
+  margin-top: 0.2rem;
+}
+
+.detail-toc a {
+  display: block;
+  padding-block: 0.28rem;
+  color: #a8a8a8;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  text-decoration: none;
+}
+
+.detail-toc a:hover {
+  color: var(--nvidia-green);
+  text-decoration: underline;
+}
+
+.detail-toc summary {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  cursor: pointer;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.readme-content {
+  min-width: 0;
+  color: #d5d5d5;
+}
+
+.readme-content > :first-child {
+  margin-top: 0;
+}
+
+.readme-content h2,
+.readme-content h3,
+.readme-content h4,
+.readme-content h5,
+.readme-content h6 {
+  scroll-margin-top: 1.5rem;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.readme-content h2 {
+  padding-top: 1.25rem;
+  margin: 2.5rem 0 0.8rem;
+  border-top: 1px solid var(--line);
+  font-size: clamp(1.4rem, 2.5vw, 1.8rem);
+}
+
+.readme-content h3 {
+  margin: 2rem 0 0.7rem;
+  font-size: 1.2rem;
+}
+
+.readme-content h4 {
+  margin: 1.5rem 0 0.6rem;
+  font-size: 1.05rem;
+}
+
+.readme-content p,
+.readme-content li {
+  max-width: 78ch;
+}
+
+.readme-content p,
+.readme-content ul,
+.readme-content ol,
+.readme-content blockquote,
+.readme-content table,
+.readme-content pre {
+  margin-block: 0 1rem;
+}
+
+.readme-content ul,
+.readme-content ol {
+  padding-left: 1.5rem;
+}
+
+.readme-content li + li {
+  margin-top: 0.25rem;
+}
+
+.readme-content a {
+  color: var(--nvidia-green);
+}
+
+.readme-content .readme-image-link {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 0.3rem;
+  background: var(--surface);
+  text-decoration: none;
+}
+
+.readme-content .readme-image-link:hover {
+  border-color: var(--nvidia-green);
+  text-decoration: underline;
+}
+
+.readme-content code {
+  padding: 0.08rem 0.28rem;
+  border-radius: 0.2rem;
+  background: #282828;
+  color: #f2f2f2;
+  font-size: 0.9em;
+}
+
+.readme-content :not(pre) > code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.readme-content pre {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  background: #0d0d0d;
+}
+
+.readme-content pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+/* Mermaid presentation */
+
+.mermaid-diagram {
+  max-width: 100%;
+  margin: 1.5rem 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  background: var(--surface);
+}
+
+.mermaid-caption {
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid #d6d6d6;
+  background: #e9e9e9;
+  color: #111111;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.mermaid-canvas {
+  max-width: 100%;
+  max-height: 48rem;
+  overflow: auto;
+  padding: 1rem;
+  background: #f5f5f5;
+  color-scheme: light;
+}
+
+.mermaid-frame {
+  display: block;
+  min-width: 100%;
+  min-height: 5rem;
+  border: 0;
+  background: #f5f5f5;
+  color-scheme: light;
+}
+
+.mermaid-canvas:focus-visible {
+  outline: 3px solid var(--nvidia-green);
+  outline-offset: -3px;
+}
+
+.mermaid-source {
+  border-top: 1px solid var(--line);
+  background: #161616;
+}
+
+.mermaid-source summary {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  padding-inline: 0.9rem;
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.mermaid-source pre {
+  margin: 0 0.9rem 0.9rem;
+}
+
+.mermaid-error {
+  padding: 0.75rem 1rem;
+  border-left: 3px solid #f2c037;
+  background: #292313;
+  color: #f4e6ba;
+}
+
+.readme-content blockquote {
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--nvidia-green);
+  background: var(--surface);
+  color: var(--ink-soft);
+}
+
+.readme-content blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.readme-content .table-wrapper {
+  max-width: 100%;
+  overflow-x: auto;
+  margin-bottom: 1.25rem;
+}
+
+.readme-content table {
+  width: 100%;
+  min-width: 36rem;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.readme-content th,
+.readme-content td {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.readme-content th[align="center"],
+.readme-content td[align="center"] {
+  text-align: center;
+}
+
+.readme-content th[align="right"],
+.readme-content td[align="right"] {
+  text-align: right;
+}
+
+.readme-content th {
+  background: var(--surface-raised);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.readme-content tr:nth-child(even) td {
+  background: rgb(255 255 255 / 2%);
+}
+
+.readme-content img {
+  display: block;
+  width: auto;
+  max-height: 48rem;
+  margin-block: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+}
+
+.readme-content img[src$="nvidia_header.png"] {
+  padding: clamp(0.9rem, 3vw, 1.5rem);
+  border-color: #d6d6d6;
+  background: #f5f5f5;
+}
+
+.readme-content hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin-block: 2rem;
+}
+
+/* Responsive detail-page layout */
+
+@media (min-width: 90rem) {
+  .detail-hero-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem);
+  }
+}
+
+@media (max-width: 56rem) {
+  .detail-hero-grid,
+  .detail-content-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-hero-grid {
+    align-items: start;
+  }
+
+  .detail-facts {
+    max-width: none;
+  }
+
+  .detail-content-layout {
+    gap: 2rem;
+  }
+
+  .detail-toc {
+    position: static;
+    max-height: none;
+    padding: 1rem;
+    border: 1px solid var(--line);
+    background: var(--surface);
+  }
+
+  .detail-toc-desktop {
+    display: none;
+  }
+
+  .detail-toc-mobile {
+    display: block;
+  }
+
+  .detail-toc-mobile nav {
+    margin-top: 0.75rem;
+  }
+}
+
+@media (max-width: 29.375rem) {
+  .detail-facts dl > div {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+
+  .fact-popover {
+    top: auto;
+    bottom: calc(100% + 0.55rem);
+  }
+}

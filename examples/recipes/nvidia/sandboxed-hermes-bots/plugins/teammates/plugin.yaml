@@ -1,0 +1,9 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+name: teammates
+version: 1.0.0
+description: Message a teammate bot directly and get their reply
+author: nemoclaw-hermes-swarm example
+provides_tools:
+- message_teammate
+- list_teammates

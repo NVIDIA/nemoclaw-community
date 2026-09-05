@@ -1,0 +1,96 @@
+{"id": "b-fresh-sup-steel-eta", "type": "freshness", "difficulty": "base", "question": "As of the end of the corpus, what is the current position on Harbor Point steel: ETA for the first erection-sequence loads (HPS-1, HPS-2)?"}
+{"id": "b-asof-sup-steel-eta", "type": "as_of", "difficulty": "hard", "question": "As of 2027-07-29, what was the position on Harbor Point steel: ETA for the first erection-sequence loads (HPS-1, HPS-2)? Answer with the value that was current on that date."}
+{"id": "b-chain-sup-steel-eta", "type": "chain_freshness", "difficulty": "hard", "question": "Harbor Point steel: ETA for the first erection-sequence loads (HPS-1, HPS-2) moved more than once. Give the value it held in between, and the value now."}
+{"id": "b-fresh-sup-occupancy-inspection", "type": "freshness", "difficulty": "base", "question": "As of the end of the corpus, what is the current position on Ridgeway Depot occupancy inspection date?"}
+{"id": "b-asof-sup-occupancy-inspection", "type": "as_of", "difficulty": "hard", "question": "As of 2027-08-20, what was the position on Ridgeway Depot occupancy inspection date? Answer with the value that was current on that date."}
+{"id": "b-fresh-sup-contingency", "type": "freshness", "difficulty": "base", "question": "As of the end of the corpus, what is the current position on Camden Row budget contingency?"}
+{"id": "b-asof-sup-contingency", "type": "as_of", "difficulty": "hard", "question": "As of 2027-08-16, what was the position on Camden Row budget contingency? Answer with the value that was current on that date."}
+{"id": "b-fresh-sup-crane-rate", "type": "freshness", "difficulty": "base", "question": "As of the end of the corpus, what is the current position on Tower crane daily rental rate at Harbor Point?"}
+{"id": "b-asof-sup-crane-rate", "type": "as_of", "difficulty": "hard", "question": "As of 2027-08-18, what was the position on Tower crane daily rental rate at Harbor Point? Answer with the value that was current on that date."}
+{"id": "b-fresh-sup-camden-super", "type": "freshness", "difficulty": "base", "question": "As of the end of the corpus, what is the current position on Who runs Camden Row day to day?"}
+{"id": "b-asof-sup-camden-super", "type": "as_of", "difficulty": "hard", "question": "As of 2027-08-10, what was the position on Who runs Camden Row day to day? Answer with the value that was current on that date."}
+{"id": "b-fresh-sup-pour-window", "type": "freshness", "difficulty": "base", "question": "As of the end of the corpus, what is the current position on Camden Row podium concrete pour window?"}
+{"id": "b-asof-sup-pour-window", "type": "as_of", "difficulty": "hard", "question": "As of 2027-08-11, what was the position on Camden Row podium concrete pour window? Answer with the value that was current on that date."}
+{"id": "b-chain-sup-pour-window", "type": "chain_freshness", "difficulty": "hard", "question": "Camden Row podium concrete pour window moved more than once. Give the value it held in between, and the value now."}
+{"id": "b-fresh-sup-assistant-hire", "type": "freshness", "difficulty": "base", "question": "As of the end of the corpus, what is the current position on Assistant superintendent hire?"}
+{"id": "b-asof-sup-ridgeway-closeout-count", "type": "as_of", "difficulty": "hard", "question": "As of 2027-08-19, what was the position on Ridgeway Depot closeout packages still outstanding? Answer with the value that was current on that date."}
+{"id": "b-disambig-look-two-reyes", "type": "disambiguation", "difficulty": "base", "question": "Alan Reyes and Alana Reyes are two different people \u2014 is that right? Identify each one separately and say what it is."}
+{"id": "b-disambig-look-two-permits", "type": "disambiguation", "difficulty": "base", "question": "PB-2291 and PB-2219 are different permits \u2014 is that right? Identify each one separately and say what it is."}
+{"id": "b-disambig-look-two-inspections", "type": "disambiguation", "difficulty": "base", "question": "The electrical rough-in and electrical final inspections are different events \u2014 is that right? Identify each one separately and say what it is."}
+{"id": "b-disambig-look-two-change-orders", "type": "disambiguation", "difficulty": "base", "question": "CO-114 and CO-141 have opposite outcomes \u2014 is that right? Identify each one separately and say what it is."}
+{"id": "b-disambig-look-bots-not-people", "type": "disambiguation", "difficulty": "base", "question": "SitePulse, PermitTrack and Northline Payroll are automated senders \u2014 is that right? Identify each one separately and say what it is."}
+{"id": "b-disambig-look-rfi17-sk17", "type": "disambiguation", "difficulty": "base", "question": "Harbor Point RFI-17 and Camden Row sketch SK-17 are different records \u2014 is that right? Identify each one separately and say what it is."}
+{"id": "b-disambig-look-co141-submittal141", "type": "disambiguation", "difficulty": "base", "question": "Camden Row CO-141 and Ridgeway Depot submittal 141 are different records with different outcomes \u2014 is that right? Identify each one separately and say what it is."}
+{"id": "b-abstain-sched-walkthrough", "type": "abstention", "difficulty": "base", "question": "How did Vestamark pre-handover walkthrough at Harbor Point go? Describe the outcome."}
+{"id": "b-abstain-sched-design-review", "type": "abstention", "difficulty": "base", "question": "How did Client design review for the Camden Row lobby go? Describe the outcome."}
+{"id": "b-abstain-sched-crane-dismantle", "type": "abstention", "difficulty": "base", "question": "How did Tower crane dismantle at Harbor Point go? Describe the outcome."}
+{"id": "b-abstain-sched-electrical-final", "type": "abstention", "difficulty": "base", "question": "How did Harbor Point electrical final inspection go? Describe the outcome."}
+{"id": "b-abstain-sched-payroll-cutover", "type": "abstention", "difficulty": "base", "question": "How did Northline payroll system cutover go? Describe the outcome."}
+{"id": "b-abstain-sched-ridgeway-occupancy", "type": "abstention", "difficulty": "base", "question": "How did Ridgeway Depot occupancy inspection go? Describe the outcome."}
+{"id": "b-abstain-never-westbrook", "type": "abstention", "difficulty": "base", "question": "Tell me about this: A fourth site called Westbrook Yard."}
+{"id": "b-abstain-never-co-141-approved", "type": "abstention", "difficulty": "base", "question": "Tell me about this: CO-141 being approved."}
+{"id": "b-abstain-never-pb2219-issued", "type": "abstention", "difficulty": "base", "question": "Tell me about this: The facade permit PB-2219 being issued."}
+{"id": "b-abstain-never-alan-permits", "type": "abstention", "difficulty": "base", "question": "Tell me about this: Alan Reyes working for the city permits department."}
+{"id": "b-abstain-never-steel-complete", "type": "abstention", "difficulty": "base", "question": "Tell me about this: All five steel loads having arrived."}
+{"id": "b-abstain-never-kofi-approved-co114", "type": "abstention", "difficulty": "base", "question": "Tell me about this: Kofi Mensah approved CO-114."}
+{"id": "b-order-anchors", "type": "ordering", "difficulty": "hard", "question": "Put these in the order they happened, earliest first: Brannigan mill labour action announced; CO-114 approved; CO-141 rejected; Marcus moves full-time to Harbor Point."}
+{"id": "b-fact-000", "type": "single_hop", "difficulty": "base", "question": "What change order was approved at Harbor Point for the facade glazing upgrade?"}
+{"id": "b-fact-001", "type": "single_hop", "difficulty": "base", "question": "Who was on site the morning the Camden Row north bay rebar inspection failed?"}
+{"id": "b-fact-002", "type": "single_hop", "difficulty": "base", "question": "What was the status of the dock-leveller o&m manuals for Ridgeway that Dana mentioned on September 19?"}
+{"id": "b-fact-003", "type": "multi_source", "difficulty": "base", "question": "Who had Camden day to day from the 1st?"}
+{"id": "b-fact-004", "type": "single_hop", "difficulty": "base", "question": "What is the status of the Camden Row window warranty?"}
+{"id": "b-fact-005", "type": "multi_source", "difficulty": "base", "question": "Who sent the Harbor Point pre-handover walkthrough confirmation to Sofia Duarte?"}
+{"id": "b-fact-007", "type": "single_hop", "difficulty": "base", "question": "What is the quoted cost for the Harbor Point facade upgrade to higher-performance solar-control glazing?"}
+{"id": "b-fact-009", "type": "single_hop", "difficulty": "base", "question": "What status did Alan Reyes give for the slab-edge embed conflict detail from Vantage's end?"}
+{"id": "b-fact-010", "type": "single_hop", "difficulty": "base", "question": "What was the status of the Ridgeway Depot fire-alarm matrix at AlarmTech's end?"}
+{"id": "b-fact-011", "type": "multi_source", "difficulty": "base", "question": "Who did Dana talk to at Brackenford about the PB-2219 technical review?"}
+{"id": "b-fact-012", "type": "single_hop", "difficulty": "base", "question": "How many days into re-tying the north bay at Camden was the crew as of August 31, 2027?"}
+{"id": "b-fact-013", "type": "multi_source", "difficulty": "base", "question": "What sketch was Alan working to on the Camden north bay?"}
+{"id": "b-fact-014", "type": "single_hop", "difficulty": "base", "question": "What date is the Harbor Point tower crane dismantle scheduled for?"}
+{"id": "b-fact-015", "type": "single_hop", "difficulty": "base", "question": "What date is the Northline payroll system cutover scheduled for?"}
+{"id": "b-fact-018", "type": "single_hop", "difficulty": "base", "question": "For Camden Row, which two trade completion notices were attached?"}
+{"id": "b-fact-019", "type": "single_hop", "difficulty": "base", "question": "Which permit was still sitting with the city for Harbor Point on August 24, 2027?"}
+{"id": "b-fact-020", "type": "multi_source", "difficulty": "base", "question": "For the Harbor Point steel shipping schedule, what load range did Hal identify?"}
+{"id": "b-fact-022", "type": "single_hop", "difficulty": "base", "question": "What was the batching plant's order confirmation for the podium pour?"}
+{"id": "b-fact-023", "type": "single_hop", "difficulty": "base", "question": "What is Marcus's podium pour take-off for Camden Row?"}
+{"id": "b-fact-024", "type": "single_hop", "difficulty": "base", "question": "What foundation permit number came through for Harbor Point?"}
+{"id": "b-fact-025", "type": "single_hop", "difficulty": "base", "question": "What was the Fire-Stopping Completion Notice No. for Camden Row?"}
+{"id": "b-fact-026", "type": "single_hop", "difficulty": "base", "question": "Who was on-site to sign off on the ready floors for Harbor Point's electrical rough-in?"}
+{"id": "b-fact-027", "type": "multi_source", "difficulty": "base", "question": "Who said they could walk the lab in at Camden if the acoustic test is on the 1st?"}
+{"id": "b-fact-028", "type": "single_hop", "difficulty": "base", "question": "After the generator package was accepted, which other Ridgeway package was also accepted?"}
+{"id": "b-fact-029", "type": "single_hop", "difficulty": "base", "question": "What was the result of the Camden Row rebar inspection on the morning of August 27, 2027?"}
+{"id": "b-fact-030", "type": "multi_source", "difficulty": "base", "question": "Who said they would round up the site sheets for the Camden resident-notice log?"}
+{"id": "b-fact-031", "type": "single_hop", "difficulty": "base", "question": "What status was given to submittal 141 for the Ridgeway dock-leveller controls?"}
+{"id": "b-fact-032", "type": "single_hop", "difficulty": "base", "question": "Who did Dana say she would loop if the crane site transfer was doable?"}
+{"id": "b-fact-034", "type": "multi_source", "difficulty": "base", "question": "What status did Priya give for the Camden resident notice?"}
+{"id": "b-fact-035", "type": "single_hop", "difficulty": "base", "question": "What freight premium did the Ellisburg reroute put on the Brannigan invoice?"}
+{"id": "b-fact-036", "type": "single_hop", "difficulty": "base", "question": "What percentage did Kofi say the Camden contingency line reads after the facade transfer went through?"}
+{"id": "b-fact-037", "type": "single_hop", "difficulty": "base", "question": "What was the status of co-141 for the lobby stone swap at Camden?"}
+{"id": "b-fact-038", "type": "single_hop", "difficulty": "base", "question": "How many finalists were left for the assistant super role?"}
+{"id": "b-fact-039", "type": "single_hop", "difficulty": "base", "question": "Which permit number did the city want corrections on for Harbor Point?"}
+{"id": "b-fact-040", "type": "multi_source", "difficulty": "base", "question": "What project did Marcus move full-time to as of September 1, 2027?"}
+{"id": "b-fact-041", "type": "multi_source", "difficulty": "base", "question": "Who told Toby the embed survey windows did not need to shift?"}
+{"id": "b-fact-042", "type": "single_hop", "difficulty": "base", "question": "Who signed off on the north bay spacing for Camden?"}
+{"id": "b-fact-044", "type": "multi_source", "difficulty": "base", "question": "Which two ticket numbers were assigned to the steel loads that came into Harbor Point on 31 Aug?"}
+{"id": "b-fact-045", "type": "single_hop", "difficulty": "base", "question": "What truck was assigned to load HPS-4 for the Ellisburg departure?"}
+{"id": "b-fact-046", "type": "multi_source", "difficulty": "base", "question": "What load range was affected by the Harbor Point steel order mill stoppage?"}
+{"id": "b-fact-047", "type": "single_hop", "difficulty": "base", "question": "For Camden Row, what status did the lead-paint clearance confirm for the abatement?"}
+{"id": "b-fact-049", "type": "multi_source", "difficulty": "base", "question": "What is the new Ridgeway occupancy date?"}
+{"id": "b-fact-050", "type": "multi_source", "difficulty": "base", "question": "On the Camden Row unit-release checklist, which item comes immediately after fire-stopping?"}
+{"id": "b-fact-051", "type": "single_hop", "difficulty": "base", "question": "At Camden Row, which detail did the north bay spacing match after the rebar re-inspection?"}
+{"id": "b-fact-052", "type": "single_hop", "difficulty": "base", "question": "What was Marcus adding to the Harbor Point milestone sheet?"}
+{"id": "b-fact-053", "type": "single_hop", "difficulty": "base", "question": "Who did Wren ask Dana to have light a fire under regarding the Harbor Point facade warranty?"}
+{"id": "b-fact-054", "type": "single_hop", "difficulty": "base", "question": "What item still had no date, requiring the team to sequence around it at Harbor Point?"}
+{"id": "b-fact-055", "type": "single_hop", "difficulty": "base", "question": "What PermitTrack reference was cited for the Ridgeway Depot record status change on 2027-09-07?"}
+{"id": "b-fact-057", "type": "multi_source", "difficulty": "base", "question": "What is the Ridgeway occupancy date now?"}
+{"id": "b-fact-058", "type": "multi_source", "difficulty": "base", "question": "What daily rate did Craig Lunsford offer for the Harbor Point mobile crane?"}
+{"id": "b-fact-059", "type": "single_hop", "difficulty": "base", "question": "What change order number was used for the Harbor Point facade upgrade?"}
+{"id": "b-fact-060", "type": "multi_source", "difficulty": "base", "question": "What daily rate was quoted for the mobile crane on the 60-day commitment?"}
+{"id": "b-fact-061", "type": "single_hop", "difficulty": "base", "question": "What sketch number was referenced for the Camden Row north bay rebar correction?"}
+{"id": "b-fact-062", "type": "multi_source", "difficulty": "base", "question": "What date is the Camden podium pour booked for?"}
+{"id": "b-fact-063", "type": "single_hop", "difficulty": "base", "question": "What date did the city offer for the Ridgeway occupancy inspection?"}
+{"id": "b-fact-066", "type": "single_hop", "difficulty": "base", "question": "Which RFI was closed out for the slab-edge embed conflict at Harbor Point?"}
+{"id": "b-fact-067", "type": "single_hop", "difficulty": "base", "question": "Which change order came back rejected for the Camden lobby finish issue?"}
+{"id": "b-fact-068", "type": "single_hop", "difficulty": "base", "question": "What date is the Ridgeway Depot occupancy inspection scheduled for?"}
+{"id": "b-fact-069", "type": "multi_source", "difficulty": "base", "question": "Who posted the Camden Row update about the batching plant's mix issue?"}
+{"id": "b-contra-contra-pour-volume", "type": "disambiguation", "difficulty": "hard", "question": "What volume was ordered for the Camden Row podium pour?"}

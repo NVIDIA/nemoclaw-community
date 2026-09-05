@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Custom policy preset: read-only GitHub REST access for the agent runtime.
+#
+# The rule grants one host, GET only, one path prefix, and the named agent
+# runtime binaries. No POST, PATCH, PUT, or DELETE request is allowed.
+
+version: 1
+preset:
+  name: github-api
+network_policies:
+  github-api:
+    name: github-api
+    endpoints:
+    - host: api.github.com
+      port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          method: GET
+          path: /repos/**
+    binaries:
+    - path: /usr/local/bin/openclaw
+    - path: /usr/local/bin/node
+    - path: /usr/bin/node
+    - path: /usr/bin/curl
+    - path: /usr/local/bin/curl

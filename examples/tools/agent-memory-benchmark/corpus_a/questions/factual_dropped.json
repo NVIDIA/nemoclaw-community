@@ -1,0 +1,284 @@
+[
+  {
+    "id": "fact-012",
+    "type": "multi_source",
+    "question": "What GitLab username appears in Alex Chen's profile URL for Atlas merge request !521?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-15T09-00-00__67e1733e",
+      "E:2026-05-18T09-12-00__15ecdd33",
+      "E:2026-05-23T08-44-00__46412f2d"
+    ],
+    "entity": "people/alex_chen",
+    "notes": "Alex Chen (alex.chen@examplecorp.example, @alex, GitLab alex_chen, Slack U200AC3F7E12) is the Atlas tech lead and a Platform Eng team lead; drives specs, MRs, OKRs, and the all-hands narrative; owns the Platform Eng tooling budget line. Reports ",
+    "accept": [
+      "alex_chen"
+    ],
+    "drop_reason": "Asks for formatting trivia: a GitLab username inside a profile URL."
+  },
+  {
+    "id": "fact-026",
+    "type": "multi_source",
+    "question": "What GitLab merge request URL did Alex say would be the consolidated review MR for the Atlas auth changes, marked Draft until Priya signed off?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-12T08-52-00__9b2b6f55",
+      "E:2026-05-17T08-44-00__30adea6f"
+    ],
+    "entity": "people/priya_raman",
+    "notes": "Priya Raman (@priya, priya.raman@examplecorp.example) runs Atlas security reviews for auth changes using a structured intake (file-level inventory, threat-model delta from prior scope, specific test-coverage info); signs off on the auth-changes ",
+    "accept": [
+      "https://gitlab.examplecorp.example/platform-eng/atlas/-/merge_requests/342"
+    ],
+    "drop_reason": "Asks for an exact URL/MR identifier, which is formatting/identifier trivia rather than substantive remembered content."
+  },
+  {
+    "id": "fact-050",
+    "type": "multi_source",
+    "question": "Who needs to co-sign the DPA for the eval annotation tool vendor onboarding?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-23T08-44-00__46412f2d",
+      "E:2026-05-24T08-48-00__1d4ced89"
+    ],
+    "entity": "people/dimitri_costa",
+    "notes": "Dimitri must co-sign the eval annotation vendor DPA before contract close (the vendor processes the team's golden-set inputs).",
+    "accept": [
+      "Dimitri"
+    ],
+    "drop_reason": "duplicate question text"
+  },
+  {
+    "id": "fact-051",
+    "type": "multi_source",
+    "question": "When is the Skip-level — Alex Chen / Elena scheduled?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-15T09-00-00__67e1733e",
+      "E:2026-05-15T12-49-00__0adc63e8"
+    ],
+    "entity": "people/elena_marquez",
+    "notes": "Elena holds quarterly skip-levels with Alex (last met February 2026); next booked Tuesday 2026-05-26 17:00-17:45 UTC, confidential (no Morgan, no shared notes). Her prompts for Alex: Atlas health/fragility/where to spend an extra headcount,",
+    "require_all": [
+      "Tuesday",
+      "2026-05-26",
+      "17:00",
+      "17:45 UTC"
+    ],
+    "drop_reason": "Question asks 'When' but expected answers include non-equivalent partials; unique correct answer should be full date/time range."
+  },
+  {
+    "id": "fact-060",
+    "type": "single_hop",
+    "question": "Who is covering Iris Nakamura's customer escalation queue while she is on PTO June 2-6?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-24T11-28-00__17360ea5"
+    ],
+    "entity": "people/noah_arenson",
+    "notes": "Noah covers Iris's customer escalation queue June 2-6.",
+    "accept": [
+      "Noah"
+    ],
+    "drop_reason": "duplicate entity+answer"
+  },
+  {
+    "id": "fact-074",
+    "type": "multi_source",
+    "question": "Where is the worker's `ALGO_VERSION = 1` constant for prefix trimming compiled in?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-17T21-05-00__735ea58b",
+      "E:2026-05-18T09-08-00__87135b94",
+      "E:2026-05-18T21-18-00__ded13f62"
+    ],
+    "entity": "concepts/prefix_trim",
+    "notes": "The trim function is pure over (prefix_input, algo_version): same inputs yield byte-identical output so backfill re-renders hit cache. The worker's ALGO_VERSION is a compiled-in constant (=1) in src/atlas/prompts/trim.py, so during a rollin",
+    "accept": [
+      "src/atlas/prompts/trim.py"
+    ],
+    "drop_reason": "Asks for a file path mentioned in passing, which is formatting/location trivia."
+  },
+  {
+    "id": "fact-081",
+    "type": "single_hop",
+    "question": "What first item did Alex Chen list in the headcount one-pager structure he sent Morgan for headcount conversation prep?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-23T08-41-00__a917fd3a"
+    ],
+    "entity": "people/alex_chen",
+    "notes": "Alex's headcount one-pager structure: (1) bus factor — wave ingest, (2) delivery risk — eval coverage, (3) explicit list of what they are NOT asking for (Quillon, Beacon parity, scope growth).",
+    "require_all": [
+      "Bus factor",
+      "wave ingest"
+    ],
+    "drop_reason": "Expected answer is not unique/precise; the listed first item is \"Bus factor — wave ingest,\" not either component alone."
+  },
+  {
+    "id": "fact-083",
+    "type": "single_hop",
+    "question": "Who replied '+1, with a carve-out for actual security incidents' to the proposed 'no slack saturdays' experiment?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200PFE001_channel@2026-05-23"
+    ],
+    "entity": "people/dimitri_costa",
+    "notes": "Dimitri backed the no-slack-saturdays pilot with a carve-out for actual security incidents.",
+    "accept": [
+      "Dimitri Costa",
+      "Dimitri"
+    ],
+    "drop_reason": "duplicate entity+answer"
+  },
+  {
+    "id": "fact-085",
+    "type": "single_hop",
+    "question": "Who said they would wire the prefix-trim feature flag into the runner so it could be flipped per-workspace without a redeploy?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200ATLE001_channel@2026-05-15"
+    ],
+    "entity": "people/felix_oduya",
+    "notes": "Felix wired the prefix-trim per-workspace flag into the runner so it can be flipped without a redeploy.",
+    "accept": [
+      "Felix Oduya",
+      "Felix"
+    ],
+    "drop_reason": "duplicate entity+answer"
+  },
+  {
+    "id": "fact-092",
+    "type": "multi_source",
+    "question": "What wiki path did Sam Iverson share for the customer-comms doc draft about tightening prompt prefixes to lower the bill?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200GRP001_group_dm@2026-05-13",
+      "S:C200GRP001_group_dm@2026-05-17"
+    ],
+    "entity": "people/sam_iverson",
+    "notes": "Sam wrote the prefix-trim customer-comms doc for long-context tenants (platform-eng/atlas/-/wikis/prefix-trim-tenant-comms-v1: \"tightening prompt prefixes to lower your bill, no action required\") and told an early-adopter PM the change woul",
+    "accept": [
+      "platform-eng/atlas/-/wikis/prefix-trim-tenant-comms-v1",
+      "`platform-eng/atlas/-/wikis/prefix-trim-tenant-comms-v1`"
+    ],
+    "drop_reason": "Asks for a wiki path/URL slug formatting detail rather than substantive remembered content"
+  },
+  {
+    "id": "fact-096",
+    "type": "single_hop",
+    "question": "What is the Compass v2 cutover window?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-21T13-16-00__11fe239e"
+    ],
+    "entity": "projects/compass",
+    "notes": "Compass v2 cutover window is June 3-6, rolled out cohort-by-cohort to limit blast radius (small pipeline-latency bump expected on cutover day); Compass v1 endpoint stays alive through end of Q3 as a migration window then becomes read-only.",
+    "require_all": [
+      "June 3",
+      "June 6"
+    ],
+    "drop_reason": "The cutover window is the range 'June 3 to June 6'; accepting either single date is incomplete/incorrect."
+  },
+  {
+    "id": "fact-101",
+    "type": "single_hop",
+    "question": "For the prefix-trim spec future work after deciding against shipping a plugin point, what follow-up issue number was filed?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-19T21-07-00__bbe72d6d"
+    ],
+    "entity": "concepts/prefix_trim",
+    "notes": "Decision: making the trim algorithm pluggable was YAGNI'd — keep trim_prefix() pure with a \"# pluggable: see <issue>\" comment marker and file follow-up issue #487, rather than ship a plugin point now.",
+    "accept": [
+      "#487",
+      "487"
+    ],
+    "drop_reason": "Asks for a follow-up issue number, a non-meaningful identifier/formatting trivia rather than substantive content."
+  },
+  {
+    "id": "fact-105",
+    "type": "multi_source",
+    "question": "What committed/stretch percentages did Elena Marquez say were exactly the right shape for cost in the OKR final draft?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200GRP001_group_dm@2026-05-24",
+      "S:C200GRP002_group_dm@2026-05-24"
+    ],
+    "entity": "goals/quarterly",
+    "notes": "The final OKR doc was sent to Morgan on 2026-05-24 with 40%/50% on KR3; Elena approved it the same day, calling 40% committed / 50% stretch \"exactly the right shape\".",
+    "accept": [
+      "40% committed / 50% stretch",
+      "40%/50%"
+    ],
+    "drop_reason": "duplicate entity+answer"
+  },
+  {
+    "id": "fact-109",
+    "type": "single_hop",
+    "question": "Who released Atlas tag v0.43.1 deployed to staging on 2026-05-25?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "E:2026-05-25T16-32-00__42f0285e"
+    ],
+    "entity": "people/felix_oduya",
+    "notes": "Felix released Atlas v0.43.1 to staging (2026-05-25).",
+    "accept": [
+      "Felix Oduya",
+      "Felix"
+    ],
+    "drop_reason": "duplicate entity+answer"
+  },
+  {
+    "id": "fact-112",
+    "type": "single_hop",
+    "question": "Who said to make the shared-builder path the only way to assemble a system prompt?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:C200ATLE001_channel@2026-05-02"
+    ],
+    "entity": "people/morgan_lee",
+    "notes": "Morgan decided the shared system-prompt builder should be the only assembly path, to kill the prefix divergence at the root, and landed the backfill fix accordingly.",
+    "accept": [
+      "Morgan Lee",
+      "Morgan"
+    ],
+    "drop_reason": "duplicate entity+answer"
+  },
+  {
+    "id": "fact-115",
+    "type": "multi_source",
+    "question": "What target wording did Alex Chen suggest for the RFC v2 \"cost-aware ingest\" section after Sam Iverson asked whether 20% was the realistic max?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:D200SAM001_dm@2026-05-14",
+      "S:C200GRP001_group_dm@2026-05-02",
+      "S:C200GRP001_group_dm@2026-05-16"
+    ],
+    "entity": "people/sam_iverson",
+    "notes": "Sam negotiated the RFC v2 \"cost-aware ingest\" target down from 30% to \"20% baseline, 25% with batched prompts (mid-Q3)\"; reshaped KR4 to a falsifiable metric and advocated holding 40% committed / 50% stretch on KR3.",
+    "require_all": [
+      "20% baseline",
+      "25% with batched prompts (mid-Q3)"
+    ],
+    "drop_reason": "Expected answers are incomplete alternatives; the source gives one full suggested wording: \"20% baseline, 25% with batched prompts (mid-Q3)\"."
+  },
+  {
+    "id": "fact-118",
+    "type": "multi_source",
+    "question": "What Beacon file path did Rohan Dasgupta say he mirrored the mutex fix into?",
+    "mode": "string_any",
+    "gold_source_ids": [
+      "S:D200ROH001_dm@2026-04-20",
+      "S:D200ROH001_dm@2026-04-23",
+      "S:D200ROH001_dm@2026-05-15"
+    ],
+    "entity": "projects/beacon",
+    "notes": "Beacon hit the same wiki-mutex contention as Atlas and mirrored Alex's mutex patch into src/beacon/wiki/mutex.py as-is (Alex confirmed no refactor planned, fine to copy); load test showed hold time dropped 80%; Rohan credited Alex in Beacon",
+    "accept": [
+      "src/beacon/wiki/mutex.py",
+      "`src/beacon/wiki/mutex.py`"
+    ],
+    "drop_reason": "Asks for a file path, which is formatting/trivia rather than substantive content."
+  }
+]

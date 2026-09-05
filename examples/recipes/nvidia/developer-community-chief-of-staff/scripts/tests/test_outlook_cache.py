@@ -65,6 +65,8 @@ SANDBOX_NAME="test-sandbox"
 ATIF_RELAY_HOST="127.0.0.1"
 ATIF_RELAY_PORT="8080"
 ATIF_RELAY_TOKEN_CACHE="$EXAMPLE_DIR/.bootstrap/cache/atif-token"
+GITLAB_API_HOST="gitlab.example.com"
+GITLAB_API_PORT="443"
 load_env() { :; }
 assert_messaging_config() { :; }
 provider_type_matches() { return 0; }
@@ -77,6 +79,7 @@ upsert_cred() { :; }
         "outlook-email.yaml",
         "slack.yaml",
         "github.yaml",
+        "gitlab.yaml",
         "atif-export-relay.yaml",
     ):
         (providers_dir / profile).write_text("id: test\n", encoding="utf-8")

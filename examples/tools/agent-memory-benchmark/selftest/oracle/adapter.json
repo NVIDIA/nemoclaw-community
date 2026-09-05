@@ -1,0 +1,22 @@
+{
+  "name": "selftest-oracle",
+  "description": "An adapter that answers every question correctly.",
+  "model": "none (offline fixture)",
+  "ingest": [
+    "python3",
+    "selftest/oracle/run.py",
+    "ingest",
+    "--corpus",
+    "{corpus}",
+    "--state",
+    "{state}"
+  ],
+  "answer": [
+    "python3",
+    "selftest/oracle/run.py",
+    "answer",
+    "--state",
+    "{state}"
+  ],
+  "accounting": "local"
+}

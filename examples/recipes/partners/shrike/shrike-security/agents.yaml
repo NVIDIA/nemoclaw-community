@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-FileCopyrightText: Copyright (c) 2026, Shrike Security, Inc. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Agent manifest for the Shrike governance recipe.
+#
+# Shrike governs at the ACTION boundary via an OpenClaw `before_tool_call`
+# plugin (plugin/, installed by install.sh or baked in by build-image.sh), not
+# by removing tools from the agent. The agent keeps its full toolset; every
+# tool call is evaluated by Shrike before it runs and blocked when the verdict
+# is block / require_approval. This keeps the recipe a drop-in governance layer
+# over whatever workflow the operator runs.
+main:
+  # Shrike governs at the ACTION boundary via the before_tool_call plugin. This
+  # allow-list scopes the agent to the tool-action CLASSES Shrike actually
+  # governs — file ops, command execution, network/web, messaging (as an exfil
+  # channel), and session/subagent delegation. We deliberately do NOT grant
+  # classes we have no threat model for (media generation, `computer`, and any
+  # future/unknown tool): gating those would be security theater. An explicit
+  # allow-list — not a wildcard or `profile: full` — is the only form
+  # consistent with that honest scope: a wildcard would silently sweep in
+  # future ungoverned tools, and NemoClaw's image baker requires a non-empty
+  # allow[]/deny[] regardless. In a real deployment Shrike still evaluates every
+  # call the agent makes and defers on actions outside its coverage rather than
+  # faking a verdict; here we simply scope the reference agent to what we govern.
+  tools:
+    allow:
+      # File / data ops — poisoning, sensitive-file access
+      - read
+      - write
+      - edit
+      - apply_patch
+      # Command execution — destructive commands, injection
+      - exec
+      - process
+      - code_execution
+      # Network / web — exfiltration, SSRF, untrusted-content ingestion
+      - web_search
+      - web_fetch
+      - x_search
+      - browser
+      # Messaging — secret-exfil channel
+      - message
+      # Session / subagent delegation — spawn authority, hand-off, blast radius
+      - sessions_spawn
+      - sessions_send
+      - sessions_list
+      - session_status
+      - subagents
+      - spawn_task
+      - dismiss_task
+      - cron

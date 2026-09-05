@@ -1,0 +1,72 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Slack app manifest for a NemoClaw sandbox channel. Direct messages only.
+#
+# Use it at https://api.slack.com/apps -> Create New App -> From a manifest -> pick workspace ->
+# paste this -> Create.
+#
+# Scope boundary: this app can read and write direct messages with itself, and nothing else. It
+# cannot read any channel, public or private, and it receives no channel events. Adding it to a
+# channel grants it no new read access. If you want the assistant to answer @mentions in a
+# channel, use slack-app-manifest-channels.yml instead and read the disclosure in that file
+# before you install it.
+#
+# If you created an app before this file grew its app_home block, flip the DM composer on by
+# hand: App Home -> Show Tabs -> Messages Tab -> "Allow users to send Slash commands and
+# messages from the messages tab". No reinstall and no re-approval needed.
+#
+# Two things a manifest cannot do, so do them by hand afterwards:
+#   1. Generate the app-level token. Basic Information -> App-Level Tokens -> Generate Token and
+#      Scopes, add the connections:write scope. The xapp-... value is SLACK_APP_TOKEN, and it is
+#      shown once.
+#   2. Install the app. OAuth & Permissions -> Install to Workspace. The Bot User OAuth Token
+#      (xoxb-...) is SLACK_BOT_TOKEN. On a managed workspace this button reads Request to Install
+#      and waits on an admin.
+#
+# Direct messages work as soon as the app is installed and the user is paired — no channel and no
+# invite.
+
+display_information:
+  name: NemoClaw Assistant
+  description: Chat entry point for a NemoClaw OpenClaw sandbox.
+  background_color: "#1a1a1a"
+
+features:
+  bot_user:
+    display_name: NemoClaw Assistant
+    # The sandbox is not always running, so do not claim otherwise in the member list.
+    always_online: false
+  app_home:
+    home_tab_enabled: false
+    # Without these two, the DM composer reads "Sending messages to this app has been turned
+    # off" and the app is unusable in DMs — the im:* scopes below are necessary but not
+    # sufficient. read_only must be false or the box stays greyed out.
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: false
+
+oauth_config:
+  scopes:
+    bot:
+      # Reply.
+      - chat:write
+      # Direct messages: receive, open, and reply. These read only the conversation between a
+      # user and this app.
+      - im:history
+      - im:read
+      - im:write
+
+settings:
+  # Socket Mode means no public request URL and no inbound listener on the host. This is the only
+  # mode NemoClaw supports for Slack.
+  socket_mode_enabled: true
+  event_subscriptions:
+    bot_events:
+      # Direct messages to the app. No channel events are delivered.
+      - message.im
+  interactivity:
+    # NemoClaw's Slack path is message-driven; no buttons or slash commands to serve.
+    is_enabled: false
+  org_deploy_enabled: false
+  # Rotation can expire the access token during an active session.
+  token_rotation_enabled: false

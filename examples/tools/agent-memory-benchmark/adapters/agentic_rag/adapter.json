@@ -1,0 +1,25 @@
+{
+  "name": "agentic_rag",
+  "description": "Same index as naive_rag; the model writes its own search queries over up to 3 rounds before answering.",
+  "model": "gpt-4o",
+  "ingest": [
+    "python3",
+    "adapters/agentic_rag/run.py",
+    "ingest",
+    "--corpus",
+    "{corpus}",
+    "--state",
+    "{state}"
+  ],
+  "answer": [
+    "python3",
+    "adapters/agentic_rag/run.py",
+    "answer",
+    "--state",
+    "{state}"
+  ],
+  "env": {
+    "MNEMO_RAG_WORKERS": "6"
+  },
+  "accounting": "proxy"
+}

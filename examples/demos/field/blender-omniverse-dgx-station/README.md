@@ -1,4 +1,13 @@
-# NemoClaw Specialized Agents for Blender and Omniverse
+# DGX Station Blender and Omniverse
+
+| Catalog field | Value |
+| --- | --- |
+| Description | Lets users direct a specialized Hermes agent on DGX Station across Blender and NVIDIA Omniverse workflows, producing scene edits, OVRTX renders, native OVPhysX simulations, and replay evidence. |
+| Industry | 🎬 Media & Entertainment |
+| Requirements | DGX Station · Ubuntu 24.04 ARM64 · GB300 + RTX GPU · Blender 5.1.x + OVRTX/OVPhysX · local vLLM with Nemotron 3 Ultra · Hugging Face read access token |
+| NemoClaw | v0.0.83 |
+| Harness | Hermes 0.18.0 |
+| OpenShell | 0.0.72 |
 
 This project creates a specialized NemoClaw Hermes agent for Blender and
 NVIDIA Omniverse workflows on DGX Station. A local Nemotron 3 Ultra model plans

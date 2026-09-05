@@ -1,0 +1,70 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# OPTIONAL variant of slack-app-manifest.yml that also answers @mentions in channels.
+#
+# The recipe does not need this. Use it only if you want the assistant reachable from a shared
+# channel instead of a direct message, and read this disclosure first.
+#
+# What you are granting beyond the direct-message default:
+#
+#   app_mentions:read   Deliver @mentions of this app.
+#   channels:history    Read message history in PUBLIC channels the app is added to. The runtime
+#                       reads the surrounding messages to give a mention its context, so a
+#                       mention exposes nearby channel conversation to the agent — and therefore
+#                       to the configured inference provider.
+#   channels:read       Resolve a channel name to its ID at startup. Required if you set
+#                       SLACK_ALLOWED_CHANNELS; without it the gateway logs "channel resolve
+#                       failed ... missing_scope" and falls back to the IDs in its config.
+#
+# These grants apply to every channel the app is added to, not only the one you intend. Set
+# SLACK_ALLOWED_CHANNELS in .env to bound which channels the runtime will act on, and add the app
+# to as few channels as possible. Slack does not scope a history grant to a single channel, so the
+# allowlist is a runtime control, not a permission boundary.
+#
+# Private channels are deliberately excluded. To include them you must uncomment groups:history
+# below, which grants read access to the history of any private channel the app is added to.
+# Prefer keeping the assistant in public channels or in direct messages.
+#
+# Everything else — token generation, installation, the DM composer note — matches
+# slack-app-manifest.yml.
+
+display_information:
+  name: NemoClaw Assistant
+  description: Chat entry point for a NemoClaw OpenClaw sandbox.
+  background_color: "#1a1a1a"
+
+features:
+  bot_user:
+    display_name: NemoClaw Assistant
+    always_online: false
+  app_home:
+    home_tab_enabled: false
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: false
+
+oauth_config:
+  scopes:
+    bot:
+      # Direct-message baseline, identical to the default manifest.
+      - chat:write
+      - im:history
+      - im:read
+      - im:write
+      # Channel opt-in. See the disclosure above.
+      - app_mentions:read
+      - channels:history
+      - channels:read
+      # Private-channel history. Uncomment only if you accept that boundary.
+      # - groups:history
+
+settings:
+  socket_mode_enabled: true
+  event_subscriptions:
+    bot_events:
+      - message.im
+      - app_mention
+  interactivity:
+    is_enabled: false
+  org_deploy_enabled: false
+  token_rotation_enabled: false

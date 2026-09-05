@@ -1,0 +1,86 @@
+# Every identifier the Slack assistant stated when asked, in a fresh session:
+#   "Can you give me feature test cases for #783"
+#
+# Repository NVIDIA/NeMo-Relay, pull request 783, answered 2026-08-17 12:43 IST.
+# Grouped as the assistant itself grouped them in the reply.
+#
+# This file has two jobs. It is the evidence behind the 53-of-55 figure, and it is the worked
+# example of the --identifiers format: one name per line, optional category after a tab.
+#
+# Re-derive the number with:
+#   ./scripts/verify-grounding.py --repo NVIDIA/NeMo-Relay --pr 783 \
+#       --identifiers verification/pr783-identifiers.txt
+#
+# Results of that run are in verification/pr783-grounding.json.
+
+FfiOpenTelemetryLogSubscriber	opaque handle types
+FfiOpenTelemetryMetricSubscriber	opaque handle types
+FfiOpenTelemetrySubscriber	opaque handle types
+
+NEMO_RELAY_METRIC_KIND_COUNTER	metric kind constants
+NEMO_RELAY_METRIC_KIND_UP_DOWN_COUNTER	metric kind constants
+NEMO_RELAY_METRIC_KIND_GAUGE	metric kind constants
+NEMO_RELAY_METRIC_KIND_HISTOGRAM	metric kind constants
+
+NEMO_RELAY_LOG_SEVERITY_TRACE	log severity constants
+NEMO_RELAY_LOG_SEVERITY_DEBUG	log severity constants
+NEMO_RELAY_LOG_SEVERITY_INFO	log severity constants
+NEMO_RELAY_LOG_SEVERITY_WARN	log severity constants
+NEMO_RELAY_LOG_SEVERITY_ERROR	log severity constants
+
+NEMO_RELAY_METRIC_VALUE_TYPE_U64	value type constants
+NEMO_RELAY_METRIC_VALUE_TYPE_I64	value type constants
+NEMO_RELAY_METRIC_VALUE_TYPE_F64	value type constants
+
+NemoRelayMetricMeasurement	type names
+NemoRelayMetricKind	type names
+NemoRelayMetricValueType	type names
+
+nemo_relay_otel_log_subscriber_create	C functions
+nemo_relay_otel_log_subscriber_register	C functions
+nemo_relay_otel_log_subscriber_force_flush	C functions
+nemo_relay_otel_log_subscriber_runtime_diagnostics_json	C functions
+nemo_relay_otel_log_subscriber_shutdown	C functions
+nemo_relay_otel_log_subscriber_deregister	C functions
+nemo_relay_string_free	C functions
+nemo_relay_metric	C functions
+
+# Cited in declaration order, with their C types. All eleven correct, order correct.
+name	struct fields
+kind	struct fields
+value_type	struct fields
+u64_value	struct fields
+i64_value	struct fields
+f64_value	struct fields
+unit	struct fields
+description	struct fields
+attributes_json	struct fields
+boundaries	struct fields
+boundaries_len	struct fields
+
+NemoRelayStatus	status values
+NullPointer	status values
+InvalidArg	status values
+
+"http_binary"	string literals
+"grpc"	string literals
+"trace"	string literals
+"error"	string literals
+
+NewOpenTelemetryLogSubscriber	Go symbols
+NewOpenTelemetryMetricSubscriber	Go symbols
+EmitMetric	Go symbols
+MetricMeasurement	Go symbols
+Register	Go symbols
+ForceFlush	Go symbols
+Shutdown	Go symbols
+# Fails. No such symbol in go/nemo_relay/nemo_relay.go (2694 lines on main). The real one is
+# EmitEvent. Assembled from real neighbours: the file does contain EmitEvent and WithEventData.
+EventV2	Go symbols
+
+crates/ffi/nemo_relay.h	file paths
+go/nemo_relay/nemo_relay.go	file paths
+
+# Fails. The crate is nemo-relay-ffi with crate-type ["cdylib","staticlib","rlib"], so the
+# artefact is libnemo_relay_ffi.so. Wrong by one suffix: invisible to a reader, fatal to a linker.
+libnemo_relay.so	build artefacts

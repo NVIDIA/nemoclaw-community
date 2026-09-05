@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Authenticated, repo-scoped GitHub REST GET helper."""
+"""Authenticated, repository-scoped GitHub REST GET helper."""
 
 from __future__ import annotations
 
@@ -35,11 +35,46 @@ GENERIC_ROOTS = {
 }
 
 
-def repo_name() -> str:
-    repo = (os.environ.get("GITHUB_READONLY_REPO") or "NVIDIA/OpenShell").strip()
-    if not REPO_RE.fullmatch(repo):
-        raise SystemExit(f"invalid GITHUB_READONLY_REPO {repo!r}; expected owner/repo")
-    return repo
+def allowed_repositories() -> tuple[str, ...]:
+    plural = (os.environ.get("GITHUB_READONLY_REPOS") or "").strip()
+    raw_repositories = plural or (
+        os.environ.get("GITHUB_READONLY_REPO") or "NVIDIA/OpenShell"
+    ).strip()
+    repositories = tuple(item.strip() for item in raw_repositories.split(","))
+    if any(not item for item in repositories):
+        raise SystemExit("GitHub read-only repository list contains an empty item")
+    for index, repository in enumerate(repositories, start=1):
+        if (
+            not REPO_RE.fullmatch(repository)
+            or repository.rsplit("/", 1)[-1] in {".", ".."}
+        ):
+            raise SystemExit(
+                f"GitHub read-only repository item {index} must use owner/repository"
+            )
+    normalized = [repository.casefold() for repository in repositories]
+    if len(normalized) != len(set(normalized)):
+        raise SystemExit("GitHub read-only repository list contains a duplicate item")
+    return repositories
+
+
+def select_repository(
+    requested: str | None, repositories: tuple[str, ...]
+) -> str:
+    if requested is None:
+        if len(repositories) == 1:
+            return repositories[0]
+        raise SystemExit(
+            "multiple GitHub repositories are allowed; select one with --repo owner/repository"
+        )
+    selected = requested.strip()
+    if not REPO_RE.fullmatch(selected):
+        raise SystemExit("--repo must use owner/repository")
+    allowed = {repository.casefold(): repository for repository in repositories}
+    if selected.casefold() not in allowed:
+        raise SystemExit(
+            f"repository {selected!r} is not in the GitHub read-only allowlist"
+        )
+    return allowed[selected.casefold()]
 
 
 def positive_int(value: str) -> int:
@@ -106,7 +141,9 @@ def clean_repo_route(value: str) -> str:
     if any(part in {"", ".", ".."} for part in parts):
         raise argparse.ArgumentTypeError("route must not contain empty, current, or parent-directory segments")
     if parts[0] == "repos":
-        raise argparse.ArgumentTypeError("route must be relative to the configured repo, for example 'issues/123'")
+        raise argparse.ArgumentTypeError(
+            "route must be relative to the selected repository, for example 'issues/123'"
+        )
     if parts[0] not in GENERIC_ROOTS:
         allowed = ", ".join(sorted(GENERIC_ROOTS))
         raise argparse.ArgumentTypeError(f"route root {parts[0]!r} is outside policy; allowed roots: {allowed}")
@@ -176,9 +213,8 @@ def get_json(path: str, params: dict[str, Any] | None = None) -> Any:
         raise SystemExit(1) from exc
 
 
-def repo_path(suffix: str = "") -> str:
-    repo = repo_name()
-    return f"/repos/{repo}{suffix}"
+def repo_path(repository: str, suffix: str = "") -> str:
+    return f"/repos/{repository}{suffix}"
 
 
 def paged_items(path: str, params: dict[str, Any] | None = None) -> list[Any]:
@@ -225,9 +261,11 @@ def issue_only(items: list[Any]) -> list[Any]:
     return [item for item in items if isinstance(item, dict) and "pull_request" not in item]
 
 
-def issue_counts() -> dict[str, int]:
+def issue_counts(repository: str) -> dict[str, int]:
     counts = {"open": 0, "closed": 0, "total": 0}
-    for item in issue_only(paged_items(repo_path("/issues"), {"state": "all"})):
+    for item in issue_only(
+        paged_items(repo_path(repository, "/issues"), {"state": "all"})
+    ):
         state = item.get("state")
         if state in ("open", "closed"):
             counts[state] += 1
@@ -235,12 +273,16 @@ def issue_counts() -> dict[str, int]:
     return counts
 
 
-def pull_counts(state: str) -> dict[str, int]:
+def pull_counts(repository: str, state: str) -> dict[str, int]:
     if state == "all":
-        open_count = len(paged_items(repo_path("/pulls"), {"state": "open"}))
-        closed_count = len(paged_items(repo_path("/pulls"), {"state": "closed"}))
+        open_count = len(
+            paged_items(repo_path(repository, "/pulls"), {"state": "open"})
+        )
+        closed_count = len(
+            paged_items(repo_path(repository, "/pulls"), {"state": "closed"})
+        )
         return {"open": open_count, "closed": closed_count, "total": open_count + closed_count}
-    count = len(paged_items(repo_path("/pulls"), {"state": state}))
+    count = len(paged_items(repo_path(repository, "/pulls"), {"state": state}))
     return {state: count, "total": count}
 
 
@@ -268,14 +310,14 @@ def project_fields(data: Any, fields: list[str]) -> Any:
     return project_one(data)
 
 
-def generic_get(args: argparse.Namespace) -> Any:
+def generic_get(args: argparse.Namespace, repository: str) -> Any:
     try:
         route = clean_repo_route(args.route)
     except argparse.ArgumentTypeError as exc:
         raise SystemExit(str(exc)) from exc
     params = params_dict(args.param)
     fields = [field.strip() for field in args.fields.split(",") if field.strip()] if args.fields else []
-    path = repo_path(f"/{route}" if route else "")
+    path = repo_path(repository, f"/{route}" if route else "")
 
     list_mode = args.paginate or args.count or args.limit is not None or args.exclude_pulls
     if list_mode:
@@ -297,6 +339,11 @@ def generic_get(args: argparse.Namespace) -> Any:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--repo",
+        dest="repository",
+        help="allowed owner/repository to read; required when multiple are configured",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     generic = sub.add_parser("get")
@@ -359,24 +406,44 @@ def main() -> int:
     contents.add_argument("path", nargs="?", type=clean_contents_path, default="")
 
     args = parser.parse_args()
+    repositories = allowed_repositories()
+    repository = (
+        None
+        if args.command == "rate-limit"
+        else select_repository(args.repository, repositories)
+    )
 
     if args.command == "get":
-        data = generic_get(args)
+        assert repository is not None
+        data = generic_get(args, repository)
     elif args.command == "rate-limit":
         data = get_json("/rate_limit")
     elif args.command == "repo":
-        data = get_json(repo_path())
+        assert repository is not None
+        data = get_json(repo_path(repository))
     elif args.command == "readme":
-        data = get_json(repo_path("/readme"))
+        assert repository is not None
+        data = get_json(repo_path(repository, "/readme"))
     elif args.command == "labels":
-        data = get_json(repo_path("/labels"), {"per_page": args.limit})
+        assert repository is not None
+        data = get_json(
+            repo_path(repository, "/labels"), {"per_page": args.limit}
+        )
     elif args.command == "milestones":
-        data = get_json(repo_path("/milestones"), {"state": args.state, "per_page": args.limit})
+        assert repository is not None
+        data = get_json(
+            repo_path(repository, "/milestones"),
+            {"state": args.state, "per_page": args.limit},
+        )
     elif args.command == "issues":
+        assert repository is not None
         collected: list[Any] = []
         page = 1
         while len(collected) < args.limit:
-            items = get_json(repo_path("/issues"), {"state": args.state, "per_page": 100, "page": page})
+            items = get_json(
+                repo_path(repository, "/issues"),
+                {"state": args.state, "per_page": 100, "page": page},
+            )
             if not isinstance(items, list):
                 raise SystemExit("unexpected GitHub issues response")
             collected.extend(issue_only(items))
@@ -385,32 +452,67 @@ def main() -> int:
             page += 1
         data = collected[: args.limit]
     elif args.command == "issue-counts":
-        data = issue_counts()
+        assert repository is not None
+        data = issue_counts(repository)
     elif args.command == "issue":
-        data = get_json(repo_path(f"/issues/{args.number}"))
+        assert repository is not None
+        data = get_json(repo_path(repository, f"/issues/{args.number}"))
     elif args.command == "issue-comments":
-        data = get_json(repo_path(f"/issues/{args.number}/comments"), {"per_page": args.limit})
+        assert repository is not None
+        data = get_json(
+            repo_path(repository, f"/issues/{args.number}/comments"),
+            {"per_page": args.limit},
+        )
     elif args.command == "pulls":
-        data = get_json(repo_path("/pulls"), {"state": args.state, "per_page": args.limit})
+        assert repository is not None
+        data = get_json(
+            repo_path(repository, "/pulls"),
+            {"state": args.state, "per_page": args.limit},
+        )
     elif args.command == "pull-counts":
-        data = pull_counts(args.state)
+        assert repository is not None
+        data = pull_counts(repository, args.state)
     elif args.command == "pull":
-        data = get_json(repo_path(f"/pulls/{args.number}"))
+        assert repository is not None
+        data = get_json(repo_path(repository, f"/pulls/{args.number}"))
     elif args.command == "pull-files":
-        data = get_json(repo_path(f"/pulls/{args.number}/files"), {"per_page": args.limit})
+        assert repository is not None
+        data = get_json(
+            repo_path(repository, f"/pulls/{args.number}/files"),
+            {"per_page": args.limit},
+        )
     elif args.command == "pull-commits":
-        data = get_json(repo_path(f"/pulls/{args.number}/commits"), {"per_page": args.limit})
+        assert repository is not None
+        data = get_json(
+            repo_path(repository, f"/pulls/{args.number}/commits"),
+            {"per_page": args.limit},
+        )
     elif args.command == "pull-reviews":
-        data = get_json(repo_path(f"/pulls/{args.number}/reviews"), {"per_page": args.limit})
+        assert repository is not None
+        data = get_json(
+            repo_path(repository, f"/pulls/{args.number}/reviews"),
+            {"per_page": args.limit},
+        )
     elif args.command == "pull-comments":
-        data = get_json(repo_path(f"/pulls/{args.number}/comments"), {"per_page": args.limit})
+        assert repository is not None
+        data = get_json(
+            repo_path(repository, f"/pulls/{args.number}/comments"),
+            {"per_page": args.limit},
+        )
     elif args.command == "commits":
-        data = get_json(repo_path("/commits"), {"per_page": args.limit})
+        assert repository is not None
+        data = get_json(
+            repo_path(repository, "/commits"), {"per_page": args.limit}
+        )
     elif args.command == "branches":
-        data = get_json(repo_path("/branches"), {"per_page": args.limit})
+        assert repository is not None
+        data = get_json(
+            repo_path(repository, "/branches"), {"per_page": args.limit}
+        )
     elif args.command == "contents":
+        assert repository is not None
         suffix = "/contents" if not args.path else f"/contents/{args.path}"
-        data = get_json(repo_path(suffix))
+        data = get_json(repo_path(repository, suffix))
     else:
         parser.error(f"unknown command: {args.command}")
 

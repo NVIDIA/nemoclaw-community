@@ -3,7 +3,7 @@
 
 id: nemoclaw-github
 display_name: NemoClaw GitHub
-description: GitHub REST read-only access for live api.github.com reads; sandbox policy further restricts paths to GITHUB_READONLY_REPO
+description: GitHub REST read-only access for live api.github.com reads; sandbox policy further restricts paths to the configured repository allowlist
 category: source_control
 credentials:
   - name: api_token

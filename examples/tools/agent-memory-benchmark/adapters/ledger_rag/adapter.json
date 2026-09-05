@@ -1,0 +1,30 @@
+{
+  "name": "ledger_rag",
+  "description": "Retrieval over the Memory-Driven Chief of Staff ledger. Demonstrates that the benchmark can drive a NemoClaw Community memory store; the candidate selection and the answer call belong to this adapter, not to the recipe.",
+  "model": "gpt-4o",
+  "ingest": [
+    "python3",
+    "adapters/ledger_rag/run.py",
+    "ingest",
+    "--corpus",
+    "{corpus}",
+    "--state",
+    "{state}"
+  ],
+  "answer": [
+    "python3",
+    "adapters/ledger_rag/run.py",
+    "answer",
+    "--state",
+    "{state}"
+  ],
+  "env": {
+    "MNEMO_LEDGER_TOP_K": "12"
+  },
+  "requires": {
+    "schema": "the Memory-Driven Chief of Staff example, for profile/scripts/schema.sql; override with MNEMO_LEDGER_SCHEMA",
+    "endpoint": "an OpenAI-compatible chat endpoint for the answer phase only; ingest needs no network"
+  },
+  "caveat": "Measures candidate selection over the Memory-Driven Chief of Staff ledger plus the model \u2014 not the recipe's own behaviour.",
+  "accounting": "proxy"
+}

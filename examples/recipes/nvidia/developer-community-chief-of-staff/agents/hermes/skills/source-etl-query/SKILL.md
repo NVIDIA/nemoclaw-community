@@ -17,8 +17,9 @@ This is the mirror path, not the live GitHub REST path.
 - Build digests or comparisons that should use the hourly ETL mirror
 
 Use `github-readonly-live` instead when the user asks for current live GitHub
-issues, PRs, commits, branches, README, or repository contents from the single
-repo allowed by `$GITHUB_READONLY_REPO`.
+issues, PRs, commits, branches, README, or repository contents from a
+repository selected from `$GITHUB_READONLY_REPOS` or the legacy
+`$GITHUB_READONLY_REPO` fallback.
 
 ## Access model
 
@@ -26,8 +27,8 @@ repo allowed by `$GITHUB_READONLY_REPO`.
 - Prefer the helper scripts over custom REST queries
 - The sandbox should treat this bridge as the default source for GitHub
   discussions and NVIDIA forum data in the NVIDIA setup path.
-- The mirror and `$GITHUB_READONLY_REPO` may point at different repos. Keep
-  mirror facts and live GitHub facts labeled separately.
+- The mirror and the live GitHub allowlist may cover different repositories.
+  Keep mirror facts and live GitHub facts labeled separately.
 
 ## Required Environment
 
@@ -83,7 +84,7 @@ is asking about.
 
 **Do not fall back to live NVIDIA forum requests** — the sandbox has no egress
 to forum HTML. For GitHub, switch to `github-readonly-live` only when the user
-needs current live data from `$GITHUB_READONLY_REPO`; otherwise explain the ETL
+needs current live data from an allowed repository; otherwise explain the ETL
 mirror scope or freshness limitation.
 
 ## Pitfalls

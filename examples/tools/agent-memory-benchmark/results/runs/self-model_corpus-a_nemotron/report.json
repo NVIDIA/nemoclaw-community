@@ -1,0 +1,200 @@
+{
+  "adapter": {
+    "name": "self-model",
+    "revision": {
+      "shipped_here": null,
+      "files_sha256": null,
+      "note": "no adapter for this system ships here; the run is not reproducible from this repository"
+    },
+    "declared_model": "nvidia/nvidia/nemotron-3-ultra",
+    "declared_env": [],
+    "caveat": "Measures a consolidating design that does not ship an adapter here; the row is a data point, not something this repository can re-run."
+  },
+  "model": "nvidia/nvidia/nemotron-3-ultra",
+  "observed_models": {
+    "nvidia/nvidia/nemotron-3-ultra": 3278
+  },
+  "run_id": "self_model_a_nemotron",
+  "timestamp": "20260824T070555Z",
+  "corpus": {
+    "documents": 425,
+    "part_a": 212,
+    "part_b": 213
+  },
+  "timing": {
+    "ingest_seconds": 5960.74,
+    "answer_seconds": 3137.42
+  },
+  "accounting": {
+    "declared": "proxy",
+    "method": "proxy",
+    "observed_calls": {
+      "ingest": 1603,
+      "answer": 1675
+    },
+    "observed_calls_total": 3278,
+    "forwarded_calls": null,
+    "uncounted_calls": null,
+    "comparable_on_cost": false,
+    "description": "counted at a local proxy, but this run predates the forwarded-call record, so the gap between forwarded and counted cannot be established from the artifact and the run is not treated as cost-comparable"
+  },
+  "cost": {
+    "ingest_input_tokens": 180119409,
+    "ingest_output_tokens": 2641300,
+    "answer_input_tokens": 44597597,
+    "answer_output_tokens": 273057,
+    "answer_calls": 1675,
+    "tokens_per_question": 241240.1,
+    "ingest_usd": null,
+    "answer_usd": null,
+    "price_snapshot": "2026-08-21"
+  },
+  "usage_raw": {
+    "calls": {
+      "ingest": 1603,
+      "answer": 1675
+    },
+    "input_tokens": {
+      "ingest": 180119409,
+      "answer": 44597597
+    },
+    "output_tokens": {
+      "ingest": 2641300,
+      "answer": 273057
+    },
+    "models": {
+      "nvidia/nvidia/nemotron-3-ultra": 3278
+    },
+    "by_phase_model": {
+      "ingest": {
+        "nvidia/nvidia/nemotron-3-ultra": [
+          180119409,
+          2641300
+        ]
+      },
+      "answer": {
+        "nvidia/nvidia/nemotron-3-ultra": [
+          44597597,
+          273057
+        ]
+      }
+    }
+  },
+  "self_reported_usage": {
+    "latest": {
+      "input_tokens": 40134158,
+      "output_tokens": 2914357,
+      "calls": 258
+    },
+    "snapshots": 3
+  },
+  "summary": {
+    "questions": 186,
+    "graded": 186,
+    "deferred_to_judge": 0,
+    "accuracy_overall": 0.9086,
+    "accuracy_by_type": {
+      "abstention": 0.9231,
+      "as_of": 0.6667,
+      "attribution": 0.8,
+      "chain_freshness": 1.0,
+      "citation": 1.0,
+      "constraint": 1.0,
+      "disambiguation": 0.8667,
+      "freshness": 0.9167,
+      "multi_source": 0.9452,
+      "ordering": 1.0,
+      "set_difference": 0.8333,
+      "single_hop": 0.8333
+    },
+    "accuracy_by_difficulty": {
+      "base": 0.9161,
+      "hard": 0.871
+    },
+    "freshness_detail": {
+      "with_stale_in_corpus": 0.8889,
+      "recency_only": 1.0
+    },
+    "evidence": {
+      "questions_with_citations": 182,
+      "citation_coverage": 0.9785,
+      "evidence_recall_mean": 0.4017,
+      "evidence_precision_mean": 0.4598
+    }
+  },
+  "answers_missing": [],
+  "regraded": true,
+  "corpus_name": "corpus_a",
+  "fingerprint": {
+    "algorithm": "sha256-v1",
+    "scorer": "da4305f52827bf5229c456c50b07fb1198fd55b86c4086800acdb0ecb9238f10",
+    "normalization": {
+      "default_year": "2026",
+      "alt_years": [
+        "2027"
+      ]
+    },
+    "corpus": "12772a521d95bd777625924d8ec7b151d0d9c0e388f4dc4bafbd7540130cc9a9",
+    "corpus_documents": 428,
+    "questions": "6d38f6c11edbefb4baa77b8014af1920c48ab65f3647a2bb10daa691e9259b06",
+    "gold": "55a66b80ff0f62d8b3a340dcbb9cc970a011922b1e509269c4402192f9504970"
+  },
+  "benchmark_revision": {
+    "commit": "9ce129b022061201c271931eadcf8b7d7b006868",
+    "dirty": true
+  },
+  "provenance_note": {
+    "answers_transformed": true,
+    "why": "These answers were produced against the corpus before publication, when a set of identifiers carried different names. The same substitution applied to the corpus at publication was applied to the answers, because an answer is derived from the corpus it read: a system reading the published corpus would have written the published name. Nothing else was changed.",
+    "verify": "Applying substitutions.text then substitutions.question_ids to answers.as-answered.jsonl reproduces answers.jsonl exactly. Two further substitutions were applied at publication and are deliberately not listed, because publishing their pre-image would put back into a public artifact exactly what they were applied to remove: one replaced a registrable .com domain, the others two internal source-repository identifiers a model named while inventing merge requests -- the corpus never held either string, so the corpus-side rename could not reach them. Both are pre-applied in answers.as-answered.jsonl, so the map below still reproduces the rows.",
+    "substitutions": {
+      "text": {
+        "docs/sot/designs/": "docs/design/",
+        "docs/sot/log.md": "docs/design/CHANGELOG.md",
+        "docs/sot/": "docs/design/",
+        "docs/specs/": "docs/proposals/",
+        "TaskRegistry": "JobRegistry",
+        "task_registry": "job_registry",
+        ".ingest_state.json": ".wave_state.json",
+        "ingest_state": "wave_state",
+        "ingest_backfill": "wave_backfill",
+        "consolidate_service.py": "rollup_service.py",
+        "action_results": "wave_results",
+        "self_model/": "wiki/",
+        "state.db": "atlas.db",
+        "WikiPage": "PageRef",
+        "ingest_pipeline.md": "wave_pipeline.md",
+        "consolidate.md": "rollup.md",
+        "WaveAbort": "BatchAbort",
+        "inbox--gitlab": "inbox-automated",
+        "Helix": "Quillon",
+        "helix": "quillon"
+      },
+      "question_ids": {
+        "fresh-helix-launch-date": "fresh-quillon-launch-date",
+        "abstain-helix-launched": "abstain-quillon-launched",
+        "disambig-helix-single-date": "disambig-quillon-single-date",
+        "chain-helix-date": "chain-quillon-date"
+      }
+    },
+    "not_a_rerun": "This is not a run against the published corpus. The systems never saw it. Reproducing these numbers requires re-running the answer phase.",
+    "effect": {
+      "accuracy_as_answered": 0.8763,
+      "accuracy_after_map": 0.9086,
+      "questions_reported_unanswered_before_id_map": 4,
+      "note": "The id map matters more than the text map: four question ids were renamed at publication, and without mapping them those four answers are reported as unanswered, which invalidates the run."
+    },
+    "substitution_order": "Text substitutions are applied in the listed order to the answer field; longer keys precede their prefixes. Question ids are replaced whole, never by substring.",
+    "run_id_note": "run_id was renamed at publication for the same reason the corpus was de-identified. It names no answer row, so it is not part of the substitution map, which is only what reproduces answers.jsonl."
+  },
+  "corpus_scope": "A only. Corpus B was not run on this model; see results/README.md.",
+  "schema_version": 1,
+  "trial": {
+    "index": 1,
+    "of": 1
+  },
+  "run_parameters": {
+    "max_rounds": null,
+    "note": "consolidating design; no round budget applies"
+  }
+}

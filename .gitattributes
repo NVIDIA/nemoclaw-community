@@ -1,0 +1,2 @@
+# Preserve author-maintained tutorial Markdown hard breaks.
+examples/**/tutorial.md whitespace=-blank-at-eol

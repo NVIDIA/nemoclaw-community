@@ -3,7 +3,17 @@ SPDX-FileCopyrightText: Copyright (c) 2026 BlueTier Operations LLC
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# blackwall-guard — BLACK_WALL Preflight Guardrail
+# Blackwall Preflight Guardrail
+
+| Catalog field | Value |
+| --- | --- |
+| Description | Screens every OpenClaw tool call through an external Blackwall pre-action risk forecast, GO, CAUTION, or STOP, as defense-in-depth, with proxy-injected credentials and metadata-only forecasts by default. |
+| Industry | ✨ Other |
+| Requirements | Node.js · Docker + OpenShell · Blackwall API key, free tier available · in-sandbox hook, not an independent enforcement boundary |
+| NemoClaw | N/A |
+| Harness | OpenClaw Unpinned |
+| OpenShell | Unpinned |
+| Contributor | BlueTier Operations |
 
 A community integration that adds a **pre-action risk gate** to an OpenClaw agent
 running under NemoClaw. It hooks `before_tool_call` and runs a risk forecast
@@ -115,7 +125,7 @@ L7 proxy on egress. Two files here express this:
 The plugin itself needs no change: it still sends `Authorization: Bearer
 $BLACKWALL_API_KEY`, but in the sandbox that value is the placeholder, and the real
 key exists only host-side. This mirrors the provider + policy pattern used by the
-[Developer Community Chief of Staff](../../nvidia/developer-community-chief-of-staff/README.md)
+[Developer Community Chief of Staff](../../../nvidia/developer-community-chief-of-staff/README.md)
 recipe. `scripts/bring-up.sh` performs the profile import, provider creation, and
 policy application; to wire it into an existing deployment instead, merge
 `policy.yaml`'s `network_policies` entry into your sandbox policy and import

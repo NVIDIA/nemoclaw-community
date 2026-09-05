@@ -1,0 +1,258 @@
+<!doctype html>
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="Search NemoClaw Community recipes, field demos, and developer tools by example type or industry."
+    >
+    <title>NemoClaw Community Example Catalog | NVIDIA</title>
+    <link rel="icon" type="image/png" sizes="64x64" href="assets/nvidia-favicon.png">
+    <link rel="stylesheet" href="styles/shared.css">
+    <link rel="stylesheet" href="styles/catalog.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#catalog">Skip to examples</a>
+
+    <header class="site-header">
+      <div class="shell masthead">
+        <div class="brand-lockup">
+          <a class="nvidia-brand" href="https://www.nvidia.com/" aria-label="NVIDIA home">
+            <img src="assets/nvidia-logo.png" alt="NVIDIA" width="400" height="138">
+          </a>
+          <span class="brand-divider" aria-hidden="true"></span>
+          <span class="product-name">NemoClaw Community</span>
+        </div>
+        <nav class="header-links" aria-label="NemoClaw resources">
+          <a
+            class="repository-link"
+            href="https://brev.nvidia.com/launchable/deploy?launchableID=env-3Azt0aYgVNFEuz7opyx3gscmowS"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Launch NemoClaw on Brev (opens in a new tab)"
+          >
+            <span class="header-link-wide">Launch NemoClaw on Brev</span><span class="header-link-compact">Brev</span>
+            <span aria-hidden="true">↗</span>
+          </a>
+          <a
+            class="repository-link"
+            href="https://github.com/NVIDIA/nemoclaw-community"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="GitHub repository (opens in a new tab)"
+          >
+            <span class="header-link-wide">GitHub repository</span><span class="header-link-compact">GitHub</span>
+            <span aria-hidden="true">↗</span>
+          </a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="shell hero-layout">
+          <h1 id="hero-title">Find a starting point for your next agent.</h1>
+          <div class="hero-support">
+            <div class="hero-copy">
+              <p class="hero-summary">
+                Explore reusable recipes, field demos, and developer tools—then
+                narrow the catalog by type, provenance, collection, or industry.
+              </p>
+              <nav class="hero-actions" aria-label="Catalog actions">
+                <a class="button button-primary" href="#catalog">Search examples <span aria-hidden="true">↓</span></a>
+                <a
+                  class="button button-secondary"
+                  href="https://github.com/NVIDIA/nemoclaw-community/blob/main/CONTRIBUTING.md#add-a-new-example"
+                >
+                  Contribute an example
+                </a>
+                <a class="button button-tertiary" href="{{TUTORIAL_URL}}">
+                  Getting Started <span aria-hidden="true">→</span>
+                </a>
+              </nav>
+            </div>
+            <dl class="hero-stats" aria-label="Catalog coverage">
+              <div><dt>{{EXAMPLE_COUNT}}</dt><dd>Examples</dd></div>
+              <div><dt>{{BROWSE_GROUP_COUNT}}</dt><dd>Catalog groupings</dd></div>
+              <div><dt>{{REPRESENTED_INDUSTRY_COUNT}}</dt><dd>Industries represented</dd></div>
+            </dl>
+          </div>
+        </div>
+      </section>
+
+      <section class="discovery" aria-labelledby="browse-title">
+        <div class="shell discovery-layout">
+          <header class="discovery-header">
+            <div>
+              <p class="eyebrow">Explore the catalog</p>
+              <h2 id="browse-title">Browse by category or industry</h2>
+              <p>
+                Category combines artifact type with recipe provenance. Industry
+                describes the workflow that the example serves.
+              </p>
+            </div>
+
+            <fieldset class="browse-mode" id="catalog-view-controls" hidden>
+              <legend class="sr-only">Browse examples by</legend>
+              <div class="browse-mode-options">
+                <label class="browse-mode-option" for="catalog-view-category">
+                  <input
+                    id="catalog-view-category"
+                    type="radio"
+                    name="catalog-view"
+                    value="category"
+                    aria-controls="browse-category-panel catalog-results"
+                    checked
+                  >
+                  <span><strong>Category &amp; collection</strong><small>Type, provenance, or collection</small></span>
+                </label>
+                <label class="browse-mode-option" for="catalog-view-industry">
+                  <input
+                    id="catalog-view-industry"
+                    type="radio"
+                    name="catalog-view"
+                    value="industry"
+                    aria-controls="browse-industry-panel catalog-results"
+                  >
+                  <span><strong>Industry</strong><small>{{INDUSTRY_COUNT}} industry options</small></span>
+                </label>
+              </div>
+            </fieldset>
+          </header>
+
+          <nav
+            class="browse-grid browse-grid-categories"
+            id="browse-category-panel"
+            aria-label="Browse by category or collection"
+          >
+{{CATEGORY_NAV}}
+          </nav>
+          <nav
+            class="browse-grid browse-grid-industries"
+            id="browse-industry-panel"
+            aria-label="Browse by industry"
+            hidden
+          >
+{{INDUSTRY_NAV}}
+          </nav>
+        </div>
+      </section>
+
+      <section class="catalog" id="catalog" tabindex="-1" aria-labelledby="catalog-title">
+        <div class="shell catalog-intro">
+          <div>
+            <p class="eyebrow">Search the catalog</p>
+            <h2 id="catalog-title">Find an example</h2>
+            <p>
+              Search titles, descriptions, requirements, contributors, types,
+              provenance, collections, and industries.
+            </p>
+          </div>
+          <nav class="data-links" aria-label="Machine-readable catalog resources">
+            <a class="data-link" href="catalog.json">Use generated catalog JSON <span aria-hidden="true">→</span></a>
+            <a class="data-link" href="llms.txt">Use agent navigation index <span aria-hidden="true">→</span></a>
+          </nav>
+        </div>
+
+        <div
+          class="shell catalog-controls"
+          id="catalog-controls"
+          role="search"
+          aria-label="Filter examples"
+          hidden
+        >
+          <div class="search-control">
+            <label for="catalog-search">Search examples</label>
+            <input
+              id="catalog-search"
+              type="search"
+              inputmode="search"
+              autocomplete="off"
+              placeholder="Try payment, Kubernetes, Slack…"
+            >
+          </div>
+
+          <div class="filter-control" data-filter-for="category">
+            <label for="catalog-category">Category or collection</label>
+            <div class="select-shell">
+              <select id="catalog-category">
+{{CATEGORY_OPTIONS}}
+              </select>
+            </div>
+          </div>
+
+          <div class="filter-control" data-filter-for="industry" hidden>
+            <label for="catalog-industry">Industry</label>
+            <div class="select-shell">
+              <select id="catalog-industry" disabled>
+{{INDUSTRY_OPTIONS}}
+              </select>
+            </div>
+          </div>
+
+          <div class="filter-control">
+            <label for="catalog-maintenance">Maintenance</label>
+            <div class="select-shell">
+              <select id="catalog-maintenance">
+                <option value="maintained">Maintained examples</option>
+                <option value="all">All maintenance states</option>
+                <option value="current">Current</option>
+                <option value="review-soon">Review soon</option>
+                <option value="review-due">Review due</option>
+                <option value="review-overdue">Review overdue</option>
+                <option value="review-critical">Review critical</option>
+                <option value="deprecated">Deprecated</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="control-summary">
+            <p id="catalog-status" role="status" aria-live="polite">{{EXAMPLE_COUNT}} examples shown</p>
+            <button class="reset-button" id="catalog-reset" type="button" disabled>Reset filters</button>
+          </div>
+        </div>
+
+        <noscript>
+          <p class="shell noscript-note">
+            Interactive search requires JavaScript. The complete catalog remains
+            available below, organized by example type.
+          </p>
+        </noscript>
+
+        <div class="empty-state shell" id="catalog-empty" hidden>
+          <h2>No examples match</h2>
+          <p>Try a broader search, choose another view, or reset the filters above.</p>
+        </div>
+
+        <div class="catalog-results" id="catalog-results" data-view="category">
+{{CATALOG_GROUPS}}
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="shell footer-layout">
+        <p>
+          NemoClaw Community support is best-effort unless a specific NVIDIA product
+          agreement says otherwise.
+        </p>
+        <nav class="footer-links" aria-label="Repository policies and resources">
+          <a href="{{TUTORIAL_URL}}">Build-a-Claw tutorial</a>
+          <a href="https://github.com/NVIDIA/nemoclaw-community">Repository</a>
+          <a href="https://github.com/NVIDIA/nemoclaw-community/blob/main/SUPPORT.md">Support</a>
+          <a href="https://github.com/NVIDIA/nemoclaw-community/blob/main/SECURITY.md">Security</a>
+          <a href="https://brev.nvidia.com/launchable/deploy?launchableID=env-3Azt0aYgVNFEuz7opyx3gscmowS">Launch NemoClaw on Brev</a>
+          <a href="llms.txt">Agent index</a>
+          <a href="https://github.com/brevdev/nemoclaw-demos">Additional examples</a>
+        </nav>
+      </div>
+    </footer>
+
+    <script type="module" src="scripts/catalog.mjs"></script>
+  </body>
+</html>

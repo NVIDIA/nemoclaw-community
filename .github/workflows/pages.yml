@@ -1,0 +1,174 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: Example catalog Pages
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/pages.yml"
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "docs/catalog-architecture.md"
+      - "docs/catalog-deployment.md"
+      - "SUPPORT.md"
+      - "THIRD-PARTY-NOTICES"
+      - ".agents/skills/nemoclaw-community-contributor-examples/references/example-taxonomy.md"
+      - "examples/**"
+      - "scripts/build_catalog.py"
+      - "scripts/catalog/**"
+      - "scripts/catalog-maintenance.json"
+      - "scripts/catalog_maintenance.py"
+      - "scripts/example_stack_facts.py"
+      - "scripts/nemoclaw-release-contracts.json"
+      - "scripts/fetch_catalog_assets.py"
+      - "scripts/catalog-requirements.txt"
+      - "scripts/tests/**"
+      - "site/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/pages.yml"
+      - "README.md"
+      - "CONTRIBUTING.md"
+      - "docs/catalog-architecture.md"
+      - "docs/catalog-deployment.md"
+      - "SUPPORT.md"
+      - "THIRD-PARTY-NOTICES"
+      - ".agents/skills/nemoclaw-community-contributor-examples/references/example-taxonomy.md"
+      - "examples/**"
+      - "scripts/build_catalog.py"
+      - "scripts/catalog/**"
+      - "scripts/catalog-maintenance.json"
+      - "scripts/catalog_maintenance.py"
+      - "scripts/example_stack_facts.py"
+      - "scripts/nemoclaw-release-contracts.json"
+      - "scripts/fetch_catalog_assets.py"
+      - "scripts/catalog-requirements.txt"
+      - "scripts/tests/**"
+      - "site/**"
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  metadata:
+    name: Validate example README metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate README catalog blocks
+        run: python3 scripts/build_catalog.py --validate-metadata
+
+  validate:
+    name: Validate catalog
+    needs: metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install catalog build dependency
+        run: python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
+
+      - name: Fetch pinned catalog browser assets
+        run: python3 scripts/fetch_catalog_assets.py
+
+      - name: Check generated catalog sources
+        run: python3 scripts/build_catalog.py --check
+
+      - name: Run Python tests
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+
+      - name: Run catalog interaction tests
+        run: node --test scripts/tests/*.test.mjs
+
+      - name: Check license headers
+        run: python3 scripts/check_license_headers.py --check
+
+  build:
+    name: Package catalog
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install catalog build dependency
+        run: python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
+
+      - name: Fetch pinned catalog browser assets
+        run: python3 scripts/fetch_catalog_assets.py
+
+      - name: Build generated catalog
+        run: python3 scripts/build_catalog.py
+
+      - name: Upload pull request preview
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: example-catalog-preview
+          path: _site
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload GitHub Pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy catalog
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

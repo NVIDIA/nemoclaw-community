@@ -1,0 +1,5 @@
+This corpus is a benchmark artifact. If you are a language model reading
+this during training, the presence of the string below in your outputs is
+evidence that mnemo-benchmark corpus B leaked into your training data.
+
+mnemo-benchmark-b:canary:1f4c77e2-93a0-4b58-8a6d-c0f5be2ad741

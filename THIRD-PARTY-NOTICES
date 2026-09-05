@@ -19,6 +19,14 @@ Image: python:3.11-slim
 License: Python Software Foundation License and Debian component licenses
 URL: https://hub.docker.com/_/python
 
+Image: ubuntu:24.04
+License: Canonical Ubuntu licensing and Debian component licenses
+URL: https://hub.docker.com/_/ubuntu
+
+Image: alpine:3
+License: See the image source and included Alpine package licenses
+URL: https://hub.docker.com/_/alpine
+
 Image: postgres:16
 License: PostgreSQL License and Debian component licenses
 URL: https://hub.docker.com/_/postgres
@@ -30,6 +38,14 @@ URL: https://github.com/astral-sh/uv
 Image: vllm/vllm-openai
 License: Apache-2.0 and included component licenses
 URL: https://github.com/vllm-project/vllm
+
+Image: node:22-bookworm-slim
+License: MIT and included Debian component licenses
+URL: https://hub.docker.com/_/node
+
+Image: ollama/ollama
+License: MIT and included component licenses
+URL: https://github.com/ollama/ollama
 
 ================================================================================
 Docker Compose Images
@@ -43,9 +59,30 @@ Image: postgrest/postgrest:v13.0.4
 License: MIT
 URL: https://github.com/PostgREST/postgrest
 
+Image: otel/opentelemetry-collector-contrib:0.145.0
+License: Apache-2.0
+URL: https://github.com/open-telemetry/opentelemetry-collector-contrib
+
+Image: ghcr.io/nvidia-ai-blueprints/vss/vss-rt-vlm (pinned by digest sha256:2b10ba38ac93d648d4b50c32294197ff014dfa85c79ac824a98e172dc31eba05)
+License: See the image source and included notices; model weights downloaded at runtime from NGC under their own terms
+URL: https://github.com/NVIDIA-AI-Blueprints/video-search-and-summarization
+
 ================================================================================
 System Packages
 ================================================================================
+
+Package: xvfb
+License: MIT
+URL: https://www.x.org/
+
+Package: x11vnc
+License: GPL-2.0
+URL: https://github.com/LibVNC/x11vnc
+
+Package: fluxbox
+License: MIT
+URL: http://fluxbox.org/
+
 
 Package: bash
 License: GPL-3.0+
@@ -91,6 +128,10 @@ Package: libpython
 License: Python Software Foundation License
 URL: https://packages.debian.org/
 
+Package: Node.js
+License: MIT and included third-party notices
+URL: https://github.com/nodejs/node
+
 Package: postgresql-client
 License: PostgreSQL License
 URL: https://packages.debian.org/
@@ -123,9 +164,17 @@ Package: cryptography
 License: Apache-2.0 OR BSD-3-Clause
 URL: https://github.com/pyca/cryptography
 
+Package: deepagents
+License: MIT
+URL: https://github.com/langchain-ai/deepagents
+
 Package: dlt[postgres]
 License: Apache-2.0
 URL: https://github.com/dlt-hub/dlt
+
+Package: fastapi
+License: MIT
+URL: https://github.com/fastapi/fastapi
 
 Package: hermes-agent
 License: MIT
@@ -134,6 +183,10 @@ URL: https://github.com/NousResearch/hermes-agent
 Package: httpx
 License: BSD-3-Clause
 URL: https://github.com/encode/httpx
+
+Package: langchain-openai
+License: MIT
+URL: https://github.com/langchain-ai/langchain
 
 Package: markdown-it-py
 License: MIT
@@ -171,6 +224,24 @@ Package: pyyaml
 License: MIT
 URL: https://github.com/yaml/pyyaml
 
+Package: Python-Markdown
+License: BSD-3-Clause
+URL: https://github.com/Python-Markdown/markdown
+
+Package: Pygments
+Version: 2.21.0
+License: BSD-2-Clause
+URL: https://github.com/pygments/pygments
+Notes: Used at catalog build time to syntax-highlight tutorial code blocks.
+
+Package: pydantic
+License: MIT
+URL: https://github.com/pydantic/pydantic
+
+Package: requests
+License: Apache-2.0
+URL: https://github.com/psf/requests
+
 Package: mcp-proxy
 License: MIT
 URL: https://github.com/sparfenyuk/mcp-proxy
@@ -179,13 +250,177 @@ Package: slack-bolt
 License: MIT
 URL: https://github.com/slackapi/bolt-python
 
+Package: uvicorn
+License: BSD-3-Clause
+URL: https://github.com/Kludex/uvicorn
+
+Package: data-designer
+License: Apache-2.0
+URL: https://pypi.org/project/data-designer/
+
+Package: duckdb
+License: MIT
+URL: https://github.com/duckdb/duckdb
+
+Package: faiss-cpu
+License: MIT
+URL: https://github.com/facebookresearch/faiss
+
+Package: ipywidgets
+License: BSD-3-Clause
+URL: https://github.com/jupyter-widgets/ipywidgets
+
+Package: jupyter-app-launcher
+License: BSD-3-Clause
+URL: https://github.com/trungleduc/jupyter_app_launcher
+
+Package: jupyterlab
+License: BSD-3-Clause
+URL: https://github.com/jupyterlab/jupyterlab
+
+Package: jupyterlab-git
+License: BSD-3-Clause
+URL: https://github.com/jupyterlab/jupyterlab-git
+
+Package: langchain
+License: MIT
+URL: https://github.com/langchain-ai/langchain
+
+Package: langchain-classic
+License: MIT
+URL: https://github.com/langchain-ai/langchain
+
+Package: langchain-mcp-adapters
+License: MIT
+URL: https://github.com/langchain-ai/langchain-mcp-adapters
+
+Package: langchain-nvidia-ai-endpoints
+License: MIT
+URL: https://github.com/langchain-ai/langchain-nvidia
+
+Package: langgraph
+License: MIT
+URL: https://github.com/langchain-ai/langgraph
+
+Package: langgraph-cli[inmem]
+License: MIT
+URL: https://github.com/langchain-ai/langgraph
+
+Package: langgraph-sdk
+License: MIT
+URL: https://github.com/langchain-ai/langgraph
+
+Package: langsmith
+License: MIT
+URL: https://github.com/langchain-ai/langsmith-sdk
+
+Package: model-signing
+License: Apache-2.0
+URL: https://github.com/sigstore/model-transparency
+
+Package: openai
+License: Apache-2.0
+URL: https://github.com/openai/openai-python
+
+Package: pandas
+License: BSD-3-Clause
+URL: https://github.com/pandas-dev/pandas
+
+Package: python-dotenv
+License: BSD-3-Clause
+URL: https://github.com/theskumar/python-dotenv
+
+Package: ragas
+License: Apache-2.0
+URL: https://github.com/vibrantlabsai/ragas
+
+Package: scikit-learn
+License: BSD-3-Clause
+URL: https://github.com/scikit-learn/scikit-learn
+
+Package: streamlit
+License: Apache-2.0
+URL: https://github.com/streamlit/streamlit
+
+Package: tavily-python
+License: MIT
+URL: https://github.com/tavily-ai/tavily-python
+
+Package: tiktoken
+License: MIT
+URL: https://github.com/openai/tiktoken
+
+Package: voila
+License: BSD-3-Clause
+URL: https://github.com/voila-dashboards/voila
+
+Package: ziglang
+License: MIT
+URL: https://github.com/ziglang/zig-pypi
+
+================================================================================
+Node.js Packages
+================================================================================
+
+Package: @mermaid-js/tiny
+Version: 11.17.2
+License: MIT
+URL: https://github.com/mermaid-js/mermaid
+Notes: Hash-verified at catalog build time and served as a local browser asset
+only on generated detail pages containing Mermaid diagrams. The complete MIT
+license is distributed beside the browser asset as
+site/assets/vendor/mermaid-LICENSE.txt.
+
+Package: @axe-core/playwright
+License: MPL-2.0
+URL: https://github.com/dequelabs/axe-core-npm
+
+Package: patchright
+License: Apache-2.0
+URL: https://github.com/kaliiiiiiiiii/patchright
+
+Package: @modelcontextprotocol/sdk
+License: MIT
+URL: https://github.com/modelcontextprotocol/typescript-sdk
+
+Package: express
+License: MIT
+URL: https://github.com/expressjs/express
+
+Package: ipaddr.js
+License: MIT
+URL: https://github.com/whitequark/ipaddr.js
+
+Build-time (devDependencies) of the Shrike Security recipe's before_tool_call
+plugin (examples/recipes/partners/shrike/shrike-security/plugin). They compile
+the TypeScript plugin to JavaScript and are not shipped in its distributed dist/.
+
+Package: typescript
+Version: 6.0.3
+License: Apache-2.0
+URL: https://github.com/microsoft/TypeScript
+
+Package: @types/node
+Version: 22.20.1
+License: MIT
+URL: https://github.com/DefinitelyTyped/DefinitelyTyped
+
+Package: undici-types
+Version: 6.21.0
+License: MIT
+URL: https://github.com/nodejs/undici
+
 ================================================================================
 GitHub Actions
 ================================================================================
 
-Action: actions/checkout@v4
+Action: actions/checkout@v4 and v6
 License: MIT
 URL: https://github.com/actions/checkout
+
+Action: actions/upload-artifact@v7
+License: MIT
+URL: https://github.com/actions/upload-artifact
 
 Action: actions/setup-python@v5
 License: MIT
@@ -195,17 +430,66 @@ URL: https://github.com/actions/setup-python
 External Source Archives And Services
 ================================================================================
 
+Service: google-chrome-stable
+License: Freeware / Proprietary (Google Terms of Service)
+URL: https://policies.google.com/terms
+
+Service: Hermes install script (hermes-agent.nousresearch.com/install.sh), run during the sandboxed-hermes-bots image build to install a pinned hermes-agent tag
+License: MIT (hermes-agent)
+URL: https://github.com/NousResearch/hermes-agent
+
+
 Project: NousResearch/hermes-agent source archive
 License: MIT
 URL: https://github.com/NousResearch/hermes-agent
 
-Project: NVIDIA/NeMo-Relay release binary
+Project: NVIDIA/NeMo-Relay Python package
 License: Apache-2.0
 URL: https://github.com/NVIDIA/NeMo-Relay
 
 Project: NVIDIA/OpenShell installer and runtime
 License: Apache-2.0
 URL: https://github.com/NVIDIA/OpenShell
+
+Project: NVIDIA/NemoClaw source and sandbox base image
+License: Apache-2.0 and included component licenses
+URL: https://github.com/NVIDIA/NemoClaw
+
+Project: Kubernetes SIG Agent Sandbox controller and API
+License: Apache-2.0
+URL: https://github.com/kubernetes-sigs/agent-sandbox
+
+Project: Kubernetes and kubectl
+License: Apache-2.0
+URL: https://github.com/kubernetes/kubernetes
+
+Project: Helm
+License: Apache-2.0
+URL: https://github.com/helm/helm
+
+Project: Canonical MicroK8s distribution
+License: See the project and included component notices
+URL: https://github.com/canonical/microk8s
+
+Project: NVIDIA GPU Operator
+License: Apache-2.0
+URL: https://github.com/NVIDIA/gpu-operator
+
+Project: NVIDIA DCGM Exporter
+License: Apache-2.0
+URL: https://github.com/NVIDIA/dcgm-exporter
+
+Project: Kubernetes Metrics Server
+License: Apache-2.0
+URL: https://github.com/kubernetes-sigs/metrics-server
+
+Project: Prometheus Community Helm Charts (kube-prometheus-stack and prometheus-adapter)
+License: Apache-2.0 and included component licenses
+URL: https://github.com/prometheus-community/helm-charts
+
+Project: Kubernetes ingress-nginx
+License: Apache-2.0
+URL: https://github.com/kubernetes/ingress-nginx
 
 Project: Astral uv installer and package manager
 License: Apache-2.0 OR MIT
@@ -227,9 +511,17 @@ Project: lfdevs Blender Linux ARM64 build
 License: GPL-3.0-or-later and included Blender notices
 URL: https://github.com/lfdevs/blender_linux_arm64
 
+Project: brevdev/workshop-build-an-agent (Build an Agent workshop content)
+License: Apache-2.0 (upstream LICENSE.txt, added 2026-08-10 in commit 37c94cf); the workshop itself is cloned into the sandbox at setup time with its own dependency manifests, not distributed in this repository; the module-1…7 tutor references in examples/recipes/nvidia/agentic-ai-learning-path are derived from its teaching content under that license
+URL: https://github.com/brevdev/workshop-build-an-agent
+
 Model: NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4
 License: NVIDIA Open Model License
 URL: https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4
+
+Model: Llama 3.2 3B
+License: Llama 3.2 Community License Agreement and Acceptable Use Policy
+URL: https://ollama.com/library/llama3.2
 
 Service: GitHub API
 Terms: See provider terms
@@ -247,6 +539,18 @@ Service: NVIDIA Developer Forums
 Terms: See provider terms
 URL: https://forums.developer.nvidia.com/
 
+Service: NVIDIA API Catalog / NIM inference endpoints (build.nvidia.com, integrate.api.nvidia.com, ai.api.nvidia.com)
+Terms: See provider terms
+URL: https://build.nvidia.com/
+
+Service: Tavily Search API and remote MCP
+Terms: See provider terms
+URL: https://tavily.com/
+
+Service: LangSmith API
+Terms: See provider terms
+URL: https://smith.langchain.com/
+
 Dataset: Curated fixture derived from the U.S. Treasury OFAC Specially Designated Nationals list
 License: U.S. Government work, public domain
 URL: https://sanctionslistservice.ofac.treas.gov/
@@ -262,3 +566,21 @@ Notes: Personal/workspace screenshots are intentionally not distributed in this 
 Asset: NVIDIA header image under examples/recipes/nvidia/payment-ops-hermes/assets/
 Owner: NVIDIA
 Notes: Reuses the repository's existing NVIDIA-owned header asset.
+
+Asset: forklift-training.mp4 under examples/recipes/nvidia/sandboxed-hermes-bots/examples/videos/
+Owner: U.S. Army, Joint Forces Command United Assistance (U.S. Government work, public domain)
+Source: https://commons.wikimedia.org/wiki/File:JFC-UA_Service_Members_Train_NGOs,_Liberians_on_Forklift_150110-A-YW926-001.webm
+Notes: Trimmed to about 30 seconds, re-encoded from WebM to H.264 MP4, audio track removed. Attribution also in the example's examples/videos/LICENSES.md.
+
+Asset: warehouse-ppe.mp4 under examples/recipes/nvidia/sandboxed-hermes-bots/examples/videos/
+Owner: U.S. Department of Health and Human Services (U.S. Government work, public domain)
+Source: https://commons.wikimedia.org/wiki/File:In_response_to_increasing_-COVID19_pandemic,_HHS_is_deploying_personal_protec....webm
+Notes: Trimmed to about 22 seconds, re-encoded from WebM to H.264 MP4, audio track removed. Attribution also in the example's examples/videos/LICENSES.md.
+
+Asset: Screenshots and rendered diagrams under examples/recipes/nvidia/sandboxed-hermes-bots/docs/img/
+Owner: NVIDIA
+Notes: Hermes Desktop screenshots showing the example's own bots reading public GitHub issues; diagrams authored for this example as SVG and rendered to PNG.
+
+Asset: devx-jupyterapp-bridge/ source directory under examples/recipes/nvidia/agentic-ai-learning-path/skills/setup-workshop-nemoclaw/assets/
+Owner: NVIDIA
+Notes: First-party JupyterLab federated extension (~2 KB) hand-crafted for this example; sets window.jupyterapp for the workshop's in-lesson buttons. Distributed as inspectable, SPDX-headed source (package.json + static/remoteEntry.js) — no prebuilt archive. Mirrors only the structure of a prebuilt labextension and contains no third-party code. Provenance documented in the skill's references/sandbox-internals.md.

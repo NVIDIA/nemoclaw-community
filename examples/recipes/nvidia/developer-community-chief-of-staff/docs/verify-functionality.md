@@ -3,11 +3,11 @@ title:
   page: "Verify Skill Functionality"
   nav: "Verify Skills"
 description:
-  main: "Walk through 21 conversational prompts plus a live GitHub check that prove the core Hermes workflow skills, all eight NVTeam role lenses, Rich Blocks, and interactive clarification end-to-end across Slack DM, Slack thread, and Outlook email channels."
-  agent: "End-to-end functional verification recipe for the developer-community-chief-of-staff example. Contains 21 copy-pasteable prompts covering outlook-email-search, slack-channel-finder, slack-channel-summarizer, source-etl-query, cross-source-gap-analysis, and all eight role-first nemoclaw-nvteam lenses, plus a live github-readonly-live check. Each prompt has a stated expected behavior and a specific verification cue. Use after running scripts/bring-up.sh and confirming the README's plumbing checks pass."
+  main: "Walk through 21 conversational prompts plus live GitHub and optional GitLab checks that prove the core Hermes workflow skills, all eight NVTeam role lenses, Rich Blocks, and interactive clarification end-to-end across Slack DM, Slack thread, and Outlook email channels."
+  agent: "End-to-end functional verification recipe for the developer-community-chief-of-staff example. Contains 21 copy-pasteable prompts covering outlook-email-search, slack-channel-finder, slack-channel-summarizer, source-etl-query, cross-source-gap-analysis, and all eight role-first nemoclaw-nvteam lenses, plus live github-readonly-live and optional gitlab-readonly-live checks. Each prompt has a stated expected behavior and a specific verification cue. Use after running scripts/bring-up.sh and confirming the README's plumbing checks pass."
 keywords: ["verify nemoclaw skills", "hermes skill verification", "slack outlook smoke test", "developer community chief of staff verification"]
 topics: ["generative_ai", "ai_agents"]
-tags: ["hermes", "openshell", "outlook", "slack", "verification", "smoke-test"]
+tags: ["hermes", "openshell", "outlook", "slack", "github", "gitlab", "verification", "smoke-test"]
 content:
   type: how_to
   difficulty: intermediate
@@ -24,7 +24,7 @@ status: published
 
 # Verify Skill Functionality
 
-Twenty-one copy-pasteable prompts plus a live GitHub check prove each skill works end-to-end across Slack and Outlook. The README's [§ Verification](../README.md#verification-what-success-looks-like) checks plumbing. This guide checks whether the **agent** can use its skills correctly.
+Twenty-one copy-pasteable prompts plus live GitHub and optional GitLab checks prove each skill works end-to-end across Slack and Outlook. The README's [§ Verification](../README.md#verification-what-success-looks-like) checks plumbing. This guide checks whether the **agent** can use its skills correctly.
 
 Once you've run all 21, head to [collective-wisdom.md](collective-wisdom.md) for the cross-channel skill-learning demo, where one user teaches the agent a new skill and another user invokes it after a rebuild.
 
@@ -151,8 +151,15 @@ In either case, the agent may **loop trying to satisfy "from my inbox"** rather 
 
 > Pick any channel the bot is a member of and summarize the most recent 10 messages.
 
-**Expected:** agent uses `users.conversations` to pick a member channel, then `conversations.history` with `limit=10`, then a short summary.
-**Verify:** reply names the chosen channel by ID (`C…`) and gives a bulleted summary covering ≤10 messages. **If the bot isn't in any channels yet**, the skill correctly reports `not_in_channel` and asks to be invited — that's also a valid pass; invite `@myuser_nemoclaw` to a channel and retry.
+**Expected:** agent uses `users.conversations` to pick a member channel, then
+`fetch_slack_history.py --message-limit 10`. The helper can make more than one
+`conversations.history` request when bot or system messages consume a page.
+
+**Verify:** reply names the chosen channel by ID (`C…`), states the number of
+messages and pages inspected, and gives a bulleted summary covering at most 10
+human messages. Each factual bullet ends with a Slack source link. If the bot is
+not a member, the skill reports `not_in_channel` and asks to be invited. Invite
+`@myuser_nemoclaw` to a channel and retry.
 
 #### Q6 — realistic
 
@@ -160,8 +167,29 @@ In either case, the agent may **loop trying to satisfy "from my inbox"** rather 
 
 > Summarize the last 7 days of this channel — main topics, who's most active, and any unresolved questions.
 
-**Expected:** agent uses the thread's channel ID directly, pulls history with `oldest=` set to 7 days ago, replies in-thread.
-**Verify:** reply has sections for time range, main topics, active participants, and decisions/action items — the documented summary structure. Bonus credibility: a participant name you recognize.
+**Expected:** agent uses the thread's channel ID directly and runs
+`fetch_slack_history.py` with `--oldest` set to seven days ago, `--latest` set
+to the current time, and bounded pagination. The agent uses `--replies` when
+thread context is required and replies in-thread.
+
+**Verify:** reply starts with the requested and retrieved ranges, messages and
+pages inspected, and any history or thread truncation. It has sections for main
+topics, active participants, decisions and action items, and unresolved
+questions. Every factual bullet about a theme, decision, action item, or
+unresolved question links to a representative Slack message. Open at least two
+links and confirm that they support the associated statements.
+
+#### Q6b — fail-closed
+
+Remove the bot from a test channel or use a channel ID that the bot cannot
+read. Then ask the agent to summarize that channel.
+
+**Expected:** the helper returns `ok: false` with an error such as
+`not_in_channel` or `channel_not_found`.
+
+**Verify:** the agent reports the retrieval failure and remediation. It does
+not produce a summary, infer channel activity, or describe the failure as an
+empty successful range.
 
 ---
 
@@ -180,20 +208,83 @@ in output.
 
 Ask the agent:
 
-> How many issues does the configured GitHub repo have? Use live GitHub, not the ETL mirror.
+The prompts below use the default `NVIDIA/OpenShell` repository. If you changed
+the allowlist, substitute one of its repositories.
+
+> How many issues does NVIDIA/OpenShell have? Use live GitHub, not the ETL mirror.
 
 **Expected:** agent uses the generic helper pattern, for example
-`github_readonly.py get issues --param state=all --paginate --count --exclude-pulls`.
+`github_readonly.py --repo NVIDIA/OpenShell get issues --param state=all --paginate --count --exclude-pulls`.
 It should not use `gh`, `git`, GitHub search, GraphQL, or the source ETL
 mirror for this live count.
 
 Also ask:
 
-> How many pull requests are currently open in the configured GitHub repo? Use live GitHub, not the ETL mirror.
+> How many pull requests are currently open in NVIDIA/OpenShell? Use live GitHub, not the ETL mirror.
 
 **Expected:** agent uses the generic helper pattern, for example
-`github_readonly.py get pulls --param state=open --paginate --count`; it should
+`github_readonly.py --repo NVIDIA/OpenShell get pulls --param state=open --paginate --count`; it should
 not estimate from a single `pulls --limit` page.
+
+### public-web-search (optional)
+
+This check applies only when `TAVILY_API_KEY` was configured before sandbox
+creation. Send through Slack or Outlook:
+
+> Search the public web for the latest official NVIDIA NemoClaw announcement.
+> Return the top three titles, source URLs, snippets, and search metadata. Do
+> not open or extract any result page.
+
+**Expected:** the agent loads `public-web-search` and calls native
+`web_search`. It does not use `web_extract`, `web_fetch`, a browser, `curl`, or
+custom HTTP code.
+
+**Verify:** every result includes a returned source URL, snippet-derived claims
+are identified as such, and the response does not claim to have read a result
+page. Use [Policy-Scoped Public Web Search](public-web-search.md) for the
+positive plumbing check and the blocked-host and blocked-`/extract` probes.
+
+With no `TAVILY_API_KEY`, the same prompt must report that public web search is
+disabled and must not try a fallback network path.
+
+---
+
+### gitlab-readonly-live
+
+When `GITLAB_TOKEN` and `GITLAB_READONLY_PROJECTS` are configured, verify the
+initial configured project from the host shell:
+
+```console
+$ openshell sandbox exec --name hermes-direct -- sh -lc \
+    '/usr/bin/python3 /sandbox/.hermes-data/skills/gitlab-readonly-live/scripts/gitlab_readonly.py get repository/branches --limit 1 --fields name,web_url'
+```
+
+With multiple projects, add `--project group/project` to the `get` command.
+Expected: up to one branch from the configured project appears; the token itself
+never does. Requests for authenticated-user metadata, bare project metadata,
+unlisted projects, sensitive routes, and arbitrary URLs must fail without being
+retried through another tool.
+
+Verify local route validation inside the sandbox. This command must fail before
+making a network request:
+
+```console
+$ openshell sandbox exec --name hermes-direct -- sh -lc \
+    '/usr/bin/python3 /sandbox/.hermes-data/skills/gitlab-readonly-live/scripts/gitlab_readonly.py get variables'
+```
+
+To inspect the enforced network boundary, replace `PROJECT_ID` with one of the
+numeric IDs printed during bring-up. All calls below must be denied with `403`;
+the value shown in the header is an OpenShell placeholder, not the token:
+
+```console
+$ openshell sandbox exec --name hermes-direct -- sh -lc \
+    'curl -sS -o /dev/null -w "%{http_code}\\n" -H "Authorization: Bearer openshell:resolve:env:GITLAB_TOKEN" "$GITLAB_API_URL/user"'
+$ openshell sandbox exec --name hermes-direct -- sh -lc \
+    'curl -sS -o /dev/null -w "%{http_code}\\n" -H "Authorization: Bearer openshell:resolve:env:GITLAB_TOKEN" "$GITLAB_API_URL/projects/PROJECT_ID/variables"'
+$ openshell sandbox exec --name hermes-direct -- sh -lc \
+    'curl -sS -o /dev/null -w "%{http_code}\\n" -X POST -H "Authorization: Bearer openshell:resolve:env:GITLAB_TOKEN" "$GITLAB_API_URL/projects/PROJECT_ID/issues"'
+```
 
 ---
 
@@ -217,6 +308,7 @@ Empty array `[]` is fine — bridge is up but ETL hasn't finished first sync. A 
 **Verify:** response contains 3 numbered items. The agent should identify this
 as mirrored PostgREST data, not live GitHub data. Current GitHub issues and PRs
 should use the separate `github-readonly-live` skill for `GITHUB_READONLY_REPO`.
+The plural `GITHUB_READONLY_REPOS` setting takes precedence when configured.
 
 #### Q8 — realistic
 
@@ -401,6 +493,37 @@ choices as Block Kit buttons.
 replaces the controls with the selected answer and the agent continues the
 normal turn. The click does not approve, publish, deploy, or perform another
 side effect. A typed answer remains a valid fallback.
+
+---
+
+## ATIF export check
+
+ATIF is produced by Hermes's native NeMo Relay integration when Hermes
+finalizes a session and closes its top-level Agent scope. It is not expected
+after every conversational turn. Complete a short session, then use `/new`,
+`/reset`, or a clean CLI/TUI exit before checking. Do not wait for the gateway's
+potentially long expiry policy during a manual check.
+
+With the default `ATIF_EXPORT_MODE=local`, confirm one new trajectory file
+appears in the sandbox:
+
+```console
+$ openshell sandbox exec --name hermes-direct -- sh -lc \
+    'find /tmp/atif -maxdepth 1 -type f -name "hermes-atif-*.json" -print'
+```
+
+With `ATIF_EXPORT_MODE=relay` and the MinIO backend, confirm one new object
+appears remotely:
+
+```console
+$ docker run --rm --network=host \
+    -e "MC_HOST_local=http://minioadmin:minioadmin@localhost:9000" \
+    minio/mc ls --recursive local/nemo-relay-traces/
+```
+
+A successful remote delivery does not create a duplicate local file. If the
+remote POST fails, NeMo Relay `0.7.2` writes a recovery copy to `/tmp/atif/`.
+See [atif-export.md](atif-export.md) for the request contract and diagnostics.
 
 ---
 

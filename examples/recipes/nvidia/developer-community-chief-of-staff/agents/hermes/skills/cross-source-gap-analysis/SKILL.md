@@ -35,7 +35,7 @@ combine the findings once you have them.
 Prefer a small, relevant slice from each source over broad collection. For example:
 
 - a recent Slack window for the relevant channel
-- live GitHub issues or PRs from `$GITHUB_READONLY_REPO`, when current state
+- live GitHub issues or PRs from an allowed repository, when current state
   matters
 - mirrored GitHub discussions, or historical issue/PR mirror data for the repo
   or feature area, when the task is about the ETL mirror or discussions
