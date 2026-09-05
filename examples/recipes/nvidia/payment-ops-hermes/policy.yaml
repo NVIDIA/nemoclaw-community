@@ -30,6 +30,8 @@ network_policies:
         rules:
           - allow: { method: POST, path: "/**" }
     binaries:
-      - { path: /usr/local/bin/nemo-relay }
+      - { path: /usr/bin/python3 }
+      - { path: /usr/bin/python3.13 }
+      - { path: /opt/hermes/.venv/bin/python }
 # Deliberately absent: payments-rail.internal and every real payment network.
 # OpenShell's deny-by-default egress is the maker/checker enforcement boundary.

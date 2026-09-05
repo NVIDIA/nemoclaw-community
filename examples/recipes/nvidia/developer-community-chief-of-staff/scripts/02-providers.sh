@@ -360,10 +360,10 @@ fi
 # ── ATIF object-storage provider (bearer token for atif-export-relay) ───
 # Only configured when atif_remote_enabled returns true (i.e.,
 # ATIF_EXPORT_MODE=relay). For local/unset, this block is skipped and ATIF
-# writes go to the sandbox's /tmp/atif. The
+# writes go to the sandbox's /sandbox/atif. The
 # credential is a per-VM bearer token: the sandbox env carries a
-# placeholder (`openshell:resolve:env:ATIF_RELAY_AUTH_TOKEN`), the L7
-# proxy substitutes the real value on egress, and atif-export-relay
+# provider-injected placeholder, the L7 proxy substitutes the real value on
+# egress, and atif-export-relay
 # validates it against the ATIF_RELAY_AUTH_TOKEN env var passed to the
 # relay container (see extras/docker-compose.yml).
 if atif_remote_enabled; then

@@ -54,7 +54,8 @@ sandbox_phase() {
 
 sandbox_workload_healthy() {
   openshell sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" -- \
-    curl -fsS http://127.0.0.1:4040/healthz >/dev/null 2>&1 \
+    curl -fsS http://127.0.0.1:8642/health >/dev/null 2>&1 \
     && openshell sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" -- \
-      curl -fsS http://127.0.0.1:18642/health >/dev/null 2>&1
+      /opt/hermes/.venv/bin/python -c 'from importlib.metadata import version; import tomllib; from pathlib import Path; from nemo_relay import plugin; path = Path("/etc/nemo-relay/config/plugins.toml"); config = tomllib.loads(path.read_text(encoding="utf-8")); diagnostics = plugin.validate(config).get("diagnostics", []); assert version("hermes-agent") == "0.20.6"; assert version("nemo-relay") == "0.7.2"; assert not diagnostics, diagnostics' \
+      >/dev/null 2>&1
 }

@@ -59,11 +59,11 @@ assert_messaging_config() {
 load_env
 
 # Parse ATIF_RELAY_ENDPOINT into the parts every downstream consumer needs:
-# the canonical URL (docker-compose env and bridge upstream), the host
+# the canonical URL (docker-compose env and native Relay endpoint), the host
 # (provider profile, TLS cert CN + first SAN), and the port (provider profile,
 # relay bind addr, compose healthcheck). One operator-facing knob, three
 # derived forms. Fails fast on a malformed origin so a path or typo doesn't
-# quietly break the provider rule or sandbox-bridge handshake at runtime.
+# quietly break the provider rule or sandbox-to-relay handshake at runtime.
 export ATIF_RELAY_ENDPOINT="${ATIF_RELAY_ENDPOINT:-https://host.openshell.internal:18443}"
 {
   _url="$ATIF_RELAY_ENDPOINT"
@@ -124,7 +124,7 @@ default_gateway_endpoint() {
 
 # ATIF export is governed by two orthogonal vars:
 #   ATIF_EXPORT_MODE   = local (default) | relay   — deployment-wide: in-sandbox
-#                        /tmp/atif vs host-relay export. Gates the sandbox bake,
+#                        /sandbox/atif vs host-relay export. Gates the sandbox bake,
 #                        host services, and providers.
 #   ATIF_RELAY_BACKEND = s3 | minio                — the relay's downstream, only
 #                        meaningful when mode=relay (see atif_relay_backend).

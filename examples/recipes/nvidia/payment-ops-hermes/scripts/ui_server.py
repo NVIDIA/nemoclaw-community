@@ -53,11 +53,8 @@ SYSTEM_PROMPT = SOUL.read_text(encoding="utf-8") if SOUL.exists() else ""
 HERMES_URL = os.environ.get("HERMES_URL", "http://127.0.0.1:8642").rstrip("/")
 HERMES_MODEL = os.environ.get("HERMES_MODEL", "hermes")
 API_SERVER_KEY = os.environ.get("API_SERVER_KEY", "")
-PHOENIX_ENDPOINT = os.environ.get(
-    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
-    "http://127.0.0.1:6006/v1/traces",
-)
-PHOENIX_PROJECT = os.environ.get("NEMO_RELAY_PROJECT_NAME", "finguard-payment-ops")
+PHOENIX_ENDPOINT = "http://127.0.0.1:6006/v1/traces"
+PHOENIX_PROJECT = "finguard-payment-ops"
 
 @contextmanager
 def span(name: str, **attrs):

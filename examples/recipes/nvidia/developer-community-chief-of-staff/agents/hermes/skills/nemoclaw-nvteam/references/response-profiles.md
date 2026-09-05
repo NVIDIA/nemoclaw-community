@@ -100,8 +100,8 @@ not compulsory empty templates.
 ### Interactive choices
 
 When the user must choose among two to four materially different paths before
-useful work can continue, call Hermes's `clarify` tool. On Slack, the recipe
-renders each choice as a one-tap button plus an `Other` path. Keep labels short,
+useful work can continue, call Hermes's `clarify` tool. On Slack, Hermes renders
+each choice as a one-tap button plus an `Other` path. Keep labels short,
 mutually exclusive, and phrased as outcomes.
 
 Do not add interaction for decoration. Do not use persona-authored buttons to

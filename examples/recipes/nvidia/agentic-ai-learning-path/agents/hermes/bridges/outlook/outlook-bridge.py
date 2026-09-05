@@ -150,8 +150,8 @@ def _graph_url(path_or_url: str) -> str:
 
 
 # ── Runtime config ───────────────────────────────────────────────────────────
-HERMES_URL      = "http://127.0.0.1:18642/v1/chat/completions"
-HEALTH_URL      = "http://127.0.0.1:18642/health"
+HERMES_URL      = "http://127.0.0.1:8642/v1/chat/completions"
+HEALTH_URL      = "http://127.0.0.1:8642/health"
 HERMES_API_KEY  = "nemoclaw-internal"
 
 MIN_POLL_INTERVAL      = 5

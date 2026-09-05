@@ -4,10 +4,10 @@
 | --- | --- |
 | Description | Helps payment operators screen synthetic outbound payments, explain holds, and prepare review packets while OpenShell keeps final release authority with a human outside the Hermes sandbox. |
 | Industry | 💳 Financial Services |
-| Requirements | Linux · Docker Compose · OpenShell 0.0.53 · OpenAI-compatible inference API key · synthetic data only |
+| Requirements | Linux · Docker Compose · OpenShell 0.0.106 · OpenAI-compatible inference API key · synthetic data only |
 | NemoClaw | N/A |
-| Harness | Hermes 0.14.0 |
-| OpenShell | 0.0.53 |
+| Harness | Hermes 0.20.6 |
+| OpenShell | 0.0.106 |
 
 ![NVIDIA](assets/nvidia_header.png)
 
@@ -17,15 +17,15 @@ cleared items for human review. The example demonstrates a platform-enforced
 maker/checker boundary: the agent cannot reach the payment rail because
 OpenShell never grants that egress.
 
-The custom Hermes sandbox embeds NeMo Relay. Hermes model and tool hooks flow
-to a health-checked Relay sidecar, which writes ATIF trajectories locally and
-exports OpenInference spans to Phoenix.
+The sandbox derives from NemoClaw's pinned Hermes base. Hermes uses its native,
+in-process NeMo Relay integration to write ATIF trajectories locally and
+export OpenInference spans to Phoenix.
 
 ## Deployment model
 
 This example runs on a single Linux host or VM, including a Brev instance.
 Docker hosts Phoenix, the FinGuard web UI, and a mock payment rail. The
-OpenShell gateway creates and supervises a custom Hermes sandbox on the same
+OpenShell gateway creates and supervises the derived Hermes sandbox on the same
 host.
 
 OpenShell is the workload security boundary. It restricts network egress and
@@ -60,21 +60,19 @@ flowchart LR
 
             subgraph sandbox["payment-ops sandbox"]
                 direction TB
-                hermes["Hermes agent<br/>API :18642"]
+                hermes["Hermes 0.20.6<br/>API :8642<br/>native Relay 0.7.2"]
                 skills["FinGuard skills<br/>screen · explain · packet · boundary test"]
-                relay["NeMo Relay sidecar<br/>127.0.0.1:4040"]
                 atif[("/sandbox/atif<br/>local trajectories")]
 
                 hermes -->|"skill dispatch"| skills
-                hermes -->|"model + tool hook events"| relay
-                relay -->|"ATIF write"| atif
+                hermes -->|"completed-session ATIF"| atif
             end
         end
 
         ui -->|"agent requests"| forward
         forward --> hermes
         gateway <--> policy
-        relay -->|"OTLP/OpenInference"| policy
+        hermes -->|"OTLP/OpenInference"| policy
         policy --> phoenix
         checker -->|"re-screen + approved release"| rail
         checker -->|"human audit span"| phoenix
@@ -87,7 +85,7 @@ flowchart LR
     style host fill:#f7f6ef,stroke:#8a8068,stroke-width:2px
     style supervisor fill:#e7f0ff,stroke:#2b5fab,stroke-width:3px
     style sandbox fill:#d8e8ff,stroke:#2b5fab,stroke-dasharray:5 3
-    style relay fill:#fef9e7,stroke:#f39c12,stroke-width:2px
+    style hermes fill:#fef9e7,stroke:#f39c12,stroke-width:2px
     style policy fill:#fce5cd,stroke:#e69138,stroke-width:2px
     style rail fill:#fce5cd,stroke:#c0392b,stroke-width:2px
     style phoenix fill:#eef7e9,stroke:#6aa84f,stroke-width:2px
@@ -117,15 +115,20 @@ telemetry.
 
 | Action | Execution | Expected Phoenix evidence |
 |---|---|---|
-| Ask what FinGuard can do | Hermes agent turn | Agent and LLM spans from NeMo Relay |
-| Screen one payment or the queue | Hermes invokes `payment-screening` | Agent, tool, and LLM spans from NeMo Relay |
-| Explain a hold | Hermes reasons over the skill result | Agent and LLM spans from NeMo Relay |
-| Prepare a release packet | Hermes invokes `release-packet` | Agent and tool spans from NeMo Relay |
-| Test the agent release boundary | `rail-boundary-test` attempts access; OpenShell denies it | Tool failure and agent spans from NeMo Relay |
+| Ask what FinGuard can do | Hermes agent turn | Live turn and LLM spans from NeMo Relay |
+| Screen one payment or the queue | Hermes invokes `payment-screening` | Live turn, tool, and LLM spans from NeMo Relay |
+| Explain a hold | Hermes reasons over the skill result | Live turn and LLM spans from NeMo Relay |
+| Prepare a release packet | Hermes invokes `release-packet` | Live turn and tool spans from NeMo Relay |
+| Test the agent release boundary | `rail-boundary-test` attempts access; OpenShell denies it | Live tool-failure and turn spans from NeMo Relay |
 | Human approves or refuses release | Host checker re-screens and calls the mock rail | `finguard-host-checker` span with `actor.type=human` |
 
 Queue display and ledger reads are views, not control decisions, so they do
 not emit traces.
+
+Relay exports closed turn, LLM, and tool spans to Phoenix during an active
+conversation. Its top-level Agent span and local ATIF trajectory complete only
+when Hermes reaches a native session-finalization boundary; the example does
+not synthesize a boundary after each API request.
 
 ## Agent skills
 
@@ -141,8 +144,8 @@ them.
 
 ## Intended user journey
 
-1. Bring up the host observability service, OpenShell gateway/provider, custom
-   Hermes + NeMo Relay sandbox, and demo services.
+1. Bring up the host observability service, OpenShell gateway/provider, Hermes
+   sandbox with native NeMo Relay observability, and demo services.
 2. Open FinGuard and screen the queue.
 3. Ask the agent to explain a held payment and inspect its Relay-generated
    trace in Phoenix.
@@ -150,13 +153,14 @@ them.
    corresponding agent/tool evidence.
 5. Act as the human checker and approve a cleared payment on the host. Compare
    the separately attributed human audit span in Phoenix.
-6. Download the ATIF trajectories before destroying the sandbox.
+6. Use Phoenix for live spans. Download local ATIF only after Hermes has
+   finalized the corresponding session and before destroying the sandbox.
 
 ## Requirements
 
 - Linux x86_64 or aarch64 host
 - Docker with the Compose plugin
-- OpenShell `0.0.53` with a running local gateway
+- OpenShell `0.0.106` with a running local gateway
 - An OpenAI-compatible inference key
 
 No Python virtual environment or host-side Python package installation is
@@ -166,12 +170,12 @@ Install the pinned OpenShell CLI and local gateway if the host does not already
 provide them:
 
 ```console
-$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION=v0.0.53 sh
+$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION=v0.0.106 sh
 ```
 
-This example downloads additional third-party open source components during
-the first sandbox build. Review their license terms before use; the community
-repository records them in its root `THIRD-PARTY-NOTICES` file.
+The pinned NemoClaw base includes third-party open source components. Review
+their license terms before use; the community repository records them in its
+root `THIRD-PARTY-NOTICES` file.
 
 ## Quick start
 
@@ -186,7 +190,7 @@ $ bash scripts/bring-up.sh
 gateway and inference provider, builds the sandbox, and starts the host demo
 services. It is also the resume command: rerunning it reuses a healthy sandbox
 and restarts host services and forwarding without rebuilding the image. The
-first build downloads pinned artifacts and can take several minutes.
+first build downloads the pinned base image and can take several minutes.
 
 The normal preflight prints one summary line for the six bundled payment
 scenarios. To inspect every expected decision and fired control independently:
@@ -203,8 +207,9 @@ cached image layers:
 $ bash scripts/bring-up.sh --recover-error
 ```
 
-An SSH or browser disconnect does not require this flag. Use it only when
-`openshell sandbox list` reports `Error`.
+The same command replaces a `Ready` sandbox that does not contain Hermes
+`0.20.6`, Relay `0.7.2`, and the native Relay configuration. An SSH or browser
+disconnect does not require this flag.
 
 Open:
 
@@ -224,8 +229,11 @@ access.
 $ bash scripts/verify.sh
 ```
 
-The verification checks fixtures, host services, the Hermes API, NeMo Relay,
-Relay configuration, and the sandbox policy denial.
+The verification checks fixtures, host services, the Hermes API, pinned Hermes
+and NeMo Relay versions, the Relay configuration, and that the payment rail is
+unreachable from the sandbox. The
+[end-to-end runbook](../../../../NATIVE_RELAY_E2E.md) also requires an
+OpenShell denial log before attributing that result to policy enforcement.
 
 Exercise the host-side checker directly:
 
@@ -239,16 +247,20 @@ The cleared wire is released; the sanctions-held ACH is refused. For expected
 results and troubleshooting, see
 [`docs/verify-functionality.md`](docs/verify-functionality.md).
 
-## Retrieve ATIF trajectories
+## Retrieve completed ATIF trajectories
 
-After at least one agent turn:
+Native Relay writes ATIF when Hermes finalizes the Agent session, not after
+each `/v1/chat/completions` turn. Normal UI turns export their closed child
+spans to Phoenix while the session remains active, but the command below may
+find no completed file until a native session boundary has occurred:
 
 ```console
 $ bash scripts/download-traces.sh
 ```
 
 The script copies `/sandbox/atif` from the sandbox to `.tmp/atif` on the host.
-Retrieve these files before destroying the sandbox.
+It does not force or fake session finalization. Retrieve completed files before
+destroying the sandbox.
 
 ## Adapting this blueprint for FSI
 
@@ -265,7 +277,7 @@ invariant.
 ## Repository layout
 
 ```text
-agents/hermes/               custom Hermes + NeMo Relay image and startup
+agents/hermes/               Hermes image, native Relay config, and startup
 skills/                      FinGuard operating and control skills
 scripts/                     phased bring-up, verification, UI, and teardown
 policy.yaml                  active OpenShell sandbox policy

@@ -1,8 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Native NeMo Relay config loaded in-process by Hermes's bundled
-# observability/nemo_relay plugin. Dockerfile substitutes the @@...@@ tokens.
+# Native NeMo Relay config loaded directly by Hermes core observability.
+# Dockerfile substitutes the @@...@@ tokens.
 
 version = 1
 
@@ -15,10 +15,10 @@ version = 3
 
 [components.config.atif]
 enabled = true
-output_directory = "/tmp/atif"
+output_directory = "/sandbox/atif"
 filename_template = "hermes-atif-{session_id}.json"
-agent_name = "Developer Community Chief of Staff"
-agent_version = "0.20.0"
+agent_name = "Agentic AI Learning Path"
+agent_version = "0.20.6"
 @@ATIF_STORAGE_BLOCK@@
 
 [components.config.opentelemetry]

@@ -122,11 +122,8 @@ text-only output. The setting accepts only `true` or `false`. Every message
 keeps a text fallback for notifications, accessibility, old clients, and
 renderer failure.
 
-The recipe also renders two to four Hermes clarification choices as one-tap
-buttons plus an `Other` option. The pinned Hermes base already provides the
-clarification and authorization primitives; a feature-detected compatibility
-shim adds the missing Slack presentation. It stands down when a future Hermes
-base supplies native Slack clarification buttons. Rich Blocks and buttons use
+Hermes also renders two to four clarification choices as one-tap buttons plus
+an `Other` option through its native Slack adapter. Rich Blocks and buttons use
 the existing Slack credentials and require no additional OAuth scopes or app
 reinstall. Rebuild the sandbox after changing the Rich Blocks setting.
 
@@ -189,10 +186,10 @@ $ python3 scripts/slack_delivery_diagnostic.py \
     --mode slash --slash-command /alice-nemoclaw
 ```
 
-Then run the printed slash command in Slack. The compatibility shim forwards
-only a message that contains the generated diagnostic value through the normal
-Hermes inference path. Other unknown slash commands keep their existing help
-response.
+Then run the printed slash command in Slack. The recipe's custom-command hook
+forwards only a message that contains the generated diagnostic value through
+the normal Hermes inference path. Other unknown slash commands keep their
+existing help response.
 
 The sandbox records only the diagnostic value, stage, status, timestamp,
 process ID, and exception class in a mode-0600 bounded log. It does not record
