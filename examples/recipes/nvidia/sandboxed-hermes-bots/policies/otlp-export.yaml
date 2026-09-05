@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Additive policy: let a bot's Hermes process send OTLP spans to the collector
+# on the OpenShell bridge. Applied by tracing_enable_bot with policy-add.
+#
+# Files given to `nemoclaw <sandbox> policy-add` are presets: they need a
+# preset.name and must not carry a top-level version.
+preset:
+  name: otlp-export
+  description: Export NeMo Relay spans to the swarm collector
+network_policies:
+  otlp-export:
+    name: otlp-export
+    endpoints:
+      - { host: host.openshell.internal, port: __OTLP_PORT__, tls: skip }
+    binaries:
+      - { path: /sandbox/.hermes/hermes-agent/venv/bin/python }
+      - { path: /sandbox/.hermes/hermes-agent/venv/bin/* }
+      - { path: /usr/bin/curl }
+      - { path: /bin/sh }

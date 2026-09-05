@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+name: dropbox
+version: 1.0.0
+description: Operator-only video uploader used by swarm video-add; registers no chat hooks.
+author: nemoclaw-hermes-swarm example

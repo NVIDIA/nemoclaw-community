@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1a2a1a" stroke-width="0.5"/>
+    </pattern>
+    <marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#76b900"/></marker>
+  </defs>
+  <rect width="1200" height="520" fill="#0b0f0b"/>
+  <rect width="1200" height="520" fill="url(#grid)"/>
+
+  <text x="40" y="48" fill="#e5e7eb" font-size="22" font-weight="700">Same bot, different doors</text>
+
+  <!-- researcher -->
+  <rect x="40" y="90" width="520" height="290" rx="12" fill="#0f1a0f" stroke="#76b900" stroke-width="2"/>
+  <text x="60" y="124" fill="#76b900" font-size="16" font-weight="700">nemoclaw-researcher</text>
+
+  <text x="60" y="166" fill="#e5e7eb" font-size="14">model</text>
+  <text x="60" y="194" fill="#e5e7eb" font-size="14">collector</text>
+  <text x="60" y="222" fill="#e5e7eb" font-size="14">nemoclaw-reviewer</text>
+  <text x="60" y="250" fill="#e5e7eb" font-size="14">github.com</text>
+  <text x="60" y="278" fill="#e5e7eb" font-size="14">docs.nvidia.com</text>
+  <text x="60" y="306" fill="#e5e7eb" font-size="14">developer.nvidia.com</text>
+  <text x="60" y="334" fill="#e5e7eb" font-size="14">hermes-agent.nousresearch.com</text>
+  <text x="60" y="362" fill="#6b7280" font-size="11">the last four come from policies/nemoclaw-researcher.yaml</text>
+
+  <!-- reviewer -->
+  <rect x="640" y="90" width="520" height="290" rx="12" fill="#0f1a0f" stroke="#76b900" stroke-width="2"/>
+  <text x="660" y="124" fill="#76b900" font-size="16" font-weight="700">nemoclaw-reviewer</text>
+
+  <text x="660" y="166" fill="#e5e7eb" font-size="14">model</text>
+  <text x="660" y="194" fill="#e5e7eb" font-size="14">collector</text>
+  <text x="660" y="222" fill="#e5e7eb" font-size="14">nemoclaw-researcher</text>
+  <text x="660" y="278" fill="#6b7280" font-size="14">nothing else</text>
+
+  <!-- peer link -->
+  <line x1="562" y1="214" x2="636" y2="214" stroke="#76b900" stroke-width="2" marker-end="url(#a)"/>
+  <line x1="638" y1="226" x2="564" y2="226" stroke="#76b900" stroke-width="2" marker-end="url(#a)"/>
+
+  <!-- neither -->
+  <rect x="40" y="410" width="1120" height="70" rx="12" fill="#140f0f" stroke="#7f1d1d" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <text x="60" y="440" fill="#ef4444" font-size="14" font-weight="700">neither</text>
+  <text x="60" y="464" fill="#e5e7eb" font-size="14">your files · the host · each other's files · anything not listed</text>
+</svg>

@@ -23,6 +23,7 @@ Reusable agent workflows authored or maintained by NVIDIA, designed as practical
 | [Payment Operations Hermes Assistant](recipes/nvidia/payment-ops-hermes/README.md) | 💳 Financial Services | Helps payment operators screen synthetic outbound payments, explain holds, and prepare review packets while OpenShell keeps final release authority with a human outside the Hermes sandbox. |
 | [PR Review Advisor](recipes/nvidia/pr-review-advisor/README.md) | ✨ Other | Helps maintainers review exact pull request heads through staged, repository-aware Hermes analysis, producing attested JSON and Markdown findings for inspection before optional publication. |
 | [PR Test Case Assistant](recipes/nvidia/pr-test-case-assistant/README.md) | ✨ Other | Helps quality engineers turn public GitHub pull request descriptions and bounded diffs into Slack briefs and proposed, unexecuted feature test cases with source evidence. |
+| [Sandboxed Hermes Bot Team](recipes/nvidia/sandboxed-hermes-bots/README.md) | ✨ Other | A team of Hermes bots you talk to from Hermes Desktop, one NemoClaw sandbox each. A bot reaches only what its policy names, and when it needs something it cannot reach, it asks a teammate. |
 | [Video Search and Summarization](recipes/nvidia/video-search-and-summarization/README.md) | ✨ Other | Helps video analysts and engineers deploy and operate NVIDIA VSS profiles by chat, using a sandboxed agent that runs the Compose deployment through a host-side MCP server and reports the result. |
 
 ## [Partner Recipes](recipes/partners/README.md)

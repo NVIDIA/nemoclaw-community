@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# NVIDIA RT-VLM on its own: the vision model from the Video Search and
+# Summarization blueprint, serving OpenAI-style chat completions with a
+# `video_url` content part. One container, one GPU. This is the smallest piece
+# of VSS that can watch a video; the full blueprint (long-video summarization,
+# alerts, search) is at github.com/NVIDIA-AI-Blueprints/video-search-and-summarization.
+#
+# Bound to the OpenShell bridge address only, so it is reachable from
+# sandboxes whose policy names it and from nothing off-host.
+#
+#   cp .env.example .env; edit; docker compose up -d
+#
+# The image is pinned by digest to the build that was tested (published to the
+# develop-latest tag on 2026-09-03). To try a newer build, set
+# VSS_RT_VLM_IMAGE in .env to another digest and re-run the checks in
+# examples/README.md; the tag itself moves and is not used here.
+#
+# Teardown never needs the NGC key: `docker compose down` reads .env for
+# interpolation only, and NGC_API_KEY has a harmless default so an empty .env
+# does not stop it. The key is still required at `up`, where the entrypoint
+# checks it before downloading weights.
+services:
+  rtvi-vlm:
+    image: ${VSS_RT_VLM_IMAGE:-ghcr.io/nvidia-ai-blueprints/vss/vss-rt-vlm@sha256:2b10ba38ac93d648d4b50c32294197ff014dfa85c79ac824a98e172dc31eba05}
+    container_name: vss-rtvi-vlm
+    user: "1001:1001"
+    shm_size: 16gb
+    runtime: nvidia
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+              driver: nvidia
+              device_ids: ["${VSS_GPU:-0}"]
+    ports:
+      - "${VSS_BIND:-172.18.0.1}:${VSS_PORT:-8018}:8000"
+    environment:
+      MODEL_PATH: "${VSS_MODEL_PATH:-ngc:nim/nvidia/cosmos3-nano-reasoner:bf16-final}"
+      VLM_MODEL_TO_USE: "${VSS_MODEL_TO_USE:-cosmos-reason3}"
+      NGC_API_KEY: "${NGC_API_KEY:-}"
+      NVIDIA_VISIBLE_DEVICES: "${VSS_GPU:-0}"
+      # Standalone: no Kafka, Redis, or OTel peers.
+      KAFKA_ENABLED: "false"
+      MESSAGE_BUS: ""
+      ERROR_BUS: ""
+      ENABLE_REDIS_ERROR_MESSAGES: "false"
+      ENABLE_OTEL_MONITORING: "false"
+      OTEL_SDK_DISABLED: "true"
+      # Accept inline (data:) videos from the plugin; the default cap is small.
+      VLM_PROMPT_MAX_LENGTH: "10240"
+      VLM_MAX_GENERATION_TOKENS: "4096"
+      VLM_MAX_MODEL_LEN: "${VSS_MAX_MODEL_LEN:-32768}"
+      VLLM_GPU_MEMORY_UTILIZATION: "${VSS_GPU_MEM:-0.5}"
+      INSTALL_PROPRIETARY_CODECS: "${VSS_CODECS:-true}"
+      LOG_LEVEL: INFO
+    volumes:
+      - rtvi-ngc-model-cache:/opt/nvidia/rtvi/.rtvi/ngc_model_cache
+      - rtvi-hf-cache:/tmp/huggingface
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      stack: 67108864
+      nofile: { soft: 65535, hard: 65535 }
+    ipc: host
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 900s
+
+volumes:
+  rtvi-ngc-model-cache:
+  rtvi-hf-cache:
