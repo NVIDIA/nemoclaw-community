@@ -31,10 +31,10 @@ handoff between them crossed a sandbox boundary.
 | Category | NVIDIA Recipe |
 | Contributor or provenance | NVIDIA. Developed in [sandboxed-bots](https://github.com/PicoNVIDIA/sandboxed-bots), which remains the upstream repository. |
 | Use this when | You want Hermes agents that keep running, that several people can address from one group chat, and whose network reach is set by a sandbox policy rather than by prompt instructions. |
-| You will get | Two bots in two sandboxes, a Hermes Desktop group chat that addresses them by name, NeMo Relay traces from every turn at one collector, and a 50-check live suite. The same `swarm up` restores the fleet after a reboot. Two optional bots add image and video input. |
+| You will get | Two bots in two sandboxes, a Hermes Desktop group chat that addresses them by name, NeMo Relay traces from every turn at one collector, and a configuration-aware live verification suite. The same `swarm up` restores configured bots and bots previously created with `swarm add` after a reboot. Two optional bots add image and video input. |
 | Runs on | A Linux host, or macOS with Colima. No GPU is needed unless you run the video example. |
 | Requires | Docker, OpenShell, NemoClaw, and Hermes 0.21 on the host, plus an OpenAI-compatible inference endpoint and its API key. `./swarm doctor` reports what is missing before anything is built. |
-| Verified on | The base team on a fresh Ubuntu 24.04 VM from the public installers (50 of 50 checks, live handoff) and on macOS 26 with Colima. The image and video bots on one Linux host with an RT-VLM container on a data-center GPU: 119 of 119 checks, both handoffs three times in a row. The multimodal examples have not yet been set up from scratch on a second machine. |
+| Verified on | Historical, configuration-scoped results: during the 2026-09-03 review, the pre-fix base team passed 50 of 50 checks on a fresh Ubuntu 24.04 VM and was exercised on macOS 26 with Colima. At commit `44865fff2b0c4c5e73bdff612bc36875768375b2`, a Linux host with both optional bots and RT-VLM passed 150 of 150 checks. The current total depends on the bots and optional services enabled; require zero failures. The multimodal examples have not yet been set up from scratch on a second machine. |
 | Evidence level | live end-to-end for the base team; integration for the multimodal examples |
 | Support and maturity | Best-effort community support under the repository [support policy](../../../../SUPPORT.md). |
 | External access, data, and actions | The image build fetches Hermes from `github.com` and `hermes-agent.nousresearch.com`. Prompts and tool output go to the inference endpoint you configure. The researcher preset allows egress to `github.com` and NVIDIA documentation hosts; the reviewer preset allows none. With a LangSmith key, traces are also exported there. The video example pulls RT-VLM from `ghcr.io` and its weights from NGC. On the host, `swarm` creates and removes sandboxes, containers, and Hermes profiles. |
@@ -100,8 +100,9 @@ and its teammate. That difference is one file, `policies/nemoclaw-researcher.yam
 and the reviewer not having one. Neither bot can reach your laptop, the host's
 loopback, or the other's files.
 
-I don't want you to take that on faith. `./swarm test` runs 50 live checks.
-One reads `/proc/self/ns/pid` from inside each sandbox and fails if two bots
+I don't want you to take that on faith. `./swarm test` runs live checks for the
+bots and optional services that are enabled. One reads `/proc/self/ns/pid` from
+inside each sandbox and fails if two bots
 share a value. One asks a bot for `hostname` through the chat and fails if the
 answer is the host's. One plants a secret where only the researcher can read it,
 asks the researcher to pass it to the reviewer, and fails unless the reviewer
@@ -159,15 +160,13 @@ Open a new login shell here so your user picks up the `docker` group and
 `~/.local/bin` is on your PATH. On a Mac, also start Colima:
 `colima start --cpu 6 --memory 14`.
 
-**3. Get the code.** Clone the repository this README is in and change into
-this example's directory. Reading this on GitHub, that is the path in the
-address bar; the two published locations are the NemoClaw Community catalog
-under `examples/recipes/nvidia/sandboxed-hermes-bots/` and the upstream at
-`PicoNVIDIA/sandboxed-bots` under `nemoclaw-hermes-swarm/`. Run what you
-cloned; do not mix a README from one with a tree from the other.
+**3. Get the code.** Clone the NVIDIA NemoClaw Community repository and change
+into this example's exact directory. Run the README from the same checkout as
+the scripts; do not mix instructions and code from different revisions.
 
 ```bash
-git clone <this repository> && cd <this example directory>
+git clone https://github.com/NVIDIA/nemoclaw-community.git
+cd nemoclaw-community/examples/recipes/nvidia/sandboxed-hermes-bots
 ```
 
 **4. Make your config.** The example already points at the NVIDIA inference
@@ -201,8 +200,9 @@ image build. Prints one line per step and ends with a status ladder.
 ./swarm up
 ```
 
-**8. Prove it.** 50 live checks: namespaces differ, egress is denied, the
-handoff crosses the boundary and nowhere else. Expect `50 passed, 0 failed`.
+**8. Prove it.** The enabled live checks verify namespace separation, denied
+egress, authenticated handoffs, and any configured optional services. The
+number varies with the fleet; expect `SUMMARY: N passed, 0 failed`.
 
 ```bash
 ./swarm test
@@ -263,7 +263,7 @@ INFERENCE_BASE_URL=http://172.18.0.1:8000/v1               # not 127.0.0.1
 
 `./swarm doctor` checks the key, the endpoint, and that the model is listed
 before anything gets built. To change the model later, edit `swarm.env` and run
-`./swarm up`; it rewrites every bot's model config in place. Changing to a
+`./swarm up`; it rewrites every tracked bot's model config in place. Changing to a
 different *host* also needs a rebuild of the bots so the policy allows it; see
 [docs/customizing.md](docs/customizing.md#the-model).
 
@@ -275,8 +275,9 @@ You type once. The room routes to the bot you mentioned. That bot does the work
 inside its sandbox, decides the reviewer should see it, and calls
 `message_teammate`. That's one authenticated HTTP request across the bridge to
 the reviewer's api_server, which runs a turn with the reviewer's own role,
-memory, and (tighter) policy, and replies. Only the text crosses the wall. The
-reviewer never sees the researcher's files, its key, or its shell.
+memory, and (tighter) policy, and replies. Text crosses every handoff. Images
+cross only when the caller sets `with_images=true`; files, keys, and shell
+access never cross with the message.
 
 ## Day to day
 
@@ -287,7 +288,7 @@ reviewer never sees the researcher's files, its key, or its shell.
 ./swarm status                                                # health ladder, one real probe per rung
 ./swarm traces nemoclaw-researcher                            # relay state + collector counters
 ./swarm rm nemoclaw-qa --yes
-./swarm down --yes                                            # everything, sandboxes included
+./swarm down --yes                                            # bots named in BOTS; use --all for tracked additions
 ```
 
 Each bot's reach is its own file. `policies/<bot>.yaml` is applied when that
@@ -313,23 +314,24 @@ After `./swarm up`, run the suite from the host:
 ./swarm test
 ```
 
-**Expected result:**
+**Expected result** (the value of `N` depends on the tracked bots and optional
+services detected):
 
 ```text
-  SUMMARY: 50 passed, 0 failed
+  SUMMARY: N passed, 0 failed
 ```
 
-With the vision and video bots added, the suite has 119 checks. The last
-section shows the policy at work: the researcher requests the video model's
-`/v1/models` and gets a 403; the video bot makes the same request and gets a
-200. The only difference is which sandbox the request came from.
+With the vision and video bots added, optional sections exercise their handoff
+and policy paths. For example, the researcher requests the video model's
+`/v1/models` and gets a 403 while the video bot makes the same request and gets
+a 200. The only difference is which sandbox the request came from.
 
-**This verifies:** that the two bots have different hostnames and PID
-namespaces, that a request to a host outside the policy is refused from inside
-each sandbox, that each bot answers on its own port with its own key, that a
-message sent from one bot arrives at the other and the reply comes back, and
-that the collector holds spans from every bot. Every check is a live probe, not
-a read of a config file.
+**This verifies:** for the enabled sections, that bots have different hostnames
+and PID namespaces, that a request to a host outside the policy is refused from
+inside each sandbox, that each bot answers on its own port with its own key,
+that a message sent from one bot arrives at the other and the reply comes back,
+and that the collector holds spans from every traced bot. These are live probes,
+not conclusions drawn only from config files.
 
 **This does not verify:** the quality of any model's answer; the suite asks
 for exact strings on purpose. It does not exercise Hermes Desktop itself. For
@@ -338,10 +340,8 @@ that, open the group chat and use the prompts in
 cover a cold start of the RT-VLM container on a machine that has not already
 pulled the weights.
 
-The image and video handoffs were also rehearsed by hand: the demonstration
-prompts were run three times in a row through the same host profiles Desktop
-uses, and the tool trace inside every sandbox was read after each pass. That
-found six problems the suite did not, written up in
+For answer quality and Desktop routing, also run the manual image and video
+demonstrations. The failure modes found during earlier rehearsals are in
 [docs/troubleshooting.md](docs/troubleshooting.md#multimodal-handoffs).
 
 ## Teardown
@@ -353,17 +353,25 @@ found six problems the suite did not, written up in
 This removes every bot in `BOTS`: the sandbox, the host profile and its
 gateway, and the key. It keeps the sandbox image, the collector container,
 `swarm.env`, and the inference key in `~/.secrets/`, since the next `swarm up`
-needs them. For a clean host:
+needs them. Bots created with `swarm add` remain tracked and are re-meshed with
+the survivors. To remove every bot and collector owned by this deployment:
 
 ```bash
-docker rm -f swarm-otel
+./swarm down --all --yes
+```
+
+The sandbox image and local deployment directory are reusable caches. Remove
+them separately if you want to reclaim that space:
+
+```bash
 docker rmi hermes-bot:v2026.8.31
 rm -rf ~/.swarm
 ```
 
-A bot added with `swarm add` is not in `BOTS` and needs its own
-`./swarm rm NAME --yes`; `./swarm down --all --yes` removes every bot this
-tool created, added or not.
+A bot added with `swarm add` is not in `BOTS`; remove it individually with
+`./swarm rm NAME --yes`, or use `down --all` as above. Neither form removes
+`swarm.env`, `~/.secrets/inference.key`, nor `~/.langsmith/api_key`; delete
+those operator-owned files separately only when you no longer need them.
 
 The RT-VLM container is managed separately and does not need the NGC key to
 stop:
@@ -410,7 +418,9 @@ handed a photo it cannot read, it asks the vision bot and relays the answer.
 Text crosses the boundary in both directions. The image itself crosses only
 when the asking bot sets `with_images` on that one `message_teammate` call,
 which its soul tells it to do for exactly this case, and the tool result
-reports how many images went. Nothing is forwarded by default.
+reports how many images went. No image is forwarded by default. Video files are
+placed in the VSS sandbox only by an explicit host-operator `swarm video-add`
+command, not by chat text or attachments.
 
 Two lines in `swarm.env` and `swarm add` for the first; one container on a
 GPU plus the same for the second. [examples/README.md](examples/README.md)
@@ -428,7 +438,7 @@ souls/                     roles: researcher, reviewer, critic, qa
 plugins/teammates/         message_teammate / list_teammates
 examples/                  optional: a vision bot, a VSS video bot, RT-VLM compose
 observability/             Relay config + collector config
-tests/                     e2e.sh (50 live checks), presubmit.sh
+tests/                     configuration-aware e2e.sh, presubmit.sh
 skill/                     hand this to your own agent
 docs/                      see below
 SECURITY.md                what's protected, what isn't, what you hold

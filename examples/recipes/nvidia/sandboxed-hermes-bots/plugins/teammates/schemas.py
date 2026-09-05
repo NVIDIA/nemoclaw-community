@@ -12,9 +12,9 @@ MESSAGE_TEAMMATE = {
         "tools and memory, then their answer is returned to you. "
         "Call list_teammates first if you are unsure who is reachable. "
         "Be specific in your message; the teammate does not see this conversation. "
-        "Any image attached to the message you are currently answering is forwarded "
-        "with yours automatically, so a teammate who can see can look at it. Do not "
-        "send file paths; they mean nothing outside your sandbox."
+        "Images are not forwarded by default. Set with_images=true only when the "
+        "teammate needs the images attached to the current user turn. Do not send "
+        "file paths; they mean nothing outside your sandbox."
     ),
     "parameters": {
         "type": "object",

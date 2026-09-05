@@ -41,10 +41,11 @@ umask 077; printf '%s' '<key>' > ~/.secrets/inference.key
 ```
 
 `swarm up` runs preflight, builds the image with Hermes baked in, starts the
-collector, creates every bot in `BOTS`, wires the mesh, and prints a status
-table. First run is 8 to 12 minutes, dominated by the image build and two
-sandbox creations. Re-running is idempotent and is also how you recover after
-a reboot: existing bots are restored, missing ones are created.
+collector, creates every bot in `BOTS`, restores bots recorded by earlier
+`swarm add` commands, wires the mesh, and prints a status table. First run is 8
+to 12 minutes, dominated by the image build and two sandbox creations.
+Re-running is idempotent and is also how you recover after a reboot: existing
+bots are restored, missing configured bots are created.
 
 Then have the user restart Hermes Desktop; the roster is read at launch. For a
 remote host they first add it under Settings, Connections, Add connection, SSH.
@@ -58,15 +59,16 @@ For their own machine there is nothing to add.
 ./swarm rm nemoclaw-analyst --yes                 # sandbox, profile, key, peers
 ./swarm ls
 ./swarm status                                    # health ladder per bot
-./swarm test                                      # 50-check e2e suite
+./swarm test                                      # configuration-aware live suite
 ./swarm traces nemoclaw-analyst                   # relay state + collector counters
 ```
 
 `add` takes 3 to 4 minutes, so give the terminal tool a timeout of at least
 600 seconds. New bots share the inference endpoint; there is no model load. If
 a tool call still times out mid-`add`, do not conclude failure: run
-`./swarm ls` and `./swarm status` and read the result. Re-running `add` for the
-same name does not change anything.
+`./swarm ls` and `./swarm status` and read the result. `add` refuses a name that
+is already tracked; use `./swarm up` to restore or reconcile it, or remove it
+explicitly before changing its role.
 
 `./swarm` fixes its own environment (real `HOME` from the passwd database,
 `HERMES_HOME`/`HERMES_PROFILE` cleared, `~/.local/bin` on `PATH`), so it works
@@ -104,6 +106,19 @@ To give one bot more network reach than the others, add
 `policies/<bot>.yaml` (a preset; see `policies/nemoclaw-researcher.yaml`).
 `swarm add` applies it automatically when the file exists. Bots without a file
 get only the model endpoint, the collector, and their teammates.
+
+For a local video that an owned, Ready `nemoclaw-vss` bot should analyze, the
+host operator must add it explicitly:
+
+```bash
+./swarm video-add /absolute/path/to/clip.mp4
+```
+
+Use the sanitized filename the command prints in chat. Chat text and Desktop
+attachments never select or copy host files. The VSS tools accept only a file
+already under `/sandbox/videos`, never a URL or host path. The operator command
+accepts one nonempty, regular, non-symlink `.mp4`, `.webm`, `.mov`, `.mkv`, or
+`.avi` no larger than 40 MiB.
 
 ## Diagnosing "a bot is down"
 
@@ -176,9 +191,11 @@ In this order. Stop at the first failure.
 
 ## Before claiming success
 
-Run `./swarm test` and quote the numbers. If something failed, name the check
-and the error rather than reporting a clean run. Do not trust a bot's
-self-description; it can recite its role while every tool is broken.
+Run `./swarm test` and quote its `SUMMARY: N passed, 0 failed` line along with
+the enabled sections. The total varies with the tracked bots and optional
+services. If something failed, name the check and the error rather than
+reporting a clean run. Do not trust a bot's self-description; it can recite its
+role while every tool is broken.
 
 For a public change, `./swarm presubmit` gates secrets, internal hostnames,
 SPDX headers, and shell syntax.

@@ -2,5 +2,5 @@
 # SPDX-License-Identifier: Apache-2.0
 name: dropbox
 version: 1.0.0
-description: Host-side. A video dropped into Desktop lands in the vss bot's sandbox by name.
+description: Operator-only video uploader used by swarm video-add; registers no chat hooks.
 author: nemoclaw-hermes-swarm example

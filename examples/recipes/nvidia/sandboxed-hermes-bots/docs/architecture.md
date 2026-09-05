@@ -93,6 +93,11 @@ Hermes 0.21 has a built-in `message_agent` that does the same job for bots
 Desktop manages. The plugin keeps handoffs working from the CLI and in rooms
 with no Desktop attached.
 
+`message_teammate` sends text by default. A hook remembers images attached to
+the current user turn, but the tool includes those pixels only when the caller
+sets `with_images=true`; its result records how many were forwarded. Sender-local
+path hints are removed because filesystems are never shared between sandboxes.
+
 ## Tracing
 
 <p align="center"><img src="img/05-relay-trace.png" alt="Relay spans from sandbox to collector" width="100%"></p>

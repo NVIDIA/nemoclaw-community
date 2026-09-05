@@ -5,9 +5,10 @@
 # swarm — run Hermes bots in NemoClaw sandboxes.
 #
 #   swarm key                store the inference key (prompts, no echo, mode 600)
-#   swarm up                 preflight, image, collector, every bot in BOTS, mesh, status
+#   swarm up                 preflight, image, collector, tracked bots, mesh, status
 #                            (idempotent: the same command restores a fleet after a reboot)
 #   swarm add NAME [--soul FILE | --role "text"]
+#   swarm video-add PATH     explicitly upload one video to the owned VSS bot
 #   swarm rm NAME [--yes]
 #   swarm ls [--json]
 #   swarm status             health ladder per bot
@@ -98,16 +99,7 @@ cmd_up() {
     log "tracing off"
     tracing_collector_remove
   fi
-  local b
-  for b in $BOTS; do
-    if bot_exists "$b"; then
-      log "bot $b: restoring"
-      bot_restore "$b"
-    else
-      log "bot $b: creating"
-      bot_create "$b" "$(bot_soul_file "$b")"
-    fi
-  done
+  bot_up_all
   log "mesh"
   mesh_sync
   log "status"
@@ -118,22 +110,21 @@ cmd_up() {
 cmd_add() {
   local name="${1:-}"; shift || true
   valid_name "$name" || die "usage: swarm add NAME [--soul FILE | --role \"text\"]  (lowercase, digits, dashes)"
-  local soul="" role=""
+  local soul="" role="" soul_set="" role_set=""
   while (($#)); do
     case "$1" in
-      --soul) soul="$2"; shift 2 ;;
-      --role) role="$2"; shift 2 ;;
+      --soul) (($# >= 2)) || die "--soul needs a file"; soul="$2"; soul_set=1; shift 2 ;;
+      --role) (($# >= 2)) || die "--role needs text"; role="$2"; role_set=1; shift 2 ;;
       *) die "unknown flag: $1" ;;
     esac
   done
-  bot_exists "$name" && die "bot $name already exists (swarm rm $name first, or swarm up to restore it)"
-  if [[ -z "$soul" && -z "$role" ]]; then
-    soul=$(bot_soul_file "$name")
-  fi
-  if [[ -n "$role" ]]; then
-    soul="$SWARM_STATE/souls/$name.md"; mkdir -p "$(dirname "$soul")"
-    printf '# %s\n\n%s\n' "${name^}" "$role" > "$soul"
-  fi
+  [[ -z "$soul_set" || -z "$role_set" ]] || die "choose one of --soul or --role"
+  bot_tracked "$name" && die "bot $name is already tracked (swarm rm $name first, or swarm up to restore it)"
+  local mode=default value=""
+  [[ -z "$soul_set" ]] || { mode=soul; value="$soul"; }
+  [[ -z "$role_set" ]] || { mode=role; value="$role"; }
+  bot_prepare_soul "$name" "$mode" "$value"
+  soul=$BOT_PREPARED_SOUL
   image_ensure
   [[ "$TRACING" == "on" ]] && tracing_collector_ensure
   bot_create "$name" "$soul"
@@ -151,9 +142,27 @@ cmd_rm() {
     read -r -p "remove bot $name, its sandbox, profile, and key? [y/N] " a
     [[ "$a" == y || "$a" == Y ]] || { dim "aborted"; return 0; }
   fi
-  bot_destroy "$name" || die "bot $name was not fully removed; see above. Nothing else was touched."
-  mesh_forget "$name"
-  bot_reconcile_others "$name"
+  bot_destroy_scope "$name" || die "bot $name was not fully removed; see above. Nothing else was touched."
+}
+
+# Deliberately operator-only: no chat/plugin hook is allowed to turn a host
+# path into a sandbox upload. The helper validates regular/non-symlink input,
+# supported video type, a 40 MiB limit, and a sanitized staged basename.
+cmd_video_add() {
+  (($# == 1)) || die "usage: swarm video-add PATH"
+  local path="$1" target=nemoclaw-vss sb result
+  bot_tracked "$target" || die "video-add needs a tracked nemoclaw-vss bot"
+  bot_exists "$target" || die "the VSS bot is not running; run swarm up first"
+  sb=$(sandbox_of "$target")
+  [[ "$(sandbox_phase "$sb")" == Ready ]] || die "the VSS sandbox is not Ready"
+  bot_require_owned "$target"
+  if ! result=$(python3 "$SWARM_ROOT/plugins/dropbox/__init__.py" --sandbox "$sb" -- "$path" 2>/dev/null); then
+    die "video upload failed validation or transfer"
+  fi
+  result=$(printf '%s\n' "$result" | tail -1)
+  [[ "$result" =~ ^[A-Za-z0-9._-]+$ && "$result" != . && "$result" != .. ]] \
+    || die "video upload returned an invalid staged name"
+  ok "video added: $result"
 }
 
 # Removes the bots named in BOTS and nothing else. A bot created with
@@ -177,13 +186,11 @@ cmd_down() {
     [[ "$a" == y || "$a" == Y ]] || { dim "aborted"; return 0; }
   fi
   local failed=0
-  for b in $scope; do
-    bot_exists "$b" || { dim "$b: not present"; continue; }
-    bot_destroy "$b" || { failed=1; continue; }
-    mesh_forget "$b"
-  done
+  # shellcheck disable=SC2086 # names are validated, space-free bot identifiers
+  bot_destroy_scope $scope || failed=1
   [[ -z "$all" && -n "$extra" ]] && dim "kept (not in BOTS): $extra; use swarm rm NAME or swarm down --all"
   (( failed )) && die "one or more bots were not fully removed; their state was kept for recovery"
+  [[ -n "$all" ]] && tracing_collector_remove
   return 0
 }
 
@@ -226,6 +233,7 @@ case "${1:-}" in
   key)     shift; cmd_key "$@" ;;
   up)      shift; cmd_up "$@" ;;
   add)     shift; cmd_add "$@" ;;
+  video-add) shift; cmd_video_add "$@" ;;
   rm)      shift; cmd_rm "$@" ;;
   ls)      shift; cmd_ls "$@" ;;
   status)  shift; cmd_status "$@" ;;

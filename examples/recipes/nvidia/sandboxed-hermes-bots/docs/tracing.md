@@ -43,11 +43,12 @@ Once per host it starts the collector from
 which is enough to prove the pipeline works.
 
 `TRACING=off` in `swarm.env`, then `./swarm up`, turns the whole thing off: the
-Relay configuration is removed from every bot and each gateway restarted, and
-the collector container is removed. The OTLP egress rule stays in each policy
-because OpenShell policies are add-only; with Relay off, nothing uses it. Spans
-already exported to LangSmith are outside this tool's reach. Setting `TRACING`
-in the shell environment does nothing: `swarm.env` is read after it and wins.
+Relay configuration is removed from every tracked bot (including bots created
+with `swarm add`), each gateway is restarted, and the collector container is
+removed. The OTLP egress rule stays in each policy because OpenShell policies
+are add-only; with Relay off, nothing uses it. Spans already exported to
+LangSmith are outside this tool's reach. Setting `TRACING` in the shell
+environment does nothing: `swarm.env` is read after it and wins.
 
 ## Checking it works
 

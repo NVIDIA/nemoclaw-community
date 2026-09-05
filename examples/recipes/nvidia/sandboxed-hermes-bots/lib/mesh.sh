@@ -23,6 +23,7 @@ mesh_peers_of() {
 # updates every bot instead of skipping the ones that already have a copy.
 _mesh_install_plugin() {
   local sb="$1" tgz b64 want have
+  sandbox_owned "$sb" || die "sandbox $sb is not owned by this deployment; refusing to install the mesh plugin"
   want=$(cd "$SWARM_ROOT/plugins/teammates" && cat plugin.yaml __init__.py schemas.py tools.py > /tmp/teammates.$$ && sha16 /tmp/teammates.$$; rm -f /tmp/teammates.$$)
   have=$(sbx "$sb" 'cat /sandbox/.hermes/plugins/teammates/.swarm-hash 2>/dev/null' 60 | tail -1)
   [[ "$have" == "$want" ]] && return 0
@@ -41,6 +42,8 @@ test -f /sandbox/.hermes/plugins/teammates/plugin.yaml && echo PLUGIN-OK" 180 | 
 # _mesh_link A B: make A able to reach B.
 _mesh_link() {
   local a="$1" b="$2" sb_a port_b key_b
+  bot_require_owned "$a"
+  bot_require_owned "$b"
   sb_a=$(sandbox_of "$a"); port_b=$(bot_port "$b") || return 0
   key_b=$(read_secret "$(bot_key_file "$b")")
   sbx "$sb_a" "\$H -m hermes_cli.main peer add '$b' --url 'http://host.openshell.internal:$port_b' --key '$key_b' --note '$b' >/dev/null 2>&1 && echo PEER-OK" 120 \
@@ -51,25 +54,32 @@ _mesh_link() {
 # Bring every pair up to date. Idempotent; peer add updates in place, and
 # policy-add of an existing group is a no-op.
 mesh_sync() {
-  local a b n line
-  local bots=(); while IFS= read -r line; do [[ -n "$line" ]] && bots+=("$line"); done < <(bot_list)
-  n=${#bots[@]}
+  local a b n=0 line bots=""
+  # Validate every live participant before the first write. A tracked foreign
+  # collision must stop the operation, never receive a plugin or peer config.
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    [[ "$(sandbox_phase "$(sandbox_of "$line")")" == Ready ]] || continue
+    bot_require_owned "$line"
+    [[ -s "$(bot_key_file "$line")" && -n "$(bot_port "$line" || true)" ]] \
+      || die "$line is missing its key or port; refusing a partial mesh update"
+    bots+="$line "
+    n=$((n + 1))
+  done < <(bot_list)
   (( n < 2 )) && { dim "mesh: fewer than two bots"; return 0; }
-  for a in "${bots[@]}"; do
-    [[ "$(sandbox_phase "$(sandbox_of "$a")")" == Ready ]] || continue
+  for a in $bots; do
     _mesh_install_plugin "$(sandbox_of "$a")"
-    for b in "${bots[@]}"; do
+    for b in $bots; do
       [[ "$a" == "$b" ]] && continue
       _mesh_link "$a" "$b"
     done
     ok "$a knows: $(mesh_peers_of "$a" | tr '\n' ' ')"
   done
   # Gateways read peer config at startup; restart so message_teammate sees new peers.
-  for a in "${bots[@]}"; do
-    [[ "$(sandbox_phase "$(sandbox_of "$a")")" == Ready ]] || continue
+  for a in $bots; do
     bot_start "$a" "$(bot_port "$a")" >/dev/null
   done
-  for a in "${bots[@]}"; do
+  for a in $bots; do
     bot_wait_api "$a" "$(bot_port "$a")" "$(read_secret "$(bot_key_file "$a")")" >/dev/null || warn "$a api not back yet"
   done
   ok "mesh: $n bots, $((n * (n - 1))) directed links"
@@ -78,9 +88,14 @@ mesh_sync() {
 # Remove a departed bot from everyone else's peer list. The policy group that
 # allowed its port stays (policy-add cannot remove); the port is dead anyway.
 mesh_forget() {
-  local gone="$1" a
+  local gone="$1" a bots=""
   for a in $(bot_list); do
     [[ "$a" == "$gone" ]] && continue
+    [[ "$(sandbox_phase "$(sandbox_of "$a")")" == Ready ]] || continue
+    bot_require_owned "$a"
+    bots+="$a "
+  done
+  for a in $bots; do
     sbx "$(sandbox_of "$a")" "\$H -m hermes_cli.main peer remove '$gone' >/dev/null 2>&1; echo ok" 60 >/dev/null
   done
 }

@@ -151,13 +151,22 @@ calls), and `INFERENCE_CONTEXT_LENGTH` can't exceed what the server actually
 serves or the first long turn gets a 400.
 
 To switch models or endpoints, edit `swarm.env` and run `./swarm up`. It
-rewrites the model config in every sandbox and restarts the gateways; the
+rewrites the model config in every tracked sandbox and restarts the gateways; the
 sandboxes, souls, and peers stay. One thing to watch: if the new endpoint is a
 different host, the egress policy still only allows the old one. Rebuild those
 bots (`./swarm rm`, `./swarm add`) so the policy is rendered for the new URL.
 
-There's deliberately no per-bot model knob. A fleet on one model is a fleet you
-can reason about, and `./swarm up` would overwrite a hand edit anyway.
+The default is fleet-wide. To give one bot another model, add a normalized
+per-bot override in `swarm.env`; dashes become underscores and letters become
+uppercase:
+
+```bash
+INFERENCE_MODEL_NEMOCLAW_VISION=nvidia/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
+INFERENCE_VISION_NEMOCLAW_VISION=on
+```
+
+`./swarm up` applies these values again to every tracked bot, so do not hand-edit
+the generated model config inside a sandbox.
 
 ## More bots
 
@@ -175,10 +184,10 @@ and drop a `souls/<bot>.md` in place.
 
 ## Hermes inside the sandbox
 
-Hermes is baked into the image at the tag in `HERMES_REF`. To move the fleet to
-a new release: change `HERMES_REF`, `./swarm down --yes`, `./swarm up`. Don't
-`hermes update` inside a sandbox. The image is the source of truth, and a fleet
-on mixed versions is miserable to debug.
+Hermes is baked into the image at the tag in `HERMES_REF`. To move the whole
+tracked fleet to a new release: change `HERMES_REF`, `./swarm down --all --yes`,
+then `./swarm up`. Don't `hermes update` inside a sandbox. The image is the
+source of truth, and a fleet on mixed versions is miserable to debug.
 
 Skills and plugins for a bot go in `/sandbox/.hermes/skills/` and
 `/sandbox/.hermes/plugins/` inside its sandbox. `teammates` is the only plugin

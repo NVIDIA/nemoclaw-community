@@ -10,6 +10,8 @@ unchanged on a host profile or inside an OpenShell sandbox. Keys are read
 from the environment (HERMES_PEER_<NAME>_KEY), never hardcoded.
 """
 
+from __future__ import annotations
+
 import json
 import os
 import re
@@ -24,9 +26,16 @@ _HERMES_HOME = os.environ.get("HERMES_HOME") or os.path.join(
 # as image_url parts when the call sets with_images. Off by default. Cap so one
 # handoff cannot carry an album.
 _MAX_FORWARD_IMAGES = 4
-# An ask that is about a picture. Used only to decide whether to append the
-# "no image is attached" notice when nothing was forwarded.
-_RE_MENTIONS_IMAGE = re.compile(r"\b(image|picture|photo|photograph|screenshot|attached|attachment|see|look)\b", re.I)
+# A structural reference to an image the recipient is expected to have. This is
+# deliberately narrower than words such as "look" and "see": ordinary requests
+# like "look into issue 42" must remain ordinary text handoffs.
+_RE_DEICTIC_IMAGE = re.compile(
+    r"\b(?:this|that|the|my|your|attached|uploaded)\s+"
+    r"(?:(?:attached|uploaded)\s+)?(?:image|picture|photo|photograph|screenshot)\b"
+    r"|\b(?:image|picture|photo|photograph|screenshot)\s+"
+    r"(?:above|below|attached|uploaded|sent|shared)\b",
+    re.IGNORECASE,
+)
 _RE_PATH_HINT = re.compile(
     r"\[Image attached(?: at)?:[^\]]*\]|MEDIA:\S+|(?<![\w/])/(?:tmp|sandbox|home|Users|var)/\S+\.(?:png|jpe?g|gif|webp)\b",
     re.IGNORECASE,
@@ -199,13 +208,14 @@ def message_teammate(args: dict, **kwargs) -> str:
     # asks for it, and the result says how many went.
     images = _images_in_current_turn(str(kwargs.get("session_id") or "")) if args.get("with_images") else []
     if not images:
-        # No image is riding along. If the ask talks about one anyway (a copied
-        # path, a MEDIA: token, or just the word "image"), say so in the message
-        # itself, or a vision teammate will describe a picture it never saw.
-        if _RE_PATH_HINT.search(message):
+        # No image is riding along. If the ask contains a copied path/attachment
+        # marker or structurally refers to an expected image, say so explicitly
+        # so a vision teammate does not describe pixels it never received.
+        had_path_hint = bool(_RE_PATH_HINT.search(message))
+        if had_path_hint:
             message = _RE_PATH_HINT.sub("an image", message)
             message = re.sub(r"[ \t]{2,}", " ", message).strip()
-        if _RE_MENTIONS_IMAGE.search(message):
+        if had_path_hint or _RE_DEICTIC_IMAGE.search(message):
             message += ("\n\n[No image is attached to this message. Answer that you were not given an "
                         "image; do not guess what it shows.]")
     if images:

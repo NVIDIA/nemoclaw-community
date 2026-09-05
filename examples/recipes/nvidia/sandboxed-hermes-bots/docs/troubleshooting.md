@@ -120,8 +120,9 @@ and is selected, then restart the app.
 ```
 
 Sandboxes and profiles survive a reboot; processes do not. `up` restores every
-bot in `BOTS`, re-applies tracing, re-checks the mesh, and prints status. It does
-not start your inference endpoint.
+bot in `BOTS` plus bots recorded by earlier `swarm add` commands, re-applies the
+current tracing setting, re-checks the mesh, and prints status. It does not
+start your inference endpoint.
 
 ## A request from inside a sandbox is blocked
 
@@ -229,10 +230,11 @@ thing that looked like it worked and did not.
 
 **The vision bot says "file not found" for an image the reviewer was given.**
 The reviewer's model copied the host path from the message text and sent that.
-Paths do not cross sandboxes. Fixed in the plugin: `message_teammate` forwards
-the current turn's image parts, strips path hints from the text, and tells the
-receiver the image is attached. If you see this after updating, run `./swarm
-up`; the plugin is re-synced only when its content hash changes.
+Paths do not cross sandboxes. Fixed in the plugin: when a call explicitly sets
+`with_images=true`, `message_teammate` forwards the current turn's image parts,
+strips path hints from the text, and tells the receiver the image is attached.
+The default is text-only. If you see this after updating, run `./swarm up`; the
+plugin is re-synced only when its content hash changes.
 
 **The image never reached the reviewer's sandbox at all.** The host profile
 (`hermes -p nemoclaw-reviewer`) is itself a Hermes agent. With
@@ -257,10 +259,19 @@ fabrication. The api_server derives a session id from the first message, so
 an identical ask reuses the earlier session. Count turns by message timestamp,
 not by session creation.
 
-**A vision bot describes an image it was never sent.** The forwarded ask had
-a filename in it and no image. The plugin now marks those asks (`[No image is
-attached to this message...]`) and the vision soul says to answer that it was
-not given one. If you write your own vision soul, keep that line.
+**A vision bot describes an image it was never sent.** The forwarded ask had a
+sender-local image path or an explicit attachment reference, but no pixels. The
+plugin strips the path and marks the ask (`[No image is attached to this
+message...]`); ordinary wording such as "look into this issue" is left alone.
+The vision soul says to answer that it was not given an image. If you write your
+own vision soul, keep that line.
+
+**The VSS bot cannot find a clip on the host.** A chat message or Desktop
+attachment does not import host files. On the host, run
+`./swarm video-add /absolute/path/to/clip.mp4`, then use the filename printed by
+that command in chat. The VSS tools accept only a filename or relative path that
+already exists beneath `/sandbox/videos`; they reject URLs, host paths, and
+traversal paths.
 
 ## Traps in your own diagnostics
 

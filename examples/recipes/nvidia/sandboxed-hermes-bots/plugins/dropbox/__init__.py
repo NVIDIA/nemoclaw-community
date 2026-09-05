@@ -1,126 +1,160 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""dropbox plugin, host side only.
+"""Operator-only host helper for adding videos to the VSS sandbox.
 
-Runs inside each bot's host shim profile (the thin Hermes profile Desktop
-talks to), never inside a sandbox. When the user drops a video into the chat,
-Desktop attaches it as `@file:/host/path/clip.mp4`. That path means nothing
-in a sandbox. Before the shim forwards the turn, this plugin uploads the clip
-into the vss bot's /sandbox/videos and tells the bot the clip is there by
-name, so `@nemoclaw-reviewer what happens in clip.mp4?` just works.
-
-One target sandbox, one directory, video extensions only, size-capped. The
-upload is `openshell sandbox upload`, the same call `swarm up` uses for the
-shipped clips. Nothing here reads the file's contents.
+This module intentionally registers no Hermes hooks or tools. Chat content is
+untrusted and must never select a host path to read. The host-side ``swarm
+video-add PATH`` command calls :func:`upload_video_from_operator` explicitly
+after it has verified ownership of the target sandbox.
 """
 
+from __future__ import annotations
+
+import argparse
 import logging
 import os
 import re
 import shutil
+import stat
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 VIDEO_EXT = {".mp4", ".webm", ".mov", ".mkv", ".avi"}
-MAX_BYTES = int(os.environ.get("SWARM_DROP_MAX_MB", "200")) * 1024 * 1024
-# The vss bot's sandbox. `swarm up` writes this into the shim's .env.
-VSS_SANDBOX = os.environ.get("SWARM_VSS_SANDBOX", "")
+MAX_BYTES = 40 * 1024 * 1024
 DEST_DIR = "/sandbox/videos"
 
-# @file:/abs/path or @file:"/abs path with spaces", and the bare-path form
-# Hermes leaves in the binary-reference block.
-_RE_REF = re.compile(r'@file:(?:"([^"]+)"|(\S+))')
-_RE_BLOCK = re.compile(r"available on disk at `([^`]+)`")
+
+def register(_ctx):
+    """Keep the host plugin inert; operator commands own host-file access."""
+    logger.info("dropbox: automatic host-file handling is disabled")
 
 
-def register(ctx):
-    if not VSS_SANDBOX:
-        logger.info("dropbox: SWARM_VSS_SANDBOX unset, plugin idle")
-        return
-    ctx.register_hook("pre_llm_call", _on_turn)
-    logger.info("dropbox: uploading dropped videos to %s:%s", VSS_SANDBOX, DEST_DIR)
+def upload_video_from_operator(source: str | os.PathLike[str], sandbox: str) -> tuple[bool, str]:
+    """Copy one explicitly selected host video into an owned VSS sandbox.
 
+    Sandbox ownership is checked by the ``swarm`` command before this helper is
+    called. This function uses an already-open file descriptor so a final-path
+    symlink swap cannot change which host file is copied.
+    """
+    target = (sandbox or "").strip()
+    if not target:
+        return False, "the target sandbox is empty"
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", target):
+        return False, "the target sandbox name is invalid"
 
-def _on_turn(user_message=None, **_ignored):
     try:
-        text = _text_of(user_message)
-        paths = _video_paths(text)
-        if not paths:
-            return None
-        landed, failed = [], []
-        for p in paths:
-            ok, why = _upload(p)
-            (landed if ok else failed).append((p.name, why))
-        return {"context": _note(landed, failed)}
-    except Exception as exc:  # never break a turn over a convenience
-        logger.warning("dropbox: %s", exc)
-        return None
-
-
-def _text_of(msg) -> str:
-    if isinstance(msg, str):
-        return msg
-    if isinstance(msg, dict):
-        c = msg.get("content")
-        if isinstance(c, str):
-            return c
-        if isinstance(c, list):
-            return " ".join(p.get("text", "") for p in c if isinstance(p, dict) and p.get("type") == "text")
-    return ""
-
-
-def _video_paths(text: str) -> list:
-    seen, out = set(), []
-    cands = [a or b for a, b in _RE_REF.findall(text)] + _RE_BLOCK.findall(text)
-    for raw in cands:
-        raw = raw.split(":")[0] if re.search(r":\d+(-\d+)?$", raw) else raw  # strip :10-20 line ranges
-        p = Path(os.path.expanduser(raw))
-        if p.suffix.lower() not in VIDEO_EXT or str(p) in seen:
-            continue
-        seen.add(str(p))
-        out.append(p)
-    return out
-
-
-def _upload(p: Path):
-    if not p.is_file():
-        return False, "not found on this host"
-    size = p.stat().st_size
-    if size > MAX_BYTES:
-        return False, f"{size // (1024*1024)} MB is over the {MAX_BYTES // (1024*1024)} MB limit"
-    if not shutil.which("openshell"):
-        return False, "openshell not on PATH"
-    # `openshell sandbox upload DIR DEST` lands DIR inside DEST by basename, so
-    # stage under a directory literally named "videos" (same trick as swarm up).
-    stage = tempfile.mkdtemp(prefix="swarm-drop.")
+        path = Path(source).expanduser()
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        return False, f"video path is invalid: {exc}"
+    if path.suffix.lower() not in VIDEO_EXT:
+        return False, f"video must use one of: {', '.join(sorted(VIDEO_EXT))}"
     try:
-        vdir = Path(stage) / "videos"
-        vdir.mkdir()
-        safe = re.sub(r"[^A-Za-z0-9._-]", "_", p.name)
-        shutil.copy2(p, vdir / safe)
-        r = subprocess.run(
-            ["openshell", "sandbox", "upload", "--no-git-ignore", VSS_SANDBOX, str(vdir), "/sandbox"],
-            capture_output=True, text=True, timeout=300,
-        )
-        if r.returncode != 0:
-            return False, (r.stderr or r.stdout or "upload failed").strip()[:200]
-        return True, safe
+        if path.is_symlink():
+            return False, "symbolic-link video paths are not accepted"
+        before_open = os.stat(path, follow_symlinks=False)
+        if not stat.S_ISREG(before_open.st_mode):
+            return False, "video path is not a regular file"
+    except (OSError, ValueError) as exc:
+        return False, f"cannot inspect the video: {exc}"
+
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        fd = os.open(path, flags)
+    except (OSError, ValueError) as exc:
+        return False, f"cannot open the video: {exc}"
+
+    try:
+        metadata = os.fstat(fd)
+        if not stat.S_ISREG(metadata.st_mode):
+            return False, "video path is not a regular file"
+        if (metadata.st_dev, metadata.st_ino) != (before_open.st_dev, before_open.st_ino):
+            return False, "video path changed while it was being opened"
+        if metadata.st_size == 0:
+            return False, "video is empty"
+        if metadata.st_size > MAX_BYTES:
+            return False, (
+                f"video is {metadata.st_size // (1024 * 1024)} MiB; "
+                f"the limit is {MAX_BYTES // (1024 * 1024)} MiB"
+            )
+        if not shutil.which("openshell"):
+            return False, "openshell is not on PATH"
+
+        safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", path.name)
+        if not safe_name or safe_name in {".", ".."}:
+            return False, "video filename is not usable"
+        if not safe_name[0].isalnum():
+            safe_name = f"video_{safe_name}"
+
+        try:
+            stage = tempfile.mkdtemp(prefix="swarm-video.")
+        except OSError as exc:
+            return False, f"cannot create a private staging directory: {exc}"
+        try:
+            video_dir = Path(stage) / "videos"
+            video_dir.mkdir()
+            staged = video_dir / safe_name
+            copied = 0
+            with os.fdopen(fd, "rb", closefd=False) as source_file, staged.open("xb") as dest_file:
+                while True:
+                    chunk = source_file.read(min(1024 * 1024, MAX_BYTES + 1 - copied))
+                    if not chunk:
+                        break
+                    copied += len(chunk)
+                    if copied > MAX_BYTES:
+                        return False, f"video grew beyond the {MAX_BYTES // (1024 * 1024)} MiB limit while copying"
+                    dest_file.write(chunk)
+            if copied == 0:
+                return False, "video became empty while copying"
+
+            result = subprocess.run(
+                [
+                    "openshell",
+                    "sandbox",
+                    "upload",
+                    "--no-git-ignore",
+                    target,
+                    str(video_dir),
+                    "/sandbox",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=300,
+                check=False,
+            )
+            if result.returncode != 0:
+                detail = (result.stderr or result.stdout or "upload failed").strip()[:200]
+                return False, detail
+            return True, safe_name
+        except (OSError, subprocess.SubprocessError) as exc:
+            return False, f"video upload failed: {exc}"
+        finally:
+            shutil.rmtree(stage, ignore_errors=True)
     finally:
-        shutil.rmtree(stage, ignore_errors=True)
+        os.close(fd)
 
 
-def _note(landed, failed) -> str:
-    lines = []
-    if landed:
-        names = ", ".join(f"`{n}`" for _, n in landed)
-        lines.append(
-            f"The user dropped a video into the chat. It is now in nemoclaw-vss's sandbox at "
-            f"{DEST_DIR} and nemoclaw-vss can watch it by filename: {names}. "
-            f"Ask nemoclaw-vss about it by that name; ignore any host path in the message."
-        )
-    for name, why in failed:
-        lines.append(f"A dropped video `{name}` could not be delivered to nemoclaw-vss ({why}). Tell the user.")
-    return "\n".join(lines)
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Add one host video to the VSS sandbox")
+    parser.add_argument("--sandbox", required=True, help=argparse.SUPPRESS)
+    parser.add_argument("source", help="host path selected by the operator")
+    args = parser.parse_args(argv)
+    ok, detail = upload_video_from_operator(args.source, args.sandbox)
+    if ok:
+        # Machine-readable contract for `swarm video-add`; that wrapper owns
+        # the user-facing status line.
+        print(detail)
+        return 0
+    print(f"video-add failed: {detail}", file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

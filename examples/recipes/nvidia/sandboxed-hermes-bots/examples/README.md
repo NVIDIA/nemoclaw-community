@@ -16,7 +16,9 @@ Everything in this directory is picked up by name. `swarm add nemoclaw-vision`
 finds `examples/souls/nemoclaw-vision.md`; `swarm add nemoclaw-vss` finds its
 soul, `examples/policies/nemoclaw-vss.yaml`, `examples/plugins/vss/`,
 `examples/skills/vss-video/`, and the clips in `examples/videos/`. Nothing
-here touches the two default bots.
+changes the default bots' roles or policies, but `swarm` refreshes every
+tracked bot's generated teammate guidance and peer configuration so it can
+reach the newly added specialist.
 
 ## The vision bot
 
@@ -118,21 +120,20 @@ same port in step 5; the policy is rendered from it.
 hermes -p nemoclaw-vss chat -q "What happens in forklift-training.mp4?"
 ```
 
-Your own footage, three ways:
+Your own footage, two explicit operator paths:
 
-- **Drop it in the chat.** Drag a clip into any bot's Desktop chat and ask.
-  Desktop stages the file on the host; a small host-side plugin (installed in
-  every bot's shim when a vss bot exists) uploads it into the vss sandbox's
-  `/sandbox/videos` before the turn is forwarded and tells the bot the name.
-  So `what happens in this clip?` with `dock-inspection.mp4` attached
-  works, from the reviewer or anyone else. Videos only, 200 MB cap, one
-  target sandbox, and the file's bytes are never read on the host.
+- **Add one clip deliberately.** On the host, run
+  `./swarm video-add /absolute/path/to/dock-inspection.mp4`. The command
+  accepts a nonempty, regular, non-symlink `.mp4`, `.webm`, `.mov`, `.mkv`, or
+  `.avi`, sanitizes its basename, copies it into the owned, Ready VSS sandbox's
+  `/sandbox/videos`, and prints the filename to use in chat. It is an explicit
+  host-operator action: chat text and Desktop attachments never select or copy
+  host files. Both staging and inline analysis cap the file at 40 MiB.
 - **Ship it with the bot.** Put files in `examples/videos/` (or point
   `VSS_VIDEOS_DIR` elsewhere) and run `./swarm up`.
-- **Link it.** Give the bot an `http(s)` URL the RT-VLM container can fetch.
 
-Clips up to about a minute and 40 MB travel to RT-VLM inline; longer ones
-need a URL.
+The bundled VSS tool sends a sandbox-local clip to RT-VLM inline. Use a shorter
+cut when a file exceeds the 40 MiB limit.
 
 ## The demonstration
 
@@ -158,22 +159,25 @@ its answer from what comes back. 20 to 40 seconds.
 @nemoclaw-reviewer what safety issues do you see in this photo?
 ```
 
-**Your own video.** Drag a clip into the chat, then ask. The clip lands in the
-vss sandbox before anyone reads the message; the reviewer asks vss about it by
-name. Same 20 seconds plus the upload.
+**Your own video.** Add the clip from the host, then ask about the filename the
+command prints. The reviewer asks VSS about that name.
+
+```bash
+./swarm video-add /absolute/path/to/dock-inspection.mp4
+```
 
 ```
-@nemoclaw-reviewer what happens in this clip?
+@nemoclaw-reviewer what happens in dock-inspection.mp4? Ask nemoclaw-vss.
 ```
 
 Three bots, three sandboxes, two handoffs across the boundary. The image
 reaches the vision bot because the reviewer chose to send it on that one call;
-`message_teammate` forwards nothing unless asked. The video reaches the vss
-bot's sandbox as a file, and only the vss bot's policy reaches RT-VLM.
+`message_teammate` forwards no image unless asked. The video reaches the vss
+bot's sandbox only after the host operator runs `swarm video-add` (or provisions
+it through `VSS_VIDEOS_DIR`), and only the vss bot's policy reaches RT-VLM.
 
-We ran each of these three times in a row through the same path Desktop uses
-before writing this section, reading the tool trace in every sandbox each
-time. The traps we hit on the way, and what fixed them, are in
+The traps found while rehearsing earlier iterations of these handoffs, and what
+fixed them, are in
 [docs/troubleshooting.md](../docs/troubleshooting.md#multimodal-handoffs).
 
 ## What's here

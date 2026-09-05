@@ -27,6 +27,11 @@ strip_ansi() { sed -r 's/\x1B\[[0-9;]*[mK]//g'; }
 
 valid_name() { [[ "$1" =~ ^[a-z][a-z0-9-]{0,30}$ ]]; }
 
+# Escape an arbitrary literal for use inside an extended regular expression.
+# Sandbox prefixes are operator-configurable, so process-match patterns must
+# never interpret their punctuation as regex syntax.
+ere_escape() { printf '%s' "$1" | sed 's/[][(){}.^$*+?|\\]/\\&/g'; }
+
 # ── Requirements ─────────────────────────────────────────────────────────────
 require_cmd() {
   local c
@@ -92,9 +97,28 @@ pkill_pattern() { pkill -f -- "$1" 2>/dev/null || true; }
 
 # ── State ────────────────────────────────────────────────────────────────────
 state_init() {
-  mkdir -p "$SWARM_STATE"/{keys,policies,logs,relay}
-  chmod 700 "$SWARM_STATE" "$SWARM_STATE/keys"
+  local owner="$SWARM_STATE/owner-token" tmp token
+  mkdir -p "$SWARM_STATE"/{keys,policies,logs,relay,souls,owned}
+  chmod 700 "$SWARM_STATE" "$SWARM_STATE/keys" "$SWARM_STATE/souls" "$SWARM_STATE/owned"
+  [[ ! -e "$owner" || ( -f "$owner" && ! -L "$owner" ) ]] \
+    || die "$owner must be a regular, non-symlink file"
+
+  # One stable, deployment-scoped identity owns every resource made from this
+  # state directory.  A hard-link publishes it atomically, so two concurrent
+  # invocations cannot silently choose different identities.
+  if [[ ! -s "$owner" ]]; then
+    token=$(openssl rand -hex 32)
+    tmp="$SWARM_STATE/.owner-token.$$.$RANDOM"
+    (umask 077; printf '%s\n' "$token" > "$tmp")
+    ln "$tmp" "$owner" 2>/dev/null || true
+    rm -f "$tmp"
+  fi
+  chmod 600 "$owner"
+  token=$(tr -d '\r\n' < "$owner")
+  [[ "$token" =~ ^[0-9a-f]{64}$ ]] || die "$owner is not a valid deployment owner token; refusing to manage resources"
 }
+
+deployment_owner_token() { tr -d '\r\n' < "$SWARM_STATE/owner-token"; }
 
 # ── Portability (Linux hosts and macOS with Colima or Docker Desktop) ────────
 # GNU base64 wraps at 76 columns unless told -w0; macOS base64 has no -w.
@@ -124,5 +148,6 @@ fi
 
 bot_key_file()  { printf '%s/keys/%s.key' "$SWARM_STATE" "$1"; }
 bot_port_file() { printf '%s/keys/%s.port' "$SWARM_STATE" "$1"; }
+bot_state_soul_file() { printf '%s/souls/%s.md' "$SWARM_STATE" "$1"; }
 bot_log()       { printf '%s/logs/%s-%s.log' "$SWARM_STATE" "$1" "$2"; }
 sandbox_of()    { printf '%s%s' "$SANDBOX_PREFIX" "$1"; }

@@ -17,9 +17,11 @@ tool_call(name="vss_describe_video", arguments={"video": "forklift-training.mp4"
 tool_call(name="vss_ask_video",      arguments={"video": "forklift-training.mp4", "question": "How many people are on foot?"})
 ```
 
-`video` is a filename under `/sandbox/videos` (copied in when the bot was made) or
-an `http(s)` URL the model server can fetch. Anything else fails with a
-message listing what is available; pass that list on rather than guessing.
+`video` is a filename or relative path for a file already beneath
+`/sandbox/videos`. Never pass an `http(s)` URL, host path, or traversal path.
+Anything else fails with a clear refusal; report that rather than guessing. A
+host operator may add a reviewed clip with
+`./swarm video-add PATH`; chat text and attachments do not upload host files.
 
 ## Order of work
 
@@ -46,9 +48,8 @@ message listing what is available; pass that list on rather than guessing.
 
 ## Limits
 
-- Clips up to about 60 seconds and 40 MB inline. Longer footage: point the
-  model at an `http(s)` URL, or ask for a shorter cut. Say so when you hit the
-  cap; the tool's error tells you the size.
+- Clips up to about 60 seconds and 40 MiB inline. Ask for a shorter cut when
+  footage exceeds that cap; the tool's error tells you the size.
 - The model reports what it sees. Small text, faces at distance, and events
   behind other objects are often "not visible". That is a finding, not a
   failure; report it as such.

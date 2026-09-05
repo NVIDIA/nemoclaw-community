@@ -62,15 +62,17 @@ The host user owns everything. `swarm` runs as the user who owns
 `~/.hermes`. That user can read every key, every sandbox, and the collector.
 This is an operator tool, not a multi-tenant one.
 
-A dropped video is written into one sandbox. When a vss bot exists, each
-bot's host shim carries a plugin that copies a video the user drops into
-Desktop into the vss sandbox's `/sandbox/videos`, using the same
-`openshell sandbox upload` that ships the example clips. It is host code
-acting on the host user's file, so it adds no capability the host user did not
-already have. It is bounded anyway: video extensions only, 200 MB, one target
-directory, filename sanitized, and it never reads the file's contents. The
-shim's other tools cannot call it; it runs only on a message that carries a
-video attachment. It is not installed when no vss bot exists.
+A video added by the operator is written into the VSS sandbox. The host-only
+command `./swarm video-add PATH` reads the selected local file and copies it to
+`/sandbox/videos`; the VSS tool then reads that copy and sends its bytes inline
+to RT-VLM. The host command accepts only a nonempty, regular, non-symlink video
+with a supported extension, sanitizes its basename, targets the owned, Ready
+`nemoclaw-vss` sandbox, and caps both staging and inline analysis at 40 MiB.
+This is an explicit operator action. Chat text and Desktop attachments never
+select a host path or start an upload, and bots cannot invoke the command through
+their tool interface. The sandbox copy remains until it is deleted there or the
+VSS sandbox is removed. Review the file before adding it, and treat the RT-VLM
+endpoint as a recipient of its contents.
 
 Desktop reaches the host over SSH. Whoever has that SSH key can talk to every
 bot. The bots do not authenticate Desktop users separately.

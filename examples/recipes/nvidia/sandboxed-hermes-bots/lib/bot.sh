@@ -6,12 +6,19 @@
 # host profile is NAME.
 
 # ── inventory ────────────────────────────────────────────────────────────────
-# Bots are discovered from the key files this tool wrote, so the sandbox name
-# can equal the bot name (SANDBOX_PREFIX may be empty) and other people's
-# sandboxes on the same host are never touched.
+# Bots are discovered from every durable per-bot state artifact. This includes
+# partial state left for recovery after a failed create/delete, without ever
+# discovering other people's sandboxes by name alone.
 bot_list() {
   local f
-  for f in "$SWARM_STATE"/keys/*.key; do [[ -f "$f" ]] && basename "$f" .key; done | sort
+  {
+    for f in "$SWARM_STATE"/keys/*.key; do [[ -f "$f" ]] && basename "$f" .key; done
+    for f in "$SWARM_STATE"/keys/*.port; do [[ -f "$f" ]] && basename "$f" .port; done
+    for f in "$SWARM_STATE"/souls/*.md; do [[ -f "$f" ]] && basename "$f" .md; done
+  } | sort -u
+}
+bot_tracked() {
+  [[ -e "$(bot_key_file "$1")" || -e "$(bot_port_file "$1")" || -e "$(bot_state_soul_file "$1")" ]]
 }
 bot_exists() { [[ -s "$(bot_key_file "$1")" ]] && sandbox_exists "$(sandbox_of "$1")"; }
 # A sandbox with our name that we did not create. Restore and destroy refuse it.
@@ -23,9 +30,36 @@ bot_foreign() {
   return 0
 }
 
+bot_require_owned() {
+  local name="$1" sb phase
+  sb=$(sandbox_of "$name"); phase=$(sandbox_phase "$sb")
+  [[ -n "$phase" ]] || die "sandbox $sb is absent; refusing to mutate $name"
+  if ! sandbox_owned "$sb" && ! sandbox_adopt_legacy "$sb" "$name"; then
+    die "sandbox $sb was not created by this deployment; refusing to mutate it"
+  fi
+  [[ "$phase" == Ready ]] || die "sandbox $sb is not Ready (phase: $phase)"
+}
+
+# Configured bots come first, then custom tracked bots. Names are validated and
+# space-free, so a sentinel string is portable to macOS Bash 3.2.
+fleet_list() {
+  local b seen=" "
+  for b in $BOTS $(bot_list); do
+    [[ " $seen" == *" $b "* ]] && continue
+    printf '%s\n' "$b"
+    seen+="$b "
+  done
+}
+
 bot_port() {
   local f; f=$(bot_port_file "$1")
   [[ -s "$f" ]] && tr -dc '0-9' < "$f"
+}
+
+bot_forward_process_pattern() {
+  local port="$1" sb
+  sb=$(ere_escape "$2")
+  printf 'forward service --target-port %s .* %s$' "$port" "$sb"
 }
 
 # Next api port not held by any bot and not bound on the bridge.
@@ -34,6 +68,35 @@ _next_port() {
   used=$(cat "$SWARM_STATE"/keys/*.port 2>/dev/null | tr '\n' ' ')
   while [[ " $used " == *" $p "* ]] || port_in_use "$p"; do p=$((p + 1)); done
   printf '%s' "$p"
+}
+
+bot_assert_create_safe() {
+  local name="$1" port="${2:-}" sb
+  sb=$(sandbox_of "$name")
+  [[ -n "$port" ]] || { port=$(bot_port "$name" || true); [[ -n "$port" ]] || port=$(_next_port); }
+  if sandbox_exists "$sb" && ! sandbox_owned "$sb" && ! sandbox_adopt_legacy "$sb" "$name"; then
+    die "a sandbox named $sb already exists and was not created by this deployment; refusing to create $name"
+  fi
+  host_profile_assert_available "$name" "$port"
+}
+
+# Validate every live tracked bot plus any explicitly named bot before a
+# command performs a mutation that will later mesh/reconcile survivors. This
+# prevents add/rm/down from succeeding halfway before discovering a foreign
+# same-named sandbox in the surviving fleet.
+bot_preflight_mutation_fleet() {
+  local name sb port seen=" "
+  for name in "$@" $(bot_list); do
+    [[ " $seen" == *" $name "* ]] && continue
+    seen+="$name "
+    sb=$(sandbox_of "$name")
+    sandbox_exists "$sb" || continue
+    if ! sandbox_owned "$sb" && ! sandbox_adopt_legacy "$sb" "$name"; then
+      die "sandbox $sb was not created by this deployment; refusing to change any bot"
+    fi
+    port=$(bot_port "$name" || true)
+    [[ -n "$port" ]] && host_profile_assert_available "$name" "$port"
+  done
 }
 
 # ── create ───────────────────────────────────────────────────────────────────
@@ -46,9 +109,14 @@ bot_create() {
   # Reuse a stored key and port on re-runs: a new key would invalidate every
   # peer registration other bots hold for this one.
   port=$(bot_port "$name" || true); [[ -n "$port" ]] || port=$(_next_port)
-  printf '%s\n' "$port" > "$(bot_port_file "$name")"
   if [[ -s "$(bot_key_file "$name")" ]]; then key=$(read_secret "$(bot_key_file "$name")")
-  else key=$(openssl rand -hex 32); (umask 077; printf '%s\n' "$key" > "$(bot_key_file "$name")"); fi
+  else key=$(openssl rand -hex 32); fi
+
+  # Check both namespaces before persisting a key, port, or custom role. A
+  # foreign same-named resource therefore leaves no misleading local state.
+  bot_assert_create_safe "$name" "$port"
+  printf '%s\n' "$port" > "$(bot_port_file "$name")"
+  [[ -s "$(bot_key_file "$name")" ]] || (umask 077; printf '%s\n' "$key" > "$(bot_key_file "$name")")
   dim "api port $port"
 
   pol=$(policy_render_base "$name")
@@ -68,12 +136,43 @@ bot_create() {
   bot_wait_api "$name" "$port" "$key"
 }
 
+# Restore/create the whole deployment inventory, including bots previously
+# added outside BOTS. Keeping this loop here makes its recovery semantics
+# independently testable without executing the CLI dispatcher.
+bot_preflight_up_all() {
+  # shellcheck disable=SC2046 # fleet entries are validated, space-free names
+  bot_preflight_mutation_fleet $(fleet_list)
+  local b port sb phase
+  for b in $(fleet_list); do
+    sb=$(sandbox_of "$b"); phase=$(sandbox_phase "$sb")
+    [[ -z "$phase" || "$phase" == Ready ]] \
+      || die "sandbox $sb is not Ready (phase: $phase); refusing to change any bot"
+    port=$(bot_port "$b" || true)
+    host_profile_assert_available "$b" "${port:-0}"
+  done
+}
+
+bot_up_all() {
+  local b
+  bot_preflight_up_all
+  for b in $(fleet_list); do
+    if bot_exists "$b"; then
+      log "bot $b: restoring"
+      bot_restore "$b"
+    else
+      log "bot $b: creating"
+      bot_create "$b" "$(bot_source_soul_file "$b")"
+    fi
+  done
+}
+
 # Role-specific reach: policies/<bot>.yaml is an additive preset applied when
 # present. This is how the researcher gets GitHub and the reviewer does not.
 # A preset may carry __VSS_PORT__; it is rendered from VSS_BASE_URL so the
 # egress rule and the endpoint the bot calls cannot drift apart.
 bot_policy_extras() {
   local name="$1" f rendered port
+  bot_require_owned "$name"
   f=$(bot_policy_file "$name")
   [[ -n "$f" ]] || return 0
   if grep -q '__VSS_PORT__' "$f"; then
@@ -93,6 +192,7 @@ bot_policy_extras() {
 # Write model/provider, api_server, SOUL, and the inference key into the sandbox.
 bot_configure() {
   local name="$1" port="$2" key="$3" soul="$4"
+  bot_require_owned "$name"
   bot_configure_model "$name" "$port" "$key"
   bot_write_soul "$name" "$soul"
   ok "model $(bot_model "$name"), api_server :$port, SOUL written"
@@ -119,6 +219,7 @@ bot_vision() {
 
 bot_configure_model() {
   local name="$1" port="$2" key="$3" sb ikey model
+  bot_require_owned "$name"
   sb=$(sandbox_of "$name")
   ikey=$(read_secret "$INFERENCE_KEY_FILE")
   model=$(bot_model "$name")
@@ -149,6 +250,7 @@ echo CONFIGURED" 300 | tail -1 | grep -q CONFIGURED || die "configuring $sb fail
 
 bot_write_soul() {
   local name="$1" soul="$2" sb body
+  bot_require_owned "$name"
   sb=$(sandbox_of "$name")
   body=$(cat "$soul"; printf '\n\n%s\n' "$(_soul_runtime_section "$name")")
   printf '%s' "$body" > "$SWARM_STATE/relay/$name.soul.md"
@@ -198,15 +300,17 @@ EOF
 # Start (or restart) the in-sandbox gateway and publish the api_server on the bridge.
 bot_start() {
   local name="$1" port="$2" sb
+  bot_require_owned "$name"
   sb=$(sandbox_of "$name")
   # Always restart: the gateway reads API_SERVER_KEY and the Relay env at
   # startup, so a gateway started earlier can hold stale values.
   sbx "$sb" '$H -m hermes_cli.main gateway stop >/dev/null 2>&1 || true; pkill -f "hermes_cli.main gateway run" 2>/dev/null || true; rm -f /sandbox/.hermes/gateway.pid /sandbox/.hermes/gateway.lock; echo STOPPED' 90 >/dev/null
-  pkill_pattern "sandbox exec -n $sb .* gateway run"
+  pkill_pattern "sandbox exec -n $(ere_escape "$sb") .* gateway run"
   daemonize "$(bot_log "$name" gateway)" openshell sandbox exec -n "$sb" --timeout 0 -- /bin/sh -c \
     'export HOME=/sandbox HERMES_HOME=/sandbox/.hermes; exec /sandbox/.hermes/hermes-agent/venv/bin/python -m hermes_cli.main gateway run'
-  # Forward: kill by exact port first so duplicates never accumulate.
-  pkill_pattern "forward service --target-port $port "
+  # Qualify by both port and owned sandbox; another deployment may legitimately
+  # use a different sandbox on the same host.
+  pkill_pattern "$(bot_forward_process_pattern "$port" "$sb")"
   daemonize "$(bot_log "$name" forward)" openshell forward service --target-port "$port" --local "$HOST_API_ADDR:$port" "$sb"
   ok "gateway and bridge forward started"
 }
@@ -225,7 +329,7 @@ bot_wait_api() {
 # After a reboot: sandbox exists, nothing is running. Bring it back.
 bot_restore() {
   local name="$1" port key
-  bot_foreign "$name" && die "sandbox $(sandbox_of "$name") exists but was not created by this deployment; refusing to reconfigure it"
+  bot_require_owned "$name"
   port=$(bot_port "$name") || die "no stored port for $name in $SWARM_STATE/keys"
   key=$(read_secret "$(bot_key_file "$name")")
   [[ "$(sandbox_phase "$(sandbox_of "$name")")" == Ready ]] || die "sandbox $(sandbox_of "$name") is not Ready"
@@ -233,7 +337,7 @@ bot_restore() {
   dim "model $(bot_model "$name") via $INFERENCE_BASE_URL"
   # Re-write the soul and per-bot extras too: editing a soul or swarm.env's
   # VSS_* lines and re-running `swarm up` is how those changes land.
-  bot_write_soul "$name" "$(bot_soul_file "$name")" 2>/dev/null || true
+  bot_write_soul "$name" "$(bot_source_soul_file "$name")"
   bot_policy_extras "$name"
   bot_env_extras "$name"
   bot_files_extras "$name"
@@ -251,23 +355,52 @@ bot_restore() {
 # ── reconcile ────────────────────────────────────────────────────────────────
 # After the fleet changes (add/rm), everything that was generated from the
 # fleet inventory is regenerated on every other bot: the teammate section of
-# the soul, and the host profile's dropbox plugin and env. The gateway is
-# restarted so the new soul is read. Called by cmd_add and cmd_rm.
+# the soul and the host profile configuration. The gateway is restarted so
+# the new soul is read. Called by cmd_add and cmd_rm.
 bot_reconcile_others() {
-  local changed="$1" b port key
+  local changed="$1" b port key line
+  local bots=""
+  # Ownership is a preflight: discover every collision before touching any
+  # surviving sandbox, so reconciliation cannot partially mutate the fleet.
   for b in $(bot_list); do
     [[ "$b" == "$changed" ]] && continue
     bot_exists "$b" || continue
+    [[ "$(sandbox_phase "$(sandbox_of "$b")")" == Ready ]] || continue
+    bot_require_owned "$b"
+    bots+="$b "
+  done
+  for b in $bots; do
     port=$(bot_port "$b") || continue
     key=$(read_secret "$(bot_key_file "$b")")
-    bot_write_soul "$b" "$(bot_soul_file "$b")" 2>/dev/null || true
+    bot_write_soul "$b" "$(bot_source_soul_file "$b")"
     host_profile_ensure "$b" "$port" "$key" "" >/dev/null
     bot_start "$b" "$port" >/dev/null
     dim "reconciled $b (soul, host profile)"
   done
 }
+bot_reconcile_all() { bot_reconcile_others ""; }
 
 # ── destroy ──────────────────────────────────────────────────────────────────
+# Validate a multi-bot teardown before the first delete, so discovering one
+# foreign same-named sandbox cannot leave the requested scope half-removed.
+bot_preflight_destroy_scope() {
+  bot_preflight_mutation_fleet "$@"
+}
+
+bot_destroy_scope() {
+  local name failed=0 removed=0
+  bot_preflight_destroy_scope "$@"
+  for name in "$@"; do
+    bot_destroy "$name" || { failed=1; continue; }
+    removed=1
+    mesh_forget "$name"
+  done
+  # A failed single removal must not rewrite/restart unrelated survivors. A
+  # partial multi-remove still reconciles after whichever deletions succeeded.
+  (( removed )) && bot_reconcile_all
+  (( failed == 0 ))
+}
+
 # Order matters: the sandbox goes first, and only if it is really gone do the
 # key, port, policies, and host profile follow. A sandbox that will not delete
 # keeps everything needed to retry or to manage it by hand, and this returns
@@ -277,18 +410,24 @@ bot_destroy() {
   sb=$(sandbox_of "$name")
   port=$(bot_port "$name" || true)
   log "removing bot $name"
-  if sandbox_exists "$sb" && ! sandbox_owned "$sb"; then
-    fail "sandbox $sb exists but was not created by this deployment; leaving it and $name's state untouched"
-    return 1
+  if sandbox_exists "$sb"; then
+    if ! sandbox_owned "$sb" && ! sandbox_adopt_legacy "$sb" "$name"; then
+      fail "sandbox $sb exists but was not created by this deployment; leaving it and $name's state untouched"
+      return 1
+    fi
+    # Migrate an old empty profile marker while the owned sandbox is still
+    # available as corroborating evidence.
+    [[ -n "$port" ]] && host_profile_assert_available "$name" "$port"
   fi
-  [[ -n "$port" ]] && pkill_pattern "forward service --target-port $port "
-  pkill_pattern "sandbox exec -n $sb .* gateway run"
+  [[ -n "$port" ]] && pkill_pattern "$(bot_forward_process_pattern "$port" "$sb")"
+  pkill_pattern "sandbox exec -n $(ere_escape "$sb") .* gateway run"
   if ! sandbox_delete "$sb"; then
     fail "kept $name's key, port, policies, and host profile so the sandbox can still be managed; retry with: swarm rm $name"
     return 1
   fi
   host_profile_remove "$name"
   rm -f "$(bot_key_file "$name")" "$(bot_port_file "$name")" \
+        "$(bot_state_soul_file "$name")" \
         "$SWARM_STATE/policies/$sb"*.yaml "$SWARM_STATE/policies/"*"-peer-$name.yaml" \
         "$SWARM_STATE/relay/$name."* "$SWARM_STATE/logs/$name-"*.log "$SWARM_STATE/owned/$sb"
   ok "bot $name removed"

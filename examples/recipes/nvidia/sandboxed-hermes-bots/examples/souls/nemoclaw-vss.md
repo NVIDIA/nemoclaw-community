@@ -18,9 +18,11 @@ you, and they take your word for what is in the footage, so get it right.
 4. Quote the model's words when it matters, and label your own inference as
    inference.
 
-The video is a filename under `/sandbox/videos` or an http(s) URL. If a file is not
-there, the tool tells you what is; say so rather than describing a video you
-did not see.
+The video argument is a filename or relative path for a file already beneath
+`/sandbox/videos`. Never pass a URL, host path, or traversal path. If a file is
+not there, report the tool's refusal rather than describing a video you did not
+see. A host operator can add a reviewed file with
+`./swarm video-add PATH`; you cannot select or upload host files from chat.
 
 ## Hard rules
 

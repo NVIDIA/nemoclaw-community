@@ -18,24 +18,39 @@ sandbox_container() { docker ps --format '{{.Names}}' | grep "^openshell-$1-" | 
 # Ready, so it is bounded and the readiness poll below is the real gate.
 # Ownership. OpenShell has no label API for sandboxes, so a sandbox this tool
 # created is marked twice: a file under $SWARM_STATE/owned/ (host side, mode
-# 700 directory) and a marker file inside the sandbox holding the same random
-# token. Both must exist and agree. A same-named sandbox that fails the check
-# is someone else's, and every mutating path refuses it.
+# 700 directory) and a marker file inside the sandbox. Both hold this state
+# directory's persistent deployment token. A same-named sandbox that fails
+# the check is someone else's, and every mutating path refuses it.
 _owned_dir() { printf '%s/owned' "$SWARM_STATE"; }
 sandbox_owned() {
-  local sb="$1" f tok inside
+  local sb="$1" f tok inside expected
   f="$(_owned_dir)/$sb"; [[ -s "$f" ]] || return 1
-  tok=$(cat "$f")
+  tok=$(tr -d '\r\n' < "$f")
   inside=$(sbx "$sb" 'cat /sandbox/.hermes/.swarm-owner 2>/dev/null' 30 | tail -1)
-  [[ -n "$inside" && "$inside" == "$tok" ]]
+  expected=$(deployment_owner_token)
+  [[ "$tok" == "$expected" && "$inside" == "$expected" ]] && return 0
+
+  # Migrate the old per-sandbox token only when both independently stored
+  # copies still agree.  A one-sided marker never grants ownership.
+  if [[ -n "$tok" && "$tok" == "$inside" ]]; then
+    _sandbox_set_owner "$sb" "$expected" || return 1
+    return 0
+  fi
+  return 1
+}
+_sandbox_set_owner() {
+  local sb="$1" tok="$2" tmp
+  mkdir -p "$(_owned_dir)"; chmod 700 "$(_owned_dir)"
+  sbx "$sb" "printf '%s' '$tok' > /sandbox/.hermes/.swarm-owner && chmod 600 /sandbox/.hermes/.swarm-owner && echo OWN-OK" 60 \
+    | grep -q OWN-OK || return 1
+  tmp="$(_owned_dir)/.$sb.$$.$RANDOM"
+  (umask 077; printf '%s\n' "$tok" > "$tmp")
+  mv "$tmp" "$(_owned_dir)/$sb"
 }
 _sandbox_mark_owned() {
-  local sb="$1" tok
-  mkdir -p "$(_owned_dir)"; chmod 700 "$(_owned_dir)"
-  tok=$(openssl rand -hex 16)
-  (umask 077; printf '%s' "$tok" > "$(_owned_dir)/$sb")
-  sbx "$sb" "printf '%s' '$tok' > /sandbox/.hermes/.swarm-owner && chmod 600 /sandbox/.hermes/.swarm-owner && echo OWN-OK" 60 \
-    | grep -q OWN-OK || die "could not write ownership marker into $sb"
+  local sb="$1"
+  _sandbox_set_owner "$sb" "$(deployment_owner_token)" \
+    || die "could not write ownership marker into $sb"
 }
 
 # One-time adoption for fleets built before ownership markers existed: the
@@ -48,7 +63,9 @@ sandbox_adopt_legacy() {
   port=$(bot_port "$name" 2>/dev/null) || return 1
   [[ -s "$(bot_key_file "$name")" ]] || return 1
   key=$(read_secret "$(bot_key_file "$name")")
-  code=$(http_code "http://$HOST_API_ADDR:$port/v1/models" -H "Authorization: Bearer $key")
+  # Probe from inside the candidate itself. A host-side forward could point at
+  # a different process and must never be accepted as proof of ownership.
+  code=$(sbx "$sb" "curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Authorization: Bearer $key' http://127.0.0.1:$port/v1/models" 30 | tail -1)
   [[ "$code" == 200 ]] || return 1
   _sandbox_mark_owned "$sb"
   dim "adopted $sb: built by an earlier version of this tool, now marked as owned"
@@ -84,6 +101,7 @@ sandbox_create() {
 sandbox_delete() {
   local sb="$1"
   sandbox_exists "$sb" || return 0
+  sandbox_owned "$sb" || { fail "sandbox $sb is not owned by this deployment; refusing to delete it"; return 1; }
   timeout 180 openshell sandbox delete "$sb" >/dev/null 2>&1 || true
   local i
   for ((i = 0; i < 20; i++)); do
@@ -118,6 +136,7 @@ sbx() {
 # exec because `sandbox upload` creates a directory at DEST.
 sandbox_put() {
   local sb="$1" src="$2" dest="$3" b64
+  sandbox_owned "$sb" || die "sandbox $sb is not owned by this deployment; refusing to write to it"
   b64=$(b64 "$src")
   sbx "$sb" "mkdir -p $(dirname "$dest") && printf '%s' '$b64' | base64 -d > $dest && chmod 600 $dest && echo PUT-OK" 120 \
     | grep -q PUT-OK || die "failed to write $dest into $sb"

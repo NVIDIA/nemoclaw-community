@@ -38,13 +38,20 @@ bad_sh=$(for f in swarm lib/*.sh tests/*.sh; do bash -n "$f" 2>&1 | sed "s|^|$f:
 
 # 5. python syntax
 if command -v python3 >/dev/null; then
-  bad_py=$(find plugins -name '*.py' -not -path '*/__pycache__/*' -exec python3 -m py_compile {} \; 2>&1)
+  bad_py=$(find plugins examples/plugins -name '*.py' -not -path '*/__pycache__/*' -exec python3 -m py_compile {} \; 2>&1)
   [[ -z "$bad_py" ]] && good "python syntax" || { bad "python syntax:"; printf '%s\n' "$bad_py" | sed 's/^/         /'; }
-  find plugins -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null
+  find plugins examples/plugins -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null
+
+  if unit_out=$(python3 -m unittest discover -s tests -p 'test_*.py' 2>&1); then
+    good "python regression tests"
+  else
+    bad "python regression tests:"
+    printf '%s\n' "$unit_out" | sed 's/^/         /'
+  fi
 fi
 
 # 6. executables
-for f in swarm tests/e2e.sh tests/presubmit.sh; do
+for f in swarm tests/e2e.sh tests/lifecycle.sh tests/presubmit.sh; do
   [[ -x "$f" ]] && good "$f executable" || bad "$f not executable (chmod +x)"
 done
 
@@ -53,10 +60,18 @@ stray=$(git ls-files 2>/dev/null | grep -E '(^|/)(keys|logs|secrets)/|\.key$|\.l
 [[ -z "$stray" ]] && good "no tracked state or secrets" || { bad "tracked state/secrets:"; printf '%s\n' "$stray" | sed 's/^/         /'; }
 
 # 8. the skill points at commands that exist
-for c in $(grep -oE '\./swarm [a-z]+' skill/SKILL.md | awk '{print $2}' | sort -u); do
+for c in $(grep -oE '\./swarm [a-z][a-z-]*' skill/SKILL.md | awk '{print $2}' | sort -u); do
   grep -qE "^  $c\)" swarm || bad "skill mentions './swarm $c' but swarm has no such command"
 done
 good "skill commands resolve"
+
+# 9. lifecycle/ownership tests use only a temporary HOME and mocked commands.
+if lifecycle_out=$(tests/lifecycle.sh 2>&1); then
+  good "isolated lifecycle tests"
+else
+  bad "isolated lifecycle tests:"
+  printf '%s\n' "$lifecycle_out" | sed 's/^/         /'
+fi
 
 echo
 (( fail == 0 )) && echo "  presubmit: PASS" || { echo "  presubmit: FAIL"; exit 1; }

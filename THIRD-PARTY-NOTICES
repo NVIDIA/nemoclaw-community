@@ -23,6 +23,10 @@ Image: ubuntu:24.04
 License: Canonical Ubuntu licensing and Debian component licenses
 URL: https://hub.docker.com/_/ubuntu
 
+Image: alpine:3
+License: See the image source and included Alpine package licenses
+URL: https://hub.docker.com/_/alpine
+
 Image: postgres:16
 License: PostgreSQL License and Debian component licenses
 URL: https://hub.docker.com/_/postgres

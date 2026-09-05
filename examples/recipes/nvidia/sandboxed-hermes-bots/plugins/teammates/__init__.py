@@ -25,10 +25,10 @@ def register(ctx):
     )
     # Once per turn, Hermes hands hooks the user message exactly as received,
     # before it decides what this bot's own model can see. Remember any images
-    # so message_teammate can forward them to a teammate whose model can look.
+    # so message_teammate can forward them when the tool call explicitly opts in.
     # Observer only: returns nothing, changes nothing.
     ctx.register_hook("pre_llm_call", _remember_images)
-    logger.info("teammates: registered message_teammate, list_teammates, image relay")
+    logger.info("teammates: registered message_teammate, list_teammates, opt-in image relay")
 
 
 def _remember_images(session_id="", user_message=None, **_ignored):

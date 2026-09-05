@@ -42,7 +42,19 @@ collector_running() { [[ "$(docker inspect -f '{{.State.Running}}' "$COLLECTOR_N
 # Ensure the collector runs with the current config. Recreated when the
 # rendered config changes (e.g. a LangSmith key appeared).
 collector_owned() {
-  [[ -n "$(docker inspect -f '{{index .Config.Labels "swarm.config"}}' "$COLLECTOR_NAME" 2>/dev/null)" ]]
+  [[ "$(docker inspect -f '{{index .Config.Labels "swarm.owner"}}' "$COLLECTOR_NAME" 2>/dev/null)" == "$(deployment_owner_token)" ]]
+}
+
+# Backward-compatible ownership proof for a collector from the release before
+# owner labels: it must carry our config label and mount this exact state
+# directory's rendered config at the collector's fixed destination.
+collector_legacy_owned() {
+  local owner label mount
+  owner=$(docker inspect -f '{{index .Config.Labels "swarm.owner"}}' "$COLLECTOR_NAME" 2>/dev/null || true)
+  case "$owner" in ""|"<no value>") ;; *) return 1 ;; esac
+  label=$(docker inspect -f '{{index .Config.Labels "swarm.config"}}' "$COLLECTOR_NAME" 2>/dev/null || true)
+  mount=$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/etc/otelcol-contrib/config.yaml"}}{{.Source}}{{end}}{{end}}' "$COLLECTOR_NAME" 2>/dev/null || true)
+  [[ -n "$label" && "$label" != "<no value>" && "$mount" == "$(_collector_config)" ]]
 }
 
 tracing_collector_ensure() {
@@ -50,7 +62,12 @@ tracing_collector_ensure() {
   local want have
   want=$(sha16 "$cfg")
   if docker inspect "$COLLECTOR_NAME" >/dev/null 2>&1 && ! collector_owned; then
-    die "a container named $COLLECTOR_NAME exists and was not created by this deployment; refusing to replace it. Stop it or set TRACING=off."
+    if collector_legacy_owned; then
+      docker rm -f "$COLLECTOR_NAME" >/dev/null 2>&1 || die "could not replace this deployment's legacy collector"
+      dim "migrating legacy collector to deployment-scoped ownership"
+    else
+      die "a container named $COLLECTOR_NAME exists and was not created by this deployment; refusing to replace it. Stop it or set TRACING=off."
+    fi
   fi
   have=$(docker inspect -f '{{index .Config.Labels "swarm.config"}}' "$COLLECTOR_NAME" 2>/dev/null || true)
   if collector_running && [[ "$have" == "$want" ]]; then
@@ -70,7 +87,7 @@ tracing_collector_ensure() {
     key_env="LANGSMITH_API_KEY=$(read_secret "$LANGSMITH_KEY_FILE")"
   fi
   docker run -d --name "$COLLECTOR_NAME" --restart unless-stopped \
-    --label "swarm.config=$want" \
+    --label "swarm.config=$want" --label "swarm.owner=$(deployment_owner_token)" \
     -p "$otlp_bind" -p "127.0.0.1:${OTLP_METRICS_PORT:-8889}:8888" \
     ${key_env:+-e "$key_env"} \
     -v "$cfg:/etc/otelcol-contrib/config.yaml:ro" \
@@ -91,6 +108,7 @@ tracing_collector_ensure() {
 # Per bot: relay-plugins.toml + env var + egress policy. Caller restarts the gateway.
 tracing_enable_bot() {
   local name="$1" sb toml pol
+  bot_require_owned "$name"
   sb=$(sandbox_of "$name")
   toml="$SWARM_STATE/relay/$name.relay-plugins.toml"
   sed -e "s|__OTLP_PORT__|$OTLP_PORT|" -e "s|__BOT__|$name|g" \
@@ -114,6 +132,7 @@ echo 'HERMES_NEMO_RELAY_PLUGINS_TOML=/sandbox/.hermes/relay-plugins.toml' >> /sa
 # Caller restarts the gateway.
 tracing_disable_bot() {
   local name="$1" sb
+  bot_require_owned "$name"
   sb=$(sandbox_of "$name")
   sbx "$sb" "sed -i '/^HERMES_NEMO_RELAY_PLUGINS_TOML=/d' /sandbox/.hermes/.env; rm -f /sandbox/.hermes/relay-plugins.toml; echo ENV-OK" 60 \
     | grep -q ENV-OK || die "could not clear relay env in $sb"
@@ -125,7 +144,10 @@ tracing_disable_bot() {
 # LangSmith are outside our reach; the local debug log goes with the container.
 tracing_collector_remove() {
   docker inspect "$COLLECTOR_NAME" >/dev/null 2>&1 || return 0
-  collector_owned || { warn "container $COLLECTOR_NAME is not ours; leaving it"; return 0; }
+  if ! collector_owned && ! collector_legacy_owned; then
+    warn "container $COLLECTOR_NAME is not ours; leaving it"
+    return 0
+  fi
   docker rm -f "$COLLECTOR_NAME" >/dev/null 2>&1 && ok "collector $COLLECTOR_NAME removed"
 }
 

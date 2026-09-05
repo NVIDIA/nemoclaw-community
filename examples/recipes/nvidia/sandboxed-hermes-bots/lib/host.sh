@@ -18,22 +18,51 @@ host_profile_state() {
 # A host profile with our bot's name that this tool did not create belongs to
 # the operator. Refuse to reconfigure or delete it.
 _profile_marker() { printf '%s/.hermes/profiles/%s/.swarm-owner' "$HOME" "$1"; }
-host_profile_owned() { [[ -f "$(_profile_marker "$1")" ]]; }
+host_profile_owned() {
+  local marker; marker=$(_profile_marker "$1")
+  [[ -s "$marker" ]] || return 1
+  [[ "$(tr -d '\r\n' < "$marker")" == "$(deployment_owner_token)" ]]
+}
+
+_host_profile_mark_owned() {
+  local name="$1" marker tmp
+  marker=$(_profile_marker "$name")
+  mkdir -p "$(dirname "$marker")"
+  tmp="$marker.$$.$RANDOM"
+  (umask 077; printf '%s\n' "$(deployment_owner_token)" > "$tmp")
+  mv "$tmp" "$marker"
+}
+
+# Profiles made before deployment-scoped markers used an empty marker.  Adopt
+# one only when its endpoint and this deployment's persisted bot state agree.
+_host_profile_adopt_legacy() {
+  local name="$1" port="$2" marker config
+  marker=$(_profile_marker "$name")
+  config="$HOME/.hermes/profiles/$name/config.yaml"
+  [[ -f "$marker" && ! -s "$marker" ]] || return 1
+  [[ -s "$(bot_key_file "$name")" ]] || return 1
+  grep -qs "base_url: http://$HOST_API_ADDR:$port/v1" "$config" || return 1
+  sandbox_owned "$(sandbox_of "$name")" || return 1
+  _host_profile_mark_owned "$name"
+  dim "adopted legacy host profile $name into this deployment"
+}
+
+host_profile_assert_available() {
+  local name="$1" port="$2" dir="$HOME/.hermes/profiles/$1"
+  if [[ -e "$dir" ]] || hermes profile list 2>/dev/null | strip_ansi | awk '{print $1}' | grep -qx "$name"; then
+    host_profile_owned "$name" && return 0
+    _host_profile_adopt_legacy "$name" "$port" && return 0
+    die "a Hermes profile named $name already exists and was not created by this deployment; refusing to reconfigure it"
+  fi
+}
 
 host_profile_ensure() {
   local name="$1" port="$2" key="$3" soul="$4"
-  if hermes profile list 2>/dev/null | strip_ansi | awk '{print $1}' | grep -qx "$name"; then
-    if ! host_profile_owned "$name"; then
-      # Legacy adoption: the profile already points at this bot's sandbox port.
-      if grep -qs "base_url: http://$HOST_API_ADDR:$port/v1" "$HOME/.hermes/profiles/$name/config.yaml"; then
-        touch "$(_profile_marker "$name")"
-      else
-        die "a Hermes profile named $name already exists and was not created by this deployment; refusing to reconfigure it"
-      fi
-    fi
-  else
+  bot_require_owned "$name"
+  host_profile_assert_available "$name" "$port"
+  if ! hermes profile list 2>/dev/null | strip_ansi | awk '{print $1}' | grep -qx "$name"; then
     hermes profile create "$name" >/dev/null 2>&1 || die "could not create host profile $name"
-    touch "$(_profile_marker "$name")"
+    _host_profile_mark_owned "$name"
   fi
   local prov
   prov=$(jq -cn --arg url "http://$HOST_API_ADDR:$port/v1" \
@@ -60,7 +89,9 @@ host_profile_ensure() {
   sed_delete '^SANDBOX_API_KEY=' "$envf"
   printf 'SANDBOX_API_KEY=%s\n' "$key" >> "$envf"
   [[ -n "$soul" && -f "$soul" ]] && cp "$soul" "$HOME/.hermes/profiles/$name/SOUL.md"
-  host_dropbox_ensure "$name"
+  # Older releases installed a host-side dropbox plugin.  Video transfer is
+  # now an explicit operator action (`swarm video-add`), so remove that hook.
+  host_dropbox_remove "$name"
   ok "host profile $name -> $HOST_API_ADDR:$port"
 
   if [[ "$HOST_GATEWAY" == on ]]; then
@@ -68,34 +99,24 @@ host_profile_ensure() {
   fi
 }
 
-# Dropped videos. Desktop attaches a dropped file as @file:/host/path, which
-# means nothing in a sandbox. The dropbox plugin, installed in every host shim
-# when a vss bot is in the fleet, uploads the clip into that bot's
-# /sandbox/videos before the turn is forwarded and tells the bot the name.
-# Host code, host tool (openshell sandbox upload), one target, videos only.
-# Content-hashed like the sandbox plugins; removed when no vss bot exists.
-host_dropbox_ensure() {
-  local name="$1" vss="" b pdir dst envf want have
-  for b in $(bot_list); do [[ "$(bot_short "$b")" == vss ]] && vss=$(sandbox_of "$b"); done
+# Remove the unsafe automatic host-file bridge left by older releases.  A
+# loaded gateway must be cycled or it keeps the removed plugin in memory.
+host_dropbox_remove() {
+  local name="$1" pdir dst envf changed="" running=""
   pdir="$HOME/.hermes/profiles/$name/plugins"; dst="$pdir/dropbox"
   envf="$HOME/.hermes/profiles/$name/.env"
-  sed_delete '^SWARM_VSS_SANDBOX=' "$envf"
-  if [[ -z "$vss" || "$(bot_short "$name")" == vss ]]; then
-    rm -rf "$dst"; return 0
+  [[ -f "$envf" ]] && grep -q '^SWARM_VSS_SANDBOX=' "$envf" && changed=1
+  [[ -e "$dst" ]] && changed=1
+  [[ -n "$changed" ]] || return 0
+  [[ "$(host_profile_state "$name")" == running ]] && running=1
+  [[ -f "$envf" ]] && sed_delete '^SWARM_VSS_SANDBOX=' "$envf"
+  hermes -p "$name" plugins disable dropbox >/dev/null 2>&1 || true
+  rm -rf "$dst"
+  if [[ -n "$running" ]]; then
+    host_gateway_stop "$name"
+    host_gateway_start "$name"
   fi
-  printf 'SWARM_VSS_SANDBOX=%s\n' "$vss" >> "$envf"
-  want=$(cat "$SWARM_ROOT/plugins/dropbox/plugin.yaml" "$SWARM_ROOT/plugins/dropbox/__init__.py" > /tmp/dropbox.$$ && sha16 /tmp/dropbox.$$; rm -f /tmp/dropbox.$$)
-  have=$(cat "$dst/.hash" 2>/dev/null || true)
-  if [[ "$want" != "$have" ]]; then
-    mkdir -p "$pdir"; rm -rf "$dst"; cp -R "$SWARM_ROOT/plugins/dropbox" "$dst"
-    printf '%s' "$want" > "$dst/.hash"
-    hermes -p "$name" plugins enable dropbox >/dev/null 2>&1 || true
-    dim "dropbox plugin -> $name (videos land in $vss:/sandbox/videos)"
-    # A running host gateway loaded plugins at start; cycle it so this lands.
-    if [[ "$(host_profile_state "$name")" == running ]]; then
-      host_gateway_stop "$name"; host_gateway_start "$name"
-    fi
-  fi
+  dim "removed legacy automatic video hook from $name"
 }
 
 # The profile shows `running` in `hermes profile list` only when a gateway for
@@ -130,11 +151,17 @@ except Exception:
 }
 
 host_profile_remove() {
-  local name="$1"
-  if hermes profile list 2>/dev/null | strip_ansi | awk '{print $1}' | grep -qx "$name" && ! host_profile_owned "$name"; then
+  local name="$1" dir="$HOME/.hermes/profiles/$1" port
+  port=$(bot_port "$name" 2>/dev/null || true)
+  if ! host_profile_owned "$name" && [[ -n "$port" ]]; then
+    _host_profile_adopt_legacy "$name" "$port" || true
+  fi
+  if { [[ -e "$dir" ]] || hermes profile list 2>/dev/null | strip_ansi | awk '{print $1}' | grep -qx "$name"; } \
+      && ! host_profile_owned "$name"; then
     warn "host profile $name was not created by this deployment; leaving it"
     return 0
   fi
+  [[ -e "$dir" ]] || return 0
   host_gateway_stop "$name"
   if hermes profile delete -y "$name" >/dev/null 2>&1; then ok "host profile $name deleted"
   else rm -rf "$HOME/.hermes/profiles/$name"; dim "host profile dir removed"; fi

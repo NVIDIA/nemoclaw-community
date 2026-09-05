@@ -25,6 +25,46 @@ bot_soul_file() {
     || die "no souls/$1.md or examples/souls/$1.md; pass --soul FILE or --role \"text\""
 }
 
+# Custom roles are snapshots in deployment state, not references to an
+# operator path that may move.  Reconcile and reboot restore always prefer the
+# snapshot; repository-defined roles continue to pick up repository updates.
+bot_source_soul_file() {
+  local saved; saved=$(bot_state_soul_file "$1")
+  if [[ -s "$saved" ]]; then printf '%s' "$saved"; else bot_soul_file "$1"; fi
+}
+
+bot_persist_soul() {
+  local name="$1" src="$2" dst tmp
+  [[ -f "$src" ]] || die "soul file not found"
+  dst=$(bot_state_soul_file "$name"); tmp="$dst.$$.$RANDOM"
+  (umask 077; cp "$src" "$tmp")
+  mv "$tmp" "$dst"
+  printf '%s' "$dst"
+}
+
+bot_persist_role() {
+  local name="$1" role="$2" dst tmp
+  dst=$(bot_state_soul_file "$name"); tmp="$dst.$$.$RANDOM"
+  (umask 077; printf '# %s\n\n%s\n' "$name" "$role" > "$tmp")
+  mv "$tmp" "$dst"
+  printf '%s' "$dst"
+}
+
+# Resolve and, when needed, snapshot the source for a newly added bot. The
+# ownership/name preflight intentionally happens before any state write.
+bot_prepare_soul() {
+  local name="$1" mode="$2" value="${3:-}"
+  [[ "$mode" != soul || -f "$value" ]] || die "soul file not found"
+  bot_preflight_mutation_fleet
+  bot_assert_create_safe "$name"
+  case "$mode" in
+    default) BOT_PREPARED_SOUL=$(bot_soul_file "$name") ;;
+    soul)    BOT_PREPARED_SOUL=$(bot_persist_soul "$name" "$value") ;;
+    role)    BOT_PREPARED_SOUL=$(bot_persist_role "$name" "$value") ;;
+    *)       die "invalid soul source mode" ;;
+  esac
+}
+
 bot_policy_file() {
   _first_existing "$SWARM_ROOT/policies/$1.yaml" "$SWARM_ROOT/examples/policies/$1.yaml" || true
 }
@@ -54,6 +94,7 @@ _bot_install_dir() {
 # Plugin + skill for this bot, if any. Idempotent.
 bot_install_extras() {
   local name="$1" sb pdir sdir pname
+  bot_require_owned "$name"
   sb=$(sandbox_of "$name")
   pdir=$(_bot_plugin_dir "$name")
   if [[ -n "$pdir" ]]; then
@@ -81,6 +122,7 @@ bot_install_extras() {
 bot_toolset_extras() {
   local name="$1" sb
   [[ "$(bot_vision "$name")" == true ]] || return 0
+  bot_require_owned "$name"
   sb=$(sandbox_of "$name")
   # `config set` accepts a bare toolset name here and stores the list form.
   sbx "$sb" '$H -m hermes_cli.main config set agent.disabled_toolsets vision >/dev/null 2>&1 && echo TS-OK' 120 \
@@ -92,6 +134,7 @@ bot_toolset_extras() {
 bot_env_extras() {
   local name="$1" sb
   [[ "$(bot_short "$name")" == vss ]] || return 0
+  bot_require_owned "$name"
   sb=$(sandbox_of "$name")
   local url="${VSS_BASE_URL:-}" model="${VSS_MODEL:-}"
   [[ -n "$url" ]] || { warn "nemoclaw-vss: VSS_BASE_URL is not set in swarm.env; its video tools will report that"; return 0; }
@@ -108,12 +151,13 @@ printf 'VSS_BASE_URL=%s\nVSS_MODEL=%s\n' '$url' '$model' >> /sandbox/.hermes/.en
 bot_files_extras() {
   local name="$1" sb dir stage n
   [[ "$(bot_short "$name")" == vss ]] || return 0
+  bot_require_owned "$name"
   dir="${VSS_VIDEOS_DIR:-$SWARM_ROOT/examples/videos}"
   [[ -d "$dir" ]] || { warn "VSS_VIDEOS_DIR=$dir does not exist"; return 0; }
   sb=$(sandbox_of "$name")
   stage=$(mktemp -d /tmp/swarm-videos.XXXXXX); mkdir -p "$stage/videos"
   n=0
-  for f in "$dir"/*.mp4 "$dir"/*.webm "$dir"/*.mov; do
+  for f in "$dir"/*.mp4 "$dir"/*.webm "$dir"/*.mov "$dir"/*.mkv "$dir"/*.avi; do
     [[ -f "$f" ]] && { cp "$f" "$stage/videos/"; n=$((n+1)); }
   done
   if (( n > 0 )); then
