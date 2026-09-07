@@ -66,7 +66,10 @@ observation history — not merely that the hash exists for some skill),
 whether the shipped skill has moved since (compared against the latest
 version this code has actually observed for that skill, not against
 whatever happens to be live right now — live may already be the override
-itself), whether an override is well-formed enough to trust (a handful of
+itself — and, when it has moved, `--apply` refuses to write the now-stale
+override rather than silently letting it win over a shipped update
+nobody has reviewed it against), whether an override is well-formed
+enough to trust (a handful of
 required frontmatter fields), and what to restore on `--remove` (the
 newest content this code has ever actually observed for that skill,
 tracked as it happens rather than guessed at removal time, and only ever
@@ -562,19 +565,24 @@ class Report:
 
 # Kinds a caller (install.sh, a human) should treat as needing attention —
 # used only to decide the process exit status, never to hide the finding
-# itself, which is always in the printed JSON regardless. `applied-stale`
-# is deliberately absent: it is this design's normal, expected state
-# whenever a shipped skill has moved on since a fork, not a failure — an
-# override that's stale still gets applied, and every upstream update
-# would otherwise page whoever watches this exit code for no reason.
+# itself, which is always in the printed JSON regardless. `skipped-stale`
+# is included on purpose, not excluded the way an earlier design left it:
+# a shipped update landing after a fork is exactly the moment a newer
+# safety or correctness fix in that update could otherwise be silently
+# overwritten by content nobody has reviewed against it — the quieter of
+# the two dangers a curated layer surviving an update has to guard
+# against, the louder one being an update that discards a user's tuning
+# outright. Leaving it out of PROBLEM_KINDS traded a real risk for
+# avoiding routine alert noise; it belongs here instead, and a `--fork`
+# resolves it in one command once someone has actually looked.
 # `skipped-exists`/`skipped-no-override`/`reconciled-retry`/
 # `reconciled-complete`/`reconciled-abandoned` are the ordinary, expected
 # outcome of an idempotent command finding nothing left to do, not a
 # failure either.
 PROBLEM_KINDS = frozenset({
     "skipped-invalid", "skipped-missing-base", "skipped-no-base",
-    "skipped-unknown-skill", "orphaned-override", "error", "blocked",
-    "reconciled-diverged", "reconciled-error",
+    "skipped-unknown-skill", "skipped-stale", "orphaned-override", "error",
+    "blocked", "reconciled-diverged", "reconciled-error",
 })
 
 
@@ -730,11 +738,31 @@ def _observe_if_new(conn: sqlite3.Connection, root: Path, skill_name: str,
     time this runs. Both together still preserve version A -> B -> A: each
     transition differs from the one immediately before it, so all three
     are recorded, and "latest" is decided by insertion order, not content.
+
+    A third check, not "nothing new" but "not trustworthy enough to
+    retain": `live_text` also has to carry frontmatter naming this exact
+    skill before it is recorded as a base at all. Hermes's own install/
+    update mechanism gives this module no stronger signal than "the
+    bytes at this path changed" to tell a genuine shipped update apart
+    from a manual edit or corruption — its distribution copy is a raw
+    whole-file overwrite with no checksum manifest or event this code
+    could hook into instead, so full provenance cannot be established
+    here regardless. What can be checked cheaply is shape: content that
+    does not even look like a real shipped skill is never retained, so
+    it can never become something `--remove`/reset would trust enough to
+    restore a skill to. Silently skipping it (not recording it, not
+    raising) is deliberate too — `_latest_base` then keeps answering
+    with whatever the last well-formed observation was, which is exactly
+    the safe fallback a restore needs, rather than this tick's read
+    failing loudly over content nobody asked this run to validate.
     """
     live_hash = _sha256(live_text)
     if _is_own_write(conn, skill_name, live_hash):
         return
     if _latest_base(conn, skill_name) == live_hash:
+        return
+    fm = _frontmatter(live_text)
+    if fm.get("name") != skill_name or not fm.get("description"):
         return
     conn.execute(
         "INSERT OR IGNORE INTO base_blobs(content_hash) VALUES (?)",
@@ -929,11 +957,11 @@ def _check_one_skill(root: Path, skill_name: str) -> Report | None:
 
         if baseline is not None and based_on != baseline:
             return Report(
-                "applied-stale", skill_name,
+                "skipped-stale", skill_name,
                 f"override was forked from a different shipped version "
                 f"(recorded {based_on[:12]}, latest known is "
-                f"{baseline[:12]}) — review it against the current shipped "
-                "skill")
+                f"{baseline[:12]}); --apply will refuse it until you "
+                "--fork again to pick up the newer base")
         return Report("applied", skill_name,
                       "matches the shipped version it was forked from")
     finally:
@@ -1153,14 +1181,31 @@ def _apply_one_skill(root: Path, skill_name: str) -> Report | None:
                 fm = _frontmatter(override_text)
                 based_on = fm["based_on_sha256"]
                 latest = _latest_base(conn, skill_name)
-                if latest is None or based_on == latest:
-                    kind, detail = "applied", "matches the shipped version it was forked from"
-                else:
-                    kind, detail = "applied-stale", (
-                        f"override was forked from a different shipped version "
-                        f"(recorded {based_on[:12]}, latest known is {latest[:12]}) "
-                        "— review it against the current shipped skill")
+                if latest is not None and based_on != latest:
+                    # A newer shipped version has landed since this
+                    # override was forked. Applying it anyway would
+                    # silently replace whatever is currently live —
+                    # possibly a newer safety or correctness fix the
+                    # shipped update carried — with content nobody has
+                    # reviewed against that update. Refuse rather than
+                    # guess: leave live content exactly as it is (the
+                    # observation above already recorded the newer
+                    # shipped version if this is the first tick to see
+                    # it), and require a deliberate `--fork` against the
+                    # new base before this override can become
+                    # effective again.
+                    conn.execute("COMMIT")  # keep the observation
+                    return Report(
+                        "skipped-stale", skill_name,
+                        f"override was forked from a different shipped "
+                        f"version (recorded {based_on[:12]}, latest known "
+                        f"is {latest[:12]}); run --fork again to pick up "
+                        "the newer base before this override can be "
+                        "applied — left untouched rather than silently "
+                        "applying content nobody has reviewed against "
+                        "the update")
 
+                kind, detail = "applied", "matches the shipped version it was forked from"
                 before_hash = _sha256(live_text)
                 after_hash = _sha256(override_text)
                 if before_hash == after_hash:

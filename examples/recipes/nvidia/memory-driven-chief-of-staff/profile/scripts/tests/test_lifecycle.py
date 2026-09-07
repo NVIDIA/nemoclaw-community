@@ -729,6 +729,107 @@ class TestExportShowsEverythingItHolds(StoreCase):
                    / "inbound-judging" / "SKILL.md")
         self.assertEqual(exported.read_text(encoding="utf-8"), override_text)
 
+    def test_an_exported_override_copies_back_cleanly_when_shipped_content_did_not_move(self):
+        """A reset does not touch `skills/` at all — only this
+        feature's own bookkeeping under `workspace/skill-overrides/`.
+        So if nothing shipped has changed since the override was
+        forked, `--apply`'s own observation step re-observes the still-
+        unchanged live file as a legitimate base on the very tick it
+        validates the copied-back override against it, and the two
+        happen to agree. A straight copy-back-and-apply is not
+        guaranteed to fail — only guaranteed to fail once the shipped
+        skill has genuinely moved on, proven separately below."""
+        skill_dir = Path(self.home) / "skills" / "inbound-judging"
+        skill_dir.mkdir(parents=True)
+        shipped_text = "---\nname: inbound-judging\ndescription: shipped\n---\n\nbody\n"
+        (skill_dir / "SKILL.md").write_text(shipped_text, encoding="utf-8")
+        skill_overrides.fork_skill(Path(self.home), "inbound-judging")
+        override_path = (Path(self.home) / "workspace" / "skill-overrides"
+                         / "overrides" / "inbound-judging" / "SKILL.md")
+        override_text = override_path.read_text(encoding="utf-8") + "\nEdited.\n"
+        override_path.write_text(override_text, encoding="utf-8")
+        skill_overrides.apply_overrides(Path(self.home))
+
+        destination = Path(self.home) / "out"
+        export_store.export(destination)
+        exported_text = (destination / "skill-overrides" / "overrides"
+                         / "inbound-judging" / "SKILL.md").read_text(encoding="utf-8")
+
+        self.assertEqual(reset.main(["--yes"]), 0)
+        self.assertEqual(
+            (skill_dir / "SKILL.md").read_text(encoding="utf-8"), shipped_text,
+            "reset must have actually restored the shipped version")
+
+        override_path.parent.mkdir(parents=True, exist_ok=True)
+        override_path.write_text(exported_text, encoding="utf-8")
+        reports = skill_overrides.apply_overrides(Path(self.home))
+        self.assertEqual([r.kind for r in reports], ["applied"])
+        self.assertEqual(
+            (skill_dir / "SKILL.md").read_text(encoding="utf-8"), exported_text)
+
+    def test_an_exported_override_needs_a_fresh_fork_once_the_shipped_skill_has_moved_on(self):
+        """The case the documented limitation is actually about: the
+        shipped skill changes between export and restore (a real
+        `hermes profile update`, simulated here the same way — writing
+        straight to `skills/`, never through this module). `--apply`'s
+        observation step now records the *new* shipped content as the
+        latest base, so the exported override's `based_on_sha256` —
+        still pointing at the old one — was never observed on this
+        profile and fails validation outright, never silently applying.
+        Forking fresh against the new base, then copying the user's own
+        edit into that fresh override, is the documented way back, and
+        it must actually work."""
+        skill_dir = Path(self.home) / "skills" / "inbound-judging"
+        skill_dir.mkdir(parents=True)
+        shipped_text = "---\nname: inbound-judging\ndescription: shipped\n---\n\nbody\n"
+        (skill_dir / "SKILL.md").write_text(shipped_text, encoding="utf-8")
+        skill_overrides.fork_skill(Path(self.home), "inbound-judging")
+        override_path = (Path(self.home) / "workspace" / "skill-overrides"
+                         / "overrides" / "inbound-judging" / "SKILL.md")
+        override_text = override_path.read_text(encoding="utf-8") + "\nEdited.\n"
+        override_path.write_text(override_text, encoding="utf-8")
+        skill_overrides.apply_overrides(Path(self.home))
+
+        destination = Path(self.home) / "out"
+        export_store.export(destination)
+        exported_text = (destination / "skill-overrides" / "overrides"
+                         / "inbound-judging" / "SKILL.md").read_text(encoding="utf-8")
+
+        self.assertEqual(reset.main(["--yes"]), 0)
+
+        # The shipped skill moved on after the reset — a real update,
+        # not this module's own doing.
+        newer_shipped_text = ("---\nname: inbound-judging\n"
+                              "description: a newer shipped skill\n---\n\nbody\n")
+        (skill_dir / "SKILL.md").write_text(newer_shipped_text, encoding="utf-8")
+
+        # Copying the exported file straight back in and applying it
+        # must fail: its based_on_sha256 points at the old shipped
+        # content, which this freshly reset profile never observed —
+        # only the new one, on this very tick.
+        override_path.parent.mkdir(parents=True, exist_ok=True)
+        override_path.write_text(exported_text, encoding="utf-8")
+        reports = skill_overrides.apply_overrides(Path(self.home))
+        self.assertEqual([r.kind for r in reports], ["skipped-invalid"])
+        self.assertEqual(
+            (skill_dir / "SKILL.md").read_text(encoding="utf-8"), newer_shipped_text,
+            "an override that fails validation must never overwrite "
+            "the live file")
+        override_path.unlink()
+
+        # The documented way back: fork fresh (against the new base),
+        # then copy the user's own edit into the new override.
+        self.assertEqual(
+            skill_overrides.fork_skill(Path(self.home), "inbound-judging").kind,
+            "forked")
+        restored_override_text = override_path.read_text(encoding="utf-8") + "\nEdited.\n"
+        override_path.write_text(restored_override_text, encoding="utf-8")
+        reports = skill_overrides.apply_overrides(Path(self.home))
+        self.assertEqual([r.kind for r in reports], ["applied"])
+        self.assertEqual(
+            (skill_dir / "SKILL.md").read_text(encoding="utf-8"),
+            restored_override_text)
+
     def test_an_invalid_utf8_override_is_preserved_byte_for_byte(self):
         """Losing the user's own bytes because they are hard to validate
         would be the same silent omission a valid override losing its

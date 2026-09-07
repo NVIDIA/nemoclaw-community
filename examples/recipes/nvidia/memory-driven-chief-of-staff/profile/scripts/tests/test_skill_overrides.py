@@ -212,7 +212,13 @@ class TestApply(OverridesCase):
         live = (self.home / "skills" / "memory-writing" / "SKILL.md").read_text(encoding="utf-8")
         self.assertNotIn("based_on_sha256: " + foreign_hash, live)
 
-    def test_a_stale_override_still_applies_and_is_reported(self):
+    def test_a_stale_override_is_refused_not_silently_applied(self):
+        """The regression this reproduces: a `based_on_sha256` mismatch
+        used to be reported as 'applied-stale' while still overwriting
+        live content with the stale override — meaning a newer shipped
+        safety or correctness fix could be silently reverted by content
+        nobody had reviewed against it. Apply must refuse instead,
+        leaving whatever is currently live untouched."""
         self.ship("inbound-judging")
         so.fork_skill(self.home, "inbound-judging")
         override_text = self.override_path("inbound-judging").read_text(encoding="utf-8")
@@ -220,12 +226,17 @@ class TestApply(OverridesCase):
 
         # Shipped content changes — simulating a real `hermes profile
         # update`, not going through this module at all.
-        self.ship("inbound-judging", description="A newer shipped skill.")
+        newer_live_path = self.ship("inbound-judging", description="A newer shipped skill.")
+        newer_shipped_text = newer_live_path.read_text(encoding="utf-8")
 
         reports = so.apply_overrides(self.home)
-        self.assertEqual(reports[0].kind, "applied-stale")
-        live = (self.home / "skills" / "inbound-judging" / "SKILL.md").read_text(encoding="utf-8")
-        self.assertEqual(live, override_text, "the override must still win")
+        self.assertEqual(reports[0].kind, "skipped-stale")
+        live = newer_live_path.read_text(encoding="utf-8")
+        self.assertEqual(
+            live, newer_shipped_text,
+            "a stale override must never overwrite content nobody has "
+            "reviewed it against")
+        self.assertNotEqual(live, override_text)
 
     def test_check_reports_without_writing_anything(self):
         shipped_text = self.ship("inbound-judging").read_text(encoding="utf-8")
@@ -245,7 +256,7 @@ class TestApply(OverridesCase):
         blobs_before = sorted(p.name for p in bases_dir.iterdir()) if bases_dir.exists() else []
 
         reports = so.check_overrides(self.home)
-        self.assertEqual(self.kinds(reports), ["applied-stale"])
+        self.assertEqual(self.kinds(reports), ["skipped-stale"])
 
         live = (self.home / "skills" / "inbound-judging" / "SKILL.md").read_text(encoding="utf-8")
         self.assertNotEqual(live, override_text, "check must never touch the live skill")

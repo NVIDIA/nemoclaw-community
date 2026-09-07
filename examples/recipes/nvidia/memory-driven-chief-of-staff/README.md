@@ -1305,6 +1305,14 @@ python3 profile/scripts/skill_overrides.py --remove <skill>  # delete an overrid
 needed, detach and revoke external credentials separately, and verify the
 profile named by `HERMES_HOME` before running it.
 
+The four `skill_overrides.py` commands customize a shipped skill's
+instructions and keep the change across a `hermes profile install`/`update`.
+See [docs/skill-overrides.md](docs/skill-overrides.md) for the canonical edit
+location, when an override actually takes effect, the full table of statuses
+and exit codes, what happens when the shipped skill moves on since a fork,
+the rollback and export/restore story, and how this relates to the
+skill-evolution module proposed in #159.
+
 ### Verification
 
 This is an integration-level reference implementation. Its evidence includes
@@ -1336,7 +1344,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the fifteen files report 714 tests
+Expected result: every file ends with `OK`, the fifteen files report 716 tests
 in total, and the final line is `failed=0`. Do not shorten the loop with an
 early break; running every module is part of the documented check.
 

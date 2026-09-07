@@ -159,19 +159,22 @@ def as_markdown(data: dict[str, list[dict]],
                    "this export, but restoring it after a reset is not "
                    "automatic: `skill_overrides.py` validates a "
                    "`based_on_sha256` against retained shipped history "
-                   "this export deliberately does not include, so a "
-                   "copied-back override will fail that check. To restore "
-                   "one: run `--fork <skill>` first to start a fresh "
-                   "override against whatever is shipped now, then copy "
-                   "the edited parts of this export's file into it by "
-                   "hand — copying this export's file directly into "
-                   "`workspace/skill-overrides/overrides/` before forking "
-                   "will make `--fork` refuse with `skipped-exists` "
-                   "instead.")
+                   "this export deliberately does not include. A copied-"
+                   "back override applies cleanly if the shipped skill has "
+                   "not changed since it was forked, and is refused with "
+                   "`skipped-invalid` — never silently applied — once it "
+                   "has. To restore one after that: run `--fork <skill>` "
+                   "first to start a fresh override against whatever is "
+                   "shipped now, then copy the edited parts of this "
+                   "export's file into it by hand — copying this export's "
+                   "file directly into `workspace/skill-overrides/"
+                   "overrides/` before forking will make `--fork` refuse "
+                   "with `skipped-exists` instead.")
     for report in sorted(overrides, key=lambda r: r.skill):
         state = "up to date with the shipped skill" if report.kind == "applied" \
-            else ("stale — the shipped skill has changed since this was forked"
-                 if report.kind == "applied-stale"
+            else ("stale — the shipped skill has changed since this was "
+                  "forked; --apply refuses it until it is forked again"
+                 if report.kind == "skipped-stale"
                  else f"not applied: {report.detail}")
         out.append(f"- **{report.skill}** — {state}")
     out.append("")
