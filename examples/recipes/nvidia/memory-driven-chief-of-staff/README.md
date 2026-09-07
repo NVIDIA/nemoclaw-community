@@ -326,10 +326,10 @@ from lives alongside it, at `$HERMES_HOME/workspace/ledger/state.db`.
 
 > **`cron status` shows the gateway running but no scheduled job?** The jobs
 > were never registered — for example if step 4 stopped at the credential
-> check before reaching its `3/3 Registering scheduled jobs` phase. Do not
+> check before reaching its `4/4 Registering scheduled jobs` phase. Do not
 > run `register-jobs.sh` directly to fix that: it checks only the platform
 > and that the profile exists, not that a credential is set, so it would
-> schedule all seven jobs against a profile that fails authentication on
+> schedule all eight jobs against a profile that fails authentication on
 > every run. Verify the credential first, then rerun the installer, which
 > registers jobs as its own last step once the credential check passes:
 >
@@ -796,12 +796,13 @@ instead of creating duplicates.
 | memory repair | daily 03:00 | — | `memory-repair` |
 | memory consolidation | daily 04:00 | — | `memory-consolidation` |
 | preference update | daily 04:30 | — | `preference-update` |
+| skill overrides | hourly at :15 | `skill_overrides.py` | — |
 
 Intake, review, and memory writing run their selector before an agent turn. If
 no work is available, the selector's final non-empty line is the wake gate and
-Hermes skips inference. Retention never wakes the agent. Memory writing runs
-before repair and consolidation so every new page is checked and compacted in
-the same nightly sequence.
+Hermes skips inference. Retention and skill overrides never wake the agent —
+neither involves judgment. Memory writing runs before repair and consolidation
+so every new page is checked and compacted in the same nightly sequence.
 
 ### Persistence and reboot behavior
 
@@ -1150,10 +1151,11 @@ memory-driven-chief-of-staff/
 │   │   ├── retention.py              # Scheduled message-body clearing
 │   │   ├── exclusions.py             # Sender, domain, and channel filtering
 │   │   ├── export_store.py           # Complete Markdown and JSON export
-│   │   ├── reset.py                  # Store, memory, and policy reset
+│   │   ├── reset.py                  # Store, memory, policy, and skill-override reset
 │   │   ├── migrate.py                # Forward-only store migration
 │   │   ├── memory_check.py           # Deterministic memory invariant checker
-│   │   └── tests/                    # 14 direct-execution unittest modules
+│   │   ├── skill_overrides.py        # User customizations that survive a profile update
+│   │   └── tests/                    # 15 direct-execution unittest modules
 │   └── skills/
 │       ├── inbound-judging/          # New-message judgment instructions
 │       ├── obligation-review/        # Scheduled re-judgment instructions
@@ -1277,9 +1279,10 @@ est_effort:
 | `preferences.py` | User correction events | Bounded preference policy after the fixed threshold is met |
 | `memory_check.py` | Memory Markdown pages | Diagnostics and exit status; no model call |
 | `retention.py` | Store and `RETENTION_DAYS` | Clears expired bodies; keeps metadata, obligations, and history |
-| `export_store.py` | Store, memory, and policy | Complete Markdown and JSON export directory |
-| `reset.py` | Profile workspace | Removes store, memory, policy, and collection state after confirmation |
+| `export_store.py` | Store, memory, policy, and skill overrides | Complete Markdown and JSON export directory |
+| `reset.py` | Profile workspace | Removes store, memory, policy, skill overrides, and collection state after confirmation |
 | `migrate.py` | Existing store | Forward-only schema migration or compatibility check |
+| `skill_overrides.py` | `skills/`, `workspace/skill-overrides/` | Applies a user's customization of a shipped skill over the copy an install or update just laid down |
 <!-- markdownlint-enable MD013 -->
 
 #### Store and migration commands
@@ -1292,6 +1295,10 @@ python3 profile/scripts/migrate.py --check
 python3 profile/scripts/migrate.py
 python3 profile/scripts/reset.py --dry-run
 python3 profile/scripts/reset.py --yes
+python3 profile/scripts/skill_overrides.py --fork <skill>    # start an override from the shipped copy
+python3 profile/scripts/skill_overrides.py --check           # report what --apply would do
+python3 profile/scripts/skill_overrides.py --apply           # validate and apply every override
+python3 profile/scripts/skill_overrides.py --remove <skill>  # delete an override, restore the latest shipped version
 ```
 
 `reset.py --yes` is destructive. Stop or pause the schedule first, export if
@@ -1329,7 +1336,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the fourteen files report 640 tests
+Expected result: every file ends with `OK`, the fifteen files report 714 tests
 in total, and the final line is `failed=0`. Do not shorten the loop with an
 early break; running every module is part of the documented check.
 

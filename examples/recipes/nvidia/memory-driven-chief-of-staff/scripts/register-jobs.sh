@@ -59,7 +59,7 @@ fi
 # steadier than parsing that table, and it is a read.
 #
 # Without this the script cannot tell an existing job from a missing one, and
-# every run creates another copy of all seven.
+# every run creates another copy of all eight.
 job_id_for() {
   local name="$1" store="$PROFILE_HOME/cron/jobs.json"
   [[ -f "$store" ]] || return 0
@@ -129,6 +129,15 @@ register "retention" "0 2 * * *" "" retention.py \
   "The retention pre-step clears message bodies past the configured window and
 gates the agent off, so this prompt is never reached. It exists because the
 scheduler requires one."
+
+# Self-healing against `hermes profile update`, the platform-native update
+# path that never runs install.sh: every tick re-applies any override still
+# recorded on top of whatever is currently shipped, so a customization
+# survives an update no matter which path the user took to run it.
+register "skill overrides" "15 * * * *" "" skill_overrides.py \
+  "The skill-overrides pre-step applies every valid override and gates the
+agent off, so this prompt is never reached. It exists because the scheduler
+requires one."
 
 register "preference update" "30 4 * * *" preference-update "" \
   "Read the audit trail for user corrections since the last run and update the bounded preference policy. Never write to obligations."

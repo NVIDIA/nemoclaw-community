@@ -146,7 +146,7 @@ class TestSchedulerIntegrationContract(unittest.TestCase):
     registration script. Neither was covered, and one of them was already
     false — the script looked jobs up with `cron list --json`, a flag the CLI
     does not have, so the lookup always came back empty and every run created
-    another copy of all seven jobs.
+    another copy of all eight jobs.
     """
 
     RECIPE = HERE.parents[1]
@@ -304,6 +304,10 @@ class TestTheDocumentedScheduleMatchesTheScript(unittest.TestCase):
         "memory repair": ("0 3 * * *", "memory-repair"),
         "memory consolidation": ("0 4 * * *", "memory-consolidation"),
         "preference update": ("30 4 * * *", "preference-update"),
+        # No skill, same reason as retention: applying an override is
+        # mechanical, and gates the agent off before any judgment would be
+        # needed.
+        "skill overrides": ("15 * * * *", None),
     }
 
     def registered(self):
@@ -502,7 +506,7 @@ class TestTheInstallerRefusesTheWrongPlatform(unittest.TestCase):
     """Documentation that says "Linux only" and code that installs anywhere.
 
     The README states the scheduled path does not work on macOS, and the
-    scripts installed and registered seven jobs there regardless — producing
+    scripts installed and registered eight jobs there regardless — producing
     exactly the model-without-skill calls the same document warns about. A
     warning nothing enforces is not a warning.
     """
@@ -696,7 +700,7 @@ class TestTheInstallerCarriesSettingsNotSecrets(unittest.TestCase):
         self.assertNotEqual(register, -1, "installer no longer registers jobs")
         self.assertLess(check, register,
                         "the check must precede registration, or the exit "
-                        "leaves seven jobs scheduled against a dead profile")
+                        "leaves eight jobs scheduled against a dead profile")
 
     def test_an_unresolvable_model_exits_non_zero(self):
         """The check has to end the run, not merely print a complaint."""
@@ -858,7 +862,7 @@ class TestAFailedTransferStopsTheInstall(unittest.TestCase):
     `false && echo` is a no-op, not an abort. So a profile could take
     `model.default`, silently drop `model.provider` and `model.base_url`, pass
     the model check — which only asks about `model.default` — pass the
-    credential check, and get all seven jobs registered against whatever route
+    credential check, and get all eight jobs registered against whatever route
     it had left.
 
     Exit status alone is also not proof the value landed, so each carried
