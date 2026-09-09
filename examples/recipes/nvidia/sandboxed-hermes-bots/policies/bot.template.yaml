@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Egress policy for one bot sandbox. Deny by default; the bot reaches its
+# inference endpoint and, after mesh, its teammates. Nothing else.
+#
+# Two rules that trip everyone up:
+#   1. `version: 3` is mandatory.
+#   2. network_policies bind to BINARY PATHS as well as hosts. The program that
+#      makes the call must be listed in `binaries`, or the proxy answers 403.
+#
+# Debugging ladder for a blocked request from inside a sandbox:
+#   403  policy denied it (host not allowed, or calling binary not listed)
+#   502  policy allowed it but nothing answered (a host service bound to loopback)
+#   401  reached the target; the credential is wrong
+#   200  working
+version: 3
+
+filesystem_policy:
+  include_workdir: true
+  read_only:
+    - /usr
+    - /lib
+    - /etc
+    - /dev/urandom
+  read_write:
+    - /sandbox
+    - /sandbox/.hermes
+    - /tmp
+    - /var/tmp
+    - /dev/null
+    - /dev/pts
+    - /home/sandbox
+
+landlock:
+  compatibility: best_effort
+
+network_policies:
+  inference:
+    name: inference
+    endpoints:
+      - { host: "__INFERENCE_HOST__", port: __INFERENCE_PORT__, tls: __INFERENCE_TLS__ }
+    binaries: &bot_binaries
+      - { path: /sandbox/.hermes/hermes-agent/venv/bin/python }
+      - { path: /sandbox/.hermes/hermes-agent/venv/bin/* }
+      - { path: /usr/bin/python3.11 }
+      - { path: /usr/bin/curl }
+      - { path: /bin/sh }
+      - { path: /bin/bash }
+
+  # Teammates are added by `swarm add` / mesh as one group per peer:
+  #   peer-<name>:
+  #     endpoints: [{ host: host.openshell.internal, port: <their api port>, tls: skip }]
+  #     binaries: *bot_binaries
+  # Direction matters: bot A's peer-B group allows B's port, not A's own.

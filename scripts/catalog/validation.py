@@ -22,7 +22,7 @@ from .markdown import (
     TUTORIAL_CONTENT_SECURITY_POLICY,
     TUTORIAL_IFRAME_PATHS,
 )
-from .model import CatalogEntry, CatalogError, Category, Collection
+from .model import PAGES_BASE_URL, CatalogEntry, CatalogError, Category, Collection
 from .sources import is_regular_repo_file
 
 
@@ -45,6 +45,7 @@ class GeneratedHTMLValidator(HTMLParser):
         self.labels_for: set[str] = set()
         self.tag_counts: dict[str, int] = {}
         self.content_security_policies: list[str] = []
+        self.canonical_urls: list[str] = []
         self.html_language = ""
         self.has_viewport = False
         self.h1_count = 0
@@ -53,6 +54,19 @@ class GeneratedHTMLValidator(HTMLParser):
     def handle_starttag(
         self, tag: str, attrs: list[tuple[str, str | None]]
     ) -> None:
+        attribute_names = [name.casefold() for name, _ in attrs]
+        duplicate_attributes = sorted(
+            {
+                name
+                for name in attribute_names
+                if attribute_names.count(name) > 1
+            }
+        )
+        if duplicate_attributes:
+            self.errors.append(
+                "Duplicate HTML attributes are not allowed: "
+                + ", ".join(duplicate_attributes)
+            )
         values = {name: value or "" for name, value in attrs}
         self.tag_counts[tag] = self.tag_counts.get(tag, 0) + 1
         if tag == "html":
@@ -112,7 +126,16 @@ class GeneratedHTMLValidator(HTMLParser):
                     self.errors.append(f"Root-relative URL breaks project Pages: {value}")
                 if value.startswith("#"):
                     self.fragments.add(unquote(value[1:]))
-        if tag in {"img", "link", "script"}:
+        link_relations = values.get("rel", "").casefold().split()
+        has_canonical = tag == "link" and "canonical" in link_relations
+        is_canonical_metadata = has_canonical and link_relations == ["canonical"]
+        if has_canonical:
+            self.canonical_urls.append(values.get("href", ""))
+            if not is_canonical_metadata:
+                self.errors.append(
+                    "Canonical metadata must use only the canonical link relation."
+                )
+        if tag in {"img", "link", "script"} and not is_canonical_metadata:
             resource = values.get("src") or values.get("href") or ""
             if resource:
                 self.resources.append(resource)
@@ -171,6 +194,10 @@ def validate_generated_site(
         errors.append("The generated page must declare html lang=\"en\".")
     if not parser.has_viewport:
         errors.append("The generated page must include a viewport meta tag.")
+    if parser.canonical_urls != [PAGES_BASE_URL]:
+        errors.append(
+            "Expected exactly one approved catalog canonical URL: " + PAGES_BASE_URL
+        )
     if parser.tag_counts.get("header", 0) < 1:
         errors.append("The generated page must include a header landmark.")
     for landmark in ("main", "footer"):

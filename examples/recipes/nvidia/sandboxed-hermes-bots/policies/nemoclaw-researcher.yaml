@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Additive preset: let a bot read public documentation and source on GitHub
+# and docs.nvidia.com. Read-only in practice because the proxy allows the host,
+# not a method, and these hosts serve nothing writable without a token the bot
+# does not have.
+#
+#   nemoclaw <sandbox> policy-add --from-file policies/nemoclaw-researcher.yaml --yes
+#
+# Applied automatically to the bot named nemoclaw-researcher: policies/<bot>.yaml
+# is picked up by `swarm add`. Copy it to policies/<other-bot>.yaml to give another
+# bot the same reach. The reviewer deliberately has no such file.
+preset:
+  name: web-research
+  description: Read public docs and source on GitHub and docs.nvidia.com
+network_policies:
+  web-research:
+    name: web-research
+    endpoints:
+      - { host: github.com, port: 443, tls: skip }
+      - { host: raw.githubusercontent.com, port: 443, tls: skip }
+      - { host: api.github.com, port: 443, tls: skip }
+      - { host: docs.nvidia.com, port: 443, tls: skip }
+      - { host: developer.nvidia.com, port: 443, tls: skip }
+      - { host: hermes-agent.nousresearch.com, port: 443, tls: skip }
+    binaries:
+      - { path: /sandbox/.hermes/hermes-agent/venv/bin/python }
+      - { path: /sandbox/.hermes/hermes-agent/venv/bin/* }
+      - { path: /usr/bin/curl }
+      - { path: /bin/sh }

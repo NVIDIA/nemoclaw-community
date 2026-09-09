@@ -19,6 +19,14 @@ Image: python:3.11-slim
 License: Python Software Foundation License and Debian component licenses
 URL: https://hub.docker.com/_/python
 
+Image: ubuntu:24.04
+License: Canonical Ubuntu licensing and Debian component licenses
+URL: https://hub.docker.com/_/ubuntu
+
+Image: alpine:3
+License: See the image source and included Alpine package licenses
+URL: https://hub.docker.com/_/alpine
+
 Image: postgres:16
 License: PostgreSQL License and Debian component licenses
 URL: https://hub.docker.com/_/postgres
@@ -50,6 +58,14 @@ URL: https://github.com/Arize-ai/phoenix
 Image: postgrest/postgrest:v13.0.4
 License: MIT
 URL: https://github.com/PostgREST/postgrest
+
+Image: otel/opentelemetry-collector-contrib:0.145.0
+License: Apache-2.0
+URL: https://github.com/open-telemetry/opentelemetry-collector-contrib
+
+Image: ghcr.io/nvidia-ai-blueprints/vss/vss-rt-vlm (pinned by digest sha256:2b10ba38ac93d648d4b50c32294197ff014dfa85c79ac824a98e172dc31eba05)
+License: See the image source and included notices; model weights downloaded at runtime from NGC under their own terms
+URL: https://github.com/NVIDIA-AI-Blueprints/video-search-and-summarization
 
 ================================================================================
 System Packages
@@ -418,6 +434,10 @@ Service: google-chrome-stable
 License: Freeware / Proprietary (Google Terms of Service)
 URL: https://policies.google.com/terms
 
+Service: Hermes install script (hermes-agent.nousresearch.com/install.sh), run during the sandboxed-hermes-bots image build to install a pinned hermes-agent tag
+License: MIT (hermes-agent)
+URL: https://github.com/NousResearch/hermes-agent
+
 
 Project: NousResearch/hermes-agent source archive
 License: MIT
@@ -546,6 +566,20 @@ Notes: Personal/workspace screenshots are intentionally not distributed in this 
 Asset: NVIDIA header image under examples/recipes/nvidia/payment-ops-hermes/assets/
 Owner: NVIDIA
 Notes: Reuses the repository's existing NVIDIA-owned header asset.
+
+Asset: forklift-training.mp4 under examples/recipes/nvidia/sandboxed-hermes-bots/examples/videos/
+Owner: U.S. Army, Joint Forces Command United Assistance (U.S. Government work, public domain)
+Source: https://commons.wikimedia.org/wiki/File:JFC-UA_Service_Members_Train_NGOs,_Liberians_on_Forklift_150110-A-YW926-001.webm
+Notes: Trimmed to about 30 seconds, re-encoded from WebM to H.264 MP4, audio track removed. Attribution also in the example's examples/videos/LICENSES.md.
+
+Asset: warehouse-ppe.mp4 under examples/recipes/nvidia/sandboxed-hermes-bots/examples/videos/
+Owner: U.S. Department of Health and Human Services (U.S. Government work, public domain)
+Source: https://commons.wikimedia.org/wiki/File:In_response_to_increasing_-COVID19_pandemic,_HHS_is_deploying_personal_protec....webm
+Notes: Trimmed to about 22 seconds, re-encoded from WebM to H.264 MP4, audio track removed. Attribution also in the example's examples/videos/LICENSES.md.
+
+Asset: Screenshots and rendered diagrams under examples/recipes/nvidia/sandboxed-hermes-bots/docs/img/
+Owner: NVIDIA
+Notes: Hermes Desktop screenshots showing the example's own bots reading public GitHub issues; diagrams authored for this example as SVG and rendered to PNG.
 
 Asset: devx-jupyterapp-bridge/ source directory under examples/recipes/nvidia/agentic-ai-learning-path/skills/setup-workshop-nemoclaw/assets/
 Owner: NVIDIA

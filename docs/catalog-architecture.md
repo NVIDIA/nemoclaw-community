@@ -83,6 +83,19 @@ filters those cards in the browser, so the full category-organized catalog
 remains readable when JavaScript is unavailable. GitHub Pages only serves the
 generated files.
 
+## Homepage Discovery Metadata
+
+The catalog homepage publishes one title, description, keyword set, canonical
+URL, and Open Graph object from `site/templates/index.html`. The canonical URL
+is the approved GitHub Pages root in `scripts/catalog/model.py`. It must use a
+standalone `canonical` link relation so it cannot hide a stylesheet, icon,
+preload, or other browser-fetched resource from validation.
+
+The Open Graph object uses the same canonical URL and a same-origin, tracked
+PNG image with its type, dimensions, and alternative text. The generated-site
+validator requires exactly one approved canonical URL, rejects duplicate HTML
+attributes, and continues to inventory and reject remote page resources.
+
 Each card links to a static detail page. The build extracts the source-document
 title, compiles headings, tables, lists, links, code, and images, and renders
 the result inside the shared site theme. Normal detail pages without Mermaid

@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="580" viewBox="0 0 1200 580" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1a1f1a" stroke-width="1"/>
+    </pattern>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#76b900"/>
+    </marker>
+    <marker id="arrow-dim" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7280"/>
+    </marker>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="580" fill="#0b0d0b"/>
+  <rect width="1200" height="580" fill="url(#grid)"/>
+
+  <text x="48" y="56" fill="#e5e7eb" font-size="26" font-weight="700">One request</text>
+
+  <!-- laptop -->
+  <rect x="48" y="150" width="200" height="110" rx="10" fill="#111611" stroke="#374151" stroke-width="1.5"/>
+  <text x="148" y="196" fill="#e5e7eb" font-size="15" font-weight="700" text-anchor="middle">Hermes Desktop</text>
+  <text x="148" y="222" fill="#76b900" font-size="13" text-anchor="middle">@nemoclaw-researcher</text>
+
+  <line x1="248" y1="205" x2="318" y2="205" stroke="#76b900" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <!-- host boundary -->
+  <rect x="320" y="110" width="832" height="420" rx="14" fill="none" stroke="#374151" stroke-width="1.5" stroke-dasharray="8 5"/>
+  <text x="340" y="136" fill="#9ca3af" font-size="12" letter-spacing="2">HOST</text>
+
+  <!-- host gateway -->
+  <rect x="344" y="160" width="220" height="90" rx="10" fill="#111611" stroke="#374151" stroke-width="1.5"/>
+  <text x="454" y="198" fill="#e5e7eb" font-size="15" font-weight="700" text-anchor="middle">host profile</text>
+  <text x="454" y="222" fill="#9ca3af" font-size="12" text-anchor="middle">thin client</text>
+
+  <line x1="454" y1="250" x2="454" y2="292" stroke="#76b900" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <!-- sandbox -->
+  <g filter="url(#glow)">
+    <rect x="344" y="296" width="440" height="186" rx="12" fill="rgba(118,185,0,0.06)" stroke="#76b900" stroke-width="2"/>
+  </g>
+  <text x="364" y="326" fill="#76b900" font-size="14" font-weight="700" letter-spacing="1.5">NEMOCLAW SANDBOX</text>
+
+  <rect x="364" y="346" width="400" height="52" rx="8" fill="#0f140f" stroke="#2d3a2d"/>
+  <text x="380" y="378" fill="#e5e7eb" font-size="15" font-weight="700">Hermes</text>
+  <text x="564" y="378" fill="#9ca3af" font-size="12" text-anchor="middle">runs the turn and every tool</text>
+
+  <rect x="364" y="412" width="190" height="52" rx="8" fill="#0f140f" stroke="#2d3a2d"/>
+  <text x="459" y="444" fill="#e5e7eb" font-size="15" font-weight="700" text-anchor="middle">NeMo Relay</text>
+
+  <rect x="574" y="412" width="190" height="52" rx="8" fill="#0f140f" stroke="#2d3a2d"/>
+  <text x="669" y="444" fill="#e5e7eb" font-size="15" font-weight="700" text-anchor="middle">egress policy</text>
+
+  <!-- inference -->
+  <line x1="784" y1="372" x2="866" y2="372" stroke="#76b900" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <rect x="870" y="342" width="256" height="60" rx="10" fill="#111611" stroke="#374151" stroke-width="1.5"/>
+  <text x="998" y="379" fill="#e5e7eb" font-size="15" font-weight="700" text-anchor="middle">model endpoint</text>
+
+  <!-- collector -->
+  <path d="M 459 464 L 459 500 L 998 500 L 998 484" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrow-dim)"/>
+  <rect x="870" y="428" width="256" height="52" rx="10" fill="#111611" stroke="#374151" stroke-width="1.5"/>
+  <text x="998" y="461" fill="#e5e7eb" font-size="15" font-weight="700" text-anchor="middle">traces</text>
+
+  <text x="48" y="558" fill="#9ca3af" font-size="14">Hermes thinks. NemoClaw draws the line. Relay keeps the record.</text>
+</svg>
