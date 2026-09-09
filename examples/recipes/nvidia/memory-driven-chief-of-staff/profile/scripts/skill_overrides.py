@@ -1,108 +1,25 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Let a user customize a shipped skill's instructions and keep the change.
+"""Persist user skill overrides with explicit distribution provenance.
 
-`hermes profile install --force` and `hermes profile update` both copy
-every entry `skills/` has in the shipped distribution straight over
-whatever is already installed — verified against Hermes's real source,
-which iterates the staged distribution and never checks `distribution_
-owned:` at all. A hand-edited `skills/<name>/SKILL.md` survives exactly
-until the next install or update, then is gone with no warning.
+Only ``--record-distribution /path/to/reviewed/recipe/profile`` registers
+shipped bases. The installer calls it with the source it just installed.
+Apply, check, fork, remove and reset never promote unknown live bytes to
+shipped content. After a bare Hermes update, record that update's reviewed
+source before applying overrides; a stale override remains blocked until
+its author rebases it deliberately.
 
-`workspace/skill-overrides/overrides/<name>/SKILL.md` is where a
-customization actually lives. It is never committed into this recipe's
-own `profile/` source tree, so Hermes's copy step — which only ever
-replaces a name present in the *source* it is copying from — never
-touches it, the same reason `cron/` already survives every update.
-Nested under `workspace/`, which Hermes's own installer additionally
-treats as reserved regardless of any single recipe's manifest, for a
-second, independent reason it can never be swept up in a copy.
+Each skill has a lock and a durable apply/remove journal. A global lock
+coordinates distribution registration, recovery snapshots, restore and reset.
+Hermes does not take these locks: stop the profile's jobs and avoid running
+Hermes updates concurrently with these commands. The locks coordinate only
+this recipe's own commands.
 
-An override on its own does nothing: Hermes only ever reads skills from
-`skills/`, never from this directory. `apply_overrides()` is the one
-thing that makes an override real — it copies a validated override's
-text over the shipped copy in `skills/<name>/SKILL.md`. It runs once
-right after `install.sh` finishes (immediate effect after a fresh setup)
-and again on every scheduled tick a cron job fires (self-healing after
-any update, including a bare `hermes profile update` that never touches
-`install.sh` at all).
-
-Every skill is processed on its own SQLite connection, its own
-transaction(s), and its own held file lock, start to finish. A crash, a
-corrupt override, an unsafe path, or any other failure while processing
-one skill is caught there and turned into that skill's own report — it
-never aborts, blocks, or leaves a partial write on any other skill's
-files or database rows. The lock is real mutual exclusion, not a
-database row two processes could each believe they own in turn: while
-one process holds a skill's lock, nothing else — a second scheduled
-tick, a concurrent `--fork` or `--remove` — can even begin a claim for
-that same skill, so two writers can never both finish believing they
-won. Different skills use different lock files, so contention on one
-never delays another.
-
-Every write that touches `skills/<name>/SKILL.md` durably records what it
-is about to do, in its own committed transaction, *before* touching the
-filesystem — not interleaved with the write inside one long transaction a
-crash could roll back after the file already changed. `reconcile()` reads
-that record back against the file's real, current hash on every run,
-under that same skill's lock: a finished write is completed (its
-database side effects applied, even if the crash landed between the
-write and those), a skill that no longer exists at all clears its own
-now-unresolvable record rather than blocking that skill forever, and a
-hash that matches neither is left alone and reported rather than guessed
-at. An unfinished *apply* is picked back up automatically, since the
-scheduled tick that drives `apply_overrides()` re-derives the same write
-from current state on its own regardless of what `reconcile()` finds; an
-unfinished *remove* is not — nothing re-invokes `remove_override()` on a
-schedule, so `reconcile()` leaves its record retryable and reports that,
-but only running `--remove` again on that exact skill actually retries
-it.
-
-Every one of the four questions this design answers is deliberately
-mechanical, not judged: which base an override was forked from
-(`based_on_sha256`, a hash, checked against this exact skill's own
-observation history — not merely that the hash exists for some skill),
-whether the shipped skill has moved since (compared against the latest
-version this code has actually observed for that skill, not against
-whatever happens to be live right now — live may already be the override
-itself — and, when it has moved, `--apply` refuses to write the now-stale
-override rather than silently letting it win over a shipped update
-nobody has reviewed it against), whether an override is well-formed
-enough to trust (a handful of
-required frontmatter fields), and what to restore on `--remove` (the
-newest content this code has ever actually observed for that skill,
-tracked as it happens rather than guessed at removal time, and only ever
-touched if there is customized state for that skill to undo — an
-override file being the ordinary signal, but not the only one: a
-completed `applied_overrides` row, or a still-pending apply whose
-expected result matches what is live, both count too, since an override
-file deleted by hand does not make the customization it applied any less
-real).
-
-    python3 skill_overrides.py --check            # report only, write nothing
-    python3 skill_overrides.py --apply            # validate and apply every override
-    python3 skill_overrides.py --fork <skill>      # start an override from the shipped copy
-    python3 skill_overrides.py --remove <skill>    # delete an override, restore the latest base
-
-Two honest limits, stated rather than papered over. First, Hermes itself
-does not participate in the lock this module's own writers share — if
-`hermes profile install`/`update` replaces a shipped skill in the instant
-between this module reading its content and writing an override over it,
-that version is silently overwritten before anything ever observes it.
-No lock this module holds can close that, since Hermes's own writer
-holds none of them; the next `--apply` tick still restores this module's
-own accounting to a consistent state (`--check` does not — it is
-strictly read-only and repairs nothing, by design), but the shipped
-update's own content, specifically, is gone. Second, this module's own
-writers still share one SQLite database file underneath their separate
-per-skill locks, and SQLite's own writer lock is for the whole file, not
-one row — so two different skills' operations can still briefly wait on
-each other at the database level even though neither can affect the
-other's outcome, the same way any two SQLite writers to one file
-ordinarily do. `busy_timeout` is generous relative to how small and fast
-these writes are, so this is latency, not a correctness gap; it is not,
-and does not need to be, one lock per skill at the database level too.
+``--restore BUNDLE`` restores this feature's files and SQLite history from
+export_store.py's versioned recovery bundle. It never writes live skills;
+the next explicit or scheduled apply validates them against the restored
+base relationship. An unknown installed version is refused.
 """
 
 from __future__ import annotations
@@ -387,6 +304,16 @@ CREATE TABLE IF NOT EXISTS base_observations (
 );
 CREATE INDEX IF NOT EXISTS base_observations_skill
     ON base_observations(skill_name, observation_id);
+
+CREATE TABLE IF NOT EXISTS approved_bases (
+    skill_name TEXT NOT NULL,
+    content_hash TEXT NOT NULL REFERENCES base_blobs(content_hash),
+    PRIMARY KEY (skill_name, content_hash)
+);
+CREATE TABLE IF NOT EXISTS distribution_bases (
+    skill_name TEXT PRIMARY KEY,
+    content_hash TEXT NOT NULL REFERENCES base_blobs(content_hash)
+);
 
 CREATE TABLE IF NOT EXISTS applied_overrides (
     skill_name   TEXT PRIMARY KEY,
@@ -722,82 +649,94 @@ def _is_own_write(conn: sqlite3.Connection, skill_name: str, live_hash: str) -> 
         (skill_name, live_hash)).fetchone() is not None
 
 
-def _observe_if_new(conn: sqlite3.Connection, root: Path, skill_name: str,
-                    live_text: str) -> None:
-    """Record `live_text` as a newly observed base for `skill_name`, unless
-    it is exactly what this code already knows about that skill — either
-    the override it last applied (or is in the middle of applying) there
-    itself, or the same content as the most recent observation already on
-    file.
+class UnverifiedBase(RuntimeError):
+    """Live content has no accepted distribution provenance."""
 
-    Two separate "nothing new here" checks, not one: `_is_own_write`
-    catches this run's own override so it is never mistaken for pristine
-    shipped content; the latest observation catches an ordinary repeat
-    tick on a skill nobody has touched, so a skill with no override does
-    not grow one new row and rewrite one identical blob file every single
-    time this runs. Both together still preserve version A -> B -> A: each
-    transition differs from the one immediately before it, so all three
-    are recorded, and "latest" is decided by insertion order, not content.
 
-    A third check, not "nothing new" but "not trustworthy enough to
-    retain": `live_text` also has to carry frontmatter naming this exact
-    skill before it is recorded as a base at all. Hermes's own install/
-    update mechanism gives this module no stronger signal than "the
-    bytes at this path changed" to tell a genuine shipped update apart
-    from a manual edit or corruption — its distribution copy is a raw
-    whole-file overwrite with no checksum manifest or event this code
-    could hook into instead, so full provenance cannot be established
-    here regardless. What can be checked cheaply is shape: content that
-    does not even look like a real shipped skill is never retained, so
-    it can never become something `--remove`/reset would trust enough to
-    restore a skill to. Silently skipping it (not recording it, not
-    raising) is deliberate too — `_latest_base` then keeps answering
-    with whatever the last well-formed observation was, which is exactly
-    the safe fallback a restore needs, rather than this tick's read
-    failing loudly over content nobody asked this run to validate.
+def record_distribution(root: Path, source: Path) -> list[Report]:
+    """Register a complete distribution from the source chosen by its operator.
+
+    This is an explicit trust boundary, not signature verification. The caller
+    must use the same reviewed recipe checkout used for installation. Never
+    infer a distribution from the installed profile or from its workspace.
+    No live skill is changed, including a name removed by this distribution.
     """
-    live_hash = _sha256(live_text)
-    if _is_own_write(conn, skill_name, live_hash):
-        return
-    if _latest_base(conn, skill_name) == live_hash:
-        return
-    fm = _frontmatter(live_text)
-    if fm.get("name") != skill_name or not fm.get("description"):
-        return
-    conn.execute(
-        "INSERT OR IGNORE INTO base_blobs(content_hash) VALUES (?)",
-        (live_hash,))
-    conn.execute(
-        "INSERT INTO base_observations(skill_name, content_hash)"
-        " VALUES (?, ?)", (skill_name, live_hash))
-    blob_path = _safe_child(_bases_dir(root), live_hash, "SKILL.md")
-    _atomic_write(blob_path, live_text)
+    source = source.absolute()
+    installed = root.resolve()
+    if source.resolve() == installed or installed in source.resolve().parents:
+        raise UnverifiedBase("use the reviewed recipe source, not the installed profile")
+    skills = _safe_child(source, "skills")
+    payload = {}
+    for entry in sorted(skills.iterdir()):
+        if entry.name.startswith("."):
+            continue
+        _validate_skill_name(entry.name)
+        path = _safe_child(skills, entry.name, "SKILL.md")
+        if not _regular_file_exists(path):
+            raise UnverifiedBase(f"distribution skill {entry.name} has no SKILL.md")
+        content = path.read_text(encoding="utf-8")
+        fm = _frontmatter(content)
+        if fm.get("name") != entry.name or not fm.get("description"):
+            raise UnverifiedBase(f"invalid distribution frontmatter for {entry.name}")
+        payload[entry.name] = content
+
+    with _global_lock(root, exclusive=True):
+        conn = _connect(root)
+        try:
+            if conn.execute("SELECT 1 FROM override_operations WHERE status = 'pending'").fetchone():
+                raise UnverifiedBase("resolve pending operations before recording a distribution")
+            # Retain bytes before committing their references. A crash leaves
+            # at most an unreferenced blob, never an approved missing file.
+            for content in payload.values():
+                _atomic_write(_safe_child(_bases_dir(root), _sha256(content), "SKILL.md"), content)
+            conn.execute("BEGIN IMMEDIATE")
+            previous = dict(conn.execute("SELECT skill_name, content_hash FROM distribution_bases"))
+            conn.execute("DELETE FROM distribution_bases")
+            for name, content in payload.items():
+                digest = _sha256(content)
+                conn.execute("INSERT OR IGNORE INTO base_blobs(content_hash) VALUES (?)", (digest,))
+                conn.execute("INSERT OR IGNORE INTO approved_bases VALUES (?, ?)", (name, digest))
+                conn.execute("INSERT INTO distribution_bases VALUES (?, ?)", (name, digest))
+                if previous.get(name) != digest:
+                    conn.execute("INSERT INTO base_observations(skill_name, content_hash) VALUES (?, ?)",
+                                 (name, digest))
+            conn.execute("COMMIT")
+        except BaseException:
+            _rollback(conn)
+            raise
+        finally:
+            conn.close()
+    return [Report("distribution-recorded", name, f"accepted source hash {_sha256(content)}")
+            for name, content in payload.items()]
 
 
 def _latest_base(conn: sqlite3.Connection, skill_name: str) -> str | None:
-    row = conn.execute(
-        "SELECT content_hash FROM base_observations"
-        " WHERE skill_name = ? ORDER BY observation_id DESC LIMIT 1",
-        (skill_name,)).fetchone()
+    # Old automatically observed history is retained for export, never
+    # grandfathered into trusted content during the upgrade.
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='distribution_bases'").fetchone():
+        return None
+    row = conn.execute("SELECT content_hash FROM distribution_bases WHERE skill_name = ?",
+                       (skill_name,)).fetchone()
     return row[0] if row else None
+
+
+def _observe_if_new(conn: sqlite3.Connection, root: Path, skill_name: str,
+                    live_text: str) -> None:
+    """Validate live bytes; never create an observation from them."""
+    latest = _latest_base(conn, skill_name)
+    if latest is None:
+        raise UnverifiedBase("skill is absent from the accepted distribution; record the reviewed source")
+    live_hash = _sha256(live_text)
+    if live_hash != latest and not _is_own_write(conn, skill_name, live_hash):
+        raise UnverifiedBase("unknown live content; record the reviewed update source or restore the installed file from it")
 
 
 def _observed_for_skill(conn: sqlite3.Connection, skill_name: str,
                         content_hash: str) -> bool:
-    """Whether `content_hash` was actually observed *for this skill*.
-
-    `base_blobs` stores content once regardless of which skill it came
-    from — two skills can legitimately share a blob if their shipped text
-    happens to match. Whether a given override may claim a hash as its
-    base is a separate, per-skill question this checks against
-    `base_observations` directly, rather than trusting that the blob
-    merely exists somewhere.
-    """
-    row = conn.execute(
-        "SELECT 1 FROM base_observations"
-        " WHERE skill_name = ? AND content_hash = ? LIMIT 1",
-        (skill_name, content_hash)).fetchone()
-    return row is not None
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='approved_bases'").fetchone():
+        return False
+    return conn.execute("SELECT 1 FROM approved_bases WHERE skill_name = ? AND content_hash = ?",
+                        (skill_name, content_hash)).fetchone() is not None
 
 
 def _base_text(root: Path, content_hash: str) -> str | None:
@@ -901,40 +840,23 @@ def _list_overridden_skill_names(root: Path) -> list[str]:
 
 
 def _check_one_skill(root: Path, skill_name: str) -> Report | None:
-    """Never writes — not a new observation, not even this feature's own
-    bookkeeping database file, when there is nothing to check against it
-    in the first place. That costs some accuracy `--apply` does not have
-    to accept: if the shipped skill changed since the last time anything
-    observed it, and this run is the first thing to look, a pure read
-    still needs an honest answer. So it computes the same "is live
-    actually our own already-applied override, or a genuine baseline"
-    distinction `_observe_if_new` uses to decide whether to record
-    something — using the live file's hash directly as the baseline
-    whenever it is not indistinguishable from the override this feature
-    applied itself (or is in the middle of applying — a still-`pending`
-    operation whose expected result matches live counts too, so a run
-    landing between apply's file write and its completion commit does
-    not read that write as if it were a fresh shipped version), and only
-    falling back to the last recorded observation when live tells it
-    nothing new.
-    """
+    """Report accepted-base and live-content checks without writing state."""
     override_file = _safe_child(_overrides_dir(root), skill_name, "SKILL.md")
     if not _regular_file_exists(override_file):
         return None
     live_file = _safe_child(_skills_dir(root), skill_name, "SKILL.md")
     if not live_file.is_file():
         return Report("orphaned-override", skill_name,
-                      "this skill is no longer shipped, but an override "
-                      "for it still exists; --remove will restore its "
-                      "last known content, or delete the override by hand")
+                      "the installed skill file is missing; inspect the accepted "
+                      "distribution before restoring or retiring its override")
     override_text = override_file.read_text(encoding="utf-8")
 
     db_path = _db_path(root)
     if not db_path.is_file():
         return Report("skipped-invalid", skill_name,
                       "no retained history exists for this skill yet "
-                      "(nothing has ever been observed); run --apply or "
-                      "--fork first")
+                      "(nothing has been accepted); run --record-distribution "
+                      "with the reviewed recipe source first")
 
     # Read-only at the SQLite level too, not just by discipline: opened
     # this way, a write anywhere in this function would raise rather than
@@ -952,8 +874,8 @@ def _check_one_skill(root: Path, skill_name: str) -> Report | None:
         based_on = fm["based_on_sha256"]
 
         live_hash = _sha256(live_file.read_text(encoding="utf-8"))
-        is_own_write = _is_own_write(conn, skill_name, live_hash)
-        baseline = _latest_base(conn, skill_name) if is_own_write else live_hash
+        _observe_if_new(conn, root, skill_name, live_file.read_text(encoding="utf-8"))
+        baseline = _latest_base(conn, skill_name)
 
         if baseline is not None and based_on != baseline:
             return Report(
@@ -961,9 +883,11 @@ def _check_one_skill(root: Path, skill_name: str) -> Report | None:
                 f"override was forked from a different shipped version "
                 f"(recorded {based_on[:12]}, latest known is "
                 f"{baseline[:12]}); --apply will refuse it until you "
-                "--fork again to pick up the newer base")
+                "export the edit, then --remove and --fork to rebase it")
         return Report("applied", skill_name,
                       "matches the shipped version it was forked from")
+    except UnverifiedBase as exc:
+        return Report("blocked", skill_name, str(exc))
     finally:
         conn.close()
 
@@ -1032,7 +956,7 @@ def _overridden_skill_names_strict(root: Path) -> list[str]:
     return sorted(names)
 
 
-def snapshot_for_export(root: Path) -> list[tuple[Report, str | None]]:
+def snapshot_for_export(root: Path, *, locked: bool = False) -> list[tuple[Report, str | None]]:
     """Like `check_overrides`, but pairs each report with that override's
     exact text at the same instant, captured under that skill's own lock
     — used by `export_store.py`, which otherwise reads a status and
@@ -1057,7 +981,7 @@ def snapshot_for_export(root: Path) -> list[tuple[Report, str | None]]:
     results: list[tuple[Report, str | None]] = []
     for name in sorted(set(_list_skill_names(root))
                        | set(_overridden_skill_names_strict(root))):
-        with _skill_lock(root, name):
+        with (_skill_lock_only(root, name) if locked else _skill_lock(root, name)):
             try:
                 report = _check_one_skill(root, name)
             except UnicodeDecodeError as exc:
@@ -1139,71 +1063,39 @@ def _apply_one_skill(root: Path, skill_name: str) -> Report | None:
                     conn.execute("COMMIT")
                     return verdict
 
+                _observe_if_new(conn, root, skill_name, live_text)
                 override_file = _safe_child(_overrides_dir(root), skill_name, "SKILL.md")
                 if not override_file.is_file():
-                    # An `applied_overrides` row here, with the override
-                    # file itself gone, means one of two different things
-                    # — and only one of them is safe to clear:
-                    #
-                    # If live content still matches the row exactly, the
-                    # override file was deleted by hand but the words
-                    # themselves are still live and still this feature's
-                    # own customization — reset's own restoration pass
-                    # depends on finding this row later, so it must be
-                    # left in place, not cleared just because the file
-                    # happens to be gone this tick.
-                    #
-                    # If live content has genuinely changed since — a
-                    # real shipped update landed, or something else wrote
-                    # over it — the row is now actively wrong, and
-                    # leaving it would make `_observe_if_new` below keep
-                    # mistaking this genuinely new content for "our own
-                    # override" forever, masking it from ever being
-                    # retained as a real shipped base a later `--fork`
-                    # could use. That case, and only that case, is
-                    # cleared before observing, in the same tick.
+                    # Forget a manifest only after live bytes passed the
+                    # accepted-distribution check. Unknown edits must not
+                    # erase recovery state.
                     live_hash = _sha256(live_text)
                     if not _is_own_write(conn, skill_name, live_hash):
                         conn.execute(
                             "DELETE FROM applied_overrides WHERE skill_name = ?",
                             (skill_name,))
-                    _observe_if_new(conn, root, skill_name, live_text)
                     conn.execute("COMMIT")
                     return None
-                _observe_if_new(conn, root, skill_name, live_text)
 
                 override_text = override_file.read_text(encoding="utf-8")
                 reason = _validate_override_text(conn, root, skill_name, override_text)
                 if reason:
-                    conn.execute("COMMIT")  # keep the observation; report, don't write
+                    conn.execute("COMMIT")  # validation only; no live write
                     return Report("skipped-invalid", skill_name, reason)
 
                 fm = _frontmatter(override_text)
                 based_on = fm["based_on_sha256"]
                 latest = _latest_base(conn, skill_name)
                 if latest is not None and based_on != latest:
-                    # A newer shipped version has landed since this
-                    # override was forked. Applying it anyway would
-                    # silently replace whatever is currently live —
-                    # possibly a newer safety or correctness fix the
-                    # shipped update carried — with content nobody has
-                    # reviewed against that update. Refuse rather than
-                    # guess: leave live content exactly as it is (the
-                    # observation above already recorded the newer
-                    # shipped version if this is the first tick to see
-                    # it), and require a deliberate `--fork` against the
-                    # new base before this override can become
-                    # effective again.
-                    conn.execute("COMMIT")  # keep the observation
+                    # An accepted update changed the base. Preserve the
+                    # live file and the user's edit until explicit rebase.
+                    conn.execute("COMMIT")
                     return Report(
                         "skipped-stale", skill_name,
                         f"override was forked from a different shipped "
                         f"version (recorded {based_on[:12]}, latest known "
-                        f"is {latest[:12]}); run --fork again to pick up "
-                        "the newer base before this override can be "
-                        "applied — left untouched rather than silently "
-                        "applying content nobody has reviewed against "
-                        "the update")
+                        f"is {latest[:12]}); export the edit, then --remove "
+                        "and --fork to rebase it; live content left untouched")
 
                 kind, detail = "applied", "matches the shipped version it was forked from"
                 before_hash = _sha256(live_text)
@@ -1260,7 +1152,8 @@ def _apply_one_skill(root: Path, skill_name: str) -> Report | None:
         # Caught here, not re-raised: this function processes exactly one
         # skill, and its failure must never abort or roll back a sibling
         # skill's already-committed work in the loop that calls it.
-        return Report("error", skill_name, f"{type(exc).__name__}: {exc}")
+        return Report("blocked" if isinstance(exc, UnverifiedBase) else "error",
+                      skill_name, f"{type(exc).__name__}: {exc}")
 
 
 def apply_overrides(root: Path) -> list[Report]:
@@ -1524,24 +1417,7 @@ def _remove_override_core(root: Path, skill_name: str) -> Report:
                               "this skill has no override and no applied "
                               "record; nothing to remove")
 
-        # Observe live content before deciding what "latest" means, not
-        # after: a real `hermes profile update` can land a genuinely
-        # newer shipped version that no apply/check tick has observed
-        # yet. Without this, `_latest_base` below would still answer
-        # with the last thing anything actually looked at — an older
-        # base — and remove would restore straight over content this
-        # code never got a chance to retain, discarding it for good.
-        # This skill's own lock, already held, is exactly what makes
-        # it safe to observe here rather than only in apply/check.
-        #
-        # But a still-pending operation on this skill must be checked
-        # first, before that observation — the same reasoning as
-        # `_apply_one_skill`'s matching check, and the same helper: this
-        # function's own caller, `remove_override()`, already calls
-        # `reconcile_skill()` first, but that can leave a row genuinely
-        # unresolved (a retry case, or a real divergence), and
-        # `_observe_if_new` below must not record diverged content as a
-        # trusted new base before that unresolved row is ever noticed.
+        # Validate provenance before changing the live file or its history.
         if live_text is not None:
             verdict = _pending_operation_verdict(
                 conn, skill_name, "remove", _sha256(live_text))
@@ -1551,15 +1427,8 @@ def _remove_override_core(root: Path, skill_name: str) -> Report:
             _observe_if_new(conn, root, skill_name, live_text)
             conn.execute("COMMIT")
 
-        # No check on whether `skills/<name>/` currently exists: an override
-        # existing at all is the signal that the user cares about this
-        # skill, and restoring the newest content this code ever actually
-        # observed is what --remove promises regardless of whether Hermes
-        # currently ships that skill. A restored directory Hermes no
-        # longer ships is left alone by the next install (verified: its
-        # copy step only ever adds/overwrites names present in its staged
-        # source, never deletes a target name absent from it) — an orphan
-        # a user can delete by hand, not a correctness or safety problem.
+        # Only a skill in the accepted distribution has a current base.
+        # A historical observation cannot resurrect a retired skill.
         latest_hash = _latest_base(conn, skill_name)
         if latest_hash is None:
             return Report("skipped-no-base", skill_name,
@@ -1956,31 +1825,11 @@ def _list_pending_operation_skill_names(root: Path) -> list[str]:
 
 
 def _restore_live_file_only(root: Path, skill_name: str) -> Report:
-    """Write a skill's live `SKILL.md` back to its latest known shipped
-    content, and never touch the override file, `applied_overrides`, or
-    any operation journal row — no claim, no unlinking, no row deletion.
+    """Restore only the live file from an accepted base during reset.
 
-    This is deliberately less than `_remove_override_core` does for an
-    ordinary `--remove`, and that is the point: reset's own bulk deletion
-    of `workspace/skill-overrides/` immediately afterward already removes
-    every override file and every row in one stroke, for every skill, as
-    long as every skill's live file restored successfully first — so
-    nothing here needs to, or should, unlink or delete any of that. A
-    version that did (the previous design) meant one skill's override was
-    fully gone — file unlinked, row deleted — the moment its own
-    restoration finished, so a *later* skill failing left reset reporting
-    "nothing removed" while that earlier skill's customization had
-    already been quietly removed. Restricting this function to the live
-    file, plus observation, means a reset that stops partway because some
-    skill could not be restored has destroyed nothing anywhere: every
-    override, every retained base, every applied row and journal row is
-    still exactly where it was — the one exception being that observing a
-    genuinely new shipped version (below) can still add a *new*
-    `base_observations` row and blob for this skill, same as any check or
-    apply tick would; that is additive history, never a deletion, and is
-    what lets restoration target the actual newest shipped content
-    instead of a stale base even when this is the first thing to notice
-    the shipped file changed.
+    Leave overrides, manifests and history intact until the caller completes
+    every restoration and deletes the state tree under the global lock.
+    A failure can leave an earlier live skill restored, but deletes no edits.
     """
     override_path = _safe_child(_overrides_dir(root), skill_name, "SKILL.md")
     live_file = _safe_child(_skills_dir(root), skill_name, "SKILL.md")
@@ -2159,7 +2008,8 @@ def _report_or_error(fn, root: Path, skill_name: str) -> Report:
     try:
         return fn(root, skill_name)
     except Exception as exc:
-        return Report("error", skill_name, f"{type(exc).__name__}: {exc}")
+        return Report("blocked" if isinstance(exc, UnverifiedBase) else "error",
+                      skill_name, f"{type(exc).__name__}: {exc}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -2179,11 +2029,25 @@ def main(argv: list[str] | None = None) -> int:
                        help="start an override from the shipped copy")
     group.add_argument("--remove", metavar="SKILL",
                        help="delete an override and restore the latest base")
+    group.add_argument("--record-distribution", metavar="PROFILE_SOURCE", type=Path,
+                       help="accept shipped bases from the reviewed recipe source")
+    group.add_argument("--restore", metavar="BUNDLE", type=Path,
+                       help="restore override state from a versioned recovery bundle")
     args = ap.parse_args(argv)
 
     root = profile_root()
 
-    if args.check:
+    if args.record_distribution or args.restore:
+        try:
+            if args.record_distribution:
+                reports = record_distribution(root, args.record_distribution)
+            else:
+                from skill_override_bundle import restore_bundle
+                restore_bundle(root, args.restore)
+                reports = [Report("restored", "*", "override state restored; live skills unchanged")]
+        except Exception as exc:
+            reports = [Report("error", "*", f"{type(exc).__name__}: {exc}")]
+    elif args.check:
         # No reconcile() here: reconcile can repair this feature's own
         # bookkeeping (and, for a completed remove, delete an orphaned
         # override file), which is more than --check's "write nothing"

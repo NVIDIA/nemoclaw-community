@@ -133,36 +133,14 @@ second to process — and copies the memory, the learned preference policy, and
 any skill override's own text whole, byte-for-byte, even if that text is not
 valid UTF-8.
 
-What it deliberately does not copy: the retained history of shipped versions
-an override's `based_on_sha256` validates against, and the operation journal
-that records whether it was ever actually applied. Both are this feature's
-own internal bookkeeping — reconstructible, not something the user wrote —
-and both live under `workspace/skill-overrides/`, outside what this command
-reads.
-
-The consequence, precisely: copying an exported override straight into
-`workspace/skill-overrides/overrides/<skill>/` and running `--apply` is not
-guaranteed to fail, and it is not guaranteed to succeed either — it depends
-on whether the shipped skill has moved since. A reset does not touch
-`skills/` at all, only this feature's own bookkeeping, so if nothing shipped
-has changed, `--apply`'s own observation step re-observes the still-unchanged
-live file as a legitimate base on the very tick it validates the copied-back
-override against it, and the two agree — the override applies normally. Once
-the shipped skill has genuinely moved on since the override was forked
-(a real `hermes profile update`, or simply time passing on a different
-machine), that observation records the *new* shipped content instead, the
-override's `based_on_sha256` no longer matches anything this profile has
-seen, and `--apply` refuses it outright with `skipped-invalid` — never
-silently applying stale content. Bringing one back in that case is a
-two-step, partly manual process: run `--fork <skill>` first, against
-whatever is shipped at the time, to start a new override validated against
-a base this profile has actually seen; then copy the edited parts of the
-exported file into that new one by hand. Copying the exported file straight
-into `workspace/skill-overrides/overrides/` before forking makes `--fork`
-refuse with `skipped-exists` instead of helping. A full self-contained
-recovery bundle — one an `import` command could restore without that manual
-step, regardless of whether the shipped skill has moved on — is a larger,
-separate feature this export intentionally does not attempt.
+The export also writes `skill-overrides-recovery.json`. This versioned bundle
+contains the override text, retained base contents, accepted distribution,
+observations, applied manifest, and operation history. It preserves the base
+relationship needed to recover or remove an override after reset without
+re-forking. Only restore bundles you trust: their checksums detect corruption,
+not authorship. See [skill override recovery](skill-overrides.md#export-and-restore)
+for the restore command and its scope. Restoring override state does not
+restore the main ledger, memory, policy, or credentials.
 
 Each export is a snapshot rather than an accumulation. The whole thing is
 built beside the destination and moved into place at the end, so a previous
@@ -171,15 +149,14 @@ date-based default directory makes likely, since the same path is reused all
 day — and a failure part-way leaves no directory at all rather than one that
 looks complete. "Snapshot" describes the destination, not one single instant
 the whole export was captured at: the ledger tables are read together, in one
-transaction, but each skill override's status and text are captured under
-that skill's own lock, one skill at a time, and the memory and policy copies
+transaction, while all override files, statuses, bases, and history are captured
+together under one global lock. The memory and policy copies
 happen afterward — so a change landing in the middle of an export can appear
 in one part of it and not another, the same way any live system being copied
 piece by piece can.
 
-Every workspace file this recipe wrote is a candidate to be read, with one
-deliberate exception — the retained base history and operation journal under
-`workspace/skill-overrides/`, described above. Nothing outside the workspace
+Override exports include the retained base history and operation journal.
+Nothing outside the workspace
 is read *except* each shipped skill's own `skills/<name>/SKILL.md`, which
 computing a skill override's status requires reading to compare against. A
 symbolic link under `memory/` that points elsewhere on the machine stops the

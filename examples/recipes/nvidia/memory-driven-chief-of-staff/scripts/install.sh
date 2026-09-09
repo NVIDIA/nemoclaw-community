@@ -73,7 +73,9 @@ fi
 # guard keeps `set -e` from treating that as fatal; the carried-over model
 # settings and the scheduled jobs below still matter even when one
 # override does not.
-echo "2/4  Re-applying skill overrides"
+echo "2/4  Registering shipped skills and re-applying overrides"
+HERMES_HOME="$PROFILE_HOME" python3 "$RECIPE_ROOT/profile/scripts/skill_overrides.py" \
+  --record-distribution "$RECIPE_ROOT/profile"
 if ! HERMES_HOME="$PROFILE_HOME" python3 "$RECIPE_ROOT/profile/scripts/skill_overrides.py" --apply; then
   echo "     one or more overrides could not be applied; see the JSON above." >&2
   echo "     continuing — this does not block the rest of install." >&2

@@ -36,14 +36,17 @@ class OverridesCase(unittest.TestCase):
     def setUp(self):
         self.home = Path(tempfile.mkdtemp())
         (self.home / "skills").mkdir(parents=True)
+        self.distribution = Path(tempfile.mkdtemp())
+        (self.distribution / "skills").mkdir()
         os.environ["HERMES_HOME"] = str(self.home)
 
     def tearDown(self):
         os.environ.pop("HERMES_HOME", None)
         shutil.rmtree(self.home, ignore_errors=True)
+        shutil.rmtree(self.distribution, ignore_errors=True)
 
     def ship(self, name: str, description: str = "A shipped skill.",
-            extra: str = "") -> Path:
+            extra: str = "", *, register: bool = True) -> Path:
         """Create a shipped skill, the way `hermes profile install` would
         have just laid one down."""
         skill_dir = self.home / "skills" / name
@@ -51,6 +54,11 @@ class OverridesCase(unittest.TestCase):
         text = (f"---\nname: {name}\ndescription: {description}\n---\n\n"
                f"# {name}\n\nDo the thing.\n{extra}")
         (skill_dir / "SKILL.md").write_text(text, encoding="utf-8")
+        if register:
+            source = self.distribution / "skills" / name / "SKILL.md"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text(text, encoding="utf-8")
+            so.record_distribution(self.home, self.distribution)
         return skill_dir / "SKILL.md"
 
     def override_path(self, name: str) -> Path:
@@ -112,6 +120,9 @@ class TestFork(OverridesCase):
             "---\nname: inbound-judging\ndescription: x\n"
             f"based_on_sha256: {'1' * 64}\n---\n\nbody\n", encoding="utf-8")
         real_hash = so._sha256(shipped_text.read_text(encoding="utf-8"))
+        (self.distribution / "skills" / "inbound-judging" / "SKILL.md").write_text(
+            shipped_text.read_text(encoding="utf-8"), encoding="utf-8")
+        so.record_distribution(self.home, self.distribution)
 
         so.fork_skill(self.home, "inbound-judging")
         override = self.override_path("inbound-judging").read_text(encoding="utf-8")
@@ -453,7 +464,7 @@ class TestRemove(OverridesCase):
         something to observe and restore to — this case only remains
         reachable when the skill is gone too, with truly nothing on
         either side for remove's own observation step to find."""
-        self.ship("inbound-judging")
+        self.ship("inbound-judging", register=False)
         import shutil
         shutil.rmtree(self.home / "skills" / "inbound-judging")
         # A hand-placed override with no prior --fork/--apply ever having
@@ -978,7 +989,7 @@ class TestVirginProfileCheck(OverridesCase):
     its own bookkeeping."""
 
     def test_check_with_no_override_anywhere_creates_no_state(self):
-        self.ship("inbound-judging")
+        self.ship("inbound-judging", register=False)
         state_dir = self.home / "workspace" / "skill-overrides"
 
         reports = so.check_overrides(self.home)
@@ -989,7 +1000,7 @@ class TestVirginProfileCheck(OverridesCase):
                          "no state tree at all from --check")
 
     def test_check_with_a_hand_placed_override_but_no_history_reports_without_creating_state(self):
-        self.ship("inbound-judging")
+        self.ship("inbound-judging", register=False)
         self.write_override(
             "inbound-judging",
             f"---\nname: inbound-judging\ndescription: x\n"

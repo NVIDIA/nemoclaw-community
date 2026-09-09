@@ -1154,8 +1154,9 @@ memory-driven-chief-of-staff/
 │   │   ├── reset.py                  # Store, memory, policy, and skill-override reset
 │   │   ├── migrate.py                # Forward-only store migration
 │   │   ├── memory_check.py           # Deterministic memory invariant checker
-│   │   ├── skill_overrides.py        # User customizations that survive a profile update
-│   │   └── tests/                    # 15 direct-execution unittest modules
+│   │   ├── skill_overrides.py        # User customizations with accepted shipped bases
+│   │   ├── skill_override_bundle.py  # Complete override export and recovery
+│   │   └── tests/                    # 16 direct-execution unittest modules
 │   └── skills/
 │       ├── inbound-judging/          # New-message judgment instructions
 │       ├── obligation-review/        # Scheduled re-judgment instructions
@@ -1282,7 +1283,7 @@ est_effort:
 | `export_store.py` | Store, memory, policy, and skill overrides | Complete Markdown and JSON export directory |
 | `reset.py` | Profile workspace | Removes store, memory, policy, skill overrides, and collection state after confirmation |
 | `migrate.py` | Existing store | Forward-only schema migration or compatibility check |
-| `skill_overrides.py` | `skills/`, `workspace/skill-overrides/` | Applies a user's customization of a shipped skill over the copy an install or update just laid down |
+| `skill_overrides.py` | `skills/`, `workspace/skill-overrides/` | Validates live content against an accepted distribution before applying a customization |
 <!-- markdownlint-enable MD013 -->
 
 #### Store and migration commands
@@ -1305,8 +1306,14 @@ python3 profile/scripts/skill_overrides.py --remove <skill>  # delete an overrid
 needed, detach and revoke external credentials separately, and verify the
 profile named by `HERMES_HOME` before running it.
 
-The four `skill_overrides.py` commands customize a shipped skill's
+The `skill_overrides.py` commands customize a shipped skill's
 instructions and keep the change across a `hermes profile install`/`update`.
+The installer registers bases from its reviewed source. After a bare profile
+update, use `--record-distribution /path/to/reviewed/recipe/profile` before
+applying overrides. Unknown live content is blocked; a changed accepted base
+requires review and rebase. Exports include `skill-overrides-recovery.json`;
+`--restore /path/to/export/skill-overrides-recovery.json` restores override
+state into an empty destination without replacing live skills.
 See [docs/skill-overrides.md](docs/skill-overrides.md) for the canonical edit
 location, when an override actually takes effect, the full table of statuses
 and exit codes, what happens when the shipped skill moves on since a fork,
@@ -1344,7 +1351,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the fifteen files report 716 tests
+Expected result: every file ends with `OK`, the sixteen files report 731 tests
 in total, and the final line is `failed=0`. Do not shorten the loop with an
 early break; running every module is part of the documented check.
 

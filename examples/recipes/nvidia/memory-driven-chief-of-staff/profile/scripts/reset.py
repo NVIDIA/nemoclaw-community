@@ -67,6 +67,7 @@ def targets() -> dict[str, Path]:
         # own bookkeeping database — a separate tree reset.py did not
         # previously walk.
         "skill-overrides": workspace / "skill-overrides",
+        "skill-overrides-restore": workspace / ".skill-overrides-restore",
     }
     # `workspace/.skill-overrides-global.lock` is deliberately absent from
     # this dict, the same way `cron/` is deliberately absent elsewhere: it

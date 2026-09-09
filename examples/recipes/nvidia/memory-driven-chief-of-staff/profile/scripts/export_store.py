@@ -49,6 +49,7 @@ from datetime import date
 from pathlib import Path
 
 import skill_overrides
+import skill_override_bundle
 from _db import ensure_store, ledger_path
 
 TABLES = ("items", "obligations", "events", "cursors", "meta")
@@ -155,21 +156,13 @@ def as_markdown(data: dict[str, list[dict]],
     if not overrides:
         out.append("None.")
     else:
-        out.append("The text itself is under `skill-overrides/overrides/` in "
-                   "this export, but restoring it after a reset is not "
-                   "automatic: `skill_overrides.py` validates a "
-                   "`based_on_sha256` against retained shipped history "
-                   "this export deliberately does not include. A copied-"
-                   "back override applies cleanly if the shipped skill has "
-                   "not changed since it was forked, and is refused with "
-                   "`skipped-invalid` — never silently applied — once it "
-                   "has. To restore one after that: run `--fork <skill>` "
-                   "first to start a fresh override against whatever is "
-                   "shipped now, then copy the edited parts of this "
-                   "export's file into it by hand — copying this export's "
-                   "file directly into `workspace/skill-overrides/"
-                   "overrides/` before forking will make `--fork` refuse "
-                   "with `skipped-exists` instead.")
+        out.append("Readable copies are under `skill-overrides/overrides/`. "
+                   "The versioned `skill-overrides-recovery.json` also holds "
+                   "the retained bases, distribution approvals, manifest and "
+                   "operation history. Restore trusted bundles with "
+                   "`skill_overrides.py --restore <bundle>` into an empty "
+                   "override-state directory, then run `--check`. Restore "
+                   "does not overwrite live skills or restore the main ledger.")
     for report in sorted(overrides, key=lambda r: r.skill):
         state = "up to date with the shipped skill" if report.kind == "applied" \
             else ("stale — the shipped skill has changed since this was "
@@ -436,7 +429,9 @@ def export(destination: Path) -> dict[str, object]:
         # — not a status check and a separate filesystem copy as two
         # unlocked reads a concurrent apply/fork/remove could land
         # between, leaving the two disagree with each other.
-        snapshot = skill_overrides.snapshot_for_export(workspace.parent)
+        snapshot, recovery = skill_override_bundle.capture(workspace.parent)
+        _write_private(staging / "skill-overrides-recovery.json",
+                       json.dumps(recovery, indent=2, ensure_ascii=True))
         overrides = [report for report, _text in snapshot]
         _write_private(staging / "store.json",
                        json.dumps({**data, "skill_overrides":
@@ -454,14 +449,8 @@ def export(destination: Path) -> dict[str, object]:
         if _top_level_export_source_is_dir(policy_src):
             _copy_inside_workspace(policy_src, staging / "policy", workspace)
 
-        # The customization itself — the same text `--fork` produced —
-        # not the retained shipped-version history or the bookkeeping
-        # database that applies it. Losing an edit the user actually wrote
-        # to an export-then-reset cycle would be the one failure this
-        # command exists to avoid; the history and bookkeeping are this
-        # feature's own internal state, not something the user authored.
-        # Written directly from `snapshot`'s own locked read, not
-        # re-copied from disk afterward.
+        # Keep the readable override copies beside the complete recovery
+        # bundle. Both came from the same globally locked snapshot.
         for report, text in snapshot:
             if text is None:
                 continue

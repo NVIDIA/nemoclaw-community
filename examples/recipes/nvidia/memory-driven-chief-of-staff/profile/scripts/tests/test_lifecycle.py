@@ -31,6 +31,7 @@ import export_store  # noqa: E402
 import reset  # noqa: E402
 import retention  # noqa: E402
 import skill_overrides  # noqa: E402
+import skill_override_bundle  # noqa: E402
 from normalize import (  # noqa: E402
     graph_message_to_item, insert_items, slack_message_to_item)
 
@@ -45,6 +46,8 @@ def iso(days_ago: int) -> str:
 class StoreCase(unittest.TestCase):
     def setUp(self):
         self.home = tempfile.mkdtemp()
+        self.distribution = Path(tempfile.mkdtemp())
+        (self.distribution / "skills").mkdir()
         # `_db` refuses a directory that does not look like a profile home, so
         # a marker is what makes this a store rather than a guess at one.
         (Path(self.home) / "distribution.yaml").write_text("id: test\n",
@@ -60,6 +63,17 @@ class StoreCase(unittest.TestCase):
         for name in ("RETENTION_DAYS",):
             os.environ.pop(name, None)
         shutil.rmtree(self.home, ignore_errors=True)
+        shutil.rmtree(self.distribution, ignore_errors=True)
+
+    def register_shipped(self, name):
+        source = self.distribution / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes((Path(self.home) / "skills" / name / "SKILL.md").read_bytes())
+        skill_overrides.record_distribution(Path(self.home), self.distribution)
+
+    def fork_shipped(self, name):
+        self.register_shipped(name)
+        return skill_overrides.fork_skill(Path(self.home), name)
 
     def add(self, source_id, *, days_ago=0, body="hello", sender="Dana",
             scope="inbox", source="email"):
@@ -714,7 +728,7 @@ class TestExportShowsEverythingItHolds(StoreCase):
             "---\nname: inbound-judging\ndescription: shipped\n---\n\nbody\n",
             encoding="utf-8")
         self.assertEqual(
-            skill_overrides.fork_skill(Path(self.home), "inbound-judging").kind,
+            self.fork_shipped("inbound-judging").kind,
             "forked")
         override_path = (Path(self.home) / "workspace" / "skill-overrides"
                          / "overrides" / "inbound-judging" / "SKILL.md")
@@ -729,106 +743,52 @@ class TestExportShowsEverythingItHolds(StoreCase):
                    / "inbound-judging" / "SKILL.md")
         self.assertEqual(exported.read_text(encoding="utf-8"), override_text)
 
-    def test_an_exported_override_copies_back_cleanly_when_shipped_content_did_not_move(self):
-        """A reset does not touch `skills/` at all — only this
-        feature's own bookkeeping under `workspace/skill-overrides/`.
-        So if nothing shipped has changed since the override was
-        forked, `--apply`'s own observation step re-observes the still-
-        unchanged live file as a legitimate base on the very tick it
-        validates the copied-back override against it, and the two
-        happen to agree. A straight copy-back-and-apply is not
-        guaranteed to fail — only guaranteed to fail once the shipped
-        skill has genuinely moved on, proven separately below."""
-        skill_dir = Path(self.home) / "skills" / "inbound-judging"
-        skill_dir.mkdir(parents=True)
-        shipped_text = "---\nname: inbound-judging\ndescription: shipped\n---\n\nbody\n"
-        (skill_dir / "SKILL.md").write_text(shipped_text, encoding="utf-8")
-        skill_overrides.fork_skill(Path(self.home), "inbound-judging")
-        override_path = (Path(self.home) / "workspace" / "skill-overrides"
-                         / "overrides" / "inbound-judging" / "SKILL.md")
-        override_text = override_path.read_text(encoding="utf-8") + "\nEdited.\n"
-        override_path.write_text(override_text, encoding="utf-8")
+    def _export_applied_override(self):
+        name = "inbound-judging"
+        live = Path(self.home) / "skills" / name / "SKILL.md"
+        live.parent.mkdir(parents=True)
+        shipped = "---\nname: inbound-judging\ndescription: shipped\n---\n\nbody\n"
+        live.write_text(shipped, encoding="utf-8")
+        self.fork_shipped(name)
+        override = self.workspace / "skill-overrides" / "overrides" / name / "SKILL.md"
+        edited = override.read_text(encoding="utf-8") + "\nEdited.\n"
+        override.write_text(edited, encoding="utf-8")
         skill_overrides.apply_overrides(Path(self.home))
-
         destination = Path(self.home) / "out"
         export_store.export(destination)
-        exported_text = (destination / "skill-overrides" / "overrides"
-                         / "inbound-judging" / "SKILL.md").read_text(encoding="utf-8")
+        return live, shipped, edited, destination / "skill-overrides-recovery.json"
 
+    def test_export_reset_restore_preserves_the_base_manifest_and_history(self):
+        live, shipped, edited, bundle = self._export_applied_override()
+        before = json.loads(bundle.read_text())["tables"]
         self.assertEqual(reset.main(["--yes"]), 0)
-        self.assertEqual(
-            (skill_dir / "SKILL.md").read_text(encoding="utf-8"), shipped_text,
-            "reset must have actually restored the shipped version")
+        self.assertEqual(live.read_text(), shipped)
+        skill_override_bundle.restore_bundle(Path(self.home), bundle)
+        self.assertEqual(live.read_text(), shipped, "restore does not write live skills")
+        with sqlite3.connect(self.workspace / "skill-overrides" / "state.db") as conn:
+            conn.row_factory = sqlite3.Row
+            for table, rows in before.items():
+                self.assertEqual([dict(row) for row in conn.execute(f"SELECT * FROM {table} ORDER BY rowid")], rows)
+        self.assertEqual([r.kind for r in skill_overrides.apply_overrides(Path(self.home))], ["applied"])
+        self.assertEqual(live.read_text(), edited)
+        self.assertEqual(skill_overrides.remove_override(Path(self.home), "inbound-judging").kind, "removed")
+        self.assertEqual(live.read_text(), shipped)
 
-        override_path.parent.mkdir(parents=True, exist_ok=True)
-        override_path.write_text(exported_text, encoding="utf-8")
-        reports = skill_overrides.apply_overrides(Path(self.home))
-        self.assertEqual([r.kind for r in reports], ["applied"])
-        self.assertEqual(
-            (skill_dir / "SKILL.md").read_text(encoding="utf-8"), exported_text)
-
-    def test_an_exported_override_needs_a_fresh_fork_once_the_shipped_skill_has_moved_on(self):
-        """The case the documented limitation is actually about: the
-        shipped skill changes between export and restore (a real
-        `hermes profile update`, simulated here the same way — writing
-        straight to `skills/`, never through this module). `--apply`'s
-        observation step now records the *new* shipped content as the
-        latest base, so the exported override's `based_on_sha256` —
-        still pointing at the old one — was never observed on this
-        profile and fails validation outright, never silently applying.
-        Forking fresh against the new base, then copying the user's own
-        edit into that fresh override, is the documented way back, and
-        it must actually work."""
-        skill_dir = Path(self.home) / "skills" / "inbound-judging"
-        skill_dir.mkdir(parents=True)
-        shipped_text = "---\nname: inbound-judging\ndescription: shipped\n---\n\nbody\n"
-        (skill_dir / "SKILL.md").write_text(shipped_text, encoding="utf-8")
-        skill_overrides.fork_skill(Path(self.home), "inbound-judging")
-        override_path = (Path(self.home) / "workspace" / "skill-overrides"
-                         / "overrides" / "inbound-judging" / "SKILL.md")
-        override_text = override_path.read_text(encoding="utf-8") + "\nEdited.\n"
-        override_path.write_text(override_text, encoding="utf-8")
-        skill_overrides.apply_overrides(Path(self.home))
-
-        destination = Path(self.home) / "out"
-        export_store.export(destination)
-        exported_text = (destination / "skill-overrides" / "overrides"
-                         / "inbound-judging" / "SKILL.md").read_text(encoding="utf-8")
-
+    def test_restoring_against_a_newer_install_keeps_the_override_blocked(self):
+        live, shipped, edited, bundle = self._export_applied_override()
         self.assertEqual(reset.main(["--yes"]), 0)
-
-        # The shipped skill moved on after the reset — a real update,
-        # not this module's own doing.
-        newer_shipped_text = ("---\nname: inbound-judging\n"
-                              "description: a newer shipped skill\n---\n\nbody\n")
-        (skill_dir / "SKILL.md").write_text(newer_shipped_text, encoding="utf-8")
-
-        # Copying the exported file straight back in and applying it
-        # must fail: its based_on_sha256 points at the old shipped
-        # content, which this freshly reset profile never observed —
-        # only the new one, on this very tick.
-        override_path.parent.mkdir(parents=True, exist_ok=True)
-        override_path.write_text(exported_text, encoding="utf-8")
-        reports = skill_overrides.apply_overrides(Path(self.home))
-        self.assertEqual([r.kind for r in reports], ["skipped-invalid"])
-        self.assertEqual(
-            (skill_dir / "SKILL.md").read_text(encoding="utf-8"), newer_shipped_text,
-            "an override that fails validation must never overwrite "
-            "the live file")
-        override_path.unlink()
-
-        # The documented way back: fork fresh (against the new base),
-        # then copy the user's own edit into the new override.
-        self.assertEqual(
-            skill_overrides.fork_skill(Path(self.home), "inbound-judging").kind,
-            "forked")
-        restored_override_text = override_path.read_text(encoding="utf-8") + "\nEdited.\n"
-        override_path.write_text(restored_override_text, encoding="utf-8")
-        reports = skill_overrides.apply_overrides(Path(self.home))
-        self.assertEqual([r.kind for r in reports], ["applied"])
-        self.assertEqual(
-            (skill_dir / "SKILL.md").read_text(encoding="utf-8"),
-            restored_override_text)
+        newer = shipped.replace("description: shipped", "description: newer")
+        live.write_text(newer, encoding="utf-8")
+        skill_override_bundle.restore_bundle(Path(self.home), bundle)
+        self.assertEqual([r.kind for r in skill_overrides.apply_overrides(Path(self.home))], ["blocked"])
+        self.assertEqual(live.read_text(), newer)
+        self.register_shipped("inbound-judging")
+        self.assertEqual([r.kind for r in skill_overrides.apply_overrides(Path(self.home))], ["skipped-stale"])
+        self.assertEqual(live.read_text(), newer)
+        # The old relationship remains recoverable; removal uses the newly
+        # accepted version, without having to manufacture a fresh fork.
+        self.assertEqual(skill_overrides.remove_override(Path(self.home), "inbound-judging").kind, "removed")
+        self.assertEqual(live.read_text(), newer)
 
     def test_an_invalid_utf8_override_is_preserved_byte_for_byte(self):
         """Losing the user's own bytes because they are hard to validate
@@ -840,7 +800,7 @@ class TestExportShowsEverythingItHolds(StoreCase):
         (skill_dir / "SKILL.md").write_text(
             "---\nname: inbound-judging\ndescription: shipped\n---\n\nbody\n",
             encoding="utf-8")
-        skill_overrides.fork_skill(Path(self.home), "inbound-judging")
+        self.fork_shipped("inbound-judging")
         override_path = (Path(self.home) / "workspace" / "skill-overrides"
                          / "overrides" / "inbound-judging" / "SKILL.md")
         malformed = override_path.read_bytes() + b"\nBroken: \xff\xfe not utf-8\n"
@@ -869,7 +829,7 @@ class TestExportShowsEverythingItHolds(StoreCase):
         (skill_dir / "SKILL.md").write_text(
             "---\nname: inbound-judging\ndescription: shipped\n---\n\nbody\n",
             encoding="utf-8")
-        skill_overrides.fork_skill(Path(self.home), "inbound-judging")
+        self.fork_shipped("inbound-judging")
         override_path = (Path(self.home) / "workspace" / "skill-overrides"
                          / "overrides" / "inbound-judging" / "SKILL.md")
 
@@ -965,7 +925,7 @@ class TestExportShowsEverythingItHolds(StoreCase):
         (skill_dir / "SKILL.md").write_text(
             "---\nname: inbound-judging\ndescription: shipped\n---\n\nbody\n",
             encoding="utf-8")
-        skill_overrides.fork_skill(Path(self.home), "inbound-judging")
+        self.fork_shipped("inbound-judging")
 
         destination = Path(self.home) / "out"
         real_replace = export_store.os.replace
@@ -1156,7 +1116,7 @@ class TestResetLeavesNothingBehind(StoreCase):
         shipped_text = ("---\nname: inbound-judging\ndescription: shipped\n"
                         "---\n\nbody\n")
         (skill_dir / "SKILL.md").write_text(shipped_text, encoding="utf-8")
-        skill_overrides.fork_skill(Path(self.home), "inbound-judging")
+        self.fork_shipped("inbound-judging")
         override_path = (Path(self.home) / "workspace" / "skill-overrides"
                          / "overrides" / "inbound-judging" / "SKILL.md")
         override_text = override_path.read_text(encoding="utf-8") + "\nCustomized.\n"
@@ -1188,7 +1148,7 @@ class TestResetLeavesNothingBehind(StoreCase):
         shipped_text = ("---\nname: inbound-judging\ndescription: shipped\n"
                         "---\n\nbody\n")
         (skill_dir / "SKILL.md").write_text(shipped_text, encoding="utf-8")
-        skill_overrides.fork_skill(Path(self.home), "inbound-judging")
+        self.fork_shipped("inbound-judging")
         override_path = (Path(self.home) / "workspace" / "skill-overrides"
                          / "overrides" / "inbound-judging" / "SKILL.md")
         override_text = override_path.read_text(encoding="utf-8") + "\nCustomized.\n"
@@ -1225,7 +1185,7 @@ class TestResetLeavesNothingBehind(StoreCase):
                         "---\n\nbody\n")
         live_path = skill_dir / "SKILL.md"
         live_path.write_text(shipped_text, encoding="utf-8")
-        skill_overrides.fork_skill(Path(self.home), "inbound-judging")
+        self.fork_shipped("inbound-judging")
         override_path = (Path(self.home) / "workspace" / "skill-overrides"
                          / "overrides" / "inbound-judging" / "SKILL.md")
         override_text = override_path.read_text(encoding="utf-8") + "\nCustomized.\n"
@@ -1273,7 +1233,7 @@ class TestResetLeavesNothingBehind(StoreCase):
                         "---\n\nbody\n")
         live_path = skill_dir / "SKILL.md"
         live_path.write_text(shipped_text, encoding="utf-8")
-        skill_overrides.fork_skill(Path(self.home), "inbound-judging")
+        self.fork_shipped("inbound-judging")
         override_path = (Path(self.home) / "workspace" / "skill-overrides"
                          / "overrides" / "inbound-judging" / "SKILL.md")
         override_text = override_path.read_text(encoding="utf-8") + "\nCustomized.\n"
@@ -1340,7 +1300,7 @@ class TestResetLeavesNothingBehind(StoreCase):
                         "---\n\nbody\n")
         live_path = skill_dir / "SKILL.md"
         live_path.write_text(shipped_text, encoding="utf-8")
-        skill_overrides.fork_skill(Path(self.home), "inbound-judging")
+        self.fork_shipped("inbound-judging")
         override_path = (Path(self.home) / "workspace" / "skill-overrides"
                          / "overrides" / "inbound-judging" / "SKILL.md")
         override_text = override_path.read_text(encoding="utf-8") + "\nO.\n"
@@ -1393,7 +1353,7 @@ class TestResetLeavesNothingBehind(StoreCase):
         (skill_a_dir / "SKILL.md").write_text(
             "---\nname: inbound-judging\ndescription: shipped\n---\n\nbody\n",
             encoding="utf-8")
-        skill_overrides.fork_skill(Path(self.home), "inbound-judging")
+        self.fork_shipped("inbound-judging")
         override_a = (Path(self.home) / "workspace" / "skill-overrides"
                       / "overrides" / "inbound-judging" / "SKILL.md")
         override_a_text = override_a.read_text(encoding="utf-8") + "\nA.\n"
@@ -1404,7 +1364,7 @@ class TestResetLeavesNothingBehind(StoreCase):
         (skill_b_dir / "SKILL.md").write_text(
             "---\nname: memory-writing\ndescription: shipped\n---\n\nbody\n",
             encoding="utf-8")
-        skill_overrides.fork_skill(Path(self.home), "memory-writing")
+        self.fork_shipped("memory-writing")
         override_b = (Path(self.home) / "workspace" / "skill-overrides"
                       / "overrides" / "memory-writing" / "SKILL.md")
         override_b_text = override_b.read_text(encoding="utf-8") + "\nB.\n"
@@ -1483,7 +1443,7 @@ class TestResetLeavesNothingBehind(StoreCase):
         (skill_dir / "SKILL.md").write_text(
             "---\nname: inbound-judging\ndescription: shipped\n---\n\nbody\n",
             encoding="utf-8")
-        skill_overrides.fork_skill(Path(self.home), "inbound-judging")
+        self.fork_shipped("inbound-judging")
 
         import fcntl
         lock_path = (Path(self.home) / "workspace" / "skill-overrides"
@@ -1517,7 +1477,7 @@ class TestResetLeavesNothingBehind(StoreCase):
             encoding="utf-8")
         # A real directory to rmtree, and released back so reset's own
         # restoration step has nothing left to do.
-        skill_overrides.fork_skill(Path(self.home), "inbound-judging")
+        self.fork_shipped("inbound-judging")
         skill_overrides.remove_override(Path(self.home), "inbound-judging")
 
         entered = threading.Event()
@@ -1546,7 +1506,7 @@ class TestResetLeavesNothingBehind(StoreCase):
         forked_while_blocked = threading.Event()
 
         def do_fork():
-            skill_overrides.fork_skill(Path(self.home), "inbound-judging")
+            self.fork_shipped("inbound-judging")
             forked_while_blocked.set()
 
         # By this point reset is parked inside `slow_rmtree`'s
