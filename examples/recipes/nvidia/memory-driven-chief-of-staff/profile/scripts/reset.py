@@ -185,11 +185,12 @@ def remove() -> tuple[dict[str, object] | None, list[str], list[str]]:
     turns it into a clean failure message rather than deleting anything
     while unsure what succeeded.
 
-    If any restoration did not actually succeed — a missing retained
-    base, anything short of `removed` — nothing at all is deleted.
-    Reporting a complete reset while one skill's words stayed live
-    because its own restoration quietly failed would be exactly the
-    silent partial reset this whole command exists to refuse.
+    If a live file still contains this feature's recorded write, it must be
+    restored successfully before anything is deleted. Content that another
+    writer already replaced is preserved and does not need restoration. A
+    missing retained base or genuinely diverged operation still blocks all
+    deletion. Reporting a complete reset while this feature's own words stayed
+    live would be exactly the silent partial reset this command must refuse.
     """
     with skill_overrides.exclusive_lock_for_reset(_profile_root()):
         restore_reports = skill_overrides.restore_all_for_reset_locked(_profile_root())
@@ -197,12 +198,14 @@ def remove() -> tuple[dict[str, object] | None, list[str], list[str]]:
         # customized at all — "skipped-no-override" there means exactly
         # that, not a failure, and reporting it for every plain shipped
         # skill on every reset would bury the one line that matters. Only
-        # a skill that actually had something to restore and did not
-        # successfully restore counts here.
+        # a skill that actually had state to account for and could neither
+        # restore its own write nor safely preserve another writer's content
+        # counts here.
         restored = [f"{report.skill}: {report.kind}" for report in restore_reports
                    if report.kind != "skipped-no-override"]
         unrestored = [f"{report.skill}: {report.detail}" for report in restore_reports
-                     if report.kind not in ("removed", "skipped-no-override")]
+                     if report.kind not in (
+                         "removed", "preserved-live", "skipped-no-override")]
         if unrestored:
             return None, unrestored, restored
 

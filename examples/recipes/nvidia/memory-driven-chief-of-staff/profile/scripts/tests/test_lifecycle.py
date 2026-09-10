@@ -1136,6 +1136,36 @@ class TestResetLeavesNothingBehind(StoreCase):
             "reset must restore the live skill to shipped content, not just "
             "delete the bookkeeping that tracked the customization")
 
+    def test_reset_preserves_an_unregistered_update_and_removes_tracked_data(self):
+        """A bare profile update can replace an applied override before its
+        source is registered. The new live bytes are not this feature's write,
+        so reset must preserve them without making source registration a
+        prerequisite for deleting the user's tracked recipe data."""
+        self.populate()
+        skill_dir = Path(self.home) / "skills" / "inbound-judging"
+        skill_dir.mkdir(parents=True)
+        shipped_text = ("---\nname: inbound-judging\ndescription: shipped\n"
+                        "---\n\nbody\n")
+        live_path = skill_dir / "SKILL.md"
+        live_path.write_text(shipped_text, encoding="utf-8")
+        self.fork_shipped("inbound-judging")
+        override_path = (self.workspace / "skill-overrides" / "overrides"
+                         / "inbound-judging" / "SKILL.md")
+        override_path.write_text(
+            override_path.read_text(encoding="utf-8") + "\nCustomized.\n",
+            encoding="utf-8")
+        skill_overrides.apply_overrides(Path(self.home))
+
+        updated_text = ("---\nname: inbound-judging\n"
+                        "description: unregistered profile update\n---\n\n"
+                        "new shipped body\n")
+        live_path.write_text(updated_text, encoding="utf-8")
+
+        self.assertEqual(reset.main(["--yes"]), 0)
+        self.assertEqual(live_path.read_text(encoding="utf-8"), updated_text)
+        self.assertFalse(self.db.exists())
+        self.assertFalse((self.workspace / "skill-overrides").exists())
+
     def test_reset_still_restores_a_hand_deleted_override_after_a_scheduled_apply_tick(self):
         """The regression this reproduces: a stale applied_overrides row
         used to be cleared unconditionally the moment the override file

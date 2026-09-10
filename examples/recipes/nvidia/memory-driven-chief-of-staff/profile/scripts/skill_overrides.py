@@ -432,6 +432,38 @@ def _pending_operation_verdict(conn: sqlite3.Connection, skill_name: str,
     return None
 
 
+def _pending_operation_check_report(conn: sqlite3.Connection,
+                                    skill_name: str,
+                                    live_hash: str) -> Report | None:
+    """Describe unresolved journal state without reconciling or hiding it.
+
+    The mutating commands reconcile pending rows before they continue. A
+    read-only check cannot do that, but it must still report the row: otherwise
+    it can claim an override is ready while the corresponding apply would stop
+    on a pending remove, or while an interrupted write still needs recovery.
+    """
+    pending = _pending_operation_row(conn, skill_name)
+    if pending is None:
+        return None
+    op_type, before_hash, after_hash = pending
+    if live_hash not in (before_hash, after_hash):
+        return Report(
+            "blocked", skill_name,
+            f"a previous {op_type} operation is still pending, and live "
+            "content matches neither its expected starting point nor its "
+            "intended result; resolve it by hand before this skill is "
+            "touched again automatically")
+    state = ("its intended write has landed but its bookkeeping is incomplete"
+             if live_hash == after_hash else
+             "its intended write has not landed")
+    retry = "--apply" if op_type == "apply" else f"--remove {skill_name}"
+    return Report(
+        "blocked", skill_name,
+        f"a previous {op_type} operation is still pending and {state}; "
+        f"--check cannot reconcile it because --check writes nothing — run "
+        f"{retry} to finish the operation")
+
+
 def _claim_operation(conn: sqlite3.Connection, skill_name: str, op_type: str,
                      before_hash: str, after_hash: str) -> tuple[int | None, str | None]:
     """Durably record the write this skill is about to make, before making
@@ -842,17 +874,20 @@ def _list_overridden_skill_names(root: Path) -> list[str]:
 def _check_one_skill(root: Path, skill_name: str) -> Report | None:
     """Report accepted-base and live-content checks without writing state."""
     override_file = _safe_child(_overrides_dir(root), skill_name, "SKILL.md")
-    if not _regular_file_exists(override_file):
-        return None
+    has_override_file = _regular_file_exists(override_file)
     live_file = _safe_child(_skills_dir(root), skill_name, "SKILL.md")
-    if not live_file.is_file():
-        return Report("orphaned-override", skill_name,
-                      "the installed skill file is missing; inspect the accepted "
-                      "distribution before restoring or retiring its override")
-    override_text = override_file.read_text(encoding="utf-8")
+    live_text = (live_file.read_text(encoding="utf-8")
+                 if live_file.is_file() else None)
 
     db_path = _db_path(root)
     if not db_path.is_file():
+        if not has_override_file:
+            return None
+        if live_text is None:
+            return Report(
+                "orphaned-override", skill_name,
+                "the installed skill file is missing; inspect the accepted "
+                "distribution before restoring or retiring its override")
         return Report("skipped-invalid", skill_name,
                       "no retained history exists for this skill yet "
                       "(nothing has been accepted); run --record-distribution "
@@ -867,14 +902,28 @@ def _check_one_skill(root: Path, skill_name: str) -> Report | None:
     # avoid, so `resolve()` comes first.
     conn = sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)
     try:
+        live_hash = _sha256(live_text) if live_text is not None else ""
+        pending_report = _pending_operation_check_report(
+            conn, skill_name, live_hash)
+        if pending_report is not None:
+            return pending_report
+        if not has_override_file:
+            return None
+        if live_text is None:
+            return Report(
+                "orphaned-override", skill_name,
+                "the installed skill file is missing; inspect the accepted "
+                "distribution before restoring or retiring its override")
+
+        override_text = override_file.read_text(encoding="utf-8")
+
         reason = _validate_override_text(conn, root, skill_name, override_text)
         if reason:
             return Report("skipped-invalid", skill_name, reason)
         fm = _frontmatter(override_text)
         based_on = fm["based_on_sha256"]
 
-        live_hash = _sha256(live_file.read_text(encoding="utf-8"))
-        _observe_if_new(conn, root, skill_name, live_file.read_text(encoding="utf-8"))
+        _observe_if_new(conn, root, skill_name, live_text)
         baseline = _latest_base(conn, skill_name)
 
         if baseline is not None and based_on != baseline:
@@ -884,8 +933,11 @@ def _check_one_skill(root: Path, skill_name: str) -> Report | None:
                 f"(recorded {based_on[:12]}, latest known is "
                 f"{baseline[:12]}); --apply will refuse it until you "
                 "export the edit, then --remove and --fork to rebase it")
-        return Report("applied", skill_name,
-                      "matches the shipped version it was forked from")
+        if live_hash == _sha256(override_text):
+            detail = "override is already live and matches its accepted base"
+        else:
+            detail = "override is ready to apply against its accepted base"
+        return Report("applied", skill_name, detail)
     except UnverifiedBase as exc:
         return Report("blocked", skill_name, str(exc))
     finally:
@@ -896,9 +948,16 @@ def check_overrides(root: Path) -> list[Report]:
     """Read-only: report what applying would do, write nothing — not even
     a new base observation, not even this feature's own journal, and not
     even its own bookkeeping database file when nothing has ever used it."""
-    names = sorted(set(_list_skill_names(root))
-                   | set(_list_overridden_skill_names(root)))
     reports: list[Report] = []
+    try:
+        pending_names = _list_pending_operation_skill_names(root)
+    except Exception as exc:
+        pending_names = []
+        reports.append(Report(
+            "error", "pending operations", f"{type(exc).__name__}: {exc}"))
+    names = sorted(set(_list_skill_names(root))
+                   | set(_list_overridden_skill_names(root))
+                   | set(pending_names))
     for name in names:
         try:
             report = _check_one_skill(root, name)
@@ -1825,11 +1884,12 @@ def _list_pending_operation_skill_names(root: Path) -> list[str]:
 
 
 def _restore_live_file_only(root: Path, skill_name: str) -> Report:
-    """Restore only the live file from an accepted base during reset.
+    """Restore this feature's live write from an accepted base during reset.
 
-    Leave overrides, manifests and history intact until the caller completes
-    every restoration and deletes the state tree under the global lock.
-    A failure can leave an earlier live skill restored, but deletes no edits.
+    Preserve live content that another writer already installed. Leave
+    overrides, manifests and history intact until the caller accounts for
+    every skill and deletes the state tree under the global lock. A failure can
+    leave an earlier live skill restored, but deletes no edits.
     """
     override_path = _safe_child(_overrides_dir(root), skill_name, "SKILL.md")
     live_file = _safe_child(_skills_dir(root), skill_name, "SKILL.md")
@@ -1884,6 +1944,21 @@ def _restore_live_file_only(root: Path, skill_name: str) -> Report:
                 return Report("skipped-no-override", skill_name,
                               "this skill has no override and no applied "
                               "record; nothing to restore")
+
+        if (live_text is not None
+                and not _is_own_write(
+                    conn, skill_name, _sha256(live_text))):
+            # Another writer has already replaced the applied override. Reset
+            # does not need an accepted base to preserve bytes this feature
+            # did not write, and refusing here would also prevent deletion of
+            # the ledger, memory, and the override state itself after an
+            # otherwise ordinary bare profile update. A genuinely diverged
+            # pending operation was already rejected above, before this safe
+            # cancellation path.
+            return Report(
+                "preserved-live", skill_name,
+                "live content is not this feature's recorded write; left it "
+                "unchanged while reset removes the tracked override state")
 
         if live_text is not None:
             conn.execute("BEGIN IMMEDIATE")

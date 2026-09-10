@@ -130,10 +130,9 @@ register "retention" "0 2 * * *" "" retention.py \
 gates the agent off, so this prompt is never reached. It exists because the
 scheduler requires one."
 
-# Self-healing against `hermes profile update`, the platform-native update
-# path that never runs install.sh: every tick re-applies any override still
-# recorded on top of whatever is currently shipped, so a customization
-# survives an update no matter which path the user took to run it.
+# Re-apply overrides after an accepted profile update. A bare `hermes profile
+# update` does not run install.sh, so the operator must register its reviewed
+# distribution source before this hourly tick can apply the override again.
 register "skill overrides" "15 * * * *" "" skill_overrides.py \
   "The skill-overrides pre-step applies every valid override and gates the
 agent off, so this prompt is never reached. It exists because the scheduler

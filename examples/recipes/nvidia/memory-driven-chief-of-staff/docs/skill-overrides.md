@@ -62,10 +62,12 @@ python3 profile/scripts/skill_overrides.py --check
 python3 profile/scripts/skill_overrides.py --apply
 ```
 
-`--check` writes nothing. The installer and hourly job run `--apply`;
-a successful apply makes the customization effective for subsequent skill
-loads. Every command prints findings and `{"wakeAgent": false}`. None uses
-a model call.
+`--check` writes nothing. It reports `blocked` if an interrupted apply or remove
+operation is still pending, including when the file write already landed. Run
+the named mutating command to reconcile and finish that operation. The installer
+and hourly job run `--apply`; a successful apply makes the customization
+effective for subsequent skill loads. Every command prints findings and
+`{"wakeAgent": false}`. None uses a model call.
 
 ## Rebase after a shipped change
 
@@ -93,6 +95,7 @@ Argument errors return 2. Other skills continue when one skill is blocked.
 | `distribution-recorded` | 0 | Accepted a base from the selected source. |
 | `restored` | 0 | Restored override state without writing live skills. |
 | `forked` / `applied` / `removed` | 0 | Completed the requested operation. |
+| `preserved-live` | 0 | Reset left content not written by the override feature unchanged and removed its tracked state. |
 | `skipped-exists` / `skipped-no-override` | 0 | Nothing to create or remove. |
 | `reconciled-complete` / `reconciled-retry` / `reconciled-abandoned` | 0 | Recorded the outcome of an interrupted operation. |
 | `blocked` | 1 | Unknown distribution/live content, or an unresolved operation. |
@@ -154,9 +157,12 @@ state. Retrying restore then refuses to replace it; use `--check` instead.
 `--remove <skill>` restores the latest accepted base and removes that
 customization. Unknown live content or a missing base blocks it.
 `reset.py --yes` first restores active customizations and then removes all
-recipe data. A restoration failure prevents that deletion and preserves the
-overrides and history for investigation. An earlier skill in that same reset
-may already have its live base restored.
+tracked recipe data. If another writer already replaced an applied override and
+no pending operation is diverged, reset leaves that live content unchanged and
+removes the tracked override state. A genuinely diverged pending operation or a
+missing base for an override that is still live prevents deletion and preserves
+the overrides and history for investigation. An earlier skill in that same
+reset may already have its live base restored.
 
 ## Relationship to skill evolution (#159)
 

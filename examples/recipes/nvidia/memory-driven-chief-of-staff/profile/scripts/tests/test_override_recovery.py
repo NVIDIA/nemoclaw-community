@@ -40,8 +40,12 @@ class TestDistributionAuthority(OverridesCase):
         self.assertEqual(self.db_path().read_bytes(), original_db)
         with so.exclusive_lock_for_reset(self.home):
             reports = so.restore_all_for_reset_locked(self.home)
-        self.assertTrue(any(r.kind in so.PROBLEM_KINDS for r in reports))
+        self.assertEqual([r.kind for r in reports], ["preserved-live"])
         self.assertEqual(live.read_text(), unknown)
+        self.assertEqual(
+            self.db_path().read_bytes(), original_db,
+            "reset preparation must not promote preserved live bytes into "
+            "accepted history")
 
     def test_bare_update_requires_registration_then_refuses_the_stale_override(self):
         self.ship("inbound-judging")

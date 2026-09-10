@@ -291,13 +291,75 @@ class TestApply(OverridesCase):
                 "(skill_name, op_type, status, expected_before_hash, expected_after_hash)"
                 " VALUES ('inbound-judging', 'apply', 'pending', 'x', 'y')")
 
-        so.check_overrides(self.home)
+        reports = so.check_overrides(self.home)
+
+        self.assertEqual([r.kind for r in reports], ["blocked"])
 
         with sqlite3.connect(self.db_path()) as conn:
             status = conn.execute(
                 "SELECT status FROM override_operations WHERE expected_before_hash='x'"
             ).fetchone()[0]
         self.assertEqual(status, "pending", "--check must never run reconcile")
+
+    def test_check_blocks_on_a_pending_remove_that_apply_would_refuse(self):
+        live_path = self.ship("inbound-judging")
+        shipped_text = live_path.read_text(encoding="utf-8")
+        so.fork_skill(self.home, "inbound-judging")
+        override_text = (self.override_path("inbound-judging")
+                         .read_text(encoding="utf-8") + "\nCustomized.\n")
+        self.write_override("inbound-judging", override_text)
+        so.apply_overrides(self.home)
+
+        with sqlite3.connect(self.db_path()) as conn:
+            latest = conn.execute(
+                "SELECT content_hash FROM base_observations"
+                " WHERE skill_name = ? ORDER BY observation_id DESC LIMIT 1",
+                ("inbound-judging",)).fetchone()[0]
+            conn.execute(
+                "INSERT INTO override_operations"
+                "(skill_name, op_type, status, expected_before_hash,"
+                " expected_after_hash) VALUES (?, 'remove', 'pending', ?, ?)",
+                ("inbound-judging", so._sha256(override_text), latest))
+
+        reports = so.check_overrides(self.home)
+
+        self.assertEqual([r.kind for r in reports], ["blocked"])
+        self.assertIn("previous remove operation", reports[0].detail)
+        self.write_override("inbound-judging", "invalid override\n")
+        self.assertEqual(
+            [r.kind for r in so.check_overrides(self.home)], ["blocked"],
+            "a malformed override must not hide the operation that must be "
+            "reconciled before it")
+        self.write_override("inbound-judging", override_text)
+        self.assertEqual(so.main(["--check"]), 1)
+        self.assertEqual(live_path.read_text(encoding="utf-8"), override_text)
+
+        # The other recoverable crash point: the remove's file write landed,
+        # but its database completion and override-file deletion did not.
+        live_path.write_text(shipped_text, encoding="utf-8")
+        landed_reports = so.check_overrides(self.home)
+        self.assertEqual([r.kind for r in landed_reports], ["blocked"])
+        self.assertIn("bookkeeping is incomplete", landed_reports[0].detail)
+        self.assertEqual(live_path.read_text(encoding="utf-8"), shipped_text)
+
+        # Remove both filesystem entries that could otherwise enumerate this
+        # skill. The pending-operation table must be a check source in its own
+        # right, just as it is for reset recovery.
+        self.override_path("inbound-judging").unlink()
+        self.override_path("inbound-judging").parent.rmdir()
+        real_list_skill_names = so._list_skill_names
+        so._list_skill_names = lambda root: []
+        try:
+            pending_only_reports = so.check_overrides(self.home)
+        finally:
+            so._list_skill_names = real_list_skill_names
+        self.assertEqual(
+            [r.kind for r in pending_only_reports], ["blocked"])
+        with sqlite3.connect(self.db_path()) as conn:
+            self.assertEqual(conn.execute(
+                "SELECT status FROM override_operations"
+                " WHERE op_type = 'remove' ORDER BY id DESC LIMIT 1"
+            ).fetchone()[0], "pending")
 
     def test_skills_with_no_override_are_left_alone(self):
         self.ship("inbound-judging")

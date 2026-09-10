@@ -311,10 +311,11 @@ now that the gateway should actually be up.
 job. If it still reports not running, check `/tmp/mdcos-gateway.log` for a
 startup error.
 
-The seven registered jobs drive distinct Hermes skills — intake runs
+The eight registered jobs drive six distinct Hermes skills — intake runs
 `inbound-judging`, review runs `obligation-review`, and there are separate
 `memory-writing`, `memory-repair`, `memory-consolidation`, and
-`preference-update` skills; retention runs no skill at all. See
+`preference-update` skills; retention and skill overrides run pre-steps without
+a skill. See
 [Scheduled Operation](#scheduled-operation) for the full schedule and
 job-to-skill table.
 
@@ -1351,7 +1352,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the sixteen files report 731 tests
+Expected result: every file ends with `OK`, the sixteen files report 733 tests
 in total, and the final line is `failed=0`. Do not shorten the loop with an
 early break; running every module is part of the documented check.
 
