@@ -32,6 +32,7 @@ Reusable NemoClaw agent workflows contributed by partner organizations, with att
 
 | Example | Contributor | Industry | Description |
 | --- | --- | --- | --- |
+| [Blackwall Preflight Guardrail](recipes/partners/bluetier/blackwall-guard/README.md) | BlueTier Operations | ✨ Other | Screens every OpenClaw tool call through an external Blackwall pre-action risk forecast, GO, CAUTION, or STOP, as defense-in-depth, with proxy-injected credentials and metadata-only forecasts by default. |
 | [x402 Payment Gate](recipes/partners/bluetier/x402-payment-gate/README.md) | BlueTier Operations | 💳 Financial Services | Demonstrates a maker-checker gate for x402 payments: a sandboxed agent submits intents, while a host-side Blackwall verdict controls mock signing and settlement before any signature exists. |
 | [Retail Assistant](recipes/partners/hpe/retail-assistant/README.md) | HPE | 🛍️ Retail/Consumer Packaged Goods | Helps store employees check inventory and sales or request transfers and reorders through role-aware Telegram conversations scoped to their assigned store. |
 | [Shrike Security Action Governance](recipes/partners/shrike/shrike-security/README.md) | Shrike Security, Inc. | ✨ Other | Adds defense-in-depth action governance through an in-sandbox hook that checks each OpenClaw tool call against server-side Shrike policy and blocks prohibited or approval-required calls. |

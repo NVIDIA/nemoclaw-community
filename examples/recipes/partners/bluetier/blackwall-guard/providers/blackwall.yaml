@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 BlueTier Operations LLC
+# SPDX-License-Identifier: Apache-2.0
+
+# OpenShell provider profile for BLACK_WALL egress with credential injection at
+# the L7 proxy. The sandbox never holds the real API key: its BLACKWALL_API_KEY
+# env carries only an OpenShell placeholder, and the proxy substitutes the real
+# value into the Authorization header on egress to blackwalltier.com. A leaked or
+# prompt-injected agent inside the sandbox therefore cannot read the credential.
+id: nemoclaw-blackwall
+display_name: NemoClaw BLACK_WALL
+description: Pre-signature payment-risk forecast egress to blackwalltier.com; the L7 proxy injects the API key at egress so it never enters the sandbox.
+# Valid categories: other, inference, agent, source_control, messaging, data, knowledge.
+# A pre-action risk oracle has no dedicated category; `other` is the honest fit.
+category: other
+credentials:
+  - name: api_key
+    description: >-
+      BLACK_WALL API key. The sandbox env sets BLACKWALL_API_KEY to an OpenShell
+      placeholder; the L7 proxy injects the real value as the Authorization bearer
+      header at egress. The real key lives host-side, never inside the sandbox.
+    env_vars: [BLACKWALL_API_KEY]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+endpoints:
+  - host: blackwalltier.com
+    port: 443
+    protocol: rest
+    enforcement: enforce
+    # Scope egress to exactly the two endpoints the plugin calls: forecast()
+    # (POST /api/v1/forecast) and observe() (POST /api/v1/forecast/<id>/outcome).
+    rules:
+      - allow:
+          method: POST
+          path: /api/v1/forecast
+      - allow:
+          method: POST
+          path: /api/v1/forecast/**
+binaries:
+  - /usr/local/bin/openclaw
+  - /usr/local/bin/node
+  - /usr/bin/curl

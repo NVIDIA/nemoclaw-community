@@ -1,0 +1,50 @@
+{
+  "id": "nemoclaw-blackwall-guard",
+  "name": "BLACK_WALL Preflight Guardrail",
+  "description": "Pre-action risk check for OpenClaw tool calls. Hooks before_tool_call to call BLACK_WALL forecast(); in enforce mode, blocks STOP verdicts and (by default) blocks CAUTION verdicts with the named red flags, since this runtime has no interactive approval surface. Receipts are Ed25519-signed and verifiable offline.",
+  "version": "0.2.0",
+  "enabledByDefault": false,
+  "activation": {
+    "onStartup": true,
+    "onCapabilities": ["hook"]
+  },
+  "skills": ["./skills"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "type": "string",
+        "description": "BLACK_WALL API key (bw_live_… / bw_test_…). Prefer the BLACKWALL_API_KEY env var over config."
+      },
+      "baseUrl": {
+        "type": "string",
+        "description": "BLACK_WALL API base URL. Defaults to https://blackwalltier.com."
+      },
+      "mode": {
+        "type": "string",
+        "enum": ["observe", "enforce"],
+        "description": "observe = log verdicts but never block; enforce = block STOP, gate CAUTION. Defaults to observe."
+      },
+      "cautionAction": {
+        "type": "string",
+        "enum": ["approve", "block", "allow"],
+        "description": "What a CAUTION verdict does in enforce mode. This runtime has no interactive approval surface, so: approve = block and surface the verdict + named red flags (so a human can re-decide out of band); block = veto with a generic reason; allow = proceed. Defaults to approve (block-with-detail)."
+      },
+      "failClosed": {
+        "type": "boolean",
+        "description": "enforce mode only: when the gate is unreachable, block the action instead of letting it run unscored. Defaults to true (fail closed); set false (or BLACKWALL_FAIL_CLOSED=false) to prefer availability over enforcement."
+      },
+      "inputMode": {
+        "type": "string",
+        "enum": ["metadata", "contents"],
+        "description": "What a forecast carries about the tool call's parameters. metadata (default): key names, value types, and byte sizes only — parameter values never leave the sandbox. contents: the size-capped/truncated parameter values, for deployments that opt in to content-based red-flag detection."
+      },
+      "forecastTimeoutMs": {
+        "type": "number",
+        "minimum": 1,
+        "description": "Per-call forecast timeout in milliseconds."
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 BlueTier Operations LLC
+# SPDX-License-Identifier: Apache-2.0
+
+# Sandbox network-authorization policy for the blackwall-guard integration.
+# Merge this `network_policies` entry into your NemoClaw sandbox policy;
+# filesystem_policy / process / landlock are inherited from your base policy and
+# are omitted here on purpose. Paired with providers/blackwall.yaml, which injects
+# the credential at egress, so the BLACK_WALL API key is never present in the
+# sandbox — this file is the explicit authorization gate for the egress itself.
+version: 1
+network_policies:
+  blackwall:
+    name: blackwall
+    endpoints:
+      - host: blackwalltier.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow:
+              method: POST
+              path: /api/v1/forecast
+          - allow:
+              method: POST
+              path: /api/v1/forecast/**
+    binaries:
+      - path: /usr/local/bin/openclaw
+      - path: /usr/local/bin/node
