@@ -18,6 +18,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -29,6 +30,8 @@ import exclusions  # noqa: E402
 import export_store  # noqa: E402
 import reset  # noqa: E402
 import retention  # noqa: E402
+import skill_overrides  # noqa: E402
+import skill_override_bundle  # noqa: E402
 from normalize import (  # noqa: E402
     graph_message_to_item, insert_items, slack_message_to_item)
 
@@ -43,6 +46,8 @@ def iso(days_ago: int) -> str:
 class StoreCase(unittest.TestCase):
     def setUp(self):
         self.home = tempfile.mkdtemp()
+        self.distribution = Path(tempfile.mkdtemp())
+        (self.distribution / "skills").mkdir()
         # `_db` refuses a directory that does not look like a profile home, so
         # a marker is what makes this a store rather than a guess at one.
         (Path(self.home) / "distribution.yaml").write_text("id: test\n",
@@ -58,6 +63,17 @@ class StoreCase(unittest.TestCase):
         for name in ("RETENTION_DAYS",):
             os.environ.pop(name, None)
         shutil.rmtree(self.home, ignore_errors=True)
+        shutil.rmtree(self.distribution, ignore_errors=True)
+
+    def register_shipped(self, name):
+        source = self.distribution / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_bytes((Path(self.home) / "skills" / name / "SKILL.md").read_bytes())
+        skill_overrides.record_distribution(Path(self.home), self.distribution)
+
+    def fork_shipped(self, name):
+        self.register_shipped(name)
+        return skill_overrides.fork_skill(Path(self.home), name)
 
     def add(self, source_id, *, days_ago=0, body="hello", sender="Dana",
             scope="inbox", source="email"):
@@ -701,6 +717,235 @@ class TestExportShowsEverythingItHolds(StoreCase):
         self.assertEqual(report["memory_pages"], 1)
         self.assertTrue((destination / "memory" / "people" / "dana.md").exists())
 
+    def test_a_skill_overrides_own_text_travels_with_it(self):
+        """Not the retained history or the bookkeeping database, but the
+        one thing the user actually wrote — losing it in an export-then-
+        reset cycle would be exactly the failure this command exists to
+        avoid."""
+        skill_dir = Path(self.home) / "skills" / "inbound-judging"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: inbound-judging\ndescription: shipped\n---\n\nbody\n",
+            encoding="utf-8")
+        self.assertEqual(
+            self.fork_shipped("inbound-judging").kind,
+            "forked")
+        override_path = (Path(self.home) / "workspace" / "skill-overrides"
+                         / "overrides" / "inbound-judging" / "SKILL.md")
+        override_text = override_path.read_text(encoding="utf-8") + "\nEdited.\n"
+        override_path.write_text(override_text, encoding="utf-8")
+
+        destination = Path(self.home) / "out"
+        report = export_store.export(destination)
+
+        self.assertEqual(report["skill_overrides"], 1)
+        exported = (destination / "skill-overrides" / "overrides"
+                   / "inbound-judging" / "SKILL.md")
+        self.assertEqual(exported.read_text(encoding="utf-8"), override_text)
+
+    def _export_applied_override(self):
+        name = "inbound-judging"
+        live = Path(self.home) / "skills" / name / "SKILL.md"
+        live.parent.mkdir(parents=True)
+        shipped = "---\nname: inbound-judging\ndescription: shipped\n---\n\nbody\n"
+        live.write_text(shipped, encoding="utf-8")
+        self.fork_shipped(name)
+        override = self.workspace / "skill-overrides" / "overrides" / name / "SKILL.md"
+        edited = override.read_text(encoding="utf-8") + "\nEdited.\n"
+        override.write_text(edited, encoding="utf-8")
+        skill_overrides.apply_overrides(Path(self.home))
+        destination = Path(self.home) / "out"
+        export_store.export(destination)
+        return live, shipped, edited, destination / "skill-overrides-recovery.json"
+
+    def test_export_reset_restore_preserves_the_base_manifest_and_history(self):
+        live, shipped, edited, bundle = self._export_applied_override()
+        before = json.loads(bundle.read_text())["tables"]
+        self.assertEqual(reset.main(["--yes"]), 0)
+        self.assertEqual(live.read_text(), shipped)
+        skill_override_bundle.restore_bundle(Path(self.home), bundle)
+        self.assertEqual(live.read_text(), shipped, "restore does not write live skills")
+        with sqlite3.connect(self.workspace / "skill-overrides" / "state.db") as conn:
+            conn.row_factory = sqlite3.Row
+            for table, rows in before.items():
+                self.assertEqual([dict(row) for row in conn.execute(f"SELECT * FROM {table} ORDER BY rowid")], rows)
+        self.assertEqual([r.kind for r in skill_overrides.apply_overrides(Path(self.home))], ["applied"])
+        self.assertEqual(live.read_text(), edited)
+        self.assertEqual(skill_overrides.remove_override(Path(self.home), "inbound-judging").kind, "removed")
+        self.assertEqual(live.read_text(), shipped)
+
+    def test_restoring_against_a_newer_install_keeps_the_override_blocked(self):
+        live, shipped, edited, bundle = self._export_applied_override()
+        self.assertEqual(reset.main(["--yes"]), 0)
+        newer = shipped.replace("description: shipped", "description: newer")
+        live.write_text(newer, encoding="utf-8")
+        skill_override_bundle.restore_bundle(Path(self.home), bundle)
+        self.assertEqual([r.kind for r in skill_overrides.apply_overrides(Path(self.home))], ["blocked"])
+        self.assertEqual(live.read_text(), newer)
+        self.register_shipped("inbound-judging")
+        self.assertEqual([r.kind for r in skill_overrides.apply_overrides(Path(self.home))], ["skipped-stale"])
+        self.assertEqual(live.read_text(), newer)
+        # The old relationship remains recoverable; removal uses the newly
+        # accepted version, without having to manufacture a fresh fork.
+        self.assertEqual(skill_overrides.remove_override(Path(self.home), "inbound-judging").kind, "removed")
+        self.assertEqual(live.read_text(), newer)
+
+    def test_an_invalid_utf8_override_is_preserved_byte_for_byte(self):
+        """Losing the user's own bytes because they are hard to validate
+        would be the same silent omission a valid override losing its
+        text would be — the override is still reported (as an error, its
+        own content being unreadable as text), but exported whole."""
+        skill_dir = Path(self.home) / "skills" / "inbound-judging"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: inbound-judging\ndescription: shipped\n---\n\nbody\n",
+            encoding="utf-8")
+        self.fork_shipped("inbound-judging")
+        override_path = (Path(self.home) / "workspace" / "skill-overrides"
+                         / "overrides" / "inbound-judging" / "SKILL.md")
+        malformed = override_path.read_bytes() + b"\nBroken: \xff\xfe not utf-8\n"
+        override_path.write_bytes(malformed)
+
+        destination = Path(self.home) / "out"
+        report = export_store.export(destination)
+
+        self.assertEqual(report["skill_overrides"], 1)
+        exported = (destination / "skill-overrides" / "overrides"
+                   / "inbound-judging" / "SKILL.md")
+        self.assertEqual(exported.read_bytes(), malformed,
+                         "an override that fails to validate must still be "
+                         "exported byte-for-byte, not silently omitted")
+
+    def test_an_unreadable_override_aborts_the_export_rather_than_omitting_it(self):
+        """The regression this reproduces: a `read_bytes()` failure on an
+        override file that genuinely exists — permission denied, not
+        absence — used to be caught into an 'error' Report with
+        `text=None`, which `export_store.py` then silently skipped
+        writing while still finishing the export and reporting success.
+        That contradicts the documented 'nothing is omitted' contract as
+        surely as a symlink under `memory/` would."""
+        skill_dir = Path(self.home) / "skills" / "inbound-judging"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: inbound-judging\ndescription: shipped\n---\n\nbody\n",
+            encoding="utf-8")
+        self.fork_shipped("inbound-judging")
+        override_path = (Path(self.home) / "workspace" / "skill-overrides"
+                         / "overrides" / "inbound-judging" / "SKILL.md")
+
+        real_read_bytes = Path.read_bytes
+
+        def refuse(self):
+            if self == override_path:
+                raise PermissionError(13, "Permission denied")
+            return real_read_bytes(self)
+
+        Path.read_bytes = refuse
+        destination = Path(self.home) / "out"
+        try:
+            with self.assertRaises(PermissionError):
+                export_store.export(destination)
+        finally:
+            Path.read_bytes = real_read_bytes
+
+        self.assertFalse(
+            destination.exists(),
+            "a capture failure must leave no export directory at all, "
+            "not one silently missing the override it could not read")
+        self.assertEqual(
+            list(destination.parent.glob(".export-*")), [],
+            "a failed export must leave no leaked staging directory "
+            "behind either — checking only the destination's own "
+            "absence would pass even if `export()`'s own cleanup left "
+            "a sibling `.export-*` directory behind")
+
+    def test_a_symlinked_orphaned_override_directory_aborts_the_export(self):
+        """The regression this reproduces: the strict enumerator used to
+        silently filter out a symlinked child directory under
+        overrides/ instead of raising, so an orphaned override sitting
+        behind one was never even attempted — not captured, not even
+        reported as an error — while export still finished and reported
+        success."""
+        overrides_dir = (Path(self.home) / "workspace" / "skill-overrides"
+                         / "overrides")
+        overrides_dir.mkdir(parents=True)
+        real_target = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, real_target, ignore_errors=True)
+        (real_target / "SKILL.md").write_text(
+            "---\nname: orphaned-skill\ndescription: x\nbased_on_sha256: "
+            + "0" * 64 + "\n---\n\nbody\n", encoding="utf-8")
+        (overrides_dir / "orphaned-skill").symlink_to(real_target)
+
+        destination = Path(self.home) / "out"
+        with self.assertRaises(skill_overrides.UnsafePath):
+            export_store.export(destination)
+        self.assertFalse(
+            destination.exists(),
+            "an unsafe entry in the candidate listing must leave no "
+            "export directory at all, not one silently missing the "
+            "orphaned override behind it")
+        self.assertEqual(
+            list(destination.parent.glob(".export-*")), [],
+            "a failed export must leave no leaked staging directory "
+            "behind either — checking only the destination's own "
+            "absence would pass even if `export()`'s own cleanup left "
+            "a sibling `.export-*` directory behind")
+
+    def test_a_regular_file_where_memory_should_be_a_directory_aborts_the_export(self):
+        """The regression this reproduces: a regular file (or FIFO, or
+        anything else non-directory) sitting at `workspace/memory`
+        looked exactly like absence to the old `Path.is_dir()` check —
+        silently skipped, not reported. Worse than most omissions:
+        `reset.py` still deletes whatever is at that exact path as one
+        of its own targets, so an export-then-reset cycle could lose it
+        without export ever having captured it first."""
+        memory_path = Path(self.home) / "workspace" / "memory"
+        memory_path.parent.mkdir(parents=True, exist_ok=True)
+        memory_path.write_text("not a directory\n", encoding="utf-8")
+
+        destination = Path(self.home) / "out"
+        with self.assertRaises(export_store.ExportEscapesWorkspace):
+            export_store.export(destination)
+        self.assertFalse(destination.exists())
+        self.assertEqual(list(destination.parent.glob(".export-*")), [])
+
+    def test_a_publication_failure_cleans_up_the_staging_export(self):
+        """The regression this reproduces: publication (removing
+        whatever was at the destination, then the final rename) used to
+        sit outside the try/except that cleans up the staging directory
+        — so any failure at that specific point, after the fully-built
+        export already exists in staging, left it behind as a leaked
+        `.export-*` sibling even though the command as a whole failed.
+        `os.replace` itself is what is made to fail here, deliberately
+        independent of any earlier destination-inspection fix, to prove
+        the cleanup boundary now covers publication generally, not just
+        the specific failure that first exposed the gap."""
+        skill_dir = Path(self.home) / "skills" / "inbound-judging"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: inbound-judging\ndescription: shipped\n---\n\nbody\n",
+            encoding="utf-8")
+        self.fork_shipped("inbound-judging")
+
+        destination = Path(self.home) / "out"
+        real_replace = export_store.os.replace
+
+        def refuse(src, dst):
+            raise OSError(18, "Invalid cross-device link")
+
+        export_store.os.replace = refuse
+        try:
+            with self.assertRaises(OSError):
+                export_store.export(destination)
+        finally:
+            export_store.os.replace = real_replace
+
+        self.assertFalse(destination.exists())
+        self.assertEqual(
+            list(destination.parent.glob(".export-*")), [],
+            "the fully-built staging export must not survive a "
+            "publication failure as a leaked sibling directory")
+
 
 class TestResetLeavesNothingBehind(StoreCase):
     """A partial reset is worse than none: it answers the question wrongly."""
@@ -776,8 +1021,13 @@ class TestResetLeavesNothingBehind(StoreCase):
 
         self.assertEqual(reset.main(["--yes"]), 0)
 
+        # `.skill-overrides-global.lock` is the one deliberate, documented
+        # exception (see the comment beside `reset.targets()`): it is the
+        # barrier `remove()` itself holds exclusively while deleting
+        # everything else, so deleting it from inside that same hold
+        # would recreate the inode-swap race the lock exists to close.
         left = sorted(p.name for p in self.workspace.glob("*")
-                      if p.is_file())
+                      if p.is_file() and p.name != ".skill-overrides-global.lock")
         self.assertEqual(left, [], f"survived a successful reset: {left}")
 
     def test_the_listed_state_matches_what_collectors_write(self):
@@ -794,7 +1044,8 @@ class TestResetLeavesNothingBehind(StoreCase):
 
         reset.main(["--yes"])
 
-        left = sorted(p.name for p in self.workspace.glob("*") if p.is_file())
+        left = sorted(p.name for p in self.workspace.glob("*")
+                      if p.is_file() and p.name != ".skill-overrides-global.lock")
         self.assertEqual(
             left, ["some_future_collector.json"],
             "this test is the reminder: add the file to "
@@ -838,6 +1089,491 @@ class TestResetLeavesNothingBehind(StoreCase):
             self.assertEqual(reset.main(["--yes"]), 1)
         finally:
             reset.shutil.rmtree = original
+
+    def test_a_dangling_target_symlink_is_removed_not_reported_absent(self):
+        """The regression this reproduces: `os.stat()` follows a
+        symlink, so a target replaced by one whose destination does not
+        exist made the old strict check's own `FileNotFoundError` (from
+        looking up the missing destination, not the symlink itself) read
+        as "nothing here" — the dangling symlink itself was never
+        recorded as present, and never removed, while reset still
+        reported success."""
+        self.populate()
+        target = reset.targets()["exclusions.json"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.symlink_to(target.parent / "does-not-exist")
+        self.assertTrue(target.is_symlink())
+
+        self.assertEqual(reset.main(["--yes"]), 0)
+        self.assertFalse(
+            target.is_symlink(),
+            "a dangling target symlink must actually be removed, not "
+            "silently left in place because its destination is missing")
+
+    def test_a_populated_skill_overrides_directory_is_removed(self):
+        skill_dir = Path(self.home) / "skills" / "inbound-judging"
+        skill_dir.mkdir(parents=True)
+        shipped_text = ("---\nname: inbound-judging\ndescription: shipped\n"
+                        "---\n\nbody\n")
+        (skill_dir / "SKILL.md").write_text(shipped_text, encoding="utf-8")
+        self.fork_shipped("inbound-judging")
+        override_path = (Path(self.home) / "workspace" / "skill-overrides"
+                         / "overrides" / "inbound-judging" / "SKILL.md")
+        override_text = override_path.read_text(encoding="utf-8") + "\nCustomized.\n"
+        override_path.write_text(override_text, encoding="utf-8")
+        skill_overrides.apply_overrides(Path(self.home))
+        live_path = skill_dir / "SKILL.md"
+        self.assertEqual(live_path.read_text(encoding="utf-8"), override_text,
+                         "the override should be live before reset runs")
+        state_dir = Path(self.home) / "workspace" / "skill-overrides"
+        self.assertTrue(state_dir.exists())
+
+        self.assertEqual(reset.main(["--yes"]), 0)
+
+        self.assertFalse(state_dir.exists())
+        self.assertEqual(
+            live_path.read_text(encoding="utf-8"), shipped_text,
+            "reset must restore the live skill to shipped content, not just "
+            "delete the bookkeeping that tracked the customization")
+
+    def test_reset_preserves_an_unregistered_update_and_removes_tracked_data(self):
+        """A bare profile update can replace an applied override before its
+        source is registered. The new live bytes are not this feature's write,
+        so reset must preserve them without making source registration a
+        prerequisite for deleting the user's tracked recipe data."""
+        self.populate()
+        skill_dir = Path(self.home) / "skills" / "inbound-judging"
+        skill_dir.mkdir(parents=True)
+        shipped_text = ("---\nname: inbound-judging\ndescription: shipped\n"
+                        "---\n\nbody\n")
+        live_path = skill_dir / "SKILL.md"
+        live_path.write_text(shipped_text, encoding="utf-8")
+        self.fork_shipped("inbound-judging")
+        override_path = (self.workspace / "skill-overrides" / "overrides"
+                         / "inbound-judging" / "SKILL.md")
+        override_path.write_text(
+            override_path.read_text(encoding="utf-8") + "\nCustomized.\n",
+            encoding="utf-8")
+        skill_overrides.apply_overrides(Path(self.home))
+
+        updated_text = ("---\nname: inbound-judging\n"
+                        "description: unregistered profile update\n---\n\n"
+                        "new shipped body\n")
+        live_path.write_text(updated_text, encoding="utf-8")
+
+        self.assertEqual(reset.main(["--yes"]), 0)
+        self.assertEqual(live_path.read_text(encoding="utf-8"), updated_text)
+        self.assertFalse(self.db.exists())
+        self.assertFalse((self.workspace / "skill-overrides").exists())
+
+    def test_reset_still_restores_a_hand_deleted_override_after_a_scheduled_apply_tick(self):
+        """The regression this reproduces: a stale applied_overrides row
+        used to be cleared unconditionally the moment the override file
+        went missing, even though live content hadn't actually changed —
+        discarding the one thing reset's own restoration candidate list
+        depends on to find this skill at all, one apply tick before reset
+        ever got a chance to look."""
+        skill_dir = Path(self.home) / "skills" / "inbound-judging"
+        skill_dir.mkdir(parents=True)
+        shipped_text = ("---\nname: inbound-judging\ndescription: shipped\n"
+                        "---\n\nbody\n")
+        (skill_dir / "SKILL.md").write_text(shipped_text, encoding="utf-8")
+        self.fork_shipped("inbound-judging")
+        override_path = (Path(self.home) / "workspace" / "skill-overrides"
+                         / "overrides" / "inbound-judging" / "SKILL.md")
+        override_text = override_path.read_text(encoding="utf-8") + "\nCustomized.\n"
+        override_path.write_text(override_text, encoding="utf-8")
+        skill_overrides.apply_overrides(Path(self.home))
+        live_path = skill_dir / "SKILL.md"
+
+        # Deleted by hand, not through --remove — live content is still
+        # exactly the override.
+        override_path.unlink()
+        # One ordinary scheduled apply tick runs before reset does.
+        skill_overrides.apply_overrides(Path(self.home))
+        self.assertEqual(live_path.read_text(encoding="utf-8"), override_text,
+                         "the apply tick must not have touched live content")
+
+        self.assertEqual(reset.main(["--yes"]), 0)
+
+        self.assertEqual(
+            live_path.read_text(encoding="utf-8"), shipped_text,
+            "reset must still restore this skill even after an apply tick "
+            "ran with the override file already gone")
+
+    def test_reset_does_not_canonize_a_crashed_apply_as_shipped_content(self):
+        """The regression this reproduces: a crash between apply's file
+        write and its completion commit left an override live with no
+        applied_overrides row yet — and without recognizing the still-
+        pending operation as this feature's own, reset's own observation
+        step read that live content as a fresh shipped version and wrote
+        it right back, permanently canonizing an override that was never
+        actually confirmed applied."""
+        skill_dir = Path(self.home) / "skills" / "inbound-judging"
+        skill_dir.mkdir(parents=True)
+        shipped_text = ("---\nname: inbound-judging\ndescription: shipped\n"
+                        "---\n\nbody\n")
+        live_path = skill_dir / "SKILL.md"
+        live_path.write_text(shipped_text, encoding="utf-8")
+        self.fork_shipped("inbound-judging")
+        override_path = (Path(self.home) / "workspace" / "skill-overrides"
+                         / "overrides" / "inbound-judging" / "SKILL.md")
+        override_text = override_path.read_text(encoding="utf-8") + "\nCustomized.\n"
+        override_path.write_text(override_text, encoding="utf-8")
+
+        # The exact state a crash between apply's file write and its
+        # completion commit leaves: live already holds the override, a
+        # pending journal row expects exactly this write's result, but no
+        # applied_overrides row exists yet.
+        before_hash = skill_overrides._sha256(shipped_text)
+        after_hash = skill_overrides._sha256(override_text)
+        live_path.write_text(override_text, encoding="utf-8")
+        db_path = (Path(self.home) / "workspace" / "skill-overrides" / "state.db")
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                "INSERT INTO override_operations"
+                "(skill_name, op_type, status, expected_before_hash, expected_after_hash)"
+                " VALUES ('inbound-judging', 'apply', 'pending', ?, ?)",
+                (before_hash, after_hash))
+
+        self.assertEqual(reset.main(["--yes"]), 0)
+
+        self.assertEqual(
+            live_path.read_text(encoding="utf-8"), shipped_text,
+            "reset must restore the shipped version, not canonize the "
+            "unconfirmed crashed override as if it were shipped content")
+
+    def test_reset_finds_the_pending_only_crash_state_even_when_skills_cannot_be_listed(self):
+        """The regression this specifically proves, that the test above
+        does not: `_list_pending_operation_skill_names()` was added
+        because the pending-only crash state (override file gone, no
+        applied row, only a pending operation row to show for it) must
+        be found independently of whether `skills/` can even be
+        enumerated — `iterdir()` and a direct `stat()` on a known path
+        are allowed to disagree about what is readable. The test above
+        leaves the override file in place, so the skill is trivially
+        discoverable through the ordinary override listing regardless of
+        whether the new source works at all. This one removes every
+        other way of finding it and monkeypatches `_list_skill_names`
+        itself to return nothing, so the only thing that can find this
+        skill is the new database-backed source."""
+        skill_dir = Path(self.home) / "skills" / "inbound-judging"
+        skill_dir.mkdir(parents=True)
+        shipped_text = ("---\nname: inbound-judging\ndescription: shipped\n"
+                        "---\n\nbody\n")
+        live_path = skill_dir / "SKILL.md"
+        live_path.write_text(shipped_text, encoding="utf-8")
+        self.fork_shipped("inbound-judging")
+        override_path = (Path(self.home) / "workspace" / "skill-overrides"
+                         / "overrides" / "inbound-judging" / "SKILL.md")
+        override_text = override_path.read_text(encoding="utf-8") + "\nCustomized.\n"
+
+        before_hash = skill_overrides._sha256(shipped_text)
+        after_hash = skill_overrides._sha256(override_text)
+        live_path.write_text(override_text, encoding="utf-8")
+        db_path = (Path(self.home) / "workspace" / "skill-overrides" / "state.db")
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                "INSERT INTO override_operations"
+                "(skill_name, op_type, status, expected_before_hash, expected_after_hash)"
+                " VALUES ('inbound-judging', 'apply', 'pending', ?, ?)",
+                (before_hash, after_hash))
+        # Hand-deleted on top of the crash state above, so neither the
+        # override listing nor an applied row can find this skill either
+        # — only the pending-operation row can. The empty parent
+        # directory left behind by unlinking just the file is removed
+        # too: `_list_overridden_skill_names()` enumerates directory
+        # names under `overrides/`, not whether `SKILL.md` exists inside
+        # one, so leaving it in place would let that listing keep
+        # finding this skill regardless of whether the new
+        # pending-operations source works at all.
+        override_path.unlink()
+        override_path.parent.rmdir()
+
+        root = Path(self.home)
+        self.assertNotIn(
+            "inbound-judging", skill_overrides._list_overridden_skill_names(root),
+            "the override listing must not be able to find this skill "
+            "either, or this test does not actually isolate the new "
+            "pending-operations source")
+        self.assertNotIn(
+            "inbound-judging", skill_overrides._list_applied_skill_names(root),
+            "no applied row exists in this crash state, so the applied "
+            "listing must not find this skill either")
+
+        real_list_skill_names = skill_overrides._list_skill_names
+        skill_overrides._list_skill_names = lambda root: []
+        try:
+            self.assertEqual(reset.main(["--yes"]), 0)
+        finally:
+            skill_overrides._list_skill_names = real_list_skill_names
+
+        self.assertEqual(
+            live_path.read_text(encoding="utf-8"), shipped_text,
+            "reset must still find and restore this skill via the "
+            "pending-operation database listing alone, even when the "
+            "ordinary shipped-skill listing finds nothing at all")
+
+    def test_reset_refuses_a_skill_with_diverged_pending_state_rather_than_guessing(self):
+        """The regression this reproduces: a pending apply A->O, with
+        the override file gone and live content changed to X (matching
+        neither A nor O — something outside this module's cooperating
+        writers touched it), used to either report the skill restored
+        while silently deleting the one journal row that explained the
+        divergence, or record X itself as a trusted new shipped base
+        before overwriting it. Reset must refuse this skill outright,
+        deleting nothing anywhere, rather than guess which of those two
+        wrong answers to give."""
+        skill_dir = Path(self.home) / "skills" / "inbound-judging"
+        skill_dir.mkdir(parents=True)
+        shipped_text = ("---\nname: inbound-judging\ndescription: shipped\n"
+                        "---\n\nbody\n")
+        live_path = skill_dir / "SKILL.md"
+        live_path.write_text(shipped_text, encoding="utf-8")
+        self.fork_shipped("inbound-judging")
+        override_path = (Path(self.home) / "workspace" / "skill-overrides"
+                         / "overrides" / "inbound-judging" / "SKILL.md")
+        override_text = override_path.read_text(encoding="utf-8") + "\nO.\n"
+
+        before_hash = skill_overrides._sha256(shipped_text)
+        after_hash = skill_overrides._sha256(override_text)
+        db_path = (Path(self.home) / "workspace" / "skill-overrides" / "state.db")
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                "INSERT INTO override_operations"
+                "(skill_name, op_type, status, expected_before_hash, expected_after_hash)"
+                " VALUES ('inbound-judging', 'apply', 'pending', ?, ?)",
+                (before_hash, after_hash))
+        # Diverged: neither the pre-apply shipped text (A) nor the
+        # override's own content (O) — something else entirely.
+        diverged_text = "something else entirely\n"
+        live_path.write_text(diverged_text, encoding="utf-8")
+        override_path.unlink()
+
+        ops_before = self._all_rows(db_path, "override_operations")
+
+        self.assertEqual(reset.main(["--yes"]), 1)
+
+        self.assertEqual(
+            live_path.read_text(encoding="utf-8"), diverged_text,
+            "a diverged skill's live content must be left exactly as "
+            "found, not overwritten with a guess")
+        self.assertTrue(
+            (Path(self.home) / "workspace" / "skill-overrides").exists(),
+            "nothing may be deleted while any skill's state is genuinely "
+            "unresolved")
+        self.assertEqual(
+            self._all_rows(db_path, "override_operations"), ops_before,
+            "the pending row that explains the divergence must survive "
+            "a refused reset untouched")
+
+    def _all_rows(self, db_path: Path, table: str) -> list[tuple]:
+        with sqlite3.connect(db_path) as conn:
+            return conn.execute(f"SELECT * FROM {table} ORDER BY id").fetchall()
+
+    def test_one_skill_failing_to_restore_leaves_a_successful_skills_override_untouched(self):
+        """The regression this reproduces: restoring skill A used to
+        delete A's override file and bookkeeping as soon as A itself
+        succeeded — so when a later skill B then failed, reset reported
+        'nothing has been removed' while A's customization was, in fact,
+        already gone. Restoring must not mutate any skill's override or
+        bookkeeping at all until every skill in the batch has succeeded."""
+        skill_a_dir = Path(self.home) / "skills" / "inbound-judging"
+        skill_a_dir.mkdir(parents=True)
+        (skill_a_dir / "SKILL.md").write_text(
+            "---\nname: inbound-judging\ndescription: shipped\n---\n\nbody\n",
+            encoding="utf-8")
+        self.fork_shipped("inbound-judging")
+        override_a = (Path(self.home) / "workspace" / "skill-overrides"
+                      / "overrides" / "inbound-judging" / "SKILL.md")
+        override_a_text = override_a.read_text(encoding="utf-8") + "\nA.\n"
+        override_a.write_text(override_a_text, encoding="utf-8")
+
+        skill_b_dir = Path(self.home) / "skills" / "memory-writing"
+        skill_b_dir.mkdir(parents=True)
+        (skill_b_dir / "SKILL.md").write_text(
+            "---\nname: memory-writing\ndescription: shipped\n---\n\nbody\n",
+            encoding="utf-8")
+        self.fork_shipped("memory-writing")
+        override_b = (Path(self.home) / "workspace" / "skill-overrides"
+                      / "overrides" / "memory-writing" / "SKILL.md")
+        override_b_text = override_b.read_text(encoding="utf-8") + "\nB.\n"
+        override_b.write_text(override_b_text, encoding="utf-8")
+
+        # Both actually applied, not just forked: the point of this test
+        # is that a failed reset leaves A's *bookkeeping* — its applied
+        # row and operation journal, not merely its override file —
+        # untouched, and there is nothing to protect there unless
+        # something has actually been applied.
+        skill_overrides.apply_overrides(Path(self.home))
+
+        db_path = Path(self.home) / "workspace" / "skill-overrides" / "state.db"
+        with sqlite3.connect(db_path) as conn:
+            b_hash = conn.execute(
+                "SELECT content_hash FROM base_observations"
+                " WHERE skill_name='memory-writing'"
+                " ORDER BY observation_id DESC LIMIT 1").fetchone()[0]
+            a_applied_before = conn.execute(
+                "SELECT * FROM applied_overrides"
+                " WHERE skill_name='inbound-judging'").fetchone()
+            a_ops_before = conn.execute(
+                "SELECT * FROM override_operations"
+                " WHERE skill_name='inbound-judging'"
+                " ORDER BY id").fetchall()
+        self.assertIsNotNone(
+            a_applied_before,
+            "A must actually be applied before the failed reset, or this "
+            "test proves nothing about bookkeeping surviving one")
+        self.assertTrue(a_ops_before)
+
+        # Only B's own retained base becomes unusable — A's must remain
+        # intact, so A's restoration would genuinely succeed in isolation.
+        import shutil
+        shutil.rmtree(Path(self.home) / "workspace" / "skill-overrides"
+                      / "bases" / b_hash)
+
+        self.assertEqual(reset.main(["--yes"]), 1)
+
+        self.assertTrue(override_a.exists(),
+                        "skill A's override must survive a batch reset "
+                        "that failed on a different skill")
+        self.assertEqual(override_a.read_text(encoding="utf-8"), override_a_text)
+        self.assertTrue(override_b.exists())
+        self.assertTrue(
+            (Path(self.home) / "workspace" / "skill-overrides").exists(),
+            "the whole bookkeeping tree must survive too — nothing is "
+            "deleted until every skill restores successfully")
+
+        with sqlite3.connect(db_path) as conn:
+            a_applied_after = conn.execute(
+                "SELECT * FROM applied_overrides"
+                " WHERE skill_name='inbound-judging'").fetchone()
+            a_ops_after = conn.execute(
+                "SELECT * FROM override_operations"
+                " WHERE skill_name='inbound-judging'"
+                " ORDER BY id").fetchall()
+        self.assertEqual(
+            a_applied_after, a_applied_before,
+            "every column of A's applied-overrides row (not just "
+            "applied_hash) must be byte-for-byte unchanged by a batch "
+            "reset that failed on B, not merely still present")
+        self.assertEqual(
+            a_ops_after, a_ops_before,
+            "A's operation journal must be untouched too — restoration "
+            "must not claim or journal anything on A's behalf just "
+            "because it happened to succeed before B failed")
+
+    def test_a_reset_refuses_while_a_skills_lock_is_held(self):
+        """Reset deletes the very lock files that provide mutual
+        exclusion — a raw rmtree while one is held could unlink it out
+        from under a live operation. Refusing outright, rather than
+        racing it, is the whole point of the check."""
+        skill_dir = Path(self.home) / "skills" / "inbound-judging"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: inbound-judging\ndescription: shipped\n---\n\nbody\n",
+            encoding="utf-8")
+        self.fork_shipped("inbound-judging")
+
+        import fcntl
+        lock_path = (Path(self.home) / "workspace" / "skill-overrides"
+                    / "locks" / "inbound-judging.lock")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            self.assertEqual(reset.main(["--yes"]), 1)
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+
+        # Nothing was removed — the refusal must be all-or-nothing, not a
+        # partial reset that skips only the locked skill.
+        self.assertTrue((Path(self.home) / "workspace" / "skill-overrides").exists())
+        self.assertTrue(self.db.exists())
+
+        # And now that the lock is free, reset proceeds normally.
+        self.assertEqual(reset.main(["--yes"]), 0)
+
+    def test_reset_actually_blocks_a_new_skill_operation_not_just_the_precheck(self):
+        """The real guarantee, proven with a real thread: `refuse_if_busy`
+        is a fast early check that can miss an operation starting after
+        it runs — the exclusive lock reset actually holds around deletion
+        is what a new operation cannot get past regardless of timing."""
+        skill_dir = Path(self.home) / "skills" / "inbound-judging"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: inbound-judging\ndescription: shipped\n---\n\nbody\n",
+            encoding="utf-8")
+        # A real directory to rmtree, and released back so reset's own
+        # restoration step has nothing left to do.
+        self.fork_shipped("inbound-judging")
+        skill_overrides.remove_override(Path(self.home), "inbound-judging")
+
+        entered = threading.Event()
+        proceed = threading.Event()
+        real_rmtree = shutil.rmtree
+
+        def slow_rmtree(path, *a, **kw):
+            if Path(path).name == "skill-overrides":
+                entered.set()
+                proceed.wait(timeout=5)
+            return real_rmtree(path, *a, **kw)
+
+        reset.shutil.rmtree = slow_rmtree
+        results = {}
+
+        def do_reset():
+            results["reset"] = reset.main(["--yes"])
+
+        resetter = threading.Thread(target=do_reset)
+        resetter.start()
+        self.assertTrue(entered.wait(timeout=5),
+                        "reset never reached its deletion step")
+
+        # A new fork attempt must not be able to acquire this skill's
+        # lock while reset holds the exclusive global lock.
+        forked_while_blocked = threading.Event()
+
+        def do_fork():
+            self.fork_shipped("inbound-judging")
+            forked_while_blocked.set()
+
+        # By this point reset is parked inside `slow_rmtree`'s
+        # `proceed.wait()`, holding the exclusive global lock but not
+        # calling `flock` again — so the only thread that can reach this
+        # wrapper before the negative assertion below is the forker.
+        # Instrumenting the real `flock` call itself, rather than setting
+        # a `threading.Event` merely before entering `fork_skill`, is
+        # what makes this prove the forker actually reached the blocking
+        # primitive rather than merely having been scheduled to run.
+        import fcntl
+        forker_attempting = threading.Event()
+        real_flock = fcntl.flock
+
+        def instrumented_flock(fd, operation):
+            forker_attempting.set()
+            return real_flock(fd, operation)
+
+        fcntl.flock = instrumented_flock
+        try:
+            forker = threading.Thread(target=do_fork)
+            forker.start()
+            self.assertTrue(forker_attempting.wait(timeout=5),
+                            "forker thread never reached its flock() call")
+            self.assertFalse(forked_while_blocked.wait(timeout=0.3),
+                             "a new skill operation proceeded while reset "
+                             "held the exclusive lock")
+        finally:
+            fcntl.flock = real_flock
+
+        proceed.set()
+        resetter.join(timeout=5)
+        forker.join(timeout=5)
+        reset.shutil.rmtree = real_rmtree
+        self.assertFalse(resetter.is_alive())
+        self.assertFalse(forker.is_alive())
+        self.assertEqual(results["reset"], 0)
 
     def test_it_says_the_credential_is_somewhere_else(self):
         """Somebody withdrawing consent wants both, and would stop after one."""

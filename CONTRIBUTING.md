@@ -3,7 +3,8 @@
 Thank you for your interest in improving NemoClaw Community.
 
 This repository contains NemoClaw examples and developer tools. You can deploy
-each example independently.
+each runnable example independently. Documentation-only tutorials state that
+they have no runtime deployment.
 
 By participating, you agree to follow our
 [Code of Conduct](CODE_OF_CONDUCT.md).
@@ -146,8 +147,11 @@ Follow the selected example's instructions for these items:
 - Cleanup and teardown.
 - Known limitations.
 
-Keep each example independently deployable. Do not make an example depend on
-private files, internal systems, or local state from another example.
+Keep each runnable example independently deployable. Do not make an example
+depend on private files, internal systems, or local state from another example.
+For a documentation-only tutorial, keep its canonical content in an adjacent
+root `tutorial.md`. Declare the primary runtime documented by the tutorial, and
+use `N/A` only for components that do not participate.
 
 ## Contribution Requirements
 
@@ -252,11 +256,8 @@ python3 -m pip install --require-hashes -r scripts/catalog-requirements.txt
 python3 scripts/fetch_catalog_assets.py
 python3 scripts/build_catalog.py --validate-metadata
 python3 scripts/build_catalog.py --check
-python3 -m unittest \
-  scripts.tests.test_build_catalog \
-  scripts.tests.test_catalog_maintenance \
-  scripts.tests.test_example_stack_facts
-node --test scripts/tests/catalog.test.mjs
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+node --test scripts/tests/*.test.mjs
 ```
 
 Run the documented setup, syntax, unit, configuration, and teardown-safe checks.
@@ -305,6 +306,11 @@ Document this information for a new example:
 - Its known limitations.
 - Its third-party dependencies and license obligations.
 
+For a documentation-only tutorial, omit runtime-only sections that do not
+apply. State that no deployment is required, identify the root `tutorial.md` as
+the canonical content source, and document how to build and verify its
+published page.
+
 Give readers one recommended start command or action. If the example has
 multiple deployment paths, name the lowest-risk or most generally applicable
 entry point first and link the alternatives. Do not add an empty `setup.sh`
@@ -346,12 +352,14 @@ index README. The five canonical category indexes are:
 - `examples/demos/field/README.md`
 - `examples/tools/README.md`
 
-Hackathon and Build-a-Claw are cross-cutting recipe collections, not example
-paths. Their index-only READMEs are
+Hackathon and Build-a-Claw are cross-cutting discovery collections, not
+example paths. Their index-only READMEs are
 `examples/collections/hackathon/README.md` and
 `examples/collections/build-a-claw/README.md`. Do not place examples under
-`examples/collections/`; keep each recipe in its canonical NVIDIA, partner, or
-community path.
+`examples/collections/`; keep each example in its canonical category path.
+Recipes and demos opt into a collection through README metadata. The website
+presents each collection as one browse group without changing an example's
+artifact type, path, or provenance.
 
 After optional license comments, each index README must start with its public
 H1 title, a blank line, and one concise plain-text description paragraph. The
@@ -368,6 +376,34 @@ The build retains the authored title and description values while normalizing
 the index structure and regenerating the example list. No other sections are
 permitted. Change an individual example's root README metadata and regenerate
 the catalog instead of editing that list by hand.
+
+### Tutorial Markdown
+
+Any canonical example can place an exact lowercase `tutorial.md` beside its
+root `README.md`. The README remains the catalog metadata and overview source,
+while GitHub Pages renders `tutorial.md` as that entry's tutorial detail page.
+Without `tutorial.md`, the entry keeps its normal README detail page. Other
+Markdown files do not enable tutorial rendering, and an incorrectly cased
+variant such as `Tutorial.md` fails validation.
+
+The tutorial renderer uses the first level-one heading as the page title. Each
+later level-one heading starts one tutorial step; nested headings remain on that
+step. The published page adds progress plus Previous and Next navigation, while
+the complete document remains readable when JavaScript is unavailable. It also
+adds copy controls and build-time syntax highlighting to fenced code. Put each
+fence at the start of a line and give it an explicit language such as `bash`,
+`yaml`, or `text`; indented fences are not supported. The renderer suppresses a
+standalone `[TOC]` marker because it creates its own navigation. These changes
+affect generated HTML only. The build does not rewrite the Markdown source, run
+its commands, or validate its technical claims.
+
+Prefer reviewed local images whose publication rights and attribution are
+known. The tutorial renderer never loads a remote image automatically. It
+replaces a credential-free HTTPS image with an outbound no-referrer link that
+names the external host. Remote bytes remain mutable and outside this
+repository's availability and provenance boundary. YouTube and LinkedIn are
+the only supported iframe hosts. Disclose those external connections before
+the first embedded frame; generated frames use lazy loading and a sandbox.
 
 ## Catalog Metadata
 
@@ -439,9 +475,9 @@ Follow these metadata rules:
   a separate canonical public project, and use an absolute HTTPS URL without
   embedded credentials. Do not use it as a second source link to this example.
 - `Contributor` is required only for partner recipes.
-- `Collection` is optional and accepts exactly one of `Hackathon` or
-  `Build-a-Claw`, only for recipes. A collection recipe still keeps its NVIDIA,
-  partner, or community provenance and canonical recipe path.
+- `Collection` is optional for recipes and demos and accepts exactly one of
+  `Hackathon` or `Build-a-Claw`. A collection entry keeps its canonical
+  artifact type, path, and provenance.
 - The directory path remains the source for artifact kind and recipe
   provenance; do not repeat either in the catalog block.
 
@@ -592,7 +628,7 @@ exception; `| Reviewed | YYYY-MM-DD |` after a focused maintenance review;
 `| Upstream | https://github.com/organization/project |` for a separate public
 project that this example adapts; `| Contributor | [Organization] |` for a
 partner recipe; and `| Collection | [Hackathon or Build-a-Claw] |` for an
-accepted collection recipe. Omit rows that do not apply.
+accepted collection recipe or demo. Omit rows that do not apply.
 -->
 
 [Introduce the intended user, problem, and result.]

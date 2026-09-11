@@ -47,7 +47,7 @@ class CatalogMaintenanceTests(unittest.TestCase):
         self.assertEqual(
             [band.minimum_days for band in self.policy.bands], [0, 30, 60, 120, 240]
         )
-        styles = (Path(__file__).parents[2] / "site/styles.css").read_text(
+        styles = (Path(__file__).parents[2] / "site/styles/detail.css").read_text(
             encoding="utf-8"
         )
         for band in self.policy.bands:

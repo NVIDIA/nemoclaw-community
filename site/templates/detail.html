@@ -8,14 +8,16 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="{{META_DESCRIPTION}}">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'self'; worker-src 'none'; base-uri 'none'; form-action 'none'">
+    <meta http-equiv="Content-Security-Policy" content="{{CONTENT_SECURITY_POLICY}}">
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <title>{{PAGE_TITLE}} | NemoClaw Community</title>
     <link rel="icon" type="image/png" sizes="64x64" href="{{FAVICON_URL}}">
     <link rel="stylesheet" href="{{STYLES_URL}}">
+    <link rel="stylesheet" href="{{DETAIL_STYLES_URL}}">
+{{PAGE_STYLES}}
   </head>
-  <body class="detail-page">
-    <a class="skip-link" href="#readme">Skip to example guide</a>
+  <body class="detail-page{{PAGE_CLASS}}">
+    <a class="skip-link" href="#readme">Skip to content</a>
 
     <header class="site-header">
       <div class="shell masthead">
@@ -26,10 +28,12 @@
           <span class="brand-divider" aria-hidden="true"></span>
           <a class="product-name product-link" href="{{CATALOG_URL}}">NemoClaw Community</a>
         </div>
-        <a class="repository-link" href="{{SOURCE_URL}}">
-          View source
-          <span aria-hidden="true">↗</span>
-        </a>
+        <nav class="header-links" aria-label="NemoClaw resources">
+          <a class="repository-link" href="{{SOURCE_URL}}">
+            View source
+            <span aria-hidden="true">↗</span>
+          </a>
+        </nav>
       </div>
     </header>
 
@@ -64,7 +68,7 @@
         </div>
       </section>
 
-      <section class="detail-content" aria-label="Example guide">
+      <section class="detail-content" aria-label="{{CONTENT_LABEL}}">
         <div class="shell detail-content-layout">
           <nav class="detail-toc detail-toc-desktop" aria-labelledby="toc-title">
             <h2 id="toc-title">On this page</h2>
@@ -76,7 +80,7 @@
               {{TABLE_OF_CONTENTS}}
             </nav>
           </details>
-          <article class="readme-content" id="readme" tabindex="-1">
+          <article class="readme-content{{CONTENT_CLASS}}" id="readme" tabindex="-1">
 {{README_HTML}}
           </article>
         </div>
@@ -91,11 +95,12 @@
         </p>
         <nav class="footer-links" aria-label="Repository policies and resources">
           <a href="{{CATALOG_URL}}">Example catalog</a>
+          <a href="{{TUTORIAL_URL}}">Build-a-Claw tutorial</a>
           <a href="https://github.com/NVIDIA/nemoclaw-community/blob/main/SUPPORT.md">Support</a>
           <a href="https://github.com/NVIDIA/nemoclaw-community/blob/main/SECURITY.md">Security</a>
         </nav>
       </div>
     </footer>
-{{DIAGRAM_SCRIPTS}}
+{{PAGE_SCRIPTS}}
   </body>
 </html>

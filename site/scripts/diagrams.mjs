@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+// Safe client-side rendering for build-validated Mermaid diagrams.
+
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const FORBIDDEN_ELEMENTS = new Set([
   "audio",

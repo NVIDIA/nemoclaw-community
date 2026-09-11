@@ -14,7 +14,9 @@ This is the canonical placement and naming policy for content under
   supported versions, integrations, deployment status, industry, and program
   collections in documentation and catalog metadata.
 - Use directory placement for discovery, not as a support-level claim.
-- Keep each example independently deployable.
+- Keep each runnable example independently deployable. A documentation-only
+  tutorial keeps its canonical content in a root `tutorial.md` beside its
+  `README.md` and states that it has no runtime deployment.
 
 ## Directory Structure
 
@@ -67,6 +69,8 @@ example.
 Record the one primary industry, any accepted cross-cutting collection, and an
 optional upstream project in the standardized catalog block in the example's
 root `README.md`.
+An exact lowercase root `tutorial.md` opts the same catalog entry into tutorial
+presentation; it does not change kind, provenance, or collection membership.
 Use the exact emoji-and-title values documented in
 [`CONTRIBUTING.md`](../../../../CONTRIBUTING.md#catalog-metadata). Industry does
 not change kind, provenance, support, or maturity. `Lifecycle` and `Reviewed`
@@ -82,10 +86,10 @@ versions. Custom layouts remain `Unconfirmed`, `Unpinned`, or `Unknown` until
 standardized; these labels do not mean unsupported or broken.
 
 `Hackathon` and `Build-a-Claw` are collections, not artifact kinds or
-provenance. A collection entry that is a reusable workflow remains a recipe
-under its NVIDIA, partner, or community provenance path. The corresponding
-`examples/collections/` directories are indexes only; do not place examples
-there or use a collection to erase contributor attribution.
+provenance. Recipes and demos opt in through their metadata while remaining in
+their canonical category path. The corresponding `examples/collections/`
+directories are indexes only; do not place examples there or use a collection
+to erase artifact type or contributor attribution.
 
 Set `Upstream` only when an example wraps, adapts, or extends a separate
 canonical public project. Use an absolute HTTPS URL. Do not use it as a second
@@ -107,7 +111,7 @@ permitted:
 
 The build retains the authored title and description values while normalizing
 the index and regenerating its inventory. Do not edit that inventory by hand.
-Collection indexes group recipes by metadata without changing their canonical
+Collection indexes group examples by metadata without changing their canonical
 paths.
 
 ## Naming

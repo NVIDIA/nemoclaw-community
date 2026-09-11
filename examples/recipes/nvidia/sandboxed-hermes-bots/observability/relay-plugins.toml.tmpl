@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# NeMo Relay observability config for one bot. Rendered per bot by
+# lib/tracing.sh (placeholders in __CAPS__) and written to
+# /sandbox/.hermes/relay-plugins.toml; Hermes finds it through the
+# HERMES_NEMO_RELAY_PLUGINS_TOML variable in /sandbox/.hermes/.env.
+#
+# The variable is read once at gateway start, and a missing or malformed file
+# fails OPEN (agent runs, exports nothing). `swarm status` checks the gateway
+# log for the activation line rather than assuming.
+
+version = 1
+
+[[components]]
+kind = "observability"
+enabled = true
+
+[components.config]
+version = 3
+
+[components.config.opentelemetry]
+enabled = true
+
+# gen_ai: OTel GenAI semantic conventions; what LangSmith and most OTLP
+# backends render as LLM runs. Alternatives: openinference (Arize Phoenix),
+# full (every nemo_relay.* attribute, for debugging).
+[[components.config.opentelemetry.endpoints]]
+type = "gen_ai"
+endpoint = "http://host.openshell.internal:__OTLP_PORT__/v1/traces"
+transport = "http_binary"
+service_name = "hermes-__BOT__"
+service_namespace = "__NAMESPACE__"
+timeout_millis = 8000
+
+[components.config.opentelemetry.endpoints.resource_attributes]
+"agent.name" = "__BOT__"
+"deployment.environment" = "__HOSTNAME__"
