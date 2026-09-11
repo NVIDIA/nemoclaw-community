@@ -405,13 +405,21 @@ def evidence(conn, since: str) -> dict[str, object]:
     # Grouped by `(source, sender_key)`, not by the key alone. Two sources can
     # mint the same string, and merging two people because their opaque ids
     # happened to match would be silent and unrecoverable.
-    counted = conn.execute(
-        "SELECT source, sender_key, sender, sender_handle,"
-        "       COUNT(*), MAX(event_at)"
-        "  FROM items"
-        "  WHERE event_at >= ? AND sender IS NOT NULL AND sender_key IS NOT NULL"
-        "  GROUP BY source, sender_key, sender, sender_handle",
-        (since,)).fetchall()
+    # Keep authorship in the ledger; use the recipient identity only for
+    # grouping an outbound observation with the corresponding person.
+    evidence_sql = """WITH evidence_items AS (
+        SELECT source, source_id, event_at, addressing, subject, body, direction,
+          CASE WHEN direction='outbound' THEN counterparty_key ELSE sender_key END AS sender_key,
+          CASE WHEN direction='outbound' THEN counterparty_name ELSE sender END AS sender,
+          CASE WHEN direction='outbound' THEN counterparty_handle ELSE sender_handle END AS sender_handle,
+          counterparty_basis
+        FROM items WHERE direction IS NOT 'outbound' OR
+          (counterparty_key IS NOT NULL AND counterparty_key IS NOT sender_key)
+    ) """
+    counted = conn.execute(evidence_sql +
+        "SELECT source, sender_key, sender, sender_handle, COUNT(*), MAX(event_at), direction"
+        " FROM evidence_items WHERE event_at >= ? AND sender IS NOT NULL AND sender_key IS NOT NULL"
+        " GROUP BY source, sender_key, sender, sender_handle, direction", (since,)).fetchall()
 
     # Said out loud rather than silently skipped. These are rows from before
     # the upgrade; they stop appearing as the collectors re-read their window
@@ -419,7 +427,8 @@ def evidence(conn, since: str) -> dict[str, object]:
     # once the window has turned over.
     unkeyed = conn.execute(
         "SELECT COUNT(*) FROM items"
-        "  WHERE event_at >= ? AND sender IS NOT NULL AND sender_key IS NULL",
+        "  WHERE event_at >= ? AND sender IS NOT NULL AND sender_key IS NULL"
+        "    AND direction IS NOT 'outbound'",
         (since,)).fetchone()[0]
 
     # Per identity first: how much they wrote, when last, and what they are
@@ -428,13 +437,15 @@ def evidence(conn, since: str) -> dict[str, object]:
     last_at: dict[identity.Identity, str] = {}
     shown: dict[identity.Identity, str] = {}
     handles: dict[identity.Identity, str | None] = {}
-    for source, key, sender, handle, count, last in counted:
+    directions = {}
+    for source, key, sender, handle, count, last, direction in counted:
         if AUTOMATED.search(sender or ""):
             continue
         if not key or not source:
             continue
         who = identity.Identity(source, key)
         seen[who] += count
+        directions.setdefault(who, set()).add(direction)
         handles.setdefault(who, handle)
         if last and last > last_at.get(who, ""):
             last_at[who] = last
@@ -481,7 +492,8 @@ def evidence(conn, since: str) -> dict[str, object]:
     candidates = []
     group_of: dict[str, list[identity.Identity]] = {}
     for key, count in counts.most_common():
-        if count < PEOPLE_THRESHOLD:
+        group_directions = set().union(*(directions.get(who, set()) for who in members[key]))
+        if count < PEOPLE_THRESHOLD or group_directions <= {"outbound"}:
             continue
         sender = display[key]
         mark = names[key]
@@ -524,6 +536,7 @@ def evidence(conn, since: str) -> dict[str, object]:
             "identities": [str(i) for i in members[key]],
             "slug": mark,
             "messages": count,
+            "both_directions": {"inbound", "outbound"} <= group_directions,
             "last_interaction": last,
             "has_page": mark in have,
             "page_records": (have[mark]["last_interaction"] or None)
@@ -546,10 +559,10 @@ def evidence(conn, since: str) -> dict[str, object]:
         # the number of identities a person has is small.
         rows: list[tuple] = []
         for who in group:
-            rows += conn.execute(
+            rows += conn.execute(evidence_sql +
                 "SELECT source, event_at, addressing,"
-                "       substr(subject, 1, 200), substr(body, 1, 200)"
-                "  FROM items WHERE source = ? AND sender_key = ?"
+                "       substr(subject, 1, 200), substr(body, 1, 200), direction, counterparty_basis"
+                "  FROM evidence_items WHERE source = ? AND sender_key = ?"
                 "    AND event_at >= ?"
                 "  ORDER BY event_at DESC LIMIT ?",
                 (who.source, who.key, since, MAX_INTERACTIONS)).fetchall()
@@ -562,10 +575,11 @@ def evidence(conn, since: str) -> dict[str, object]:
         # not a gap to paper over.
         interactions[mark] = [
             {"when": (event_at or "")[:10], "source": source,
-             "addressing": addressing,
+             "addressing": addressing, "direction": direction,
+             "counterparty_basis": basis,
              "subject": " ".join((subject or "").split()),
              "body": " ".join((body or "").split())}
-            for source, event_at, addressing, subject, body
+            for source, event_at, addressing, subject, body, direction, basis
             in rows[:MAX_INTERACTIONS]]
 
     return {"people": chosen, "interactions": interactions,

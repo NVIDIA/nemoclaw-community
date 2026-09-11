@@ -22,7 +22,7 @@ import sqlite3
 from pathlib import Path
 from typing import Callable
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # version -> callable applied to reach it. Forward only; there is no down path,
 # because a downgrade that drops a column loses data no backup can infer.
@@ -276,11 +276,53 @@ def _rebuild_items_without_the_source_check(conn: sqlite3.Connection) -> None:
                 f"{count} rows")
 
 
+def _add_direction_columns(conn: sqlite3.Connection) -> None:
+    """v6: preserve authorship and add separate counterparty attribution.
+
+    Existing rows keep NULL direction because their authorship was not
+    recorded. Readers use `direction IS NOT 'outbound'` to preserve those
+    rows. Collector opt-ins are separate Phase C steps.
+    The caller owns the transaction, including index replacement and version
+    stamping. Repeated calls detect columns that already exist.
+    """
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(items)")}
+    if "direction" not in columns:
+        conn.execute(
+            "ALTER TABLE items ADD COLUMN direction TEXT "
+            "CHECK (direction IN ('inbound','outbound'))")
+    if "counterparty_pending_until" not in columns:
+        conn.execute(
+            "ALTER TABLE items ADD COLUMN counterparty_pending_until TEXT")
+
+    for name in ("source_account", "counterparty_key", "counterparty_name",
+                 "counterparty_handle", "counterparty_candidates"):
+        if name not in columns:
+            conn.execute(f"ALTER TABLE items ADD COLUMN {name} TEXT")
+    if "counterparty_basis" not in columns:
+        conn.execute("ALTER TABLE items ADD COLUMN counterparty_basis TEXT "
+                     "CHECK (counterparty_basis IN "
+                     "('single_recipient','dm','mention','reply'))")
+
+    # Replace the old index: IF NOT EXISTS alone would keep its unfiltered
+    # definition. Building the replacement scans the existing items table.
+    conn.execute("DROP INDEX IF EXISTS idx_items_pending")
+    conn.execute(
+        "CREATE INDEX idx_items_pending ON items(state, event_at) "
+        "WHERE direction IS NOT 'outbound'")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_items_conversation "
+                 "ON items(source, source_account, thread_ref, event_at)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_items_counterparty_pending "
+        "ON items(counterparty_pending_until) "
+        "WHERE counterparty_pending_until IS NOT NULL")
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _add_body_cleared_at,
     3: _add_sender_key,
     4: _add_removal_tracking,
     5: _add_identity_model,
+    6: _add_direction_columns,
 }
 
 

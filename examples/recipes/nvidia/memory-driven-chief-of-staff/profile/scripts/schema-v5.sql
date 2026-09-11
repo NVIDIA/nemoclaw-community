@@ -1,3 +1,12 @@
+-- FROZEN. The v5 schema exactly as it shipped.
+--
+-- Kept so the v5 -> v6 migration is tested against the database people
+-- actually have. v6 only adds nullable columns and indexes, so it does not
+-- need this file the way v4 -> v5's table rebuild did — kept anyway, for the
+-- same reason v4's copy was kept: the next migration after this one will
+-- want a real v5 database to test against, not a hand-edited v6 with the new
+-- columns removed.
+
 -- Ledger store for the memory-driven chief-of-staff recipe.
 --
 -- Target runtime : SQLite bundled with Hermes 0.19.0 (the version the current
@@ -22,7 +31,7 @@ CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
-INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '6');
+INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '5');
 
 
 -- ---------------------------------------------------------------------------
@@ -120,21 +129,7 @@ CREATE TABLE IF NOT EXISTS items (
     state       TEXT NOT NULL
                 CHECK (state IN ('pending','judged','skipped'))
                 DEFAULT 'pending',
-    state_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-
-    -- Authorship relative to the connected user. NULL means unrecorded;
-    -- pre-C1 collectors keep this value until their separate upgrades.
-    direction   TEXT CHECK (direction IN ('inbound','outbound')),
-    -- Resolution deadline measured from the outbound event. Counterparty
-    -- fields describe the recipient; sender fields always describe the author.
-    counterparty_pending_until TEXT,
-    source_account TEXT,
-    counterparty_key TEXT,
-    counterparty_name TEXT,
-    counterparty_handle TEXT,
-    counterparty_basis TEXT CHECK (counterparty_basis IN
-        ('single_recipient','dm','mention','reply')),
-    counterparty_candidates TEXT
+    state_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
 -- ---------------------------------------------------------------------------
@@ -183,9 +178,8 @@ CREATE INDEX IF NOT EXISTS idx_links_right
     ON identity_links(right_source, right_key) WHERE status = 'confirmed';
 
 
--- _db.ensure_store creates idx_items_pending and
--- idx_items_counterparty_pending after migration. Creating indexes on the
--- new columns here would fail before an older items table can be upgraded.
+-- Intake selector reads this: oldest pending first.
+CREATE INDEX IF NOT EXISTS idx_items_pending ON items(state, event_at);
 -- Body pruning reads this.
 CREATE INDEX IF NOT EXISTS idx_items_event_at ON items(event_at) WHERE body IS NOT NULL;
 

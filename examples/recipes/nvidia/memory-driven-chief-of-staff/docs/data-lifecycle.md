@@ -231,3 +231,12 @@ twice does nothing the second time. `schema-v1.sql` is kept beside
 `schema.sql` as the frozen text of what actually shipped, so the migration is
 tested against the real prior state rather than against the current schema
 with a column removed.
+
+## Direction schema (v6)
+
+The [Phase C1 contract](phase-c1-direction.md) describes author and counterparty
+fields, migration, exclusions, reader compatibility, and rollback through a
+pre-upgrade backup. Retention keeps these metadata fields, including recipient
+addresses and attribution basis; `store.json` exports them with every item.
+The C1 migration alone enables no additional collection. Graph Sent Items and
+Slack self-authored capture require their separate opt-ins.

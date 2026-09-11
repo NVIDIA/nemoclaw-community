@@ -127,12 +127,15 @@ def main() -> int:
     SLICE = bounded_int("INTAKE_SLICE", 25, maximum=MAX_SLICE)
     ensure_store()
     collected, collector_failed = collect()
+    from outbound import resolve_pending
+    with write_txn() as conn:
+        pending_resolved = resolve_pending(conn)
 
     with write_txn() as conn:
         rows = conn.execute(
             "SELECT source_id, source, scope, event_at, sender, subject, body,"
             "       addressing, unread"
-            "  FROM items WHERE state='pending'"
+            "  FROM items WHERE state='pending' AND direction IS NOT 'outbound'"
             " ORDER BY event_at LIMIT ?", (SLICE,)).fetchall()
         open_rows = conn.execute(
             "SELECT o.source_id, o.title, o.status FROM obligations o"
@@ -146,6 +149,7 @@ def main() -> int:
             "body", "addressing", "unread")
     payload = {
         "collected": collected,
+        "pending_resolved": pending_resolved,
         "slice": [dict(zip(cols, r)) for r in rows],
         "open_obligations": [{"source_id": r[0], "title": r[1]} for r in open_rows],
         "recently_resolved": [{"title": r[0], "status": r[1]} for r in recent_closed],

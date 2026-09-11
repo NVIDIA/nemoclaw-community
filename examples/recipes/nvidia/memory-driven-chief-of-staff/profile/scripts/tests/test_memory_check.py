@@ -846,24 +846,36 @@ class TestTheContractDoesNotContradictTheChecker(unittest.TestCase):
 
 
 class TestNoInstructionAsksAnUnanswerableQuestion(unittest.TestCase):
-    """The store holds inbound messages only.
+    """The store tracks whether both directions exist, not which message
+    replied to which.
 
-    `memory-writing` told the agent to write a page when the user "has
-    exchanged messages with them in both directions", and not to write one for
-    "senders the user never replies to". Neither can be evaluated: the mail
-    collector reads the inbox and the Slack one drops every message the user
-    wrote, so the outbound half is not in the store. Both rules degraded
-    silently — and the admission clause that was lost is the one that best
-    separates a colleague from a system that only sends notifications.
+    An earlier version of `memory-writing` told the agent to write a page
+    when the user "has exchanged messages with them in both directions", and
+    not to write one for "senders the user never replies to" — both
+    unanswerable at the time, because the mail collector read the inbox only
+    and the Slack one dropped every message the user wrote. Phase C of #156
+    fixed that: both collectors now keep the user's own messages, tagged
+    `direction='outbound'`, and `select_memory.py` computes `both_directions`
+    from them. "Both directions" is an answerable claim again, and the rule
+    text says so.
+
+    What is still missing is causal, not existential: nothing in the store
+    says a specific outbound row was a *reply to* a specific inbound one,
+    only that both exist somewhere in the window. An instruction phrased as
+    "the user replied to X" or "never replies" still asks the model to judge
+    something nothing here can answer — the same class of defect this test
+    class exists to catch, narrowed by Phase C rather than retired by it.
     """
 
     SKILL = (HERE.parents[1] / "profile" / "skills" / "memory-writing"
              / "SKILL.md")
 
-    # Anything that presumes the user's own traffic. Spellings, not concepts,
-    # so this is a floor and not a proof — see the test below it, which is
-    # the one that reads the evidence rather than the words.
-    OUTBOUND = ("both directions", "never replies", "the user replied",
+    # Anything that presumes message-level reply causality, which the store
+    # still does not track — as opposed to "both directions exist somewhere
+    # in the window", which `both_directions` now answers for real. Spellings,
+    # not concepts, so this is a floor and not a proof — see the test below
+    # it, which is the one that reads the evidence rather than the words.
+    OUTBOUND = ("never replies", "the user replied",
                 "user's reply", "replied to", "user sent", "user wrote",
                 "sent by the user", "responded to them")
 
@@ -928,7 +940,7 @@ class TestNoInstructionAsksAnUnanswerableQuestion(unittest.TestCase):
 
         text = self.SKILL.read_text(encoding="utf-8")
         self.assertIn("never `mentioned`", text)
-        self.assertIn("necessary condition", text)
+        self.assertIn("sufficient on its own", text)
         self.assertIn("Anything automated, whatever its `addressing`",
                       self.rules_block())
 
@@ -942,11 +954,22 @@ class TestNoInstructionAsksAnUnanswerableQuestion(unittest.TestCase):
                     / "select_memory.py").read_text(encoding="utf-8")
         self.assertIn('"addressing": addressing', selector)
 
+    def test_the_admission_rule_uses_a_field_the_selector_supplies(self):
+        """`both_directions` is on every candidate the selector hands over,
+        computed there rather than left for the model to infer from raw rows
+        or, worse, from counting `addressing` values itself."""
+        self.assertIn("both_directions", self.rules_block())
+        selector = (HERE.parents[1] / "profile" / "scripts"
+                    / "select_memory.py").read_text(encoding="utf-8")
+        self.assertIn('"both_directions"', selector)
+
     def test_the_limitation_is_stated_rather_than_left_implicit(self):
-        """An agent that does not know the outbound half is missing will
-        reasonably try to infer it."""
+        """An agent that does not know `both_directions` can be false even
+        after a real exchange will reasonably read it as "never happened"
+        rather than "not confirmed" — and act on a colleague's silence that
+        was never actually silence."""
         text = self.SKILL.read_text(encoding="utf-8")
-        self.assertIn("inbound messages only", text)
+        self.assertIn("not confirmed", text)
 
     def test_the_third_rule_does_not_compare_against_an_unsupplied_identity(self):
         """"Names the user" asked the agent to check a message's text

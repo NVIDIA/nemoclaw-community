@@ -127,6 +127,20 @@ def excluded(item: dict[str, Any], rules: dict[str, set[str]]) -> bool:
     if not any(rules.values()):
         return False
 
+    # Outbound participant coverage must be explicit. A group with unknown
+    # members cannot be checked against person/domain exclusions before storage.
+    if item.get("direction") == "outbound":
+        if (rules["senders"] or rules["domains"]) and not item.get("participants_complete"):
+            return True
+        values = list(item.get("participant_values") or []) + [
+            item.get("counterparty_key"), item.get("counterparty_name")]
+        for value in values:
+            value = str(value or "").strip().lower()
+            if value in rules["senders"]:
+                return True
+            if "@" in value and value.rsplit("@", 1)[-1] in rules["domains"]:
+                return True
+
     scope = str(item.get("scope") or "").strip().lower()
     if scope and scope in rules["channels"]:
         return True

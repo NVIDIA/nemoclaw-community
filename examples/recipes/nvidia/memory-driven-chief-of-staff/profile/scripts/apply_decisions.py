@@ -116,6 +116,14 @@ def apply(env: dict[str, Any]) -> dict[str, int]:
         for d in decisions:
             sid, verdict = d["source_id"], d["decision"]
 
+            # Enforce the direction boundary at the writer too. A stale
+            # decision envelope must not turn the user's words into an ask.
+            item = conn.execute(
+                "SELECT direction FROM items WHERE source_id=?", (sid,)
+            ).fetchone()
+            if item and item[0] == "outbound":
+                raise ValueError("outbound items cannot receive obligation decisions")
+
             if verdict == "SKIP":
                 conn.execute(
                     "UPDATE items SET state='skipped',"

@@ -63,7 +63,7 @@ class TestMigration(unittest.TestCase):
 
         with sqlite3.connect(path) as c:
             # v1 -> v4 now, so all three steps run in order.
-            self.assertEqual(migrate(c), [2, 3, 4, 5])
+            self.assertEqual(migrate(c), [2, 3, 4, 5, 6])
             self.assertEqual(current_version(c), SCHEMA_VERSION)
             columns = {row[1] for row in c.execute("PRAGMA table_info(items)")}
             self.assertIn("body_cleared_at", columns)
@@ -104,7 +104,7 @@ class TestMigration(unittest.TestCase):
                              "the artifact is not really v2")
 
         with sqlite3.connect(path) as c:
-            self.assertEqual(migrate(c), [3, 4, 5])
+            self.assertEqual(migrate(c), [3, 4, 5, 6])
             self.assertEqual(current_version(c), SCHEMA_VERSION)
             columns = {row[1] for row in c.execute("PRAGMA table_info(items)")}
             self.assertIn("sender_key", columns)
@@ -152,7 +152,7 @@ class TestMigration(unittest.TestCase):
                              "the frozen v3 schema contains a v4 column")
 
         with sqlite3.connect(path) as c:
-            self.assertEqual(migrate(c), [4, 5])
+            self.assertEqual(migrate(c), [4, 5, 6])
             self.assertEqual(current_version(c), SCHEMA_VERSION)
             columns = {row[1] for row in c.execute("PRAGMA table_info(items)")}
             row = c.execute("SELECT sender, sender_key, body, deleted_at,"
@@ -177,7 +177,7 @@ class TestMigration(unittest.TestCase):
         with sqlite3.connect(path) as c:
             c.execute("UPDATE meta SET value='2' WHERE key='schema_version'")
         with sqlite3.connect(path) as c:
-            self.assertEqual(migrate(c), [3, 4, 5])
+            self.assertEqual(migrate(c), [3, 4, 5, 6])
             self.assertEqual(current_version(c), SCHEMA_VERSION)
 
     def test_the_rebuild_keeps_the_audit_trail(self):
@@ -287,6 +287,8 @@ class TestMigration(unittest.TestCase):
         # v3 schema that immediately preceded it.
         # The rule it stood for still holds; the example moved on.
         self.assertIn("deleted_at", columns)
+        self.assertIn("direction", columns)
+        self.assertIn("counterparty_pending_until", columns)
         self.assertNotIn("thread_participants", columns)
         with sqlite3.connect(p) as c:
             self.assertEqual(migrate(c), [])
@@ -298,6 +300,109 @@ class TestMigration(unittest.TestCase):
         with sqlite3.connect(p) as c:
             self.assertEqual(current_version(c), 0)
             self.assertEqual(migrate(c), list(range(1, SCHEMA_VERSION + 1)))
+            self.assertEqual(current_version(c), SCHEMA_VERSION)
+
+    def test_the_v5_artifact_is_never_quietly_edited(self):
+        artifact = (HERE / "schema-v5.sql").read_text(encoding="utf-8")
+        self.assertIn("'schema_version', '5'", artifact)
+        self.assertIn("sender_handle", artifact)
+        self.assertNotIn("direction", artifact)
+        self.assertNotIn("counterparty_pending_until", artifact)
+
+    def test_a_real_v5_store_upgrades_to_the_current_version(self):
+        """Exercised against v5's own artifact, not a doctored current one."""
+        path = Path(tempfile.mkdtemp()) / "v5.db"
+        with sqlite3.connect(path) as c:
+            c.executescript((HERE / "schema-v5.sql").read_text(encoding="utf-8"))
+            self.assertEqual(current_version(c), 5)
+            c.execute("INSERT INTO items(source_id, source, scope, event_at,"
+                      " sender, sender_key, body, addressing, state) VALUES"
+                      " ('m1','email','inbox','2026-08-01T00:00:00Z','Dana',"
+                      "  'dana@example.com','b','direct','pending')")
+
+        with sqlite3.connect(path) as c:
+            self.assertEqual(migrate(c), [6])
+            self.assertEqual(current_version(c), SCHEMA_VERSION)
+            columns = {row[1] for row in c.execute("PRAGMA table_info(items)")}
+            self.assertIn("direction", columns)
+            self.assertIn("counterparty_pending_until", columns)
+
+    def test_the_v5_to_v6_upgrade_leaves_existing_rows_directionless(self):
+        """NULL, not 'inbound' -- see `_add_direction_columns`'s docstring.
+
+        A pre-Phase-C collector dropped outbound messages outright, so every
+        row that survives to be migrated happens to be inbound today -- but
+        asserting that as a fact this migration cannot verify is exactly the
+        false-precision the column's nullability exists to avoid.
+        """
+        path = Path(tempfile.mkdtemp()) / "v5.db"
+        with sqlite3.connect(path) as c:
+            c.executescript((HERE / "schema-v5.sql").read_text(encoding="utf-8"))
+            c.execute("INSERT INTO items(source_id, source, scope, event_at,"
+                      " sender, body, addressing, state) VALUES"
+                      " ('m1','slack','c1','2026-08-01T00:00:00Z','Dana',"
+                      "  'b','direct','pending')")
+
+        with sqlite3.connect(path) as c:
+            migrate(c)
+            row = c.execute(
+                "SELECT direction, counterparty_pending_until FROM items"
+                " WHERE source_id='m1'").fetchone()
+        self.assertIsNone(row[0])
+        self.assertIsNone(row[1])
+
+    def test_the_v6_index_excludes_outbound_rows_and_keeps_null_ones(self):
+        """The regression this migration exists to prevent.
+
+        `direction != 'outbound'` is not NULL-safe in SQLite -- it drops
+        every pre-migration row (`direction IS NULL`) from any query that
+        uses it, silently and permanently. This asserts the actual index
+        predicate and a real query against it, not just that the column
+        exists -- a test that only checked the column would not have caught
+        the earlier draft of this migration using the unsafe form.
+        """
+        path = Path(tempfile.mkdtemp()) / "v5.db"
+        with sqlite3.connect(path) as c:
+            c.executescript((HERE / "schema-v5.sql").read_text(encoding="utf-8"))
+            c.execute("INSERT INTO items(source_id, source, scope, event_at,"
+                      " body, state) VALUES"
+                      " ('legacy','slack','c1','2026-08-01T00:00:00Z','b',"
+                      "  'pending')")
+
+        with sqlite3.connect(path) as c:
+            migrate(c)
+            c.execute("INSERT INTO items(source_id, source, scope, event_at,"
+                      " body, state, direction) VALUES"
+                      " ('in','slack','c1','2026-08-02T00:00:00Z','b',"
+                      "  'pending','inbound')")
+            c.execute("INSERT INTO items(source_id, source, scope, event_at,"
+                      " body, state, direction) VALUES"
+                      " ('out','slack','c1','2026-08-03T00:00:00Z','b',"
+                      "  'pending','outbound')")
+            pending = {row[0] for row in c.execute(
+                "SELECT source_id FROM items"
+                " WHERE state='pending' AND direction IS NOT 'outbound'")}
+        self.assertEqual(pending, {"legacy", "in"})
+
+        # The index itself was rebuilt, not merely a query that happens to
+        # work without it -- confirms the DROP INDEX / CREATE INDEX pair ran
+        # rather than `IF NOT EXISTS` silently keeping the pre-v6 shape.
+        with sqlite3.connect(path) as c:
+            plan = c.execute(
+                "EXPLAIN QUERY PLAN SELECT source_id FROM items"
+                " WHERE state='pending' AND direction IS NOT 'outbound'"
+            ).fetchall()
+        plan_text = " ".join(str(cell) for row in plan for cell in row)
+        self.assertIn("idx_items_pending", plan_text)
+
+    def test_migrating_a_v5_store_twice_is_a_no_op_the_second_time(self):
+        path = Path(tempfile.mkdtemp()) / "v5.db"
+        with sqlite3.connect(path) as c:
+            c.executescript((HERE / "schema-v5.sql").read_text(encoding="utf-8"))
+        with sqlite3.connect(path) as c:
+            self.assertEqual(migrate(c), [6])
+        with sqlite3.connect(path) as c:
+            self.assertEqual(migrate(c), [])
             self.assertEqual(current_version(c), SCHEMA_VERSION)
 
 

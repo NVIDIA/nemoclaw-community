@@ -163,6 +163,17 @@ def ensure_store(schema_sql: Path | None = None) -> Path:
         conn.execute("BEGIN IMMEDIATE")
         try:
             migrate(conn)
+            # Create direction indexes after migration, when old stores
+            # have the new columns. Fresh stores need these indexes too.
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_items_pending "
+                "ON items(state, event_at) WHERE direction IS NOT 'outbound'")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_items_conversation "
+                         "ON items(source, source_account, thread_ref, event_at)")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_items_counterparty_pending "
+                "ON items(counterparty_pending_until) "
+                "WHERE counterparty_pending_until IS NOT NULL")
             conn.execute("COMMIT")
         except Exception:
             if conn.in_transaction:

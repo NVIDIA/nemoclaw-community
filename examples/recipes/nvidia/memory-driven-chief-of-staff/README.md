@@ -1131,11 +1131,12 @@ memory-driven-chief-of-staff/
 │   ├── schema.md                     # Memory page types, provenance, decay, ceilings
 │   ├── seed/                         # Initial index and attention pages for a new memory
 │   ├── scripts/
-│   │   ├── schema.sql                # Current v5 SQLite store schema
+│   │   ├── schema.sql                # Current v6 SQLite store schema
 │   │   ├── schema-v1.sql             # Frozen schemas used by migration tests
 │   │   ├── schema-v2.sql
 │   │   ├── schema-v3.sql
 │   │   ├── schema-v4.sql
+│   │   ├── schema-v5.sql
 │   │   ├── _db.py                    # Profile-home, connection, and transaction boundary
 │   │   ├── identity.py               # Cross-provider identity relation resolver
 │   │   ├── link_identity.py          # User command for identity confirmations
@@ -1198,7 +1199,7 @@ memory-driven-chief-of-staff/
 | --- | --- | --- |
 | Python package manifest | None | All Python modules use the standard library |
 | Recipe manifest | `profile/distribution.yaml` | Pins recipe version and Hermes 0.19.0+ |
-| SQLite schema | `profile/scripts/schema.sql` | Defines application state schema v5 |
+| SQLite schema | `profile/scripts/schema.sql` | Defines application state schema v6 |
 | Outlook provider policy | `providers/graph-user.yaml` | Declares the recipe's intended read-only delegated `graph.microsoft.com` boundary |
 | Slack provider policy | `providers/slack-user.yaml` | Declares the recipe's intended read-only `slack.com` boundary |
 <!-- markdownlint-enable MD013 -->
@@ -1352,7 +1353,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the sixteen files report 733 tests
+Expected result: every file ends with `OK`, the seventeen files report 757 tests
 in total, and the final line is `failed=0`. Do not shorten the loop with an
 early break; running every module is part of the documented check.
 
