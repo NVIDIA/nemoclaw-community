@@ -1,0 +1,26 @@
+THIRD-PARTY SOFTWARE NOTICES
+
+This recipe depends on the kubernetes-deployer chart in this repository
+(examples/tools/kubernetes-deployer), whose own THIRD-PARTY-NOTICES records the
+vendored NVIDIA OpenShell Helm chart and its local modifications. The recipe
+adds no vendored third-party source. It references, but does not vendor, these
+immutable artifacts:
+
+- Python 3.13.7 slim utility image, used for the authenticated API proxies and
+  the OpenShift CLI stager (Python Software Foundation License and included
+  Debian component licenses): https://hub.docker.com/_/python
+- OpenShift Client 4.20.28 archives containing oc and kubectl, downloaded and
+  SHA-256-verified inside the seed Job (Apache-2.0):
+  https://github.com/openshift/oc and
+  https://mirror.openshift.com/pub/openshift-v4/
+- NVIDIA Dynamo vLLM and TensorRT-LLM runtime images, referenced by the optional
+  model deployment skill (Apache-2.0 and included component licenses):
+  https://github.com/ai-dynamo/dynamo and https://github.com/NVIDIA/TensorRT-LLM
+- vLLM OpenAI server image, referenced by the optional model deployment skill
+  (Apache-2.0 and included component licenses): https://github.com/vllm-project/vllm
+
+The skill trees under files/skills/ are NVIDIA-authored; each carries a
+SOURCE_NOTICES.md describing any adapted material.
+
+The repository-root THIRD-PARTY-NOTICES records the same referenced projects
+for repository-level attribution and review.

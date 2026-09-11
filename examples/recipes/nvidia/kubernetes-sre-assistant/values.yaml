@@ -1,0 +1,186 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Kubernetes SRE assistant: a Hermes agent with a reviewed Kubernetes SRE skill
+# and a policy-bounded cluster API path, layered on the kubernetes-deployer
+# chart (examples/tools/kubernetes-deployer). This chart owns the skills, the
+# authenticated API proxies, and their RBAC; the deployer owns the OpenShell
+# gateway, the sandbox, the state volume, and the access surfaces.
+#
+# The recipe configuration lives under `global.sre` because Helm shares only
+# global values with the deployer subchart, whose extension points render the
+# templates in templates/_deployer-values.tpl.
+
+global:
+  sre:
+    bundle:
+      # SHA-256 of the committed skill archive (files/sre-skills.tar.xz.sha256)
+      # and the ordered ConfigMap chunk names (files/sre-skills.parts.json).
+      # scripts/build-sre-skills-bundle.py rewrites both; rendering fails when
+      # they disagree with the committed files.
+      sha256: 6549aa785c1b584c4a72e818df2d5339784118ae0303acdb1da8a0e5d8b02cf2
+      parts:
+        - sre-skills.part-000
+    # Immutable multi-architecture Python image for the API proxies and the
+    # OpenShift CLI stager. Identical to the deployer's utility image.
+    utilityImage: docker.io/library/python:3.13.7-slim@sha256:5f55cdf0c5d9dc1a415637a5ccc4a9e18663ad203673173b8cda8f8dcacef689
+    cli:
+      # Official, checksum-pinned OpenShift client archives. The utility image
+      # verifies and stages oc/kubectl; this chart builds no helper image.
+      version: 4.20.28
+      amd64:
+        url: https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/4.20.28/openshift-client-linux.tar.gz
+        sha256: 6250bbbbdb46c5c4dfc8c1b083a349938bec8546cbb88d226a410a2e0d5d9bbe
+      arm64:
+        url: https://mirror.openshift.com/pub/openshift-v4/arm64/clients/ocp/4.20.28/openshift-client-linux.tar.gz
+        sha256: 47582d3d77e34a5f4cebbb9dc266978b1501618e05de9b133e3904fa5960570a
+    rbac:
+      # safe: read common non-secret resources cluster-wide and scale only
+      # Deployments/StatefulSets. Full workload patches are intentionally denied.
+      # broad-no-delete: all API groups/resources/verbs except delete operations.
+      mode: safe
+      dangerousAcknowledgement: ""
+    proxy:
+      port: 8001
+      # Empty name creates a random chart-managed Secret and preserves it across
+      # upgrades with Helm lookup. Set a name to reference an operator Secret.
+      authSecretRef:
+        name: ""
+        key: token
+      # Empty name creates and preserves a chart-managed private CA and serving
+      # certificate. Set a name to use an operator-managed kubernetes.io/tls
+      # Secret whose certificate covers every chart proxy Service DNS name.
+      tlsSecretRef:
+        name: ""
+        caKey: ca.crt
+        certKey: tls.crt
+        privateKeyKey: tls.key
+      maxRequestBytes: 10485760
+      maxResponseBytes: 33554432
+      requestTimeoutSeconds: 30
+    networkPolicy:
+      # Admit only Agent Sandbox Pods to the proxy ports. The bearer token
+      # remains the authorization boundary after this network admission.
+      enabled: true
+    openshiftLlmDeploy:
+      enabled: false
+      # Empty uses the Helm release namespace. Set an explicit namespace only
+      # when Helm is authorized to create the model-runner ServiceAccount there.
+      targetNamespace: ""
+      modelRunnerServiceAccount:
+        create: true
+        name: ""
+      # Reference only. The chart never reads or copies this Secret. A future
+      # model-download Job receives the selected key through secretKeyRef.
+      hfTokenSecretRef:
+        name: hf-token
+        key: HF_TOKEN
+      metrics:
+        # Creates a separate read-only, exact-service proxy. On OpenShift it
+        # binds cluster-monitoring-view; keep disabled unless telemetry is needed.
+        enabled: false
+        namespace: openshift-monitoring
+        service: thanos-querier
+        port: 9091
+        # OpenShift creates an injected service-CA ConfigMap when name is empty.
+        # Standard Kubernetes uses system roots unless an explicit ConfigMap is
+        # supplied for the HTTPS Prometheus Service certificate.
+        caConfigMapRef:
+          name: ""
+          key: service-ca.crt
+      dynamo:
+        enabled: true
+        apiVersion: nvidia.com/v1beta1
+        vllmRuntimeImage: nvcr.io/nvidia/ai-dynamo/vllm-runtime:1.4.1@sha256:a6bb45ad652f01d08b5a18b54b9fa9e80584ce18ee1ba1e5a760a8f228872fe5
+        vllmRuntimeVersion: "1.4.1"
+        tensorrtllmRuntimeImage: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.4.1@sha256:535640569a28a94a373ffb091d7bea40a84cc7d46cee56b25a487b2472e12668
+        tensorrtllmRuntimeVersion: "1.4.1"
+        standardVllmImage: docker.io/vllm/vllm-openai:v0.27.1@sha256:0a51ea5b4ae2dc5d81890e5173f54203d2a3ae0cfffe51b8fd2afd4391bfd967
+        # Only exact model IDs with reviewed, immutable images belong here.
+        modelRuntimeOverrides: {}
+        observationTimeoutSeconds: 150
+        downloadObservationTimeoutSeconds: 300
+        downloadTimeoutSeconds: 7200
+        verificationTimeoutSeconds: 300
+        terminalTimeoutSeconds: 420
+        imagePullSecretName: ""
+      deletion:
+        enabled: false
+        namespace: ""
+        deletePVCs: false
+        # Reserved false: model credentials remain human-managed.
+        deleteSecrets: false
+        # Exact API-group/resource/name tuples authorized for deletion. The chart
+        # has no implicit ownership heuristic, so this must be operator supplied.
+        allowedResources: []
+        dangerousAcknowledgement: ""
+
+# Values for the kubernetes-deployer subchart. Everything not listed here keeps
+# the deployer's own defaults; override any deployer value under this key, for
+# example `deployer.agent.model.baseUrl` or `-f values-openshift.yaml`.
+deployer:
+  # Fixed so this chart can derive the deployer's resource names
+  # (<release>-deployer-*) without templated subchart values.
+  nameOverride: deployer
+  imagePullSecrets: []
+  platform:
+    openshift:
+      enabled: false
+  agent:
+    # Extension points rendered by the deployer with tpl; the named templates
+    # live in templates/_deployer-values.tpl and read global.sre.
+    envTemplate: '{{ include "sre-assistant.agentEnv" . }}'
+    extraStateMounts: '{{ include "sre-assistant.extraStateMounts" . }}'
+  policy:
+    readOnlyPaths:
+      - /chart-bin
+    networkPoliciesTemplate: '{{ include "sre-assistant.networkPolicies" . }}'
+  lifecycle:
+    seed:
+      plugins: '{{ include "sre-assistant.seedPlugins" . }}'
+  operatorClient:
+    skills: '{{ include "sre-assistant.operatorClientSkills" . }}'
+
+# Values for the vendored sre-autoheal-agent subchart, which adds autonomous
+# detection and tiered remediation beside the interactive assistant. Opt-in:
+# with enabled=false the subchart renders nothing at all.
+#
+# Risk tiers are enforced inside the agent, not by this chart. In `assisted`
+# mode only SAFE actions (restart pod, rollout restart, delete evicted pods)
+# run unattended; MEDIUM actions need an approval annotation on the specific
+# workload, and NEVER_AUTO actions always escalate to a human. Namespace
+# scope, an opt-out label, flap detection, a cooldown and per-cycle and
+# per-hour budgets apply on top.
+autoheal:
+  enabled: false
+  # Same immutable digest as global.sre.utilityImage above. The agent is pure
+  # Python standard library with no pip install at start-up, so it needs only
+  # an interpreter. The subchart's own default is a mutable tag; this repo
+  # pins digests.
+  image:
+    repository: docker.io/library/python
+    digest: sha256:5f55cdf0c5d9dc1a415637a5ccc4a9e18663ad203673173b8cda8f8dcacef689
+  # Required verbatim when policy mode is not `observe`, because the agent
+  # then changes live workloads without being asked.
+  dangerousAcknowledgement: ""
+  rbac:
+    # read-only | safe | safe+nodes. `safe` is the least privilege that still
+    # allows the SAFE tier to act.
+    profile: safe
+  llm:
+    enabled: true
+    # The agent diagnoses findings through an OpenAI-compatible endpoint.
+    # Umbrella charts pass static subchart values, so this cannot be derived
+    # from deployer.agent.model; 000-validate.yaml refuses an enabled agent
+    # with no endpoint. Point it at the assistant's model unless you
+    # deliberately want a cheaper one for triage.
+    baseUrl: ""
+    model: ""
+    apiKeySecret:
+      name: ""
+      key: api-key
+  agentConfig:
+    policy:
+      # observe | safe | assisted. Start at observe on a cluster you share.
+      mode: observe
+      dry_run: false

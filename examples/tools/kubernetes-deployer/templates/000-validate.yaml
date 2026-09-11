@@ -1,0 +1,357 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- $openshift := .Values.platform.openshift -}}
+{{- if and .Release.IsUpgrade .Values.lifecycle.seed.runOnUpgrade (ne .Values.lifecycle.seed.dangerousAcknowledgement "I_ACKNOWLEDGE_SANDBOX_STOPPED") -}}
+{{- fail "lifecycle.seed.dangerousAcknowledgement must equal I_ACKNOWLEDGE_SANDBOX_STOPPED before remounting the Hermes PVC during an upgrade" -}}
+{{- end -}}
+{{- $issuerDiscovery := .Values.platform.serviceAccountIssuerDiscovery -}}
+{{- /*
+Both spellings of the in-cluster ServiceAccount issuer need the same
+discovery decision. OpenShift publishes the short form; a default kubeadm
+cluster publishes the fully qualified one. OpenShell compares the configured
+issuer to the published one byte for byte, so the value must match the
+cluster and the guard below must recognise either spelling.
+*/ -}}
+{{- $inClusterIssuers := list "https://kubernetes.default.svc" "https://kubernetes.default.svc.cluster.local" -}}
+{{- if and $issuerDiscovery.createPublicBinding (ne $issuerDiscovery.dangerousAcknowledgement "I_ACKNOWLEDGE_PUBLIC_OIDC_DISCOVERY") -}}
+{{- fail "platform.serviceAccountIssuerDiscovery.dangerousAcknowledgement must equal I_ACKNOWLEDGE_PUBLIC_OIDC_DISCOVERY before granting unauthenticated read access to OIDC discovery and public JWKS endpoints" -}}
+{{- end -}}
+{{- if and $issuerDiscovery.createPublicBinding (ne .Values.lifecycle.bootstrap.authentication.mode "serviceAccountToken") -}}
+{{- fail "platform.serviceAccountIssuerDiscovery.createPublicBinding is only valid with serviceAccountToken bootstrap authentication" -}}
+{{- end -}}
+{{- if and $issuerDiscovery.createPublicBinding $issuerDiscovery.preexistingAnonymousAccess -}}
+{{- fail "platform.serviceAccountIssuerDiscovery.createPublicBinding and preexistingAnonymousAccess are mutually exclusive; choose the one that matches the cluster" -}}
+{{- end -}}
+{{- /*
+The OpenShell gateway resolves its OIDC issuer by fetching the discovery
+document and JWKS with an anonymous HTTP client. Standard Kubernetes serves
+neither endpoint anonymously and stock OpenShift serves only the discovery
+document, so a managed gateway on the in-cluster ServiceAccount issuer needs
+an explicit, acknowledged decision about that access before it can start.
+*/ -}}
+{{- if and
+      (eq .Values.openshell.mode "managed")
+      (eq .Values.lifecycle.bootstrap.authentication.mode "serviceAccountToken")
+      (has .Values.openshell.server.oidc.issuer $inClusterIssuers)
+      (not $issuerDiscovery.createPublicBinding)
+      (not $issuerDiscovery.preexistingAnonymousAccess) -}}
+{{- fail "the managed OpenShell gateway fetches https://kubernetes.default.svc/.well-known/openid-configuration and its JWKS without credentials, which standard Kubernetes and stock OpenShift do not serve anonymously; either install with -f values-kubernetes.yaml (or -f values-openshift.yaml), which sets platform.serviceAccountIssuerDiscovery.createPublicBinding=true with dangerousAcknowledgement=I_ACKNOWLEDGE_PUBLIC_OIDC_DISCOVERY, or set platform.serviceAccountIssuerDiscovery.preexistingAnonymousAccess=true when the cluster already exposes both endpoints anonymously (the bootstrap Job verifies this before creating the sandbox)" -}}
+{{- end -}}
+{{- $sandboxLifecycle := .Values.lifecycle.sandbox -}}
+{{- if not (has $sandboxLifecycle.desiredState (list "present" "absent")) -}}
+{{- fail "lifecycle.sandbox.desiredState must be present or absent" -}}
+{{- end -}}
+{{- if and (eq $sandboxLifecycle.desiredState "absent") (ne $sandboxLifecycle.dangerousAcknowledgement "I_ACKNOWLEDGE_SANDBOX_DELETE") -}}
+{{- fail "lifecycle.sandbox.dangerousAcknowledgement must equal I_ACKNOWLEDGE_SANDBOX_DELETE before the bootstrap Job deletes this release's OpenShell sandbox and its active Hermes sessions" -}}
+{{- end -}}
+{{- if and $openshift.createPrivilegedSccBinding (not $openshift.enabled) -}}
+{{- fail "platform.openshift.createPrivilegedSccBinding requires platform.openshift.enabled=true" -}}
+{{- end -}}
+{{- if and $openshift.createPrivilegedSccBinding (ne $openshift.dangerousAcknowledgement "I_ACKNOWLEDGE_PRIVILEGED_SCC") -}}
+{{- fail "platform.openshift.dangerousAcknowledgement must equal I_ACKNOWLEDGE_PRIVILEGED_SCC before creating the privileged SCC binding" -}}
+{{- end -}}
+{{- $gatewayUid := .Values.openshell.server.openshift.gatewayUid -}}
+{{- if and $gatewayUid.enabled (not $openshift.enabled) -}}
+{{- fail "openshell.server.openshift.gatewayUid.enabled requires platform.openshift.enabled=true" -}}
+{{- end -}}
+{{- if and $openshift.enabled (eq .Values.openshell.mode "managed") (not $gatewayUid.enabled) -}}
+{{- fail "managed OpenShift mode requires openshell.server.openshift.gatewayUid.enabled=true to isolate the gateway from the Hermes sandbox process limit" -}}
+{{- end -}}
+{{- $sandboxUid := .Values.openshell.server.openshift.sandboxUid -}}
+{{- if and $sandboxUid.enabled (not $openshift.enabled) -}}
+{{- fail "openshell.server.openshift.sandboxUid.enabled requires platform.openshift.enabled=true" -}}
+{{- end -}}
+{{- if $openshift.enabled -}}
+  {{- if and $openshift.verifyApi (not (.Capabilities.APIVersions.Has "security.openshift.io/v1")) -}}
+  {{- fail "platform.openshift.enabled=true requires the security.openshift.io/v1 API; use the Kubernetes defaults on a standard Kubernetes cluster" -}}
+  {{- end -}}
+  {{- if ne .Values.openshell.podSecurityContext.fsGroup nil -}}
+  {{- fail "OpenShift requires openshell.podSecurityContext.fsGroup=null so the SCC can allocate a permitted group" -}}
+  {{- end -}}
+  {{- if ne .Values.openshell.securityContext.runAsUser nil -}}
+  {{- fail "OpenShift requires openshell.securityContext.runAsUser=null so the SCC can allocate a permitted UID" -}}
+  {{- end -}}
+  {{- if .Values.openshell.server.enableUserNamespaces -}}
+  {{- fail "OpenShift requires openshell.server.enableUserNamespaces=false because this chart uses SCC-resolved identity for retained PVC subpaths" -}}
+  {{- end -}}
+  {{- if eq .Values.openshell.mode "managed" -}}
+    {{- if not $sandboxUid.enabled -}}
+    {{- fail "managed OpenShift mode requires openshell.server.openshift.sandboxUid.enabled=true to isolate Hermes and preserve NemoClaw's process limit" -}}
+    {{- end -}}
+    {{- if eq (int $gatewayUid.offset) (int $sandboxUid.offset) -}}
+    {{- fail "managed OpenShift mode requires distinct gatewayUid.offset and sandboxUid.offset values" -}}
+    {{- end -}}
+    {{- $gatewayExplicit := ne $gatewayUid.value nil -}}
+    {{- $sandboxExplicit := ne $sandboxUid.value nil -}}
+    {{- if ne $gatewayExplicit $sandboxExplicit -}}
+    {{- fail "managed OpenShift mode requires gatewayUid.value and sandboxUid.value to both be null for live lookup or both be set for offline rendering" -}}
+    {{- end -}}
+    {{- if and $gatewayExplicit $sandboxExplicit (eq (int $gatewayUid.value) (int $sandboxUid.value)) -}}
+    {{- fail "managed OpenShift mode requires distinct gatewayUid.value and sandboxUid.value values" -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- if eq .Values.openshell.mode "managed" -}}
+  {{- if not .Values.openshell.enabled -}}
+  {{- fail "openshell.enabled must be true when openshell.mode=managed" -}}
+  {{- end -}}
+  {{- if and .Values.openshell.server.sandboxNamespace (ne .Values.openshell.server.sandboxNamespace .Release.Namespace) -}}
+  {{- fail "managed mode requires openshell.server.sandboxNamespace to be empty or equal the Helm release namespace because the Sandbox mounts the release PVC and reaches namespace-local proxies" -}}
+  {{- end -}}
+  {{- if ne .Values.lifecycle.bootstrap.authentication.mode "serviceAccountToken" -}}
+  {{- fail "managed Kubernetes OpenShell requires lifecycle.bootstrap.authentication.mode=serviceAccountToken because mTLS is transport-only for the Kubernetes driver" -}}
+  {{- end -}}
+  {{- if .Values.openshell.server.auth.allowUnauthenticatedUsers -}}
+  {{- fail "openshell.server.auth.allowUnauthenticatedUsers must remain false for managed production gateways" -}}
+  {{- end -}}
+{{- else if eq .Values.openshell.mode "existing" -}}
+  {{- if .Values.openshell.enabled -}}
+  {{- fail "openshell.enabled must be false when openshell.mode=existing" -}}
+  {{- end -}}
+  {{- if not .Values.openshell.existing.endpoint -}}
+  {{- fail "openshell.existing.endpoint is required when openshell.mode=existing" -}}
+  {{- end -}}
+  {{- if not (hasPrefix "https://" .Values.openshell.existing.endpoint) -}}
+  {{- fail "openshell.existing.endpoint must use https:// because bootstrap provider registration is credential-bearing" -}}
+  {{- end -}}
+  {{- if not .Values.openshell.existing.clientTLSSecretName -}}
+  {{- fail "openshell.existing.clientTLSSecretName is required when openshell.mode=existing" -}}
+  {{- end -}}
+{{- else -}}
+{{- fail "openshell.mode must be managed or existing" -}}
+{{- end -}}
+{{- if and .Values.operatorClient.enabled (ne .Values.openshell.mode "managed") -}}
+{{- fail "operatorClient.enabled requires openshell.mode=managed so the chart can enforce its OIDC role and workspace contract" -}}
+{{- end -}}
+{{- $bootstrapAuth := .Values.lifecycle.bootstrap.authentication -}}
+{{- if not (has $bootstrapAuth.mode (list "serviceAccountToken" "clientTLS")) -}}
+{{- fail "lifecycle.bootstrap.authentication.mode must be serviceAccountToken or clientTLS" -}}
+{{- end -}}
+{{- if eq $bootstrapAuth.mode "serviceAccountToken" -}}
+  {{- $externalLifecycleServiceAccount := trim .Values.lifecycle.serviceAccount.name -}}
+  {{- if and
+        (not .Values.lifecycle.serviceAccount.create)
+        (or (not $externalLifecycleServiceAccount) (eq $externalLifecycleServiceAccount "default")) -}}
+  {{- fail "serviceAccountToken bootstrap with lifecycle.serviceAccount.create=false requires an explicit non-default lifecycle.serviceAccount.name" -}}
+  {{- end -}}
+  {{- if not .Values.openshell.server.oidc.issuer -}}
+  {{- fail "openshell.server.oidc.issuer is required for ServiceAccount token bootstrap authentication" -}}
+  {{- end -}}
+  {{- if not .Values.openshell.server.oidc.audience -}}
+  {{- fail "openshell.server.oidc.audience is required for ServiceAccount token bootstrap authentication" -}}
+  {{- end -}}
+  {{- if or
+        (ne .Values.openshell.server.oidc.rolesClaim "aud")
+        (ne .Values.openshell.server.oidc.userRole .Values.openshell.server.oidc.audience) -}}
+  {{- fail "ServiceAccount token authentication requires rolesClaim=aud and userRole equal to openshell.server.oidc.audience" -}}
+  {{- end -}}
+  {{- if or
+        (not .Values.openshell.server.oidc.adminRole)
+        (eq .Values.openshell.server.oidc.adminRole .Values.openshell.server.oidc.audience) -}}
+  {{- fail "ServiceAccount token authentication requires a non-empty OpenShell adminRole distinct from the user audience" -}}
+  {{- end -}}
+  {{- if and (has .Values.openshell.server.oidc.issuer $inClusterIssuers) (ne .Values.openshell.server.oidc.caConfigMapName "kube-root-ca.crt") -}}
+  {{- fail "the in-cluster Kubernetes OIDC issuer requires openshell.server.oidc.caConfigMapName=kube-root-ca.crt" -}}
+  {{- end -}}
+{{- end -}}
+{{- if and .Values.operatorClient.enabled .Values.openshell.server.oidc.scopesClaim -}}
+{{- fail "operatorClient.enabled requires openshell.server.oidc.scopesClaim to remain empty because Kubernetes projected tokens carry one audience" -}}
+{{- end -}}
+{{- /*
+Kubernetes injects <SERVICE>_SERVICE_HOST/_PORT/_PORT_<NAME> variables for every
+Service in the namespace into the sandbox Pod. NemoClaw's environment boundary
+validator refuses any variable whose name contains a TOKEN, KEY, SECRET,
+PASSWORD, CREDENTIAL, or API segment, so such segments must not appear in the
+names Helm derives from the release. Chart-owned Service port names are chosen
+to satisfy the same rule.
+*/ -}}
+{{- range $segment := splitList "-" (lower (include "nemoclaw-openshell.fullname" .)) -}}
+  {{- if has $segment (list "token" "key" "secret" "password" "credential" "api") -}}
+  {{- fail (printf "release/fullname segment %q would become a Kubernetes Service environment variable that NemoClaw rejects inside the sandbox; choose a release name without token, key, secret, password, credential, or api segments" $segment) -}}
+  {{- end -}}
+{{- end -}}
+{{- /* NemoClaw dashboard and API access relay. */ -}}
+{{- $access := .Values.access -}}
+{{- $exposure := $access.exposure -}}
+{{- $accessActive := and $access.enabled (or $access.dashboard.enabled $access.api.enabled) -}}
+{{- if not (has $exposure.type (list "none" "route" "ingress" "nodePort")) -}}
+{{- fail "access.exposure.type must be none, route, ingress, or nodePort" -}}
+{{- end -}}
+{{- if and $accessActive (ne .Values.openshell.mode "managed") -}}
+{{- fail "access.enabled requires openshell.mode=managed so the chart can grant the relay a scoped workspace membership; set access.enabled=false for existing-gateway mode" -}}
+{{- end -}}
+{{- if and $accessActive .Values.openshell.server.oidc.scopesClaim -}}
+{{- fail "access.enabled requires openshell.server.oidc.scopesClaim to remain empty because Kubernetes projected tokens carry one audience" -}}
+{{- end -}}
+{{- if and (ne $exposure.type "none") (not $accessActive) -}}
+{{- fail "access.exposure.type requires access.enabled=true with access.dashboard.enabled or access.api.enabled" -}}
+{{- end -}}
+{{- if and $access.dashboard.externalUrl (not (regexMatch "^https?://[^/[:space:]]+/?$" $access.dashboard.externalUrl)) -}}
+{{- fail "access.dashboard.externalUrl must be an http:// or https:// origin with an optional port and no path" -}}
+{{- end -}}
+{{- $dashboardPort := int $access.dashboard.port -}}
+{{- $apiPort := int $access.api.port -}}
+{{- if or (lt $dashboardPort 1024) (gt $dashboardPort 65535) -}}
+{{- fail "access.dashboard.port must be between 1024 and 65535" -}}
+{{- end -}}
+{{- if and (ge $dashboardPort 8642) (le $dashboardPort 8652) -}}
+{{- fail "access.dashboard.port must not use the NemoClaw Hermes API range 8642-8652" -}}
+{{- end -}}
+{{- if or (lt $apiPort 8642) (gt $apiPort 8652) -}}
+{{- fail "access.api.port must be between 8642 and 8652 to match the NemoClaw managed image contract" -}}
+{{- end -}}
+{{- $edgePorts := list (int $exposure.edge.dashboardPort) (int $exposure.edge.apiPort) -}}
+{{- if or (eq (int $exposure.edge.dashboardPort) (int $exposure.edge.apiPort)) (has $dashboardPort $edgePorts) (has $apiPort $edgePorts) -}}
+{{- fail "access.exposure.edge.dashboardPort and access.exposure.edge.apiPort must be distinct from each other and from the dashboard and API ports" -}}
+{{- end -}}
+{{- $dashboardAcknowledged := eq $exposure.dashboardUnauthenticatedAcknowledgement "I_ACKNOWLEDGE_UNAUTHENTICATED_DASHBOARD" -}}
+{{- if eq $exposure.type "route" -}}
+  {{- if not $openshift.enabled -}}
+  {{- fail "access.exposure.type=route requires platform.openshift.enabled=true; use ingress or nodePort on standard Kubernetes" -}}
+  {{- end -}}
+  {{- if and $openshift.verifyApi (not (.Capabilities.APIVersions.Has "route.openshift.io/v1")) -}}
+  {{- fail "access.exposure.type=route requires the route.openshift.io/v1 API" -}}
+  {{- end -}}
+  {{- if and $access.dashboard.enabled $exposure.route.dashboard.enabled -}}
+    {{- if not (include "nemoclaw-openshell.dashboardRouteHost" .) -}}
+    {{- fail "access.exposure.route.dashboard.host or access.exposure.route.appsDomain is required to publish the dashboard Route" -}}
+    {{- end -}}
+    {{- if and (not $exposure.route.oauthProxy.enabled) (not $dashboardAcknowledged) -}}
+    {{- fail "disabling access.exposure.route.oauthProxy publishes the Hermes dashboard without a login; set access.exposure.dashboardUnauthenticatedAcknowledgement=I_ACKNOWLEDGE_UNAUTHENTICATED_DASHBOARD only after another control protects it" -}}
+    {{- end -}}
+  {{- end -}}
+  {{- if and $access.api.enabled $exposure.route.api.enabled (not (include "nemoclaw-openshell.apiRouteHost" .)) -}}
+  {{- fail "access.exposure.route.api.host or access.exposure.route.appsDomain is required to publish the API Route" -}}
+  {{- end -}}
+  {{- if ne $exposure.route.api.tlsTermination "edge" -}}
+  {{- fail "access.exposure.route.api.tlsTermination must be edge because the relay serves plaintext inside the Pod" -}}
+  {{- end -}}
+{{- end -}}
+{{- if and (has $exposure.type (list "ingress" "nodePort")) $access.dashboard.enabled (not $dashboardAcknowledged) -}}
+{{- fail (printf "access.exposure.type=%s publishes the Hermes dashboard without a login; set access.exposure.dashboardUnauthenticatedAcknowledgement=I_ACKNOWLEDGE_UNAUTHENTICATED_DASHBOARD only after an authenticating proxy or private network protects it, or set access.dashboard.enabled=false" $exposure.type) -}}
+{{- end -}}
+{{- if eq $exposure.type "ingress" -}}
+  {{- if and $access.dashboard.enabled (not $exposure.ingress.dashboard.host) -}}
+  {{- fail "access.exposure.ingress.dashboard.host is required when the dashboard is published through an Ingress" -}}
+  {{- end -}}
+  {{- if and $access.api.enabled (not $exposure.ingress.api.host) -}}
+  {{- fail "access.exposure.ingress.api.host is required when the API is published through an Ingress" -}}
+  {{- end -}}
+{{- end -}}
+{{- if not .Values.persistence.enabled -}}
+{{- fail "persistence.enabled must remain true because Hermes state and installed skills require durable storage" -}}
+{{- end -}}
+{{- if hasPrefix "http://" .Values.agent.model.baseUrl -}}
+  {{- if not .Values.agent.model.allowInsecureHttp -}}
+  {{- fail "agent.model.allowInsecureHttp must be true before using a plaintext http:// model endpoint" -}}
+  {{- end -}}
+  {{- if ne .Values.agent.model.insecureHttpAcknowledgement "I_ACKNOWLEDGE_PLAINTEXT_MODEL_CREDENTIALS" -}}
+  {{- fail "agent.model.insecureHttpAcknowledgement must equal I_ACKNOWLEDGE_PLAINTEXT_MODEL_CREDENTIALS for a plaintext model endpoint" -}}
+  {{- end -}}
+{{- end -}}
+{{- range $name, $_ := include "nemoclaw-openshell.agentEnvValues" . | fromYaml -}}
+  {{- if not (regexMatch "^[A-Z_][A-Z0-9_]*$" $name) -}}
+  {{- fail (printf "agent.env name %q must be an upper-case identifier" $name) -}}
+  {{- end -}}
+  {{- if regexMatch "(?i)(secret|token|password|credential|api.?key)" $name -}}
+  {{- fail (printf "agent.env.%s looks secret-bearing; use agent.model.apiKeySecretRef or a dedicated Secret reference" $name) -}}
+  {{- end -}}
+  {{- if has $name (list "NEMOCLAW_SANDBOX_NAME" "NEMOCLAW_MODEL" "NEMOCLAW_INFERENCE_PROVIDER_ID" "NEMOCLAW_UPSTREAM_PROVIDER" "NEMOCLAW_INFERENCE_BASE_URL" "NEMOCLAW_INFERENCE_API" "NEMOCLAW_CONTEXT_WINDOW" "CHAT_UI_URL" "NEMOCLAW_DASHBOARD_PORT" "NEMOCLAW_HERMES_API_PORT") -}}
+  {{- fail (printf "agent.env.%s is chart-managed; use its dedicated values field" $name) -}}
+  {{- end -}}
+  {{- /* NemoClaw's environment boundary validator refuses these name segments at sandbox startup. */ -}}
+  {{- if regexMatch "(^|_)(TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL|API)(_|$)" $name -}}
+  {{- fail (printf "agent.env.%s contains a TOKEN, KEY, SECRET, PASSWORD, CREDENTIAL, or API segment that NemoClaw rejects inside the sandbox" $name) -}}
+  {{- end -}}
+{{- end -}}
+{{- /* Extension points consumed by skill recipes that layer on this chart. */ -}}
+{{- $reservedMountPaths := list "/sandbox" "/sandbox/.hermes" "/sandbox/workspace" "/sandbox/.nemoclaw" "/chart-runtime" -}}
+{{- $seenMountPaths := list -}}
+{{- $seenSubPaths := list -}}
+{{- range $mount := include "nemoclaw-openshell.extraStateMounts" . | fromYamlArray -}}
+  {{- if not (and (kindIs "map" $mount) (hasKey $mount "mountPath") (hasKey $mount "subPath") (hasKey $mount "readOnly")) -}}
+  {{- fail "agent.extraStateMounts entries must render to objects with mountPath, subPath, and readOnly" -}}
+  {{- end -}}
+  {{- $mountPath := toString $mount.mountPath -}}
+  {{- $subPath := toString $mount.subPath -}}
+  {{- if not (regexMatch "^/[^[:space:]]*[^/[:space:]]$" $mountPath) -}}
+  {{- fail (printf "agent.extraStateMounts mountPath %q must be an absolute path without a trailing slash" $mountPath) -}}
+  {{- end -}}
+  {{- if or (has $mountPath $reservedMountPaths) (hasPrefix "/sandbox/.nemoclaw/" $mountPath) (hasPrefix "/sandbox/workspace/" $mountPath) -}}
+  {{- fail (printf "agent.extraStateMounts mountPath %q overlaps a chart-managed mount" $mountPath) -}}
+  {{- end -}}
+  {{- if or (not $subPath) (hasPrefix "/" $subPath) (hasSuffix "/" $subPath) (has ".." (splitList "/" $subPath)) (has "." (splitList "/" $subPath)) (eq $subPath "workspace") (hasPrefix "workspace/" $subPath) (hasPrefix "." $subPath) -}}
+  {{- fail (printf "agent.extraStateMounts subPath %q must be a relative path inside the state volume outside workspace/ and without . or .. segments" $subPath) -}}
+  {{- end -}}
+  {{- if or (has $mountPath $seenMountPaths) (has $subPath $seenSubPaths) -}}
+  {{- fail (printf "agent.extraStateMounts entries must use unique mountPath and subPath values (%s -> %s)" $subPath $mountPath) -}}
+  {{- end -}}
+  {{- $seenMountPaths = append $seenMountPaths $mountPath -}}
+  {{- $seenSubPaths = append $seenSubPaths $subPath -}}
+{{- end -}}
+{{- range $path := include "nemoclaw-openshell.policyReadOnlyPaths" . | fromYamlArray -}}
+  {{- if not (regexMatch "^/[^[:space:]]+$" (toString $path)) -}}
+  {{- fail (printf "policy.readOnlyPaths entry %q must be an absolute path" (toString $path)) -}}
+  {{- end -}}
+{{- end -}}
+{{- range $name, $definition := include "nemoclaw-openshell.policyNetworkPolicies" . | fromYaml -}}
+  {{- if not (regexMatch "^[a-z][a-z0-9_]{0,62}$" $name) -}}
+  {{- fail (printf "policy.networkPolicies key %q must be a lowercase snake_case OpenShell policy name" $name) -}}
+  {{- end -}}
+  {{- if not (kindIs "map" $definition) -}}
+  {{- fail (printf "policy.networkPolicies.%s must be an OpenShell network policy object" $name) -}}
+  {{- end -}}
+{{- end -}}
+{{- $reservedSeedEnv := list "RELEASE_ID" "RELEASE_REVISION" "SEED_STATE" "SEED_PLUGINS" "SEED_PLUGIN_NAME" "SEED_PLUGIN_ROOT" "SEED_CORE_MODULE_PATH" -}}
+{{- $reservedSeedVolumes := list "state" "runtime" "tmp" -}}
+{{- $seenPluginNames := list -}}
+{{- range $plugin := include "nemoclaw-openshell.seedPlugins" . | fromYamlArray -}}
+  {{- $pluginName := toString $plugin.name -}}
+  {{- if not (regexMatch "^[a-z0-9]([-a-z0-9]{0,30}[a-z0-9])?$" $pluginName) -}}
+  {{- fail (printf "lifecycle.seed.plugins name %q must be a short lowercase DNS label" $pluginName) -}}
+  {{- end -}}
+  {{- if has $pluginName $seenPluginNames -}}
+  {{- fail (printf "lifecycle.seed.plugins name %q is declared twice" $pluginName) -}}
+  {{- end -}}
+  {{- $seenPluginNames = append $seenPluginNames $pluginName -}}
+  {{- if not (regexMatch "^[A-Za-z0-9_][A-Za-z0-9_.-]*\\.py$" (toString $plugin.entrypoint)) -}}
+  {{- fail (printf "lifecycle.seed.plugins %s entrypoint must be a Python file name inside its ConfigMap" $pluginName) -}}
+  {{- end -}}
+  {{- if not (regexMatch "^[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$" (toString $plugin.configMapName)) -}}
+  {{- fail (printf "lifecycle.seed.plugins %s configMapName must be a valid ConfigMap name" $pluginName) -}}
+  {{- end -}}
+  {{- range $variable := (default (list) $plugin.env) -}}
+    {{- if not (regexMatch "^[A-Z_][A-Z0-9_]*$" (toString $variable.name)) -}}
+    {{- fail (printf "lifecycle.seed.plugins %s env names must be upper-case identifiers" $pluginName) -}}
+    {{- end -}}
+    {{- if has (toString $variable.name) $reservedSeedEnv -}}
+    {{- fail (printf "lifecycle.seed.plugins %s must not override the reserved seed variable %s" $pluginName $variable.name) -}}
+    {{- end -}}
+  {{- end -}}
+  {{- range $volume := (default (list) $plugin.volumes) -}}
+    {{- if or (has (toString $volume.name) $reservedSeedVolumes) (hasPrefix "plugin-" (toString $volume.name)) -}}
+    {{- fail (printf "lifecycle.seed.plugins %s volume name %q collides with a chart-managed seed volume" $pluginName $volume.name) -}}
+    {{- end -}}
+  {{- end -}}
+  {{- range $mount := (default (list) $plugin.volumeMounts) -}}
+    {{- if has (toString $mount.mountPath) (list "/state" "/runtime" "/tmp" "/plugins") -}}
+    {{- fail (printf "lifecycle.seed.plugins %s volumeMounts must not shadow /state, /runtime, /tmp, or /plugins" $pluginName) -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- range $skill := include "nemoclaw-openshell.operatorClientSkills" . | fromYamlArray -}}
+  {{- if not (regexMatch "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$" (toString $skill)) -}}
+  {{- fail (printf "operatorClient.skills entry %q must be a lowercase Hermes skill directory name" (toString $skill)) -}}
+  {{- end -}}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nemoclaw-openshell.fullname" . }}-contract
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+data:
+  platform: {{ ternary "openshift" "kubernetes" $openshift.enabled | quote }}
+  openshellMode: {{ .Values.openshell.mode | quote }}
+  agentImage: {{ .Values.agent.image.multiarch | quote }}

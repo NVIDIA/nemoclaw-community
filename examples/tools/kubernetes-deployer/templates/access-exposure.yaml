@@ -1,0 +1,155 @@
+{{- if and (include "nemoclaw-openshell.accessEnabled" .) (ne .Values.access.exposure.type "none") }}
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- $access := .Values.access -}}
+{{- $exposure := $access.exposure -}}
+{{- $service := include "nemoclaw-openshell.accessName" . -}}
+{{- $oauth := include "nemoclaw-openshell.dashboardOAuthEnabled" . -}}
+{{- if eq $exposure.type "route" }}
+{{- if and $access.dashboard.enabled $exposure.route.dashboard.enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "nemoclaw-openshell.dashboardRouteName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+    app.kubernetes.io/component: access-relay
+  annotations:
+    # The Hermes dashboard keeps WebSocket sessions open for the chat view.
+    haproxy.router.openshift.io/timeout: 1h
+    {{- if not $oauth }}
+    nemoclaw.nvidia.com/security-impact: unauthenticated-dashboard-route
+    {{- end }}
+spec:
+  host: {{ include "nemoclaw-openshell.dashboardRouteHost" . | quote }}
+  to:
+    kind: Service
+    name: {{ $service }}
+  port:
+    targetPort: {{ ternary "oauth-https" "edge-dashboard" (eq $oauth "true") }}
+  tls:
+    # Service serving certificates are re-encrypted by the router with the
+    # cluster service CA, so no destinationCACertificate is required.
+    termination: {{ ternary "reencrypt" "edge" (eq $oauth "true") }}
+    insecureEdgeTerminationPolicy: Redirect
+---
+{{- end }}
+{{- if and $access.api.enabled $exposure.route.api.enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "nemoclaw-openshell.apiRouteName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+    app.kubernetes.io/component: access-relay
+  annotations:
+    # Hermes authenticates every API request with its own bearer key
+    # (`gateway-token`); streaming completions can run for minutes.
+    haproxy.router.openshift.io/timeout: 10m
+spec:
+  host: {{ include "nemoclaw-openshell.apiRouteHost" . | quote }}
+  to:
+    kind: Service
+    name: {{ $service }}
+  port:
+    targetPort: edge-openai
+  tls:
+    termination: {{ $exposure.route.api.tlsTermination }}
+    insecureEdgeTerminationPolicy: Redirect
+---
+{{- end }}
+{{- if $oauth }}
+{{- if not $exposure.route.oauthProxy.cookieSecretRef.name }}
+{{- $cookieName := include "nemoclaw-openshell.dashboardOAuthCookieSecretName" . -}}
+{{- $cookieKey := $exposure.route.oauthProxy.cookieSecretRef.key -}}
+{{- $cookie := randAlphaNum 32 | b64enc -}}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace $cookieName -}}
+{{- if and $existing $existing.data (hasKey $existing.data $cookieKey) -}}
+  {{- $cookie = index $existing.data $cookieKey -}}
+{{- end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $cookieName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+    app.kubernetes.io/component: access-relay
+  annotations:
+    nemoclaw.nvidia.com/purpose: dashboard-oauth-proxy-cookie-signing
+type: Opaque
+data:
+  {{ $cookieKey | quote }}: {{ $cookie | quote }}
+---
+{{- end }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "nemoclaw-openshell.clusterResourceName" . }}-dashboard-oauth
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+    app.kubernetes.io/component: access-relay
+  annotations:
+    nemoclaw.nvidia.com/security-impact: tokenreview-and-subjectaccessreview-for-oauth-proxy
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  # Kubernetes supplies this role. oauth-proxy needs it only to validate the
+  # logged-in user's token and evaluate the configured SubjectAccessReview.
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "nemoclaw-openshell.accessServiceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- else if eq $exposure.type "ingress" }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $service }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+    app.kubernetes.io/component: access-relay
+  annotations:
+    nemoclaw.nvidia.com/security-impact: unauthenticated-dashboard-ingress
+    {{- with $exposure.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- with $exposure.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  {{- with $exposure.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- if $access.dashboard.enabled }}
+    - host: {{ $exposure.ingress.dashboard.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $service }}
+                port:
+                  name: edge-dashboard
+    {{- end }}
+    {{- if $access.api.enabled }}
+    - host: {{ $exposure.ingress.api.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $service }}
+                port:
+                  name: edge-openai
+    {{- end }}
+{{- end }}
+{{- end }}

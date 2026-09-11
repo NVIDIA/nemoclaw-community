@@ -1,0 +1,122 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- if .Values.rbac.create }}
+{{- $profile := .Values.rbac.profile }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "sre-autoheal.fullname" . }}
+  labels:
+    {{- include "sre-autoheal.labels" . | nindent 4 }}
+  annotations:
+    sre-autoheal.nvidia.com/rbac-profile: {{ $profile | quote }}
+    # The agent never reads Secrets, never changes RBAC/SCC and never deletes
+    # anything except Pods. Human-only actions are documented, not granted.
+rules:
+  # --- read paths used by the detectors ---------------------------------
+  - apiGroups: [""]
+    resources: [namespaces, nodes, pods, pods/log, services, endpoints, events, persistentvolumeclaims, persistentvolumes, resourcequotas, limitranges]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch]
+  - apiGroups: [policy]
+    resources: [poddisruptionbudgets]
+    verbs: [get, list, watch]
+  - apiGroups: [certificates.k8s.io]
+    resources: [certificatesigningrequests]
+    verbs: [get, list, watch]
+  - apiGroups: [config.openshift.io]
+    resources: [clusteroperators, clusterversions]
+    verbs: [get, list, watch]
+  - apiGroups: [machineconfiguration.openshift.io]
+    resources: [machineconfigpools]
+    verbs: [get, list, watch]
+  - apiGroups: [authorization.k8s.io]
+    resources: [selfsubjectaccessreviews]
+    verbs: [create]
+  - apiGroups: [authentication.k8s.io]
+    resources: [selfsubjectreviews]
+    verbs: [create]
+  - nonResourceURLs: ["/version", "/apis", "/apis/*", "/api", "/api/*", "/healthz", "/readyz", "/livez"]
+    verbs: [get]
+{{- if ne $profile "read-only" }}
+  # --- SAFE tier: restart_pod, delete_evicted_pods, force_delete_pod -----
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [delete]
+  # --- rollout_restart, rollout_undo, bump_memory_limit -----------------
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets]
+    verbs: [patch]
+  # --- scale ---------------------------------------------------------------
+  - apiGroups: [apps]
+    resources: [deployments/scale, statefulsets/scale]
+    verbs: [get, patch, update]
+{{- end }}
+{{- if eq $profile "safe+nodes" }}
+  # --- cordon_node / uncordon_node ----------------------------------------
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [patch]
+{{- end }}
+{{- with .Values.rbac.extraRules }}
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "sre-autoheal.fullname" . }}
+  labels:
+    {{- include "sre-autoheal.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "sre-autoheal.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "sre-autoheal.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- if eq .Values.memory.backend "configmap" }}
+---
+# Memory ConfigMap lives in the release namespace only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "sre-autoheal.fullname" . }}-memory
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sre-autoheal.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [{{ include "sre-autoheal.fullname" . }}-memory]
+    verbs: [get, patch, update]
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "sre-autoheal.fullname" . }}-memory
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sre-autoheal.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "sre-autoheal.fullname" . }}-memory
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "sre-autoheal.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- end }}

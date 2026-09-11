@@ -1,0 +1,142 @@
+{{- if .Values.agent.nemoclawHome.enabled }}
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- $claim := include "nemoclaw-openshell.nemoclawHomeClaimName" . -}}
+{{- $storageClass := default .Values.persistence.storageClass .Values.agent.nemoclawHome.storageClass -}}
+# NemoClaw's Hermes gateway gate (`gateway.drain_control`) refuses API turns
+# unless /sandbox/.nemoclaw is a root-owned directory without group/world
+# write. OpenShell's Kubernetes driver chowns /sandbox to the injected sandbox
+# UID, so this volume is mounted read-only over that path and prepared as root.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $claim }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nemoclaw-home
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if $storageClass }}
+  storageClassName: {{ $storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.agent.nemoclawHome.size }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "nemoclaw-openshell.nemoclawHomePrepareName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nemoclaw-home
+  annotations:
+    # Runs before the bootstrap hook (weight 10) so the Sandbox mounts a
+    # prepared volume. The first read-write mount also formats the claim.
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    nemoclaw.nvidia.com/security-impact: root-job-prepares-read-only-nemoclaw-state-volume
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        {{- include "nemoclaw-openshell.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: nemoclaw-home
+      {{- if .Values.platform.openshift.enabled }}
+      annotations:
+        openshift.io/required-scc: privileged
+      {{- end }}
+    spec:
+      restartPolicy: OnFailure
+      # The sandbox ServiceAccount already carries the privileged admission the
+      # OpenShell supervisor needs; this Job reuses it for a root filesystem fix.
+      serviceAccountName: {{ include "nemoclaw-openshell.sandboxServiceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # The claim is ReadWriteOnce and a running Sandbox may hold it read-only,
+      # so prefer the node that already has it attached.
+      affinity:
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchExpressions:
+                    - key: agents.x-k8s.io/sandbox-name-hash
+                      operator: Exists
+      containers:
+        - name: prepare
+          image: {{ .Values.artifacts.utilityImage | quote }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              chown 0:0 /nemoclaw-home
+              chmod 0755 /nemoclaw-home
+              # Sandbox Pods receive random SELinux MCS categories and cannot
+              # relabel a read-only mount, so publish the directory without
+              # categories. selinuxfs is not visible inside containers; the
+              # process context tells whether SELinux is active on the node.
+              context="$(cat /proc/self/attr/current 2>/dev/null | tr -d '\0' || true)"
+              case "$context" in
+                ""|kernel|unconfined)
+                  echo "SELinux is not active on this node; skipping relabel"
+                  ;;
+                *:*:*:*)
+                  chcon system_u:object_r:container_file_t:s0 /nemoclaw-home
+                  if [ -d /nemoclaw-home/lost+found ]; then
+                    chcon system_u:object_r:container_file_t:s0 /nemoclaw-home/lost+found
+                  fi
+                  echo "relabelled /nemoclaw-home to container_file_t:s0 (process context: $context)"
+                  ;;
+                *)
+                  # Any other value comes from a non-SELinux LSM. Ubuntu with
+                  # containerd reports an AppArmor profile such as
+                  # "cri-containerd.apparmor.d (enforce)", which carries no
+                  # colon-separated SELinux label. Running chcon there fails
+                  # with EPERM and would abort the install.
+                  echo "non-SELinux LSM context ($context); skipping relabel"
+                  ;;
+              esac
+              owner="$(stat -c '%u:%g:%a' /nemoclaw-home)"
+              test "$owner" = "0:0:755" || { echo "unexpected /nemoclaw-home posture: $owner" >&2; exit 1; }
+              echo "prepared read-only NemoClaw state root (root:root 0755)"
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN", "FOWNER", "DAC_OVERRIDE"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          volumeMounts:
+            - name: nemoclaw-home
+              mountPath: /nemoclaw-home
+      volumes:
+        - name: nemoclaw-home
+          persistentVolumeClaim:
+            claimName: {{ $claim }}
+{{- end }}

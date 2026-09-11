@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- if eq .Values.lifecycle.bootstrap.authentication.mode "serviceAccountToken" }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "nemoclaw-openshell.fullname" . }}-tokenrequest
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["serviceaccounts/token"]
+    resourceNames: [{{ include "nemoclaw-openshell.lifecycleServiceAccountName" . | quote }}]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "nemoclaw-openshell.fullname" . }}-tokenrequest
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "nemoclaw-openshell.fullname" . }}-tokenrequest
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "nemoclaw-openshell.lifecycleServiceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

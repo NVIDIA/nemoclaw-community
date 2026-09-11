@@ -1,0 +1,161 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- $sre := .Values.global.sre -}}
+{{- $deployer := .Values.deployer -}}
+{{- /* Deterministic names: this chart derives <release>-deployer-* without templated subchart values. */ -}}
+{{- if ne (toString (default "" $deployer.nameOverride)) "deployer" -}}
+{{- fail "deployer.nameOverride must stay \"deployer\"; this chart derives the deployer's resource names from it" -}}
+{{- end -}}
+{{- if $deployer.fullnameOverride -}}
+{{- fail "deployer.fullnameOverride is not supported; this chart derives the deployer's resource names from the release name" -}}
+{{- end -}}
+{{- if gt (len .Release.Name) 40 -}}
+{{- fail "the release name must be at most 40 characters so every derived proxy, Secret, and ConfigMap name fits the Kubernetes limit" -}}
+{{- end -}}
+{{- range $segment := splitList "-" (lower .Release.Name) -}}
+  {{- if has $segment (list "token" "key" "secret" "password" "credential" "api") -}}
+  {{- fail (printf "release name segment %q would become a Kubernetes Service environment variable that NemoClaw rejects inside the sandbox" $segment) -}}
+  {{- end -}}
+{{- end -}}
+{{- if and (hasKey $deployer "openshell") (hasKey $deployer.openshell "mode") (ne $deployer.openshell.mode "managed") -}}
+{{- fail "kubernetes-sre-assistant requires the chart-managed OpenShell gateway (deployer.openshell.mode=managed) because the sandbox reaches namespace-local proxies" -}}
+{{- end -}}
+{{- /* The committed skill bundle and the values that identify it must agree. */ -}}
+{{- $fileDigest := .Files.Get "files/sre-skills.tar.xz.sha256" | trim -}}
+{{- if ne (toString $sre.bundle.sha256) $fileDigest -}}
+{{- fail "global.sre.bundle.sha256 must equal files/sre-skills.tar.xz.sha256; run scripts/build-sre-skills-bundle.py after changing the skills" -}}
+{{- end -}}
+{{- $partsIndex := .Files.Get "files/sre-skills.parts.json" | fromJson -}}
+{{- $partNames := list -}}
+{{- range $partsIndex.parts -}}
+  {{- $partNames = append $partNames .name -}}
+{{- end -}}
+{{- if ne (join "," (toStrings $sre.bundle.parts)) (join "," $partNames) -}}
+{{- fail "global.sre.bundle.parts must list the chunk names from files/sre-skills.parts.json in order; run scripts/build-sre-skills-bundle.py" -}}
+{{- end -}}
+{{- /* Access modes and acknowledgements. */ -}}
+{{- if not (has $sre.rbac.mode (list "safe" "broad-no-delete")) -}}
+{{- fail "global.sre.rbac.mode must be safe or broad-no-delete" -}}
+{{- end -}}
+{{- if and (eq $sre.rbac.mode "broad-no-delete") (ne $sre.rbac.dangerousAcknowledgement "I_ACKNOWLEDGE_CLUSTER_WIDE_NO_DELETE") -}}
+{{- fail "global.sre.rbac.dangerousAcknowledgement must equal I_ACKNOWLEDGE_CLUSTER_WIDE_NO_DELETE for broad-no-delete mode" -}}
+{{- end -}}
+{{- $proxyTls := $sre.proxy.tlsSecretRef -}}
+{{- if or (eq $proxyTls.caKey $proxyTls.certKey) (eq $proxyTls.caKey $proxyTls.privateKeyKey) (eq $proxyTls.certKey $proxyTls.privateKeyKey) -}}
+{{- fail "global.sre.proxy.tlsSecretRef caKey, certKey, and privateKeyKey must be distinct" -}}
+{{- end -}}
+{{- $llm := $sre.openshiftLlmDeploy -}}
+{{- if and $llm.metrics.enabled (not $llm.enabled) -}}
+{{- fail "global.sre.openshiftLlmDeploy.metrics.enabled requires global.sre.openshiftLlmDeploy.enabled=true" -}}
+{{- end -}}
+{{- if and $llm.enabled (ne $sre.rbac.mode "broad-no-delete") -}}
+{{- fail "global.sre.openshiftLlmDeploy.enabled requires global.sre.rbac.mode=broad-no-delete because model deployment creates and patches workloads" -}}
+{{- end -}}
+{{- if and $llm.enabled (not $llm.modelRunnerServiceAccount.create) (not $llm.modelRunnerServiceAccount.name) -}}
+{{- fail "global.sre.openshiftLlmDeploy.modelRunnerServiceAccount.name is required when create=false" -}}
+{{- end -}}
+{{- $deletion := $llm.deletion -}}
+{{- if and $deletion.enabled (not $llm.enabled) -}}
+{{- fail "global.sre.openshiftLlmDeploy.deletion.enabled requires global.sre.openshiftLlmDeploy.enabled=true" -}}
+{{- end -}}
+{{- if and $deletion.enabled (not $deletion.namespace) -}}
+{{- fail "global.sre.openshiftLlmDeploy.deletion.namespace is required when namespace-scoped model deletion is enabled" -}}
+{{- end -}}
+{{- if and $deletion.enabled (ne $deletion.namespace (include "sre-assistant.modelDeployNamespace" .)) -}}
+{{- fail "global.sre.openshiftLlmDeploy.deletion.namespace must equal the model deployment target namespace" -}}
+{{- end -}}
+{{- if and $deletion.enabled (eq (len $deletion.allowedResources) 0) -}}
+{{- fail "global.sre.openshiftLlmDeploy.deletion.allowedResources must contain at least one exact apiGroup/resource/name tuple" -}}
+{{- end -}}
+{{- if and $deletion.enabled (ne $deletion.dangerousAcknowledgement "I_ACKNOWLEDGE_NAMESPACE_MODEL_DELETE") -}}
+{{- fail "global.sre.openshiftLlmDeploy.deletion.dangerousAcknowledgement must equal I_ACKNOWLEDGE_NAMESPACE_MODEL_DELETE" -}}
+{{- end }}
+{{- $supportedDeletes := list
+      "nvidia.com/dynamographdeployments"
+      "serving.kserve.io/inferenceservices"
+      "serving.kserve.io/servingruntimes"
+      "nim.opendatahub.io/nimservices"
+      "nim.opendatahub.io/nimcaches"
+      "nim.opendatahub.io/nimpipelines"
+      "apps/deployments"
+      "apps/statefulsets"
+      "apps/replicasets"
+      "batch/jobs"
+      "/services"
+      "/configmaps"
+      "/persistentvolumeclaims"
+      "route.openshift.io/routes"
+      "networking.k8s.io/ingresses"
+-}}
+{{- range $resource := $deletion.allowedResources -}}
+  {{- $tuple := printf "%s/%s" $resource.apiGroup $resource.resource -}}
+  {{- if not (has $tuple $supportedDeletes) -}}
+  {{- fail (printf "unsupported model deletion tuple %s" $tuple) -}}
+  {{- end -}}
+  {{- if and (eq $resource.resource "persistentvolumeclaims") (not $deletion.deletePVCs) -}}
+  {{- fail "persistentvolumeclaims in allowedResources requires deletion.deletePVCs=true" -}}
+  {{- end -}}
+{{- end }}
+{{- if $deletion.deleteSecrets -}}
+{{- fail "global.sre.openshiftLlmDeploy.deletion.deleteSecrets cannot be enabled; the external model credential Secret is never deleted by Hermes" -}}
+{{- end }}
+{{- /*
+The auto-heal subchart is opt-in and acts on the cluster without being asked,
+so its posture is validated here rather than left to the subchart defaults.
+*/ -}}
+{{- $autoheal := .Values.autoheal | default dict -}}
+{{- if $autoheal.enabled -}}
+{{- $healPolicy := (($autoheal.agentConfig | default dict).policy | default dict) -}}
+{{- $mode := $healPolicy.mode | default "observe" -}}
+{{- $modes := list "observe" "safe" "assisted" -}}
+{{- if not (has $mode $modes) -}}
+{{- fail (printf "autoheal.agentConfig.policy.mode must be one of %s" (join ", " $modes)) -}}
+{{- end -}}
+{{- $profiles := list "read-only" "safe" "safe+nodes" -}}
+{{- $profile := ($autoheal.rbac | default dict).profile | default "safe" -}}
+{{- if not (has $profile $profiles) -}}
+{{- fail (printf "autoheal.rbac.profile must be one of %s" (join ", " $profiles)) -}}
+{{- end -}}
+{{- if and (ne $mode "observe") (eq $profile "read-only") -}}
+{{- fail (printf "autoheal.agentConfig.policy.mode=%s cannot remediate with autoheal.rbac.profile=read-only; use safe or safe+nodes, or set mode=observe" $mode) -}}
+{{- end -}}
+{{- if and (ne $mode "observe") (ne $autoheal.dangerousAcknowledgement "I_ACKNOWLEDGE_CLUSTER_REMEDIATION") -}}
+{{- fail (printf "autoheal.agentConfig.policy.mode=%s lets the agent change live workloads without being asked; set autoheal.dangerousAcknowledgement=I_ACKNOWLEDGE_CLUSTER_REMEDIATION to confirm, or keep mode=observe" $mode) -}}
+{{- end -}}
+{{- /*
+The vendored subchart defaults to a mutable `3.12-slim` tag and this chart
+overrides it with an immutable digest. `helm upgrade --reuse-values` does not
+re-apply parent defaults to a subtree the command also touches, which silently
+restores that mutable tag. Fail loudly instead of pulling an unpinned image.
+*/ -}}
+{{- $healImage := $autoheal.image | default dict -}}
+{{- if not $healImage.digest -}}
+{{- fail "autoheal.image.digest must be set so the agent image is immutable; if this appeared during an upgrade, re-run without --reuse-values or pass the recipe values with -f" -}}
+{{- end -}}
+{{- $healLlm := $autoheal.llm | default dict -}}
+{{- if $healLlm.enabled -}}
+{{- if or (not $healLlm.baseUrl) (not $healLlm.model) -}}
+{{- fail "autoheal.llm.enabled requires autoheal.llm.baseUrl and autoheal.llm.model; umbrella charts cannot derive them from deployer.agent.model" -}}
+{{- end -}}
+{{- if not (hasPrefix "https://" $healLlm.baseUrl) -}}
+{{- fail "autoheal.llm.baseUrl must use https://; the diagnosis prompt carries cluster state" -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sre-assistant.contractConfigMapName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sre-assistant.labels" . | nindent 4 }}
+data:
+  rbacMode: {{ $sre.rbac.mode | quote }}
+  modelDeploySkill: {{ $llm.enabled | quote }}
+  modelDeletion: {{ $deletion.enabled | quote }}
+  metricsProxy: {{ $llm.metrics.enabled | quote }}
+  skillBundleSha256: {{ $sre.bundle.sha256 | quote }}
+  deployer: {{ include "sre-assistant.deployerFullname" . | quote }}
+  autoheal: {{ ($autoheal.enabled | default false) | quote }}
+  autohealMode: {{ (ternary (($autoheal.agentConfig | default dict).policy | default dict).mode "" ($autoheal.enabled | default false)) | default "" | quote }}
+  autohealRbacProfile: {{ (ternary ($autoheal.rbac | default dict).profile "" ($autoheal.enabled | default false)) | default "" | quote }}

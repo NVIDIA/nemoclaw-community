@@ -1,0 +1,1257 @@
+{
+ "version": 1,
+ "patterns": [
+  {
+   "id": "pod-crashloopbackoff",
+   "title": "Container crash loop (CrashLoopBackOff)",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "high",
+   "detection": [
+    "containerStatuses[].state.waiting.reason == CrashLoopBackOff with rising restartCount",
+    "event BackOff \"Back-off restarting failed container\"; lastState.terminated.exitCode != 0"
+   ],
+   "root_causes": [
+    "missing env var / wrong Secret or ConfigMap (often in the wrong namespace)",
+    "bad command/entrypoint override or missing binary (exit 126/127)",
+    "failed startup migration or unreachable dependency at boot",
+    "memory limit too low (see pod-oomkilled, exit 137)",
+    "liveness probe too aggressive for a slow starter (see pod-probe-failing)",
+    "image regression introduced by the latest rollout"
+   ],
+   "diagnostics": [
+    "kubectl logs <pod> -c <container> --previous",
+    "kubectl describe pod <pod>",
+    "kubectl get events -n <ns> --sort-by=.lastTimestamp | tail -30",
+    "kubectl rollout history deployment/<name> -n <ns>"
+   ],
+   "remediation": [
+    {
+     "action": "restart_pod",
+     "tier": "SAFE",
+     "when": "the crash cause looks transient (dependency was down, node hiccup) and other replicas are healthy"
+    },
+    {
+     "action": "rollout_restart",
+     "tier": "SAFE",
+     "when": "pods across the workload are stuck after a ConfigMap/Secret or dependency fix"
+    },
+    {
+     "action": "rollout_undo",
+     "tier": "MEDIUM",
+     "when": "failures began with the newest revision and the previous ReplicaSet was healthy"
+    },
+    {
+     "action": "create_missing_config",
+     "tier": "NEVER_AUTO",
+     "when": "logs show a missing env var, file, or config key"
+    },
+    {
+     "action": "notify_only",
+     "tier": "SAFE",
+     "when": "exit code indicates an application bug that no restart will fix"
+    }
+   ],
+   "verification": "restartCount stable for >=5 min; READY n/n; rollout status Complete",
+   "notes": "Dies before logging -> entrypoint/permissions/image; logs show an exception -> application/config. A restart only helps when the cause was transient."
+  },
+  {
+   "id": "pod-oomkilled",
+   "title": "Container OOMKilled (exit 137)",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "high",
+   "detection": [
+    "lastState.terminated.reason == OOMKilled or exitCode 137 with rising restartCount",
+    "container_memory_working_set_bytes approaching the memory limit"
+   ],
+   "root_causes": [
+    "memory limit below the real working set (undersized from day one)",
+    "memory leak in the application (JVM heap, Node.js, Python caches)",
+    "runtime heap not sized to the cgroup limit",
+    "traffic spike / batch job with larger input",
+    "node-level OOM killing BestEffort pods that have no requests"
+   ],
+   "diagnostics": [
+    "kubectl describe pod <pod> | grep -A10 \"Last State\"",
+    "kubectl top pod <pod> --containers -n <ns>",
+    "kubectl logs <pod> -c <container> --previous",
+    "kubectl get pod <pod> -o jsonpath='{.status.qosClass}'"
+   ],
+   "remediation": [
+    {
+     "action": "bump_memory_limit",
+     "tier": "MEDIUM",
+     "when": "OOM recurs across restarts and the limit is clearly below observed usage; raise by ~1.5x with a cap"
+    },
+    {
+     "action": "scale",
+     "tier": "MEDIUM",
+     "when": "load is spread unevenly and more replicas would lower per-pod memory"
+    },
+    {
+     "action": "restart_pod",
+     "tier": "SAFE",
+     "when": "a single OOM after a known one-off spike; do not repeat if it recurs"
+    },
+    {
+     "action": "notify_only",
+     "tier": "SAFE",
+     "when": "usage grows linearly over time (leak) - a code fix is needed"
+    }
+   ],
+   "verification": "no new OOMKilled terminations for 30 min; working set < 80% of the limit",
+   "notes": "Guaranteed QoS needs cpu AND memory request==limit for EVERY container. Autoscaling does not help when every replica is starved (Node.js at 128Mi case). CoreDNS itself being OOMKilled is a recurring k8s.af story."
+  },
+  {
+   "id": "pod-imagepull-failure",
+   "title": "Image pull failure (ImagePullBackOff / ErrImagePull)",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "high",
+   "detection": [
+    "waiting.reason in ImagePullBackOff, ErrImagePull, InvalidImageName",
+    "event Failed \"Failed to pull image\" with unauthorized / manifest unknown / not found / timeout"
+   ],
+   "root_causes": [
+    "wrong tag or tag never pushed (image-or-tag-not-found)",
+    "missing or wrong-namespace imagePullSecret; expired registry credential (registry-auth)",
+    {
+     "node cannot reach the registry": "firewall, proxy, DNS (registry-unreachable)"
+    },
+    "registry rate limit (Docker Hub) or TLS trust problem",
+    "OpenShift internal registry unavailable or without storage"
+   ],
+   "diagnostics": [
+    "kubectl describe pod <pod> | grep -A3 -i \"failed to pull\"",
+    "kubectl get deployment <name> -n <ns> -o jsonpath='{.spec.template.spec.containers[*].image}'",
+    "kubectl get sa <sa> -n <ns> -o jsonpath='{.imagePullSecrets}'",
+    "oc get co image-registry"
+   ],
+   "remediation": [
+    {
+     "action": "restart_pod",
+     "tier": "SAFE",
+     "when": "cause is registry-unreachable or registry-rate-limit (transient); forces an immediate retry"
+    },
+    {
+     "action": "rollout_undo",
+     "tier": "MEDIUM",
+     "when": "cause is image-or-tag-not-found and the previous revision pulled fine"
+    },
+    {
+     "action": "fix_image_reference",
+     "tier": "NEVER_AUTO",
+     "when": "cause is image-or-tag-not-found / invalid-image-name / registry-auth"
+    },
+    {
+     "action": "notify_only",
+     "tier": "SAFE",
+     "when": "registry credentials or network must be fixed by a human"
+    }
+   ],
+   "verification": "pod Running and Ready; status.containerStatuses[].imageID populated",
+   "notes": "Usually not an application problem. Mutable tags (:latest) cause split-brain rollouts; pin by digest."
+  },
+  {
+   "id": "pod-config-error",
+   "title": "Missing ConfigMap / Secret reference (CreateContainerConfigError)",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "high",
+   "detection": [
+    "waiting.reason == CreateContainerConfigError or CreateContainerError",
+    "message 'configmap \"x\" not found' / 'secret \"x\" not found' / \"couldn't find key\""
+   ],
+   "root_causes": [
+    "ConfigMap/Secret not deployed or deployed to another namespace",
+    "key name mismatch (optional=false)",
+    {
+     "GitOps sync ordering": "workload applied before its config"
+    }
+   ],
+   "diagnostics": [
+    "kubectl describe pod <pod> | grep -A3 -i error",
+    "kubectl get configmap,secret -n <ns>",
+    "kubectl get pod <pod> -n <ns> -o jsonpath='{range .spec.containers[*].env[*]}{.valueFrom}{\"\\n\"}{end}'"
+   ],
+   "remediation": [
+    {
+     "action": "restart_pod",
+     "tier": "SAFE",
+     "when": "the referenced object now exists (kubelet retries, but a restart is immediate)"
+    },
+    {
+     "action": "rollout_undo",
+     "tier": "MEDIUM",
+     "when": "the newest revision added the broken reference"
+    },
+    {
+     "action": "create_missing_config",
+     "tier": "NEVER_AUTO",
+     "when": "the object truly does not exist; contents must come from a human"
+    }
+   ],
+   "verification": "container leaves the waiting state; READY n/n",
+   "notes": "Same class as FailedMount \"configmap not found\" for projected volumes."
+  },
+  {
+   "id": "pod-pending-unschedulable",
+   "title": "Pod Pending - scheduler cannot place it",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "high",
+   "detection": [
+    "phase Pending; condition PodScheduled=False reason Unschedulable",
+    {
+     "event FailedScheduling \"0/N nodes are available": "Insufficient cpu|memory|nvidia.com/gpu\", \"untolerated taint\", \"didn't match node affinity/selector\", \"Too many pods\""
+    }
+   ],
+   "root_causes": [
+    "requests larger than any node's allocatable (or GPUs all reserved)",
+    "taints without tolerations; nodeSelector label absent; impossible required affinity",
+    "cluster-autoscaler not adding nodes (max size, no matching node group)",
+    "nodes cordoned / under pressure; per-node pod or IP limit reached",
+    "ResourceQuota exhausted (surfaces as workload-replica-failure)"
+   ],
+   "diagnostics": [
+    "kubectl describe pod <pod> | grep -A5 Events",
+    "kubectl describe node <node> | grep -A8 \"Allocated resources\"",
+    "kubectl get nodes -o wide; kubectl get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints",
+    "kubectl -n kube-system logs deploy/cluster-autoscaler --tail=100",
+    "oc get machineautoscaler,clusterautoscaler -A"
+   ],
+   "remediation": [
+    {
+     "action": "uncordon_node",
+     "tier": "MEDIUM",
+     "when": "cause is nodes-cordoned and the node is otherwise Ready"
+    },
+    {
+     "action": "scale",
+     "tier": "MEDIUM",
+     "when": "temporarily lowering replicas of a lower-priority workload frees capacity (operator decision)"
+    },
+    {
+     "action": "add_node_capacity",
+     "tier": "NEVER_AUTO",
+     "when": "cause is insufficient-cpu/memory/gpu or no-nodes"
+    },
+    {
+     "action": "notify_only",
+     "tier": "SAFE",
+     "when": "cause is taint/affinity/selector mismatch - manifests must change"
+    }
+   ],
+   "verification": "PodScheduled=True; phase Running; Deployment Available",
+   "notes": "Deleting a Pending pod changes nothing. Distinguish 'HPA raised replicas but pods Pending' (capacity) from 'HPA not raising' (metrics)."
+  },
+  {
+   "id": "pod-pending-volume",
+   "title": "Pod cannot mount/attach its volume",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "high",
+   "detection": [
+    "FailedScheduling mentioning persistentvolumeclaim / volume node affinity conflict / unbound PVC",
+    "ContainerCreating with FailedAttachVolume \"Multi-Attach error\" or FailedMount \"timed out waiting for the volume\""
+   ],
+   "root_causes": [
+    "PVC Pending (see pvc-pending)",
+    "RWO volume still attached to the previous node (Multi-Attach)",
+    "zone mismatch between pod and zonal disk",
+    "CSI node/controller plugin unhealthy"
+   ],
+   "diagnostics": [
+    "kubectl describe pod <pod> | grep -A5 -E \"FailedMount|FailedAttach\"",
+    "kubectl get pvc -n <ns>; kubectl get pv",
+    "kubectl get volumeattachment | grep <pv>",
+    "kubectl -n <csi-ns> get pods"
+   ],
+   "remediation": [
+    {
+     "action": "restart_pod",
+     "tier": "SAFE",
+     "when": "Multi-Attach error and the old node is gone/NotReady - attach is retried on the new node"
+    },
+    {
+     "action": "fix_storage",
+     "tier": "NEVER_AUTO",
+     "when": "PVC/StorageClass/CSI problem - data safety"
+    }
+   ],
+   "verification": "pod Running; no FailedMount events for 10 min",
+   "notes": "StatefulSets on slow storage produce liveness failures that look like app crashes."
+  },
+  {
+   "id": "pod-probe-failing",
+   "title": "Readiness/liveness probe failing",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "medium",
+   "detection": [
+    "events Unhealthy \"Readiness probe failed\" / \"Liveness probe failed\"",
+    "pod Running but READY 0/1 for minutes; liveness restarts correlated across many pods"
+   ],
+   "root_causes": [
+    "liveness probe checks external dependencies -> cascading restarts when a dependency is slow",
+    "initialDelaySeconds/timeoutSeconds too short for a slow starter",
+    "probe path/port wrong after a change",
+    "readiness depends on DNS while CoreDNS is unhealthy"
+   ],
+   "diagnostics": [
+    "kubectl describe pod <pod> | grep -B2 -A6 -E \"Liveness|Readiness\"",
+    "kubectl get deployment <name> -n <ns> -o jsonpath='{.spec.template.spec.containers[*].livenessProbe}'",
+    "kubectl exec <pod> -- wget -qO- localhost:<port>/<path>"
+   ],
+   "remediation": [
+    {
+     "action": "notify_only",
+     "tier": "SAFE",
+     "when": "many pods fail probes at once (dependency problem) - restarting worsens the thundering herd"
+    },
+    {
+     "action": "rollout_undo",
+     "tier": "MEDIUM",
+     "when": "the probe definition changed in the newest revision"
+    },
+    {
+     "action": "fix_probe",
+     "tier": "NEVER_AUTO",
+     "when": "thresholds/paths need tuning"
+    }
+   ],
+   "verification": "Unhealthy events stop; READY n/n; restartCount flat",
+   "notes": "Rule: liveness = internal process only; readiness = dependencies. 50 pods x liveness->DB turned a 10s DB blip into a multi-hour outage."
+  },
+  {
+   "id": "pod-evicted",
+   "title": "Evicted / failed pods left behind",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "low",
+   "detection": [
+    "phase Failed, reason Evicted / Shutdown / NodeAffinity / UnexpectedAdmissionError"
+   ],
+   "root_causes": [
+    "node DiskPressure / MemoryPressure / ephemeral-storage overuse (see node-pressure)",
+    "node shutdown or preemption"
+   ],
+   "diagnostics": [
+    "kubectl get pods -A --field-selector status.phase=Failed",
+    "kubectl describe node <node> | grep -A6 Conditions"
+   ],
+   "remediation": [
+    {
+     "action": "delete_evicted_pods",
+     "tier": "SAFE",
+     "when": "always safe; the controller already replaced them"
+    }
+   ],
+   "verification": "no Failed pods remain in the namespace",
+   "notes": "Many evictions at once point at a node hygiene problem, not an application bug."
+  },
+  {
+   "id": "pod-stuck-terminating",
+   "title": "Pod stuck Terminating",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "medium",
+   "detection": [
+    "metadata.deletionTimestamp older than the threshold"
+   ],
+   "root_causes": [
+    "finalizer from a controller that is gone",
+    "kubelet on the node is NotReady/unreachable",
+    "container ignores SIGTERM and volume unmount hangs"
+   ],
+   "diagnostics": [
+    "kubectl get pod <pod> -o jsonpath='{.metadata.finalizers}'",
+    "kubectl get node <node>",
+    "kubectl describe pod <pod> | tail -20"
+   ],
+   "remediation": [
+    {
+     "action": "force_delete_pod",
+     "tier": "MEDIUM",
+     "when": "node is gone/NotReady and the pod is not part of a StatefulSet"
+    },
+    {
+     "action": "notify_only",
+     "tier": "SAFE",
+     "when": "a finalizer must be inspected by a human or the pod belongs to a StatefulSet"
+    }
+   ],
+   "verification": "pod object gone; replacement Running",
+   "notes": "Force-deleting StatefulSet pods risks two instances writing to the same volume."
+  },
+  {
+   "id": "pod-init-failure",
+   "title": "Init container failing",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "high",
+   "detection": [
+    "initContainerStatuses waiting.reason CrashLoopBackOff/Error; pod stuck Init:x/y"
+   ],
+   "root_causes": [
+    "dependency wait loop never succeeds (DB, migration, service DNS)",
+    "wrong image/command in the init container",
+    "permissions on a shared volume"
+   ],
+   "diagnostics": [
+    "kubectl logs <pod> -c <init-container> --previous",
+    "kubectl describe pod <pod>"
+   ],
+   "remediation": [
+    {
+     "action": "restart_pod",
+     "tier": "SAFE",
+     "when": "the dependency the init container waits for is now available"
+    },
+    {
+     "action": "rollout_undo",
+     "tier": "MEDIUM",
+     "when": "the init container changed in the newest revision"
+    },
+    {
+     "action": "notify_only",
+     "tier": "SAFE",
+     "when": "the dependency itself is down"
+    }
+   ],
+   "verification": "pod leaves Init phase; READY n/n"
+  },
+  {
+   "id": "pod-run-container-error",
+   "title": "Container cannot start (RunContainerError / ContainerCannotRun)",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "high",
+   "detection": [
+    "waiting.reason RunContainerError / ContainerCannotRun / StartError"
+   ],
+   "root_causes": [
+    "entrypoint not found or not executable (exit 126/127)",
+    "volume mount path conflicts / read-only filesystem",
+    "runtime/seccomp/SELinux denial"
+   ],
+   "diagnostics": [
+    "kubectl describe pod <pod> | grep -A4 -i \"cannot run\"",
+    "kubectl logs <pod> --previous"
+   ],
+   "remediation": [
+    {
+     "action": "rollout_undo",
+     "tier": "MEDIUM",
+     "when": "introduced by the newest revision"
+    },
+    {
+     "action": "fix_image_reference",
+     "tier": "NEVER_AUTO",
+     "when": "the image or command is wrong"
+    }
+   ],
+   "verification": "container Running"
+  },
+  {
+   "id": "pod-scc-denied",
+   "title": "Pod rejected by SecurityContextConstraints",
+   "platform": "openshift",
+   "detected": true,
+   "severity_default": "high",
+   "detection": [
+    "ReplicaSet FailedCreate \"unable to validate against any security context constraint\"",
+    "Deployment ReplicaFailure=True while zero pods exist"
+   ],
+   "root_causes": [
+    "manifest assumes root / privileged / hostPath / hostNetwork / extra capabilities",
+    "ServiceAccount not bound to the SCC the workload needs"
+   ],
+   "diagnostics": [
+    "oc describe rs <rs> -n <ns> | tail -10",
+    "oc adm policy scc-subject-review -f deployment.yaml",
+    "oc get scc; oc adm policy who-can use scc privileged"
+   ],
+   "remediation": [
+    {
+     "action": "rollout_undo",
+     "tier": "MEDIUM",
+     "when": "the previous revision was admitted"
+    },
+    {
+     "action": "grant_scc_or_rbac",
+     "tier": "NEVER_AUTO",
+     "when": "the workload legitimately needs an SCC - security decision"
+    }
+   ],
+   "verification": "pods created with annotation openshift.io/scc",
+   "notes": "The denial is usually correct behaviour; fix the manifest before widening SCCs."
+  },
+  {
+   "id": "workload-rollout-stuck",
+   "title": "Deployment rollout stuck (ProgressDeadlineExceeded)",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "high",
+   "detection": [
+    "Deployment Progressing=False reason ProgressDeadlineExceeded",
+    "new ReplicaSet pods not becoming Ready while the old one still serves"
+   ],
+   "root_causes": [
+    "any pod-level failure on the new ReplicaSet",
+    "maxUnavailable=0 with no spare capacity; PDB blocking; quota exhausted"
+   ],
+   "diagnostics": [
+    "kubectl rollout status deployment/<name> -n <ns>",
+    "kubectl get rs -n <ns> -l <selector>",
+    "kubectl rollout history deployment/<name> -n <ns>"
+   ],
+   "remediation": [
+    {
+     "action": "rollout_undo",
+     "tier": "MEDIUM",
+     "when": "users are impacted and the previous revision was healthy - do not delay"
+    },
+    {
+     "action": "rollout_restart",
+     "tier": "SAFE",
+     "when": "pods are stale after a transient failure and the manifest is believed good"
+    },
+    {
+     "action": "notify_only",
+     "tier": "SAFE",
+     "when": "the failing pod pattern needs a manifest fix"
+    }
+   ],
+   "verification": "Progressing=True reason NewReplicaSetAvailable; Available=True",
+   "notes": "Classify by the failing pod's reason first, then apply that pattern; rollback is a first-class primitive."
+  },
+  {
+   "id": "workload-replica-failure",
+   "title": "Controller cannot create pods (quota / LimitRange / admission)",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "high",
+   "detection": [
+    "Deployment ReplicaFailure=True; ReplicaSet FailedCreate \"exceeded quota\", \"must specify limits\", \"admission webhook ... denied\", \"forbidden\""
+   ],
+   "root_causes": [
+    "ResourceQuota sized below the rollout surge (resource-quota)",
+    "LimitRange rejects missing/oversized requests (limit-range)",
+    "admission webhook backend down with failurePolicy Fail (admission-webhook)",
+    "ServiceAccount missing or RBAC/PSA rejection"
+   ],
+   "diagnostics": [
+    "kubectl describe rs <rs> -n <ns> | tail -20",
+    "kubectl describe resourcequota,limitrange -n <ns>",
+    "kubectl get validatingwebhookconfiguration,mutatingwebhookconfiguration"
+   ],
+   "remediation": [
+    {
+     "action": "scale",
+     "tier": "MEDIUM",
+     "when": "cause is resource-quota and lowering replicas temporarily restores service"
+    },
+    {
+     "action": "notify_only",
+     "tier": "SAFE",
+     "when": "quota/LimitRange/webhook needs a human change"
+    }
+   ],
+   "verification": "FailedCreate events stop; desired == available",
+   "notes": "A webhook with failurePolicy Fail blocks pod creation cluster-wide while existing pods keep running."
+  },
+  {
+   "id": "workload-unavailable",
+   "title": "Workload has zero available replicas",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "high",
+   "detection": [
+    "Deployment/StatefulSet with desired > 0 and availableReplicas == 0 without a more specific pod finding"
+   ],
+   "root_causes": [
+    "pods deleted/evicted and not recreated; scheduler starvation; controller manager issue"
+   ],
+   "diagnostics": [
+    "kubectl get pods -n <ns> -l <selector> -o wide",
+    "kubectl describe deployment <name> -n <ns>",
+    "kubectl get events -n <ns> --sort-by=.lastTimestamp | tail -30"
+   ],
+   "remediation": [
+    {
+     "action": "rollout_restart",
+     "tier": "SAFE",
+     "when": "no pods exist or they are wedged without a clearer reason"
+    },
+    {
+     "action": "notify_only",
+     "tier": "SAFE",
+     "when": "evidence is insufficient"
+    }
+   ],
+   "verification": "availableReplicas == desired"
+  },
+  {
+   "id": "service-no-endpoints",
+   "title": "Service selector matches no pods",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "medium",
+   "detection": [
+    "Service with a selector that matches zero pods in its namespace (EndpointSlice empty)"
+   ],
+   "root_causes": [
+    {
+     "selector/label typo (app": "payment-api vs payments-api)"
+    },
+    "workload scaled to zero or deployed to another namespace",
+    "targetPort != containerPort (not detected here; check when 503s persist)"
+   ],
+   "diagnostics": [
+    "kubectl describe service <name> -n <ns>",
+    "kubectl get endpointslices -n <ns> -l kubernetes.io/service-name=<name>",
+    "kubectl get pods -n <ns> --show-labels"
+   ],
+   "remediation": [
+    {
+     "action": "notify_only",
+     "tier": "SAFE",
+     "when": "always - fixing a selector is a manifest change"
+    }
+   ],
+   "verification": "EndpointSlice has Ready endpoints; curl via the Service returns 200",
+   "notes": "502 = bad upstream response, 503 = no healthy upstream, 504 = upstream timeout."
+  },
+  {
+   "id": "job-failed",
+   "title": "Job reached backoffLimit",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "low",
+   "detection": [
+    "Job condition Failed=True reason BackoffLimitExceeded / DeadlineExceeded"
+   ],
+   "root_causes": [
+    "application error, bad input, missing config, OOM"
+   ],
+   "diagnostics": [
+    "kubectl logs job/<name> -n <ns> --all-containers",
+    "kubectl describe job <name> -n <ns>"
+   ],
+   "remediation": [
+    {
+     "action": "notify_only",
+     "tier": "SAFE",
+     "when": "always - re-running a Job is an owner decision"
+    }
+   ],
+   "verification": "n/a"
+  },
+  {
+   "id": "node-not-ready",
+   "title": "Node NotReady / kubelet not posting status",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "critical",
+   "detection": [
+    "Node Ready=False/Unknown, reason NodeStatusUnknown \"Kubelet stopped posting node status\"",
+    "taint node.kubernetes.io/unreachable; pods on node Terminating/Unknown after ~5 min"
+   ],
+   "root_causes": [
+    "kubelet crash/OOM (containers may keep running)",
+    "firewall blocking 10250 / API 6443; VPC route change",
+    "node OOM / disk full; cloud instance stopped or throttled"
+   ],
+   "diagnostics": [
+    "kubectl describe node <node> | grep -A10 Conditions",
+    "kubectl get pods -A --field-selector spec.nodeName=<node>",
+    "oc adm node-logs <node> -u kubelet --tail=200",
+    "oc debug node/<node> -- chroot /host systemctl status kubelet"
+   ],
+   "remediation": [
+    {
+     "action": "cordon_node",
+     "tier": "MEDIUM",
+     "when": "the node flaps Ready/NotReady and keeps attracting pods"
+    },
+    {
+     "action": "drain_node",
+     "tier": "NEVER_AUTO",
+     "when": "the node must be emptied - PDBs and local storage need judgement"
+    },
+    {
+     "action": "control_plane_intervention",
+     "tier": "NEVER_AUTO",
+     "when": "kubelet restart / node reboot / network change is required"
+    }
+   ],
+   "verification": "Ready=True; pods rescheduled and Running",
+   "notes": "Blocked port 10250 made every worker NotReady while apps kept serving."
+  },
+  {
+   "id": "node-pressure",
+   "title": "Node under Memory/Disk/PID pressure",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "high",
+   "detection": [
+    "Node condition MemoryPressure / DiskPressure / PIDPressure = True",
+    {
+     "pods Evicted \"The node was low on resource": "ephemeral-storage\"; ImageGCFailed"
+    }
+   ],
+   "root_causes": [
+    "container logs not rotated; image cache growth; emptyDir abuse",
+    "missing ephemeral-storage limits; inode exhaustion",
+    "memory-hungry pods without requests"
+   ],
+   "diagnostics": [
+    "kubectl describe node <node> | grep -A10 Conditions",
+    "kubectl get pods -A --field-selector status.phase=Failed | grep Evicted",
+    "oc debug node/<node> -- chroot /host df -h /var/lib/containers /var/log"
+   ],
+   "remediation": [
+    {
+     "action": "delete_evicted_pods",
+     "tier": "SAFE",
+     "when": "evicted pods clutter namespaces on this node"
+    },
+    {
+     "action": "cordon_node",
+     "tier": "MEDIUM",
+     "when": "pressure persists and new pods keep landing on the node"
+    },
+    {
+     "action": "control_plane_intervention",
+     "tier": "NEVER_AUTO",
+     "when": "images must be pruned, disk resized or kubelet thresholds changed"
+    }
+   ],
+   "verification": "pressure condition False; no new evictions",
+   "notes": "Many nodes under DiskPressure is a cluster-hygiene issue, not an app bug."
+  },
+  {
+   "id": "pvc-pending",
+   "title": "PersistentVolumeClaim Pending",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "high",
+   "detection": [
+    "PVC phase Pending beyond threshold; events ProvisioningFailed / \"storageclass not found\" / \"no persistent volumes available\"",
+    "only WaitForFirstConsumer events -> informational (binding waits for a pod)"
+   ],
+   "root_causes": [
+    "StorageClass missing or misspelled; no dynamic provisioner",
+    "zone mismatch; storage quota exhausted; CSI controller down",
+    "cloud API permissions lost"
+   ],
+   "diagnostics": [
+    "kubectl describe pvc <name> -n <ns>",
+    "kubectl get storageclass; kubectl get pv",
+    "kubectl -n <csi-ns> logs deploy/<csi-controller> -c csi-provisioner --tail=100"
+   ],
+   "remediation": [
+    {
+     "action": "fix_storage",
+     "tier": "NEVER_AUTO",
+     "when": "always - StorageClass/PV/CSI changes are human decisions"
+    }
+   ],
+   "verification": "PVC Bound; consuming pod Running",
+   "notes": "emptyDir used for database data is irreversible loss on reschedule."
+  },
+  {
+   "id": "hpa-metrics-unavailable",
+   "title": "HPA cannot fetch metrics",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "medium",
+   "detection": [
+    "HPA ScalingActive=False reason FailedGetResourceMetric / FailedGetExternalMetric; TARGETS <unknown>"
+   ],
+   "root_causes": [
+    "metrics-server absent or crashing",
+    "target pods lack CPU requests (utilization undefined)",
+    "wrong scaleTargetRef; external metrics adapter down"
+   ],
+   "diagnostics": [
+    "kubectl describe hpa <name> -n <ns>",
+    "kubectl top pods -n <ns>",
+    "kubectl get apiservice v1beta1.metrics.k8s.io",
+    "kubectl -n kube-system get deploy metrics-server"
+   ],
+   "remediation": [
+    {
+     "action": "scale",
+     "tier": "MEDIUM",
+     "when": "load is high and autoscaling is broken - set a manual bridge replica count"
+    },
+    {
+     "action": "notify_only",
+     "tier": "SAFE",
+     "when": "metrics-server / requests must be fixed"
+    }
+   ],
+   "verification": "TARGETS numeric; ScalingActive=True",
+   "notes": "HPA object exists != autoscaling works. Queue-based workloads lag CPU; consider KEDA."
+  },
+  {
+   "id": "cluster-csr-pending",
+   "title": "CertificateSigningRequests pending approval",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "medium",
+   "detection": [
+    "CSRs with no Approved/Denied condition older than 10 min (kubelet client/serving signers)"
+   ],
+   "root_causes": [
+    "cluster restored/powered on after cert rotation; new node joined while approver disabled",
+    "machine-approver rate limited; nodes added outside machine-api"
+   ],
+   "diagnostics": [
+    "oc get csr | grep Pending",
+    "oc describe csr <name>",
+    "oc -n openshift-cluster-machine-approver logs deploy/machine-approver --tail=100"
+   ],
+   "remediation": [
+    {
+     "action": "approve_csr",
+     "tier": "NEVER_AUTO",
+     "when": "always - approving a certificate is a trust decision"
+    }
+   ],
+   "verification": "no Pending CSRs; nodes Ready"
+  },
+  {
+   "id": "ocp-clusteroperator-degraded",
+   "title": "ClusterOperator Degraded or not Available",
+   "platform": "openshift",
+   "detected": true,
+   "severity_default": "critical",
+   "detection": [
+    "oc get co shows AVAILABLE=False or DEGRADED=True",
+    "ClusterVersion Failing=True; alerts ClusterOperatorDegraded/ClusterOperatorDown"
+   ],
+   "root_causes": [
+    "operand pods CrashLoop; node/MCP issues; expired certificates",
+    "storage for the operand missing (image-registry); misconfigured operator CR; partial upgrade"
+   ],
+   "diagnostics": [
+    "oc get co; oc describe co <name>",
+    "oc get clusterversion -o yaml",
+    "oc get pods -n openshift-<name>-operator; oc logs -n openshift-<name>-operator deploy/<name>-operator --tail=200",
+    "oc adm inspect co/<name> --dest-dir=./inspect"
+   ],
+   "remediation": [
+    {
+     "action": "control_plane_intervention",
+     "tier": "NEVER_AUTO",
+     "when": "always - collect `oc adm inspect` / must-gather and page a human"
+    }
+   ],
+   "verification": "AVAILABLE=True DEGRADED=False for >=15 min",
+   "notes": "Every part of the cluster is a Cluster Operator; each operator is just another container whose logs can be read."
+  },
+  {
+   "id": "ocp-mcp-degraded",
+   "title": "MachineConfigPool degraded or stuck Updating",
+   "platform": "openshift",
+   "detected": true,
+   "severity_default": "critical",
+   "detection": [
+    "oc get mcp DEGRADED=True or DEGRADEDMACHINECOUNT>0; UPDATING=True for hours",
+    "node annotation machineconfiguration.openshift.io/state=Degraded, reason \"failed to drain node\""
+   ],
+   "root_causes": [
+    "drain blocked by PDB or local-storage pod",
+    "bad MachineConfig (invalid ignition, conflicting files)",
+    "node failed to reboot/rejoin; rpm-ostree deployment mismatch"
+   ],
+   "diagnostics": [
+    "oc describe mcp <pool>",
+    "oc get nodes -o custom-columns=NAME:.metadata.name,STATE:.metadata.annotations.machineconfiguration\\.openshift\\.io/state,REASON:.metadata.annotations.machineconfiguration\\.openshift\\.io/reason",
+    "oc -n openshift-machine-config-operator logs -l k8s-app=machine-config-daemon --tail=200",
+    "oc debug node/<node> -- chroot /host rpm-ostree status"
+   ],
+   "remediation": [
+    {
+     "action": "control_plane_intervention",
+     "tier": "NEVER_AUTO",
+     "when": "always - report which PDB or MachineConfig blocks progress"
+    }
+   ],
+   "verification": "UPDATED=True UPDATING=False DEGRADED=False",
+   "notes": "CoreOS nodes have no package manager; verify with rpm-ostree."
+  },
+  {
+   "id": "coredns-failure",
+   "title": "Cluster DNS (CoreDNS) failure or overload",
+   "platform": "both",
+   "detected": false,
+   "detection": [
+    "app logs NXDOMAIN / SERVFAIL / \"i/o timeout\" across many namespaces",
+    "coredns pods OOMKilled/CrashLoop in kube-system (openshift-dns on OpenShift); ClusterOperator dns Degraded"
+   ],
+   "root_causes": [
+    "CoreDNS OOMKilled or too few replicas",
+    "bad Corefile",
+    "NetworkPolicy blocking port 53",
+    "ndots:5 amplification",
+    "conntrack exhaustion"
+   ],
+   "diagnostics": [
+    "kubectl -n kube-system get pods -l k8s-app=kube-dns -o wide",
+    "kubectl run dbg --rm -it --image=busybox -- nslookup kubernetes.default.svc.cluster.local",
+    "oc get co dns"
+   ],
+   "remediation": [
+    {
+     "action": "rollout_restart",
+     "tier": "SAFE",
+     "when": "plain Kubernetes only, coredns pods wedged; on OpenShift the DNS operator owns it (never touch)"
+    },
+    {
+     "action": "control_plane_intervention",
+     "tier": "NEVER_AUTO",
+     "when": "Corefile/upstream/NetworkPolicy changes are needed"
+    }
+   ],
+   "verification": "nslookup succeeds; SERVFAIL rate 0",
+   "notes": "DNS is the single most recurring shared-infra failure on k8s.af."
+  },
+  {
+   "id": "networkpolicy-blocking",
+   "title": "NetworkPolicy blocks legitimate traffic",
+   "platform": "both",
+   "detected": false,
+   "detection": [
+    "timeouts (not refused) between namespaces right after a policy change; DNS failing only in default-deny namespaces"
+   ],
+   "root_causes": [
+    "default-deny without DNS egress allow",
+    "wrong namespaceSelector/podSelector",
+    "wrong policyTypes"
+   ],
+   "diagnostics": [
+    "kubectl get networkpolicy -A",
+    "kubectl run dbg -n <src-ns> --rm -it --image=curlimages/curl -- curl -m5 -v http://<svc>.<dst-ns>.svc:<port>"
+   ],
+   "remediation": [
+    {
+     "action": "notify_only",
+     "tier": "SAFE",
+     "when": "always - revert via GitOps"
+    }
+   ],
+   "verification": "curl succeeds",
+   "notes": "Cluster-scoped network policy, CNI, admission and DNS config are blast-radius multipliers."
+  },
+  {
+   "id": "rbac-forbidden",
+   "title": "RBAC Forbidden",
+   "platform": "both",
+   "detected": false,
+   "detection": [
+    "\"Error from server (Forbidden)\" in controller logs; CrashLoop right after a RoleBinding change"
+   ],
+   "root_causes": [
+    "missing Role/RoleBinding",
+    "wrong namespace in binding",
+    "ClusterRole vs Role scope"
+   ],
+   "diagnostics": [
+    "kubectl auth can-i <verb> <resource> --as=system:serviceaccount:<ns>:<sa> -n <ns>",
+    "kubectl get rolebinding,clusterrolebinding -A -o wide | grep <sa>"
+   ],
+   "remediation": [
+    {
+     "action": "grant_scc_or_rbac",
+     "tier": "NEVER_AUTO",
+     "when": "always"
+    }
+   ],
+   "verification": "auth can-i yes; 403s stop",
+   "notes": "Never auto-widen RBAC; over-broad RBAC appears in most incident stories."
+  },
+  {
+   "id": "admission-webhook-failure",
+   "title": "Admission webhook down with failurePolicy Fail",
+   "platform": "both",
+   "detected": false,
+   "detection": [
+    "FailedCreate \"failed calling webhook ... connection refused / no endpoints available\"; new pods blocked cluster-wide"
+   ],
+   "root_causes": [
+    "webhook backend crashed or scaled to zero",
+    "expired serving cert",
+    "caBundle mismatch",
+    "webhook matching its own namespace"
+   ],
+   "diagnostics": [
+    "kubectl get validatingwebhookconfiguration,mutatingwebhookconfiguration",
+    "kubectl -n <webhook-ns> get pods,svc,endpointslices"
+   ],
+   "remediation": [
+    {
+     "action": "rollout_restart",
+     "tier": "SAFE",
+     "when": "the webhook backend Deployment is wedged"
+    },
+    {
+     "action": "control_plane_intervention",
+     "tier": "NEVER_AUTO",
+     "when": "failurePolicy or certificates must change"
+    }
+   ],
+   "verification": "test pod creation succeeds"
+  },
+  {
+   "id": "certificate-expiry",
+   "title": "TLS certificate expiry",
+   "platform": "both",
+   "detected": false,
+   "detection": [
+    "\"x509: certificate has expired\"; cert-manager Certificate Ready=False; KubeClientCertificateExpiration alerts"
+   ],
+   "root_causes": [
+    "CA never rotated",
+    "kubelet rotation disabled",
+    "issuer broken",
+    "pending CSRs after power-off"
+   ],
+   "diagnostics": [
+    "kubectl get certificate,certificaterequest -A",
+    "echo | openssl s_client -connect <host>:443 2>/dev/null | openssl x509 -noout -dates"
+   ],
+   "remediation": [
+    {
+     "action": "control_plane_intervention",
+     "tier": "NEVER_AUTO",
+     "when": "always"
+    }
+   ],
+   "verification": "new NotAfter date"
+  },
+  {
+   "id": "deprecated-api-after-upgrade",
+   "title": "Removed API after cluster upgrade",
+   "platform": "both",
+   "detected": false,
+   "detection": [
+    "\"no matches for kind X in version Y\"; GitOps sync failing right after upgrade"
+   ],
+   "root_causes": [
+    "manifests/Helm charts pin removed apiVersions; operators built against removed APIs"
+   ],
+   "diagnostics": [
+    "kubectl api-resources | grep <kind>",
+    "pluto detect-helm -A"
+   ],
+   "remediation": [
+    {
+     "action": "notify_only",
+     "tier": "SAFE",
+     "when": "always - manifests must be updated"
+    }
+   ],
+   "verification": "apply succeeds"
+  },
+  {
+   "id": "etcd-apiserver-latency",
+   "title": "etcd / API server latency or NOSPACE",
+   "platform": "both",
+   "detected": false,
+   "detection": [
+    "etcd_disk_wal_fsync_duration_seconds p99 > 10ms; \"mvcc: database space exceeded\"; kubectl timeouts; ClusterOperator etcd Degraded"
+   ],
+   "root_causes": [
+    "slow disk",
+    "db over quota without compaction",
+    "too many objects/events",
+    "burstable instances",
+    "large LIST calls"
+   ],
+   "diagnostics": [
+    "kubectl get --raw /readyz?verbose",
+    "oc get co etcd kube-apiserver"
+   ],
+   "remediation": [
+    {
+     "action": "control_plane_intervention",
+     "tier": "NEVER_AUTO",
+     "when": "always"
+    }
+   ],
+   "verification": "fsync p99 < 10ms; no alarms",
+   "notes": "etcd appears in 15+ k8s.af incidents."
+  },
+  {
+   "id": "pdb-blocking-drain",
+   "title": "PodDisruptionBudget blocks drain/upgrade",
+   "platform": "both",
+   "detected": false,
+   "detection": [
+    "drain output \"Cannot evict pod as it would violate the pod's disruption budget\"",
+    "MachineConfigPool stuck Updating; PDB status.disruptionsAllowed == 0"
+   ],
+   "root_causes": [
+    "minAvailable == replicas",
+    "replicas=1 with minAvailable=1",
+    "unhealthy replicas already violating the budget"
+   ],
+   "diagnostics": [
+    "kubectl get pdb -A -o wide",
+    "kubectl describe pdb <name> -n <ns>"
+   ],
+   "remediation": [
+    {
+     "action": "scale",
+     "tier": "MEDIUM",
+     "when": "adding one replica lets the drain proceed"
+    },
+    {
+     "action": "notify_only",
+     "tier": "SAFE",
+     "when": "the PDB itself must be relaxed"
+    }
+   ],
+   "verification": "disruptionsAllowed >= 1; drain completes"
+  },
+  {
+   "id": "ocp-ingress-router",
+   "title": "OpenShift ingress controller / router unhealthy",
+   "platform": "openshift",
+   "detected": false,
+   "detection": [
+    "co ingress Degraded; router-default pods not Ready; Routes return 503 \"Application is not available\""
+   ],
+   "root_causes": [
+    "router capacity/placement",
+    "backend Service without endpoints",
+    "invalid route TLS",
+    "default cert expiry"
+   ],
+   "diagnostics": [
+    "oc -n openshift-ingress get pods -o wide",
+    "oc -n openshift-ingress-operator get ingresscontroller default -o yaml"
+   ],
+   "remediation": [
+    {
+     "action": "control_plane_intervention",
+     "tier": "NEVER_AUTO",
+     "when": "always (operator-managed namespace is excluded from auto-heal scope)"
+    }
+   ],
+   "verification": "router pods Ready; route returns 200"
+  },
+  {
+   "id": "ocp-authentication-oauth",
+   "title": "OpenShift authentication operator degraded",
+   "platform": "openshift",
+   "detected": false,
+   "detection": [
+    "co authentication Degraded; oc login fails on .well-known/oauth-authorization-server; console login loops"
+   ],
+   "root_causes": [
+    "ingress down",
+    "default ingress cert invalid",
+    "IdP unreachable",
+    "oauth-openshift pods CrashLoop"
+   ],
+   "diagnostics": [
+    "oc get co authentication ingress dns",
+    "oc -n openshift-authentication logs deploy/oauth-openshift --tail=100"
+   ],
+   "remediation": [
+    {
+     "action": "control_plane_intervention",
+     "tier": "NEVER_AUTO",
+     "when": "always"
+    }
+   ],
+   "verification": "oc login succeeds",
+   "notes": "Fallback access when auth is broken - kubeconfig on a control-plane node."
+  },
+  {
+   "id": "posture-workload-hardening",
+   "title": "Workload hardening gaps (preventive)",
+   "platform": "both",
+   "detected": true,
+   "severity_default": "info",
+   "detection": [
+    "mutable/untagged image; missing cpu/memory requests or memory limit; no readinessProbe; single replica; multi-replica without PDB"
+   ],
+   "root_causes": [
+    "manifests written without production defaults"
+   ],
+   "diagnostics": [
+    "kubectl get deployment <name> -n <ns> -o yaml"
+   ],
+   "remediation": [
+    {
+     "action": "notify_only",
+     "tier": "SAFE",
+     "when": "always - included in the posture digest, never acted on"
+    }
+   ],
+   "verification": "n/a",
+   "notes": "These are the anti-patterns behind most of the incidents above; fix them before they page you."
+  }
+ ],
+ "posture_checks": [
+  {
+   "id": "pc-mutable-image-tags",
+   "why": "split-brain deployments on scale-up; silent rollback failure"
+  },
+  {
+   "id": "pc-missing-requests-limits",
+   "why": "scheduler blind; BestEffort evicted first; HPA cannot compute"
+  },
+  {
+   "id": "pc-single-replica",
+   "why": "any restart is downtime"
+  },
+  {
+   "id": "pc-missing-pdb",
+   "why": "upgrades evict without protection, or drains deadlock when minAvailable == replicas"
+  },
+  {
+   "id": "pc-probes",
+   "why": "cascading restart storms; traffic to unready pods"
+  },
+  {
+   "id": "pc-privileged-root",
+   "why": "container escape -> node -> cloud IAM"
+  },
+  {
+   "id": "pc-rbac-overbroad",
+   "why": "small foothold -> full cluster control"
+  },
+  {
+   "id": "pc-no-networkpolicy",
+   "why": "flat network -> lateral movement"
+  },
+  {
+   "id": "pc-topology-spread",
+   "why": "all replicas on one failing node/zone"
+  },
+  {
+   "id": "pc-graceful-shutdown",
+   "why": "SIGKILL interrupts in-flight work during drains"
+  },
+  {
+   "id": "pc-storage",
+   "why": "emptyDir for data = loss; zonal PVs need WaitForFirstConsumer"
+  },
+  {
+   "id": "pc-deprecated-apis",
+   "why": "removed APIs break deploys after upgrade"
+  },
+  {
+   "id": "pc-cert-expiry",
+   "why": "expired CA bricks the cluster"
+  }
+ ]
+}

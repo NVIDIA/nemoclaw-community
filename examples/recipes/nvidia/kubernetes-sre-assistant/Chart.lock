@@ -1,0 +1,9 @@
+dependencies:
+- name: kubernetes-deployer
+  repository: file://../../../tools/kubernetes-deployer
+  version: 0.4.0
+- name: sre-autoheal-agent
+  repository: ""
+  version: 0.1.0
+digest: sha256:136eee5fad79e3f6eec5ea9f1f447700f8d8ed99a68d7c709894ad6299596716
+generated: "2026-09-11T10:46:45.40806-05:00"

@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Broader cluster access: every API group, resource, and verb except delete,
+# deletecollection, bind, escalate, impersonate, approve, sign, and use. The
+# proxy additionally admits POST and PUT. Required by the optional model
+# deployment skill. Review the RBAC in templates/sre-rbac.yaml before use.
+global:
+  sre:
+    rbac:
+      mode: broad-no-delete
+      dangerousAcknowledgement: I_ACKNOWLEDGE_CLUSTER_WIDE_NO_DELETE

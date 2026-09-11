@@ -1,0 +1,2 @@
+# `helm dependency build` materializes the sibling deployer chart here.
+/charts/*.tgz
