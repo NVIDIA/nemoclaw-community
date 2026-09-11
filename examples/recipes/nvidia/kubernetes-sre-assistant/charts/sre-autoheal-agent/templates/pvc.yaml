@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- if and (eq .Values.memory.backend "file") .Values.memory.persistence.enabled (not .Values.memory.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "sre-autoheal.fullname" . }}-memory
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sre-autoheal.labels" . | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- with .Values.memory.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.memory.persistence.size }}
+{{- end }}

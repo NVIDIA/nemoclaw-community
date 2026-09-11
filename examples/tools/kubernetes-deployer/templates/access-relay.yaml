@@ -1,0 +1,592 @@
+{{- if include "nemoclaw-openshell.accessEnabled" . }}
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- $name := include "nemoclaw-openshell.accessName" . -}}
+{{- $access := .Values.access -}}
+{{- $exposure := $access.exposure -}}
+{{- $edge := ne $exposure.type "none" -}}
+{{- $oauth := include "nemoclaw-openshell.dashboardOAuthEnabled" . -}}
+{{- $dashboardPort := int $access.dashboard.port -}}
+{{- $apiPort := int $access.api.port -}}
+{{- $forwards := list -}}
+{{- if $access.dashboard.enabled -}}
+  {{- $forwards = append $forwards (printf "dashboard=%d" $dashboardPort) -}}
+{{- end -}}
+{{- if $access.api.enabled -}}
+  {{- $forwards = append $forwards (printf "api=%d" $apiPort) -}}
+{{- end -}}
+{{- $readinessPort := ternary "dashboard" "openai" $access.dashboard.enabled -}}
+{{- $edgeConfig := "" -}}
+{{- if $edge -}}
+{{- $edgeConfig = printf `worker_processes 1;
+pid /tmp/nginx.pid;
+error_log /dev/stderr warn;
+
+events {
+  worker_connections 512;
+}
+
+http {
+  access_log /dev/stdout;
+  server_tokens off;
+  client_body_temp_path /tmp/client_body;
+  proxy_temp_path /tmp/proxy;
+  fastcgi_temp_path /tmp/fastcgi;
+  uwsgi_temp_path /tmp/uwsgi;
+  scgi_temp_path /tmp/scgi;
+  client_max_body_size 64m;
+
+  map $http_upgrade $edge_connection {
+    default upgrade;
+    "" close;
+  }
+
+  map $http_x_forwarded_proto $edge_forwarded_proto {
+    default $http_x_forwarded_proto;
+    "" $scheme;
+  }
+
+  # Host component of the browser Origin header, when one is present.
+  map $http_origin $edge_origin_host {
+    default "";
+    "~^https?://(?<origin_host>[^/]+)$" $origin_host;
+  }
+
+  # Hermes 0.19 binds its dashboard to loopback and accepts only loopback
+  # Host and Origin values. The relay delivers requests to that loopback
+  # listener, so present the values Hermes expects after the same-origin
+  # guard below has validated the browser's real Origin.
+  map $http_origin $edge_dashboard_origin {
+    default "http://127.0.0.1:%d";
+    "" "";
+  }
+
+  server {
+    listen %d default_server;
+    server_name _;
+
+    # Same-origin guard: a request carrying an Origin header must target the
+    # host the browser used. Without it the loopback rewrite could turn a
+    # cross-site request or WebSocket upgrade into a same-origin one.
+    set $edge_origin_ok 1;
+    if ($http_origin != "") {
+      set $edge_origin_ok 0;
+    }
+    if ($edge_origin_host = $http_host) {
+      set $edge_origin_ok 1;
+    }
+
+    location / {
+      if ($edge_origin_ok = 0) {
+        return 403;
+      }
+      proxy_pass http://127.0.0.1:%d;
+      proxy_http_version 1.1;
+      proxy_set_header Host 127.0.0.1:%d;
+      proxy_set_header Origin $edge_dashboard_origin;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $edge_connection;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $edge_forwarded_proto;
+      proxy_read_timeout 3600s;
+      proxy_send_timeout 3600s;
+      proxy_buffering off;
+      proxy_redirect off;
+    }
+  }
+
+  server {
+    listen %d default_server;
+    server_name _;
+
+    location / {
+      proxy_pass http://127.0.0.1:%d;
+      proxy_http_version 1.1;
+      proxy_set_header Host 127.0.0.1:%d;
+      proxy_set_header Connection "";
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $edge_forwarded_proto;
+      proxy_read_timeout 600s;
+      proxy_send_timeout 600s;
+      proxy_buffering off;
+      proxy_redirect off;
+    }
+  }
+}
+` $dashboardPort (int $exposure.edge.dashboardPort) $dashboardPort $dashboardPort (int $exposure.edge.apiPort) $apiPort $apiPort -}}
+{{- end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "nemoclaw-openshell.accessServiceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+    app.kubernetes.io/component: access-relay
+  {{- if $oauth }}
+  annotations:
+    # Lets the OpenShift OAuth server treat this ServiceAccount as the OAuth
+    # client for the dashboard Route without a separate OAuthClient object.
+    serviceaccounts.openshift.io/oauth-redirectreference.primary: {{ toJson (dict "kind" "OAuthRedirectReference" "apiVersion" "v1" "reference" (dict "kind" "Route" "name" (include "nemoclaw-openshell.dashboardRouteName" .))) | quote }}
+  {{- end }}
+automountServiceAccountToken: false
+{{- if $edge }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nemoclaw-openshell.accessEdgeConfigName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+    app.kubernetes.io/component: access-relay
+data:
+  nginx.conf: |
+    {{- $edgeConfig | nindent 4 }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+    app.kubernetes.io/component: access-relay
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "nemoclaw-openshell.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: access-relay
+  template:
+    metadata:
+      labels:
+        {{- include "nemoclaw-openshell.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: access-relay
+      annotations:
+        nemoclaw.nvidia.com/forwards: {{ join "," $forwards | quote }}
+        {{- if $edge }}
+        checksum/edge-config: {{ $edgeConfig | sha256sum | quote }}
+        {{- end }}
+        {{- if .Values.platform.openshift.enabled }}
+        openshift.io/required-scc: restricted-v2
+        {{- end }}
+        {{- with $access.relay.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "nemoclaw-openshell.accessServiceAccountName" . }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 15
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+        {{- if not .Values.platform.openshift.enabled }}
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: stage-openshell-cli
+          image: {{ .Values.artifacts.utilityImage | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/python3", "-B", "/runtime/stage_cli.py"]
+          env:
+            - name: OPENSHELL_CLI_VERSION
+              value: {{ .Values.artifacts.openshellCli.version | quote }}
+            - name: OPENSHELL_CLI_AMD64_URL
+              value: {{ .Values.artifacts.openshellCli.amd64.url | quote }}
+            - name: OPENSHELL_CLI_AMD64_SHA256
+              value: {{ .Values.artifacts.openshellCli.amd64.sha256 | quote }}
+            - name: OPENSHELL_CLI_ARM64_URL
+              value: {{ .Values.artifacts.openshellCli.arm64.url | quote }}
+            - name: OPENSHELL_CLI_ARM64_SHA256
+              value: {{ .Values.artifacts.openshellCli.arm64.sha256 | quote }}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: runtime
+              mountPath: /runtime
+              readOnly: true
+            - name: tools
+              mountPath: /tools
+            - name: tmp
+              mountPath: /tmp
+      containers:
+        - name: relay
+          image: {{ .Values.artifacts.utilityImage | quote }}
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/python3", "-B", "/runtime/access_relay.py", "serve"]
+          env:
+            - name: HOME
+              value: /tmp
+            - name: XDG_CONFIG_HOME
+              value: /cli-config
+            - name: OPENSHELL_GATEWAY
+              value: {{ include "nemoclaw-openshell.gatewayName" . | quote }}
+            - name: OPENSHELL_GATEWAY_ENDPOINT
+              value: {{ include "nemoclaw-openshell.gatewayEndpoint" . | quote }}
+            - name: OPENSHELL_WORKSPACE
+              value: default
+            - name: OPENSHELL_SANDBOX_NAME
+              value: {{ include "nemoclaw-openshell.agentName" . | quote }}
+            - name: OPENSHELL_CLIENT_TLS_SOURCE
+              value: /client-tls
+            - name: OPENSHELL_SERVICE_ACCOUNT_TOKEN
+              value: /var/run/secrets/openshell-access/token
+            - name: OPENSHELL_OIDC_ISSUER
+              value: {{ .Values.openshell.server.oidc.issuer | quote }}
+            - name: OPENSHELL_OIDC_AUDIENCE
+              value: {{ .Values.openshell.server.oidc.audience | quote }}
+            - name: OPENSHELL_OIDC_ADMIN_ROLE
+              value: {{ .Values.openshell.server.oidc.adminRole | quote }}
+            - name: OPENSHELL_OIDC_SUBJECT
+              value: {{ include "nemoclaw-openshell.accessSubject" . | quote }}
+            - name: ACCESS_FORWARDS
+              value: {{ join "," $forwards | quote }}
+            - name: ACCESS_BIND
+              value: "0.0.0.0"
+          ports:
+            {{- if $access.dashboard.enabled }}
+            - name: dashboard
+              containerPort: {{ $dashboardPort }}
+              protocol: TCP
+            {{- end }}
+            {{- if $access.api.enabled }}
+            # Port names become Kubernetes Service-link environment variables
+            # inside the sandbox; NemoClaw rejects names carrying an API segment.
+            - name: openai
+              containerPort: {{ $apiPort }}
+              protocol: TCP
+            {{- end }}
+          # Readiness means gateway credentials are staged. The forward
+          # listeners themselves bind only after the post-install bootstrap
+          # hook has created the sandbox and OpenShell reports it Ready, so a
+          # listener probe would deadlock `helm install --wait`.
+          readinessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "test -f /tmp/access-relay.ready"]
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            failureThreshold: 6
+          # The relay supervisor must stay alive to restart forwards after a
+          # sandbox restart or credential rotation ({{ $readinessPort }} is the
+          # first forwarded surface).
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "test -f /tmp/access-relay.ready"]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            {{- toYaml $access.relay.resources | nindent 12 }}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # The nested /tools/nemoclaw-access mount below needs its
+            # mountpoint created inside this emptyDir when the container
+            # starts. CRI-O creates it even when the parent mount is
+            # read-only, so OpenShift keeps the tighter posture. containerd
+            # and runc refuse with "make mountpoint ...: read-only file
+            # system", so standard Kubernetes mounts the parent writable. The
+            # init container populates the directory either way and the
+            # nested script itself stays read-only on both platforms.
+            - name: tools
+              mountPath: /tools
+              {{- if .Values.platform.openshift.enabled }}
+              readOnly: true
+              {{- end }}
+            - name: runtime
+              mountPath: /runtime
+              readOnly: true
+            - name: runtime
+              mountPath: /tools/nemoclaw-access
+              subPath: access_relay.py
+              readOnly: true
+            - name: cli-config
+              mountPath: /cli-config
+            - name: client-tls
+              mountPath: /client-tls
+              readOnly: true
+            - name: access-token
+              mountPath: /var/run/secrets/openshell-access
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+        {{- if $edge }}
+        - name: edge
+          image: {{ $exposure.edge.image | quote }}
+          imagePullPolicy: {{ $exposure.edge.pullPolicy }}
+          command: ["nginx", "-c", "/etc/nginx-edge/nginx.conf", "-g", "daemon off;"]
+          ports:
+            - name: edge-dashboard
+              containerPort: {{ int $exposure.edge.dashboardPort }}
+              protocol: TCP
+            - name: edge-openai
+              containerPort: {{ int $exposure.edge.apiPort }}
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: edge-openai
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          resources:
+            {{- toYaml $exposure.edge.resources | nindent 12 }}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: edge-config
+              mountPath: /etc/nginx-edge
+              readOnly: true
+            - name: edge-tmp
+              mountPath: /tmp
+        {{- end }}
+        {{- if $oauth }}
+        - name: oauth-proxy
+          image: {{ $exposure.route.oauthProxy.image | quote }}
+          imagePullPolicy: {{ $exposure.route.oauthProxy.pullPolicy }}
+          args:
+            - --https-address=:8443
+            - --provider=openshift
+            - {{ printf "--openshift-service-account=%s" (include "nemoclaw-openshell.accessServiceAccountName" .) | quote }}
+            - {{ printf "--upstream=http://127.0.0.1:%d" (int $exposure.edge.dashboardPort) | quote }}
+            - --upstream-timeout=3600s
+            - --tls-cert=/var/run/secrets/serving-tls/tls.crt
+            - --tls-key=/var/run/secrets/serving-tls/tls.key
+            - --cookie-secret-file=/var/run/secrets/oauth-cookie/cookie-secret
+            - --cookie-secure=true
+            - --cookie-httponly=true
+            - --cookie-samesite=lax
+            - --pass-user-headers=false
+            - --pass-access-token=false
+            - --email-domain=*
+            - --skip-provider-button=true
+            - {{ printf "--openshift-sar=%s" (include "nemoclaw-openshell.dashboardOAuthSubjectAccessReview" .) | quote }}
+            # Also accept `Authorization: Bearer <OpenShift token>` for scripted
+            # access; the same SubjectAccessReview gates every path.
+            - {{ printf "--openshift-delegate-urls=%s" (dict "/" (include "nemoclaw-openshell.dashboardOAuthSubjectAccessReview" . | fromJson) | toJson) | quote }}
+          ports:
+            - name: oauth-https
+              containerPort: 8443
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /oauth/healthz
+              port: oauth-https
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml $exposure.route.oauthProxy.resources | nindent 12 }}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: serving-tls
+              mountPath: /var/run/secrets/serving-tls
+              readOnly: true
+            - name: oauth-cookie
+              mountPath: /var/run/secrets/oauth-cookie
+              readOnly: true
+            - name: oauth-token
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
+        {{- end }}
+      volumes:
+        - name: runtime
+          configMap:
+            name: {{ include "nemoclaw-openshell.fullname" . }}-runtime
+            defaultMode: 0555
+            items:
+              - key: stage_cli.py
+                path: stage_cli.py
+              - key: access_relay.py
+                path: access_relay.py
+        - name: tools
+          emptyDir: {}
+        - name: cli-config
+          emptyDir: {}
+        - name: client-tls
+          secret:
+            secretName: {{ include "nemoclaw-openshell.clientTLSSecretName" . }}
+            defaultMode: 0400
+            items:
+              - key: ca.crt
+                path: ca.crt
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key
+        - name: access-token
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  audience: {{ .Values.openshell.server.oidc.audience | quote }}
+                  expirationSeconds: {{ $access.relay.tokenExpirationSeconds }}
+                  path: token
+        - name: tmp
+          emptyDir: {}
+        {{- if $edge }}
+        - name: edge-config
+          configMap:
+            name: {{ include "nemoclaw-openshell.accessEdgeConfigName" . }}
+            defaultMode: 0444
+        - name: edge-tmp
+          emptyDir: {}
+        {{- end }}
+        {{- if $oauth }}
+        - name: serving-tls
+          secret:
+            secretName: {{ include "nemoclaw-openshell.accessServingCertSecretName" . }}
+            defaultMode: 0440
+        - name: oauth-cookie
+          secret:
+            secretName: {{ include "nemoclaw-openshell.dashboardOAuthCookieSecretName" . }}
+            defaultMode: 0440
+            items:
+              - key: {{ $exposure.route.oauthProxy.cookieSecretRef.key | quote }}
+                path: cookie-secret
+        - name: oauth-token
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  expirationSeconds: 3600
+                  path: token
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+              - configMap:
+                  name: openshift-service-ca.crt
+                  optional: true
+                  items:
+                    - key: service-ca.crt
+                      path: service-ca.crt
+              - downwardAPI:
+                  items:
+                    - path: namespace
+                      fieldRef:
+                        fieldPath: metadata.namespace
+        {{- end }}
+      {{- with $access.relay.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $access.relay.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $access.relay.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+    app.kubernetes.io/component: access-relay
+  {{- if $oauth }}
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: {{ include "nemoclaw-openshell.accessServingCertSecretName" . | quote }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "nemoclaw-openshell.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: access-relay
+  ports:
+    {{- if $access.dashboard.enabled }}
+    - name: dashboard
+      port: {{ $dashboardPort }}
+      targetPort: dashboard
+      protocol: TCP
+    {{- end }}
+    {{- if $access.api.enabled }}
+    - name: openai
+      port: {{ $apiPort }}
+      targetPort: openai
+      protocol: TCP
+    {{- end }}
+    {{- if $edge }}
+    - name: edge-dashboard
+      port: {{ int $exposure.edge.dashboardPort }}
+      targetPort: edge-dashboard
+      protocol: TCP
+    - name: edge-openai
+      port: {{ int $exposure.edge.apiPort }}
+      targetPort: edge-openai
+      protocol: TCP
+    {{- end }}
+    {{- if $oauth }}
+    - name: oauth-https
+      port: 443
+      targetPort: oauth-https
+      protocol: TCP
+    {{- end }}
+{{- if eq $exposure.type "nodePort" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nemoclaw-openshell.accessExternalServiceName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+    app.kubernetes.io/component: access-relay
+  annotations:
+    nemoclaw.nvidia.com/security-impact: unauthenticated-dashboard-node-port
+spec:
+  type: NodePort
+  selector:
+    {{- include "nemoclaw-openshell.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: access-relay
+  ports:
+    {{- if $access.dashboard.enabled }}
+    - name: edge-dashboard
+      port: {{ int $exposure.edge.dashboardPort }}
+      targetPort: edge-dashboard
+      protocol: TCP
+      {{- if $exposure.nodePort.dashboard }}
+      nodePort: {{ int $exposure.nodePort.dashboard }}
+      {{- end }}
+    {{- end }}
+    {{- if $access.api.enabled }}
+    - name: edge-openai
+      port: {{ int $exposure.edge.apiPort }}
+      targetPort: edge-openai
+      protocol: TCP
+      {{- if $exposure.nodePort.api }}
+      nodePort: {{ int $exposure.nodePort.api }}
+      {{- end }}
+    {{- end }}
+{{- end }}
+{{- end }}

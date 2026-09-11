@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v2
+name: kubernetes-sre-assistant
+description: Policy-bounded Hermes SRE assistant for Kubernetes and OpenShift, layered on the kubernetes-deployer chart, with a read-mostly cluster skill, acknowledged broader access, and an optional model deployment skill
+type: application
+version: 0.1.0
+appVersion: "0.0.117"
+dependencies:
+  # The core deployer is a sibling example in this repository. Run
+  # `helm dependency build` from a repository clone before install.
+  - name: kubernetes-deployer
+    alias: deployer
+    version: "0.4.0"
+    repository: file://../../../tools/kubernetes-deployer
+  # Vendored under charts/ rather than fetched, so no repository is set. It
+  # adds autonomous detection and tiered remediation beside the interactive
+  # assistant. Opt-in: nothing renders unless autoheal.enabled is true.
+  - name: sre-autoheal-agent
+    alias: autoheal
+    version: "0.1.0"
+    condition: autoheal.enabled

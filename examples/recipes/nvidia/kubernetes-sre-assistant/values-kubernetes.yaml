@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Standard Kubernetes profile: the kubernetes-deployer chart's
+# values-kubernetes.yaml nested under the `deployer` key. It grants the built-in
+# system:service-account-issuer-discovery ClusterRole to system:unauthenticated
+# so the OpenShell gateway can fetch the issuer's discovery document and JWKS
+# without credentials. See the deployer README, "Issuer discovery".
+deployer:
+  platform:
+    serviceAccountIssuerDiscovery:
+      createPublicBinding: true
+      dangerousAcknowledgement: I_ACKNOWLEDGE_PUBLIC_OIDC_DISCOVERY
+    openshift:
+      enabled: false
+  openshell:
+    server:
+      oidc:
+        # The gateway compares this to the cluster's published issuer byte for
+        # byte. kubeadm and k3s publish the fully qualified name; OpenShift
+        # publishes the short form. Confirm with
+        #   kubectl get --raw /.well-known/openid-configuration
+        issuer: https://kubernetes.default.svc.cluster.local
+
+# Values for the vendored sre-autoheal-agent subchart, mirroring its own
+# values-kubernetes.yaml. Standard Kubernetes has no SCC, so the agent UID/GID are pinned explicitly.
+# The recipe tests compare these two files line for line.
+autoheal:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile: {type: RuntimeDefault}
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities: {drop: [ALL]}
+    runAsUser: 10001

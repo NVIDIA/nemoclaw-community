@@ -19,6 +19,14 @@ Image: python:3.13.7-slim
 License: Python Software Foundation License and Debian component licenses
 URL: https://hub.docker.com/_/python
 
+Image: nginxinc/nginx-unprivileged
+License: BSD-2-Clause and Alpine component licenses
+URL: https://github.com/nginx/docker-nginx-unprivileged
+
+Image: quay.io/openshift/origin-oauth-proxy
+License: Apache-2.0
+URL: https://github.com/openshift/oauth-proxy
+
 Image: python:3.11-slim
 License: Python Software Foundation License and Debian component licenses
 URL: https://hub.docker.com/_/python

@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- if eq .Values.runMode "watch" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sre-autoheal.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sre-autoheal.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  # One agent at a time: two instances would double-act on the same incident.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "sre-autoheal.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "sre-autoheal.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include "sre-autoheal.agentConfig" . | sha256sum }}
+        {{- if .Values.agentSource.fromConfigMap }}
+        checksum/agent: {{ (.Files.Glob "files/agent/sre_autoheal/*.py").AsConfig | sha256sum }}
+        {{- end }}
+        {{- if .Values.parentIntegration.hermesWebuiOpenshell.enabled }}
+        # The parent chart bumps this through podAnnotations when its overlay changes.
+        sre-autoheal.nvidia.com/parent-overlay: {{ include "sre-autoheal.parentConfigMapName" . | quote }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "sre-autoheal.podSpec" (dict "root" . "args" (list "watch")) | nindent 6 }}
+{{- end }}

@@ -1,0 +1,203 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# sre-autoheal-agent Helm values.
+#
+# Zero-build by default: the agent source ships inside a ConfigMap and runs on
+# an immutable upstream Python image. Set image.repository/tag to use the image
+# built from deploy/Dockerfile instead (then agentSource.fromConfigMap=false).
+
+image:
+  # Pinned multi-arch python:3.12-slim (bookworm). Override with your own build.
+  repository: docker.io/library/python
+  tag: "3.12-slim"
+  digest: ""            # e.g. sha256:...; when set it overrides tag
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+agentSource:
+  # true: mount the agent package + knowledge base from a chart-rendered ConfigMap
+  # false: expect them baked into the image at /opt/sre-autoheal
+  fromConfigMap: true
+
+# Agent run mode: watch (long-running Deployment) or cronjob (periodic one-shot)
+runMode: watch
+cronjob:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+
+replicaCount: 1
+resources:
+  requests: {cpu: 100m, memory: 256Mi}
+  limits: {cpu: "1", memory: 1Gi}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""
+
+# OpenShift-friendly by default: no fixed UID (restricted-v2 SCC assigns one).
+# On plain Kubernetes with PodSecurity "restricted" set runAsUser/runAsGroup.
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile: {type: RuntimeDefault}
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities: {drop: [ALL]}
+  # runAsUser: 10001
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+rbac:
+  create: true
+  # safe        : read everything the detectors need + delete pods + patch
+  #               deployments/statefulsets/daemonsets (rollout restart/undo, limits)
+  #               + scale subresources. No secrets read, no RBAC/SCC, no nodes patch.
+  # safe+nodes  : safe + patch nodes (cordon/uncordon)
+  # read-only   : observe mode only, no mutations at all
+  profile: safe
+  # Extra rules appended verbatim
+  extraRules: []
+
+# Persistent memory (learning). PVC needs a StorageClass; the configmap backend
+# needs none. Choose one.
+memory:
+  backend: configmap          # file | configmap | none
+  persistence:
+    enabled: false            # used when backend=file
+    storageClass: ""
+    size: 1Gi
+    existingClaim: ""
+
+# LLM endpoint. api key comes from an existing Secret (never from values).
+llm:
+  enabled: true
+  provider: openai            # openai (NIM/vLLM/OpenAI-compatible) | anthropic | none
+  baseUrl: ""                 # e.g. https://integrate.api.nvidia.com/v1 or in-cluster NIM /v1
+  model: ""                   # empty = first model advertised by /models (openai provider)
+  timeoutSeconds: 120
+  maxTokens: 2048
+  effort: medium              # anthropic only
+  redactLogs: false           # true = omit pod log tails from the model prompt; tails are always credential-redacted and are never persisted to memory
+  apiKeySecret:
+    name: ""                  # existing Secret name; empty = unauthenticated endpoint
+    key: api-key
+
+notifications:
+  # Optional deployment label shown in the subject and body. Empty omits it.
+  environment: ""
+  clusterName: ""
+  runbookBaseUrl: ""
+  events: [healed, escalated, approval_needed]
+  # Seconds before the same unresolved incident is emailed again (6 hours).
+  # `healed` messages are never suppressed.
+  dedupeSeconds: 21600
+  # Seconds between posture-audit digests (1 day). Independent of dedupeSeconds
+  # so a longer incident window never stretches the digest cadence.
+  postureDedupeSeconds: 86400
+  stdout: true
+  slack:
+    enabled: false
+    channel: ""               # required with botToken; ignored for webhooks
+    mentionOnEscalation: ""   # e.g. "<!subteam^S0123456>" or "<@U0123456>"
+    secret:
+      name: ""                # Secret holding webhook-url and/or bot-token keys
+      webhookKey: webhook-url
+      botTokenKey: bot-token
+  email:
+    enabled: false
+    smtpHost: ""
+    smtpPort: 587
+    starttls: true
+    ssl: false
+    from: ""
+    to: []
+    secret:
+      name: ""                # Secret with username/password keys (optional)
+      usernameKey: username
+      passwordKey: password
+  webhook:
+    enabled: false
+    headers: {}
+    secret:
+      name: ""
+      urlKey: url
+
+# Everything below is rendered verbatim into the agent config (see agent/sre_autoheal/config.py).
+agentConfig:
+  scope:
+    include_namespaces: []
+    exclude_namespaces: [kube-system, kube-public, kube-node-lease, openshift, "openshift-*", "agent-sandbox-system"]
+    opt_in_label: ""
+    opt_out_label: "sre-autoheal.nvidia.com/managed=false"
+    include_cluster_scope: true
+  policy:
+    mode: assisted            # observe | safe | assisted
+    dry_run: false
+    max_actions_per_cycle: 5
+    max_actions_per_hour: 20
+    cooldown_seconds: 600
+    flap_threshold: 3
+    flap_window_seconds: 21600
+    tier_overrides: {}
+    disabled_actions: []
+    approval_annotation: sre-autoheal.nvidia.com/approve
+    min_llm_confidence: 0.6
+  detection:
+    interval_seconds: 60
+    crashloop_min_restarts: 3
+    pending_pod_min_age_seconds: 300
+    stuck_terminating_min_age_seconds: 900
+    rollout_stuck_min_age_seconds: 600
+    pvc_pending_min_age_seconds: 300
+    node_not_ready_min_age_seconds: 300
+    events_lookback_seconds: 1800
+    log_tail_lines: 40
+    max_findings_per_cycle: 50
+    include_posture_audit: true
+  memory:
+    max_incidents: 2000
+    learning:
+      enabled: true
+      fast_path_min_samples: 5
+      fast_path_min_success_rate: 0.9
+      demote_min_samples: 4
+      demote_max_success_rate: 0.3
+      few_shot_examples: 5
+  verify:
+    timeout_seconds: 300
+    poll_seconds: 15
+  log_level: INFO
+
+# Additional JSON/YAML config overlays mounted into /etc/sre-autoheal/conf.d
+# (applied after config.json, before environment variables). Each entry is an
+# existing ConfigMap name in the release namespace.
+extraConfigMaps: []
+
+# Integration with the hermes-webui-openshell parent chart. When this chart is
+# installed as that chart's `sreAutoheal` subchart, the parent renders a
+# ConfigMap carrying its mail gateway, recipients, allowed recipient domains,
+# cluster name and inference endpoint; enabling this mounts that overlay and
+# reuses the parent's runtime Secret as the LLM API key source.
+parentIntegration:
+  hermesWebuiOpenshell:
+    enabled: false
+    # Defaults follow the parent's fullname helper: <release>-hermes-webui-openshell.
+    parentChartName: hermes-webui-openshell
+    configMapName: ""          # default <parent fullname>-sre-autoheal-parent
+    apiKeySecretName: ""       # default <parent fullname>-runtime
+    apiKeySecretKey: COMPATIBLE_API_KEY
+
+# Restrict egress to the API server, DNS and the configured endpoints. Disabled
+# by default because CIDR/port details are cluster-specific.
+networkPolicy:
+  enabled: false
+  extraEgress: []
+
+podAnnotations: {}
+podLabels: {}

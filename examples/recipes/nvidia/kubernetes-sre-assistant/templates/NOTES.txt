@@ -1,0 +1,43 @@
+{{- $sre := .Values.global.sre -}}
+{{- $cli := ternary "oc" "kubectl" .Values.deployer.platform.openshift.enabled -}}
+{{- $deployer := include "sre-assistant.deployerFullname" . -}}
+{{- $sandbox := printf "%s-hermes" .Release.Name | trunc 19 | trimSuffix "-" -}}
+Kubernetes SRE assistant ({{ .Release.Name }}) is layered on the kubernetes-deployer chart.
+
+Cluster access
+  Mode: {{ $sre.rbac.mode }} (DELETE is never granted)
+  {{- if eq $sre.rbac.mode "safe" }}
+  Safe mode reads common non-secret resources and scales Deployments/StatefulSets only.
+  {{- else }}
+  broad-no-delete grants create/patch/update across API groups; review templates/sre-rbac.yaml.
+  {{- end }}
+  Proxy: https://{{ include "sre-assistant.proxyName" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ int $sre.proxy.port }}
+  Reached only from the sandbox with the chart-managed bearer token and private CA
+  {{- if $sre.networkPolicy.enabled }} (NetworkPolicy admits Agent Sandbox Pods only){{ end }}.
+{{- if $sre.openshiftLlmDeploy.enabled }}
+  Model deployment skill: enabled (external Secret reference only; target namespace {{ include "sre-assistant.modelDeployNamespace" . }})
+  {{- if $sre.openshiftLlmDeploy.metrics.enabled }}
+  Metrics proxy: read-only, exact service {{ $sre.openshiftLlmDeploy.metrics.namespace }}/{{ $sre.openshiftLlmDeploy.metrics.service }}
+  {{- end }}
+  {{- if $sre.openshiftLlmDeploy.deletion.enabled }}
+  Model deletion: {{ len $sre.openshiftLlmDeploy.deletion.allowedResources }} exact resource(s) in {{ $sre.openshiftLlmDeploy.deletion.namespace }}
+  {{- end }}
+{{- end }}
+
+Hermes (provided by the deployer subchart, resources named {{ $deployer }}-*)
+  Sandbox status:  {{ $cli }} -n {{ .Release.Namespace }} get sandbox default--{{ $sandbox }}
+  Skills seeded:   {{ $cli }} -n {{ .Release.Namespace }} logs job/{{ $deployer }}-seed-{{ .Release.Revision }}
+  Dashboard/API:   {{ $cli }} -n {{ .Release.Namespace }} port-forward svc/{{ $deployer }}-access 18789:18789 8642:8642
+                   then http://127.0.0.1:18789/ and http://127.0.0.1:8642/v1
+  Bearer token:    {{ $cli }} -n {{ .Release.Namespace }} exec deploy/{{ $deployer }}-access -c relay -- /tools/nemoclaw-access gateway-token --quiet
+  Terminal chat:   set deployer.operatorClient.enabled=true, then
+                   {{ $cli }} -n {{ .Release.Namespace }} attach -it statefulset/{{ $deployer }}-operator-client -c hermes-chat
+  Ask the assistant, for example: "Which pods in {{ .Release.Namespace }} are not Ready?"
+  Pass --render-subchart-notes to helm install/upgrade for the deployer's full notes.
+
+Teardown (no local OpenShell binary required)
+  helm upgrade {{ .Release.Name }} <chart-path> -n {{ .Release.Namespace }} --reuse-values \
+    --set deployer.lifecycle.sandbox.desiredState=absent \
+    --set deployer.lifecycle.sandbox.dangerousAcknowledgement=I_ACKNOWLEDGE_SANDBOX_DELETE --wait
+  {{ $cli }} -n {{ .Release.Namespace }} get sandbox default--{{ $sandbox }}   (expect NotFound)
+  helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}

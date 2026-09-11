@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Standard Kubernetes profile for the managed OpenShell gateway.
+#
+# The gateway validates bootstrap and client tokens against the cluster's
+# ServiceAccount issuer. OpenShell 0.0.116 fetches
+# <issuer>/.well-known/openid-configuration and the advertised JWKS with an
+# anonymous HTTP client, and a standard cluster serves neither endpoint to
+# unauthenticated callers. This profile grants exactly the built-in
+# `system:service-account-issuer-discovery` ClusterRole (issuer metadata and
+# public signing keys, nothing else) to `system:unauthenticated`.
+#
+# If the cluster already exposes both endpoints anonymously, use
+#   --set platform.serviceAccountIssuerDiscovery.preexistingAnonymousAccess=true
+# instead of this file. The bootstrap Job verifies the anonymous path before
+# it creates the sandbox in either case.
+platform:
+  serviceAccountIssuerDiscovery:
+    createPublicBinding: true
+    dangerousAcknowledgement: I_ACKNOWLEDGE_PUBLIC_OIDC_DISCOVERY
+  openshift:
+    enabled: false
+
+openshell:
+  server:
+    oidc:
+      # The gateway compares this to the `issuer` field of the cluster's
+      # discovery document byte for byte. kubeadm, k3s and most self-managed
+      # clusters publish the fully qualified name below, while OpenShift
+      # publishes the short form that values-openshift.yaml sets. Confirm with
+      #   kubectl get --raw /.well-known/openid-configuration
+      # and override this value when the cluster publishes something else, for
+      # example the external URL that a managed cloud control plane uses. The
+      # bootstrap Job reports the exact value to set if they disagree.
+      issuer: https://kubernetes.default.svc.cluster.local

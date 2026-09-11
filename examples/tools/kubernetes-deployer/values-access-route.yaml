@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# OpenShift profile add-on: publish the NemoClaw Hermes dashboard and the
+# OpenAI-compatible API through Routes. Combine with values-openshift.yaml and
+# supply the cluster application domain (or explicit hosts):
+#
+#   helm upgrade --install nemoclaw-hermes . -n nemoclaw-hermes \
+#     -f values-openshift.yaml -f values-access-route.yaml \
+#     --set access.exposure.route.appsDomain=apps.cluster.example
+#
+# The dashboard Route terminates at an OpenShift oauth-proxy sidecar, so every
+# browser session signs in with an OpenShift account that can `get` this
+# release's access Service. The API Route relies on Hermes' own bearer key
+# (see `gateway-token` in the Helm NOTES).
+access:
+  enabled: true
+  exposure:
+    type: route
+    route:
+      appsDomain: ""
+      dashboard:
+        enabled: true
+        host: ""
+      api:
+        enabled: true
+        host: ""
+      oauthProxy:
+        enabled: true

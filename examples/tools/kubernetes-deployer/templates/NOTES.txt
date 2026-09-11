@@ -1,0 +1,102 @@
+{{- $cli := ternary "oc" "kubectl" .Values.platform.openshift.enabled -}}
+{{- $sandbox := include "nemoclaw-openshell.agentName" . -}}
+{{- $accessEnabled := include "nemoclaw-openshell.accessEnabled" . -}}
+{{- $access := .Values.access -}}
+{{- $exposure := $access.exposure -}}
+{{- $accessName := include "nemoclaw-openshell.accessName" . -}}
+{{- $dashboardUrl := include "nemoclaw-openshell.dashboardPublicUrl" . -}}
+{{- $apiUrl := include "nemoclaw-openshell.apiPublicUrl" . -}}
+NemoClaw Hermes is configured through OpenShell.
+
+Platform: {{ ternary "OpenShift" "Kubernetes" .Values.platform.openshift.enabled }}
+Sandbox: {{ $sandbox }}
+Immutable agent image: {{ .Values.agent.image.multiarch }}
+
+NemoClaw quickstart equivalents on this cluster
+  nemohermes {{ $sandbox }} status
+    {{ $cli }} -n {{ .Release.Namespace }} get sandbox default--{{ $sandbox }}
+  nemohermes {{ $sandbox }} logs --follow
+    {{ $cli }} -n {{ .Release.Namespace }} logs pod/default--{{ $sandbox }} -c agent --follow
+{{- if $accessEnabled }}
+{{- if $access.dashboard.enabled }}
+  nemohermes {{ $sandbox }} dashboard-url
+{{- if and (eq $exposure.type "route") $exposure.route.dashboard.enabled }}
+    {{ $dashboardUrl }}/
+    {{- if include "nemoclaw-openshell.dashboardOAuthEnabled" . }}
+    Sign in with your OpenShift account; access requires `get` on Service
+    {{ $accessName }} in this namespace unless another SubjectAccessReview was configured.
+    {{- else }}
+    WARNING: this Route publishes the dashboard without a login (acknowledged).
+    {{- end }}
+{{- else if and (eq $exposure.type "ingress") $exposure.ingress.dashboard.host }}
+    {{ $dashboardUrl }}/
+    WARNING: the Ingress publishes the dashboard without a login (acknowledged).
+{{- else if eq $exposure.type "nodePort" }}
+    http://<node-address>:$({{ $cli }} -n {{ .Release.Namespace }} get svc {{ include "nemoclaw-openshell.accessExternalServiceName" . }} -o jsonpath='{.spec.ports[?(@.name=="edge-dashboard")].nodePort}')/
+    WARNING: the NodePort publishes the dashboard without a login (acknowledged).
+{{- else }}
+    {{ $cli }} -n {{ .Release.Namespace }} port-forward svc/{{ $accessName }} {{ int $access.dashboard.port }}:{{ int $access.dashboard.port }}{{ if $access.api.enabled }} {{ int $access.api.port }}:{{ int $access.api.port }}{{ end }}
+    http://127.0.0.1:{{ int $access.dashboard.port }}/
+{{- end }}
+{{- end }}
+{{- if $access.api.enabled }}
+  Hermes OpenAI-compatible API
+{{- if and (eq $exposure.type "route") $exposure.route.api.enabled }}
+    {{ $apiUrl }}
+{{- else if and (eq $exposure.type "ingress") $exposure.ingress.api.host }}
+    {{ $apiUrl }}
+{{- else if eq $exposure.type "nodePort" }}
+    http://<node-address>:$({{ $cli }} -n {{ .Release.Namespace }} get svc {{ include "nemoclaw-openshell.accessExternalServiceName" . }} -o jsonpath='{.spec.ports[?(@.name=="edge-openai")].nodePort}')/v1
+{{- else }}
+    {{- if not $access.dashboard.enabled }}
+    {{ $cli }} -n {{ .Release.Namespace }} port-forward svc/{{ $accessName }} {{ int $access.api.port }}:{{ int $access.api.port }}
+    {{- end }}
+    http://127.0.0.1:{{ int $access.api.port }}/v1  (after the port-forward above)
+{{- end }}
+  nemohermes {{ $sandbox }} gateway-token --quiet
+    {{ $cli }} -n {{ .Release.Namespace }} exec deploy/{{ $accessName }} -c relay -- /tools/nemoclaw-access gateway-token --quiet
+    Pass the printed value as the Authorization bearer token.
+{{- end }}
+  Relay readiness (both surfaces wait for the OpenShell sandbox to be Ready)
+    {{ $cli }} -n {{ .Release.Namespace }} get deploy/{{ $accessName }}
+{{- else }}
+
+  Dashboard and API access relay: disabled (set access.enabled=true)
+{{- end }}
+{{- if .Values.operatorClient.enabled }}
+  nemohermes launch {{ $sandbox }}  (terminal chat without a local OpenShell binary)
+    {{ $cli }} -n {{ .Release.Namespace }} attach -it statefulset/{{ include "nemoclaw-openshell.operatorClientName" . }} -c hermes-chat
+
+The caller needs pods/get and pods/attach, but not pods/exec. The chart does not
+create an end-user RoleBinding.
+Assign this client to one trusted operator only. Do not share one client among
+mutually untrusted users; deploy separate release/client identities instead.
+{{- else }}
+
+  In-cluster terminal chat client: disabled (set operatorClient.enabled=true)
+{{- end }}
+
+{{- if eq .Values.lifecycle.sandbox.desiredState "absent" }}
+
+THIS REVISION DELETES THE SANDBOX. The bootstrap Job removes sandbox
+{{ $sandbox }} through the chart-managed gateway and verifies it is gone.
+  Verify:   {{ $cli }} -n {{ .Release.Namespace }} get sandbox default--{{ $sandbox }}   (expect NotFound)
+  Then:     helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
+  Or recreate it with --set lifecycle.sandbox.desiredState=present.
+{{- else }}
+
+Sandbox lifecycle (no local OpenShell binary required)
+The chart does not render a Sandbox object and never deletes the sandbox or the
+retained Hermes PVC during `helm uninstall`. To retire the sandbox, let the
+authenticated bootstrap Job delete it, verify, then uninstall:
+  helm upgrade {{ .Release.Name }} <chart-path> -n {{ .Release.Namespace }} --reuse-values \
+    --set lifecycle.sandbox.desiredState=absent \
+    --set lifecycle.sandbox.dangerousAcknowledgement=I_ACKNOWLEDGE_SANDBOX_DELETE --wait
+  {{ $cli }} -n {{ .Release.Namespace }} get sandbox default--{{ $sandbox }}   (expect NotFound)
+  helm uninstall {{ .Release.Name }} -n {{ .Release.Namespace }}
+{{- end }}
+{{- if not .Values.platform.openshift.enabled }}
+
+The operator must ensure the Sandbox namespace's admission policy permits the
+OpenShell combined supervisor; the chart does not modify namespace PSA labels.
+{{- end }}

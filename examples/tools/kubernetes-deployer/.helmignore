@@ -1,0 +1,9 @@
+# Review-only material stays in Git; packaged releases carry the chart,
+# runtime scripts, and the vendored OpenShell subchart only.
+/docs/
+tests/
+__pycache__/
+*.pyc
+.DS_Store
+.git/
+.gitignore

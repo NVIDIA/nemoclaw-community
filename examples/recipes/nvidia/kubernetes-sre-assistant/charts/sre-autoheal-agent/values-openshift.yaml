@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# OpenShift overlay: restricted-v2 SCC assigns the UID; keep system namespaces out of scope.
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities: {drop: [ALL]}
+agentConfig:
+  scope:
+    exclude_namespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - openshift
+      - "openshift-*"
+      - agent-sandbox-system
+      - default

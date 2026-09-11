@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# One ConfigMap serves two consumers: the deployer's seed Job mounts it at
+# /plugins/sre (seed plugin, CLI stager, bundle trust metadata) and the API
+# proxies mount only api_proxy.py.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sre-assistant.runtimeConfigMapName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sre-assistant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sre-runtime
+data:
+  seed_sre.py: |
+    {{- .Files.Get "files/scripts/seed_sre.py" | nindent 4 }}
+  stage_sre_cli.py: |
+    {{- .Files.Get "files/scripts/stage_sre_cli.py" | nindent 4 }}
+  api_proxy.py: |
+    {{- .Files.Get "files/scripts/api_proxy.py" | nindent 4 }}
+  sre-skills.parts.json: |
+    {{- .Files.Get "files/sre-skills.parts.json" | nindent 4 }}
+  sre-skills.tar.xz.sha256: |
+    {{- .Files.Get "files/sre-skills.tar.xz.sha256" | nindent 4 }}
+  sre-skills.manifest.sha256: |
+    {{- .Files.Get "files/sre-skills.manifest.sha256" | nindent 4 }}

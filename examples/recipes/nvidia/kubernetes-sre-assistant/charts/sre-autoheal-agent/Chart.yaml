@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v2
+name: sre-autoheal-agent
+description: >-
+  LLM-assisted self-healing SRE agent for Kubernetes and OpenShift. Detects
+  production failure patterns, executes only allow-listed risk-tiered
+  remediations, verifies the outcome, learns from every incident, and notifies
+  operators over Slack, email or a webhook.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords: [sre, self-healing, aiops, kubernetes, openshift, nemoclaw, hermes]
+home: https://github.com/agudanv/hermes-nemo-skills
+sources:
+  - https://github.com/agudanv/hermes-nemo-skills/tree/main/skills/operations/infrastructure/sre/sre-autoheal-agent
+maintainers:
+  - name: NVIDIA

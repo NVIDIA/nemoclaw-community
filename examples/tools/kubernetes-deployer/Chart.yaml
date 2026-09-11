@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v2
+name: kubernetes-deployer
+description: Deploy the official NemoClaw-managed Hermes image behind an OpenShell gateway on Kubernetes or OpenShift, with dashboard, OpenAI-compatible API, and terminal access surfaces and extension points for skill recipes
+type: application
+version: 0.4.0
+appVersion: "0.0.117"
+dependencies:
+  - name: helm-chart
+    alias: openshell
+    version: "0.0.116"
+    condition: openshell.enabled

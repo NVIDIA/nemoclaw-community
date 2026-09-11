@@ -1,0 +1,157 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+{{- $fullname := include "nemoclaw-openshell.fullname" . -}}
+{{- $claimName := include "nemoclaw-openshell.stateClaimName" . -}}
+{{- /*
+agent.env values are rendered as templates so a consuming umbrella chart can
+reference release facts such as {{ .Release.Namespace }} from static values.
+*/ -}}
+{{- $agentEnv := dict -}}
+{{- range $key, $value := include "nemoclaw-openshell.agentEnvValues" . | fromYaml -}}
+  {{- $_ := set $agentEnv $key (toString $value) -}}
+{{- end -}}
+{{- /*
+NemoClaw dashboard and API ports. The managed image already defaults to
+18789 and 8642, so the defaults add no environment and keep the configuration
+identity of existing sandboxes unchanged. A browser-facing origin is recorded
+as CHAT_UI_URL, the variable the NemoClaw CLI itself uses for that purpose.
+*/ -}}
+{{- $accessEnabled := include "nemoclaw-openshell.accessEnabled" . -}}
+{{- if and $accessEnabled .Values.access.dashboard.enabled -}}
+  {{- if ne (int .Values.access.dashboard.port) 18789 -}}
+    {{- $_ := set $agentEnv "NEMOCLAW_DASHBOARD_PORT" (toString (int .Values.access.dashboard.port)) -}}
+  {{- else -}}
+    {{- $dashboardPublicUrl := include "nemoclaw-openshell.dashboardPublicUrl" . -}}
+    {{- if $dashboardPublicUrl -}}
+      {{- $_ := set $agentEnv "CHAT_UI_URL" $dashboardPublicUrl -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- if and $accessEnabled .Values.access.api.enabled (ne (int .Values.access.api.port) 8642) -}}
+  {{- $_ := set $agentEnv "NEMOCLAW_HERMES_API_PORT" (toString (int .Values.access.api.port)) -}}
+{{- end -}}
+{{- $pod := dict "node_selector" .Values.agent.sandbox.nodeSelector "tolerations" .Values.agent.sandbox.tolerations -}}
+{{- if .Values.agent.sandbox.runtimeClassName -}}
+  {{- $_ := set $pod "runtime_class_name" .Values.agent.sandbox.runtimeClassName -}}
+{{- end -}}
+{{- if .Values.agent.sandbox.priorityClassName -}}
+  {{- $_ := set $pod "priority_class_name" .Values.agent.sandbox.priorityClassName -}}
+{{- end -}}
+{{- $mounts := list
+      (dict "name" "hermes-state" "mount_path" "/sandbox/workspace" "sub_path" "workspace" "read_only" false)
+-}}
+{{- /*
+Additional subpaths of the retained state PVC, typically populated by a seed
+plugin (skills, kubeconfigs, staged binaries). Validated in 000-validate.yaml.
+*/ -}}
+{{- range $mount := include "nemoclaw-openshell.extraStateMounts" . | fromYamlArray -}}
+  {{- $mounts = append $mounts (dict
+        "name" "hermes-state"
+        "mount_path" (toString $mount.mountPath)
+        "sub_path" (toString $mount.subPath)
+        "read_only" (ne (toString $mount.readOnly) "false")) -}}
+{{- end -}}
+{{- $volumes := list (dict "name" "hermes-state" "persistent_volume_claim" (dict "claim_name" $claimName "read_only" false)) -}}
+{{- if .Values.agent.nemoclawHome.enabled -}}
+  {{- /* Root-owned, read-only NemoClaw state root; see values.yaml agent.nemoclawHome. */ -}}
+  {{- $mounts = append $mounts (dict "name" "nemoclaw-home" "mount_path" "/sandbox/.nemoclaw" "read_only" true) -}}
+  {{- $volumes = append $volumes (dict "name" "nemoclaw-home" "persistent_volume_claim" (dict "claim_name" (include "nemoclaw-openshell.nemoclawHomeClaimName" .) "read_only" true)) -}}
+{{- end -}}
+{{- $agentContainer := dict "resources" .Values.agent.sandbox.resources "volume_mounts" $mounts -}}
+{{- $kubernetesDriver := dict "pod" $pod "containers" (dict "agent" $agentContainer) "volumes" $volumes -}}
+{{- $driverConfig := dict "kubernetes" $kubernetesDriver -}}
+{{- $imageDigest := last (splitList "@sha256:" .Values.agent.image.multiarch) -}}
+{{- $model := dict
+      "providerName" (include "nemoclaw-openshell.providerName" .)
+      "providerType" .Values.agent.model.providerType
+      "name" .Values.agent.model.name
+      "baseUrl" .Values.agent.model.baseUrl
+      "api" .Values.agent.model.api
+      "contextWindow" .Values.agent.model.contextWindow
+      "requestTimeoutSeconds" .Values.agent.model.requestTimeoutSeconds
+      "verifyEndpoint" .Values.agent.model.verifyEndpoint
+-}}
+{{- $policy := include "nemoclaw-openshell.policy" . -}}
+{{- $startupContract := "normalize-injected-uid-path-modes-v1" -}}
+{{- /*
+Seed plugins declare an identity string (for example a skill bundle digest) so
+that changing the seeded content changes the sandbox configuration identity.
+A stale running sandbox can therefore never be presented as carrying content
+it was not seeded with.
+*/ -}}
+{{- $seedPlugins := include "nemoclaw-openshell.seedPluginIdentity" . | fromJsonArray -}}
+{{- $configIdentity := dict
+      "agentImage" .Values.agent.image.multiarch
+      "agentEnv" $agentEnv
+      "model" $model
+      "sandbox" .Values.agent.sandbox
+      "driverConfig" $driverConfig
+      "policy" $policy
+      "openshellMode" .Values.openshell.mode
+      "seedPlugins" $seedPlugins
+      "startupContract" $startupContract
+-}}
+{{- $configId := sha256sum (toJson $configIdentity) | trunc 63 -}}
+{{- $labels := dict
+      "nemoclaw.nvidia.com/release" (.Release.Name | trunc 63 | trimSuffix "-")
+      "nemoclaw.nvidia.com/image-id" ($imageDigest | trunc 32)
+      "nemoclaw.nvidia.com/config-id" $configId
+      "nemoclaw.nvidia.com/managed-by" "helm"
+-}}
+{{- $operatorClient := dict
+      "enabled" .Values.operatorClient.enabled
+      "workspace" "default"
+      "subject" (include "nemoclaw-openshell.operatorClientSubject" .)
+-}}
+{{- $accessRelay := dict
+      "enabled" (eq $accessEnabled "true")
+      "workspace" "default"
+      "subject" (include "nemoclaw-openshell.accessSubject" .)
+-}}
+{{- if eq .Values.openshell.mode "existing" -}}
+  {{- $_ := set $labels "nemoclaw.nvidia.com/release-id" (printf "%s/%s" .Release.Namespace .Release.Name | sha256sum | trunc 32) -}}
+{{- end -}}
+{{- $config := dict
+      "releaseId" (printf "%s/%s" .Release.Namespace .Release.Name)
+      "sandboxName" (include "nemoclaw-openshell.agentName" .)
+      "sandboxDesiredState" .Values.lifecycle.sandbox.desiredState
+      "agentImage" .Values.agent.image.multiarch
+      "agentEnv" $agentEnv
+      "model" $model
+      "sandbox" .Values.agent.sandbox
+      "driverConfig" $driverConfig
+      "labels" $labels
+      "openshellMode" .Values.openshell.mode
+      "seedPlugins" $seedPlugins
+      "startupContract" $startupContract
+      "operatorClient" $operatorClient
+      "accessRelay" $accessRelay
+}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullname }}-runtime
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "nemoclaw-openshell.labels" . | nindent 4 }}
+data:
+  stage_cli.py: |
+    {{- .Files.Get "files/scripts/stage_cli.py" | nindent 4 }}
+  seed.py: |
+    {{- .Files.Get "files/scripts/seed.py" | nindent 4 }}
+  wait_seed.py: |
+    {{- .Files.Get "files/scripts/wait_seed.py" | nindent 4 }}
+  bootstrap.py: |
+    {{- .Files.Get "files/scripts/bootstrap.py" | nindent 4 }}
+  {{- if .Values.operatorClient.enabled }}
+  operator_client.py: |
+    {{- .Files.Get "files/scripts/operator_client.py" | nindent 4 }}
+  {{- end }}
+  {{- if $accessEnabled }}
+  access_relay.py: |
+    {{- .Files.Get "files/scripts/access_relay.py" | nindent 4 }}
+  {{- end }}
+  bootstrap-config.json: |
+    {{- $config | toPrettyJson | nindent 4 }}
+  policy.yaml: |
+    {{- $policy | nindent 4 }}

@@ -1,0 +1,19 @@
+sre-autoheal-agent {{ .Chart.Version }} installed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Mode            : {{ .Values.agentConfig.policy.mode }}{{ if .Values.agentConfig.policy.dry_run }} (dry-run){{ end }}
+Run mode        : {{ .Values.runMode }}
+RBAC profile    : {{ .Values.rbac.profile }}
+Memory backend  : {{ .Values.memory.backend }}
+LLM             : {{ if .Values.llm.enabled }}{{ .Values.llm.provider }} {{ .Values.llm.baseUrl }} {{ .Values.llm.model }}{{ else }}disabled (rule-based only){{ end }}
+Notifications   : stdout={{ .Values.notifications.stdout }} slack={{ .Values.notifications.slack.enabled }} email={{ .Values.notifications.email.enabled }} webhook={{ .Values.notifications.webhook.enabled }}
+
+Check the agent:
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "sre-autoheal.fullname" . }} -f
+  kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "sre-autoheal.fullname" . }} -- python3 -m sre_autoheal preflight
+  kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "sre-autoheal.fullname" . }} -- python3 -m sre_autoheal memory summary
+
+Approve a MEDIUM-tier action the agent proposed:
+  kubectl annotate deployment/<name> -n <ns> {{ .Values.agentConfig.policy.approval_annotation }}=<action_id> --overwrite
+
+Opt a workload out of auto-heal:
+  kubectl label deployment/<name> -n <ns> sre-autoheal.nvidia.com/managed=false
