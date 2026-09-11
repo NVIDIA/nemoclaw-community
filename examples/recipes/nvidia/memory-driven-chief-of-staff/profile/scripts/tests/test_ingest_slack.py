@@ -101,6 +101,10 @@ def message(ts, user=OTHER, text="hello"):
 
 class CollectorCase(unittest.TestCase):
     def setUp(self):
+        from unittest.mock import patch
+        env = patch.dict(os.environ, {"INTAKE_GRAPH_SENT_ITEMS": "0", "INTAKE_SLACK_SELF_AUTHORED": "0"})
+        env.start()
+        self.addCleanup(env.stop)
         self.home = tempfile.mkdtemp()
         Path(self.home, "workspace", "ledger").mkdir(parents=True)
         self.db = Path(self.home) / "workspace" / "ledger" / "state.db"
@@ -1389,6 +1393,310 @@ class TestAttachmentsAreNotFetched(CollectorCase):
         self.assertNotIn("url_private", everything)
         self.assertNotIn("files.slack.example", everything)
         self.assertNotIn("salaries.pdf", everything)
+
+
+class TestSelfAuthoredCollection(CollectorCase):
+    def setUp(self):
+        super().setUp()
+        from unittest.mock import patch
+        self.now = int(time.time())
+        clock = patch.object(ingest_slack.time, "time", return_value=self.now)
+        clock.start()
+        self.addCleanup(clock.stop)
+        os.environ["SLACK_USER_TOKEN"] = "openshell:resolve:env:SLACK_USER_TOKEN"
+        os.environ["INTAKE_SLACK_SELF_AUTHORED"] = "1"
+        budget = patch.dict(os.environ, {"INTAKE_SLACK_BUDGET": "100"})
+        budget.start()
+        self.addCleanup(budget.stop)
+        Path(self.home, "distribution.yaml").write_text("id: test\n")
+
+    def ts(self, age):
+        return f"{self.now - age:.6f}"
+
+    def configured(self, entries, family="im"):
+        cid = "D01" if family == "im" else "G01"
+        responses = self.working_slack()
+        responses["users.conversations"] = lambda p: {
+            "ok": True, "channels": [channel(cid, family)] if p.get("types") == family else []}
+        responses["conversations.history"] = lambda p: {
+            "ok": True, "has_more": False,
+            "messages": [m for m in entries if float(m["ts"]) > float(p.get("oldest", 0))]}
+        responses["conversations.replies"] = {"ok": True, "has_more": False, "messages": []}
+        responses["conversations.info"] = {"ok": True, "channel": {"user": OTHER}}
+        responses["users.info"] = lambda p: {"ok": True, "user": {
+            "name": "avery" if p["user"] == USER else "dana",
+            "profile": {"display_name": "Avery" if p["user"] == USER else "Dana"}}}
+        self.serve(responses)
+        return entries
+
+    def all_rows(self):
+        with sqlite3.connect(self.db) as conn:
+            conn.row_factory = sqlite3.Row
+            return [dict(row) for row in conn.execute("SELECT * FROM items ORDER BY event_at")]
+
+    def state(self, key="slack_outbound_collection"):
+        with sqlite3.connect(self.db) as conn:
+            row = conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        return row[0] if row else None
+
+    def test_default_off_does_not_collect_self_or_look_up_dm_membership(self):
+        os.environ["INTAKE_SLACK_SELF_AUTHORED"] = "0"
+        os.environ["INTAKE_GRAPH_SENT_ITEMS"] = "1"
+        self.configured([message(self.ts(1), USER)])
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(self.all_rows(), [])
+        self.assertFalse(any(method == "conversations.info" for method, _ in self.slack.calls))
+        self.assertFalse(json.loads(self.stdout)["self_authored"]["enabled"])
+
+    def test_invalid_flag_stops_before_network_requests(self):
+        self.configured([])
+        os.environ["INTAKE_SLACK_SELF_AUTHORED"] = "true"
+        self.assertEqual(self.run_main(), ingest_slack.EXIT_OTHER)
+        self.assertEqual(self.slack.calls, [])
+
+    def test_dm_preserves_actual_author_and_records_the_other_member(self):
+        self.configured([message(self.ts(1), USER, "I will send the report")])
+        self.assertEqual(self.run_main(), 0)
+        row, = self.all_rows()
+        self.assertEqual((row["sender"], row["sender_key"], row["sender_handle"]), ("Avery", USER, "avery"))
+        self.assertEqual((row["counterparty_key"], row["counterparty_name"], row["counterparty_basis"]), (OTHER, "Dana", "dm"))
+        self.assertEqual(row["source_account"], f"T1:{USER}")
+        self.assertEqual(row["direction"], "outbound")
+        self.assertIsNone(row["addressing"])
+
+    def test_group_single_mention_excludes_self_and_deduplicates(self):
+        self.configured([message(self.ts(1), USER, f"<@{USER}> <@{OTHER}> <@{OTHER}>")], "mpim")
+        self.assertEqual(self.run_main(), 0)
+        row, = self.all_rows()
+        self.assertEqual((row["sender_key"], row["counterparty_key"], row["counterparty_basis"]), (USER, OTHER, "mention"))
+        self.assertFalse(any(method == "conversations.info" for method, _ in self.slack.calls))
+
+    def test_group_ambiguous_root_waits_but_an_arbitrary_reply_does_not(self):
+        root = message(self.ts(3), USER, f"<@{OTHER}> <@U0THIRD>")
+        reply = dict(message(self.ts(2), USER, "Thanks everyone"), thread_ts=root["ts"])
+        self.configured([root, reply], "mpim")
+        self.assertEqual(self.run_main(), 0)
+        first, second = self.all_rows()
+        self.assertIsNone(first["counterparty_key"])
+        self.assertIsNotNone(first["counterparty_pending_until"])
+        self.assertIsNone(second["counterparty_pending_until"])
+
+    def test_group_root_resolves_from_first_reply_without_changing_author(self):
+        import outbound
+        root = dict(message(self.ts(3), USER, "Any feedback?"), reply_count=1)
+        self.configured([root], "mpim")
+        self.slack.responses["conversations.replies"] = {"ok": True, "has_more": False,
+            "messages": [dict(message(self.ts(1), OTHER), thread_ts=root["ts"])]}
+        self.assertEqual(self.run_main(), 0)
+        with sqlite3.connect(self.db) as conn:
+            self.assertEqual(outbound.resolve_pending(conn), 1)
+        row = self.all_rows()[0]
+        self.assertEqual((row["sender_key"], row["counterparty_key"], row["counterparty_basis"]), (USER, OTHER, "reply"))
+
+    def test_note_to_self_has_no_counterparty_or_pending_resolution(self):
+        self.configured([message(self.ts(1), USER)])
+        self.slack.responses["conversations.info"] = {"ok": True, "channel": {"user": USER}}
+        self.assertEqual(self.run_main(), 0)
+        row, = self.all_rows()
+        self.assertIsNone(row["counterparty_key"])
+        self.assertIsNone(row["counterparty_pending_until"])
+
+    def test_failed_dm_lookup_is_omitted_and_retried_without_cursor_loss(self):
+        self.configured([message(self.ts(1), USER)])
+        self.slack.responses["conversations.info"] = {"ok": False, "error": "missing_scope"}
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(self.all_rows(), [])
+        self.assertEqual(self.cursors(), {})
+        self.assertIsNone(self.state("slack_outbound_done:D01"))
+        self.assertEqual(json.loads(self.stdout)["self_authored"]["unresolved_dm_conversations"], 1)
+        self.slack.responses["conversations.info"] = {"ok": True, "channel": {"user": OTHER}}
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(self.all_rows()[0]["counterparty_key"], OTHER)
+
+    def test_dm_lookup_and_names_share_the_existing_request_budget(self):
+        from unittest.mock import patch
+        self.configured([message(self.ts(1), USER)])
+        ingest_slack.load_capabilities(os.environ["SLACK_USER_TOKEN"])
+        self.slack.calls.clear()
+        with patch.dict(os.environ, {"INTAKE_SLACK_BUDGET": "3"}):
+            self.assertEqual(self.run_main(), 0)
+        # auth.test verifies identity outside the collection budget.
+        self.assertLessEqual(sum(method != "auth.test" for method, _ in self.slack.calls), 3)
+        self.assertEqual(self.all_rows(), [])
+        self.assertIn("incomplete_coverage", json.loads(self.stdout))
+
+    def test_person_exclusion_omits_outbound_dm_before_storage(self):
+        self.configured([message(self.ts(1), USER, "private outbound fixture")])
+        Path(self.home, "workspace", "exclusions.json").write_text(json.dumps({"senders": [OTHER]}))
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(self.all_rows(), [])
+        self.assertNotIn(b"private outbound fixture", self.db.read_bytes())
+
+    def test_unknown_group_membership_does_not_bypass_person_exclusions(self):
+        self.configured([message(self.ts(1), USER, f"<@{OTHER}> hello")], "mpim")
+        Path(self.home, "workspace", "exclusions.json").write_text(json.dumps({"senders": ["U0THIRD"]}))
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(self.all_rows(), [])
+
+    def test_channel_exclusion_omits_outbound_even_with_known_recipient(self):
+        self.configured([message(self.ts(1), USER)])
+        Path(self.home, "workspace", "exclusions.json").write_text(json.dumps({"channels": ["D01"]}))
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(self.all_rows(), [])
+
+    def test_enabling_after_inbound_cursor_advanced_backfills_only_seven_days(self):
+        entries = self.configured([message(self.ts(9 * 86400), USER),
+                                   message(self.ts(100), USER), message(self.ts(1), OTHER)])
+        os.environ["INTAKE_SLACK_SELF_AUTHORED"] = "0"
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(self.cursors()["D01"], entries[-1]["ts"])
+        os.environ["INTAKE_SLACK_SELF_AUTHORED"] = "1"
+        self.slack.calls.clear()
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual({r["source_id"] for r in self.all_rows()}, {f"D01:{m['ts']}" for m in entries[1:]})
+        history = [p for m, p in self.slack.calls if m == "conversations.history"]
+        self.assertEqual(float(history[0]["oldest"]), self.now - 7 * 86400)
+        self.assertEqual(self.cursors()["D01"], entries[-1]["ts"])
+
+    def test_enabling_revisits_an_existing_thread_watermark(self):
+        root = dict(message(self.ts(400), OTHER), reply_count=2)
+        own = dict(message(self.ts(300), USER), thread_ts=root["ts"])
+        last = dict(message(self.ts(200), OTHER), thread_ts=root["ts"])
+        self.configured([root])
+        self.slack.responses["conversations.replies"] = lambda p: {"ok": True, "has_more": False,
+            "messages": [m for m in (own, last) if float(m["ts"]) > float(p.get("oldest", 0))]}
+        os.environ["INTAKE_SLACK_SELF_AUTHORED"] = "0"
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(ingest_slack.read_threads("D01")[root["ts"]], last["ts"])
+        os.environ["INTAKE_SLACK_SELF_AUTHORED"] = "1"
+        self.assertEqual(self.run_main(), 0)
+        self.assertIn(f"D01:{own['ts']}", {r["source_id"] for r in self.all_rows()})
+
+    def test_disabling_preserves_data_and_reenabling_starts_a_new_window(self):
+        entries = self.configured([message(self.ts(300), USER)])
+        self.assertEqual(self.run_main(), 0)
+        first = json.loads(self.state())
+        os.environ["INTAKE_SLACK_SELF_AUTHORED"] = "0"
+        entries.append(message(self.ts(200), USER))
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(len(self.all_rows()), 1)
+        os.environ["INTAKE_SLACK_SELF_AUTHORED"] = "1"
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(len(self.all_rows()), 2)
+        self.assertNotEqual(json.loads(self.state())["generation"], first["generation"])
+
+    def test_incomplete_history_does_not_mark_catchup_complete(self):
+        self.configured([message(self.ts(1), USER)])
+        self.slack.responses["conversations.history"] = {"ok": True, "has_more": True,
+            "messages": [message(self.ts(1), USER)]}
+        self.assertEqual(self.run_main(), 0)
+        self.assertIsNone(self.state("slack_outbound_done:D01"))
+        self.assertEqual(self.cursors(), {})
+        self.slack.responses["conversations.history"]["has_more"] = False
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(len(self.all_rows()), 1)
+        self.assertEqual(self.state("slack_outbound_done:D01"), json.loads(self.state())["generation"])
+
+    def test_thread_reset_failure_keeps_old_file_and_retries(self):
+        from unittest.mock import patch
+        self.configured([message(self.ts(1), USER)])
+        ingest_slack.save_threads("D01", {self.ts(100): self.ts(50)})
+        before = ingest_slack.threads_path().read_bytes()
+        with patch.object(ingest_slack.os, "replace", side_effect=OSError("fixture failure")):
+            self.assertEqual(self.run_main(), ingest_slack.EXIT_OTHER)
+        self.assertEqual(ingest_slack.threads_path().read_bytes(), before)
+        self.assertIsNone(self.state("slack_outbound_reset:D01"))
+        self.assertEqual(self.all_rows(), [])
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(len(self.all_rows()), 1)
+
+    def test_row_commit_failure_does_not_complete_catchup_or_skip_own_reply(self):
+        from unittest.mock import patch
+        root = dict(message(self.ts(300), OTHER), reply_count=1)
+        own = dict(message(self.ts(200), USER), thread_ts=root["ts"])
+        self.configured([root])
+        self.slack.responses["conversations.replies"] = lambda p: {"ok": True, "has_more": False,
+            "messages": [own] if float(own["ts"]) > float(p.get("oldest", 0)) else []}
+        ingest_slack.save_threads("D01", {root["ts"]: own["ts"]})
+        with patch.object(ingest_slack, "commit_channel", side_effect=sqlite3.OperationalError("fixture failure")):
+            with self.assertRaises(sqlite3.OperationalError):
+                self.run_main()
+        self.assertIsNone(self.state("slack_outbound_done:D01"))
+        self.assertLess(float(ingest_slack.read_threads("D01")[root["ts"]]), float(own["ts"]))
+        self.assertEqual(self.run_main(), 0)
+        self.assertIn(f"D01:{own['ts']}", {r["source_id"] for r in self.all_rows()})
+
+    def test_same_placeholder_with_a_different_account_cannot_mix_evidence(self):
+        self.configured([message(self.ts(1), USER)])
+        self.assertEqual(self.run_main(), 0)
+        before = self.all_rows()
+        self.slack.responses["auth.test"] = {"ok": True, "user_id": "U0NEWME", "team_id": "T2"}
+        self.assertEqual(self.run_main(), ingest_slack.EXIT_OTHER)
+        self.assertEqual(self.all_rows(), before)
+        self.assertEqual(json.loads(self.state())["account"], f"T1:{USER}")
+
+    def test_malformed_enablement_state_stops_without_advancing_cursors(self):
+        self.configured([message(self.ts(1), USER)])
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("INSERT INTO meta(key,value) VALUES ('slack_outbound_collection','[]')")
+        self.assertEqual(self.run_main(), ingest_slack.EXIT_OTHER)
+        self.assertEqual(self.all_rows(), [])
+        self.assertEqual(self.cursors(), {})
+
+    def test_live_shaped_collection_feeds_memory_but_own_text_never_becomes_an_ask(self):
+        from unittest.mock import patch
+        import select_memory
+        import select_intake
+        self.configured([message(self.ts(2), OTHER, "Can you review this?"),
+                         message(self.ts(1), USER, "I will review it")])
+        self.assertEqual(self.run_main(), 0)
+        with sqlite3.connect(self.db) as conn:
+            evidence = select_memory.evidence(conn, "2000-01-01T00:00:00Z")
+        self.assertEqual(len(evidence["people"]), 1)
+        self.assertTrue(evidence["people"][0]["both_directions"])
+        interactions = next(iter(evidence["interactions"].values()))
+        self.assertEqual({entry["direction"] for entry in interactions}, {"inbound", "outbound"})
+        output = io.StringIO()
+        with patch.object(select_intake, "collect", return_value=({}, False)), contextlib.redirect_stdout(output):
+            select_intake.main()
+        intake = json.loads(output.getvalue().split('{"wakeAgent"')[0])
+        self.assertEqual([entry["body"] for entry in intake["slice"]], ["Can you review this?"])
+
+    def test_export_includes_capture_state_and_reset_removes_it_but_keeps_opt_in(self):
+        import export_store
+        import reset
+        self.configured([message(self.ts(1), USER)])
+        self.assertEqual(self.run_main(), 0)
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / "export"
+            export_store.export(destination)
+            exported = json.loads((destination / "store.json").read_text())
+            row, = exported["items"]
+            self.assertEqual(row["counterparty_key"], OTHER)
+            self.assertIn("slack_outbound_collection", {r["key"] for r in exported["meta"]})
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(reset.main(["--yes"]), 0)
+            self.assertFalse(self.db.exists())
+            self.assertFalse(ingest_slack.threads_path().exists())
+            self.assertTrue((destination / "store.json").exists())
+        self.assertEqual(os.environ["INTAKE_SLACK_SELF_AUTHORED"], "1")
+
+    def test_replay_keeps_legacy_direction_unknown_and_does_not_restore_cleared_body(self):
+        self.configured([message(self.ts(1), USER, "must stay cleared")])
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("INSERT INTO items(source_id,source,scope,event_at,body_cleared_at) VALUES (?,'slack','D01','2026-01-01T00:00:00Z','2026-01-02T00:00:00Z')", (f"D01:{self.ts(1)}",))
+        self.assertEqual(self.run_main(), 0)
+        row, = self.all_rows()
+        self.assertIsNone(row["direction"])
+        self.assertIsNone(row["body"])
+
+    def test_messages_without_human_authorship_are_omitted(self):
+        bot = dict(message(self.ts(2), USER), bot_id="BEXAMPLE")
+        unknown = message(self.ts(1))
+        unknown.pop("user")
+        self.configured([bot, unknown])
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(self.all_rows(), [])
 
 
 if __name__ == "__main__":

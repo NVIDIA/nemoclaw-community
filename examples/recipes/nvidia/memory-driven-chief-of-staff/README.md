@@ -552,6 +552,10 @@ user_scopes:
   - users:read
 ```
 
+Your own Slack messages can optionally contribute memory evidence; capture is
+off by default. See [self-authored collection](docs/set-up-slack.md#optional-self-authored-collection)
+for the independent switch, seven-day backfill, and privacy limits.
+
 Static user tokens, bot tokens, and app tokens are refused. Attachments are not
 downloaded. Full setup and workspace-admin recovery steps are in
 [docs/set-up-slack.md](docs/set-up-slack.md).
@@ -886,7 +890,9 @@ code.
 - The offline fixtures are entirely synthetic and make no network request.
 - Inbound addressing is reduced to `direct`, `mentioned`, or `broadcast`.
   Opt-in outbound mail retains recipient addresses for counterparty attribution;
-  exports include those metadata fields.
+  exports include those metadata fields. Slack can independently collect your
+  own messages with a separate counterparty identity. Neither outbound source
+  enters the obligation intake or turns message text into a priority correction.
 - Message bodies are cleared after 30 days by default; metadata, obligation
   state, and audit history remain.
 - Exclusions are enforced at the shared insert boundary, before a row reaches
@@ -1355,7 +1361,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the seventeen files report 774 tests
+Expected result: every file ends with `OK`, the seventeen files report 798 tests
 in total, and the final line is `failed=0`. Do not shorten the loop with an
 early break; running every module is part of the documented check.
 
@@ -1363,7 +1369,10 @@ The suite covers schema migration, memory invariants, concurrency and crash
 recovery, deterministic ranking, preference thresholds, normalization,
 transactional decisions, correction state transitions, the walkthrough,
 intake, review, and memory-writing selector wake gates, scheduler contracts,
-lifecycle controls, and Slack and Outlook collection/rotation behavior.
+lifecycle controls, and Slack and Outlook collection/rotation behavior. Phase C
+coverage includes opt-in independence, account checks, bounded backfill, cursor
+recovery, recipient exclusions, and outbound evidence reaching memory without
+entering obligation intake.
 
 ### Recipe Metadata
 

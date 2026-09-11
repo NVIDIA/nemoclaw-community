@@ -5,7 +5,7 @@
 
 # Phase C1: direction and counterparty contract
 
-Phase C is proposed as one PR with three commits: shared data and reader
+Phase C is proposed as one pull request (PR) with three commits: shared data and reader
 compatibility (C1), opt-in Graph Sent Items (C2), and opt-in Slack self-authored
 collection (C3). It follows [#156](https://github.com/NVIDIA/nemoclaw-community/issues/156)
 and the merged Phase B work in #170. The remaining Foundation and dependency
@@ -107,8 +107,9 @@ Phase B's override restore are not a main-ledger downgrade/restore command.
 
 C2 and C3 are independent opt-ins, each defaulting to off. Disabling capture
 stops subsequent collection, not retention or deletion of previously stored
-content. Their collector documentation must cover cursor recovery, backfill,
-source-deletion limits, and environment settings for scheduled jobs.
+content. See [Graph setup](set-up-graph.md#optional-sent-items-collection) and
+[Slack setup](set-up-slack.md#optional-self-authored-collection) for cursor
+recovery, backfill, source-deletion limits, and scheduled environment settings.
 
 The proposed owner is @rebelle5868. The one-PR organization does not replace the
 requested child-issue contracts or resolve the Foundation/C1 dependency gate.

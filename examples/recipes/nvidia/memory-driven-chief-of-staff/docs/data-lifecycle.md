@@ -247,3 +247,11 @@ source-deletion limits are described in
 Environment opt-ins are not exported with `store.json` and are not cleared by
 recipe reset. Disable the corresponding entry in the profile environment file
 when reset should also stop future collection.
+
+Slack opt-in, bounded backfill, account checks, thread recovery, and source-edit
+and deletion limits are described in
+[optional self-authored collection](set-up-slack.md#optional-self-authored-collection).
+Its enablement and per-channel markers are ledger metadata, included in
+`store.json` and removed with the ledger by reset. Both outbound sources feed
+quoted memory evidence; neither changes source messages or bypasses the existing
+explicit user-correction path.
