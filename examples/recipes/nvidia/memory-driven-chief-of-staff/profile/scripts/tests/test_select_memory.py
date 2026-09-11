@@ -1226,5 +1226,91 @@ class TestTheGate(SelectorCase):
         self.assertIn("Dana Okoro", out)
 
 
+
+class TestOutboundBackfillRefresh(SelectorCase):
+    def setUp(self):
+        super().setUp()
+        self.add("Dana Okoro", days_ago=1)
+        self.add("Dana Okoro", days_ago=2)
+        self.page("dana_okoro", last_interaction=iso(1)[:10],
+                  identities=["email:dana.okoro@example.com"])
+
+    def outbound(self, sid="backfilled", days_ago=3, resolved=True):
+        with sqlite3.connect(self.db) as conn:
+            conn.execute(
+                "INSERT INTO items(source_id,source,scope,event_at,sender,sender_key,"
+                "direction,counterparty_key,counterparty_name,counterparty_basis,body)"
+                " VALUES (?,'email','sentitems',?,'Avery','avery@example.com','outbound',?,?,?,?)",
+                (sid, iso(days_ago), "dana.okoro@example.com" if resolved else None,
+                 "Dana Okoro" if resolved else None,
+                 "single_recipient" if resolved else None, sid))
+
+    def acknowledge(self, candidate, padding=""):
+        path = self.workspace / "memory/people/dana_okoro.md"
+        text = path.read_text()
+        text = text.replace("---\n\n# page", padding +
+            f"outbound_evidence: {candidate['outbound_evidence']}\n---\n\n# page")
+        path.write_text(text)
+
+    def test_backfill_refreshes_a_page_even_when_event_time_is_older(self):
+        self.assertEqual(self.report()["people"], [])
+        self.outbound()
+        found = self.report()
+        self.assertEqual(len(found["people"]), 1)
+        self.assertEqual(found["people"][0]["last_interaction"], iso(1)[:10])
+        self.assertIn("backfilled", {r["body"] for r in found["interactions"]["dana_okoro"]})
+
+    def test_only_a_saved_page_acknowledges_the_evidence(self):
+        self.outbound()
+        first, = self.report()["people"]
+        second, = self.report()["people"]
+        self.assertEqual(first["outbound_evidence"], second["outbound_evidence"])
+        self.acknowledge(first)
+        self.assertEqual(self.report()["people"], [])
+
+    def test_a_second_older_backfill_refreshes_an_acknowledged_page(self):
+        self.outbound()
+        first, = self.report()["people"]
+        self.acknowledge(first)
+        self.outbound("older-backfill", days_ago=4)
+        next_page, = self.report()["people"]
+        self.assertNotEqual(next_page["outbound_evidence"], first["outbound_evidence"])
+
+    def test_later_attribution_makes_old_evidence_newly_available(self):
+        self.outbound(resolved=False)
+        self.assertEqual(self.report()["people"], [])
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE items SET counterparty_key='dana.okoro@example.com',"
+                         " counterparty_name='Dana Okoro', counterparty_basis='reply'"
+                         " WHERE source_id='backfilled'")
+        self.assertEqual(len(self.report()["people"]), 1)
+
+    def test_acknowledgment_is_read_beyond_the_old_header_prefix(self):
+        self.outbound()
+        candidate, = self.report()["people"]
+        self.acknowledge(candidate, "relationship: " + "long context " * 40 + "\n")
+        self.assertEqual(self.report()["people"], [])
+
+    def test_body_text_cannot_acknowledge_unwritten_evidence(self):
+        self.outbound()
+        candidate, = self.report()["people"]
+        page = self.workspace / "memory/people/dana_okoro.md"
+        page.write_text(page.read_text() + f"\noutbound_evidence: {candidate['outbound_evidence']}\n")
+        self.assertEqual(len(self.report()["people"]), 1)
+
+    def test_backfilled_outbound_is_visible_despite_newer_inbound_volume(self):
+        for i in range(select_memory.MAX_INTERACTIONS + 2):
+            self.add("Dana Okoro", days_ago=1, body=f"recent inbound {i}")
+        self.outbound(days_ago=3)
+        found = self.report()
+        self.assertEqual(len(found["people"]), 1)
+        snippets = found["interactions"]["dana_okoro"]
+        self.assertLessEqual(len(snippets), select_memory.MAX_INTERACTIONS)
+        self.assertIn("backfilled", {r["body"] for r in snippets})
+
+    def test_inbound_only_pages_keep_the_existing_quiet_gate(self):
+        self.assertEqual(self.report()["people"], [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

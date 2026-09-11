@@ -255,3 +255,12 @@ Its enablement and per-channel markers are ledger metadata, included in
 `store.json` and removed with the ledger by reset. Both outbound sources feed
 quoted memory evidence; neither changes source messages or bypasses the existing
 explicit user-correction path.
+
+The outbound resolver's rotation cursor is also ledger metadata: it is exported
+with `store.json` and removed with the ledger on reset. Unmatched outbound rows
+retain their seven-day event-time deadline so replies collected later can still
+qualify; this does not extend the allowed reply event window. People-page
+`outbound_evidence` markers are exported with memory and removed with those
+pages on reset. They track the evidence snapshot independently of interaction
+dates and contain no message text. Body retention and the existing limits on
+deleting derived memory remain unchanged.

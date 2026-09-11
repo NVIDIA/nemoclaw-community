@@ -79,10 +79,19 @@ role: Job title or function
 relationship: How they relate to the user, 1-2 sentences
 importance: high | medium | low
 last_interaction: YYYY-MM-DD
+outbound_evidence: sha256:<digest>  # optional; copy from the memory selector
 interaction_frequency: daily | weekly | monthly | rare
 status: active | departing | departed   # optional, default active
 ---
 ```
+
+`outbound_evidence` records the selector's current outbound evidence snapshot
+for this person. It is optional for existing pages and pages without outbound
+evidence. When the selector supplies a marker, the memory-writing job copies it
+into the same complete page write as its evidence update. A backfilled message
+or newly resolved counterparty can change this marker even when the event is
+older than `last_interaction`; do not change that date to acknowledge backfill.
+An unchanged marker and interaction date let subsequent runs remain quiet.
 
 **Sections, in order:** Relationship · Communication Style · Key Context ·
 Projects (linked) · Recent Interactions.

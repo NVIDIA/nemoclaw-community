@@ -174,6 +174,11 @@ def ensure_store(schema_sql: Path | None = None) -> Path:
                 "CREATE INDEX IF NOT EXISTS idx_items_counterparty_pending "
                 "ON items(counterparty_pending_until) "
                 "WHERE counterparty_pending_until IS NOT NULL")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_items_counterparty_work "
+                "ON items(counterparty_pending_until, source_id) "
+                "WHERE direction='outbound' AND counterparty_key IS NULL "
+                "AND counterparty_pending_until IS NOT NULL")
             conn.execute("COMMIT")
         except Exception:
             if conn.in_transaction:

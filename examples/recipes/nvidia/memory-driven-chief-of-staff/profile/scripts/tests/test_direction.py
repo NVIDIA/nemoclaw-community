@@ -275,6 +275,77 @@ class TestDirection(unittest.TestCase):
             self.assertEqual(outbound.resolve_pending(conn), 0)
             self.assertIsNone(conn.execute("SELECT counterparty_key FROM items WHERE source_id='sent'").fetchone()[0])
 
+    def pending_batch(self, conn, count=201):
+        for i in range(count):
+            row = self.graph(f"sent{i:03d}", recipients=("dana@example.com", "pat@example.com"),
+                             conversationId=f"thread{i}")
+            normalize.insert_items(conn, [row])
+
+    def reply_to(self, conn, index, when="2026-09-02T00:00:00Z"):
+        normalize.insert_items(conn, [self.graph(f"reply{index}:{when}", sender="dana@example.com",
+            conversationId=f"thread{index}", receivedDateTime=when)])
+
+    def test_pending_work_rotates_past_two_hundred_unresolved_rows(self):
+        with _db.write_txn() as conn:
+            self.pending_batch(conn)
+            self.reply_to(conn, 200)
+            self.assertEqual(outbound.resolve_pending(conn, "2026-09-03T00:00:00Z"), 0)
+        # The next scheduled run opens another connection.
+        with _db.write_txn() as conn:
+            self.assertEqual(outbound.resolve_pending(conn, "2026-09-03T00:00:00Z"), 1)
+            self.assertEqual(conn.execute("SELECT counterparty_key FROM items WHERE source_id='sent200'").fetchone()[0],
+                             "dana@example.com")
+
+    def test_pending_work_wraps_to_an_earlier_row_with_a_new_reply(self):
+        with _db.write_txn() as conn:
+            self.pending_batch(conn)
+            self.assertEqual(outbound.resolve_pending(conn, "2026-09-03T00:00:00Z"), 0)
+            self.assertEqual(outbound.resolve_pending(conn, "2026-09-03T00:00:00Z"), 0)
+            self.reply_to(conn, 0)
+            self.assertEqual(outbound.resolve_pending(conn, "2026-09-03T00:00:00Z"), 1)
+
+    def test_pending_cursor_rolls_back_with_the_resolution_transaction(self):
+        with _db.write_txn() as conn:
+            self.pending_batch(conn)
+            self.reply_to(conn, 200)
+        with self.assertRaisesRegex(RuntimeError, "interrupted"):
+            with _db.write_txn() as conn:
+                self.assertEqual(outbound.resolve_pending(conn, "2026-09-03T00:00:00Z"), 0)
+                raise RuntimeError("interrupted")
+        with _db.write_txn() as conn:
+            self.assertEqual(outbound.resolve_pending(conn, "2026-09-03T00:00:00Z"), 0)
+            self.assertEqual(outbound.resolve_pending(conn, "2026-09-03T00:00:00Z"), 1)
+
+    def test_late_collected_reply_still_resolves_after_an_expiry_pass(self):
+        with _db.write_txn() as conn:
+            self.pending_batch(conn, 1)
+            self.assertEqual(outbound.resolve_pending(conn, "2026-09-10T00:00:00Z"), 0)
+        with _db.write_txn() as conn:
+            self.reply_to(conn, 0)
+            self.assertEqual(outbound.resolve_pending(conn, "2026-09-10T00:00:00Z"), 1)
+            self.assertEqual(conn.execute("SELECT sender_key, counterparty_key FROM items WHERE source_id='sent000'").fetchone(),
+                             ("me@example.com", "dana@example.com"))
+
+    def test_expiration_does_not_extend_the_reply_event_window(self):
+        with _db.write_txn() as conn:
+            self.pending_batch(conn, 1)
+            outbound.resolve_pending(conn, "2026-09-10T00:00:00Z")
+            self.reply_to(conn, 0, "2026-09-09T00:00:00Z")
+            self.assertEqual(outbound.resolve_pending(conn, "2026-09-12T00:00:00Z"), 0)
+            self.reply_to(conn, 0, "2026-09-08T01:00:00Z")
+            self.assertEqual(outbound.resolve_pending(conn, "2026-09-12T00:00:00Z"), 1)
+
+    def test_exclusions_still_apply_to_replies_collected_after_expiry(self):
+        with _db.write_txn() as conn:
+            self.pending_batch(conn, 1)
+            outbound.resolve_pending(conn, "2026-09-10T00:00:00Z")
+            self.reply_to(conn, 0)
+        (self.home / "workspace/exclusions.json").write_text(json.dumps({"senders": ["dana@example.com"]}))
+        with _db.write_txn() as conn:
+            self.assertEqual(outbound.resolve_pending(conn, "2026-09-10T00:00:00Z"), 0)
+            self.assertIsNone(conn.execute("SELECT counterparty_key FROM items WHERE source_id='sent000'").fetchone()[0])
+
+
 
 if __name__ == "__main__":
     unittest.main()

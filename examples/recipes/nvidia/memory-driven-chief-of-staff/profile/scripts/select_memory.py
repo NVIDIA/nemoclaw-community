@@ -294,7 +294,10 @@ def existing_people() -> dict[str, dict[str, str]]:
     found: dict[str, dict[str, str]] = {}
     for page in folder.glob("*.md"):
         try:
-            head = page.read_text(encoding="utf-8")[:400]
+            text = page.read_text(encoding="utf-8")
+            header = re.match(r"\A---[ \t]*\r?\n(.*?)\r?\n---(?:[ \t]*\r?\n|$)",
+                              text, re.S)
+            head = header.group(1) + "\n" if header else ""
         except OSError:
             # Unreadable means unknown, and unknown means offer the person
             # rather than skip them: a page nobody can read is one worth
@@ -303,7 +306,11 @@ def existing_people() -> dict[str, dict[str, str]]:
             continue
         seen = re.search(r"^last_interaction:\s*(\d{4}-\d{2}-\d{2})",
                          head, re.M)
+        outbound_seen = re.search(
+            r"^outbound_evidence:[ \t]*['\"]?(sha256:[0-9a-f]{64})['\"]?[ \t]*$",
+            head, re.M)
         found[page.stem] = {
+            "outbound_evidence": outbound_seen.group(1) if outbound_seen else None,
             "last_interaction": seen.group(1) if seen else "",
             "identities": _page_identities(head),
         }
@@ -408,7 +415,7 @@ def evidence(conn, since: str) -> dict[str, object]:
     # Keep authorship in the ledger; use the recipient identity only for
     # grouping an outbound observation with the corresponding person.
     evidence_sql = """WITH evidence_items AS (
-        SELECT source, source_id, event_at, addressing, subject, body, direction,
+        SELECT rowid AS collection_order, source, source_id, event_at, addressing, subject, body, direction,
           CASE WHEN direction='outbound' THEN counterparty_key ELSE sender_key END AS sender_key,
           CASE WHEN direction='outbound' THEN counterparty_name ELSE sender END AS sender,
           CASE WHEN direction='outbound' THEN counterparty_handle ELSE sender_handle END AS sender_handle,
@@ -420,6 +427,19 @@ def evidence(conn, since: str) -> dict[str, object]:
         "SELECT source, sender_key, sender, sender_handle, COUNT(*), MAX(event_at), direction"
         " FROM evidence_items WHERE event_at >= ? AND sender IS NOT NULL AND sender_key IS NOT NULL"
         " GROUP BY source, sender_key, sender, sender_handle, direction", (since,)).fetchall()
+
+    # Availability is different from event time: old messages can be newly
+    # collected or attributed. Hash the eligible outbound set, not the clock.
+    # Stream identifiers/bases only; message bodies stay out of this scan.
+    outbound_sets = {}
+    for source, key, sid, basis in conn.execute(evidence_sql +
+            "SELECT source, sender_key, source_id, counterparty_basis"
+            " FROM evidence_items WHERE direction='outbound' AND event_at>=?"
+            " AND sender_key IS NOT NULL AND sender IS NOT NULL"
+            " ORDER BY source, sender_key, source_id", (since,)):
+        who = identity.Identity(source, key)
+        digest = outbound_sets.setdefault(who, hashlib.sha256())
+        digest.update((json.dumps([sid, basis], ensure_ascii=False) + "\n").encode("utf-8"))
 
     # Said out loud rather than silently skipped. These are rows from before
     # the upgrade; they stop appearing as the collectors re-read their window
@@ -498,6 +518,12 @@ def evidence(conn, since: str) -> dict[str, object]:
         sender = display[key]
         mark = names[key]
         last = (latest.get(key) or "")[:10]
+        outbound_parts = [(str(who), outbound_sets[who].hexdigest())
+                          for who in sorted(members[key], key=str) if who in outbound_sets]
+        outbound_marker = ("sha256:" + hashlib.sha256(
+            json.dumps(outbound_parts).encode("utf-8")).hexdigest()) if outbound_parts else None
+        outbound_changed = bool(outbound_marker and
+            outbound_marker != have.get(mark, {}).get("outbound_evidence"))
         if mark in have:
             # Offer an existing person only when something happened after
             # the date their page records. A page written last night and two
@@ -519,7 +545,8 @@ def evidence(conn, since: str) -> dict[str, object]:
             # new message is required to arrive for it to still be true, so
             # skipping here leaves the person split indefinitely and lets the
             # wake gate sleep on it.
-            if recorded and last and last <= recorded and not extra.get(key):
+            if (recorded and last and last <= recorded and not extra.get(key)
+                    and not outbound_changed):
                 continue
         candidates.append({
             "sender": sender,
@@ -537,6 +564,8 @@ def evidence(conn, since: str) -> dict[str, object]:
             "slug": mark,
             "messages": count,
             "both_directions": {"inbound", "outbound"} <= group_directions,
+            "outbound_evidence": outbound_marker,
+            "outbound_evidence_changed": outbound_changed,
             "last_interaction": last,
             "has_page": mark in have,
             "page_records": (have[mark]["last_interaction"] or None)
@@ -549,6 +578,7 @@ def evidence(conn, since: str) -> dict[str, object]:
     candidates.sort(key=lambda c: (c["has_page"], -c["messages"]))
     chosen = candidates[:MAX_PEOPLE]
     wanted = [(c["slug"], group_of[c["slug"]]) for c in chosen]
+    outbound_refreshes = {c["slug"] for c in chosen if c["outbound_evidence_changed"]}
 
     # Keyed by page slug, not by display name: two namesakes would otherwise
     # write into one entry and the second would replace the first's history.
@@ -567,6 +597,27 @@ def evidence(conn, since: str) -> dict[str, object]:
                 "  ORDER BY event_at DESC LIMIT ?",
                 (who.source, who.key, since, MAX_INTERACTIONS)).fetchall()
         rows.sort(key=lambda r: r[1] or "", reverse=True)
+        selected = rows[:MAX_INTERACTIONS]
+        if mark in outbound_refreshes:
+            # A busy inbound feed must not hide the user's newly collected
+            # side. Reserve one bounded snippet for the latest collected
+            # resolved outbound message, even when its event is older.
+            outbound_snippets = []
+            for who in group:
+                snippet = conn.execute(evidence_sql +
+                    "SELECT source, event_at, addressing, substr(subject,1,200),"
+                    " substr(body,1,200), direction, counterparty_basis, collection_order"
+                    " FROM evidence_items WHERE source=? AND sender_key=?"
+                    " AND direction='outbound' AND event_at>=?"
+                    " ORDER BY collection_order DESC LIMIT 1",
+                    (who.source, who.key, since)).fetchone()
+                if snippet:
+                    outbound_snippets.append(snippet)
+            if outbound_snippets:
+                latest_outbound = max(outbound_snippets, key=lambda row: row[-1])[:-1]
+                if latest_outbound not in selected:
+                    selected = selected[:MAX_INTERACTIONS - 1] + [latest_outbound]
+                    selected.sort(key=lambda row: row[1] or "", reverse=True)
         # Subject and body are kept apart rather than folded into one field
         # with `COALESCE(subject, body)`: a mail with a subject hides its
         # body behind it that way, and the body is exactly where a name and a
@@ -580,7 +631,7 @@ def evidence(conn, since: str) -> dict[str, object]:
              "subject": " ".join((subject or "").split()),
              "body": " ".join((body or "").split())}
             for source, event_at, addressing, subject, body, direction, basis
-            in rows[:MAX_INTERACTIONS]]
+            in selected]
 
     return {"people": chosen, "interactions": interactions,
             "shared_display_name": shared,

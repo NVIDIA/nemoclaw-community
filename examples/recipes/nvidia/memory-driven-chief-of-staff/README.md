@@ -1361,7 +1361,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the seventeen files report 798 tests
+Expected result: every file ends with `OK`, the seventeen files report 812 tests
 in total, and the final line is `failed=0`. Do not shorten the loop with an
 early break; running every module is part of the documented check.
 
@@ -1372,7 +1372,8 @@ intake, review, and memory-writing selector wake gates, scheduler contracts,
 lifecycle controls, and Slack and Outlook collection/rotation behavior. Phase C
 coverage includes opt-in independence, account checks, bounded backfill, cursor
 recovery, recipient exclusions, and outbound evidence reaching memory without
-entering obligation intake.
+entering obligation intake. It also checks existing-page refresh after backfill,
+persisted resolver rotation, and timely replies collected after an expiry pass.
 
 ### Recipe Metadata
 

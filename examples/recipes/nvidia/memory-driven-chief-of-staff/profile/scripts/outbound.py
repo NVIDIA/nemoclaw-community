@@ -11,6 +11,8 @@ import exclusions
 
 SETTINGS = {"email": "INTAKE_GRAPH_SENT_ITEMS", "slack": "INTAKE_SLACK_SELF_AUTHORED"}
 PENDING_DAYS = 7
+RESOLUTION_BATCH = 200
+RESOLUTION_CURSOR = "outbound_resolution_cursor"
 
 
 def enabled(source):
@@ -31,22 +33,43 @@ def pending_deadline(event_at):
     return (event.astimezone(timezone.utc) + timedelta(days=PENDING_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _pending_batch(conn):
+    """Continue a bounded keyset sweep, wrapping only after reaching its end."""
+    saved = conn.execute("SELECT value FROM meta WHERE key=?", (RESOLUTION_CURSOR,)).fetchone()
+    try:
+        cursor = json.loads(saved[0]) if saved else None
+        if not (isinstance(cursor, list) and len(cursor) == 2
+                and all(isinstance(value, str) for value in cursor)):
+            cursor = None
+    except (ValueError, TypeError):
+        # This is scheduling position, not evidence. Restarting costs a scan.
+        cursor = None
+    query = (
+        "SELECT source_id, source, source_account, scope, thread_ref, event_at,"
+        " counterparty_pending_until, sender_key, counterparty_candidates"
+        " FROM items WHERE direction='outbound' AND counterparty_key IS NULL"
+        " AND counterparty_pending_until IS NOT NULL")
+    order = " ORDER BY counterparty_pending_until, source_id LIMIT ?"
+    if cursor:
+        rows = conn.execute(query + " AND (counterparty_pending_until,source_id)>(?,?)"
+                            + order, (*cursor, RESOLUTION_BATCH)).fetchall()
+        if rows:
+            return rows
+    return conn.execute(query + order, (RESOLUTION_BATCH,)).fetchall()
+
+
 def resolve_pending(conn, now=None):
     """Attribute an eligible group message to its first qualifying responder.
 
     Match the connected account and thread; Slack also needs the channel.
-    Email responders must be among the recorded recipients. An expired window
-    may still resolve to an already-stored reply that occurred within it.
-    Content never determines attribution. The caller owns the transaction.
+    Email responders must be among the recorded recipients. Eligibility uses
+    reply event time, including replies collected after the window elapsed.
+    `now` remains accepted for compatibility; wall-clock expiry does not erase
+    that event-time boundary. Content never determines attribution. The caller
+    owns the transaction, including the work cursor.
     """
-    now = now or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     rules = exclusions.load_rules()
-    rows = conn.execute(
-        "SELECT source_id, source, source_account, scope, thread_ref, event_at,"
-        " counterparty_pending_until, sender_key, counterparty_candidates"
-        " FROM items WHERE direction='outbound' AND counterparty_key IS NULL"
-        " AND counterparty_pending_until IS NOT NULL"
-        " ORDER BY counterparty_pending_until, source_id LIMIT 200").fetchall()
+    rows = _pending_batch(conn)
     resolved = 0
     for sid, source, account, scope, thread, event_at, deadline, author, candidates in rows:
         reply = None
@@ -91,6 +114,14 @@ def resolve_pending(conn, now=None):
                 resolved += 1
             else:
                 conn.execute("UPDATE items SET counterparty_pending_until=NULL WHERE source_id=?", (sid,))
-        elif deadline <= now:
-            conn.execute("UPDATE items SET counterparty_pending_until=NULL WHERE source_id=?", (sid,))
+        # Unmatched rows retain their event-time deadline. A later collection
+        # can supply an eligible reply without extending the seven-day window.
+    if rows:
+        last = rows[-1]
+        conn.execute(
+            "INSERT INTO meta(key,value) VALUES (?,?) ON CONFLICT(key)"
+            " DO UPDATE SET value=excluded.value",
+            (RESOLUTION_CURSOR, json.dumps([last[6], last[0]])))
+    else:
+        conn.execute("DELETE FROM meta WHERE key=?", (RESOLUTION_CURSOR,))
     return resolved

@@ -96,9 +96,26 @@ role: Job title or function      # write "unknown" rather than omitting it
 relationship: How they relate to the user, 1-2 sentences
 importance: high | medium | low
 last_interaction: YYYY-MM-DD
+outbound_evidence: sha256:<digest>  # copy only when the selector supplies it
 interaction_frequency: daily | weekly | monthly | rare
 ---
 ```
+
+**Copy `outbound_evidence` from the selector when it is provided.** This marker
+records the outbound evidence set available for this page. Keep it in the same
+complete page write as the evidence update; do not acknowledge a marker before
+the page is saved. It is not a message timestamp and must not replace or advance
+`last_interaction`. Never invent a digest or copy one from message content.
+
+`outbound_evidence_changed=true` means newly collected or newly attributed
+outbound evidence, or a change to that set inside the configured window, needs
+review. The person may therefore be offered even when no later interaction
+occurred. The interaction payload remains bounded; for these updates it reserves
+one snippet for the latest collected resolved outbound message so a busy inbound
+feed cannot hide the user's side. The marker describes the available evidence
+set, not a claim that every message was quoted in the page. Without a successful
+page write, a later run will offer the update again. Existing pages with no
+outbound evidence keep the `last_interaction` freshness rule.
 
 **Copy `identities` verbatim and never invent an entry.** It is how the
 selector finds this page again — addresses and user ids, not names. Get one

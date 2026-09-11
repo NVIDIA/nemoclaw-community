@@ -47,11 +47,20 @@ only resolves a user-authored thread root, not an arbitrary reply within a
 thread. The first qualifying reply wins; attribution records `reply` as its basis.
 
 The reply must occur after the outbound event and at or before its deadline.
-A reply collected later can qualify if its event time was inside that window.
-Expired rows with no qualifying reply stop waiting. Deleted replies do not
-qualify. A group exchange is not evidence that the original message targeted
-only the responder. Resolution changes no author field and parses no message
+A reply collected later can qualify if its event time was inside that window,
+even after an earlier pass found no reply after the deadline. Unmatched rows
+retain that deadline; elapsed wall-clock time does not erase eligibility or
+extend the permitted reply event window. Deleted replies do not qualify. A group
+exchange is not evidence that the original message targeted only the responder. Resolution changes no author field and parses no message
 text as an instruction.
+
+Each resolver pass examines at most 200 pending rows. A persisted keyset cursor
+in ledger `meta` rotates by `(counterparty_pending_until, source_id)` and wraps
+after reaching the end. Unresolved rows cannot hold every subsequent batch.
+Cursor changes and attribution share the caller's transaction, so a failed pass
+advances neither. The compound work index is created when the store is opened;
+no new ledger version is required. This rotation remains bounded even when old
+unmatched records stay eligible for delayed collection.
 
 ## Reader and writer boundaries
 
@@ -66,6 +75,16 @@ into each interaction. Outbound-only evidence cannot admit a person. A candidate
 with explicit inbound and outbound evidence has `both_directions=true`; false
 means unconfirmed, not that the user never replied. Existing addressing-based
 admission remains available when capture is disabled or evidence is incomplete.
+
+Existing people pages also carry an optional `outbound_evidence` marker copied
+from the selector. It fingerprints eligible outbound IDs and attribution bases,
+independently of event time, and is acknowledged only by saving the updated
+page. Backfill and newly resolved counterparties therefore refresh an existing
+page without falsely advancing `last_interaction`. Repeated selection before a
+successful write retries; after the matching marker is saved, unchanged runs
+are quiet. Changes to the outbound set inside the configured window can also
+refresh the page. The bounded handoff reserves one snippet for the latest
+collected resolved outbound item when this marker changes.
 
 Both directions remain quoted source material. Outbound mail is not an explicit
 priority correction. Only the existing user-correction path may change inferred
