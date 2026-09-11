@@ -240,3 +240,10 @@ pre-upgrade backup. Retention keeps these metadata fields, including recipient
 addresses and attribution basis; `store.json` exports them with every item.
 The C1 migration alone enables no additional collection. Graph Sent Items and
 Slack self-authored capture require their separate opt-ins.
+
+Graph opt-in and opt-out, per-folder cursor recovery, recipient retention, and
+source-deletion limits are described in
+[optional Sent Items collection](set-up-graph.md#optional-sent-items-collection).
+Environment opt-ins are not exported with `store.json` and are not cleared by
+recipe reset. Disable the corresponding entry in the profile environment file
+when reset should also stop future collection.

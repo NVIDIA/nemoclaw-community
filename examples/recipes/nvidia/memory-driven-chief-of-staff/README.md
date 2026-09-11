@@ -578,7 +578,8 @@ Collector exit codes are stable diagnostics:
 
 ### Microsoft Outlook
 
-Outlook intake uses the Microsoft Graph inbox delta API. Register a Microsoft
+Outlook intake uses the Microsoft Graph Inbox delta API, with independently
+opt-in Sent Items collection. See [outbound mail setup](docs/set-up-graph.md#optional-sent-items-collection). Register a Microsoft
 Entra application with public-client flows enabled and delegated `Mail.Read`,
 `User.Read`, and `offline_access` permissions. Do not grant application-level
 mail permissions, which would authorize access beyond the signed-in mailbox.
@@ -883,8 +884,9 @@ read-write provider attached to the same sandbox would refuse writes from other
 code.
 
 - The offline fixtures are entirely synthetic and make no network request.
-- Recipient lists are reduced to `direct`, `mentioned`, or `broadcast` and are
-  never stored.
+- Inbound addressing is reduced to `direct`, `mentioned`, or `broadcast`.
+  Opt-in outbound mail retains recipient addresses for counterparty attribution;
+  exports include those metadata fields.
 - Message bodies are cleared after 30 days by default; metadata, obligation
   state, and audit history remain.
 - Exclusions are enforced at the shared insert boundary, before a row reaches
@@ -894,7 +896,7 @@ code.
 - Slack content deleted at the source is not detected immediately because a
   bounded history read cannot distinguish deletion from an older page. It ages
   out through retention.
-- Outlook messages removed from the inbox are reconciled through Microsoft
+- Outlook messages removed from a monitored folder are reconciled through Microsoft
   Graph. A confirmed deletion is tombstoned and its body is cleared immediately;
   the metadata, obligation, and audit history remain. A move to another folder
   is not treated as a deletion.
@@ -1091,8 +1093,8 @@ read-write provider would make the platform-level write-refusal claim false.
 - Scheduled jobs require the Linux environment inside a NemoHermes sandbox.
   The current provider setup helpers require Linux or WSL on your machine.
 - Recorded judgment turns test the workflow, not model quality.
-- Live connectors currently cover Slack and a Microsoft Outlook inbox through
-  Microsoft Graph. Other messaging providers need their own collector and
+- Live connectors currently cover Slack and Microsoft Outlook Inbox, with
+  opt-in Sent Items collection through Microsoft Graph. Other messaging providers need their own collector and
   OpenShell provider policy.
 - Graph credential provenance is not yet enforced at collector runtime. An
   unrelated attached provider exposing `MS_GRAPH_ACCESS_TOKEN` can be used even
@@ -1269,7 +1271,7 @@ est_effort:
 | --- | --- | --- |
 | `normalize.py` | Graph- or Slack-shaped source objects | Source-neutral item dictionaries; recipient lists become one addressing value |
 | `_db.py` | `HERMES_HOME`, `schema.sql` | Validated profile path, SQLite connection, transactions, automatic migration |
-| `ingest_graph.py` | Delegated Graph token and inbox delta | New Outlook message rows, resumable cursor state, and source-removal tombstones |
+| `ingest_graph.py` | Delegated Graph token and per-folder delta | New Outlook message rows, resumable cursor state, and source-removal tombstones |
 | `ingest_slack.py` | Rotating Slack token and selected conversations | New Slack rows and per-conversation watermarks |
 | `select_intake.py` | Collectors and pending rows | JSON batch or a final wake-gate line |
 | `select_review.py` | Open obligations | Oldest-review-first JSON batch or a final wake-gate line |
@@ -1353,7 +1355,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the seventeen files report 757 tests
+Expected result: every file ends with `OK`, the seventeen files report 774 tests
 in total, and the final line is `failed=0`. Do not shorten the loop with an
 early break; running every module is part of the documented check.
 

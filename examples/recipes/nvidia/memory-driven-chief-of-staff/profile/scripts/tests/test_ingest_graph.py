@@ -64,6 +64,28 @@ def message(mid, *, when="2026-08-20T09:00:00Z", sender="Dana Okoro",
     }
 
 
+def sent(mid, *, when="2026-08-20T09:05:00Z", to=None,
+         subject="re: cutover", body="sending the doc now"):
+    """A Sent Items message: `from` is the mailbox owner, not a counterparty."""
+    return {
+        "id": mid,
+        "receivedDateTime": when,
+        "subject": subject,
+        "body": {"contentType": "text", "content": body},
+        "from": {"emailAddress": {"name": "Avery", "address": ME}},
+        "toRecipients": (
+            [{"emailAddress": {"name": "Dana Okoro",
+                               "address": "dana@example.com"}}]
+            if to is None else to),
+        "ccRecipients": [],
+        "isRead": False,
+        "parentFolderId": "sentitems",
+        "conversationId": "c1",
+        "webLink": "https://outlook.example/" + mid,
+        "internetMessageId": "<%s@example.com>" % mid,
+    }
+
+
 def removed(mid):
     """What a delta page carries for something that left the folder.
 
@@ -81,8 +103,32 @@ class FakeGraph:
 
     def __init__(self, pages):
         # `pages` is a list of dicts, served in order for successive delta
-        # requests. Anything else is answered from `identity`.
-        self.pages = list(pages)
+        # requests against `inbox` — the only folder a test's `serve()` call
+        # seeds directly. `sentitems` starts empty, which is what makes it
+        # answer "nothing new, synced" the moment it is asked, unless a test
+        # calls `queue(..., folder="sentitems")`.
+        #
+        # Kept as two separate queues, not one shared list split by request
+        # order: a shared list would let `sentitems`'s request (issued after
+        # `inbox`'s round, every tick) silently consume pages `inbox` queued
+        # for its own continuation but had not reached yet — corrupting an
+        # exhausted-budget test in a way its own assertions might not catch,
+        # while a *resumed* round's test absolutely would.
+        self.pages_by_folder: dict[str, list[dict]] = {
+            "inbox": list(pages), "sentitems": []}
+        # An opaque continuation link (`nextLink`/`deltaLink`) carries no
+        # folder marker of its own — real Graph does not put one in a URL a
+        # caller is required to treat as opaque, and this fake mirrors that.
+        # So the fake remembers, for every link it has ever served, which
+        # folder's queue that link continues — populated the moment a page
+        # carrying that link is served, looked up the moment it is requested.
+        # This is what lets a *resumed* round (a later `run_main()` call,
+        # starting directly from a saved opaque URL, never touching the
+        # literal `/mailFolders/<folder>/…` path again) still route
+        # correctly, even after the other folder's own literal request has
+        # run in between.
+        self._link_folder: dict[str, str] = {}
+        self._last_folder = "inbox"
         self.calls: list[str] = []
         self.headers_seen: list[str] = []
         self.identity = {"mail": ME, "displayName": "Avery"}
@@ -153,11 +199,19 @@ class FakeGraph:
                     outer.status_for_next = None
                     return outer._send(self, code, {"error": {"code": "x"}})
 
-                if outer.pages:
-                    return outer._send(self, 200, outer.pages.pop(0))
-                return outer._send(self, 200, {"value": [],
-                                               "@odata.deltaLink": outer.url
-                                               + "delta-final"})
+                folder = outer._folder_for(parsed.path)
+                queue = outer.pages_by_folder.setdefault(folder, [])
+                if queue:
+                    served = queue.pop(0)
+                    for key in ("@odata.nextLink", "@odata.deltaLink"):
+                        link = served.get(key)
+                        if link:
+                            outer._link_folder[urlparse(link).path] = folder
+                    return outer._send(self, 200, served)
+                link = f"{outer.url}/{folder}-delta-final"
+                outer._link_folder[urlparse(link).path] = folder
+                return outer._send(self, 200, {
+                    "value": [], "@odata.deltaLink": link})
 
         self.server = HTTPServer(("127.0.0.1", 0), Handler)
         self.port = self.server.server_port
@@ -172,14 +226,34 @@ class FakeGraph:
         handler.end_headers()
         handler.wfile.write(body)
 
-    def queue(self, *pages):
+    def _folder_for(self, path: str) -> str:
+        """Which folder's queue this request continues.
+
+        The literal first-round path names its folder unambiguously and is
+        trusted first. Anything else is an opaque continuation link: looked
+        up by the folder it was tagged with when this fake served it, since
+        the path itself carries no folder marker (see `__init__`). A path
+        this fake has never seen before — a test-authored `http://x/…`
+        constant that was never returned as a `nextLink`/`deltaLink` value —
+        falls back to whichever folder was resolved most recently, which is
+        always correct for a same-round follow-up request.
+        """
+        if "/mailFolders/sentitems/" in path:
+            self._last_folder = "sentitems"
+        elif "/mailFolders/inbox/" in path:
+            self._last_folder = "inbox"
+        elif path in self._link_folder:
+            self._last_folder = self._link_folder[path]
+        return self._last_folder
+
+    def queue(self, *pages, folder="inbox"):
         """Add pages for later rounds, on the same server.
 
         Stopping one stand-in and starting another leaves the saved cursor
         pointing at a dead address, which hangs rather than failing — so the
         whole of a multi-round test runs against one server.
         """
-        self.pages.extend(json.loads(
+        self.pages_by_folder.setdefault(folder, []).extend(json.loads(
             json.dumps(list(pages)).replace("http://x/", self.url + "/")))
 
     @property
@@ -195,6 +269,10 @@ class FakeGraph:
 
 class CollectorCase(unittest.TestCase):
     def setUp(self):
+        from unittest.mock import patch
+        env = patch.dict(os.environ, {"INTAKE_GRAPH_SENT_ITEMS": "0", "INTAKE_SLACK_SELF_AUTHORED": "0"})
+        env.start()
+        self.addCleanup(env.stop)
         self.home = tempfile.mkdtemp()
         Path(self.home, "distribution.yaml").write_text("id: t\n",
                                                         encoding="utf-8")
@@ -226,10 +304,9 @@ class CollectorCase(unittest.TestCase):
         """
         self.graph = FakeGraph(pages)
         ingest_graph.API = self.graph.url
-        rewritten = json.loads(
-            json.dumps(self.graph.pages).replace("http://x/",
-                                                 self.graph.url + "/"))
-        self.graph.pages = rewritten
+        for folder, queued in self.graph.pages_by_folder.items():
+            self.graph.pages_by_folder[folder] = json.loads(
+                json.dumps(queued).replace("http://x/", self.graph.url + "/"))
         return self.graph
 
     def run_main(self, args=None):
@@ -265,8 +342,21 @@ class CollectorCase(unittest.TestCase):
                 "SELECT source_id, sender, body, deleted_at, body_cleared_at"
                 "  FROM items ORDER BY source_id").fetchall()
 
+    def outbound_row(self, source_id=None):
+        query = ("SELECT counterparty_name, counterparty_key, addressing, unread, direction,"
+                 " counterparty_pending_until FROM items")
+        args: tuple = ()
+        if source_id is not None:
+            query += " WHERE source_id = ?"
+            args = (source_id,)
+        with sqlite3.connect(self.db) as conn:
+            return conn.execute(query, args).fetchone()
+
     def state(self):
         return ingest_graph.read_state()
+
+    def folder_state(self, folder="inbox"):
+        return self.state().get("folders", {}).get(folder, {})
 
 
 class TestAFetchWritesRowsTheNormalizerMade(CollectorCase):
@@ -414,8 +504,8 @@ class TestTheCursorIsTheWatermark(CollectorCase):
         self.serve([{"value": [message("m1")],
                      "@odata.deltaLink": "http://x/final"}])
         self.run_main()
-        self.assertIn("delta", self.state())
-        self.assertNotIn("next", self.state())
+        self.assertIn("delta", self.folder_state())
+        self.assertNotIn("next", self.folder_state())
 
     def test_an_interrupted_round_stores_the_page_instead(self):
         pages = [{"value": [message(f"m{i}")],
@@ -423,8 +513,8 @@ class TestTheCursorIsTheWatermark(CollectorCase):
                  for i in range(ingest_graph.REQUEST_BUDGET + 2)]
         self.serve(pages)
         self.run_main()
-        self.assertIn("next", self.state())
-        self.assertNotIn("delta", self.state(),
+        self.assertIn("next", self.folder_state())
+        self.assertNotIn("delta", self.folder_state(),
                          "a partial crawl recorded a synchronisation point")
         self.assertFalse(self.report()["complete"])
 
@@ -436,7 +526,7 @@ class TestTheCursorIsTheWatermark(CollectorCase):
                       "@odata.deltaLink": "http://x/final"})
         self.serve(pages)
         self.run_main()
-        resumed_from = self.state()["next"]
+        resumed_from = self.folder_state()["next"]
         self.run_main()
         self.assertIn(resumed_from.rsplit("/", 1)[-1],
                       "".join(self.graph.calls),
@@ -456,8 +546,8 @@ class TestTheCursorIsTheWatermark(CollectorCase):
         """Graph gave nothing to resume from, so there is nothing to save."""
         self.serve([{"value": [message("m1")]}])
         self.run_main()
-        self.assertNotIn("next", self.state())
-        self.assertNotIn("delta", self.state())
+        self.assertNotIn("next", self.folder_state())
+        self.assertNotIn("delta", self.folder_state())
         self.assertFalse(self.report()["complete"])
 
     def test_an_expired_cursor_starts_a_fresh_round(self):
@@ -474,6 +564,218 @@ class TestTheCursorIsTheWatermark(CollectorCase):
         self.assertIn("m2", [r[0] for r in self.rows()])
 
 
+class TestSentItemsIsSynchronisedInItsOwnRight(CollectorCase):
+    """Sent Items gets its own delta cursor and its own full page budget --
+    not a filter over the inbox round, a second independent round."""
+
+    def setUp(self):
+        super().setUp()
+        os.environ["INTAKE_GRAPH_SENT_ITEMS"] = "1"
+
+    def test_a_single_recipient_message_resolves_immediately(self):
+        self.serve([])
+        self.graph.queue({"value": [sent("s1")],
+                          "@odata.deltaLink": "http://x/sent-final"},
+                         folder="sentitems")
+        self.run_main()
+        sender, key, addressing, unread, direction, pending = (
+            self.outbound_row("s1"))
+        self.assertEqual(sender, "Dana Okoro")
+        self.assertEqual(key, "dana@example.com")
+        self.assertIsNone(addressing)
+        self.assertIsNone(unread)
+        self.assertEqual(direction, "outbound")
+        self.assertIsNone(pending)
+
+    def test_more_than_one_recipient_leaves_the_counterparty_pending(self):
+        self.serve([])
+        self.graph.queue({"value": [sent("s1", to=[
+            {"emailAddress": {"name": "Dana Okoro",
+                              "address": "dana@example.com"}},
+            {"emailAddress": {"name": "Jae Park",
+                              "address": "jae@example.com"}}])],
+                          "@odata.deltaLink": "http://x/sent-final"},
+                         folder="sentitems")
+        self.run_main()
+        sender, key, _addr, _unread, direction, pending = self.outbound_row("s1")
+        self.assertIsNone(sender)
+        self.assertIsNone(key)
+        self.assertEqual(direction, "outbound")
+        self.assertIsNotNone(pending)
+
+    def test_inbox_rows_are_still_inbound(self):
+        """Direction handling for one folder must not disturb the other."""
+        self.serve([{"value": [message("m1")],
+                     "@odata.deltaLink": "http://x/final"}])
+        self.graph.queue({"value": [sent("s1")],
+                          "@odata.deltaLink": "http://x/sent-final"},
+                         folder="sentitems")
+        self.run_main()
+        _sender, _key, _addr, _unread, direction, pending = (
+            self.outbound_row("m1"))
+        self.assertEqual(direction, "inbound")
+        self.assertIsNone(pending)
+
+    def test_each_folder_keeps_its_own_delta_cursor(self):
+        self.serve([{"value": [message("m1")],
+                     "@odata.deltaLink": "http://x/inbox-final"}])
+        self.graph.queue({"value": [sent("s1")],
+                          "@odata.deltaLink": "http://x/sent-final"},
+                         folder="sentitems")
+        self.run_main()
+        self.assertIn("inbox-final", self.folder_state("inbox")["delta"])
+        self.assertIn("sent-final", self.folder_state("sentitems")["delta"])
+
+    def test_the_report_nests_sentitems_under_its_own_key(self):
+        self.serve([{"value": [message("m1")],
+                     "@odata.deltaLink": "http://x/inbox-final"}])
+        self.graph.queue({"value": [sent("s1")],
+                          "@odata.deltaLink": "http://x/sent-final"},
+                         folder="sentitems")
+        self.run_main()
+        found = self.report()
+        # Inbox's own fields stay at the top level, unchanged in shape from
+        # before Sent Items existed.
+        self.assertEqual(found["added"], 1)
+        self.assertEqual(found["sentitems"]["added"], 1)
+        self.assertTrue(found["sentitems"]["complete"])
+
+    def test_a_large_inbox_backlog_does_not_delay_sentitems_own_turn(self):
+        """Each folder gets its own full REQUEST_BUDGET, not a shared pool --
+        an exhausted inbox round must not leave sentitems unserved."""
+        pages = [{"value": [message(f"m{i}")],
+                  "@odata.nextLink": f"http://x/page{i + 1}"}
+                 for i in range(ingest_graph.REQUEST_BUDGET + 2)]
+        self.serve(pages)
+        self.graph.queue({"value": [sent("s1")],
+                          "@odata.deltaLink": "http://x/sent-final"},
+                         folder="sentitems")
+        self.run_main()
+        self.assertFalse(self.report()["complete"],
+                         "the inbox round should still be interrupted")
+        self.assertTrue(self.report()["sentitems"]["complete"],
+                        "sentitems did not get its own turn this tick")
+        self.assertEqual([r[0] for r in self.rows() if r[0] == "s1"], ["s1"])
+
+    def test_a_legacy_flat_state_file_migrates_to_folders_inbox(self):
+        """A pre-Phase-C state file names the inbox round implicitly -- there
+        was no other folder to name. Upgrading must not discard its cursor."""
+        Path(self.home, "workspace", "graph_state.json").write_text(
+            json.dumps({"delta": "http://x/legacy-delta",
+                       "identity": {"address": ME, "display_name": "Avery"}}),
+            encoding="utf-8")
+        state = ingest_graph.read_state()
+        self.assertEqual(state["folders"]["inbox"]["delta"],
+                         "http://x/legacy-delta")
+        self.assertEqual(state["identity"]["address"], ME)
+
+
+class TestSentItemsOptIn(CollectorCase):
+    def test_own_inbox_copy_does_not_duplicate_sent_evidence(self):
+        os.environ["INTAKE_GRAPH_SENT_ITEMS"] = "1"
+        self.serve([{"value": [sent("inbox-copy")]}])
+        self.graph.queue({"value": [sent("sent-copy")]}, folder="sentitems")
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual([row[0] for row in self.rows()], ["sent-copy"])
+
+    def test_default_off_makes_no_sent_requests_even_when_slack_is_enabled(self):
+        os.environ["INTAKE_SLACK_SELF_AUTHORED"] = "1"
+        self.serve([{"value": [message("in"), sent("self-copy")], "@odata.deltaLink": "http://x/inbox-final"}])
+        self.graph.queue({"value": [sent("sent")]}, folder="sentitems")
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual([row[0] for row in self.rows()], ["in"])
+        self.assertFalse(any("sentitems" in url for url in self.graph.calls))
+        self.assertFalse(self.report()["sentitems"]["enabled"])
+
+    def test_invalid_opt_in_stops_before_any_request(self):
+        self.serve([])
+        os.environ["INTAKE_GRAPH_SENT_ITEMS"] = "yes"
+        self.assertEqual(self.run_main(), ingest_graph.EXIT_OTHER)
+        self.assertEqual(self.graph.calls, [])
+
+    def test_disabling_preserves_sent_cursor_and_reenabling_resumes_it(self):
+        os.environ["INTAKE_GRAPH_SENT_ITEMS"] = "1"
+        self.serve([])
+        self.graph.queue({"value": [sent("s1")], "@odata.deltaLink": "http://x/sent-cursor"}, folder="sentitems")
+        self.assertEqual(self.run_main(), 0)
+        prior = self.folder_state("sentitems")
+        os.environ["INTAKE_GRAPH_SENT_ITEMS"] = "0"
+        self.graph.calls.clear()
+        self.graph.queue({"value": [sent("s2")], "@odata.deltaLink": "http://x/sent-next"}, folder="sentitems")
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(self.folder_state("sentitems"), prior)
+        self.assertFalse(any("sent" in url for url in self.graph.calls))
+        self.assertEqual(len(self.rows()), 1)
+        os.environ["INTAKE_GRAPH_SENT_ITEMS"] = "1"
+        self.graph.calls.clear()
+        self.assertEqual(self.run_main(), 0)
+        self.assertTrue(any("sent-cursor" in url for url in self.graph.calls))
+        self.assertEqual(len(self.rows()), 2)
+
+    def test_sent_folder_does_not_prove_user_authorship(self):
+        os.environ["INTAKE_GRAPH_SENT_ITEMS"] = "1"
+        self.serve([])
+        self.graph.queue({"value": [message("copied-other-person")], "@odata.deltaLink": "http://x/sent-final"}, folder="sentitems")
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(self.rows(), [])
+        self.assertEqual(self.report()["sentitems"]["unverified_authorship"], 1)
+
+    def test_primary_name_alias_is_known_but_other_aliases_are_not_guessed(self):
+        os.environ["INTAKE_GRAPH_SENT_ITEMS"] = "1"
+        self.serve([])
+        alias = "alias@example.com"
+        self.graph.identity["userPrincipalName"] = alias
+        entry = sent("alias")
+        entry["from"]["emailAddress"]["address"] = alias
+        self.graph.queue({"value": [entry], "@odata.deltaLink": "http://x/sent-final"}, folder="sentitems")
+        self.assertEqual(self.run_main(), 0)
+        with sqlite3.connect(self.db) as conn:
+            self.assertEqual(conn.execute("SELECT sender_key, direction, source_account FROM items").fetchone(),
+                             (alias, "outbound", ME))
+
+    def test_inbox_progress_survives_a_sent_folder_failure(self):
+        from unittest.mock import patch
+        os.environ["INTAKE_GRAPH_SENT_ITEMS"] = "1"
+        self.serve([{"value": [message("in")], "@odata.deltaLink": "http://x/inbox-final"}])
+        collect = ingest_graph.collect
+        def fail_sent(token, address, state, days, budget, folder, **kwargs):
+            if folder == "sentitems":
+                raise ingest_graph.GraphError("fixture failure")
+            return collect(token, address, state, days, budget, folder, **kwargs)
+        with patch.object(ingest_graph, "collect", side_effect=fail_sent):
+            self.assertEqual(self.run_main(), ingest_graph.EXIT_OTHER)
+        self.assertIn("inbox-final", self.folder_state("inbox")["delta"])
+        self.assertEqual(len(self.rows()), 1)
+
+    def test_bcc_exclusion_applies_before_any_sent_body_is_stored(self):
+        os.environ["INTAKE_GRAPH_SENT_ITEMS"] = "1"
+        self.serve([])
+        Path(self.home, "workspace", "exclusions.json").write_text(json.dumps({"domains": ["private.example"]}))
+        entry = sent("s1")
+        entry["bccRecipients"] = [{"emailAddress": {"address": "person@private.example"}}]
+        self.graph.queue({"value": [entry], "@odata.deltaLink": "http://x/sent-final"}, folder="sentitems")
+        self.assertEqual(self.run_main(), 0)
+        self.assertEqual(self.rows(), [])
+
+    def test_failed_state_publication_keeps_the_previous_complete_snapshot(self):
+        from unittest.mock import patch
+        self.serve([{"value": [], "@odata.deltaLink": "http://x/inbox-first"}])
+        self.assertEqual(self.run_main(), 0)
+        original = ingest_graph.state_path().read_bytes()
+        self.graph.queue({"value": [message("new")], "@odata.deltaLink": "http://x/inbox-second"})
+        with patch.object(ingest_graph.os, "replace", side_effect=OSError("fixture failure")):
+            self.assertEqual(self.run_main(), ingest_graph.EXIT_OTHER)
+        self.assertEqual(ingest_graph.state_path().read_bytes(), original)
+        self.assertEqual(len(self.rows()), 1)
+        self.assertEqual(list(ingest_graph.state_path().parent.glob(".graph-state-*")), [])
+
+    def test_malformed_cursor_state_is_reported_without_collection(self):
+        self.serve([])
+        ingest_graph.state_path().write_text('{"folders":{"inbox":[]}}')
+        self.assertEqual(self.run_main(), ingest_graph.EXIT_OTHER)
+        self.assertEqual(self.graph.calls, [])
+
+
 class TestTheMailboxIdentityIsChecked(CollectorCase):
     """Inside the sandbox the credential is a placeholder the gateway
     substitutes, and it does not change when the token behind it does."""
@@ -488,7 +790,7 @@ class TestTheMailboxIdentityIsChecked(CollectorCase):
         self.serve([{"value": [message("m1")],
                      "@odata.deltaLink": "http://x/first-mailbox"}])
         self.run_main()
-        first_cursor = self.state()["delta"]
+        first_cursor = self.folder_state()["delta"]
         self.assertIn("first-mailbox", first_cursor)
 
         self.graph.identity = {"mail": "someone.else@example.com",
@@ -551,10 +853,10 @@ class TestTheMailboxIdentityIsChecked(CollectorCase):
         """Re-checking must not become re-synchronising every tick."""
         self.serve([{"value": [], "@odata.deltaLink": "http://x/final"}])
         self.run_main()
-        first = self.state()["delta"]
+        first = self.folder_state()["delta"]
         self.graph.queue({"value": [], "@odata.deltaLink": "http://x/final"})
         self.run_main()
-        self.assertEqual(self.state()["delta"], first)
+        self.assertEqual(self.folder_state()["delta"], first)
 
 
 class TestTheScopesAreTheOnesUsed(CollectorCase):
@@ -916,13 +1218,13 @@ class TestFailuresCarryTheirDiagnosisInTheExitCode(CollectorCase):
         self.serve([{"value": [message("m1")],
                      "@odata.deltaLink": "http://x/final"}])
         self.run_main()
-        before = self.state().get("delta")
+        before = self.folder_state().get("delta")
 
         self.graph.queue({"value": [removed("m1")],
                           "@odata.deltaLink": "http://x/moved-on"})
         self.graph.lookup_status = 500
         self.assertEqual(self.run_main(), ingest_graph.EXIT_OTHER)
-        self.assertEqual(self.state().get("delta"), before,
+        self.assertEqual(self.folder_state().get("delta"), before,
                          "the cursor advanced past an unresolved removal")
         # rows() is (source_id, sender, body, deleted_at, body_cleared_at)
         self.assertIsNone(self.rows()[0][3],
