@@ -163,9 +163,10 @@ translation and credentials stay in the host relay.
    `.bootstrap/cache/atif-relay-token`, unless the operator supplies
    `ATIF_RELAY_AUTH_TOKEN`. The host relay reads the real value.
 2. `scripts/02-providers.sh` registers the same value in OpenShell's provider
-   store. The sandbox receives only OpenShell's revision-scoped credential
-   placeholder in `ATIF_RELAY_AUTH_TOKEN`; `start.sh` prefixes that placeholder
-   with `Bearer` for native Relay.
+   store. The sandbox receives only OpenShell's identity-stable,
+   revision-scoped credential placeholder in `ATIF_RELAY_AUTH_TOKEN`; `start.sh`
+   prefixes that placeholder with `Bearer` for native Relay. OpenShell `0.0.116`
+   keeps that handle valid across provider credential rotation.
 3. When Hermes finalizes the session, native Relay sends exactly one request to
    `https://host.openshell.internal:18443/atif` through OpenShell's L7 proxy:
 

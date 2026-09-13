@@ -76,6 +76,10 @@ class GenerateConfigTest(unittest.TestCase):
             ["nemoclaw"],
         )
         self.assertNotIn("hooks", config)
+        self.assertEqual(
+            config["platforms"]["slack"]["token"],
+            "openshell:resolve:env:SLACK_BOT_TOKEN",
+        )
         self.assertIs(config["platforms"]["slack"]["extra"]["rich_blocks"], True)
         self.assertIs(config["platforms"]["api_server"]["enabled"], True)
         self.assertEqual(

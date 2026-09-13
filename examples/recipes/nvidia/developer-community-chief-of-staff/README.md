@@ -7,7 +7,7 @@
 | Requirements | Single Linux host · Docker · OpenShell · inference provider API key · Slack or Outlook |
 | NemoClaw | N/A |
 | Harness | Hermes 0.20.6 |
-| OpenShell | 0.0.106 |
+| OpenShell | 0.0.116 |
 
 ![NVIDIA](assets/nvidia_header.png)
 
@@ -275,11 +275,12 @@ itself). The session UUID for Outlook gets produced *between* them, so the order
 
 ```console
 $ git clone https://github.com/NVIDIA/nemoclaw-community.git && cd examples/recipes/nvidia/developer-community-chief-of-staff/
-$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION=v0.0.106 sh
+$ curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | OPENSHELL_VERSION=v0.0.116 sh
 ```
 
-OpenShell `v0.0.106` matches the supported version for this example's pinned
-NemoClaw Hermes sandbox base image.
+OpenShell `v0.0.116` is the supported version for this example. It provides
+identity-stable provider credential handles so long-running Slack and Outlook
+processes continue working across gateway-managed credential rotation.
 
 The package-managed installer starts a local gateway service for you. This
 example assumes that default path and targets the `openshell` gateway at
