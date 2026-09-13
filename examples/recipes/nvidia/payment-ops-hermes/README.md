@@ -231,9 +231,8 @@ $ bash scripts/verify.sh
 
 The verification checks fixtures, host services, the Hermes API, pinned Hermes
 and NeMo Relay versions, the Relay configuration, and that the payment rail is
-unreachable from the sandbox. The
-[end-to-end runbook](../../../../NATIVE_RELAY_E2E.md) also requires an
-OpenShell denial log before attributing that result to policy enforcement.
+unreachable from the sandbox. Capture an OpenShell denial log before
+attributing that result to policy enforcement.
 
 Exercise the host-side checker directly:
 

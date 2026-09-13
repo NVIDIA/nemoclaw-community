@@ -15,10 +15,8 @@ It checks:
 - payment-rail inaccessibility from the sandbox.
 
 The reachability probe alone does not distinguish an OpenShell policy denial
-from a DNS or TLS failure. For release acceptance, also capture the OpenShell
-denial log and confirm that the host ledger did not change, as described in
-the repository's
-[native Relay end-to-end runbook](../../../../../NATIVE_RELAY_E2E.md).
+from a DNS or TLS failure. For release acceptance, capture the OpenShell denial
+log and confirm that the host ledger did not change.
 
 ## Offline-only checks
 
