@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Outlook bridge — polls Microsoft Graph for new mail, relays to the Hermes
-# HTTP API, sends replies. Authorization is `Bearer
-# openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN`: the OpenShell L7 proxy
-# substitutes the placeholder with a live, gateway-refreshed delegated access
-# token on egress. The bridge never holds a real token.
+# HTTP API, sends replies. Authorization uses the identity-stable OpenShell
+# placeholder injected in `MS_GRAPH_ACCESS_TOKEN`; the L7 proxy substitutes it
+# with a live, gateway-refreshed delegated access token on egress. The bridge
+# never holds a real token.
 
 import asyncio
 import datetime
@@ -84,29 +84,13 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 # ── Auth placeholder ─────────────────────────────────────────────────────────
-# Send the CANONICAL (unscoped) OpenShell placeholder, NOT the value OpenShell
-# injects into MS_GRAPH_ACCESS_TOKEN. OpenShell injects a *revision-pinned*
-# placeholder (`openshell:resolve:env:v<rev>_MS_GRAPH_ACCESS_TOKEN`) fixed at
-# process-start and never mutates a running process's env afterward — see the
-# OpenShell docs, sandboxes/providers-v2.mdx "Runtime Limitations": "already-
-# running processes keep the environment they started with ... restart that
-# process". So for this long-running poller, once the gateway's OAuth refresh
-# rotates the token the pinned revision's value expires and the L7 proxy fails
-# closed (same doc: "stale placeholders fail closed") — every Graph call then
-# dies with ServerDisconnectedError ~1h in, until the sandbox is recreated.
-#
-# Re-reading os.environ does NOT help: the env holds only a placeholder string
-# (never a token), frozen at process spawn, so it returns the same pinned
-# revision forever. The token is substituted at the proxy per request, so the
-# only lever is WHICH placeholder we emit. `openshell:resolve:env:KEY` is the
-# documented canonical/stable form (OpenShell docs: reference/policy-schema.mdx,
-# sandboxes/policies.mdx) and the proxy resolves it to the CURRENT refreshed
-# token every request (kept fresh on each sandbox poll). It's the same floating
-# form this repo already uses for the ATIF bearer
-# (ATIF_RELAY_AUTHORIZATION, see agents/hermes/start.sh).
-#
-# Do NOT change this back to os.environ.get("MS_GRAPH_ACCESS_TOKEN", ...).
-MS_GRAPH_ACCESS_TOKEN = "openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN"
+# OpenShell injects an identity-stable, revision-scoped placeholder into the
+# sandbox process. Use that exact value on egress; OpenShell 0.0.116 keeps the
+# handle valid across gateway-managed credential rotation. The canonical
+# placeholder remains a local-development fallback when no provider is attached.
+MS_GRAPH_ACCESS_TOKEN = os.environ.get("MS_GRAPH_ACCESS_TOKEN") or (
+    "openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN"
+)
 
 # ── Mailbox config ───────────────────────────────────────────────────────────
 # OUTLOOK_TARGET_MAILBOX / OUTLOOK_REPLY_TO are non-secret per-user config,

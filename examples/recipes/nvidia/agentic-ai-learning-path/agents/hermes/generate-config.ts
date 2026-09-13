@@ -142,10 +142,7 @@ function main(): void {
   const platformsConfig: Record<string, Record<string, unknown>> = {};
   for (const ch of msgChannels) {
     if (ch in TOKEN_ENV) {
-      const tokenPlaceholder =
-        ch === "slack" && TOKEN_ENV[ch] === "SLACK_BOT_TOKEN"
-          ? "xoxb-OPENSHELL-RESOLVE-ENV-SLACK_BOT_TOKEN"
-          : `openshell:resolve:env:${TOKEN_ENV[ch]}`;
+      const tokenPlaceholder = `openshell:resolve:env:${TOKEN_ENV[ch]}`;
       const pCfg: Record<string, unknown> = {
         enabled: true,
         token: tokenPlaceholder,
@@ -194,18 +191,10 @@ function main(): void {
   ];
   for (const ch of msgChannels) {
     if (ch in TOKEN_ENV) {
-      if (ch === "slack" && TOKEN_ENV[ch] === "SLACK_BOT_TOKEN") {
-        envLines.push("SLACK_BOT_TOKEN=xoxb-OPENSHELL-RESOLVE-ENV-SLACK_BOT_TOKEN");
-      } else {
-        envLines.push(`${TOKEN_ENV[ch]}=openshell:resolve:env:${TOKEN_ENV[ch]}`);
-      }
+      envLines.push(`${TOKEN_ENV[ch]}=openshell:resolve:env:${TOKEN_ENV[ch]}`);
     }
     if (ch in EXTRA_TOKEN_ENV) {
-      if (ch === "slack" && EXTRA_TOKEN_ENV[ch] === "SLACK_APP_TOKEN") {
-        envLines.push("SLACK_APP_TOKEN=xapp-OPENSHELL-RESOLVE-ENV-SLACK_APP_TOKEN");
-      } else {
-        envLines.push(`${EXTRA_TOKEN_ENV[ch]}=openshell:resolve:env:${EXTRA_TOKEN_ENV[ch]}`);
-      }
+      envLines.push(`${EXTRA_TOKEN_ENV[ch]}=openshell:resolve:env:${EXTRA_TOKEN_ENV[ch]}`);
     }
   }
   // Slack allowlist (SLACK_ALLOWED_USERS / SLACK_ALLOW_ALL_USERS) and the

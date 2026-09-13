@@ -130,9 +130,11 @@ deploy_config_to_writable() {
 
 refresh_hermes_provider_placeholders() {
   local env_file="${HERMES_WRITABLE}/.env"
+  local config_file="${HERMES_WRITABLE}/config.yaml"
   [ -f "$env_file" ] || return 0
+  [ -f "$config_file" ] || return 0
 
-  local keys="TELEGRAM_BOT_TOKEN DISCORD_BOT_TOKEN SLACK_BOT_TOKEN SLACK_APP_TOKEN GITHUB_TOKEN"
+  local keys="TELEGRAM_BOT_TOKEN DISCORD_BOT_TOKEN SLACK_BOT_TOKEN SLACK_APP_TOKEN GITHUB_TOKEN MS_GRAPH_ACCESS_TOKEN"
   local has_scoped_placeholder=0
   local key value
   for key in $keys; do
@@ -143,13 +145,14 @@ refresh_hermes_provider_placeholders() {
   done
   [ "$has_scoped_placeholder" -eq 1 ] || return 0
 
-  if [ -L "$env_file" ]; then
-    echo "[SECURITY] Refusing Hermes provider placeholder refresh — env path is a symlink" >&2
+  if [ -L "$env_file" ] || [ -L "$config_file" ]; then
+    echo "[SECURITY] Refusing Hermes provider placeholder refresh — runtime file path is a symlink" >&2
     return 1
   fi
 
   NEMOCLAW_PROVIDER_PLACEHOLDER_KEYS="$keys" \
-    python3 /usr/local/lib/nemoclaw/refresh-placeholders.py "$env_file"
+    python3 /usr/local/lib/nemoclaw/refresh-placeholders.py \
+      "$env_file" "$config_file"
 
   echo "[config] Refreshed Hermes provider placeholders from OpenShell runtime env" >&2
 }

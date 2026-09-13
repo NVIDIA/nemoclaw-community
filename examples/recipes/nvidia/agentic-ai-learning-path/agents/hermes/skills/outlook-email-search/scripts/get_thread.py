@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Fetch all messages in an Outlook conversation via Microsoft Graph.
 
-Authorization is the placeholder `openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN`;
-the OpenShell L7 proxy substitutes a live access token on egress.
+Authorization uses the identity-stable OpenShell placeholder injected in
+`MS_GRAPH_ACCESS_TOKEN`; the L7 proxy substitutes a live access token on egress.
 
 Usage: /usr/bin/python3 get_thread.py --conversation-id <ID> [--top N]
 The conversation_id comes from search_emails.py output.
@@ -22,7 +22,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-MS_GRAPH_ACCESS_TOKEN = "openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN"
+MS_GRAPH_ACCESS_TOKEN = os.environ.get("MS_GRAPH_ACCESS_TOKEN") or (
+    "openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN"
+)
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 

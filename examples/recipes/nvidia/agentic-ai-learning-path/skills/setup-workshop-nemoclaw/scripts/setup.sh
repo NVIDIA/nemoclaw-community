@@ -13,9 +13,9 @@
 # Prereqs (verify with scripts/preflight.sh; details in
 # references/operator-contract.md — the operator does these OUTSIDE the sandbox):
 #   - Sandbox policy allows the github_git_clone block (repo clone), GET
-#     pypi.org + files.pythonhosted.org, and POST /v1/ranking on
-#     integrate.api.nvidia.com (module-2 reranker).
-#   - NVIDIA key staged at $REPO/secrets.env  (NVIDIA_API_KEY=...)
+#     pypi.org + files.pythonhosted.org, and POST /v1/retrieval/** on
+#     ai.api.nvidia.com (module-2 reranker).
+#   - The learner adds API keys with the Secrets Manager tile after launch.
 set -euo pipefail
 
 # ---- config -----------------------------------------------------------------
@@ -62,7 +62,15 @@ else
     exit 1
   fi
 fi
-[ -f "$REPO/secrets.env" ] || echo "WARN: $REPO/secrets.env missing — notebooks will lack NVIDIA_API_KEY (the learner sets it in the Secrets Manager tile after launch; see references/operator-contract.md)."
+# The notebook's Secrets Manager opens this file with the process umask. On a
+# fresh clone that otherwise creates a world-readable 0644 credential file.
+# Pre-create it privately (and repair an existing file) so later truncating
+# writes retain 0600 without changing the upstream notebook UI.
+if [ ! -e "$REPO/secrets.env" ]; then
+  (umask 077; : > "$REPO/secrets.env")
+fi
+chmod 600 "$REPO/secrets.env"
+echo "secrets file ready at $REPO/secrets.env (mode 600; add keys with the Secrets Manager tile)"
 
 # ---- 1. venv + deps ---------------------------------------------------------
 say "1. venv + pinned deps"
