@@ -29,6 +29,7 @@ sys.path.insert(0, str(HERE))
 import correct  # noqa: E402
 import identity  # noqa: E402
 import normalize  # noqa: E402
+import outbound  # noqa: E402
 import select_memory  # noqa: E402
 
 SCHEMA = (HERE / "schema.sql").read_text(encoding="utf-8")
@@ -1248,6 +1249,7 @@ class TestOutboundBackfillRefresh(SelectorCase):
     def acknowledge(self, candidate, padding=""):
         path = self.workspace / "memory/people/dana_okoro.md"
         text = path.read_text()
+        text = re.sub(r"^outbound_evidence:.*\n", "", text, flags=re.M)
         text = text.replace("---\n\n# page", padding +
             f"outbound_evidence: {candidate['outbound_evidence']}\n---\n\n# page")
         path.write_text(text)
@@ -1310,6 +1312,100 @@ class TestOutboundBackfillRefresh(SelectorCase):
 
     def test_inbound_only_pages_keep_the_existing_quiet_gate(self):
         self.assertEqual(self.report()["people"], [])
+
+    def test_delayed_attribution_supplies_the_new_evidence_before_acknowledgment(self):
+        self.outbound("newly-resolved-promise", days_ago=4, resolved=False)
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE items SET source_account='avery@example.com',"
+                         " thread_ref='delayed-thread', counterparty_candidates=?,"
+                         " counterparty_pending_until=? WHERE source_id='newly-resolved-promise'",
+                         (json.dumps(["dana.okoro@example.com", "pat@example.com"]), iso(-3)))
+        self.outbound("already-reviewed-outbound", days_ago=3)
+        for i in range(select_memory.MAX_INTERACTIONS + 2):
+            self.add("Dana Okoro", days_ago=1, body=f"recent inbound {i}")
+        self.acknowledge(self.report()["people"][0])
+        self.assertEqual(self.report()["people"], [])
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("INSERT INTO items(source_id,source,scope,event_at,sender,sender_key,"
+                         "direction,source_account,thread_ref,body) VALUES"
+                         " ('delayed-reply','email','inbox',?,'Dana Okoro','dana.okoro@example.com',"
+                         " 'inbound','avery@example.com','delayed-thread','reply')", (iso(2),))
+            self.assertEqual(outbound.resolve_pending(conn), 1)
+        found = self.report()
+        self.assertIn("newly-resolved-promise",
+                      {row["body"] for row in found["interactions"]["dana_okoro"]})
+        self.acknowledge(found["people"][0])
+        self.assertEqual(self.report()["people"], [])
+
+    def test_large_snapshot_advances_only_with_saved_batches(self):
+        expected = {f"outbound-{n:03}" for n in range(select_memory.MAX_INTERACTIONS * 2 + 1)}
+        for sid in sorted(expected):
+            self.outbound(sid)
+        seen = set()
+        for _ in range(4):
+            found = self.report()
+            if not found["people"]:
+                break
+            retry = self.report()
+            self.assertEqual(found["people"], retry["people"], "unsaved selection must retry the same marker")
+            self.assertEqual(found["interactions"], retry["interactions"])
+            snippets = found["interactions"]["dana_okoro"]
+            self.assertLessEqual(len(snippets), select_memory.MAX_INTERACTIONS)
+            batch = {r["body"] for r in snippets if r["direction"] == "outbound"}
+            self.assertFalse(seen & batch)
+            seen.update(batch)
+            self.acknowledge(found["people"][0])
+        self.assertEqual(seen, expected)
+        self.assertEqual(self.report()["people"], [])
+
+    def test_attribution_during_partial_snapshot_finishes_then_revisits_new_set(self):
+        self.outbound("aaa-delayed", resolved=False)
+        for n in range(select_memory.MAX_INTERACTIONS + 1):
+            self.outbound(f"outbound-{n:03}")
+        first = self.report()["people"][0]
+        self.assertEqual(first["outbound_evidence"].count(":"), 2)
+        self.acknowledge(first)
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE items SET counterparty_key='dana.okoro@example.com',"
+                         " counterparty_name='Dana Okoro',counterparty_basis='reply'"
+                         " WHERE source_id='aaa-delayed'")
+        found = self.report()
+        self.assertIn("outbound-012", {r["body"] for r in found["interactions"]["dana_okoro"]})
+        self.assertTrue(found["people"][0]["outbound_evidence"].endswith(":0"))
+        self.assertNotEqual(first["outbound_evidence"], found["people"][0]["outbound_evidence"])
+        self.acknowledge(found["people"][0])
+        restarted = self.report()
+        self.assertIn("aaa-delayed", {r["body"] for r in restarted["interactions"]["dana_okoro"]})
+
+    def test_partial_snapshot_continues_across_linked_identities(self):
+        expected = {f"outbound-{n:03}" for n in range(select_memory.MAX_INTERACTIONS + 3)}
+        for sid in sorted(expected):
+            self.outbound(sid)
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE items SET source='slack',sender_key='U0SELF',"
+                         " counterparty_key='U01DANA' WHERE source_id LIKE 'outbound-%'"
+                         " AND source_id>='outbound-005'")
+            identity.record(conn, identity.parse("email:dana.okoro@example.com"),
+                            identity.parse("slack:U01DANA"), "confirmed")
+        seen = set()
+        for _ in range(3):
+            found = self.report()
+            if not found["people"]:
+                break
+            seen.update(r["body"] for r in found["interactions"]["dana_okoro"]
+                        if r["direction"] == "outbound")
+            self.acknowledge(found["people"][0])
+        self.assertEqual(seen, expected)
+        self.assertEqual(self.report()["people"], [])
+
+    def test_out_of_range_partial_marker_retries_instead_of_acknowledging(self):
+        self.outbound()
+        candidate = self.report()["people"][0]
+        candidate["outbound_evidence"] += ":999999"
+        self.acknowledge(candidate)
+        found = self.report()
+        self.assertIn("backfilled", {r["body"] for r in found["interactions"]["dana_okoro"]})
+        self.assertEqual(found["people"][0]["outbound_evidence"].count(":"), 1)
 
 
 if __name__ == "__main__":

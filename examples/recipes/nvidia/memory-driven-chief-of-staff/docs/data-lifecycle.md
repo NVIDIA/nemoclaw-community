@@ -262,5 +262,8 @@ retain their seven-day event-time deadline so replies collected later can still
 qualify; this does not extend the allowed reply event window. People-page
 `outbound_evidence` markers are exported with memory and removed with those
 pages on reset. They track the evidence snapshot independently of interaction
-dates and contain no message text. Body retention and the existing limits on
+dates and contain no message text. A partial marker also records the next
+batch offset; only a saved page advances it. If the snapshot changes, the current
+pass finishes before its bounded batches restart. No new database or sidecar
+state is added. Body retention and the existing limits on
 deleting derived memory remain unchanged.

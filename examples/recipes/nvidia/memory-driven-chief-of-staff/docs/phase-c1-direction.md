@@ -80,11 +80,18 @@ Existing people pages also carry an optional `outbound_evidence` marker copied
 from the selector. It fingerprints eligible outbound IDs and attribution bases,
 independently of event time, and is acknowledged only by saving the updated
 page. Backfill and newly resolved counterparties therefore refresh an existing
-page without falsely advancing `last_interaction`. Repeated selection before a
-successful write retries; after the matching marker is saved, unchanged runs
-are quiet. Changes to the outbound set inside the configured window can also
-refresh the page. The bounded handoff reserves one snippet for the latest
-collected resolved outbound item when this marker changes.
+page without falsely advancing `last_interaction`. The handoff supplies at most
+eleven outbound snippets per person, leaving room for inbound context within
+the twelve-interaction bound. A partial marker includes an `:<offset>` suffix;
+saving it advances to the next batch in stable identity and message-ID order.
+Repeated selection before a successful write retries the same batch. Only the
+final marker, without an offset, acknowledges the complete snapshot and lets
+unchanged runs remain quiet. If the outbound set changes inside the configured
+window, the current partial pass finishes before a `:0` marker starts another
+pass. New arrivals therefore cannot keep restarting the first batch. An older
+message whose attribution resolved later is included in the next pass instead
+of being acknowledged unseen. This can repeat
+previous evidence, and it does not extend the configured evidence window.
 
 Both directions remain quoted source material. Outbound mail is not an explicit
 priority correction. Only the existing user-correction path may change inferred

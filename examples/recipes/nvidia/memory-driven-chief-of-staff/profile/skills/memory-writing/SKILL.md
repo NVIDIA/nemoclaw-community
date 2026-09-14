@@ -96,7 +96,7 @@ role: Job title or function      # write "unknown" rather than omitting it
 relationship: How they relate to the user, 1-2 sentences
 importance: high | medium | low
 last_interaction: YYYY-MM-DD
-outbound_evidence: sha256:<digest>  # copy only when the selector supplies it
+outbound_evidence: sha256:<digest>  # may include :<offset>; copy the complete value
 interaction_frequency: daily | weekly | monthly | rare
 ---
 ```
@@ -111,11 +111,19 @@ the page is saved. It is not a message timestamp and must not replace or advance
 outbound evidence, or a change to that set inside the configured window, needs
 review. The person may therefore be offered even when no later interaction
 occurred. The interaction payload remains bounded; for these updates it reserves
-one snippet for the latest collected resolved outbound message so a busy inbound
-feed cannot hide the user's side. The marker describes the available evidence
-set, not a claim that every message was quoted in the page. Without a successful
-page write, a later run will offer the update again. Existing pages with no
-outbound evidence keep the `last_interaction` freshness rule.
+up to eleven outbound snippets, with room for inbound context, so a busy inbound
+feed cannot hide the user's side. A marker with an `:<offset>` suffix records a
+partial batch. Copy the complete value, including that suffix; the next run
+continues the pass only after the page is saved. The final batch has
+no offset suffix. If the evidence set changes during a partial pass, finish
+that pass and then start a new one. A `:0` suffix requests that restart rather
+than acknowledging completion. This lets collection make progress even when
+new messages keep arriving. Previously supplied evidence can repeat, but newly
+attributed messages are not skipped because
+their insertion time is old. These batches cover the configured evidence
+window, not all retained history. Without a successful page write, a later run
+offers the same batch again. Existing pages with no outbound evidence keep the
+`last_interaction` freshness rule.
 
 **Copy `identities` verbatim and never invent an entry.** It is how the
 selector finds this page again — addresses and user ids, not names. Get one

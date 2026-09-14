@@ -307,7 +307,7 @@ def existing_people() -> dict[str, dict[str, str]]:
         seen = re.search(r"^last_interaction:\s*(\d{4}-\d{2}-\d{2})",
                          head, re.M)
         outbound_seen = re.search(
-            r"^outbound_evidence:[ \t]*['\"]?(sha256:[0-9a-f]{64})['\"]?[ \t]*$",
+            r"^outbound_evidence:[ \t]*['\"]?(sha256:[0-9a-f]{64}(?::[0-9]{1,16})?)['\"]?[ \t]*$",
             head, re.M)
         found[page.stem] = {
             "outbound_evidence": outbound_seen.group(1) if outbound_seen else None,
@@ -386,6 +386,32 @@ def stale_attention() -> list[dict[str, str]]:
     return found
 
 
+def outbound_batch(conn, evidence_sql, group, since, offset, limit):
+    """Read a bounded snapshot slice across identities in stable order.
+
+    Fetch one extra row to distinguish a partial batch from completion. Counts
+    skip preceding identities without loading their message text into memory.
+    """
+    rows = []
+    for who in sorted(group, key=str):
+        where = (" FROM evidence_items WHERE source=? AND sender_key=?"
+                 " AND direction='outbound' AND event_at>=? AND sender IS NOT NULL")
+        args = (who.source, who.key, since)
+        count = conn.execute(evidence_sql + "SELECT COUNT(*)" + where, args).fetchone()[0]
+        if offset >= count:
+            offset -= count
+            continue
+        rows += conn.execute(evidence_sql +
+            "SELECT source, event_at, addressing, substr(subject,1,200),"
+            " substr(body,1,200), direction, counterparty_basis" + where +
+            " ORDER BY source_id LIMIT ? OFFSET ?",
+            (*args, limit + 1 - len(rows), offset)).fetchall()
+        offset = 0
+        if len(rows) > limit:
+            break
+    return rows[:limit], len(rows) > limit
+
+
 def evidence(conn, since: str) -> dict[str, object]:
     """Who has been in touch, how often, and about what.
 
@@ -415,7 +441,7 @@ def evidence(conn, since: str) -> dict[str, object]:
     # Keep authorship in the ledger; use the recipient identity only for
     # grouping an outbound observation with the corresponding person.
     evidence_sql = """WITH evidence_items AS (
-        SELECT rowid AS collection_order, source, source_id, event_at, addressing, subject, body, direction,
+        SELECT source, source_id, event_at, addressing, subject, body, direction,
           CASE WHEN direction='outbound' THEN counterparty_key ELSE sender_key END AS sender_key,
           CASE WHEN direction='outbound' THEN counterparty_name ELSE sender END AS sender,
           CASE WHEN direction='outbound' THEN counterparty_handle ELSE sender_handle END AS sender_handle,
@@ -578,7 +604,7 @@ def evidence(conn, since: str) -> dict[str, object]:
     candidates.sort(key=lambda c: (c["has_page"], -c["messages"]))
     chosen = candidates[:MAX_PEOPLE]
     wanted = [(c["slug"], group_of[c["slug"]]) for c in chosen]
-    outbound_refreshes = {c["slug"] for c in chosen if c["outbound_evidence_changed"]}
+    outbound_refreshes = {c["slug"]: c for c in chosen if c["outbound_evidence_changed"]}
 
     # Keyed by page slug, not by display name: two namesakes would otherwise
     # write into one entry and the second would replace the first's history.
@@ -599,25 +625,35 @@ def evidence(conn, since: str) -> dict[str, object]:
         rows.sort(key=lambda r: r[1] or "", reverse=True)
         selected = rows[:MAX_INTERACTIONS]
         if mark in outbound_refreshes:
-            # A busy inbound feed must not hide the user's newly collected
-            # side. Reserve one bounded snippet for the latest collected
-            # resolved outbound message, even when its event is older.
-            outbound_snippets = []
-            for who in group:
-                snippet = conn.execute(evidence_sql +
-                    "SELECT source, event_at, addressing, substr(subject,1,200),"
-                    " substr(body,1,200), direction, counterparty_basis, collection_order"
-                    " FROM evidence_items WHERE source=? AND sender_key=?"
-                    " AND direction='outbound' AND event_at>=?"
-                    " ORDER BY collection_order DESC LIMIT 1",
-                    (who.source, who.key, since)).fetchone()
-                if snippet:
-                    outbound_snippets.append(snippet)
-            if outbound_snippets:
-                latest_outbound = max(outbound_snippets, key=lambda row: row[-1])[:-1]
-                if latest_outbound not in selected:
-                    selected = selected[:MAX_INTERACTIONS - 1] + [latest_outbound]
-                    selected.sort(key=lambda row: row[1] or "", reverse=True)
+            # Attribution does not change insertion order. Review the changed
+            # snapshot in batches instead of acknowledging unseen rows after
+            # showing only the most recently inserted outbound message.
+            candidate = outbound_refreshes[mark]
+            marker = candidate["outbound_evidence"]
+            saved = have.get(mark, {}).get("outbound_evidence") or ""
+            partial = saved.rsplit(":", 1) if saved.count(":") == 2 else None
+            sweep_marker = partial[0] if partial else marker
+            offset = int(partial[1]) if partial else 0
+            batch, more = outbound_batch(conn, evidence_sql, group, since,
+                                         offset, MAX_INTERACTIONS - 1)
+            if offset and not batch:
+                # A manually edited, out-of-range cursor cannot mark work done.
+                offset = 0
+                sweep_marker = marker
+                batch, more = outbound_batch(conn, evidence_sql, group, since,
+                                             offset, MAX_INTERACTIONS - 1)
+            if more:
+                candidate["outbound_evidence"] = f"{sweep_marker}:{offset + len(batch)}"
+            elif sweep_marker != marker:
+                # New arrivals must not restart every partial pass at its
+                # first rows. Finish the pass, then revisit the changed set;
+                # only a complete pass over an unchanged set acknowledges it.
+                candidate["outbound_evidence"] = f"{marker}:0"
+            # Leave room for inbound context, but never let it displace the
+            # outbound batch. Only saving this page acknowledges that batch;
+            # a changed snapshot gets another pass, including late replies.
+            selected = batch + [row for row in rows if row[5] != "outbound"][:MAX_INTERACTIONS - len(batch)]
+            selected.sort(key=lambda row: row[1] or "", reverse=True)
         # Subject and body are kept apart rather than folded into one field
         # with `COALESCE(subject, body)`: a mail with a subject hides its
         # body behind it that way, and the body is exactly where a name and a
