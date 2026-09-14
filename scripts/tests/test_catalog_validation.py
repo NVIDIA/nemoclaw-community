@@ -20,6 +20,31 @@ from scripts.tests.catalog_test_support import CatalogFixtureMixin, ROOT
 
 
 class CatalogValidationTests(CatalogFixtureMixin, unittest.TestCase):
+    def test_canonical_metadata_cannot_hide_a_remote_resource(self) -> None:
+        for relation in (
+            "canonical stylesheet",
+            "canonical icon",
+            "canonical preload",
+        ):
+            with self.subTest(relation=relation):
+                parser = GeneratedHTMLValidator()
+                parser.feed(
+                    f'<link rel="{relation}" href="https://example.com/resource">'
+                )
+
+                self.assertIn(
+                    "Canonical metadata must use only the canonical link relation.",
+                    parser.errors,
+                )
+                self.assertIn(
+                    "Remote page resource is not allowed: "
+                    "https://example.com/resource",
+                    parser.errors,
+                )
+                self.assertEqual(
+                    parser.resources, ["https://example.com/resource"]
+                )
+
     def test_readme_compiler_rejects_unsafe_mermaid(self) -> None:
         unsafe_sources = {
             "unsupported type": "pie\n    title Unsafe",

@@ -129,21 +129,41 @@ python3 export_store.py --to ~/out
 ```
 
 Writes `store.md` and `store.json` side by side — the first to read, the
-second to process — and copies the memory and the learned preference policy
-whole.
+second to process — and copies the memory, the learned preference policy, and
+any skill override's own text whole, byte-for-byte, even if that text is not
+valid UTF-8.
+
+The export also writes `skill-overrides-recovery.json`. This versioned bundle
+contains the override text, retained base contents, accepted distribution,
+observations, applied manifest, and operation history. It preserves the base
+relationship needed to recover or remove an override after reset without
+re-forking. Only restore bundles you trust: their checksums detect corruption,
+not authorship. See [skill override recovery](skill-overrides.md#export-and-restore)
+for the restore command and its scope. Restoring override state does not
+restore the main ledger, memory, policy, or credentials.
 
 Each export is a snapshot rather than an accumulation. The whole thing is
 built beside the destination and moved into place at the end, so a previous
 export cannot leave a deleted page behind in the next one — which the
 date-based default directory makes likely, since the same path is reused all
 day — and a failure part-way leaves no directory at all rather than one that
-looks complete.
+looks complete. "Snapshot" describes the destination, not one single instant
+the whole export was captured at: the ledger tables are read together, in one
+transaction, while all override files, statuses, bases, and history are captured
+together under one global lock. The memory and policy copies
+happen afterward — so a change landing in the middle of an export can appear
+in one part of it and not another, the same way any live system being copied
+piece by piece can.
 
-Nothing outside the workspace is read. A symbolic link under `memory/` that
-points elsewhere on the machine stops the export rather than pulling that file
-into something the user is about to hand to somebody. Nothing is summarised
-and nothing is omitted; an export that quietly
-left something out would answer the question wrongly.
+Override exports include the retained base history and operation journal.
+Nothing outside the workspace
+is read *except* each shipped skill's own `skills/<name>/SKILL.md`, which
+computing a skill override's status requires reading to compare against. A
+symbolic link under `memory/` that points elsewhere on the machine stops the
+export rather than pulling that file into
+something the user is about to hand to somebody. Nothing is summarised and
+nothing is omitted; an export that quietly left something out would answer
+the question wrongly.
 
 A body cleared by the retention pass appears as `text cleared <timestamp>`
 rather than as an empty line, so the export distinguishes the same two cases
@@ -156,11 +176,14 @@ python3 reset.py --dry-run
 python3 reset.py --yes
 ```
 
-Removes the store, the memory, the learned policy and the collection
-bookkeeping, and reports each. It refuses without `--yes`, and if any part
-cannot be removed it says so and exits non-zero — a reset that half worked
-must not read as one that worked. The policy goes with the rest because it
-encodes what its subject ignores, which is about them.
+Removes the store, the memory, the learned policy, any skill overrides, and
+the collection bookkeeping, and reports each. Every currently applied
+override is restored to its shipped content first, so a customization is
+never left live and untracked once the bookkeeping that authorized it is
+gone. It refuses without `--yes`, and if any part cannot be removed it says
+so and exits non-zero — a reset that half worked must not read as one that
+worked. The policy goes with the rest because it encodes what its subject
+ignores, which is about them.
 
 On the supported provider path, the credential is not removed because it was
 never held here: it lives with the OpenShell gateway. `reset.py` prints the

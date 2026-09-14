@@ -12,8 +12,10 @@ author: NVIDIA
 license: Apache-2.0
 
 # What an install replaces. Everything else in the profile home is the user's
-# and is left alone — in particular `workspace`, which holds the store and the
-# memory. `cron` is deliberately absent: jobs are registered through the cron
+# and is left alone — in particular `workspace`, which holds the store, the
+# memory, and `workspace/skill-overrides` (a user's customization of a shipped
+# skill, and the bookkeeping that reapplies it after every install or update).
+# `cron` is deliberately absent: jobs are registered through the cron
 # interface by the installer, so an update cannot replace the live job store
 # along with its run history.
 distribution_owned:

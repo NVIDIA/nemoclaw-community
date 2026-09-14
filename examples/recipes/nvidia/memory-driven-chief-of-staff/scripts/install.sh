@@ -4,7 +4,7 @@
 #
 # Stage the profile into a Hermes runtime and make it runnable.
 #
-# Three steps. The second is the one a reader skips: a freshly
+# Four steps. The third is the one a reader skips: a freshly
 # installed profile has no model configuration, so every agent-backed job fails
 # on its first tick with "no model configured". The runtime already knows which
 # model to use, so the profile inherits that rather than the recipe asking the
@@ -49,7 +49,7 @@ command -v hermes >/dev/null 2>&1 || {
   exit 1
 }
 
-echo "1/3  Installing the profile distribution"
+echo "1/4  Installing the profile distribution"
 hermes profile install "$RECIPE_ROOT/profile" --name "$PROFILE" --force --yes
 
 # `|| true` matters: `hermes profile show` exits 1 for a profile that does not
@@ -62,7 +62,26 @@ if [[ -z "$PROFILE_HOME" ]]; then
   exit 1
 fi
 
-echo "2/3  Carrying over the model settings"
+# Re-applies whatever the user has already customized on top of the copy
+# `hermes profile install` just laid down. On a fresh install there is
+# nothing to apply yet; on a re-install (`--force`) this is what puts a
+# previously forked skill back, since the copy above just overwrote it with
+# the shipped version again.
+#
+# Exits nonzero when any single skill's override could not be applied — a
+# signal worth seeing, not worth stopping the install over. The `if !`
+# guard keeps `set -e` from treating that as fatal; the carried-over model
+# settings and the scheduled jobs below still matter even when one
+# override does not.
+echo "2/4  Registering shipped skills and re-applying overrides"
+HERMES_HOME="$PROFILE_HOME" python3 "$RECIPE_ROOT/profile/scripts/skill_overrides.py" \
+  --record-distribution "$RECIPE_ROOT/profile"
+if ! HERMES_HOME="$PROFILE_HOME" python3 "$RECIPE_ROOT/profile/scripts/skill_overrides.py" --apply; then
+  echo "     one or more overrides could not be applied; see the JSON above." >&2
+  echo "     continuing — this does not block the rest of install." >&2
+fi
+
+echo "3/4  Carrying over the model settings"
 
 # Named settings through the CLI, never a copy of the file.
 #
@@ -78,7 +97,7 @@ echo "2/3  Carrying over the model settings"
 # as the left operand of `&&` — `false && echo` is a no-op, not an abort — so
 # writing this as `config set … && echo …` swallowed the failure. A profile
 # that took `model.default` and silently dropped `provider` and `base_url`
-# passed both checks below and got all seven jobs registered, pointed at
+# passed both checks below and got all eight jobs registered, pointed at
 # whatever route it had left.
 # What a profile holds instead of a key when an OpenShell gateway substitutes
 # the credential at the boundary. A public constant, not a secret — it is only
@@ -180,7 +199,7 @@ else
   echo "     model.api_key is set on this profile"
 fi
 
-echo "3/3  Registering scheduled jobs"
+echo "4/4  Registering scheduled jobs"
 PROFILE_NAME="$PROFILE" bash "$HERE/register-jobs.sh"
 
 cat <<EOF
