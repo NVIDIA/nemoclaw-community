@@ -29,9 +29,10 @@ trap 'rm -f "$staged"' EXIT
 cp "$EXAMPLE_DIR/agents/hermes/Dockerfile" "$staged"
 
 model="${NEMOCLAW_MODEL:-${FINANCE_MODEL:-nvidia/nemotron-3-super-120b-a12b}}"
-sed -i \
+sed \
   -e "s|^ARG NEMOCLAW_MODEL=.*|ARG NEMOCLAW_MODEL=$model|" \
-  "$staged"
+  "$staged" >"$staged.tmp"
+mv "$staged.tmp" "$staged"
 
 phase="$(sandbox_phase)"
 case "${phase,,}" in
@@ -90,7 +91,8 @@ case "${phase,,}" in
 esac
 
 echo "Building and creating sandbox $NEMOCLAW_SANDBOX_NAME..."
-setsid openshell sandbox create \
+python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \
+  openshell sandbox create \
   --from "$staged" \
   --name "$NEMOCLAW_SANDBOX_NAME" \
   --policy "$EXAMPLE_DIR/policy.yaml" \
