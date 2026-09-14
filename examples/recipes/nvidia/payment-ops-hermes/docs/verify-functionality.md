@@ -12,6 +12,7 @@ It checks:
 - Phoenix, the mock rail, and the FinGuard UI;
 - Hermes health and pinned version inside the sandbox;
 - the native NeMo Relay version and valid configuration;
+- a live Hermes canary turn exported by native Relay, redacted, and found in Phoenix;
 - payment-rail inaccessibility from the sandbox.
 
 The reachability probe alone does not distinguish an OpenShell policy denial

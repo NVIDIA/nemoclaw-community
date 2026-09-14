@@ -56,6 +56,6 @@ sandbox_workload_healthy() {
   openshell sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" -- \
     curl -fsS http://127.0.0.1:8642/health >/dev/null 2>&1 \
     && openshell sandbox exec --name "$NEMOCLAW_SANDBOX_NAME" -- \
-      /opt/hermes/.venv/bin/python -c 'from importlib.metadata import version; import tomllib; from pathlib import Path; from nemo_relay import plugin; path = Path("/etc/nemo-relay/config/plugins.toml"); config = tomllib.loads(path.read_text(encoding="utf-8")); diagnostics = plugin.validate(config).get("diagnostics", []); assert version("hermes-agent") == "0.20.6"; assert version("nemo-relay") == "0.7.2"; assert not diagnostics, diagnostics' \
+      /opt/hermes/.venv/bin/python -c 'from importlib.metadata import version; import tomllib; from pathlib import Path; from nemo_relay import plugin; path = Path("/etc/nemo-relay/config/plugins.toml"); config = tomllib.loads(path.read_text(encoding="utf-8")); diagnostics = plugin.validate(config).get("diagnostics", []); assert version("hermes-agent") == "0.20.6"; assert version("nemo-relay") == "0.7.2"; assert any(component.get("kind") == "pii_redaction" and component.get("enabled", True) for component in config.get("components", [])); assert not diagnostics, diagnostics' \
       >/dev/null 2>&1
 }

@@ -32,3 +32,21 @@ timeout_millis = 3000
 [components.config.opentelemetry.endpoints.resource_attributes]
 "openinference.project.name" = "finguard-payment-ops"
 "nemo.claw.example" = "finguard-payment-ops"
+
+# Placeholder-shaped references in the Hermes system prompt are copied into
+# Relay telemetry. Redact them without changing the live request.
+[[components]]
+kind = "pii_redaction"
+enabled = true
+
+[components.config]
+version = 1
+
+[[components.config.profiles]]
+mode = "builtin"
+priority = 80
+
+[components.config.profiles.builtin]
+action = "regex_replace"
+pattern = "openshell:resolve:env:[A-Za-z_][A-Za-z0-9_]*"
+replacement = "[openshell env placeholder]"
