@@ -1,0 +1,70 @@
+<!doctype html>
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+  Reproducible screenshot fixture with synthetic content. It never contacts NemoClaw.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ask NemoClaw screenshot fixture</title>
+    <link rel="icon" href="data:,">
+    <style>
+      :root { color-scheme: dark; font-family: Arial, Helvetica, sans-serif; }
+      * { box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #000; color: #fff; }
+      body { display: grid; grid-template-columns: minmax(0, 1fr) 560px; }
+      .browser { min-width: 0; background: #0f100f; border-right: 1px solid #4b4b4b; }
+      .browser-bar { height: 66px; display: flex; align-items: center; gap: 18px; padding: 0 24px; background: #1a1a1a; border-bottom: 1px solid #313131; }
+      .dots { display: flex; gap: 8px; }
+      .dot { width: 12px; height: 12px; border-radius: 50%; background: #757575; }
+      .dot:first-child { background: #76b900; }
+      .tab { min-width: 230px; padding: 12px 18px; border-radius: 10px 10px 0 0; background: #313131; font-weight: 700; }
+      .address { flex: 1; min-width: 0; padding: 11px 18px; border-radius: 24px; background: #000; color: #a7a7a7; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      .video { position: relative; height: calc(100% - 212px); min-height: 590px; display: grid; place-items: center; overflow: hidden; background: radial-gradient(circle at 82% 20%, #203500 0, #080a08 23%, #000 60%); }
+      .green-axis { position: absolute; inset: 0 auto 0 0; width: 12px; background: #76b900; }
+      .video-label { position: absolute; left: 42px; top: 30px; color: #76b900; font-size: 14px; font-weight: 700; letter-spacing: .18em; }
+      .stage { width: min(920px, 84%); }
+      .stage h1 { margin: 0 0 42px; font-size: 44px; line-height: 1.12; }
+      .stage h1 span { color: #76b900; }
+      .terminal { width: 86%; padding: 26px 32px 34px; border: 1px solid #4b4b4b; border-radius: 13px; background: rgba(10, 12, 10, .92); box-shadow: 0 22px 70px rgba(0,0,0,.55); font: 24px/1.75 ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .terminal-head { display: flex; gap: 8px; margin-bottom: 18px; }
+      .terminal-head i { width: 12px; height: 12px; border-radius: 50%; background: #4b4b4b; }
+      .prompt { color: #76b900; }
+      .cursor { display: inline-block; width: 13px; height: 26px; vertical-align: -4px; background: #76b900; }
+      .caption { position: absolute; left: 42px; bottom: 24px; padding: 11px 16px; background: rgba(0,0,0,.84); color: #e0e0e0; font-size: 18px; }
+      .meta { height: 146px; padding: 24px 34px; background: #151515; border-top: 1px solid #313131; }
+      .meta h2 { margin: 0 0 12px; font-size: 24px; }
+      .meta p { margin: 0; color: #a7a7a7; font-size: 16px; }
+      .side-panel { width: 100%; height: 100%; border: 0; background: #0b0d0c; }
+    </style>
+  </head>
+  <body>
+    <section class="browser" aria-label="Synthetic browser page">
+      <div class="browser-bar">
+        <div class="dots" aria-hidden="true"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <div class="tab">NemoClaw demo</div>
+        <div class="address">https://example.com/nemoclaw-demo</div>
+      </div>
+      <div class="video">
+        <div class="green-axis"></div>
+        <div class="video-label">NVIDIA NEMOCLAW COMMUNITY</div>
+        <div class="stage">
+          <h1>Ask your agent about the <span>page you can see</span></h1>
+          <div class="terminal" aria-label="Synthetic terminal example">
+            <div class="terminal-head" aria-hidden="true"><i></i><i></i><i></i></div>
+            <div><span class="prompt">$</span> nemoclaw onboard</div>
+            <div><span class="prompt">$</span> ask about this browser tab <span class="cursor"></span></div>
+          </div>
+        </div>
+        <div class="caption">Readable text and the rendered viewport become agent context.</div>
+      </div>
+      <div class="meta">
+        <h2>NemoClaw browser context demo</h2>
+        <p>A synthetic page demonstrates multimodal context without exposing credentials, private endpoints, or personal data.</p>
+      </div>
+    </section>
+    <iframe class="side-panel" title="Ask NemoClaw side panel" src="sidepanel_browser_fixture.html"></iframe>
+  </body>
+</html>

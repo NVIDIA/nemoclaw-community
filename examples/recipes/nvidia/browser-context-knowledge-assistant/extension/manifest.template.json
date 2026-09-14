@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Ask NemoClaw",
+  "description": "Ask a NemoClaw agent about the current browser page.",
+  "version": "0.10.11",
+  "minimum_chrome_version": "116",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwr8B/RcrLRQ1ObNib3+ernj5nMiXxw1PHGTxL6KR5tiQSJeQPFGqz7VAknHZg8ZnYYtX69xtSLC/wPFdLL8izgwGUoBfnaWXO68NVdegh9DWABUcHmk04kcuclgX7EuYEoqiQkONQ9NwrYY504ui2GPeZqp+kzNUmcQ175zGuf1QsqrSULARd3RQ34B9gtYypKha1dTO/bYi/t1itdmt4er03M28+Uckf5bqDv3P963xCZFTQGEtwRxJBlgdC1cIqVPyoFY4OFN9SjZbHxijGE+Z7kpwXUBNGifhJ8kYAr+4MwxUv1EyM4sukqWOne0cWTdISwQUvDLNOFXvKDuJcwIDAQAB",
+  "permissions": ["sidePanel", "activeTab", "scripting", "storage", "cookies"],
+  "host_permissions": [],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "action": {
+    "default_title": "Ask NemoClaw about this page"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  }
+}
