@@ -214,9 +214,30 @@ Select the final model call to inspect the response, duration, and token usage.
 # Try Example 2 with Another Compatible Model
 
 The default configuration uses NVIDIA Build and is the configuration validated
-by this tutorial. To explore the same task with another compatible endpoint,
-create a local model profile and add the credential named by that profile to
-`keys.env`:
+by this tutorial. The recorded Claude Sonnet 5 run below shows the same task
+and verifier with a different compatible model endpoint.
+
+## Claude Sonnet 5 Example
+
+These screenshots show a recorded Example 2 run with Claude Sonnet 5. The
+[result summary](results/conference-research-claude-sonnet-5.json) records the
+model configuration, runtime versions, and verifier result. It is a trace
+example, not a model comparison. Phoenix reported five model calls, five tool
+calls, no tool errors, 60,059 tokens, and an estimated cost of `$0.053960`.
+
+The trace tree shows the total estimated cost above the span list and token
+counts beside the model spans. Select an image to open it at full resolution.
+
+[![Phoenix trace tree showing total cost, token counts, and model, file, and web spans](screenshots/phoenix-trace-tree.png)](screenshots/phoenix-trace-tree.png)
+
+| Web-search call | Final model call |
+| --- | --- |
+| [![Phoenix web-search span showing the query and returned results](screenshots/phoenix-web-search-span.png)](screenshots/phoenix-web-search-span.png) | [![Phoenix final model span showing the response and model-call metrics](screenshots/phoenix-final-llm-span.png)](screenshots/phoenix-final-llm-span.png) |
+
+## Run the Task with Your Own Compatible Model
+
+To run the same task with another compatible endpoint, create a local model
+profile and add the credential named by that profile to `keys.env`:
 
 ```bash
 cp config/model_profile.env.example model-profile.env
