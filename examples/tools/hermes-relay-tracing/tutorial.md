@@ -167,9 +167,10 @@ model.
 
 ### Explore the Run in Phoenix
 
-Open `http://localhost:6006/projects` in your browser. If you selected
-a different port, use that port instead of `6006`. The trace tree appears on the
-left, and selecting a model or tool call opens its details on the right.
+Open Phoenix in your browser at `http://localhost:6006/projects`. If you
+selected a different port, replace `6006` with that port. The trace tree
+appears on the left. Select a model or tool call to view its details on the
+right.
 
 Start with the first and final model calls. The first call shows the request to
 read the travel plan, find the matching conference, verify it on an official
