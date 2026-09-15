@@ -32,7 +32,7 @@ endpoint, profile, credential, or production data.
 | Question | Answer |
 | --- | --- |
 | What do I get? | A Chrome side panel with isolated Hermes conversations, fresh browser context on every message, and local NeMo Relay ATIF traces. |
-| Where does it run? | On a Linux host running NemoClaw with Hermes. This guide uses the NemoClaw Brev launchable. |
+| Where does it run? | The NemoClaw agent and Hermes server run on a Linux host. The Ask NemoClaw extension runs in Chrome on your workstation. This guide uses the NemoClaw Brev launchable for the Linux host. |
 | What was tested? | Local tests and a fresh Brev deployment using NemoClaw 0.0.123, OpenShell 0.0.106, and `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` on September 14, 2026. |
 | What leaves the browser? | The active page URL, title, selected text, readable page text, visible viewport image, and your prompt go to your configured Hermes deployment and inference provider. |
 | Can it take actions? | Not by itself. Tool actions still need an installed Hermes tool, its credentials, and an OpenShell policy that allows the exact destination. |
