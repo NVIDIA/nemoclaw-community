@@ -38,6 +38,7 @@ grep -Fq 'Kubernetes deployment exposes Hermes through an authenticated HTTPS in
   "$ROOT/README.md"
 grep -Fq 'shutil.copytree(origin, destination, dirs_exist_ok=True)' \
   "$ROOT/scripts/prepare-hermes-image.py"
+grep -Fq 'supports_vision = true' "$ROOT/scripts/prepare-hermes-image.py"
 if "$ROOT/scripts/check-connection.sh" 'https://hermes.example.com/path' >/dev/null 2>&1; then
   printf 'connection checker accepted a URL path instead of an exact origin\n' >&2
   exit 1
@@ -138,6 +139,14 @@ printf '%s\n' \
   '      enabled: ["nemoclaw"],' \
   '    },' \
   '};' \
+  '' \
+  '  applyHermesManagedRoute(config, {' \
+  '    model: settings.model,' \
+  '    baseUrl: settings.baseUrl,' \
+  '    upstreamProvider: settings.upstreamProvider,' \
+  '    inferenceApi: settings.inferenceApi,' \
+  '    contextWindow: settings.contextWindow,' \
+  '  });' \
   > "$IMAGE_FIXTURE/agents/hermes/config/hermes-config.ts"
 "$PYTHON_BIN" "$ROOT/scripts/prepare-hermes-image.py" --nemoclaw-source "$IMAGE_FIXTURE"
 "$PYTHON_BIN" "$ROOT/scripts/prepare-hermes-image.py" --nemoclaw-source "$IMAGE_FIXTURE"
@@ -166,6 +175,10 @@ grep -Fq '/etc/nemoclaw/ask-nemoclaw-loopback-mode' \
 grep -Fq 'enabled: ["nemoclaw", "ask-nemoclaw", "observability/nemo_relay", "dashboard_auth/basic"]' \
   "$IMAGE_FIXTURE/agents/hermes/config/hermes-config.ts"
 grep -Fq '"plugins",' \
+  "$IMAGE_FIXTURE/agents/hermes/config/hermes-config.ts"
+grep -Fq 'settings.model === "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"' \
+  "$IMAGE_FIXTURE/agents/hermes/config/hermes-config.ts"
+grep -Fq '(config.model as Record<string, unknown>).supports_vision = true;' \
   "$IMAGE_FIXTURE/agents/hermes/config/hermes-config.ts"
 if grep -Fq '"plugins.enabled",' \
   "$IMAGE_FIXTURE/agents/hermes/config/hermes-config.ts"; then

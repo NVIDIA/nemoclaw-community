@@ -280,6 +280,37 @@ For a quick live check:
 6. Check `/sandbox/.hermes-data/nemo-relay/atif` for a new trace file. Don’t
    inspect trace values when the page contains sensitive data.
 
+NeMo Relay keeps these ATIF JSON traces inside the sandbox. From the NemoClaw
+host, list their filenames without printing their contents:
+
+```bash
+nemohermes ask-nemoclaw exec -- \
+  find /sandbox/.hermes-data/nemo-relay/atif \
+    -maxdepth 1 -type f -name '*.json' -printf '%f\n'
+```
+
+To copy the traces to the host for an authorized review:
+
+```bash
+mkdir -p "$HOME/ask-nemoclaw-traces"
+openshell sandbox download \
+  ask-nemoclaw \
+  /sandbox/.hermes-data/nemo-relay/atif \
+  "$HOME/ask-nemoclaw-traces"
+chmod -R go-rwx "$HOME/ask-nemoclaw-traces"
+```
+
+On Brev, copy that directory to your workstation from a local terminal:
+
+```bash
+brev copy \
+  <instance-name>:/home/ubuntu/ask-nemoclaw-traces \
+  "$HOME/Downloads/"
+```
+
+Treat the downloaded files as sensitive because they can contain the prompt,
+browser context, model output, and tool events.
+
 See [Development and verification](docs/development.md) for the complete test
 matrix and shared-deployment reference.
 

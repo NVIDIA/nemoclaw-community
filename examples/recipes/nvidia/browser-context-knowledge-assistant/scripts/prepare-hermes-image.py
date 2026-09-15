@@ -25,6 +25,23 @@ ROUTING_KEYS_AFTER = (
     '  "plugins",\n'
     '] as const;'
 )
+VISION_MODEL_ID = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+VISION_ROUTE_BEFORE = """  applyHermesManagedRoute(config, {
+    model: settings.model,
+    baseUrl: settings.baseUrl,
+    upstreamProvider: settings.upstreamProvider,
+    inferenceApi: settings.inferenceApi,
+    contextWindow: settings.contextWindow,
+  });"""
+VISION_ROUTE_AFTER = VISION_ROUTE_BEFORE + f"""
+
+  // NemoClaw presents its enforced inference route to Hermes as a custom
+  // OpenAI-compatible provider. Hermes cannot discover capabilities for that
+  // provider automatically, so preserve native viewport pixels for the Omni
+  // model tested by this recipe.
+  if (settings.model === "{VISION_MODEL_ID}") {{
+    (config.model as Record<string, unknown>).supports_vision = true;
+  }}"""
 LEGACY_MANAGED_PLUGIN_PATH = '  "plugins.enabled",\n'
 RELAY_VERSION = "0.7.2"
 RELAY_WHEEL_FILENAME = (
@@ -85,10 +102,17 @@ def update_managed_policy(text: str) -> str:
             "The managed Hermes dashboard policy has changed; review the current "
             "NemoClaw dashboard seeding contract before applying this example"
         )
+    if VISION_ROUTE_AFTER not in text and VISION_ROUTE_BEFORE not in text:
+        raise SystemExit(
+            "The managed Hermes inference route has changed; review the current "
+            "NemoClaw vision capability contract before applying this example"
+        )
     return text.replace(
         MANAGED_POLICY_BEFORE, MANAGED_POLICY_AFTER, 1
     ).replace(
         ROUTING_KEYS_BEFORE, ROUTING_KEYS_AFTER, 1
+    ).replace(
+        VISION_ROUTE_BEFORE, VISION_ROUTE_AFTER, 1
     ).replace(
         LEGACY_MANAGED_PLUGIN_PATH, "", 1
     )

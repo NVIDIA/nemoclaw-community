@@ -98,4 +98,7 @@ doesn’t override that route.
 
 This example was tested with
 `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`. A text-only primary model can
-still use readable page text but can’t interpret the viewport image.
+still use readable page text but can’t interpret the viewport image. NemoClaw
+exposes its enforced route to Hermes as a custom provider, so this recipe marks
+that tested Omni model as vision-capable in the generated Hermes configuration.
+Other models are not marked automatically.
