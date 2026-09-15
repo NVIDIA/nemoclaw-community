@@ -33,6 +33,7 @@ grep -Fq 'Removing existing example sandbox' "$ROOT/scripts/onboard.sh"
 grep -Fq '"$NEMOHERMES_BIN" "$SANDBOX_NAME" destroy -y' "$ROOT/scripts/onboard.sh"
 grep -Fq 'ONBOARD_ARGS+=(--fresh)' "$ROOT/scripts/onboard.sh"
 grep -Fq 'scripts/build-extension.sh' "$ROOT/README.md"
+grep -Fq 'nemoclaw status' "$ROOT/README.md"
 grep -Fq 'shutil.copytree(origin, destination, dirs_exist_ok=True)' \
   "$ROOT/scripts/prepare-hermes-image.py"
 if "$ROOT/scripts/check-connection.sh" 'https://hermes.example.com/path' >/dev/null 2>&1; then

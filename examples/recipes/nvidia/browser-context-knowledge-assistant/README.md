@@ -81,10 +81,10 @@ Create one instance from the launchable, but **don’t run the launchable’s we
 onboarding flow**. The steps below update NemoClaw, prepare the custom Hermes
 image, and then create the only sandbox this example needs.
 
-Connect to the instance and confirm that it has no sandbox:
+Connect to the instance and confirm that NemoClaw lists no sandboxes:
 
 ```bash
-openshell sandbox list
+nemoclaw status
 ```
 
 ### 2. Prepare the host
