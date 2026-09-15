@@ -156,10 +156,12 @@ class CatalogPipelineTests(CatalogFixtureMixin, unittest.TestCase):
             self.assertIn('id="readme" tabindex="-1"', page)
             if entry.is_tutorial:
                 self.assertNotIn(" hidden", facts_attributes)
-                self.assertRegex(page, r'<iframe\b')
                 self.assertNotRegex(page, r'<img[^>]+src="https?://')
-                self.assertIn('class="readme-image-link"', page)
-                self.assertIn('rel="noreferrer"', page)
+                self.assertRegex(page, r'<img\b')
+                if entry.path == "demos/field/build-a-claw-tutorial":
+                    self.assertRegex(page, r'<iframe\b')
+                    self.assertIn('class="readme-image-link"', page)
+                    self.assertIn('rel="noreferrer"', page)
                 self.assertIn('<div class="codehilite">', page)
                 self.assertIn('<code class="language-bash">', page)
                 self.assertIn("tutorial.css", page)

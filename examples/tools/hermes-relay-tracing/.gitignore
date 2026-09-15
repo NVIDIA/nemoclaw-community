@@ -1,0 +1,10 @@
+# Local credentials and generated tutorial state.
+keys.env
+model-profile.env
+.tutorial-runtime/
+artifacts/
+
+# Python caches.
+__pycache__/
+.pytest_cache/
+*.py[cod]
