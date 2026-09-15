@@ -5,9 +5,16 @@ SPDX-License-Identifier: Apache-2.0
 
 # Trace and Evaluate Hermes Agent Runs with NeMo Relay
 
-Run Example 1 from the README before starting this guide. It verifies the basic
-integration. This guide shows how to inspect the output from that run, then use
-the same environment for a task that combines file access and web search.
+# Overview
+
+This guide picks up after Example 1 in the Quick Start in the README. In the
+next section, you will learn how ATOF, ATIF, and OpenTelemetry with OpenInference
+provide different views of an agent's lifecycle and inspect the ATOF event stream
+and ATIF trajectory from Example 1. After learning about these traces, you will
+run Example 2 using the same environment. In this more realistic task, Hermes
+reads a travel plan, finds and verifies a matching conference, and saves a
+report. You will then open the run in Phoenix and follow its model and tool
+calls, timing, token usage, errors, and captured inputs and outputs.
 
 # Understand the Trace Outputs
 

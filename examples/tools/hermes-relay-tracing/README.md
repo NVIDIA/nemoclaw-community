@@ -14,19 +14,33 @@ SPDX-License-Identifier: Apache-2.0
 | Harness | Hermes 0.21.1 |
 | OpenShell | N/A |
 
-An agent's final answer does not show every model call, tool call, retry, or
-error that occurred during a run. NeMo Relay captures that execution evidence
-without requiring changes to Hermes Agent. Hermes includes Relay and maps its
-session, turn, model, and tool lifecycles to Relay scopes and lifecycle events.
+## Overview
 
-This example runs two Hermes tasks with
-[NVIDIA Nemotron 3.5 Lightning](https://build.nvidia.com/nvidia/nemotron-3.5-lightning-30b-a3b).
-Example 1 runs a fixed Python script in a Docker sandbox and verifies its exact
-result. Example 2 reads a travel plan, searches for a matching conference,
-verifies the result on the web, and writes a report. Both tasks save an Agent
-Trajectory Observability Format (ATOF) event stream and an Agent Trajectory
-Interchange Format (ATIF) trajectory. Example 2 also sends an OpenTelemetry
-trace to a local [Arize Phoenix](https://arize.com/phoenix/) instance.
+An agent's final answer does not show every model call, tool call, retry, or
+error that occurred during a run. An incorrect result can come from missing
+context, a poor tool choice, or a failed call. Even a correct result can hide
+repeated searches, unnecessary retries, and extra model calls. Tracing the run
+helps you find these behaviors and understand their effect on reliability,
+latency, and token usage.
+
+[NVIDIA NeMo Relay](https://docs.nvidia.com/nemo/relay/latest/about-nemo-relay/overview)
+gives agent developers a common way to observe and control model and tool
+execution. [Hermes Agent](https://hermes-agent.nousresearch.com/) includes Relay
+natively and maps its sessions, turns, model calls, and tool calls to Relay's
+scope hierarchy. Relay records lifecycle events as that work begins and ends,
+preserving timing and parent-child relationships.
+
+**In this tutorial, you will:**
+
+1. Set up an isolated environment for Hermes Agent and its built-in NeMo Relay
+   integration.
+2. Ask Hermes to run a small Python script, verify the expected result, and
+   inspect the resulting Agent Trajectory Observability Format (ATOF) event
+   stream and Agent Trajectory Interchange Format (ATIF) trajectory.
+3. Ask Hermes to find a conference that fits a travel plan, save a verified
+   report, and explore the run in [Arize Phoenix](https://arize.com/phoenix/).
+4. Learn how to combine task verification with trace data when evaluating a
+   controlled change to the prompt, tools, or agent harness.
 
 ## Screenshot
 
@@ -58,6 +72,8 @@ Example 1 confirms that Hermes can call the model, run a terminal command in a
 Docker sandbox, and create the ATOF and ATIF files. It is the recommended first
 run because its result has an exact verifier.
 
+### Set Up the Tutorial
+
 Before you start, install [Git](https://git-scm.com/downloads),
 [curl](https://curl.se/download.html), and
 [Docker](https://docs.docker.com/get-started/get-docker/). Start Docker, then
@@ -85,6 +101,19 @@ Set your NVIDIA Build API key in `keys.env`. The file is ignored by Git.
 ```ini
 NVIDIA_API_KEY=<your-nvidia-api-key>
 ```
+
+### Example 1: Run and Trace a Terminal Task
+
+Start with a small, predictable task to confirm that the setup works before
+moving to the more realistic scenario in Example 2. The included
+[`sample.py`](sample-project/sample.py) script contains one statement:
+`print("VALUE=42")`. Hermes sends Nemotron 3.5 Lightning an instruction to run
+that file. To complete the task, the model must request Hermes Agent's terminal
+tool, which executes the script inside an isolated Docker container.
+
+The runner checks that Hermes returns the exact output `VALUE=42`. A passing
+run confirms that the model call, terminal-tool execution, Docker sandbox, and
+Relay trace exporters all worked together.
 
 The following commands contact NVIDIA Build. The terminal task runs in Docker
 with no network access, no repository mount, and no API key passed to the
@@ -131,6 +160,12 @@ ATOF and ATIF output.
 
 **This does not verify:** that live web search is available or that a future
 model, provider, or Hermes Agent release behaves the same way.
+
+### Why the Task Runs in Docker
+
+Hermes can execute terminal commands, so this tutorial runs them in an isolated
+Docker container instead of on your host. The container cannot access the
+network, repository checkout, or NVIDIA API key.
 
 ## Continue with Example 2
 
