@@ -98,6 +98,7 @@ if grep -Fq 'sudo install -o root -g root -m 0755' "$ROOT/README.md"; then
   exit 1
 fi
 grep -Fq 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning' "$ROOT/README.md"
+grep -Fq 'https://github.com/NVIDIA/NemoClaw/issues/8887' "$ROOT/README.md"
 grep -Fq 'one primary model for every' "$ROOT/docs/security.md"
 grep -Fq 'A shorter `hermes plugins install` path may be useful later' "$ROOT/docs/development.md"
 grep -Fq 'version: "0.9.4"' "$ROOT/hermes-plugin/plugin.yaml"

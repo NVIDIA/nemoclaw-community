@@ -161,7 +161,13 @@ bash scripts/onboard.sh --fresh
 
 Enter your inference credential through the normal NemoClaw prompt. For
 viewport understanding, select
-`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` as the primary model. A
+`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` as the primary model. This is
+needed because NemoClaw and OpenShell currently expose one enforced inference
+route to Hermes. Hermes auxiliary vision expects a separate model route, so it
+doesn’t work with this recipe’s current single-route setup. Secure multi-model
+OpenShell routing, including Switchyard integration, is tracked in
+[NVIDIA/NemoClaw#8887](https://github.com/NVIDIA/NemoClaw/issues/8887). Until
+that support is available, the primary model must accept image input. A
 text-only primary model can still use readable page text, but it can’t analyze
 the viewport image.
 
