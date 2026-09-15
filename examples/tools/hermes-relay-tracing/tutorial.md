@@ -27,6 +27,10 @@ events, `parent_uuid` connects the tool call to its parent, and the tool-call
 identifier links the model's request to the invocation when the integration
 supplies one.
 
+The verifier checks both the trace status and returned tool failure fields,
+including nonzero terminal exit codes. A completed callback alone does not
+prove that the requested command, file operation, or web request succeeded.
+
 Example 2 also uses [Relay's OpenInference
 projection](https://docs.nvidia.com/nemo/relay/latest/configure-plugins/observability/openinference)
 to create an OpenTelemetry trace. Relay sends that trace to [Arize

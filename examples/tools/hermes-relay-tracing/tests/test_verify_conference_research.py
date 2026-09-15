@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -56,6 +57,18 @@ def successful_tool_events(
 
 
 class VerifyConferenceResearchTests(unittest.TestCase):
+    def test_returned_tool_failure_cannot_satisfy_the_research_path(self) -> None:
+        for index, name in enumerate(("read_file", "web_search", "web_extract", "write_file")):
+            with self.subTest(tool=name):
+                events = successful_tool_events()
+                events[index * 2 + 1]["data"] = json.dumps({"error": "Synthetic tool failure"})
+                with self.assertRaisesRegex(ValueError, name):
+                    verify_conference_research.validate_research_trace(
+                        events, expected_read_path=EXPECTED_READ_PATH,
+                        expected_write_path=EXPECTED_WRITE_PATH,
+                        expected_source_prefix=EXPECTED_SOURCE,
+                    )
+
     def test_final_response_returns_content_after_the_last_session_id(self) -> None:
         output = "reasoning\nsession_id: first\ndraft\nsession_id: final\nCOLT 2026\n"
 

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import unittest
 from contextlib import redirect_stdout
@@ -17,6 +18,71 @@ import summarize_atof
 
 
 class SummarizeAtofTests(unittest.TestCase):
+    def test_returned_failures_are_not_successful_tool_calls(self) -> None:
+        failures = [
+            {"exit_code": 1, "error": None},
+            {"exit_code": -1, "error": "Synthetic command failure"},
+            {"error": "Synthetic file or web failure"},
+            {"is_error": True},
+            {"success": False},
+            {"status": "blocked"},
+            {"status": "degraded"},
+        ]
+        for failure in failures:
+            for encoded in (False, True):
+                with self.subTest(failure=failure, encoded=encoded):
+                    events = summarize_atof.load_events(EXAMPLES / "terminal-task.atof.jsonl")
+                    events[-1]["data"] = json.dumps(failure) if encoded else failure
+                    summary = summarize_atof.summarize(events)
+                    self.assertEqual(summary["tool_errors"], 1)
+                    self.assertFalse(summarize_atof.has_successful_tool_command(events, "sample.py"))
+                    self.assertFalse(summarize_atof.has_successful_tool_name(events, "terminal"))
+                    with self.assertRaisesRegex(ValueError, "error-free tool calls"):
+                        summarize_atof.validate_trace_requirements(
+                            events, summary, require_llm=True, require_tool=True,
+                            require_no_tool_errors=True, required_tool_command="sample.py",
+                            required_tool_names=["terminal"],
+                        )
+
+    def test_successful_results_and_arbitrary_content_are_not_errors(self) -> None:
+        for result in (
+            {"exit_code": 0, "error": None, "output": "error: quoted page text"},
+            {"success": True, "status": "completed"},
+            {"content": '{"error": "text in a document"}'},
+            "ordinary text mentioning an error",
+            None,
+        ):
+            for encoded in (False, True):
+                with self.subTest(result=result, encoded=encoded):
+                    event = {"metadata": {"otel.status_code": "OK"},
+                             "data": json.dumps(result) if encoded else result}
+                    self.assertFalse(summarize_atof.is_error_status(event))
+
+    def test_trace_error_is_not_hidden_by_a_successful_result(self) -> None:
+        self.assertTrue(summarize_atof.is_error_status({
+            "metadata": {"otel.status_code": "ERROR"}, "data": {"exit_code": 0},
+        }))
+        self.assertTrue(summarize_atof.is_error_status({
+            "metadata": {"otel.status_code": "OK", "status": "ERROR"},
+        }))
+
+    def test_web_extract_counts_per_page_failures(self) -> None:
+        for encoded in (False, True):
+            with self.subTest(encoded=encoded):
+                result = {"results": [
+                    {"url": "https://example.com/first", "content": "Public text"},
+                    {"url": "https://example.com/second", "error": "Synthetic extraction failure"},
+                ]}
+                self.assertTrue(summarize_atof.is_error_status({
+                    "name": "web_extract", "metadata": {"otel.status_code": "OK"},
+                    "data": json.dumps(result) if encoded else result,
+                }))
+                result["results"].pop()
+                self.assertFalse(summarize_atof.is_error_status({
+                    "name": "web_extract", "metadata": {"otel.status_code": "OK"},
+                    "data": json.dumps(result) if encoded else result,
+                }))
+
     def test_main_prints_token_usage_only_when_requested(self) -> None:
         trace = str(EXAMPLES / "terminal-task.atof.jsonl")
         default_output = StringIO()

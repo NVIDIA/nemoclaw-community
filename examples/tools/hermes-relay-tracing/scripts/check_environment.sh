@@ -22,14 +22,14 @@ if [[ ! -x "$hermes_python" ]]; then
   exit 1
 fi
 
-hermes_version="$($hermes_python - <<'PY'
+hermes_version="$("$hermes_python" - <<'PY'
 from hermes_cli import __version__
 
 print(__version__)
 PY
 )"
 
-relay_version="$($hermes_python - <<'PY'
+relay_version="$("$hermes_python" - <<'PY'
 from importlib.metadata import PackageNotFoundError, version
 
 try:

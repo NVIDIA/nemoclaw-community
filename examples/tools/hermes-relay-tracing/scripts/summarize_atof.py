@@ -53,8 +53,38 @@ def is_scope(event: Event, category: str, phase: str) -> bool:
 
 
 def is_error_status(event: Event) -> bool:
-    status = metadata(event).get("otel.status_code", metadata(event).get("status"))
-    return status is not None and str(status).strip().upper() not in {"OK", "SUCCESS", "UNSET"}
+    for key in ("otel.status_code", "status"):
+        status = metadata(event).get(key)
+        if status is not None and str(status).strip().upper() not in {"OK", "SUCCESS", "UNSET"}:
+            return True
+    # Relay's status describes callback completion. Hermes tools can instead
+    # return a failure as an object or a JSON-encoded result string.
+    result = event.get("data")
+    if isinstance(result, str):
+        try:
+            result = json.loads(result)
+        except json.JSONDecodeError:
+            return False
+    if not isinstance(result, dict):
+        return False
+    if result_reports_error(result):
+        return True
+    # web_extract returns one result per URL, including per-page failures.
+    pages = result.get("results")
+    return event.get("name") == "web_extract" and isinstance(pages, list) and any(
+        isinstance(page, dict) and result_reports_error(page) for page in pages
+    )
+
+
+def result_reports_error(result: dict[str, Any]) -> bool:
+    if result.get("error") or result.get("is_error") is True or result.get("success") is False:
+        return True
+    exit_code = result.get("exit_code")
+    if isinstance(exit_code, int) and not isinstance(exit_code, bool) and exit_code != 0:
+        return True
+    return str(result.get("status", "")).strip().lower() in {
+        "error", "failed", "timeout", "timed_out", "blocked", "denied", "cancelled", "degraded",
+    }
 
 
 def token_count(value: Any) -> int | None:
