@@ -204,6 +204,27 @@ Select the final model call to inspect the response, duration, and token usage.
 
 [![Phoenix final model span showing the verified response, duration, and token usage](screenshots/phoenix-nemotron-final-llm-span.png)](screenshots/phoenix-nemotron-final-llm-span.png)
 
+# Try Example 2 with Another Compatible Model
+
+The default configuration uses NVIDIA Build and is the configuration validated
+by this tutorial. To explore the same task with another compatible endpoint,
+create a local model profile and add the credential named by that profile to
+`keys.env`:
+
+```bash
+cp config/model_profile.env.example model-profile.env
+
+# Edit model-profile.env with the endpoint and model settings from your provider.
+# Add the value for MODEL_PROFILE_API_KEY_ENV to keys.env.
+
+./scripts/run_conference_research_with_phoenix.sh \
+  --model-profile model-profile.env
+```
+
+The runner writes the result to a separate profile directory under
+`artifacts/conference-research/`. Provider behavior and trace fields can vary,
+so use this path to explore traces rather than to make a benchmark claim.
+
 # Use Traces to Evaluate a Harness Change
 
 The two examples show how to verify a result and inspect one agent run. To
