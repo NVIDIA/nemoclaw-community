@@ -267,3 +267,19 @@ batch offset; only a saved page advances it. If the snapshot changes, the curren
 pass finishes before its bounded batches restart. No new database or sidecar
 state is added. Body retention and the existing limits on
 deleting derived memory remain unchanged.
+
+## Foundation page operations
+
+Schema 7 adds the managed-page registry, operation journal, ownership receipts,
+and pending resolutions to the recipe ledger. [Recoverable memory writes](memory-foundation.md)
+describes their lifecycle. Export includes every Foundation table and encodes
+active binary replay payloads as base64 JSON objects. It holds the memory
+barrier across the database and Markdown snapshot, including partial operations.
+
+Completed/cancelled/superseded operations clear replay bytes. Unfinished
+payloads expire after 30 days and require an explicit resolution; expiry never
+rebuilds text from cleared messages. Forget and reset scrub relevant payloads
+immediately. Reset does not replay a pending operation before erasing it and
+keeps the empty `workspace/.memory-operations.lock` inode. Reinitialization
+creates a new store-instance UUID so old proposals cannot write into a reset
+store. Hermes's separate profile-root `state.db` remains outside this reset.

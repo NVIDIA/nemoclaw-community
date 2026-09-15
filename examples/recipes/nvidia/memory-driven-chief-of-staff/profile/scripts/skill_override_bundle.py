@@ -16,6 +16,7 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
+import contextlib
 import json
 import os
 import re
@@ -125,9 +126,9 @@ def _capture_locked(root: Path) -> dict:
     return result
 
 
-def capture(root: Path) -> tuple[list, dict]:
+def capture(root: Path, *, locked: bool = False) -> tuple[list, dict]:
     """Hold one barrier across the status, files and database snapshot."""
-    with so._global_lock(root, exclusive=True):
+    with (contextlib.nullcontext() if locked else so._global_lock(root, exclusive=True)):
         reports = so.snapshot_for_export(root, locked=True)
         return reports, _capture_locked(root)
 

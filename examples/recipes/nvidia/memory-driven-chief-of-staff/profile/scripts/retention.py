@@ -128,6 +128,11 @@ def main(argv: list[str] | None = None) -> int:
         else:
             report["cleared"] = clear(conn, before)
 
+    if not args.dry_run:
+        from memory_io import memory_lock
+        from memory_journal import expire_locked
+        with memory_lock(exclusive=True):
+            report["expired_memory_operations"] = expire_locked()
     print(json.dumps(report))
     # Retention needs no judgment, so the agent is never woken. Printing the
     # gate last is what the scheduler reads; see `select_intake.py` for the

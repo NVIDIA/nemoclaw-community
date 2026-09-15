@@ -308,6 +308,7 @@ class TestTheDocumentedScheduleMatchesTheScript(unittest.TestCase):
         # mechanical, and gates the agent off before any judgment would be
         # needed.
         "skill overrides": ("15 * * * *", None),
+        "memory operations": ("45 * * * *", None),
     }
 
     def registered(self):

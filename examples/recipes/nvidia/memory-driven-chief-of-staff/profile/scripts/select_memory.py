@@ -129,26 +129,39 @@ def bootstrap(root) -> list[str]:
 
     Returns the relative paths written, so the caller can report them.
     """
-    written: list[str] = []
-    for folder in (root, root / "people", root / "attention"):
-        folder.mkdir(parents=True, exist_ok=True)
-
-    for source in sorted(seed_root().rglob("*.md")):
-        relative = source.relative_to(seed_root())
-        target = root / relative
-        if target.exists():
-            continue
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
-        written.append(str(relative))
-
-    if written:
-        log = root / "log.md"
-        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        with log.open("a", encoding="utf-8") as handle:
-            handle.write(f"\n## [{stamp}] bootstrap\n"
-                         f"- seeded {', '.join(written)}\n")
-    return written
+    from memory_pages import writer
+    from memory_io import read_bytes, target
+    import memory_journal as journal
+    import uuid
+    if root.resolve() != memory_root().resolve():
+        raise ValueError("bootstrap target must be this profile's memory root")
+    with writer(check_skills=False):
+        from memory_io import mkdirs
+        mkdirs(root / "people")
+        mkdirs(root / "attention")
+        files = []
+        for source in sorted(seed_root().rglob("*.md")):
+            relative = str(source.relative_to(seed_root()))
+            if read_bytes(target(relative)) is None:
+                files.append((relative, None, source.read_bytes()))
+        written = [name for name, _, _ in files]
+        if not files:
+            return written
+        op = str(uuid.uuid4())
+        line = f"\n- {journal.stamp()} bootstrap <!-- mdcos:operation:{op} -->\n".encode()
+        log = next((i for i, item in enumerate(files) if item[0] == "log.md"), None)
+        if log is None:
+            before = read_bytes(target("log.md"))
+            files.append(("log.md", before, (before or b"") + line))
+        else:
+            files[log] = ("log.md", None, files[log][2] + line)
+        files.sort(key=lambda item: item[0] == "index.md")
+        with journal.connection() as conn:
+            instance = journal.store_id(conn)
+        journal.prepare(operation_id=op, request_id=op, request_digest=journal.json_digest(written),
+                        instance=instance, op_type="legacy_write", actor="maintenance", files=files, effects={})
+        journal.recover_locked()
+        return written
 
 
 def memory_root():
@@ -796,7 +809,20 @@ def applied_events(root) -> set[int]:
 
 def main() -> int:
     ensure_store()
+    # Real installed writer skills must be compatible before a model turn can
+    # load them. The fixture-only selector path has no installed skills.
+    from memory_pages import WRITER_SKILLS, writer
+    from memory_io import workspace
+    if any((workspace().parent / "skills" / name).exists() for name in WRITER_SKILLS):
+        with writer():
+            pass
     seeded = bootstrap(memory_root())
+    from memory_io import read_snapshot
+    with read_snapshot():
+        return _snapshot_report(seeded)
+
+
+def _snapshot_report(seeded):
     window = bounded_days("MEMORY_WINDOW_DAYS", WINDOW_DAYS)
     since = (datetime.now(timezone.utc)
              - timedelta(days=window)).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -870,4 +896,10 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    from memory_io import MemoryBlocked, MemoryConflict
+    try:
+        raise SystemExit(main())
+    except (MemoryBlocked, MemoryConflict) as exc:
+        print(json.dumps({"status": "blocked", "detail": str(exc)}))
+        print(json.dumps({"wakeAgent": False}))
+        raise SystemExit(3)

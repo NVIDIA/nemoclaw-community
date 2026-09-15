@@ -59,7 +59,7 @@ fi
 # steadier than parsing that table, and it is a read.
 #
 # Without this the script cannot tell an existing job from a missing one, and
-# every run creates another copy of all eight.
+# every run creates another copy of all nine.
 job_id_for() {
   local name="$1" store="$PROFILE_HOME/cron/jobs.json"
   [[ -f "$store" ]] || return 0
@@ -115,12 +115,12 @@ register review "0 */6 * * *" obligation-review select_review.py \
 # that grew, and neither creates one. Writing last would leave every new page
 # unchecked until the following night.
 register "memory writing" "0 1 * * *" memory-writing select_memory.py \
-  "Write the memory pages the script output supports, following the memory-writing skill exactly. Read \$HERMES_HOME/schema.md first — a page that violates it is a defect the repair job rewrites. Write complete pages, update index.md in the same pass, and append one line to memory/log.md. Report only the count of pages written."
+  "Write the memory pages the script output supports, following the memory-writing skill exactly. Read \$HERMES_HOME/schema.md first — a page that violates it is a defect the repair job rewrites. Submit complete pages and their expected hashes through apply_memory.py; include index changes in the same journaled pass. The writer records the log entry. Report only the count of pages written."
 
-register "memory repair" "0 3 * * *" memory-repair "" \
-  "Check the memory under workspace/memory against its schema and repair what can be repaired safely. Append one log entry even when nothing changed."
+register "memory repair" "0 3 * * *" memory-repair select_memory_maintenance.py \
+  "Check the memory under workspace/memory against its schema and repair what can be repaired safely. Use apply_memory.py for every memory effect, including a log_only proposal when nothing changed."
 
-register "memory consolidation" "0 4 * * *" memory-consolidation "" \
+register "memory consolidation" "0 4 * * *" memory-consolidation select_memory_maintenance.py \
   "Compact any memory page over the ceilings in the schema growth-control table. Compact, never truncate; preserve unresolved commitments and provenance."
 
 # Bodies age out daily, before the memory jobs run — so a consolidation pass
@@ -138,8 +138,11 @@ register "skill overrides" "15 * * * *" "" skill_overrides.py \
 agent off, so this prompt is never reached. It exists because the scheduler
 requires one."
 
-register "preference update" "30 4 * * *" preference-update "" \
+register "preference update" "30 4 * * *" preference-update select_memory_maintenance.py \
   "Read the audit trail for user corrections since the last run and update the bounded preference policy. Never write to obligations."
+
+register "memory operations" "45 * * * *" "" maintain_memory.py \
+  "Recover frozen memory operations and expire replay payloads. This deterministic pre-step never wakes the agent."
 
 echo
 echo "Jobs registered. They fire only while a gateway is serving this profile."

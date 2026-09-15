@@ -330,7 +330,7 @@ from lives alongside it, at `$HERMES_HOME/workspace/ledger/state.db`.
 > check before reaching its `4/4 Registering scheduled jobs` phase. Do not
 > run `register-jobs.sh` directly to fix that: it checks only the platform
 > and that the profile exists, not that a credential is set, so it would
-> schedule all eight jobs against a profile that fails authentication on
+> schedule all nine jobs against a profile that fails authentication on
 > every run. Verify the credential first, then rerun the installer, which
 > registers jobs as its own last step once the credential check passes:
 >
@@ -799,16 +799,29 @@ instead of creating duplicates.
 | review | every 6 hours | `select_review.py` | `obligation-review` |
 | memory writing | daily 01:00 | `select_memory.py` | `memory-writing` |
 | retention | daily 02:00 | `retention.py` | — |
-| memory repair | daily 03:00 | — | `memory-repair` |
-| memory consolidation | daily 04:00 | — | `memory-consolidation` |
-| preference update | daily 04:30 | — | `preference-update` |
+| memory repair | daily 03:00 | `select_memory_maintenance.py` | `memory-repair` |
+| memory consolidation | daily 04:00 | `select_memory_maintenance.py` | `memory-consolidation` |
+| preference update | daily 04:30 | `select_memory_maintenance.py` | `preference-update` |
 | skill overrides | hourly at :15 | `skill_overrides.py` | — |
+| memory operations | hourly at :45 | `maintain_memory.py` | — |
 
 Intake, review, and memory writing run their selector before an agent turn. If
 no work is available, the selector's final non-empty line is the wake gate and
 Hermes skips inference. Retention and skill overrides never wake the agent —
 neither involves judgment. Memory writing runs before repair and consolidation
 so every new page is checked and compacted in the same nightly sequence.
+
+Memory file effects now use a recoverable journal and a shared reader/writer
+lock. Repair, consolidation, and preference pre-steps recover pending work
+before invoking the model. The hourly memory-operations job performs recovery
+and payload expiry without a model call. Incompatible effective skills or
+unresolved operations stop publication with a diagnostic.
+
+Generated-field ownership is disabled by default. After installation and job
+resynchronization, use `memory_operations.py enable` to opt in. Existing
+handwritten fields remain unmanaged; generated content needs no per-page
+approval. See [Recoverable memory writes](docs/memory-foundation.md) for the
+proposal format, adoption, recovery, lifecycle commands, and completion hooks.
 
 ### Persistence and reboot behavior
 
@@ -846,8 +859,12 @@ python3 -c '
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as handle:
     data = json.load(handle)
+owned = {"intake", "review", "memory writing", "memory repair",
+         "memory consolidation", "preference update", "retention",
+         "skill overrides", "memory operations"}
 for job in data.get("jobs", []):
-    print(job["id"])
+    if job.get("name") in owned:
+        print(job["id"])
 ' "$PROFILE_HOME/cron/jobs.json" | while read -r JOB_ID; do
   hermes -p memory-driven-chief-of-staff cron remove "$JOB_ID"
 done
@@ -1361,7 +1378,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the seventeen files report 817 tests
+Expected result: every file ends with `OK`, the eighteen files report 861 tests
 in total, and the final line is `failed=0`. Do not shorten the loop with an
 early break; running every module is part of the documented check.
 

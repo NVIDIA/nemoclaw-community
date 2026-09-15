@@ -1,13 +1,47 @@
 ---
 name: memory-consolidation
 description: Keep the memory inside its size limits by compacting rather than truncating, so it stays readable as it ages.
-version: 0.1.0
+version: 0.2.0
+memory-operation-protocol: 1
 license: Apache-2.0
 platforms: [linux]
 metadata:
   hermes:
     tags: [memory, maintenance]
 ---
+
+## Coordinated memory transport
+
+All reads of `workspace/memory` use
+`python3 $HERMES_HOME/scripts/memory_operations.py read <relative-path> ...`.
+This returns the store instance, exact file hashes, and a coherent snapshot.
+If it reports a pending or blocked operation, stop this pass and surface the
+diagnostic. Do not read partial files as current memory.
+
+All memory file changes, including shared index entries and the single log
+entry, go through `python3 $HERMES_HOME/scripts/apply_memory.py < proposal.json`.
+Never write, append, rename, or delete memory files with shell or file tools.
+Prepare complete people/attention pages and their evidence markers together
+in a `legacy_write` proposal with the returned `expected_hash` for every file.
+Use `null` text for a reviewed people merge source deletion and include its
+index removal in the same operation. Preserve the content and admission rules
+below. A failed proposal acknowledges no new evidence batch.
+
+Managed projects, patterns, and concepts use `update` with declared field
+changes; never send a managed page through the whole-file adapter. Existing
+unmanaged pages may be repaired with their exact full-file precondition and
+remain unmanaged. Use `repair_index` for verified missing or stale entries,
+and `log_only` for a pass that changes only the shared memory log. The writer
+constructs index patches and a log entry containing its operation ID.
+Before building a proposal, read `$HERMES_HOME/scripts/memory-protocol.md`
+for the installed JSON contract and examples.
+
+A conflict preserves the live file. Report it and defer that target. Generate
+a fresh independent proposal for unrelated work; do not retry a changed
+request under an already used request ID, adopt a page implicitly, clear
+review flags, or use a direct write as a fallback. Per-page user approval is
+not required for generated content after Foundation enablement. Handwritten
+content requires an explicit scoped user action through `correct.py`.
 
 # Consolidating the memory
 
