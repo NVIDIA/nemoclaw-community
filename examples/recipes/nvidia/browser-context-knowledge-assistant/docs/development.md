@@ -65,6 +65,8 @@ The suite checks:
 - conversation ownership, isolation, and idempotency;
 - viewport-only and multimodal requests;
 - same-session image attachment;
+- tab and document changes during page capture;
+- cancellation during initialization, image attachment, and inference;
 - cancellation, timeout, and non-PTY behavior;
 - dashboard session visibility;
 - extension builds for portable, HTTPS, loopback, and Brev paths;

@@ -47,6 +47,7 @@ node "$ROOT/tests/test_sidepanel_parsing.js"
 node "$ROOT/tests/test_auth_session.js"
 node "$ROOT/tests/test_service_worker.js"
 node "$ROOT/tests/test_authenticated_fetch.js"
+node "$ROOT/tests/test_capture_context.js"
 "$PYTHON_BIN" "$ROOT/tests/test_dashboard_auth_helper.py" -v
 "$PYTHON_BIN" "$ROOT/tests/test_dashboard_public_url_helper.py" -v
 "$PYTHON_BIN" "$ROOT/tests/test_plugin_api.py" -v

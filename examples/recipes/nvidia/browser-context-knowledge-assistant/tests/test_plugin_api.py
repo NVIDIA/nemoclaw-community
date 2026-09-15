@@ -688,6 +688,76 @@ class ConversationApiTests(unittest.TestCase):
         )
         self.assertEqual(_response_json(status)["status"], "cancelled")
 
+    def test_stop_during_initialization_prevents_submission(self):
+        self._check_stop_at_gateway_stage("initialization")
+
+    def test_stop_during_image_attachment_prevents_submission(self):
+        self._check_stop_at_gateway_stage("image.attach_bytes")
+
+    def test_stop_after_submission_interrupts_the_session(self):
+        self._check_stop_at_gateway_stage("completion")
+
+    def _check_stop_at_gateway_stage(self, stage):
+        conversation_id = self.create_conversation()
+        request = _FakeRequest({
+            "page_url": "https://example.com/article",
+            "page_title": "Synthetic page",
+            "prompt": "Describe this page",
+            "page_text": "Synthetic page text",
+            "capture_mode": "browser",
+            "viewport_image": {"mime_type": "image/jpeg", "content_base64": _jpeg_fixture()},
+        }, headers={"idempotency-key": "s" * 24})
+        with mock.patch.object(module.threading, "Thread", _DeferredThread):
+            created = asyncio.run(module.create_conversation_message(conversation_id, request))
+        job_id = _response_json(created)["job_id"]
+        calls = []
+
+        def stop():
+            response = asyncio.run(module.cancel_conversation_job(conversation_id, job_id, _FakeRequest()))
+            self.assertEqual(response.status_code, 202)
+            calls.append("stop.accepted")
+
+        class Ready:
+            def wait(self, timeout):
+                if stage == "initialization":
+                    stop()
+                return True
+
+        class Gateway:
+            _sessions_lock = threading.Lock()
+            _sessions = {"live": {"agent_ready": Ready(), "agent": object(), "agent_error": None}}
+
+            @staticmethod
+            def dispatch(request, transport):
+                method = request["method"]
+                calls.append(method)
+                if method == "session.create":
+                    return {"result": {"session_id": "live", "stored_session_id": "stored"}}
+                if method == "image.attach_bytes" and stage == method:
+                    stop()
+                if method == "prompt.submit":
+                    self.assertTrue(module._prompt_submission_lock.locked())
+                return {"result": {}}
+
+        def completion(*_):
+            if stage == "completion":
+                stop()
+            return "Synthetic response"
+
+        with mock.patch.dict(sys.modules, {"tui_gateway": SimpleNamespace(server=Gateway)}), \
+             mock.patch.object(module, "_stored_message_high_water", return_value=0), \
+             mock.patch.object(module, "_stored_assistant_completion", side_effect=completion), \
+             mock.patch.object(module, "_ensure_hermes_session_profile"):
+            module._conversation_worker(job_id)
+        if stage == "completion":
+            self.assertLess(calls.index("prompt.submit"), calls.index("session.interrupt"))
+        else:
+            self.assertNotIn("prompt.submit", calls)
+        self.assertIn("session.close", calls)
+        self.assertNotIn(job_id, module._active_runs)
+        status = asyncio.run(module.get_conversation_job(conversation_id, job_id, _FakeRequest()))
+        self.assertEqual(_response_json(status)["status"], "cancelled")
+
     def test_conversation_path_does_not_request_a_terminal(self):
         source = PLUGIN.read_text(encoding="utf-8")
         self.assertNotIn('"method": "terminal.', source)

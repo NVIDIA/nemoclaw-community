@@ -573,6 +573,7 @@ function captureFromPage(maximum, maximumSelection) {
   const visible = document.body?.innerText || "";
   const selected = globalThis.getSelection?.().toString() || "";
   return {
+    document_url: location.href,
     page_title: document.title || "Untitled page",
     page_text: visible.slice(0, maximum),
     page_text_truncated: visible.length > maximum,
@@ -631,15 +632,46 @@ async function captureViewportImage(windowId) {
 }
 
 async function captureContext() {
+  let page = null;
+  let changed = false;
+  const onActivated = (info) => {
+    if (!page || info.windowId === page.windowId) changed = true;
+  };
+  const onUpdated = (tabId, info) => {
+    if ((!page || tabId === page.tabId) && (info.url || info.status === "loading")) changed = true;
+  };
+  const onRemoved = (tabId) => {
+    if (!page || tabId === page.tabId) changed = true;
+  };
+  chrome.tabs.onActivated.addListener(onActivated);
+  chrome.tabs.onUpdated.addListener(onUpdated);
+  chrome.tabs.onRemoved.addListener(onRemoved);
   try {
-    const page = await readActiveTab();
+    page = await readActiveTab();
+    const requireSameTab = async () => {
+      const [tab] = await chrome.tabs.query({ active: true, windowId: page.windowId });
+      if (changed || tab?.id !== page.tabId) throw new Error("page_changed");
+    };
     const injection = await chrome.scripting.executeScript({
       target: { tabId: page.tabId },
       func: captureFromPage,
       args: [MAX_PAGE_TEXT_CHARS, MAX_SELECTED_TEXT_CHARS]
     });
     const capture = injection?.[0]?.result;
+    const documentId = injection?.[0]?.documentId;
+    if (!documentId || !capture?.document_url || sanitizePageUrl(capture.document_url) !== page.page_url) {
+      throw new Error("page_changed");
+    }
+    await requireSameTab();
     const viewportImage = await captureViewportImage(page.windowId);
+    await requireSameTab();
+    const verification = await chrome.scripting.executeScript({
+      target: { tabId: page.tabId },
+      func: () => location.href
+    });
+    if (changed || verification?.[0]?.documentId !== documentId || verification?.[0]?.result !== capture.document_url) {
+      throw new Error("page_changed");
+    }
     const pageText = String(capture?.page_text || "").trim();
     const selectedText = String(capture?.selected_text || "").trim();
     return {
@@ -653,6 +685,7 @@ async function captureContext() {
     };
   } catch (error) {
     const messages = {
+      page_changed: "The active page changed during capture. Keep the target tab open and active, then try again.",
       unsupported_page: "Open a normal HTTP or HTTPS page and click the extension icon again.",
       invalid_viewport_image: "Chrome could not prepare an image of the visible page area.",
       viewport_image_too_large: "The visible page image exceeded the protected request limit. Reduce browser zoom and try again."
@@ -664,6 +697,10 @@ async function captureContext() {
       () => submitMessage(true)
     );
     return null;
+  } finally {
+    chrome.tabs.onActivated.removeListener(onActivated);
+    chrome.tabs.onUpdated.removeListener(onUpdated);
+    chrome.tabs.onRemoved.removeListener(onRemoved);
   }
 }
 

@@ -76,6 +76,7 @@ _conversation_schema_ready_for: str | None = None
 _conversation_payloads_lock = threading.Lock()
 _conversation_payloads: dict[str, "ConversationTurn"] = {}
 _active_runs_lock = threading.Lock()
+_prompt_submission_lock = threading.Lock()
 _active_runs: dict[str, tuple[Any, str, "CaptureTransport"]] = {}
 
 _request_slots = threading.BoundedSemaphore(value=2)
@@ -704,6 +705,17 @@ def _dispatch_rpc(
             return candidate
 
 
+def _raise_if_job_cancelled(job_id: str | None) -> None:
+    if job_id is None:
+        return
+    with _conversation_connection() as connection:
+        row = connection.execute(
+            "SELECT status FROM conversation_jobs WHERE job_id = ?", (job_id,)
+        ).fetchone()
+    if row is None or row["status"] in {"cancelling", "cancelled"}:
+        raise RequestFailure("cancelled", "The request was cancelled")
+
+
 def _run_hermes_prompt(
     prompt: str,
     *,
@@ -768,6 +780,7 @@ def _run_hermes_prompt(
             ready = session.get("agent_ready") if session else None
         if session is None or ready is None or not ready.wait(_AGENT_READY_TIMEOUT_SECONDS):
             raise RequestFailure("inference_timeout", "Hermes inference initialization timed out")
+        _raise_if_job_cancelled(job_id)
 
         with gateway._sessions_lock:
             session = gateway._sessions.get(session_id)
@@ -811,15 +824,20 @@ def _run_hermes_prompt(
             attached_path = str(((attached.get("result") or {}).get("path") or "")).strip()
             if attached_path:
                 attached_image_path = Path(attached_path)
-        submitted = gateway.dispatch(
-            {
-                "jsonrpc": "2.0",
-                "id": "ask-nemoclaw-submit",
-                "method": "prompt.submit",
-                "params": {"session_id": session_id, "text": prompt},
-            },
-            transport=transport,
-        )
+        # Serialize the final state check and submission with accepting Stop.
+        # A cancellation accepted during initialization or image attachment
+        # must not be followed by a new prompt submission.
+        with _prompt_submission_lock:
+            _raise_if_job_cancelled(job_id)
+            submitted = gateway.dispatch(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "ask-nemoclaw-submit",
+                    "method": "prompt.submit",
+                    "params": {"session_id": session_id, "text": prompt},
+                },
+                transport=transport,
+            )
         _rpc_error(submitted, "prompt submission")
         if on_session_bound is not None:
             on_session_bound(bound_stored_session_id)
@@ -1460,7 +1478,7 @@ async def cancel_conversation_job(conversation_id: str, job_id: str, request: Re
         raise HTTPException(status_code=404, detail="Request not found")
     owner_key = _owner_key(_owner(request))
     _require_allowed_origin(request)
-    with _conversation_connection() as connection:
+    with _prompt_submission_lock, _conversation_connection() as connection:
         connection.execute("BEGIN IMMEDIATE")
         row = connection.execute(
             """

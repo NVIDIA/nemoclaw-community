@@ -246,6 +246,9 @@ Every message recaptures the available page text and visible viewport. The
 page doesn’t need readable DOM text if Chrome can capture a valid viewport
 image. After changing tabs, select the toolbar icon on the new tab before
 selecting **Refresh**; this grants temporary access to that tab.
+If the tab or document changes during capture, the extension discards the
+capture and asks you to try again. Keep the target tab active until capture
+finishes.
 
 The agent chooses skills from your prompt, not from the page URL. For example,
 a Google Docs skill is used only when it’s installed, authorized, allowed by
@@ -259,6 +262,9 @@ Chrome’s memory-backed session storage.
 
 Multimodal requests over large pages can take several minutes. The side panel
 keeps polling and shows the current request stage while Hermes works.
+**Stop** prevents prompt submission if accepted during initialization or image
+attachment. After submission, it requests a session interrupt; it does not undo
+actions that the agent has already completed.
 
 ## Verify the example
 
