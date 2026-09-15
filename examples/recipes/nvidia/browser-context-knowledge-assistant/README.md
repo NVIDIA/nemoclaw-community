@@ -212,33 +212,35 @@ brev port-forward <brev-instance-name> -p 18790:18789
 Then use `http://127.0.0.1:18790` in the extension. Don’t use a Brev Secure
 Link as the extension URL; its redirect-based login flow isn’t an API ingress.
 
-### 5. Build and load the Chrome extension
+### 5. Load the Chrome extension
 
-On your workstation, open this example from a local clone and build the
-portable extension:
+Download the
+[prebuilt portable extension](release/ask-nemoclaw-extension-0.10.11.zip) and
+extract the ZIP file. It contains no deployment URL or credential.
 
-```bash
-bash scripts/build-extension.sh
-```
-
-Then:
+Then load the extracted directory:
 
 1. Open `chrome://extensions`.
 2. Enable **Developer mode**.
 3. Select **Load unpacked**.
-4. Select the printed `build/extension` directory.
+4. Select the extracted `ask-nemoclaw-extension` directory.
 5. Pin **Ask NemoClaw** to the Chrome toolbar.
 6. Open the side panel and enter `http://127.0.0.1:18789` in Settings.
-7. Approve Chrome’s request for that exact origin.
+7. Approve Chrome’s request for that exact origin and confirm the status says
+   **Connected to NemoClaw**.
 
-You only need to install the portable build once. Use the Settings gear to
-switch deployments later.
+You only need to install the extension once. Use the Settings gear to switch
+deployments later. Contributors can build the same portable package from source
+with `python3 scripts/build-extension-release.py`.
 
 ## Use Ask NemoClaw
 
-1. Open a normal HTTP or HTTPS page.
-2. Select the **Ask NemoClaw** toolbar icon.
-3. Enter any prompt and select **Send**.
+1. Make sure the Brev port forward is running, then open the Ask NemoClaw side
+   panel and confirm it says **Connected to NemoClaw**. For another deployment,
+   open Settings and enter its reachable Hermes URL.
+2. Open a normal HTTP or HTTPS page.
+3. Select the **Ask NemoClaw** toolbar icon.
+4. Enter any prompt and select **Send**.
 
 Every message recaptures the available page text and visible viewport. The
 page doesn’t need readable DOM text if Chrome can capture a valid viewport

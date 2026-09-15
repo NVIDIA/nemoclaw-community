@@ -32,7 +32,7 @@ grep -Fq 'Releasing %d existing Ask NemoClaw host forward(s) before recreation' 
 grep -Fq 'Removing existing example sandbox' "$ROOT/scripts/onboard.sh"
 grep -Fq '"$NEMOHERMES_BIN" "$SANDBOX_NAME" destroy -y' "$ROOT/scripts/onboard.sh"
 grep -Fq 'ONBOARD_ARGS+=(--fresh)' "$ROOT/scripts/onboard.sh"
-grep -Fq 'scripts/build-extension.sh' "$ROOT/README.md"
+grep -Fq 'scripts/build-extension-release.py' "$ROOT/README.md"
 grep -Fq 'nemoclaw status' "$ROOT/README.md"
 grep -Fq 'Kubernetes deployment exposes Hermes through an authenticated HTTPS ingress' \
   "$ROOT/README.md"
@@ -62,6 +62,7 @@ node "$ROOT/tests/test_authenticated_fetch.js"
   --service-path /ask-nemoclaw \
   --dashboard-path / \
   --output "$ROOT/build/brev-verification-extension"
+"$PYTHON_BIN" "$ROOT/scripts/build-extension-release.py" --check
 test -s "$ROOT/build/verification-extension/manifest.json"
 test -s "$ROOT/build/verification-extension/config.js"
 test -s "$ROOT/build/portable-verification-extension/manifest.json"
@@ -101,6 +102,8 @@ if grep -Fq 'sudo install -o root -g root -m 0755' "$ROOT/README.md"; then
 fi
 grep -Fq 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning' "$ROOT/README.md"
 grep -Fq 'https://github.com/NVIDIA/NemoClaw/issues/8887' "$ROOT/README.md"
+grep -Fq 'release/ask-nemoclaw-extension-0.10.11.zip' "$ROOT/README.md"
+grep -Fq 'Connected to NemoClaw' "$ROOT/README.md"
 grep -Fq 'one primary model for every' "$ROOT/docs/security.md"
 grep -Fq 'A shorter `hermes plugins install` path may be useful later' "$ROOT/docs/development.md"
 grep -Fq 'version: "0.9.4"' "$ROOT/hermes-plugin/plugin.yaml"

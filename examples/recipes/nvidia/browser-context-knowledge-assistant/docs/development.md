@@ -37,6 +37,17 @@ minimum OpenShell policy, and both loopback and authenticated HTTPS behavior.
 
 ## Local verification
 
+Build the versioned portable extension archive after changing extension source
+or its manifest version:
+
+```bash
+python3 scripts/build-extension-release.py
+```
+
+The generated ZIP contains no deployment URL or credential. Commit it with the
+source change. The verification suite compares the archive byte-for-byte with a
+fresh deterministic build.
+
 From the example directory:
 
 ```bash
@@ -116,6 +127,7 @@ third-party notices before redistributing the example or a built image.
 | Path | Purpose |
 | --- | --- |
 | `extension/` | Manifest V3 Chrome side-panel source. |
+| `release/ask-nemoclaw-extension-0.10.11.zip` | Prebuilt portable extension for local installation. |
 | `hermes-plugin/` | Authenticated Hermes REST adapter backed by non-PTY JSON-RPC sessions. |
 | `relay/plugins.toml` | Local-only NeMo Relay ATIF configuration with provider-placeholder redaction. |
 | `scripts/prepare-hermes-image.py` | Adds the plugin, Relay settings, and managed enablement to the Hermes image source. |
@@ -123,6 +135,7 @@ third-party notices before redistributing the example or a built image.
 | `scripts/check-brev-host.sh` | Runs read-only launchable compatibility checks. |
 | `scripts/onboard.sh` | Builds and onboards the custom Hermes sandbox. |
 | `scripts/build-extension.sh` | Builds the portable extension or one with an initial HTTPS origin. |
+| `scripts/build-extension-release.py` | Builds the versioned portable extension ZIP committed with the example. |
 | `scripts/check-connection.sh` | Checks dashboard and plugin routes without printing credentials. |
 | `deploy/nginx/ask-nemoclaw-server.conf` | Reference proxy for a shared HTTPS ingress. |
 | `scripts/verify.sh` | Runs static and local tests. |
