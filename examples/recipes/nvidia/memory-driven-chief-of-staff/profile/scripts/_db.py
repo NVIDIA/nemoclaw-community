@@ -110,6 +110,8 @@ def ensure_store(schema_sql: Path | None = None) -> Path:
     from migrate import migrate, refuse_if_from_the_future   # avoids a cycle
 
     path = ledger_path()
+    from memory_io import validate_database
+    validate_database(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     os.chmod(path.parent, 0o700)
     if schema_sql is None:
@@ -163,6 +165,8 @@ def ensure_store(schema_sql: Path | None = None) -> Path:
         conn.execute("BEGIN IMMEDIATE")
         try:
             migrate(conn)
+            from migrate import _add_memory_foundation
+            _add_memory_foundation(conn)
             # Create direction indexes after migration, when old stores
             # have the new columns. Fresh stores need these indexes too.
             conn.execute(
@@ -187,6 +191,7 @@ def ensure_store(schema_sql: Path | None = None) -> Path:
                 except Exception:
                     pass
             raise
+    os.chmod(path, 0o600)
     return path
 
 
@@ -198,7 +203,10 @@ def write_txn(path: Path | None = None):
     that covers them go through this together, so a crash leaves either both
     or neither — never an advanced watermark over unwritten rows.
     """
-    conn = sqlite3.connect(path or ledger_path(), isolation_level=None)
+    path = path or ledger_path()
+    from memory_io import validate_database
+    validate_database(path)
+    conn = sqlite3.connect(path, isolation_level=None)
     try:
         conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
         conn.execute("PRAGMA foreign_keys = ON")
