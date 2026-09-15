@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Trace and Evaluate Hermes Agent Runs with NeMo Relay
+# Tracing Agent Harness Behavior with NVIDIA NeMo Relay
 
 | Catalog field | Value |
 | --- | --- |
@@ -13,41 +13,6 @@ SPDX-License-Identifier: Apache-2.0
 | NemoClaw | N/A |
 | Harness | Hermes 0.21.1 |
 | OpenShell | N/A |
-
-## Overview
-
-An agent's final answer does not show every model call, tool call, retry, or
-error that occurred during a run. An incorrect result can come from missing
-context, a poor tool choice, or a failed call. Even a correct result can hide
-repeated searches, unnecessary retries, and extra model calls. Tracing the run
-helps you find these behaviors and understand their effect on reliability,
-latency, and token usage.
-
-[NVIDIA NeMo Relay](https://docs.nvidia.com/nemo/relay/latest/about-nemo-relay/overview)
-gives agent developers a common way to observe and control model and tool
-execution. [Hermes Agent](https://hermes-agent.nousresearch.com/) includes Relay
-natively and maps its sessions, turns, model calls, and tool calls to Relay's
-scope hierarchy. Relay records lifecycle events as that work begins and ends,
-preserving timing and parent-child relationships.
-
-**In this tutorial, you will:**
-
-1. Set up an isolated environment for Hermes Agent and its built-in NeMo Relay
-   integration.
-2. Ask Hermes to run a small Python script, verify the expected result, and
-   inspect the resulting Agent Trajectory Observability Format (ATOF) event
-   stream and Agent Trajectory Interchange Format (ATIF) trajectory.
-3. Ask Hermes to find a conference that fits a travel plan, save a verified
-   report, and explore the run in [Arize Phoenix](https://arize.com/phoenix/).
-4. Learn how to combine task verification with trace data when evaluating a
-   controlled change to the prompt, tools, or agent harness.
-
-## Screenshot
-
-![Phoenix trace for a completed Nemotron research task, showing model, file, and web spans with token and duration information.](screenshots/phoenix-nemotron-final-llm-span.png)
-
-Phoenix displays the model and tool calls that produced a verified task result.
-Select a span to inspect its timing, inputs, outputs, token usage, and errors.
 
 ## At A Glance
 
@@ -64,39 +29,70 @@ Select a span to inspect its timing, inputs, outputs, token usage, and errors.
 | Support and maturity | Best-effort community support. See [SUPPORT.md](../../../SUPPORT.md). |
 | External access, data, and actions | Sends prompts to NVIDIA Build. Example 2 sends a public research query to web services, writes a report under `artifacts/`, and starts a local Phoenix container. |
 | Start here | [Run Example 1](#quick-start). |
-| Confirm success | [Verify Example 1](#verify-example-1). |
+| Confirm success | [Verify Example 1](#quick-start). |
+
+## Overview
+
+An agent's final response does not tell you everything that happened during the
+run. An incorrect result can come from missing context, a poor tool choice, or a
+failed call. Even a correct result can hide repeated searches, unnecessary
+retries, and extra model calls. Tracing the run helps you find these behaviors
+and understand their effect on reliability, latency, and token usage.
+
+[NVIDIA NeMo Relay](https://docs.nvidia.com/nemo/relay/latest/about-nemo-relay/overview)
+gives agent developers a common way to observe and control model and tool
+execution. [Hermes Agent](https://hermes-agent.nousresearch.com/) includes Relay
+natively and maps its sessions, turns, model calls, and tool calls to Relay's
+scope hierarchy. Relay records lifecycle events as that work begins and ends,
+preserving timing and parent-child relationships.
+
+**In this tutorial, you will:**
+
+1. Set up an isolated environment for Hermes Agent and its built-in NeMo Relay
+   integration.
+2. Ask Hermes to run a small Python script, verify the expected result, and
+   inspect the resulting ATOF event stream and ATIF trajectory.
+3. Ask Hermes to find a conference that fits a travel plan, save a verified
+   report, and explore the run in Phoenix.
+4. Learn how to combine task verification with trace data when evaluating a
+   controlled change to the prompt, tools, or agent harness.
 
 ## Quick Start
 
-Example 1 confirms that Hermes can call the model, run a terminal command in a
-Docker sandbox, and create the ATOF and ATIF files. It is the recommended first
-run because its result has an exact verifier.
+Before you begin, make sure you have:
+
+- A macOS or Linux system.
+- [Git](https://git-scm.com/downloads),
+  [curl](https://curl.se/download.html), and
+  [Docker](https://docs.docker.com/get-started/get-docker/), with Docker running.
+- An API key from the
+  [Nemotron 3.5 Lightning model page](https://build.nvidia.com/nvidia/nemotron-3.5-lightning-30b-a3b)
+  on NVIDIA Build.
 
 ### Set Up the Tutorial
 
-Before you start, install [Git](https://git-scm.com/downloads),
-[curl](https://curl.se/download.html), and
-[Docker](https://docs.docker.com/get-started/get-docker/). Start Docker, then
-generate an API key from the
-[Nemotron 3.5 Lightning model page](https://build.nvidia.com/nvidia/nemotron-3.5-lightning-30b-a3b).
-
-The setup script downloads a checksum-verified `uv` installer, checks out a
-pinned Hermes Agent commit, and creates `.tutorial-runtime/` inside this
-example directory. It does not modify an existing Hermes installation.
+Run these commands in order:
 
 ```bash
-# Clone NemoClaw Community and enter this example.
+# Clone the tutorial repository.
 git clone https://github.com/NVIDIA/nemoclaw-community.git
+
+# Enter the cloned repository.
 cd nemoclaw-community/examples/tools/hermes-relay-tracing
 
-# Create the isolated Hermes Agent runtime.
+# Create the isolated Hermes Agent and NeMo Relay runtime.
 ./scripts/setup_tutorial_runtime.sh
 
-# Create the local API-key file.
+# Copy the API-key template.
 cp keys.env.example keys.env
 ```
 
-Set your NVIDIA Build API key in `keys.env`. The file is ignored by Git.
+The setup script creates an isolated environment under `.tutorial-runtime/`
+and installs Hermes Agent `0.21.1` with its pinned NeMo Relay `0.8.3`
+dependency. It does not change your existing Hermes installation.
+
+Open `keys.env` and set `NVIDIA_API_KEY` to the key you generated. The repository
+ignores this file, and editing it keeps the key out of your shell history.
 
 ```ini
 NVIDIA_API_KEY=<your-nvidia-api-key>
@@ -115,51 +111,51 @@ The runner checks that Hermes returns the exact output `VALUE=42`. A passing
 run confirms that the model call, terminal-tool execution, Docker sandbox, and
 Relay trace exporters all worked together.
 
-The following commands contact NVIDIA Build. The terminal task runs in Docker
-with no network access, no repository mount, and no API key passed to the
-container.
+Confirm that Docker is running, build the task image, and start the example:
 
 ```bash
-# Confirm that Docker is running.
+# Confirm that the Docker client can reach the Docker service.
 docker version
 
-# Build the terminal-task image.
+# Build the Docker image for the terminal-tool task.
 ./scripts/build_tutorial_image.sh
 
-# Run and trace the terminal task.
+# Run the task and export the ATOF event stream and ATIF trajectory.
 ./scripts/run_tutorial.sh
 ```
 
-## Verify Example 1
-
-**Evidence level:** local/static
-
-A successful run prints the following result and writes a run directory under
-`artifacts/runs/`:
+**What you should see:** On a successful run, Hermes returns `VALUE=42`. The
+runner validates the result and trace files, then prints their ATOF and ATIF
+summaries. One verified run produced:
 
 ```text
 ATOF summary:
-completed llm scopes: <positive number>
-llm scopes with usage: <positive number>
-total tokens: <positive number>
-tool calls: <positive number>
+trace: .../artifacts/runs/<run-id>/atof/run.jsonl
+events: 74
+completed llm scopes: 2
+llm scopes with usage: 2
+prompt tokens: 7239
+completion tokens: 96
+total tokens: 7335
+tool calls: 1
 tool errors: 0
+correlated events: 74
 
 ATIF summary:
+trajectory: .../artifacts/runs/<run-id>/atif/trajectory-<session-id>.json
 agent: Hermes Agent
 model: nvidia/nemotron-3.5-lightning-30b-a3b
-steps: <positive number>
+steps: 3
+llm calls: 2
+requested tool calls: 1
 
 Task verified: VALUE=42
+
 Artifacts: .../artifacts/runs/<run-id>
 ```
 
-**This verifies:** the pinned Hermes runtime can call the configured model,
-execute the included script through the terminal tool, and export validated
-ATOF and ATIF output.
-
-**This does not verify:** that live web search is available or that a future
-model, provider, or Hermes Agent release behaves the same way.
+The counts, identifiers, and run directory vary between runs. The runner exits
+with an error if the result or trace validation fails.
 
 ### Why the Task Runs in Docker
 
@@ -167,11 +163,20 @@ Hermes can execute terminal commands, so this tutorial runs them in an isolated
 Docker container instead of on your host. The container cannot access the
 network, repository checkout, or NVIDIA API key.
 
-## Continue with Example 2
+## Explore Agent Traces and Run Example 2
 
-[tutorial.md](tutorial.md) explains the ATOF, ATIF, and OpenTelemetry outputs,
-then walks through the live research task and its Phoenix trace. The task uses
-public web search, so its sources and execution path can vary between runs.
+After Example 1 succeeds, continue with the [detailed tutorial](tutorial.md).
+
+## License
+
+This repository is licensed under the [Apache License 2.0](../../../LICENSE).
+
+## Screenshot
+
+![Phoenix trace for a completed Nemotron research task, showing model, file, and web spans with token and duration information.](screenshots/phoenix-nemotron-final-llm-span.png)
+
+The detailed tutorial shows how to inspect model and tool spans in Phoenix,
+including timing, inputs, outputs, token usage, and errors.
 
 ## Cleanup
 

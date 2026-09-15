@@ -3,20 +3,21 @@ SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES. All
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Trace and Evaluate Hermes Agent Runs with NeMo Relay
+# Inspect Hermes Agent Execution with NeMo Relay
 
-# Overview
+## Overview
 
 This guide picks up after Example 1 in the Quick Start in the README. In the
-next section, you will learn how ATOF, ATIF, and OpenTelemetry with OpenInference
-provide different views of an agent's lifecycle and inspect the ATOF event stream
-and ATIF trajectory from Example 1. After learning about these traces, you will
-run Example 2 using the same environment. In this more realistic task, Hermes
-reads a travel plan, finds and verifies a matching conference, and saves a
-report. You will then open the run in Phoenix and follow its model and tool
-calls, timing, token usage, errors, and captured inputs and outputs.
+next section, you will learn how
+ATOF, ATIF, and OpenTelemetry with OpenInference provide different views of an
+agent's lifecycle and inspect the ATOF event stream and ATIF trajectory from
+Example 1. After learning about these traces, you will run Example 2 using the
+same environment. In this more realistic task, Hermes reads a travel plan,
+finds and verifies a matching conference, and saves a report. You will then
+open the run in Phoenix and follow its model and tool calls, timing, token
+usage, errors, and captured inputs and outputs.
 
-# Understand the Trace Outputs
+## Understand the Observability Outputs
 
 These representations describe the same agent run in different ways:
 
@@ -33,10 +34,6 @@ tool start and end events and any recorded error. Their shared `uuid` pairs the
 events, `parent_uuid` connects the tool call to its parent, and the tool-call
 identifier links the model's request to the invocation when the integration
 supplies one.
-
-The verifier checks both the trace status and returned tool failure fields,
-including nonzero terminal exit codes. A completed callback alone does not
-prove that the requested command, file operation, or web request succeeded.
 
 Example 2 also uses [Relay's OpenInference
 projection](https://docs.nvidia.com/nemo/relay/latest/configure-plugins/observability/openinference)
@@ -57,10 +54,11 @@ Relay supports additional exporters and configuration options. See the
 [NeMo Relay observability guide](https://docs.nvidia.com/nemo/relay/latest/configure-plugins/observability/about)
 for details about the available outputs and configuration.
 
-> **Caution:** Traces can include prompts, model responses, tool inputs and
-> outputs, and file paths. Review them before sharing.
+> [!CAUTION]
+> Traces can include prompts, model responses, tool inputs and outputs, and file
+> paths. Review them before sharing.
 
-# Review the Example 1 Trace Files
+## Review the Example 1 Trace Files
 
 The Quick Start prints an `Artifacts:` path for the run. That directory
 contains:
@@ -92,7 +90,7 @@ The repository also includes a minimal
 [ATIF example](examples/terminal-task.atif.json), and an
 [example walkthrough](examples/README.md) that highlights the key fields.
 
-# Run Example 2: Find a Conference That Fits Your Travel Plans
+## Example 2: Find a Conference That Fits Your Travel Plans
 
 Now that you have verified the basic setup, use the same Hermes and Relay
 environment for a task that combines file access and web search.
@@ -211,49 +209,51 @@ Select the final model call to inspect the response, duration, and token usage.
 
 [![Phoenix final model span showing the verified response, duration, and token usage](screenshots/phoenix-nemotron-final-llm-span.png)](screenshots/phoenix-nemotron-final-llm-span.png)
 
-# Try Example 2 with Another Compatible Model
+### Try the Same Task with Another Model
 
-The default configuration uses NVIDIA Build and is the configuration validated
-by this tutorial. The recorded Claude Sonnet 5 run below shows the same task
-and verifier with a different compatible model endpoint.
-
-## Claude Sonnet 5 Example
-
-These screenshots show a recorded Example 2 run with Claude Sonnet 5. The
-[result summary](results/conference-research-claude-sonnet-5.json) records the
-model configuration, runtime versions, and verifier result. It is a trace
-example, not a model comparison. Phoenix reported five model calls, five tool
-calls, no tool errors, 60,059 tokens, and an estimated cost of `$0.053960`.
-
-The trace tree shows the total estimated cost above the span list and token
-counts beside the model spans. Select an image to open it at full resolution.
-
-[![Phoenix trace tree showing total cost, token counts, and model, file, and web spans](screenshots/phoenix-trace-tree.png)](screenshots/phoenix-trace-tree.png)
-
-| Web-search call | Final model call |
-| --- | --- |
-| [![Phoenix web-search span showing the query and returned results](screenshots/phoenix-web-search-span.png)](screenshots/phoenix-web-search-span.png) | [![Phoenix final model span showing the response and model-call metrics](screenshots/phoenix-final-llm-span.png)](screenshots/phoenix-final-llm-span.png) |
-
-## Run the Task with Your Own Compatible Model
-
-To run the same task with another compatible endpoint, create a local model
-profile and add the credential named by that profile to `keys.env`:
+To repeat Example 2 with another model without changing the task or verifier,
+copy the model profile template:
 
 ```bash
 cp config/model_profile.env.example model-profile.env
+```
 
-# Edit model-profile.env with the endpoint and model settings from your provider.
-# Add the value for MODEL_PROFILE_API_KEY_ENV to keys.env.
+Update `model-profile.env` with the model, endpoint, API mode, and the name of
+the environment variable that holds your provider API key. Add that variable
+and its value to `keys.env`, then run:
 
+```bash
 ./scripts/run_conference_research_with_phoenix.sh \
   --model-profile model-profile.env
 ```
 
-The runner writes the result to a separate profile directory under
-`artifacts/conference-research/`. Provider behavior and trace fields can vary,
-so use this path to explore traces rather than to make a benchmark claim.
+The runner supports the `chat_completions`, `anthropic_messages`, and
+`codex_responses` API modes provided by Hermes. The selected endpoint must
+support tool use. These live-search runs are useful for exploring agent
+behavior, not ranking models. For a controlled comparison, follow
+the **Use Traces to Evaluate a Harness Change** section below.
 
-# Use Traces to Evaluate a Harness Change
+#### Claude Sonnet 5 Example
+
+These screenshots show Example 2 with Claude Sonnet 5. The task and verifier
+remain unchanged; only the model configuration changes. Use the traces to
+compare the sequence of model and tool calls, token usage, duration, errors,
+and any cost reported by Phoenix. You can configure your own compatible model
+endpoint to repeat Example 2. The
+[result summary](results/conference-research-claude-sonnet-5.json) records the
+configuration and verifier result. Phoenix reported five model calls, five tool
+calls, no tool errors, 60,059 tokens, and an estimated cost of `$0.053960`.
+
+The trace tree shows the total estimated cost above the span list and token
+counts beside the model spans. Select the image to open it at full resolution.
+
+[![Phoenix trace tree showing total cost, token counts, and model, file, and web spans](screenshots/phoenix-trace-tree.png)](screenshots/phoenix-trace-tree.png)
+
+| Web-Search Call | Final Model Call |
+|---|---|
+| [![Phoenix web-search span showing the query and returned results](screenshots/phoenix-web-search-span.png)](screenshots/phoenix-web-search-span.png) | [![Phoenix final model span showing the response and model-call metrics](screenshots/phoenix-final-llm-span.png)](screenshots/phoenix-final-llm-span.png) |
+
+## Use Traces to Evaluate a Harness Change
 
 The two examples show how to verify a result and inspect one agent run. To
 determine whether a change improves the harness, repeat those checks under
@@ -283,7 +283,7 @@ Example 2 is useful for learning this process, but it is not a controlled
 benchmark because live search results can change. To reuse it for an A/B test,
 capture the search responses and give both versions the same fixed responses.
 
-# Stop Phoenix
+## Stop Phoenix
 
 When you finish, stop and remove the tutorial's Phoenix container:
 
@@ -297,7 +297,7 @@ If you ran Phoenix on another port, set that port again when you stop it:
 PHOENIX_UI_PORT=6007 ./scripts/stop_phoenix.sh
 ```
 
-# Troubleshooting
+## Troubleshooting
 
 - **NVIDIA API authentication fails:** Confirm that `keys.env` contains a valid
   `NVIDIA_API_KEY` with access to the Nemotron model configured in

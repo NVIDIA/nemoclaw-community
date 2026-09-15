@@ -11,4 +11,4 @@ Standalone utilities that help developers build, evaluate, inspect, or operate N
 | --- | --- | --- |
 | [Agent Memory Benchmark](agent-memory-benchmark/README.md) | ✨ Other | Measures memory built from synthetic email and chat, asks 186 questions on one corpus and 96 on a second, and reports accuracy by question type with ingest and answer token costs. |
 | [Harness Engineering Playground](harness-engineering-playground/README.md) | ✨ Other | Provides an experimental loop for tuning DeepAgents harness profiles against behavioral evaluations, keeping fixes that pass verification and rolling back rejected edits. |
-| [Trace and Evaluate Hermes Agent Runs with NeMo Relay](hermes-relay-tracing/README.md) | ✨ Other | Runs verified Hermes Agent tool-use tasks and produces NeMo Relay traces for local inspection and evaluation. |
+| [Tracing Agent Harness Behavior with NVIDIA NeMo Relay](hermes-relay-tracing/README.md) | ✨ Other | Runs verified Hermes Agent tool-use tasks and produces NeMo Relay traces for local inspection and evaluation. |
