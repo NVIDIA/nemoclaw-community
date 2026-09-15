@@ -944,11 +944,17 @@ def main() -> int:
         print(json.dumps({"error": f"no memory at {args.memory}"}))
         return 2
 
+    # Check remains observational: journal state is reported, never replayed.
+    from memory_operations import check
+    journal_status = None
+    if os.environ.get("HERMES_HOME") and args.memory.absolute() == (Path(os.environ["HERMES_HOME"]) / "workspace/memory").absolute():
+        journal_status = check()
     findings = check_all(args.memory)
     print(json.dumps({
         "memory": str(args.memory),
+        "operations": journal_status,
         "findings": [{"kind": f.kind, "path": f.path, "detail": f.detail} for f in findings],
-        "clean": not findings,
+        "clean": not findings and (journal_status is None or journal_status["status"] in {"clean", "uninitialized"}),
     }, indent=2))
     # A clean memory is not an error; the caller reads `clean`.
     return 0

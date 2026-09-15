@@ -173,7 +173,7 @@ class TestDirection(unittest.TestCase):
             self.assertNotIn("direction", {r[1] for r in conn.execute("PRAGMA table_info(items)")})
         _db.ensure_store()
         with contextlib.closing(sqlite3.connect(self.db)) as conn:
-            self.assertEqual(migrate.current_version(conn), 6)
+            self.assertEqual(migrate.current_version(conn), migrate.SCHEMA_VERSION)
 
 
     def graph(self, sid, sender="me@example.com", recipients=("dana@example.com",), **over):

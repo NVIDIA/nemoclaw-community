@@ -63,7 +63,7 @@ class TestMigration(unittest.TestCase):
 
         with sqlite3.connect(path) as c:
             # v1 -> v4 now, so all three steps run in order.
-            self.assertEqual(migrate(c), [2, 3, 4, 5, 6])
+            self.assertEqual(migrate(c), [2, 3, 4, 5, 6, 7])
             self.assertEqual(current_version(c), SCHEMA_VERSION)
             columns = {row[1] for row in c.execute("PRAGMA table_info(items)")}
             self.assertIn("body_cleared_at", columns)
@@ -104,7 +104,7 @@ class TestMigration(unittest.TestCase):
                              "the artifact is not really v2")
 
         with sqlite3.connect(path) as c:
-            self.assertEqual(migrate(c), [3, 4, 5, 6])
+            self.assertEqual(migrate(c), [3, 4, 5, 6, 7])
             self.assertEqual(current_version(c), SCHEMA_VERSION)
             columns = {row[1] for row in c.execute("PRAGMA table_info(items)")}
             self.assertIn("sender_key", columns)
@@ -152,7 +152,7 @@ class TestMigration(unittest.TestCase):
                              "the frozen v3 schema contains a v4 column")
 
         with sqlite3.connect(path) as c:
-            self.assertEqual(migrate(c), [4, 5, 6])
+            self.assertEqual(migrate(c), [4, 5, 6, 7])
             self.assertEqual(current_version(c), SCHEMA_VERSION)
             columns = {row[1] for row in c.execute("PRAGMA table_info(items)")}
             row = c.execute("SELECT sender, sender_key, body, deleted_at,"
@@ -177,7 +177,7 @@ class TestMigration(unittest.TestCase):
         with sqlite3.connect(path) as c:
             c.execute("UPDATE meta SET value='2' WHERE key='schema_version'")
         with sqlite3.connect(path) as c:
-            self.assertEqual(migrate(c), [3, 4, 5, 6])
+            self.assertEqual(migrate(c), [3, 4, 5, 6, 7])
             self.assertEqual(current_version(c), SCHEMA_VERSION)
 
     def test_the_rebuild_keeps_the_audit_trail(self):
@@ -321,7 +321,7 @@ class TestMigration(unittest.TestCase):
                       "  'dana@example.com','b','direct','pending')")
 
         with sqlite3.connect(path) as c:
-            self.assertEqual(migrate(c), [6])
+            self.assertEqual(migrate(c), [6, 7])
             self.assertEqual(current_version(c), SCHEMA_VERSION)
             columns = {row[1] for row in c.execute("PRAGMA table_info(items)")}
             self.assertIn("direction", columns)
@@ -400,7 +400,7 @@ class TestMigration(unittest.TestCase):
         with sqlite3.connect(path) as c:
             c.executescript((HERE / "schema-v5.sql").read_text(encoding="utf-8"))
         with sqlite3.connect(path) as c:
-            self.assertEqual(migrate(c), [6])
+            self.assertEqual(migrate(c), [6, 7])
         with sqlite3.connect(path) as c:
             self.assertEqual(migrate(c), [])
             self.assertEqual(current_version(c), SCHEMA_VERSION)

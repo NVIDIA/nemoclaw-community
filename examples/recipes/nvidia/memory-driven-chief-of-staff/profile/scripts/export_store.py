@@ -38,6 +38,7 @@ held, then have it gone.
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import shutil
@@ -52,7 +53,9 @@ import skill_overrides
 import skill_override_bundle
 from _db import ensure_store, ledger_path
 
-TABLES = ("items", "obligations", "events", "cursors", "meta")
+TABLES = ("items", "obligations", "events", "cursors", "meta", "sources", "identity_links",
+          "memory_control", "pages", "page_paths", "page_operations", "managed_fields",
+          "operation_pages", "memory_steps", "page_events", "pending_resolutions")
 
 
 # How much of a body `store.md` shows before marking the remainder. The JSON
@@ -87,7 +90,9 @@ def _narrow(root: Path) -> None:
 
 def rows(conn: sqlite3.Connection, table: str) -> list[dict]:
     conn.row_factory = sqlite3.Row
-    return [dict(r) for r in conn.execute(f"SELECT * FROM {table}")]
+    return [{key: {"encoding": "base64", "data": base64.b64encode(value).decode("ascii")}
+             if isinstance(value, bytes) else value for key, value in dict(row).items()}
+            for row in conn.execute(f"SELECT * FROM {table}")]
 
 
 def _overrides_as_dicts(reports: list[skill_overrides.Report]) -> list[dict]:
@@ -385,6 +390,17 @@ def _refuse_overlap(destination: Path, workspace: Path) -> None:
 
 
 def export(destination: Path) -> dict[str, object]:
+    from memory_io import memory_lock
+    root = ledger_path().parent.parent.parent
+    with skill_overrides._global_lock(root, exclusive=True):
+        # Acquire per-skill locks before the memory lock. Pass the captured
+        # bundle down so no helper attempts to reacquire a nonreentrant lock.
+        captured = skill_override_bundle.capture(root, locked=True)
+        with memory_lock(exclusive=True):
+            return _export_locked(destination, captured)
+
+
+def _export_locked(destination: Path, captured) -> dict[str, object]:
     ensure_store()
 
     # Build the whole thing beside the destination and rename on success.
@@ -429,7 +445,7 @@ def export(destination: Path) -> dict[str, object]:
         # — not a status check and a separate filesystem copy as two
         # unlocked reads a concurrent apply/fork/remove could land
         # between, leaving the two disagree with each other.
-        snapshot, recovery = skill_override_bundle.capture(workspace.parent)
+        snapshot, recovery = captured
         _write_private(staging / "skill-overrides-recovery.json",
                        json.dumps(recovery, indent=2, ensure_ascii=True))
         overrides = [report for report, _text in snapshot]

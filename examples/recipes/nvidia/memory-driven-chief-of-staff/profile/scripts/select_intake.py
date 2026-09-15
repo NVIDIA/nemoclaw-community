@@ -17,6 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from memory_io import read_snapshot
 from _db import ensure_store, write_txn
 
 def bounded_int(name: str, default: int, *, maximum: int) -> int:
@@ -128,10 +129,10 @@ def main() -> int:
     ensure_store()
     collected, collector_failed = collect()
     from outbound import resolve_pending
-    with write_txn() as conn:
+    with read_snapshot(), write_txn() as conn:
         pending_resolved = resolve_pending(conn)
 
-    with write_txn() as conn:
+    with read_snapshot(), write_txn() as conn:
         rows = conn.execute(
             "SELECT source_id, source, scope, event_at, sender, subject, body,"
             "       addressing, unread"
@@ -164,4 +165,10 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    from memory_io import MemoryBlocked, MemoryConflict
+    try:
+        raise SystemExit(main())
+    except (MemoryBlocked, MemoryConflict) as exc:
+        print(json.dumps({"status": "blocked", "detail": str(exc)}))
+        print(json.dumps({"wakeAgent": False}))
+        raise SystemExit(3)

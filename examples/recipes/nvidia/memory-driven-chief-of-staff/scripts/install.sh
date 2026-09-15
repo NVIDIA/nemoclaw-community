@@ -97,7 +97,7 @@ echo "3/4  Carrying over the model settings"
 # as the left operand of `&&` — `false && echo` is a no-op, not an abort — so
 # writing this as `config set … && echo …` swallowed the failure. A profile
 # that took `model.default` and silently dropped `provider` and `base_url`
-# passed both checks below and got all eight jobs registered, pointed at
+# passed both checks below and got all nine jobs registered, pointed at
 # whatever route it had left.
 # What a profile holds instead of a key when an OpenShell gateway substitutes
 # the credential at the boundary. A public constant, not a secret — it is only

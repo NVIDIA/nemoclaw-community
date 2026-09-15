@@ -1021,13 +1021,13 @@ class TestResetLeavesNothingBehind(StoreCase):
 
         self.assertEqual(reset.main(["--yes"]), 0)
 
-        # `.skill-overrides-global.lock` is the one deliberate, documented
+        # `.skill-overrides-global.lock` and `.memory-operations.lock` are deliberate, documented
         # exception (see the comment beside `reset.targets()`): it is the
         # barrier `remove()` itself holds exclusively while deleting
         # everything else, so deleting it from inside that same hold
         # would recreate the inode-swap race the lock exists to close.
         left = sorted(p.name for p in self.workspace.glob("*")
-                      if p.is_file() and p.name != ".skill-overrides-global.lock")
+                      if p.is_file() and p.name not in {".skill-overrides-global.lock", ".memory-operations.lock"})
         self.assertEqual(left, [], f"survived a successful reset: {left}")
 
     def test_the_listed_state_matches_what_collectors_write(self):
@@ -1045,7 +1045,7 @@ class TestResetLeavesNothingBehind(StoreCase):
         reset.main(["--yes"])
 
         left = sorted(p.name for p in self.workspace.glob("*")
-                      if p.is_file() and p.name != ".skill-overrides-global.lock")
+                      if p.is_file() and p.name not in {".skill-overrides-global.lock", ".memory-operations.lock"})
         self.assertEqual(
             left, ["some_future_collector.json"],
             "this test is the reminder: add the file to "

@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 
+from memory_io import read_snapshot
 from _db import ensure_store, write_txn
 from select_intake import bounded_int
 
@@ -26,7 +27,7 @@ def main() -> int:
     BATCH = bounded_int("REVIEW_BATCH", 15, maximum=MAX_BATCH)
     ensure_store()
 
-    with write_txn() as conn:
+    with read_snapshot(), write_txn() as conn:
         rows = conn.execute(
             "SELECT o.source_id, o.title, o.context, o.urgency_reason, o.kind,"
             "       o.est_effort, o.priority, o.manual_priority, o.global_rank,"
@@ -52,4 +53,10 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    from memory_io import MemoryBlocked, MemoryConflict
+    try:
+        raise SystemExit(main())
+    except (MemoryBlocked, MemoryConflict) as exc:
+        print(json.dumps({"status": "blocked", "detail": str(exc)}))
+        print(json.dumps({"wakeAgent": False}))
+        raise SystemExit(3)

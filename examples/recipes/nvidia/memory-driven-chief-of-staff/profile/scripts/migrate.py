@@ -19,10 +19,11 @@ from __future__ import annotations
 import contextlib
 import json
 import sqlite3
+import uuid
 from pathlib import Path
 from typing import Callable
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 # version -> callable applied to reach it. Forward only; there is no down path,
 # because a downgrade that drops a column loses data no backup can infer.
@@ -317,12 +318,28 @@ def _add_direction_columns(conn: sqlite3.Connection) -> None:
         "WHERE counterparty_pending_until IS NOT NULL")
 
 
+def _add_memory_foundation(conn: sqlite3.Connection) -> None:
+    """v7: add the journal without claiming any existing Markdown content."""
+    sql = Path(__file__).with_name("schema-memory.sql").read_text(encoding="utf-8")
+    # execute each statement inside the caller's transaction; executescript
+    # would commit the preceding migration and its version independently.
+    statement = ""
+    for line in sql.splitlines(keepends=True):
+        statement += line
+        if sqlite3.complete_statement(statement):
+            conn.execute(statement)
+            statement = ""
+    conn.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('store_instance_id', ?)",
+                 (str(uuid.uuid4()),))
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _add_body_cleared_at,
     3: _add_sender_key,
     4: _add_removal_tracking,
     5: _add_identity_model,
     6: _add_direction_columns,
+    7: _add_memory_foundation,
 }
 
 
