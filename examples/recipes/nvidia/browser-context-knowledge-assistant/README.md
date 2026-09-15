@@ -183,6 +183,11 @@ start. The authenticated Brev CLI tunnel provides access to the local dashboard.
 
 ### 4. Forward Hermes to your workstation
 
+This step is only needed when Hermes is bound to loopback on the Brev host.
+Skip it if your workstation can already reach Hermes directly or if a
+Kubernetes deployment exposes Hermes through an authenticated HTTPS ingress.
+In those environments, configure the extension with the reachable Hermes URL.
+
 On the workstation where Chrome is installed, keep this command running:
 
 ```bash
