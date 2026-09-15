@@ -32,7 +32,7 @@ grep -Fq 'Releasing %d existing Ask NemoClaw host forward(s) before recreation' 
 grep -Fq 'Removing existing example sandbox' "$ROOT/scripts/onboard.sh"
 grep -Fq '"$NEMOHERMES_BIN" "$SANDBOX_NAME" destroy -y' "$ROOT/scripts/onboard.sh"
 grep -Fq 'ONBOARD_ARGS+=(--fresh)' "$ROOT/scripts/onboard.sh"
-grep -Fq 'Normal runs without' "$ROOT/README.md"
+grep -Fq 'scripts/build-extension.sh' "$ROOT/README.md"
 grep -Fq 'shutil.copytree(origin, destination, dirs_exist_ok=True)' \
   "$ROOT/scripts/prepare-hermes-image.py"
 if "$ROOT/scripts/check-connection.sh" 'https://hermes.example.com/path' >/dev/null 2>&1; then
@@ -84,9 +84,9 @@ if grep -Eq 'sudo[[:space:]]+(ss|test|cp|install|nginx|rm|systemctl)' \
   printf 'Brev helpers must use noninteractive sudo -n\n' >&2
   exit 1
 fi
-grep -Fq 'Operation is not implemented or not supported' "$ROOT/README.md"
-grep -Fq 'Do not copy newer OpenShell binaries' "$ROOT/README.md"
-grep -Fq "Do not run the launchable's NemoClaw onboarding flow" "$ROOT/README.md"
+grep -Fq 'Operation is not implemented or not supported' "$ROOT/docs/brev.md"
+grep -Fq 'Don’t copy individual OpenShell binaries' "$ROOT/docs/brev.md"
+grep -Fq 'don’t run the launchable’s web' "$ROOT/README.md"
 if grep -Eiq '\$[0-9]+([.][0-9]+)?(/hour|/hr)|compute price|storage pricing' "$ROOT/README.md"; then
   printf 'README must not include Brev pricing language\n' >&2
   exit 1
@@ -97,8 +97,8 @@ if grep -Fq 'sudo install -o root -g root -m 0755' "$ROOT/README.md"; then
   exit 1
 fi
 grep -Fq 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning' "$ROOT/README.md"
-grep -Fq 'one forced inference route' "$ROOT/README.md"
-grep -Fq 'A shorter development path based on `hermes plugins install` is being' "$ROOT/README.md"
+grep -Fq 'one primary model for every' "$ROOT/docs/security.md"
+grep -Fq 'A shorter `hermes plugins install` path may be useful later' "$ROOT/docs/development.md"
 grep -Fq 'version: "0.9.4"' "$ROOT/hermes-plugin/plugin.yaml"
 grep -Fq '"version": "0.9.4"' "$ROOT/hermes-plugin/dashboard/manifest.json"
 test -s "$ROOT/assets/ask-nemoclaw-browser-context.png"
