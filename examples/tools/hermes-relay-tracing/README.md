@@ -14,23 +14,6 @@ SPDX-License-Identifier: Apache-2.0
 | Harness | Hermes 0.21.1 |
 | OpenShell | N/A |
 
-## At A Glance
-
-| Question | Answer |
-| --- | --- |
-| Category | Developer Tool |
-| Contributor or provenance | NVIDIA |
-| Use this when | You need to inspect Hermes Agent model and tool behavior or evaluate one controlled harness change. |
-| You will get | A verified terminal-task result, local ATOF and ATIF files, and a Phoenix trace for the research task. |
-| Runs on | macOS or Linux with Docker. |
-| Requires | Git, curl, Docker, an NVIDIA Build API key, and internet access for the live research task. |
-| Verified on | Not yet verified in NemoClaw Community. |
-| Evidence level | local/static |
-| Support and maturity | Best-effort community support. See [SUPPORT.md](../../../SUPPORT.md). |
-| External access, data, and actions | Sends prompts to NVIDIA Build. Example 2 sends a public research query to web services, writes a report under `artifacts/`, and starts a local Phoenix container. |
-| Start here | [Run Example 1](#quick-start). |
-| Confirm success | [Verify Example 1](#quick-start). |
-
 ## Overview
 
 An agent's final response does not tell you everything that happened during the
@@ -170,29 +153,3 @@ After Example 1 succeeds, continue with the [detailed tutorial](tutorial.md).
 ## License
 
 This repository is licensed under the [Apache License 2.0](../../../LICENSE).
-
-## Screenshot
-
-![Phoenix trace for a completed Nemotron research task, showing model, file, and web spans with token and duration information.](screenshots/phoenix-nemotron-final-llm-span.png)
-
-The detailed tutorial shows how to inspect model and tool spans in Phoenix,
-including timing, inputs, outputs, token usage, and errors.
-
-## Cleanup
-
-Example 1 leaves its generated traces in `artifacts/`. Example 2 starts a local
-Phoenix container. Remove that container when you finish:
-
-```bash
-./scripts/stop_phoenix.sh
-```
-
-## Known Limitations
-
-- Example 2 depends on live web search and an external conference website. It
-  is useful for trace exploration, not for controlled benchmarking.
-- The example is pinned to Hermes Agent `0.21.1` and the NeMo Relay version
-  selected by that Hermes release. Run the documented verification after
-  changing either dependency.
-- Traces can contain prompts, model responses, tool inputs and outputs, and
-  file paths. Review trace contents before sharing them.
