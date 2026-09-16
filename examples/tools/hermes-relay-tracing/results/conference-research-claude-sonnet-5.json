@@ -1,0 +1,26 @@
+{
+  "captured_at_utc": "2026-09-04T03:19:44Z",
+  "task": {
+    "name": "conference research",
+    "description": "Identify the conference that matches the supplied travel constraints, verify it against an official source, and write the result to a file."
+  },
+  "runtime": {
+    "hermes_agent": "0.20.5",
+    "nemo_relay": "0.7.2",
+    "phoenix": "19.10.0"
+  },
+  "model": "claude-sonnet-5",
+  "api_mode": "anthropic_messages",
+  "verifier": {
+    "status": "passed",
+    "verified_result": "COLT 2026"
+  },
+  "execution": {
+    "measurement_source": "Phoenix",
+    "model_calls": 5,
+    "tool_calls": 5,
+    "tool_errors": 0,
+    "total_tokens": 60059,
+    "estimated_cost_usd": 0.05396
+  }
+}

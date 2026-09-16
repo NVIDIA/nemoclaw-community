@@ -14,14 +14,12 @@ exec 9>"$AUTOHEAL_STATE_DIR/watchdog.lock"
 flock -n 9 || exit 0
 
 gateway_has_allowlist() {
-  local container expected
-  container="$(sandbox_container)"
+  local expected
   expected="${SLACK_ALLOWED_IDS:-}"
   [[ -z "${SLACK_BOT_TOKEN:-}" ]] && return 0
   # An empty configured allowlist intentionally enables Slack's allow-all mode.
   [[ -z "$expected" ]] && return 0
-  [[ -n "$container" ]] || return 1
-  docker exec "$container" bash -lc '
+  openshell sandbox exec --name "$AUTOHEAL_SANDBOX_NAME" -- bash -lc '
     pid="$(pgrep -f "hermes gateway run" | head -n1 || true)"
     [ -n "$pid" ] || exit 1
     tr "\0" "\n" < "/proc/$pid/environ" | grep -Fx "SLACK_ALLOWED_USERS='"$expected"'"
@@ -29,10 +27,8 @@ gateway_has_allowlist() {
 }
 
 recent_log_match() {
-  local pattern="$1" container logs
-  container="$(sandbox_container)"
-  [[ -n "$container" ]] || return 1
-  logs="$(docker logs --since=15m --tail=5000 "$container" 2>&1 || true)"
+  local pattern="$1" logs
+  logs="$(openshell logs "$AUTOHEAL_SANDBOX_NAME" --since 15m -n 5000 2>&1 || true)"
   grep -Eiq "$pattern" <<<"$logs"
 }
 
@@ -53,15 +49,10 @@ outlook_graph_ok() {
 }
 
 restart_gateway() {
-  local container
-  container="$(sandbox_container)"
-  [[ -n "$container" ]] || return 1
   autoheal_log "restarting Hermes gateway in ${AUTOHEAL_SANDBOX_NAME}"
-  docker exec "$container" bash -lc '
+  openshell sandbox exec --name "$AUTOHEAL_SANDBOX_NAME" -- bash -lc '
     set +e
     pkill -f "[h]ermes gateway run" 2>/dev/null
-    pkill -f "[s]ocat TCP-LISTEN:8642" 2>/dev/null
-    pkill -f "[n]emo-relay --bind" 2>/dev/null
     pkill -f "[o]utlook-bridge.py" 2>/dev/null
     sleep 2
     nohup /usr/local/bin/nemoclaw-start >/tmp/nemoclaw-autoheal-restart.log 2>&1 < /dev/null &

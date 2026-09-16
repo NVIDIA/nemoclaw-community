@@ -489,3 +489,6 @@ alike, under the repository's [LICENSE](../../../LICENSE).
 | Description | Measures memory built from synthetic email and chat, asks 186 questions on one corpus and 96 on a second, and reports accuracy by question type with ingest and answer token costs. |
 | Industry | ✨ Other |
 | Requirements | Python 3.9+ · pytest and tesseract for offline checks · endpoint and adapter for live scoring |
+| NemoClaw | N/A |
+| Harness | N/A |
+| OpenShell | N/A |

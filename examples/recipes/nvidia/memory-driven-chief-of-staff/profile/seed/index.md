@@ -15,6 +15,8 @@ at a page that does not exist, as a defect to fix.
 
 ## Patterns
 
+## Concepts
+
 ## Goals
 
 ## Attention

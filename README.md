@@ -21,9 +21,9 @@ catalog also includes standalone developer tools.
 ## Reference Examples
 
 Examples are organized as reusable NVIDIA and partner recipes, community
-recipes, NVIDIA field demos, and standalone developer tools. Hackathon and
-Build-a-Claw recipes remain in their provenance category and also appear in
-cross-cutting collection views. Search the
+recipes, NVIDIA field demos, and standalone developer tools. The Build-a-Claw
+view brings its guided demos, tutorials, and tagged recipes together without
+changing their canonical paths or contributor provenance. Search the
 [web catalog](https://nvidia.github.io/nemoclaw-community/)
 by example type or industry, browse the
 [source example catalog](examples/README.md), or consume the
@@ -38,6 +38,59 @@ Review the example README before setup.
 
 Additional NemoClaw examples are available in
 [brevdev/nemoclaw-demos](https://github.com/brevdev/nemoclaw-demos).
+
+## How Catalog Status Works
+
+Each example detail page reports stack verification and maintenance status.
+These are independent evidence signals, not scores for support, quality, or
+runtime health.
+
+### Stack Verification
+
+Each example README declares its NemoClaw, harness, and OpenShell values. The
+catalog compares those declarations with recognized version variables in a
+root `Dockerfile*` or `agents/*/Dockerfile*`. A reviewed exact NemoClaw release
+and a recognized harness selection can also supply the stock harness and
+OpenShell versions through the checked-in
+[release contracts](scripts/nemoclaw-release-contracts.json). The build does
+not run the example or guess values from custom file layouts.
+
+| Status | Meaning |
+| --- | --- |
+| `Confirmed` | Exact README values agree with recognized Dockerfile evidence. |
+| `Unconfirmed` | Exact values appear only in the README. |
+| `Unpinned` | A participating version is a range or mutable value. |
+| `Unknown` | The harness or a required version cannot be determined. |
+| `Conflict` | README declarations and Dockerfile evidence disagree. |
+| `N/A` | NemoClaw, a harness, and OpenShell do not participate. |
+
+For mixed component results, the overall priority is `Conflict`, `Unknown`,
+`Unpinned`, `Unconfirmed`, then `Confirmed`.
+
+### Maintenance Status
+
+The catalog uses the later of two dates: the latest committed change anywhere
+under the example, or its optional `Reviewed` date. An explicit `Deprecated`
+lifecycle takes effect immediately. The scheduled Pages build recalculates
+the age each day from the thresholds in
+[`scripts/catalog-maintenance.json`](scripts/catalog-maintenance.json).
+
+| Age since latest activity | Status |
+| --- | --- |
+| 0–29 days | `Current` |
+| 30–59 days | `Review soon` |
+| 60–119 days | `Review due` |
+| 120–239 days | `Review overdue` |
+| 240 days or more | `Review critical` |
+
+Only an explicit `Lifecycle` value of `Deprecated` produces the `Deprecated`
+status. The default catalog view hides explicitly deprecated examples; age
+alone does not hide an example.
+
+See [Runtime Stack Discovery](CONTRIBUTING.md#runtime-stack-discovery) for the
+recognized variables and contributor contract. See the
+[catalog architecture](docs/catalog-architecture.md#static-stack-discovery)
+for the complete generation contract.
 
 ## Getting Started
 

@@ -1,0 +1,885 @@
+/*
+ * SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* Landing-page hero */
+
+.hero {
+  overflow: hidden;
+  background: var(--page);
+  color: var(--ink);
+}
+
+.hero-layout {
+  padding-block: clamp(3.25rem, 5.5vw, 5rem) clamp(2.75rem, 4vw, 4rem);
+}
+
+.eyebrow {
+  margin: 0 0 1.25rem;
+  color: #c7c7c7;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.hero h1 {
+  max-width: 20ch;
+  margin-bottom: 0;
+  font-size: clamp(2.25rem, 4.1vw, 3.75rem);
+  font-weight: 500;
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+}
+
+.hero-support {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(23rem, 0.7fr);
+  gap: clamp(2rem, 6vw, 6rem);
+  align-items: end;
+  margin-top: clamp(1.75rem, 3vw, 2.5rem);
+}
+
+.hero-summary {
+  max-width: 42rem;
+  margin: 0;
+  color: #c7c7c7;
+  font-size: clamp(1rem, 2vw, 1.2rem);
+  line-height: 1.6;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.625rem;
+}
+
+.hero-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  background: var(--line);
+}
+
+.hero-stats div {
+  min-width: 0;
+  padding: 1rem;
+  background: var(--page);
+}
+
+.hero-stats dt {
+  color: var(--nvidia-green);
+  font-size: clamp(1.65rem, 3vw, 2.35rem);
+  font-weight: 500;
+  line-height: 1;
+}
+
+.hero-stats dd {
+  margin: 0.45rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+/* Browse controls and discovery tiles */
+
+.discovery {
+  padding-block: 3rem;
+  border-block: 1px solid var(--line);
+  background: #161616;
+}
+
+.discovery-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2rem;
+  align-items: end;
+  margin-bottom: 1.75rem;
+}
+
+.discovery-header h2 {
+  margin-bottom: 0.5rem;
+  font-size: clamp(1.75rem, 4vw, 2.75rem);
+  font-weight: 500;
+}
+
+.discovery-header p:last-child {
+  max-width: 48rem;
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.browse-mode {
+  padding: 0;
+  border: 0;
+  margin: 0;
+}
+
+.browse-mode-options {
+  display: grid;
+  min-width: min(100%, 28rem);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.browse-mode-option {
+  position: relative;
+  display: block;
+  cursor: pointer;
+}
+
+.browse-mode-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.browse-mode-option > span {
+  display: flex;
+  min-height: 4.25rem;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 0.35rem;
+  background: var(--surface);
+  color: var(--ink-soft);
+}
+
+.browse-mode-option strong {
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+
+.browse-mode-option small {
+  margin-top: 0.15rem;
+  color: #969696;
+  font-size: 0.72rem;
+}
+
+.browse-mode-option input:checked + span {
+  border-color: var(--nvidia-green);
+  background: rgb(118 185 0 / 9%);
+}
+
+.browse-mode-option input:focus-visible + span {
+  outline: 3px solid var(--nvidia-green);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 2px var(--page);
+}
+
+.browse-grid {
+  display: grid;
+  gap: 0.625rem;
+}
+
+.browse-grid-categories {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.browse-grid-industries {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.category-tile {
+  position: relative;
+  min-width: 0;
+  min-height: 6.5rem;
+  border: 1px solid var(--tile-line);
+  color: var(--ink);
+}
+
+.category-tile-collection {
+  border-style: dashed;
+}
+
+.category-tile:hover {
+  border-color: var(--nvidia-green);
+  background: rgb(118 185 0 / 4%);
+}
+
+.category-tile-link {
+  display: flex;
+  min-height: 6.4rem;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1rem 3rem 1rem 1rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.category-info {
+  position: absolute;
+  z-index: 4;
+  top: 0.25rem;
+  right: 0.25rem;
+}
+
+.category-info button {
+  display: grid;
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: help;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.category-info button > span {
+  display: grid;
+  width: 1.35rem;
+  height: 1.35rem;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.category-info button:hover > span {
+  border-color: var(--nvidia-green);
+  color: var(--ink);
+}
+
+.category-info p {
+  position: absolute;
+  z-index: 5;
+  top: 2.25rem;
+  right: 0;
+  display: none;
+  width: min(18rem, calc(100vw - 3rem));
+  padding: 0.8rem;
+  border: 1px solid var(--line-strong);
+  margin: 0;
+  background: var(--surface-raised);
+  box-shadow: 0 0.75rem 2rem rgb(0 0 0 / 35%);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.category-info[data-open="true"] p,
+.category-info:hover p {
+  display: block;
+}
+
+.category-info[data-dismissed="true"] p {
+  display: none;
+}
+
+.category-name {
+  font-size: 0.94rem;
+  font-weight: 400;
+}
+
+.category-name small {
+  display: block;
+  margin-top: 0.25rem;
+  color: #969696;
+  font-size: 0.68rem;
+}
+
+.category-count {
+  color: var(--nvidia-green);
+  font-size: 0.84rem;
+  font-weight: 500;
+}
+
+.industry-tile {
+  display: flex;
+  min-height: 3.25rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+
+.industry-tile:hover {
+  border-color: var(--nvidia-green);
+  background: var(--surface-hover);
+}
+
+.industry-tile > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.industry-tile-count {
+  flex: 0 0 auto;
+  color: var(--nvidia-green);
+  font-variant-numeric: tabular-nums;
+}
+
+.industry-tile[data-empty="true"] {
+  color: #8c8c8c;
+}
+
+.industry-tile[data-empty="true"] .industry-tile-count {
+  color: #8c8c8c;
+}
+
+/* Search controls and result groups */
+
+.catalog {
+  padding-block: 2.75rem 3rem;
+  background: var(--page);
+}
+
+.catalog-intro {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 2rem;
+  padding-bottom: 1.5rem;
+}
+
+.catalog-intro h2 {
+  margin-bottom: 0.45rem;
+  font-size: clamp(1.65rem, 4vw, 2.4rem);
+  font-weight: 500;
+}
+
+.catalog-intro p:last-child {
+  max-width: 46rem;
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.data-link {
+  display: inline-flex;
+  min-height: 2.75rem;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--nvidia-green);
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+
+.data-links {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.catalog-controls {
+  display: grid;
+  grid-template-columns: minmax(16rem, 1.7fr) minmax(16rem, 1fr);
+  gap: 1rem 1.25rem;
+  padding-block: 1.25rem;
+  padding-inline: 1.25rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--nvidia-green);
+  background: var(--surface);
+}
+
+.search-control,
+.filter-control {
+  min-width: 0;
+}
+
+.search-control label,
+.filter-control label {
+  display: block;
+  margin-bottom: 0.4rem;
+  color: #dedede;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.search-control input,
+.filter-control select {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 0.35rem;
+  background: #101010;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+}
+
+.search-control input:hover,
+.filter-control select:hover {
+  border-color: #7b7b7b;
+}
+
+.search-control input:focus-visible,
+.filter-control select:focus-visible {
+  border-color: var(--nvidia-green);
+}
+
+.search-control input::placeholder {
+  color: #8f8f8f;
+}
+
+.select-shell {
+  position: relative;
+}
+
+.select-shell::after {
+  position: absolute;
+  top: 50%;
+  right: 1rem;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-right: 2px solid var(--nvidia-green);
+  border-bottom: 2px solid var(--nvidia-green);
+  content: "";
+  pointer-events: none;
+  transform: translateY(-65%) rotate(45deg);
+}
+
+.filter-control select {
+  padding-right: 3rem;
+  appearance: none;
+  cursor: pointer;
+}
+
+.filter-control select:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.filter-control option,
+.filter-control optgroup {
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+.control-summary {
+  grid-column: 1 / -1;
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--line);
+}
+
+.control-summary p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+}
+
+.reset-button {
+  min-height: 2.75rem;
+  padding: 0.45rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--nvidia-green);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.reset-button:disabled {
+  color: #777777;
+  cursor: default;
+  text-decoration: none;
+}
+
+.empty-state {
+  margin-top: 1.5rem;
+  padding-block: 2rem;
+  border-block: 1px solid var(--line);
+  text-align: center;
+}
+
+.noscript-note {
+  margin-top: 1.25rem;
+  padding: 0.85rem 1rem;
+  border-left: 3px solid var(--nvidia-green);
+  background: var(--surface);
+  color: var(--ink-soft);
+}
+
+.empty-state h2 {
+  margin-bottom: 0.4rem;
+  font-size: 1.35rem;
+  font-weight: 500;
+}
+
+.empty-state p {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.catalog-results {
+  margin-top: 1.75rem;
+}
+
+.catalog-group {
+  padding: 0;
+  background: var(--page);
+  scroll-margin-top: 1.5rem;
+}
+
+.group-layout {
+  display: grid;
+  gap: 0;
+  padding-block: 1.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.catalog-group:target .group-layout {
+  border-top-color: var(--nvidia-green);
+}
+
+.group-heading {
+  max-width: 70rem;
+}
+
+.group-heading h2 {
+  margin-bottom: 0.35rem;
+  font-size: 1.3rem;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+
+.group-heading > p:last-child {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/* Example cards */
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.example-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: var(--surface);
+  scroll-margin-top: 1.5rem;
+}
+
+.example-card:hover {
+  border-color: #4d4d4d;
+  background: var(--surface-hover);
+}
+
+.example-card:target {
+  outline: 3px solid var(--nvidia-green);
+  outline-offset: 0.35rem;
+}
+
+.example-card h3 {
+  margin-bottom: 0.5rem;
+  font-size: 1.18rem;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+
+.example-title-link {
+  text-decoration: none;
+}
+
+.example-title-link:hover {
+  color: var(--nvidia-green);
+  text-decoration: underline;
+}
+
+.outcome {
+  margin: 0 0 0.65rem;
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.example-card dl {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0 0 0.75rem;
+}
+
+.example-card dl.requirements {
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--line);
+}
+
+.example-card dl div {
+  display: block;
+}
+
+.example-card dt,
+.example-card dd {
+  display: inline;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.example-card dt {
+  font-weight: 500;
+}
+
+.example-card dt::after {
+  content: ": ";
+  white-space: pre;
+}
+
+.example-card dd {
+  margin: 0;
+}
+
+.example-card .requirements dt {
+  color: #dedede;
+  font-weight: 600;
+}
+
+.example-card .requirements dd {
+  color: var(--ink-soft);
+}
+
+.example-card code {
+  padding: 0.05rem 0.2rem;
+  border-radius: 0.15rem;
+  background: #252525;
+  color: #f1f1f1;
+  font-size: 0.88em;
+}
+
+.example-card abbr {
+  text-decoration-color: #8c8c8c;
+  text-underline-offset: 0.14em;
+}
+
+.card-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: auto;
+  padding-top: 0.9rem;
+}
+
+.card-action {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--nvidia-green);
+  border-radius: 0.3rem;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.84rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.card-action:hover {
+  background: var(--nvidia-green);
+  color: #111111;
+}
+
+.catalog-results[data-view="industry"] {
+  display: grid;
+  width: min(calc(100% - 3rem), var(--shell));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.625rem 1.375rem;
+  margin-inline: auto;
+}
+
+.catalog-results[data-view="industry"] .catalog-group,
+.catalog-results[data-view="industry"] .group-layout,
+.catalog-results[data-view="industry"] .card-grid {
+  display: contents;
+}
+
+.catalog-results[data-view="industry"] .group-heading {
+  display: none;
+}
+
+.catalog-results[data-view="industry"] .example-card {
+  margin-top: 1rem;
+}
+
+/* Responsive catalog layout */
+
+@media (min-width: 90rem) {
+  .browse-grid-categories {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+  .browse-grid-categories .category-tile:first-child .category-info p {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .browse-grid-industries {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .catalog-controls {
+    grid-template-columns:
+      minmax(22rem, 1.8fr)
+      minmax(18rem, 1fr)
+      minmax(16rem, 0.9fr)
+      minmax(17rem, 0.65fr);
+    align-items: end;
+  }
+
+  .control-summary {
+    grid-column: auto;
+    padding-top: 0;
+    padding-left: 1.25rem;
+    border-top: 0;
+    border-left: 1px solid var(--line);
+  }
+
+  .control-summary p,
+  .control-summary .reset-button {
+    white-space: nowrap;
+  }
+
+  .card-grid,
+  .catalog-results[data-view="industry"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 100rem) {
+  .browse-grid-industries {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 120rem) {
+  .card-grid,
+  .catalog-results[data-view="industry"] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 65rem) {
+  .browse-grid-categories,
+  .browse-grid-industries {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 50rem) {
+  .hero-layout {
+    padding-block: 3rem 2.75rem;
+  }
+
+  .hero-support,
+  .discovery-header {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-support,
+  .discovery-header {
+    gap: 2rem;
+  }
+
+  .hero h1 {
+    max-width: 20ch;
+  }
+
+  .browse-mode-options {
+    width: 100%;
+  }
+
+  .browse-grid-categories,
+  .browse-grid-industries {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-intro {
+    display: block;
+  }
+
+  .data-links {
+    align-items: flex-start;
+    margin-top: 1rem;
+  }
+  .catalog-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .control-summary {
+    grid-column: auto;
+  }
+
+  .catalog-results[data-view="industry"] {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 45rem) and (max-width: 50rem) {
+  .card-grid,
+  .catalog-results[data-view="industry"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 29.375rem) {
+  .hero h1 {
+    font-size: clamp(2.1rem, 11vw, 3rem);
+  }
+
+  .hero-actions {
+    display: grid;
+  }
+
+  .browse-grid-categories,
+  .browse-grid-industries,
+  .browse-mode-options,
+  .hero-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .category-tile {
+    min-height: 6rem;
+  }
+
+  .catalog-results[data-view="industry"] {
+    width: min(calc(100% - 2rem), var(--shell));
+  }
+
+  .industry-tile {
+    min-height: 3rem;
+  }
+
+  .control-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

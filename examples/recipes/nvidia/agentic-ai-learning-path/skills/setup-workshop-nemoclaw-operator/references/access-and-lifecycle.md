@@ -165,7 +165,7 @@ docker exec "$C" chown sandbox:sandbox /tmp/nemoclaw-restore-env.sh
 
 # 2. Kill the stack, then relaunch it under a SUPERVISOR session — leave this
 #    stream running (tmux/background); it is the stack's parent:
-docker exec "$C" bash -c 'pkill -f "[h]ermes gateway run"; pkill -f "[s]ocat TCP-LISTEN:8642"; pkill -f "[n]emo-relay --bind"; pkill -f "[o]utlook-bridge.py"; pkill -f "bash /usr/local/bin/[n]emoclaw-start"'
+docker exec "$C" bash -c 'pkill -f "[h]ermes gateway run"; pkill -f "[o]utlook-bridge.py"; pkill -f "bash /usr/local/bin/[n]emoclaw-start"'
 openshell sandbox exec -n "$SANDBOX" --no-tty -- sh -lc 'set -a; . /tmp/nemoclaw-restore-env.sh; set +a; exec /usr/local/bin/nemoclaw-start'
 
 # 3. From another shell — verify, then detach the LOCAL client (the remote

@@ -89,9 +89,16 @@ refuses can cost you the whole install rather than that one scope.
 
 ## 2. Hand it to the gateway
 
-**On the host**, from the recipe root:
+**On the host**, from the recipe root. `SANDBOX_STORAGE_PATH` is required
+every time this script runs — including a `FORCE_REAUTH=1` re-run below —
+because the storage-encryption check in [step 0](#0-encrypted-storage) is
+step 1 of the script itself, before anything else. `OPENSHELL_SANDBOX_NAME`
+defaults to `hermes` if omitted; set it explicitly when your sandbox uses
+another name:
 
 ```bash
+export SANDBOX_STORAGE_PATH="<path-containing-sandbox-storage>"
+export OPENSHELL_SANDBOX_NAME="my-hermes"
 bash scripts/setup-slack.sh
 ```
 
@@ -127,9 +134,12 @@ provider, configures rotation, and attaches it to your sandbox. Attaching works
 on a sandbox that already exists; it does not have to be rebuilt.
 
 To replace the credential later — after regenerating the app's tokens, or if
-the refresh chain broke:
+the refresh chain broke — `SANDBOX_STORAGE_PATH` is still required, for the
+same reason as above:
 
 ```bash
+export SANDBOX_STORAGE_PATH="<path-containing-sandbox-storage>"
+export OPENSHELL_SANDBOX_NAME="my-hermes"
 FORCE_REAUTH=1 bash scripts/setup-slack.sh
 ```
 
@@ -200,7 +210,8 @@ new, plus anything it could not reach.
 
 `--recheck` re-probes what the token can do. The answer is cached in
 `workspace/slack_capabilities.json`, because asking every half hour is a rate
-limit waiting to happen. Re-run with `--recheck` after changing scopes.
+limit waiting to happen. Identity is still verified with `auth.test` on every
+run. Re-run with `--recheck` after changing scopes.
 
 Renewal is the gateway's:
 
@@ -265,3 +276,103 @@ removes them along with the memory and the learned policy, and
 `python3 export_store.py` writes out a copy first if you want one. Both are in
 [data-lifecycle.md](data-lifecycle.md); revoking and erasing are separate
 actions and doing one is easy to mistake for both.
+
+## Optional self-authored collection
+
+Slack capture of your own messages is disabled by default. Enable it separately
+from Graph Sent Items by setting `INTAKE_SLACK_SELF_AUTHORED=1` in the profile
+environment. The only accepted values are `0` and `1`; any other value stops the
+collector before it makes a request. Enabling Graph does not enable Slack.
+
+For one manual run in the sandbox:
+
+```bash
+INTAKE_SLACK_SELF_AUTHORED=1 python3 "$HERMES_HOME/scripts/ingest_slack.py"
+```
+
+For scheduled runs, add the following line to the profile environment file
+reported by `hermes -p <profile> config env-path`, inside the same sandbox:
+
+```dotenv
+INTAKE_SLACK_SELF_AUTHORED=1
+```
+
+Restart long-running Hermes processes that already loaded that environment.
+The setting is local configuration; it is not a credential and does not belong
+in the Slack provider. The existing user-token scopes and named-channel list
+still apply. This adds no private-channel enumeration, writes to Slack, or
+attachment downloads.
+
+### Authorship and attribution
+
+Each run verifies `auth.test`, including when the gateway placeholder and
+cached scopes are unchanged. Messages with no human author, bots, and service
+subtypes are omitted. Only a message whose author matches the authenticated
+user becomes outbound. The ledger retains that author and records the other
+person separately, with the team/user pair as `source_account`.
+
+For a 1:1 DM, the collector obtains the other member from
+[`conversations.info`](https://docs.slack.dev/reference/methods/conversations.info/).
+A note to yourself has no counterparty. In a group, exactly one distinct
+non-self mention supplies the counterparty; repeated mentions of that same
+person count once. Other group messages have no immediate attribution. A
+user-authored thread root may resolve from the first qualifying inbound reply
+within seven days; an arbitrary reply in someone else's thread cannot use that
+heuristic. The [direction contract](phase-c1-direction.md) defines the limits.
+
+DM membership and display-name lookups share `INTAKE_SLACK_BUDGET` with history
+and replies. Failed or unaffordable DM membership lookup omits affected own
+messages and holds their history/thread progress for retry. The JSON report
+includes `self_authored.enabled`, `unresolved_dm_conversations`, and incomplete
+coverage. Names can fall back to stable IDs when their lookup is unavailable.
+Use stable user IDs for person exclusions because display names can change or
+be unavailable. Exclusions check the author, known target, mentions, and channel
+before storage. If any person/domain exclusion is configured, outbound group
+messages with unknown full membership are omitted, even with a resolved mention.
+
+### Backfill, pause, and recovery
+
+The first enabled run starts a seven-day lookback. Enabling after inbound
+collection has already advanced its cursor also revisits that window and
+rewinds remembered thread watermarks. The collector keeps an enablement
+generation, cutoff, and per-channel progress in ledger `meta` rows; partial runs
+reuse that generation. Thread resets are written atomically before the reset
+marker, and completion is committed with the collected rows. Interruptions
+therefore retry work without moving past uncommitted evidence.
+
+Existing conversation and thread rotation still applies. The collector watches
+at most 200 recent parents with no known replies, and may miss replies under
+parents it no longer remembers. Capture covers readable, configured channels;
+it is not a complete Slack history export. Own messages older than the current
+enablement cutoff are omitted, including old replies returned during a crawl.
+Replaying a stored message never relabels historical NULL direction or restores
+a body previously cleared by retention.
+
+Set the environment entry to `0` to stop future own-message capture. This keeps
+stored evidence, inbound collection, and progress records. Once a collector run
+has observed `0`, changing back to `1` starts another seven-day lookback, including
+messages from the disabled interval that remain inside that window. A toggle
+between runs cannot be observed. `--recheck` refreshes scopes, not the lookback;
+a confirmed disable/run/enable cycle starts a new window.
+
+The first Phase C run binds the ledger to the authenticated team/user pair.
+Subsequent account changes stop collection so another account cannot reuse
+these cursors. Use a separate profile, or export and reset with writers stopped,
+before switching accounts. Pre-upgrade rows without an account stay unknown.
+
+### Retention, export, and rollback
+
+Own-message bodies follow the same 30-day default retention as inbound bodies.
+Author, counterparty, attribution basis, and collection metadata remain in the
+ledger and its `store.json` export. Deleting a source message is not a local
+purge: bounded Slack reads do not reliably detect source deletions or edits.
+Adding an exclusion or disabling capture does not erase prior evidence or
+already-derived people pages.
+
+Recipe reset removes the ledger, memory, learned policy, and Slack collection
+state. It does not remove independent exports/backups or clear environment
+settings. Disable the flag and pause writers first when withdrawing consent;
+otherwise the next run can collect again. Portable exports do not include the
+profile environment. For schema rollback, restore a consistent pre-upgrade
+profile backup together with its matching distribution revision, as described
+in [the rollback contract](phase-c1-direction.md#migration-rollback-and-review).

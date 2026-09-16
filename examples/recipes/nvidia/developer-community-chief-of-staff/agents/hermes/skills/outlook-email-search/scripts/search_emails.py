@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Search a Microsoft Graph mailbox and return structured JSON results.
 
-Authorization is the placeholder `openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN`;
-the OpenShell L7 proxy substitutes a live access token on egress.
+Authorization uses the identity-stable OpenShell placeholder injected in
+`MS_GRAPH_ACCESS_TOKEN`; the L7 proxy substitutes a live access token on egress.
 """
 
 from __future__ import annotations
@@ -28,7 +28,9 @@ class ClientFilters(NamedTuple):
     sender: str | None      # exact sender email (from --from)
     unread_only: bool       # from --unread
 
-MS_GRAPH_ACCESS_TOKEN = "openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN"
+MS_GRAPH_ACCESS_TOKEN = os.environ.get("MS_GRAPH_ACCESS_TOKEN") or (
+    "openshell:resolve:env:MS_GRAPH_ACCESS_TOKEN"
+)
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 _WELL_KNOWN_FOLDERS = {

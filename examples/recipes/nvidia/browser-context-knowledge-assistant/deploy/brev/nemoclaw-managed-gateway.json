@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "mode": "nemoclaw-managed",
+  "requiredCapabilities": [
+    "gateway.health",
+    "sandbox.create",
+    "sandbox.exec"
+  ]
+}

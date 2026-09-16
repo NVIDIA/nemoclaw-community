@@ -1,10 +1,12 @@
 <!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# Build-a-Claw Recipes
+# Build-a-Claw
 
-A curated collection of NemoClaw recipes created through the Build-a-Claw program, while each recipe remains organized by its contributor provenance.
+Guided demos, tutorials, and reusable recipes created through the Build-a-Claw program, while every example keeps its canonical type, path, and contributor provenance.
 
 ## Examples
 
-_No examples are currently in this group._
+| Example | Category | Industry | Description |
+| --- | --- | --- | --- |
+| [Build-a-Claw Tutorial](../../demos/field/build-a-claw-tutorial/README.md) | NVIDIA Field Demos | 🎓 Academia/Education | Guides DGX Spark users through serving local multimodal models with llama.cpp, connecting an agent harness, and trying coding, vision, browser, messaging, and speech workflows. |

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="460" viewBox="0 0 1200 460" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1a1f1a" stroke-width="1"/>
+    </pattern>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#76b900"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="460" fill="#0b0d0b"/>
+  <rect width="1200" height="460" fill="url(#grid)"/>
+
+  <text x="48" y="56" fill="#e5e7eb" font-size="26" font-weight="700">NeMo Relay</text>
+
+  <!-- pipeline -->
+  <rect x="48" y="110" width="240" height="70" rx="10" fill="rgba(118,185,0,0.06)" stroke="#76b900" stroke-width="2"/>
+  <text x="168" y="152" fill="#76b900" font-size="15" font-weight="700" text-anchor="middle">bot</text>
+
+  <line x1="288" y1="145" x2="360" y2="145" stroke="#76b900" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <rect x="364" y="110" width="240" height="70" rx="10" fill="#111611" stroke="#374151" stroke-width="1.5"/>
+  <text x="484" y="152" fill="#e5e7eb" font-size="15" font-weight="700" text-anchor="middle">collector on host</text>
+
+  <line x1="604" y1="145" x2="676" y2="145" stroke="#76b900" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <rect x="680" y="110" width="240" height="70" rx="10" fill="#111611" stroke="#374151" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <text x="800" y="152" fill="#e5e7eb" font-size="15" font-weight="700" text-anchor="middle">any OTLP backend</text>
+
+  <rect x="960" y="110" width="192" height="70" rx="10" fill="#111611" stroke="#374151" stroke-width="1.5"/>
+  <text x="1056" y="141" fill="#76b900" font-size="13" text-anchor="middle">sent  45</text>
+  <text x="1056" y="163" fill="#76b900" font-size="13" text-anchor="middle">failed  0</text>
+
+  <!-- trace -->
+  <rect x="48" y="210" width="560" height="200" rx="10" fill="#0f140f" stroke="#2d3a2d"/>
+  <text x="68" y="240" fill="#e5e7eb" font-size="15" font-weight="700">one turn</text>
+  <g font-size="14">
+    <text x="68" y="274" fill="#76b900">turn</text>
+    <text x="68" y="300" fill="#d1d5db">├─ model call</text>
+    <text x="68" y="326" fill="#d1d5db">├─ tool: terminal</text>
+    <text x="68" y="352" fill="#d1d5db">├─ tool: message_teammate</text>
+    <text x="68" y="378" fill="#d1d5db">└─ model call</text>
+  </g>
+
+  <!-- why -->
+  <rect x="640" y="210" width="512" height="200" rx="10" fill="#111611" stroke="#374151" stroke-width="1.5"/>
+  <text x="660" y="240" fill="#e5e7eb" font-size="15" font-weight="700">what you can see</text>
+  <g font-size="14" fill="#d1d5db">
+    <text x="660" y="274">which bot got no work</text>
+    <text x="660" y="300">where a chain stalled</text>
+    <text x="660" y="326">a claim with no tool call behind it</text>
+    <text x="660" y="352">what every token was spent on</text>
+  </g>
+
+  <text x="48" y="440" fill="#9ca3af" font-size="14">Ships inside Hermes. One file per bot turns it on.</text>
+</svg>

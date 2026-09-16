@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Loaded in-process by Hermes's bundled observability/nemo_relay plugin.
+# The base recipe writes ATIF traces only to the sandbox filesystem. It does
+# not configure an external collector or add a network destination.
+
+version = 1
+
+[[components]]
+kind = "observability"
+enabled = true
+
+[components.config]
+version = 3
+
+[components.config.atif]
+enabled = true
+output_directory = "/sandbox/.hermes-data/nemo-relay/atif"
+filename_template = "ask-nemoclaw-atif-{session_id}.json"
+agent_name = "Ask NemoClaw"
+agent_version = "0.9.0"
+
+# OpenShell provider placeholders can appear in request metadata until the L7
+# proxy resolves them. Redact those references from local trace artifacts.
+[[components]]
+kind = "pii_redaction"
+enabled = true
+
+[components.config]
+version = 1
+
+[[components.config.profiles]]
+mode = "builtin"
+priority = 80
+
+[components.config.profiles.builtin]
+action = "regex_replace"
+pattern = "openshell:resolve:env:[A-Za-z_][A-Za-z0-9_]*"
+replacement = "[openshell env placeholder]"

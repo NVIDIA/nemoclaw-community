@@ -79,10 +79,26 @@ role: Job title or function
 relationship: How they relate to the user, 1-2 sentences
 importance: high | medium | low
 last_interaction: YYYY-MM-DD
+outbound_evidence: sha256:<digest>  # optional; may include :<offset>; copy verbatim
 interaction_frequency: daily | weekly | monthly | rare
 status: active | departing | departed   # optional, default active
 ---
 ```
+
+`outbound_evidence` records the selector's current outbound evidence snapshot
+for this person. It is optional for existing pages and pages without outbound
+evidence. When the selector supplies a marker, the memory-writing job copies it
+into the same complete page write as its evidence update. A backfilled message
+or newly resolved counterparty can change this marker even when the event is
+older than `last_interaction`; do not change that date to acknowledge backfill.
+A partial snapshot uses `sha256:<digest>:<offset>`. The offset advances only
+when the page is saved with the supplied marker. The final batch uses
+`sha256:<digest>` without an offset; only that completed marker and an unchanged
+interaction date let subsequent runs remain quiet. If a snapshot changes
+during a partial pass, the selector finishes that pass, then supplies a `:0`
+marker to restart its bounded batches, including newly attributed older
+messages. No ledger migration is required; progress stays in this optional page
+field.
 
 **Sections, in order:** Relationship · Communication Style · Key Context ·
 Projects (linked) · Recent Interactions.
@@ -301,7 +317,7 @@ updated: YYYY-MM-DD
 ```
 
 Sections, in this order: `## People` · `## Projects` · `## Patterns` ·
-`## Goals` · `## Attention`. One line per page: a relative link, then a
+`## Concepts` · `## Goals` · `## Attention`. One line per page: a relative link, then a
 half-line of what it holds and why someone would open it.
 
 An index entry pointing at a missing page, or a page with no index entry, is a

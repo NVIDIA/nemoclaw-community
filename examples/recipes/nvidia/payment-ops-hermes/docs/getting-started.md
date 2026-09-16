@@ -10,7 +10,7 @@ example:
 
 ```bash
 curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh \
-  | OPENSHELL_VERSION=v0.0.53 sh
+  | OPENSHELL_VERSION=v0.0.106 sh
 ```
 
 ```bash
@@ -34,8 +34,9 @@ cp .env.example .env
 nano .env
 ```
 
-Set `COMPATIBLE_API_KEY`. The endpoint, model, sandbox name, Phoenix endpoint,
-and project name have working defaults.
+Set `COMPATIBLE_API_KEY`. The inference endpoint, model, and sandbox name have
+working defaults. The demo's Phoenix endpoint and project are fixed in its
+native Relay configuration.
 
 ## 3. Bring up
 
@@ -44,7 +45,7 @@ bash scripts/bring-up.sh
 ```
 
 The first image build can take several minutes. Do not interrupt it while
-OpenShell is downloading the base image or building Hermes.
+OpenShell downloads and layers the pinned Hermes base image.
 
 Bring-up keeps fixture validation concise. Run the detailed, offline control
 smoke test separately whenever you want to inspect all six expected decisions:
@@ -64,6 +65,11 @@ bash scripts/bring-up.sh --recover-error
 
 This recovery uses cached image layers. A browser or SSH timeout by itself does
 not require sandbox replacement.
+
+The same recovery command replaces a `Ready` sandbox when the required Hermes
+`0.20.6` or native Relay `0.7.2` version is absent, or when the native Relay
+configuration is missing or invalid. Bring-up reports that condition instead
+of silently reusing the legacy sidecar workload.
 
 ## 4. Verify
 
@@ -88,7 +94,11 @@ python3 scripts/approve_release.py --id ACH-2003 --approver "Jane Ops"
 
 The first command releases a cleared fixture. The second refuses a held one.
 
-## 6. Preserve traces and clean up
+## 6. Preserve completed traces and clean up
+
+Normal UI turns export closed spans to Phoenix immediately. Local ATIF appears
+only after Hermes finalizes the corresponding session; downloading does not
+force that boundary and may find no completed file while the session is active.
 
 ```bash
 bash scripts/download-traces.sh

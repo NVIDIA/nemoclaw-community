@@ -15,7 +15,7 @@
 // Sets what's required for Hermes to run inside OpenShell:
 //   - Model and inference endpoint (Hermes calls OpenShell's `inference.local`
 //     route, bound to the `compatible-endpoint` provider by `openshell inference set`)
-//   - API server on internal port (socat forwards to public port)
+//   - API server on the OpenShell-forwarded sandbox port
 //   - Messaging platform tokens (if configured during onboard)
 //   - Agent defaults (terminal, memory, skills, display)
 //   - Slack-facing UX tweaks (less mid-turn chatter, no browser tool exposure)
@@ -71,7 +71,7 @@ function main(): void {
   );
 
   const config: Record<string, unknown> = {
-    _config_version: 34,
+    _config_version: 39,
     model: {
       default: model,
       provider: "custom",
@@ -86,7 +86,7 @@ function main(): void {
       max_turns: 30,
       reasoning_effort: "medium",
       // Config migration v30 -> v32 disables the previous implicit
-      // verify-on-stop behavior. Generated configs start at v34, so preserve
+      // verify-on-stop behavior. Generated configs start at v39, so preserve
       // that migrated value explicitly instead of inheriting "auto".
       verify_on_stop: false,
     },
@@ -131,10 +131,10 @@ function main(): void {
       timeout: 60,
     },
     // Hermes owns Relay's provider, tool, and session lifecycles in-process.
-    // The bundled plugin loads the immutable plugins.toml selected by
-    // HERMES_NEMO_RELAY_PLUGINS_TOML; no shell hooks or Relay daemon are used.
+    // Core observability loads the immutable plugins.toml selected by
+    // HERMES_NEMO_RELAY_PLUGINS_TOML; no compatibility plugin is enabled.
     plugins: {
-      enabled: ["nemoclaw", "observability/nemo_relay"],
+      enabled: ["nemoclaw"],
     },
   };
 
@@ -142,10 +142,7 @@ function main(): void {
   const platformsConfig: Record<string, Record<string, unknown>> = {};
   for (const ch of msgChannels) {
     if (ch in TOKEN_ENV) {
-      const tokenPlaceholder =
-        ch === "slack" && TOKEN_ENV[ch] === "SLACK_BOT_TOKEN"
-          ? "xoxb-OPENSHELL-RESOLVE-ENV-SLACK_BOT_TOKEN"
-          : `openshell:resolve:env:${TOKEN_ENV[ch]}`;
+      const tokenPlaceholder = `openshell:resolve:env:${TOKEN_ENV[ch]}`;
       const pCfg: Record<string, unknown> = {
         enabled: true,
         token: tokenPlaceholder,
@@ -165,15 +162,13 @@ function main(): void {
     config.platforms = platformsConfig;
   }
 
-  // API server — internal port only.
-  // Hermes binds to 127.0.0.1 regardless of config (upstream bug).
-  // socat in start.sh forwards 0.0.0.0:8642 -> 127.0.0.1:18642.
+  // OpenShell forwards this API server port from the sandbox.
   const platforms = (config.platforms ?? {}) as Record<string, unknown>;
   platforms.api_server = {
     enabled: true,
     extra: {
-      port: 18642,
-      host: "127.0.0.1",
+      port: 8642,
+      host: "0.0.0.0",
     },
   };
   config.platforms = platforms;
@@ -188,26 +183,18 @@ function main(): void {
   // route, which injects the bearer at the gateway. The key never enters
   // the sandbox env.
   const envLines: string[] = [
-    "API_SERVER_PORT=18642",
-    "API_SERVER_HOST=127.0.0.1",
+    "API_SERVER_PORT=8642",
+    "API_SERVER_HOST=0.0.0.0",
     // Internal API key used by the Outlook bridge to authenticate local API
     // requests and support X-Hermes-Session-Id continuation.
     "API_SERVER_KEY=nemoclaw-internal",
   ];
   for (const ch of msgChannels) {
     if (ch in TOKEN_ENV) {
-      if (ch === "slack" && TOKEN_ENV[ch] === "SLACK_BOT_TOKEN") {
-        envLines.push("SLACK_BOT_TOKEN=xoxb-OPENSHELL-RESOLVE-ENV-SLACK_BOT_TOKEN");
-      } else {
-        envLines.push(`${TOKEN_ENV[ch]}=openshell:resolve:env:${TOKEN_ENV[ch]}`);
-      }
+      envLines.push(`${TOKEN_ENV[ch]}=openshell:resolve:env:${TOKEN_ENV[ch]}`);
     }
     if (ch in EXTRA_TOKEN_ENV) {
-      if (ch === "slack" && EXTRA_TOKEN_ENV[ch] === "SLACK_APP_TOKEN") {
-        envLines.push("SLACK_APP_TOKEN=xapp-OPENSHELL-RESOLVE-ENV-SLACK_APP_TOKEN");
-      } else {
-        envLines.push(`${EXTRA_TOKEN_ENV[ch]}=openshell:resolve:env:${EXTRA_TOKEN_ENV[ch]}`);
-      }
+      envLines.push(`${EXTRA_TOKEN_ENV[ch]}=openshell:resolve:env:${EXTRA_TOKEN_ENV[ch]}`);
     }
   }
   // Slack allowlist (SLACK_ALLOWED_USERS / SLACK_ALLOW_ALL_USERS) and the

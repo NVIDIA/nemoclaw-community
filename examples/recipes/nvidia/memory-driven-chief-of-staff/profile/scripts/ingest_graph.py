@@ -1,8 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Read the user's own mail into the intake, through a credential it never
-holds.
+"""Read the user's own mail into the intake, both sent and received, through a
+credential it never holds.
 
 The counterpart to `ingest_slack.py`, and deliberately the same shape where
 the two sources allow it: a bounded read, exit codes that say what went wrong,
@@ -11,6 +11,16 @@ and a credential that is a placeholder inside the sandbox. What this sees in
 nothing; the OpenShell gateway substitutes the real delegated token at the
 egress boundary and refreshes it on its own schedule. A compromised collector
 leaks a string that is useless off this host.
+
+Inbox is always synchronised. With INTAKE_GRAPH_SENT_ITEMS=1, two folders
+are synchronised independently: `inbox` and `sentitems`. Authorship is checked against the mailbox identity, rather
+than inferred from folder placement. Each gets its own full page budget
+and its own delta cursor — a large backlog in one does not delay the other's
+turn. Unlike Slack, resolving an outbound message's counterparty needs no
+extra request: Graph's To/Cc/Bcc fields carry the recipient names and
+addresses. Exactly one non-self recipient resolves immediately. See
+`normalize.graph_message_to_item` for the resolution rules and
+`ingest_slack.py`'s module docstring for why this collector exists at all.
 
 Where the two sources differ is deletion, and the difference decides the
 design. Slack offers no way to learn that a message was removed — its absence
@@ -45,6 +55,7 @@ import sqlite3
 import os
 import sys
 import time
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -53,6 +64,7 @@ from typing import Any
 
 from _db import ensure_store, ledger_path, write_txn
 from normalize import graph_message_to_item, insert_items
+from outbound import enabled
 
 API = "https://graph.microsoft.com/v1.0"
 
@@ -99,13 +111,30 @@ MAX_TOTAL_BACKOFF_SECONDS = 120
 PAGE_SIZE = 50
 MAX_BACKOFF_SECONDS = 30
 
+# The mail folders this collector synchronises, inbox first. Each gets its own
+# full REQUEST_BUDGET-page allowance every tick, independent of the other's
+# backlog — not a shared pool split between them, which would let a large
+# inbox backlog crowd out Sent Items indefinitely (or the reverse). A folder
+# whose own round is rate-limited beyond MAX_TOTAL_BACKOFF_SECONDS still stops
+# the tick, exactly as a single-folder failure did before this — that is an
+# accepted, pre-existing risk this does not newly introduce.
+FOLDERS = ("inbox", "sentitems")
+
 # Where the synchronisation stands. Not in `cursors`, because that table holds
 # one opaque string per scope and this needs two states — mid-round and
 # between rounds — plus the mailbox identity.
+#
+# Nested per folder (`state["folders"][folder]`), with `identity` shared at
+# the top level: it names the mailbox, not the folder. A pre-Phase-C file is
+# flat (`next`/`delta` directly under the top level, naming the inbox round
+# implicitly, since inbox was the only folder read) -- `read_state` reshapes
+# it into `folders.inbox` on load, so an existing installation keeps its
+# resume point and delta cursor rather than paying for a full
+# resynchronisation the mailbox never asked for.
 STATE_FILE = "graph_state.json"
 
 FIELDS = ("id,parentFolderId,conversationId,receivedDateTime,from,subject,"
-          "body,webLink,isRead,toRecipients,ccRecipients,"
+          "body,webLink,isRead,toRecipients,ccRecipients,bccRecipients,sentDateTime,"
           "internetMessageId")
 
 
@@ -165,21 +194,58 @@ def state_path():
 def read_state() -> dict[str, Any]:
     try:
         found = json.loads(state_path().read_text(encoding="utf-8"))
-        return found if isinstance(found, dict) else {}
-    except (OSError, json.JSONDecodeError):
-        return {}
+    except FileNotFoundError:
+        return {"folders": {}}
+    except (OSError, ValueError) as exc:
+        raise GraphError("Graph cursor state is unreadable; collection was not started") from exc
+    if not isinstance(found, dict):
+        raise GraphError("Graph cursor state must be an object")
+    migrated = _migrated(found)
+    for value in migrated["folders"].values():
+        if not isinstance(value, dict) or any(not isinstance(value[k], str) for k in ("next", "delta") if k in value):
+            raise GraphError("Graph folder cursor state is invalid")
+    return migrated
+
+
+def _migrated(state: dict[str, Any]) -> dict[str, Any]:
+    """Nest a pre-Phase-C flat state under `folders.inbox`.
+
+    Every round before this recipe read Sent Items lived entirely in the
+    top-level `next`/`delta` keys, naming the inbox round implicitly — there
+    was no other folder to name. Reshaping it into `folders.inbox` keeps that
+    round's resume point and delta cursor rather than discarding them and
+    paying for a resynchronisation the mailbox never asked for.
+    """
+    if "folders" in state:
+        folders = state.get("folders")
+        if not isinstance(folders, dict):
+            raise GraphError("Graph folder state must be an object")
+        state["folders"] = folders
+        return state
+    inbox = {k: state[k] for k in ("next", "delta") if k in state}
+    migrated: dict[str, Any] = {"folders": ({"inbox": inbox} if inbox else {})}
+    if "identity" in state:
+        migrated["identity"] = state["identity"]
+    return migrated
 
 
 def save_state(state: dict[str, Any]) -> None:
+    """Publish a complete cursor snapshot after rows have committed."""
     path = state_path()
+    temporary = None
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(state), encoding="utf-8")
-    except OSError:
-        # Losing this costs a re-synchronisation, not correctness: without it
-        # the next run starts a fresh delta round and the rows are idempotent
-        # on `source_id`.
-        pass
+        fd, temporary = tempfile.mkstemp(prefix=".graph-state-", dir=path.parent)
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(state, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    except OSError as exc:
+        raise GraphError("could not save Graph cursor state; retry the collection", "other") from exc
+    finally:
+        if temporary is not None and os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 class Budget:
@@ -300,12 +366,13 @@ def identity(token: str, state: dict[str, Any],
     changed = bool(isinstance(previous, dict)
                    and previous.get("address")
                    and previous["address"].lower() != address.lower())
-    return ({"address": address, "display_name": me.get("displayName")},
+    addresses = sorted({a.lower() for a in (address, me.get("userPrincipalName")) if a})
+    return ({"address": address.lower(), "addresses": addresses, "display_name": me.get("displayName")},
             changed)
 
 
-def first_round_url(days: int) -> str:
-    """The initial delta request, bounded to a window the user chose."""
+def first_round_url(folder: str, days: int) -> str:
+    """The initial delta request for one folder, bounded to a chosen window."""
     start = (datetime.now(timezone.utc)
              - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%SZ")
     query = urllib.parse.urlencode({
@@ -313,7 +380,7 @@ def first_round_url(days: int) -> str:
         "$top": PAGE_SIZE,
         "$filter": "receivedDateTime ge %s" % start,
     })
-    return "/me/mailFolders/inbox/messages/delta?" + query
+    return f"/me/mailFolders/{folder}/messages/delta?" + query
 
 
 def still_in_mailbox(source_id: str, token: str, budget: Budget) -> str:
@@ -423,8 +490,10 @@ def commit_tombstones(removed: list[str]) -> int:
 
 
 def collect(token: str, address: str, state: dict[str, Any],
-            days: int, budget: Budget) -> dict[str, Any]:
-    """One synchronisation round, or as much of one as the budget allows.
+            days: int, budget: Budget, folder: str = "inbox", *,
+            include_outbound: bool = False, user_addresses=None) -> dict[str, Any]:
+    """One folder's synchronisation round, or as much of one as its own page
+    budget allows.
 
     Three states, and which one this run is in decides where it starts:
 
@@ -436,6 +505,11 @@ def collect(token: str, address: str, state: dict[str, Any],
     fabricated from the messages this run happened to see. The rule that a
     partial crawl must not advance the watermark is therefore enforced by the
     protocol rather than by this code remembering it.
+
+    `state` is this one folder's own sub-object (`state["folders"][folder]` in
+    the caller) — mutated in place, the same arrangement `ingest_slack.py`
+    uses for a channel's cursor, so the caller's dict is up to date without
+    this function needing to know where it sits in the larger structure.
     """
     resuming = bool(state.get("next"))
     if state.get("next"):
@@ -443,7 +517,10 @@ def collect(token: str, address: str, state: dict[str, Any],
     elif state.get("delta"):
         url, absolute = state["delta"], True
     else:
-        url, absolute = first_round_url(days), False
+        url, absolute = first_round_url(folder, days), False
+
+    own = {address.lower()} | set(user_addresses or [])
+    omitted_self = unverified = 0
 
     added_total = removed_total = moved = unresolved = pages = 0
     delta_link = None
@@ -483,7 +560,18 @@ def collect(token: str, address: str, state: dict[str, Any],
 
         # Written before the removals are resolved, so a message collected
         # earlier in this same round can be asked about in a later page.
-        items = [graph_message_to_item(m, address) for m in present]
+        items = []
+        for message in present:
+            author = ((message.get("from") or {}).get("emailAddress") or {}).get("address", "").lower()
+            if not author or (folder == "sentitems" and author not in own):
+                unverified += 1
+                continue
+            direction = "outbound" if author in own else "inbound"
+            if direction == "outbound" and (not include_outbound or folder != "sentitems"):
+                omitted_self += 1
+                continue
+            items.append(graph_message_to_item(message, address, direction=direction,
+                source_account=address.lower(), user_addresses=own))
         added_total += commit_rows(items)
 
         verdicts = {source_id: still_in_mailbox(source_id, token, budget)
@@ -512,7 +600,8 @@ def collect(token: str, address: str, state: dict[str, Any],
         state.pop("next", None)
         complete = False
 
-    return {"source": "email", "scope": "inbox", "added": added_total,
+    return {"source": "email", "scope": folder, "added": added_total,
+            "omitted_self": omitted_self, "unverified_authorship": unverified,
             "removed": removed_total, "moved": moved,
             # Removals that left the folder while the row had no identity of
             # its own to ask about — collected before the column existed, or
@@ -529,12 +618,21 @@ def collect(token: str, address: str, state: dict[str, Any],
 def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
     refresh = "--recheck" in args
+    try:
+        include_outbound = enabled("email")
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return EXIT_OTHER
 
     raw = os.environ.get("MS_GRAPH_ACCESS_TOKEN")
     kind = classify_token(raw)
 
     ensure_store()
-    state = read_state()
+    try:
+        state = read_state()
+    except GraphError as exc:
+        print(str(exc), file=sys.stderr)
+        return EXIT_OTHER
 
     # Never configured is not the same as broken, and the difference decides
     # whether every idle tick wakes the model. This file exists as soon as the
@@ -545,7 +643,12 @@ def main(argv: list[str] | None = None) -> int:
     # the variable, which then looks like "never set up". The saved state
     # closes it, because it is only written after a mailbox answered once.
     if kind == "absent":
-        if state:
+        # `state` now always holds a `folders` key, even for a mailbox that
+        # was never connected (see `read_state`) -- checking the whole dict's
+        # truthiness would misread that as "was connected before". `identity`
+        # is the signal that actually means that: it is only ever written
+        # after a mailbox answered `/me` once, below.
+        if state.get("identity"):
             print("Mail was connected and MS_GRAPH_ACCESS_TOKEN has gone. If "
                   "this sandbox uses an OpenShell provider, check it is still "
                   "attached: openshell sandbox provider list <sandbox>.",
@@ -572,34 +675,45 @@ def main(argv: list[str] | None = None) -> int:
         who, mailbox_changed = identity(token, state, budget)
         if mailbox_changed:
             # A different account. Everything remembered describes the old
-            # one: a delta cursor issued for its inbox, a resume link into
+            # one: a delta cursor issued for each folder, a resume link into
             # its pages, identities of its messages. Carrying any of it over
             # would synchronise one mailbox against another's position.
             print("the mailbox has changed; discarding the previous "
                   "synchronisation state", file=sys.stderr)
-            for key in ("delta", "next"):
-                state.pop(key, None)
+            state["folders"] = {}
         elif refresh:
-            state.pop("delta", None)
-            state.pop("next", None)
+            state["folders"] = {}
         state["identity"] = who
-        try:
-            report = collect(token, who["address"], state, days,
-                             budget)
-        except GraphError as exc:
-            if exc.kind != "resync":
-                raise
-            # Graph expires a delta cursor that has gone unused for too long.
-            # Recovering means a fresh round over the window; the rows are
-            # idempotent on `source_id`, so re-reading costs requests rather
-            # than duplicates.
-            print("delta cursor expired; starting a new synchronisation round",
-                  file=sys.stderr)
-            state.pop("delta", None)
-            state.pop("next", None)
-            report = collect(token, who["address"], state, days,
-                             budget)
-            report["resynchronised"] = True
+
+        # Each folder gets its own full page budget and its own delta cursor
+        # (see FOLDERS), synchronised inbox first, sentitems second -- a
+        # simple, deterministic order rather than a rotation, since neither
+        # folder's page budget depends on the other's backlog. The wait
+        # budget (`budget`, for rate-limit backoff) is the one thing shared
+        # across both: it belongs to the tick, not to a folder.
+        reports: dict[str, Any] = {}
+        for folder in (FOLDERS if include_outbound else ("inbox",)):
+            folder_state = state["folders"].setdefault(folder, {})
+            try:
+                reports[folder] = collect(token, who["address"], folder_state,
+                                          days, budget, folder, include_outbound=include_outbound,
+                                          user_addresses=who["addresses"])
+            except GraphError as exc:
+                if exc.kind != "resync":
+                    raise
+                # Graph expires a delta cursor that has gone unused for too
+                # long. Recovering means a fresh round over the window; the
+                # rows are idempotent on `source_id`, so re-reading costs
+                # requests rather than duplicates.
+                print(f"delta cursor expired for {folder}; starting a new "
+                      "synchronisation round", file=sys.stderr)
+                folder_state.pop("delta", None)
+                folder_state.pop("next", None)
+                reports[folder] = collect(token, who["address"], folder_state,
+                                          days, budget, folder, include_outbound=include_outbound,
+                                          user_addresses=who["addresses"])
+                reports[folder]["resynchronised"] = True
+            save_state(state)
     except GraphError as exc:
         print(str(exc), file=sys.stderr)
         return {"credential": EXIT_CREDENTIAL, "rate_limit": EXIT_RATE_LIMIT,
@@ -607,8 +721,13 @@ def main(argv: list[str] | None = None) -> int:
 
     # After the rows, never before: a cursor saved over rows that were not
     # written would have the next round start past them.
-    save_state(state)
+    # Each successful folder has already saved its committed progress.
 
+    # Inbox's own result stays at the top level, unchanged in shape from
+    # before Sent Items existed; sentitems' result nests under its own key
+    # rather than reusing the same field names for two different folders.
+    report = reports["inbox"]
+    report["sentitems"] = {"enabled": include_outbound, **reports.get("sentitems", {})}
     report["backfill_days"] = days
     print(json.dumps(report))
     return EXIT_OK

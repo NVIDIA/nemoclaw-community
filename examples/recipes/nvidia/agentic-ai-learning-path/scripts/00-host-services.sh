@@ -94,11 +94,10 @@ cmd_up() {
     echo "ATIF export: relay → $backend (atif-export-relay + ${backend} will be brought up)"
     # Cert is bind-mounted into the relay container at startup; generate
     # it now so the relay doesn't crashloop on missing files. See
-    # docs/atif-export.md "Sandbox→relay TLS via Python protocol-bridge
-    # sidecar" for the wider architecture.
+    # docs/atif-export.md for the wider architecture.
     bash "$EXAMPLE_DIR/extras/atif-export-relay/generate-tls-cert.sh"
   else
-    echo "ATIF export: local (traces written to sandbox /tmp/atif; no host services for ATIF)"
+    echo "ATIF export: local (traces written to sandbox /sandbox/atif; no host services for ATIF)"
   fi
 
   # The sandbox image build unconditionally bakes the relay CA into its trust

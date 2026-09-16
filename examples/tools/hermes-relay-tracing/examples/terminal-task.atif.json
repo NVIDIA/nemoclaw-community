@@ -1,0 +1,38 @@
+{
+  "agent": {
+    "model_name": "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "name": "Hermes Agent"
+  },
+  "extra": {},
+  "final_metrics": {},
+  "schema_version": "1.0",
+  "session_id": "example-session",
+  "steps": [
+    {
+      "extra": {},
+      "message": "Run exactly `python3 /opt/nemo-relay-hermes-tutorial/sample.py`. Reply with only the exact output line.",
+      "source": "user",
+      "step_id": 1,
+      "timestamp": "2026-01-01T00:00:00+00:00"
+    },
+    {
+      "extra": {},
+      "llm_call_count": 1,
+      "message": "I will run the fixed sample script.",
+      "model_name": "nvidia/nemotron-3.5-lightning-30b-a3b",
+      "observation": "VALUE=42",
+      "source": "agent",
+      "step_id": 2,
+      "timestamp": "2026-01-01T00:00:03+00:00",
+      "tool_calls": [
+        {
+          "arguments": "{\"command\": \"python3 /opt/nemo-relay-hermes-tutorial/sample.py\"}",
+          "extra": {},
+          "function_name": "terminal",
+          "tool_call_id": "example-terminal-call"
+        }
+      ]
+    }
+  ],
+  "trajectory_id": "example-terminal-task"
+}

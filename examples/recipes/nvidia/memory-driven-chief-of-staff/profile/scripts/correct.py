@@ -29,6 +29,7 @@ import sys
 from pathlib import Path
 
 from _db import ensure_store, write_txn
+from memory_io import read_snapshot
 from ranking import rank_population
 
 TIERS = ("high", "medium", "low")
@@ -119,7 +120,7 @@ def ignore(source_id: str, reason: str | None = None) -> dict:
     it three times is how three identical rows reach the preference threshold
     and mint a rule the user never asked for.
     """
-    with write_txn() as conn:
+    with read_snapshot(), write_txn() as conn:
         oid, status, priority, _, rank = _row(conn, source_id)
         _refuse_if_closed(source_id, status, "ignore")
         if status == "ignored":
@@ -137,7 +138,7 @@ def unignore(source_id: str) -> dict:
 
     A no-op on a row that is already open, for the same reason `ignore` is.
     """
-    with write_txn() as conn:
+    with read_snapshot(), write_txn() as conn:
         oid, status, priority, _, rank = _row(conn, source_id)
         if status == "open":
             return {"source_id": source_id, "status": "open", "changed": False}
@@ -162,7 +163,7 @@ def set_priority(source_id: str, tier: str) -> dict:
     """
     if tier not in TIERS:
         raise ValueError(f"priority must be one of {TIERS}, got {tier!r}")
-    with write_txn() as conn:
+    with read_snapshot(), write_txn() as conn:
         oid, status, priority, manual, rank = _row(conn, source_id)
         _refuse_if_closed(source_id, status, "a priority override")
         if status != "open":
@@ -199,7 +200,20 @@ def main(argv: list[str] | None = None) -> int:
     p_priority.add_argument("source_id")
     p_priority.add_argument("tier", choices=TIERS)
 
+    from memory_corrections import COMMANDS
+    for command in COMMANDS:
+        sub.add_parser(command, help="apply an explicit, reviewed memory action").add_argument("--proposal", type=Path, required=True)
     args = parser.parse_args(argv)
+    if args.command in COMMANDS:
+        from memory_corrections import apply_user
+        from memory_io import MemoryBlocked, MemoryConflict
+        try:
+            out = apply_user(args.command, json.loads(args.proposal.read_text(encoding="utf-8")))
+        except (MemoryBlocked, MemoryConflict, ValueError, KeyError, TypeError) as exc:
+            print(json.dumps({"status": "blocked", "detail": str(exc)}))
+            return 3
+        print(json.dumps(out))
+        return 0
     ensure_store()
     try:
         if args.command == "ignore":

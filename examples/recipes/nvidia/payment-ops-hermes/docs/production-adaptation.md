@@ -8,7 +8,7 @@ decision and a human-controlled system that executes it.
 
 | Component | Reusable pattern |
 |---|---|
-| Custom Hermes image | Package the agent runtime, domain skills, and NeMo Relay together as a versioned workload. |
+| Derived Hermes image | Layer domain skills and native NeMo Relay configuration on a pinned NemoClaw base. |
 | OpenShell policy | Start deny-by-default and grant only named inference, data, and observability paths. |
 | FinGuard skills | Keep screening, explanation, evidence preparation, and boundary testing as distinct capabilities. |
 | Maker/checker workflow | Let the agent prepare a recommendation while a separately authenticated human owns release. |

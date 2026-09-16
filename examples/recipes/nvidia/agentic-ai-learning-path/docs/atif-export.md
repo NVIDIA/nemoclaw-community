@@ -4,7 +4,7 @@ title:
   nav: "ATIF S3 Export"
 description:
   main: "Configure Hermes's native NeMo Relay integration to send completed ATIF trajectories to S3-compatible object storage through the host-side atif-export-relay. Real AWS credentials stay on the host; the sandbox carries only an OpenShell credential placeholder."
-  agent: "Explains how Hermes 0.20.0 and NeMo Relay 0.7.2 export ATIF through OpenShell. Native Relay POSTs ATIF JSON with a standard Authorization Bearer placeholder through a loopback HTTP-to-HTTPS bridge; OpenShell resolves the bearer at egress; the host relay validates it and writes to MinIO or S3 with host-side boto3 credentials."
+  agent: "Explains how Hermes 0.20.6 and NeMo Relay 0.7.2 export ATIF through OpenShell. Native Relay POSTs ATIF JSON with a standard Authorization Bearer placeholder; OpenShell resolves the bearer at egress; the host relay validates it and writes to MinIO or S3 with host-side boto3 credentials."
 keywords: ["atif export", "nemo relay", "openshell credential substitution", "sandbox object storage", "minio s3 export"]
 topics: ["generative_ai", "ai_agents", "observability"]
 tags: ["hermes", "openshell", "nemo-relay", "atif", "s3", "minio", "deployment", "provider-v2"]
@@ -24,22 +24,23 @@ status: published
 
 # ATIF Trace Export
 
-Hermes `0.20.0` runs NeMo Relay `0.7.2` in process through its native
-`observability/nemo_relay` plugin, with no separate Relay installation or
-process. When Hermes finalizes a session and closes its top-level Agent scope,
-the plugin produces one ATIF trajectory.
+Hermes `0.20.6` runs NeMo Relay `0.7.2` in process through its native core
+integration, with no separate Relay installation or process. When Hermes
+finalizes a session and closes its top-level Agent scope, Relay produces one
+ATIF trajectory using the standard configuration selected by
+`HERMES_NEMO_RELAY_PLUGINS_TOML`.
 
 The export destination is selected at deployment time:
 
 - **`ATIF_EXPORT_MODE=local`** (the default) writes completed trajectories to
-  `/tmp/atif/` in the sandbox.
+  `/sandbox/atif/` in the sandbox.
 - **`ATIF_EXPORT_MODE=relay`** POSTs completed trajectories to the host-side
   `atif-export-relay`, which writes to MinIO, AWS S3, or another S3-compatible
   store. Real storage credentials never enter the sandbox.
 
 Remote and local storage are not parallel success paths. A successful remote
 delivery creates no local file. If every configured remote target fails, NeMo
-Relay `0.7.2` writes a recovery copy to `/tmp/atif/`.
+Relay `0.7.2` writes a recovery copy to `/sandbox/atif/`.
 
 Export happens at a Hermes session boundary—an explicit `/new` or `/reset`,
 CLI/TUI exit, or configured gateway expiry—not after every conversational turn.
@@ -162,16 +163,16 @@ translation and credentials stay in the host relay.
    `.bootstrap/cache/atif-relay-token`, unless the operator supplies
    `ATIF_RELAY_AUTH_TOKEN`. The host relay reads the real value.
 2. `scripts/02-providers.sh` registers the same value in OpenShell's provider
-   store. The sandbox receives only
-   `openshell:resolve:env:ATIF_RELAY_AUTH_TOKEN` in the configured Bearer
-   header.
+   store. The sandbox receives only OpenShell's revision-scoped credential
+   placeholder in `ATIF_RELAY_AUTH_TOKEN`; `start.sh` prefixes that placeholder
+   with `Bearer` for native Relay.
 3. When Hermes finalizes the session, native Relay sends exactly one request to
-   `http://127.0.0.1:18444/atif`:
+   `https://host.openshell.internal:18443/atif` through OpenShell's L7 proxy:
 
    ```http
    POST /atif HTTP/1.1
    Content-Type: application/json
-   Authorization: Bearer openshell:resolve:env:ATIF_RELAY_AUTH_TOKEN
+   Authorization: Bearer <OpenShell ATIF_RELAY_AUTH_TOKEN placeholder>
    X-NeMo-Relay-ATIF-Filename: <trajectory>.json
 
    { ...ATIF-v1.7 trajectory... }
@@ -182,21 +183,19 @@ translation and credentials stay in the host relay.
    ID is available; the host accepts it as optional metadata. The filename is
    an opaque, Relay-generated object name.
 
-4. The in-sandbox `atif-bridge` forwards the same method, path, body, and
-   headers over HTTPS to `host.openshell.internal:18443/atif`.
-5. OpenShell's L7 proxy replaces the whole credential placeholder in
+4. OpenShell's L7 proxy replaces the whole credential placeholder in
    `Authorization` with the real token and forwards the request.
-6. The `atif-export-relay` trajectory route accepts only `POST /atif`, validates
+5. The `atif-export-relay` trajectory route accepts only `POST /atif`, validates
    the standard Bearer token, requires the Relay-generated filename, and writes
    the JSON body to its configured bucket and prefix through boto3.
-7. The relay returns `204 No Content`; native Relay treats any `2xx` as
+6. The relay returns `204 No Content`; native Relay treats any `2xx` as
    success. On a non-`2xx` response or transport failure, native Relay writes
    the recovery copy locally after all remote targets fail.
 
 ### Security properties
 
-- Hermes, native NeMo Relay, and the bridge see only the OpenShell placeholder,
-  never the resolved token.
+- Hermes and native NeMo Relay see only the OpenShell placeholder, never the
+  resolved token.
 - The OpenShell L7 proxy and host relay see the bearer. Only the host relay
   sees downstream AWS or MinIO credentials.
 - The host relay's trajectory route accepts only `POST /atif`, enforces a
@@ -207,20 +206,8 @@ translation and credentials stay in the host relay.
 - The bearer is scoped per VM in this single-tenant deployment. Separate
   tenants use separate VMs, relays, buckets, and tokens.
 
-## Why the loopback bridge remains
-
-The bridge exists only because OpenShell `v0.0.85` still generates L7-proxy
-MITM leaf certificates without the `ServerAuth` extended-key-usage value.
-NeMo Relay's rustls client rejects that certificate; Python's OpenSSL-backed
-`ssl` client follows RFC 5280 behavior for a certificate without an EKU
-extension and accepts it.
-
 ```text
 Hermes + native NeMo Relay
-  POST http://127.0.0.1:18444/atif
-                    |
-                    v
-atif-bridge.py (placeholder only; no resolved credential)
   POST https://host.openshell.internal:18443/atif
                     |
                     v
@@ -233,26 +220,10 @@ atif-export-relay (validates bearer; boto3 PutObject)
 MinIO or AWS S3
 ```
 
-Only the loopback hop is plaintext. Traffic crossing from the sandbox to the
-host relay is HTTPS. The bridge does not implement export logic or credential
-resolution; it only changes the transport from loopback HTTP to outbound
-HTTPS.
-
-### Removing the bridge after the OpenShell fix
-
-Once OpenShell includes `ExtendedKeyUsagePurpose::ServerAuth` on generated
-MITM leaf certificates:
-
-1. Upgrade OpenShell to the fixed release.
-2. Delete `agents/hermes/bridges/atif/` and its startup call.
-3. Point the native Relay HTTP storage endpoint directly at
-   `https://host.openshell.internal:18443/atif`.
-4. In `providers/atif-export-relay.yaml`, replace the bridge's system-Python
-   binaries with `/opt/hermes/.venv/bin/python`, then verify OpenShell attributes
-   the direct native request to that executable.
-5. Re-run the local and remote export checks below.
-
-The native Hermes integration remains unchanged when the bridge is removed.
+Traffic from the sandbox to the host relay is HTTPS. Relay's native reqwest
+client honors OpenShell's proxy environment, and its rustls verifier trusts the
+proxy CA injected by OpenShell. No protocol shim or separate Relay process is
+required.
 
 ## Operations
 
@@ -279,8 +250,8 @@ fixed and appended by the sandbox configuration.
 - For another host name, set
   `ATIF_RELAY_ENDPOINT=https://my-vm.local:18443`.
 
-Bring-up derives the listener port, bridge upstream, provider endpoint, and TLS
-certificate names from this value. Re-run bring-up after changing it.
+Bring-up derives the listener port, native Relay endpoint, provider endpoint,
+and TLS certificate names from this value. Re-run bring-up after changing it.
 `ATIF_RELAY_FORCE_CERT=1` forces certificate regeneration.
 
 ### Verify lifecycle and delivery
@@ -293,7 +264,7 @@ For local mode, verify one new trajectory file appears:
 
 ```bash
 openshell sandbox exec --name hermes-direct -- sh -lc \
-  'find /tmp/atif -maxdepth 1 -type f -name "hermes-atif-*.json" -print'
+  'find /sandbox/atif -maxdepth 1 -type f -name "hermes-atif-*.json" -print'
 ```
 
 For MinIO relay mode, verify one new remote object appears. A successful
@@ -305,7 +276,7 @@ docker run --rm --network=host \
   minio/mc ls --recursive local/nemo-relay-traces/
 ```
 
-If remote delivery fails, inspect `/tmp/atif/` for the recovery copy and the
+If remote delivery fails, inspect `/sandbox/atif/` for the recovery copy and the
 Hermes logs for the original HTTP error.
 
 ### Tear down host services
@@ -349,7 +320,7 @@ Storage backends are registered in
 | Relay returns `404` or `405` | The native client must send `POST /atif`. Rebuild the sandbox so it receives the current `plugins.toml`. |
 | No remote object and a new local ATIF file appears | Remote delivery failed and NeMo Relay created its recovery copy. Check Hermes logs, `docker compose -f extras/docker-compose.yml logs atif-export-relay`, and downstream availability. |
 | No remote object and no new local ATIF file appears | The session has not finalized. Another conversational turn does not close it; use `/new`, `/reset`, a clean CLI/TUI exit, or wait for the configured gateway expiry, then check again. |
-| Bridge logs a TLS verification error | Confirm the generated relay certificate matches `ATIF_RELAY_ENDPOINT`, the host CA is staged, and the bridge is targeting HTTPS while native Relay targets loopback HTTP. Regenerate with `ATIF_RELAY_FORCE_CERT=1 bash scripts/bring-up.sh`. |
+| Relay logs a TLS verification error | Confirm the generated relay certificate matches `ATIF_RELAY_ENDPOINT` and the host CA is staged in the sandbox image. Regenerate with `ATIF_RELAY_FORCE_CERT=1 bash scripts/bring-up.sh`. |
 | Relay cannot resolve the EC2 instance ID | `ATIF_RELAY_PREFIXER=ec2-instance-id` requires reachable IMDSv2. Use an EC2 host with IMDS enabled or choose `none`. |
 | Relay reports `AccessDenied` | The host instance profile lacks `s3:PutObject`, or its allowed prefix does not match the relay's resolved prefix. Compare the relay startup log with the IAM resource path. |
 | Relay reports `NoSuchBucket` | Create the configured bucket and confirm `ATIF_RELAY_S3_REGION`. |
@@ -360,7 +331,6 @@ Storage backends are registered in
 | Path | Role |
 |---|---|
 | [`agents/hermes/nemo-relay/plugins.toml.in`](../agents/hermes/nemo-relay/plugins.toml.in) | Native NeMo Relay observability and HTTP ATIF storage configuration. |
-| [`agents/hermes/bridges/atif/`](../agents/hermes/bridges/atif/) | Temporary loopback HTTP-to-HTTPS transport bridge for the OpenShell EKU limitation. |
 | [`extras/atif-export-relay/relay.py`](../extras/atif-export-relay/relay.py) | Host service that accepts authenticated `POST /atif` requests and forwards them to its configured backend. |
 | [`extras/atif-export-relay/backends/`](../extras/atif-export-relay/backends/) | boto3-backed S3, MinIO, custom-endpoint, and prefix implementations. |
 | [`extras/docker-compose.yml`](../extras/docker-compose.yml) | Host relay and MinIO services. |

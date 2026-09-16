@@ -129,21 +129,41 @@ python3 export_store.py --to ~/out
 ```
 
 Writes `store.md` and `store.json` side by side — the first to read, the
-second to process — and copies the memory and the learned preference policy
-whole.
+second to process — and copies the memory, the learned preference policy, and
+any skill override's own text whole, byte-for-byte, even if that text is not
+valid UTF-8.
+
+The export also writes `skill-overrides-recovery.json`. This versioned bundle
+contains the override text, retained base contents, accepted distribution,
+observations, applied manifest, and operation history. It preserves the base
+relationship needed to recover or remove an override after reset without
+re-forking. Only restore bundles you trust: their checksums detect corruption,
+not authorship. See [skill override recovery](skill-overrides.md#export-and-restore)
+for the restore command and its scope. Restoring override state does not
+restore the main ledger, memory, policy, or credentials.
 
 Each export is a snapshot rather than an accumulation. The whole thing is
 built beside the destination and moved into place at the end, so a previous
 export cannot leave a deleted page behind in the next one — which the
 date-based default directory makes likely, since the same path is reused all
 day — and a failure part-way leaves no directory at all rather than one that
-looks complete.
+looks complete. "Snapshot" describes the destination, not one single instant
+the whole export was captured at: the ledger tables are read together, in one
+transaction, while all override files, statuses, bases, and history are captured
+together under one global lock. The memory and policy copies
+happen afterward — so a change landing in the middle of an export can appear
+in one part of it and not another, the same way any live system being copied
+piece by piece can.
 
-Nothing outside the workspace is read. A symbolic link under `memory/` that
-points elsewhere on the machine stops the export rather than pulling that file
-into something the user is about to hand to somebody. Nothing is summarised
-and nothing is omitted; an export that quietly
-left something out would answer the question wrongly.
+Override exports include the retained base history and operation journal.
+Nothing outside the workspace
+is read *except* each shipped skill's own `skills/<name>/SKILL.md`, which
+computing a skill override's status requires reading to compare against. A
+symbolic link under `memory/` that points elsewhere on the machine stops the
+export rather than pulling that file into
+something the user is about to hand to somebody. Nothing is summarised and
+nothing is omitted; an export that quietly left something out would answer
+the question wrongly.
 
 A body cleared by the retention pass appears as `text cleared <timestamp>`
 rather than as an empty line, so the export distinguishes the same two cases
@@ -156,11 +176,14 @@ python3 reset.py --dry-run
 python3 reset.py --yes
 ```
 
-Removes the store, the memory, the learned policy and the collection
-bookkeeping, and reports each. It refuses without `--yes`, and if any part
-cannot be removed it says so and exits non-zero — a reset that half worked
-must not read as one that worked. The policy goes with the rest because it
-encodes what its subject ignores, which is about them.
+Removes the store, the memory, the learned policy, any skill overrides, and
+the collection bookkeeping, and reports each. Every currently applied
+override is restored to its shipped content first, so a customization is
+never left live and untracked once the bookkeeping that authorized it is
+gone. It refuses without `--yes`, and if any part cannot be removed it says
+so and exits non-zero — a reset that half worked must not read as one that
+worked. The policy goes with the rest because it encodes what its subject
+ignores, which is about them.
 
 On the supported provider path, the credential is not removed because it was
 never held here: it lives with the OpenShell gateway. `reset.py` prints the
@@ -208,3 +231,55 @@ twice does nothing the second time. `schema-v1.sql` is kept beside
 `schema.sql` as the frozen text of what actually shipped, so the migration is
 tested against the real prior state rather than against the current schema
 with a column removed.
+
+## Direction schema (v6)
+
+The [Phase C1 contract](phase-c1-direction.md) describes author and counterparty
+fields, migration, exclusions, reader compatibility, and rollback through a
+pre-upgrade backup. Retention keeps these metadata fields, including recipient
+addresses and attribution basis; `store.json` exports them with every item.
+The C1 migration alone enables no additional collection. Graph Sent Items and
+Slack self-authored capture require their separate opt-ins.
+
+Graph opt-in and opt-out, per-folder cursor recovery, recipient retention, and
+source-deletion limits are described in
+[optional Sent Items collection](set-up-graph.md#optional-sent-items-collection).
+Environment opt-ins are not exported with `store.json` and are not cleared by
+recipe reset. Disable the corresponding entry in the profile environment file
+when reset should also stop future collection.
+
+Slack opt-in, bounded backfill, account checks, thread recovery, and source-edit
+and deletion limits are described in
+[optional self-authored collection](set-up-slack.md#optional-self-authored-collection).
+Its enablement and per-channel markers are ledger metadata, included in
+`store.json` and removed with the ledger by reset. Both outbound sources feed
+quoted memory evidence; neither changes source messages or bypasses the existing
+explicit user-correction path.
+
+The outbound resolver's rotation cursor is also ledger metadata: it is exported
+with `store.json` and removed with the ledger on reset. Unmatched outbound rows
+retain their seven-day event-time deadline so replies collected later can still
+qualify; this does not extend the allowed reply event window. People-page
+`outbound_evidence` markers are exported with memory and removed with those
+pages on reset. They track the evidence snapshot independently of interaction
+dates and contain no message text. A partial marker also records the next
+batch offset; only a saved page advances it. If the snapshot changes, the current
+pass finishes before its bounded batches restart. No new database or sidecar
+state is added. Body retention and the existing limits on
+deleting derived memory remain unchanged.
+
+## Foundation page operations
+
+Schema 7 adds the managed-page registry, operation journal, ownership receipts,
+and pending resolutions to the recipe ledger. [Recoverable memory writes](memory-foundation.md)
+describes their lifecycle. Export includes every Foundation table and encodes
+active binary replay payloads as base64 JSON objects. It holds the memory
+barrier across the database and Markdown snapshot, including partial operations.
+
+Completed/cancelled/superseded operations clear replay bytes. Unfinished
+payloads expire after 30 days and require an explicit resolution; expiry never
+rebuilds text from cleared messages. Forget and reset scrub relevant payloads
+immediately. Reset does not replay a pending operation before erasing it and
+keeps the empty `workspace/.memory-operations.lock` inode. Reinitialization
+creates a new store-instance UUID so old proposals cannot write into a reset
+store. Hermes's separate profile-root `state.db` remains outside this reset.

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="480" viewBox="0 0 1200 480" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1a1f1a" stroke-width="1"/>
+    </pattern>
+    <linearGradient id="spectrum" x1="0" x2="1">
+      <stop offset="0" stop-color="#374151"/>
+      <stop offset="0.55" stop-color="#4b5f2a"/>
+      <stop offset="1" stop-color="#76b900"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="480" fill="#0b0d0b"/>
+  <rect width="1200" height="480" fill="url(#grid)"/>
+
+  <text x="48" y="56" fill="#e5e7eb" font-size="26" font-weight="700">Session, agent, bot</text>
+
+  <rect x="48" y="96" width="1104" height="10" rx="5" fill="url(#spectrum)"/>
+  <text x="48" y="128" fill="#9ca3af" font-size="13">you drive</text>
+  <text x="1152" y="128" fill="#76b900" font-size="13" text-anchor="end">runs on its own</text>
+
+  <!-- session -->
+  <rect x="48" y="156" width="340" height="270" rx="12" fill="#111611" stroke="#374151" stroke-width="1.5"/>
+  <text x="68" y="194" fill="#e5e7eb" font-size="20" font-weight="700">Session</text>
+  <text x="68" y="220" fill="#9ca3af" font-size="12">ChatGPT · Grok · a chat tab</text>
+  <line x1="68" y1="240" x2="368" y2="240" stroke="#1f2937"/>
+  <text x="68" y="276" fill="#d1d5db" font-size="14">answers, then forgets</text>
+  <text x="68" y="318" fill="#9ca3af" font-size="13">persists</text><text x="230" y="318" fill="#f87171" font-size="13">no</text>
+  <text x="68" y="344" fill="#9ca3af" font-size="13">runs your tools</text><text x="230" y="344" fill="#f87171" font-size="13">no</text>
+  <text x="68" y="370" fill="#9ca3af" font-size="13">holds your keys</text><text x="230" y="370" fill="#f87171" font-size="13">no</text>
+  <text x="68" y="404" fill="#6b7280" font-size="12">worst case: a wrong answer</text>
+
+  <!-- agent -->
+  <rect x="430" y="156" width="340" height="270" rx="12" fill="#111611" stroke="#4b5f2a" stroke-width="1.5"/>
+  <text x="450" y="194" fill="#e5e7eb" font-size="20" font-weight="700">Agent</text>
+  <text x="450" y="220" fill="#9ca3af" font-size="12">Claude Code · Codex · Hermes CLI</text>
+  <line x1="450" y1="240" x2="750" y2="240" stroke="#1f2937"/>
+  <text x="450" y="276" fill="#d1d5db" font-size="14">does a task, then exits</text>
+  <text x="450" y="318" fill="#9ca3af" font-size="13">persists</text><text x="612" y="318" fill="#fbbf24" font-size="13">for the task</text>
+  <text x="450" y="344" fill="#9ca3af" font-size="13">runs your tools</text><text x="612" y="344" fill="#76b900" font-size="13">yes</text>
+  <text x="450" y="370" fill="#9ca3af" font-size="13">holds your keys</text><text x="612" y="370" fill="#fbbf24" font-size="13">while it runs</text>
+  <text x="450" y="404" fill="#6b7280" font-size="12">worst case: what you had open</text>
+
+  <!-- bot -->
+  <rect x="812" y="156" width="340" height="270" rx="12" fill="rgba(118,185,0,0.06)" stroke="#76b900" stroke-width="2"/>
+  <text x="832" y="194" fill="#e5e7eb" font-size="20" font-weight="700">Bot</text>
+  <text x="832" y="220" fill="#76b900" font-size="12">Hermes Bots · this repo</text>
+  <line x1="832" y1="240" x2="1132" y2="240" stroke="#2d3a2d"/>
+  <text x="832" y="276" fill="#d1d5db" font-size="14">stays up, talks to other bots</text>
+  <text x="832" y="318" fill="#9ca3af" font-size="13">persists</text><text x="994" y="318" fill="#76b900" font-size="13">always</text>
+  <text x="832" y="344" fill="#9ca3af" font-size="13">runs your tools</text><text x="994" y="344" fill="#76b900" font-size="13">unattended</text>
+  <text x="832" y="370" fill="#9ca3af" font-size="13">holds your keys</text><text x="994" y="370" fill="#76b900" font-size="13">its own</text>
+  <text x="832" y="404" fill="#f87171" font-size="12">worst case: everything it can reach</text>
+
+  <text x="48" y="460" fill="#9ca3af" font-size="14">The bot is the shape. The sandbox is the boundary.</text>
+</svg>

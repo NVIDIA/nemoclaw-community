@@ -1,0 +1,162 @@
+<!doctype html>
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+  Browser-only fixture with synthetic content. It never contacts NemoClaw.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ask NemoClaw browser fixture</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="../extension/sidepanel.css">
+  </head>
+  <body>
+    <header>
+      <div class="eyebrow">BROWSER CONTEXT ASSISTANT</div>
+      <h1>Ask NemoClaw</h1>
+      <p id="page-label" class="document-label">Checking the active page…</p>
+    </header>
+    <main>
+      <section class="conversation-toolbar" aria-label="Conversation controls">
+        <div class="connection-row" aria-label="NemoClaw connection">
+          <span id="connection-status" class="connection-status" data-state="checking" aria-live="polite">Checking NemoClaw…</span>
+          <button id="open-nemoclaw-button" class="secondary compact" type="button">Open NemoClaw</button>
+          <button id="settings-button" class="secondary compact icon-button" type="button" aria-label="NemoClaw settings" title="Settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.8 7.8 0 0 0 .1-1 7.8 7.8 0 0 0-.1-1l2.1-1.6-2-3.4L17 7a7.2 7.2 0 0 0-1.7-1L15 3h-4l-.4 3a7.2 7.2 0 0 0-1.7 1L6.5 6l-2 3.4L6.6 11a7.8 7.8 0 0 0-.1 1 7.8 7.8 0 0 0 .1 1l-2.1 1.6 2 3.4L9 17a7.2 7.2 0 0 0 1.7 1l.4 3h4l.4-3a7.2 7.2 0 0 0 1.7-1l2.4 1 2-3.4L19.4 13ZM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"/></svg>
+          </button>
+        </div>
+        <section id="settings-card" class="card settings-card" hidden aria-label="NemoClaw settings">
+          <form id="settings-form">
+            <label for="nemoclaw-url">NemoClaw URL</label>
+            <input id="nemoclaw-url" name="nemoclaw-url" type="url" required placeholder="https://hermes.example.com">
+            <p id="settings-error" class="settings-error" hidden></p>
+            <div class="button-row">
+              <button id="save-settings-button" type="submit">Save and connect</button>
+              <button id="check-connection-button" class="secondary" type="button">Check current connection</button>
+              <button id="cancel-settings-button" class="secondary" type="button">Cancel</button>
+            </div>
+          </form>
+        </section>
+        <label for="conversation-select">Recent conversation</label>
+        <div class="toolbar-row">
+          <select id="conversation-select" aria-label="Recent conversation"></select>
+          <button id="new-conversation-button" class="secondary compact" type="button">New</button>
+          <button id="refresh-button" class="secondary compact" type="button">Refresh</button>
+        </div>
+      </section>
+      <section id="error-card" class="card error" hidden role="alert">
+        <h2 id="error-title">NemoClaw request failed</h2><p id="error-detail"></p>
+        <div class="button-row">
+          <button id="retry-button" class="secondary" type="button">Try again</button>
+          <button id="sign-in-button" type="button" hidden>Sign in to NemoClaw</button>
+        </div>
+      </section>
+      <section id="status-card" class="status-strip" hidden aria-live="polite">
+        <div class="spinner" aria-hidden="true"></div>
+        <div class="status-copy"><strong id="status-title">Starting</strong><span id="status-detail"></span></div>
+        <button id="stop-button" class="secondary compact" type="button">Stop</button>
+      </section>
+      <section id="messages" class="messages" aria-live="polite">
+        <div id="empty-state" class="empty-state"><h2>Start a conversation</h2><p>Ask about the current page.</p></div>
+      </section>
+    </main>
+    <form id="composer" class="composer">
+      <div class="context-note"><span id="context-mode">Current browser content</span><span>recaptured on Send</span></div>
+      <label class="visually-hidden" for="prompt">Message NemoClaw</label>
+      <textarea id="prompt" maxlength="8000" rows="4" placeholder="Ask NemoClaw about this page…" required></textarea>
+      <button id="send-button" type="submit">Send</button>
+    </form>
+    <footer>Each Send includes readable page text and the visible viewport. Only opaque conversation identifiers are retained by the extension.</footer>
+    <script>
+      globalThis.ASK_NEMOCLAW_CONFIG = { hermesOrigin: "https://hermes.example.com" };
+      const conversations = [{
+        conversation_id: "fixtureConversationId000001",
+        title: "NemoClaw browser context demo",
+        message_count: 2
+      }];
+      const histories = {
+        fixtureConversationId000001: [
+          { message_id: 1, job_id: "fixtureJobId000000000001", role: "user", content: "Explain what I am looking at." },
+          { message_id: 2, job_id: "fixtureJobId000000000001", role: "assistant", content: "Viewport explanation.", result: { format: "text", text: "You are viewing a browser demonstration of **Ask NemoClaw**. The page presents a video-style frame with a terminal example, while this side panel uses the readable page text and rendered viewport as context.\n\n- **Current page:** NemoClaw browser context demo\n- **Visible workflow:** Browser tab → Ask NemoClaw → Hermes agent\n- **Agent behavior:** The user supplies the task; Hermes selects relevant installed skills and tools.\n\nThe extension does not modify the page." } }
+        ]
+      };
+      let pollCount = 0;
+      let storedConversationId = "fixtureConversationId000001";
+      const jsonResponse = (body, status = 200) => new Response(JSON.stringify(body), {
+        status,
+        headers: { "Content-Type": "application/json" }
+      });
+      globalThis.chrome = {
+        tabs: {
+          query: async () => [{ id: 17, windowId: 3, title: "NemoClaw browser context demo", url: "https://example.com/nemoclaw-demo" }],
+          captureVisibleTab: async () => {
+            const canvas = document.createElement("canvas");
+            canvas.width = 1280;
+            canvas.height = 720;
+            const context = canvas.getContext("2d");
+            context.fillStyle = "#111a13";
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            context.fillStyle = "#76b900";
+            context.font = "48px sans-serif";
+            context.fillText("Synthetic rendered viewport", 80, 160);
+            return canvas.toDataURL("image/jpeg", 0.9);
+          },
+          create: async () => ({})
+        },
+        scripting: {
+          executeScript: async () => [{ result: { page_title: "NemoClaw browser context demo", page_text: "A synthetic video-style demonstration of browser context sent to a NemoClaw agent running with Hermes.", selected_text: "", page_text_truncated: false } }]
+        },
+        storage: {
+          session: { get: async () => ({ askNemoClawTarget: null }) },
+          local: {
+            get: async () => ({ askNemoClawConversationId: storedConversationId }),
+            set: async value => { storedConversationId = value.askNemoClawConversationId; },
+            remove: async () => {}
+          }
+        },
+        permissions: {
+          contains: async () => true,
+          request: async () => true
+        },
+        runtime: { onMessage: { addListener: () => {} } }
+      };
+      globalThis.fetch = async (url, options = {}) => {
+        const parsed = new URL(url);
+        const path = parsed.pathname;
+        const method = options.method || "GET";
+        if (path.endsWith("/conversations") && method === "GET") return jsonResponse({ conversations });
+        if (path.endsWith("/conversations") && method === "POST") {
+          const conversation = { conversation_id: "fixtureConversationId000002", title: "Synthetic engineering page", message_count: 0 };
+          conversations.unshift(conversation);
+          histories[conversation.conversation_id] = [];
+          return jsonResponse({ conversation }, 201);
+        }
+        const messageMatch = path.match(/\/conversations\/([^/]+)\/messages$/);
+        if (messageMatch && method === "POST") {
+          const body = JSON.parse(options.body);
+          histories[messageMatch[1]].push({ message_id: 3, job_id: "fixtureJobId000000000002", role: "user", content: body.prompt });
+          pollCount = 0;
+          return jsonResponse({ conversation_id: messageMatch[1], job_id: "fixtureJobId000000000002", status: "queued", context_status: "changed" }, 202);
+        }
+        const jobMatch = path.match(/\/conversations\/([^/]+)\/messages\/([^/]+)$/);
+        if (jobMatch && method === "GET") {
+          pollCount += 1;
+          if (pollCount < 2) return jsonResponse({ conversation_id: jobMatch[1], job_id: jobMatch[2], status: "prompting", context_status: "changed" });
+          if (!histories[jobMatch[1]].some(item => item.role === "assistant" && item.job_id === jobMatch[2])) {
+            histories[jobMatch[1]].push({ message_id: 4, job_id: jobMatch[2], role: "assistant", content: "Follow-up answer.", result: { format: "text", text: "Follow-up answer using the **changed page context**." } });
+          }
+          return jsonResponse({ conversation_id: jobMatch[1], job_id: jobMatch[2], status: "complete", context_status: "changed", result: { format: "text", text: "Follow-up answer." } });
+        }
+        const conversationMatch = path.match(/\/conversations\/([^/]+)$/);
+        if (conversationMatch && method === "GET") {
+          const conversation = conversations.find(item => item.conversation_id === conversationMatch[1]);
+          return jsonResponse({ conversation, messages: histories[conversationMatch[1]] || [] });
+        }
+        return jsonResponse({ detail: "Fixture route not found" }, 404);
+      };
+    </script>
+    <script src="../extension/sidepanel.js"></script>
+  </body>
+</html>

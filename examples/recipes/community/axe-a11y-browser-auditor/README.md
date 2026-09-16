@@ -8,6 +8,9 @@
 | Description | Helps web teams find WCAG issues through a dedicated sandbox and host-side real Chrome, returning rule-level findings with optional screenshots, PDFs, recordings, and network traces. |
 | Industry | 🌐 Consumer Internet |
 | Requirements | Docker 24+ with Compose · linux/amd64 or Docker Desktop emulation · dedicated OpenShell/NemoClaw sandbox |
+| NemoClaw | Unpinned |
+| Harness | OpenClaw Unpinned |
+| OpenShell | Unpinned |
 
 Axe A11y Browser Auditor is a community recipe for automated web quality and WCAG accessibility compliance testing inside a NemoClaw-managed sandbox. It installs an `axe-a11y` skill into an existing OpenClaw sandbox, then routes requests to a host-side Streamable-HTTP MCP sidecar running `axe-core` and Patchright against real Google Chrome Stable.
 

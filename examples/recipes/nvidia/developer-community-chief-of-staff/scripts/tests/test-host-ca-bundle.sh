@@ -40,10 +40,10 @@ grep -Fq '00-host-services.sh up' "$COMPOSE_SOURCE" \
   || fail "Compose must not advertise a preflight-bypassing startup command"
 
 DOCKERFILE_SOURCE="$SOURCE_EXAMPLE_DIR/agents/hermes/Dockerfile"
-first_ca_update="$(grep -n '&& update-ca-certificates' "$DOCKERFILE_SOURCE" | head -1 | cut -d: -f1)"
-first_apt_update="$(grep -n '&& apt-get update -qq' "$DOCKERFILE_SOURCE" | head -1 | cut -d: -f1)"
+first_ca_update="$(grep -nE '^[[:space:]]*(RUN|&&)[[:space:]]+update-ca-certificates([[:space:]\\]|$)' "$DOCKERFILE_SOURCE" | head -1 | cut -d: -f1)"
+first_apt_update="$(grep -nE '(^|[[:space:]])apt-get update([[:space:]]|$)' "$DOCKERFILE_SOURCE" | head -1 | cut -d: -f1)"
 [[ -n "$first_ca_update" && -n "$first_apt_update" && "$first_ca_update" -lt "$first_apt_update" ]] \
-  || fail "builder must register copied enterprise CAs before its first apt request"
+  || fail "sandbox image must register copied enterprise CAs before its first apt request"
 
 docker() {
   {

@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Fail the image build if the pinned Hermes base lacks native table blocks."""
+"""Fail the image build if pinned Hermes lacks native Slack rendering."""
 
 from __future__ import annotations
 
@@ -31,15 +31,13 @@ if not isinstance(rows, list) or len(rows) != 2:
 if any(not isinstance(row, list) or len(row) != 3 for row in rows):
     raise SystemExit(f"expected three columns in every table row, got {rows!r}")
 
-# The pinned Hermes base inherits Slack clarification from the text-only base
-# adapter. sitecustomize installs a direct Slack override. A future Hermes base
-# may provide the direct override itself, in which case the compatibility shim
-# stands down and this contract still passes.
+# Hermes owns the Slack clarification implementation. The recipe must not
+# replace it with sitecustomize compatibility code.
 if "send_clarify" not in SlackAdapter.__dict__:
-    raise SystemExit("expected a direct Slack send_clarify implementation")
+    raise SystemExit("expected native Slack send_clarify implementation")
 
 send_clarify = SlackAdapter.__dict__["send_clarify"]
-if send_clarify.__module__ == "sitecustomize" and not hasattr(
-    SlackAdapter, "_nemoclaw_handle_clarify_action"
-):
-    raise SystemExit("compatibility send_clarify is missing its action handler")
+if send_clarify.__module__ != "plugins.platforms.slack.adapter":
+    raise SystemExit(
+        "Slack send_clarify must come from Hermes's native Slack adapter"
+    )

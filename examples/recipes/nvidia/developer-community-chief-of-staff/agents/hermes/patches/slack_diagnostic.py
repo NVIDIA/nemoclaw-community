@@ -297,18 +297,3 @@ def install_adapter_instrumentation(adapter_class: type) -> bool:
     adapter_class._nemoclaw_slack_diagnostic_methods = tuple(patched_methods)
     adapter_class._nemoclaw_slack_diagnostic_installed = True
     return True
-
-
-def copy_adapter_instrumentation(template_class: type, runtime_class: type) -> bool:
-    """Copy installed hooks to Hermes's namespaced runtime adapter class."""
-    method_names = template_class.__dict__.get(
-        "_nemoclaw_slack_diagnostic_methods",
-        (),
-    )
-    if not method_names:
-        return False
-    for name in method_names:
-        setattr(runtime_class, name, template_class.__dict__[name])
-    runtime_class._nemoclaw_slack_diagnostic_methods = tuple(method_names)
-    runtime_class._nemoclaw_slack_diagnostic_installed = True
-    return True

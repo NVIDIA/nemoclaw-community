@@ -10,6 +10,9 @@
 | Description | Helps video analysts and engineers deploy and operate NVIDIA VSS profiles by chat, using a sandboxed agent that runs the Compose deployment through a host-side MCP server and reports the result. |
 | Industry | ✨ Other |
 | Requirements | Linux GPU host · Docker with the NVIDIA runtime · Python 3.11+ for the notebooks · NGC API key · agent model provider · VSS repository develop branch · large container image and model pulls |
+| NemoClaw | Unpinned |
+| Harness | Unknown |
+| OpenShell | Unpinned |
 
 ## Screenshot
 
@@ -134,25 +137,25 @@ this page. No VSS deployment, sandbox, notebook, or GPU host was involved.
 
 ```text
 $ python3 scripts/build_catalog.py --validate-metadata
-README catalog metadata is valid for 18 examples.
+README catalog metadata is valid for 19 examples.
 
 $ python3 scripts/build_catalog.py --write
-Built 18 catalog entries and detail pages in _site.
+Built 19 catalog entries and detail pages in _site.
 
 $ python3 scripts/build_catalog.py --check
-Catalog metadata and generated sources are valid: 18 examples across 7 browse groups.
+Catalog metadata and generated sources are valid: 19 examples across 7 browse groups.
 
-$ python3 -m unittest discover -s scripts/tests -p 'test_build_catalog.py'
-Ran 32 tests in 0.928s
+$ python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+Ran 67 tests
 
 OK
 
-$ node --test scripts/tests/catalog.test.mjs
-# pass 12
+$ node --test scripts/tests/*.test.mjs
+# pass 14
 # fail 0
 
 $ python3 scripts/check_license_headers.py --check
-All 608 checked source files have SPDX headers.
+All 630 checked source files have SPDX headers.
 
 $ git diff --check
 ```

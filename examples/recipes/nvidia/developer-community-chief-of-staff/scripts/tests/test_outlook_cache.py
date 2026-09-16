@@ -215,6 +215,7 @@ exec "$REAL_PYTHON" "$@"
         "OPENAI_API_KEY",
         "COMPATIBLE_API_KEY",
         "GITHUB_TOKEN",
+        "TAVILY_API_KEY",
         "SLACK_BOT_TOKEN",
         "SLACK_APP_TOKEN",
         "MS_GRAPH_ACCESS_TOKEN",
