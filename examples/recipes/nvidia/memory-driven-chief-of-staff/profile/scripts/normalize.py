@@ -25,8 +25,10 @@ is where that translation is pinned down:
 from __future__ import annotations
 
 import sys
+import json
 
 import exclusions
+from outbound import pending_deadline
 
 
 import re
@@ -60,7 +62,10 @@ def _display_of(entry: dict[str, Any] | None) -> str:
     return ea.get("name") or ea.get("address") or ""
 
 
-def graph_message_to_item(msg: dict[str, Any], user_address: str) -> dict[str, Any]:
+def graph_message_to_item(msg: dict[str, Any], user_address: str, *,
+                          direction: str | None = None,
+                          source_account: str | None = None,
+                          user_addresses: set[str] | None = None) -> dict[str, Any]:
     """One Graph message -> one `items` row.
 
     `user_address` decides addressing: being a To recipient is being asked;
@@ -80,12 +85,25 @@ def graph_message_to_item(msg: dict[str, Any], user_address: str) -> dict[str, A
         addressing = "broadcast"
 
     body = msg.get("body") or {}
+    own = {me} | {a.lower() for a in (user_addresses or set())}
+    recipients = {}
+    participant_values = []
+    for field in ("toRecipients", "ccRecipients", "bccRecipients"):
+        for entry in msg.get(field) or []:
+            address = _address_of(entry)
+            participant_values.extend([address, _display_of(entry)])
+            if address and address not in own:
+                recipients[address] = entry
+    outbound = direction == "outbound"
+    target = next(iter(recipients.values())) if outbound and len(recipients) == 1 else None
+    key = _address_of(target) or None
+    event_at = _iso(msg.get("sentDateTime") or msg.get("receivedDateTime", "")) if outbound else _iso(msg.get("receivedDateTime", ""))
     return {
         "source_id": msg["id"],
         "source": "email",
         "scope": msg.get("parentFolderId") or "inbox",
         "thread_ref": msg.get("conversationId"),
-        "event_at": _iso(msg.get("receivedDateTime", "")),
+        "event_at": event_at,
         "sender": _display_of(msg.get("from")),
         # Carried for the exclusion rules and dropped before the insert: it is
         # not in ITEM_COLUMNS, so it is matched on and never stored. `sender`
@@ -108,8 +126,18 @@ def graph_message_to_item(msg: dict[str, Any], user_address: str) -> dict[str, A
         "subject": msg.get("subject"),
         "body": body.get("content"),
         "permalink": msg.get("webLink"),
-        "addressing": addressing,
-        "unread": 0 if msg.get("isRead") else 1,
+        "addressing": None if outbound else addressing,
+        "unread": None if outbound else (0 if msg.get("isRead") else 1),
+        "direction": direction,
+        "source_account": source_account,
+        "counterparty_key": key,
+        "counterparty_name": _display_of(target) or key,
+        "counterparty_handle": key.split("@")[0] if key else None,
+        "counterparty_basis": "single_recipient" if key else None,
+        "counterparty_pending_until": pending_deadline(event_at) if outbound and len(recipients) > 1 else None,
+        "counterparty_candidates": json.dumps(sorted(recipients)) if outbound else None,
+        "participant_values": participant_values if outbound else [],
+        "participants_complete": True,
         # Stored, unlike `sender_address`: a removal reported later can only
         # be told apart from a move by asking about this, and by then the
         # message is no longer available to read it from.
@@ -123,6 +151,10 @@ def slack_message_to_item(
     user_id: str,
     sender_name: str | None = None,
     sender_handle: str | None = None,
+    *, direction: str | None = None, source_account: str | None = None,
+    counterparty_key: str | None = None, counterparty_name: str | None = None,
+    counterparty_handle: str | None = None, counterparty_basis: str | None = None,
+    participants_complete: bool = False,
 ) -> dict[str, Any]:
     """One Slack message -> one `items` row.
 
@@ -133,6 +165,7 @@ def slack_message_to_item(
     cid = channel["id"]
     ts = msg["ts"]
 
+    outbound = direction == "outbound"
     ctype = channel.get("type", "")
     if ctype in {"im", "mpim"}:
         addressing = "direct"
@@ -166,7 +199,19 @@ def slack_message_to_item(
         "permalink": msg.get("permalink"),
         # Slack tracks read state per channel, not per message.
         "unread": None,
-        "addressing": addressing,
+        "addressing": None if outbound else addressing,
+        "direction": direction,
+        "source_account": source_account,
+        "counterparty_key": counterparty_key if outbound else None,
+        "counterparty_name": (counterparty_name or counterparty_key) if outbound else None,
+        "counterparty_handle": counterparty_handle if outbound else None,
+        "counterparty_basis": counterparty_basis if outbound else None,
+        # Only the user's thread root can be attributed from a later reply.
+        "counterparty_pending_until": (
+            pending_deadline(_slack_ts_to_iso(ts))
+            if outbound and not counterparty_key and (msg.get("thread_ts") or ts) == ts else None),
+        "participant_values": MENTION.findall(msg.get("text", "")) if outbound else [],
+        "participants_complete": participants_complete,
     }
 
 
@@ -174,6 +219,9 @@ ITEM_COLUMNS = (
     "source_id", "source", "scope", "thread_ref", "event_at",
     "sender", "sender_key", "sender_handle", "subject", "body", "permalink",
     "addressing", "unread",
+    "direction", "counterparty_pending_until", "source_account",
+    "counterparty_key", "counterparty_name", "counterparty_handle",
+    "counterparty_basis", "counterparty_candidates",
     # Mail only. Slack has no equivalent and leaves it NULL; the collector
     # that needs it is the one that can tell a move from a deletion.
     "internet_message_id",

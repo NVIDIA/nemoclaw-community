@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+.venv/
+.playwright-cli/
+build/
+__pycache__/
+*.pyc
+.DS_Store
+assets/ask-hermes-review.png

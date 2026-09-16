@@ -16,6 +16,7 @@ Reusable agent workflows authored or maintained by NVIDIA, designed as practical
 | Example | Industry | Description |
 | --- | --- | --- |
 | [Agentic AI Learning Path](recipes/nvidia/agentic-ai-learning-path/README.md) | 🎓 Academia/Education | Helps learners work through the seven-module Build an Agent workshop in JupyterLab with an AI tutor that explains concepts, offers graduated hints, and checks progress inside an OpenShell sandbox. |
+| [Ask NemoClaw](recipes/nvidia/browser-context-knowledge-assistant/README.md) | ✨ Other | Adds a Chrome side panel that sends your prompt, readable page text, and the visible viewport to a NemoClaw agent running with Hermes. |
 | [Developer Community Chief of Staff](recipes/nvidia/developer-community-chief-of-staff/README.md) | ✨ Other | Helps developer community leaders align priorities with demand by turning available GitHub, GitLab, forum, Slack, email, and web signals into evidence-grounded briefs, gaps, and follow-up recommendations. |
 | [Kubernetes GPU Autoscaling](recipes/nvidia/kubernetes-gpu-autoscaling/README.md) | ☁️ Cloud Services | Helps Kubernetes operators match GPU inference capacity to demand by pairing a CPU-only OpenShell sandbox with Ollama replicas that scale on utilization or latency and return to one after load. |
 | [Kubernetes SRE Assistant](recipes/nvidia/kubernetes-sre-assistant/README.md) | ☁️ Cloud Services | Helps platform SREs inspect and scale Kubernetes or OpenShift workloads through a sandboxed Hermes agent whose cluster access flows only through a reviewed skill, an authenticated proxy, and RBAC with no delete verb, plus an opt-in controller that detects failures and applies tiered remediation. |
@@ -35,7 +36,7 @@ Reusable NemoClaw agent workflows contributed by partner organizations, with att
 | --- | --- | --- | --- |
 | [x402 Payment Gate](recipes/partners/bluetier/x402-payment-gate/README.md) | BlueTier Operations | 💳 Financial Services | Demonstrates a maker-checker gate for x402 payments: a sandboxed agent submits intents, while a host-side Blackwall verdict controls mock signing and settlement before any signature exists. |
 | [Retail Assistant](recipes/partners/hpe/retail-assistant/README.md) | HPE | 🛍️ Retail/Consumer Packaged Goods | Helps store employees check inventory and sales or request transfers and reorders through role-aware Telegram conversations scoped to their assigned store. |
-| [Shrike Security Action Governance](recipes/partners/shrike/shrike-security/README.md) | Shrike Security, Inc. | ✨ Other | Adds defense-in-depth action governance through an in-sandbox hook that checks each OpenClaw tool call against server-side Shrike policy and blocks prohibited or approval-required calls. |
+| [Shrike Security Action Governance](recipes/partners/shrike/shrike-security/README.md) | Shrike Security, Inc. | ✨ Other | Governs action-bearing OpenClaw tool calls, including shell commands, SQL, file writes, and web requests. An in-sandbox hook sends action content to Shrike policy before execution and blocks prohibited or approval-required calls. It complements, but does not replace, OpenShell isolation. |
 | [Watchtower](recipes/partners/tavily/watchtower/README.md) | Tavily | ✨ Other | Tracks what changed across chosen web topics and why it matters, producing scheduled, deduplicated Markdown digests and JSON changelogs with source citations. |
 
 ## [Community Recipes](recipes/community/README.md)
@@ -65,6 +66,7 @@ Standalone utilities that help developers build, evaluate, inspect, or operate N
 | [Agent Memory Benchmark](tools/agent-memory-benchmark/README.md) | ✨ Other | Measures memory built from synthetic email and chat, asks 186 questions on one corpus and 96 on a second, and reports accuracy by question type with ingest and answer token costs. |
 | [Harness Engineering Playground](tools/harness-engineering-playground/README.md) | ✨ Other | Provides an experimental loop for tuning DeepAgents harness profiles against behavioral evaluations, keeping fixes that pass verification and rolling back rejected edits. |
 | [Kubernetes Deployer](tools/kubernetes-deployer/README.md) | ✨ Other | Deploys the official NemoClaw-managed Hermes image behind an OpenShell gateway on Kubernetes or OpenShift, with the Hermes dashboard, OpenAI-compatible API, and terminal access, plus extension points that skill recipes build on. |
+| [Tracing Agent Harness Behavior with NVIDIA NeMo Relay](tools/hermes-relay-tracing/README.md) | ✨ Other | Runs verified Hermes Agent tool-use tasks and produces NeMo Relay traces for local inspection and evaluation. |
 
 ## Collections
 

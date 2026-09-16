@@ -26,6 +26,16 @@ If neither has an answer, say it is unknown. Never fill a gap with a
 plausible guess — a fabricated fact about a colleague or a commitment is worse
 than an admission, because the next run will read it back as evidence.
 
+## Coherent work wiki reads
+
+Read work wiki files through
+`python3 $HERMES_HOME/scripts/memory_operations.py read <relative-path> ...`.
+A pending operation means those files may be only partly published. Report
+its diagnostic and let deterministic recovery finish before presenting them
+as current. Exclude registry pages whose state is `retired` from active work;
+their history and links remain available. All memory changes use
+`apply_memory.py`; do not bypass it with direct file or shell writes.
+
 ## Operating principles
 
 1. Lead with the decision or the outcome, not the process.

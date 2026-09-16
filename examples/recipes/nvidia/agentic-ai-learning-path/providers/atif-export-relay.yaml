@@ -10,10 +10,10 @@
 # actually targeted.
 #
 # Transport: NeMo Relay's native HTTP ATIF storage sends POST /atif with an
-# `Authorization: Bearer openshell:resolve:env:ATIF_RELAY_AUTH_TOKEN` header.
-# OpenShell's L7 proxy substitutes the placeholder at egress, and the host
-# relay validates the resulting bearer before writing through its configured
-# storage backend.
+# `Authorization` header using the provider-injected `ATIF_RELAY_AUTH_TOKEN`
+# placeholder. OpenShell's L7 proxy substitutes the placeholder at egress, and
+# the host relay validates the resulting bearer before writing through its
+# configured storage backend.
 
 id: nemoclaw-atif-export-relay
 display_name: NemoClaw ATIF Export Relay
@@ -53,5 +53,4 @@ endpoints:
           method: POST
           path: /atif
 binaries:
-  - /usr/bin/python3
-  - /usr/bin/python3.13
+  - /opt/hermes/.venv/bin/python

@@ -29,6 +29,7 @@ sys.path.insert(0, str(HERE))
 import correct  # noqa: E402
 import identity  # noqa: E402
 import normalize  # noqa: E402
+import outbound  # noqa: E402
 import select_memory  # noqa: E402
 
 SCHEMA = (HERE / "schema.sql").read_text(encoding="utf-8")
@@ -1224,6 +1225,187 @@ class TestTheGate(SelectorCase):
         out, _ = self.run_selector()
         self.assertNotIn("wakeAgent", out)
         self.assertIn("Dana Okoro", out)
+
+
+
+class TestOutboundBackfillRefresh(SelectorCase):
+    def setUp(self):
+        super().setUp()
+        self.add("Dana Okoro", days_ago=1)
+        self.add("Dana Okoro", days_ago=2)
+        self.page("dana_okoro", last_interaction=iso(1)[:10],
+                  identities=["email:dana.okoro@example.com"])
+
+    def outbound(self, sid="backfilled", days_ago=3, resolved=True):
+        with sqlite3.connect(self.db) as conn:
+            conn.execute(
+                "INSERT INTO items(source_id,source,scope,event_at,sender,sender_key,"
+                "direction,counterparty_key,counterparty_name,counterparty_basis,body)"
+                " VALUES (?,'email','sentitems',?,'Avery','avery@example.com','outbound',?,?,?,?)",
+                (sid, iso(days_ago), "dana.okoro@example.com" if resolved else None,
+                 "Dana Okoro" if resolved else None,
+                 "single_recipient" if resolved else None, sid))
+
+    def acknowledge(self, candidate, padding=""):
+        path = self.workspace / "memory/people/dana_okoro.md"
+        text = path.read_text()
+        text = re.sub(r"^outbound_evidence:.*\n", "", text, flags=re.M)
+        text = text.replace("---\n\n# page", padding +
+            f"outbound_evidence: {candidate['outbound_evidence']}\n---\n\n# page")
+        path.write_text(text)
+
+    def test_backfill_refreshes_a_page_even_when_event_time_is_older(self):
+        self.assertEqual(self.report()["people"], [])
+        self.outbound()
+        found = self.report()
+        self.assertEqual(len(found["people"]), 1)
+        self.assertEqual(found["people"][0]["last_interaction"], iso(1)[:10])
+        self.assertIn("backfilled", {r["body"] for r in found["interactions"]["dana_okoro"]})
+
+    def test_only_a_saved_page_acknowledges_the_evidence(self):
+        self.outbound()
+        first, = self.report()["people"]
+        second, = self.report()["people"]
+        self.assertEqual(first["outbound_evidence"], second["outbound_evidence"])
+        self.acknowledge(first)
+        self.assertEqual(self.report()["people"], [])
+
+    def test_a_second_older_backfill_refreshes_an_acknowledged_page(self):
+        self.outbound()
+        first, = self.report()["people"]
+        self.acknowledge(first)
+        self.outbound("older-backfill", days_ago=4)
+        next_page, = self.report()["people"]
+        self.assertNotEqual(next_page["outbound_evidence"], first["outbound_evidence"])
+
+    def test_later_attribution_makes_old_evidence_newly_available(self):
+        self.outbound(resolved=False)
+        self.assertEqual(self.report()["people"], [])
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE items SET counterparty_key='dana.okoro@example.com',"
+                         " counterparty_name='Dana Okoro', counterparty_basis='reply'"
+                         " WHERE source_id='backfilled'")
+        self.assertEqual(len(self.report()["people"]), 1)
+
+    def test_acknowledgment_is_read_beyond_the_old_header_prefix(self):
+        self.outbound()
+        candidate, = self.report()["people"]
+        self.acknowledge(candidate, "relationship: " + "long context " * 40 + "\n")
+        self.assertEqual(self.report()["people"], [])
+
+    def test_body_text_cannot_acknowledge_unwritten_evidence(self):
+        self.outbound()
+        candidate, = self.report()["people"]
+        page = self.workspace / "memory/people/dana_okoro.md"
+        page.write_text(page.read_text() + f"\noutbound_evidence: {candidate['outbound_evidence']}\n")
+        self.assertEqual(len(self.report()["people"]), 1)
+
+    def test_backfilled_outbound_is_visible_despite_newer_inbound_volume(self):
+        for i in range(select_memory.MAX_INTERACTIONS + 2):
+            self.add("Dana Okoro", days_ago=1, body=f"recent inbound {i}")
+        self.outbound(days_ago=3)
+        found = self.report()
+        self.assertEqual(len(found["people"]), 1)
+        snippets = found["interactions"]["dana_okoro"]
+        self.assertLessEqual(len(snippets), select_memory.MAX_INTERACTIONS)
+        self.assertIn("backfilled", {r["body"] for r in snippets})
+
+    def test_inbound_only_pages_keep_the_existing_quiet_gate(self):
+        self.assertEqual(self.report()["people"], [])
+
+    def test_delayed_attribution_supplies_the_new_evidence_before_acknowledgment(self):
+        self.outbound("newly-resolved-promise", days_ago=4, resolved=False)
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE items SET source_account='avery@example.com',"
+                         " thread_ref='delayed-thread', counterparty_candidates=?,"
+                         " counterparty_pending_until=? WHERE source_id='newly-resolved-promise'",
+                         (json.dumps(["dana.okoro@example.com", "pat@example.com"]), iso(-3)))
+        self.outbound("already-reviewed-outbound", days_ago=3)
+        for i in range(select_memory.MAX_INTERACTIONS + 2):
+            self.add("Dana Okoro", days_ago=1, body=f"recent inbound {i}")
+        self.acknowledge(self.report()["people"][0])
+        self.assertEqual(self.report()["people"], [])
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("INSERT INTO items(source_id,source,scope,event_at,sender,sender_key,"
+                         "direction,source_account,thread_ref,body) VALUES"
+                         " ('delayed-reply','email','inbox',?,'Dana Okoro','dana.okoro@example.com',"
+                         " 'inbound','avery@example.com','delayed-thread','reply')", (iso(2),))
+            self.assertEqual(outbound.resolve_pending(conn), 1)
+        found = self.report()
+        self.assertIn("newly-resolved-promise",
+                      {row["body"] for row in found["interactions"]["dana_okoro"]})
+        self.acknowledge(found["people"][0])
+        self.assertEqual(self.report()["people"], [])
+
+    def test_large_snapshot_advances_only_with_saved_batches(self):
+        expected = {f"outbound-{n:03}" for n in range(select_memory.MAX_INTERACTIONS * 2 + 1)}
+        for sid in sorted(expected):
+            self.outbound(sid)
+        seen = set()
+        for _ in range(4):
+            found = self.report()
+            if not found["people"]:
+                break
+            retry = self.report()
+            self.assertEqual(found["people"], retry["people"], "unsaved selection must retry the same marker")
+            self.assertEqual(found["interactions"], retry["interactions"])
+            snippets = found["interactions"]["dana_okoro"]
+            self.assertLessEqual(len(snippets), select_memory.MAX_INTERACTIONS)
+            batch = {r["body"] for r in snippets if r["direction"] == "outbound"}
+            self.assertFalse(seen & batch)
+            seen.update(batch)
+            self.acknowledge(found["people"][0])
+        self.assertEqual(seen, expected)
+        self.assertEqual(self.report()["people"], [])
+
+    def test_attribution_during_partial_snapshot_finishes_then_revisits_new_set(self):
+        self.outbound("aaa-delayed", resolved=False)
+        for n in range(select_memory.MAX_INTERACTIONS + 1):
+            self.outbound(f"outbound-{n:03}")
+        first = self.report()["people"][0]
+        self.assertEqual(first["outbound_evidence"].count(":"), 2)
+        self.acknowledge(first)
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE items SET counterparty_key='dana.okoro@example.com',"
+                         " counterparty_name='Dana Okoro',counterparty_basis='reply'"
+                         " WHERE source_id='aaa-delayed'")
+        found = self.report()
+        self.assertIn("outbound-012", {r["body"] for r in found["interactions"]["dana_okoro"]})
+        self.assertTrue(found["people"][0]["outbound_evidence"].endswith(":0"))
+        self.assertNotEqual(first["outbound_evidence"], found["people"][0]["outbound_evidence"])
+        self.acknowledge(found["people"][0])
+        restarted = self.report()
+        self.assertIn("aaa-delayed", {r["body"] for r in restarted["interactions"]["dana_okoro"]})
+
+    def test_partial_snapshot_continues_across_linked_identities(self):
+        expected = {f"outbound-{n:03}" for n in range(select_memory.MAX_INTERACTIONS + 3)}
+        for sid in sorted(expected):
+            self.outbound(sid)
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("UPDATE items SET source='slack',sender_key='U0SELF',"
+                         " counterparty_key='U01DANA' WHERE source_id LIKE 'outbound-%'"
+                         " AND source_id>='outbound-005'")
+            identity.record(conn, identity.parse("email:dana.okoro@example.com"),
+                            identity.parse("slack:U01DANA"), "confirmed")
+        seen = set()
+        for _ in range(3):
+            found = self.report()
+            if not found["people"]:
+                break
+            seen.update(r["body"] for r in found["interactions"]["dana_okoro"]
+                        if r["direction"] == "outbound")
+            self.acknowledge(found["people"][0])
+        self.assertEqual(seen, expected)
+        self.assertEqual(self.report()["people"], [])
+
+    def test_out_of_range_partial_marker_retries_instead_of_acknowledging(self):
+        self.outbound()
+        candidate = self.report()["people"][0]
+        candidate["outbound_evidence"] += ":999999"
+        self.acknowledge(candidate)
+        found = self.report()
+        self.assertIn("backfilled", {r["body"] for r in found["interactions"]["dana_okoro"]})
+        self.assertEqual(found["people"][0]["outbound_evidence"].count(":"), 1)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Fetch the Slack messages this user received, into the store.
+"""Fetch inbound Slack messages and optional user-authored memory evidence.
 
 Run by `select_intake.py` before every scheduled intake tick. It reads
 whichever conversations the user belongs to, advances a per-conversation
@@ -37,7 +37,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
+import re
+import tempfile
+import uuid
 import sys
 import time
 import urllib.error
@@ -47,6 +51,7 @@ from typing import Any
 
 from _db import ensure_store, ledger_path, write_txn
 from normalize import insert_items, slack_message_to_item
+from outbound import enabled
 
 API = "https://slack.com/api/"
 
@@ -365,7 +370,11 @@ def load_capabilities(token: str, *, refresh: bool = False) -> dict[str, Any]:
         try:
             cached = json.loads(path.read_text(encoding="utf-8"))
             if cached.get("user_id") and cached.get("credential") == fingerprint(token):
-                return cached
+                # A gateway placeholder can stay the same while its user
+                # changes. Verify the account even when scopes are cached.
+                identity = call("auth.test", token)
+                if (identity.get("user_id"), identity.get("team_id")) == (cached.get("user_id"), cached.get("team_id")):
+                    return cached
         except (OSError, json.JSONDecodeError):
             pass
     caps = probe(token)
@@ -519,20 +528,12 @@ def replies(token: str, channel_id: str, parent_ts: str, oldest: str | None,
     return gathered, complete
 
 
-def worth_judging(message: dict[str, Any], user_id: str | None) -> bool:
-    """Is this a person saying something to the user?
-
-    A message the user sent is not one they received. Neither is Slack
-    announcing that somebody joined, and neither is a CI app posting a build
-    result — both of which arrive in a DM as `direct`, the highest-priority
-    class this recipe has, and the second with no `user` field at all, so the
-    sender lands NULL.
-    """
-    if message.get("subtype") not in KEPT_SUBTYPES:
-        return False
-    if message.get("bot_id"):
-        return False
-    return message.get("user") != user_id
+def worth_judging(message: dict[str, Any], user_id: str | None,
+                  include_outbound: bool = False) -> bool:
+    """Keep human messages, with user-authored evidence independently opt-in."""
+    return (message.get("subtype") in KEPT_SUBTYPES
+            and not message.get("bot_id") and bool(message.get("user"))
+            and (include_outbound or message["user"] != user_id))
 
 
 def sender_name(token: str, user_id: str | None,
@@ -575,6 +576,87 @@ def sender_name(token: str, user_id: str | None,
     return cache[user_id]
 
 
+def single_mention(text: str, user_id: str) -> str | None:
+    others = set(re.findall(r"<@(U[A-Z0-9]+|W[A-Z0-9]+)(?:\|[^>]+)?>", text)) - {user_id}
+    return next(iter(others)) if len(others) == 1 else None
+
+
+def im_counterparty(token, channel_id, budget):
+    """Resolve DM membership within the shared request allowance."""
+    if not budget.spend():
+        return None
+    try:
+        return call("conversations.info", token, channel=channel_id).get("channel", {}).get("user")
+    except SlackError:
+        return None
+
+
+def _meta(conn, key):
+    row = conn.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+    return row[0] if row else None
+
+
+def _set_meta(conn, key, value):
+    conn.execute("INSERT INTO meta(key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
+
+
+def outbound_session(caps, include_outbound):
+    """Bind collection to an account and persist a bounded enablement window.
+
+    A generation survives partial runs. Turning capture off preserves data;
+    the next observed enablement starts a fresh seven-day catch-up window.
+    """
+    if not caps.get("team_id") or not caps.get("user_id"):
+        raise SlackError("auth.test", "identity_missing")
+    account = f"{caps['team_id']}:{caps['user_id']}"
+    with write_txn() as conn:
+        raw = _meta(conn, "slack_outbound_collection")
+        try:
+            prior = json.loads(raw) if raw else {}
+            if not isinstance(prior, dict):
+                raise ValueError()
+            if prior and prior.get("account") != account:
+                raise SlackError("collection", "account_changed")
+            if prior and not isinstance(prior.get("enabled"), bool):
+                raise ValueError()
+            if prior.get("enabled"):
+                cutoff = float(prior.get("cutoff", "nan"))
+                if not prior.get("generation") or not math.isfinite(cutoff) or cutoff <= 0:
+                    raise ValueError()
+        except (ValueError, TypeError):
+            raise SlackError("collection", "state_invalid")
+        current = dict(prior, account=account, enabled=include_outbound)
+        if include_outbound and not prior.get("enabled"):
+            current.update(generation=uuid.uuid4().hex,
+                           cutoff=f"{time.time() - BACKFILL_DAYS * 86400:.6f}")
+        _set_meta(conn, "slack_outbound_collection", json.dumps(current))
+    return current
+
+
+def prepare_catchup(channel_id, session, known):
+    """Rewind remembered threads once, before recording that reset as durable.
+
+    Advancing the completion marker before resetting thread watermarks could
+    skip user-authored replies on a crash. An interrupted reset only replays
+    rows. Existing rotation still determines which parents get served next.
+    """
+    if not session["enabled"]:
+        return False, known
+    generation = session["generation"]
+    with write_txn() as conn:
+        done = _meta(conn, f"slack_outbound_done:{channel_id}") == generation
+        reset = _meta(conn, f"slack_outbound_reset:{channel_id}") == generation
+    if done:
+        return False, known
+    if not reset:
+        known = {ts: min(mark, session["cutoff"], key=float) if mark is not None else None
+                 for ts, mark in known.items()}
+        save_threads(channel_id, known, strict=True)
+        with write_txn() as conn:
+            _set_meta(conn, f"slack_outbound_reset:{channel_id}", generation)
+    return True, known
+
+
 def read_cursors() -> dict[str, str]:
     with write_txn() as conn:
         return {row[0]: row[1] for row in conn.execute(
@@ -582,7 +664,7 @@ def read_cursors() -> dict[str, str]:
 
 
 def commit_channel(channel: dict[str, Any], items: list[dict[str, Any]],
-                   watermark: str | None) -> int:
+                   watermark: str | None, *, generation: str | None = None) -> int:
     """Rows and their watermark, together or not at all.
 
     One short transaction per conversation. The fetch happens outside it: a
@@ -599,6 +681,8 @@ def commit_channel(channel: dict[str, Any], items: list[dict[str, Any]],
                 " ON CONFLICT(source, scope) DO UPDATE SET cursor=excluded.cursor,"
                 " updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')",
                 (channel["id"], watermark))
+        if generation:
+            _set_meta(conn, f"slack_outbound_done:{channel['id']}", generation)
     return added
 
 
@@ -620,7 +704,7 @@ def read_threads(channel_id: str) -> dict[str, str | None]:
         return {}
 
 
-def save_threads(channel_id: str, threads: dict[str, str | None]) -> None:
+def save_threads(channel_id: str, threads: dict[str, str | None], *, strict=False) -> None:
     path = threads_path()
     try:
         existing = json.loads(path.read_text(encoding="utf-8"))
@@ -629,12 +713,22 @@ def save_threads(channel_id: str, threads: dict[str, str | None]) -> None:
     except (OSError, json.JSONDecodeError):
         existing = {}
     existing[channel_id] = threads
+    temporary = None
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(existing), encoding="utf-8")
-    except OSError:
-        # Losing this costs a re-read, not correctness.
-        pass
+        fd, temporary = tempfile.mkstemp(prefix=".slack-threads-", dir=path.parent)
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(existing, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    except OSError as exc:
+        if strict:
+            raise SlackError("collection", "state_save_failed") from exc
+        # After row commit, lost progress costs a re-read.
+    finally:
+        if temporary and os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def prune_threads(known: dict[str, str | None]) -> dict[str, str | None]:
@@ -731,7 +825,7 @@ def save_rotation(offset: int) -> None:
 
 
 def collect(token: str, caps: dict[str, Any],
-            budget: Budget) -> tuple[dict[str, Any], bool]:
+            budget: Budget, *, include_outbound=False) -> tuple[dict[str, Any], bool]:
     """Fetch what the budget allows, starting where the last tick stopped.
 
     A failure in one conversation used to abort the run and roll back every
@@ -741,10 +835,12 @@ def collect(token: str, caps: dict[str, Any],
     livelock that wakes the model every half hour to redo work it will discard.
     """
     ensure_store()
+    session = outbound_session(caps, include_outbound)
     channels = conversations(token, caps["available"], budget)
     watermarks = read_cursors()
-    names: dict[str, str | None] = {}
+    names: dict[str, tuple[str | None, str | None]] = {}
     fetched = added = served = failed_conversations = 0
+    unresolved_dms = 0
     partial: list[dict[str, str]] = []
     incomplete: list[str] = []
 
@@ -756,15 +852,19 @@ def collect(token: str, caps: dict[str, Any],
             budget.exhausted = True
             break
         served += 1
+        known = read_threads(channel["id"])
+        catchup, known = prepare_catchup(channel["id"], session, known)
+        oldest = watermarks.get(channel["id"])
+        if catchup:
+            oldest = min(oldest, session["cutoff"], key=float) if oldest else session["cutoff"]
         try:
-            messages, complete = history(token, channel["id"],
-                                         watermarks.get(channel["id"]), budget)
+            messages, complete = history(token, channel["id"], oldest, budget)
         except SlackError as exc:
-            # The conversation id is not repeated: a DM id names who the user
-            # talks to, and this summary is the agent's prompt.
             failed_conversations += 1
             partial.append({"family": channel["type"], "error": exc.error})
             continue
+        dm_peer = (im_counterparty(token, channel["id"], budget)
+                   if include_outbound and channel["type"] == "im" else None)
         # No early exit on an empty channel. A quiet conversation is exactly
         # where a thread reply hides: the parent is already below the
         # watermark, so `conversations.history` returns nothing, and skipping
@@ -777,8 +877,6 @@ def collect(token: str, caps: dict[str, Any],
         # as the thread stayed alive. Threads therefore carry their own
         # watermark: remembered when first seen, re-read on later ticks from
         # wherever their own reading stopped.
-        known = read_threads(channel["id"])
-
         # Two different things live in `known`, and conflating them was the
         # first mistake here.
         #
@@ -801,6 +899,7 @@ def collect(token: str, caps: dict[str, Any],
                 if message.get("reply_count"):
                     owed.add(message["ts"])
         known = prune_threads(known)
+        before_replies = dict(known)
         owed &= set(known)
 
         # Both sets rotate, for the same reason and with different
@@ -857,22 +956,40 @@ def collect(token: str, caps: dict[str, Any],
             elif not done:
                 threads_complete = False
 
-        items = [
-            slack_message_to_item(
-                message, channel, caps["user_id"],
-                *sender_name(token, message.get("user"), names, budget))
-            for message in messages + threaded
-            if worth_judging(message, caps["user_id"])
-        ]
-        if not items:
-            # Nothing to store, so nothing to lose by recording where the
-            # thread reading reached.
-            save_threads(channel["id"], known)
-            save_thread_offset(channel["id"], start_thread + served_watched,
-                               len(watched))
-            save_thread_offset(channel["id"], start_active + served_active,
-                               len(active), "owed")
-            continue
+        items = []
+        dm_unresolved = False
+        for message in messages + threaded:
+            if not worth_judging(message, caps["user_id"], include_outbound):
+                continue
+            outgoing = message["user"] == caps["user_id"]
+            if outgoing and float(message["ts"]) < float(session["cutoff"]):
+                continue
+            target = basis = None
+            if outgoing:
+                if channel["type"] == "im":
+                    if not dm_peer:
+                        dm_unresolved = True
+                        continue
+                    if dm_peer != caps["user_id"]:
+                        target, basis = dm_peer, "dm"
+                else:
+                    target = single_mention(message.get("text", ""), caps["user_id"])
+                    basis = "mention" if target else None
+            cp_name, cp_handle = sender_name(token, target, names, budget) if target else (None, None)
+            author_name, author_handle = sender_name(token, message["user"], names, budget)
+            item = slack_message_to_item(message, channel, caps["user_id"], author_name, author_handle,
+                direction="outbound" if outgoing else "inbound", source_account=session["account"],
+                counterparty_key=target, counterparty_name=cp_name, counterparty_handle=cp_handle,
+                counterparty_basis=basis, participants_complete=bool(dm_peer))
+            if outgoing and dm_peer == caps["user_id"]:
+                item["counterparty_pending_until"] = None
+            items.append(item)
+        if dm_unresolved:
+            # Never advance a thread past omitted own replies. Metadata
+            # lookup failure must be retriable after the API budget recovers.
+            known = before_replies
+            complete = False
+            unresolved_dms += 1
         fetched += len(items)
         # Only a complete crawl may move the watermark; the rows are idempotent
         # on `source_id`, so re-reading an unmoved window costs nothing.
@@ -881,9 +998,14 @@ def collect(token: str, caps: dict[str, Any],
         # be lost for good.
         watermark = (messages[-1]["ts"]
                      if (messages and complete and threads_complete) else None)
+        if watermark and watermarks.get(channel["id"]):
+            watermark = max(watermark, watermarks[channel["id"]], key=float)
         if not complete or not threads_complete:
             incomplete.append(channel["type"])
-        added += commit_channel(channel, items, watermark)
+        if catchup and complete and threads_complete:
+            added += commit_channel(channel, items, watermark, generation=session["generation"])
+        else:
+            added += commit_channel(channel, items, watermark)
         # Only now. `save_threads` writes a file rather than a row, so it
         # cannot share the store's transaction — but it can be made to happen
         # strictly afterwards. Advancing a thread watermark before the rows it
@@ -905,6 +1027,7 @@ def collect(token: str, caps: dict[str, Any],
         "fetched": fetched,
         "added": added,
         "skipped_families": caps["missing"],
+        "self_authored": {"enabled": include_outbound, "unresolved_dm_conversations": unresolved_dms},
     }
     if partial:
         result["partial"] = partial
@@ -926,6 +1049,11 @@ def collect(token: str, caps: dict[str, Any],
 def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
     refresh = "--recheck" in args
+    try:
+        include_outbound = enabled("slack")
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return EXIT_OTHER
 
     raw = os.environ.get("SLACK_USER_TOKEN")
     kind = classify_token(raw)
@@ -972,7 +1100,7 @@ def main(argv: list[str] | None = None) -> int:
 
     budget = Budget(bounded_budget())
     try:
-        result, everything_failed = collect(token, caps, budget)
+        result, everything_failed = collect(token, caps, budget, include_outbound=include_outbound)
     except SlackError as exc:
         return _report_failure(exc)
 
@@ -988,6 +1116,12 @@ def main(argv: list[str] | None = None) -> int:
 
 def _report_failure(exc: SlackError) -> int:
     """Map a Slack error onto an exit code, saying only what is safe to say."""
+    if exc.error == "account_changed":
+        print("Slack account differs from this ledger. Use a separate profile, or export and reset before switching accounts.", file=sys.stderr)
+        return EXIT_OTHER
+    if exc.error in {"state_invalid", "state_save_failed", "identity_missing"}:
+        print(f"Slack collection stopped ({exc.error}); no collection progress was discarded. Check profile state and account access before retrying.", file=sys.stderr)
+        return EXIT_OTHER
     credential = {"invalid_auth", "not_authed", "token_revoked",
                   "account_inactive", "token_expired"}
     if exc.error in credential:

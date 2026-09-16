@@ -152,13 +152,8 @@ def main() -> None:
         log.error("downstream credentials unavailable at startup: %s", e)
         sys.exit(1)
 
-    # HTTPS listener. The sandbox→relay wire is encrypted end-to-end: the
-    # in-sandbox atif-bridge sidecar (Python ssl, OpenSSL backend) forwards
-    # NeMo Relay's native HTTP POST over HTTPS through OpenShell's L7 proxy,
-    # which MITMs and substitutes the bearer placeholder during transit. See
-    # docs/atif-export.md
-    # "Sandbox→relay TLS via Python protocol-bridge sidecar" for the wire
-    # diagram and the OpenShell EKU bug that makes the bridge necessary.
+    # HTTPS listener. Native NeMo Relay sends the completed trajectory through
+    # OpenShell's L7 proxy, which substitutes the bearer placeholder in transit.
     # Downstream (relay → S3/MinIO) is also TLS via boto3.
     tls_cert = _required("ATIF_RELAY_TLS_CERT")
     tls_key = _required("ATIF_RELAY_TLS_KEY")

@@ -154,9 +154,13 @@ def latest_unanswered(token: str, channel_id: str, bot_user_id: str, bot_id: str
 def recent_gateway_failures() -> set[str]:
     sandbox = os.environ.get("SANDBOX_NAME", "hermes-direct")
     command = [
-        "bash", "-lc",
-        "container=$(docker ps --format '{{.Names}}' | grep '^openshell-" + sandbox + "' | head -n1); "
-        "[ -n \"$container\" ] && docker logs --since=15m --tail=5000 \"$container\" 2>&1",
+        "openshell",
+        "logs",
+        sandbox,
+        "--since",
+        "15m",
+        "-n",
+        "5000",
     ]
     _, output = run(command, timeout=12)
     return classify_log_text(output)

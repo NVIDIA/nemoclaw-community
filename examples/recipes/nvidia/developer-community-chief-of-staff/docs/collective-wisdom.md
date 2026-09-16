@@ -80,8 +80,6 @@ Expected: sandbox `Ready`; skills dir contains the 9 baked-in skills (`cross-sou
 
 If an extra user-authored skill from a previous run is sitting in the skills directory, wipe anything that isn't one of the nine baked-in names so the example starts on a clean slate:
 
-The command must be on a single line — `openshell sandbox exec` rejects literal newlines in the command argument (gRPC `InvalidArgument: command argument 2 contains newline or carriage return characters`). Use `;` separators instead of multi-line scripts.
-
 ```console
 $ openshell sandbox exec --name hermes-direct -- bash -c 'cd /sandbox/.hermes-data/skills/ && for d in */; do case "${d%/}" in cross-source-gap-analysis|github-readonly-live|gitlab-readonly-live|nemoclaw-autoheal|nemoclaw-nvteam|outlook-email-search|slack-channel-finder|slack-channel-summarizer|source-etl-query) ;; *) echo "removing ${d%/}"; rm -rf "$d" ;; esac; done'
 ```

@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -50,22 +49,31 @@ def load(fixtures: Path) -> dict[str, int]:
 
     memory_src = fixtures / "memory"
     memory_dst = ledger_path().parent.parent / "memory"
-    if memory_src.is_dir() and not memory_dst.exists():
-        # Skip editor and archive debris; an AppleDouble sidecar is binary
-        # and would land beside a page with the same .md suffix.
-        shutil.copytree(memory_src, memory_dst,
-                        ignore=shutil.ignore_patterns('._*', '.DS_Store'))
-        memory_dst.chmod(0o700)
-        # The seed represents "now". Without restamping, a fixture committed
-        # with a fixed date starts failing its own decay check a day or two
-        # after it ships, and the walkthrough opens by reporting itself stale.
-        today = datetime.now(timezone.utc).date().isoformat()
-        for page in memory_dst.rglob("*.md"):
-            text = page.read_text(encoding="utf-8")
-            page.write_text(
-                re.sub(r"^updated: \d{4}-\d{2}-\d{2}$", f"updated: {today}",
-                       text, count=1, flags=re.M),
-                encoding="utf-8")
+    from memory_pages import writer
+    from memory_io import MemoryConflict
+    import memory_journal as journal
+    import uuid
+    with writer(check_skills=False):
+        if memory_src.is_dir() and not memory_dst.exists():
+            with journal.connection() as conn:
+                if conn.execute("SELECT 1 FROM pages LIMIT 1").fetchone():
+                    raise MemoryConflict("fixture seeding requires a fresh memory registry")
+                instance = journal.store_id(conn)
+            today = datetime.now(timezone.utc).date().isoformat()
+            files = []
+            for source in sorted(memory_src.rglob("*.md")):
+                if source.name.startswith("._"):
+                    continue
+                text = re.sub(r"^updated: \d{4}-\d{2}-\d{2}$", f"updated: {today}",
+                              source.read_text(encoding="utf-8"), count=1, flags=re.M)
+                files.append((str(source.relative_to(memory_src)), None, text.encode()))
+            files.sort(key=lambda item: item[0] == "index.md")
+            if files:
+                operation_id = str(uuid.uuid4())
+                journal.prepare(operation_id=operation_id, request_id=operation_id,
+                                request_digest=journal.json_digest([name for name, _, _ in files]),
+                                instance=instance, op_type="legacy_write", actor="maintenance", files=files, effects={})
+                journal.recover_locked()
 
     return {"seen": len(items), "added": added, "memory": str(memory_dst),
             "seeded": memory_dst.is_dir()}

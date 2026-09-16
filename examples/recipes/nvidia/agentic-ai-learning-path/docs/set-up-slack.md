@@ -122,13 +122,10 @@ text-only output. The setting accepts only `true` or `false`. Every message
 keeps a text fallback for notifications, accessibility, old clients, and
 renderer failure.
 
-The recipe also renders two to four Hermes clarification choices as one-tap
-buttons plus an `Other` option. The pinned Hermes base already provides the
-clarification and authorization primitives; a feature-detected compatibility
-shim adds the missing Slack presentation. It stands down when a future Hermes
-base supplies native Slack clarification buttons. Rich Blocks and buttons use
-the existing Slack credentials and require no additional OAuth scopes or app
-reinstall. Rebuild the sandbox after changing the Rich Blocks setting.
+Hermes renders two to four clarification choices as native one-tap buttons
+plus an `Other` option. Rich Blocks and buttons use the existing Slack
+credentials and require no additional OAuth scopes or app reinstall. Rebuild
+the sandbox after changing the Rich Blocks setting.
 
 ## Run `bring-up.sh`
 

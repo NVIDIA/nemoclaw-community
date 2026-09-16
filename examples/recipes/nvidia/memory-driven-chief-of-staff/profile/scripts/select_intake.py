@@ -17,6 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from memory_io import read_snapshot
 from _db import ensure_store, write_txn
 
 def bounded_int(name: str, default: int, *, maximum: int) -> int:
@@ -127,12 +128,15 @@ def main() -> int:
     SLICE = bounded_int("INTAKE_SLICE", 25, maximum=MAX_SLICE)
     ensure_store()
     collected, collector_failed = collect()
+    from outbound import resolve_pending
+    with read_snapshot(), write_txn() as conn:
+        pending_resolved = resolve_pending(conn)
 
-    with write_txn() as conn:
+    with read_snapshot(), write_txn() as conn:
         rows = conn.execute(
             "SELECT source_id, source, scope, event_at, sender, subject, body,"
             "       addressing, unread"
-            "  FROM items WHERE state='pending'"
+            "  FROM items WHERE state='pending' AND direction IS NOT 'outbound'"
             " ORDER BY event_at LIMIT ?", (SLICE,)).fetchall()
         open_rows = conn.execute(
             "SELECT o.source_id, o.title, o.status FROM obligations o"
@@ -146,6 +150,7 @@ def main() -> int:
             "body", "addressing", "unread")
     payload = {
         "collected": collected,
+        "pending_resolved": pending_resolved,
         "slice": [dict(zip(cols, r)) for r in rows],
         "open_obligations": [{"source_id": r[0], "title": r[1]} for r in open_rows],
         "recently_resolved": [{"title": r[0], "status": r[1]} for r in recent_closed],
@@ -160,4 +165,10 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    from memory_io import MemoryBlocked, MemoryConflict
+    try:
+        raise SystemExit(main())
+    except (MemoryBlocked, MemoryConflict) as exc:
+        print(json.dumps({"status": "blocked", "detail": str(exc)}))
+        print(json.dumps({"wakeAgent": False}))
+        raise SystemExit(3)

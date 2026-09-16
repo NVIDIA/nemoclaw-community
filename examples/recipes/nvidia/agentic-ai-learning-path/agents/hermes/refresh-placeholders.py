@@ -1,23 +1,28 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Rewrite Hermes's .env file with OpenShell provider placeholders.
+"""Rewrite Hermes runtime files with OpenShell provider placeholders.
 
 Called by start.sh at sandbox boot. Reads NEMOCLAW_PROVIDER_PLACEHOLDER_KEYS
 (a space-separated list of env var names) and for each one whose value starts
-with `openshell:resolve:env:`, ensures the target env file has the canonical
-placeholder string. Idempotent — no-op if values already match. Symlink guard
-lives in the bash caller.
+with `openshell:resolve:env:`, ensures the target files contain the exact
+identity-stable, revision-scoped placeholder injected into the sandbox.
+Idempotent — no-op if values already match. Symlink guards live in the bash
+caller.
 """
 from __future__ import annotations
 
 import os
+import re
 import sys
 
 
 def main() -> int:
     if len(sys.argv) < 2:
-        print("usage: refresh-placeholders.py <env_file>", file=sys.stderr)
+        print(
+            "usage: refresh-placeholders.py <env_file> [config_file]",
+            file=sys.stderr,
+        )
         return 2
 
     env_file = sys.argv[1]
@@ -28,10 +33,7 @@ def main() -> int:
     for key in keys:
         value = os.environ.get(key, "")
         if value.startswith(prefix):
-            # OpenShell may inject revision-pinned placeholders into process env
-            # (for example, openshell:resolve:env:v123_KEY). Hermes persists this
-            # file for long-running bridges, so store the stable provider lookup.
-            replacements[key] = f"{prefix}{key}"
+            replacements[key] = value
 
     if not replacements:
         return 0
@@ -61,11 +63,28 @@ def main() -> int:
             updated.append(f"{key}={value}\n")
             changed = True
 
-    if not changed:
-        return 0
+    if changed:
+        with open(env_file, "w", encoding="utf-8") as f:
+            f.writelines(updated)
 
-    with open(env_file, "w", encoding="utf-8") as f:
-        f.writelines(updated)
+    if len(sys.argv) > 2:
+        config_file = sys.argv[2]
+        with open(config_file, encoding="utf-8") as f:
+            config = f.read()
+        refreshed = config
+        for key, value in replacements.items():
+            placeholder = re.compile(
+                rf"{re.escape(prefix)}(?:v[0-9]+_)?{re.escape(key)}"
+            )
+            refreshed = placeholder.sub(value, refreshed)
+        if "SLACK_BOT_TOKEN" in replacements:
+            refreshed = refreshed.replace(
+                "xoxb-OPENSHELL-RESOLVE-ENV-SLACK_BOT_TOKEN",
+                replacements["SLACK_BOT_TOKEN"],
+            )
+        if refreshed != config:
+            with open(config_file, "w", encoding="utf-8") as f:
+                f.write(refreshed)
     return 0
 
 

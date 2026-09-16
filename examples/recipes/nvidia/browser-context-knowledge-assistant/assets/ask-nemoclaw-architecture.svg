@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 940"
+     font-family="'NVIDIA Sans', Arial, sans-serif" role="img"
+     aria-labelledby="diagram-title diagram-description">
+  <title id="diagram-title">Ask NemoClaw browser context architecture</title>
+  <desc id="diagram-description">A user grants the Ask NemoClaw Chrome extension access to the active tab. For the Brev community quick start, the extension sends an arbitrary prompt, readable page text, and a bounded viewport image through an authenticated Brev CLI tunnel to a loopback-only Hermes plugin inside an OpenShell sandbox. A shared deployment can use an authenticated HTTPS ingress. Hermes selects installed skills and sends inference through the NemoClaw configured provider route. NeMo Relay records local ATIF traces.</desc>
+  <defs>
+    <filter id="shadow" x="-8%" y="-8%" width="116%" height="124%">
+      <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#000000" flood-opacity="0.30"/>
+    </filter>
+    <marker id="arrow-green" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="10" markerHeight="7" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#76B900"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="10" markerHeight="7" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#0074DF"/>
+    </marker>
+    <marker id="arrow-gray" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="10" markerHeight="7" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#A7A7A7"/>
+    </marker>
+  </defs>
+
+  <rect width="1600" height="940" fill="#000000"/>
+  <rect x="0" y="0" width="18" height="940" fill="#76B900"/>
+  <text x="58" y="64" font-size="17" font-weight="700" letter-spacing="3" fill="#76B900">NVIDIA NEMOCLAW COMMUNITY</text>
+  <text x="58" y="113" font-size="40" font-weight="700" fill="#FFFFFF">Ask NemoClaw</text>
+  <text x="58" y="145" font-size="18" fill="#A7A7A7">Turn the active browser tab into permission-scoped agent context</text>
+
+  <!-- Browser boundary -->
+  <rect x="50" y="190" width="350" height="590" rx="18" fill="#1A1A1A" stroke="#4B4B4B" stroke-width="2"/>
+  <rect x="50" y="190" width="350" height="60" rx="18" fill="#313131"/>
+  <rect x="50" y="232" width="350" height="18" fill="#313131"/>
+  <circle cx="82" cy="220" r="7" fill="#76B900"/>
+  <text x="102" y="227" font-size="20" font-weight="700" fill="#FFFFFF">Chrome</text>
+  <text x="76" y="282" font-size="12" font-weight="700" letter-spacing="1.7" fill="#76B900">USER CONTROLLED</text>
+
+  <rect x="76" y="308" width="298" height="92" rx="12" fill="#000000" stroke="#4B4B4B"/>
+  <text x="98" y="341" font-size="17" font-weight="700" fill="#FFFFFF">Active browser tab</text>
+  <text x="98" y="368" font-size="14" fill="#A7A7A7">Readable text + visible viewport</text>
+  <text x="98" y="389" font-size="14" fill="#A7A7A7">Captured fresh on every Send</text>
+
+  <rect x="76" y="442" width="298" height="190" rx="12" fill="#162400" stroke="#76B900" stroke-width="2" filter="url(#shadow)"/>
+  <text x="98" y="481" font-size="20" font-weight="700" fill="#FFFFFF">Ask NemoClaw</text>
+  <text x="98" y="511" font-size="14" fill="#BFF230">Chrome side-panel extension</text>
+  <text x="98" y="544" font-size="14" fill="#FFFFFF">Arbitrary user prompt</text>
+  <text x="98" y="570" font-size="14" fill="#FFFFFF">New or retained conversation</text>
+  <text x="98" y="596" font-size="14" fill="#FFFFFF">Rendered answer and live status</text>
+  <text x="98" y="620" font-size="13" fill="#A7A7A7">No packaged credentials</text>
+
+  <rect x="76" y="674" width="298" height="72" rx="12" fill="#000000" stroke="#4B4B4B"/>
+  <text x="98" y="706" font-size="15" font-weight="700" fill="#FFFFFF">Chrome activeTab grant</text>
+  <text x="98" y="730" font-size="13" fill="#A7A7A7">User selects the toolbar icon</text>
+
+  <line x1="225" y1="400" x2="225" y2="436" stroke="#76B900" stroke-width="3" marker-end="url(#arrow-green)"/>
+  <line x1="225" y1="632" x2="225" y2="668" stroke="#A7A7A7" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow-gray)"/>
+
+  <!-- NemoClaw runtime boundary -->
+  <rect x="500" y="190" width="745" height="590" rx="18" fill="#0D1408" stroke="#76B900" stroke-width="3"/>
+  <rect x="522" y="210" width="300" height="34" rx="17" fill="#76B900"/>
+  <text x="672" y="233" text-anchor="middle" font-size="15" font-weight="700" fill="#000000">NEMOCLAW AGENT RUNTIME</text>
+  <text x="530" y="278" font-size="21" font-weight="700" fill="#FFFFFF">Hermes inside an OpenShell sandbox</text>
+  <text x="530" y="303" font-size="14" fill="#BFF230">Access control, policy enforcement, agent execution, and local observability</text>
+
+  <rect x="530" y="330" width="685" height="420" rx="16" fill="#1A1A1A" stroke="#4B4B4B" stroke-width="2"/>
+  <text x="558" y="365" font-size="13" font-weight="700" letter-spacing="1.5" fill="#A7A7A7">HERMES</text>
+
+  <rect x="558" y="390" width="282" height="96" rx="11" fill="#000000" stroke="#76B900" stroke-width="1.5"/>
+  <text x="580" y="423" font-size="16" font-weight="700" fill="#FFFFFF">Hermes access boundary</text>
+  <text x="580" y="450" font-size="14" fill="#A7A7A7">Brev CLI tunnel + loopback identity</text>
+  <text x="580" y="471" font-size="14" fill="#A7A7A7">Or authenticated HTTPS ingress</text>
+
+  <rect x="886" y="390" width="300" height="96" rx="11" fill="#162400" stroke="#76B900" stroke-width="2" filter="url(#shadow)"/>
+  <text x="908" y="423" font-size="16" font-weight="700" fill="#FFFFFF">Ask NemoClaw plugin</text>
+  <text x="908" y="450" font-size="14" fill="#BFF230">Authorization, limits, isolation</text>
+  <text x="908" y="471" font-size="14" fill="#A7A7A7">JSON-RPC sessions without PTYs</text>
+
+  <rect x="558" y="530" width="282" height="100" rx="11" fill="#000000" stroke="#0074DF" stroke-width="1.5"/>
+  <text x="580" y="563" font-size="16" font-weight="700" fill="#FFFFFF">Conversation store</text>
+  <text x="580" y="590" font-size="14" fill="#7CD7FE">Owner-scoped opaque mapping</text>
+  <text x="580" y="612" font-size="14" fill="#A7A7A7">Separate session per conversation</text>
+
+  <rect x="886" y="530" width="300" height="100" rx="11" fill="#000000" stroke="#76B900" stroke-width="1.5"/>
+  <text x="908" y="563" font-size="16" font-weight="700" fill="#FFFFFF">Hermes agent session</text>
+  <text x="908" y="590" font-size="14" fill="#BFF230">Selects installed skills and tools</text>
+  <text x="908" y="612" font-size="14" fill="#A7A7A7">Uses the supplied page as context</text>
+
+  <rect x="558" y="674" width="282" height="54" rx="11" fill="#000000" stroke="#4B4B4B"/>
+  <text x="580" y="707" font-size="15" font-weight="700" fill="#FFFFFF">OpenShell policy</text>
+  <text x="816" y="707" text-anchor="end" font-size="13" fill="#A7A7A7">runtime controls</text>
+
+  <rect x="886" y="674" width="300" height="54" rx="11" fill="#000000" stroke="#4B4B4B"/>
+  <text x="908" y="707" font-size="15" font-weight="700" fill="#FFFFFF">NeMo Relay</text>
+  <text x="1162" y="707" text-anchor="end" font-size="13" fill="#A7A7A7">local ATIF traces</text>
+
+  <line x1="840" y1="438" x2="880" y2="438" stroke="#76B900" stroke-width="3" marker-end="url(#arrow-green)"/>
+  <polyline points="1036,486 1036,506 1036,524" fill="none" stroke="#76B900" stroke-width="3" marker-end="url(#arrow-green)"/>
+  <polyline points="886,580 865,580 846,580" fill="none" stroke="#0074DF" stroke-width="2.5" marker-end="url(#arrow-blue)"/>
+  <polyline points="1036,630 1036,650 1036,668" fill="none" stroke="#A7A7A7" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow-gray)"/>
+
+  <!-- Browser request -->
+  <polyline points="374,537 448,537 448,438 552,438" fill="none" stroke="#76B900" stroke-width="4" marker-end="url(#arrow-green)"/>
+  <rect x="408" y="465" width="80" height="54" rx="8" fill="#000000" stroke="#313131"/>
+  <text x="448" y="488" text-anchor="middle" font-size="11" font-weight="700" fill="#76B900">LOCALHOST</text>
+  <text x="448" y="507" text-anchor="middle" font-size="10" fill="#FFFFFF">prompt + context</text>
+
+  <!-- Providers and optional capabilities -->
+  <rect x="1305" y="190" width="245" height="590" rx="18" fill="#1A1A1A" stroke="#4B4B4B" stroke-width="2"/>
+  <text x="1330" y="228" font-size="19" font-weight="700" fill="#FFFFFF">Configured services</text>
+  <text x="1330" y="253" font-size="13" fill="#A7A7A7">Operator-selected destinations</text>
+
+  <rect x="1330" y="310" width="195" height="124" rx="11" fill="#162400" stroke="#76B900" stroke-width="1.5"/>
+  <text x="1352" y="345" font-size="16" font-weight="700" fill="#FFFFFF">Inference provider</text>
+  <text x="1352" y="374" font-size="14" fill="#BFF230">Text or multimodal model</text>
+  <text x="1352" y="399" font-size="14" fill="#A7A7A7">Routed by NemoClaw</text>
+  <text x="1352" y="420" font-size="14" fill="#A7A7A7">Protected in transit by TLS</text>
+
+  <rect x="1330" y="510" width="195" height="140" rx="11" fill="#000000" stroke="#0074DF" stroke-width="1.5"/>
+  <text x="1352" y="545" font-size="16" font-weight="700" fill="#FFFFFF">Optional capabilities</text>
+  <text x="1352" y="576" font-size="14" fill="#7CD7FE">Installed skills and tools</text>
+  <text x="1352" y="603" font-size="14" fill="#A7A7A7">Separate authorization</text>
+  <text x="1352" y="626" font-size="14" fill="#A7A7A7">Policy must permit access</text>
+
+  <polyline points="1186,580 1270,580 1270,372 1324,372" fill="none" stroke="#76B900" stroke-width="3" marker-end="url(#arrow-green)"/>
+  <line x1="1186" y1="580" x2="1324" y2="580" stroke="#0074DF" stroke-width="2.5" stroke-dasharray="7 5" marker-end="url(#arrow-blue)"/>
+
+  <!-- Legend -->
+  <rect x="50" y="830" width="1500" height="72" rx="14" fill="#1A1A1A" stroke="#313131"/>
+  <text x="76" y="861" font-size="13" font-weight="700" letter-spacing="1.5" fill="#FFFFFF">FLOW</text>
+  <line x1="180" y1="866" x2="240" y2="866" stroke="#76B900" stroke-width="4" marker-end="url(#arrow-green)"/>
+  <text x="258" y="871" font-size="14" fill="#FFFFFF">Authorized request and agent execution</text>
+  <line x1="650" y1="866" x2="710" y2="866" stroke="#0074DF" stroke-width="3" marker-end="url(#arrow-blue)"/>
+  <text x="728" y="871" font-size="14" fill="#FFFFFF">Owner-scoped state or optional capability</text>
+  <line x1="1120" y1="866" x2="1180" y2="866" stroke="#A7A7A7" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow-gray)"/>
+  <text x="1198" y="871" font-size="14" fill="#FFFFFF">Policy or observability relationship</text>
+</svg>

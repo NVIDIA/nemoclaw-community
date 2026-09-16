@@ -194,3 +194,69 @@ messages read up to that point are still in the store. `reset.py --yes` removes
 them, and `export_store.py` writes out a copy first if you want one — both in
 [data-lifecycle.md](data-lifecycle.md). Revoking and erasing are separate
 actions, and doing one is easy to mistake for both.
+
+## Optional Sent Items collection
+
+Inbox remains enabled with the existing setup. Sent Items is disabled by
+default. To enable it for a manual run inside the selected profile:
+
+```bash
+INTAKE_GRAPH_SENT_ITEMS=1 python3 profile/scripts/ingest_graph.py
+```
+
+For scheduled intake, edit the environment file reported by
+`hermes -p <profile> config env-path` and set exactly one entry:
+
+```dotenv
+INTAKE_GRAPH_SENT_ITEMS=1
+```
+
+Set it to `0`, or remove it, to stop Sent Items collection. Only `0` and `1`
+are accepted; other values stop the collector before requests. The Slack
+self-authored setting is independent. Exporting a value in an interactive
+shell does not configure future scheduled runs.
+
+The existing delegated `Mail.Read`, `User.Read`, and `offline_access` scopes
+are sufficient; this feature adds no permissions. Each run checks the mailbox
+identity. Only Sent Items whose From address matches the returned mail address
+or user principal name qualify as outbound. Unrecognized aliases and copied
+messages from other authors are omitted and counted as `unverified_authorship`.
+User-authored copies in Inbox are omitted in both modes, avoiding duplicate
+outbound evidence from Inbox and Sent Items.
+
+Inbox and Sent Items keep separate delta/resume cursors in
+`workspace/graph_state.json`. An older flat state file migrates its cursor to
+Inbox. Each folder gets its own page budget; the rate-limit wait budget is
+shared. A folder's committed progress is saved atomically before proceeding to
+the next folder. Failed cursor publication is reported, while already-stored
+rows remain idempotent on retry. Malformed state is reported before collection.
+
+The initial backfill defaults to seven days (`GRAPH_BACKFILL_DAYS` changes it).
+Graph delta permits a `receivedDateTime` filter, not a `sentDateTime` filter;
+that is the initial API boundary. Outbound evidence uses `sentDateTime`, falling
+back to received time when the source omits it. Subsequent delta queries may
+report older changes. See the [Graph delta contract](https://learn.microsoft.com/en-us/graph/api/message-delta?view=graph-rest-1.0)
+and [message fields](https://learn.microsoft.com/en-us/graph/api/resources/message?view=graph-rest-1.0).
+
+Disabling preserves the Sent Items cursor and stored content. Re-enabling
+resumes that cursor, including changes during the disabled interval. An expired
+cursor restarts that folder's bounded backfill. `--recheck` or a changed mailbox
+starts fresh folder rounds. Source-deletion monitoring for Sent Items pauses
+while disabled; retention still runs over its stored bodies.
+
+Recipient metadata includes distinct non-self To/Cc/Bcc addresses. Exclusions
+check recipients before storage, and sender fields continue to identify the
+author. Ambiguous group messages are kept unassigned until a qualifying reply;
+see the [direction contract](phase-c1-direction.md). Resolved outbound text can
+inform relationship memory, but cannot create inbound obligations or act as an
+explicit user priority correction.
+
+Retention clears bodies, not metadata or derived pages. Reset removes the
+ledger and collection state, but not independent exports/backups. Portable
+exports include recipient metadata and cursor state; they omit the profile
+`.env`, so restoring into a new profile does not opt it into collection.
+Set the environment entry to `0` as part of reset if future collection must
+remain off. [Data lifecycle](data-lifecycle.md) describes the remaining controls.
+Schema rollback requires a consistent pre-upgrade profile backup and matching
+distribution, with writers stopped; toggling this setting does not downgrade
+schema v6.

@@ -19,9 +19,10 @@
 #                            github-etl-state). DESTRUCTIVE: forces ETL
 #                            re-scrape on next bring-up.
 #
-# Gateway is never destroyed automatically — run
-#   $ openshell gateway destroy --name <gateway>
-# manually if you want to clean it up too.
+# Gateway metadata is never removed automatically — run
+#   $ openshell gateway remove <gateway>
+# manually if you want to unregister it from the CLI too. The package manager
+# owns the local gateway service lifecycle.
 #
 # To remove the shared compatible-endpoint inference provider, run
 #   $ openshell provider delete compatible-endpoint
@@ -106,7 +107,7 @@ done
 
 echo
 echo "Tear-down complete."
-echo "  Gateway:       not destroyed (run 'openshell gateway destroy --name $GATEWAY_NAME' manually)"
+echo "  Gateway:       still registered (run 'openshell gateway remove $GATEWAY_NAME' manually)"
 if [[ -z "$stop_mode" ]]; then
   echo "  Host services: still running (re-run with --stop-host-services or --purge-host-services to stop)"
 fi

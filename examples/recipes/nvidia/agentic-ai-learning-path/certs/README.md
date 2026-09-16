@@ -2,9 +2,9 @@
 
 Optional drop point for additional CA certificates used by the Hermes image
 build and trusted inside the final sandbox image. Files placed here are
-installed before the pinned Hermes environment is built and retained so
-`curl`, Python, native NeMo Relay, and other TLS clients inside the sandbox
-trust the corresponding roots.
+installed in the derived sandbox image and retained so `curl`, Python, native
+NeMo Relay, and other TLS clients inside the sandbox trust the corresponding
+roots.
 
 ## When you need this
 

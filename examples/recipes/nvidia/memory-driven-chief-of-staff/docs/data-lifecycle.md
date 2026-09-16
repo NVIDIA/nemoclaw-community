@@ -231,3 +231,55 @@ twice does nothing the second time. `schema-v1.sql` is kept beside
 `schema.sql` as the frozen text of what actually shipped, so the migration is
 tested against the real prior state rather than against the current schema
 with a column removed.
+
+## Direction schema (v6)
+
+The [Phase C1 contract](phase-c1-direction.md) describes author and counterparty
+fields, migration, exclusions, reader compatibility, and rollback through a
+pre-upgrade backup. Retention keeps these metadata fields, including recipient
+addresses and attribution basis; `store.json` exports them with every item.
+The C1 migration alone enables no additional collection. Graph Sent Items and
+Slack self-authored capture require their separate opt-ins.
+
+Graph opt-in and opt-out, per-folder cursor recovery, recipient retention, and
+source-deletion limits are described in
+[optional Sent Items collection](set-up-graph.md#optional-sent-items-collection).
+Environment opt-ins are not exported with `store.json` and are not cleared by
+recipe reset. Disable the corresponding entry in the profile environment file
+when reset should also stop future collection.
+
+Slack opt-in, bounded backfill, account checks, thread recovery, and source-edit
+and deletion limits are described in
+[optional self-authored collection](set-up-slack.md#optional-self-authored-collection).
+Its enablement and per-channel markers are ledger metadata, included in
+`store.json` and removed with the ledger by reset. Both outbound sources feed
+quoted memory evidence; neither changes source messages or bypasses the existing
+explicit user-correction path.
+
+The outbound resolver's rotation cursor is also ledger metadata: it is exported
+with `store.json` and removed with the ledger on reset. Unmatched outbound rows
+retain their seven-day event-time deadline so replies collected later can still
+qualify; this does not extend the allowed reply event window. People-page
+`outbound_evidence` markers are exported with memory and removed with those
+pages on reset. They track the evidence snapshot independently of interaction
+dates and contain no message text. A partial marker also records the next
+batch offset; only a saved page advances it. If the snapshot changes, the current
+pass finishes before its bounded batches restart. No new database or sidecar
+state is added. Body retention and the existing limits on
+deleting derived memory remain unchanged.
+
+## Foundation page operations
+
+Schema 7 adds the managed-page registry, operation journal, ownership receipts,
+and pending resolutions to the recipe ledger. [Recoverable memory writes](memory-foundation.md)
+describes their lifecycle. Export includes every Foundation table and encodes
+active binary replay payloads as base64 JSON objects. It holds the memory
+barrier across the database and Markdown snapshot, including partial operations.
+
+Completed/cancelled/superseded operations clear replay bytes. Unfinished
+payloads expire after 30 days and require an explicit resolution; expiry never
+rebuilds text from cleared messages. Forget and reset scrub relevant payloads
+immediately. Reset does not replay a pending operation before erasing it and
+keeps the empty `workspace/.memory-operations.lock` inode. Reinitialization
+creates a new store-instance UUID so old proposals cannot write into a reset
+store. Hermes's separate profile-root `state.db` remains outside this reset.

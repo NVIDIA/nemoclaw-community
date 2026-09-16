@@ -159,8 +159,8 @@ fi
 # It bakes no bucket, key prefix, region, or downstream credentials: the
 # host-side relay owns all of those (and whether the backend is S3 or MinIO is
 # not a sandbox concern). When ATIF_EXPORT_MODE != relay, the native NeMo Relay
-# configuration writes ATIF trajectories to /tmp/atif and the bridge stays
-# down.
+# configuration writes ATIF trajectories to /sandbox/atif and no remote storage
+# component is configured.
 if atif_remote_enabled; then
   # atif_relay_backend validates ATIF_RELAY_BACKEND is set (loud error if not).
   echo "ATIF export: mode=relay backend=$(atif_relay_backend) (bucket + key prefix owned by the relay)"
@@ -175,34 +175,6 @@ for arg in "${!DOCKERFILE_ARGS[@]}"; do
 done
 
 BUILD_FROM="$STAGED_DOCKERFILE"
-# BuildKit-only Dockerfile features, such as secret mounts, must be built by
-# Docker before handing the result to OpenShell. OpenShell accepts an image ref
-# in --from, so this preserves the normal sandbox-create flow while ensuring
-# token-backed GitHub release downloads work when GITHUB_TOKEN is supplied.
-if [[ -n "${GITHUB_TOKEN:-}" ]] || grep -q -- "--mount=type=secret" "$STAGED_DOCKERFILE"; then
-  command -v docker >/dev/null || {
-    echo "docker not in PATH; required for BuildKit sandbox image build" >&2
-    exit 1
-  }
-  safe_sandbox_name="$(printf '%s' "$SANDBOX_NAME" \
-    | tr '[:upper:]' '[:lower:]' \
-    | tr -c 'a-z0-9_.-' '-')"
-  BUILD_FROM="nemoclaw-hermes-sandbox:${safe_sandbox_name}-${DOCKERFILE_ARGS[NEMOCLAW_BUILD_ID]}"
-  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    echo "Building sandbox image $BUILD_FROM with BuildKit secret-backed GitHub authentication"
-    DOCKER_BUILDKIT=1 GITHUB_TOKEN="$GITHUB_TOKEN" docker build \
-      --secret id=github_token,env=GITHUB_TOKEN \
-      -t "$BUILD_FROM" \
-      -f "$STAGED_DOCKERFILE" \
-      "$EXAMPLE_DIR"
-  else
-    echo "Building sandbox image $BUILD_FROM with BuildKit"
-    DOCKER_BUILDKIT=1 docker build \
-      -t "$BUILD_FROM" \
-      -f "$STAGED_DOCKERFILE" \
-      "$EXAMPLE_DIR"
-  fi
-fi
 
 # ── Stage policy with exact GitHub, GitLab, and web-search rules ────────
 python3 "$DIR/lib/github_repositories.py" stage-policy \
@@ -264,8 +236,8 @@ setsid openshell sandbox create \
 CREATE_PID=$!
 
 # ── Wait for ready ─────────────────────────────────────────────────────
-# A cold, uncached image build (the ~73-step hermes Dockerfile) can take many
-# minutes — far longer than a warm rebuild — so wait on a generous, configurable
+# A cold, uncached image build can take several minutes — far longer than a
+# warm rebuild — so wait on a generous, configurable
 # deadline instead of a fixed cap (a too-short cap was killing healthy in-progress
 # builds and making the first bring-up look like it needed a second run). We keep
 # polling while the create process is alive (build still progressing) and only
@@ -310,7 +282,7 @@ kill "$SIGKILL_BG_PID" 2>/dev/null || true
 wait "$SIGKILL_BG_PID" 2>/dev/null || true
 
 if [[ "$READY" != "1" ]]; then
-  echo "Sandbox did not reach ready in ${SANDBOX_READY_TIMEOUT_SECS}s — likely a slow cold image build. Re-run bring-up (it resumes from cached layers) or raise SANDBOX_READY_TIMEOUT_SECS. Check 'openshell sandbox logs $SANDBOX_NAME'." >&2
+  echo "Sandbox did not reach ready in ${SANDBOX_READY_TIMEOUT_SECS}s — likely a slow cold image build. Re-run bring-up (it resumes from cached layers) or raise SANDBOX_READY_TIMEOUT_SECS. Check 'openshell logs $SANDBOX_NAME'." >&2
   exit 1
 fi
 echo "  Sandbox reported ready; detached local create stream."

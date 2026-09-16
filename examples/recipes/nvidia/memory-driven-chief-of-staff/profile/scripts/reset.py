@@ -209,22 +209,26 @@ def remove() -> tuple[dict[str, object] | None, list[str], list[str]]:
         if unrestored:
             return None, unrestored, restored
 
-        removed: dict[str, object] = {}
-        failed: list[str] = []
-        for name, path in targets().items():
-            try:
-                if _is_dir_strict(path):
-                    shutil.rmtree(path)
-                    removed[name] = "removed"
-                elif _exists_strict(path):
-                    path.unlink()
-                    removed[name] = "removed"
-                else:
-                    removed[name] = "absent"
-            except OSError as exc:
-                removed[name] = f"failed: {exc.strerror or exc}"
-                failed.append(name)
-        return removed, failed, restored
+        from memory_io import memory_lock
+        # Reset erases pending operations without replay. The stable lock lives
+        # outside every deletion target and must never be unlinked here.
+        with memory_lock(exclusive=True, root=_profile_root() / "workspace"):
+            removed: dict[str, object] = {}
+            failed: list[str] = []
+            for name, path in targets().items():
+                try:
+                    if _is_dir_strict(path):
+                        shutil.rmtree(path)
+                        removed[name] = "removed"
+                    elif _exists_strict(path):
+                        path.unlink()
+                        removed[name] = "removed"
+                    else:
+                        removed[name] = "absent"
+                except OSError as exc:
+                    removed[name] = f"failed: {exc.strerror or exc}"
+                    failed.append(name)
+            return removed, failed, restored
 
 
 def main(argv: list[str] | None = None) -> int:

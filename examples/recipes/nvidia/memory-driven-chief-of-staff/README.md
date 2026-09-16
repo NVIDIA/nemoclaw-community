@@ -330,7 +330,7 @@ from lives alongside it, at `$HERMES_HOME/workspace/ledger/state.db`.
 > check before reaching its `4/4 Registering scheduled jobs` phase. Do not
 > run `register-jobs.sh` directly to fix that: it checks only the platform
 > and that the profile exists, not that a credential is set, so it would
-> schedule all eight jobs against a profile that fails authentication on
+> schedule all nine jobs against a profile that fails authentication on
 > every run. Verify the credential first, then rerun the installer, which
 > registers jobs as its own last step once the credential check passes:
 >
@@ -552,6 +552,10 @@ user_scopes:
   - users:read
 ```
 
+Your own Slack messages can optionally contribute memory evidence; capture is
+off by default. See [self-authored collection](docs/set-up-slack.md#optional-self-authored-collection)
+for the independent switch, seven-day backfill, and privacy limits.
+
 Static user tokens, bot tokens, and app tokens are refused. Attachments are not
 downloaded. Full setup and workspace-admin recovery steps are in
 [docs/set-up-slack.md](docs/set-up-slack.md).
@@ -578,7 +582,8 @@ Collector exit codes are stable diagnostics:
 
 ### Microsoft Outlook
 
-Outlook intake uses the Microsoft Graph inbox delta API. Register a Microsoft
+Outlook intake uses the Microsoft Graph Inbox delta API, with independently
+opt-in Sent Items collection. See [outbound mail setup](docs/set-up-graph.md#optional-sent-items-collection). Register a Microsoft
 Entra application with public-client flows enabled and delegated `Mail.Read`,
 `User.Read`, and `offline_access` permissions. Do not grant application-level
 mail permissions, which would authorize access beyond the signed-in mailbox.
@@ -794,16 +799,29 @@ instead of creating duplicates.
 | review | every 6 hours | `select_review.py` | `obligation-review` |
 | memory writing | daily 01:00 | `select_memory.py` | `memory-writing` |
 | retention | daily 02:00 | `retention.py` | — |
-| memory repair | daily 03:00 | — | `memory-repair` |
-| memory consolidation | daily 04:00 | — | `memory-consolidation` |
-| preference update | daily 04:30 | — | `preference-update` |
+| memory repair | daily 03:00 | `select_memory_maintenance.py` | `memory-repair` |
+| memory consolidation | daily 04:00 | `select_memory_maintenance.py` | `memory-consolidation` |
+| preference update | daily 04:30 | `select_memory_maintenance.py` | `preference-update` |
 | skill overrides | hourly at :15 | `skill_overrides.py` | — |
+| memory operations | hourly at :45 | `maintain_memory.py` | — |
 
 Intake, review, and memory writing run their selector before an agent turn. If
 no work is available, the selector's final non-empty line is the wake gate and
 Hermes skips inference. Retention and skill overrides never wake the agent —
 neither involves judgment. Memory writing runs before repair and consolidation
 so every new page is checked and compacted in the same nightly sequence.
+
+Memory file effects now use a recoverable journal and a shared reader/writer
+lock. Repair, consolidation, and preference pre-steps recover pending work
+before invoking the model. The hourly memory-operations job performs recovery
+and payload expiry without a model call. Incompatible effective skills or
+unresolved operations stop publication with a diagnostic.
+
+Generated-field ownership is disabled by default. After installation and job
+resynchronization, use `memory_operations.py enable` to opt in. Existing
+handwritten fields remain unmanaged; generated content needs no per-page
+approval. See [Recoverable memory writes](docs/memory-foundation.md) for the
+proposal format, adoption, recovery, lifecycle commands, and completion hooks.
 
 ### Persistence and reboot behavior
 
@@ -841,8 +859,12 @@ python3 -c '
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as handle:
     data = json.load(handle)
+owned = {"intake", "review", "memory writing", "memory repair",
+         "memory consolidation", "preference update", "retention",
+         "skill overrides", "memory operations"}
 for job in data.get("jobs", []):
-    print(job["id"])
+    if job.get("name") in owned:
+        print(job["id"])
 ' "$PROFILE_HOME/cron/jobs.json" | while read -r JOB_ID; do
   hermes -p memory-driven-chief-of-staff cron remove "$JOB_ID"
 done
@@ -883,8 +905,11 @@ read-write provider attached to the same sandbox would refuse writes from other
 code.
 
 - The offline fixtures are entirely synthetic and make no network request.
-- Recipient lists are reduced to `direct`, `mentioned`, or `broadcast` and are
-  never stored.
+- Inbound addressing is reduced to `direct`, `mentioned`, or `broadcast`.
+  Opt-in outbound mail retains recipient addresses for counterparty attribution;
+  exports include those metadata fields. Slack can independently collect your
+  own messages with a separate counterparty identity. Neither outbound source
+  enters the obligation intake or turns message text into a priority correction.
 - Message bodies are cleared after 30 days by default; metadata, obligation
   state, and audit history remain.
 - Exclusions are enforced at the shared insert boundary, before a row reaches
@@ -894,7 +919,7 @@ code.
 - Slack content deleted at the source is not detected immediately because a
   bounded history read cannot distinguish deletion from an older page. It ages
   out through retention.
-- Outlook messages removed from the inbox are reconciled through Microsoft
+- Outlook messages removed from a monitored folder are reconciled through Microsoft
   Graph. A confirmed deletion is tombstoned and its body is cleared immediately;
   the metadata, obligation, and audit history remain. A move to another folder
   is not treated as a deletion.
@@ -1091,8 +1116,8 @@ read-write provider would make the platform-level write-refusal claim false.
 - Scheduled jobs require the Linux environment inside a NemoHermes sandbox.
   The current provider setup helpers require Linux or WSL on your machine.
 - Recorded judgment turns test the workflow, not model quality.
-- Live connectors currently cover Slack and a Microsoft Outlook inbox through
-  Microsoft Graph. Other messaging providers need their own collector and
+- Live connectors currently cover Slack and Microsoft Outlook Inbox, with
+  opt-in Sent Items collection through Microsoft Graph. Other messaging providers need their own collector and
   OpenShell provider policy.
 - Graph credential provenance is not yet enforced at collector runtime. An
   unrelated attached provider exposing `MS_GRAPH_ACCESS_TOKEN` can be used even
@@ -1131,11 +1156,12 @@ memory-driven-chief-of-staff/
 │   ├── schema.md                     # Memory page types, provenance, decay, ceilings
 │   ├── seed/                         # Initial index and attention pages for a new memory
 │   ├── scripts/
-│   │   ├── schema.sql                # Current v5 SQLite store schema
+│   │   ├── schema.sql                # Current v6 SQLite store schema
 │   │   ├── schema-v1.sql             # Frozen schemas used by migration tests
 │   │   ├── schema-v2.sql
 │   │   ├── schema-v3.sql
 │   │   ├── schema-v4.sql
+│   │   ├── schema-v5.sql
 │   │   ├── _db.py                    # Profile-home, connection, and transaction boundary
 │   │   ├── identity.py               # Cross-provider identity relation resolver
 │   │   ├── link_identity.py          # User command for identity confirmations
@@ -1198,7 +1224,7 @@ memory-driven-chief-of-staff/
 | --- | --- | --- |
 | Python package manifest | None | All Python modules use the standard library |
 | Recipe manifest | `profile/distribution.yaml` | Pins recipe version and Hermes 0.19.0+ |
-| SQLite schema | `profile/scripts/schema.sql` | Defines application state schema v5 |
+| SQLite schema | `profile/scripts/schema.sql` | Defines application state schema v6 |
 | Outlook provider policy | `providers/graph-user.yaml` | Declares the recipe's intended read-only delegated `graph.microsoft.com` boundary |
 | Slack provider policy | `providers/slack-user.yaml` | Declares the recipe's intended read-only `slack.com` boundary |
 <!-- markdownlint-enable MD013 -->
@@ -1268,7 +1294,7 @@ est_effort:
 | --- | --- | --- |
 | `normalize.py` | Graph- or Slack-shaped source objects | Source-neutral item dictionaries; recipient lists become one addressing value |
 | `_db.py` | `HERMES_HOME`, `schema.sql` | Validated profile path, SQLite connection, transactions, automatic migration |
-| `ingest_graph.py` | Delegated Graph token and inbox delta | New Outlook message rows, resumable cursor state, and source-removal tombstones |
+| `ingest_graph.py` | Delegated Graph token and per-folder delta | New Outlook message rows, resumable cursor state, and source-removal tombstones |
 | `ingest_slack.py` | Rotating Slack token and selected conversations | New Slack rows and per-conversation watermarks |
 | `select_intake.py` | Collectors and pending rows | JSON batch or a final wake-gate line |
 | `select_review.py` | Open obligations | Oldest-review-first JSON batch or a final wake-gate line |
@@ -1352,7 +1378,7 @@ cd ../..
 test "$fail" -eq 0
 ```
 
-Expected result: every file ends with `OK`, the sixteen files report 733 tests
+Expected result: every file ends with `OK`, the eighteen files report 861 tests
 in total, and the final line is `failed=0`. Do not shorten the loop with an
 early break; running every module is part of the documented check.
 
@@ -1360,7 +1386,11 @@ The suite covers schema migration, memory invariants, concurrency and crash
 recovery, deterministic ranking, preference thresholds, normalization,
 transactional decisions, correction state transitions, the walkthrough,
 intake, review, and memory-writing selector wake gates, scheduler contracts,
-lifecycle controls, and Slack and Outlook collection/rotation behavior.
+lifecycle controls, and Slack and Outlook collection/rotation behavior. Phase C
+coverage includes opt-in independence, account checks, bounded backfill, cursor
+recovery, recipient exclusions, and outbound evidence reaching memory without
+entering obligation intake. It also checks existing-page refresh after backfill,
+persisted resolver rotation, and timely replies collected after an expiry pass.
 
 ### Recipe Metadata
 

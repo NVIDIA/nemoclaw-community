@@ -1,0 +1,94 @@
+<!doctype html>
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ask NemoClaw</title>
+    <link rel="stylesheet" href="sidepanel.css">
+  </head>
+  <body>
+    <header>
+      <div class="eyebrow">BROWSER CONTEXT ASSISTANT</div>
+      <h1>Ask NemoClaw</h1>
+      <p id="page-label" class="document-label">Checking the active page…</p>
+    </header>
+
+    <main>
+      <section class="conversation-toolbar" aria-label="Conversation controls">
+        <div class="connection-row" aria-label="NemoClaw connection">
+          <span id="connection-status" class="connection-status" data-state="checking" aria-live="polite">Checking NemoClaw…</span>
+          <button id="open-nemoclaw-button" class="secondary compact" type="button">Open NemoClaw</button>
+          <button id="settings-button" class="secondary compact icon-button" type="button" aria-label="NemoClaw settings" title="Settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.8 7.8 0 0 0 .1-1 7.8 7.8 0 0 0-.1-1l2.1-1.6-2-3.4L17 7a7.2 7.2 0 0 0-1.7-1L15 3h-4l-.4 3a7.2 7.2 0 0 0-1.7 1L6.5 6l-2 3.4L6.6 11a7.8 7.8 0 0 0-.1 1 7.8 7.8 0 0 0 .1 1l-2.1 1.6 2 3.4L9 17a7.2 7.2 0 0 0 1.7 1l.4 3h4l.4-3a7.2 7.2 0 0 0 1.7-1l2.4 1 2-3.4L19.4 13ZM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"/></svg>
+          </button>
+        </div>
+        <section id="settings-card" class="card settings-card" hidden aria-label="NemoClaw settings">
+          <form id="settings-form">
+            <label for="nemoclaw-url">NemoClaw URL</label>
+            <input id="nemoclaw-url" name="nemoclaw-url" type="url" required
+                   placeholder="https://hermes.example.com">
+            <p class="settings-help">Enter the dashboard URL. Ask NemoClaw detects the standard Hermes plugin path or the Brev reverse-proxy path automatically. HTTPS is required except for localhost development.</p>
+            <p class="settings-help"><strong>Authentication:</strong> sign in through the configured NemoHermes dashboard. Ask NemoClaw reads only that origin's Hermes session cookies and converts the session to supported bearer authentication. Tokens copied by the extension remain in Chrome's memory-backed session storage and are cleared when Chrome exits. The extension never stores a username, password, API key, or token in persistent extension storage. Disconnect removes the extension session without signing the dashboard out.</p>
+            <p id="settings-error" class="settings-error" hidden></p>
+            <div class="button-row">
+              <button id="save-settings-button" type="submit">Save and connect</button>
+              <button id="check-connection-button" class="secondary" type="button">Check current connection</button>
+              <button id="disconnect-button" class="secondary" type="button">Disconnect</button>
+              <button id="cancel-settings-button" class="secondary" type="button">Cancel</button>
+            </div>
+          </form>
+        </section>
+        <label for="conversation-select">Recent conversation</label>
+        <div class="toolbar-row">
+          <select id="conversation-select" aria-label="Recent conversation"></select>
+          <button id="new-conversation-button" class="secondary compact" type="button">New</button>
+          <button id="refresh-button" class="secondary compact" type="button" title="Reload the active page context and start a new conversation">Refresh</button>
+        </div>
+      </section>
+
+      <section id="error-card" class="card error" hidden role="alert">
+        <h2 id="error-title">NemoClaw request failed</h2>
+        <p id="error-detail"></p>
+        <div class="button-row">
+          <button id="retry-button" class="secondary" type="button">Try again</button>
+          <button id="sign-in-button" type="button" hidden>Sign in to NemoClaw</button>
+        </div>
+      </section>
+
+      <section id="messages" class="messages" aria-live="polite">
+        <div id="empty-state" class="empty-state">
+          <h2>Start a conversation</h2>
+          <p>Ask about the current page. Every message includes a fresh capture of the active browser tab.</p>
+        </div>
+      </section>
+
+      <section id="status-card" class="status-strip conversation-status" hidden aria-live="polite">
+        <div class="spinner" aria-hidden="true"></div>
+        <div class="status-copy">
+          <strong id="status-title">Starting</strong>
+          <span id="status-detail">NemoClaw is preparing the conversation.</span>
+        </div>
+        <button id="stop-button" class="secondary compact" type="button">Stop</button>
+      </section>
+    </main>
+
+    <form id="composer" class="composer">
+      <div class="context-note">
+        <span id="context-mode">Current browser content</span>
+        <span>recaptured on Send</span>
+      </div>
+      <label class="visually-hidden" for="prompt">Message NemoClaw</label>
+      <textarea id="prompt" maxlength="8000" rows="4" placeholder="Ask NemoClaw about this page…" required></textarea>
+      <button id="send-button" type="submit">Send</button>
+    </form>
+
+    <footer>Each Send includes available readable page text and the visible viewport. Page content is not stored. Tokens copied by the extension remain only in Chrome's memory-backed session storage.</footer>
+    <script src="auth-session.js"></script>
+    <script src="config.js"></script>
+    <script src="sidepanel.js"></script>
+  </body>
+</html>

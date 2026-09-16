@@ -41,6 +41,7 @@ import uuid
 from typing import Any
 
 from _db import ensure_store, write_txn
+from memory_io import read_snapshot
 from ranking import rank_population
 
 VALID_DECISIONS = {"CREATE", "KEEP_OPEN", "MARK_DONE", "SKIP"}
@@ -112,9 +113,17 @@ def apply(env: dict[str, Any]) -> dict[str, int]:
     # other open row is audited whether or not this envelope mentioned it.
     created: set[str] = set()
 
-    with write_txn() as conn:
+    with read_snapshot(), write_txn() as conn:
         for d in decisions:
             sid, verdict = d["source_id"], d["decision"]
+
+            # Enforce the direction boundary at the writer too. A stale
+            # decision envelope must not turn the user's words into an ask.
+            item = conn.execute(
+                "SELECT direction FROM items WHERE source_id=?", (sid,)
+            ).fetchone()
+            if item and item[0] == "outbound":
+                raise ValueError("outbound items cannot receive obligation decisions")
 
             if verdict == "SKIP":
                 conn.execute(

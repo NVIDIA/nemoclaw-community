@@ -1,0 +1,10 @@
+# Keep local credentials, generated traces, and repository metadata out of the
+# tutorial image build context.
+keys.env
+artifacts/
+.git/
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+.DS_Store
