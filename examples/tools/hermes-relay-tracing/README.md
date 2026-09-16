@@ -36,7 +36,7 @@ preserving timing and parent-child relationships.
 2. Ask Hermes to run a small Python script, verify the expected result, and
    inspect the resulting ATOF event stream and ATIF trajectory.
 3. Ask Hermes to find a conference that fits a travel plan, save a verified
-   report, and explore the run in Phoenix.
+   report, and explore the run in [Arize Phoenix](https://arize.com/phoenix/).
 4. Learn how to combine task verification with trace data when evaluating a
    controlled change to the prompt, tools, or agent harness.
 
