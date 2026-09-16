@@ -212,7 +212,8 @@ class ExampleStackFactsTests(unittest.TestCase):
             states,
             Counter(
                 {
-                    "unconfirmed": 9,
+                    # Includes the Kubernetes Deployer and SRE Assistant.
+                    "unconfirmed": 11,
                     "unpinned": 11,
                     "unknown": 1,
                     "not-applicable": 1,

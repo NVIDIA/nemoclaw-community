@@ -38,7 +38,7 @@ CATALOG: Dict[str, ActionSpec] = {
         rbac=["deployments|statefulsets|daemonsets: patch"]),
     "delete_evicted_pods": ActionSpec(
         id="delete_evicted_pods", tier=SAFE,
-        description="Remove pods left in Failed/Evicted or Succeeded state that clutter the namespace.",
+        description="Remove evicted or terminated failed pods belonging to the current finding.",
         applies_to=["Namespace", "Deployment", "StatefulSet", "DaemonSet", "Job", "Pod"],
         rbac=["pods: delete"]),
     "rollout_undo": ActionSpec(
@@ -212,16 +212,25 @@ class ActionExecutor:
 
     def _do_delete_evicted_pods(self, finding: Finding, params: Dict[str, Any]) -> ActionResult:
         ns = self._ns(finding)
+        # Policy approved this finding's subject, not every workload in its
+        # namespace. Never expand that decision to unrelated failed Pods.
+        candidates = set(finding.related_pods or [])
+        if finding.resource.kind == "Pod":
+            candidates.add(finding.resource.name)
+        if not candidates:
+            return ActionResult(True, "no pods associated with this finding")
         pods = self.client.list(k.ResourceRef("", "v1", "pods", ns))
         targets = []
         for pod in pods:
+            if pod.get("metadata", {}).get("name") not in candidates:
+                continue
             status = pod.get("status", {})
             phase = status.get("phase")
             reason = status.get("reason", "")
             if phase == "Failed" and reason in {"Evicted", "Terminated", "NodeAffinity", "Shutdown", "UnexpectedAdmissionError"}:
                 targets.append(pod["metadata"]["name"])
         if not targets:
-            return ActionResult(True, f"no evicted/failed pods to clean in {ns}")
+            return ActionResult(True, f"no evicted/failed pods to clean for {finding.subject.short}")
         if self.dry_run:
             return ActionResult(True, f"[dry-run] would delete {len(targets)} evicted pods in {ns}", targets, dry_run=True)
         for name in targets:

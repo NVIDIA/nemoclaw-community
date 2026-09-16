@@ -148,9 +148,10 @@ class HttpTransport(Transport):
     name = "http"
 
     def __init__(self, api_server: str, token: str, ca_file: Optional[str], timeout: int = 30,
-                 insecure: bool = False):
+                 insecure: bool = False, token_file: Optional[str] = None):
         self.api_server = api_server.rstrip("/")
         self._token = token
+        self._token_file = token_file
         self.timeout = timeout
         if insecure:
             self.ctx = ssl._create_unverified_context()  # noqa: S323 - explicit operator opt-in
@@ -173,19 +174,35 @@ class HttpTransport(Transport):
             ca = ca or SA_CA
         if not api:
             return None
-        if not token and token_file and os.path.isfile(token_file):
-            with open(token_file, encoding="utf-8") as fh:
-                token = fh.read().strip()
+        # An explicit token takes precedence over a file. Otherwise retain the
+        # path, not just its initial contents: kubelet rotates projected tokens.
+        reload_file = token_file if not token else None
+        if reload_file:
+            token = cls._read_token(reload_file)
         if not token:
             return None
         ca_file = ca if ca and os.path.isfile(ca) else None
-        return cls(api, token, ca_file, timeout=timeout, insecure=insecure)
+        return cls(api, token, ca_file, timeout=timeout, insecure=insecure, token_file=reload_file)
+
+    @staticmethod
+    def _read_token(path: str) -> str:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                token = fh.read().strip()
+        except (OSError, UnicodeError):
+            raise KubeError("cannot read Kubernetes API token file") from None
+        if not token:
+            raise KubeError("Kubernetes API token file is empty")
+        return token
 
     def request(self, method: str, path: str, body: Any = None,
                 content_type: str = "application/json", ref: Optional["ResourceRef"] = None,
                 dry_run: bool = False) -> Any:
         data = None
-        headers = {"Authorization": f"Bearer {self._token}", "Accept": "application/json"}
+        # Reopen the projected path on each request, including after an atomic
+        # symlink replacement. A failed read must not reuse a stale credential.
+        token = self._read_token(self._token_file) if self._token_file else self._token
+        headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
         if body is not None:
             data = json.dumps(body).encode("utf-8")
             headers["Content-Type"] = content_type

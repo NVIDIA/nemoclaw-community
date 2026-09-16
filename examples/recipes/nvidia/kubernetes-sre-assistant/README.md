@@ -296,6 +296,15 @@ kubectl -n nemoclaw-sre-assistant logs deploy/<release>-autoheal -f
 Every decision is recorded in the release's memory ConfigMap, which also drives
 the learning that promotes or demotes an action for a recurring fingerprint.
 
+The controller reloads file-backed Kubernetes API tokens before each request,
+so projected ServiceAccount token rotation does not require a restart. If the
+file cannot be read or is empty, the request fails without reusing an old token.
+An explicitly configured token value takes precedence over a token file.
+
+Failed-Pod cleanup is limited to the Pods recorded in the approved finding;
+it does not clean unrelated workloads in the same namespace. Pods that are no
+longer in an eligible failed state are left unchanged.
+
 Treat the release namespace as privileged. The agent's Python source is
 mounted from a ConfigMap, so anyone who can edit ConfigMaps there can run code
 with the agent's cluster-wide rights; the agent's own Role cannot modify that
@@ -329,8 +338,10 @@ retired first (see [Teardown](#teardown)) and the upgrade run with
 
 ## Verification
 
-**Evidence level:** live end-to-end for OpenShift safe mode; local/static for
-standard Kubernetes and the acknowledged opt-ins.
+**Evidence level:** contributor-reported live runs for OpenShift safe mode and
+standard Kubernetes, as listed above. Model deployment, metrics, and deletion
+have local/static coverage only. The token-rotation and cleanup-scope fixes
+have local regression coverage; they were not re-tested on a live cluster.
 
 The 0.1.0 evaluation on OpenShift 4.22.6 (safe mode, cluster-local model
 endpoint) confirmed:
@@ -357,7 +368,7 @@ Run the local/static checks from this recipe directory:
 helm dependency build .
 helm lint . --set deployer.openshell.agentSandbox.preflight.enabled=false \
   --set deployer.platform.serviceAccountIssuerDiscovery.preexistingAnonymousAccess=true
-python3 -m unittest tests/test_chart.py
+python3 -m unittest discover -s tests -p 'test_*.py'
 python3 scripts/build-sre-skills-bundle.py
 python3 ../../../../scripts/check_license_headers.py --check
 helm template test . -f values-kubernetes.yaml --api-versions agents.x-k8s.io/v1alpha1 >/tmp/rendered.yaml
@@ -366,16 +377,17 @@ helm template test . -f values-kubernetes.yaml --api-versions agents.x-k8s.io/v1
 **Expected result:**
 
 ```text
-Ran 42 tests
+Ran 53 tests
 OK
 ```
 
 **This verifies:** dependency wiring, the seed plugin contract and its
 ownership behavior, bundle integrity, the proxy's method and path policy,
 RBAC guardrails for every mode, acknowledgements for the opt-ins, package
-contents, and that the deployer alone carries no SRE material.
+contents, file-backed API token rotation, finding-scoped failed-Pod cleanup,
+and that the deployer alone carries no SRE material.
 
-**This does not verify:** a live standard Kubernetes deployment,
+**These local checks do not verify:** live token rotation or cleanup,
 `broad-no-delete` mode, model deployment, metrics, or deletion against a live
 cluster, production scale, or availability.
 
@@ -423,8 +435,9 @@ The `charts/sre-autoheal-agent` subchart is vendored, not fetched. It is an
 NVIDIA-authored chart whose upstream lives in the `hermes-nemo-skills`
 repository under
 `skills/operations/infrastructure/sre/sre-autoheal-agent`. The vendored copy
-keeps its own Apache-2.0 SPDX headers and is unmodified except through this
-recipe's values: the agent container image is repinned from the subchart's
+keeps its own Apache-2.0 SPDX headers. Local source changes reload file-backed
+Kubernetes API tokens and limit failed-Pod cleanup to the current finding.
+Through this recipe's values, the agent container image is repinned from the subchart's
 mutable `3.12-slim` tag to the same immutable digest this recipe already uses
 elsewhere. The agent is pure Python standard library and installs nothing at
 start-up.

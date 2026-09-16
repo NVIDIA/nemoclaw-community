@@ -405,8 +405,8 @@ helm upgrade --install nemoclaw-hermes . -n nemoclaw-hermes -f values-kubernetes
   --set openshell.server.oidc.issuer=https://kubernetes.default.svc.cluster.local
 ```
 
-The render-time guard above recognises only the exact default string, so an
-issuer override bypasses it; keep the platform profile on the command line.
+The render-time guard recognises both in-cluster issuer spellings above. Keep
+the platform profile on the command line when overriding the issuer.
 
 The OpenShift profile keeps user namespaces disabled and uses OpenShell's SCC
 range resolution instead. Combining two UID-mapping mechanisms with retained
@@ -481,8 +481,9 @@ created by an earlier chart version before upgrading to `0.4.0`.
 
 ## Verification
 
-**Evidence level:** live end-to-end for the OpenShift path; local/static for
-standard Kubernetes.
+**Evidence level:** contributor-reported live end-to-end runs on OpenShift and
+standard Kubernetes, as listed in the table above. The commands below are the
+repeatable local/static checks.
 
 The 0.4.0 evaluation on OpenShift 4.22.6 (Route exposure, oauth-proxy,
 cluster-local model endpoint) confirmed:
@@ -620,8 +621,6 @@ after an abandoned failed install. Helm 4 removes them on the failure as well.
   releases for mutually untrusted users.
 - The attach client and access relay are supported only with the chart-managed
   gateway.
-- Standard Kubernetes has local/static render coverage but has not been
-  exercised live by this contribution.
 
 ## Provenance and Support
 
