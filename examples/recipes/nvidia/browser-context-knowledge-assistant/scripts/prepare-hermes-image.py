@@ -42,36 +42,38 @@ VISION_ROUTE_AFTER = VISION_ROUTE_BEFORE + f"""
   if (settings.model === "{VISION_MODEL_ID}") {{
     (config.model as Record<string, unknown>).supports_vision = true;
   }}"""
+VISION_ROUTE_NULLABLE_BEFORE = """  if (settings.model !== null)
+    applyHermesManagedRoute(config, {
+      model: settings.model,
+      baseUrl: settings.baseUrl,
+      upstreamProvider: settings.upstreamProvider,
+      inferenceApi: settings.inferenceApi,
+      contextWindow: settings.contextWindow,
+    });"""
+VISION_ROUTE_NULLABLE_AFTER = VISION_ROUTE_NULLABLE_BEFORE + f"""
+
+  // NemoClaw presents its enforced inference route to Hermes as a custom
+  // OpenAI-compatible provider. Hermes cannot discover capabilities for that
+  // provider automatically, so preserve native viewport pixels for the Omni
+  // model tested by this recipe.
+  if (settings.model === "{VISION_MODEL_ID}") {{
+    (config.model as Record<string, unknown>).supports_vision = true;
+  }}"""
 LEGACY_MANAGED_PLUGIN_PATH = '  "plugins.enabled",\n'
 RELAY_VERSION = "0.7.2"
-RELAY_WHEEL_FILENAME = (
-    "nemo_relay-0.7.2-cp311-abi3-manylinux_2_17_x86_64."
-    "manylinux2014_x86_64.whl"
-)
-RELAY_WHEEL_URL = (
-    "https://files.pythonhosted.org/packages/11/83/"
-    "90230c2e9fae1aee39f768d4a9ef57e9f2716bcaed1a5923cce8b526c66b/"
-    + RELAY_WHEEL_FILENAME
-)
-RELAY_WHEEL_SHA256 = (
-    "0ce7103aec546766649c182619d16aa6ad07439e4d0ebd16d95c5004afb3e56a"
-)
 PLUGIN_LAYER = f"""{BEGIN_MARKER}
 # This source checkout is dedicated to the community example. Keep the complete
 # managed Hermes image contract above and add only this recipe's files.
 COPY local-plugins/ask-nemoclaw/ /opt/hermes/plugins/ask-nemoclaw/
 COPY local-relay/browser-context-knowledge-assistant/plugins.toml \\
      /etc/nemo-relay/config/plugins.toml
-ADD --checksum=sha256:{RELAY_WHEEL_SHA256} \\
-    {RELAY_WHEEL_URL} \\
-    /tmp/{RELAY_WHEEL_FILENAME}
+# Hermes already includes the compatible NeMo Relay wheel. Verify its pinned
+# version instead of reinstalling it and adding another overlay layer; the
+# OpenShell sandbox needs headroom below Docker's 128-lowerdir limit.
 RUN test "$(dpkg --print-architecture)" = "amd64" \\
-    && uv pip install --python /opt/hermes/.venv/bin/python \\
-       --no-cache --no-deps /tmp/{RELAY_WHEEL_FILENAME} \\
     && /opt/hermes/.venv/bin/python -c \\
        'from importlib.metadata import version; assert version("nemo-relay") == "{RELAY_VERSION}"' \\
     && uv pip check --python /opt/hermes/.venv/bin/python \\
-    && rm /tmp/{RELAY_WHEEL_FILENAME} \\
     && mkdir -p /sandbox/.hermes-data/nemo-relay/atif \\
     && chown -R root:root /opt/hermes/plugins/ask-nemoclaw \\
     && chmod -R a+rX /opt/hermes/plugins/ask-nemoclaw \\
@@ -102,20 +104,32 @@ def update_managed_policy(text: str) -> str:
             "The managed Hermes dashboard policy has changed; review the current "
             "NemoClaw dashboard seeding contract before applying this example"
         )
-    if VISION_ROUTE_AFTER not in text and VISION_ROUTE_BEFORE not in text:
+    vision_route_is_current = any(
+        candidate in text
+        for candidate in (
+            VISION_ROUTE_AFTER,
+            VISION_ROUTE_NULLABLE_AFTER,
+            VISION_ROUTE_BEFORE,
+            VISION_ROUTE_NULLABLE_BEFORE,
+        )
+    )
+    if not vision_route_is_current:
         raise SystemExit(
             "The managed Hermes inference route has changed; review the current "
             "NemoClaw vision capability contract before applying this example"
         )
-    return text.replace(
+    updated = text.replace(
         MANAGED_POLICY_BEFORE, MANAGED_POLICY_AFTER, 1
     ).replace(
         ROUTING_KEYS_BEFORE, ROUTING_KEYS_AFTER, 1
     ).replace(
-        VISION_ROUTE_BEFORE, VISION_ROUTE_AFTER, 1
-    ).replace(
         LEGACY_MANAGED_PLUGIN_PATH, "", 1
     )
+    if VISION_ROUTE_NULLABLE_BEFORE in updated:
+        return updated.replace(
+            VISION_ROUTE_NULLABLE_BEFORE, VISION_ROUTE_NULLABLE_AFTER, 1
+        )
+    return updated.replace(VISION_ROUTE_BEFORE, VISION_ROUTE_AFTER, 1)
 
 
 def main() -> None:

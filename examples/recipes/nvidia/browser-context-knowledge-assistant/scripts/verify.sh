@@ -15,13 +15,24 @@ bash -n "$ROOT/scripts/check-brev-host.sh"
 bash -n "$ROOT/scripts/prepare-brev-gateway.sh"
 bash -n "$ROOT/scripts/onboard.sh"
 bash -n "$ROOT/scripts/configure-brev-nginx.sh"
+bash -n "$ROOT/scripts/test-functional.sh"
+"$PYTHON_BIN" -c 'import ast,sys; ast.parse(open(sys.argv[1], encoding="utf-8").read())' \
+  "$ROOT/scripts/test-functional.py"
+test -s "$ROOT/tests/fixtures/red-viewport.jpg.b64"
 grep -Fq 'io.containerd.snapshotter.v1' "$ROOT/scripts/onboard.sh"
 grep -Fq 'openshell sandbox list' "$ROOT/scripts/onboard.sh"
 grep -Fq 'Loopback development connection is ready' "$ROOT/scripts/check-connection.sh"
 grep -Fq 'status.get("auth_required") is not False' "$ROOT/scripts/check-connection.sh"
 grep -Fq 'X-Hermes-Session-Token' "$ROOT/scripts/check-connection.sh"
 grep -Fq 'nemoclaw-managed-gateway.json' "$ROOT/scripts/onboard.sh"
-grep -Fq 'NEMOCLAW_OPENSHELL_GATEWAY_CONTAINER_PATCH' "$ROOT/scripts/onboard.sh"
+grep -Fq "WHERE lower(object_type) LIKE '%sandbox%'" \
+  "$ROOT/scripts/prepare-brev-gateway.sh"
+grep -Fq 'Never print object payloads from this database' \
+  "$ROOT/scripts/prepare-brev-gateway.sh"
+if grep -Fq 'NEMOCLAW_OPENSHELL_GATEWAY_CONTAINER_PATCH' "$ROOT/scripts/onboard.sh"; then
+  printf 'onboarding must not enable the privileged compatibility gateway implicitly\n' >&2
+  exit 1
+fi
 grep -Fq '/etc/nemoclaw/gateway-management.env' "$ROOT/scripts/onboard.sh"
 grep -Fq 'unset NEMOCLAW_OPENSHELL_GATEWAY_STATE_DIR' "$ROOT/scripts/onboard.sh"
 grep -Fq 'unset OPENSHELL_LOCAL_TLS_DIR' "$ROOT/scripts/onboard.sh"
@@ -104,12 +115,13 @@ if grep -Fq 'sudo install -o root -g root -m 0755' "$ROOT/README.md"; then
 fi
 grep -Fq 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning' "$ROOT/README.md"
 grep -Fq 'https://github.com/NVIDIA/NemoClaw/issues/8887' "$ROOT/README.md"
-grep -Fq 'release/ask-nemoclaw-extension-0.10.11.zip' "$ROOT/README.md"
+grep -Fq 'release/ask-nemoclaw-extension-0.10.12.zip' "$ROOT/README.md"
 grep -Fq 'Connected to NemoClaw' "$ROOT/README.md"
 grep -Fq 'one primary model for every' "$ROOT/docs/security.md"
 grep -Fq 'A shorter `hermes plugins install` path may be useful later' "$ROOT/docs/development.md"
-grep -Fq 'version: "0.9.4"' "$ROOT/hermes-plugin/plugin.yaml"
-grep -Fq '"version": "0.9.4"' "$ROOT/hermes-plugin/dashboard/manifest.json"
+grep -Fq 'version: "0.9.6"' "$ROOT/hermes-plugin/plugin.yaml"
+grep -Fq '"version": "0.9.6"' "$ROOT/hermes-plugin/dashboard/manifest.json"
+grep -Fq '"entry": "index.js"' "$ROOT/hermes-plugin/dashboard/manifest.json"
 test -s "$ROOT/assets/ask-nemoclaw-browser-context.png"
 test -s "$ROOT/assets/ask-nemoclaw-architecture.png"
 test -s "$ROOT/assets/ask-nemoclaw-architecture.svg"
@@ -141,17 +153,23 @@ printf '%s\n' \
   '    },' \
   '};' \
   '' \
-  '  applyHermesManagedRoute(config, {' \
-  '    model: settings.model,' \
-  '    baseUrl: settings.baseUrl,' \
-  '    upstreamProvider: settings.upstreamProvider,' \
-  '    inferenceApi: settings.inferenceApi,' \
-  '    contextWindow: settings.contextWindow,' \
-  '  });' \
+  '  if (settings.model !== null)' \
+  '    applyHermesManagedRoute(config, {' \
+  '      model: settings.model,' \
+  '      baseUrl: settings.baseUrl,' \
+  '      upstreamProvider: settings.upstreamProvider,' \
+  '      inferenceApi: settings.inferenceApi,' \
+  '      contextWindow: settings.contextWindow,' \
+  '    });' \
   > "$IMAGE_FIXTURE/agents/hermes/config/hermes-config.ts"
 "$PYTHON_BIN" "$ROOT/scripts/prepare-hermes-image.py" --nemoclaw-source "$IMAGE_FIXTURE"
 "$PYTHON_BIN" "$ROOT/scripts/prepare-hermes-image.py" --nemoclaw-source "$IMAGE_FIXTURE"
 test -s "$IMAGE_FIXTURE/local-plugins/ask-nemoclaw/dashboard/plugin_api.py"
+test -s "$IMAGE_FIXTURE/local-plugins/ask-nemoclaw/dashboard/index.js"
+if test -e "$IMAGE_FIXTURE/local-plugins/ask-nemoclaw/dashboard/dist/index.js"; then
+  printf 'dashboard plugin entry must not use a Docker-ignored dist directory\n' >&2
+  exit 1
+fi
 test -x "$IMAGE_FIXTURE/local-plugins/ask-nemoclaw/configure_dashboard_auth.py"
 test -x "$IMAGE_FIXTURE/local-plugins/ask-nemoclaw/configure_dashboard_public_url.py"
 test -s "$IMAGE_FIXTURE/local-relay/browser-context-knowledge-assistant/plugins.toml"
@@ -159,12 +177,12 @@ grep -Fq '# BEGIN browser-context-knowledge-assistant' "$IMAGE_FIXTURE/agents/he
 test "$(grep -Fc '# BEGIN browser-context-knowledge-assistant' "$IMAGE_FIXTURE/agents/hermes/Dockerfile")" -eq 1
 grep -Fq 'COPY local-plugins/ask-nemoclaw/ /opt/hermes/plugins/ask-nemoclaw/' \
   "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
-grep -Fq 'ADD --checksum=sha256:0ce7103aec546766649c182619d16aa6ad07439e4d0ebd16d95c5004afb3e56a' \
-  "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
-grep -Fq 'nemo_relay-0.7.2-cp311-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl' \
-  "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
 grep -Fq 'assert version("nemo-relay") == "0.7.2"' \
   "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
+if grep -Fq 'nemo_relay-0.7.2-cp311-abi3' "$IMAGE_FIXTURE/agents/hermes/Dockerfile"; then
+  printf 'managed image must use the Hermes-bundled NeMo Relay wheel without adding another layer\n' >&2
+  exit 1
+fi
 grep -Fq 'uv pip check --python /opt/hermes/.venv/bin/python' \
   "$IMAGE_FIXTURE/agents/hermes/Dockerfile"
 grep -Fq 'HERMES_NEMO_RELAY_PLUGINS_TOML=/etc/nemo-relay/config/plugins.toml' \
