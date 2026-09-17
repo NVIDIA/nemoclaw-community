@@ -88,6 +88,8 @@ _prompt_submission_lock = threading.Lock()
 _active_runs: dict[str, tuple[Any, str, "CaptureTransport"]] = {}
 
 _request_slots = threading.BoundedSemaphore(value=2)
+# A stopped conversation must not leave an unbounded number of HTTP readers.
+_vision_request_slots = threading.BoundedSemaphore(value=2)
 
 
 class RequestFailure(Exception):
@@ -975,7 +977,61 @@ def _active_managed_model_id() -> str:
     raise RequestFailure("vision_configuration", "The managed vision model is not configured")
 
 
-def _describe_viewport_image(viewport_image: ViewportImage) -> str:
+def _read_viewport_response(request: urllib.request.Request, job_id: str | None) -> bytes:
+    def read() -> bytes:
+        with urllib.request.urlopen(request, timeout=180) as response:
+            return response.read(1_000_001)
+
+    if job_id is None:
+        return read()
+
+    # urllib cannot interrupt a pending connection. Let the conversation stop
+    # promptly while its bounded reader finishes or times out. Keep its slot
+    # until then; never start another attempt for a cancelled job.
+    slots = _vision_request_slots
+    while not slots.acquire(timeout=0.1):
+        _raise_if_job_cancelled(job_id)
+    responses: queue.Queue = queue.Queue(maxsize=1)
+
+    def reader() -> None:
+        try:
+            _raise_if_job_cancelled(job_id)
+            responses.put((read(), None))
+        except Exception as error:
+            responses.put((None, error))
+        finally:
+            slots.release()
+
+    try:
+        with _prompt_submission_lock:
+            _raise_if_job_cancelled(job_id)
+            threading.Thread(target=reader, daemon=True).start()
+    except Exception:
+        slots.release()
+        raise
+    while True:
+        _raise_if_job_cancelled(job_id)
+        try:
+            raw, error = responses.get(timeout=0.1)
+        except queue.Empty:
+            continue
+        _raise_if_job_cancelled(job_id)
+        if error is not None:
+            raise error
+        return raw
+
+
+def _wait_for_vision_retry(delay: float, job_id: str | None) -> None:
+    deadline = time.monotonic() + delay
+    while True:
+        _raise_if_job_cancelled(job_id)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return
+        time.sleep(min(0.1, remaining))
+
+
+def _describe_viewport_image(viewport_image: ViewportImage, job_id: str | None = None) -> str:
     """Describe pixels before the tool-enabled Hermes agent turn.
 
     NVIDIA's Omni endpoint accepts a normal multimodal Chat Completions request,
@@ -1024,10 +1080,10 @@ def _describe_viewport_image(viewport_image: ViewportImage) -> str:
     )
     raw = b""
     for attempt in range(len(_VISION_RETRY_DELAYS_SECONDS) + 1):
+        _raise_if_job_cancelled(job_id)
         retryable = False
         try:
-            with urllib.request.urlopen(request, timeout=180) as response:
-                raw = response.read(1_000_001)
+            raw = _read_viewport_response(request, job_id)
             break
         except urllib.error.HTTPError as error:
             retryable = error.code in {429, 500, 502, 503, 504}
@@ -1037,7 +1093,7 @@ def _describe_viewport_image(viewport_image: ViewportImage) -> str:
             raise RequestFailure(
                 "vision_inference", "The viewport vision analysis could not be completed"
             ) from None
-        time.sleep(_VISION_RETRY_DELAYS_SECONDS[attempt])
+        _wait_for_vision_retry(_VISION_RETRY_DELAYS_SECONDS[attempt], job_id)
     if len(raw) > 1_000_000:
         raise RequestFailure("vision_inference", "The viewport vision response was too large")
     try:
@@ -1247,7 +1303,7 @@ def _conversation_worker(job_id: str) -> None:
             viewport_analysis_unavailable = False
             if turn.viewport_image is not None:
                 try:
-                    viewport_description = _describe_viewport_image(turn.viewport_image)
+                    viewport_description = _describe_viewport_image(turn.viewport_image, job_id)
                 except RequestFailure as error:
                     if error.category != "vision_inference" or not turn.page_text:
                         raise

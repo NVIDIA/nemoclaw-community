@@ -184,12 +184,12 @@ class PluginApiTests(unittest.TestCase):
             module.urllib.request,
             "urlopen",
             side_effect=[temporary_error, FakeResponse()],
-        ) as open_request, mock.patch.object(module.time, "sleep") as sleep:
+        ) as open_request, mock.patch.object(module, "_wait_for_vision_retry") as wait:
             result = module._describe_viewport_image(image)
 
         self.assertEqual(result, "A red viewport.")
         self.assertEqual(open_request.call_count, 2)
-        sleep.assert_called_once_with(2)
+        wait.assert_called_once_with(2, None)
 
     def test_validates_bounded_jpeg_viewport_image(self):
         validated = module._validate_page_payload(
@@ -944,6 +944,144 @@ class ConversationApiTests(unittest.TestCase):
     def test_stop_during_initialization_prevents_submission(self):
         self._check_stop_at_gateway_stage("initialization")
 
+    def create_vision_job(self):
+        conversation_id = self.create_conversation()
+        request = _FakeRequest({
+            "page_url": "https://example.com/article",
+            "page_title": "Synthetic page",
+            "prompt": "Describe this page",
+            "page_text": "Synthetic page text",
+            "capture_mode": "browser",
+            "viewport_image": {"mime_type": "image/jpeg", "content_base64": _jpeg_fixture()},
+        }, headers={"idempotency-key": "v" * 24})
+        with mock.patch.object(module.threading, "Thread", _DeferredThread):
+            created = asyncio.run(module.create_conversation_message(conversation_id, request))
+        return conversation_id, _response_json(created)["job_id"]
+
+    def stop_vision_job(self, conversation_id, job_id):
+        response = asyncio.run(module.cancel_conversation_job(
+            conversation_id, job_id, _FakeRequest(),
+        ))
+        self.assertEqual(response.status_code, 202)
+
+    def assert_job_cancelled(self, conversation_id, job_id):
+        status = asyncio.run(module.get_conversation_job(
+            conversation_id, job_id, _FakeRequest(),
+        ))
+        self.assertEqual(_response_json(status)["status"], "cancelled")
+
+    def test_stop_during_vision_failure_prevents_retries_and_text_fallback(self):
+        conversation_id, job_id = self.create_vision_job()
+
+        def unavailable(request, timeout):
+            self.stop_vision_job(conversation_id, job_id)
+            raise urllib.error.HTTPError(request.full_url, 503, "unavailable", None, None)
+
+        with mock.patch.object(module, "_active_managed_model_id", return_value="test/model"), \
+             mock.patch.object(module.urllib.request, "urlopen", side_effect=unavailable) as fetch, \
+             mock.patch.object(module, "_wait_for_vision_retry") as wait, \
+             mock.patch.object(module, "_run_hermes_prompt") as prompt:
+            module._conversation_worker(job_id)
+        fetch.assert_called_once()
+        wait.assert_not_called()
+        prompt.assert_not_called()
+        self.assert_job_cancelled(conversation_id, job_id)
+
+    def test_vision_reader_retries_and_delivers_success_to_hermes(self):
+        conversation_id, job_id = self.create_vision_job()
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = (
+            b'{"choices":[{"message":{"content":"A red viewport."}}]}'
+        )
+        error = urllib.error.HTTPError("https://inference.local/", 503, "unavailable", None, None)
+        with mock.patch.object(module, "_active_managed_model_id", return_value="test/model"), \
+             mock.patch.object(module.urllib.request, "urlopen", side_effect=[error, response]) as fetch, \
+             mock.patch.object(module, "_wait_for_vision_retry") as wait, \
+             mock.patch.object(module, "_run_hermes_prompt", return_value=({"format": "text", "text": "Red"}, "stored-vision")) as prompt:
+            module._conversation_worker(job_id)
+        self.assertEqual(fetch.call_count, 2)
+        wait.assert_called_once_with(2, job_id)
+        self.assertIn('"model_description": "A red viewport."', prompt.call_args.args[0])
+        self.assertIsNone(prompt.call_args.kwargs["viewport_image"])
+        status = _response_json(asyncio.run(module.get_conversation_job(
+            conversation_id, job_id, _FakeRequest(),
+        )))
+        self.assertEqual(status["status"], "complete")
+        self.assertEqual(status["result"]["text"], "Red")
+
+    def test_stop_during_vision_backoff_prevents_retry(self):
+        conversation_id, job_id = self.create_vision_job()
+        error = urllib.error.HTTPError("https://inference.local/", 503, "unavailable", None, None)
+        with mock.patch.object(module, "_active_managed_model_id", return_value="test/model"), \
+             mock.patch.object(module.urllib.request, "urlopen", side_effect=error) as fetch, \
+             mock.patch.object(module.time, "sleep", side_effect=lambda _: self.stop_vision_job(conversation_id, job_id)) as sleep, \
+             mock.patch.object(module, "_run_hermes_prompt") as prompt:
+            module._conversation_worker(job_id)
+        fetch.assert_called_once()
+        sleep.assert_called_once()
+        self.assertLessEqual(sleep.call_args.args[0], 0.1)
+        prompt.assert_not_called()
+        self.assert_job_cancelled(conversation_id, job_id)
+
+    def test_stop_while_waiting_for_vision_capacity_does_not_send_request(self):
+        conversation_id, job_id = self.create_vision_job()
+
+        def occupied(*, timeout):
+            self.stop_vision_job(conversation_id, job_id)
+            return False
+
+        with mock.patch.object(module, "_active_managed_model_id", return_value="test/model"), \
+             mock.patch.object(module, "_vision_request_slots") as slots, \
+             mock.patch.object(module.urllib.request, "urlopen") as fetch, \
+             mock.patch.object(module, "_run_hermes_prompt") as prompt:
+            slots.acquire.side_effect = occupied
+            module._conversation_worker(job_id)
+            slots.release.assert_not_called()
+        fetch.assert_not_called()
+        prompt.assert_not_called()
+        self.assert_job_cancelled(conversation_id, job_id)
+
+    def test_stop_during_pending_vision_read_keeps_capacity_bounded(self):
+        conversation_id, job_id = self.create_vision_job()
+        reading = threading.Event()
+        release = threading.Event()
+        slots = threading.BoundedSemaphore(value=1)
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def read(self, _limit):
+                reading.set()
+                if not release.wait(5):
+                    raise TimeoutError("synthetic reader was not released")
+                return b'{"choices":[{"message":{"content":"Late image description"}}]}'
+
+        with mock.patch.object(module, "_active_managed_model_id", return_value="test/model"), \
+             mock.patch.object(module, "_vision_request_slots", slots), \
+             mock.patch.object(module.urllib.request, "urlopen", return_value=Response()) as fetch, \
+             mock.patch.object(module, "_run_hermes_prompt") as prompt:
+            worker = threading.Thread(target=module._conversation_worker, args=(job_id,))
+            worker.start()
+            try:
+                self.assertTrue(reading.wait(2))
+                self.stop_vision_job(conversation_id, job_id)
+                worker.join(2)
+                self.assertFalse(worker.is_alive(), "Stop waited for the provider response")
+                self.assert_job_cancelled(conversation_id, job_id)
+                self.assertFalse(slots.acquire(blocking=False), "Pending reader lost its capacity slot")
+            finally:
+                release.set()
+                worker.join(2)
+                self.assertTrue(slots.acquire(timeout=2))
+                slots.release()
+            fetch.assert_called_once()
+            prompt.assert_not_called()
+        self.assert_job_cancelled(conversation_id, job_id)
+
     def test_stop_after_viewport_analysis_prevents_submission(self):
         self._check_stop_at_gateway_stage("viewport.analysis")
 
@@ -997,7 +1135,7 @@ class ConversationApiTests(unittest.TestCase):
                 stop()
             return "Synthetic response"
 
-        def describe(_image):
+        def describe(_image, _job_id):
             if stage == "viewport.analysis":
                 stop()
             return "Synthetic viewport description"

@@ -78,7 +78,24 @@ assert.match(source, /NemoClaw is not configured/);
 assert.match(source, /const configured = await loadNemoClawOrigin\(\)/);
 assert.doesNotMatch(source, /Ask NemoClaw requires HTTPS or an HTTP loopback NemoClaw origin/);
 assert.match(source, /askNemoClawOrigin/);
-assert.match(source, /new URL\("\/sessions", nemoClawDashboardUrl\)/);
+const dashboardUrlStart = source.indexOf("function nemoClawConversationDashboardUrl()");
+const dashboardUrlEnd = source.indexOf("async function loadNemoClawOrigin()", dashboardUrlStart);
+assert.ok(dashboardUrlStart >= 0 && dashboardUrlEnd > dashboardUrlStart);
+for (const [base, expectedPath] of [
+  ["https://hermes.example.com", "/sessions"],
+  ["https://hermes.example.com/", "/sessions"],
+  ["https://hermes.example.com/hermes", "/hermes/sessions"],
+  ["https://hermes.example.com/hermes/", "/hermes/sessions"],
+  ["https://hermes.example.com/team/hermes/", "/team/hermes/sessions"],
+  ["http://127.0.0.1:18789", "/sessions"]
+]) {
+  const context = { URL, nemoClawDashboardUrl: base };
+  vm.runInNewContext(source.slice(dashboardUrlStart, dashboardUrlEnd), context);
+  assert.equal(
+    context.nemoClawConversationDashboardUrl(),
+    `${new URL(base).origin}${expectedPath}?profile=dashboard-home`
+  );
+}
 assert.match(source, /url\.searchParams\.set\("profile", "dashboard-home"\)/);
 assert.match(source, /chrome\.tabs\.create\(\{ url: nemoClawConversationDashboardUrl\(\) \}\)/);
 assert.match(html, /id="settings-button"/);

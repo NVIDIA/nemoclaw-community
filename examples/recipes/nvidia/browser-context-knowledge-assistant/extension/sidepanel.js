@@ -112,7 +112,8 @@ function applyNemoClawUrl(dashboardUrl, preferredServiceUrl = null) {
 }
 
 function nemoClawConversationDashboardUrl() {
-  const url = new URL("/sessions", nemoClawDashboardUrl);
+  const url = new URL(nemoClawDashboardUrl);
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}/sessions`;
   url.searchParams.set("profile", "dashboard-home");
   return url.href;
 }

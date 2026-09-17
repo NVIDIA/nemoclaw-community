@@ -272,7 +272,8 @@ contains connection and disconnect controls. Shared HTTPS deployments use the
 normal Hermes login. The extension keeps rotated session tokens only in
 Chrome’s memory-backed session storage.
 
-**Open NemoClaw** includes `profile=dashboard-home` so browser conversations
+**Open NemoClaw** preserves the configured dashboard path and includes
+`profile=dashboard-home` so browser conversations
 and ordinary dashboard chat use the profile served by this dashboard process.
 Keep that profile selected. Hermes 0.20.6 can remove the profile parameter when
 the native profile selector changes; Sessions and Chat may then remain on their
@@ -280,9 +281,12 @@ loading screen. Select **Open NemoClaw** again to restore the correct profile.
 
 Multimodal requests over large pages can take several minutes. The side panel
 keeps polling and shows the current request stage while Hermes works.
-**Stop** prevents prompt submission if accepted during initialization or image
-attachment. After submission, it requests a session interrupt; it does not undo
-actions that the agent has already completed.
+**Stop** cancels the conversation during viewport analysis or retry waits and
+prevents further vision retries and Hermes prompt submission. A vision request
+already sent to the provider can finish or time out, but its result is ignored.
+At most two such HTTP requests can remain active. Stop also prevents prompt
+submission during initialization. After submission, it requests a session
+interrupt; it does not undo actions that the agent has already completed.
 
 ## Verify the example
 
