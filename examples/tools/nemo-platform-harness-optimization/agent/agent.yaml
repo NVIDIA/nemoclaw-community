@@ -1,0 +1,75 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+config_format: nemo-agents-spec-v1
+name: cad-agent
+description: A CAD agent executed with DeepAgents against a live FreeCAD session
+
+instructions:
+  system:
+    content: |
+      You are a CAD Agent (Computer Aided Design).
+
+      A skills library is available at /skills/. Before starting a task, check
+      whether a skill applies and read the applicable SKILL.md with read_file.
+
+default_harness: deepagents
+
+harnesses:
+  deepagents:
+    kind: deepagents
+    settings:
+      deepagents: {}
+
+
+models:
+  default:
+    provider: nvidia
+    # SUBSTITUTE: model entities are auto-discovered per workspace, so this name
+    # does not exist on your platform. List yours with `nemo models list
+    # --all-pages` (that command paginates at 100 results) and paste one here.
+    model: REPLACE_WITH_YOUR_MODEL_NAME
+
+mcp:
+  servers:
+    freecad:
+      transport: stdio
+      # SUBSTITUTE: for stdio transport, `url` is the executable path, and the
+      # harness subprocess does not reliably inherit your PATH — so an absolute
+      # path is required. Find yours with `command -v uvx`. The value below is
+      # the Homebrew location on macOS; a Linux install typically lands in
+      # ~/.local/bin/uvx or ~/.cargo/bin/uvx.
+      url: /opt/homebrew/bin/uvx
+      args:
+        # Pinned so an upstream freecad-mcp release cannot change tool behaviour
+        # underneath this example. 0.1.24 is the version this was verified on.
+        - --from
+        - freecad-mcp==0.1.24
+        - freecad-mcp
+        # Suppresses screenshot ImageContent. Keep this while the model is
+        # text-only; drop it only alongside a vision-capable model.
+        - --only-text-feedback
+      exposure: harness_native
+
+tools:
+  blocked: []
+
+environment:
+  workspace: ./workspace
+  artifacts: ./artifacts
+
+telemetry:
+  enabled: true
+  provider: relay
+  output_dir: ./traces
+  atif:
+    enabled: true
+    filename_template: trajectory-{session_id}.atif.json
+    storage:
+      - type: http
+        # SUBSTITUTE (host and workspace): this URL hardcodes a platform at
+        # localhost:8080 and the `default` workspace. Change both segments if
+        # your platform or workspace differs — this endpoint line and the
+        # `model:` line above are the only machine-specific values in this file.
+        endpoint: http://localhost:8080/apis/intake/v2/workspaces/default/ingest/atif
+        timeout_millis: 3000

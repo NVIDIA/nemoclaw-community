@@ -212,8 +212,9 @@ class ExampleStackFactsTests(unittest.TestCase):
             states,
             Counter(
                 {
-                    # Includes the Kubernetes Deployer and SRE Assistant.
-                    "unconfirmed": 11,
+                    # Includes the Kubernetes Deployer, SRE Assistant, and the
+                    # NeMo Platform Harness Optimization example.
+                    "unconfirmed": 12,
                     "unpinned": 11,
                     "unknown": 1,
                     "not-applicable": 1,
