@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Dependencies for the offline test suite only. The scorer itself runs inside
+# FreeCAD's bundled interpreter, which already provides NumPy; nothing here is
+# needed for a live run.
+numpy>=1.24

@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Shared profile for both halves of the insight-driven loop: the Analyst
+# (`nemo agents analyst run`) and the Experimentalist
+# (`nemo agents experimentalist run`). Both discover it by walking *up* from the
+# working directory, so run them from inside harness/.
+#
+# Every path here is relative to this file, so the profile travels with the
+# checkout and needs no editing.
+
+# The registered agent name, as passed to `nemo agents create --name`.
+agent: cad-agent
+
+# The standard the Analyst judges runs against. Without it the Analyst can only
+# report that runs disagree with each other; it has no statement of what "good"
+# means, and the 0.85 IoU bar lives here and nowhere else.
+ethos: ../agent/ETHOS.md
+
+workspace: default
+
+# The directory Harbor imports the entry point from. It must be a directory of
+# its own holding harbor_wrapper.py, because Harbor's `_scoped_import_path`
+# resolves `harbor_wrapper:WrappedAgent` against the agent directory alone. Its
+# agent.yaml is a copy of ../agent/agent.yaml, kept here because the
+# Experimentalist gives each candidate a config to mutate - see the KNOWN
+# LIMITATION section in agent_source/harbor_wrapper.py for why those mutations
+# do not reach the running deployment.
+#
+# A local path disables PR publishing for a winning candidate; that needs a git
+# URL of the form <url>@<ref>.
+agent_source: ./agent_source
+
+# Copied once per trace by the Eval Author and filled from that trace, so it
+# keeps its @MESH_PATH@ / @DOCUMENT_NAME@ placeholders.
+task_template: ./task-template
+
+datasets:
+  train: ./dataset/train
+  validation: ./dataset/validation

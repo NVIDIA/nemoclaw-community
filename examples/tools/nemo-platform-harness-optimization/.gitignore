@@ -1,0 +1,5 @@
+# Optimizer run output: cached LLM responses, materialized task copies, logs.
+# None of it is authored content.
+harness/experiment/
+agent/artifacts/
+agent/traces/
