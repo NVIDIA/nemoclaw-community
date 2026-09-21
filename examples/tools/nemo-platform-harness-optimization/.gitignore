@@ -4,6 +4,7 @@
 # Optimizer run output: cached LLM responses, materialized task copies, the
 # per-candidate agent sources, logs. None of it is authored content.
 harness/experiment/
+harness/run.out
 
 # Agent runtime output. The deployment writes next to agent/agent.yaml; a trial
 # writes next to the candidate copy it builds the agent from.

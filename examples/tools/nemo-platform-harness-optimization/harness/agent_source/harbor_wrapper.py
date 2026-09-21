@@ -35,6 +35,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
+import fcntl
 import xmlrpc.client
 import subprocess
 import sys
@@ -161,6 +163,44 @@ ATTRIBUTE_KEYS = {
 # for nested tool calls in _tool_call_spans, which is where its value is.
 
 
+# One live FreeCAD session and one Intake stream are shared by every trial, but
+# the Experimentalist evaluates candidates concurrently: `n_concurrent_trials`
+# only serialises trials *inside* one candidate's job. Two candidates running at
+# once build documents of the same name in the same application, close each
+# other's documents, and cannot be told apart in the trace stream because they
+# share an agent name. This lock makes a trial the unit of exclusion.
+TRIAL_LOCK = Path(os.environ.get(
+    "CAD_TRIAL_LOCK", str(Path(tempfile.gettempdir()) / "cad-harness-trial.lock")))
+
+
+# In-process half of the lock. The Experimentalist evaluates candidates with
+# asyncio.gather on one event loop, so a bare blocking flock would stall the
+# loop that the lock holder needs in order to finish: the first trial can never
+# complete while the second is blocking inside it.
+_TRIAL_GATE = asyncio.Lock()
+
+
+@contextlib.asynccontextmanager
+async def _exclusive_trial() -> Any:
+    """Hold an exclusive lock for one trial, in-process and host-wide.
+
+    The asyncio lock orders coroutines on this event loop without blocking it;
+    the file lock then excludes any other process using the same FreeCAD
+    session. The flock is taken in a worker thread for the same reason.
+    """
+    TRIAL_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    async with _TRIAL_GATE:
+        handle = open(TRIAL_LOCK, "w")
+        try:
+            await asyncio.to_thread(fcntl.flock, handle, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle, fcntl.LOCK_UN)
+        finally:
+            handle.close()
+
+
 class WrappedAgent(BaseAgent):
     """Drive the deployed cad-agent and publish its trace for the verifier."""
 
@@ -177,72 +217,89 @@ class WrappedAgent(BaseAgent):
     async def run(
         self, instruction: str, environment: BaseEnvironment, context: AgentContext
     ) -> None:
-        # The task ships with a @MESH_PATH@ placeholder because the path has to
-        # be absolute for FreeCAD and an absolute path cannot be committed.
-        # Resolving it here keeps the checkout clean and avoids a setup step.
-        instruction = instruction.replace("@MESH_PATH@", str(MESH))
+        # Serialised across candidates: see TRIAL_LOCK. Held for the whole trial,
+        # because the agent run, the score and the document close all touch the
+        # one FreeCAD session, and the trace correlation below assumes nothing
+        # else is producing traces under this agent name meanwhile.
+        async with _exclusive_trial():
+            await self._run_locked(instruction, environment, context)
 
-        # Wait for FreeCAD before spending a trial on it. Trials are serial, and
-        # a heavy reconstruction can leave GUI dispatch busy well past the point
-        # where the previous trial returned. An agent that starts against a
-        # wedged session burns its turns polling get_rpc_status instead of
-        # building, and the scorer then finds no solid to measure - which reads
-        # as an agent failure rather than the environment problem it is.
-        if not _await_idle():
-            raise RuntimeError(
-                "FreeCAD GUI dispatch did not become healthy before this trial; "
-                "refusing to score a run that never had a working application."
+    async def _run_locked(
+            self, instruction: str, environment: BaseEnvironment, context: AgentContext
+        ) -> None:
+            # The task ships with a @MESH_PATH@ placeholder because the path has to
+            # be absolute for FreeCAD and an absolute path cannot be committed.
+            # Resolving it here keeps the checkout clean and avoids a setup step.
+            instruction = instruction.replace("@MESH_PATH@", str(MESH))
+
+            # Wait for FreeCAD before spending a trial on it. Trials are serial, and
+            # a heavy reconstruction can leave GUI dispatch busy well past the point
+            # where the previous trial returned. An agent that starts against a
+            # wedged session burns its turns polling get_rpc_status instead of
+            # building, and the scorer then finds no solid to measure - which reads
+            # as an agent failure rather than the environment problem it is.
+            if not _await_idle():
+                raise RuntimeError(
+                    "FreeCAD GUI dispatch did not become healthy before this trial; "
+                    "refusing to score a run that never had a working application."
+                )
+
+            # Captured first: none of the gateway's ids (x-nemo-session-id,
+            # x-trace-id, the response id) reach Intake, so the only handle on this
+            # run is when it started.
+            since = datetime.now(timezone.utc) - timedelta(seconds=5)
+
+            # Build the agent from this candidate's own config, so agent.yaml, the
+            # system prompt and workspace/skills/ are inside the measurement.
+            completed = await asyncio.to_thread(
+                subprocess.run,
+                [NEMO, "agents", "invoke",
+                 "--agent-config", str(AGENT_CONFIG),
+                 "--input", instruction,
+                 "--no-progress"],
+                capture_output=True, text=True, timeout=TIMEOUT, cwd=AGENT_DIR,
             )
+            context.metadata = {"invoke_returncode": completed.returncode}
+            if completed.returncode != 0:
+                # The CLI reports adapter and config errors on stdout and keeps only
+                # a banner on stderr, so quoting stderr alone loses the reason.
+                detail = (completed.stderr.strip() + "\n" + completed.stdout.strip()).strip()
+                raise RuntimeError(
+                    f"agent invocation failed ({completed.returncode}): {detail[-600:]}"
+                )
 
-        # Captured first: none of the gateway's ids (x-nemo-session-id,
-        # x-trace-id, the response id) reach Intake, so the only handle on this
-        # run is when it started.
-        since = datetime.now(timezone.utc) - timedelta(seconds=5)
+            async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+                # Recorded so a trial can be traced back to the exact config
+                # that produced it. Without this a mis-correlated trace is
+                # invisible: every candidate looks alike in the trial output.
+                context.metadata["agent_config"] = str(AGENT_CONFIG)
+                context.metadata["agent_name"] = AGENT_NAME
+                trace_id = await _await_trace(client, since)
+                if trace_id is None:
+                    return
+                context.metadata["trace_id"] = trace_id
+                spans = await _get(client, "spans", filter=json.dumps({"trace_id": trace_id}))
 
-        # Build the agent from this candidate's own config, so agent.yaml, the
-        # system prompt and workspace/skills/ are inside the measurement.
-        completed = await asyncio.to_thread(
-            subprocess.run,
-            [NEMO, "agents", "invoke",
-             "--agent-config", str(AGENT_CONFIG),
-             "--input", instruction,
-             "--no-progress"],
-            capture_output=True, text=True, timeout=TIMEOUT, cwd=AGENT_DIR,
-        )
-        context.metadata = {"invoke_returncode": completed.returncode}
-        if completed.returncode != 0:
-            raise RuntimeError(
-                f"agent invocation failed ({completed.returncode}): "
-                f"{completed.stderr.strip()[-400:]}"
-            )
-
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            trace_id = await _await_trace(client, since)
-            if trace_id is None:
-                return
-            context.metadata["trace_id"] = trace_id
-            spans = await _get(client, "spans", filter=json.dumps({"trace_id": trace_id}))
-
-        # Publishing nothing lets the verifier exit non-zero on absent evidence
-        # rather than scoring a confident zero it has not earned.
-        if spans:
-            emitted: list[dict[str, Any]] = []
-            # One set for the whole trace: see _tool_call_spans on why the tool
-            # history is replayed and must be de-duplicated across spans.
-            seen_calls: set[str] = set()
-            for raw in spans:
-                emitted.append(_otlp(raw))
-                emitted.extend(_tool_call_spans(raw, seen_calls))
-            # Ground truth, measured on the host and carried into the trace so a
-            # container-bound verifier can gate on it.
-            document, mesh = _task_targets(instruction)
-            scored = _iou_span(document, mesh, trace_id)
-            if scored is not None:
-                emitted.append(scored)
-                context.metadata["eval_iou"] = scored["attributes"][2]["value"]["stringValue"]
-            # After scoring, so the scorer still sees the document.
-            _close_document(document)
-            await _upload(environment, emitted)
+            # Publishing nothing lets the verifier exit non-zero on absent evidence
+            # rather than scoring a confident zero it has not earned.
+            if spans:
+                emitted: list[dict[str, Any]] = []
+                # One set for the whole trace: see _tool_call_spans on why the tool
+                # history is replayed and must be de-duplicated across spans.
+                seen_calls: set[str] = set()
+                for raw in spans:
+                    emitted.append(_otlp(raw))
+                    emitted.extend(_tool_call_spans(raw, seen_calls))
+                # Ground truth, measured on the host and carried into the trace so a
+                # container-bound verifier can gate on it.
+                document, mesh = _task_targets(instruction)
+                scored = _iou_span(document, mesh, trace_id)
+                if scored is not None:
+                    emitted.append(scored)
+                    context.metadata["eval_iou"] = scored["attributes"][2]["value"]["stringValue"]
+                # After scoring, so the scorer still sees the document.
+                _close_document(document)
+                await _upload(environment, emitted)
 
 
 async def _get(client: httpx.AsyncClient, path: str, **params: Any) -> list[dict[str, Any]]:
@@ -262,6 +319,7 @@ async def _await_trace(client: httpx.AsyncClient, since: datetime) -> str | None
     """
     deadline = asyncio.get_running_loop().time() + TRACE_WAIT
     while True:
+        matches = []
         for trace in await _get(client, "traces", page_size=20):
             started = datetime.fromisoformat(trace["started_at"])
             started = started if started.tzinfo else started.replace(tzinfo=timezone.utc)
@@ -272,7 +330,23 @@ async def _await_trace(client: httpx.AsyncClient, since: datetime) -> str | None
                 and started >= since
                 and trace.get("ended_at")
             ):
-                return trace["id"]
+                matches.append((started, trace["id"]))
+        if matches:
+            # Oldest first. Intake returns newest-started first, and taking that
+            # blindly hands back a later run's trace whenever anything else is
+            # producing traces under the same agent name.
+            started, trace_id = min(matches)
+            if len(matches) > 1:
+                # Correlation here is by agent name and start time, so more than
+                # one candidate trace in the window means it cannot be resolved.
+                # Say so rather than scoring whichever sorted first.
+                print(
+                    f"[trace] {len(matches)} traces match {AGENT_NAME} since "
+                    f"{since.isoformat()}; taking the oldest ({trace_id}). "
+                    "Concurrent runs under one agent name cannot be told apart.",
+                    file=sys.stderr,
+                )
+            return trace_id
         if asyncio.get_running_loop().time() >= deadline:
             return None
         await asyncio.sleep(5)

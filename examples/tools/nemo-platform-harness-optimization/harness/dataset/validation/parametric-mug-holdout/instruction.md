@@ -6,8 +6,8 @@ Build it in a new FreeCAD document named `EvalMugHoldout`.
 
 Requirements:
 - The result must be a single valid solid.
-- It must be a native sketch-based PartDesign feature tree — sketches driving
-  features — not a stack of fused boolean primitives.
+- It must be a native sketch-based PartDesign feature tree, with sketches
+  driving features, not a stack of fused boolean primitives.
 - A designer must be able to change a named dimension and have the model rebuild.
 - It must match the original mesh closely.
 
