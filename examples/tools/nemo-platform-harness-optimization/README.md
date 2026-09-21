@@ -689,14 +689,20 @@ external measurement.
 #### The result
 
 ```text
-Finished · winner=agent-1 · validation geometry_fidelity_validation 1.000
+Finished · winner=agent-1 · validation symmetric_material_overlap 0.664
 report:  ./experiment/eval-and-optimize/OPTIMIZATION.md
 ```
 
-The baseline agent never ran a geometry check at all, so it scored **0.000**. The
-skill moved it to **1.000** on the validation split. `OPTIMIZATION.md` carries the
-per-round reward tables, the root-cause analysis for each round, and the full
-source of every candidate under `agents/agent-N/`.
+`OPTIMIZATION.md` carries the per-round reward tables, the root-cause analysis
+for each round, and the full source of every candidate under `agents/agent-N/`.
+
+One complete run is recorded in
+[results/optimization-run.md](results/optimization-run.md): the winner took the
+validation reward from 0.514 to 0.664, and the second candidate, which changed
+only the system prompt in its `agent.yaml`, scored 0.402. That second number is
+the one worth reading twice. A system prompt is measurable only because each
+trial builds the agent from the candidate's own config, and what it measured
+was that the proposal made the result worse.
 
 **What the trial exercised.** Each candidate is a full copy of `agent_source/`,
 and the wrapper builds the agent from the copy's own `agent.yaml`. The skill
@@ -820,9 +826,10 @@ it. Across these runs:
 
 - The scorer said **IoU 0.6207** while the agent reported success. Re-measured at
   n=3, the same agent scored **0.334 to 0.432**; the first number was a lucky draw.
-- The authored metric moved **0.000 → 1.000**. It grades whether the agent
-  *checks its work*, not whether the mug is right, and that gap is exactly the
-  room a candidate has to win the metric while losing the product.
+- The authored metric grades whether the agent *checks its work*, not whether
+  the mug is right, and that gap is exactly the room a candidate has to win the
+  metric while losing the product. In the recorded run the two happened to
+  coincide, which is luck, not design.
 - The winner that did hold up cost **50% more tokens** than the naive agent. Read
   in isolation, that is a regression.
 
