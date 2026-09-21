@@ -36,6 +36,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import contextlib
+import importlib.util
 import fcntl
 import xmlrpc.client
 import subprocess
@@ -134,6 +135,32 @@ def _example_root() -> Path:
 
 EXAMPLE_ROOT = _example_root()
 SCORER = os.environ.get("CAD_SCORER", str(EXAMPLE_ROOT / "scorer" / "score.py"))
+
+
+def _load_trial_metric() -> Any:
+    """Load the guardrail metric from outside the candidate directory.
+
+    The optimizer copies this file into every candidate and lets a coding agent
+    edit it. The metric that decides whether a candidate is kept must not be
+    editable by that candidate, so it is loaded from the example root and the
+    path is checked before use.
+    """
+    module_path = (EXAMPLE_ROOT / "scorer" / "trial_metric.py").resolve()
+    if AGENT_DIR.resolve() in module_path.parents:
+        raise RuntimeError(
+            f"guardrail metric resolved inside the candidate directory "
+            f"({module_path}); it must come from the example root so a "
+            "candidate cannot rewrite the measure that selects it."
+        )
+    spec = importlib.util.spec_from_file_location("cad_trial_metric", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load the guardrail metric from {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+TRIAL_METRIC = _load_trial_metric()
 MESH = Path(os.environ.get("CAD_REFERENCE_MESH",
                            EXAMPLE_ROOT / "meshes" / "reference_mug.obj"))
 TIMEOUT = float(os.environ.get("CAD_AGENT_TIMEOUT", "3600"))
@@ -293,7 +320,7 @@ class WrappedAgent(BaseAgent):
                 # Ground truth, measured on the host and carried into the trace so a
                 # container-bound verifier can gate on it.
                 document, mesh = _task_targets(instruction)
-                scored = _iou_span(document, mesh, trace_id)
+                scored = TRIAL_METRIC.iou_span(document, mesh, trace_id, SCORER)
                 if scored is not None:
                     emitted.append(scored)
                     context.metadata["eval_iou"] = scored["attributes"][2]["value"]["stringValue"]
@@ -426,48 +453,6 @@ def _await_idle(timeout: float = 600.0) -> bool:
             return True
         time.sleep(2)
     return False
-
-
-def _iou_span(document: str, mesh: str, trace_id: str) -> dict[str, Any] | None:
-    """Score the built document against its reference mesh and wrap it as a span."""
-    # Every failure path below returns None, which the verifier reports as
-    # "no eval.iou span". Say why on stderr: without a reason, a harness fault
-    # and a genuinely unscoreable document are indistinguishable, and both look
-    # like the agent failed.
-    def _skip(reason: str) -> None:
-        print(f"[eval.iou] not scored for {document!r}: {reason}", file=sys.stderr)
-        return None
-
-    if not document or not mesh:
-        return _skip("no document or mesh parsed from the instruction")
-    if not _await_idle():
-        return _skip("FreeCAD GUI dispatch never became healthy")
-    try:
-        done = subprocess.run(
-            [sys.executable, SCORER, document, mesh],
-            capture_output=True, text=True, timeout=900,
-        )
-        # A non-zero exit is void data, not a measured zero. score.py prints
-        # nothing to stdout and exits 2 on every failure path, so the exit code
-        # is the contract. Recording a failure as 0.0 would be the mistake a
-        # guardrail must not make: a floor of 0 protects nothing.
-        if done.returncode != 0:
-            return _skip(f"scorer exit {done.returncode}: {done.stderr.strip()[:200]}")
-        iou = float(done.stdout.strip().splitlines()[-1])
-    except Exception as exc:
-        # Same reasoning: absent evidence is not a score.
-        return _skip(f"{type(exc).__name__}: {exc}")
-    return {
-        "name": "eval.iou",
-        "spanId": _otlp_id(f"iou{trace_id}", 8),
-        "traceId": _otlp_id(trace_id, 16),
-        "attributes": [
-            {"key": "openinference.span.kind", "value": {"stringValue": "TOOL"}},
-            {"key": "tool.name", "value": {"stringValue": "eval.iou"}},
-            {"key": "eval.iou", "value": {"stringValue": f"{iou:.4f}"}},
-            {"key": "tool.output", "value": {"stringValue": f"eval.iou={iou:.4f}"}},
-        ],
-    }
 
 
 def _tool_call_spans(

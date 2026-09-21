@@ -611,6 +611,14 @@ Pareto front and makes selection noisier, because with several noisy objectives
 estimated at `n_attempts: 2` almost everything is non-dominated by chance.
 Adding a guardrail only ever removes candidates.
 
+That holds only if a candidate cannot rewrite the guardrail. The optimizer
+copies `agent_source/` into every candidate and invites a coding agent to edit
+it, so the metric lives in `scorer/trial_metric.py`, outside that directory, and
+the wrapper loads it from the example root and refuses to run if it ever
+resolves inside the candidate. The scorer it calls is outside for the same
+reason: anything inside the agent directory is readable, and now writable, by
+the thing being measured.
+
 The cost is getting ground truth into the loop at all: the verifier runs in a
 container and can never open FreeCAD, so IoU has to be measured host-side and
 carried in through the trace. That is the one piece of real work in
@@ -846,8 +854,6 @@ variable and carries no values.
 | `NEMO_AGENTS_GATEWAY_READ_TIMEOUT` | `300` | Raise it. The gateway caps any response at 300 s and returns 502 while the agent keeps working. |
 | `FREECAD_RPC` | `http://127.0.0.1:9875` | The MCP addon's RPC endpoint. |
 | `FREECAD_BIN` | platform default | FreeCAD binary used for headless scoring. |
-| `CAD_AGENT_DEPLOYMENT` | `cad-agent-deployment` | The deployment every optimizer trial invokes. |
-| `CAD_AGENT_NAME` | `cad-agent` | Agent name used to correlate traces in Intake. |
 | `CAD_SCORER` | `scorer/score.py` | Absolute path to the scorer. |
 | `CAD_AGENT_TIMEOUT` | `3600` | Seconds to wait for one invocation. |
 | `CAD_AGENT_TRACE_WAIT` | `3600` | Seconds to wait for the trace to reach Intake, which ingests asynchronously. |
@@ -908,7 +914,7 @@ python3 -m unittest discover -s tests
 **Expected result:**
 
 ```text
-Ran 57 tests
+Ran 69 tests
 
 OK
 ```
