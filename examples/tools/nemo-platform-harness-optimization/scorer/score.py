@@ -46,6 +46,7 @@ import subprocess
 import sys
 import tempfile
 import xmlrpc.client
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 # Reference meshes live outside the agent directory: the agent spec fileset is

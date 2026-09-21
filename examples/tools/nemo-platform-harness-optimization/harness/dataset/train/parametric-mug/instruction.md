@@ -9,9 +9,9 @@ Requirements:
 - It must be a native sketch-based PartDesign feature tree — sketches driving
   features — not a stack of fused boolean primitives.
 - A designer must be able to change a named dimension and have the model rebuild.
-- It must still work after the file is saved and reopened.
 - It must match the original mesh closely.
 
-Leave exactly one object visible: the finished model.
+Leave the document open when you finish, with exactly one object visible:
+the finished model. The result is scored from the open document.
 
 Do not take screenshots; verify numerically.

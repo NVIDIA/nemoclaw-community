@@ -9,7 +9,7 @@
 | --- | --- |
 | Description | Deploys a CAD agent against a live desktop application, scores its output geometrically, turns its traces into Insights, and lets the platform author an eval and propose a fix against it. |
 | Industry | 🏭 Manufacturing |
-| Requirements | macOS · FreeCAD 1.1 with the MCP addon · NeMo Platform 0.5.0 on localhost · Docker for the verifier · a registered model provider |
+| Requirements | macOS · Python 3.12 or 3.13 · FreeCAD 1.1 with the MCP addon · NeMo Platform 0.5.0 on localhost · Docker for the verifier · a registered model provider |
 | NemoClaw | N/A |
 | Harness | LangChain Deep Agents 0.7.13 |
 | OpenShell | N/A |
@@ -28,6 +28,10 @@ need for the cost side of any comparison. Telemetry is on in `agent/agent.yaml`,
 so this appears without exporting anything or standing up a separate
 observability stack.
 
+Both screenshots come from an earlier run of this example, before the reference
+mesh was renamed, so the prompt text in the trace shows the older filename. The
+span tree, counts and Insight are otherwise what this walkthrough produces.
+
 The out-of-loop scorer, run against the same document:
 
 ```text
@@ -42,7 +46,7 @@ $ python3 scorer/score.py EvalMug meshes/reference_mug.obj
 | Category | Developer Tool |
 | Contributor or provenance | NVIDIA |
 | Use this when | You have an agent driving an external application and you need a measured pass/fail rather than the agent's own report of success. |
-| You will get | One IoU number per run, Insights filed from the traces, and an optimizer run that scores candidate changes against an eval suite it authored from an Insight. |
+| You will get | One IoU number per run, Insights filed from the traces, and an optimizer run that builds each candidate from its own `agent.yaml` and scores it against an eval suite the platform authored from an Insight. |
 | Runs on | macOS with a FreeCAD GUI session on the same host. The agent runs on the host; only the verifier runs in a container. |
 | Requires | FreeCAD 1.1 with the freecad-mcp addon, NeMo Platform 0.5.0, Docker, and a registered model provider. |
 | Verified on | macOS 15, FreeCAD 1.1, NeMo Platform 0.5.0, deepagents 0.7.13, Python 3.13. |
@@ -83,10 +87,10 @@ The point is not the mug. The point is that this is where you deploy an agent,
 observe it, and then *evolve* it.
 
 Two results up front, because they shaped everything else. The fix the platform
-found and validated on its own **more than doubled the deliverable**: median
-geometric accuracy went from 0.3969 to 0.9049 against the reference mesh. And an
-earlier candidate that *looked* like a win improved its metric by 67% while
-making the mug worse. Telling those two apart needed a third artifact alongside
+found on its own **more than doubled the deliverable** once it was deployed and
+measured out of loop: median geometric accuracy went from 0.3969 to 0.9049
+against the reference mesh. And an earlier candidate that *looked* like a win
+improved its metric by 67% while making the mug worse. Telling those two apart needed a third artifact alongside
 the scorer and the traces: a file that writes down what the agent is *for*.
 
 That lesson returns in the last step, sharper. Once the platform starts writing
@@ -95,7 +99,13 @@ measurement; it is choosing what to measure.
 
 ## Prerequisites
 
-- **Python 3.12+**
+- **Python 3.12 or 3.13.** NeMo Platform 0.5.0 declares
+  `Requires-Python: >=3.12,<3.14`, so 3.11 and older and 3.14 and newer will
+  not resolve. The install command below pins the interpreter so a newer
+  system default cannot change which one the tool lands on. The offline test
+  suite under `tests/` runs in a separate interpreter of your choosing and
+  needs only Python 3.12 or newer; `requirements.txt` floors NumPy at 1.26,
+  the first release with Python 3.12 wheels.
 - **NeMo Platform 0.5.0**, installed pinned and with pre-releases allowed. The
   `[all]` extra depends on a pre-release adapter, and an unpinned install
   resolves backwards without saying so. See the install commands below.
@@ -115,7 +125,7 @@ measurement; it is choosing what to measure.
 Install the platform:
 
 ```bash
-uv tool install --prerelease allow "nemo-platform[all]==0.5.0"
+uv tool install --python 3.13 --prerelease allow "nemo-platform[all]==0.5.0"
 nemo --version     # confirm; a bad resolution looks like success
 ```
 
@@ -246,8 +256,9 @@ designer can open and edit. Build it in a document named EvalMug.
 - It must be a native sketch-based PartDesign feature tree - sketches driving
   features - not a stack of fused boolean primitives.
 - A designer must be able to change a named dimension and have it rebuild.
-- It must still work after the file is saved and reopened.
 - It must match the original mesh closely.
+
+Leave the document open when you finish, with exactly one object visible.
 ```
 
 The source is a 1,824-vertex coffee mug mesh, 15.50 x 10.33 x 13.44 mm.
@@ -459,8 +470,8 @@ still unmeasured: nothing in the harness detects this failure the *next* time it
 appears, so the next regression needs the same manual round trip.
 
 The rest of this closes that loop instead. The platform will write the evaluation
-that detects the Insight, propose a fix against it, and score the fix on data it
-was not allowed to see.
+that detects the Insight, propose a fix against it, and score that fix on a
+split it could not read while the candidates were being written.
 
 ### Step 6: Turn the Insight into an eval
 
@@ -510,9 +521,17 @@ image = "python:3.12-slim"    # verifier only; the agent runs on your machine
 ```
 
 Harbor reaches your agent through one class you write,
-`harbor_wrapper:WrappedAgent`. Nothing ships a default. This one calls the
-deployed agent and publishes its trace where the verifier can read it. Read its
-`KNOWN LIMITATION` section before drawing conclusions from any candidate diff.
+`harbor_wrapper:WrappedAgent`. Nothing ships a default. This one builds the
+agent from `agent.yaml` in its own directory, waits for the trace to reach
+Intake, converts it to the OTLP the verifier reads, and scores the result
+against the reference mesh.
+
+Building from the candidate's own config is what makes the loop meaningful.
+Every candidate is a full copy of `agent_source/`, so a candidate can change the
+model, the system prompt, the MCP server set, or add a skill under
+`workspace/skills/`, and the next trial measures that change rather than a proxy
+for it. The config needs `api_key_env` and `base_url` under `models.default`,
+which the deepagents adapter requires when the agent is built from a file.
 
 The profile, `harness/optimizer.yaml`, points at all of it:
 
@@ -553,17 +572,50 @@ file bounds the run. The defaults, 15 rounds of 3 candidates, are far too large
 when every trial is a full reconstruction. `harness/experiment-config.yaml`:
 
 ```yaml
-max_rounds: 2
+max_rounds: 1
 max_candidates: 2
+max_survivors: 3
+min_rounds_before_stopping: 1
 outcome_evaluator_config:
-  n_concurrent_trials: 1
+  n_concurrent_trials: 1  # a live FreeCAD session is one shared resource
   n_attempts: 2           # measure every task twice; the default is 1
 storage:
   publish_winner: false   # defaults to true
+  archive_candidates: false
+regression_metrics:
+  - name: eval_iou
+    direction: maximize
 ```
 
 `n_attempts` matters as much as the bounds. Agent runs are noisy, and a single
 trial per task cannot separate a real improvement from run-to-run variance.
+
+**`regression_metrics` is the part that keeps the loop honest, and it is on from
+the first run.** The Eval Author writes the objective, and its metric asks
+whether the agent measured its own output and acted on the result. That is the
+right question for the Insight and the wrong question for the product: a
+candidate can score 1.000 on it while building a worse mug. That is not
+hypothetical. An earlier run of this example produced a winner whose authored
+metric rose 67% while IoU fell from 0.6207 to 0.5442.
+
+So the deliverable goes in as a floor rather than as a second objective.
+`eval_iou` is the out-of-loop geometric score, measured on the host by the
+wrapper and published into the trace as a span the containerised verifier reads
+back. The selector treats the two lists differently: objectives are *ranked*,
+while a candidate that worsens a regression metric against the baseline is
+**dropped before ranking**. A gain on the authored metric cannot pay for a loss
+on geometry.
+
+It is also the only list that cannot be inflated. Adding objectives widens the
+Pareto front and makes selection noisier, because with several noisy objectives
+estimated at `n_attempts: 2` almost everything is non-dominated by chance.
+Adding a guardrail only ever removes candidates.
+
+The cost is getting ground truth into the loop at all: the verifier runs in a
+container and can never open FreeCAD, so IoU has to be measured host-side and
+carried in through the trace. That is the one piece of real work in
+`harbor_wrapper.py`, and it is what turns the loop from optimizing a proxy into
+optimizing a proxy that is not allowed to break the product.
 
 ### Step 7: Let the platform fix it
 
@@ -580,10 +632,14 @@ cd ..
 existing; without that flag you get the defaults.
 
 The run builds a baseline, analyses the Insight's root cause, proposes candidate
-changes, has a coding agent implement each one, and scores them on the held-out
-split, which is physically moved out of reach during candidate generation and
-restored only for scoring, so no candidate can be tuned against the data that
-judges it.
+changes, has a coding agent implement each one, and scores them on the validation
+split. That split is physically moved out of reach during candidate generation
+and restored only for scoring, so the agent writing the candidates never reads
+it. The isolation is in the mechanism, not in the content: this example's
+validation task is the training task with a different document name, so a
+validation score here measures repeatability on the same part, not
+generalization to a new one. Point it at a different mesh with different
+requirements if you want the second thing.
 
 #### What it proposed
 
@@ -597,8 +653,11 @@ agents/agent-1/
 ```
 
 That is the same artifact a human would reach for, arrived at from nothing but
-traces and an Insight. It ships here at
-`agent/workspace/skills/geometry-fidelity-policy/SKILL.md`.
+traces and an Insight. The one this run produced is recorded at
+[`results/geometry-fidelity-policy/SKILL.md`](results/geometry-fidelity-policy/SKILL.md)
+so you can compare it with what your own run writes. It is deliberately **not**
+preloaded into `agent/workspace/`: the agent you deploy in Step 2 is the naive
+one, and the skill only arrives if the loop produces it.
 
 It turns the Insight into a rule:
 
@@ -627,15 +686,16 @@ report:  ./experiment/eval-and-optimize/OPTIMIZATION.md
 ```
 
 The baseline agent never ran a geometry check at all, so it scored **0.000**. The
-skill moved it to **1.000** on the held-out split. `OPTIMIZATION.md` carries the
+skill moved it to **1.000** on the validation split. `OPTIMIZATION.md` carries the
 per-round reward tables, the root-cause analysis for each round, and the full
 source of every candidate under `agents/agent-N/`.
 
-**What the trial did and did not exercise.** The wrapper invokes one fixed
-deployment, so a candidate's edits to `agent.yaml` (a new model, a skill path, a
-changed system prompt) never reach the agent the trial actually runs. Only
-changes to the wrapper itself are exercised end to end. Treat an `agent.yaml`
-diff as a hypothesis the loop has *not* tested.
+**What the trial exercised.** Each candidate is a full copy of `agent_source/`,
+and the wrapper builds the agent from the copy's own `agent.yaml`. The skill
+above therefore reached the agent the same way it will after promotion: as a
+file under `workspace/skills/` announced by the `/skills/` pointer in the system
+prompt. The score measures the change you are about to deploy, not a proxy for
+it.
 
 Before believing any winner, apply two external checks. **Did the candidate
 actually use what it changed?** One winner here wrote a 168-line surface-distance
@@ -668,6 +728,11 @@ a new tool when the agent lacks a capability, a policy document when it lacks a
 standard, a prompt constraint when it lacks discipline. None of these were
 suggested to it.
 
+Every row above is a surface the trial actually runs, because the candidate's
+own `agent.yaml` and `workspace/` are what the wrapper builds the agent from.
+Step 9 then re-measures the winner on the deployed agent, which is a different
+environment rather than a different change.
+
 The second Insight is left open here. Its candidates improved the metrics they
 were given, but an end-to-end win on the deliverable could not be demonstrated
 within this experiment, and the honest thing is to say so rather than promote a
@@ -680,8 +745,11 @@ which is exactly the surface the trials could not exercise. So promoting is not
 the end of the validation; it is the start of it.
 
 ```bash
+mkdir -p agent/workspace/skills
 cp -r harness/experiment/eval-and-optimize/agents/agent-1/workspace/skills/geometry-fidelity-policy \
       agent/workspace/skills/
+# or, to reproduce the published measurement with the skill this run produced:
+#   cp -r results/geometry-fidelity-policy agent/workspace/skills/
 
 nemo agents undeploy --agent cad-agent --yes
 nemo agents delete cad-agent --yes
@@ -731,6 +799,8 @@ Nothing here is CAD-specific:
 5. **Analyse the traces** to find what is actually wrong. *(Analyst)*
 6. **Author an eval for what you found**, so the next iteration can see it. *(Eval Author)*
 7. **Propose and score a fix** against that eval. *(Experimenter)*
+8. **Deploy the winner and re-measure**, because a trial builds the agent
+   from a config file while production serves a registered deployment.
 
 Steps 5 to 7 are the ones the platform automates, and step 6 is what makes it a
 loop rather than a single repair. A scorer written up front can only measure the
@@ -754,16 +824,8 @@ one that mattered.
 
 The lesson is not to distrust the loop. It is to **put the thing you actually
 care about inside it**, and to measure it more than once. A proxy makes a fine
-objective; it makes a terrible sole criterion. `regression_metrics` exists for
-exactly this. Anything listed there is demoted to a floor, and a candidate that
-worsens it is dropped before ranking, so a gain on the objective cannot pay for a
-regression on the deliverable:
-
-```yaml
-regression_metrics:
-  - name: eval_iou
-    direction: maximize
-```
+objective; it makes a terrible sole criterion. That is why `eval_iou` is a
+guardrail in Step 6 rather than an afterthought here.
 
 **An optimization loop improves whatever it can measure.** Automating the writing
 of evals does not repeal that; it raises the stakes, because now the loop also
@@ -810,9 +872,16 @@ from the gateway, and the runner injects it into the deployment process.
 
 ## Known limitations
 
-- **Every optimizer candidate hits the same deployment.** `harbor_wrapper.py`
-  invokes a fixed deployment name, so a candidate's `agent.yaml` edits do not
-  reach what executes; only wrapper edits have real effect.
+- **A trial runs the agent from a config file, production serves a deployment.**
+  `harbor_wrapper.py` builds each candidate from its own `agent.yaml`, so the
+  change surface is real, but a trial and a deployed run are not byte-identical
+  environments: a trial needs `api_key_env` and `base_url` in the config, and it
+  does not pass through the gateway. Step 9 re-measures on the deployment for
+  that reason.
+- **The validation split is the training task under a different document name.**
+  The `.aad-heldout/` mechanism that hides it during candidate generation is
+  real, but the mesh and the requirements are identical, so a validation score
+  here reports repeatability rather than generalization.
 - **Non-determinism here is branch divergence, not sampling noise**, and the
   sampling surface is one knob: `temperature`. `models.default.settings` is never
   read on the deepagents path, so a `seed` placed there is inert, and there is no

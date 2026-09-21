@@ -1,5 +1,41 @@
-# Optimizer run output: cached LLM responses, materialized task copies, logs.
-# None of it is authored content.
+# Credentials
+.env
+
+# Optimizer run output: cached LLM responses, materialized task copies, the
+# per-candidate agent sources, logs. None of it is authored content.
 harness/experiment/
+
+# Agent runtime output. The deployment writes next to agent/agent.yaml; a trial
+# writes next to the candidate copy it builds the agent from.
 agent/artifacts/
 agent/traces/
+harness/agent_source/artifacts/
+harness/agent_source/traces/
+**/.fabric/
+
+# FreeCAD documents and their rolling backups. The agent writes these while it
+# works; the deliverable is the score, not the .FCStd.
+*.FCStd
+*.FCStd[0-9]
+*.FCBak
+
+# Scratch geometry. meshes/reference_mug.obj is the one tracked mesh; anything
+# else dropped in here is a local substitution and should not be committed.
+meshes/*
+!meshes/reference_mug.obj
+
+# Other build and export artifacts from scoring runs.
+*.brep
+*.step
+*.stp
+*.stl
+*.obj
+!meshes/reference_mug.obj
+results/runs/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+.DS_Store

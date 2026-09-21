@@ -3,6 +3,10 @@
 schema_version = "1.4"
 
 [task]
+# Same mesh and same requirements as dataset/train/parametric-mug; only the
+# document name differs. The loop hides this split during candidate generation,
+# but because the content is identical a score here measures repeatability on
+# the same part, not generalization to a new one.
 name = "nvidia-cad/parametric-mug-holdout"
 version = "0.1.0"
 description = "Held-out reconstruction of the same coffee-mug mesh."

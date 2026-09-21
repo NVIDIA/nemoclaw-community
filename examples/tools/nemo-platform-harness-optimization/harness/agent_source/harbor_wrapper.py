@@ -1,45 +1,34 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Harbor entry point for the deployed NeMo ``cad-agent``.
+"""Harbor entry point for the NeMo ``cad-agent``.
 
 Harbor imports this class into the *host* process (``harbor-native``), which is
 what makes a GUI-bound agent evaluable: the run below reaches the FreeCAD
 session on this machine, while the task container only hosts the verifier.
 
-Two jobs: invoke the deployed agent, and publish its trace to ``/app/traces``,
-the only channel through which the verifier can see what the agent did.
+Three jobs: run the agent, publish its trace to ``/app/traces`` where the
+verifier can read it, and measure the result against the reference mesh.
 
 This module must live in the directory named by ``agent_source`` in
 ``optimizer.yaml``: Harbor's ``_scoped_import_path`` resolves the default entry
 point ``harbor_wrapper:WrappedAgent`` against the agent directory alone.
 
-KNOWN LIMITATION - candidate ``agent.yaml`` edits do not reach the agent
-========================================================================
-``DEPLOYMENT`` below names a *fixed, already-running* deployment. Every trial of
-every optimizer candidate therefore POSTs to the same endpoint, serving the
-config that was registered with ``nemo agents create`` when that deployment was
-made.
+The agent runs from ``agent.yaml`` *in this directory*
+==========================================================
+Each candidate is a full copy of this directory, and the run below invokes the
+agent from the copy's own ``agent.yaml``. That is what makes a candidate's
+edits real: change the model, the system prompt, the MCP server set, or drop a
+skill into ``workspace/skills/``, and the next trial measures it.
 
-The consequence is that a candidate can rewrite ``agent.yaml`` however it likes
-- change the model, add ``skills.paths``, rewrite the system prompt - and none
-of it reaches what actually executes. NeMo Platform has no update command: a
-config change only takes effect after a full undeploy/delete/create/deploy
-cycle, which this wrapper never performs. The only surface with real effect on
-a trial is *this file*, which is why, in the runs behind this example, every
-candidate that moved the score did so by editing the wrapper (typically by
-injecting policy text into the user prompt).
+So the whole directory is the change surface, not only this file. A skill
+belongs in ``workspace/skills/<name>/SKILL.md`` with a pointer to ``/skills/``
+in ``instructions.system.content``, which is how the deployed agent loads it
+too. Prefer that over injecting text here: it is the mechanism that survives
+promotion, and a change measured here is then the same change you deploy.
 
-Symptom to watch for: a candidate "wins" with an ``agent.yaml`` change you
-cannot reproduce by deploying that config by hand. Before believing any result,
-run ``diff agents/agent-0/harbor_wrapper.py agents/agent-N/harbor_wrapper.py``
-and check whether the wrapper is what changed.
-
-Fixing it means deploying each candidate to its own endpoint - create and
-deploy a uniquely named agent per candidate from that candidate's
-``agent.yaml``, point ``CAD_AGENT_DEPLOYMENT`` at it for the duration of its
-trials, and tear it down afterwards. That is a harness redesign, not a config
-tweak, and it also serialises the loop further: one live FreeCAD session
-already forces ``n_concurrent_trials: 1``.
+``agent.yaml`` must keep ``api_key_env`` and ``base_url`` under
+``models.default``. The deepagents adapter's preflight requires both when the
+agent is built from a config file rather than served by a deployment.
 """
 
 from __future__ import annotations
@@ -53,6 +42,7 @@ import time
 import json
 import os
 import re
+import shutil
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -77,8 +67,44 @@ except ImportError:  # pragma: no cover - exercised by the tests, never by a run
 
 BASE = os.environ.get("NMP_BASE_URL", "http://localhost:8080")
 WORKSPACE = os.environ.get("NMP_WORKSPACE", "default")
-DEPLOYMENT = os.environ.get("CAD_AGENT_DEPLOYMENT", "cad-agent-deployment")
-AGENT_NAME = os.environ.get("CAD_AGENT_NAME", "cad-agent")
+# The candidate copy this wrapper was imported from. Resolved per copy, so
+# every candidate runs its own configuration.
+AGENT_DIR = Path(__file__).resolve().parent
+AGENT_CONFIG = AGENT_DIR / "agent.yaml"
+def _agent_name() -> str:
+    """Read the agent name out of the config this wrapper runs.
+
+    Traces are correlated by agent name, and the name is a property of the
+    config, not of the environment. Reading it here keeps the two in step: a
+    candidate that renames its agent still matches its own trace.
+    """
+    for line in AGENT_CONFIG.read_text(encoding="utf-8").splitlines():
+        if line.startswith("name:"):
+            return line.split(":", 1)[1].strip()
+    raise RuntimeError(f"no top-level 'name:' in {AGENT_CONFIG}")
+
+
+AGENT_NAME = _agent_name()
+def _nemo_cli() -> str:
+    """Locate the ``nemo`` CLI without depending on PATH.
+
+    Harbor imports this module into the interpreter that owns the CLI, so its
+    sibling is the first and usual answer. The fallbacks cover being imported
+    from another interpreter, which is what the unit tests do.
+    """
+    override = os.environ.get("NEMO_CLI")
+    if override:
+        return override
+    sibling = Path(sys.executable).parent / "nemo"
+    if sibling.is_file():
+        return str(sibling)
+    found = shutil.which("nemo")
+    if found:
+        return found
+    return str(Path.home() / ".local" / "bin" / "nemo")
+
+
+NEMO = _nemo_cli()
 TRACE_DIR = "/app/traces"
 # Ground truth. The verifier runs in a container and can never touch geometry,
 # so IoU has to be measured here — on the host, where FreeCAD is — and published
@@ -87,7 +113,24 @@ FREECAD_RPC = os.environ.get("FREECAD_RPC", "http://127.0.0.1:9875")
 # Resolved relative to this file so the harness runs from any checkout location:
 # agent_source/ -> harness/ -> the example root, which holds scorer/score.py.
 # Override with CAD_SCORER to point at a scorer kept outside the example.
-EXAMPLE_ROOT = Path(__file__).resolve().parents[2]
+def _example_root() -> Path:
+    """Find the example root by walking up until the scorer is in sight.
+
+    A fixed number of parents does not work here. The Experimentalist copies
+    this whole directory into ``experiment/eval-and-optimize/agents/agent-N``
+    for every candidate, so a relative offset that is correct in the checkout
+    points inside the run output for every trial - where ``scorer/`` and
+    ``meshes/`` do not exist, and every measurement is silently discarded.
+    Searching upward is correct from both locations.
+    """
+    for candidate in Path(__file__).resolve().parents:
+        if (candidate / "scorer" / "score.py").is_file():
+            return candidate
+    # Fall back to the checkout layout so the failure names a real path.
+    return Path(__file__).resolve().parents[2]
+
+
+EXAMPLE_ROOT = _example_root()
 SCORER = os.environ.get("CAD_SCORER", str(EXAMPLE_ROOT / "scorer" / "score.py"))
 MESH = Path(os.environ.get("CAD_REFERENCE_MESH",
                            EXAMPLE_ROOT / "meshes" / "reference_mug.obj"))
@@ -138,29 +181,42 @@ class WrappedAgent(BaseAgent):
         # be absolute for FreeCAD and an absolute path cannot be committed.
         # Resolving it here keeps the checkout clean and avoids a setup step.
         instruction = instruction.replace("@MESH_PATH@", str(MESH))
+
+        # Wait for FreeCAD before spending a trial on it. Trials are serial, and
+        # a heavy reconstruction can leave GUI dispatch busy well past the point
+        # where the previous trial returned. An agent that starts against a
+        # wedged session burns its turns polling get_rpc_status instead of
+        # building, and the scorer then finds no solid to measure - which reads
+        # as an agent failure rather than the environment problem it is.
+        if not _await_idle():
+            raise RuntimeError(
+                "FreeCAD GUI dispatch did not become healthy before this trial; "
+                "refusing to score a run that never had a working application."
+            )
+
         # Captured first: none of the gateway's ids (x-nemo-session-id,
         # x-trace-id, the response id) reach Intake, so the only handle on this
         # run is when it started.
         since = datetime.now(timezone.utc) - timedelta(seconds=5)
 
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            response = await client.post(
-                f"{BASE}/apis/agents/v2/workspaces/{WORKSPACE}"
-                f"/deployments/{DEPLOYMENT}/-/v1/chat/completions",
-                json={"model": DEPLOYMENT,
-                      "messages": [{"role": "user", "content": instruction}]},
+        # Build the agent from this candidate's own config, so agent.yaml, the
+        # system prompt and workspace/skills/ are inside the measurement.
+        completed = await asyncio.to_thread(
+            subprocess.run,
+            [NEMO, "agents", "invoke",
+             "--agent-config", str(AGENT_CONFIG),
+             "--input", instruction,
+             "--no-progress"],
+            capture_output=True, text=True, timeout=TIMEOUT, cwd=AGENT_DIR,
+        )
+        context.metadata = {"invoke_returncode": completed.returncode}
+        if completed.returncode != 0:
+            raise RuntimeError(
+                f"agent invocation failed ({completed.returncode}): "
+                f"{completed.stderr.strip()[-400:]}"
             )
-            context.metadata = {"http_status": response.status_code}
-            # A 502 is routinely a *completed* run that outran the gateway's
-            # 300 s cap, so the trace, not the response, is the authority: record
-            # the status and wait it out. A 4xx never is - the deployment is
-            # missing or the request was rejected, no trace will ever appear, and
-            # waiting would burn the whole trace budget in silence.
-            if 400 <= response.status_code < 500:
-                raise RuntimeError(
-                    f"agent invocation failed with {response.status_code}: "
-                    f"{response.text[:200]}"
-                )
+
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
             trace_id = await _await_trace(client, since)
             if trace_id is None:
                 return
@@ -300,10 +356,18 @@ def _await_idle(timeout: float = 600.0) -> bool:
 
 def _iou_span(document: str, mesh: str, trace_id: str) -> dict[str, Any] | None:
     """Score the built document against its reference mesh and wrap it as a span."""
+    # Every failure path below returns None, which the verifier reports as
+    # "no eval.iou span". Say why on stderr: without a reason, a harness fault
+    # and a genuinely unscoreable document are indistinguishable, and both look
+    # like the agent failed.
+    def _skip(reason: str) -> None:
+        print(f"[eval.iou] not scored for {document!r}: {reason}", file=sys.stderr)
+        return None
+
     if not document or not mesh:
-        return None
+        return _skip("no document or mesh parsed from the instruction")
     if not _await_idle():
-        return None
+        return _skip("FreeCAD GUI dispatch never became healthy")
     try:
         done = subprocess.run(
             [sys.executable, SCORER, document, mesh],
@@ -314,11 +378,11 @@ def _iou_span(document: str, mesh: str, trace_id: str) -> dict[str, Any] | None:
         # is the contract. Recording a failure as 0.0 would be the mistake a
         # guardrail must not make: a floor of 0 protects nothing.
         if done.returncode != 0:
-            return None
+            return _skip(f"scorer exit {done.returncode}: {done.stderr.strip()[:200]}")
         iou = float(done.stdout.strip().splitlines()[-1])
-    except Exception:
+    except Exception as exc:
         # Same reasoning: absent evidence is not a score.
-        return None
+        return _skip(f"{type(exc).__name__}: {exc}")
     return {
         "name": "eval.iou",
         "spanId": _otlp_id(f"iou{trace_id}", 8),

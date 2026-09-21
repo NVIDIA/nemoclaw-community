@@ -174,6 +174,14 @@ and no run landed near 0.619.
 The scorer and the reference mesh live outside the agent directory so the agent
 cannot read its own grading criteria.
 
+The optimizer's Harbor trials build each candidate from its own `agent.yaml`,
+so changes to the system prompt, the model, the MCP server set or the skills
+under `workspace/skills/` are inside the measurement. A trial and a deployed
+run are still different environments: a trial builds from a config file and
+needs `api_key_env` and `base_url`, while a deployment serves a registered
+config through the gateway. Re-measure a promoted winner with
+`scorer/score.py` before trusting it in production.
+
 ## Metric Semantics
 
 - **IoU**: intersection over union of candidate and reference volume, in
