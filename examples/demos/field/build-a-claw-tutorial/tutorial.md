@@ -42,9 +42,9 @@
 
 There are two tested ways to serve the models on the Spark.
 
-**vLLM with NVFP4 checkpoints is our primary recommendation.**
+**vLLM with NVFP4 checkpoints is our primary recommendation.** NVFP4 is NVIDIA's 4-bit floating-point quantization format, and the Spark's Blackwell GPU runs it in dedicated kernels.
 
-**The llama.cpp + GGUF setup remains a fully tested and supported alternative**.
+**The llama.cpp + GGUF setup remains a tested alternative**. GGUF is the quantized checkpoint format that llama.cpp loads.
 
 | | vLLM + NVFP4 (recommended) | llama.cpp + GGUF (tested alternative) |
 | --- | --- | --- |
@@ -89,7 +89,7 @@ https://hackmd.io/fH95LfPuRi-gruvfn5FTrg
 
 ### Check the NVFP4 kernels before serving
 
-Run this first. If it fails, vLLM will still start, but it silently falls back to marlin W4A16 and you lose the NVFP4 speedup without any obvious error.
+Run this first. If it fails, vLLM will still start, but it silently falls back to marlin W4A16 and you lose the NVFP4 speedup without an explicit error.
 
 ```bash
 python -c "
@@ -221,7 +221,7 @@ If you run this alongside Qwen or Gemma on port 8000, lower `--gpu-memory-utiliz
 
 ## Serve with llama.cpp + GGUF (tested alternative)
 
-This track is still fully tested, and it is a good fallback if the vLLM install does not resolve cleanly on your machine.
+This track is tested, and it is a fallback if the vLLM install does not resolve cleanly on your machine.
 
 ### Build llama.cpp
 
@@ -353,7 +353,7 @@ Serving the model:
     --top-p 1.0 \
     --port 8001
 ```
-Now you have 3 top models ready to serve. Cheers!
+You now have three model-server configurations.
 
 ## Test the server
 
@@ -646,7 +646,7 @@ Once configured, start Hermes with:
 hermes
 ```
 
-At this point, Hermes is using the **same local model servers loaded above**, just with its own config and harness.
+At this point, Hermes is using the **same local model servers loaded above**, with its own config and harness.
 
 ### Troubleshooting
 If Hermes can't connect, verify the model server is running  with:
@@ -665,7 +665,7 @@ If Hermes asks whether you want to migrate from OpenClaw, you can choose yes if 
 
 ## Starting a new session or resetting
 
-If an agent feels slow or “bogged down,” the session context has probably grown too large. Starting a new session clears that context and usually restores speed.
+If an agent feels slow or “bogged down,” the session context has probably grown too large. Starting a new session clears that context and restores speed.
 
 ### OpenClaw
 
@@ -977,7 +977,7 @@ procedure.
 
 This is the fully workaround to get TTS working on Webchat interface.
 
-If you have Telegram, you can just use the default TTS built-in skill, and should just work out of the box without using mpv.
+On Telegram you can use the built-in TTS skill instead, which does not need mpv.
 
 ```text
 \tts on
