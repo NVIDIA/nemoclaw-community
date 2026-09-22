@@ -135,8 +135,10 @@ sbx() {
     done
     script="base64 -d $f.b64 > $f && rm -f $f.b64 && . $f && rm -f $f"
   fi
+  # </dev/null: `openshell sandbox exec` reads stdin, and a caller inside a
+  # while-read loop would otherwise lose the rest of its input.
   timeout "$t" openshell sandbox exec -n "$sb" --timeout "$((t - 10 > 5 ? t - 10 : 5))" -- \
-    /bin/sh -c "$pre$script" 2>&1 | grep -v '^profile: Permission' || true
+    /bin/sh -c "$pre$script" < /dev/null 2>&1 | grep -v '^profile: Permission' || true
 }
 
 # Write a local file into the sandbox at DEST (mode 600). Uses base64 through

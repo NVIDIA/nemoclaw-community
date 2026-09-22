@@ -272,8 +272,22 @@ if (mesh_sync >/dev/null 2>&1); then mesh_result=mutated; else mesh_result=refus
 check "foreign mesh collision is refused" "$mesh_result" refused
 check "mesh preflight writes nothing before refusal" "$([[ -e "$MUTATIONS" ]] && echo yes || echo no)" no
 
+# `openshell sandbox exec` reads stdin. The ownership check inside mesh_sync's
+# loop runs it, so the loop must not read the bot list from stdin.
+LINKS="$TMP/links"
+bot_list() { printf 'alpha\nbeta\n'; }
+bot_require_owned() { timeout 2 cat >/dev/null 2>&1; return 0; }
+printf key > "$TMP/alpha.key"; printf key > "$TMP/beta.key"
+_mesh_install_plugin() { :; }
+_mesh_link() { printf '%s>%s\n' "$1" "$2" >> "$LINKS"; }
+mesh_peers_of() { :; }
+bot_start() { :; }
+bot_wait_api() { :; }
+(mesh_sync >/dev/null 2>&1 < /dev/null)
+check "mesh links every bot when the ownership check reads stdin" "$(sort "$LINKS" 2>/dev/null | tr '\n' ' ')" "alpha>beta beta>alpha "
+
 # Restore real helpers for stale teardown and profile-hook cleanup tests.
-unset -f bot_list sandbox_phase bot_require_owned bot_key_file bot_port _mesh_install_plugin
+unset -f bot_list sandbox_phase bot_require_owned bot_key_file bot_port _mesh_install_plugin _mesh_link mesh_peers_of bot_start bot_wait_api
 source "$SWARM_ROOT/lib/common.sh"
 source "$SWARM_ROOT/lib/sandbox.sh"
 source "$SWARM_ROOT/lib/bot.sh"
