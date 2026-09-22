@@ -72,6 +72,14 @@ check "name: rule text names the limit" "$(name_rule nemoclaw-abcdef | grep -c '
 check "rm accepts an over-long name so stale state can be removed" "$(valid_name_loose nemoclaw-zz-lifecycle && echo ok || echo refused)" ok
 check "rm still refuses a path-unsafe name" "$(valid_name_loose '../x' && echo ok || echo refused)" refused
 
+# `swarm down --all` assigns bot_list's output under the entrypoint's
+# `set -euo pipefail`. With no custom soul files, bot_list must still succeed,
+# or the teardown exits 1 with no output and removes nothing.
+bl_dir=$(mktemp -d); mkdir -p "$bl_dir/keys" "$bl_dir/souls"; : > "$bl_dir/keys/nemoclaw-a.key"
+check "bot_list succeeds under errexit with no custom souls" \
+  "$( (set -euo pipefail; SWARM_STATE="$bl_dir"; s=$(bot_list | tr '\n' ' '); echo "ok:$s") 2>/dev/null )" "ok:nemoclaw-a "
+rm -rf "$bl_dir"
+
 # Partial state and custom souls are part of inventory, while configured bots
 # remain first and are de-duplicated for `swarm up`.
 printf 'key\n' > "$(bot_key_file base-a)"
