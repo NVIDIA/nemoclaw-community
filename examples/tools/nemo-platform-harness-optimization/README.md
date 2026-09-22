@@ -430,29 +430,38 @@ nemo insights analysis status
 ```
 
 From three traces, and nothing else on a platform with no other history, it
-produced **two** Insights, each citing all three runs:
+filed **three** Insights:
 
-> **1. Mesh fidelity is claimed from bounding boxes and volume without
-> validating shape overlap**
+> **1. Mesh-fidelity verification does not establish close geometric agreement**
 >
-> *"…it never performs an overlap, sampled-distance, or comparable geometry
-> check before claiming the model matches closely… across the same mug input,
-> the three runs produced different feature strategies and final volumes of
-> about 306.5, 359.2, and 274.5 mm³ against a 382.1 mm³ reference, while every
-> run reported success."*
+> *"…the agent claims the result matches the reference without a robust overlap
+> check… EvalMug2 reports only distances from reference vertices to the
+> candidate surface (mean 0.1674 mm, RMS 0.2334 mm, p95 0.4099 mm); this one-way
+> metric can look good while missing extra candidate geometry, incorrect wall
+> occupancy, or other false-positive volume."*
 
-> **2. FreeCAD reconstruction becomes a long trial-and-error loop with repeated
-> API failures**
+> **2. Chatty reconstruction loops repeatedly replay large context**
 >
-> *"…12 to 18 FreeCAD tool invocations rather than a few bounded
-> construction/verification calls, and each run contains multiple failed
-> `execute_code` attempts… Because each model turn replays the growing tool
-> history, later calls carry very large contexts while debugging transient API
-> mistakes."*
+> *"…12-17 provider model calls and approximately 218k, 222k and 381k tokens…
+> every additional measurement or correction replayed an increasingly large
+> history."*
 
-Two defects, two different kinds. The first is about **correctness**: the agent
-has no way to check its own work. The second is about **process**: it gets there
-by trial and error.
+> **3. Reconstruction runs reuse and mutate models from earlier requests**
+>
+> *"In the EvalMug2 trace it operated on existing EvalMug1 and used `saveCopy`;
+> in the EvalMug3 trace it merged the existing EvalMug2 project into a new
+> document… invalidates repeatability measurements because later trials inherit
+> prior geometry."*
+
+Three defects, three different kinds. The first is **correctness**: the agent
+has no way to check its own work. The second is **process**: it gets there by
+trial and error. The third is **hygiene**, and it is the one that would have
+quietly corrupted everything downstream, because a trial that inherits the last
+trial's geometry is not a measurement. It is fixed in the task instruction
+rather than in the agent: the prompt now requires a document built from scratch
+and forbids opening, copying or merging one left by an earlier run.
+
+The rest of this walkthrough optimizes against the first.
 
 [![A NeMo Studio Insight titled "Mesh-fidelity validation accepts materially inconsistent reconstructions", showing status resolved, the agent name, a description, and the three observed sessions with their durations, spans and token counts](assets/studio-insight.jpg)](assets/studio-insight.jpg)
 
@@ -596,6 +605,27 @@ regression_metrics:
 
 `n_attempts` matters as much as the bounds. Agent runs are noisy, and a single
 trial per task cannot separate a real improvement from run-to-run variance.
+
+**What the Eval Author actually wrote here.** Given the first Insight and its
+three traces, it authored a metric asking whether the agent performed a
+*symmetric* geometry comparison and acted on the answer, which is the Insight's
+own complaint turned into something executable. That metric name becomes the
+run's objective, and every candidate is then scored on it:
+
+| Run | Authored objective |
+| --- | --- |
+| earlier | `geometry_fidelity_validation` |
+| run 1 | `symmetric_material_overlap` |
+| run 2 | `symmetric_geometry_fidelity` |
+
+Three runs, three names, one Insight. **The Eval Author is non-deterministic**,
+so re-authoring is a re-baselining event rather than a refresh, and rewards are
+never comparable across runs. Freeze the suite and use `--no-insight` if you
+need runs you can compare directly.
+
+All three also resolved to the same `eval.iou` span the wrapper publishes, which
+means the objective and the guardrail below measured the same thing and the
+guardrail was never exercised. Convenient, and not something to rely on.
 
 **`regression_metrics` is the part that keeps the loop honest, and it is on from
 the first run.** The Eval Author writes the objective, and its metric asks
@@ -756,9 +786,9 @@ both optimization runs in full, including the first one's failure.
 
 ### Step 8: The optimizer is not a prompt-tweaker
 
-Step 5 produced two Insights. This walkthrough optimizes against the first. The
-second, *"FreeCAD reconstruction becomes a long trial-and-error loop"*, is a
-different kind of problem: process rather than correctness.
+Step 5 produced three Insights and this walkthrough optimizes against the
+first. The second, *"Chatty reconstruction loops repeatedly replay large
+context"*, is a different kind of problem: process rather than correctness.
 
 Running the same loop against it is worth doing for one observation. The three
 surfaces in Step 7 are not the limit of what a coding agent will reach for. It
