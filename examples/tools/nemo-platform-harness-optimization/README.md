@@ -693,12 +693,14 @@ exactly the IoU the scorer computes in Step 3, which the optimizer cannot see.
 All four agents, same task, same FreeCAD session, one run each, scored by
 `scorer/score.py` out of loop:
 
-| Agent | Surface changed | Promote with | IoU | Wall time |
-| --- | --- | --- | ---: | ---: |
-| baseline | nothing | | 0.4783 | 3m23s |
-| skill | `workspace/skills/` | `cp -r` into `agent/workspace/skills/` | 0.5370 | 5m04s |
-| system prompt | `instructions.system.content` | `cp` over `agent/agent.yaml` | **0.8974** | 4m14s |
-| subagent | `harnesses...deepagents.subagents` | `cp` over `agent/agent.yaml` | **0.9414** | 8m44s |
+| Agent | Surface changed | IoU | Tokens | Spans | Wall time |
+| --- | --- | ---: | ---: | ---: | ---: |
+| baseline | nothing | 0.4783 | 196,289 | 135 | 3m23s |
+| skill | `workspace/skills/` | 0.5370 | 236,650 | 151 | 5m04s |
+| system prompt | `instructions.system.content` | **0.8974** | 235,581 | 154 | 4m14s |
+| subagent | `harnesses...deepagents.subagents` | **0.9414** | 632,265 | 289 | 8m44s |
+
+Step 9 has the `cp` command for each surface.
 
 Raw scores and FreeCAD health per run are in
 [`results/candidates/measurement.csv`](results/candidates/measurement.csv).
@@ -711,10 +713,12 @@ read only if the agent judges it relevant, and the failure being fixed is
 precisely the agent judging that it does not need to check. A standard the
 agent can decline to consult is a weak fix for a discipline problem.
 
-**Accuracy costs time.** The subagent is the most accurate and the slowest at
-2.6x the baseline, because it runs a full analysis phase before touching
-geometry. The system prompt gets 87% of that gain for a quarter of the added
-time, which makes it the better default.
+**Accuracy is bought, and the two winners have very different price tags.** The
+system prompt gains 0.42 IoU for 20% more tokens. The subagent gains 0.46 for
+**3.2x** the tokens and 2.6x the wall time, because its analyst measures the
+reference densely before any geometry is built. Per token spent it is much the
+worse deal, which makes the system prompt the better default and the subagent
+the choice when accuracy dominates cost.
 
 **This is n=1 per arm.** One run each is a signal, not an effect size, and this
 task is bimodal: the same configuration has produced 0.042, 0.905 and 0.909

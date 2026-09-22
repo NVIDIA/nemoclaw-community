@@ -1,5 +1,5 @@
-arm,round,document,invoke_rc,freecad_health,iou
-baseline,1,M1base,0,healthy,0.4783
-prompt,1,M1prom,0,healthy,0.8974
-subagent,1,M1suba,0,healthy,0.9414
-skill,1,M1skil,0,healthy,0.537
+arm,round,document,invoke_rc,freecad_health,iou,total_tokens,spans
+baseline,1,M1base,0,healthy,0.4783,196289,135
+prompt,1,M1prom,0,healthy,0.8974,235581,154
+subagent,1,M1suba,0,healthy,0.9414,632265,289
+skill,1,M1skil,0,healthy,0.537,236650,151

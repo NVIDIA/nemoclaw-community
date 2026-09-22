@@ -146,12 +146,16 @@ directly: `nemo agents invoke --agent-config` against each config, scored by
 FreeCAD health was recorded at scoring time so a void could not be mistaken for
 a low score. All three runs were healthy.
 
-| Agent | Surface changed | IoU | Wall time |
-| --- | --- | ---: | ---: |
-| baseline | nothing | 0.4783 | 3m23s |
-| skill | `workspace/skills/geometry-fidelity-policy` | 0.5370 | 5m04s |
-| system prompt | `instructions.system.content` | **0.8974** | 4m14s |
-| subagent | `harnesses...deepagents.subagents` | **0.9414** | 8m44s |
+| Agent | Surface changed | IoU | Tokens | Spans | Wall time |
+| --- | --- | ---: | ---: | ---: | ---: |
+| baseline | nothing | 0.4783 | 196,289 | 135 | 3m23s |
+| skill | `workspace/skills/geometry-fidelity-policy` | 0.5370 | 236,650 | 151 | 5m04s |
+| system prompt | `instructions.system.content` | **0.8974** | 235,581 | 154 | 4m14s |
+| subagent | `harnesses...deepagents.subagents` | **0.9414** | 632,265 | 289 | 8m44s |
+
+Tokens and spans come from the ATIF trace of each run, not the CLI. `cost_usd`
+is null on a local deployment because no price list is attached to the inference
+gateway, so tokens are the only honest cost proxy.
 
 The two unconditional changes won. A skill is read only if the agent judges it
 relevant, and the failure being fixed is the agent judging that it does not need
