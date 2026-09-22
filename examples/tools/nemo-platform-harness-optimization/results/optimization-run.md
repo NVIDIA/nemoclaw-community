@@ -138,6 +138,47 @@ The run was stopped before the candidate train arms, which would have added
 trial, as `symmetric_material_overlap` did in run 1. So neither run exercises
 the guardrail rejecting a candidate that trades geometry for metric.
 
+## What changed between the runs, and why
+
+Three runs against the same Insight, and the differences are mostly the
+harness, not the agent:
+
+| | Harness allowed | Eval Author wrote | Candidates went to |
+| --- | --- | --- | --- |
+| earlier run | a fixed deployment; candidate configs never executed | `geometry_fidelity_validation` | a skill, and the wrapper |
+| run 1 | candidate-local invocation, nothing pinned | `symmetric_material_overlap` | the wrapper, and the system prompt |
+| run 2 | wrapper and non-promotable config pinned | `symmetric_geometry_fidelity` | the system prompt, and a subagent |
+
+Two things move independently.
+
+**The candidates follow the change surface.** When the wrapper was editable a
+candidate took it every time, because it is the shortest path to moving a
+number. Pin it and the same coding agent, on the same Insight, writes a
+completion gate and a subagent instead. The loop was never choosing between
+shippable and unshippable work; it was taking whatever was open.
+
+**The Eval Author is non-deterministic.** Same Insight, same traces, three runs,
+three differently named metrics. Re-authoring is a re-baselining event rather
+than a refresh, which is why comparing rewards across runs is meaningless and
+every comparison here is within one run or measured out of loop. All three
+metrics also resolved to the same `eval.iou` span in the end, so no run
+exercised the guardrail.
+
+## The three surfaces came from three different candidates
+
+Worth stating plainly, because the table below puts them side by side. A round
+is a baseline plus `max_candidates` rival agents, each a full copy of
+`agent_source/` carrying **one** change. They compete; they are never merged.
+
+| Surface | Candidate | Run |
+| --- | --- | --- |
+| `workspace/skills/geometry-fidelity-policy/` | one candidate | an earlier run |
+| `instructions.system.content` | `agent-1` | run 2 |
+| `harnesses...deepagents.subagents` | `agent-2` | run 2 |
+
+No candidate proposed more than one of them, and no run produced all three. Each
+was promoted onto the baseline separately and measured on its own.
+
 ## Measured out of loop
 
 The loop's reward table was unusable, so both candidates were re-measured

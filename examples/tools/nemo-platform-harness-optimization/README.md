@@ -656,23 +656,55 @@ validation score here measures repeatability on the same part, not
 generalization to a new one. Point it at a different mesh with different
 requirements if you want the second thing.
 
-#### What it proposed, across three different surfaces
+#### What one run produces
 
-The loop is not a prompt-tweaker. Given the same Insight, it has reached for
-three different parts of the agent, and each one is a surface you can deploy:
+A round is a baseline plus `max_candidates` **rival** agents. Each candidate is
+a full copy of `agent_source/` with **one** change applied by a coding agent;
+they are alternatives competing against each other, never a combined patch:
 
 ```text
-agents/agent-N/
-  workspace/skills/geometry-fidelity-policy/SKILL.md   a policy document
-  agent.yaml  instructions.system.content              a completion gate
-  agent.yaml  harnesses...deepagents.subagents         an analysis subagent
+harness/experiment/eval-and-optimize/
+  agents/agent-0/       the baseline, unchanged
+  agents/agent-1/       candidate A, one change
+  agents/agent-2/       candidate B, a different change
+  results/agent-N-train/       scored trials per arm
+  results/agent-N-validation/
+  OPTIMIZATION.md       per-round reward tables, root-cause analysis, the winner
 ```
+
+With `max_rounds: 1` and `max_candidates: 2`, one run gives you `agent-0`,
+`agent-1` and `agent-2`, and `OPTIMIZATION.md` reports which won. A longer run
+carries survivors into the next round and mutates those.
+
+#### What it proposed, across separate runs
+
+The loop is not a prompt-tweaker. It has reached for three different parts of
+the agent, and each one is a surface you can deploy:
+
+| Surface it wrote | Where it came from |
+| --- | --- |
+| `workspace/skills/geometry-fidelity-policy/SKILL.md`, a policy document | one candidate of an earlier run |
+| `agent.yaml` `instructions.system.content`, a completion gate | `agent-1` of the run below |
+| `agent.yaml` `harnesses...deepagents.subagents`, an analysis subagent | `agent-2` of the same run |
+
+**No single candidate proposed all three.** Each is one candidate's single
+change, and the first came from a different run against the same Insight. The
+comparison below puts them side by side because they are alternatives you could
+promote, not because any run produced them together.
+
+What moved between those runs was mostly the harness. While the wrapper was
+editable a candidate took it every time, because it is the shortest path to
+moving a number; pinned, the same coding agent on the same Insight writes a
+completion gate and a subagent instead. The Eval Author also renamed its metric
+on every run, which is why rewards are never compared across runs here.
+[`results/optimization-run.md`](results/optimization-run.md) has the run-by-run
+detail.
 
 All three are shipped verbatim in
 [`results/candidates/`](results/candidates/) so you can read what a coding agent
-actually writes when it is given traces, an Insight, and nothing else. None of
-them is preloaded into `agent/`: the agent you deploy in Step 2 is the naive
-one, and a change only arrives if the loop produces it.
+actually writes when it is given traces, an Insight, and nothing else. None is
+preloaded into `agent/`: the agent you deploy in Step 2 is the naive one, and a
+change only arrives if the loop produces it.
 
 They differ in kind, not just in wording:
 
@@ -690,8 +722,9 @@ exactly the IoU the scorer computes in Step 3, which the optimizer cannot see.
 
 #### The result
 
-All four agents, same task, same FreeCAD session, one run each, scored by
-`scorer/score.py` out of loop:
+Promoted one at a time onto the baseline agent and measured separately, same
+task, same FreeCAD session, one invocation each, scored by `scorer/score.py`
+out of loop. Four agents, four independent measurements:
 
 | Agent | Surface changed | IoU | Tokens | Spans | Wall time |
 | --- | --- | ---: | ---: | ---: | ---: |
