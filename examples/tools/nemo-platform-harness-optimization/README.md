@@ -86,11 +86,12 @@ This example is a minimal, reproducible loop on
 The point is not the mug. The point is that this is where you deploy an agent,
 observe it, and then *evolve* it.
 
-Two results up front, because they shaped everything else. The fix the platform
-found on its own **more than doubled the deliverable** once it was deployed and
-measured out of loop: median geometric accuracy went from 0.3969 to 0.9049
-against the reference mesh. And an earlier candidate that *looked* like a win
-improved its metric by 67% while making the mug worse. Telling those two apart needed a third artifact alongside
+Two results up front, because they shaped everything else. The fixes the
+platform found on its own **roughly doubled the deliverable** once deployed and
+measured out of loop: geometric accuracy against the reference mesh went from
+0.478 to 0.897 for a system-prompt change, and 0.941 for a subagent. And an
+earlier candidate that *looked* like a win improved its metric by 67% while
+making the mug worse. Telling those two apart needed a third artifact alongside
 the scorer and the traces: a file that writes down what the agent is *for*.
 
 That lesson returns in the last step, sharper. Once the platform starts writing
@@ -649,115 +650,71 @@ validation score here measures repeatability on the same part, not
 generalization to a new one. Point it at a different mesh with different
 requirements if you want the second thing.
 
-#### What it proposed
+#### What it proposed, across three different surfaces
 
-The surface varies between runs, and all of them are promotable. Across the
-runs recorded here the loop has written a Markdown skill, a system prompt, and
-a subagent, from nothing but traces and an Insight:
+The loop is not a prompt-tweaker. Given the same Insight, it has reached for
+three different parts of the agent, and each one is a surface you can deploy:
 
 ```text
 agents/agent-N/
-  workspace/skills/geometry-fidelity-policy/SKILL.md   ← a policy document
-  agent.yaml   instructions.system.content             ← a completion gate
-  agent.yaml   harnesses...deepagents.subagents        ← an analysis subagent
+  workspace/skills/geometry-fidelity-policy/SKILL.md   a policy document
+  agent.yaml  instructions.system.content              a completion gate
+  agent.yaml  harnesses...deepagents.subagents         an analysis subagent
 ```
 
-All three are shipped under [`results/`](results/) so you can compare them with
-what your own run writes. None is preloaded into `agent/workspace/`: the agent
-you deploy in Step 2 is the naive one, and a change only arrives if the loop
-produces it.
+All three are shipped verbatim in
+[`results/candidates/`](results/candidates/) so you can read what a coding agent
+actually writes when it is given traces, an Insight, and nothing else. None of
+them is preloaded into `agent/`: the agent you deploy in Step 2 is the naive
+one, and a change only arrives if the loop produces it.
 
-It turns the Insight into a rule:
+They differ in kind, not just in wording:
 
-> *"Structural and persistence evidence cannot substitute for geometric-fidelity
-> evidence. Matching a bounding box or a few global dimensions is also not
-> sufficient… because materially different surfaces can share those properties."*
+- the **skill** states a standard the agent should apply, and the agent decides
+  whether to read it
+- the **system prompt** makes the same standard a completion gate that fires
+  after every geometry change, with no opt-out
+- the **subagent** splits the work, forcing a measured analysis phase to return
+  a structured `ReferenceFittingSpecification` before construction starts
 
-Declare the tolerance **before** measuring, then produce **bidirectional**
-evidence: either surface distances reported in both directions with a worst-case
-statistic, or a registered volumetric overlap that penalises both material the
-candidate adds and material it is missing:
-
-> *"A one-way nearest-distance result is insufficient: it can hide missing source
-> features or unsupported extra candidate geometry."*
-
-Notice what that overlap option is. A registered volumetric measure penalising
-both extra and missing material is *exactly* the IoU the scorer computes in Step
-3, which the optimizer cannot see. Working only from traces, it reinvented the
-external measurement.
+Each reinvented the same idea from the traces alone: declare a tolerance first,
+then produce **bidirectional** evidence, because a one-way nearest-distance
+result hides both missing source features and extra candidate geometry. That is
+exactly the IoU the scorer computes in Step 3, which the optimizer cannot see.
 
 #### The result
 
-```text
-Finished · winner=agent-1 · validation symmetric_material_overlap 0.664
-report:  ./experiment/eval-and-optimize/OPTIMIZATION.md
-```
+All four agents, same task, same FreeCAD session, one run each, scored by
+`scorer/score.py` out of loop:
 
-`OPTIMIZATION.md` carries the per-round reward tables, the root-cause analysis
-for each round, and the full source of every candidate under `agents/agent-N/`.
+| Agent | Surface changed | Promote with | IoU | Wall time |
+| --- | --- | --- | ---: | ---: |
+| baseline | nothing | | 0.4783 | 3m23s |
+| skill | `workspace/skills/` | `cp -r` into `agent/workspace/skills/` | 0.5370 | 5m04s |
+| system prompt | `instructions.system.content` | `cp` over `agent/agent.yaml` | **0.8974** | 4m14s |
+| subagent | `harnesses...deepagents.subagents` | `cp` over `agent/agent.yaml` | **0.9414** | 8m44s |
 
-Two runs are recorded in
-[results/optimization-run.md](results/optimization-run.md). In the first, the
-winning candidate put its change in the harness: the reward moved 0.514 to
-0.664 for an edit the traces show never reached the model and that could not be
-deployed. That is why the harness is now pinned. In the second, both candidates
-proposed deployable changes instead, one a system prompt and one a subagent,
-and the traces confirm both executed.
+Raw scores and FreeCAD health per run are in
+[`results/candidates/measurement.csv`](results/candidates/measurement.csv).
 
-Re-measured out of loop, one run per arm, same task and session:
+Three things worth reading off that table.
 
-| Arm | Change | IoU |
-| --- | --- | ---: |
-| baseline | none | 0.4783 |
-| `agent-1` | system prompt only | **0.8974** |
-| `agent-2` | adds a subagent | **0.9414** |
+**The two unconditional changes won.** The skill barely moved the baseline,
+while the completion gate and the subagent roughly doubled it. The skill is
+read only if the agent judges it relevant, and the failure being fixed is
+precisely the agent judging that it does not need to check. A standard the
+agent can decline to consult is a weak fix for a discipline problem.
 
-Both land above every baseline trial in the optimization run, which spanned
-0.178 to 0.882. This is **n=1 per arm** on a task whose spread is wide, so read
-it as a signal rather than an effect size; the record explains why and what n
-would settle it.
+**Accuracy costs time.** The subagent is the most accurate and the slowest at
+2.6x the baseline, because it runs a full analysis phase before touching
+geometry. The system prompt gets 87% of that gain for a quarter of the added
+time, which makes it the better default.
 
-**Only promotable changes are measurable.** Each candidate is a full copy of
-`agent_source/`, and the wrapper builds the agent from the copy's own
-`agent.yaml`. Three things there are worth optimizing and can all be shipped by
-copying the file and the workspace: the **system prompt**, **subagents**, and
-**skills** under `workspace/skills/`. Everything else is pinned by
-`_assert_promotable_change_surface` and checked before any trial runs:
-
-| Pinned | Why |
-| --- | --- |
-| `harbor_wrapper.py` | the harness runs trials; it is not part of the agent |
-| every other `agent.yaml` block | the model and its sampling parameters are a deployment decision, not agent design |
-
-That check is not theoretical. In the first recorded run the winning candidate
-edited the wrapper to add its own measurement step, and the traces show the
-result never reached the model: the reward moved for a change that could not be
-shipped. Advice was not enough, and the optimizer's coder is already advised
-that harness files are out of scope. Now a candidate that touches a pinned
-surface raises at import, produces no metric, and cannot reach the Pareto
-front, so a reward difference is always attributable to something you can
-deploy.
-
-Pinning the model matters as much as pinning the harness. Left open, the loop
-answers "which model is stronger" instead of "which prompt works better", and
-only one of those is a finding about your agent.
-
-Middleware and pre- or post-model hooks are absent from the change surface
-because they are unreachable, not because they are forbidden: the deepagents
-adapter accepts only `subagents` and `interrupt_on` under `harnesses`, and owns
-`model`, `tools`, `backend`, `skills`, `system_prompt`, `middleware` and
-`checkpointer` itself. A hook cannot be expressed in `agent.yaml`, so no
-candidate could promote one. Reaching that surface means writing a Fabric
-adapter, which is a different project.
-
-Before believing any winner, apply two external checks. **Did the candidate
-actually use what it changed?** One winner here wrote a 168-line surface-distance
-MCP server and never called it; another added a measurement step that ran after
-the agent had already finished. Check the traces, not the diff: the candidates
-above were confirmed by `distToShape` appearing 848 times against zero in every
-baseline trace, and by a `task` call returning the subagent's schema. **And what
-does the out-of-loop scorer say?** On one run the authored metric rose 67% while
-IoU fell from 0.6207 to 0.5442.
+**This is n=1 per arm.** One run each is a signal, not an effect size, and this
+task is bimodal: the same configuration has produced 0.042, 0.905 and 0.909
+across three runs. Treat the ordering as a hypothesis worth n=3 before you
+quote it. [`results/optimization-run.md`](results/optimization-run.md) records
+both optimization runs in full, including the first one's failure.
 
 ### Step 8: The optimizer is not a prompt-tweaker
 
@@ -765,29 +722,15 @@ Step 5 produced two Insights. This walkthrough optimizes against the first. The
 second, *"FreeCAD reconstruction becomes a long trial-and-error loop"*, is a
 different kind of problem: process rather than correctness.
 
-Running the same loop against it is worth doing for one observation. Across
-these runs the optimizer proposed changes at **every level of the agent**, not
-just its prompt. The last two columns are the point: it will reach for whatever
-surface fits the diagnosis, including surfaces that cannot be deployed, which is
-why the harness and the rest of `agent.yaml` are pinned:
+Running the same loop against it is worth doing for one observation. The three
+surfaces in Step 7 are not the limit of what a coding agent will reach for. It
+has also written MCP servers, an execution governor, and a resilient MCP wrapper
+classifying every call as success, recoverable, or terminal, none of it
+suggested to it. That is real engineering, and none of it can be deployed from a
+candidate, which is why the harness and every `agent.yaml` block outside
+`instructions` and `harnesses` are pinned. A loop optimizes whatever surface you
+leave open, so leave open only what you can ship.
 
-| Surface | What a candidate actually wrote | Promotable |
-| :---- | :---- | :---- |
-| **Skill** | `geometry-fidelity-policy/SKILL.md`, an acceptance policy | yes |
-| **System prompt** | a completion gate requiring volume, bounds, overlap and bidirectional surface distance after every geometry change | yes |
-| **System prompt** | a phase gate with a tool-call budget and a forced discovery to construction transition | yes |
-| **Subagent** | `reference-geometry-analyst`, with its own response schema, that the parent must call before constructing | yes |
-| **MCP tool** | a server exposing live FreeCAD API signatures; another computing bidirectional surface distance via trimesh | no, pinned |
-| **Agent code** | an execution governor and a resilient MCP wrapper classifying every call as success, recoverable, or terminal | no, pinned |
-
-A coding agent with the Insight, the traces, and write access will reach for
-whatever surface fits the diagnosis: a new tool when the agent lacks a
-capability, a policy document when it lacks a standard, a prompt constraint when
-it lacks discipline. None of these were suggested to it.
-
-The rows marked promotable are surfaces a trial runs *and* you can ship, because
-the candidate's own `agent.yaml` and `workspace/` are what the wrapper builds
-the agent from. The pinned rows are why that distinction had to be enforced.
 Step 9 then re-measures the winner on the deployed agent, which is a different
 environment rather than a different change.
 
@@ -815,9 +758,9 @@ cp -r harness/experiment/eval-and-optimize/agents/agent-1/workspace/skills/* \
 
 # or promote one of the shipped examples instead, to reproduce a published
 # measurement without running the loop:
-#   cp results/candidates/agent-1-prompt.yaml   agent/agent.yaml
-#   cp results/candidates/agent-2-subagent.yaml agent/agent.yaml
-#   cp -r results/geometry-fidelity-policy      agent/workspace/skills/
+#   cp    results/candidates/system-prompt.yaml           agent/agent.yaml
+#   cp    results/candidates/subagent.yaml                agent/agent.yaml
+#   cp -r results/candidates/geometry-fidelity-policy     agent/workspace/skills/
 
 nemo agents undeploy --agent cad-agent --yes
 nemo agents delete cad-agent --yes
@@ -827,25 +770,17 @@ nemo agents deploy --agent cad-agent --name cad-agent-deployment --mode subproce
 cd ..
 ```
 
-Then repeat Step 4 and compare against your baseline:
+Then repeat Step 4 and compare against your baseline. The four-agent table in
+Step 7 is that comparison, run out of loop on these shipped configs.
 
-| Statistic | Naive | With the fidelity policy |
-| --- | ---: | ---: |
-| Median IoU | 0.3969 | **0.9049** |
-| Runs ≥ 0.85 | 0 of 3 | **2 of 3** |
-| Median spans | 146 | 167 |
-| Median total tokens | 201,650 | 300,485 |
-| Median latency | 203 s | 250 s |
-
-The policy costs roughly 50% more tokens and 25% more latency, because it makes
-the agent measure its output against the source geometry and iterate instead of
-building once and declaring success. You are paying for the iterations.
-
-The distribution matters as much as the median. The policy arm scored 0.0421,
-0.9049 and 0.9092, a mean of 0.619, and no run landed anywhere near 0.619. An
-early decision about the feature tree either works or cannot be repaired.
-**Report the median and the fraction of runs clearing your bar, not the mean.**
-Full records and their limits are in [results/README.md](results/README.md).
+Two things to carry into your own reading of it. Accuracy is bought with time
+and tokens: an n=3 measurement of the skill arm cost roughly 50% more tokens and
+25% more latency than the naive agent, because the agent measures and iterates
+instead of building once and declaring success. And the distribution matters as
+much as the median: that arm scored 0.0421, 0.9049 and 0.9092, a mean of 0.619
+that no run landed near. **Report the median and the fraction of runs clearing
+your bar, not the mean.** Full records and their limits are in
+[results/README.md](results/README.md).
 
 Mark the Insight resolved only once the redeployed agent clears the bar on a
 measurement you ran yourself:
@@ -975,7 +910,7 @@ python3 -m unittest discover -s tests
 **Expected result:**
 
 ```text
-Ran 69 tests
+Ran 76 tests
 
 OK
 ```

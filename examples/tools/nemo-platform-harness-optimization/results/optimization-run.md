@@ -146,14 +146,19 @@ directly: `nemo agents invoke --agent-config` against each config, scored by
 FreeCAD health was recorded at scoring time so a void could not be mistaken for
 a low score. All three runs were healthy.
 
-| Arm | Config | IoU | Wall time |
+| Agent | Surface changed | IoU | Wall time |
 | --- | --- | ---: | ---: |
-| baseline | `agent_source/agent.yaml` | 0.4783 | 3m23s |
-| prompt | `agent-1-prompt.yaml` | **0.8974** | 4m14s |
-| subagent | `agent-2-subagent.yaml` | **0.9414** | 8m44s |
+| baseline | nothing | 0.4783 | 3m23s |
+| skill | `workspace/skills/geometry-fidelity-policy` | 0.5370 | 5m04s |
+| system prompt | `instructions.system.content` | **0.8974** | 4m14s |
+| subagent | `harnesses...deepagents.subagents` | **0.9414** | 8m44s |
 
-Both candidates land above every baseline trial measured that day; the
-optimizer's baseline spanned 0.178 to 0.882 across ten scored trials.
+The two unconditional changes won. A skill is read only if the agent judges it
+relevant, and the failure being fixed is the agent judging that it does not need
+to check; a completion gate and a forced analysis phase have no such opt-out.
+
+The prompt and subagent arms land above every baseline trial measured that day;
+the optimizer's baseline spanned 0.178 to 0.882 across ten scored trials.
 
 **This is n=1 per arm.** One paired observation is a signal, not an effect size,
 and this task is bimodal: the same configuration has produced 0.042, 0.905 and
@@ -179,5 +184,5 @@ review. Pinning the surface is what makes the reward mean something.
 
 ## Reproducing
 
-`results/candidates/` holds both candidate configs as produced:
-`agent-1-prompt.yaml` and `agent-2-subagent.yaml`.
+`results/candidates/` holds all three proposed surfaces as produced:
+`system-prompt.yaml`, `subagent.yaml` and `geometry-fidelity-policy/`.

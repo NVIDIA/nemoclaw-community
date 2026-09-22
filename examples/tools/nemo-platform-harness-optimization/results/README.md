@@ -11,16 +11,16 @@ copying into `agent/`:
 
 | Artifact | Surface | Promote with |
 | --- | --- | --- |
-| [`geometry-fidelity-policy/SKILL.md`](geometry-fidelity-policy/SKILL.md) | a skill | `cp -r` into `agent/workspace/skills/` |
-| [`candidates/agent-1-prompt.yaml`](candidates/agent-1-prompt.yaml) | system prompt | `cp` over `agent/agent.yaml` |
-| [`candidates/agent-2-subagent.yaml`](candidates/agent-2-subagent.yaml) | a subagent | `cp` over `agent/agent.yaml` |
+| [`candidates/geometry-fidelity-policy/`](candidates/geometry-fidelity-policy/SKILL.md) | a skill | `cp -r` into `agent/workspace/skills/` |
+| [`candidates/system-prompt.yaml`](candidates/system-prompt.yaml) | `instructions.system.content` | `cp` over `agent/agent.yaml` |
+| [`candidates/subagent.yaml`](candidates/subagent.yaml) | `harnesses...deepagents.subagents` | `cp` over `agent/agent.yaml` |
 
 Two measurements accompany them:
 
 - `runs.json`, the n=3 comparison of the naive agent against the skill, from
   2026-09-18, which is the summary table in the main [README](../README.md).
-- `candidates/measurement.csv`, a single out-of-loop run of each of the three
-  arms above, described in [optimization-run.md](optimization-run.md).
+- `candidates/measurement.csv`, one out-of-loop run of the baseline and each of
+  the three arms above, which is the table in the main README.
 
 [optimization-run.md](optimization-run.md) records the two optimization runs
 themselves, including the first one's failure, which is why the harness is now
