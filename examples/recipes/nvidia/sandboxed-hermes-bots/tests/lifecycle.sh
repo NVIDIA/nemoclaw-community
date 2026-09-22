@@ -60,6 +60,18 @@ check "forward pattern matches exact sandbox" \
 check "forward pattern rejects prefix-overlap sandbox" \
   "$([[ 'openshell forward service --target-port 18100 --local 127.0.0.1:18100 team.foo[1]bar' =~ $forward_pattern ]] && echo yes || echo no)" no
 
+# OpenShell caps sandbox names at 19 chars and the sandbox is prefix + name, so
+# the rule applies to the combined string. SANDBOX_PREFIX here is "test-" (5).
+check "name: 14 chars with prefix ok" "$(valid_name nemoclaw-abcde && echo ok || echo refused)" ok
+check "name: 15 chars with prefix refused" "$(valid_name nemoclaw-abcdef && echo ok || echo refused)" refused
+check "name: doubled hyphen refused" "$(valid_name ab--cd && echo ok || echo refused)" refused
+check "name: trailing hyphen refused" "$(valid_name abc- && echo ok || echo refused)" refused
+check "name: uppercase refused" "$(valid_name Abc && echo ok || echo refused)" refused
+check "name: rule text names the limit" "$(name_rule nemoclaw-abcdef | grep -c '1-19 chars')" 1
+( SANDBOX_PREFIX=""; check "name: nemoclaw-researcher (19) ok without prefix" "$(valid_name nemoclaw-researcher && echo ok || echo refused)" ok )
+check "rm accepts an over-long name so stale state can be removed" "$(valid_name_loose nemoclaw-zz-lifecycle && echo ok || echo refused)" ok
+check "rm still refuses a path-unsafe name" "$(valid_name_loose '../x' && echo ok || echo refused)" refused
+
 # Partial state and custom souls are part of inventory, while configured bots
 # remain first and are de-duplicated for `swarm up`.
 printf 'key\n' > "$(bot_key_file base-a)"
@@ -277,14 +289,20 @@ dir="$HOME/.hermes/profiles/$name"
 mkdir -p "$dir/plugins/dropbox"
 printf 'KEEP=1\nSWARM_VSS_SANDBOX=test-vss\n' > "$dir/.env"
 GATEWAY_EVENTS="$TMP/gateway-events"
-host_profile_state() { printf 'running\n'; }
+# One host gateway (Hermes 0.21.4+): the cleanup cycles it once, not a per-profile gateway.
+host_gateway_running() { return 0; }
 host_gateway_stop() { printf 'stop\n' >> "$GATEWAY_EVENTS"; }
-host_gateway_start() { printf 'start\n' >> "$GATEWAY_EVENTS"; }
+host_gateway_ensure() { printf 'start\n' >> "$GATEWAY_EVENTS"; }
 hermes() { return 0; }
 host_dropbox_remove "$name" >/dev/null
 check "legacy dropbox plugin is removed" "$([[ -e "$dir/plugins/dropbox" ]] && echo yes || echo no)" no
 check "legacy dropbox env is removed" "$(grep -c '^SWARM_VSS_SANDBOX=' "$dir/.env" || true)" 0
-check "loaded host gateway is restarted after cleanup" "$(tr '\n' ' ' < "$GATEWAY_EVENTS")" "stop start "
+check "loaded host gateway is cycled once after cleanup" "$(tr '\n' ' ' < "$GATEWAY_EVENTS")" "stop start "
+# No file to touch: cleanup must not restart a gateway that is not running.
+: > "$GATEWAY_EVENTS"; mkdir -p "$dir/plugins/dropbox"
+host_gateway_running() { return 1; }
+host_dropbox_remove "$name" >/dev/null
+check "stopped host gateway is left alone after cleanup" "$(tr '\n' ' ' < "$GATEWAY_EVENTS")" ""
 
 # The live e2e suite must never invoke commands that create, delete, or
 # reconfigure the operator's fleet.

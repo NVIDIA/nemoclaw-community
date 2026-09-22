@@ -9,7 +9,7 @@
 | --- | --- |
 | Description | A team of Hermes bots you talk to from Hermes Desktop, one NemoClaw sandbox each. A bot reaches only what its policy names, and when it needs something it cannot reach, it asks a teammate. |
 | Industry | ✨ Other |
-| Requirements | Linux host or macOS with Colima · Docker · OpenShell and NemoClaw · Hermes 0.21 on the host · OpenAI-compatible inference endpoint · optional GPU for the video example |
+| Requirements | Linux host or macOS with Colima · Docker · OpenShell and NemoClaw · Hermes 0.21.4 or newer on the host · OpenAI-compatible inference endpoint · optional GPU for the video example |
 | NemoClaw | Unpinned |
 | Harness | Hermes 0.21.0 |
 | OpenShell | 0.0.101 |
@@ -33,7 +33,7 @@ handoff between them crossed a sandbox boundary.
 | Use this when | You want Hermes agents that keep running, that several people can address from one group chat, and whose network reach is set by a sandbox policy rather than by prompt instructions. |
 | You will get | Two bots in two sandboxes, a Hermes Desktop group chat that addresses them by name, NeMo Relay traces from every turn at one collector, and a configuration-aware live verification suite. The same `swarm up` restores configured bots and bots previously created with `swarm add` after a reboot. Two optional bots add image and video input. |
 | Runs on | A Linux host, or macOS with Colima. No GPU is needed unless you run the video example. |
-| Requires | Docker, OpenShell, NemoClaw, and Hermes 0.21 on the host, plus an OpenAI-compatible inference endpoint and its API key. `./swarm doctor` reports what is missing before anything is built. |
+| Requires | Docker, OpenShell, NemoClaw, and Hermes 0.21.4 or newer on the host, plus an OpenAI-compatible inference endpoint and its API key. `./swarm doctor` reports what is missing before anything is built. |
 | Verified on | Historical, configuration-scoped results: during the 2026-09-03 review, the pre-fix base team passed 50 of 50 checks on a fresh Ubuntu 24.04 VM and was exercised on macOS 26 with Colima. At commit `44865fff2b0c4c5e73bdff612bc36875768375b2`, a Linux host with both optional bots and RT-VLM passed 150 of 150 checks. The current total depends on the bots and optional services enabled; require zero failures. The multimodal examples have not yet been set up from scratch on a second machine. |
 | Evidence level | live end-to-end for the base team; integration for the multimodal examples |
 | Support and maturity | Best-effort community support under the repository [support policy](../../../../SUPPORT.md). |
@@ -133,7 +133,7 @@ Two ways to run it. Same command, same bots, same tests.
 | **Local** | your Mac or Linux box, sandboxed, next to Desktop | trying it, demos, one person |
 | **Remote** | a Linux host you SSH to | a team, GPUs on the host, always-on bots |
 
-Either way you need Docker, OpenShell, NemoClaw, Hermes 0.21, and an
+Either way you need Docker, OpenShell, NemoClaw, Hermes 0.21.4 or newer, and an
 OpenAI-compatible model endpoint. Model serving is out of scope; the host does
 not need a GPU if the model is somewhere else.
 
@@ -141,13 +141,20 @@ Eight commands, one at a time. Each does one thing, and you can stop after
 any of them and nothing is half-built. This is the sequence we ran on a blank
 Ubuntu 24.04 VM.
 
-**1. Install NemoClaw, OpenShell, and Docker.** One installer. It stops at its
-own "configure inference provider" step because you have no NVIDIA key in it
-yet; that is fine, `swarm` brings its own endpoint.
+**1. Install NemoClaw, OpenShell, and Docker.** One installer. On a fresh
+Ubuntu it needs `binutils` first (it checks OpenShell's binary with `strings`
+and stops if that is missing). It ends at its own "configure inference
+provider" step because you have no NVIDIA key in it yet; that is fine, `swarm`
+brings its own endpoint.
 
 ```bash
-curl -fsSL https://nvidia.com/nemoclaw.sh | NEMOCLAW_AGENT=hermes NEMOCLAW_NON_INTERACTIVE=1 bash
+sudo apt-get install -y binutils
+curl -fsSL https://www.nvidia.com/nemoclaw.sh | NEMOCLAW_AGENT=hermes NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 bash
 ```
+
+`NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1` is the non-interactive form of the
+installer's third-party software prompt (Docker, Node); read the notice it
+prints before you set it.
 
 **2. Install Hermes on the host.** Desktop talks to the bots through a thin
 Hermes profile per bot, so the host needs Hermes too.
@@ -201,8 +208,9 @@ image build. Prints one line per step and ends with a status ladder.
 ```
 
 **8. Prove it.** The enabled live checks verify namespace separation, denied
-egress, authenticated handoffs, and any configured optional services. The
-number varies with the fleet; expect `SUMMARY: N passed, 0 failed`.
+egress, authenticated handoffs, one host gateway serving every bot, and any
+configured optional services. The number varies with the fleet; expect
+`SUMMARY: N passed, 0 failed`. The two-bot team takes about 13 minutes.
 
 ```bash
 ./swarm test
@@ -290,6 +298,10 @@ access never cross with the message.
 ./swarm rm nemoclaw-qa --yes
 ./swarm down --yes                                            # bots named in BOTS; use --all for tracked additions
 ```
+
+Bot names are sandbox names, and OpenShell caps those at 19 characters
+(lowercase letters, digits, single hyphens). `nemoclaw-researcher` is exactly
+19. `swarm add` refuses a longer name before it creates anything.
 
 Each bot's reach is its own file. `policies/<bot>.yaml` is applied when that
 bot is created; the researcher ships with one for GitHub and docs.nvidia.com and
