@@ -696,12 +696,16 @@ report:  ./experiment/eval-and-optimize/OPTIMIZATION.md
 `OPTIMIZATION.md` carries the per-round reward tables, the root-cause analysis
 for each round, and the full source of every candidate under `agents/agent-N/`.
 
-One complete run is recorded in
-[results/optimization-run.md](results/optimization-run.md). The candidate worth
-reading twice is the one that changed only the system prompt in its
-`agent.yaml` and scored 0.402 against a 0.514 baseline. A system prompt is
-measurable at all only because each trial builds the agent from the candidate's
-own config, and what it measured was that the proposal made the result worse.
+Two runs are recorded in
+[results/optimization-run.md](results/optimization-run.md), and they are worth
+reading together. In the first, the winning candidate put its change in the
+harness: the reward moved 0.514 to 0.664 for an edit that the traces show never
+reached the model and that could not have been deployed. In the second, run
+after pinning the harness, both candidates proposed deployable changes instead,
+one a system prompt and one a subagent, and the traces confirm both executed.
+The reward comparison in that second run is not usable, because environmental
+failures left the candidates scored on fewer trials than the baseline, and
+failed trials are dropped from the denominator rather than scored as zero.
 
 **Only promotable changes are measurable.** Each candidate is a full copy of
 `agent_source/`, and the wrapper builds the agent from the copy's own

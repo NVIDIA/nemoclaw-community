@@ -3,87 +3,154 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- markdownlint-enable MD013 -->
 
-# One optimization run, end to end
+# Two runs, and what each one measured
 
-A bounded run of the loop described in the README, on the Insight
-*"Mesh-fidelity verification does not establish close geometric agreement"*.
-Config as shipped: 1 round, 2 candidates, `n_attempts: 2`, one FreeCAD session.
+Both runs used the Insight *"Mesh-fidelity verification does not establish close
+geometric agreement"*, 1 round, 2 candidates, `n_attempts: 2`, one FreeCAD
+session. The first produced a result that did not survive inspection. The
+second was run after fixing what the first exposed.
 
-## Result
+## Run 1: a win that could not be shipped
 
-| Arm | Validation reward | vs baseline | n | median IoU | range |
-| --- | ---: | ---: | ---: | ---: | --- |
-| `agent-0` baseline | 0.514 | | 4 | 0.5139 | 0.2948 to 0.7327 |
-| **`agent-1` winner** | **0.664** | **+0.150** | 4 | 0.6635 | 0.5656 to 0.7626 |
-| `agent-2` | 0.402 | -0.112 | 4 | 0.3970 | 0.3360 to 0.4781 |
+| Arm | Validation | n |
+| --- | ---: | ---: |
+| `agent-0` baseline | 0.514 | 4 |
+| `agent-1` winner | 0.664 | 4 |
+| `agent-2` | 0.402 | 4 |
 
-Baseline train reward was 0.396 over 6 trials. The Eval Author named its metric
-`symmetric_material_overlap`; it reads the `eval.iou` span the wrapper
-publishes, so objective and guardrail coincided in this run.
+The winner's entire change was 157 lines added to `harbor_wrapper.py`, the
+evaluation harness. It added a `geometry_overlap_audit` whose docstring claimed
+to measure geometry *"before allowing the run to finish"*.
 
-## What the candidates changed
+The traces said otherwise. The audit ran once per trial and produced real
+numbers, but it was called host-side after the agent had already finished: the
+agent's own trace for every trial contains no reference to it, so the result
+never entered the model's context and nothing was gated. Its bounding-box proxy
+reported 0.9975 on a trial whose true IoU was 0.5656.
 
-Both proposals were reached from the traces and the Insight alone.
+So the +0.150 was not attributable to the change it was credited with, and the
+change was not promotable in the first place. A harness edit ships nothing.
 
-**`agent-1`, the winner, edited the wrapper only** (157 diff lines, `agent.yaml`
-untouched), adding a `geometry_overlap_audit` method whose docstring claims to
-measure geometry *"before allowing the run to finish"*.
+## The fix: pin everything that cannot be promoted
 
-The traces say otherwise, and this is the important finding of the run. The
-audit ran once per trial in all four `agent-1` trials and in none of the
-baseline trials, and it produced real numbers. But it was called host-side by
-the wrapper after the agent had already finished: the agent's own trace for
-each trial contains no reference to it, so the result never entered the model's
-context and nothing was gated. Its bounding-box proxy also reported 0.9975 on a
-trial whose true IoU was 0.5656, so it could not have gated anything useful.
+`_assert_promotable_change_surface` now runs before any trial and pins two
+things against the originals outside the candidate:
 
-**The +0.150 is therefore unexplained.** It is not attributable to the change
-it was credited with. Since the harness is not promotable in the first place,
-the fix is to stop such candidates from being scored at all: the wrapper is now
-pinned by `_assert_promotable_change_surface`, and a candidate whose copy
-differs from the original raises at import and produces no metric.
+- `harbor_wrapper.py`, byte for byte
+- every `agent.yaml` block except `instructions` and `harnesses`
 
-**`agent-2` edited `agent.yaml` only** (28 diff lines, wrapper untouched). It
-rewrote the system prompt into three mandatory phases: coordinate-frame analysis
-before any feature, construction in that frame, then axis-by-axis verification
-of centers, extents, orientation and symmetry before submitting, with an
-explicit rule against declaring completion while a frame contradiction remains.
+What remains is the change surface, and it is what a deployed agent carries:
+the system prompt, subagents, and skills under `workspace/skills/`. The model
+and its sampling parameters are pinned too, because a stronger model is a
+deployment decision and leaving it open turns "which prompt works better" into
+"which model is stronger".
 
-That candidate is the one worth noting. A system prompt lives only in
-`agent.yaml`, so under a harness that invokes a fixed deployment it would have
-scored exactly the baseline. Here it scored 0.402, which is a real measurement
-of a real change: **the proposal was tested and it made the result worse.**
+Middleware and pre- or post-model hooks need no rule. The deepagents adapter
+accepts only `subagents` and `interrupt_on` under `harnesses` and owns the
+rest, so they cannot be expressed in `agent.yaml` and no candidate could
+promote one.
 
-## The guardrail held
+## Run 2: what the loop proposed once it could only propose deployable things
 
-`eval_iou` is computed by `scorer/trial_metric.py`, outside the directory the
-optimizer copies into each candidate. The winner's 157-line wrapper diff
-contains no reference to the metric, the scorer, or `eval.iou`, and its loader
-call is unmodified. The code that measured the winner was not code the winner
-could edit.
+Baseline, no errors in either arm:
 
-## Trace attribution
+| Arm | Mean | Median | Trials |
+| --- | ---: | ---: | --- |
+| `agent-0` train | 0.390 | 0.388 | 0.178, 0.227, 0.280, 0.497, 0.543, 0.613 |
+| `agent-0` validation | 0.656 | 0.628 | 0.486, 0.515, 0.741, 0.882 |
 
-Verified across all 26 trials: no trace id appears under more than one trial,
-and every trial records the agent config it was built from. An earlier run,
-before trials were serialised, produced two trace ids each shared by two
-different candidates reporting different scores.
+Both candidates stayed inside the change surface without being stopped by the
+guard; it never had to reject anything. Neither wrote a skill.
 
-The wrapper warned three times that several traces matched its window under one
-agent name and that it was taking the oldest. That is the conservative path
-working as intended rather than a fault, but giving each candidate a distinct
-agent name would remove the ambiguity at the source.
+**`agent-1` changed only the system prompt** (41 lines). It added a
+fidelity-gated completion loop: after every substantial geometry change,
+measure reference and candidate in the same coordinate frame and compare
+enclosed volume, axis-aligned bounds including placement, volumetric overlap,
+and bidirectional surface distance reported separately in each direction. If a
+discrepancy is material, stay in the same run and go back to fitting. Do not
+complete because the document recomputes or one metric improved.
 
-## Limits
+**`agent-2` added a subagent** (144 lines) under
+`harnesses.deepagents.settings.deepagents.subagents`: a
+`reference-geometry-analyst` with its own system prompt and a `response_format`
+schema, plus a parent prompt requiring `task` as the first tool call and
+forbidding construction before the analyst returns. The analyst is told to
+report ordered contours rather than radii, detect cavity boundaries separately,
+report X and Y extents independently, and not to infer rotational symmetry from
+an object name.
 
-- One round, two candidates, four validation trials per arm. Enough to separate
-  0.664 from 0.402; not enough to resolve a small difference.
-- Per-trial spread is wide (baseline 0.087 to 0.744), which is why
-  `n_attempts: 2` is set and why the medians matter more than any single trial.
-- The winner is a wrapper change, so it is not promotable and its margin is
-  not trustworthy. The run is retained as the evidence that produced the
-  promotable-surface guard, not as a demonstration that the loop improved the
-  agent. `agent-2` is the sound measurement in it.
-- Objective and guardrail read the same span here, so this run does not
-  demonstrate the guardrail rejecting a candidate that trades geometry for
-  metric.
+## Both changes provably executed
+
+This is the check that run 1 failed, done from the traces rather than the diff.
+
+`agent-1`, against three baseline traces from the same session:
+
+| marker | `agent-1` | baseline |
+| --- | ---: | ---: |
+| `distToShape` | 848 | 0, 0, 0 |
+| `common(` | 424 | 116, 92, 0 |
+| reference mesh loaded | 3923 | 0, 0, 0 |
+
+Neither `distToShape` nor `common(` appears in the prompt, which asks for
+"bidirectional surface distance" and "volumetric overlap" in English. The agent
+translated those into FreeCAD calls itself, so the counts come from executed
+code rather than replayed prompt text.
+
+`agent-2`, deduplicated tool calls from one trace:
+
+```text
+execute_code 7 | list_documents 2 | ls 2 | task 1
+execute_code_headless 1 | read_file 1 | ReferenceFittingSpecification 1
+```
+
+The subagent was invoked and returned its structured response, so the
+`response_format` schema survived the adapter passthrough.
+
+Note the trap in reading this. Intake's `tool_name` column holds the LangGraph
+node name, not the tool, so filtering on it reports zero `task` calls. The real
+calls are inside the span payloads and must be deduplicated on the call id.
+
+## What run 2 does not establish
+
+**The reward comparison is not usable.** Trials that error are dropped from the
+denominator, not scored as zero:
+
+| Arm | Scored | Errored | Mean |
+| --- | ---: | ---: | ---: |
+| `agent-0` validation | 4 | 0 | 0.656 |
+| `agent-1` validation | 2 | 2 | 0.642 |
+| `agent-2` validation | 1 | 2 | 0.675 |
+
+A baseline averaged over four runs against candidates averaged over two and one
+is survivorship bias, and no reading of those means is sound. The failures were
+environmental rather than candidate-specific: one Docker
+`EnvironmentStartTimeoutError` at 600 s, one `RewardFileNotFoundError`, and two
+trials the wrapper refused to score because FreeCAD's GUI dispatch was
+unhealthy. That last one is the harness working as intended, declining to turn
+an application failure into a score of zero, but it still distorts the
+comparison.
+
+The run was stopped before the candidate train arms, which would have added
+12 trials at roughly 9 minutes each without addressing any of the above.
+
+**Objective and guardrail coincided again.** The Eval Author named its metric
+`symmetric_geometry_fidelity` and it returned exactly `eval_iou` on every
+trial, as `symmetric_material_overlap` did in run 1. So neither run exercises
+the guardrail rejecting a candidate that trades geometry for metric.
+
+## What it does establish
+
+The loop, restricted to surfaces that can be deployed, proposed two changes
+that a human would recognise as reasonable, and both of them ran. One is a
+prompt, one is a subagent, and each promotes by copying `agent.yaml` and the
+workspace. Whether either is better than the baseline is unmeasured.
+
+The measurable claim from these two runs together is about the harness, not the
+agent: a loop will optimize whatever surface you leave open, including one that
+cannot be shipped, and it will do so convincingly enough to survive a diff
+review. Pinning the surface is what makes the reward mean something.
+
+## Reproducing
+
+`results/candidates/` holds both candidate configs as produced:
+`agent-1-prompt.yaml` and `agent-2-subagent.yaml`.

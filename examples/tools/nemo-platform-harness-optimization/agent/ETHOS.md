@@ -121,9 +121,8 @@ mechanism in use here.
   0.95 and a sketch-driven tree at 0.88, the tree wins. It is the reason the
   agent exists.
 - **Determinism over cleverness.** A slightly worse result that repeats is more
-  useful than a better one that appears in one run out of three. Run-to-run IoU
-  on this task has ranged 0.042 to 0.909 across six runs of two configurations,
-  and that spread is itself a defect.
+  useful than a better one that appears in one run out of three. The spread on
+  this task is itself a defect; see Open Questions.
 - **Text over vision.** The default model is text-only, so screenshots are
   spent tokens with nothing to read them. Keep `--only-text-feedback` on the
   MCP server and verify geometry by reading numbers back over RPC.
@@ -165,22 +164,18 @@ The instructions state *what* is required, never *how*. Scored by
 `scorer/score.py`, which exports the candidate solid to BREP over RPC and
 computes IoU in a headless FreeCAD.
 
-Run every arm **three times and compare medians**. Single-trial results on this
-task are not measurements: one configuration produced 0.042, 0.905 and 0.909
-across three runs of an identical task. Report the median, the fraction of runs
-at or above 0.85, and the void rate. Never the mean. That arm's mean is 0.619
-and no run landed near 0.619.
+Run every arm **three times and report the median**, the fraction of runs at or
+above 0.85, and the void rate. Never the mean: one arm scored 0.042, 0.905 and
+0.909, for a mean of 0.619 that no run landed near.
 
 The scorer and the reference mesh live outside the agent directory so the agent
 cannot read its own grading criteria.
 
-The optimizer's Harbor trials build each candidate from its own `agent.yaml`,
-so changes to the system prompt, the model, the MCP server set or the skills
-under `workspace/skills/` are inside the measurement. A trial and a deployed
-run are still different environments: a trial builds from a config file and
-needs `api_key_env` and `base_url`, while a deployment serves a registered
-config through the gateway. Re-measure a promoted winner with
-`scorer/score.py` before trusting it in production.
+Each candidate is built from its own `agent.yaml`, so the system prompt,
+subagents and `workspace/skills/` are inside the measurement; everything else
+is pinned (see Change Scope). A trial and a deployed run are still different
+environments, so re-measure a promoted winner with `scorer/score.py` before
+trusting it in production.
 
 ## Metric Semantics
 

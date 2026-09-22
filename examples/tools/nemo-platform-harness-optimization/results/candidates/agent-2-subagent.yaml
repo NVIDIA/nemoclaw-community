@@ -1,0 +1,223 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+config_format: nemo-agents-spec-v1
+name: cad-agent-e2e
+description: A CAD agent executed with DeepAgents against a live FreeCAD session
+
+instructions:
+  system:
+    content: |
+      You are a CAD Agent (Computer Aided Design).
+
+      For every reference-geometry reconstruction, analysis and construction are
+      separate graph phases. Your first tool call MUST be `task` with
+      `subagent_type: reference-geometry-analyst`. Copy the complete user
+      instruction, including every source path and output requirement, into the
+      task description. Do not inspect the reference or create CAD before this
+      call. The analyst uses read_file and the FreeCAD tools and returns the
+      structured ReferenceFittingSpecification defined by its response schema.
+
+      After that task returns, treat its JSON result as the measured evidence
+      edge into the construction phase. Build the requested CAD yourself with
+      the FreeCAD tools. Consume the reported outer_contours, cavity_boundaries,
+      independent_dimensions, and handle_sections directly; do not replace them
+      with circular slices, averaged radii, or a few hand-selected profile
+      points. Preserve separate exterior/interior boundaries and X/Y asymmetry.
+      You may take additional measurements when a construction detail needs
+      clarification, but do not redo or discard the analysis.
+
+      A skills library is available at /skills/. The analyst checks and reads an
+      applicable SKILL.md before measurement; during construction, read any
+      additional applicable skill with read_file.
+
+default_harness: deepagents
+
+harnesses:
+  deepagents:
+    kind: deepagents
+    settings:
+      deepagents:
+        subagents:
+          - name: reference-geometry-analyst
+            description: >-
+              Mandatory first phase for reference-based CAD reconstruction.
+              Inspect the supplied reference with read_file and FreeCAD tools,
+              then return a dense, measured fitting specification before the
+              parent constructs any geometry.
+            system_prompt: |
+              You are the reference-geometry analysis node. Analyze only; do not
+              create, modify, or save the requested final CAD document.
+
+              Start by reading any applicable /skills/ SKILL.md with read_file.
+              Parse the complete delegated instruction to identify the reference
+              asset and requirements. Use the available FreeCAD tools to inspect
+              or import the reference and derive measurements from its actual
+              geometry. Do not infer a rotationally symmetric shape merely from
+              a semantic object name.
+
+              Sample enough heights and perimeter locations to preserve local
+              changes in shape. At each sampled height, report an ordered outer
+              contour in a consistent coordinate frame rather than reducing it
+              to a radius. Detect and report interior/cavity boundaries
+              separately. Report X and Y extents independently at every level.
+              Measure attached features with multiple sections along their path,
+              including section dimensions, center, orientation, attachment
+              regions, and clearance from the main body. Include provenance and
+              uncertainty so the constructor can distinguish measurements from
+              assumptions.
+
+              Return only the structured response required by the schema. Keep
+              all useful measured samples; do not summarize dense contours into
+              sparse profile points.
+            response_format:
+              type: object
+              title: ReferenceFittingSpecification
+              additionalProperties: false
+              required:
+                - coordinate_frame
+                - overall_bounds
+                - outer_contours
+                - cavity_boundaries
+                - independent_dimensions
+                - handle_sections
+                - feature_attachments
+                - evidence
+                - uncertainties
+              properties:
+                coordinate_frame:
+                  type: object
+                  description: Origin, axis directions, units, and transforms used by every sample.
+                  additionalProperties: true
+                overall_bounds:
+                  type: object
+                  description: Measured minimum and maximum coordinates on each axis.
+                  additionalProperties: true
+                outer_contours:
+                  type: array
+                  description: Dense ordered exterior perimeter samples at many measured heights.
+                  items:
+                    type: object
+                    required: [height, points]
+                    properties:
+                      height: {type: number}
+                      points:
+                        type: array
+                        items:
+                          type: array
+                          minItems: 2
+                          maxItems: 3
+                          items: {type: number}
+                      provenance: {type: string}
+                cavity_boundaries:
+                  type: array
+                  description: Interior boundary loops kept distinct from exterior contours.
+                  items:
+                    type: object
+                    required: [height, points]
+                    properties:
+                      height: {type: number}
+                      points:
+                        type: array
+                        items:
+                          type: array
+                          minItems: 2
+                          maxItems: 3
+                          items: {type: number}
+                      provenance: {type: string}
+                independent_dimensions:
+                  type: array
+                  description: Independent X and Y dimensions associated with sampled heights.
+                  items:
+                    type: object
+                    required: [height, x_extent, y_extent]
+                    properties:
+                      height: {type: number}
+                      x_extent: {type: number}
+                      y_extent: {type: number}
+                handle_sections:
+                  type: array
+                  description: Measured sections along each attached feature path.
+                  items:
+                    type: object
+                    required: [path_parameter, center, dimensions, orientation]
+                    properties:
+                      path_parameter: {type: number}
+                      center: {type: array, items: {type: number}}
+                      dimensions: {type: array, items: {type: number}}
+                      orientation: {type: array, items: {type: number}}
+                      clearance: {type: number}
+                      provenance: {type: string}
+                feature_attachments:
+                  type: array
+                  description: Measured attachment regions and transitions between features.
+                  items: {type: object, additionalProperties: true}
+                evidence:
+                  type: array
+                  description: Tool-derived observations and measurement provenance.
+                  items: {type: string}
+                uncertainties:
+                  type: array
+                  description: Uncertain, occluded, or assumption-dependent measurements.
+                  items: {type: string}
+
+
+
+models:
+  default:
+    provider: nvidia
+    # SUBSTITUTE: model entities are auto-discovered per workspace, so this name
+    # does not exist on your platform. List yours with `nemo models list
+    # --all-pages` (that command paginates at 100 results) and paste one here.
+    model: azure-openai-gpt-5-6-sol
+    # Required when the agent is built from this file rather than served by a
+    # deployment: the deepagents adapter's preflight demands both. The runner
+    # injects NEMO_AGENTS_IGW_API_KEY for deployments, so naming it here keeps
+    # one config working for both paths. The value is unused for
+    # platform-routed models; export it as any non-empty string locally.
+    api_key_env: NEMO_AGENTS_IGW_API_KEY
+    base_url: http://localhost:8080/apis/inference-gateway/v2/workspaces/default/openai/-/v1
+
+mcp:
+  servers:
+    freecad:
+      transport: stdio
+      # SUBSTITUTE: for stdio transport, `url` is the executable path, and the
+      # harness subprocess does not reliably inherit your PATH — so an absolute
+      # path is required. Find yours with `command -v uvx`. The value below is
+      # the Homebrew location on macOS; a Linux install typically lands in
+      # ~/.local/bin/uvx or ~/.cargo/bin/uvx.
+      url: /opt/homebrew/bin/uvx
+      args:
+        # Pinned so an upstream freecad-mcp release cannot change tool behaviour
+        # underneath this example. 0.1.24 is the version this was verified on.
+        - --from
+        - freecad-mcp==0.1.24
+        - freecad-mcp
+        # Suppresses screenshot ImageContent. Keep this while the model is
+        # text-only; drop it only alongside a vision-capable model.
+        - --only-text-feedback
+      exposure: harness_native
+
+tools:
+  blocked: []
+
+environment:
+  workspace: ./workspace
+  artifacts: ./artifacts
+
+telemetry:
+  enabled: true
+  provider: relay
+  output_dir: ./traces
+  atif:
+    enabled: true
+    filename_template: trajectory-{session_id}.atif.json
+    storage:
+      - type: http
+        # SUBSTITUTE (host and workspace): this URL hardcodes a platform at
+        # localhost:8080 and the `default` workspace. Change both segments if
+        # your platform or workspace differs — this endpoint line and the
+        # `model:` line above are the only machine-specific values in this file.
+        endpoint: http://localhost:8080/apis/intake/v2/workspaces/default/ingest/atif
+        timeout_millis: 3000
