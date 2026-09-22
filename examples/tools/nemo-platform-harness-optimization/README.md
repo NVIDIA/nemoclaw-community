@@ -697,19 +697,44 @@ report:  ./experiment/eval-and-optimize/OPTIMIZATION.md
 for each round, and the full source of every candidate under `agents/agent-N/`.
 
 One complete run is recorded in
-[results/optimization-run.md](results/optimization-run.md): the winner took the
-validation reward from 0.514 to 0.664, and the second candidate, which changed
-only the system prompt in its `agent.yaml`, scored 0.402. That second number is
-the one worth reading twice. A system prompt is measurable only because each
-trial builds the agent from the candidate's own config, and what it measured
-was that the proposal made the result worse.
+[results/optimization-run.md](results/optimization-run.md). The candidate worth
+reading twice is the one that changed only the system prompt in its
+`agent.yaml` and scored 0.402 against a 0.514 baseline. A system prompt is
+measurable at all only because each trial builds the agent from the candidate's
+own config, and what it measured was that the proposal made the result worse.
 
-**What the trial exercised.** Each candidate is a full copy of `agent_source/`,
-and the wrapper builds the agent from the copy's own `agent.yaml`. The skill
-above therefore reached the agent the same way it will after promotion: as a
-file under `workspace/skills/` announced by the `/skills/` pointer in the system
-prompt. The score measures the change you are about to deploy, not a proxy for
-it.
+**Only promotable changes are measurable.** Each candidate is a full copy of
+`agent_source/`, and the wrapper builds the agent from the copy's own
+`agent.yaml`. Three things there are worth optimizing and can all be shipped by
+copying the file and the workspace: the **system prompt**, **subagents**, and
+**skills** under `workspace/skills/`. Everything else is pinned by
+`_assert_promotable_change_surface` and checked before any trial runs:
+
+| Pinned | Why |
+| --- | --- |
+| `harbor_wrapper.py` | the harness runs trials; it is not part of the agent |
+| every other `agent.yaml` block | the model and its sampling parameters are a deployment decision, not agent design |
+
+That check is not theoretical. In the first recorded run the winning candidate
+edited the wrapper to add its own measurement step, and the traces show the
+result never reached the model: the reward moved for a change that could not be
+shipped. Advice was not enough, and the optimizer's coder is already advised
+that harness files are out of scope. Now a candidate that touches a pinned
+surface raises at import, produces no metric, and cannot reach the Pareto
+front, so a reward difference is always attributable to something you can
+deploy.
+
+Pinning the model matters as much as pinning the harness. Left open, the loop
+answers "which model is stronger" instead of "which prompt works better", and
+only one of those is a finding about your agent.
+
+Middleware and pre- or post-model hooks are absent from the change surface
+because they are unreachable, not because they are forbidden: the deepagents
+adapter accepts only `subagents` and `interrupt_on` under `harnesses`, and owns
+`model`, `tools`, `backend`, `skills`, `system_prompt`, `middleware` and
+`checkpointer` itself. A hook cannot be expressed in `agent.yaml`, so no
+candidate could promote one. Reaching that surface means writing a Fabric
+adapter, which is a different project.
 
 Before believing any winner, apply two external checks. **Did the candidate
 actually use what it changed?** One winner here wrote a 168-line surface-distance

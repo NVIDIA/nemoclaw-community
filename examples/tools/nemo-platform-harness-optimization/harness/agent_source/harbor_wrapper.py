@@ -20,11 +20,15 @@ agent from the copy's own ``agent.yaml``. That is what makes a candidate's
 edits real: change the model, the system prompt, the MCP server set, or drop a
 skill into ``workspace/skills/``, and the next trial measures it.
 
-So the whole directory is the change surface, not only this file. A skill
-belongs in ``workspace/skills/<name>/SKILL.md`` with a pointer to ``/skills/``
-in ``instructions.system.content``, which is how the deployed agent loads it
-too. Prefer that over injecting text here: it is the mechanism that survives
-promotion, and a change measured here is then the same change you deploy.
+The change surface is ``agent.yaml`` and ``workspace/skills/`` - the two
+things that survive promotion to a deployed agent. A skill belongs in
+``workspace/skills/<name>/SKILL.md`` with a pointer to ``/skills/`` in
+``instructions.system.content``, which is how the deployed agent loads it too.
+
+This file is the harness, not the agent, so it is pinned: a candidate copy that
+differs from the checked-in original refuses to run. See
+``_assert_promotable_change_surface`` below for why that is checked rather than
+asked for.
 
 ``agent.yaml`` must keep ``api_key_env`` and ``base_url`` under
 ``models.default``. The deepagents adapter's preflight requires both when the
@@ -135,6 +139,72 @@ def _example_root() -> Path:
 
 EXAMPLE_ROOT = _example_root()
 SCORER = os.environ.get("CAD_SCORER", str(EXAMPLE_ROOT / "scorer" / "score.py"))
+
+PRISTINE = EXAMPLE_ROOT / "harness" / "agent_source"
+
+
+#: The only ``agent.yaml`` blocks a candidate may change. Both promote by
+#: copying the file to a deployment: the system prompt lives under
+#: ``instructions``, subagents under ``harnesses``. Skills are files under
+#: ``workspace/skills/`` and are not in this config at all.
+MUTABLE_CONFIG_KEYS = ("instructions:", "harnesses:")
+
+
+def _pinned_config(config: Path) -> str:
+    """Return *config* with the mutable blocks removed, for comparison."""
+    kept, dropping = [], False
+    for line in config.read_text().splitlines():
+        if line[:1] not in (" ", "\t", ""):  # a new top-level key
+            dropping = line.startswith(MUTABLE_CONFIG_KEYS)
+        if not dropping:
+            kept.append(line)
+    return "\n".join(kept).strip()
+
+
+def _assert_promotable_change_surface() -> None:
+    """Refuse to score a candidate that changed something it cannot promote.
+
+    A reward difference is only worth acting on if the thing that moved it can
+    be deployed. Two parts of this directory fail that test and are pinned to
+    the originals outside the candidate:
+
+    * **This file** is the harness, not the agent. A candidate that edits it can
+      still move the score, and that score then measures something there is no
+      way to ship - which is exactly what happened here once, where a winning
+      candidate added a measurement step to this file that never reached the
+      model at all.
+    * **Every ``agent.yaml`` block except ``instructions`` and ``harnesses``.**
+      The model and its sampling parameters are a deployment decision, not agent
+      design: letting a candidate change them turns "which prompt works better"
+      into "which model is stronger". The rest - telemetry, the MCP server set,
+      the workspace root - is wiring the trial depends on.
+
+    What is left is the change surface, and it is the whole of what a deployed
+    agent carries that is worth optimizing: the system prompt, subagents, and
+    skills under ``workspace/skills/``. The optimizer's coder is already told
+    that harness files are out of scope and edited one anyway, so this is
+    checked rather than asked for: a violating candidate raises here, produces
+    no metric, and cannot reach the Pareto front.
+    """
+    if AGENT_DIR == PRISTINE.resolve():
+        return  # the checkout itself, not a candidate copy
+    pinned = (
+        ("the evaluation harness", PRISTINE / "harbor_wrapper.py", Path(__file__),
+         lambda path: path.resolve().read_bytes()),
+        ("pinned agent.yaml blocks", PRISTINE / "agent.yaml", AGENT_CONFIG, _pinned_config),
+    )
+    for what, original, current, read in pinned:
+        if not original.is_file():
+            raise RuntimeError(f"cannot verify {what}: {original} is missing")
+        if read(current) != read(original):
+            raise RuntimeError(
+                f"{current} changed {what}, which cannot be promoted to a "
+                f"deployed agent. Propose the change in the system prompt, "
+                f"subagents, MCP servers or workspace/skills/ instead."
+            )
+
+
+_assert_promotable_change_surface()
 
 
 def _load_trial_metric() -> Any:

@@ -214,20 +214,37 @@ config through the gateway. Re-measure a promoted winner with
 
 - System prompt: yes
 - Skills under `workspace/skills/`: yes
-- Model selection: with-approval
-- Sampling parameters: yes
-- MCP server set and arguments: with-approval
+- Subagents under `harnesses.deepagents.settings.deepagents.subagents`: yes
+- Model selection and sampling parameters: no
+- MCP server set and arguments: no
 - `environment.workspace`: no
 - Telemetry configuration: no
 - Eval task, reference mesh or scorer: no
+- Evaluation harness, including `harbor_wrapper.py`: no
 
-Notes: the eval and the scorer are the measuring instrument and are never a
-valid target of optimization. `environment.workspace` is frozen because
-pointing the backend root at the agent directory would expose the eval scorer
-to the agent's own file tools. Routing changes count as model selection: a
-50/50 random split to a weaker tier dropped IoU from 0.8832 to 0.3528 *and*
-raised tokens 26%, because a weak turn makes a geometric decision that later
-turns inherit.
+Notes: a change is only worth measuring if it can be promoted, so the scope is
+the three things a deployed agent carries that are worth optimizing: what the
+agent is told, how it is decomposed, and what it knows. Everything else is
+pinned and the boundary is enforced, not requested: a candidate whose
+`harbor_wrapper.py` or whose pinned `agent.yaml` blocks differ from the
+originals refuses to run, so it yields no metric and cannot win.
+
+The model is pinned because a stronger model is a deployment decision, not
+agent design; leaving it open turns "which prompt works better" into "which
+model is stronger". Routing counts as model selection: a 50/50 random split to
+a weaker tier dropped IoU from 0.8832 to 0.3528 *and* raised tokens 26%,
+because a weak turn makes a geometric decision that later turns inherit.
+
+The eval and the scorer are the measuring instrument and are never a valid
+target of optimization. `environment.workspace` is frozen because pointing the
+backend root at the agent directory would expose the eval scorer to the agent's
+own file tools.
+
+Middleware and pre- or post-model hooks appear nowhere above because they are
+unreachable: the deepagents adapter accepts only `subagents` and `interrupt_on`
+under `harnesses`, and owns `model`, `tools`, `backend`, `skills`,
+`system_prompt`, `middleware` and `checkpointer` itself. Reaching that surface
+needs a custom Fabric adapter, which no candidate could deploy anyway.
 
 ## Vision
 

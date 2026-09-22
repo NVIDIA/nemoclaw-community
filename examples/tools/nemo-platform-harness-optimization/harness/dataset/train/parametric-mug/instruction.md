@@ -2,7 +2,10 @@ Turn the mesh at
 `@MESH_PATH@`
 into a fully parametric FreeCAD model that a CAD designer can open and edit.
 
-Build it in a new FreeCAD document named `EvalMug`.
+Build it in a new FreeCAD document named `EvalMug`, constructed
+from scratch. Other documents may be open from earlier work: do not open,
+copy, merge or `saveCopy` any of them. Confirm the document does not
+already exist before you create it.
 
 Requirements:
 - The result must be a single valid solid.

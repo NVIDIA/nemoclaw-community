@@ -96,6 +96,77 @@ class GuardrailIsOutsideTheCandidate(unittest.TestCase):
         self.assertIn("TRIAL_METRIC.iou_span", source)
 
 
+class OnlyPromotableSurfacesAreMeasurable(unittest.TestCase):
+    """A candidate that changes something unpromotable cannot produce a score.
+
+    The change surface is the system prompt, subagents and
+    `workspace/skills/`. The harness and the rest of `agent.yaml` are pinned:
+    an edit there can still move the reward, and then the run has measured
+    something there is no way to ship.
+    """
+
+    def _candidate(self, name: str = "agent-1") -> Path:
+        path = (EXAMPLE / "harness" / "experiment" / "eval-and-optimize"
+                / "agents" / name)
+        path.mkdir(parents=True, exist_ok=True)
+        for source in ("harbor_wrapper.py", "agent.yaml"):
+            shutil.copyfile(AGENT_SOURCE / source, path / source)
+        return path
+
+    def tearDown(self) -> None:
+        shutil.rmtree(EXAMPLE / "harness" / "experiment", ignore_errors=True)
+
+    def _wrapper_differs(self, candidate: Path) -> bool:
+        original = (AGENT_SOURCE / "harbor_wrapper.py").read_bytes()
+        return (candidate / "harbor_wrapper.py").read_bytes() != original
+
+    def _config_differs(self, candidate: Path) -> bool:
+        pinned = harbor_wrapper._pinned_config
+        return pinned(candidate / "agent.yaml") != pinned(AGENT_SOURCE / "agent.yaml")
+
+    def test_the_checkout_itself_passes(self) -> None:
+        harbor_wrapper._assert_promotable_change_surface()
+
+    def test_an_untouched_candidate_copy_passes(self) -> None:
+        candidate = self._candidate()
+        self.assertFalse(self._wrapper_differs(candidate))
+        self.assertFalse(self._config_differs(candidate))
+
+    def test_a_harness_edit_is_rejected(self) -> None:
+        candidate = self._candidate()
+        wrapper = candidate / "harbor_wrapper.py"
+        wrapper.write_bytes(wrapper.read_bytes() + b"\n# candidate edit\n")
+        self.assertTrue(self._wrapper_differs(candidate))
+
+    def test_a_model_or_sampling_change_is_rejected(self) -> None:
+        candidate = self._candidate()
+        config = candidate / "agent.yaml"
+        config.write_text(config.read_text().replace(
+            "    provider: nvidia", "    provider: nvidia\n    temperature: 0.2"))
+        self.assertTrue(self._config_differs(candidate))
+
+    def test_a_system_prompt_change_is_allowed(self) -> None:
+        candidate = self._candidate()
+        config = candidate / "agent.yaml"
+        config.write_text(config.read_text().replace(
+            "You are a CAD Agent", "You are a careful CAD Agent"))
+        self.assertFalse(self._config_differs(candidate))
+
+    def test_a_subagent_is_allowed(self) -> None:
+        candidate = self._candidate()
+        config = candidate / "agent.yaml"
+        config.write_text(config.read_text().replace(
+            "      deepagents: {}",
+            "      deepagents:\n        subagents: [{name: checker}]"))
+        self.assertFalse(self._config_differs(candidate))
+
+    def test_ethos_scope_matches_what_is_enforced(self) -> None:
+        ethos = (EXAMPLE / "agent" / "ETHOS.md").read_text()
+        self.assertIn("Evaluation harness, including `harbor_wrapper.py`: no", ethos)
+        self.assertIn("Model selection and sampling parameters: no", ethos)
+        self.assertNotIn("with-approval", ethos)
+
+
 class CandidateWorkspaceSkill(unittest.TestCase):
     """A skill dropped into the candidate's workspace is part of its config."""
 

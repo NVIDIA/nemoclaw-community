@@ -26,11 +26,22 @@ publishes, so objective and guardrail coincided in this run.
 Both proposals were reached from the traces and the Insight alone.
 
 **`agent-1`, the winner, edited the wrapper only** (157 diff lines, `agent.yaml`
-untouched). It added a `geometry_overlap_audit` step the agent must pass before
-finishing, reasoning in its own docstring that *"the model cannot omit the
-measurement or manufacture its values"*, and falling back to bounding-box IoU
-because *"mesh/solid boolean intersections are unreliable across FreeCAD
-versions"*, which is independently true of this application.
+untouched), adding a `geometry_overlap_audit` method whose docstring claims to
+measure geometry *"before allowing the run to finish"*.
+
+The traces say otherwise, and this is the important finding of the run. The
+audit ran once per trial in all four `agent-1` trials and in none of the
+baseline trials, and it produced real numbers. But it was called host-side by
+the wrapper after the agent had already finished: the agent's own trace for
+each trial contains no reference to it, so the result never entered the model's
+context and nothing was gated. Its bounding-box proxy also reported 0.9975 on a
+trial whose true IoU was 0.5656, so it could not have gated anything useful.
+
+**The +0.150 is therefore unexplained.** It is not attributable to the change
+it was credited with. Since the harness is not promotable in the first place,
+the fix is to stop such candidates from being scored at all: the wrapper is now
+pinned by `_assert_promotable_change_surface`, and a candidate whose copy
+differs from the original raises at import and produces no metric.
 
 **`agent-2` edited `agent.yaml` only** (28 diff lines, wrapper untouched). It
 rewrote the system prompt into three mandatory phases: coordinate-frame analysis
@@ -69,9 +80,10 @@ agent name would remove the ambiguity at the source.
   0.664 from 0.402; not enough to resolve a small difference.
 - Per-trial spread is wide (baseline 0.087 to 0.744), which is why
   `n_attempts: 2` is set and why the medians matter more than any single trial.
-- The winner is a wrapper change, so it is not promotable to a deployed agent
-  the way a skill or a system prompt is. Step 9 promotion applies to candidates
-  that change `agent.yaml` or `workspace/skills/`.
+- The winner is a wrapper change, so it is not promotable and its margin is
+  not trustworthy. The run is retained as the evidence that produced the
+  promotable-surface guard, not as a demonstration that the loop improved the
+  agent. `agent-2` is the sound measurement in it.
 - Objective and guardrail read the same span here, so this run does not
   demonstrate the guardrail rejecting a candidate that trades geometry for
   metric.
