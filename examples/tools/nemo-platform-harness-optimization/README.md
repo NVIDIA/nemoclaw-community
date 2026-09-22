@@ -752,9 +752,12 @@ adapter, which is a different project.
 
 Before believing any winner, apply two external checks. **Did the candidate
 actually use what it changed?** One winner here wrote a 168-line surface-distance
-MCP server and never called it. It had added the server but left the system
-prompt untouched. **And what does the out-of-loop scorer say?** On that same run
-the authored metric rose 67% while IoU fell from 0.6207 to 0.5442.
+MCP server and never called it; another added a measurement step that ran after
+the agent had already finished. Check the traces, not the diff: the candidates
+above were confirmed by `distToShape` appearing 848 times against zero in every
+baseline trace, and by a `task` call returning the subagent's schema. **And what
+does the out-of-loop scorer say?** On one run the authored metric rose 67% while
+IoU fell from 0.6207 to 0.5442.
 
 ### Step 8: The optimizer is not a prompt-tweaker
 
@@ -762,27 +765,29 @@ Step 5 produced two Insights. This walkthrough optimizes against the first. The
 second, *"FreeCAD reconstruction becomes a long trial-and-error loop"*, is a
 different kind of problem: process rather than correctness.
 
-Running the same loop against it is worth doing for one observation. Across both
-Insights the optimizer proposed changes at **every level of the agent**, not just
-its prompt:
+Running the same loop against it is worth doing for one observation. Across
+these runs the optimizer proposed changes at **every level of the agent**, not
+just its prompt. The last two columns are the point: it will reach for whatever
+surface fits the diagnosis, including surfaces that cannot be deployed, which is
+why the harness and the rest of `agent.yaml` are pinned:
 
-| Level | What a candidate actually wrote |
-| :---- | :---- |
-| **Skill** | `geometry-fidelity-policy/SKILL.md`, an acceptance policy |
-| **MCP tool** | a server exposing live FreeCAD API signatures so the agent stops guessing interfaces |
-| **MCP tool** | bidirectional surface distance via trimesh, with worst-error clustering |
-| **System prompt** | a phase gate with an explicit tool-call budget and a forced discovery→construction transition |
-| **Subagents** | a planner/builder split, declared through `deepagents.subagents` |
-| **Agent code** | an execution governor and a resilient MCP wrapper classifying every call as success, recoverable, or terminal |
+| Surface | What a candidate actually wrote | Promotable |
+| :---- | :---- | :---- |
+| **Skill** | `geometry-fidelity-policy/SKILL.md`, an acceptance policy | yes |
+| **System prompt** | a completion gate requiring volume, bounds, overlap and bidirectional surface distance after every geometry change | yes |
+| **System prompt** | a phase gate with a tool-call budget and a forced discovery to construction transition | yes |
+| **Subagent** | `reference-geometry-analyst`, with its own response schema, that the parent must call before constructing | yes |
+| **MCP tool** | a server exposing live FreeCAD API signatures; another computing bidirectional surface distance via trimesh | no, pinned |
+| **Agent code** | an execution governor and a resilient MCP wrapper classifying every call as success, recoverable, or terminal | no, pinned |
 
-That range is the point. A coding agent with the Insight, the traces, and write
-access to the agent's source will reach for whatever surface fits the diagnosis:
-a new tool when the agent lacks a capability, a policy document when it lacks a
-standard, a prompt constraint when it lacks discipline. None of these were
-suggested to it.
+A coding agent with the Insight, the traces, and write access will reach for
+whatever surface fits the diagnosis: a new tool when the agent lacks a
+capability, a policy document when it lacks a standard, a prompt constraint when
+it lacks discipline. None of these were suggested to it.
 
-Every row above is a surface the trial actually runs, because the candidate's
-own `agent.yaml` and `workspace/` are what the wrapper builds the agent from.
+The rows marked promotable are surfaces a trial runs *and* you can ship, because
+the candidate's own `agent.yaml` and `workspace/` are what the wrapper builds
+the agent from. The pinned rows are why that distinction had to be enforced.
 Step 9 then re-measures the winner on the deployed agent, which is a different
 environment rather than a different change.
 
