@@ -1,7 +1,5 @@
 # OpenClaw and Hermes on NVIDIA DGX Spark with Qwen 3.6, Gemma 4, and Nemotron 3 Nano Omni
 
-[TOC]
-
 ## Before you begin
 
 > [!CAUTION]
