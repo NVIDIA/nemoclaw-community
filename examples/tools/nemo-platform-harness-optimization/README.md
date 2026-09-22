@@ -412,9 +412,10 @@ description, and the trace references that evidence them.
 
 `--ethos` is optional and takes a path. Supply it and the analyst judges the
 traces against your success criteria; leave it out and it infers a standard of
-its own, which is usually reasonable and not necessarily yours. On the traces
-behind this example the same command filed **0 Insights without it and 2 with
-it**.
+its own, which is usually reasonable and not necessarily yours. Measured on one
+pair of runs over identical traces, minutes apart, with `--ethos` as the only
+variable: **0 Insights without it, and one with it** that was then confirmed
+true against the document.
 
 One behaviour to know before Step 6 introduces a profile: if the analyst
 discovers an `optimizer.yaml` by walking up from the working directory, it writes
@@ -802,10 +803,12 @@ leave open, so leave open only what you can ship.
 Step 9 then re-measures the winner on the deployed agent, which is a different
 environment rather than a different change.
 
-The second Insight is left open here. Its candidates improved the metrics they
-were given, but an end-to-end win on the deliverable could not be demonstrated
-within this experiment, and the honest thing is to say so rather than promote a
-change that cannot be stood behind.
+Only the first Insight is carried through to a promoted change here. The second
+was run and its candidates improved the metrics they were given, but no
+end-to-end win on the deliverable could be demonstrated, so nothing was
+promoted. The third is fixed in the task instruction rather than by the loop.
+All three are still `open` on the platform, because an Insight is resolved by a
+measurement you ran on the deployed agent, not by a candidate winning a round.
 
 ### Step 9: Promote the fix, then measure what you shipped
 
