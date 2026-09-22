@@ -651,21 +651,21 @@ requirements if you want the second thing.
 
 #### What it proposed
 
-The strongest candidate wrote a **policy document**: a Markdown skill stating how
-the agent must verify its own geometry, and wired it into what the agent
-receives.
+The surface varies between runs, and all of them are promotable. Across the
+runs recorded here the loop has written a Markdown skill, a system prompt, and
+a subagent, from nothing but traces and an Insight:
 
 ```text
-agents/agent-1/
-  workspace/skills/geometry-fidelity-policy/SKILL.md      ← new
+agents/agent-N/
+  workspace/skills/geometry-fidelity-policy/SKILL.md   ← a policy document
+  agent.yaml   instructions.system.content             ← a completion gate
+  agent.yaml   harnesses...deepagents.subagents        ← an analysis subagent
 ```
 
-That is the same artifact a human would reach for, arrived at from nothing but
-traces and an Insight. The one this run produced is recorded at
-[`results/geometry-fidelity-policy/SKILL.md`](results/geometry-fidelity-policy/SKILL.md)
-so you can compare it with what your own run writes. It is deliberately **not**
-preloaded into `agent/workspace/`: the agent you deploy in Step 2 is the naive
-one, and the skill only arrives if the loop produces it.
+All three are shipped under [`results/`](results/) so you can compare them with
+what your own run writes. None is preloaded into `agent/workspace/`: the agent
+you deploy in Step 2 is the naive one, and a change only arrives if the loop
+produces it.
 
 It turns the Insight into a rule:
 
@@ -797,12 +797,22 @@ A skill reaches the agent through `environment.workspace` on a *deployed* config
 which is exactly the surface the trials could not exercise. So promoting is not
 the end of the validation; it is the start of it.
 
+Promote whichever surface your winner used. A config change is one copy:
+
 ```bash
+# a winner that changed agent.yaml (system prompt, subagents)
+cp harness/experiment/eval-and-optimize/agents/agent-1/agent.yaml agent/agent.yaml
+
+# a winner that added a skill
 mkdir -p agent/workspace/skills
-cp -r harness/experiment/eval-and-optimize/agents/agent-1/workspace/skills/geometry-fidelity-policy \
+cp -r harness/experiment/eval-and-optimize/agents/agent-1/workspace/skills/* \
       agent/workspace/skills/
-# or, to reproduce the published measurement with the skill this run produced:
-#   cp -r results/geometry-fidelity-policy agent/workspace/skills/
+
+# or promote one of the shipped examples instead, to reproduce a published
+# measurement without running the loop:
+#   cp results/candidates/agent-1-prompt.yaml   agent/agent.yaml
+#   cp results/candidates/agent-2-subagent.yaml agent/agent.yaml
+#   cp -r results/geometry-fidelity-policy      agent/workspace/skills/
 
 nemo agents undeploy --agent cad-agent --yes
 nemo agents delete cad-agent --yes

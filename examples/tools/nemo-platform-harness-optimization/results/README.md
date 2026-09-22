@@ -3,11 +3,30 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- markdownlint-enable MD013 -->
 
-# Reference measurement runs
+# Shipped artifacts and reference measurements
 
-`runs.json` holds the per-run numbers behind the summary table in the main
-[README](../README.md). The comparison and what it means are there; what follows
-is only the fine print.
+Three agent improvements the loop produced, so you can promote one without
+running the loop yourself. Each is a different surface, and all three deploy by
+copying into `agent/`:
+
+| Artifact | Surface | Promote with |
+| --- | --- | --- |
+| [`geometry-fidelity-policy/SKILL.md`](geometry-fidelity-policy/SKILL.md) | a skill | `cp -r` into `agent/workspace/skills/` |
+| [`candidates/agent-1-prompt.yaml`](candidates/agent-1-prompt.yaml) | system prompt | `cp` over `agent/agent.yaml` |
+| [`candidates/agent-2-subagent.yaml`](candidates/agent-2-subagent.yaml) | a subagent | `cp` over `agent/agent.yaml` |
+
+Two measurements accompany them:
+
+- `runs.json`, the n=3 comparison of the naive agent against the skill, from
+  2026-09-18, which is the summary table in the main [README](../README.md).
+- `candidates/measurement.csv`, a single out-of-loop run of each of the three
+  arms above, described in [optimization-run.md](optimization-run.md).
+
+[optimization-run.md](optimization-run.md) records the two optimization runs
+themselves, including the first one's failure, which is why the harness is now
+pinned to promotable surfaces.
+
+What follows is the fine print on `runs.json`.
 
 ## What these numbers are not
 
