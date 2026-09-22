@@ -23,11 +23,13 @@ workspace: default
 # its own holding harbor_wrapper.py, because Harbor's `_scoped_import_path`
 # resolves `harbor_wrapper:WrappedAgent` against the agent directory alone.
 #
-# The whole directory is the change surface. Every candidate is a full copy, and
-# the wrapper builds the agent from the copy's own agent.yaml, so edits to the
-# model, the system prompt, the MCP servers or workspace/skills/ are what the
-# next trial measures. Keep agent.yaml here in step with ../agent/agent.yaml,
-# which is the one you deploy.
+# Every candidate is a full copy, and the wrapper builds the agent from the
+# copy's own agent.yaml, so the next trial measures the candidate's own change.
+# The change surface is narrower than the directory: the system prompt,
+# subagents, and workspace/skills/. The wrapper and the remaining agent.yaml
+# blocks are pinned by _assert_promotable_change_surface, so a candidate can
+# only move the reward with something you could deploy. Keep agent.yaml here in
+# step with ../agent/agent.yaml, which is the one you deploy.
 #
 # A local path disables PR publishing for a winning candidate; that needs a git
 # URL of the form <url>@<ref>.
