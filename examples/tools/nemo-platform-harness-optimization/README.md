@@ -676,35 +676,30 @@ With `max_rounds: 1` and `max_candidates: 2`, one run gives you `agent-0`,
 `agent-1` and `agent-2`, and `OPTIMIZATION.md` reports which won. A longer run
 carries survivors into the next round and mutates those.
 
-#### What it proposed, across separate runs
+#### What it proposed
 
-The loop is not a prompt-tweaker. It has reached for three different parts of
-the agent, and each one is a surface you can deploy:
+The loop is not a prompt-tweaker. Each candidate gets one change, and across
+runs against this same Insight it has reached for three different parts of the
+agent, each one a surface you can deploy:
 
-| Surface it wrote | Where it came from |
-| --- | --- |
-| `workspace/skills/geometry-fidelity-policy/SKILL.md`, a policy document | one candidate of an earlier run |
-| `agent.yaml` `instructions.system.content`, a completion gate | `agent-1` of the run below |
-| `agent.yaml` `harnesses...deepagents.subagents`, an analysis subagent | `agent-2` of the same run |
-
-**No single candidate proposed all three.** Each is one candidate's single
-change, and the first came from a different run against the same Insight. The
-comparison below puts them side by side because they are alternatives you could
-promote, not because any run produced them together.
-
-What moved between those runs was mostly the harness. While the wrapper was
-editable a candidate took it every time, because it is the shortest path to
-moving a number; pinned, the same coding agent on the same Insight writes a
-completion gate and a subagent instead. The Eval Author also renamed its metric
-on every run, which is why rewards are never compared across runs here.
-[`results/optimization-run.md`](results/optimization-run.md) has the run-by-run
-detail.
+```text
+workspace/skills/geometry-fidelity-policy/SKILL.md   a policy document
+agent.yaml  instructions.system.content              a completion gate
+agent.yaml  harnesses...deepagents.subagents         an analysis subagent
+```
 
 All three are shipped verbatim in
 [`results/candidates/`](results/candidates/) so you can read what a coding agent
-actually writes when it is given traces, an Insight, and nothing else. None is
-preloaded into `agent/`: the agent you deploy in Step 2 is the naive one, and a
-change only arrives if the loop produces it.
+writes when it is given traces, an Insight, and nothing else. None is preloaded
+into `agent/`: the agent you deploy in Step 2 is the naive one, and a change
+only arrives if the loop produces it.
+
+They are alternatives, one per candidate, and the skill came from an earlier run
+against the same Insight; [`results/optimization-run.md`](results/optimization-run.md)
+has the run-by-run detail. What moved between those runs was mostly the harness.
+While the wrapper was editable a candidate took it every time, because it is the
+shortest path to moving a number; pinned, the same coding agent on the same
+Insight writes a completion gate and a subagent instead.
 
 They differ in kind, not just in wording:
 
