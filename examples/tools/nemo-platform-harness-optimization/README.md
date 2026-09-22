@@ -81,7 +81,7 @@ This example is a minimal, reproducible loop on
 4. use **trace intelligence** to find what the agent actually gets wrong
 5. hand the finding to the **Eval Author**, and let the platform write the
    evaluation that detects it next time
-6. let the **Experimenter** propose a fix and score it against that evaluation
+6. let the **Experimentalist** propose a fix and score it against that evaluation
 
 The point is not the mug. The point is that this is where you deploy an agent,
 observe it, and then *evolve* it.
@@ -251,7 +251,9 @@ command below substitutes it with `sed`.
 
 ```text
 Turn the mesh at <mesh> into a fully parametric FreeCAD model that a CAD
-designer can open and edit. Build it in a document named EvalMug.
+designer can open and edit. Build it in a new document named EvalMug,
+constructed from scratch; do not open, copy or merge a document left by an
+earlier run.
 
 - The result must be a single valid solid.
 - It must be a native sketch-based PartDesign feature tree, with sketches
@@ -326,8 +328,10 @@ tooling can read it rather than guess. The sections that earn their keep here:
 
 - System prompt: yes
 - Skills under `workspace/skills/`: yes
-- Model selection: with-approval
+- Subagents: yes
+- Model selection and sampling parameters: no
 - Eval task, reference mesh or scorer: no
+- Evaluation harness, including `harbor_wrapper.py`: no
 ```
 
 Two of those lines do more work than they look. *The feature tree is the
@@ -336,9 +340,11 @@ still be a bad result, and it is not hypothetical. One run here scored **0.903**
 with 43 geometry elements under 43 `Block` constraints and zero named dimensions.
 Shape-accurate, fully constrained, and uneditable.
 
-And `Change Scope` is machine-readable (`yes` / `no` / `with-approval`), so an
-automated optimizer can be told that the eval and the scorer are the measuring
-instrument and never a valid target.
+And `Change Scope` is machine-readable, so an automated optimizer can be told
+what it may touch. Every lever is `yes` or `no`, because nothing in an automated
+loop can act on "ask someone". The `yes` lines are exactly the surfaces a
+deployed agent carries; Step 6 explains why the rest are enforced rather than
+requested.
 
 Validate it before relying on it, because the parser is strict:
 
@@ -488,7 +494,7 @@ entity:
 | :---- | :---- | :---- |
 | **Analyst** | Traces in Intake | Insights |
 | **Eval Author** | One Insight + its traces | An eval suite that detects it |
-| **Experimenter** | One Insight + that suite | A scored candidate |
+| **Experimentalist** | One Insight + that suite | A scored candidate |
 
 The Eval Author has no command of its own. It runs as the first phase of
 `nemo agents experimentalist`. What it needs from you is an evaluation the
@@ -529,9 +535,9 @@ against the reference mesh.
 
 Building from the candidate's own config is what makes the loop meaningful.
 Every candidate is a full copy of `agent_source/`, so a candidate can change the
-model, the system prompt, the MCP server set, or add a skill under
-`workspace/skills/`, and the next trial measures that change rather than a proxy
-for it. The config needs `api_key_env` and `base_url` under `models.default`,
+system prompt, declare a subagent, or add a skill under `workspace/skills/`, and
+the next trial measures that change rather than a proxy for it. Everything else
+in the copy is pinned, for the reason Step 7 shows. The config needs `api_key_env` and `base_url` under `models.default`,
 which the deepagents adapter requires when the agent is built from a file.
 
 The profile, `harness/optimizer.yaml`, points at all of it:
@@ -801,7 +807,7 @@ Nothing here is CAD-specific:
 4. **Run a baseline** several times and collect traces.
 5. **Analyse the traces** to find what is actually wrong. *(Analyst)*
 6. **Author an eval for what you found**, so the next iteration can see it. *(Eval Author)*
-7. **Propose and score a fix** against that eval. *(Experimenter)*
+7. **Propose and score a fix** against that eval. *(Experimentalist)*
 8. **Deploy the winner and re-measure**, because a trial builds the agent
    from a config file while production serves a registered deployment.
 
@@ -874,6 +880,11 @@ from the gateway, and the runner injects it into the deployment process.
 
 ## Known limitations
 
+- **Only promotable surfaces are measurable, by design.** The harness and every
+  `agent.yaml` block outside `instructions` and `harnesses` are pinned, so a
+  candidate cannot win with a change you could not ship. The cost is that
+  genuinely useful work is out of reach: an MCP tool or a middleware hook needs
+  a human, or a custom Fabric adapter.
 - **A trial runs the agent from a config file, production serves a deployment.**
   `harbor_wrapper.py` builds each candidate from its own `agent.yaml`, so the
   change surface is real, but a trial and a deployed run are not byte-identical
