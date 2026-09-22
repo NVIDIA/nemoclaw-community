@@ -697,15 +697,25 @@ report:  ./experiment/eval-and-optimize/OPTIMIZATION.md
 for each round, and the full source of every candidate under `agents/agent-N/`.
 
 Two runs are recorded in
-[results/optimization-run.md](results/optimization-run.md), and they are worth
-reading together. In the first, the winning candidate put its change in the
-harness: the reward moved 0.514 to 0.664 for an edit that the traces show never
-reached the model and that could not have been deployed. In the second, run
-after pinning the harness, both candidates proposed deployable changes instead,
-one a system prompt and one a subagent, and the traces confirm both executed.
-The reward comparison in that second run is not usable, because environmental
-failures left the candidates scored on fewer trials than the baseline, and
-failed trials are dropped from the denominator rather than scored as zero.
+[results/optimization-run.md](results/optimization-run.md). In the first, the
+winning candidate put its change in the harness: the reward moved 0.514 to
+0.664 for an edit the traces show never reached the model and that could not be
+deployed. That is why the harness is now pinned. In the second, both candidates
+proposed deployable changes instead, one a system prompt and one a subagent,
+and the traces confirm both executed.
+
+Re-measured out of loop, one run per arm, same task and session:
+
+| Arm | Change | IoU |
+| --- | --- | ---: |
+| baseline | none | 0.4783 |
+| `agent-1` | system prompt only | **0.8974** |
+| `agent-2` | adds a subagent | **0.9414** |
+
+Both land above every baseline trial in the optimization run, which spanned
+0.178 to 0.882. This is **n=1 per arm** on a task whose spread is wide, so read
+it as a signal rather than an effect size; the record explains why and what n
+would settle it.
 
 **Only promotable changes are measurable.** Each candidate is a full copy of
 `agent_source/`, and the wrapper builds the agent from the copy's own

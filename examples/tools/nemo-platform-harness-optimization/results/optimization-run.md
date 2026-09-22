@@ -138,6 +138,33 @@ The run was stopped before the candidate train arms, which would have added
 trial, as `symmetric_material_overlap` did in run 1. So neither run exercises
 the guardrail rejecting a candidate that trades geometry for metric.
 
+## Measured out of loop
+
+The loop's reward table was unusable, so both candidates were re-measured
+directly: `nemo agents invoke --agent-config` against each config, scored by
+`scorer/score.py`, same task, same session, one run each, arms alternating.
+FreeCAD health was recorded at scoring time so a void could not be mistaken for
+a low score. All three runs were healthy.
+
+| Arm | Config | IoU | Wall time |
+| --- | --- | ---: | ---: |
+| baseline | `agent_source/agent.yaml` | 0.4783 | 3m23s |
+| prompt | `agent-1-prompt.yaml` | **0.8974** | 4m14s |
+| subagent | `agent-2-subagent.yaml` | **0.9414** | 8m44s |
+
+Both candidates land above every baseline trial measured that day; the
+optimizer's baseline spanned 0.178 to 0.882 across ten scored trials.
+
+**This is n=1 per arm.** One paired observation is a signal, not an effect size,
+and this task is bimodal: the same configuration has produced 0.042, 0.905 and
+0.909 across three runs. Treat the table as evidence that both changes reach
+the agent and do something, and as a reason to run n=3 before quoting a number
+anywhere that matters. Raw results are in
+[`results/candidates/measurement.csv`](candidates/measurement.csv).
+
+The subagent is the most accurate and by far the most expensive, at 2.6x the
+baseline's wall time for its separate analysis phase.
+
 ## What it does establish
 
 The loop, restricted to surfaces that can be deployed, proposed two changes
