@@ -225,8 +225,7 @@ the optimizer's baseline spanned 0.178 to 0.882 across ten scored trials.
 and this task is bimodal: the same configuration has produced 0.042, 0.905 and
 0.909 across three runs. Treat the table as evidence that both changes reach
 the agent and do something, and as a reason to run n=3 before quoting a number
-anywhere that matters. Raw results are in
-[`results/candidates/measurement.csv`](candidates/measurement.csv).
+anywhere that matters.
 
 The subagent is the most accurate and by far the most expensive, at 2.6x the
 baseline's wall time for its separate analysis phase.

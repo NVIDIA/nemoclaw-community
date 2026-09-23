@@ -10,7 +10,7 @@
 # checkout and needs no editing.
 
 # The registered agent name, as passed to `nemo agents create --name`.
-agent: cad-agent-e2e
+agent: cad-agent
 
 # The standard the Analyst judges runs against. Without it the Analyst can only
 # report that runs disagree with each other; it has no statement of what "good"

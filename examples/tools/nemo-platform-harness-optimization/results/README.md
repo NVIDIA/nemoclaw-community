@@ -15,12 +15,11 @@ copying into `agent/`:
 | [`candidates/system-prompt.yaml`](candidates/system-prompt.yaml) | `instructions.system.content` | `cp` over `agent/agent.yaml` |
 | [`candidates/subagent.yaml`](candidates/subagent.yaml) | `harnesses...deepagents.subagents` | `cp` over `agent/agent.yaml` |
 
-Two measurements accompany them:
-
-- `runs.json`, the n=3 comparison of the naive agent against the skill, from
-  2026-09-18, which is the summary table in the main [README](../README.md).
-- `candidates/measurement.csv`, one out-of-loop run of the baseline and each of
-  the three arms above, which is the table in the main README.
+One measurement accompanies them: `runs.json`, the n=3 comparison of the naive
+agent against the skill, from 2026-09-18. The main [README](../README.md) quotes
+its three naive-arm scores as the Step 4 baseline; the four-agent table in Step 7
+is a separate n=1 out-of-loop measurement, recorded in
+[optimization-run.md](optimization-run.md).
 
 [optimization-run.md](optimization-run.md) records the two optimization runs
 themselves, including the first one's failure, which is why the harness is now

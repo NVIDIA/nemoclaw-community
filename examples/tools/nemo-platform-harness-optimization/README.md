@@ -5,128 +5,116 @@
 
 # NeMo Platform Harness Optimization
 
-| Catalog field | Value |
-| --- | --- |
-| Description | Deploys a CAD agent against a live desktop application, scores its output geometrically, turns its traces into Insights, and lets the platform author an eval and propose a fix against it. |
-| Industry | 🏭 Manufacturing |
-| Requirements | macOS · Python 3.12 or 3.13 · FreeCAD 1.1 with the MCP addon · NeMo Platform 0.5.0 on localhost · Docker for the verifier · a registered model provider |
-| NemoClaw | N/A |
-| Harness | LangChain Deep Agents 0.7.13 |
-| OpenShell | N/A |
+
+| Catalog field | Value                                                                                                                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Description   | Deploys a CAD agent against a live desktop application, scores its output geometrically, turns its traces into Insights, and lets the platform author an eval and propose a fix against it. |
+| Industry      | 🏭 Manufacturing                                                                                                                                                                            |
+| Requirements  | macOS · Python 3.12 or 3.13 · FreeCAD 1.1 with the MCP addon · NeMo Platform 0.6.0 on localhost · Docker for the verifier · a registered model provider                                     |
+| NemoClaw      | N/A                                                                                                                                                                                         |
+| Harness       | LangChain Deep Agents, pinned by the platform to `>=0.7.8,<0.8`                                                                                                                                                                |
+| OpenShell     | N/A                                                                                                                                                                                         |
+
 
 A worked, end-to-end loop for an agent that drives a real application: deploy it,
 measure it against ground truth, find what it actually gets wrong, and let the
-platform write the evaluation that detects that failure next time.
+platform write the evaluation that detects that failure next time — then propose
+the fixes and score them against it.
 
 ## Screenshot
 
-[![A NeMo Studio trace view: one agent session expanded into a tree of nested spans on the left, the JSON payload for the selected span on the right, and span count, duration and total tokens in the header](assets/studio-trace.jpg)](assets/studio-trace.jpg)
-
-One agent session in NeMo Studio. The span tree records every model call, tool
-call and middleware step; the header carries the span count and token totals you
-need for the cost side of any comparison. Telemetry is on in `agent/agent.yaml`,
-so this appears without exporting anything or standing up a separate
-observability stack.
-
-Both screenshots come from an earlier run of this example, before the reference
-mesh was renamed, so the prompt text in the trace shows the older filename. The
-span tree, counts and Insight are otherwise what this walkthrough produces.
-
-The out-of-loop scorer, run against the same document:
-
-```text
-$ python3 scorer/score.py EvalMug meshes/reference_mug.obj
-0.3969
-```
+![A NeMo Studio trace view: one agent session expanded into a tree of nested spans on the left, the JSON payload for the selected span on the right, and span count, duration and total tokens in the header](assets/studio-trace.jpg)
 
 ## At A Glance
 
-| Question | Answer |
-| --- | --- |
-| Category | Developer Tool |
-| Contributor or provenance | NVIDIA |
-| Use this when | You have an agent driving an external application and you need a measured pass/fail rather than the agent's own report of success. |
-| You will get | One IoU number per run, Insights filed from the traces, and an optimizer run that builds each candidate from its own `agent.yaml` and scores it against an eval suite the platform authored from an Insight. |
-| Runs on | macOS with a FreeCAD GUI session on the same host. The agent runs on the host; only the verifier runs in a container. |
-| Requires | FreeCAD 1.1 with the freecad-mcp addon, NeMo Platform 0.5.0, Docker, and a registered model provider. |
-| Verified on | macOS 15, FreeCAD 1.1, NeMo Platform 0.5.0, deepagents 0.7.13, Python 3.13. |
-| Evidence level | local/static for the bundled tests; live end-to-end for the published measurement runs. |
-| Support and maturity | Best-effort community support. See [SUPPORT.md](../../../SUPPORT.md). The optimization agents move faster than the rest of the platform, so pin versions. |
+
+| Question                           | Answer                                                                                                                                                                                                              |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Category                           | Developer Tool                                                                                                                                                                                                      |
+| Contributor or provenance          | NVIDIA                                                                                                                                                                                                              |
+| Use this when                      | You are building a specialised agent that calls out to an external application through tools, and you want to run a harness engineering loop over it: gather the traces, turn them into Insights, author the evals those Insights imply, then propose changes and score them against those evals. |
+| You will get                       | A NeMo Platform deployment of a Deep Agents harness whose every run streams to Intake, plus a worked evaluation framework for a CAD application: reconstruct a parametric model from a mesh, score it by IoU, file Insights from the traces, and run an optimizer that proposes changes across system prompt, skills and subagents and scores each one against the authored eval suite. |
+| Runs on                            | macOS with a FreeCAD GUI session on the same host. The agent runs on the host; only the verifier runs in a container.                                                                                               |
+| Requires                           | FreeCAD 1.1 with the freecad-mcp addon, NeMo Platform 0.6.0, Docker, and a registered model provider.                                                                                                               |
+| Verified on                        | macOS 15, FreeCAD 1.1, NeMo Platform 0.6.0, deepagents 0.7.13, Python 3.13.                                                                                                                                         |
+| Evidence level                     | local/static for the bundled tests; live end-to-end for the published measurement runs.                                                                                                                             |
+| Support and maturity               | Best-effort community support. See [SUPPORT.md](../../../SUPPORT.md). The optimization agents move faster than the rest of the platform, so pin versions.                                                           |
 | External access, data, and actions | Sends prompts and geometry descriptions to your configured inference endpoint. Mutates the FreeCAD document open on your screen. Runs a Docker container for the verifier. Writes telemetry to your local platform. |
-| Start here | [Start Here](#start-here) |
-| Confirm success | [Verification](#verification) |
+| Start here                         | [Start Here](#start-here)                                                                                                                                                                                           |
+| Confirm success                    | [Verification](#verification)                                                                                                                                                                                       |
+
 
 ## Why this exists
 
-General-purpose coding assistants are strong at general software. They are much
-weaker at engineering tasks that live inside a specific application, with a
-specific data model and a specific notion of "correct."
+Baseline general-purpose harnesses — Claude Code, Codex, Hermes, Deep Agents —
+are very strong at general orchestration: planning a workflow, driving tools,
+and keeping a long task on track.
+
+What they do not carry is your domain. Plenty of workflows are specialised, and
+the specialisation is exactly the part that matters: a company's tagging
+strategy, its naming conventions, its house rules for how a model should be
+built. That knowledge lives in the organisation, not in the base harness, and it
+bites hardest when the agent is calling out to an external application. Moving
+from a general-purpose harness to a **specialised agent** is how you put it back
+in.
 
 Computer-aided design is a good example. Turning a scanned or exported mesh into
 a **parametric CAD model** is not a text problem. The output has to be a real
 feature tree of sketches, constraints and features that a designer can open and
 edit. A model that looks right and is not editable is worthless, and a model with
-the right volume can still be the wrong shape.
+the right volume can still be the wrong shape. A general-purpose harness pointed
+at FreeCAD will produce something; it will not reliably produce that.
 
-That is why specialised agents matter: they need the application's tools, and
-they need a definition of success that is measured, not asserted.
+Closing that gap is **harness engineering**: adding skills, subagent workflows
+and middleware such as hooks on top of a general harness until it behaves like a
+specialist. Done well it buys two things at once — better correctness on the
+task, and a better trajectory to get there. Neither can be improved without
+being observed, which is why traces matter here as much as scores: this example
+reads token counts, span counts and wall time off the same traces it reads the
+failures from, and reports accuracy and cost side by side.
 
 This example is a minimal, reproducible loop on
 [NVIDIA NeMo Platform](https://docs.nvidia.com/nemo-platform/documentation/home):
 
-1. deploy a CAD agent that drives a real CAD application through MCP
-2. define a **scorer** so "better" is a number, and an **Ethos** so the number is
-   not the only thing that counts
-3. run a **baseline** and collect traces
-4. use **trace intelligence** to find what the agent actually gets wrong
-5. hand the finding to the **Eval Author**, and let the platform write the
-   evaluation that detects it next time
-6. let the **Experimentalist** propose a fix and score it against that evaluation
-
-The point is not the mug. The point is that this is where you deploy an agent,
-observe it, and then *evolve* it.
-
-Two results up front, because they shaped everything else. The fixes the
-platform found on its own **roughly doubled the deliverable** once deployed and
-measured out of loop: geometric accuracy against the reference mesh went from
-0.478 to 0.897 for a system-prompt change, and 0.941 for a subagent. And an
-earlier candidate that *looked* like a win improved its metric by 67% while
-making the mug worse. Telling those two apart needed a third artifact alongside
-the scorer and the traces: a file that writes down what the agent is *for*.
-
-That lesson returns in the last step, sharper. Once the platform starts writing
-your evaluation criteria for you, the loop is no longer only optimizing against a
-measurement; it is choosing what to measure.
+1. Deploy a CAD agent that drives a real CAD application through MCP.
+2. Define an **evaluation suite**: a **scorer** that puts a number on how correct
+  a result is, and an **Ethos** that says what that number is for — the standard
+  you are tuning towards, and what you will not trade away to move it.
+3. Run a **baseline** and collect traces.
+4. Use **trace intelligence** to find what the agent actually gets wrong.
+5. Hand the finding to the **Eval Author**, and let the platform write the
+  evaluation that detects it next time.
+6. Let the **Experimentalist** propose a fix and score it against that evaluation.
 
 ## Prerequisites
 
-- **Python 3.12 or 3.13.** NeMo Platform 0.5.0 declares
-  `Requires-Python: >=3.12,<3.14`, so 3.11 and older and 3.14 and newer will
-  not resolve. The install command below pins the interpreter so a newer
-  system default cannot change which one the tool lands on. The offline test
-  suite under `tests/` runs in a separate interpreter of your choosing and
-  needs only Python 3.12 or newer; `requirements.txt` floors NumPy at 1.26,
-  the first release with Python 3.12 wheels.
-- **NeMo Platform 0.5.0**, installed pinned and with pre-releases allowed. The
-  `[all]` extra depends on a pre-release adapter, and an unpinned install
-  resolves backwards without saying so. See the install commands below.
+- **Python 3.12 or 3.13.** NeMo Platform 0.6.0 declares
+`Requires-Python: >=3.12,<3.14`, so 3.11 and older and 3.14 and newer will
+not resolve. The install command below pins the interpreter so a newer
+system default cannot change which one the tool lands on. The offline test
+suite under `tests/` runs in a separate interpreter of your choosing and
+needs only Python 3.12 or newer; `requirements.txt` floors NumPy at 1.26,
+the first release with Python 3.12 wheels.
+- **NeMo Platform 0.6.0**, installed pinned and with pre-releases allowed. The
+`[all]` extra depends on a pre-release adapter, and an unpinned install
+resolves backwards without saying so. See the install commands below.
 - **FreeCAD 1.1+** with the [freecad-mcp](https://github.com/neka-nat/freecad-mcp)
-  addon installed in your FreeCAD user `Mod/` directory and `auto_start_rpc`
-  enabled. Launch the GUI normally: a FreeCAD started by executing the binary
-  directly never attaches to the window server, so its RPC port answers while no
-  queued work executes.
+addon installed in your FreeCAD user `Mod/` directory and `auto_start_rpc`
+enabled. Launch the GUI normally: a FreeCAD started by executing the binary
+directly never attaches to the window server, so its RPC port answers while no
+queued work executes.
 - **Docker**, for Steps 6 and 7. The evaluation suite's verifier runs in a
-  container. The agent itself does not; see Step 6.
+container. The agent itself does not; see Step 6.
 - **An inference provider** registered on the platform. Model entities are
-  auto-discovered; list them with `nemo models list --all-pages` and substitute
-  your own entity name into `agent/agent.yaml`.
+auto-discovered; list them with `nemo models list --all-pages` and substitute
+your own entity name into `agent/agent.yaml`.
 - **No ambient Relay config.** If `~/.config/nemo-relay/plugins.toml` exists,
-  every deployment fails at startup. Move it aside.
+every deployment fails at startup. Move it aside.
 
 Install the platform:
 
 ```bash
-uv tool install --python 3.13 --prerelease allow "nemo-platform[all]==0.5.0"
+uv tool install --python 3.13 --prerelease allow "nemo-platform[all]==0.6.0"
 nemo --version     # confirm; a bad resolution looks like success
 ```
 
@@ -182,15 +170,6 @@ mcp:
 environment:
   workspace: ./workspace
   artifacts: ./artifacts
-
-telemetry:
-  enabled: true
-  provider: relay
-  atif:
-    enabled: true
-    storage:
-      - type: http
-        endpoint: http://localhost:8080/apis/intake/v2/workspaces/default/ingest/atif
 ```
 
 Three things matter here.
@@ -210,9 +189,19 @@ means `url` is the executable and `args` are its arguments. The agent gets tools
 like `execute_code`, `create_object` and `list_documents`, and everything it does
 appears in the FreeCAD window.
 
-**`telemetry.enabled: true`** is what makes the rest of this possible. It streams
-the agent's execution trace to **NeMo Intake** in ATIF format. Without it there
-are no traces, and without traces there is nothing to analyse.
+**The telemetry you do not write** is what makes the rest of this possible.
+Every run streams its execution trace to
+[**NeMo Intake**](https://docs.nvidia.com/nemo-helix/documentation/agents/observe-agents/)
+in ATIF format, and without traces there is nothing to analyse. Note that there
+is no `telemetry:` block above. From 0.6.0 the platform reads
+`telemetry.enabled` as a tri-state: unset means *wire it for me*, so a
+deployment gets its Intake export filled in from the platform's own base URL and
+workspace. Declaring it by hand only hardcodes `localhost:8080` and `default`
+back into the config. Opt out with `telemetry: {enabled: false}`.
+
+The auto-wiring happens in the deployment backend, so it does not apply to
+`nemo agents invoke --agent-config <file>`, which builds an agent directly. That
+is why the trial config in Step 6 still declares its own telemetry.
 
 ### Step 2: Deploy it
 
@@ -231,11 +220,13 @@ cd ..
 nemo agents list
 nemo agents deployments list
 nemo agents logs cad-agent-deployment -f
+nemo agents chat --agent-deployment cad-agent-deployment   # interactive session
 ```
 
-There is no in-place update. To ship a config change, undeploy, delete, then
-create and deploy again. The platform serves the config captured at registration
-time.
+There is still no in-place update in 0.6.0: every agent resource is
+create/list/get/delete, with nothing that patches a registered agent. To ship a config change, undeploy, delete, then create and deploy again.
+The platform serves the config captured at registration time, and `deploy`
+snapshots the environment and compute spec onto the deployment as well.
 
 ### Step 3: Start with the eval, not the agent
 
@@ -250,18 +241,26 @@ path cannot be committed. The harness wrapper resolves it at invoke time; the
 command below substitutes it with `sed`.
 
 ```text
-Turn the mesh at <mesh> into a fully parametric FreeCAD model that a CAD
-designer can open and edit. Build it in a new document named EvalMug,
-constructed from scratch; do not open, copy or merge a document left by an
-earlier run.
+Turn the mesh at
+`@MESH_PATH@`
+into a fully parametric FreeCAD model that a CAD designer can open and edit.
 
+Build it in a new FreeCAD document named `EvalMug`, constructed
+from scratch. Other documents may be open from earlier work: do not open,
+copy, merge or `saveCopy` any of them. Confirm the document does not
+already exist before you create it.
+
+Requirements:
 - The result must be a single valid solid.
 - It must be a native sketch-based PartDesign feature tree, with sketches
   driving features, not a stack of fused boolean primitives.
-- A designer must be able to change a named dimension and have it rebuild.
+- A designer must be able to change a named dimension and have the model rebuild.
 - It must match the original mesh closely.
 
-Leave the document open when you finish, with exactly one object visible.
+Leave the document open when you finish, with exactly one object visible:
+the finished model. The result is scored from the open document.
+
+Do not take screenshots; verify numerically.
 ```
 
 The source is a 1,824-vertex coffee mug mesh, 15.50 x 10.33 x 13.44 mm.
@@ -281,12 +280,6 @@ This is deliberately minimal: one number, computed by per-XY-column Z-interval
 ray casting, exact along Z and discretised at 0.1 mm in XY. That is enough to
 make the loop work.
 
-Volume alone is not a substitute. One run during development came within 3.7% of
-the reference volume and scored **IoU 0.0**, because it had been built on the
-wrong axis. Boolean intersection is not usable either: OCC returns an empty shape on
-some perfectly valid candidates, and FreeCAD's mesh booleans crash the process on
-the same inputs.
-
 Keep the scorer **outside** the agent's directory, in `scorer/` rather than
 `agent/`. Everything inside the agent directory is staged into the deployment and
 readable by the agent's own file tools, and an agent that can read its grading
@@ -295,7 +288,8 @@ criteria will eventually optimize against them.
 #### The Ethos: what the number is for
 
 A scorer measures shape. It cannot say why shape matters, what you would trade
-for it, or what would count as cheating. That belongs in an **Ethos**:
+for it, or what would count as cheating. That belongs in an
+[**Ethos**](https://docs.nvidia.com/nemo-helix/v0.6.0/documentation/agents/optimize-agents/ethos/):
 `agent/ETHOS.md`, a single Markdown file stating the agent's intent, uploaded
 alongside the agent by `nemo agents create`.
 
@@ -343,8 +337,8 @@ Shape-accurate, fully constrained, and uneditable.
 And `Change Scope` is machine-readable, so an automated optimizer can be told
 what it may touch. Every lever is `yes` or `no`, because nothing in an automated
 loop can act on "ask someone". The `yes` lines are exactly the surfaces a
-deployed agent carries; Step 6 explains why the rest are enforced rather than
-requested.
+deployed agent carries; Step 6 explains why the rest are pinned rather than
+merely discouraged.
 
 Validate it before relying on it, because the parser is strict:
 
@@ -389,10 +383,6 @@ The scorer disagreed: **0.3338, 0.3969 and 0.4323**, all well under the 0.85 the
 Ethos asks for. The agent was confidently wrong, and only the measurement caught
 it.
 
-When a run 502s, recover duration and token counts from the trace rather than the
-CLI, and do not score the document until the run has actually finished, or you
-will grade a half-built model.
-
 ### Step 5: Trace intelligence
 
 Now the interesting part. Instead of reading traces by hand, ask the platform to
@@ -410,17 +400,13 @@ containers, no exported files. It surveys spans, clusters similar failures acros
 sessions, and emits **Insights**: persistent entities with a title, an actionable
 description, and the trace references that evidence them.
 
-`--ethos` is optional and takes a path. Supply it and the analyst judges the
-traces against your success criteria; leave it out and it infers a standard of
-its own, which is usually reasonable and not necessarily yours. Measured on one
-pair of runs over identical traces, minutes apart, with `--ethos` as the only
-variable: **0 Insights without it, and one with it** that was then confirmed
-true against the document.
+`--ethos` is optional and takes a path. Supply it and the analyst judges the traces against your success criteria; leave it out and it infers a standard of its own, which is usually reasonable and not necessarily yours.
 
-One behaviour to know before Step 6 introduces a profile: if the analyst
-discovers an `optimizer.yaml` by walking up from the working directory, it writes
-Insights to `.nemo-optimizer/insights.yaml` **instead of** the platform, and they
-will not appear in Studio. Run it from the example root, above `harness/`.
+In 0.6.0 Insights always go to the platform first, so they appear in Studio
+regardless of where you run the analyst from, and `--insights-file-output`
+mirrors them to a local YAML file with their platform ids. On 0.5.0 a discovered
+`optimizer.yaml` redirected them to a file *instead of* the platform; if you are
+following older notes, that is what changed.
 
 You can also opt the agent into periodic analysis and let a platform controller
 do it on a schedule:
@@ -431,7 +417,8 @@ nemo insights analysis status
 ```
 
 From three traces, and nothing else on a platform with no other history, it
-filed **three** Insights:
+filed a handful of Insights. Two of them describe the agent's behaviour on the
+task:
 
 > **1. Mesh-fidelity verification does not establish close geometric agreement**
 >
@@ -443,28 +430,17 @@ filed **three** Insights:
 
 > **2. Chatty reconstruction loops repeatedly replay large context**
 >
-> *"…12-17 provider model calls and approximately 218k, 222k and 381k tokens…
-> every additional measurement or correction replayed an increasingly large
-> history."*
+> *"…12-17 provider model calls and approximately 218k, 222k and 381k tokens…*
+> *every additional measurement or correction replayed an increasingly large*
+> *history."*
 
-> **3. Reconstruction runs reuse and mutate models from earlier requests**
->
-> *"In the EvalMug2 trace it operated on existing EvalMug1 and used `saveCopy`;
-> in the EvalMug3 trace it merged the existing EvalMug2 project into a new
-> document… invalidates repeatability measurements because later trials inherit
-> prior geometry."*
-
-Three defects, three different kinds. The first is **correctness**: the agent
-has no way to check its own work. The second is **process**: it gets there by
-trial and error. The third is **hygiene**, and it is the one that would have
-quietly corrupted everything downstream, because a trial that inherits the last
-trial's geometry is not a measurement. It is fixed in the task instruction
-rather than in the agent: the prompt now requires a document built from scratch
-and forbids opening, copying or merging one left by an earlier run.
+Two defects, two different kinds. The first is **correctness**: the agent has no
+way to check its own work. The second is **process**: it gets there by trial and
+error.
 
 The rest of this walkthrough optimizes against the first.
 
-[![A NeMo Studio Insight titled "Mesh-fidelity validation accepts materially inconsistent reconstructions", showing status resolved, the agent name, a description, and the three observed sessions with their durations, spans and token counts](assets/studio-insight.jpg)](assets/studio-insight.jpg)
+![A NeMo Studio Insight titled "Mesh-fidelity verification does not establish close geometric agreement", showing the agent name, a description, and the three observed sessions with their durations, spans and token counts](assets/studio-insight.jpg)
 
 Two things are worth noticing. The scorer independently agrees with the first
 Insight, and the analyst cites *"the 0.85 success criterion"*, a number that
@@ -500,11 +476,13 @@ defect it diagnosed.
 NeMo Platform closes that gap with two more agents that work on the same Insight
 entity:
 
-| Agent | Takes | Produces |
-| :---- | :---- | :---- |
-| **Analyst** | Traces in Intake | Insights |
-| **Eval Author** | One Insight + its traces | An eval suite that detects it |
-| **Experimentalist** | One Insight + that suite | A scored candidate |
+
+| Agent               | Takes                    | Produces                      |
+| ------------------- | ------------------------ | ----------------------------- |
+| **Analyst**         | Traces in Intake         | Insights                      |
+| **Eval Author**     | One Insight + its traces | An eval suite that detects it |
+| **Experimentalist** | One Insight + that suite | A set of scored candidates    |
+
 
 The Eval Author has no command of its own. It runs as the first phase of
 `nemo agents experimentalist`. What it needs from you is an evaluation the
@@ -547,7 +525,19 @@ Building from the candidate's own config is what makes the loop meaningful.
 Every candidate is a full copy of `agent_source/`, so a candidate can change the
 system prompt, declare a subagent, or add a skill under `workspace/skills/`, and
 the next trial measures that change rather than a proxy for it. Everything else
-in the copy is pinned, for the reason Step 7 shows. The config needs `api_key_env` and `base_url` under `models.default`,
+in the copy is pinned: a loop optimizes whatever surface you leave open, so
+leave open only what you can ship. `scorer/verify_candidates.py` is what makes
+that a boundary rather than a request. It lives outside `agent_source/`, is
+never copied into a candidate, and compares each one against the pristine
+originals:
+
+```bash
+python3 scorer/verify_candidates.py harness/experiment
+```
+
+It exits non-zero and names the offender if a candidate changed
+`harbor_wrapper.py` or a pinned `agent.yaml` block. Run it before trusting a
+run's ranking. The config needs `api_key_env` and `base_url` under `models.default`,
 which the deepagents adapter requires when the agent is built from a file.
 
 The profile, `harness/optimizer.yaml`, points at all of it:
@@ -576,12 +566,20 @@ nemo agents experimentalist doctor --insight <insight-id>
 ```
 
 ```text
-Agent-source  ✓ evaluator entrypoint harbor_wrapper:WrappedAgent
+Agent-source  ✓ evaluator entrypoint harbor_wrapper:WrappedAgent   ✓ git is available
+              ⚠ remote candidate persistence requires agent_source to be a git URL
 Artifacts     ✓ task_template  ✓ train dataset  ✓ validation dataset
 Models        ✓ default=<your-model>; fast=<your-fast-model>
 Platform      ✓ http://localhost:8080 reachable   ✓ insight verified
+Profile       ✓ profile for agent 'cad-agent'
 Runtime       ✓ docker daemon running             ✓ harbor importable
 ```
+
+The one warning is expected: `agent_source` is a local directory here, so the
+loop can score candidates but cannot open a pull request for the winner. The
+`Profile` line is the check worth reading — it resolves the agent name in
+`optimizer.yaml` against the registered agent, so it fails if the two drift
+apart.
 
 One setting is not optional. Concurrency defaults to your CPU count, but a live
 FreeCAD session is a single shared resource, so trials must be serial. The same
@@ -607,61 +605,44 @@ regression_metrics:
 `n_attempts` matters as much as the bounds. Agent runs are noisy, and a single
 trial per task cannot separate a real improvement from run-to-run variance.
 
-**What the Eval Author actually wrote here.** Given the first Insight and its
-three traces, it authored a metric asking whether the agent performed a
-*symmetric* geometry comparison and acted on the answer, which is the Insight's
-own complaint turned into something executable. That metric name becomes the
-run's objective, and every candidate is then scored on it:
+**What the Eval Author wrote for this Insight.** Given the Insight and its traces,
+it authored a metric named `geometry_fidelity_validation`: does the agent perform
+a *symmetric* geometry comparison and act on the answer? That is the Insight's
+own complaint turned into something executable. The authored metric becomes the
+run's objective, and every candidate is scored on it. It is re-authored on each
+run, so if you need runs you can compare directly, freeze the suite and pass
+`--no-insight`.
 
-| Run | Authored objective |
-| --- | --- |
-| earlier | `geometry_fidelity_validation` |
-| run 1 | `symmetric_material_overlap` |
-| run 2 | `symmetric_geometry_fidelity` |
-
-Three runs, three names, one Insight. **The Eval Author is non-deterministic**,
-so re-authoring is a re-baselining event rather than a refresh, and rewards are
-never comparable across runs. Freeze the suite and use `--no-insight` if you
-need runs you can compare directly.
-
-All three also resolved to the same `eval.iou` span the wrapper publishes, which
-means the objective and the guardrail below measured the same thing and the
-guardrail was never exercised. Convenient, and not something to rely on.
-
-**`regression_metrics` is the part that keeps the loop honest, and it is on from
-the first run.** The Eval Author writes the objective, and its metric asks
-whether the agent measured its own output and acted on the result. That is the
-right question for the Insight and the wrong question for the product: a
-candidate can score 1.000 on it while building a worse mug. That is not
-hypothetical. An earlier run of this example produced a winner whose authored
-metric rose 67% while IoU fell from 0.6207 to 0.5442.
+**`regression_metrics` is what keeps the loop honest.** The authored objective
+asks whether the agent measured its own output — the right question for the
+Insight, and the wrong question for the product. A candidate can score 1.000 on
+it while building a worse mug, and that is not hypothetical: an earlier run
+produced a winner whose authored metric rose 67% while IoU fell from 0.6207 to
+0.5442.
 
 So the deliverable goes in as a floor rather than as a second objective.
-`eval_iou` is the out-of-loop geometric score, measured on the host by the
-wrapper and published into the trace as a span the containerised verifier reads
-back. The selector treats the two lists differently: objectives are *ranked*,
-while a candidate that worsens a regression metric against the baseline is
-**dropped before ranking**. A gain on the authored metric cannot pay for a loss
-on geometry.
+Objectives are *ranked*; a candidate that worsens a regression metric against the
+baseline is **dropped before ranking**, so a gain on the authored metric cannot
+pay for a loss on geometry. Adding objectives widens the Pareto front and makes
+selection noisier. Adding a guardrail only ever removes candidates.
 
-It is also the only list that cannot be inflated. Adding objectives widens the
-Pareto front and makes selection noisier, because with several noisy objectives
-estimated at `n_attempts: 2` almost everything is non-dominated by chance.
-Adding a guardrail only ever removes candidates.
+`eval_iou` reaches the loop through the trace, because the verifier runs in a
+container and can never open FreeCAD. Three small pieces carry it:
 
-That holds only if a candidate cannot rewrite the guardrail. The optimizer
-copies `agent_source/` into every candidate and invites a coding agent to edit
-it, so the metric lives in `scorer/trial_metric.py`, outside that directory, and
-the wrapper loads it from the example root and refuses to run if it ever
-resolves inside the candidate. The scorer it calls is outside for the same
-reason: anything inside the agent directory is readable, and now writable, by
-the thing being measured.
+- `scorer/trial_metric.py` runs `scorer/score.py` on the host once the agent
+  finishes and returns the IoU as an `eval.iou` span, which `harbor_wrapper.py`
+  appends to the trace it hands the verifier.
+- `tests/check_iou.py`, inside the container, reads that span back out and
+  writes `{"eval_iou": ...}`; a missing span exits non-zero rather than scoring
+  zero, because a broken scorer must not look like a broken reconstruction.
+- `tests/merge_metrics.py` folds it into `reward.json` under the name
+  `experiment-config.yaml` lists as a regression metric.
 
-The cost is getting ground truth into the loop at all: the verifier runs in a
-container and can never open FreeCAD, so IoU has to be measured host-side and
-carried in through the trace. That is the one piece of real work in
-`harbor_wrapper.py`, and it is what turns the loop from optimizing a proxy into
-optimizing a proxy that is not allowed to break the product.
+`trial_metric.py` and the `score.py` it calls both live in `scorer/`, outside
+`agent_source/` — the directory the optimizer copies into every candidate and
+invites a coding agent to edit. The wrapper loads them from the example root and
+refuses to run if either ever resolves inside the candidate: a candidate that
+can rewrite its own guardrail can pass it.
 
 ### Step 7: Let the platform fix it
 
@@ -687,26 +668,13 @@ validation score here measures repeatability on the same part, not
 generalization to a new one. Point it at a different mesh with different
 requirements if you want the second thing.
 
-#### Check the candidates before you read the results
-
-```bash
-python3 scorer/verify_candidates.py harness/experiment
-```
-
-Every candidate must have stayed inside the change surface, and this is the
-check that decides it. The wrapper carries the same test, but it ships *inside*
-the file it guards, so a candidate that rewrites the wrapper deletes the test
-in the same edit and nothing inside the candidate is left to object. This script
-lives in `scorer/`, is never copied into a candidate, and exits non-zero naming
-any that changed the harness or a pinned `agent.yaml` block. A rejected
-candidate's reward does not measure a shippable change, so the run's ranking is
-unsound and nothing from it should be promoted.
-
 #### What one run produces
 
 A round is a baseline plus `max_candidates` **rival** agents. Each candidate is
-a full copy of `agent_source/` with **one** change applied by a coding agent;
-they are alternatives competing against each other, never a combined patch:
+a full copy of `agent_source/` with the change proposed for it applied by a
+coding agent; candidates are alternatives competing against each other, never a
+combined patch. A single candidate is not limited to one surface — the
+Experimentalist can propose a system prompt edit and a skill together:
 
 ```text
 harness/experiment/eval-and-optimize/
@@ -724,9 +692,10 @@ carries survivors into the next round and mutates those.
 
 #### What it proposed
 
-The loop is not a prompt-tweaker. Each candidate gets one change, and across
-runs against this same Insight it has reached for three different parts of the
-agent, each one a surface you can deploy:
+The Experimentalist proposes changes wherever it judges the Insight is best
+fixed, not just in the system prompt. Across runs and candidates against this
+same Insight it reached for three different parts of the agent, each one a
+surface you can deploy:
 
 ```text
 workspace/skills/geometry-fidelity-policy/SKILL.md   a policy document
@@ -738,23 +707,19 @@ All three are shipped verbatim in
 [`results/candidates/`](results/candidates/) so you can read what a coding agent
 writes when it is given traces, an Insight, and nothing else. None is preloaded
 into `agent/`: the agent you deploy in Step 2 is the naive one, and a change
-only arrives if the loop produces it.
+only arrives if the loop produces it. The runs behind them are written up in
+[`results/optimization-run.md`](results/optimization-run.md).
 
-They are alternatives, one per candidate, and the skill came from an earlier run
-against the same Insight; [`results/optimization-run.md`](results/optimization-run.md)
-has the run-by-run detail. What moved between those runs was mostly the harness.
-While the wrapper was editable a candidate took it every time, because it is the
-shortest path to moving a number; pinned, the same coding agent on the same
-Insight writes a completion gate and a subagent instead.
-
-They differ in kind, not just in wording:
+These three were measured one surface at a time, so each number below is
+attributable to the surface that produced it. They differ in kind, not just in
+wording:
 
 - the **skill** states a standard the agent should apply, and the agent decides
-  whether to read it
+whether to read it
 - the **system prompt** makes the same standard a completion gate that fires
-  after every geometry change, with no opt-out
+after every geometry change, with no opt-out
 - the **subagent** splits the work, forcing a measured analysis phase to return
-  a structured `ReferenceFittingSpecification` before construction starts
+a structured `ReferenceFittingSpecification` before construction starts
 
 Each reinvented the same idea from the traces alone: declare a tolerance first,
 then produce **bidirectional** evidence, because a one-way nearest-distance
@@ -767,19 +732,18 @@ Promoted one at a time onto the baseline agent and measured separately, same
 task, same FreeCAD session, one invocation each, scored by `scorer/score.py`
 out of loop. Four agents, four independent measurements:
 
-| Agent | Surface changed | IoU | Tokens | Spans | Wall time |
-| --- | --- | ---: | ---: | ---: | ---: |
-| baseline | nothing | 0.4783 | 196,289 | 135 | 3m23s |
-| skill | `workspace/skills/` | 0.5370 | 236,650 | 151 | 5m04s |
-| system prompt | `instructions.system.content` | **0.8974** | 235,581 | 154 | 4m14s |
-| subagent | `harnesses...deepagents.subagents` | **0.9414** | 632,265 | 289 | 8m44s |
 
-Step 9 has the `cp` command for each surface.
+| Agent         | Surface changed                    | IoU        | Tokens  | Spans | Wall time |
+| ------------- | ---------------------------------- | ---------- | ------- | ----- | --------- |
+| baseline      | nothing                            | 0.4783     | 196,289 | 135   | 3m23s     |
+| skill         | `workspace/skills/`                | 0.5370     | 236,650 | 151   | 5m04s     |
+| system prompt | `instructions.system.content`      | **0.8974** | 235,581 | 154   | 4m14s     |
+| subagent      | `harnesses...deepagents.subagents` | **0.9414** | 632,265 | 289   | 8m44s     |
 
-Raw scores and FreeCAD health per run are in
-[`results/candidates/measurement.csv`](results/candidates/measurement.csv).
 
-Three things worth reading off that table.
+Step 8 has the `cp` command for each surface.
+
+Two things worth reading off that table.
 
 **The two unconditional changes won.** The skill barely moved the baseline,
 while the completion gate and the subagent roughly doubled it. The skill is
@@ -794,38 +758,7 @@ reference densely before any geometry is built. Per token spent it is much the
 worse deal, which makes the system prompt the better default and the subagent
 the choice when accuracy dominates cost.
 
-**This is n=1 per arm.** One run each is a signal, not an effect size, and this
-task is bimodal: the same configuration has produced 0.042, 0.905 and 0.909
-across three runs. Treat the ordering as a hypothesis worth n=3 before you
-quote it. [`results/optimization-run.md`](results/optimization-run.md) records
-both optimization runs in full, including the first one's failure.
-
-### Step 8: The optimizer is not a prompt-tweaker
-
-Step 5 produced three Insights and this walkthrough optimizes against the
-first. The second, *"Chatty reconstruction loops repeatedly replay large
-context"*, is a different kind of problem: process rather than correctness.
-
-Running the same loop against it is worth doing for one observation. The three
-surfaces in Step 7 are not the limit of what a coding agent will reach for. It
-has also written MCP servers, an execution governor, and a resilient MCP wrapper
-classifying every call as success, recoverable, or terminal, none of it
-suggested to it. That is real engineering, and none of it can be deployed from a
-candidate, which is why the harness and every `agent.yaml` block outside
-`instructions` and `harnesses` are pinned. A loop optimizes whatever surface you
-leave open, so leave open only what you can ship.
-
-Step 9 then re-measures the winner on the deployed agent, which is a different
-environment rather than a different change.
-
-Only the first Insight is carried through to a promoted change here. The second
-was run and its candidates improved the metrics they were given, but no
-end-to-end win on the deliverable could be demonstrated, so nothing was
-promoted. The third is fixed in the task instruction rather than by the loop.
-All three are still `open` on the platform, because an Insight is resolved by a
-measurement you ran on the deployed agent, not by a candidate winning a round.
-
-### Step 9: Promote the fix, then measure what you shipped
+### Step 8: Promote the fix, then measure what you shipped
 
 A skill reaches the agent through `environment.workspace` on a *deployed* config,
 which is exactly the surface the trials could not exercise. So promoting is not
@@ -856,18 +789,6 @@ nemo agents deploy --agent cad-agent --name cad-agent-deployment --mode subproce
 cd ..
 ```
 
-Then repeat Step 4 and compare against your baseline. The four-agent table in
-Step 7 is that comparison, run out of loop on these shipped configs.
-
-Two things to carry into your own reading of it. Accuracy is bought with time
-and tokens: an n=3 measurement of the skill arm cost roughly 50% more tokens and
-25% more latency than the naive agent, because the agent measures and iterates
-instead of building once and declaring success. And the distribution matters as
-much as the median: that arm scored 0.0421, 0.9049 and 0.9092, a mean of 0.619
-that no run landed near. **Report the median and the fraction of runs clearing
-your bar, not the mean.** Full records and their limits are in
-[results/README.md](results/README.md).
-
 Mark the Insight resolved only once the redeployed agent clears the bar on a
 measurement you ran yourself:
 
@@ -889,7 +810,7 @@ Nothing here is CAD-specific:
 6. **Author an eval for what you found**, so the next iteration can see it. *(Eval Author)*
 7. **Propose and score a fix** against that eval. *(Experimentalist)*
 8. **Deploy the winner and re-measure**, because a trial builds the agent
-   from a config file while production serves a registered deployment.
+  from a config file while production serves a registered deployment.
 
 Steps 5 to 7 are the ones the platform automates, and step 6 is what makes it a
 loop rather than a single repair. A scorer written up front can only measure the
@@ -900,13 +821,13 @@ What does not automate is judgment, and the loop's own numbers will not supply
 it. Across these runs:
 
 - The scorer said **IoU 0.6207** while the agent reported success. Re-measured at
-  n=3, the same agent scored **0.334 to 0.432**; the first number was a lucky draw.
+n=3, the same agent scored **0.334 to 0.432**; the first number was a lucky draw.
 - The authored metric grades whether the agent *checks its work*, not whether
-  the mug is right, and that gap is exactly the room a candidate has to win the
-  metric while losing the product. In the recorded run the two happened to
-  coincide, which is luck, not design.
+the mug is right, and that gap is exactly the room a candidate has to win the
+metric while losing the product. In the recorded run the two happened to
+coincide, which is luck, not design.
 - The winner that did hold up cost **50% more tokens** than the naive agent. Read
-  in isolation, that is a regression.
+in isolation, that is a regression.
 
 Every one of those numbers is real and correctly measured. The conclusion each
 invited on its own was wrong, because each answered a narrower question than the
@@ -927,72 +848,70 @@ loop, as the things it answers to rather than things it can edit.
 Copy `.env.example` to `.env`, which is git-ignored. The example file names every
 variable and carries no values.
 
-| Variable | Default | What it does |
-| --- | --- | --- |
-| `NEMO_DEFAULT_MODEL` | none | Workspace-qualified model for the analyst and optimizer. Required. |
-| `NEMO_FAST_MODEL` | none | Workspace-qualified fast model. Required. |
-| `NMP_BASE_URL` | `http://localhost:8080` | The local platform. |
-| `NMP_WORKSPACE` | `default` | Workspace the agent is registered in. |
-| `NEMO_AGENTS_GATEWAY_READ_TIMEOUT` | `300` | Raise it. The gateway caps any response at 300 s and returns 502 while the agent keeps working. |
-| `FREECAD_RPC` | `http://127.0.0.1:9875` | The MCP addon's RPC endpoint. |
-| `FREECAD_BIN` | platform default | FreeCAD binary used for headless scoring. |
-| `CAD_SCORER` | `scorer/score.py` | Absolute path to the scorer. |
-| `CAD_AGENT_TIMEOUT` | `3600` | Seconds to wait for one invocation. |
-| `CAD_AGENT_TRACE_WAIT` | `3600` | Seconds to wait for the trace to reach Intake, which ingests asynchronously. |
+
+| Variable                           | Default                 | What it does                                                                                    |
+| ---------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------- |
+| `NEMO_DEFAULT_MODEL`               | none                    | Workspace-qualified model for the analyst and optimizer. Required.                              |
+| `NEMO_FAST_MODEL`                  | none                    | Workspace-qualified fast model. Required.                                                       |
+| `NMP_BASE_URL`                     | `http://localhost:8080` | The local platform.                                                                             |
+| `NMP_WORKSPACE`                    | `default`               | Workspace the agent is registered in.                                                           |
+| `NEMO_AGENTS_GATEWAY_READ_TIMEOUT` | `300`                   | Raise it. The gateway caps any response at 300 s and returns 502 while the agent keeps working. |
+| `FREECAD_RPC`                      | `http://127.0.0.1:9875` | The MCP addon's RPC endpoint.                                                                   |
+| `FREECAD_BIN`                      | platform default        | FreeCAD binary used for headless scoring.                                                       |
+| `CAD_SCORER`                       | `scorer/score.py`       | Absolute path to the scorer.                                                                    |
+| `CAD_AGENT_TIMEOUT`                | `3600`                  | Seconds to wait for one invocation.                                                             |
+| `CAD_AGENT_TRACE_WAIT`             | `3600`                  | Seconds to wait for the trace to reach Intake, which ingests asynchronously.                    |
+
 
 No API key belongs in `agent.yaml`. Platform-routed models take their credential
 from the gateway, and the runner injects it into the deployment process.
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-| --- | --- | --- |
-| `502 Bad Gateway`, but the deployment logged `200` | The gateway caps a response at 300 s while the agent keeps building. | Raise `NEMO_AGENTS_GATEWAY_READ_TIMEOUT`. Recover tokens and latency from the trace, not the client. |
-| Every deployment fails at startup | An ambient `~/.config/nemo-relay/plugins.toml`. | Move it aside; select Relay configs with `HERMES_NEMO_RELAY_PLUGINS_TOML`. |
-| `agents create` fails with `File exists: .../-ethos-upload-` | `--agent-config` was a relative path. | Pass an absolute path. |
-| Config edits change nothing | There is no update command; the platform serves the config captured at registration. | Undeploy, delete, create and deploy again, as in Step 9. |
-| Scorer raises `ConnectionRefusedError` | FreeCAD went down. The score is void, not zero. | Probe port 9875, relaunch the GUI, discard the run. |
-| RPC port listens but nothing executes | FreeCAD was started by running the binary directly, so it never attached to the window server. | Quit it and launch the GUI normally. |
-| A metric scores 0.000 for a tool the agent called, or counts are inflated ~70x | Intake nests MCP calls inside LangGraph node spans, and every model turn replays the whole tool history. | Walk span payloads for `{"type": "tool_call"}` and de-duplicate on `call["id"]`, not on position. |
-| Analyst finds nothing and Studio shows no Insights | A discovered `optimizer.yaml` redirected them to `.nemo-optimizer/insights.yaml`. | Run the analyst from the example root, above `harness/`. |
-| Optimizer used the defaults you thought you overrode | `experiment-config.yaml` takes effect only when passed with `--config`. | Pass `--config experiment-config.yaml` explicitly. |
-| `verify_candidates.py` rejects a candidate | It changed the harness or a pinned `agent.yaml` block, so its reward does not measure something you could deploy. | Discard the run's ranking. The in-wrapper check is advisory; this one is the gate. |
-| The skill never appears in the system prompt | `skills.paths` is not the loading mechanism here. | Keep the skill under `agent/workspace/skills/` and the pointer in the system prompt. |
+
+| Symptom                                                                        | Cause                                                                                                    | Fix                                                                                                  |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `502 Bad Gateway`, but the deployment logged `200`                             | The gateway caps a response at 300 s while the agent keeps building.                                     | Raise `NEMO_AGENTS_GATEWAY_READ_TIMEOUT`. Recover tokens and latency from the trace, not the client. |
+| Every deployment fails at startup                                              | An ambient `~/.config/nemo-relay/plugins.toml`.                                                          | Move it aside; select Relay configs with `HERMES_NEMO_RELAY_PLUGINS_TOML`.                           |
+| `agents create` fails with `File exists: .../-ethos-upload-`                   | `--agent-config` was a relative path.                                                                    | Pass an absolute path.                                                                               |
+| Config edits change nothing                                                    | There is no update command; the platform serves the config captured at registration.                     | Undeploy, delete, create and deploy again, as in Step 8.                                             |
+| Scorer raises `ConnectionRefusedError`                                         | FreeCAD went down. The score is void, not zero.                                                          | Probe port 9875, relaunch the GUI, discard the run.                                                  |
+| RPC port listens but nothing executes                                          | FreeCAD was started by running the binary directly, so it never attached to the window server.           | Quit it and launch the GUI normally.                                                                 |
+| A metric scores 0.000 for a tool the agent called, or counts are inflated ~70x | Intake nests MCP calls inside LangGraph node spans, and every model turn replays the whole tool history. | Walk span payloads for `{"type": "tool_call"}` and de-duplicate on `call["id"]`, not on position.    |
+| Optimizer used the defaults you thought you overrode                           | `experiment-config.yaml` takes effect only when passed with `--config`.                                  | Pass `--config experiment-config.yaml` explicitly.                                                   |
+| The skill never appears in the system prompt                                   | `skills.paths` is not the loading mechanism here.                                                        | Keep the skill under `agent/workspace/skills/` and the pointer in the system prompt.                 |
+
 
 ## Known limitations
 
 - **Only promotable surfaces are measurable, by design.** The harness and every
-  `agent.yaml` block outside `instructions` and `harnesses` are pinned, so a
-  candidate cannot win with a change you could not ship. The cost is that
-  genuinely useful work is out of reach: an MCP tool or a middleware hook needs
-  a human, or a custom Fabric adapter.
-- **That pin cannot be enforced from inside the loop.** Harbor resolves the
-  entry point inside the agent directory, so the wrapper's own check is
-  removable by any candidate that rewrites the wrapper. `verify_candidates.py`
-  closes it from outside, but it runs after trials rather than before, so a
-  violating candidate still consumes its trials before the run is rejected.
+`agent.yaml` block outside `instructions` and `harnesses` are pinned, so a
+candidate cannot win with a change you could not ship. The cost is that
+genuinely useful work is out of reach: an MCP tool or a middleware hook needs
+a human, or a custom Fabric adapter.
 - **A trial runs the agent from a config file, production serves a deployment.**
-  `harbor_wrapper.py` builds each candidate from its own `agent.yaml`, so the
-  change surface is real, but a trial and a deployed run are not byte-identical
-  environments: a trial needs `api_key_env` and `base_url` in the config, and it
-  does not pass through the gateway. Step 9 re-measures on the deployment for
-  that reason.
+`harbor_wrapper.py` builds each candidate from its own `agent.yaml`, so the
+change surface is real, but a trial and a deployed run are not byte-identical
+environments: a trial needs `api_key_env`, `base_url` and its own `telemetry:`
+block in the config — all three of which a deployment gets filled in for it —
+and it does not pass through the gateway. Step 8 re-measures on the deployment
+for that reason.
 - **The validation split is the training task under a different document name.**
-  The `.aad-heldout/` mechanism that hides it during candidate generation is
-  real, but the mesh and the requirements are identical, so a validation score
-  here reports repeatability rather than generalization.
+The `.aad-heldout/` mechanism that hides it during candidate generation is
+real, but the mesh and the requirements are identical, so a validation score
+here reports repeatability rather than generalization.
 - **Non-determinism here is branch divergence, not sampling noise**, and the
-  sampling surface is one knob: `temperature`. `models.default.settings` is never
-  read on the deepagents path, so a `seed` placed there is inert, and there is no
-  `seed` or `top_p` in the agent spec at all.
+sampling surface is one knob: `temperature`. `models.default.settings` is never
+read on the deepagents path, so a `seed` placed there is inert, and there is no
+`seed` or `top_p` in the agent spec at all.
 - **The sample sizes needed for statistical confidence do not fit the budget.**
-  Detecting a 0.10 difference at the observed spread needs roughly 35 runs per
-  arm. Use the optimizer to generate hypotheses and score winners out of loop.
+Detecting a 0.10 difference at the observed spread needs roughly 35 runs per
+arm. Use the optimizer to generate hypotheses and score winners out of loop.
 - **macOS only, as verified.** Nothing here is inherently macOS-specific except
-  the FreeCAD paths, but no other platform was tested.
+the FreeCAD paths, but no other platform was tested.
 - **The Eval Author is non-deterministic.** The same Insight produced three
-  differently-named metrics across three runs. Re-authoring is a re-baselining
-  event; freeze the suite and use `--no-insight` for comparable runs.
+differently-named metrics across three runs. Re-authoring is a re-baselining
+event; freeze the suite and use `--no-insight` for comparable runs.
 
 ## Verification
 
@@ -1030,6 +949,13 @@ nemo agents delete cad-agent --yes
 
 Close any `Eval*` documents left open in FreeCAD. Optimizer output under
 `harness/experiment/` is run output and is git-ignored; delete it freely.
+
+Harbor leaves one verifier container per trial behind, and they accumulate fast
+across runs. Clear them with:
+
+```bash
+docker container prune -f
+```
 
 ## Provenance and license
 

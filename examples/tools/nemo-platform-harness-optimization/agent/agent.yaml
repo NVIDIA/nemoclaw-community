@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 config_format: nemo-agents-spec-v1
-name: cad-agent-e2e
+name: cad-agent
 description: A CAD agent executed with DeepAgents against a live FreeCAD session
 
 instructions:
@@ -65,18 +65,10 @@ environment:
   workspace: ./workspace
   artifacts: ./artifacts
 
-telemetry:
-  enabled: true
-  provider: relay
-  output_dir: ./traces
-  atif:
-    enabled: true
-    filename_template: trajectory-{session_id}.atif.json
-    storage:
-      - type: http
-        # SUBSTITUTE (host and workspace): this URL hardcodes a platform at
-        # localhost:8080 and the `default` workspace. Change both segments if
-        # your platform or workspace differs — this endpoint line and the
-        # `model:` line above are the only machine-specific values in this file.
-        endpoint: http://localhost:8080/apis/intake/v2/workspaces/default/ingest/atif
-        timeout_millis: 3000
+# No telemetry block. NeMo Platform 0.6.0 reads `telemetry.enabled` as a
+# tri-state: unset means "wire it for me", so a deployment gets its ATIF export
+# to Intake filled in from the platform's own base URL and workspace. Declaring
+# it here would only hardcode localhost:8080 and `default` back in. Opt out with
+# `telemetry: {enabled: false}`; the trial config under `harness/agent_source/`
+# still declares its own, because `nemo agents invoke --agent-config` builds the
+# agent directly and never passes through the backend that wires this.

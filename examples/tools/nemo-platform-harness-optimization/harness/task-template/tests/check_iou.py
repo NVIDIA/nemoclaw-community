@@ -21,7 +21,7 @@ if not files:
 
 value = None
 for path in files:
-    for line in path.open(encoding="utf-8"):
+    for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
         for resource in json.loads(line).get("resourceSpans", []):

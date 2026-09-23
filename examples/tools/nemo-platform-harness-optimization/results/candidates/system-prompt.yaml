@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 config_format: nemo-agents-spec-v1
-name: cad-agent-e2e
+name: cad-agent
 description: A CAD agent executed with DeepAgents against a live FreeCAD session
 
 instructions:

@@ -11,6 +11,8 @@ not.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import shutil
 import sys
 import unittest
@@ -170,10 +172,15 @@ class OnlyPromotableSurfacesAreMeasurable(unittest.TestCase):
         (bad / "harbor_wrapper.py").write_text("# replaced wholesale\n")
         argv = sys.argv
         sys.argv = ["verify_candidates", str(self.experiment)]
+        sink = io.StringIO()
         try:
-            self.assertEqual(self.verify.main(), 1)
+            # main() reports to stdout and stderr; swallow it so the rejection
+            # it is meant to produce does not read as a test-run failure.
+            with contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
+                self.assertEqual(self.verify.main(), 1)
         finally:
             sys.argv = argv
+        self.assertIn("REJECTED agent-2", sink.getvalue())
 
     def test_the_verifier_is_not_inside_the_candidate_source(self) -> None:
         self.assertFalse((AGENT_SOURCE / "verify_candidates.py").exists())
