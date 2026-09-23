@@ -205,7 +205,6 @@ vllm serve nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-NVFP4 \
   --video-pruning-rate 0.5 \
   --limit-mm-per-prompt '{"video": 1, "image": 1, "audio": 1}' \
   --media-io-kwargs '{"video": {"fps": 2, "num_frames": 256}}' \
-  --allowed-local-media-path "$HOME" \
   --enable-prefix-caching \
   --max-num-batched-tokens 32768 \
   --reasoning-parser nemotron_v3 \
