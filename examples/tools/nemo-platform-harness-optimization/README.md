@@ -22,7 +22,7 @@ the fixes and score them against it.
 
 ## Screenshot
 
-![A NeMo Studio trace view: one agent session expanded into a tree of nested spans on the left, the JSON payload for the selected span on the right, and span count, duration and total tokens in the header](assets/studio-trace.jpg)
+![A NeMo Studio trace view of one cad-agent-e2e session: the span tree on the left, the selected span's JSON payload on the right, and 114 spans, 3m 669ms and 144,641 tokens in the header](assets/studio-trace.jpg)
 
 ## At A Glance
 
@@ -439,7 +439,7 @@ error.
 
 The rest of this walkthrough optimizes against the first.
 
-![A NeMo Studio Insight titled "Mesh-fidelity verification does not establish close geometric agreement", showing the agent name, a description, and the three observed sessions with their durations, spans and token counts](assets/studio-insight.jpg)
+![A NeMo Studio Insight titled "Mesh-fidelity verification does not establish close geometric agreement", status open against cad-agent-e2e, with the analyst's description on the left and the experiments that referenced it on the right](assets/studio-insight.jpg)
 
 Two things are worth noticing. The scorer independently agrees with the first
 Insight, and the analyst cites *"the 0.85 success criterion"*, a number that
@@ -1006,6 +1006,15 @@ exported agent lists `reference-geometry-analyst`. The `response_format` does
 not survive, because dcode reads only `name`, `description` and `model` from
 that frontmatter. The system prompt lands in `.deepagents/AGENTS.md` and is
 *appended* to dcode's own coding-agent identity rather than replacing it.
+
+![FreeCAD showing two spoons side by side: the source mesh in gold on the left, visibly faceted, and the reconstructed parametric solid in silver on the right with smooth lofted surfaces](assets/dcode-spoon.jpg)
+
+The exported subagent running in dcode against a different part entirely: the
+source mesh in gold, the parametric reconstruction in silver, built from 30
+measured cross sections lofted into a single solid. Nothing about the agent was
+changed for it. The task prompt names the mesh, so pointing it at a spoon
+instead of a mug needs no new configuration, which is the payoff of keeping
+domain knowledge in the skill and the prompt rather than in the harness.
 
 Leaving the platform costs the loop: no ATIF telemetry means no Intake traces,
 no Analyst, no Insights, no optimizer. Use these for interactive work and
