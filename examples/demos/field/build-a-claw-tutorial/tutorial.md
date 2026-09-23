@@ -115,6 +115,8 @@ These land in the shared Hugging Face cache, so the serve commands below resolve
 
 The serve commands below run in the foreground, so start them inside `screen` or `tmux` (for example `tmux new -s qwen`) and detach with `Ctrl-b d`. Closing the terminal or dropping an SSH session otherwise kills the server.
 
+All three serve commands below bind to `127.0.0.1`, because OpenClaw and Hermes run on the Spark and reach the server over loopback. vLLM does not authenticate requests, so reaching one of these servers from another machine needs its own protected setup rather than a wider bind address.
+
 ### Qwen 3.6 NVFP4
 
 This is the tested Spark config. The first launch warms up for a few minutes.
@@ -133,7 +135,7 @@ export MAX_JOBS=8
 vllm serve nvidia/Qwen3.6-35B-A3B-NVFP4 --moe-backend flashinfer_b12x \
     --enable-auto-tool-choice --tool-call-parser qwen3_coder \
     --reasoning-parser qwen3 \
-    --host 0.0.0.0 \
+    --host 127.0.0.1 \
     --port 8000 \
     --tensor-parallel-size 1 \
     --trust-remote-code \
@@ -167,6 +169,7 @@ export CUTE_DSL_ARCH=sm_121a
 export MAX_JOBS=8
 
 vllm serve unsloth/gemma-4-26B-A4B-it-NVFP4 \
+  --host 127.0.0.1 \
   --moe-backend flashinfer_b12x \
   --gpu-memory-utilization 0.7 \
   --max-num-seqs 8 \
@@ -191,6 +194,7 @@ export CUTE_DSL_ARCH=sm_121a
 export MAX_JOBS=8
 
 vllm serve nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-NVFP4 \
+  --host 127.0.0.1 \
   --port 8001 \
   --max-model-len 131072 \
   --max-num-seqs 8 \
@@ -201,7 +205,7 @@ vllm serve nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-NVFP4 \
   --video-pruning-rate 0.5 \
   --limit-mm-per-prompt '{"video": 1, "image": 1, "audio": 1}' \
   --media-io-kwargs '{"video": {"fps": 2, "num_frames": 256}}' \
-  --allowed-local-media-path / \
+  --allowed-local-media-path "$HOME" \
   --enable-prefix-caching \
   --max-num-batched-tokens 32768 \
   --reasoning-parser nemotron_v3 \
