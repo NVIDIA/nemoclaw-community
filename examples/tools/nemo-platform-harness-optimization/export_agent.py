@@ -113,22 +113,32 @@ def write_dcode(out: Path, config: Path, spec: dict) -> list[str]:
                      "invisible without a git root")
 
     model = _model(spec).get("model", "")
+    base_url = _model(spec).get("base_url", GATEWAY)
     (root / "run.sh").write_text(
         "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
         "# dcode only accepts known provider ids, so the NeMo gateway is configured\n"
-        "# as `openai` with a custom base_url. OPENAI_API_KEY must be set even\n"
-        "# though the gateway ignores it: without it dcode blocks on stdin.\n"
-        f"cat > ~/.deepagents/config.toml <<'TOML'\n"
-        f"[models.providers.openai]\n"
-        f'base_url = "{_model(spec).get("base_url", GATEWAY)}"\n'
-        f'api_key = "not-used"\n'
+        "# as `openai` with a custom base_url. The provider block is appended once\n"
+        "# rather than written over the file: dcode stores your recent model, agent\n"
+        "# and approval mode in the same config.\n"
+        'CONFIG=~/.deepagents/config.toml\n'
+        'mkdir -p ~/.deepagents && touch "$CONFIG"\n'
+        'if ! grep -q "^\\[models.providers.openai\\]" "$CONFIG"; then\n'
+        '  cat >> "$CONFIG" <<TOML\n'
+        "\n[models.providers.openai]\n"
+        f'base_url = "{base_url}"\n'
+        'api_key = "not-used"\n'
         f'models = ["{model}"]\n'
-        f"TOML\n"
-        f'cd "$(dirname "$0")"\n'
-        f"# --auto-classifier-model matters. Auto mode reviews each action with a\n"
-        f"# second model, and its default is not served by this gateway: the\n"
-        f"# classifier 404s, a failed classification counts as denied, and every\n"
-        f"# tool call is refused with 'Auto denied [classifier unavailable]'.\n"
+        "TOML\n"
+        "fi\n"
+        'cd "$(dirname "$0")"\n'
+        "# --auto-classifier-model matters. Auto mode reviews each action with a\n"
+        "# second model, and its default is not served by this gateway: the\n"
+        "# classifier 404s, a failed classification counts as denied, and every\n"
+        "# tool call is refused with 'Auto denied [classifier unavailable]'.\n"
+        "#\n"
+        "# Pass --yolo to skip review entirely, which is usually what you want\n"
+        "# against a local FreeCAD session you are willing to let the agent drive.\n"
         f"OPENAI_API_KEY=not-used exec dcode -M openai:{model} \\\n"
         f"  --auto-classifier-model openai:{model} --trust-project-mcp \"$@\"\n"
     )

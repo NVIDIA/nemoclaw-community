@@ -997,6 +997,7 @@ Four things cost an afternoon to find, so they are worth stating:
 | Skills and subagents not found | dcode resolves the project root as the nearest ancestor with `.git`. The export runs `git init` for this reason. |
 | `requires approval, but this headless runtime has no approval UI` | dcode gates MCP actions that are mutating or unannotated, and `freecad-mcp` annotates none of its tools. `--yolo` is ignored headless; use the interactive TUI. |
 | `Auto denied [classifier unavailable]` on every tool call | Auto mode reviews each action with a *second* model, and its default is not served by your gateway, so the classifier 404s and a failed classification counts as denied. `run.sh` pins it with `--auto-classifier-model` to the same model as the agent. |
+| `Auto denied [destructive_action]` on FreeCAD calls | The classifier is working and refusing, correctly: closing or overwriting the active document could discard unrelated unsaved work. Run `run.sh --yolo` to skip review against a session you are willing to hand over, or approve each call in manual mode. dcode persists the choice as `[startup] recent` in `config.toml`. |
 
 Subagents translate to `.deepagents/agents/<name>/AGENTS.md`, frontmatter plus
 the prompt as the body, and dcode loads them: asked what it can delegate to, the
