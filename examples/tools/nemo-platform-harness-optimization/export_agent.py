@@ -125,11 +125,19 @@ def write_dcode(out: Path, config: Path, spec: dict) -> list[str]:
         f'models = ["{model}"]\n'
         f"TOML\n"
         f'cd "$(dirname "$0")"\n'
-        f"OPENAI_API_KEY=not-used exec dcode -M openai:{model} --trust-project-mcp \"$@\"\n"
+        f"# --auto-classifier-model matters. Auto mode reviews each action with a\n"
+        f"# second model, and its default is not served by this gateway: the\n"
+        f"# classifier 404s, a failed classification counts as denied, and every\n"
+        f"# tool call is refused with 'Auto denied [classifier unavailable]'.\n"
+        f"OPENAI_API_KEY=not-used exec dcode -M openai:{model} \\\n"
+        f"  --auto-classifier-model openai:{model} --trust-project-mcp \"$@\"\n"
     )
     (root / "run.sh").chmod(0o755)
     notes.append("MCP tools need the interactive TUI: headless blocks unannotated "
                  "MCP actions and --yolo is ignored there")
+    notes.append("run.sh pins the Auto-mode classifier to the same model: its "
+                 "default is not served here, and a classifier that 404s denies "
+                 "every action")
     return notes
 
 

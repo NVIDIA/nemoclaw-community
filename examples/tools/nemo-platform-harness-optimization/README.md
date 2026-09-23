@@ -980,8 +980,9 @@ This is the highest-fidelity path: the model, MCP servers, skills workspace and
 subagents come across unchanged, because NeMo's `subagents` passthrough is
 literally the `create_deep_agent` argument.
 
-**3. dcode**, the terminal agent on the same SDK, for an interactive session
-with approval prompts:
+**3. [dcode](https://docs.langchain.com/oss/deepagents/code/overview)**, the
+terminal agent on the same SDK, for an interactive session with approval
+prompts:
 
 ```bash
 ~/cad-export/dcode/run.sh
@@ -995,6 +996,7 @@ Four things cost an afternoon to find, so they are worth stating:
 | Hangs with no output | `api_key` in `config.toml` is not used for this shape; without `OPENAI_API_KEY` set it blocks on stdin. |
 | Skills and subagents not found | dcode resolves the project root as the nearest ancestor with `.git`. The export runs `git init` for this reason. |
 | `requires approval, but this headless runtime has no approval UI` | dcode gates MCP actions that are mutating or unannotated, and `freecad-mcp` annotates none of its tools. `--yolo` is ignored headless; use the interactive TUI. |
+| `Auto denied [classifier unavailable]` on every tool call | Auto mode reviews each action with a *second* model, and its default is not served by your gateway, so the classifier 404s and a failed classification counts as denied. `run.sh` pins it with `--auto-classifier-model` to the same model as the agent. |
 
 Subagents translate to `.deepagents/agents/<name>/AGENTS.md`, frontmatter plus
 the prompt as the body, and dcode loads them: asked what it can delegate to, the
