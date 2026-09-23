@@ -687,6 +687,21 @@ validation score here measures repeatability on the same part, not
 generalization to a new one. Point it at a different mesh with different
 requirements if you want the second thing.
 
+#### Check the candidates before you read the results
+
+```bash
+python3 scorer/verify_candidates.py harness/experiment
+```
+
+Every candidate must have stayed inside the change surface, and this is the
+check that decides it. The wrapper carries the same test, but it ships *inside*
+the file it guards, so a candidate that rewrites the wrapper deletes the test
+in the same edit and nothing inside the candidate is left to object. This script
+lives in `scorer/`, is never copied into a candidate, and exits non-zero naming
+any that changed the harness or a pinned `agent.yaml` block. A rejected
+candidate's reward does not measure a shippable change, so the run's ranking is
+unsound and nothing from it should be promoted.
+
 #### What one run produces
 
 A round is a baseline plus `max_candidates` **rival** agents. Each candidate is
@@ -941,6 +956,7 @@ from the gateway, and the runner injects it into the deployment process.
 | A metric scores 0.000 for a tool the agent called, or counts are inflated ~70x | Intake nests MCP calls inside LangGraph node spans, and every model turn replays the whole tool history. | Walk span payloads for `{"type": "tool_call"}` and de-duplicate on `call["id"]`, not on position. |
 | Analyst finds nothing and Studio shows no Insights | A discovered `optimizer.yaml` redirected them to `.nemo-optimizer/insights.yaml`. | Run the analyst from the example root, above `harness/`. |
 | Optimizer used the defaults you thought you overrode | `experiment-config.yaml` takes effect only when passed with `--config`. | Pass `--config experiment-config.yaml` explicitly. |
+| `verify_candidates.py` rejects a candidate | It changed the harness or a pinned `agent.yaml` block, so its reward does not measure something you could deploy. | Discard the run's ranking. The in-wrapper check is advisory; this one is the gate. |
 | The skill never appears in the system prompt | `skills.paths` is not the loading mechanism here. | Keep the skill under `agent/workspace/skills/` and the pointer in the system prompt. |
 
 ## Known limitations
@@ -950,6 +966,11 @@ from the gateway, and the runner injects it into the deployment process.
   candidate cannot win with a change you could not ship. The cost is that
   genuinely useful work is out of reach: an MCP tool or a middleware hook needs
   a human, or a custom Fabric adapter.
+- **That pin cannot be enforced from inside the loop.** Harbor resolves the
+  entry point inside the agent directory, so the wrapper's own check is
+  removable by any candidate that rewrites the wrapper. `verify_candidates.py`
+  closes it from outside, but it runs after trials rather than before, so a
+  violating candidate still consumes its trials before the run is rejected.
 - **A trial runs the agent from a config file, production serves a deployment.**
   `harbor_wrapper.py` builds each candidate from its own `agent.yaml`, so the
   change surface is real, but a trial and a deployed run are not byte-identical
@@ -986,7 +1007,7 @@ python3 -m unittest discover -s tests
 **Expected result:**
 
 ```text
-Ran 76 tests
+Ran 77 tests
 
 OK
 ```

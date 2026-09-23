@@ -25,10 +25,11 @@ things that survive promotion to a deployed agent. A skill belongs in
 ``workspace/skills/<name>/SKILL.md`` with a pointer to ``/skills/`` in
 ``instructions.system.content``, which is how the deployed agent loads it too.
 
-This file is the harness, not the agent, so it is pinned: a candidate copy that
-differs from the checked-in original refuses to run. See
-``_assert_promotable_change_surface`` below for why that is checked rather than
-asked for.
+This file is the harness, not the agent, so it is pinned. The check below
+catches an accidental edit immediately, but it cannot enforce the rule: it lives
+in the file it protects, so a candidate that rewrites the wrapper removes the
+check in the same edit. ``scorer/verify_candidates.py`` is the authoritative
+gate, outside the candidate and never copied into one.
 
 ``agent.yaml`` must keep ``api_key_env`` and ``base_url`` under
 ``models.default``. The deepagents adapter's preflight requires both when the
@@ -51,7 +52,7 @@ import os
 import re
 import shutil
 import tempfile
-from datetime import datetime, timedelta, timezone
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -92,6 +93,31 @@ def _agent_name() -> str:
 
 
 AGENT_NAME = _agent_name()
+
+
+@contextlib.contextmanager
+def _trial_config() -> Any:
+    """Yield a config identical to the candidate's but under a unique name.
+
+    Trace correlation has no identifier to work with: no id the gateway returns
+    reaches Intake, so a trace can only be found by agent name and a time
+    window. Under one shared name that is ambiguous whenever anything else is
+    running, and the Experimentalist evaluates candidates concurrently.
+
+    Giving every trial its own name removes the ambiguity at the source rather
+    than resolving it after the fact. The candidate's own `agent.yaml` is never
+    touched: this writes a sibling file, uses it for one invocation, and deletes
+    it.
+    """
+    name = f"{AGENT_NAME}-{uuid.uuid4().hex[:12]}"
+    text = re.sub(r"^name:.*$", f"name: {name}", AGENT_CONFIG.read_text(encoding="utf-8"),
+                  count=1, flags=re.MULTILINE)
+    path = AGENT_DIR / f".trial-{name}.yaml"
+    path.write_text(text, encoding="utf-8")
+    try:
+        yield name, path
+    finally:
+        path.unlink(missing_ok=True)
 def _nemo_cli() -> str:
     """Locate the ``nemo`` CLI without depending on PATH.
 
@@ -181,10 +207,15 @@ def _assert_promotable_change_surface() -> None:
 
     What is left is the change surface, and it is the whole of what a deployed
     agent carries that is worth optimizing: the system prompt, subagents, and
-    skills under ``workspace/skills/``. The optimizer's coder is already told
-    that harness files are out of scope and edited one anyway, so this is
-    checked rather than asked for: a violating candidate raises here, produces
-    no metric, and cannot reach the Pareto front.
+    skills under ``workspace/skills/``.
+
+    **This check is fast feedback, not enforcement.** Harbor resolves the entry
+    point inside the agent directory, so this function ships inside the very
+    file it guards: a candidate that rewrites the wrapper deletes the check
+    along with it, and nothing here is left to object. It catches the accidental
+    case immediately, which is most of them. The deliberate case is caught by
+    ``scorer/verify_candidates.py``, which lives outside the candidate, is never
+    copied into one, and rejects the run before its results are trusted.
     """
     if AGENT_DIR == PRISTINE.resolve():
         return  # the checkout itself, not a candidate copy
@@ -341,21 +372,17 @@ class WrappedAgent(BaseAgent):
                     "refusing to score a run that never had a working application."
                 )
 
-            # Captured first: none of the gateway's ids (x-nemo-session-id,
-            # x-trace-id, the response id) reach Intake, so the only handle on this
-            # run is when it started.
-            since = datetime.now(timezone.utc) - timedelta(seconds=5)
-
             # Build the agent from this candidate's own config, so agent.yaml, the
             # system prompt and workspace/skills/ are inside the measurement.
-            completed = await asyncio.to_thread(
-                subprocess.run,
-                [NEMO, "agents", "invoke",
-                 "--agent-config", str(AGENT_CONFIG),
-                 "--input", instruction,
-                 "--no-progress"],
-                capture_output=True, text=True, timeout=TIMEOUT, cwd=AGENT_DIR,
-            )
+            with _trial_config() as (trial_name, trial_config):
+                completed = await asyncio.to_thread(
+                    subprocess.run,
+                    [NEMO, "agents", "invoke",
+                     "--agent-config", str(trial_config),
+                     "--input", instruction,
+                     "--no-progress"],
+                    capture_output=True, text=True, timeout=TIMEOUT, cwd=AGENT_DIR,
+                )
             context.metadata = {"invoke_returncode": completed.returncode}
             if completed.returncode != 0:
                 # The CLI reports adapter and config errors on stdout and keeps only
@@ -370,8 +397,8 @@ class WrappedAgent(BaseAgent):
                 # that produced it. Without this a mis-correlated trace is
                 # invisible: every candidate looks alike in the trial output.
                 context.metadata["agent_config"] = str(AGENT_CONFIG)
-                context.metadata["agent_name"] = AGENT_NAME
-                trace_id = await _await_trace(client, since)
+                context.metadata["agent_name"] = trial_name
+                trace_id = await _await_trace(client, trial_name)
                 if trace_id is None:
                     return
                 context.metadata["trace_id"] = trace_id
@@ -408,42 +435,31 @@ async def _get(client: httpx.AsyncClient, path: str, **params: Any) -> list[dict
     return response.json().get("data", [])
 
 
-async def _await_trace(client: httpx.AsyncClient, since: datetime) -> str | None:
-    """Poll Intake for this agent's first trace at or after *since*.
+async def _await_trace(client: httpx.AsyncClient, name: str) -> str | None:
+    """Poll Intake for the trace of the trial that ran under *name*.
 
     Polled because ingestion is asynchronous: the response returns before the
-    spans have landed.
+    spans have landed. *name* is unique to this trial, so a second match is not
+    an ambiguity to resolve but evidence that the assumption behind correlation
+    has broken, and the trial is refused rather than scored on a guess.
     """
     deadline = asyncio.get_running_loop().time() + TRACE_WAIT
     while True:
-        matches = []
-        for trace in await _get(client, "traces", page_size=20):
-            started = datetime.fromisoformat(trace["started_at"])
-            started = started if started.tzinfo else started.replace(tzinfo=timezone.utc)
+        matches = [
+            trace["id"]
+            for trace in await _get(client, "traces", page_size=20)
             # `ended_at` gates on a *finished* run: ATIF is posted at the end, so
             # a trace without it is still being written.
-            if (
-                trace.get("agent_name") == AGENT_NAME
-                and started >= since
-                and trace.get("ended_at")
-            ):
-                matches.append((started, trace["id"]))
+            if trace.get("agent_name") == name and trace.get("ended_at")
+        ]
+        if len(matches) > 1:
+            raise RuntimeError(
+                f"{len(matches)} traces carry the unique trial name {name}: "
+                f"{matches}. Correlation cannot be trusted, so this trial is "
+                "not scored."
+            )
         if matches:
-            # Oldest first. Intake returns newest-started first, and taking that
-            # blindly hands back a later run's trace whenever anything else is
-            # producing traces under the same agent name.
-            started, trace_id = min(matches)
-            if len(matches) > 1:
-                # Correlation here is by agent name and start time, so more than
-                # one candidate trace in the window means it cannot be resolved.
-                # Say so rather than scoring whichever sorted first.
-                print(
-                    f"[trace] {len(matches)} traces match {AGENT_NAME} since "
-                    f"{since.isoformat()}; taking the oldest ({trace_id}). "
-                    "Concurrent runs under one agent name cannot be told apart.",
-                    file=sys.stderr,
-                )
-            return trace_id
+            return matches[0]
         if asyncio.get_running_loop().time() >= deadline:
             return None
         await asyncio.sleep(5)

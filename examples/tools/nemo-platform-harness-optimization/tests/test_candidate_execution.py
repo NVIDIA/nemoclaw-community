@@ -97,60 +97,64 @@ class GuardrailIsOutsideTheCandidate(unittest.TestCase):
 
 
 class OnlyPromotableSurfacesAreMeasurable(unittest.TestCase):
-    """A candidate that changes something unpromotable cannot produce a score.
+    """An external check rejects candidates that changed the unpromotable.
 
-    The change surface is the system prompt, subagents and
-    `workspace/skills/`. The harness and the rest of `agent.yaml` are pinned:
-    an edit there can still move the reward, and then the run has measured
-    something there is no way to ship.
+    The wrapper checks this too, but it cannot enforce it: Harbor resolves the
+    entry point inside the agent directory, so the file carrying the check is
+    the file a candidate may rewrite. These tests drive
+    `scorer/verify_candidates.py`, which is never copied into a candidate, and
+    the decisive case is a candidate that deletes the wrapper's own guard.
     """
 
+    def setUp(self) -> None:
+        sys.path.insert(0, str(EXAMPLE / "scorer"))
+        import verify_candidates
+
+        self.verify = verify_candidates
+        self.experiment = EXAMPLE / "harness" / "experiment"
+        self.agents = self.experiment / "eval-and-optimize" / "agents"
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.experiment, ignore_errors=True)
+
     def _candidate(self, name: str = "agent-1") -> Path:
-        path = (EXAMPLE / "harness" / "experiment" / "eval-and-optimize"
-                / "agents" / name)
+        path = self.agents / name
         path.mkdir(parents=True, exist_ok=True)
         for source in ("harbor_wrapper.py", "agent.yaml"):
             shutil.copyfile(AGENT_SOURCE / source, path / source)
         return path
 
-    def tearDown(self) -> None:
-        shutil.rmtree(EXAMPLE / "harness" / "experiment", ignore_errors=True)
+    def test_an_untouched_candidate_passes(self) -> None:
+        self.assertEqual(self.verify.violations(self._candidate()), [])
 
-    def _wrapper_differs(self, candidate: Path) -> bool:
-        original = (AGENT_SOURCE / "harbor_wrapper.py").read_bytes()
-        return (candidate / "harbor_wrapper.py").read_bytes() != original
-
-    def _config_differs(self, candidate: Path) -> bool:
-        pinned = harbor_wrapper._pinned_config
-        return pinned(candidate / "agent.yaml") != pinned(AGENT_SOURCE / "agent.yaml")
-
-    def test_the_checkout_itself_passes(self) -> None:
-        harbor_wrapper._assert_promotable_change_surface()
-
-    def test_an_untouched_candidate_copy_passes(self) -> None:
-        candidate = self._candidate()
-        self.assertFalse(self._wrapper_differs(candidate))
-        self.assertFalse(self._config_differs(candidate))
-
-    def test_a_harness_edit_is_rejected(self) -> None:
+    def test_a_candidate_that_deletes_the_guard_is_rejected(self) -> None:
+        # The case the in-wrapper check cannot catch: removing the check is
+        # part of the edit, so nothing inside the candidate is left to object.
         candidate = self._candidate()
         wrapper = candidate / "harbor_wrapper.py"
-        wrapper.write_bytes(wrapper.read_bytes() + b"\n# candidate edit\n")
-        self.assertTrue(self._wrapper_differs(candidate))
+        source = wrapper.read_text()
+        start = source.index("def _assert_promotable_change_surface()")
+        end = source.index("_assert_promotable_change_surface()\n", start) + len(
+            "_assert_promotable_change_surface()\n")
+        wrapper.write_text(source[:start] + source[end:])
+        self.assertNotIn("def _assert_promotable_change_surface", wrapper.read_text())
+        self.assertIn("harbor_wrapper.py differs from the original",
+                      self.verify.violations(candidate))
 
     def test_a_model_or_sampling_change_is_rejected(self) -> None:
         candidate = self._candidate()
         config = candidate / "agent.yaml"
         config.write_text(config.read_text().replace(
             "    provider: nvidia", "    provider: nvidia\n    temperature: 0.2"))
-        self.assertTrue(self._config_differs(candidate))
+        self.assertIn("agent.yaml changed a pinned block",
+                      self.verify.violations(candidate))
 
     def test_a_system_prompt_change_is_allowed(self) -> None:
         candidate = self._candidate()
         config = candidate / "agent.yaml"
         config.write_text(config.read_text().replace(
             "You are a CAD Agent", "You are a careful CAD Agent"))
-        self.assertFalse(self._config_differs(candidate))
+        self.assertEqual(self.verify.violations(candidate), [])
 
     def test_a_subagent_is_allowed(self) -> None:
         candidate = self._candidate()
@@ -158,7 +162,22 @@ class OnlyPromotableSurfacesAreMeasurable(unittest.TestCase):
         config.write_text(config.read_text().replace(
             "      deepagents: {}",
             "      deepagents:\n        subagents: [{name: checker}]"))
-        self.assertFalse(self._config_differs(candidate))
+        self.assertEqual(self.verify.violations(candidate), [])
+
+    def test_main_exits_nonzero_when_any_candidate_is_rejected(self) -> None:
+        self._candidate("agent-1")
+        bad = self._candidate("agent-2")
+        (bad / "harbor_wrapper.py").write_text("# replaced wholesale\n")
+        argv = sys.argv
+        sys.argv = ["verify_candidates", str(self.experiment)]
+        try:
+            self.assertEqual(self.verify.main(), 1)
+        finally:
+            sys.argv = argv
+
+    def test_the_verifier_is_not_inside_the_candidate_source(self) -> None:
+        self.assertFalse((AGENT_SOURCE / "verify_candidates.py").exists())
+        self.assertTrue((EXAMPLE / "scorer" / "verify_candidates.py").is_file())
 
     def test_ethos_scope_matches_what_is_enforced(self) -> None:
         ethos = (EXAMPLE / "agent" / "ETHOS.md").read_text()
