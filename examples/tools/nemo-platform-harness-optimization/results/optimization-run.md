@@ -33,8 +33,7 @@ change was not promotable in the first place. A harness edit ships nothing.
 
 ## The fix: pin everything that cannot be promoted
 
-`_assert_promotable_change_surface` now runs before any trial and pins two
-things against the originals outside the candidate:
+Two things are pinned against the originals outside the candidate:
 
 - `harbor_wrapper.py`, byte for byte
 - every `agent.yaml` block except `instructions` and `harnesses`
@@ -49,6 +48,23 @@ Middleware and pre- or post-model hooks need no rule. The deepagents adapter
 accepts only `subagents` and `interrupt_on` under `harnesses` and owns the
 rest, so they cannot be expressed in `agent.yaml` and no candidate could
 promote one.
+
+**Where that check lives matters.** The wrapper carries
+`_assert_promotable_change_surface`, which raises at import, but it cannot
+enforce anything: Harbor resolves the entry point inside the agent directory, so
+the check ships in the file it guards and a candidate that rewrites the wrapper
+deletes the check in the same edit. It catches the accidental case, which is
+most of them. The gate is `scorer/verify_candidates.py`, outside the candidate
+and never copied into one, which rejects the run before its results are trusted.
+The residual gap is timing: it runs after trials, so a violating candidate still
+consumes its trials before the run is rejected.
+
+Trace correlation was the other thing failing open. Runs used to be found by
+agent name plus a time window, which is ambiguous whenever anything else is
+running, and the wrapper warned that runs could not be told apart and then
+scored the oldest anyway. Each trial now invokes under a **unique agent name**,
+written into a temporary sibling config so the candidate's own `agent.yaml` is
+untouched, and a trial matching anything other than exactly one trace raises.
 
 ## Run 2: what the loop proposed once it could only propose deployable things
 
