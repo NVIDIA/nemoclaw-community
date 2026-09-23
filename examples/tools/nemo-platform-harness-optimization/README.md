@@ -275,6 +275,13 @@ $ python3 scorer/score.py EvalMug meshes/reference_mug.obj
 0.3969
 ```
 
+![The reference mesh in blue beside the agent's parametric reconstruction in orange, at the same scale and orientation](assets/mug-comparison.png)
+
+Reference in blue, the agent's reconstruction in orange. They read as the same
+mug at a glance, which is the problem: eyeballing it is the judgement the score
+exists to replace. The wall and the handle carry the difference, and a
+thin-walled part punishes it.
+
 This is deliberately minimal: one number, computed by per-XY-column Z-interval
 ray casting, exact along Z and discretised at 0.1 mm in XY. That is enough to
 make the loop work.
