@@ -22,7 +22,11 @@ the fixes and score them against it.
 
 ## Screenshot
 
-![A NeMo Studio trace view of one cad-agent-e2e session: the span tree on the left, the selected span's JSON payload on the right, and 114 spans, 3m 669ms and 144,641 tokens in the header](assets/studio-trace.jpg)
+![Three panels left to right, joined by arrows. First, a NeMo Studio trace of one cad-agent-e2e session. Second, the Studio Insight the analyst filed from those traces. Third, the reference mesh in blue beside the agent's reconstruction in orange](assets/loop-overview.jpg)
+
+Observe a real run, let the platform diagnose it, then propose a fix and measure
+whether the geometry actually moved. Every panel is output from this example,
+and the rest of the walkthrough is how to produce each one.
 
 ## At A Glance
 
@@ -388,6 +392,14 @@ one reported success.
 The scorer disagreed: **0.3338, 0.3969 and 0.4323**, all well under the 0.85 the
 Ethos asks for. The agent was confidently wrong, and only the measurement caught
 it.
+
+![A NeMo Studio trace view of one cad-agent-e2e session: the span tree on the left, the selected span's JSON payload on the right, and 114 spans, 3m 669ms and 144,641 tokens in the header](assets/studio-trace.jpg)
+
+One of those runs in Studio. The span tree records every model call, tool call
+and middleware step, and the header carries the span count and token totals you
+need for the cost side of any comparison. Telemetry was wired in Step 1, so this
+appears without exporting anything or standing up a separate observability
+stack.
 
 ### Step 5: Trace intelligence
 
