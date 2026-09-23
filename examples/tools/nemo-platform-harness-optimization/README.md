@@ -5,15 +5,14 @@
 
 # NeMo Platform Harness Optimization
 
-
-| Catalog field | Value                                                                                                                                                                                       |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Description   | Deploys a CAD agent against a live desktop application, scores its output geometrically, turns its traces into Insights, and lets the platform author an eval and propose a fix against it. |
-| Industry      | 🏭 Manufacturing                                                                                                                                                                            |
-| Requirements  | macOS · Python 3.12 or 3.13 · FreeCAD 1.1 with the MCP addon · NeMo Platform 0.6.0 on localhost · Docker for the verifier · a registered model provider                                     |
-| NemoClaw      | N/A                                                                                                                                                                                         |
-| Harness       | LangChain Deep Agents, pinned by the platform to `>=0.7.8,<0.8`                                                                                                                                                                |
-| OpenShell     | N/A                                                                                                                                                                                         |
+| Catalog field | Value |
+| --- | --- |
+| Description | Deploys a CAD agent against a live desktop application, scores its output geometrically, turns its traces into Insights, and lets the platform author an eval and propose a fix against it. |
+| Industry | 🏭 Manufacturing |
+| Requirements | macOS · Python 3.12 or 3.13 · FreeCAD 1.1 with the MCP addon · NeMo Platform 0.6.0 on localhost · Docker for the verifier · a registered model provider |
+| NemoClaw | N/A |
+| Harness | LangChain Deep Agents 0.7.13 |
+| OpenShell | N/A |
 
 
 A worked, end-to-end loop for an agent that drives a real application: deploy it,
@@ -926,7 +925,7 @@ python3 -m unittest discover -s tests
 **Expected result:**
 
 ```text
-Ran 77 tests
+Ran 83 tests
 
 OK
 ```
@@ -939,6 +938,74 @@ mentions back to 17 real calls.
 **This does not verify:** the live FreeCAD export path, the deployed agent, the
 analyst, the optimizer loop, or any behaviour on a platform other than macOS.
 Those require the credentialed end-to-end path above.
+
+## Running the agent outside NeMo Platform
+
+The platform is where the agent is measured and evolved. It is not the only
+place it can run. One script exports a config three ways:
+
+```bash
+python3 export_agent.py agent/agent.yaml --to ~/cad-export
+```
+
+It reads the same `agent.yaml` the platform deploys, so a promoted candidate
+exports exactly as the baseline does, and it prints what each target could not
+carry.
+
+**1. The deployment, over HTTP.** A deployment already speaks
+chat-completions, so any OpenAI client works:
+
+```bash
+curl -s -X POST "http://localhost:8080/apis/agents/v2/workspaces/default\
+/deployments/cad-agent-deployment/-/v1/chat/completions" \
+  -H 'Content-Type: application/json' \
+  -d '{"messages":[{"role":"user","content":"Who are you?"}]}'
+```
+
+The `/-/` segment is required. Multi-turn and `"stream": true` both work. A
+`tools` parameter is accepted and **ignored**: this is an agent behind a model's
+interface, not a model, so a coding harness cannot drive it. It can still be a
+tool *inside* one, either by shelling out to that curl or by wrapping the
+endpoint in a small MCP server.
+
+**2. The Deep Agents SDK, directly.** `harness/standalone/run_agent.py` builds
+the agent from `agent.yaml` with no platform involved, streaming every tool call
+as it happens:
+
+```bash
+python3 harness/standalone/run_agent.py agent/agent.yaml
+```
+
+This is the highest-fidelity path: the model, MCP servers, skills workspace and
+subagents come across unchanged, because NeMo's `subagents` passthrough is
+literally the `create_deep_agent` argument.
+
+**3. dcode**, the terminal agent on the same SDK, for an interactive session
+with approval prompts:
+
+```bash
+~/cad-export/dcode/run.sh
+```
+
+Four things cost an afternoon to find, so they are worth stating:
+
+| Symptom | Cause |
+| --- | --- |
+| `Unsupported provider='nemo'` | dcode accepts only known provider ids. The gateway is configured as `openai` with a custom `base_url`. |
+| Hangs with no output | `api_key` in `config.toml` is not used for this shape; without `OPENAI_API_KEY` set it blocks on stdin. |
+| Skills and subagents not found | dcode resolves the project root as the nearest ancestor with `.git`. The export runs `git init` for this reason. |
+| `requires approval, but this headless runtime has no approval UI` | dcode gates MCP actions that are mutating or unannotated, and `freecad-mcp` annotates none of its tools. `--yolo` is ignored headless; use the interactive TUI. |
+
+Subagents translate to `.deepagents/agents/<name>/AGENTS.md`, frontmatter plus
+the prompt as the body, and dcode loads them: asked what it can delegate to, the
+exported agent lists `reference-geometry-analyst`. The `response_format` does
+not survive, because dcode reads only `name`, `description` and `model` from
+that frontmatter. The system prompt lands in `.deepagents/AGENTS.md` and is
+*appended* to dcode's own coding-agent identity rather than replacing it.
+
+Leaving the platform costs the loop: no ATIF telemetry means no Intake traces,
+no Analyst, no Insights, no optimizer. Use these for interactive work and
+inspection, and the deployment for anything you intend to measure.
 
 ## Teardown
 
