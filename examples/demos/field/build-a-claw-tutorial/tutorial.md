@@ -266,14 +266,21 @@ cp llama.cpp/build/bin/llama-* llama.cpp
 
 ```
 
+Set up the download environment once. Every model below uses the `hf` command from this virtual environment.
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install huggingface_hub hf_transfer
+```
+
+Pick one of the three models below. Each download step assumes this virtual environment is active.
+
 ### Qwen 3.6 
 We will first download Qwen3.6-35B-A3B model. (This is currently the top choice for demos focusing on coding capabilities and tool call following)
 
 ```bash
-#install HF transfer if you don't have it
-python3 -m venv venv
 source venv/bin/activate
-pip install huggingface_hub hf_transfer
 
 hf download unsloth/Qwen3.6-35B-A3B-GGUF \
     --local-dir unsloth/Qwen3.6-35B-A3B-GGUF \
@@ -335,6 +342,8 @@ Finally, Nemotron 3 Nano Omni 33B A3B.
 
 Rather than using this as the main driver for OpenClaw, we recommend it for VLM use cases as a subagent. We're using port 8001 for this to avoid conflicts.
 ```bash
+source venv/bin/activate
+
 hf download unsloth/NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-GGUF \
     --local-dir unsloth/NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-GGUF \
     --include "*mmproj-BF16*" \
