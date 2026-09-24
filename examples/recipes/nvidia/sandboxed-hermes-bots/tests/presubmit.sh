@@ -23,7 +23,7 @@ hits=$(grep -rInE "$pat" . --exclude-dir=.git 2>/dev/null | grep -viE 'example|p
 
 # 2. internal hostnames and addresses
 hosts='nvaie-tme|omni-lsn|omnistation|poc-nvaie|\.nvidia\.com|10\.187\.|169\.254\.'
-hits=$(grep -rInE "$hosts" . --exclude-dir=.git --exclude='*.log' 2>/dev/null | grep -viE 'inference-api\.nvidia\.com|docs\.nvidia\.com|developer\.nvidia\.com|github\.com/NVIDIA|presubmit' || true)
+hits=$(grep -rInE "$hosts" . --exclude-dir=.git --exclude='*.log' 2>/dev/null | grep -viE 'inference-api\.nvidia\.com|docs\.nvidia\.com|developer\.nvidia\.com|www\.nvidia\.com|github\.com/NVIDIA|presubmit' || true)
 [[ -z "$hits" ]] && good "no internal hostnames" || { bad "internal hostnames:"; printf '%s\n' "$hits" | sed 's/^/         /'; }
 
 # 3. SPDX header on every source file

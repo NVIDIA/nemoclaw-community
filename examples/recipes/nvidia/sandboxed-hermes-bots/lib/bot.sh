@@ -12,9 +12,11 @@
 bot_list() {
   local f
   {
-    for f in "$SWARM_STATE"/keys/*.key; do [[ -f "$f" ]] && basename "$f" .key; done
-    for f in "$SWARM_STATE"/keys/*.port; do [[ -f "$f" ]] && basename "$f" .port; done
-    for f in "$SWARM_STATE"/souls/*.md; do [[ -f "$f" ]] && basename "$f" .md; done
+    # `if`, not `&&`: an unmatched glob must not leave the loop's status at 1,
+    # which `set -euo pipefail` turns into a silent exit in `swarm down --all`.
+    for f in "$SWARM_STATE"/keys/*.key; do if [[ -f "$f" ]]; then basename "$f" .key; fi; done
+    for f in "$SWARM_STATE"/keys/*.port; do if [[ -f "$f" ]]; then basename "$f" .port; fi; done
+    for f in "$SWARM_STATE"/souls/*.md; do if [[ -f "$f" ]]; then basename "$f" .md; fi; done
   } | sort -u
 }
 bot_tracked() {
