@@ -1,0 +1,74 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+config_format: nemo-agents-spec-v1
+name: cad-agent
+description: A CAD agent executed with DeepAgents against a live FreeCAD session
+
+instructions:
+  system:
+    content: |
+      You are a CAD Agent (Computer Aided Design).
+
+      A skills library is available at /skills/. Before starting a task, check
+      whether a skill applies and read the applicable SKILL.md with read_file.
+
+default_harness: deepagents
+
+harnesses:
+  deepagents:
+    kind: deepagents
+    settings:
+      deepagents: {}
+
+
+models:
+  default:
+    provider: nvidia
+    # SUBSTITUTE: model entities are auto-discovered per workspace, so this name
+    # does not exist on your platform. List yours with `nemo models list
+    # --all-pages` (that command paginates at 100 results) and paste one here.
+    model: azure-openai-gpt-5-6-sol
+    # Required when the agent is built from this file rather than served by a
+    # deployment: the deepagents adapter's preflight demands both. The runner
+    # injects NEMO_AGENTS_IGW_API_KEY for deployments, so naming it here keeps
+    # one config working for both paths. The value is unused for
+    # platform-routed models; export it as any non-empty string locally.
+    api_key_env: NEMO_AGENTS_IGW_API_KEY
+    base_url: http://localhost:8080/apis/inference-gateway/v2/workspaces/default/openai/-/v1
+
+mcp:
+  servers:
+    freecad:
+      transport: stdio
+      # SUBSTITUTE: for stdio transport, `url` is the executable path, and the
+      # harness subprocess does not reliably inherit your PATH — so an absolute
+      # path is required. Find yours with `command -v uvx`. The value below is
+      # the Homebrew location on macOS; a Linux install typically lands in
+      # ~/.local/bin/uvx or ~/.cargo/bin/uvx.
+      url: /opt/homebrew/bin/uvx
+      args:
+        # Pinned so an upstream freecad-mcp release cannot change tool behaviour
+        # underneath this example. 0.1.24 is the version this was verified on.
+        - --from
+        - freecad-mcp==0.1.24
+        - freecad-mcp
+        # Suppresses screenshot ImageContent. Keep this while the model is
+        # text-only; drop it only alongside a vision-capable model.
+        - --only-text-feedback
+      exposure: harness_native
+
+tools:
+  blocked: []
+
+environment:
+  workspace: ./workspace
+  artifacts: ./artifacts
+
+# No telemetry block. NeMo Platform 0.6.0 reads `telemetry.enabled` as a
+# tri-state: unset means "wire it for me", so a deployment gets its ATIF export
+# to Intake filled in from the platform's own base URL and workspace. Declaring
+# it here would only hardcode localhost:8080 and `default` back in. Opt out with
+# `telemetry: {enabled: false}`; the trial config under `harness/agent_source/`
+# still declares its own, because `nemo agents invoke --agent-config` builds the
+# agent directly and never passes through the backend that wires this.

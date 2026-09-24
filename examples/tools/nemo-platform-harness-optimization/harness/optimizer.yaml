@@ -1,0 +1,50 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Shared profile for both halves of the insight-driven loop: the Analyst
+# (`nemo agents analyst run`) and the Experimentalist
+# (`nemo agents experimentalist run`). Both discover it by walking *up* from the
+# working directory, so run them from inside harness/.
+#
+# Every path here is relative to this file, so the profile travels with the
+# checkout and needs no editing.
+
+# The registered agent name, as passed to `nemo agents create --name`.
+agent: cad-agent
+
+# The standard the Analyst judges runs against. Without it the Analyst can only
+# report that runs disagree with each other; it has no statement of what "good"
+# means, and the 0.85 IoU bar lives here and nowhere else.
+ethos: ../agent/ETHOS.md
+
+workspace: default
+
+# The directory Harbor imports the entry point from. It must be a directory of
+# its own holding harbor_wrapper.py, because Harbor's `_scoped_import_path`
+# resolves `harbor_wrapper:WrappedAgent` against the agent directory alone.
+#
+# Every candidate is a full copy, and the wrapper builds the agent from the
+# copy's own agent.yaml, so the next trial measures the candidate's own change.
+# The change surface is narrower than the directory: the system prompt,
+# subagents, and workspace/skills/. The wrapper and the remaining agent.yaml
+# blocks are pinned by _assert_promotable_change_surface, so a candidate can
+# only move the reward with something you could deploy. Keep agent.yaml here in
+# step with ../agent/agent.yaml, which is the one you deploy.
+#
+# A local path disables PR publishing for a winning candidate; that needs a git
+# URL of the form <url>@<ref>.
+agent_source: ./agent_source
+
+# Copied once per trace by the Eval Author and filled from that trace, so it
+# keeps its @MESH_PATH@ / @DOCUMENT_NAME@ placeholders.
+task_template: ./task-template
+
+# The validation split is hidden from candidate generation by the loop's
+# `.aad-heldout/` mechanism. Note what that does and does not buy you here: the
+# validation task is the training task under a different document name, same
+# mesh and same requirements, so its score reports repeatability on one part
+# rather than generalization. Point it at a different mesh to measure the
+# latter.
+datasets:
+  train: ./dataset/train
+  validation: ./dataset/validation

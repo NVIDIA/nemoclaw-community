@@ -1,0 +1,25 @@
+{
+  "measured_on": "2026-09-18",
+  "reference_mesh": "meshes/reference_mug.obj",
+  "ethos_bar": 0.85,
+  "runs_per_arm": 3,
+  "notes": "One host, one FreeCAD session, one model, same day. IoU from scorer/score.py; spans, tokens and latency from NeMo Intake. Scores are specific to this reference mesh; the scorer does not align poses.",
+  "arms": {
+    "naive": {
+      "label": "naive agent",
+      "description": "One-line system prompt, freecad MCP server only, no skills.",
+      "iou": [0.3338, 0.3969, 0.4323],
+      "spans": [87, 146, 167],
+      "total_tokens": [111169, 201650, 277725],
+      "latency_s": [133.2, 203.3, 231.8]
+    },
+    "policy": {
+      "label": "with fidelity policy",
+      "description": "Adds the geometry-fidelity-policy skill and the /skills/ prompt pointer.",
+      "iou": [0.0421, 0.9049, 0.9092],
+      "spans": [191, 167, 159],
+      "total_tokens": [320513, 261410, 300485],
+      "latency_s": [250.3, 217.0, 279.4]
+    }
+  }
+}
