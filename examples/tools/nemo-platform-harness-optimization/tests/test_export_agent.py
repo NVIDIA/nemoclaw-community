@@ -10,6 +10,8 @@ subagent frontmatter, so a response_format is lost and the export says so.
 from __future__ import annotations
 
 import json
+import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -74,6 +76,30 @@ class Export(unittest.TestCase):
         # dcode reads only name, description and model from frontmatter, so a
         # structured response contract does not survive the export.
         self.assertTrue(any("response_format" in n for n in self.notes))
+
+    def test_the_curl_body_survives_quotes_and_newlines(self) -> None:
+        # A hand-written JSON string breaks on the first quote in a prompt.
+        export_agent.write_curl(self.out, self.SPEC, "dep")
+        script = (self.out / "curl.sh").read_text()
+        self.assertIn("json.dumps", script)
+        self.assertNotIn('\\"content\\":\\"', script)
+        line = next(l for l in script.splitlines() if l.startswith("BODY="))
+        snippet = re.search(r"python3 -c '([^']+)'", line).group(1)
+        prompt = 'He said "hi" \\ and\na newline'
+        out = subprocess.run([sys.executable, "-c", snippet, prompt],
+                             capture_output=True, text=True, check=True)
+        body = json.loads(out.stdout)
+        self.assertEqual(body["messages"][0]["content"], prompt)
+
+    def test_the_dcode_launcher_isolates_its_config(self) -> None:
+        # Sharing ~/.deepagents/config.toml would either clobber the user's
+        # settings or silently reuse an [models.providers.openai] block that
+        # points at the real OpenAI endpoint.
+        script = (self.out / "dcode" / "run.sh").read_text()
+        self.assertIn("DEEPAGENTS_HOME", script)
+        self.assertIn(".dcode-home", script)
+        self.assertNotIn("~/.deepagents/config.toml\"", script)
+        self.assertIn("--auto-classifier-model", script)
 
     def test_the_export_creates_a_git_root(self) -> None:
         # Project skills and subagents are invisible to dcode without one.

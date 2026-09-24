@@ -187,52 +187,72 @@ def _pinned_config(config: Path) -> str:
     return "\n".join(kept).strip()
 
 
+IGNORED_PATHS = ("__pycache__", "artifacts", "traces", ".fabric")
+
+
+def _tracked(root: Path) -> dict[str, Path]:
+    """Map relative path to file for everything under *root* worth comparing."""
+    found = {}
+    for path in root.rglob("*"):
+        rel = path.relative_to(root)
+        if any(part in IGNORED_PATHS for part in rel.parts) or rel.name.startswith(".trial-"):
+            continue
+        if path.is_symlink() or path.is_file():
+            found[rel.as_posix()] = path
+    return found
+
+
+def _surface_violations(candidate: Path, pristine: Path) -> list[str]:
+    """Return what *candidate* changed outside the promotable surface."""
+    out: list[str] = []
+    ours, theirs = _tracked(pristine), _tracked(candidate)
+    for rel, path in sorted(theirs.items()):
+        if path.is_symlink():
+            out.append(f"{rel} is a symlink")
+        elif rel.startswith("workspace/skills/"):
+            continue
+        elif rel == "agent.yaml":
+            if rel not in ours or _pinned_config(path) != _pinned_config(ours[rel]):
+                out.append("agent.yaml changed a pinned block")
+        elif rel not in ours:
+            out.append(f"{rel} is not in the original")
+        elif path.read_bytes() != ours[rel].read_bytes():
+            out.append(f"{rel} differs from the original")
+    for rel in sorted(ours):
+        if rel not in theirs and not rel.startswith("workspace/skills/"):
+            out.append(f"{rel} was deleted")
+    return out
+
+
 def _assert_promotable_change_surface() -> None:
     """Refuse to score a candidate that changed something it cannot promote.
 
-    A reward difference is only worth acting on if the thing that moved it can
-    be deployed. Two parts of this directory fail that test and are pinned to
-    the originals outside the candidate:
-
-    * **This file** is the harness, not the agent. A candidate that edits it can
-      still move the score, and that score then measures something there is no
-      way to ship - which is exactly what happened here once, where a winning
-      candidate added a measurement step to this file that never reached the
-      model at all.
-    * **Every ``agent.yaml`` block except ``instructions`` and ``harnesses``.**
-      The model and its sampling parameters are a deployment decision, not agent
-      design: letting a candidate change them turns "which prompt works better"
-      into "which model is stronger". The rest - telemetry, the MCP server set,
-      the workspace root - is wiring the trial depends on.
-
-    What is left is the change surface, and it is the whole of what a deployed
-    agent carries that is worth optimizing: the system prompt, subagents, and
-    skills under ``workspace/skills/``.
+    The change surface is the whole candidate tree minus two openings: the
+    ``instructions`` and ``harnesses`` blocks of ``agent.yaml``, and anything
+    under ``workspace/skills/``. Everything else is pinned, including
+    ``pyproject.toml`` and any file the original does not ship, because a new
+    module is only a shadowed import away from running.
 
     **This check is fast feedback, not enforcement.** Harbor resolves the entry
-    point inside the agent directory, so this function ships inside the very
-    file it guards: a candidate that rewrites the wrapper deletes the check
-    along with it, and nothing here is left to object. It catches the accidental
-    case immediately, which is most of them. The deliberate case is caught by
-    ``scorer/verify_candidates.py``, which lives outside the candidate, is never
-    copied into one, and rejects the run before its results are trusted.
+    point inside the agent directory, so this function ships inside the tree it
+    guards: a candidate that rewrites the wrapper deletes the check along with
+    it, and by the time anything here runs, the candidate's own copy of this
+    module has already been imported into the host process. It catches the
+    accidental case immediately, which is most of them.
+    ``scorer/verify_candidates.py`` applies the same rule from outside the
+    candidate and is what decides whether a run's results can be trusted.
     """
     if AGENT_DIR == PRISTINE.resolve():
         return  # the checkout itself, not a candidate copy
-    pinned = (
-        ("the evaluation harness", PRISTINE / "harbor_wrapper.py", Path(__file__),
-         lambda path: path.resolve().read_bytes()),
-        ("pinned agent.yaml blocks", PRISTINE / "agent.yaml", AGENT_CONFIG, _pinned_config),
-    )
-    for what, original, current, read in pinned:
-        if not original.is_file():
-            raise RuntimeError(f"cannot verify {what}: {original} is missing")
-        if read(current) != read(original):
-            raise RuntimeError(
-                f"{current} changed {what}, which cannot be promoted to a "
-                f"deployed agent. Propose the change in the system prompt, "
-                f"subagents, MCP servers or workspace/skills/ instead."
-            )
+    if not (PRISTINE / "harbor_wrapper.py").is_file():
+        raise RuntimeError(f"cannot verify the candidate: {PRISTINE} is missing")
+    found = _surface_violations(AGENT_DIR, PRISTINE)
+    if found:
+        raise RuntimeError(
+            f"{AGENT_DIR} changed what it cannot promote: {'; '.join(found)}. "
+            "Propose the change in the system prompt, subagents or "
+            "workspace/skills/ instead."
+        )
 
 
 _assert_promotable_change_surface()

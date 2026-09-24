@@ -903,11 +903,21 @@ from the gateway, and the runner injects it into the deployment process.
 
 ## Known limitations
 
-- **Only promotable surfaces are measurable, by design.** The harness and every
-`agent.yaml` block outside `instructions` and `harnesses` are pinned, so a
-candidate cannot win with a change you could not ship. The cost is that
-genuinely useful work is out of reach: an MCP tool or a middleware hook needs
-a human, or a custom Fabric adapter.
+- **Only promotable surfaces are measurable, by design.** The whole candidate
+tree is pinned except the `instructions` and `harnesses` blocks of `agent.yaml`
+and anything under `workspace/skills/`, so a candidate cannot win with a change
+you could not ship. The cost is that genuinely useful work is out of reach: an
+MCP tool or a middleware hook needs a human, or a custom Fabric adapter.
+- **The pin cannot be enforced before the candidate runs.** Harbor resolves the
+entry point inside the agent directory, so the wrapper's own check ships in the
+tree it guards and a candidate that rewrites the wrapper removes it.
+`verify_candidates.py` applies the same rule from outside, but it runs *after*
+the trial, and the candidate's wrapper executes host-side. That is a host-code
+execution boundary rather than just wasted trials: by the time a violation is
+reported, modified harness code has already run on your machine. Closing it
+needs an entry point Harbor resolves outside the candidate, which the current
+contract does not offer, so run the loop where you would run any other code a
+model can edit.
 - **A trial runs the agent from a config file, production serves a deployment.**
 `harbor_wrapper.py` builds each candidate from its own `agent.yaml`, so the
 change surface is real, but a trial and a deployed run are not byte-identical
@@ -945,7 +955,7 @@ python3 -m unittest discover -s tests
 **Expected result:**
 
 ```text
-Ran 83 tests
+Ran 91 tests
 
 OK
 ```

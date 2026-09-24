@@ -122,8 +122,9 @@ class OnlyPromotableSurfacesAreMeasurable(unittest.TestCase):
     def _candidate(self, name: str = "agent-1") -> Path:
         path = self.agents / name
         path.mkdir(parents=True, exist_ok=True)
-        for source in ("harbor_wrapper.py", "agent.yaml"):
-            shutil.copyfile(AGENT_SOURCE / source, path / source)
+        shutil.rmtree(path, ignore_errors=True)
+        shutil.copytree(AGENT_SOURCE, path,
+                        ignore=shutil.ignore_patterns("__pycache__", "artifacts", "traces"))
         return path
 
     def test_an_untouched_candidate_passes(self) -> None:
@@ -142,6 +143,49 @@ class OnlyPromotableSurfacesAreMeasurable(unittest.TestCase):
         self.assertNotIn("def _assert_promotable_change_surface", wrapper.read_text())
         self.assertIn("harbor_wrapper.py differs from the original",
                       self.verify.violations(candidate))
+
+    def test_a_changed_pyproject_is_rejected(self) -> None:
+        # Not the wrapper, but it decides what the trial installs.
+        candidate = self._candidate()
+        pyproject = candidate / "pyproject.toml"
+        pyproject.write_text(pyproject.read_text() + '\n# candidate edit\n')
+        self.assertIn("pyproject.toml differs from the original",
+                      self.verify.violations(candidate))
+
+    def test_an_unexpected_module_is_rejected(self) -> None:
+        # A new module is one shadowed import away from running host-side.
+        candidate = self._candidate()
+        (candidate / "helper.py").write_text("print('hello')\n")
+        self.assertTrue(any("helper.py is not in the original" in v
+                            for v in self.verify.violations(candidate)))
+
+    def test_a_deleted_file_is_rejected(self) -> None:
+        candidate = self._candidate()
+        (candidate / "pyproject.toml").unlink()
+        self.assertTrue(any("pyproject.toml was deleted" in v
+                            for v in self.verify.violations(candidate)))
+
+    def test_a_symlink_is_rejected(self) -> None:
+        candidate = self._candidate()
+        (candidate / "escape.py").symlink_to("/etc/hosts")
+        self.assertTrue(any("escape.py is a symlink" in v
+                            for v in self.verify.violations(candidate)))
+
+    def test_a_new_skill_is_allowed(self) -> None:
+        candidate = self._candidate()
+        skill = candidate / "workspace" / "skills" / "new-policy"
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text("---\nname: new-policy\ndescription: d\n---\n")
+        self.assertEqual(self.verify.violations(candidate), [])
+
+    def test_runtime_output_is_not_a_violation(self) -> None:
+        # The agent and the optimizer both write inside the candidate.
+        candidate = self._candidate()
+        (candidate / "__pycache__").mkdir(exist_ok=True)
+        (candidate / "__pycache__" / "x.pyc").write_bytes(b"\x00")
+        (candidate / "artifacts").mkdir(exist_ok=True)
+        (candidate / "artifacts" / "out.FCStd").write_bytes(b"\x00")
+        self.assertEqual(self.verify.violations(candidate), [])
 
     def test_a_model_or_sampling_change_is_rejected(self) -> None:
         candidate = self._candidate()

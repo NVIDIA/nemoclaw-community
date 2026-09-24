@@ -58,13 +58,20 @@ def write_curl(out: Path, spec: dict, deployment: str) -> None:
                 f"/deployments/{deployment}/-/v1/chat/completions")
     (out / "curl.sh").write_text(
         "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
         "# The deployed agent over its OpenAI-compatible endpoint. The /-/ segment\n"
         "# is required; without it the gateway returns 404. Add '\"stream\": true'\n"
         "# for SSE. A `tools` parameter is accepted but ignored: this is an agent\n"
         "# behind a chat-completions shape, not a model a coding harness can drive.\n"
+        "#\n"
+        "# The body is built with json.dumps rather than string interpolation, so a\n"
+        "# prompt containing quotes, backslashes or newlines stays valid JSON.\n"
+        'BODY=$(python3 -c \'import json,sys; '
+        'print(json.dumps({"messages":[{"role":"user","content":sys.argv[1]}]}))\' '
+        '"${1:-Who are you?}")\n'
         f'curl -s -X POST "{endpoint}" \\\n'
         "  -H 'Content-Type: application/json' \\\n"
-        '  -d "{\\"messages\\":[{\\"role\\":\\"user\\",\\"content\\":\\"${1:-Who are you?}\\"}]}"\n'
+        '  -d "$BODY"\n'
     )
     (out / "curl.sh").chmod(0o755)
 
@@ -117,21 +124,25 @@ def write_dcode(out: Path, config: Path, spec: dict) -> list[str]:
     (root / "run.sh").write_text(
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
+        'cd "$(dirname "$0")"\n'
+        "# DEEPAGENTS_HOME relocates dcode's whole configuration, so this writes a\n"
+        "# config beside the project instead of editing ~/.deepagents/config.toml.\n"
+        "# Sharing that file would mean either clobbering your recent model, agent\n"
+        "# and approval mode, or silently reusing an existing [models.providers.openai]\n"
+        "# block pointed at the real OpenAI endpoint and invoking a NeMo model name\n"
+        "# against it.\n"
+        'export DEEPAGENTS_HOME="$PWD/.dcode-home"\n'
+        'mkdir -p "$DEEPAGENTS_HOME"\n'
+        'cat > "$DEEPAGENTS_HOME/config.toml" <<TOML\n'
         "# dcode only accepts known provider ids, so the NeMo gateway is configured\n"
-        "# as `openai` with a custom base_url. The provider block is appended once\n"
-        "# rather than written over the file: dcode stores your recent model, agent\n"
-        "# and approval mode in the same config.\n"
-        'CONFIG=~/.deepagents/config.toml\n'
-        'mkdir -p ~/.deepagents && touch "$CONFIG"\n'
-        'if ! grep -q "^\\[models.providers.openai\\]" "$CONFIG"; then\n'
-        '  cat >> "$CONFIG" <<TOML\n'
-        "\n[models.providers.openai]\n"
+        "# as `openai` with a custom base_url.\n"
+        "[models.providers.openai]\n"
         f'base_url = "{base_url}"\n'
         'api_key = "not-used"\n'
         f'models = ["{model}"]\n'
+        "\n[warnings]\n"
+        'suppress = ["tavily"]\n'
         "TOML\n"
-        "fi\n"
-        'cd "$(dirname "$0")"\n'
         "# --auto-classifier-model matters. Auto mode reviews each action with a\n"
         "# second model, and its default is not served by this gateway: the\n"
         "# classifier 404s, a failed classification counts as denied, and every\n"
@@ -143,6 +154,8 @@ def write_dcode(out: Path, config: Path, spec: dict) -> list[str]:
         f"  --auto-classifier-model openai:{model} --trust-project-mcp \"$@\"\n"
     )
     (root / "run.sh").chmod(0o755)
+    notes.append("dcode config is written to dcode/.dcode-home via DEEPAGENTS_HOME, "
+                 "so your ~/.deepagents/config.toml is neither read nor written")
     notes.append("MCP tools need the interactive TUI: headless blocks unannotated "
                  "MCP actions and --yolo is ignored there")
     notes.append("run.sh pins the Auto-mode classifier to the same model: its "

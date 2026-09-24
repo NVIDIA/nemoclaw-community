@@ -30,6 +30,10 @@ PRISTINE = EXAMPLE_ROOT / "harness" / "agent_source"
 #: `harnesses`. Skills are files under `workspace/skills/` and are unrestricted.
 MUTABLE_CONFIG_KEYS = ("instructions:", "harnesses:")
 
+#: Runtime output the optimizer and the agent write inside the candidate. Not
+#: authored content, so not part of the comparison.
+IGNORED = ("__pycache__", "artifacts", "traces", ".fabric")
+
 
 def pinned_config(config: Path) -> str:
     """Return *config* with the mutable blocks removed, for comparison."""
@@ -42,21 +46,51 @@ def pinned_config(config: Path) -> str:
     return "\n".join(kept).strip()
 
 
+def _tracked(root: Path) -> dict[str, Path]:
+    """Map relative path to file for everything under *root* worth comparing."""
+    found = {}
+    for path in root.rglob("*"):
+        rel = path.relative_to(root)
+        if any(part in IGNORED for part in rel.parts) or rel.name.startswith(".trial-"):
+            continue
+        if path.is_symlink() or path.is_file():
+            found[rel.as_posix()] = path
+    return found
+
+
 def violations(candidate: Path) -> list[str]:
-    """Return what *candidate* changed that it cannot promote."""
-    found = []
-    wrapper = candidate / "harbor_wrapper.py"
-    if wrapper.is_file():
-        if wrapper.read_bytes() != (PRISTINE / "harbor_wrapper.py").read_bytes():
-            found.append("harbor_wrapper.py differs from the original")
-    else:
-        found.append("harbor_wrapper.py is missing")
-    config = candidate / "agent.yaml"
-    if config.is_file():
-        if pinned_config(config) != pinned_config(PRISTINE / "agent.yaml"):
-            found.append("agent.yaml changed a pinned block")
-    else:
-        found.append("agent.yaml is missing")
+    """Return everything *candidate* changed that it cannot promote.
+
+    The change surface is the whole candidate tree minus two openings: the
+    `instructions` and `harnesses` blocks of `agent.yaml`, and anything under
+    `workspace/skills/`. Every other file must be byte-identical to the
+    original, and files the original does not have are rejected rather than
+    ignored: a new module can be imported by an edited wrapper, and a changed
+    `pyproject.toml` changes what the trial installs.
+    """
+    found: list[str] = []
+    ours, theirs = _tracked(PRISTINE), _tracked(candidate)
+
+    for rel, path in sorted(theirs.items()):
+        if path.is_symlink():
+            found.append(f"{rel} is a symlink; candidates may not link outside the tree")
+            continue
+        if rel.startswith("workspace/skills/"):
+            continue  # skills are the change surface
+        if rel == "agent.yaml":
+            if rel not in ours:
+                found.append("agent.yaml is missing from the original")
+            elif pinned_config(path) != pinned_config(ours[rel]):
+                found.append("agent.yaml changed a pinned block")
+            continue
+        if rel not in ours:
+            found.append(f"{rel} is not in the original; only workspace/skills/ may gain files")
+        elif path.read_bytes() != ours[rel].read_bytes():
+            found.append(f"{rel} differs from the original")
+
+    for rel in sorted(ours):
+        if rel not in theirs and not rel.startswith("workspace/skills/"):
+            found.append(f"{rel} was deleted; the original ships it")
     return found
 
 
