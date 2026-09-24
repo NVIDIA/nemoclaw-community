@@ -188,6 +188,10 @@ def _pinned_config(config: Path) -> str:
 
 
 IGNORED_PATHS = ("__pycache__", "artifacts", "traces", ".fabric")
+# Written into every candidate by the optimizer after the change is final. It
+# documents the agent for the next round and is never imported, so treating it
+# as a candidate edit would fail every trial.
+OPTIMIZER_FILES = ("architecture.md",)
 
 
 def _tracked(root: Path) -> dict[str, Path]:
@@ -195,7 +199,9 @@ def _tracked(root: Path) -> dict[str, Path]:
     found = {}
     for path in root.rglob("*"):
         rel = path.relative_to(root)
-        if any(part in IGNORED_PATHS for part in rel.parts) or rel.name.startswith(".trial-"):
+        if (any(part in IGNORED_PATHS for part in rel.parts)
+                or rel.name.startswith(".trial-")
+                or rel.as_posix() in OPTIMIZER_FILES):
             continue
         if path.is_symlink() or path.is_file():
             found[rel.as_posix()] = path

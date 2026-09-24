@@ -955,7 +955,7 @@ python3 -m unittest discover -s tests
 **Expected result:**
 
 ```text
-Ran 91 tests
+Ran 92 tests
 
 OK
 ```

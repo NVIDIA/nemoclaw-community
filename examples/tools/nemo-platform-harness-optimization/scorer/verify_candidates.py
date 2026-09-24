@@ -34,6 +34,12 @@ MUTABLE_CONFIG_KEYS = ("instructions:", "harnesses:")
 #: authored content, so not part of the comparison.
 IGNORED = ("__pycache__", "artifacts", "traces", ".fabric")
 
+#: Written into every candidate by the optimizer itself, after the change is
+#: final (`coder.py`, `fork.workdir / "architecture.md"`). It documents the
+#: agent for the next round's proposer and is never imported or executed, so it
+#: is not a candidate edit and rejecting it would fail every trial.
+OPTIMIZER_FILES = ("architecture.md",)
+
 
 def pinned_config(config: Path) -> str:
     """Return *config* with the mutable blocks removed, for comparison."""
@@ -51,7 +57,9 @@ def _tracked(root: Path) -> dict[str, Path]:
     found = {}
     for path in root.rglob("*"):
         rel = path.relative_to(root)
-        if any(part in IGNORED for part in rel.parts) or rel.name.startswith(".trial-"):
+        if (any(part in IGNORED for part in rel.parts)
+                or rel.name.startswith(".trial-")
+                or rel.as_posix() in OPTIMIZER_FILES):
             continue
         if path.is_symlink() or path.is_file():
             found[rel.as_posix()] = path

@@ -187,6 +187,14 @@ class OnlyPromotableSurfacesAreMeasurable(unittest.TestCase):
         (candidate / "artifacts" / "out.FCStd").write_bytes(b"\x00")
         self.assertEqual(self.verify.violations(candidate), [])
 
+    def test_the_optimizer_architecture_doc_is_not_a_violation(self) -> None:
+        # The optimizer writes architecture.md into every candidate after the
+        # change is final. Rejecting it would fail every trial, baseline
+        # included, so this is the regression that keeps the loop runnable.
+        candidate = self._candidate()
+        (candidate / "architecture.md").write_text("# Agent\n\nflowchart\n")
+        self.assertEqual(self.verify.violations(candidate), [])
+
     def test_a_model_or_sampling_change_is_rejected(self) -> None:
         candidate = self._candidate()
         config = candidate / "agent.yaml"
