@@ -187,7 +187,10 @@ def _pinned_config(config: Path) -> str:
     return "\n".join(kept).strip()
 
 
-IGNORED_DIRS = ("__pycache__", "artifacts", "traces", ".fabric")
+IGNORED_DIRS = ("artifacts", "traces", ".fabric")
+# Not runtime output: Python imports cached bytecode in place of source, so it
+# is rejected rather than ignored. See scorer/verify_candidates.py.
+BYTECODE_DIR = "__pycache__"
 # Written into every candidate by the optimizer after the change is final. It
 # documents the agent for the next round and is never imported, so treating it
 # as a candidate edit would fail every trial.
@@ -207,7 +210,7 @@ def _tracked(root: Path) -> dict[str, Path]:
     def walk(directory: Path, base: str) -> None:
         for entry in sorted(directory.iterdir()):
             rel = f"{base}/{entry.name}" if base else entry.name
-            if entry.is_symlink():
+            if entry.is_symlink() or entry.name == BYTECODE_DIR:
                 found[rel] = entry  # recorded so the caller can reject it
             elif entry.is_dir():
                 if entry.name not in IGNORED_DIRS:
@@ -224,10 +227,13 @@ def _tracked(root: Path) -> dict[str, Path]:
 def _surface_violations(candidate: Path, pristine: Path) -> list[str]:
     """Return what *candidate* changed outside the promotable surface."""
     out: list[str] = []
-    ours, theirs = _tracked(pristine), _tracked(candidate)
+    ours = {rel: p for rel, p in _tracked(pristine).items() if p.name != BYTECODE_DIR}
+    theirs = _tracked(candidate)
     for rel, path in sorted(theirs.items()):
         if path.is_symlink():
             out.append(f"{rel} is a symlink")
+        elif path.name == BYTECODE_DIR:
+            out.append(f"{rel} is cached bytecode")
         elif rel.startswith("workspace/skills/"):
             continue
         elif rel == "agent.yaml":
@@ -263,6 +269,14 @@ def _assert_promotable_change_surface() -> None:
     """
     if AGENT_DIR == PRISTINE.resolve():
         return  # the checkout itself, not a candidate copy
+    if sys.pycache_prefix is None:
+        # Without a prefix Python reads bytecode from the candidate's own
+        # __pycache__, where a planted .pyc runs in place of pristine source.
+        raise RuntimeError(
+            "PYTHONPYCACHEPREFIX is not set, so bytecode is read from inside "
+            f"{AGENT_DIR}. Run the optimizer with it pointing outside the "
+            "candidate tree."
+        )
     if not (PRISTINE / "harbor_wrapper.py").is_file():
         raise RuntimeError(f"cannot verify the candidate: {PRISTINE} is missing")
     found = _surface_violations(AGENT_DIR, PRISTINE)

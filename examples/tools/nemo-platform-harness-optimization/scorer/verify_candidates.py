@@ -32,7 +32,14 @@ MUTABLE_CONFIG_KEYS = ("instructions:", "harnesses:")
 
 #: Runtime output the optimizer and the agent write inside the candidate. Not
 #: authored content, so not part of the comparison.
-IGNORED_DIRS = ("__pycache__", "artifacts", "traces", ".fabric")
+IGNORED_DIRS = ("artifacts", "traces", ".fabric")
+
+#: Not runtime output: Python imports cached bytecode in place of source, so a
+#: `.pyc` here runs while the `.py` beside it still compares equal. The optimizer
+#: strips it when forking a candidate, and the documented run sets
+#: PYTHONPYCACHEPREFIX so trials never write one, so a legitimate candidate has
+#: none and any found is rejected.
+BYTECODE_DIR = "__pycache__"
 
 #: Written into every candidate by the optimizer itself, after the change is
 #: final (`coder.py`, `fork.workdir / "architecture.md"`). It documents the
@@ -65,7 +72,7 @@ def _tracked(root: Path) -> dict[str, Path]:
     def walk(directory: Path, base: str) -> None:
         for entry in sorted(directory.iterdir()):
             rel = f"{base}/{entry.name}" if base else entry.name
-            if entry.is_symlink():
+            if entry.is_symlink() or entry.name == BYTECODE_DIR:
                 found[rel] = entry  # recorded so the caller can reject it
             elif entry.is_dir():
                 if entry.name not in IGNORED_DIRS:
@@ -90,11 +97,17 @@ def violations(candidate: Path) -> list[str]:
     `pyproject.toml` changes what the trial installs.
     """
     found: list[str] = []
-    ours, theirs = _tracked(PRISTINE), _tracked(candidate)
+    # The checkout's own bytecode is local residue from running the tests; the
+    # optimizer never copies it into a candidate, so it is not an expected file.
+    ours = {rel: p for rel, p in _tracked(PRISTINE).items() if p.name != BYTECODE_DIR}
+    theirs = _tracked(candidate)
 
     for rel, path in sorted(theirs.items()):
         if path.is_symlink():
             found.append(f"{rel} is a symlink; candidates may not link outside the tree")
+            continue
+        if path.name == BYTECODE_DIR:
+            found.append(f"{rel} is cached bytecode, which Python imports in place of source")
             continue
         if rel.startswith("workspace/skills/"):
             continue  # skills are the change surface

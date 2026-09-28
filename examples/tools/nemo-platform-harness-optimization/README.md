@@ -553,9 +553,9 @@ python3 scorer/verify_candidates.py harness/experiment
 ```
 
 It exits non-zero and names the offender for a changed `harbor_wrapper.py` or
-`pyproject.toml`, a pinned `agent.yaml` block, an unexpected or deleted file, or
-a symlink, including one standing in for a runtime directory such as
-`artifacts/`.
+`pyproject.toml`, a pinned `agent.yaml` block, an unexpected or deleted file,
+cached bytecode in any `__pycache__/`, or a symlink, including one standing in
+for a runtime directory such as `artifacts/`.
 
 Run it before trusting a run's ranking, and read it as exactly that: a validity
 check on the numbers, not protection. It runs **after** the trials, and by then
@@ -671,7 +671,7 @@ can rewrite its own guardrail can pass it.
 ### Step 7: Let the platform fix it
 
 ```bash
-nemo agents experimentalist run \
+PYTHONPYCACHEPREFIX="$PWD/.pycache" nemo agents experimentalist run \
   --insight <insight-id> \
   --task-template ./task-template \
   --config experiment-config.yaml \
@@ -679,7 +679,14 @@ nemo agents experimentalist run \
 cd ..
 ```
 
-**`--config` is load-bearing.** `experiment-config.yaml` does not take effect by
+**`PYTHONPYCACHEPREFIX` is load-bearing.** Python imports cached bytecode in
+place of source, so without it a `.pyc` planted in a candidate's `__pycache__/`
+runs while that candidate's `harbor_wrapper.py` still compares byte-identical.
+The prefix moves every bytecode read and write out of the candidate tree.
+`PYTHONDONTWRITEBYTECODE` is not a substitute: it stops writes, not reads. The
+wrapper refuses to score a candidate when the prefix is unset.
+
+**`--config` is load-bearing too.** `experiment-config.yaml` does not take effect by
 existing; without that flag you get the defaults.
 
 The run builds a baseline, analyses the Insight's root cause, proposes candidate

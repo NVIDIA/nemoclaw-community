@@ -12,9 +12,14 @@ not.
 from __future__ import annotations
 
 import contextlib
+import importlib.util
 import io
+import marshal
+import os
 import shutil
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -181,8 +186,6 @@ class OnlyPromotableSurfacesAreMeasurable(unittest.TestCase):
     def test_runtime_output_is_not_a_violation(self) -> None:
         # The agent and the optimizer both write inside the candidate.
         candidate = self._candidate()
-        (candidate / "__pycache__").mkdir(exist_ok=True)
-        (candidate / "__pycache__" / "x.pyc").write_bytes(b"\x00")
         (candidate / "artifacts").mkdir(exist_ok=True)
         (candidate / "artifacts" / "out.FCStd").write_bytes(b"\x00")
         self.assertEqual(self.verify.violations(candidate), [])
@@ -206,6 +209,7 @@ class OnlyPromotableSurfacesAreMeasurable(unittest.TestCase):
         # itself is known to be a real directory, its contents are runtime
         # output: nothing under it is imported, executed or promoted, so a
         # symlink there cannot reach host code the way a symlinked root could.
+        # __pycache__ is deliberately not such a root; see CachedBytecode.
         candidate = self._candidate()
         (candidate / "traces").mkdir(exist_ok=True)
         (candidate / "traces" / "escape").symlink_to("/etc")
@@ -213,7 +217,7 @@ class OnlyPromotableSurfacesAreMeasurable(unittest.TestCase):
 
     def test_real_ignored_directories_stay_ignored(self) -> None:
         candidate = self._candidate()
-        for name in ("artifacts", "traces", "__pycache__"):
+        for name in ("artifacts", "traces", ".fabric"):
             d = candidate / name
             d.mkdir(exist_ok=True)
             (d / "generated.bin").write_bytes(b"\x00")
@@ -275,6 +279,96 @@ class OnlyPromotableSurfacesAreMeasurable(unittest.TestCase):
         self.assertIn("Evaluation harness, including `harbor_wrapper.py`: no", ethos)
         self.assertIn("Model selection and sampling parameters: no", ethos)
         self.assertNotIn("with-approval", ethos)
+
+
+class CachedBytecode(unittest.TestCase):
+    """A planted .pyc must neither pass the verifier nor run under the contract.
+
+    Python imports `__pycache__/<module>.<tag>.pyc` in place of source when the
+    header matches the source's mtime and size, so a candidate can keep a
+    byte-identical `harbor_wrapper.py` and still run different code. The run
+    contract is PYTHONPYCACHEPREFIX, which moves bytecode lookup out of the
+    tree; PYTHONDONTWRITEBYTECODE is not enough, because it stops writes only.
+    """
+
+    MARKER = "PLANTED-BYTECODE-RAN"
+
+    def setUp(self) -> None:
+        sys.path.insert(0, str(EXAMPLE / "scorer"))
+        import verify_candidates
+
+        self.verify = verify_candidates
+        self.experiment = EXAMPLE / "harness" / "experiment"
+        self.candidate = self.experiment / "eval-and-optimize" / "agents" / "agent-1"
+        shutil.rmtree(self.experiment, ignore_errors=True)
+        shutil.copytree(AGENT_SOURCE, self.candidate,
+                        ignore=shutil.ignore_patterns("__pycache__", "artifacts", "traces"))
+        self._plant()
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.experiment, ignore_errors=True)
+
+    def _plant(self) -> None:
+        """Write a timestamp-valid .pyc for the untouched wrapper source."""
+        source = self.candidate / "harbor_wrapper.py"
+        stat = source.stat()
+        code = compile(f"print({self.MARKER!r})\n", str(source), "exec")
+        header = (importlib.util.MAGIC_NUMBER + (0).to_bytes(4, "little")
+                  + (int(stat.st_mtime) & 0xFFFFFFFF).to_bytes(4, "little")
+                  + (stat.st_size & 0xFFFFFFFF).to_bytes(4, "little"))
+        cache = self.candidate / "__pycache__"
+        cache.mkdir()
+        (cache / f"harbor_wrapper.{sys.implementation.cache_tag}.pyc").write_bytes(
+            header + marshal.dumps(code))
+
+    def _import_like_harbor(self, **env: str) -> subprocess.CompletedProcess[str]:
+        """Import the candidate's wrapper the way harbor_native does.
+
+        A synthetic package whose __path__ is the agent directory, then an
+        ordinary import of `<package>.harbor_wrapper` through the path finder.
+        """
+        snippet = (
+            "import importlib, importlib.machinery, sys, types\n"
+            "pkg = types.ModuleType('agent_under_test')\n"
+            "pkg.__spec__ = importlib.machinery.ModuleSpec('agent_under_test', None, is_package=True)\n"
+            f"pkg.__path__ = [{str(self.candidate)!r}]\n"
+            "sys.modules['agent_under_test'] = pkg\n"
+            "importlib.import_module('agent_under_test.harbor_wrapper')\n"
+        )
+        clean = {k: v for k, v in os.environ.items() if not k.startswith("PYTHON")}
+        return subprocess.run([sys.executable, "-c", snippet], capture_output=True,
+                              text=True, env={**clean, **env}, timeout=120)
+
+    def test_the_source_is_untouched(self) -> None:
+        # The attack only matters because the byte comparison cannot see it.
+        self.assertEqual((self.candidate / "harbor_wrapper.py").read_bytes(),
+                         (AGENT_SOURCE / "harbor_wrapper.py").read_bytes())
+
+    def test_planted_bytecode_runs_without_the_contract(self) -> None:
+        # The threat is real: this is what a run without a prefix executes.
+        # PYTHONDONTWRITEBYTECODE, the obvious fix, does not change it.
+        for env in ({}, {"PYTHONDONTWRITEBYTECODE": "1"}):
+            with self.subTest(env=env):
+                self.assertIn(self.MARKER, self._import_like_harbor(**env).stdout)
+
+    def test_planted_bytecode_cannot_run_under_the_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as prefix:
+            done = self._import_like_harbor(PYTHONPYCACHEPREFIX=prefix)
+        self.assertNotIn(self.MARKER, done.stdout)
+        # The pristine source ran instead, found the planted directory, and
+        # refused the candidate before any trial.
+        self.assertIn("__pycache__ is cached bytecode", done.stderr)
+
+    def test_the_external_verifier_rejects_it(self) -> None:
+        self.assertIn("__pycache__ is cached bytecode, which Python imports in place of source",
+                      self.verify.violations(self.candidate))
+
+    def test_nested_bytecode_is_rejected_too(self) -> None:
+        # Skills are the open surface, but bytecode is not a skill.
+        nested = self.candidate / "workspace" / "skills" / "policy" / "__pycache__"
+        nested.mkdir(parents=True)
+        self.assertTrue(any(v.startswith("workspace/skills/policy/__pycache__ is cached bytecode")
+                            for v in self.verify.violations(self.candidate)))
 
 
 class CandidateWorkspaceSkill(unittest.TestCase):

@@ -5,6 +5,8 @@
 # per-candidate agent sources, logs. None of it is authored content.
 harness/experiment/
 harness/run.out
+# Bytecode for the optimizer run, kept out of candidate trees (see Step 7).
+harness/.pycache/
 
 # Agent runtime output. The deployment writes next to agent/agent.yaml; a trial
 # writes next to the candidate copy it builds the agent from.
