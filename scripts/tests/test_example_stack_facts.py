@@ -214,7 +214,7 @@ class ExampleStackFactsTests(unittest.TestCase):
                 {
                     # Includes the Kubernetes Deployer and SRE Assistant.
                     "unconfirmed": 12,
-                    "unpinned": 11,
+                    "unpinned": 12,
                     "unknown": 1,
                     "not-applicable": 1,
                 }
