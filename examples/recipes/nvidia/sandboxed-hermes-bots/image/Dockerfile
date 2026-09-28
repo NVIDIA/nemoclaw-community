@@ -40,7 +40,7 @@ WORKDIR /sandbox
 # its options change (--no-skills was removed in September 2026).
 # --skip-computer-use avoids the Chromium download; bots do not drive a browser here.
 USER sandbox
-RUN curl -fsSL "https://raw.githubusercontent.com/NousResearch/hermes-agent/${HERMES_REF}/scripts/install.sh" -o /tmp/install.sh \
+RUN curl -fsSL --retry 5 "https://raw.githubusercontent.com/NousResearch/hermes-agent/${HERMES_REF}/scripts/install.sh" -o /tmp/install.sh \
  && bash /tmp/install.sh --branch "${HERMES_REF}" --skip-computer-use --no-skills \
       > /sandbox/install.log 2>&1 \
  || { tail -40 /sandbox/install.log; exit 1; } \
