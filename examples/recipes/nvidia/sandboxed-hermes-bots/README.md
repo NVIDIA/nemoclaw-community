@@ -142,13 +142,15 @@ any of them and nothing is half-built. This is the sequence we ran on a blank
 Ubuntu 24.04 VM.
 
 **1. Install NemoClaw, OpenShell, and Docker.** One installer. On a fresh
-Ubuntu it needs `binutils` first (it checks OpenShell's binary with `strings`
-and stops if that is missing). It ends at its own "configure inference
+Ubuntu, install two packages first: `binutils`, because the installer checks
+OpenShell's binary with `strings` and stops if that is missing, and
+`libatomic1`, because the Node.js that the Hermes installer in step 2 downloads
+needs it. It ends at its own "configure inference
 provider" step because you have no NVIDIA key in it yet; that is fine, `swarm`
 brings its own endpoint.
 
 ```bash
-sudo apt-get install -y binutils
+sudo apt-get install -y binutils libatomic1
 curl -fsSL https://www.nvidia.com/nemoclaw.sh | NEMOCLAW_AGENT=hermes NEMOCLAW_NON_INTERACTIVE=1 NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 bash
 ```
 

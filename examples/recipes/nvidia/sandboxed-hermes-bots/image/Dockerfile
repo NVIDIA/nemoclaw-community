@@ -35,10 +35,12 @@ ENV HOME=/sandbox
 ENV HERMES_HOME=/sandbox/.hermes
 WORKDIR /sandbox
 
-# Install Hermes as the sandbox user at the pinned ref. --skip-computer-use
-# avoids the Chromium download; bots do not drive a browser here.
+# Install Hermes as the sandbox user at the pinned ref, with the installer from
+# that same ref: the installer at hermes-agent.nousresearch.com tracks main and
+# its options change (--no-skills was removed in September 2026).
+# --skip-computer-use avoids the Chromium download; bots do not drive a browser here.
 USER sandbox
-RUN curl -fsSL https://hermes-agent.nousresearch.com/install.sh -o /tmp/install.sh \
+RUN curl -fsSL "https://raw.githubusercontent.com/NousResearch/hermes-agent/${HERMES_REF}/scripts/install.sh" -o /tmp/install.sh \
  && bash /tmp/install.sh --branch "${HERMES_REF}" --skip-computer-use --no-skills \
       > /sandbox/install.log 2>&1 \
  || { tail -40 /sandbox/install.log; exit 1; } \
