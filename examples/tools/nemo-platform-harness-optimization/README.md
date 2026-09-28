@@ -544,18 +544,24 @@ Every candidate is a full copy of `agent_source/`, so a candidate can change the
 system prompt, declare a subagent, or add a skill under `workspace/skills/`, and
 the next trial measures that change rather than a proxy for it. Everything else
 in the copy is pinned: a loop optimizes whatever surface you leave open, so
-leave open only what you can ship. `scorer/verify_candidates.py` is what makes
-that a boundary rather than a request. It lives outside `agent_source/`, is
-never copied into a candidate, and compares each one against the pristine
-originals:
+leave open only what you can ship. `scorer/verify_candidates.py` checks that.
+It lives outside `agent_source/`, is never copied into a candidate, and
+compares the **whole tree** against the pristine originals:
 
 ```bash
 python3 scorer/verify_candidates.py harness/experiment
 ```
 
-It exits non-zero and names the offender if a candidate changed
-`harbor_wrapper.py` or a pinned `agent.yaml` block. Run it before trusting a
-run's ranking. The config needs `api_key_env` and `base_url` under `models.default`,
+It exits non-zero and names the offender for a changed `harbor_wrapper.py` or
+`pyproject.toml`, a pinned `agent.yaml` block, an unexpected or deleted file, or
+a symlink, including one standing in for a runtime directory such as
+`artifacts/`.
+
+Run it before trusting a run's ranking, and read it as exactly that: a validity
+check on the numbers, not protection. It runs **after** the trials, and by then
+the candidate's own `harbor_wrapper.py` has already been imported and executed
+on your machine. Known limitations explains why no ordering available here
+changes that, and why the loop belongs in a sandbox. The config needs `api_key_env` and `base_url` under `models.default`,
 which the deepagents adapter requires when the agent is built from a file.
 
 The profile, `harness/optimizer.yaml`, points at all of it:
@@ -908,16 +914,19 @@ tree is pinned except the `instructions` and `harnesses` blocks of `agent.yaml`
 and anything under `workspace/skills/`, so a candidate cannot win with a change
 you could not ship. The cost is that genuinely useful work is out of reach: an
 MCP tool or a middleware hook needs a human, or a custom Fabric adapter.
-- **The pin cannot be enforced before the candidate runs.** Harbor resolves the
-entry point inside the agent directory, so the wrapper's own check ships in the
-tree it guards and a candidate that rewrites the wrapper removes it.
-`verify_candidates.py` applies the same rule from outside, but it runs *after*
-the trial, and the candidate's wrapper executes host-side. That is a host-code
-execution boundary rather than just wasted trials: by the time a violation is
-reported, modified harness code has already run on your machine. Closing it
-needs an entry point Harbor resolves outside the candidate, which the current
-contract does not offer, so run the loop where you would run any other code a
-model can edit.
+- **This example runs model-written code on your machine, and nothing in it
+prevents that.** `harbor-native` resolves the agent entry point *inside* the
+candidate: `_scoped_import_path` calls `_ensure_package(package_name,
+search_path=agent_path)`, so the module Harbor imports is always the candidate's
+own copy, whatever `import_path` is set to. A coding agent writes that copy, and
+it is imported into the host process before any audit can inspect it.
+`verify_candidates.py` is therefore a correctness check on results, not a
+security boundary, and the in-wrapper check is weaker still because a candidate
+that rewrites the wrapper removes it in the same edit. Neither ordering is
+fixable from here: generation and evaluation are interleaved in one process, so
+no point exists at which a candidate is written and not yet imported. **Run the
+loop in a sandbox you would hand to a model, a container or a VM, not your
+laptop.**
 - **A trial runs the agent from a config file, production serves a deployment.**
 `harbor_wrapper.py` builds each candidate from its own `agent.yaml`, so the
 change surface is real, but a trial and a deployed run are not byte-identical
@@ -955,7 +964,7 @@ python3 -m unittest discover -s tests
 **Expected result:**
 
 ```text
-Ran 92 tests
+Ran 95 tests
 
 OK
 ```

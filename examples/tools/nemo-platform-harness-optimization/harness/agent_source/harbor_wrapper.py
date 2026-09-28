@@ -187,7 +187,7 @@ def _pinned_config(config: Path) -> str:
     return "\n".join(kept).strip()
 
 
-IGNORED_PATHS = ("__pycache__", "artifacts", "traces", ".fabric")
+IGNORED_DIRS = ("__pycache__", "artifacts", "traces", ".fabric")
 # Written into every candidate by the optimizer after the change is final. It
 # documents the agent for the next round and is never imported, so treating it
 # as a candidate edit would fail every trial.
@@ -195,16 +195,29 @@ OPTIMIZER_FILES = ("architecture.md",)
 
 
 def _tracked(root: Path) -> dict[str, Path]:
-    """Map relative path to file for everything under *root* worth comparing."""
-    found = {}
-    for path in root.rglob("*"):
-        rel = path.relative_to(root)
-        if (any(part in IGNORED_PATHS for part in rel.parts)
-                or rel.name.startswith(".trial-")
-                or rel.as_posix() in OPTIMIZER_FILES):
-            continue
-        if path.is_symlink() or path.is_file():
-            found[rel.as_posix()] = path
+    """Map relative path to entry for everything under *root* worth comparing.
+
+    Walked explicitly rather than with rglob so the symlink test happens
+    *before* an ignored directory is pruned. Skipping on name first let a
+    candidate replace `artifacts/` or `traces/` with a symlink to anywhere on
+    the host and have the whole subtree ignored.
+    """
+    found: dict[str, Path] = {}
+
+    def walk(directory: Path, base: str) -> None:
+        for entry in sorted(directory.iterdir()):
+            rel = f"{base}/{entry.name}" if base else entry.name
+            if entry.is_symlink():
+                found[rel] = entry  # recorded so the caller can reject it
+            elif entry.is_dir():
+                if entry.name not in IGNORED_DIRS:
+                    walk(entry, rel)
+            elif entry.is_file():
+                if rel in OPTIMIZER_FILES or entry.name.startswith(".trial-"):
+                    continue
+                found[rel] = entry
+
+    walk(root, "")
     return found
 
 

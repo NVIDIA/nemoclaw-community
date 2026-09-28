@@ -187,6 +187,38 @@ class OnlyPromotableSurfacesAreMeasurable(unittest.TestCase):
         (candidate / "artifacts" / "out.FCStd").write_bytes(b"\x00")
         self.assertEqual(self.verify.violations(candidate), [])
 
+    def test_an_ignored_root_replaced_by_a_symlink_is_rejected(self) -> None:
+        # The bypass: skipping on directory name before testing for a symlink
+        # let a candidate point artifacts/ or traces/ anywhere on the host and
+        # have the whole subtree ignored.
+        for name in ("artifacts", "traces", "__pycache__", ".fabric"):
+            with self.subTest(root=name):
+                candidate = self._candidate()
+                target = candidate / name
+                shutil.rmtree(target, ignore_errors=True)
+                target.unlink(missing_ok=True)
+                target.symlink_to("/etc")
+                self.assertIn(f"{name} is a symlink; candidates may not link outside the tree",
+                              self.verify.violations(candidate))
+
+    def test_descendants_of_a_real_ignored_root_are_out_of_scope(self) -> None:
+        # Pins the boundary rather than asserting a rejection. Once the root
+        # itself is known to be a real directory, its contents are runtime
+        # output: nothing under it is imported, executed or promoted, so a
+        # symlink there cannot reach host code the way a symlinked root could.
+        candidate = self._candidate()
+        (candidate / "traces").mkdir(exist_ok=True)
+        (candidate / "traces" / "escape").symlink_to("/etc")
+        self.assertEqual(self.verify.violations(candidate), [])
+
+    def test_real_ignored_directories_stay_ignored(self) -> None:
+        candidate = self._candidate()
+        for name in ("artifacts", "traces", "__pycache__"):
+            d = candidate / name
+            d.mkdir(exist_ok=True)
+            (d / "generated.bin").write_bytes(b"\x00")
+        self.assertEqual(self.verify.violations(candidate), [])
+
     def test_the_optimizer_architecture_doc_is_not_a_violation(self) -> None:
         # The optimizer writes architecture.md into every candidate after the
         # change is final. Rejecting it would fail every trial, baseline
