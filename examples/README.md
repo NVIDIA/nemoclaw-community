@@ -39,6 +39,7 @@ Reusable NemoClaw agent workflows contributed by partner organizations, with att
 | [Workday HR assistant with role-scoped tool access](recipes/partners/merge/workday-hr-assistant/README.md) | Merge | ✨ Other | Give a NemoClaw agent read access to Workday workers, organizations, and time-off through a Merge Agent Handler Tool Pack that withholds compensation, payslip, and payment tools. |
 | [Shrike Security Action Governance](recipes/partners/shrike/shrike-security/README.md) | Shrike Security, Inc. | ✨ Other | Governs action-bearing OpenClaw tool calls, including shell commands, SQL, file writes, and web requests. An in-sandbox hook sends action content to Shrike policy before execution and blocks prohibited or approval-required calls. It complements, but does not replace, OpenShell isolation. |
 | [Watchtower](recipes/partners/tavily/watchtower/README.md) | Tavily | ✨ Other | Tracks what changed across chosen web topics and why it matters, producing scheduled, deduplicated Markdown digests and JSON changelogs with source citations. |
+| [Telnyx Inference provider](recipes/partners/telnyx/inference-provider/README.md) | Telnyx | ✨ Other | Connects a NemoClaw sandbox to Telnyx Inference through Telnyx's OpenAI-compatible API. |
 
 ## [Community Recipes](recipes/community/README.md)
 

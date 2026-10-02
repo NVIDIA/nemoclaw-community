@@ -216,7 +216,7 @@ class ExampleStackFactsTests(unittest.TestCase):
                     # Workday HR assistant, and the NeMo Platform Harness
                     # Optimization example.
                     "unconfirmed": 13,
-                    "unpinned": 11,
+                    "unpinned": 12,
                     "unknown": 1,
                     "not-applicable": 1,
                 }
