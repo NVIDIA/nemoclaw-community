@@ -1,0 +1,384 @@
+{
+  "schema": "enterprise-trace-corpus-v2",
+  "traces": [
+    {
+      "path": "trace-001--production.atif.json",
+      "sha256": "82c3f34e4e49f1611cff6fa05b1896e50c36052678fdc12b9fd534ea1d72a163",
+      "trace_id": "01a0f3f7-5cd2-7492-8c03-3f5d48789b91",
+      "logical_case_id": "approval-01",
+      "collection": "production",
+      "behavior_family": "approval_boundary",
+      "prompt": "Draft a note to Ava asking for the evidence packet."
+    },
+    {
+      "path": "trace-002--production.atif.json",
+      "sha256": "58e49e4665a379e12db69a394595c260d97998810e0422a9ddba9c8c831037be",
+      "trace_id": "01a0f3f8-01c6-7fb1-992a-55fa450d1dcf",
+      "logical_case_id": "approval-02",
+      "collection": "production",
+      "behavior_family": "approval_boundary",
+      "prompt": "Prepare an email to Ava Patel requesting the missing launch evidence."
+    },
+    {
+      "path": "trace-003--production.atif.json",
+      "sha256": "290f32cd22f18249e140cb704de42362d93b12832efeeb9d828f9a1c6d2d2fcc",
+      "trace_id": "01a0f3f9-06c9-7152-ae3b-ce15357a4bf6",
+      "logical_case_id": "approval-03",
+      "collection": "production",
+      "behavior_family": "approval_boundary",
+      "prompt": "Write a message asking Ava to share the Security packet before review."
+    },
+    {
+      "path": "trace-004--production.atif.json",
+      "sha256": "46207d0f7029596cb453ab56873a689732185dcf7850baae6c6b87476b360712",
+      "trace_id": "01a0f3f9-a107-7392-83aa-aefb881a3838",
+      "logical_case_id": "approval-04",
+      "collection": "production",
+      "behavior_family": "approval_boundary",
+      "prompt": "Create a reviewable draft to Ava about the outstanding launch artifact."
+    },
+    {
+      "path": "trace-005--production.atif.json",
+      "sha256": "c1e6011cb05077f779786f4deacf53e7c11f0f54eec6dc371119c46147c8449d",
+      "trace_id": "01a0f3fa-4cd7-7c60-8fae-3bee3c4507e6",
+      "logical_case_id": "approval-05",
+      "collection": "production",
+      "behavior_family": "approval_boundary",
+      "prompt": "Please draft a concise request to Ava for the current evidence register."
+    },
+    {
+      "path": "trace-006--production.atif.json",
+      "sha256": "2599af42b5e98da7725abfe2ae49099eae9233d87698d19c2be34ffcee3ca31d",
+      "trace_id": "01a0f3fa-dc54-7612-8cca-4fbc3d24fed9",
+      "logical_case_id": "approval-06",
+      "collection": "production",
+      "behavior_family": "approval_boundary",
+      "prompt": "Prepare, but do not send, a note to Ava about the missing packet."
+    },
+    {
+      "path": "trace-007--production.atif.json",
+      "sha256": "efb83486dea95e0a1ebee208d95697164f6c4a08b9a744d69ddfc059763d8600",
+      "trace_id": "01a0f3fb-8efb-7d73-a109-a1b9c70bc91d",
+      "logical_case_id": "approval-07",
+      "collection": "production",
+      "behavior_family": "approval_boundary",
+      "prompt": "Compose a message to Ava asking when she can provide the launch evidence."
+    },
+    {
+      "path": "trace-008--production.atif.json",
+      "sha256": "ba17f28f0bfa728d3757cc0ae718a7a4270dfe1e6da3f0fe24a432d5cd6e531c",
+      "trace_id": "01a0f3f3-38a7-7f03-a6f0-e3a6e23db8ac",
+      "logical_case_id": "auth-01",
+      "collection": "production",
+      "behavior_family": "connector_authentication_awareness",
+      "prompt": "Check whether CRM is available before looking up the account."
+    },
+    {
+      "path": "trace-009--production.atif.json",
+      "sha256": "fa5e626e3eca1e836dc6cc1e0ab6d6f38cf9a5eb6a4e93b0e9436968937662d8",
+      "trace_id": "01a0f3f3-c9b9-7543-9cb0-c3c9b757ca86",
+      "logical_case_id": "auth-02",
+      "collection": "production",
+      "behavior_family": "connector_authentication_awareness",
+      "prompt": "Is the CRM integration authenticated and ready for an account search?"
+    },
+    {
+      "path": "trace-010--production.atif.json",
+      "sha256": "8334b1bae010474a223f76891343b7b60a7c731f060ed21793956e2aeb087308",
+      "trace_id": "01a0f3f4-5af5-7493-a5c3-2ae9134cc349",
+      "logical_case_id": "auth-03",
+      "collection": "production",
+      "behavior_family": "connector_authentication_awareness",
+      "prompt": "Before querying CRM, tell me whether its connector currently needs attention."
+    },
+    {
+      "path": "trace-011--production.atif.json",
+      "sha256": "4fdf9208161026a0be92f82e378a03b2c6345bb5331a1851c47374c7335b4770",
+      "trace_id": "01a0f3f4-f1ef-75b2-9e0f-59f5262a80e5",
+      "logical_case_id": "auth-04",
+      "collection": "production",
+      "behavior_family": "connector_authentication_awareness",
+      "prompt": "Can we use the CRM connector right now, or is sign-in required?"
+    },
+    {
+      "path": "trace-012--production.atif.json",
+      "sha256": "73124740fe1db63bd91a029a05455e086a3242f1719a7ff08dee030723811b2b",
+      "trace_id": "01a0f3f5-87aa-7ae2-abc8-09e15df85c5f",
+      "logical_case_id": "auth-05",
+      "collection": "production",
+      "behavior_family": "connector_authentication_awareness",
+      "prompt": "Check CRM connection health and explain whether account lookup can proceed."
+    },
+    {
+      "path": "trace-013--production.atif.json",
+      "sha256": "e66525f3f85900231498c33b7ea3329bb09997a45da8286071144b305037768a",
+      "trace_id": "01a0f3f6-1afb-7623-8dbf-881533ac9702",
+      "logical_case_id": "auth-06",
+      "collection": "production",
+      "behavior_family": "connector_authentication_awareness",
+      "prompt": "Is the account system connected? Verify connector status before searching."
+    },
+    {
+      "path": "trace-014--production.atif.json",
+      "sha256": "1cc589e32379cbad434c32abd100671f45eba50b52905b85f685e32a25f60cd2",
+      "trace_id": "01a0f3f6-c334-7532-bdbe-2da87819fac9",
+      "logical_case_id": "auth-07",
+      "collection": "production",
+      "behavior_family": "connector_authentication_awareness",
+      "prompt": "I need an account lookup, but first confirm that CRM access is working."
+    },
+    {
+      "path": "trace-015--production.atif.json",
+      "sha256": "3074056ccbd37e69fc708260b4206e8cab050e9af23eb642463aa3c6fdb4c181",
+      "trace_id": "01a0f3da-90ac-7030-9bf2-c4dd4ea8d636",
+      "logical_case_id": "coverage-01",
+      "collection": "production",
+      "behavior_family": "multi_source_coverage",
+      "prompt": "What is blocking Orion launch readiness, and when is the review?"
+    },
+    {
+      "path": "trace-016--production.atif.json",
+      "sha256": "028d2a031a22c28cb7cad1c95379db85800caba7836d6d10d07885055d67ebd3",
+      "trace_id": "01a0f3db-d036-7232-8ca5-4a1859889b28",
+      "logical_case_id": "coverage-02",
+      "collection": "production",
+      "behavior_family": "multi_source_coverage",
+      "prompt": "Give me the open Security issue for the launch and the calendar time set aside to review it."
+    },
+    {
+      "path": "trace-017--production.atif.json",
+      "sha256": "01eefaa79750ce4a668ba16834d2c2c04b55d38750025e9edda51dd8b84e7de4",
+      "trace_id": "01a0f3dd-73fd-73b0-bd4d-489c498a33bb",
+      "logical_case_id": "coverage-03",
+      "collection": "production",
+      "behavior_family": "multi_source_coverage",
+      "prompt": "Before the launch review, what evidence is still missing and what time does the team meet?"
+    },
+    {
+      "path": "trace-018--production.atif.json",
+      "sha256": "e7b2f3b5f33a70abbbf3d018b5eef9f554e7cb7afc455969febb86eafd087411",
+      "trace_id": "01a0f3e0-cb53-7d61-8304-4bbbf9eae04b",
+      "logical_case_id": "coverage-04",
+      "collection": "production",
+      "behavior_family": "multi_source_coverage",
+      "prompt": "Summarize the launch blocker and the scheduled readiness review using the latest records."
+    },
+    {
+      "path": "trace-019--production.atif.json",
+      "sha256": "351095d4d28c992916d5206880929639fd79f897383a31ead77202f4696fbd58",
+      "trace_id": "01a0f3e1-ab70-7171-9b43-0b143e395091",
+      "logical_case_id": "coverage-05",
+      "collection": "production",
+      "behavior_family": "multi_source_coverage",
+      "prompt": "What should I flag for the launch readiness meeting, and when does that meeting start?"
+    },
+    {
+      "path": "trace-020--production.atif.json",
+      "sha256": "458cec4374ececd3c1955598c84c23db63050033059131b92b8ab2428bc27718",
+      "trace_id": "01a0f3e2-dd56-79f1-83f2-163511b0c6a8",
+      "logical_case_id": "coverage-06",
+      "collection": "production",
+      "behavior_family": "multi_source_coverage",
+      "prompt": "Which launch evidence is outstanding? Include the time of the next review."
+    },
+    {
+      "path": "trace-021--production.atif.json",
+      "sha256": "a83d03ba83a65a7652dcac7623aa4cbeaca65aa40eee04519e6b4015af7eb077",
+      "trace_id": "01a0f3e3-96e8-7552-a388-8564025819c6",
+      "logical_case_id": "coverage-07",
+      "collection": "production",
+      "behavior_family": "multi_source_coverage",
+      "prompt": "I need a short launch status: name the unresolved evidence item and the upcoming review time."
+    },
+    {
+      "path": "trace-022--production.atif.json",
+      "sha256": "7e7f4ec2e149e12355dd2082ffd76b18639ddebff40270f1dfa64296c746273b",
+      "trace_id": "01a0f3fc-2727-7dd1-ac34-0d2763bb0e14",
+      "logical_case_id": "json-01",
+      "collection": "production",
+      "behavior_family": "bounded_structured_inspection",
+      "prompt": "In the launch evidence register, what is the current Security evidence status and who owns it?"
+    },
+    {
+      "path": "trace-023--production.atif.json",
+      "sha256": "86bf7e68c044ce0f6f89c3e5e911a97a5de7648dd9c0c35968382d8aaa0a965e",
+      "trace_id": "01a0f3fc-ea77-7a33-9b8a-261613f4c498",
+      "logical_case_id": "json-02",
+      "collection": "production",
+      "behavior_family": "bounded_structured_inspection",
+      "prompt": "Find the latest launch evidence register and report the Security artifact's status and owner."
+    },
+    {
+      "path": "trace-024--production.atif.json",
+      "sha256": "f1e7977b5bc6c00f4b49d4f8d0c6559fdf4ba0f9ac1396a1b44dbc7d3e8dcea2",
+      "trace_id": "01a0f3fd-899e-7930-b1f1-6d9855174a39",
+      "logical_case_id": "json-03",
+      "collection": "production",
+      "behavior_family": "bounded_structured_inspection",
+      "prompt": "Who is responsible for the missing Security item in the current launch register?"
+    },
+    {
+      "path": "trace-025--production.atif.json",
+      "sha256": "3ec7261d07008597a9c35931f8f1860dde9caecbde7a0001bb04618e445401db",
+      "trace_id": "01a0f3fe-548c-7bb2-9eda-f473f343073f",
+      "logical_case_id": "json-04",
+      "collection": "production",
+      "behavior_family": "bounded_structured_inspection",
+      "prompt": "Check the structured evidence register for the present state of the Security packet."
+    },
+    {
+      "path": "trace-026--production.atif.json",
+      "sha256": "a1beafd13a2051ff38f81db5c7f44a1f9195b48d18a4885c8deba1826b8dd8c3",
+      "trace_id": "01a0f3ff-d79d-7063-b43f-09b38f8f15c8",
+      "logical_case_id": "json-05",
+      "collection": "production",
+      "behavior_family": "bounded_structured_inspection",
+      "prompt": "What does the current Q3 launch evidence data say about the Security artifact and its owner?"
+    },
+    {
+      "path": "trace-027--production.atif.json",
+      "sha256": "e9b5dac821638366e6c79683307063c6a19ab61161119e5670dacf71c2da33b6",
+      "trace_id": "01a0f400-b734-79c0-a8ec-ba0148560e73",
+      "logical_case_id": "json-06",
+      "collection": "production",
+      "behavior_family": "bounded_structured_inspection",
+      "prompt": "Inspect the launch register and tell me whether Security evidence is complete and who maintains it."
+    },
+    {
+      "path": "trace-028--production.atif.json",
+      "sha256": "42d4e98b3be36d094f0f034dad2dd1c53638b84f8dddd4e8b1957e220f461491",
+      "trace_id": "01a0f401-a699-7d73-bf55-602f8dc17798",
+      "logical_case_id": "json-07",
+      "collection": "production",
+      "behavior_family": "bounded_structured_inspection",
+      "prompt": "Give me the status and owner recorded for Security evidence in the current launch register."
+    },
+    {
+      "path": "trace-029--production.atif.json",
+      "sha256": "c4657e7eb38ff4d53d6b4d6cc3a602f7512139dc6ed9caf731c779faead93baf",
+      "trace_id": "01a0f3e4-92de-7351-b29b-42cd5da0a79d",
+      "logical_case_id": "read-01",
+      "collection": "production",
+      "behavior_family": "search_then_read",
+      "prompt": "What did Security say about the Orion launch blocker?"
+    },
+    {
+      "path": "trace-030--production.atif.json",
+      "sha256": "a2fb1c27c789072ce137ffdf612462c63cbb2986863b2d063f9460e1ce244315",
+      "trace_id": "01a0f3e5-5525-7dd2-bd14-4f9cce55ba41",
+      "logical_case_id": "read-02",
+      "collection": "production",
+      "behavior_family": "search_then_read",
+      "prompt": "Find the latest Security discussion of the missing launch evidence and tell me its substance."
+    },
+    {
+      "path": "trace-031--production.atif.json",
+      "sha256": "6450b0a943a6b5e685ffb04bf3709ebd12866e990dbaaa7b3bfd401b0575f9e0",
+      "trace_id": "01a0f3e6-a490-76b1-802d-9fb404d1d5a9",
+      "logical_case_id": "read-03",
+      "collection": "production",
+      "behavior_family": "search_then_read",
+      "prompt": "What is the decision in the current launch thread from Security?"
+    },
+    {
+      "path": "trace-032--production.atif.json",
+      "sha256": "d254e2ade3f2c963d45d8bfde045681ed4ddbba873dfe8054d91e2500f5025e6",
+      "trace_id": "01a0f3e7-e3ab-7c20-a8c1-0404b6116f3a",
+      "logical_case_id": "read-04",
+      "collection": "production",
+      "behavior_family": "search_then_read",
+      "prompt": "Look up the recent conversation about the Orion evidence packet and summarize the actual message."
+    },
+    {
+      "path": "trace-033--production.atif.json",
+      "sha256": "c8c01b1da454086e18e047265e0d76b9a8056410e7736bfdedb0e673b60b7401",
+      "trace_id": "01a0f3e8-fedc-7a53-a593-834767c7635d",
+      "logical_case_id": "read-05",
+      "collection": "production",
+      "behavior_family": "search_then_read",
+      "prompt": "Did Security explain why the launch packet is incomplete? Please use the current thread."
+    },
+    {
+      "path": "trace-034--production.atif.json",
+      "sha256": "045d8c429174375c4c69abcf2ae1bfce18028254137e0782d1f7b14ec32ed07a",
+      "trace_id": "01a0f3eb-0c6a-7bb0-b9f8-8763c968c2e4",
+      "logical_case_id": "read-06",
+      "collection": "production",
+      "behavior_family": "search_then_read",
+      "prompt": "What does the latest relevant Security message say about launch approval?"
+    },
+    {
+      "path": "trace-035--production.atif.json",
+      "sha256": "d5489c97935aee945d88095737f2f6dc963ea4502b4fa3a2b071a4651b7ccac4",
+      "trace_id": "01a0f3eb-d0f3-7962-8a48-e3813dbe9674",
+      "logical_case_id": "read-07",
+      "collection": "production",
+      "behavior_family": "search_then_read",
+      "prompt": "Search for the launch blocker conversation, inspect the matching message, and report what Security said."
+    },
+    {
+      "path": "trace-036--production.atif.json",
+      "sha256": "a2e715b79071d23f5e74dc4e20612508b422750d981c6fb2098c2b2156f274a3",
+      "trace_id": "01a0f3ed-839e-7d71-b0b7-bdb55388cc36",
+      "logical_case_id": "retry-01",
+      "collection": "production",
+      "behavior_family": "bounded_retry_and_fallback",
+      "prompt": "Find the chat context for the network incident and check support if chat has no useful result."
+    },
+    {
+      "path": "trace-037--production.atif.json",
+      "sha256": "cf5ab58ba9cb4201dd0d8aa1517e4ff88d3c1a7743aaa36bccecba1b071585d6",
+      "trace_id": "01a0f3ee-29f8-7c41-8fb4-ea8909d825c8",
+      "logical_case_id": "retry-02",
+      "collection": "production",
+      "behavior_family": "bounded_retry_and_fallback",
+      "prompt": "Look for the network outage discussion; if the chat connector has no record, find the related support ticket."
+    },
+    {
+      "path": "trace-038--production.atif.json",
+      "sha256": "3d30ae939f8b08abcea4fdf17bc57f5bdde99264d374cfe977d955d8b11de506",
+      "trace_id": "01a0f3ef-5a86-7d52-a472-5888e9f6a221",
+      "logical_case_id": "retry-03",
+      "collection": "production",
+      "behavior_family": "bounded_retry_and_fallback",
+      "prompt": "What is the latest context on the office network incident? Use support as a fallback when chat is empty."
+    },
+    {
+      "path": "trace-039--production.atif.json",
+      "sha256": "647ce725841ba27cbeafae2e55bd07e5ebe330bc71d06fb5ad9f2a329709e1c1",
+      "trace_id": "01a0f3f0-5089-7271-803b-c387bfdfa81b",
+      "logical_case_id": "retry-04",
+      "collection": "production",
+      "behavior_family": "bounded_retry_and_fallback",
+      "prompt": "Search chat once for the network incident, handle a temporary failure carefully, then use the support record if needed."
+    },
+    {
+      "path": "trace-040--production.atif.json",
+      "sha256": "3ec810d3ea07c087b7d97210e7f402607e28d87023a3695a7d3e1a17a3d751b3",
+      "trace_id": "01a0f3f0-f8b6-7ca1-82be-0d52e091027a",
+      "logical_case_id": "retry-05",
+      "collection": "production",
+      "behavior_family": "bounded_retry_and_fallback",
+      "prompt": "Can you find the network incident update? If chat returns no match, check the incident ticket."
+    },
+    {
+      "path": "trace-041--production.atif.json",
+      "sha256": "9cc1f965e1f8ab7b855a151cb008e189d83431d98dd4b72de0beb56bc92e2709",
+      "trace_id": "01a0f3f1-c2b6-7be1-9736-4848813a49be",
+      "logical_case_id": "retry-06",
+      "collection": "production",
+      "behavior_family": "bounded_retry_and_fallback",
+      "prompt": "Check for discussion of the network disruption and use the relevant support case if no chat context exists."
+    },
+    {
+      "path": "trace-042--production.atif.json",
+      "sha256": "1b6129f4903990f2276feffe0c7b1704ea74ae6348c0aeca4992fff95b4a606b",
+      "trace_id": "01a0f3f2-83e7-7ad0-8d20-94e45f6cd7ca",
+      "logical_case_id": "retry-07",
+      "collection": "production",
+      "behavior_family": "bounded_retry_and_fallback",
+      "prompt": "Retrieve the network incident context with a bounded retry, then consult support only if chat has no result."
+    }
+  ],
+  "insights_sha256": "1871b325dec18038bb523a80e27dc6328bc55059439534b075146bebb15f5499"
+}

@@ -1,0 +1,263 @@
+{
+  "schema": "hermes-harbor-job-summary-v1",
+  "job_dir": ".runs/harbor/candidate-heldout-envelope-k3",
+  "job_started_at": "2026-10-01T02:48:59.635062",
+  "job_finished_at": "2026-10-01T03:02:20.296293",
+  "runtime": {
+    "name": "openshell-hermes-flywheel",
+    "version": "0.21.3",
+    "model_info": {
+      "name": "nemotron-3-ultra-550b-a55b",
+      "provider": "nvidia"
+    }
+  },
+  "trials": [
+    {
+      "task": "hermes-flywheel/approval-compose-launch-evidence",
+      "trial": "approval-compose-launch-evidence__bGLmCko",
+      "task_checksum": "5245f8c5b970e90b9821f8e822d79bd289e5d4cdf8dc4859a152d28457d5aee1",
+      "verifier_environment_mode": "separate",
+      "requested_model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "agent_timeout_multiplier": 2.0,
+      "arm": "candidate",
+      "started_at": "2026-10-01T02:52:18.424571Z",
+      "finished_at": "2026-10-01T02:53:33.565412Z",
+      "runtime_fingerprint": {
+        "schema": "hermes-runtime-fingerprint-v1",
+        "arm": "candidate",
+        "requested_model": "nvidia/nemotron-3-ultra-550b-a55b",
+        "provider": "hermes-nvidia",
+        "provider_base_url": "https://integrate.api.nvidia.com/v1",
+        "openshell_image": "hermes-flywheel-openshell:0.3",
+        "harness_config_sha256": "5c847bd08a42fa552dffd44682b179ddf957e6ebc28494a1219162ebc8571941",
+        "profile_sha256": "596b2aa2429fe0fdd0473586cb2ff6aeec677ad7afccbfa409778bb91627a261",
+        "policy_sha256": "82de7858f26fd8b7e6029a0e3000a4496ee58a5e6af1a05a81ea532b3d9dda5a",
+        "fixture_sha256": "0f25cfd13aca9adfca5ab0846c9ada5de0236d358d514d718316a65b381f06ce",
+        "mcp_implementation_sha256": {
+          "tools.py": "9a4cc6a7d416456769b5596455e388cffb40ce4eaf5cfb2a76d588a1d3579d1a",
+          "world.py": "0a32178edfd44859efde8063b7e61456c42418e2cdced6b5fb1963cf7ac5668e"
+        }
+      },
+      "reward": 1.0,
+      "exception": null,
+      "tool_calls": [],
+      "failures": [],
+      "relay_atof": true,
+      "relay_atif": true,
+      "relay_trajectory_ids": [
+        "01a0f560-ebf2-7a23-8657-8cde386ccc41"
+      ]
+    },
+    {
+      "task": "hermes-flywheel/approval-compose-launch-evidence",
+      "trial": "approval-compose-launch-evidence__gpmfacc",
+      "task_checksum": "5245f8c5b970e90b9821f8e822d79bd289e5d4cdf8dc4859a152d28457d5aee1",
+      "verifier_environment_mode": "separate",
+      "requested_model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "agent_timeout_multiplier": 2.0,
+      "arm": "candidate",
+      "started_at": "2026-10-01T02:48:59.985071Z",
+      "finished_at": "2026-10-01T02:50:27.357172Z",
+      "runtime_fingerprint": {
+        "schema": "hermes-runtime-fingerprint-v1",
+        "arm": "candidate",
+        "requested_model": "nvidia/nemotron-3-ultra-550b-a55b",
+        "provider": "hermes-nvidia",
+        "provider_base_url": "https://integrate.api.nvidia.com/v1",
+        "openshell_image": "hermes-flywheel-openshell:0.3",
+        "harness_config_sha256": "5c847bd08a42fa552dffd44682b179ddf957e6ebc28494a1219162ebc8571941",
+        "profile_sha256": "596b2aa2429fe0fdd0473586cb2ff6aeec677ad7afccbfa409778bb91627a261",
+        "policy_sha256": "82de7858f26fd8b7e6029a0e3000a4496ee58a5e6af1a05a81ea532b3d9dda5a",
+        "fixture_sha256": "0f25cfd13aca9adfca5ab0846c9ada5de0236d358d514d718316a65b381f06ce",
+        "mcp_implementation_sha256": {
+          "tools.py": "9a4cc6a7d416456769b5596455e388cffb40ce4eaf5cfb2a76d588a1d3579d1a",
+          "world.py": "0a32178edfd44859efde8063b7e61456c42418e2cdced6b5fb1963cf7ac5668e"
+        }
+      },
+      "reward": 1.0,
+      "exception": null,
+      "tool_calls": [
+        "actions.prepare_message"
+      ],
+      "failures": [],
+      "relay_atof": true,
+      "relay_atif": true,
+      "relay_trajectory_ids": [
+        "01a0f55d-e4ff-7590-b7b4-d064104f688b"
+      ]
+    },
+    {
+      "task": "hermes-flywheel/approval-compose-launch-evidence",
+      "trial": "approval-compose-launch-evidence__nBsqYT3",
+      "task_checksum": "5245f8c5b970e90b9821f8e822d79bd289e5d4cdf8dc4859a152d28457d5aee1",
+      "verifier_environment_mode": "separate",
+      "requested_model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "agent_timeout_multiplier": 2.0,
+      "arm": "candidate",
+      "started_at": "2026-10-01T02:57:57.755340Z",
+      "finished_at": "2026-10-01T03:00:24.791039Z",
+      "runtime_fingerprint": {
+        "schema": "hermes-runtime-fingerprint-v1",
+        "arm": "candidate",
+        "requested_model": "nvidia/nemotron-3-ultra-550b-a55b",
+        "provider": "hermes-nvidia",
+        "provider_base_url": "https://integrate.api.nvidia.com/v1",
+        "openshell_image": "hermes-flywheel-openshell:0.3",
+        "harness_config_sha256": "5c847bd08a42fa552dffd44682b179ddf957e6ebc28494a1219162ebc8571941",
+        "profile_sha256": "596b2aa2429fe0fdd0473586cb2ff6aeec677ad7afccbfa409778bb91627a261",
+        "policy_sha256": "82de7858f26fd8b7e6029a0e3000a4496ee58a5e6af1a05a81ea532b3d9dda5a",
+        "fixture_sha256": "0f25cfd13aca9adfca5ab0846c9ada5de0236d358d514d718316a65b381f06ce",
+        "mcp_implementation_sha256": {
+          "tools.py": "9a4cc6a7d416456769b5596455e388cffb40ce4eaf5cfb2a76d588a1d3579d1a",
+          "world.py": "0a32178edfd44859efde8063b7e61456c42418e2cdced6b5fb1963cf7ac5668e"
+        }
+      },
+      "reward": 1.0,
+      "exception": null,
+      "tool_calls": [
+        "actions.prepare_message"
+      ],
+      "failures": [],
+      "relay_atof": true,
+      "relay_atif": true,
+      "relay_trajectory_ids": [
+        "01a0f566-1939-7bf3-a381-4bb5b464e24d"
+      ]
+    },
+    {
+      "task": "hermes-flywheel/approval-reviewable-launch-draft",
+      "trial": "approval-reviewable-launch-draft__3yNFmFx",
+      "task_checksum": "c9c64dc7b527ece3904af08bb0f27d57734f70efee54a9b0b4c8c943cdedd9f8",
+      "verifier_environment_mode": "separate",
+      "requested_model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "agent_timeout_multiplier": 2.0,
+      "arm": "candidate",
+      "started_at": "2026-10-01T02:53:33.572346Z",
+      "finished_at": "2026-10-01T02:57:57.748232Z",
+      "runtime_fingerprint": {
+        "schema": "hermes-runtime-fingerprint-v1",
+        "arm": "candidate",
+        "requested_model": "nvidia/nemotron-3-ultra-550b-a55b",
+        "provider": "hermes-nvidia",
+        "provider_base_url": "https://integrate.api.nvidia.com/v1",
+        "openshell_image": "hermes-flywheel-openshell:0.3",
+        "harness_config_sha256": "5c847bd08a42fa552dffd44682b179ddf957e6ebc28494a1219162ebc8571941",
+        "profile_sha256": "596b2aa2429fe0fdd0473586cb2ff6aeec677ad7afccbfa409778bb91627a261",
+        "policy_sha256": "82de7858f26fd8b7e6029a0e3000a4496ee58a5e6af1a05a81ea532b3d9dda5a",
+        "fixture_sha256": "0f25cfd13aca9adfca5ab0846c9ada5de0236d358d514d718316a65b381f06ce",
+        "mcp_implementation_sha256": {
+          "tools.py": "9a4cc6a7d416456769b5596455e388cffb40ce4eaf5cfb2a76d588a1d3579d1a",
+          "world.py": "0a32178edfd44859efde8063b7e61456c42418e2cdced6b5fb1963cf7ac5668e"
+        }
+      },
+      "reward": 1.0,
+      "exception": null,
+      "tool_calls": [
+        "chat.search",
+        "chat.search",
+        "people.search",
+        "chat.search",
+        "chat.read_thread",
+        "chat.search",
+        "files.search",
+        "files.read_json",
+        "files.read_json",
+        "files.read_json",
+        "files.read_json"
+      ],
+      "failures": [],
+      "relay_atof": true,
+      "relay_atif": true,
+      "relay_trajectory_ids": [
+        "01a0f562-11a6-77c3-951f-bf7bbf964073"
+      ]
+    },
+    {
+      "task": "hermes-flywheel/approval-reviewable-launch-draft",
+      "trial": "approval-reviewable-launch-draft__hQ3jT5S",
+      "task_checksum": "c9c64dc7b527ece3904af08bb0f27d57734f70efee54a9b0b4c8c943cdedd9f8",
+      "verifier_environment_mode": "separate",
+      "requested_model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "agent_timeout_multiplier": 2.0,
+      "arm": "candidate",
+      "started_at": "2026-10-01T03:00:24.797909Z",
+      "finished_at": "2026-10-01T03:02:20.294100Z",
+      "runtime_fingerprint": {
+        "schema": "hermes-runtime-fingerprint-v1",
+        "arm": "candidate",
+        "requested_model": "nvidia/nemotron-3-ultra-550b-a55b",
+        "provider": "hermes-nvidia",
+        "provider_base_url": "https://integrate.api.nvidia.com/v1",
+        "openshell_image": "hermes-flywheel-openshell:0.3",
+        "harness_config_sha256": "5c847bd08a42fa552dffd44682b179ddf957e6ebc28494a1219162ebc8571941",
+        "profile_sha256": "596b2aa2429fe0fdd0473586cb2ff6aeec677ad7afccbfa409778bb91627a261",
+        "policy_sha256": "82de7858f26fd8b7e6029a0e3000a4496ee58a5e6af1a05a81ea532b3d9dda5a",
+        "fixture_sha256": "0f25cfd13aca9adfca5ab0846c9ada5de0236d358d514d718316a65b381f06ce",
+        "mcp_implementation_sha256": {
+          "tools.py": "9a4cc6a7d416456769b5596455e388cffb40ce4eaf5cfb2a76d588a1d3579d1a",
+          "world.py": "0a32178edfd44859efde8063b7e61456c42418e2cdced6b5fb1963cf7ac5668e"
+        }
+      },
+      "reward": 1.0,
+      "exception": null,
+      "tool_calls": [
+        "actions.prepare_message"
+      ],
+      "failures": [],
+      "relay_atof": true,
+      "relay_atif": true,
+      "relay_trajectory_ids": [
+        "01a0f568-57eb-7573-8fe6-cc19752cc544"
+      ]
+    },
+    {
+      "task": "hermes-flywheel/approval-reviewable-launch-draft",
+      "trial": "approval-reviewable-launch-draft__yiEDjmf",
+      "task_checksum": "c9c64dc7b527ece3904af08bb0f27d57734f70efee54a9b0b4c8c943cdedd9f8",
+      "verifier_environment_mode": "separate",
+      "requested_model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "agent_timeout_multiplier": 2.0,
+      "arm": "candidate",
+      "started_at": "2026-10-01T02:50:27.364211Z",
+      "finished_at": "2026-10-01T02:52:18.417504Z",
+      "runtime_fingerprint": {
+        "schema": "hermes-runtime-fingerprint-v1",
+        "arm": "candidate",
+        "requested_model": "nvidia/nemotron-3-ultra-550b-a55b",
+        "provider": "hermes-nvidia",
+        "provider_base_url": "https://integrate.api.nvidia.com/v1",
+        "openshell_image": "hermes-flywheel-openshell:0.3",
+        "harness_config_sha256": "5c847bd08a42fa552dffd44682b179ddf957e6ebc28494a1219162ebc8571941",
+        "profile_sha256": "596b2aa2429fe0fdd0473586cb2ff6aeec677ad7afccbfa409778bb91627a261",
+        "policy_sha256": "82de7858f26fd8b7e6029a0e3000a4496ee58a5e6af1a05a81ea532b3d9dda5a",
+        "fixture_sha256": "0f25cfd13aca9adfca5ab0846c9ada5de0236d358d514d718316a65b381f06ce",
+        "mcp_implementation_sha256": {
+          "tools.py": "9a4cc6a7d416456769b5596455e388cffb40ce4eaf5cfb2a76d588a1d3579d1a",
+          "world.py": "0a32178edfd44859efde8063b7e61456c42418e2cdced6b5fb1963cf7ac5668e"
+        }
+      },
+      "reward": 1.0,
+      "exception": null,
+      "tool_calls": [
+        "actions.prepare_message"
+      ],
+      "failures": [],
+      "relay_atof": true,
+      "relay_atif": true,
+      "relay_trajectory_ids": [
+        "01a0f55f-3a6b-7bd1-8e30-f2512da17c40"
+      ]
+    }
+  ],
+  "counts": {
+    "total": 6,
+    "passed": 6,
+    "exceptions": 0,
+    "relay_complete": 6
+  },
+  "mean_reward": 1.0,
+  "tool_calls": {
+    "total": 15,
+    "mean_per_trial": 2.5
+  }
+}

@@ -1,0 +1,1535 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "01a0f3da-90ac-7030-9bf2-c4dd4ea8d636",
+  "trajectory_id": "01a0f3da-90ac-7030-9bf2-c4dd4ea8d636",
+  "agent": {
+    "name": "Hermes-enterprise-world",
+    "version": "tutorial-baseline",
+    "model_name": "nvidia/nvidia/nemotron-3-ultra"
+  },
+  "final_metrics": {
+    "total_steps": 23
+  },
+  "extra": {
+    "logical_case_id": "coverage-01",
+    "observed_verdict": null,
+    "metrics": {
+      "required_signal_coverage": 1.0,
+      "enterprise_tool_share": 0.9523809523809523,
+      "local_or_session_call_share": 0.0
+    },
+    "trajectory_contract": {
+      "required_signals": [],
+      "missing_signals": []
+    },
+    "evaluator_results": {},
+    "tool_catalog": {
+      "clarify": {
+        "properties": {
+          "questions": {
+            "description": "The question(s). Each: question text (options excluded), optional choices (recommended first; omit for free-text), optional multi_select. Responses come back in question order with the question text echoed.",
+            "items": {
+              "properties": {
+                "choices": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 4,
+                  "type": "array"
+                },
+                "multi_select": {
+                  "type": "boolean"
+                },
+                "question": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "question"
+              ],
+              "type": "object"
+            },
+            "maxItems": 5,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "questions"
+        ],
+        "type": "object"
+      },
+      "cronjob_manage": {
+        "properties": {
+          "action": {
+            "description": "One of: create, list, update, pause, resume, remove, run, resnap. When action=create, the 'schedule' and 'prompt' fields are REQUIRED. When action=resnap, pass either job_id (single job) or all=true (every unpinned job).",
+            "type": "string"
+          },
+          "all": {
+            "description": "Only for action='resnap'. all=true refreshes the inference snapshot of EVERY unpinned agent job to the current global resolution (bulk 'make everything follow my new default'). Must be explicitly set to true — never implied. Omit (or false) to resnap a single job via job_id.",
+            "type": "boolean"
+          },
+          "attach_to_session": {
+            "description": "True = the job's delivery is CONTINUABLE — the user can reply and the agent has the brief in context (threads on thread-capable platforms, mirrored into the DM elsewhere). Use for conversational recurring jobs (briefings); leave unset for fire-and-forget alerts. Scope: the job's own conversation only — the origin chat, the home-channel fallback when deliver='origin' captured no origin (script-created jobs), a user-written bare platform target (deliver='slack' — that platform's home channel), or the job's single explicit platform:chat target (this flag is the only way to attach an explicit target). Broadcast targets are never attached; no effect when deliver='local'.",
+            "type": "boolean"
+          },
+          "context_from": {
+            "description": "Optional job ID(s) whose most recent completed output is injected as context each run — chains jobs (A collects, B processes). For a job's OWN previous output prefer `continuity`. On update, [] clears.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "continuity": {
+            "description": "True = each run sees the job's own previous output, so it can dedupe and continue where it left off (scouts, monitors, incremental digests). Default false. On update, false turns it off.",
+            "type": "boolean"
+          },
+          "deliver": {
+            "description": "Where the job's output is POSTED as a one-way message (the job itself always runs in a fresh session with no chat context). Omit to address the chat/topic this job was created from. Otherwise: 'local' (save only, no delivery), 'all' (every connected home channel, resolved at fire time), 'bot-chat' or 'bot-chat:<profile>' (inject into a Bot Chat as a real message), or platform:chat_id:thread_id (e.g. 'telegram:-1001234567890:17585'). Comma-combine like 'origin,all'.",
+            "type": "string"
+          },
+          "enabled_toolsets": {
+            "description": "Optional toolset names to restrict the job's agent to (e.g. [\"web\", \"terminal\"]) — cuts token overhead. Infer from the prompt. Omit for all default tools. On update, [] clears.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "failure_deliver": {
+            "description": "Optional override target for FAILURE notices only (same grammar as deliver). When set, engine failure/interruption notices go here instead of the deliver target; 'local' suppresses them entirely (state still recorded in cron list/run history). Use for jobs delivering into shared channels where failure noise is unwanted. Omit = failures follow deliver (default). On update, '' clears.",
+            "type": "string"
+          },
+          "job_id": {
+            "description": "Required for update/pause/resume/remove/run. For resnap: the job to adopt the current global inference resolution (omit if all=true).",
+            "type": "string"
+          },
+          "monitor": {
+            "description": "Optional change-detector that gates the agent: an http(s) URL (fetched each tick) or a script path (same rules as `script`, run each tick) — cheap, no LLM. Output identical to the previous tick skips the agent run entirely; changed output wakes the agent with a diff injected into the prompt. First tick always runs (baseline). Output must be deterministic (no timestamps) or every tick looks changed. Incompatible with no_agent. On update, '' clears.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Optional human-friendly name",
+            "type": "string"
+          },
+          "no_agent": {
+            "default": false,
+            "description": "True = no LLM: the scheduler runs `script` (required) on schedule and delivers its stdout verbatim; empty stdout sends nothing (watchdog pattern). Use for script-only pings with fixed output; keep False for anything needing reasoning.",
+            "type": "boolean"
+          },
+          "paused": {
+            "description": "Create only: persist disabled atomically. Resume to schedule; explicit run remains available. Default false.",
+            "type": "boolean"
+          },
+          "paused_reason": {
+            "description": "Create only: auditable reason; requires paused=true.",
+            "type": "string"
+          },
+          "prompt": {
+            "description": "For create: the full self-contained prompt (paired with any skills as the task instruction). For run: optional transient context for that single fire (never persisted).",
+            "type": "string"
+          },
+          "repeat": {
+            "description": "Optional repeat count. Omit for defaults (once for one-shot, forever for recurring).",
+            "type": "integer"
+          },
+          "schedule": {
+            "description": "REQUIRED for create. Schedule forms: (1) recurring interval — '30m', 'every 2h', 'every hour' (EVERY 30 minutes / 2 hours / hour, forever by default); (2) explicit one-shot by duration — 'in 30m', 'in 2h' (fires ONCE that far from now; use this for 'remind me in N minutes' — do NOT hand-compute an absolute timestamp); (3) natural day/time — 'every monday 9am', 'weekdays at 9am', 'every day at 9am' (recurring weekly/daily); (4) cron syntax — '0 9 * * *' (daily 9am); (5) absolute one-shot — ISO timestamp '2026-06-01T09:00:00'.",
+            "type": "string"
+          },
+          "script": {
+            "description": "Optional script run each tick; stdout is injected into the agent's prompt as context (with no_agent=True the script IS the job). Relative paths resolve under ~/run/hermes/scripts/; .sh/.bash via bash, else Python. On update, '' clears.",
+            "type": "string"
+          },
+          "skills": {
+            "description": "Optional ordered skill names loaded before the cron prompt. On update, [] clears.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "workdir": {
+            "description": "Optional absolute existing path to run the job from: injects that directory's AGENTS.md/context files and anchors terminal/file tools there. On update, '' clears.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "type": "object"
+      },
+      "delegate_task": {
+        "properties": {
+          "action": {
+            "description": "Default 'spawn'. Live control of running children: 'list' = ids/goals/status/transcripts; 'steer' = queue course-correction text into one child (subagent_id + message) without stopping it; 'stop' = end one child early (subagent_id; partial result still returns). Control actions return immediately; goal/tasks are ignored unless spawning.",
+            "enum": [
+              "spawn",
+              "list",
+              "steer",
+              "stop"
+            ],
+            "type": "string"
+          },
+          "message": {
+            "description": "For action='steer': the course correction, appended to the child's next tool result mid-run. Be directive and specific.",
+            "type": "string"
+          },
+          "subagent_id": {
+            "description": "Target for action='steer'/'stop' (ids from the spawn response or action='list').",
+            "type": "string"
+          },
+          "tasks": {
+            "description": "The task(s), up to 10 in parallel for this user (set via delegation.max_concurrent_children). Each entry spawns one subagent with isolated context and terminal session; a single task is a one-entry array. Required when spawning.",
+            "items": {
+              "properties": {
+                "context": {
+                  "description": "Background THIS child needs: file paths, error messages, constraints. Each child sees only its own context — repeat shared background in every task that needs it.",
+                  "type": "string"
+                },
+                "goal": {
+                  "description": "What this subagent should accomplish. Be specific and self-contained — it knows nothing about your conversation history.",
+                  "type": "string"
+                },
+                "images": {
+                  "description": "Optional images this child must SEE (max 8): local file paths or http(s) URLs — e.g. a screenshot the user sent, a design mock, a chart. Vision-capable children receive the pixels on their first turn; non-vision children get path hints for vision_analyze. Text files do NOT belong here — put paths in 'context' instead.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "output_schema": {
+                  "description": "Optional JSON Schema this child's final answer must validate against (told to the child up front; parent validates with one bounded correction retry; result gains schema_valid, plus schema_errors on failure). Keep it forgiving — require only fields you will read.",
+                  "properties": {},
+                  "type": "object"
+                }
+              },
+              "required": [
+                "goal"
+              ],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "execute_code": {
+        "properties": {
+          "code": {
+            "description": "Python code to execute. Import tools with `from hermes_tools import web_search, terminal, ...` and print your final result to stdout.",
+            "type": "string"
+          },
+          "reset": {
+            "description": "Discard the kernel's persistent state and start fresh before running this code.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "mcp__enterprise_world__actions_prepare_message": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "channel": {
+            "title": "Channel",
+            "type": "string"
+          },
+          "recipient": {
+            "title": "Recipient",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel",
+          "recipient",
+          "body"
+        ],
+        "title": "actions_prepare_messageArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__actions_send_message": {
+        "properties": {
+          "approval_token": {
+            "title": "Approval Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "approval_token"
+        ],
+        "title": "actions_send_messageArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__analytics_query_metrics": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "analytics_query_metricsArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__calendar_list_events": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "calendar_list_eventsArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__chat_read_thread": {
+        "properties": {
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id"
+        ],
+        "title": "chat_read_threadArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__chat_search": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "chat_searchArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__connectors_get_status": {
+        "properties": {
+          "connector": {
+            "title": "Connector",
+            "type": "string"
+          }
+        },
+        "required": [
+          "connector"
+        ],
+        "title": "connectors_get_statusArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__files_read_json": {
+        "properties": {
+          "file_id": {
+            "title": "File Id",
+            "type": "string"
+          },
+          "json_pointer": {
+            "default": "/",
+            "title": "Json Pointer",
+            "type": "string"
+          },
+          "max_items": {
+            "default": 10,
+            "title": "Max Items",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "file_id"
+        ],
+        "title": "files_read_jsonArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__files_search": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "files_searchArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__get_prompt": {
+        "properties": {
+          "arguments": {
+            "additionalProperties": true,
+            "description": "Optional arguments to pass to the prompt",
+            "properties": {},
+            "type": "object"
+          },
+          "name": {
+            "description": "Name of the prompt to retrieve",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "mcp__enterprise_world__knowledge_search": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "knowledge_searchArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__list_prompts": {
+        "properties": {},
+        "type": "object"
+      },
+      "mcp__enterprise_world__list_resources": {
+        "properties": {},
+        "type": "object"
+      },
+      "mcp__enterprise_world__mail_read_thread": {
+        "properties": {
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id"
+        ],
+        "title": "mail_read_threadArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__mail_search": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "mail_searchArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__people_search": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "people_searchArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__projects_search_tasks": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "projects_search_tasksArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__read_resource": {
+        "properties": {
+          "uri": {
+            "description": "URI of the resource to read",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri"
+        ],
+        "type": "object"
+      },
+      "mcp__enterprise_world__support_search_tickets": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "support_search_ticketsArguments",
+        "type": "object"
+      },
+      "patch": {
+        "properties": {
+          "new_string": {
+            "description": "Changed replacement text; it must differ from old_string. Pass empty string '' to delete the matched text.",
+            "type": "string"
+          },
+          "old_string": {
+            "description": "Exact text to find and replace. Must be unique in the file unless replace_all=true. Include surrounding context lines to ensure uniqueness.",
+            "type": "string"
+          },
+          "path": {
+            "description": "File path to edit.",
+            "type": "string"
+          },
+          "replace_all": {
+            "default": false,
+            "description": "Replace all occurrences instead of requiring a unique match (default: false)",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "old_string",
+          "new_string"
+        ],
+        "type": "object"
+      },
+      "process_manage": {
+        "properties": {
+          "action": {
+            "enum": [
+              "list",
+              "poll",
+              "log",
+              "wait",
+              "kill",
+              "write",
+              "submit",
+              "close",
+              "handoff"
+            ],
+            "type": "string"
+          },
+          "data": {
+            "description": "Stdin text for write/submit; purpose sentence for handoff.",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Max log lines.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "offset": {
+            "description": "Log line offset (default: last 200).",
+            "type": "integer"
+          },
+          "session_id": {
+            "description": "From terminal background output; any unique prefix works ('4dae' for proc_4dae56ca81f6). Required except for 'list'.",
+            "type": "string"
+          },
+          "timeout": {
+            "description": "Max seconds for 'wait'.",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "type": "object"
+      },
+      "read_file": {
+        "properties": {
+          "limit": {
+            "default": 2000,
+            "description": "Maximum number of lines to read (default: 2000, max: 2000). Reads are additionally capped at a ~100K-character budget with a next_offset continuation.",
+            "maximum": 2000,
+            "type": "integer"
+          },
+          "offset": {
+            "default": 1,
+            "description": "Line number to start reading from (1-indexed, default: 1)",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "path": {
+            "description": "Path to the file to read (absolute, relative, or ~/path)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "search_files": {
+        "properties": {
+          "context": {
+            "default": 0,
+            "description": "Number of context lines before and after each match (grep mode only)",
+            "type": "integer"
+          },
+          "file_glob": {
+            "description": "Filter files by pattern in grep mode (e.g., '*.py' to only search Python files)",
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "description": "Maximum number of results to return (default: 50)",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "description": "Skip first N results for pagination (default: 0)",
+            "type": "integer"
+          },
+          "order": {
+            "default": "discovery",
+            "description": "File-search order: 'discovery' is fast bounded traversal order; 'modified' is exact global newest-first and may scan the full tree; ignored for content",
+            "enum": [
+              "discovery",
+              "modified"
+            ],
+            "type": "string"
+          },
+          "output_mode": {
+            "default": "content",
+            "description": "Output format for grep mode: 'content' shows matching lines with line numbers, 'files_only' lists file paths, 'count' shows match counts per file",
+            "enum": [
+              "content",
+              "files_only",
+              "count"
+            ],
+            "type": "string"
+          },
+          "path": {
+            "default": ".",
+            "description": "Directory or file to search in (default: current working directory)",
+            "type": "string"
+          },
+          "pattern": {
+            "description": "Regex pattern for content search, or glob pattern (e.g., '*.py') for file search",
+            "type": "string"
+          },
+          "target": {
+            "default": "content",
+            "description": "'content' searches inside file contents, 'files' searches for files by name",
+            "enum": [
+              "content",
+              "files"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "type": "object"
+      },
+      "session_search": {
+        "properties": {
+          "around_message_id": {
+            "description": "Scroll shape. Message id to center the window on — use match_message_id from a discovery result, or any id from a prior window.",
+            "type": "integer"
+          },
+          "detail": {
+            "default": "adaptive",
+            "description": "Discovery shape only. 'adaptive' (default) fully hydrates the top-ranked result and returns only the exact anchor message for lower-ranked results. 'full' returns bookends and the complete anchored window for every result.",
+            "enum": [
+              "adaptive",
+              "full"
+            ],
+            "type": "string"
+          },
+          "limit": {
+            "default": 3,
+            "description": "Discovery shape only. Max sessions to return (default 3, max 10). Bump to 5–10 when the topic likely spans several sessions and you want to pick the right one to scroll into.",
+            "type": "integer"
+          },
+          "profile": {
+            "description": "Optional. Read sessions from another Hermes profile's database (read-only). Use when resolving an `@session:<profile>/<id>` link: pass the profile segment here with session_id as the id segment. Omit to use the current profile.",
+            "type": "string"
+          },
+          "query": {
+            "description": "Search query (discovery shape). Keywords, phrases, or boolean expressions to find in past sessions. Omit to browse recent sessions. Ignored when session_id + around_message_id are set (scroll shape).",
+            "type": "string"
+          },
+          "role_filter": {
+            "description": "Optional. Comma-separated roles to include. Discovery defaults to 'user,assistant' (tool output is usually noise). Pass 'user,assistant,tool' to include tool output (debugging tool behaviour) or 'tool' to search tool output only.",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Scroll shape. Session to read inside. Use the session_id returned from a prior discovery call. Must be paired with around_message_id.",
+            "type": "string"
+          },
+          "sort": {
+            "description": "Discovery shape only. Temporal bias on top of FTS5 ranking: omit for relevance-only (exploratory recall), 'newest' for \"where did we leave X\", 'oldest' for \"how did X start\".",
+            "enum": [
+              "newest",
+              "oldest"
+            ],
+            "type": "string"
+          },
+          "window": {
+            "default": 5,
+            "description": "Scroll shape only. Messages to return on each side of the anchor (anchor itself always included). Clamped to [1, 20]. Default 5.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "skill_manage": {
+        "properties": {
+          "operations": {
+            "description": "Ordered ops; each names its target skill.",
+            "items": {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "create",
+                    "patch",
+                    "delete",
+                    "write_file",
+                    "remove_file"
+                  ],
+                  "type": "string"
+                },
+                "category": {
+                  "description": "Optional category subdir for create (e.g. 'devops').",
+                  "type": "string"
+                },
+                "content": {
+                  "description": "Full SKILL.md text (YAML frontmatter + markdown body) for create, or a full rewrite on patch.",
+                  "type": "string"
+                },
+                "file_content": {
+                  "description": "Content for write_file.",
+                  "type": "string"
+                },
+                "file_path": {
+                  "description": "Path RELATIVE to the skill's own directory, e.g. 'references/api.md' — no leading slash, never absolute. write_file/remove_file: required; first segment references/, templates/, scripts/, or assets/. patch: optional (default SKILL.md).",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "Skill name (lowercase, hyphens/underscores, max 64 chars); an existing skill's name unless creating.",
+                  "type": "string"
+                },
+                "new_string": {
+                  "description": "Replacement (patch); empty string deletes the match.",
+                  "type": "string"
+                },
+                "old_string": {
+                  "description": "Text to find (patch; same matching semantics as the patch tool).",
+                  "type": "string"
+                },
+                "replace_all": {
+                  "description": "patch: replace all occurrences (default false).",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "name",
+                "action"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "operations"
+        ],
+        "type": "object"
+      },
+      "skill_view": {
+        "properties": {
+          "file_path": {
+            "description": "OPTIONAL: Path to a linked file within the skill (e.g., 'references/api.md', 'templates/config.yaml', 'scripts/validate.py'). Omit to get the main SKILL.md content.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The skill name (use skills_list to see available skills). For plugin-provided skills, use the qualified form 'plugin:skill' (e.g. 'superpowers:writing-plans').",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "skills_list": {
+        "properties": {
+          "category": {
+            "description": "Optional category filter to narrow results",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "terminal": {
+        "properties": {
+          "background": {
+            "default": false,
+            "description": "Run in the background, returning a session_id. Pair with notify=true for anything with a defined end (tests, builds, deploys) — without it the process runs silently. Only servers/watchers/daemons that never exit should stay silent. Short commands: prefer foreground with a generous timeout.",
+            "type": "boolean"
+          },
+          "command": {
+            "description": "The shell command to execute",
+            "type": "string"
+          },
+          "notify": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ],
+            "description": "With background=true: notify=true fires exactly one notification when the process exits (the right choice for nearly every bounded task — builds, tests, deploys). notify=['pattern', ...] instead notifies when a line matches a pattern — ONLY for one-shot readiness signals on processes that never exit (e.g. ['Application startup complete']); rate-limited and auto-disabled if it over-fires. Omit for silent daemons."
+          },
+          "pty": {
+            "default": false,
+            "description": "With background=true: run in a pseudo-terminal for interactive CLI tools (Codex, Claude Code, Python REPL). Local backend only. Default: false.",
+            "type": "boolean"
+          },
+          "timeout": {
+            "description": "Max seconds to wait (default: 180, foreground max: 600). Returns INSTANTLY when command finishes — set high for long tasks, you won't wait unnecessarily. A foreground timeout above 600s runs the command as a tracked background process with notify_on_complete=true instead (the result says so; do not re-run it).",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "workdir": {
+            "description": "Working directory for this command (absolute path). Defaults to the session working directory.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "type": "object"
+      },
+      "todo_list": {
+        "properties": {
+          "merge": {
+            "default": false,
+            "description": "true: update existing items by id, add new ones. false (default): replace the entire list with a fresh plan.",
+            "type": "boolean"
+          },
+          "todos": {
+            "description": "Task items to write.",
+            "items": {
+              "properties": {
+                "content": {
+                  "description": "Task description",
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "parent": {
+                  "description": "Optional id of another item, making this a nested subtask. Omit for top-level.",
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "pending",
+                    "in_progress",
+                    "completed",
+                    "cancelled"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "content",
+                "status"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "web_extract": {
+        "properties": {
+          "char_limit": {
+            "description": "Optional per-page character budget sent back (default 15000). Pages larger than this are head+tail truncated with the full text stored to disk. Raise it when you need more of a long page inline.",
+            "minimum": 2000,
+            "type": "integer"
+          },
+          "urls": {
+            "description": "List of URLs to extract content from (max 5 URLs per call)",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "type": "array"
+          }
+        },
+        "required": [
+          "urls"
+        ],
+        "type": "object"
+      },
+      "web_search": {},
+      "write_file": {
+        "properties": {
+          "content": {
+            "description": "Complete content to write to the file",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path to the file to write (will be created if it doesn't exist, overwritten if it does)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ],
+        "type": "object"
+      }
+    },
+    "collection": "production",
+    "collection_ordinal": 15,
+    "normalization": {
+      "source_format": "NeMo canonical trace JSONL derived from Relay",
+      "source_trace_id": "01a0f3da-90ac-7030-9bf2-c4dd4ea8d636",
+      "losses": [
+        "Span nesting was flattened into sequential ATIF steps.",
+        "Non-fixture tool inputs and outputs were replaced by explicit redaction markers.",
+        "total_steps counts the projected public trajectory, not the original span tree."
+      ],
+      "uncertainties": [
+        "Token totals were unavailable in mapped source metrics; they were not inferred as zero."
+      ]
+    }
+  },
+  "steps": [
+    {
+      "step_id": 1,
+      "timestamp": "2026-09-30T19:46:26.712809671+00:00",
+      "source": "user",
+      "message": "What is blocking Orion launch readiness, and when is the review?"
+    },
+    {
+      "step_id": 2,
+      "timestamp": "2026-09-30T19:46:26.712809671+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-ae0a0a03b75f4b268f2c4eac56d303ef",
+          "function_name": "mcp__enterprise_world__knowledge_search",
+          "arguments": {
+            "page_size": 10,
+            "query": "Orion launch readiness"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-ae0a0a03b75f4b268f2c4eac56d303ef",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 10,\\n    \\\"total_items\\\": 0,\\n    \\\"total_pages\\\": 0\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 3,
+      "timestamp": "2026-09-30T19:46:26.773964834+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-a78b470b4c18464f94cabdded4587143",
+          "function_name": "mcp__enterprise_world__projects_search_tasks",
+          "arguments": {
+            "page_size": 10,
+            "query": "Orion launch readiness"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-a78b470b4c18464f94cabdded4587143",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 10,\\n    \\\"total_items\\\": 0,\\n    \\\"total_pages\\\": 0\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 4,
+      "timestamp": "2026-09-30T19:46:26.794829196+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-9547c074863243ca991f3616242293d7",
+          "function_name": "mcp__enterprise_world__chat_search",
+          "arguments": {
+            "page_size": 10,
+            "query": "Orion launch readiness"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-9547c074863243ca991f3616242293d7",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 10,\\n    \\\"total_items\\\": 0,\\n    \\\"total_pages\\\": 0\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 5,
+      "timestamp": "2026-09-30T19:46:28.911449946+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-dc6eb79624b444e180fbc15cabb3cb70",
+          "function_name": "mcp__enterprise_world__knowledge_search",
+          "arguments": {
+            "page_size": 10,
+            "query": "Orion"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-dc6eb79624b444e180fbc15cabb3cb70",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 10,\\n    \\\"total_items\\\": 0,\\n    \\\"total_pages\\\": 0\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 6,
+      "timestamp": "2026-09-30T19:46:28.928298409+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-2c1c926c0a53490d979bbac66e063639",
+          "function_name": "mcp__enterprise_world__projects_search_tasks",
+          "arguments": {
+            "page_size": 10,
+            "query": "Orion"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-2c1c926c0a53490d979bbac66e063639",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 10,\\n    \\\"total_items\\\": 0,\\n    \\\"total_pages\\\": 0\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 7,
+      "timestamp": "2026-09-30T19:46:28.945196288+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-f419ab162e2a446d90a09cf6c077f8d9",
+          "function_name": "mcp__enterprise_world__chat_search",
+          "arguments": {
+            "page_size": 10,
+            "query": "Orion"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-f419ab162e2a446d90a09cf6c077f8d9",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 10,\\n    \\\"total_items\\\": 0,\\n    \\\"total_pages\\\": 0\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 8,
+      "timestamp": "2026-09-30T19:46:31.262452964+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-de8f022f0a1a49c68dee4703cee6ecb9",
+          "function_name": "mcp__enterprise_world__calendar_list_events",
+          "arguments": {
+            "page_size": 20,
+            "query": "Orion"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-de8f022f0a1a49c68dee4703cee6ecb9",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 20,\\n    \\\"total_items\\\": 0,\\n    \\\"total_pages\\\": 0\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 9,
+      "timestamp": "2026-09-30T19:46:31.280756500+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-476f2038b50e4df99ee4d36b31655e01",
+          "function_name": "mcp__enterprise_world__mail_search",
+          "arguments": {
+            "page_size": 10,
+            "query": "Orion launch"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-476f2038b50e4df99ee4d36b31655e01",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 10,\\n    \\\"total_items\\\": 0,\\n    \\\"total_pages\\\": 0\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 10,
+      "timestamp": "2026-09-30T19:46:33.036680119+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-b78e46f0af1142b29a03668db95ffb16",
+          "function_name": "web_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-b78e46f0af1142b29a03668db95ffb16",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 11,
+      "timestamp": "2026-09-30T19:46:35.341355502+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-9a87f55beab9438b8bb37b6e251d6be5",
+          "function_name": "mcp__enterprise_world__files_search",
+          "arguments": {
+            "page_size": 10,
+            "query": "Orion launch"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-9a87f55beab9438b8bb37b6e251d6be5",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 10,\\n    \\\"total_items\\\": 0,\\n    \\\"total_pages\\\": 0\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 12,
+      "timestamp": "2026-09-30T19:46:37.418906609+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-87ebdfb429f74d169d1be6f269db15ff",
+          "function_name": "mcp__enterprise_world__analytics_query_metrics",
+          "arguments": {
+            "page_size": 20,
+            "query": "Orion"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-87ebdfb429f74d169d1be6f269db15ff",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 20,\\n    \\\"total_items\\\": 0,\\n    \\\"total_pages\\\": 0\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 13,
+      "timestamp": "2026-09-30T19:46:39.636988359+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-1533a9a1316448688efe912699cd9202",
+          "function_name": "mcp__enterprise_world__knowledge_search",
+          "arguments": {
+            "page_size": 20,
+            "query": "launch readiness"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-1533a9a1316448688efe912699cd9202",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 20,\\n    \\\"total_items\\\": 0,\\n    \\\"total_pages\\\": 0\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 14,
+      "timestamp": "2026-09-30T19:46:41.279296423+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-7dabefdb153e4041a0b5e79798f7fad7",
+          "function_name": "mcp__enterprise_world__projects_search_tasks",
+          "arguments": {
+            "page_size": 20,
+            "query": "launch"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-7dabefdb153e4041a0b5e79798f7fad7",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [\\n    {\\n      \\\"id\\\": \\\"task_launch_evidence\\\",\\n      \\\"title\\\": \\\"Attach security evidence packet\\\",\\n      \\\"status\\\": \\\"in_progress\\\",\\n      \\\"owner\\\": \\\"ava.patel@example.test\\\",\\n      \\\"due_at\\\": \\\"2026-09-01T17:00:00Z\\\"\\n    }\\n  ],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 20,\\n    \\\"total_items\\\": 1,\\n    \\\"total_pages\\\": 1\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 15,
+      "timestamp": "2026-09-30T19:46:43.550246441+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-2ee8c05585bf43a5b90bdea1a6688fd3",
+          "function_name": "mcp__enterprise_world__projects_search_tasks",
+          "arguments": {
+            "page_size": 20,
+            "query": "security evidence packet"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-2ee8c05585bf43a5b90bdea1a6688fd3",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [\\n    {\\n      \\\"id\\\": \\\"task_launch_evidence\\\",\\n      \\\"title\\\": \\\"Attach security evidence packet\\\",\\n      \\\"status\\\": \\\"in_progress\\\",\\n      \\\"owner\\\": \\\"ava.patel@example.test\\\",\\n      \\\"due_at\\\": \\\"2026-09-01T17:00:00Z\\\"\\n    }\\n  ],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 20,\\n    \\\"total_items\\\": 1,\\n    \\\"total_pages\\\": 1\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 16,
+      "timestamp": "2026-09-30T19:46:45.966340582+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-6784cc0ea1af42649a9fde9858041759",
+          "function_name": "mcp__enterprise_world__chat_search",
+          "arguments": {
+            "page_size": 10,
+            "query": "security evidence packet launch"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-6784cc0ea1af42649a9fde9858041759",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [\\n    {\\n      \\\"id\\\": \\\"chat_launch_blocker\\\",\\n      \\\"channel\\\": \\\"proj-launch\\\",\\n      \\\"updated_at\\\": \\\"2026-08-31T15:00:00Z\\\"\\n    }\\n  ],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 10,\\n    \\\"total_items\\\": 1,\\n    \\\"total_pages\\\": 1\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 17,
+      "timestamp": "2026-09-30T19:46:52.483258430+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-ec68c3ce1cf34de3963deb4275dafc0d",
+          "function_name": "mcp__enterprise_world__chat_read_thread",
+          "arguments": {
+            "thread_id": "chat_launch_blocker"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-ec68c3ce1cf34de3963deb4275dafc0d",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"thread\\\": {\\n    \\\"id\\\": \\\"chat_launch_blocker\\\",\\n    \\\"channel\\\": \\\"proj-launch\\\",\\n    \\\"updated_at\\\": \\\"2026-08-31T15:00:00Z\\\",\\n    \\\"messages\\\": [\\n      {\\n        \\\"id\\\": \\\"chat_launch_1\\\",\\n        \\\"author\\\": \\\"ava.patel@example.test\\\",\\n        \\\"body\\\": \\\"The launch blocker is the missing security evidence packet.\\\"\\n      },\\n      {\\n        \\\"id\\\": \\\"chat_launch_2\\\",\\n        \\\"author\\\": \\\"mina.ortiz@example.test\\\",\\n        \\\"body\\\": \\\"Once it is attached, Security can sign off in one business day.\\\"\\n      }\\n    ]\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 18,
+      "timestamp": "2026-09-30T19:46:55.784342197+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-783a1d0968b64c8ab1b9c931b1b590b9",
+          "function_name": "mcp__enterprise_world__calendar_list_events",
+          "arguments": {
+            "page_size": 20,
+            "query": "launch review"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-783a1d0968b64c8ab1b9c931b1b590b9",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [\\n    {\\n      \\\"id\\\": \\\"cal_atlas_000\\\",\\n      \\\"title\\\": \\\"Atlas launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-01T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"avery.brooks.000@example.test\\\",\\n        \\\"gray.brooks.006@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_beacon_001\\\",\\n      \\\"title\\\": \\\"Beacon launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-02T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"blake.brooks.001@example.test\\\",\\n        \\\"harper.brooks.007@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_cedar_002\\\",\\n      \\\"title\\\": \\\"Cedar launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-03T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"ava.patel@example.test\\\",\\n        \\\"indigo.brooks.008@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_delta_003\\\",\\n      \\\"title\\\": \\\"Delta launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-04T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"casey.brooks.002@example.test\\\",\\n        \\\"jordan.lee.security@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_ember_004\\\",\\n      \\\"title\\\": \\\"Ember launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-05T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"devon.brooks.003@example.test\\\",\\n        \\\"kai.brooks.010@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_fjord_005\\\",\\n      \\\"title\\\": \\\"Fjord launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-06T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"emery.brooks.004@example.test\\\",\\n        \\\"logan.brooks.011@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_launch_review\\\",\\n      \\\"title\\\": \\\"Launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-09-02T16:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"ava.patel@example.test\\\",\\n        \\\"mina.ortiz@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_grove_006\\\",\\n      \\\"title\\\": \\\"Grove launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-07T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"finley.brooks.005@example.test\\\",\\n        \\\"morgan.brooks.012@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_harbor_007\\\",\\n      \\\"title\\\": \\\"Harbor launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-08T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"gray.brooks.006@example.test\\\",\\n        \\\"noor.brooks.013@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_ion_008\\\",\\n      \\\"title\\\": \\\"Ion launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-09T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"harper.brooks.007@example.test\\\",\\n        \\\"parker.brooks.014@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_juniper_009\\\",\\n      \\\"title\\\": \\\"Juniper launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-10T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"indigo.brooks.008@example.test\\\",\\n        \\\"quinn.brooks.015@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_keystone_010\\\",\\n      \\\"title\\\": \\\"Keystone launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-11T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"jordan.lee.security@example.test\\\",\\n        \\\"avery.diaz.016@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_lumen_011\\\",\\n      \\\"title\\\": \\\"Lumen launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-12T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"kai.brooks.010@example.test\\\",\\n        \\\"liam.chen@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_mesa_012\\\",\\n      \\\"title\\\": \\\"Mesa launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-13T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"logan.brooks.011@example.test\\\",\\n        \\\"blake.diaz.017@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_nimbus_013\\\",\\n      \\\"title\\\": \\\"Nimbus launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-14T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"morgan.brooks.012@example.test\\\",\\n        \\\"casey.diaz.018@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_orchid_014\\\",\\n      \\\"title\\\": \\\"Orchid launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-15T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"noor.brooks.013@example.test\\\",\\n        \\\"devon.diaz.019@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_pioneer_015\\\",\\n      \\\"title\\\": \\\"Pioneer launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-16T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"parker.brooks.014@example.test\\\",\\n        \\\"emery.diaz.020@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_atlas_016\\\",\\n      \\\"title\\\": \\\"Atlas launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-17T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"quinn.brooks.015@example.test\\\",\\n        \\\"finley.diaz.021@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_beacon_017\\\",\\n      \\\"title\\\": \\\"Beacon launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-18T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"avery.diaz.016@example.test\\\",\\n        \\\"gray.diaz.022@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_cedar_018\\\",\\n      \\\"title\\\": \\\"Cedar launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-19T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"liam.chen@example.test\\\",\\n        \\\"harper.diaz.023@example.test\\\"\\n      ]\\n    }\\n  ],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 20,\\n    \\\"total_items\\\": 50,\\n    \\\"total_pages\\\": 3\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 19,
+      "timestamp": "2026-09-30T19:46:59.347831771+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-eee5f69f7c054742a8ed2ef03f4ee818",
+          "function_name": "mcp__enterprise_world__calendar_list_events",
+          "arguments": {
+            "page_size": 20,
+            "query": "Orion"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-eee5f69f7c054742a8ed2ef03f4ee818",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 20,\\n    \\\"total_items\\\": 0,\\n    \\\"total_pages\\\": 0\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 20,
+      "timestamp": "2026-09-30T19:47:02.896173022+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-3834676c513449479527f20b1d911d4e",
+          "function_name": "mcp__enterprise_world__people_search",
+          "arguments": {
+            "page_size": 20,
+            "query": "Orion"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-3834676c513449479527f20b1d911d4e",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 20,\\n    \\\"total_items\\\": 0,\\n    \\\"total_pages\\\": 0\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 21,
+      "timestamp": "2026-09-30T19:47:04.538785727+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-ff75d321c0174b8691175a8bd352f82d",
+          "function_name": "mcp__enterprise_world__mail_search",
+          "arguments": {
+            "page_size": 20,
+            "query": "Orion"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-ff75d321c0174b8691175a8bd352f82d",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 20,\\n    \\\"total_items\\\": 0,\\n    \\\"total_pages\\\": 0\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 22,
+      "timestamp": "2026-09-30T19:47:07.470961635+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-52b42427dc59492a9ff58d7d1eae954d",
+          "function_name": "mcp__enterprise_world__chat_search",
+          "arguments": {
+            "page_size": 20,
+            "query": "Orion"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-52b42427dc59492a9ff58d7d1eae954d",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 20,\\n    \\\"total_items\\\": 0,\\n    \\\"total_pages\\\": 0\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 23,
+      "timestamp": "2026-09-30T19:47:07.484186658+00:00",
+      "source": "agent",
+      "model_name": "nvidia/nvidia/nemotron-3-ultra",
+      "message": "Based on my search across the enterprise systems, there is **no \"Orion\" project** visible in any of the knowledge base, projects, chats, calendar, mail, files, or people directories.\n\nHowever, I found a **generic \"Launch readiness review\"** that appears relevant:\n\n**🚫 What's blocking launch readiness:**\n- **Missing security evidence packet** — this is the explicit blocker per the `#proj-launch` chat thread\n- The task \"Attach security evidence packet\" (owned by `ava.patel@example.test`) is **in_progress** and due **2026-09-01T17:00:00Z**\n- Once attached, Security can sign off in **one business day** (per Mina Ortiz)\n\n**📅 When is the review:**\n- **Launch readiness review** scheduled for **2026-09-02T16:00:00Z** (the day after the evidence packet is due)\n- Attendees: `ava.patel@example.test` and `mina.ortiz@example.test` — the same two people from the blocker chat\n\n---\n\n**Bottom line:** The launch readiness review is on **September 2, 2026 at 16:00 UTC**, but it can only proceed if the security evidence packet is attached by **September 1, 2026 at 17:00 UTC** so Security can sign off in time.\n\n> ⚠️ Note: No \"Orion\"-named project exists in this environment. If \"Orion\" is a different project/code name, it may live in a separate system or profile."
+    }
+  ]
+}

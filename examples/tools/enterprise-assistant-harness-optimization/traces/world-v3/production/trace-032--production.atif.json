@@ -1,0 +1,1391 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "01a0f3e7-e3ab-7c20-a8c1-0404b6116f3a",
+  "trajectory_id": "01a0f3e7-e3ab-7c20-a8c1-0404b6116f3a",
+  "agent": {
+    "name": "Hermes-enterprise-world",
+    "version": "tutorial-baseline",
+    "model_name": "nvidia/nvidia/nemotron-3-ultra"
+  },
+  "final_metrics": {
+    "total_steps": 19
+  },
+  "extra": {
+    "logical_case_id": "read-04",
+    "observed_verdict": null,
+    "metrics": {
+      "required_signal_coverage": 1.0,
+      "enterprise_tool_share": 0.0,
+      "local_or_session_call_share": 1.0
+    },
+    "trajectory_contract": {
+      "required_signals": [],
+      "missing_signals": []
+    },
+    "evaluator_results": {},
+    "tool_catalog": {
+      "clarify": {
+        "properties": {
+          "questions": {
+            "description": "The question(s). Each: question text (options excluded), optional choices (recommended first; omit for free-text), optional multi_select. Responses come back in question order with the question text echoed.",
+            "items": {
+              "properties": {
+                "choices": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 4,
+                  "type": "array"
+                },
+                "multi_select": {
+                  "type": "boolean"
+                },
+                "question": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "question"
+              ],
+              "type": "object"
+            },
+            "maxItems": 5,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "questions"
+        ],
+        "type": "object"
+      },
+      "cronjob_manage": {
+        "properties": {
+          "action": {
+            "description": "One of: create, list, update, pause, resume, remove, run, resnap. When action=create, the 'schedule' and 'prompt' fields are REQUIRED. When action=resnap, pass either job_id (single job) or all=true (every unpinned job).",
+            "type": "string"
+          },
+          "all": {
+            "description": "Only for action='resnap'. all=true refreshes the inference snapshot of EVERY unpinned agent job to the current global resolution (bulk 'make everything follow my new default'). Must be explicitly set to true — never implied. Omit (or false) to resnap a single job via job_id.",
+            "type": "boolean"
+          },
+          "attach_to_session": {
+            "description": "True = the job's delivery is CONTINUABLE — the user can reply and the agent has the brief in context (threads on thread-capable platforms, mirrored into the DM elsewhere). Use for conversational recurring jobs (briefings); leave unset for fire-and-forget alerts. Scope: the job's own conversation only — the origin chat, the home-channel fallback when deliver='origin' captured no origin (script-created jobs), a user-written bare platform target (deliver='slack' — that platform's home channel), or the job's single explicit platform:chat target (this flag is the only way to attach an explicit target). Broadcast targets are never attached; no effect when deliver='local'.",
+            "type": "boolean"
+          },
+          "context_from": {
+            "description": "Optional job ID(s) whose most recent completed output is injected as context each run — chains jobs (A collects, B processes). For a job's OWN previous output prefer `continuity`. On update, [] clears.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "continuity": {
+            "description": "True = each run sees the job's own previous output, so it can dedupe and continue where it left off (scouts, monitors, incremental digests). Default false. On update, false turns it off.",
+            "type": "boolean"
+          },
+          "deliver": {
+            "description": "Where the job's output is POSTED as a one-way message (the job itself always runs in a fresh session with no chat context). Omit to address the chat/topic this job was created from. Otherwise: 'local' (save only, no delivery), 'all' (every connected home channel, resolved at fire time), 'bot-chat' or 'bot-chat:<profile>' (inject into a Bot Chat as a real message), or platform:chat_id:thread_id (e.g. 'telegram:-1001234567890:17585'). Comma-combine like 'origin,all'.",
+            "type": "string"
+          },
+          "enabled_toolsets": {
+            "description": "Optional toolset names to restrict the job's agent to (e.g. [\"web\", \"terminal\"]) — cuts token overhead. Infer from the prompt. Omit for all default tools. On update, [] clears.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "failure_deliver": {
+            "description": "Optional override target for FAILURE notices only (same grammar as deliver). When set, engine failure/interruption notices go here instead of the deliver target; 'local' suppresses them entirely (state still recorded in cron list/run history). Use for jobs delivering into shared channels where failure noise is unwanted. Omit = failures follow deliver (default). On update, '' clears.",
+            "type": "string"
+          },
+          "job_id": {
+            "description": "Required for update/pause/resume/remove/run. For resnap: the job to adopt the current global inference resolution (omit if all=true).",
+            "type": "string"
+          },
+          "monitor": {
+            "description": "Optional change-detector that gates the agent: an http(s) URL (fetched each tick) or a script path (same rules as `script`, run each tick) — cheap, no LLM. Output identical to the previous tick skips the agent run entirely; changed output wakes the agent with a diff injected into the prompt. First tick always runs (baseline). Output must be deterministic (no timestamps) or every tick looks changed. Incompatible with no_agent. On update, '' clears.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Optional human-friendly name",
+            "type": "string"
+          },
+          "no_agent": {
+            "default": false,
+            "description": "True = no LLM: the scheduler runs `script` (required) on schedule and delivers its stdout verbatim; empty stdout sends nothing (watchdog pattern). Use for script-only pings with fixed output; keep False for anything needing reasoning.",
+            "type": "boolean"
+          },
+          "paused": {
+            "description": "Create only: persist disabled atomically. Resume to schedule; explicit run remains available. Default false.",
+            "type": "boolean"
+          },
+          "paused_reason": {
+            "description": "Create only: auditable reason; requires paused=true.",
+            "type": "string"
+          },
+          "prompt": {
+            "description": "For create: the full self-contained prompt (paired with any skills as the task instruction). For run: optional transient context for that single fire (never persisted).",
+            "type": "string"
+          },
+          "repeat": {
+            "description": "Optional repeat count. Omit for defaults (once for one-shot, forever for recurring).",
+            "type": "integer"
+          },
+          "schedule": {
+            "description": "REQUIRED for create. Schedule forms: (1) recurring interval — '30m', 'every 2h', 'every hour' (EVERY 30 minutes / 2 hours / hour, forever by default); (2) explicit one-shot by duration — 'in 30m', 'in 2h' (fires ONCE that far from now; use this for 'remind me in N minutes' — do NOT hand-compute an absolute timestamp); (3) natural day/time — 'every monday 9am', 'weekdays at 9am', 'every day at 9am' (recurring weekly/daily); (4) cron syntax — '0 9 * * *' (daily 9am); (5) absolute one-shot — ISO timestamp '2026-06-01T09:00:00'.",
+            "type": "string"
+          },
+          "script": {
+            "description": "Optional script run each tick; stdout is injected into the agent's prompt as context (with no_agent=True the script IS the job). Relative paths resolve under ~/run/hermes/scripts/; .sh/.bash via bash, else Python. On update, '' clears.",
+            "type": "string"
+          },
+          "skills": {
+            "description": "Optional ordered skill names loaded before the cron prompt. On update, [] clears.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "workdir": {
+            "description": "Optional absolute existing path to run the job from: injects that directory's AGENTS.md/context files and anchors terminal/file tools there. On update, '' clears.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "type": "object"
+      },
+      "delegate_task": {
+        "properties": {
+          "action": {
+            "description": "Default 'spawn'. Live control of running children: 'list' = ids/goals/status/transcripts; 'steer' = queue course-correction text into one child (subagent_id + message) without stopping it; 'stop' = end one child early (subagent_id; partial result still returns). Control actions return immediately; goal/tasks are ignored unless spawning.",
+            "enum": [
+              "spawn",
+              "list",
+              "steer",
+              "stop"
+            ],
+            "type": "string"
+          },
+          "message": {
+            "description": "For action='steer': the course correction, appended to the child's next tool result mid-run. Be directive and specific.",
+            "type": "string"
+          },
+          "subagent_id": {
+            "description": "Target for action='steer'/'stop' (ids from the spawn response or action='list').",
+            "type": "string"
+          },
+          "tasks": {
+            "description": "The task(s), up to 10 in parallel for this user (set via delegation.max_concurrent_children). Each entry spawns one subagent with isolated context and terminal session; a single task is a one-entry array. Required when spawning.",
+            "items": {
+              "properties": {
+                "context": {
+                  "description": "Background THIS child needs: file paths, error messages, constraints. Each child sees only its own context — repeat shared background in every task that needs it.",
+                  "type": "string"
+                },
+                "goal": {
+                  "description": "What this subagent should accomplish. Be specific and self-contained — it knows nothing about your conversation history.",
+                  "type": "string"
+                },
+                "images": {
+                  "description": "Optional images this child must SEE (max 8): local file paths or http(s) URLs — e.g. a screenshot the user sent, a design mock, a chart. Vision-capable children receive the pixels on their first turn; non-vision children get path hints for vision_analyze. Text files do NOT belong here — put paths in 'context' instead.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "output_schema": {
+                  "description": "Optional JSON Schema this child's final answer must validate against (told to the child up front; parent validates with one bounded correction retry; result gains schema_valid, plus schema_errors on failure). Keep it forgiving — require only fields you will read.",
+                  "properties": {},
+                  "type": "object"
+                }
+              },
+              "required": [
+                "goal"
+              ],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "execute_code": {
+        "properties": {
+          "code": {
+            "description": "Python code to execute. Import tools with `from hermes_tools import web_search, terminal, ...` and print your final result to stdout.",
+            "type": "string"
+          },
+          "reset": {
+            "description": "Discard the kernel's persistent state and start fresh before running this code.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "mcp__enterprise_world__actions_prepare_message": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "channel": {
+            "title": "Channel",
+            "type": "string"
+          },
+          "recipient": {
+            "title": "Recipient",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel",
+          "recipient",
+          "body"
+        ],
+        "title": "actions_prepare_messageArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__actions_send_message": {
+        "properties": {
+          "approval_token": {
+            "title": "Approval Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "approval_token"
+        ],
+        "title": "actions_send_messageArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__analytics_query_metrics": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "analytics_query_metricsArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__calendar_list_events": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "calendar_list_eventsArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__chat_read_thread": {
+        "properties": {
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id"
+        ],
+        "title": "chat_read_threadArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__chat_search": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "chat_searchArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__connectors_get_status": {
+        "properties": {
+          "connector": {
+            "title": "Connector",
+            "type": "string"
+          }
+        },
+        "required": [
+          "connector"
+        ],
+        "title": "connectors_get_statusArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__files_read_json": {
+        "properties": {
+          "file_id": {
+            "title": "File Id",
+            "type": "string"
+          },
+          "json_pointer": {
+            "default": "/",
+            "title": "Json Pointer",
+            "type": "string"
+          },
+          "max_items": {
+            "default": 10,
+            "title": "Max Items",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "file_id"
+        ],
+        "title": "files_read_jsonArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__files_search": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "files_searchArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__get_prompt": {
+        "properties": {
+          "arguments": {
+            "additionalProperties": true,
+            "description": "Optional arguments to pass to the prompt",
+            "properties": {},
+            "type": "object"
+          },
+          "name": {
+            "description": "Name of the prompt to retrieve",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "mcp__enterprise_world__knowledge_search": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "knowledge_searchArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__list_prompts": {
+        "properties": {},
+        "type": "object"
+      },
+      "mcp__enterprise_world__list_resources": {
+        "properties": {},
+        "type": "object"
+      },
+      "mcp__enterprise_world__mail_read_thread": {
+        "properties": {
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id"
+        ],
+        "title": "mail_read_threadArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__mail_search": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "mail_searchArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__people_search": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "people_searchArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__projects_search_tasks": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "projects_search_tasksArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__read_resource": {
+        "properties": {
+          "uri": {
+            "description": "URI of the resource to read",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri"
+        ],
+        "type": "object"
+      },
+      "mcp__enterprise_world__support_search_tickets": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "support_search_ticketsArguments",
+        "type": "object"
+      },
+      "patch": {
+        "properties": {
+          "new_string": {
+            "description": "Changed replacement text; it must differ from old_string. Pass empty string '' to delete the matched text.",
+            "type": "string"
+          },
+          "old_string": {
+            "description": "Exact text to find and replace. Must be unique in the file unless replace_all=true. Include surrounding context lines to ensure uniqueness.",
+            "type": "string"
+          },
+          "path": {
+            "description": "File path to edit.",
+            "type": "string"
+          },
+          "replace_all": {
+            "default": false,
+            "description": "Replace all occurrences instead of requiring a unique match (default: false)",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "old_string",
+          "new_string"
+        ],
+        "type": "object"
+      },
+      "process_manage": {
+        "properties": {
+          "action": {
+            "enum": [
+              "list",
+              "poll",
+              "log",
+              "wait",
+              "kill",
+              "write",
+              "submit",
+              "close",
+              "handoff"
+            ],
+            "type": "string"
+          },
+          "data": {
+            "description": "Stdin text for write/submit; purpose sentence for handoff.",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Max log lines.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "offset": {
+            "description": "Log line offset (default: last 200).",
+            "type": "integer"
+          },
+          "session_id": {
+            "description": "From terminal background output; any unique prefix works ('4dae' for proc_4dae56ca81f6). Required except for 'list'.",
+            "type": "string"
+          },
+          "timeout": {
+            "description": "Max seconds for 'wait'.",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "type": "object"
+      },
+      "read_file": {
+        "properties": {
+          "limit": {
+            "default": 2000,
+            "description": "Maximum number of lines to read (default: 2000, max: 2000). Reads are additionally capped at a ~100K-character budget with a next_offset continuation.",
+            "maximum": 2000,
+            "type": "integer"
+          },
+          "offset": {
+            "default": 1,
+            "description": "Line number to start reading from (1-indexed, default: 1)",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "path": {
+            "description": "Path to the file to read (absolute, relative, or ~/path)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "search_files": {
+        "properties": {
+          "context": {
+            "default": 0,
+            "description": "Number of context lines before and after each match (grep mode only)",
+            "type": "integer"
+          },
+          "file_glob": {
+            "description": "Filter files by pattern in grep mode (e.g., '*.py' to only search Python files)",
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "description": "Maximum number of results to return (default: 50)",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "description": "Skip first N results for pagination (default: 0)",
+            "type": "integer"
+          },
+          "order": {
+            "default": "discovery",
+            "description": "File-search order: 'discovery' is fast bounded traversal order; 'modified' is exact global newest-first and may scan the full tree; ignored for content",
+            "enum": [
+              "discovery",
+              "modified"
+            ],
+            "type": "string"
+          },
+          "output_mode": {
+            "default": "content",
+            "description": "Output format for grep mode: 'content' shows matching lines with line numbers, 'files_only' lists file paths, 'count' shows match counts per file",
+            "enum": [
+              "content",
+              "files_only",
+              "count"
+            ],
+            "type": "string"
+          },
+          "path": {
+            "default": ".",
+            "description": "Directory or file to search in (default: current working directory)",
+            "type": "string"
+          },
+          "pattern": {
+            "description": "Regex pattern for content search, or glob pattern (e.g., '*.py') for file search",
+            "type": "string"
+          },
+          "target": {
+            "default": "content",
+            "description": "'content' searches inside file contents, 'files' searches for files by name",
+            "enum": [
+              "content",
+              "files"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "type": "object"
+      },
+      "session_search": {},
+      "skill_manage": {
+        "properties": {
+          "operations": {
+            "description": "Ordered ops; each names its target skill.",
+            "items": {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "create",
+                    "patch",
+                    "delete",
+                    "write_file",
+                    "remove_file"
+                  ],
+                  "type": "string"
+                },
+                "category": {
+                  "description": "Optional category subdir for create (e.g. 'devops').",
+                  "type": "string"
+                },
+                "content": {
+                  "description": "Full SKILL.md text (YAML frontmatter + markdown body) for create, or a full rewrite on patch.",
+                  "type": "string"
+                },
+                "file_content": {
+                  "description": "Content for write_file.",
+                  "type": "string"
+                },
+                "file_path": {
+                  "description": "Path RELATIVE to the skill's own directory, e.g. 'references/api.md' — no leading slash, never absolute. write_file/remove_file: required; first segment references/, templates/, scripts/, or assets/. patch: optional (default SKILL.md).",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "Skill name (lowercase, hyphens/underscores, max 64 chars); an existing skill's name unless creating.",
+                  "type": "string"
+                },
+                "new_string": {
+                  "description": "Replacement (patch); empty string deletes the match.",
+                  "type": "string"
+                },
+                "old_string": {
+                  "description": "Text to find (patch; same matching semantics as the patch tool).",
+                  "type": "string"
+                },
+                "replace_all": {
+                  "description": "patch: replace all occurrences (default false).",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "name",
+                "action"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "operations"
+        ],
+        "type": "object"
+      },
+      "skill_view": {
+        "properties": {
+          "file_path": {
+            "description": "OPTIONAL: Path to a linked file within the skill (e.g., 'references/api.md', 'templates/config.yaml', 'scripts/validate.py'). Omit to get the main SKILL.md content.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The skill name (use skills_list to see available skills). For plugin-provided skills, use the qualified form 'plugin:skill' (e.g. 'superpowers:writing-plans').",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "skills_list": {
+        "properties": {
+          "category": {
+            "description": "Optional category filter to narrow results",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "terminal": {
+        "properties": {
+          "background": {
+            "default": false,
+            "description": "Run in the background, returning a session_id. Pair with notify=true for anything with a defined end (tests, builds, deploys) — without it the process runs silently. Only servers/watchers/daemons that never exit should stay silent. Short commands: prefer foreground with a generous timeout.",
+            "type": "boolean"
+          },
+          "command": {
+            "description": "The shell command to execute",
+            "type": "string"
+          },
+          "notify": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ],
+            "description": "With background=true: notify=true fires exactly one notification when the process exits (the right choice for nearly every bounded task — builds, tests, deploys). notify=['pattern', ...] instead notifies when a line matches a pattern — ONLY for one-shot readiness signals on processes that never exit (e.g. ['Application startup complete']); rate-limited and auto-disabled if it over-fires. Omit for silent daemons."
+          },
+          "pty": {
+            "default": false,
+            "description": "With background=true: run in a pseudo-terminal for interactive CLI tools (Codex, Claude Code, Python REPL). Local backend only. Default: false.",
+            "type": "boolean"
+          },
+          "timeout": {
+            "description": "Max seconds to wait (default: 180, foreground max: 600). Returns INSTANTLY when command finishes — set high for long tasks, you won't wait unnecessarily. A foreground timeout above 600s runs the command as a tracked background process with notify_on_complete=true instead (the result says so; do not re-run it).",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "workdir": {
+            "description": "Working directory for this command (absolute path). Defaults to the session working directory.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "type": "object"
+      },
+      "todo_list": {
+        "properties": {
+          "merge": {
+            "default": false,
+            "description": "true: update existing items by id, add new ones. false (default): replace the entire list with a fresh plan.",
+            "type": "boolean"
+          },
+          "todos": {
+            "description": "Task items to write.",
+            "items": {
+              "properties": {
+                "content": {
+                  "description": "Task description",
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "parent": {
+                  "description": "Optional id of another item, making this a nested subtask. Omit for top-level.",
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "pending",
+                    "in_progress",
+                    "completed",
+                    "cancelled"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "content",
+                "status"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "web_extract": {
+        "properties": {
+          "char_limit": {
+            "description": "Optional per-page character budget sent back (default 15000). Pages larger than this are head+tail truncated with the full text stored to disk. Raise it when you need more of a long page inline.",
+            "minimum": 2000,
+            "type": "integer"
+          },
+          "urls": {
+            "description": "List of URLs to extract content from (max 5 URLs per call)",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "type": "array"
+          }
+        },
+        "required": [
+          "urls"
+        ],
+        "type": "object"
+      },
+      "web_search": {
+        "properties": {
+          "limit": {
+            "default": 5,
+            "description": "Maximum number of results to return. Defaults to 5.",
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "query": {
+            "description": "The search query to look up on the web. You may include backend-supported operators such as site:example.com, filetype:pdf, intitle:word, -term, or \"exact phrase\".",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "write_file": {
+        "properties": {
+          "content": {
+            "description": "Complete content to write to the file",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path to the file to write (will be created if it doesn't exist, overwritten if it does)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ],
+        "type": "object"
+      }
+    },
+    "collection": "production",
+    "collection_ordinal": 32,
+    "normalization": {
+      "source_format": "NeMo canonical trace JSONL derived from Relay",
+      "source_trace_id": "01a0f3e7-e3ab-7c20-a8c1-0404b6116f3a",
+      "losses": [
+        "Span nesting was flattened into sequential ATIF steps.",
+        "Non-fixture tool inputs and outputs were replaced by explicit redaction markers.",
+        "total_steps counts the projected public trajectory, not the original span tree."
+      ],
+      "uncertainties": [
+        "Token totals were unavailable in mapped source metrics; they were not inferred as zero."
+      ]
+    }
+  },
+  "steps": [
+    {
+      "step_id": 1,
+      "timestamp": "2026-09-30T20:00:57.909687555+00:00",
+      "source": "user",
+      "message": "Look up the recent conversation about the Orion evidence packet and summarize the actual message."
+    },
+    {
+      "step_id": 2,
+      "timestamp": "2026-09-30T20:00:57.909687555+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-c8c4074bd6cf4340b70cacdca83a5179",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-c8c4074bd6cf4340b70cacdca83a5179",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 3,
+      "timestamp": "2026-09-30T20:00:59.067806933+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-1100fcf4ba984b31a5797dc1ed7efd10",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-1100fcf4ba984b31a5797dc1ed7efd10",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 4,
+      "timestamp": "2026-09-30T20:01:00.698513103+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-1a0948b7b8fa411ca8a7c4b09eeee443",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-1a0948b7b8fa411ca8a7c4b09eeee443",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 5,
+      "timestamp": "2026-09-30T20:01:02.294597292+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-43c644c391bb4ea7a76ef2ea0026c336",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-43c644c391bb4ea7a76ef2ea0026c336",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 6,
+      "timestamp": "2026-09-30T20:01:05.723948430+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-9057710e3d81413f9eef7d1655d08e45",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-9057710e3d81413f9eef7d1655d08e45",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 7,
+      "timestamp": "2026-09-30T20:01:07.267402011+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-fd6291b845fb425fa55aadf6c462016c",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-fd6291b845fb425fa55aadf6c462016c",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 8,
+      "timestamp": "2026-09-30T20:01:09.172794364+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-6f0f684dbf3f41a4a5ccc0be003bdbee",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-6f0f684dbf3f41a4a5ccc0be003bdbee",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 9,
+      "timestamp": "2026-09-30T20:01:10.958451985+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-1ed1e93ee8db4df68ac059ec2a8f3a29",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-1ed1e93ee8db4df68ac059ec2a8f3a29",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 10,
+      "timestamp": "2026-09-30T20:01:12.692735053+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-0c7b8cd8be754b17b8d7e75c11fe2202",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-0c7b8cd8be754b17b8d7e75c11fe2202",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 11,
+      "timestamp": "2026-09-30T20:01:16.414539751+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-da61aebe00864246be4b8dbe1052acc5",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-da61aebe00864246be4b8dbe1052acc5",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 12,
+      "timestamp": "2026-09-30T20:01:18.377599115+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-622b29c8cc13446e9954960b6d4b2238",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-622b29c8cc13446e9954960b6d4b2238",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 13,
+      "timestamp": "2026-09-30T20:01:20.309945762+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-86dc1e5ff16f4ff0b70faf882b1609ef",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-86dc1e5ff16f4ff0b70faf882b1609ef",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 14,
+      "timestamp": "2026-09-30T20:01:22.512510428+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-b8f45ac35b2d4985bf3677f1e7df6d89",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-b8f45ac35b2d4985bf3677f1e7df6d89",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 15,
+      "timestamp": "2026-09-30T20:01:24.704153080+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-ae44afe2ab984aa4b6e68d40c240abc6",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-ae44afe2ab984aa4b6e68d40c240abc6",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 16,
+      "timestamp": "2026-09-30T20:01:26.664209336+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-bb56437fae5142d48d00d177ca737aa4",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-bb56437fae5142d48d00d177ca737aa4",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 17,
+      "timestamp": "2026-09-30T20:01:28.818994302+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-b44108457bab47d88b6ef188b0e45d4b",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-b44108457bab47d88b6ef188b0e45d4b",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 18,
+      "timestamp": "2026-09-30T20:01:31.021895604+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-6cc602848741472f9607de997572aa9c",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-6cc602848741472f9607de997572aa9c",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 19,
+      "timestamp": "2026-09-30T20:01:31.036107032+00:00",
+      "source": "agent",
+      "model_name": "nvidia/nvidia/nemotron-3-ultra",
+      "message": "Based on my search of the Hermes session history, **there is no prior conversation about an \"Orion evidence packet\"** — the only session that contains those terms is **this current session** (titled \"Summarize Orion evidence packet conversation\"), which began with your request just now.\n\nThe search results keep returning this same session because your query (\"Look up the recent conversation about the Orion evidence packet...\") itself contains the keywords \"Orion\" and \"evidence packet.\"\n\n**Summary:** No earlier conversation on this topic exists in the session database. If you expected to find a prior discussion, it may have occurred in:\n- A different Hermes profile (use `profile` parameter to search others)\n- An external system (email, chat, documents, etc.)\n- A session that was cleared or isn't indexed\n\nWould you like me to search a specific profile, or were you referring to content from another source (e.g., a file, email, or external conversation)?"
+    }
+  ]
+}

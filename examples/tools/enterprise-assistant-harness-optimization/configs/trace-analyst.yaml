@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# NeMo Trace Analyst configuration for canonical Trace JSONL exported from Relay.
+trace:
+  filesystem:
+    path: traces/world-v3/production/insights.jsonl
+output_path: .runs/trace-analyst-output.yml
+# Select LiteLLM's NVIDIA provider for NIM-compatible request parameters.
+model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
+api_base: https://integrate.api.nvidia.com/v1
+max_tokens: 16384
+evidence_streams:
+  anomaly_and_patterns: true
+  tool_issues: true
+  eval_failure_patterns: true
+  ethos_divergence:
+    ethos_path: configs/enterprise-assistant-ethos.md
+  user_sentiment: false

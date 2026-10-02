@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# Derived from OpenShell's NVIDIA example profile. The executable allowlist is
+# expanded for this image because Hermes makes requests from its Python process.
+id: hermes-nvidia-build
+display_name: NVIDIA Build for Hermes
+description: NVIDIA inference access for the tutorial's pinned Hermes image
+category: inference
+inference_capable: true
+credentials:
+  - name: api_key
+    description: NVIDIA API key
+    env_vars: [NVIDIA_API_KEY]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+discovery:
+  credentials: [api_key]
+endpoints:
+  - host: integrate.api.nvidia.com
+    port: 443
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+binaries:
+  - /usr/local/bin/hermes
+  - /usr/local/bin/python
+  - /usr/local/bin/python3
+  - /usr/local/bin/python3.12

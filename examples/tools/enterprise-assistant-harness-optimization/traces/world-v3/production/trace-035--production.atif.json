@@ -1,0 +1,1705 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "01a0f3eb-d0f3-7962-8a48-e3813dbe9674",
+  "trajectory_id": "01a0f3eb-d0f3-7962-8a48-e3813dbe9674",
+  "agent": {
+    "name": "Hermes-enterprise-world",
+    "version": "tutorial-baseline",
+    "model_name": "nvidia/nvidia/nemotron-3-ultra"
+  },
+  "final_metrics": {
+    "total_steps": 35
+  },
+  "extra": {
+    "logical_case_id": "read-07",
+    "observed_verdict": null,
+    "metrics": {
+      "required_signal_coverage": 1.0,
+      "enterprise_tool_share": 0.3333333333333333,
+      "local_or_session_call_share": 0.6666666666666666
+    },
+    "trajectory_contract": {
+      "required_signals": [],
+      "missing_signals": []
+    },
+    "evaluator_results": {},
+    "tool_catalog": {
+      "clarify": {
+        "properties": {
+          "questions": {
+            "description": "The question(s). Each: question text (options excluded), optional choices (recommended first; omit for free-text), optional multi_select. Responses come back in question order with the question text echoed.",
+            "items": {
+              "properties": {
+                "choices": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 4,
+                  "type": "array"
+                },
+                "multi_select": {
+                  "type": "boolean"
+                },
+                "question": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "question"
+              ],
+              "type": "object"
+            },
+            "maxItems": 5,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "questions"
+        ],
+        "type": "object"
+      },
+      "cronjob_manage": {
+        "properties": {
+          "action": {
+            "description": "One of: create, list, update, pause, resume, remove, run, resnap. When action=create, the 'schedule' and 'prompt' fields are REQUIRED. When action=resnap, pass either job_id (single job) or all=true (every unpinned job).",
+            "type": "string"
+          },
+          "all": {
+            "description": "Only for action='resnap'. all=true refreshes the inference snapshot of EVERY unpinned agent job to the current global resolution (bulk 'make everything follow my new default'). Must be explicitly set to true — never implied. Omit (or false) to resnap a single job via job_id.",
+            "type": "boolean"
+          },
+          "attach_to_session": {
+            "description": "True = the job's delivery is CONTINUABLE — the user can reply and the agent has the brief in context (threads on thread-capable platforms, mirrored into the DM elsewhere). Use for conversational recurring jobs (briefings); leave unset for fire-and-forget alerts. Scope: the job's own conversation only — the origin chat, the home-channel fallback when deliver='origin' captured no origin (script-created jobs), a user-written bare platform target (deliver='slack' — that platform's home channel), or the job's single explicit platform:chat target (this flag is the only way to attach an explicit target). Broadcast targets are never attached; no effect when deliver='local'.",
+            "type": "boolean"
+          },
+          "context_from": {
+            "description": "Optional job ID(s) whose most recent completed output is injected as context each run — chains jobs (A collects, B processes). For a job's OWN previous output prefer `continuity`. On update, [] clears.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "continuity": {
+            "description": "True = each run sees the job's own previous output, so it can dedupe and continue where it left off (scouts, monitors, incremental digests). Default false. On update, false turns it off.",
+            "type": "boolean"
+          },
+          "deliver": {
+            "description": "Where the job's output is POSTED as a one-way message (the job itself always runs in a fresh session with no chat context). Omit to address the chat/topic this job was created from. Otherwise: 'local' (save only, no delivery), 'all' (every connected home channel, resolved at fire time), 'bot-chat' or 'bot-chat:<profile>' (inject into a Bot Chat as a real message), or platform:chat_id:thread_id (e.g. 'telegram:-1001234567890:17585'). Comma-combine like 'origin,all'.",
+            "type": "string"
+          },
+          "enabled_toolsets": {
+            "description": "Optional toolset names to restrict the job's agent to (e.g. [\"web\", \"terminal\"]) — cuts token overhead. Infer from the prompt. Omit for all default tools. On update, [] clears.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "failure_deliver": {
+            "description": "Optional override target for FAILURE notices only (same grammar as deliver). When set, engine failure/interruption notices go here instead of the deliver target; 'local' suppresses them entirely (state still recorded in cron list/run history). Use for jobs delivering into shared channels where failure noise is unwanted. Omit = failures follow deliver (default). On update, '' clears.",
+            "type": "string"
+          },
+          "job_id": {
+            "description": "Required for update/pause/resume/remove/run. For resnap: the job to adopt the current global inference resolution (omit if all=true).",
+            "type": "string"
+          },
+          "monitor": {
+            "description": "Optional change-detector that gates the agent: an http(s) URL (fetched each tick) or a script path (same rules as `script`, run each tick) — cheap, no LLM. Output identical to the previous tick skips the agent run entirely; changed output wakes the agent with a diff injected into the prompt. First tick always runs (baseline). Output must be deterministic (no timestamps) or every tick looks changed. Incompatible with no_agent. On update, '' clears.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Optional human-friendly name",
+            "type": "string"
+          },
+          "no_agent": {
+            "default": false,
+            "description": "True = no LLM: the scheduler runs `script` (required) on schedule and delivers its stdout verbatim; empty stdout sends nothing (watchdog pattern). Use for script-only pings with fixed output; keep False for anything needing reasoning.",
+            "type": "boolean"
+          },
+          "paused": {
+            "description": "Create only: persist disabled atomically. Resume to schedule; explicit run remains available. Default false.",
+            "type": "boolean"
+          },
+          "paused_reason": {
+            "description": "Create only: auditable reason; requires paused=true.",
+            "type": "string"
+          },
+          "prompt": {
+            "description": "For create: the full self-contained prompt (paired with any skills as the task instruction). For run: optional transient context for that single fire (never persisted).",
+            "type": "string"
+          },
+          "repeat": {
+            "description": "Optional repeat count. Omit for defaults (once for one-shot, forever for recurring).",
+            "type": "integer"
+          },
+          "schedule": {
+            "description": "REQUIRED for create. Schedule forms: (1) recurring interval — '30m', 'every 2h', 'every hour' (EVERY 30 minutes / 2 hours / hour, forever by default); (2) explicit one-shot by duration — 'in 30m', 'in 2h' (fires ONCE that far from now; use this for 'remind me in N minutes' — do NOT hand-compute an absolute timestamp); (3) natural day/time — 'every monday 9am', 'weekdays at 9am', 'every day at 9am' (recurring weekly/daily); (4) cron syntax — '0 9 * * *' (daily 9am); (5) absolute one-shot — ISO timestamp '2026-06-01T09:00:00'.",
+            "type": "string"
+          },
+          "script": {
+            "description": "Optional script run each tick; stdout is injected into the agent's prompt as context (with no_agent=True the script IS the job). Relative paths resolve under ~/run/hermes/scripts/; .sh/.bash via bash, else Python. On update, '' clears.",
+            "type": "string"
+          },
+          "skills": {
+            "description": "Optional ordered skill names loaded before the cron prompt. On update, [] clears.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "workdir": {
+            "description": "Optional absolute existing path to run the job from: injects that directory's AGENTS.md/context files and anchors terminal/file tools there. On update, '' clears.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "type": "object"
+      },
+      "delegate_task": {
+        "properties": {
+          "action": {
+            "description": "Default 'spawn'. Live control of running children: 'list' = ids/goals/status/transcripts; 'steer' = queue course-correction text into one child (subagent_id + message) without stopping it; 'stop' = end one child early (subagent_id; partial result still returns). Control actions return immediately; goal/tasks are ignored unless spawning.",
+            "enum": [
+              "spawn",
+              "list",
+              "steer",
+              "stop"
+            ],
+            "type": "string"
+          },
+          "message": {
+            "description": "For action='steer': the course correction, appended to the child's next tool result mid-run. Be directive and specific.",
+            "type": "string"
+          },
+          "subagent_id": {
+            "description": "Target for action='steer'/'stop' (ids from the spawn response or action='list').",
+            "type": "string"
+          },
+          "tasks": {
+            "description": "The task(s), up to 10 in parallel for this user (set via delegation.max_concurrent_children). Each entry spawns one subagent with isolated context and terminal session; a single task is a one-entry array. Required when spawning.",
+            "items": {
+              "properties": {
+                "context": {
+                  "description": "Background THIS child needs: file paths, error messages, constraints. Each child sees only its own context — repeat shared background in every task that needs it.",
+                  "type": "string"
+                },
+                "goal": {
+                  "description": "What this subagent should accomplish. Be specific and self-contained — it knows nothing about your conversation history.",
+                  "type": "string"
+                },
+                "images": {
+                  "description": "Optional images this child must SEE (max 8): local file paths or http(s) URLs — e.g. a screenshot the user sent, a design mock, a chart. Vision-capable children receive the pixels on their first turn; non-vision children get path hints for vision_analyze. Text files do NOT belong here — put paths in 'context' instead.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "output_schema": {
+                  "description": "Optional JSON Schema this child's final answer must validate against (told to the child up front; parent validates with one bounded correction retry; result gains schema_valid, plus schema_errors on failure). Keep it forgiving — require only fields you will read.",
+                  "properties": {},
+                  "type": "object"
+                }
+              },
+              "required": [
+                "goal"
+              ],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "execute_code": {},
+      "mcp__enterprise_world__actions_prepare_message": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "channel": {
+            "title": "Channel",
+            "type": "string"
+          },
+          "recipient": {
+            "title": "Recipient",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel",
+          "recipient",
+          "body"
+        ],
+        "title": "actions_prepare_messageArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__actions_send_message": {
+        "properties": {
+          "approval_token": {
+            "title": "Approval Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "approval_token"
+        ],
+        "title": "actions_send_messageArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__analytics_query_metrics": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "analytics_query_metricsArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__calendar_list_events": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "calendar_list_eventsArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__chat_read_thread": {
+        "properties": {
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id"
+        ],
+        "title": "chat_read_threadArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__chat_search": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "chat_searchArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__connectors_get_status": {
+        "properties": {
+          "connector": {
+            "title": "Connector",
+            "type": "string"
+          }
+        },
+        "required": [
+          "connector"
+        ],
+        "title": "connectors_get_statusArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__files_read_json": {
+        "properties": {
+          "file_id": {
+            "title": "File Id",
+            "type": "string"
+          },
+          "json_pointer": {
+            "default": "/",
+            "title": "Json Pointer",
+            "type": "string"
+          },
+          "max_items": {
+            "default": 10,
+            "title": "Max Items",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "file_id"
+        ],
+        "title": "files_read_jsonArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__files_search": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "files_searchArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__get_prompt": {
+        "properties": {
+          "arguments": {
+            "additionalProperties": true,
+            "description": "Optional arguments to pass to the prompt",
+            "properties": {},
+            "type": "object"
+          },
+          "name": {
+            "description": "Name of the prompt to retrieve",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "mcp__enterprise_world__knowledge_search": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "knowledge_searchArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__list_prompts": {
+        "properties": {},
+        "type": "object"
+      },
+      "mcp__enterprise_world__list_resources": {
+        "properties": {},
+        "type": "object"
+      },
+      "mcp__enterprise_world__mail_read_thread": {
+        "properties": {
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id"
+        ],
+        "title": "mail_read_threadArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__mail_search": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "mail_searchArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__people_search": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "people_searchArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__projects_search_tasks": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "projects_search_tasksArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__read_resource": {
+        "properties": {
+          "uri": {
+            "description": "URI of the resource to read",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri"
+        ],
+        "type": "object"
+      },
+      "mcp__enterprise_world__support_search_tickets": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "support_search_ticketsArguments",
+        "type": "object"
+      },
+      "patch": {
+        "properties": {
+          "new_string": {
+            "description": "Changed replacement text; it must differ from old_string. Pass empty string '' to delete the matched text.",
+            "type": "string"
+          },
+          "old_string": {
+            "description": "Exact text to find and replace. Must be unique in the file unless replace_all=true. Include surrounding context lines to ensure uniqueness.",
+            "type": "string"
+          },
+          "path": {
+            "description": "File path to edit.",
+            "type": "string"
+          },
+          "replace_all": {
+            "default": false,
+            "description": "Replace all occurrences instead of requiring a unique match (default: false)",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "old_string",
+          "new_string"
+        ],
+        "type": "object"
+      },
+      "process_manage": {
+        "properties": {
+          "action": {
+            "enum": [
+              "list",
+              "poll",
+              "log",
+              "wait",
+              "kill",
+              "write",
+              "submit",
+              "close",
+              "handoff"
+            ],
+            "type": "string"
+          },
+          "data": {
+            "description": "Stdin text for write/submit; purpose sentence for handoff.",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Max log lines.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "offset": {
+            "description": "Log line offset (default: last 200).",
+            "type": "integer"
+          },
+          "session_id": {
+            "description": "From terminal background output; any unique prefix works ('4dae' for proc_4dae56ca81f6). Required except for 'list'.",
+            "type": "string"
+          },
+          "timeout": {
+            "description": "Max seconds for 'wait'.",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "type": "object"
+      },
+      "read_file": {
+        "properties": {
+          "limit": {
+            "default": 2000,
+            "description": "Maximum number of lines to read (default: 2000, max: 2000). Reads are additionally capped at a ~100K-character budget with a next_offset continuation.",
+            "maximum": 2000,
+            "type": "integer"
+          },
+          "offset": {
+            "default": 1,
+            "description": "Line number to start reading from (1-indexed, default: 1)",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "path": {
+            "description": "Path to the file to read (absolute, relative, or ~/path)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "search_files": {
+        "properties": {
+          "context": {
+            "default": 0,
+            "description": "Number of context lines before and after each match (grep mode only)",
+            "type": "integer"
+          },
+          "file_glob": {
+            "description": "Filter files by pattern in grep mode (e.g., '*.py' to only search Python files)",
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "description": "Maximum number of results to return (default: 50)",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "description": "Skip first N results for pagination (default: 0)",
+            "type": "integer"
+          },
+          "order": {
+            "default": "discovery",
+            "description": "File-search order: 'discovery' is fast bounded traversal order; 'modified' is exact global newest-first and may scan the full tree; ignored for content",
+            "enum": [
+              "discovery",
+              "modified"
+            ],
+            "type": "string"
+          },
+          "output_mode": {
+            "default": "content",
+            "description": "Output format for grep mode: 'content' shows matching lines with line numbers, 'files_only' lists file paths, 'count' shows match counts per file",
+            "enum": [
+              "content",
+              "files_only",
+              "count"
+            ],
+            "type": "string"
+          },
+          "path": {
+            "default": ".",
+            "description": "Directory or file to search in (default: current working directory)",
+            "type": "string"
+          },
+          "pattern": {
+            "description": "Regex pattern for content search, or glob pattern (e.g., '*.py') for file search",
+            "type": "string"
+          },
+          "target": {
+            "default": "content",
+            "description": "'content' searches inside file contents, 'files' searches for files by name",
+            "enum": [
+              "content",
+              "files"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "type": "object"
+      },
+      "session_search": {},
+      "skill_manage": {
+        "properties": {
+          "operations": {
+            "description": "Ordered ops; each names its target skill.",
+            "items": {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "create",
+                    "patch",
+                    "delete",
+                    "write_file",
+                    "remove_file"
+                  ],
+                  "type": "string"
+                },
+                "category": {
+                  "description": "Optional category subdir for create (e.g. 'devops').",
+                  "type": "string"
+                },
+                "content": {
+                  "description": "Full SKILL.md text (YAML frontmatter + markdown body) for create, or a full rewrite on patch.",
+                  "type": "string"
+                },
+                "file_content": {
+                  "description": "Content for write_file.",
+                  "type": "string"
+                },
+                "file_path": {
+                  "description": "Path RELATIVE to the skill's own directory, e.g. 'references/api.md' — no leading slash, never absolute. write_file/remove_file: required; first segment references/, templates/, scripts/, or assets/. patch: optional (default SKILL.md).",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "Skill name (lowercase, hyphens/underscores, max 64 chars); an existing skill's name unless creating.",
+                  "type": "string"
+                },
+                "new_string": {
+                  "description": "Replacement (patch); empty string deletes the match.",
+                  "type": "string"
+                },
+                "old_string": {
+                  "description": "Text to find (patch; same matching semantics as the patch tool).",
+                  "type": "string"
+                },
+                "replace_all": {
+                  "description": "patch: replace all occurrences (default false).",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "name",
+                "action"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "operations"
+        ],
+        "type": "object"
+      },
+      "skill_view": {
+        "properties": {
+          "file_path": {
+            "description": "OPTIONAL: Path to a linked file within the skill (e.g., 'references/api.md', 'templates/config.yaml', 'scripts/validate.py'). Omit to get the main SKILL.md content.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The skill name (use skills_list to see available skills). For plugin-provided skills, use the qualified form 'plugin:skill' (e.g. 'superpowers:writing-plans').",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "skills_list": {
+        "properties": {
+          "category": {
+            "description": "Optional category filter to narrow results",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "terminal": {},
+      "todo_list": {
+        "properties": {
+          "merge": {
+            "default": false,
+            "description": "true: update existing items by id, add new ones. false (default): replace the entire list with a fresh plan.",
+            "type": "boolean"
+          },
+          "todos": {
+            "description": "Task items to write.",
+            "items": {
+              "properties": {
+                "content": {
+                  "description": "Task description",
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "parent": {
+                  "description": "Optional id of another item, making this a nested subtask. Omit for top-level.",
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "pending",
+                    "in_progress",
+                    "completed",
+                    "cancelled"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "content",
+                "status"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "web_extract": {
+        "properties": {
+          "char_limit": {
+            "description": "Optional per-page character budget sent back (default 15000). Pages larger than this are head+tail truncated with the full text stored to disk. Raise it when you need more of a long page inline.",
+            "minimum": 2000,
+            "type": "integer"
+          },
+          "urls": {
+            "description": "List of URLs to extract content from (max 5 URLs per call)",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "type": "array"
+          }
+        },
+        "required": [
+          "urls"
+        ],
+        "type": "object"
+      },
+      "web_search": {
+        "properties": {
+          "limit": {
+            "default": 5,
+            "description": "Maximum number of results to return. Defaults to 5.",
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "query": {
+            "description": "The search query to look up on the web. You may include backend-supported operators such as site:example.com, filetype:pdf, intitle:word, -term, or \"exact phrase\".",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "write_file": {
+        "properties": {
+          "content": {
+            "description": "Complete content to write to the file",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path to the file to write (will be created if it doesn't exist, overwritten if it does)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ],
+        "type": "object"
+      }
+    },
+    "collection": "production",
+    "collection_ordinal": 35,
+    "normalization": {
+      "source_format": "NeMo canonical trace JSONL derived from Relay",
+      "source_trace_id": "01a0f3eb-d0f3-7962-8a48-e3813dbe9674",
+      "losses": [
+        "Span nesting was flattened into sequential ATIF steps.",
+        "Non-fixture tool inputs and outputs were replaced by explicit redaction markers.",
+        "total_steps counts the projected public trajectory, not the original span tree."
+      ],
+      "uncertainties": [
+        "Token totals were unavailable in mapped source metrics; they were not inferred as zero."
+      ]
+    }
+  },
+  "steps": [
+    {
+      "step_id": 1,
+      "timestamp": "2026-09-30T20:05:15.151858058+00:00",
+      "source": "user",
+      "message": "Search for the launch blocker conversation, inspect the matching message, and report what Security said."
+    },
+    {
+      "step_id": 2,
+      "timestamp": "2026-09-30T20:05:15.151858058+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-ac224795bc9145bdac95bb277bbf313c",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-ac224795bc9145bdac95bb277bbf313c",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 3,
+      "timestamp": "2026-09-30T20:05:16.489202126+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-328e3103584d4ca4aaf31ad4919137a2",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-328e3103584d4ca4aaf31ad4919137a2",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 4,
+      "timestamp": "2026-09-30T20:05:18.127323022+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-0ddd9f74a1284ad8ae127ccd133c2481",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-0ddd9f74a1284ad8ae127ccd133c2481",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 5,
+      "timestamp": "2026-09-30T20:05:19.665660276+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-c56c0c887db34318a48d6d0a6c187c4a",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-c56c0c887db34318a48d6d0a6c187c4a",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 6,
+      "timestamp": "2026-09-30T20:05:21.892829274+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-5123884f5c204e3cb0a0b3aa489fbab6",
+          "function_name": "session_search",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-5123884f5c204e3cb0a0b3aa489fbab6",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 7,
+      "timestamp": "2026-09-30T20:05:23.332415159+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-d0347379cf76403f980e71d1523b8b18",
+          "function_name": "terminal",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-d0347379cf76403f980e71d1523b8b18",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 8,
+      "timestamp": "2026-09-30T20:05:24.811913373+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-1b42e11051ee450ea1bc16f437ed3729",
+          "function_name": "terminal",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-1b42e11051ee450ea1bc16f437ed3729",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 9,
+      "timestamp": "2026-09-30T20:05:26.272932085+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-842de26376bf422a81ef8f8a4166350e",
+          "function_name": "terminal",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-842de26376bf422a81ef8f8a4166350e",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 10,
+      "timestamp": "2026-09-30T20:05:29.629530135+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-15511ef894f449e6b028a5e0cf9765a4",
+          "function_name": "terminal",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-15511ef894f449e6b028a5e0cf9765a4",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 11,
+      "timestamp": "2026-09-30T20:05:31.168106359+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-6188de0e648b43c8a9b262210bf84234",
+          "function_name": "terminal",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-6188de0e648b43c8a9b262210bf84234",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 12,
+      "timestamp": "2026-09-30T20:05:32.679557493+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-f88bd5d096b64124a00254b839f40cb9",
+          "function_name": "terminal",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-f88bd5d096b64124a00254b839f40cb9",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 13,
+      "timestamp": "2026-09-30T20:05:34.277296999+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-024dd7df5a4b4b278008042170aa1267",
+          "function_name": "terminal",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-024dd7df5a4b4b278008042170aa1267",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 14,
+      "timestamp": "2026-09-30T20:05:38.380994708+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-cf9a22336206489bb5502a04358bd1e0",
+          "function_name": "terminal",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-cf9a22336206489bb5502a04358bd1e0",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 15,
+      "timestamp": "2026-09-30T20:05:43.749243377+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-c34c5c667dfe483b8b5776d05b05cea6",
+          "function_name": "terminal",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-c34c5c667dfe483b8b5776d05b05cea6",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 16,
+      "timestamp": "2026-09-30T20:05:45.510990503+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-db827ef52ee34377b5597e1f441bab90",
+          "function_name": "execute_code",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-db827ef52ee34377b5597e1f441bab90",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 17,
+      "timestamp": "2026-09-30T20:05:47.782188779+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-c21d85cff55941119d9e19bbe668d753",
+          "function_name": "execute_code",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-c21d85cff55941119d9e19bbe668d753",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 18,
+      "timestamp": "2026-09-30T20:05:49.555155212+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-d05730970845447b8599523c9786dd43",
+          "function_name": "execute_code",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-d05730970845447b8599523c9786dd43",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 19,
+      "timestamp": "2026-09-30T20:05:52.077763238+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-54cf1e181aac4b33b1189cc61f029735",
+          "function_name": "execute_code",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-54cf1e181aac4b33b1189cc61f029735",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 20,
+      "timestamp": "2026-09-30T20:05:54.627924971+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-7150532a16d942f686ecc3603b105435",
+          "function_name": "execute_code",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-7150532a16d942f686ecc3603b105435",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 21,
+      "timestamp": "2026-09-30T20:05:56.917548823+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-55c7f91598714475ab29d7888bf8672e",
+          "function_name": "execute_code",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-55c7f91598714475ab29d7888bf8672e",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 22,
+      "timestamp": "2026-09-30T20:05:59.603712904+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-1dfbdc1a33174c0f81bec344314a1969",
+          "function_name": "terminal",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-1dfbdc1a33174c0f81bec344314a1969",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 23,
+      "timestamp": "2026-09-30T20:06:02.251956373+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-980d9830fa44401a994b31b217bad59f",
+          "function_name": "terminal",
+          "arguments": {
+            "redacted": "non-fixture tool input removed from public corpus"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-980d9830fa44401a994b31b217bad59f",
+            "content": "[redacted: non-fixture tool output removed from public corpus]"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 24,
+      "timestamp": "2026-09-30T20:06:04.063612372+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-e18f630ae75e4201a45b645d93af2685",
+          "function_name": "mcp__enterprise_world__chat_search",
+          "arguments": {
+            "page_size": 10,
+            "query": "launch blocker"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-e18f630ae75e4201a45b645d93af2685",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [\\n    {\\n      \\\"id\\\": \\\"chat_atlas_000\\\",\\n      \\\"channel\\\": \\\"proj-atlas-0\\\",\\n      \\\"updated_at\\\": \\\"2026-07-01T10:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_delta_003\\\",\\n      \\\"channel\\\": \\\"proj-delta-3\\\",\\n      \\\"updated_at\\\": \\\"2026-07-04T13:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_launch_blocker\\\",\\n      \\\"channel\\\": \\\"proj-launch\\\",\\n      \\\"updated_at\\\": \\\"2026-08-31T15:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_grove_006\\\",\\n      \\\"channel\\\": \\\"proj-grove-2\\\",\\n      \\\"updated_at\\\": \\\"2026-07-07T16:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_juniper_009\\\",\\n      \\\"channel\\\": \\\"proj-juniper-1\\\",\\n      \\\"updated_at\\\": \\\"2026-07-10T10:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_mesa_012\\\",\\n      \\\"channel\\\": \\\"proj-mesa-0\\\",\\n      \\\"updated_at\\\": \\\"2026-07-13T13:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_pioneer_015\\\",\\n      \\\"channel\\\": \\\"proj-pioneer-3\\\",\\n      \\\"updated_at\\\": \\\"2026-07-16T16:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_cedar_018\\\",\\n      \\\"channel\\\": \\\"proj-cedar-2\\\",\\n      \\\"updated_at\\\": \\\"2026-07-19T10:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_fjord_021\\\",\\n      \\\"channel\\\": \\\"proj-fjord-1\\\",\\n      \\\"updated_at\\\": \\\"2026-07-22T13:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_ion_024\\\",\\n      \\\"channel\\\": \\\"proj-ion-0\\\",\\n      \\\"updated_at\\\": \\\"2026-07-25T16:00:00Z\\\"\\n    }\\n  ],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 10,\\n    \\\"total_items\\\": 27,\\n    \\\"total_pages\\\": 3\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 25,
+      "timestamp": "2026-09-30T20:06:05.823462350+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-698136fb69aa4210b148dfbd2ee0240c",
+          "function_name": "mcp__enterprise_world__chat_read_thread",
+          "arguments": {
+            "thread_id": "chat_launch_blocker"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-698136fb69aa4210b148dfbd2ee0240c",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"thread\\\": {\\n    \\\"id\\\": \\\"chat_launch_blocker\\\",\\n    \\\"channel\\\": \\\"proj-launch\\\",\\n    \\\"updated_at\\\": \\\"2026-08-31T15:00:00Z\\\",\\n    \\\"messages\\\": [\\n      {\\n        \\\"id\\\": \\\"chat_launch_1\\\",\\n        \\\"author\\\": \\\"ava.patel@example.test\\\",\\n        \\\"body\\\": \\\"The launch blocker is the missing security evidence packet.\\\"\\n      },\\n      {\\n        \\\"id\\\": \\\"chat_launch_2\\\",\\n        \\\"author\\\": \\\"mina.ortiz@example.test\\\",\\n        \\\"body\\\": \\\"Once it is attached, Security can sign off in one business day.\\\"\\n      }\\n    ]\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 26,
+      "timestamp": "2026-09-30T20:06:07.925752250+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-4ad07497c940485aa98290469245b839",
+          "function_name": "mcp__enterprise_world__chat_search",
+          "arguments": {
+            "page_size": 20,
+            "query": "Security"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-4ad07497c940485aa98290469245b839",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [\\n    {\\n      \\\"id\\\": \\\"chat_beacon_001\\\",\\n      \\\"channel\\\": \\\"proj-beacon-1\\\",\\n      \\\"updated_at\\\": \\\"2026-07-02T11:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_ember_004\\\",\\n      \\\"channel\\\": \\\"proj-ember-0\\\",\\n      \\\"updated_at\\\": \\\"2026-07-05T14:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_launch_blocker\\\",\\n      \\\"channel\\\": \\\"proj-launch\\\",\\n      \\\"updated_at\\\": \\\"2026-08-31T15:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_harbor_007\\\",\\n      \\\"channel\\\": \\\"proj-harbor-3\\\",\\n      \\\"updated_at\\\": \\\"2026-07-08T17:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_keystone_010\\\",\\n      \\\"channel\\\": \\\"proj-keystone-2\\\",\\n      \\\"updated_at\\\": \\\"2026-07-11T11:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_nimbus_013\\\",\\n      \\\"channel\\\": \\\"proj-nimbus-1\\\",\\n      \\\"updated_at\\\": \\\"2026-07-14T14:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_atlas_016\\\",\\n      \\\"channel\\\": \\\"proj-atlas-0\\\",\\n      \\\"updated_at\\\": \\\"2026-07-17T17:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_delta_019\\\",\\n      \\\"channel\\\": \\\"proj-delta-3\\\",\\n      \\\"updated_at\\\": \\\"2026-07-20T11:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_grove_022\\\",\\n      \\\"channel\\\": \\\"proj-grove-2\\\",\\n      \\\"updated_at\\\": \\\"2026-07-23T14:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_juniper_025\\\",\\n      \\\"channel\\\": \\\"proj-juniper-1\\\",\\n      \\\"updated_at\\\": \\\"2026-07-26T17:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_mesa_028\\\",\\n      \\\"channel\\\": \\\"proj-mesa-0\\\",\\n      \\\"updated_at\\\": \\\"2026-07-29T11:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_pioneer_031\\\",\\n      \\\"channel\\\": \\\"proj-pioneer-3\\\",\\n      \\\"updated_at\\\": \\\"2026-08-01T14:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_cedar_034\\\",\\n      \\\"channel\\\": \\\"proj-cedar-2\\\",\\n      \\\"updated_at\\\": \\\"2026-08-04T17:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_fjord_037\\\",\\n      \\\"channel\\\": \\\"proj-fjord-1\\\",\\n      \\\"updated_at\\\": \\\"2026-08-07T11:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_ion_040\\\",\\n      \\\"channel\\\": \\\"proj-ion-0\\\",\\n      \\\"updated_at\\\": \\\"2026-08-10T14:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_lumen_043\\\",\\n      \\\"channel\\\": \\\"proj-lumen-3\\\",\\n      \\\"updated_at\\\": \\\"2026-08-13T17:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_orchid_046\\\",\\n      \\\"channel\\\": \\\"proj-orchid-2\\\",\\n      \\\"updated_at\\\": \\\"2026-08-16T11:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_beacon_049\\\",\\n      \\\"channel\\\": \\\"proj-beacon-1\\\",\\n      \\\"updated_at\\\": \\\"2026-08-19T14:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_ember_052\\\",\\n      \\\"channel\\\": \\\"proj-ember-0\\\",\\n      \\\"updated_at\\\": \\\"2026-08-22T17:00:00Z\\\"\\n    },\\n    {\\n      \\\"id\\\": \\\"chat_harbor_055\\\",\\n      \\\"channel\\\": \\\"proj-harbor-3\\\",\\n      \\\"updated_at\\\": \\\"2026-08-25T11:00:00Z\\\"\\n    }\\n  ],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 20,\\n    \\\"total_items\\\": 27,\\n    \\\"total_pages\\\": 2\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 27,
+      "timestamp": "2026-09-30T20:06:10.145899329+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-a76b7c5ad6754c54aa7b65d876ca3568",
+          "function_name": "mcp__enterprise_world__chat_read_thread",
+          "arguments": {
+            "thread_id": "chat_beacon_001"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-a76b7c5ad6754c54aa7b65d876ca3568",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"thread\\\": {\\n    \\\"id\\\": \\\"chat_beacon_001\\\",\\n    \\\"channel\\\": \\\"proj-beacon-1\\\",\\n    \\\"updated_at\\\": \\\"2026-07-02T11:00:00Z\\\",\\n    \\\"messages\\\": [\\n      {\\n        \\\"id\\\": \\\"chat_beacon_001_message_00\\\",\\n        \\\"author\\\": \\\"casey.brooks.002@example.test\\\",\\n        \\\"body\\\": \\\"The Beacon team is reviewing a security evidence checklist for a different release. No decision is recorded here.\\\"\\n      }\\n    ]\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 28,
+      "timestamp": "2026-09-30T20:06:12.453789333+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-f42aa13d153743b4ae90e1b6d7a9a2ad",
+          "function_name": "mcp__enterprise_world__chat_read_thread",
+          "arguments": {
+            "thread_id": "chat_harbor_007"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-f42aa13d153743b4ae90e1b6d7a9a2ad",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"thread\\\": {\\n    \\\"id\\\": \\\"chat_harbor_007\\\",\\n    \\\"channel\\\": \\\"proj-harbor-3\\\",\\n    \\\"updated_at\\\": \\\"2026-07-08T17:00:00Z\\\",\\n    \\\"messages\\\": [\\n      {\\n        \\\"id\\\": \\\"chat_harbor_007_message_00\\\",\\n        \\\"author\\\": \\\"devon.diaz.019@example.test\\\",\\n        \\\"body\\\": \\\"The Harbor team is reviewing a security evidence checklist for a different release. No decision is recorded here.\\\"\\n      }\\n    ]\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 29,
+      "timestamp": "2026-09-30T20:06:14.559425362+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-6d4b00efe41e4f4886fd72d5d467547f",
+          "function_name": "mcp__enterprise_world__chat_read_thread",
+          "arguments": {
+            "thread_id": "chat_keystone_010"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-6d4b00efe41e4f4886fd72d5d467547f",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"thread\\\": {\\n    \\\"id\\\": \\\"chat_keystone_010\\\",\\n    \\\"channel\\\": \\\"proj-keystone-2\\\",\\n    \\\"updated_at\\\": \\\"2026-07-11T11:00:00Z\\\",\\n    \\\"messages\\\": [\\n      {\\n        \\\"id\\\": \\\"chat_keystone_010_message_00\\\",\\n        \\\"author\\\": \\\"morgan.diaz.028@example.test\\\",\\n        \\\"body\\\": \\\"The Keystone team is reviewing a security evidence checklist for a different release. No decision is recorded here.\\\"\\n      }\\n    ]\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 30,
+      "timestamp": "2026-09-30T20:06:16.683914486+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-83bb28f8388741a7b9c032fe96224ce5",
+          "function_name": "mcp__enterprise_world__chat_search",
+          "arguments": {
+            "page_size": 10,
+            "query": "sign off"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-83bb28f8388741a7b9c032fe96224ce5",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [\\n    {\\n      \\\"id\\\": \\\"chat_launch_blocker\\\",\\n      \\\"channel\\\": \\\"proj-launch\\\",\\n      \\\"updated_at\\\": \\\"2026-08-31T15:00:00Z\\\"\\n    }\\n  ],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 10,\\n    \\\"total_items\\\": 1,\\n    \\\"total_pages\\\": 1\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 31,
+      "timestamp": "2026-09-30T20:06:19.706144873+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-9c893b1e981742c6ab58c399c7d9538f",
+          "function_name": "mcp__enterprise_world__mail_search",
+          "arguments": {
+            "page_size": 10,
+            "query": "launch blocker security"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-9c893b1e981742c6ab58c399c7d9538f",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [\\n    {\\n      \\\"id\\\": \\\"mail_keystone_010\\\",\\n      \\\"subject\\\": \\\"Archived Keystone launch blocker review\\\",\\n      \\\"participants\\\": [\\n        \\\"jordan.lee.security@example.test\\\",\\n        \\\"devon.diaz.019@example.test\\\"\\n      ],\\n      \\\"updated_at\\\": \\\"2026-07-11T09:00:00Z\\\"\\n    }\\n  ],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 10,\\n    \\\"total_items\\\": 1,\\n    \\\"total_pages\\\": 1\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 32,
+      "timestamp": "2026-09-30T20:06:22.187935517+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-98f7cd1a0f0f42489eb744b0cbe18cd7",
+          "function_name": "mcp__enterprise_world__mail_read_thread",
+          "arguments": {
+            "thread_id": "mail_keystone_010"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-98f7cd1a0f0f42489eb744b0cbe18cd7",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"thread\\\": {\\n    \\\"id\\\": \\\"mail_keystone_010\\\",\\n    \\\"subject\\\": \\\"Archived Keystone launch blocker review\\\",\\n    \\\"participants\\\": [\\n      \\\"jordan.lee.security@example.test\\\",\\n      \\\"devon.diaz.019@example.test\\\"\\n    ],\\n    \\\"updated_at\\\": \\\"2026-07-11T09:00:00Z\\\",\\n    \\\"messages\\\": [\\n      {\\n        \\\"id\\\": \\\"mail_keystone_010_message_00\\\",\\n        \\\"author\\\": \\\"jordan.lee.security@example.test\\\",\\n        \\\"body\\\": \\\"Historical Keystone record 010. The referenced review item was closed before the current Q3 launch; confirm current status elsewhere.\\\"\\n      }\\n    ]\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 33,
+      "timestamp": "2026-09-30T20:06:24.575936382+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-a0d026720c654c12adcca3e09b170398",
+          "function_name": "mcp__enterprise_world__mail_search",
+          "arguments": {
+            "page_size": 10,
+            "query": "security evidence packet"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-a0d026720c654c12adcca3e09b170398",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [\\n    {\\n      \\\"id\\\": \\\"mail_q3_launch\\\",\\n      \\\"subject\\\": \\\"Q3 launch readiness\\\",\\n      \\\"participants\\\": [\\n        \\\"ava.patel@example.test\\\",\\n        \\\"mina.ortiz@example.test\\\"\\n      ],\\n      \\\"updated_at\\\": \\\"2026-08-30T16:00:00Z\\\"\\n    }\\n  ],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 10,\\n    \\\"total_items\\\": 1,\\n    \\\"total_pages\\\": 1\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 34,
+      "timestamp": "2026-09-30T20:06:26.511956813+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-67c904b730304bb99f868410e7d6767c",
+          "function_name": "mcp__enterprise_world__mail_read_thread",
+          "arguments": {
+            "thread_id": "mail_q3_launch"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-67c904b730304bb99f868410e7d6767c",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"thread\\\": {\\n    \\\"id\\\": \\\"mail_q3_launch\\\",\\n    \\\"subject\\\": \\\"Q3 launch readiness\\\",\\n    \\\"participants\\\": [\\n      \\\"ava.patel@example.test\\\",\\n      \\\"mina.ortiz@example.test\\\"\\n    ],\\n    \\\"updated_at\\\": \\\"2026-08-30T16:00:00Z\\\",\\n    \\\"messages\\\": [\\n      {\\n        \\\"id\\\": \\\"mail_q3_1\\\",\\n        \\\"author\\\": \\\"mina.ortiz@example.test\\\",\\n        \\\"body\\\": \\\"Security sign-off is pending the final evidence packet.\\\"\\n      },\\n      {\\n        \\\"id\\\": \\\"mail_q3_2\\\",\\n        \\\"author\\\": \\\"ava.patel@example.test\\\",\\n        \\\"body\\\": \\\"I will send the packet before Tuesday's review.\\\"\\n      }\\n    ]\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 35,
+      "timestamp": "2026-09-30T20:06:26.524070775+00:00",
+      "source": "agent",
+      "model_name": "nvidia/nvidia/nemotron-3-ultra",
+      "message": "Based on my search through the enterprise-world system, I found the **launch blocker conversation** in the `proj-launch` channel (thread `chat_launch_blocker`). Here's what Security said:\n\n**In the chat thread (`chat_launch_blocker`):**\n- **mina.ortiz (Security)**: \"Once it is attached, Security can sign off in one business day.\"\n\n**In the related email thread (`mail_q3_launch` - Q3 launch readiness):**\n- **mina.ortiz (Security)**: \"Security sign-off is pending the final evidence packet.\"\n\n**Summary:** The launch blocker is the **missing security evidence packet**. Security (mina.ortiz) stated they can provide sign-off **within one business day** once the evidence packet is attached/delivered. Ava Patel committed to sending the packet before Tuesday's review."
+    }
+  ]
+}

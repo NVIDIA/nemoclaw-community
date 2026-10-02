@@ -1,0 +1,48 @@
+schema_version = "1.4"
+artifacts = []
+
+[task]
+name = "hermes-flywheel/approval-reviewable-launch-draft"
+version = "3.0.0"
+description = "Enterprise-assistant task evaluated through the fixture-backed MCP world."
+authors = [{ name = "NVIDIA Demo" }]
+keywords = ["enterprise-assistant", "hermes", "mcp", "trace-derived"]
+
+[agent]
+timeout_sec = 300.0
+network_mode = "no-network"
+
+[verifier]
+timeout_sec = 60.0
+environment_mode = "separate"
+network_mode = "no-network"
+
+[verifier.environment]
+network_mode = "no-network"
+build_timeout_sec = 300.0
+cpus = 1
+memory_mb = 1024
+storage_mb = 2048
+
+[environment]
+network_mode = "no-network"
+build_timeout_sec = 1800.0
+cpus = 2
+memory_mb = 4096
+storage_mb = 10240
+os = "linux"
+
+[[environment.mcp_servers]]
+name = "enterprise-world"
+transport = "stdio"
+# Hermes deliberately launches stdio servers with a minimal environment.
+# Supply this task-local import path explicitly instead of relying on the
+# image's inherited PYTHONPATH.
+command = "/usr/bin/env"
+args = [
+  "PYTHONPATH=/opt/enterprise", "python",
+  "-m", "pa_style_mock_mcp.mcp_sdk_stdio",
+  "--world", "/opt/enterprise/world.json",
+  "--call-log", "/logs/artifacts/tool-calls.jsonl",
+  "--catalog", "extended",
+]

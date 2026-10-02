@@ -1,0 +1,25 @@
+version: 1
+
+filesystem_policy:
+  include_workdir: true
+  read_only: [/bin, /usr, /lib, /proc, /dev/urandom, /opt, /etc, /var/log]
+  read_write: [/workspace, /tmp, /dev/null]
+landlock:
+  compatibility: best_effort
+
+# Model access is contributed by the attached hermes-nvidia provider. The mock
+# enterprise MCP is a separate host service, reached over Streamable HTTP. On
+# the local Docker gateway this stable name resolves to the host bridge.
+network_policies:
+  enterprise_mcp:
+    endpoints:
+      - host: host.openshell.internal
+        port: 8765
+        protocol: rest
+        access: read-write
+        enforcement: enforce
+    binaries:
+      - path: /usr/local/bin/hermes
+      - path: /usr/local/bin/python
+      - path: /usr/local/bin/python3
+      - path: /usr/local/bin/python3.12

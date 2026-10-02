@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+[project]
+name = "enterprise-assistant-harness-optimization"
+version = "0.1.0"
+description = "Deterministic enterprise MCP environment for Hermes harness optimization."
+requires-python = ">=3.11"
+
+[project.optional-dependencies]
+remote-mcp = ["mcp==1.28.1"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+ignore = ["UP017"]
