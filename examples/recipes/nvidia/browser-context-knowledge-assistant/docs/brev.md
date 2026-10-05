@@ -41,9 +41,9 @@ no sandbox. It then stops and disables only `openshell-gateway.service`, removes
 the stale client registration, and leaves the old gateway data intact.
 
 `scripts/onboard.sh` selects the repository’s `nemoclaw-managed` gateway
-declaration and opts into the authenticated compatibility-container mode. This
-avoids copying a newer native gateway onto the tested Ubuntu 22.04 host, where
-its newer glibc requirement may not be available.
+declaration. Current NemoClaw uses the version-matched native gateway on the
+tested Brev host. It does not implicitly enable the more privileged
+compatibility-container mode, which requires an explicit operator opt-in.
 
 Don’t copy individual OpenShell binaries into `/usr/local/bin`. The CLI,
 gateway, and sandbox driver need to be from a compatible build.

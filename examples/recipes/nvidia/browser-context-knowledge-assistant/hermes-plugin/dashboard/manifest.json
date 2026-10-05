@@ -2,9 +2,9 @@
   "name": "ask-nemoclaw",
   "label": "Ask NemoClaw API",
   "description": "Authenticated, persistent, non-PTY browser conversation API for the managed Chrome extension.",
-  "version": "0.9.4",
+  "version": "0.9.6",
   "icon": "Shield",
-  "entry": "dist/index.js",
+  "entry": "index.js",
   "api": "plugin_api.py",
   "tab": {
     "path": "/ask-nemoclaw",

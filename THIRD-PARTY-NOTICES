@@ -136,6 +136,13 @@ Package: Blender
 License: GPL-3.0-or-later
 URL: https://www.blender.org/
 
+Package: FreeCAD
+License: LGPL-2.1-or-later
+URL: https://github.com/FreeCAD/FreeCAD
+Notes: Required and driven over its MCP addon by
+examples/tools/nemo-platform-harness-optimization. Installed by the reader on
+their own machine; not redistributed here.
+
 Package: FFmpeg
 License: LGPL-2.1-or-later or GPL-2.0-or-later, depending on build options
 URL: https://ffmpeg.org/
@@ -231,6 +238,12 @@ URL: https://github.com/AzureAD/microsoft-authentication-library-for-python
 Package: nemo-flow
 License: Apache-2.0
 URL: https://github.com/NVIDIA/NeMo-Flow
+
+Package: nemo-platform
+License: Apache-2.0
+URL: https://github.com/NVIDIA-NeMo/nemo-platform
+Notes: Installed by the reader as a CLI tool (uv tool install) and used by
+examples/tools/nemo-platform-harness-optimization; not vendored here.
 
 Package: psycopg[binary]
 License: LGPL-3.0-only
@@ -341,6 +354,15 @@ URL: https://github.com/langchain-ai/langsmith-sdk
 Package: model-signing
 License: Apache-2.0
 URL: https://github.com/sigstore/model-transparency
+
+Package: numpy
+License: BSD-3-Clause and included component licenses (upstream distribution
+metadata records BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0)
+URL: https://github.com/numpy/numpy
+Notes: Declared by
+examples/tools/nemo-platform-harness-optimization/requirements.txt for that
+example's offline test suite only. Its live scorer runs inside FreeCAD's
+bundled interpreter, which supplies its own NumPy.
 
 Package: openai
 License: Apache-2.0
@@ -537,6 +559,14 @@ Project: ahujasid/blender-mcp
 License: MIT
 URL: https://github.com/ahujasid/blender-mcp
 
+Project: neka-nat/freecad-mcp
+Version: 0.1.24
+License: MIT
+URL: https://github.com/neka-nat/freecad-mcp
+Notes: Fetched and run by uvx at agent start, pinned to 0.1.24 in
+examples/tools/nemo-platform-harness-optimization/agent/agent.yaml. Not
+vendored in this repository.
+
 Project: lfdevs Blender Linux ARM64 build
 License: GPL-3.0-or-later and included Blender notices
 URL: https://github.com/lfdevs/blender_linux_arm64
@@ -614,3 +644,11 @@ Notes: Hermes Desktop screenshots showing the example's own bots reading public 
 Asset: devx-jupyterapp-bridge/ source directory under examples/recipes/nvidia/agentic-ai-learning-path/skills/setup-workshop-nemoclaw/assets/
 Owner: NVIDIA
 Notes: First-party JupyterLab federated extension (~2 KB) hand-crafted for this example; sets window.jupyterapp for the workshop's in-lesson buttons. Distributed as inspectable, SPDX-headed source (package.json + static/remoteEntry.js) — no prebuilt archive. Mirrors only the structure of a prebuilt labextension and contains no third-party code. Provenance documented in the skill's references/sandbox-internals.md.
+
+Asset: reference_mug.obj under examples/tools/nemo-platform-harness-optimization/meshes/
+Owner: NVIDIA
+Notes: First-party ground-truth geometry authored for this example in FreeCAD and exported to Wavefront OBJ. The example's out-of-loop scorer measures agent output against it.
+
+Asset: NeMo Studio screenshots under examples/tools/nemo-platform-harness-optimization/assets/
+Owner: NVIDIA
+Notes: Trace and Insight views of this example's own agent runs on a local platform instance. No third-party or personal content.

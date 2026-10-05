@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+schema_version = "1.4"
+
+[task]
+name = "nvidia-cad/parametric-reconstruction"
+version = "0.1.0"
+description = "PLACEHOLDER: one-line description of the reconstruction this task replays."
+keywords = ["cad", "freecad", "parametric", "reconstruction"]
+
+[metadata]
+# PLACEHOLDER: filled from the production trace this task was materialized from.
+source_mesh = "@MESH_PATH@"
+document_name = "@DOCUMENT_NAME@"
+
+[environment]
+# The agent runs host-side (harbor-native imports harbor_wrapper:WrappedAgent),
+# so this container exists only to host the verifier. It needs Python, not FreeCAD.
+image = "python:3.12-slim"
+
+[agent]
+# Generous: a parametric reconstruction is a long tool-use run.
+timeout_sec = 3600
+
+[verifier]
+timeout_sec = 600

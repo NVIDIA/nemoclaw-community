@@ -21,7 +21,7 @@ directory, adds the Relay configuration, and updates NemoClaw’s managed Hermes
 policy. It also mirrors the top-level plugin configuration into the isolated
 dashboard process.
 
-The image installs the checksum-pinned NeMo Relay 0.7.2 x86-64 wheel and runs
+The image verifies the bundled NeMo Relay 0.7.2 x86-64 package and runs
 `uv pip check`. That version satisfies the Hermes dependency range tested by
 this example. The standard `nemoclaw` plugin and the rest of the managed Hermes
 image stay in place.
@@ -67,8 +67,10 @@ The suite checks:
 - same-session image attachment;
 - tab and document changes during page capture;
 - cancellation during initialization, image attachment, and inference;
+- cancellation during vision requests, capacity waits, and retry waits;
 - cancellation, timeout, and non-PTY behavior;
 - dashboard session visibility;
+- Sessions links for root and custom dashboard paths;
 - extension builds for portable, HTTPS, loopback, and Brev paths;
 - idempotent Hermes image preparation; and
 - local-only NeMo Relay ATIF configuration.
@@ -85,7 +87,10 @@ sensitive data.
 4. Ask about a page containing readable text and a distinctive visible image.
 5. Send a follow-up and confirm the conversation is retained.
 6. Start a new conversation and confirm it doesn’t inherit the earlier one.
-7. Confirm both browser conversations appear in Hermes **Sessions**.
+7. Use the extension’s **Open NemoClaw** button and confirm both browser
+   conversations appear in Hermes **Sessions** under `dashboard-home`. Do not
+   change the native profile selector during this check; Hermes 0.20.6 can drop
+   the profile parameter and leave Sessions or Chat loading indefinitely.
 8. Change tabs, select the toolbar icon, and confirm **Refresh** starts with the
    new page context.
 9. Confirm the recipe added no external host to OpenShell policy.
@@ -129,7 +134,7 @@ third-party notices before redistributing the example or a built image.
 | Path | Purpose |
 | --- | --- |
 | `extension/` | Manifest V3 Chrome side-panel source. |
-| `release/ask-nemoclaw-extension-0.10.11.zip` | Prebuilt portable extension for local installation. |
+| `release/ask-nemoclaw-extension-0.10.12.zip` | Prebuilt portable extension for local installation. |
 | `hermes-plugin/` | Authenticated Hermes REST adapter backed by non-PTY JSON-RPC sessions. |
 | `relay/plugins.toml` | Local-only NeMo Relay ATIF configuration with provider-placeholder redaction. |
 | `scripts/prepare-hermes-image.py` | Adds the plugin, Relay settings, and managed enablement to the Hermes image source. |

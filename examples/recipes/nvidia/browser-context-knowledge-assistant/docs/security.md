@@ -102,3 +102,15 @@ still use readable page text but can’t interpret the viewport image. NemoClaw
 exposes its enforced route to Hermes as a custom provider, so this recipe marks
 that tested Omni model as vision-capable in the generated Hermes configuration.
 Other models are not marked automatically.
+
+The NVIDIA endpoint currently rejects an image when Hermes combines it with
+the tool-message schema used by a normal agent turn. The server plugin avoids
+that incompatible combination by making a bounded, tool-free vision request
+through the same `inference.local` route. It then supplies the resulting
+description to the normal Hermes turn as explicitly untrusted browser context.
+The second turn retains the agent’s skills and tools. Neither stage bypasses
+OpenShell’s managed inference route. Temporary vision failures are retried. If
+retries are exhausted and readable page text is present, the agent continues
+with that text and receives an explicit marker that viewport analysis was
+unavailable. Image-only requests fail instead of inventing missing visual
+context.

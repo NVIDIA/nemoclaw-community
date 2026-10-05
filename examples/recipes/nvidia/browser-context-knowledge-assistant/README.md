@@ -162,14 +162,26 @@ bash scripts/onboard.sh --fresh
 Enter your inference credential through the normal NemoClaw prompt. For
 viewport understanding, select
 `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` as the primary model. This is
-needed because NemoClaw and OpenShell currently expose one enforced inference
-route to Hermes. Hermes auxiliary vision expects a separate model route, so it
-doesn’t work with this recipe’s current single-route setup. Secure multi-model
-OpenShell routing, including Switchyard integration, is tracked in
+needed because the extension sends both readable page text and an image of the
+visible viewport. NemoClaw and OpenShell currently expose one enforced
+inference route to Hermes, while Hermes auxiliary vision expects a separate
+model route. Secure multi-model OpenShell routing, including Switchyard
+integration, is tracked in
 [NVIDIA/NemoClaw#8887](https://github.com/NVIDIA/NemoClaw/issues/8887). Until
-that support is available, the primary model must accept image input. A
-text-only primary model can still use readable page text, but it can’t analyze
-the viewport image.
+that support is available, the primary model must accept image input.
+
+The NVIDIA endpoint currently rejects the combined tool-message and image
+schema produced by a normal tool-enabled Hermes turn. The example therefore
+uses the same Omni model in two stages: a bounded, tool-free call describes the
+viewport through `inference.local`, then the normal Hermes turn receives that
+description as explicitly untrusted browser context. Hermes skills and tools
+remain available in the second stage. A text-only primary model can still use
+readable page text, but it cannot analyze the viewport image.
+
+The vision stage retries temporary provider failures. If those retries are
+exhausted but readable page text is available, the agent continues with that
+text and records that viewport analysis was unavailable. Image-only pages
+return a clear vision error because they have no text fallback.
 
 When onboarding finishes, check the sandbox:
 
@@ -215,7 +227,7 @@ Link as the extension URL; its redirect-based login flow isn’t an API ingress.
 ### 5. Load the Chrome extension
 
 Download the
-[prebuilt portable extension](release/ask-nemoclaw-extension-0.10.11.zip) and
+[prebuilt portable extension](release/ask-nemoclaw-extension-0.10.12.zip) and
 extract the ZIP file. It contains no deployment URL or credential.
 
 Then load the extracted directory:
@@ -260,11 +272,21 @@ contains connection and disconnect controls. Shared HTTPS deployments use the
 normal Hermes login. The extension keeps rotated session tokens only in
 Chrome’s memory-backed session storage.
 
+**Open NemoClaw** preserves the configured dashboard path and includes
+`profile=dashboard-home` so browser conversations
+and ordinary dashboard chat use the profile served by this dashboard process.
+Keep that profile selected. Hermes 0.20.6 can remove the profile parameter when
+the native profile selector changes; Sessions and Chat may then remain on their
+loading screen. Select **Open NemoClaw** again to restore the correct profile.
+
 Multimodal requests over large pages can take several minutes. The side panel
 keeps polling and shows the current request stage while Hermes works.
-**Stop** prevents prompt submission if accepted during initialization or image
-attachment. After submission, it requests a session interrupt; it does not undo
-actions that the agent has already completed.
+**Stop** cancels the conversation during viewport analysis or retry waits and
+prevents further vision retries and Hermes prompt submission. A vision request
+already sent to the provider can finish or time out, but its result is ignored.
+At most two such HTTP requests can remain active. Stop also prevents prompt
+submission during initialization. After submission, it requests a session
+interrupt; it does not undo actions that the agent has already completed.
 
 ## Verify the example
 
@@ -278,11 +300,25 @@ PYTHON_BIN=.venv/bin/python bash scripts/verify.sh
 
 For a quick live check:
 
+Run the synthetic end-to-end test from the Brev host after Hermes is ready:
+
+```bash
+bash scripts/test-functional.sh http://127.0.0.1:18789
+```
+
+It creates two isolated browser conversations and verifies page-text context,
+a follow-up turn, the bundled red viewport image, Hermes Sessions registration,
+and creation of a local NeMo Relay ATIF trace. The test uses only generated
+content; it does not submit a real browser page.
+
+For a manual browser check:
+
 1. Open a public page with readable text and a distinctive image or diagram.
 2. Ask for a short summary and a description of what’s visible.
 3. Send a follow-up question and confirm that it keeps the conversation.
 4. Select **New** and confirm that the new conversation starts without the old context.
-5. Open Hermes **Sessions** and confirm that both browser conversations appear.
+5. Select **Open NemoClaw**, then confirm that both browser conversations appear
+   in Hermes **Sessions**. Keep the `dashboard-home` profile selected.
 6. Check `/sandbox/.hermes-data/nemo-relay/atif` for a new trace file. Don’t
    inspect trace values when the page contains sensitive data.
 

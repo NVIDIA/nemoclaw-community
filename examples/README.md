@@ -36,8 +36,10 @@ Reusable NemoClaw agent workflows contributed by partner organizations, with att
 | --- | --- | --- | --- |
 | [x402 Payment Gate](recipes/partners/bluetier/x402-payment-gate/README.md) | BlueTier Operations | 💳 Financial Services | Demonstrates a maker-checker gate for x402 payments: a sandboxed agent submits intents, while a host-side Blackwall verdict controls mock signing and settlement before any signature exists. |
 | [Retail Assistant](recipes/partners/hpe/retail-assistant/README.md) | HPE | 🛍️ Retail/Consumer Packaged Goods | Helps store employees check inventory and sales or request transfers and reorders through role-aware Telegram conversations scoped to their assigned store. |
+| [Workday HR assistant with role-scoped tool access](recipes/partners/merge/workday-hr-assistant/README.md) | Merge | ✨ Other | Give a NemoClaw agent read access to Workday workers, organizations, and time-off through a Merge Agent Handler Tool Pack that withholds compensation, payslip, and payment tools. |
 | [Shrike Security Action Governance](recipes/partners/shrike/shrike-security/README.md) | Shrike Security, Inc. | ✨ Other | Governs action-bearing OpenClaw tool calls, including shell commands, SQL, file writes, and web requests. An in-sandbox hook sends action content to Shrike policy before execution and blocks prohibited or approval-required calls. It complements, but does not replace, OpenShell isolation. |
 | [Watchtower](recipes/partners/tavily/watchtower/README.md) | Tavily | ✨ Other | Tracks what changed across chosen web topics and why it matters, producing scheduled, deduplicated Markdown digests and JSON changelogs with source citations. |
+| [Telnyx Inference provider](recipes/partners/telnyx/inference-provider/README.md) | Telnyx | ✨ Other | Connects a NemoClaw sandbox to Telnyx Inference through Telnyx's OpenAI-compatible API. |
 
 ## [Community Recipes](recipes/community/README.md)
 
@@ -54,7 +56,7 @@ Bounded NemoClaw demonstrations built for specific NVIDIA field scenarios, hardw
 
 | Example | Industry | Description |
 | --- | --- | --- |
-| [Build-a-Claw Tutorial](demos/field/build-a-claw-tutorial/README.md) | 🎓 Academia/Education | Guides DGX Spark users through serving local multimodal models with llama.cpp, connecting an agent harness, and trying coding, vision, browser, messaging, and speech workflows. |
+| [Build-a-Claw Tutorial](demos/field/build-a-claw-tutorial/README.md) | 🎓 Academia/Education | Guides DGX Spark users through serving local multimodal models with vLLM or llama.cpp, connecting an agent harness, and trying coding, vision, browser, messaging, and speech workflows. |
 | [DGX Station Blender and Omniverse](demos/field/blender-omniverse-dgx-station/README.md) | 🎬 Media & Entertainment | Lets users direct a specialized Hermes agent on DGX Station across Blender and NVIDIA Omniverse workflows, producing scene edits, OVRTX renders, native OVPhysX simulations, and replay evidence. |
 
 ## [Developer Tools](tools/README.md)
@@ -66,6 +68,7 @@ Standalone utilities that help developers build, evaluate, inspect, or operate N
 | [Agent Memory Benchmark](tools/agent-memory-benchmark/README.md) | ✨ Other | Measures memory built from synthetic email and chat, asks 186 questions on one corpus and 96 on a second, and reports accuracy by question type with ingest and answer token costs. |
 | [Harness Engineering Playground](tools/harness-engineering-playground/README.md) | ✨ Other | Provides an experimental loop for tuning DeepAgents harness profiles against behavioral evaluations, keeping fixes that pass verification and rolling back rejected edits. |
 | [Kubernetes Deployer](tools/kubernetes-deployer/README.md) | ✨ Other | Deploys the official NemoClaw-managed Hermes image behind an OpenShell gateway on Kubernetes or OpenShift, with the Hermes dashboard, OpenAI-compatible API, and terminal access, plus extension points that skill recipes build on. |
+| [NeMo Platform Harness Optimization](tools/nemo-platform-harness-optimization/README.md) | 🏭 Manufacturing | Deploys a CAD agent against a live desktop application, scores its output geometrically, turns its traces into Insights, and lets the platform author an eval and propose a fix against it. |
 | [Tracing Agent Harness Behavior with NVIDIA NeMo Relay](tools/hermes-relay-tracing/README.md) | ✨ Other | Runs verified Hermes Agent tool-use tasks and produces NeMo Relay traces for local inspection and evaluation. |
 
 ## Collections
@@ -76,7 +79,7 @@ Guided demos, tutorials, and reusable recipes created through the Build-a-Claw p
 
 | Example | Category | Industry | Description |
 | --- | --- | --- | --- |
-| [Build-a-Claw Tutorial](demos/field/build-a-claw-tutorial/README.md) | NVIDIA Field Demos | 🎓 Academia/Education | Guides DGX Spark users through serving local multimodal models with llama.cpp, connecting an agent harness, and trying coding, vision, browser, messaging, and speech workflows. |
+| [Build-a-Claw Tutorial](demos/field/build-a-claw-tutorial/README.md) | NVIDIA Field Demos | 🎓 Academia/Education | Guides DGX Spark users through serving local multimodal models with vLLM or llama.cpp, connecting an agent harness, and trying coding, vision, browser, messaging, and speech workflows. |
 
 ### [Hackathon Recipes](collections/hackathon/README.md)
 

@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+schema_version = "1.4"
+
+[task]
+name = "nvidia-cad/parametric-mug"
+version = "0.1.0"
+description = "Reconstruct the coffee-mug mesh as a parametric PartDesign feature tree."
+keywords = ["cad", "freecad", "parametric", "reconstruction"]
+
+[metadata]
+# `@MESH_PATH@` is resolved by harbor_wrapper.py at invoke time; it must be
+# checkout's meshes/reference_mug.obj. Re-run it if you move the checkout.
+source_mesh = "@MESH_PATH@"
+document_name = "EvalMug"
+
+[environment]
+# The agent runs host-side (harbor-native imports harbor_wrapper:WrappedAgent),
+# so this container exists only to host the verifier. It needs Python, not FreeCAD.
+image = "python:3.12-slim"
+
+[agent]
+# Generous: a parametric reconstruction is a long tool-use run.
+timeout_sec = 3600
+
+[verifier]
+timeout_sec = 600

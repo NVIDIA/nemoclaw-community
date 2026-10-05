@@ -1,0 +1,123 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+config_format: nemo-agents-spec-v1
+name: cad-agent
+description: A CAD agent executed with DeepAgents against a live FreeCAD session
+
+instructions:
+  system:
+    content: |
+      You are a CAD Agent (Computer Aided Design).
+
+      A skills library is available at /skills/. Before starting a task, check
+      whether a skill applies and read the applicable SKILL.md with read_file.
+
+      ## Fidelity-gated reconstruction loop
+
+      Treat geometric correspondence to the supplied reference as the completion
+      criterion; a valid, visible model with approximately correct extents is not
+      sufficient. Establish reference measurements before fitting, and maintain a
+      best-so-far comparison throughout the run.
+
+      After every substantial geometry change, use the FreeCAD tools to measure
+      the reference and current candidate in the same coordinate frame and compare
+      all of the following:
+
+      1. enclosed volume;
+      2. axis-aligned bounds, including both size and placement;
+      3. volumetric overlap (intersection over union), which is a mandatory
+         guardrail rather than a substitute for shape fidelity; and
+      4. bidirectional surface distance, reporting candidate-to-reference and
+         reference-to-candidate separately so missing and excess geometry cannot
+         cancel each other.
+
+      Gather the four comparisons together in one FreeCAD execution whenever
+      practical (surface distances may use representative surface sampling), so
+      validation does not become a long sequence of GUI-dispatch calls. Record the
+      measurements and their deltas from the previous best. If any discrepancy is
+      material in the context of the reference or correspondence has not improved,
+      remain in this same run and return to geometric fitting: inspect where the
+      mismatch occurs, revise the responsible dimensions, placement, profile, or
+      feature, recompute the model, and measure again. Do not route to completion
+      merely because the document recomputes, objects are visible, bounds are
+      close, or one metric improved.
+
+      Keep the loop purposeful and bounded: make at most three measured fitting
+      revisions, retaining the best measured candidate rather than repeatedly
+      perturbing a non-improving model. Complete only after the combined evidence
+      shows improved correspondence and no material discrepancy remains. If the
+      fitting budget is exhausted while a material discrepancy remains, preserve
+      the best valid document but report that fidelity is unresolved rather than
+      claiming completion. In the final response, justify the decision with the
+      final volume, bounds, overlap, and both directed surface-distance comparisons
+      against the reference, plus the improvement from the prior or initial
+      candidate.
+
+default_harness: deepagents
+
+harnesses:
+  deepagents:
+    kind: deepagents
+    settings:
+      deepagents: {}
+
+
+models:
+  default:
+    provider: nvidia
+    # SUBSTITUTE: model entities are auto-discovered per workspace, so this name
+    # does not exist on your platform. List yours with `nemo models list
+    # --all-pages` (that command paginates at 100 results) and paste one here.
+    model: azure-openai-gpt-5-6-sol
+    # Required when the agent is built from this file rather than served by a
+    # deployment: the deepagents adapter's preflight demands both. The runner
+    # injects NEMO_AGENTS_IGW_API_KEY for deployments, so naming it here keeps
+    # one config working for both paths. The value is unused for
+    # platform-routed models; export it as any non-empty string locally.
+    api_key_env: NEMO_AGENTS_IGW_API_KEY
+    base_url: http://localhost:8080/apis/inference-gateway/v2/workspaces/default/openai/-/v1
+
+mcp:
+  servers:
+    freecad:
+      transport: stdio
+      # SUBSTITUTE: for stdio transport, `url` is the executable path, and the
+      # harness subprocess does not reliably inherit your PATH — so an absolute
+      # path is required. Find yours with `command -v uvx`. The value below is
+      # the Homebrew location on macOS; a Linux install typically lands in
+      # ~/.local/bin/uvx or ~/.cargo/bin/uvx.
+      url: /opt/homebrew/bin/uvx
+      args:
+        # Pinned so an upstream freecad-mcp release cannot change tool behaviour
+        # underneath this example. 0.1.24 is the version this was verified on.
+        - --from
+        - freecad-mcp==0.1.24
+        - freecad-mcp
+        # Suppresses screenshot ImageContent. Keep this while the model is
+        # text-only; drop it only alongside a vision-capable model.
+        - --only-text-feedback
+      exposure: harness_native
+
+tools:
+  blocked: []
+
+environment:
+  workspace: ./workspace
+  artifacts: ./artifacts
+
+telemetry:
+  enabled: true
+  provider: relay
+  output_dir: ./traces
+  atif:
+    enabled: true
+    filename_template: trajectory-{session_id}.atif.json
+    storage:
+      - type: http
+        # SUBSTITUTE (host and workspace): this URL hardcodes a platform at
+        # localhost:8080 and the `default` workspace. Change both segments if
+        # your platform or workspace differs — this endpoint line and the
+        # `model:` line above are the only machine-specific values in this file.
+        endpoint: http://localhost:8080/apis/intake/v2/workspaces/default/ingest/atif
+        timeout_millis: 3000

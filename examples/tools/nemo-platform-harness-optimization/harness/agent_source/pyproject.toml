@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+[project]
+name = "cad-agent-harbor"
+version = "0.1.0"
+description = "Harbor entry point for the NeMo cad-agent, run against a live FreeCAD session."
+requires-python = ">=3.12"
+dependencies = ["httpx>=0.27"]
+
+[tool.setuptools]
+py-modules = ["harbor_wrapper"]

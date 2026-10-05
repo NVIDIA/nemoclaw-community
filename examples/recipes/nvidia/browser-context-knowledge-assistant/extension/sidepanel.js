@@ -111,6 +111,13 @@ function applyNemoClawUrl(dashboardUrl, preferredServiceUrl = null) {
   nemoClawServiceUrl = nemoClawServiceUrls[0];
 }
 
+function nemoClawConversationDashboardUrl() {
+  const url = new URL(nemoClawDashboardUrl);
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}/sessions`;
+  url.searchParams.set("profile", "dashboard-home");
+  return url.href;
+}
+
 async function loadNemoClawOrigin() {
   const stored = await chrome.storage.local.get([
     "askNemoClawUrl",
@@ -1300,7 +1307,7 @@ elements.newConversationButton.addEventListener("click", createNewConversation);
 elements.refreshButton.addEventListener("click", refreshPageAndCreateConversation);
 elements.checkConnectionButton.addEventListener("click", () => checkNemoClawConnection(true));
 elements.openNemoClawButton.addEventListener("click", () => {
-  if (nemoClawDashboardUrl) chrome.tabs.create({ url: nemoClawDashboardUrl });
+  if (nemoClawDashboardUrl) chrome.tabs.create({ url: nemoClawConversationDashboardUrl() });
   else showSettings();
 });
 elements.settingsButton.addEventListener("click", showSettings);

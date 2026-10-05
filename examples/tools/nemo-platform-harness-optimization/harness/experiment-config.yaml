@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# Settings for `nemo agents experimentalist run`, sized down from the platform
+# defaults (15 rounds x 3 candidates) because every trial here is a full CAD
+# reconstruction of several minutes against one live FreeCAD session.
+#
+# Shaped by a measured false positive: with one trial per task against a
+# stochastic agent, the selector could not tell a real improvement from
+# run-to-run variance and crowned a candidate whose IoU had gone *down*. See
+# the README's step 7 for the two external checks that caught it.
+
+# Narrower than the platform's 3 candidates, and deliberately so: the cost of
+# a wider search here is measured in hours of FreeCAD time.
+max_candidates: 2
+max_survivors: 3
+
+# Rounds capped for cost; every trial is a full CAD reconstruction.
+max_rounds: 1
+min_rounds_before_stopping: 1
+
+outcome_evaluator_config:
+  # The actual fix: measure every task twice and average, so a lucky run
+  # cannot win on its own.
+  n_attempts: 2
+  # One live FreeCAD session is a single shared resource.
+  n_concurrent_trials: 1
+  quiet: false
+
+storage:
+  publish_winner: false     # defaults to true
+  archive_candidates: false
+
+# Ground truth as a floor, not a target. The Eval Author's authored metrics
+# become the objective; anything listed here is demoted to a guardrail, so a
+# candidate cannot win by trading geometric fidelity for a better proxy.
+regression_metrics:
+  - name: eval_iou
+    direction: maximize

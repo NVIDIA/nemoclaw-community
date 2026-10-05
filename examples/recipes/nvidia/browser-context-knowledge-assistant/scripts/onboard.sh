@@ -16,12 +16,11 @@ OPENSHELL_BIN="${OPENSHELL_BIN:-$HOME/.local/bin/openshell}"
 [[ -x "$NEMOHERMES_BIN" ]] || NEMOHERMES_BIN="$(command -v nemohermes || true)"
 [[ -x "$OPENSHELL_BIN" ]] || OPENSHELL_BIN="$(command -v openshell || true)"
 
-# Current NemoClaw requires a current OpenShell gateway for provider and
-# inference-route configuration. On the tested Ubuntu 22.04 Brev launchable,
-# the image-owned gateway is older and the native current binary exceeds the
-# host glibc level. After prepare-brev-gateway.sh performs the explicit
-# lifecycle handoff, select NemoClaw-managed mode and its documented,
-# authenticated compatibility container.
+# Current NemoClaw requires a version-matched OpenShell gateway for provider
+# and inference-route configuration. After prepare-brev-gateway.sh performs
+# the explicit lifecycle handoff, select NemoClaw-managed mode. NemoClaw then
+# uses the native gateway when it is compatible with the host and requires an
+# explicit opt-in before using its compatibility-container mode.
 GATEWAY_WILL_START=0
 if [[ -r /etc/nemoclaw/gateway-management.env ]]; then
   if [[ "$(systemctl is-active openshell-gateway.service 2>/dev/null || true)" == active ]]; then
@@ -33,7 +32,6 @@ EOF
     exit 1
   fi
   export NEMOCLAW_GATEWAY_MANAGEMENT="$ROOT/deploy/brev/nemoclaw-managed-gateway.json"
-  export NEMOCLAW_OPENSHELL_GATEWAY_CONTAINER_PATCH="${NEMOCLAW_OPENSHELL_GATEWAY_CONTAINER_PATCH:-1}"
   # The launchable's interactive shell exports these paths for its retired
   # externally supervised gateway. They must not override the current managed
   # gateway's user-owned state and generated TLS bundle.
