@@ -37,6 +37,13 @@ def load_trials(job_dir: Path) -> dict[str, list[dict[str, Any]]]:
             if report_path.is_file()
             else {}
         )
+        fingerprint_path = (
+            result_path.parent / "artifacts/logs/artifacts/runtime-fingerprint.json"
+        )
+        if not fingerprint_path.is_file():
+            raise ValueError(f"missing runtime fingerprint in {result_path.parent}")
+        config = result.get("config") or {}
+        agent = config.get("agent") or {}
         grouped[task_id].append(
             {
                 "trial": result.get("trial_name"),
@@ -44,11 +51,69 @@ def load_trials(job_dir: Path) -> dict[str, list[dict[str, Any]]]:
                 "exception": result.get("exception_info"),
                 "tool_calls": len(report.get("tool_calls", [])),
                 "failures": report.get("failures", []),
+                "arm": (agent.get("kwargs") or {}).get("arm"),
+                "requested_model": agent.get("model_name"),
+                "task_checksum": result.get("task_checksum"),
+                "agent_timeout_multiplier": config.get(
+                    "agent_timeout_multiplier", config.get("timeout_multiplier", 1.0)
+                ),
+                "runtime_fingerprint": json.loads(fingerprint_path.read_text(encoding="utf-8")),
             }
         )
     for trials in grouped.values():
         trials.sort(key=lambda item: str(item.get("trial") or ""))
     return dict(grouped)
+
+
+def validate_run_identity(
+    runs: list[tuple[str, dict[str, list[dict[str, Any]]]]],
+) -> None:
+    """Allow only the selected profile to differ across the measured runs."""
+    common_settings: set[str] = set()
+    profiles: dict[str, set[str]] = defaultdict(set)
+    checksums: dict[str, set[str]] = defaultdict(set)
+    hash_fields = (
+        "harness_config_sha256", "profile_sha256", "policy_sha256", "fixture_sha256",
+    )
+    for expected_arm, tasks in runs:
+        for task_id, trials in tasks.items():
+            for trial in trials:
+                label = f"{expected_arm}/{task_id}/{trial['trial']}"
+                fingerprint = trial["runtime_fingerprint"]
+                if not isinstance(fingerprint, dict) or fingerprint.get("schema") != "hermes-runtime-fingerprint-v1":
+                    raise ValueError(f"invalid runtime fingerprint: {label}")
+                if trial["arm"] != expected_arm or fingerprint.get("arm") != expected_arm:
+                    raise ValueError(f"recorded arm differs from {expected_arm}: {label}")
+                model = trial["requested_model"]
+                if not isinstance(model, str) or not model or fingerprint.get("requested_model") != model:
+                    raise ValueError(f"missing or inconsistent model identity: {label}")
+                budget = trial["agent_timeout_multiplier"]
+                if isinstance(budget, bool) or not isinstance(budget, (int, float)) or not math.isfinite(budget) or budget <= 0:
+                    raise ValueError(f"invalid timeout budget: {label}")
+                for field in ("provider", "provider_base_url", "openshell_image", *hash_fields):
+                    if not isinstance(fingerprint.get(field), str) or not fingerprint[field]:
+                        raise ValueError(f"missing runtime {field}: {label}")
+                implementation = fingerprint.get("mcp_implementation_sha256")
+                if not isinstance(implementation, dict) or any(
+                    not isinstance(implementation.get(name), str) or not implementation[name]
+                    for name in ("tools.py", "world.py")
+                ):
+                    raise ValueError(f"missing MCP implementation identity: {label}")
+                checksum = trial["task_checksum"]
+                if not isinstance(checksum, str) or not checksum:
+                    raise ValueError(f"missing task checksum: {label}")
+                checksums[task_id].add(checksum)
+                profiles[expected_arm].add(fingerprint["profile_sha256"])
+                common = {key: value for key, value in fingerprint.items()
+                          if key not in ("arm", "profile_sha256")}
+                common["agent_timeout_multiplier"] = budget
+                common_settings.add(json.dumps(common, sort_keys=True))
+    if len(common_settings) != 1:
+        raise ValueError("model, timeout budget or shared runtime settings differ across comparison runs")
+    if any(len(values) != 1 for values in profiles.values()):
+        raise ValueError("profile changed within an arm across comparison runs")
+    if any(len(values) != 1 for values in checksums.values()):
+        raise ValueError("task checksum differs across comparison runs")
 
 
 def summarize_arm(trials: dict[str, list[dict[str, Any]]], attempts: int) -> dict[str, Any]:
@@ -86,9 +151,11 @@ def compare_split(
     candidate_job: Path,
     expected_ids: set[str],
     attempts: int,
+    *,
+    loaded_trials: tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]]] | None = None,
 ) -> dict[str, Any]:
-    baseline = load_trials(baseline_job)
-    candidate = load_trials(candidate_job)
+    baseline, candidate = loaded_trials or (load_trials(baseline_job), load_trials(candidate_job))
+    validate_run_identity([("baseline", baseline), ("candidate", candidate)])
     if set(baseline) != expected_ids:
         raise ValueError(f"baseline task IDs differ from frozen split: {sorted(set(baseline) ^ expected_ids)}")
     if set(candidate) != expected_ids:
@@ -130,15 +197,23 @@ def compare(
     }
     if not dev_ids or not held_ids:
         raise ValueError("frozen suite must contain development and held-out tasks")
+    development = (load_trials(baseline_development), load_trials(candidate_development))
+    held_out = (load_trials(baseline_held_out), load_trials(candidate_held_out))
+    validate_run_identity([
+        ("baseline", development[0]), ("candidate", development[1]),
+        ("baseline", held_out[0]), ("candidate", held_out[1]),
+    ])
     return {
         "schema": "hermes-harbor-ab-comparison-v3",
         "suite": str(suite_path),
         "attempts_per_task_per_arm": attempts,
         "development": compare_split(
-            baseline_development, candidate_development, dev_ids, attempts
+            baseline_development, candidate_development, dev_ids, attempts,
+            loaded_trials=development,
         ),
         "held_out": compare_split(
-            baseline_held_out, candidate_held_out, held_ids, attempts
+            baseline_held_out, candidate_held_out, held_ids, attempts,
+            loaded_trials=held_out,
         ),
         "acceptance": {
             "candidate_improves_development": False,
@@ -160,14 +235,17 @@ def main() -> int:
     args = parser.parse_args()
     if args.attempts < 3:
         parser.error("--attempts must be at least 3")
-    report = compare(
-        args.suite,
-        baseline_development=args.baseline_development,
-        candidate_development=args.candidate_development,
-        baseline_held_out=args.baseline_held_out,
-        candidate_held_out=args.candidate_held_out,
-        attempts=args.attempts,
-    )
+    try:
+        report = compare(
+            args.suite,
+            baseline_development=args.baseline_development,
+            candidate_development=args.candidate_development,
+            baseline_held_out=args.baseline_held_out,
+            candidate_held_out=args.candidate_held_out,
+            attempts=args.attempts,
+        )
+    except ValueError as error:
+        parser.exit(1, f"Invalid comparison: {error}\n")
     report["acceptance"].update(
         candidate_improves_development=report["development"]["candidate_improved"],
         candidate_improves_held_out=report["held_out"]["candidate_improved"],

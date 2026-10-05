@@ -798,6 +798,11 @@ in `.runs/measured-ab.json`. An accepted result meets all those conditions.
 The comparator exits with code `2` when its acceptance checks fail and still
 writes the comparison for you to inspect.
 
+Before scoring the comparison, it checks the recorded agent configuration,
+model, task checksums, timeout budgets and runtime hashes across all four jobs.
+If those inputs differ beyond the selected baseline/candidate profile, it stops
+with an error. Correct the settings and rerun the affected jobs before comparing.
+
 Your scores may differ. The fictional world's records and tools are
 deterministic, but model choices vary between executions. Three attempts per
 task expose some of that variation; the confidence intervals remain wide.

@@ -261,61 +261,78 @@ exit "$hermes_rc"
         env = os.environ.copy()
         env["PYTHONPATH"] = str(ROOT / "src")
         env["PA_STYLE_MOCK_MCP_TOKEN"] = token
-        process = await asyncio.create_subprocess_exec(
-            str(self.mcp_python),
-            "-m",
-            "pa_style_mock_mcp.streamable_http",
-            "--host",
-            "0.0.0.0",
-            "--port",
-            str(port),
-            "--catalog",
-            "extended",
-            "--fixture",
-            str(ROOT / "fixtures" / "world-v2.json"),
-            "--call-log",
-            str(artifact_dir / "tool-calls.jsonl"),
-            "--require-bearer-token",
-            "--issuer-url",
-            f"http://{self.mcp_host}:{port}",
-            "--resource-server-url",
-            f"http://{self.mcp_host}:{port}/mcp",
-            stdout=server_log,
-            stderr=asyncio.subprocess.STDOUT,
-            env=env,
-        )
-        for _ in range(100):
-            if process.returncode is not None:
-                server_log.close()
-                detail = (artifact_dir / "mcp-server.log").read_text(
-                    encoding="utf-8", errors="replace"
-                )
-                raise RuntimeError(f"Remote MCP server exited during startup:\n{detail[-4000:]}")
+        process = None
+        try:
+            process = await asyncio.create_subprocess_exec(
+                str(self.mcp_python),
+                "-m",
+                "pa_style_mock_mcp.streamable_http",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                str(port),
+                "--catalog",
+                "extended",
+                "--fixture",
+                str(ROOT / "fixtures" / "world-v2.json"),
+                "--call-log",
+                str(artifact_dir / "tool-calls.jsonl"),
+                "--require-bearer-token",
+                "--issuer-url",
+                f"http://{self.mcp_host}:{port}",
+                "--resource-server-url",
+                f"http://{self.mcp_host}:{port}/mcp",
+                stdout=server_log,
+                stderr=asyncio.subprocess.STDOUT,
+                env=env,
+            )
+            for _ in range(100):
+                if process.returncode is not None:
+                    detail = (artifact_dir / "mcp-server.log").read_text(
+                        encoding="utf-8", errors="replace"
+                    )
+                    raise RuntimeError(f"Remote MCP server exited during startup:\n{detail[-4000:]}")
+                try:
+                    _, writer = await asyncio.open_connection("127.0.0.1", port)
+                except OSError:
+                    await asyncio.sleep(0.1)
+                    continue
+                writer.close()
+                await writer.wait_closed()
+                return process, server_log
+            raise RuntimeError("Remote MCP server did not become ready within 10 seconds")
+        except BaseException as failure:
             try:
-                _, writer = await asyncio.open_connection("127.0.0.1", port)
-            except OSError:
-                await asyncio.sleep(0.1)
-                continue
-            writer.close()
-            await writer.wait_closed()
-            return process, server_log
-        process.terminate()
-        await process.wait()
-        server_log.close()
-        raise RuntimeError("Remote MCP server did not become ready within 10 seconds")
+                if process is not None:
+                    await self._stop_remote_mcp(process, server_log)
+            except BaseException as cleanup_error:
+                failure.add_note(f"Remote MCP startup cleanup failed: {cleanup_error}")
+            finally:
+                server_log.close()
+            raise
 
     @staticmethod
     async def _stop_remote_mcp(
         process: asyncio.subprocess.Process, log_handle: IO[bytes]
     ) -> None:
-        if process.returncode is None:
-            process.terminate()
-            try:
-                await asyncio.wait_for(process.wait(), timeout=5)
-            except TimeoutError:
-                process.kill()
-                await process.wait()
-        log_handle.close()
+        try:
+            if process.returncode is None:
+                try:
+                    process.terminate()
+                except ProcessLookupError:
+                    pass
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=5)
+                except (TimeoutError, asyncio.CancelledError) as failure:
+                    try:
+                        process.kill()
+                    except ProcessLookupError:
+                        pass
+                    await process.wait()
+                    if isinstance(failure, asyncio.CancelledError):
+                        raise
+        finally:
+            log_handle.close()
 
     async def _download_optional(
         self, sandbox: str, remote: str, local: Path

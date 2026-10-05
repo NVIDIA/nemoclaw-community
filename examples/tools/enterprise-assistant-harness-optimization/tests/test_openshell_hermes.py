@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock, patch
 
 from harbor_agents.openshell_utils import final_answer, sandbox_name
 
@@ -39,6 +39,71 @@ class OpenShellHelpersTest(unittest.TestCase):
 
 @unittest.skipIf(OpenShellHermesFlywheel is None, "Harbor is not installed")
 class OpenShellArtifactFailureTest(unittest.IsolatedAsyncioTestCase):
+    async def test_startup_cancellation_stops_server_and_closes_log(self):
+        for stage in ("connect", "retry", "close"):
+            with self.subTest(stage=stage), tempfile.TemporaryDirectory() as temp:
+                agent = OpenShellHermesFlywheel(logs_dir=Path(temp) / "logs", arm="baseline")
+                failure = asyncio.CancelledError("Harbor startup deadline")
+                process = SimpleNamespace(returncode=None, terminate=Mock(), kill=Mock(),
+                                          wait=AsyncMock(return_value=0))
+                writer = SimpleNamespace(close=Mock(), wait_closed=AsyncMock(
+                    side_effect=failure if stage == "close" else None))
+                connect = AsyncMock(return_value=(None, writer))
+                if stage == "connect":
+                    connect.side_effect = failure
+                elif stage == "retry":
+                    connect.side_effect = OSError("not ready")
+                with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=process)) as spawn, \
+                     patch("asyncio.open_connection", new=connect), \
+                     patch("asyncio.sleep", new=AsyncMock(side_effect=failure if stage == "retry" else None)):
+                    with self.assertRaises(asyncio.CancelledError) as caught:
+                        await agent._start_remote_mcp(Path(temp), "test-token", 8765)
+                self.assertIs(caught.exception, failure)
+                process.terminate.assert_called_once()
+                process.wait.assert_awaited_once()
+                self.assertTrue(spawn.call_args.kwargs["stdout"].closed)
+
+    async def test_startup_cleanup_kills_server_if_termination_times_out(self):
+        with tempfile.TemporaryDirectory() as temp:
+            agent = OpenShellHermesFlywheel(logs_dir=Path(temp) / "logs", arm="baseline")
+            failure = asyncio.CancelledError("startup cancelled")
+            process = SimpleNamespace(returncode=None, terminate=Mock(), kill=Mock(),
+                                      wait=AsyncMock(side_effect=[TimeoutError(), 0]))
+            with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=process)) as spawn, \
+                 patch("asyncio.open_connection", new=AsyncMock(side_effect=failure)):
+                with self.assertRaises(asyncio.CancelledError) as caught:
+                    await agent._start_remote_mcp(Path(temp), "test-token", 8765)
+            self.assertIs(caught.exception, failure)
+            process.terminate.assert_called_once()
+            process.kill.assert_called_once()
+            self.assertEqual(process.wait.await_count, 2)
+            self.assertTrue(spawn.call_args.kwargs["stdout"].closed)
+
+    async def test_spawn_failure_closes_log(self):
+        with tempfile.TemporaryDirectory() as temp:
+            agent = OpenShellHermesFlywheel(logs_dir=Path(temp) / "logs", arm="baseline")
+            failure = OSError("interpreter unavailable")
+            with patch("asyncio.create_subprocess_exec", new=AsyncMock(side_effect=failure)) as spawn:
+                with self.assertRaises(OSError) as caught:
+                    await agent._start_remote_mcp(Path(temp), "test-token", 8765)
+            self.assertIs(caught.exception, failure)
+            self.assertTrue(spawn.call_args.kwargs["stdout"].closed)
+
+    async def test_successful_startup_keeps_server_and_log_for_caller(self):
+        with tempfile.TemporaryDirectory() as temp:
+            agent = OpenShellHermesFlywheel(logs_dir=Path(temp) / "logs", arm="baseline")
+            process = SimpleNamespace(returncode=None, terminate=Mock(), kill=Mock(),
+                                      wait=AsyncMock(return_value=0))
+            writer = SimpleNamespace(close=Mock(), wait_closed=AsyncMock())
+            with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=process)), \
+                 patch("asyncio.open_connection", new=AsyncMock(return_value=(None, writer))):
+                returned, log = await agent._start_remote_mcp(Path(temp), "test-token", 8765)
+            self.assertIs(returned, process)
+            self.assertFalse(log.closed)
+            process.terminate.assert_not_called()
+            await agent._stop_remote_mcp(process, log)
+            self.assertTrue(log.closed)
+
     async def test_harbor_cancellation_downloads_evidence_before_deleting_sandbox(self):
         with tempfile.TemporaryDirectory() as temp:
             agent = OpenShellHermesFlywheel(
