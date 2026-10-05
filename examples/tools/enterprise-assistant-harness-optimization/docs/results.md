@@ -17,7 +17,7 @@ actual trial identities, task checksums and runtime fingerprints.
 ## Evidence and hypothesis
 
 The starting corpus contains 42 distinct production-like requests to Hermes in
-OpenShell, calling the fixture-backed MCP service outside the sandbox.
+OpenShell, calling the fictional company's MCP service outside the sandbox.
 [Production Insights](../results/production-insights.yml) identified messages
 sent after requests to write or compose a draft. Codex used Eval Author to create
 four Harbor tasks: two development and two held out.
@@ -56,8 +56,8 @@ improved aggregate scores but lost one content-check pass and was rejected.
 Do not pool different runtime configurations or expect identical model outputs;
 preserve per-task gates when reproducing the experiment.
 
-The profile is model guidance, not a security boundary. Production systems
-should enforce consequential-action consent in trusted code. Human task and
-Relevant experience review remains pending; the [review sheet](../evals/REVIEW.md)
-explains the deliberately narrow grader. Passing controls and this accepted
-technical comparison do not establish task readiness or deployment safety.
+The profile guides model behavior. Production systems should also enforce user
+permission for consequential actions in trusted code. Use the
+[review sheet](../evals/REVIEW.md) and walkthrough Step 4's checklist to assess
+whether these tasks measure the behavior you intend. Additional tasks are
+needed to assess explicitly authorized sends and broader assistant capabilities.

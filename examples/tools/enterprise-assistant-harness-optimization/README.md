@@ -7,7 +7,7 @@
 | --- | --- |
 | Description | Demonstrates a trace-to-evaluation optimization loop for a Hermes enterprise assistant using synthetic traces, mock MCP tools, Trace Analyst, Eval Author and Harbor. |
 | Industry | ✨ Other |
-| Requirements | Linux · native Docker with `CONFIG_NFT_FIB_INET` · OpenShell 0.1.2 · NVIDIA Build API key · Codex CLI and Eval Author access for task authoring |
+| Requirements | Linux · native Docker with isolated verification support · OpenShell 0.1.2 · NVIDIA Build API key · Codex CLI and Eval Author access for task authoring |
 | NemoClaw | N/A |
 | Harness | Hermes 0.21.3 |
 | OpenShell | 0.1.2 |
@@ -16,6 +16,11 @@ This repository is a hands-on tutorial for improving an enterprise agent harness
 from observed behavior: analyze realistic production traces with NeMo Trace
 Analyst, author Harbor evaluations with a coding agent, analyze scored baseline
 runs, implement a candidate harness, and compare it with the baseline.
+
+Hermes performs the work; OpenShell controls its runtime and network access;
+MCP supplies the fictional company; Relay records trajectories; Trace Analyst
+discovers patterns; Eval Author helps Codex construct tests; Harbor executes
+and grades those tests.
 
 The fictional agent helps a company prepare a product launch by researching
 across mail, calendar, chat, files, enterprise knowledge, directory, project,
@@ -30,7 +35,7 @@ describes related optimization methods.
 
 ## Fictional MCP tools
 
-The full catalog has 15 tools backed by [deterministic fixtures](fixtures/README.md).
+The full catalog has 15 tools backed by a [deterministic fictional world](fixtures/README.md).
 These are illustrative enterprise-service equivalents, not live integrations.
 
 | Tools | What the agent can do | Enterprise equivalent |
@@ -59,7 +64,7 @@ Each step has saved artifacts to inspect or reuse:
 
 | Step | What you do | Checked-in artifacts |
 | --- | --- | --- |
-| 1. [Freeze the baseline](docs/walkthrough.md#1-freeze-the-baseline) | Set up Hermes, OpenShell and the synthetic world | [Baseline profile](profiles/baseline-soul.md), [runtime configuration](harbor_agents/hermes_flywheel.py), [sandbox setup](openshell/), [fixtures](fixtures/world-v2.json), [workload](experiments/production-trace-matrix-v3.json) |
+| 1. [Freeze the baseline](docs/walkthrough.md#1-freeze-the-baseline) | Set up Hermes, OpenShell and the fictional world | [Baseline profile](profiles/baseline-soul.md), [runtime configuration](harbor_agents/hermes_flywheel.py), [sandbox setup](openshell/), [world records](fixtures/world-v2.json), [workload](experiments/production-trace-matrix-v3.json) |
 | 2. [Collect source traces](docs/walkthrough.md#2-collect-source-traces) | Run distinct production-like requests, or use the supplied corpus | [42 traces, corpus index and analysis input](traces/world-v3/production/) |
 | 3. [Discover issues](docs/walkthrough.md#3-discover-issues) | Run Trace Analyst on the production corpus | [Production findings](results/production-insights.yml), [analyst configuration](configs/trace-analyst.yaml) |
 | 4. [Author and prove eval tasks](docs/walkthrough.md#4-author-and-prove-eval-tasks) | Ask Codex + Eval Author to turn supported findings into executable tests | [Authoring prompt](prompts/eval-author-from-traces.md), [four Harbor tasks](evals/harbor-tasks-v3/), [technical proof receipts](evals/task-proofs/) |
@@ -77,11 +82,17 @@ patterns—tool downsampling, bounded JSON reads and evidence-state management�
 described in [harness patterns](docs/harness-patterns.md), not claimed as measured
 improvements here.
 
+The four distinct evaluation tasks demonstrate the process: two are used for
+development, and two are reserved until the candidate is frozen. Each task runs
+three times per configuration, giving 24 evaluation runs. A production suite
+needs broader task coverage. Your model-backed run may produce different scores;
+the walkthrough explains how to assess task-level improvement and regressions.
+
 ## Repository map
 
 | Folder | Purpose |
 | --- | --- |
-| [configs/](configs/) | Trace Analyst settings and the fictional assistant's analysis rules. |
+| [configs/](configs/) | Trace Analyst settings; [ETHOS.md](ETHOS.md) supplies the intended behavior used by analysis and task authoring. |
 | [docs/](docs/) | The walkthrough, measured results, harness patterns and future Gym extension. |
 | [evals/](evals/) | Eval-suite manifest, runnable Harbor tasks, proof receipts and human review sheet. |
 | [experiments/](experiments/) | The 42-request workload used to collect production-like traces—not an eval suite. |
@@ -105,15 +116,17 @@ Follow the [walkthrough](docs/walkthrough.md) for prerequisites, copyable host
 setup commands, the 10-step flywheel, optional trace regeneration, and the
 secondary Trace-Analyst-only path. The recommended full-run host is fresh Ubuntu
 24.04 with native Docker, 8 vCPUs, 32 GB RAM, 100 GB free disk, and a working
-OpenShell gateway; a Brev CPU instance is a convenient option. Harbor's isolated
-verifier requires a Linux kernel with `CONFIG_NFT_FIB_INET`, so Docker Desktop is
-not the supported full-run environment.
+OpenShell gateway; a Brev CPU instance is a convenient option, and a compatible
+local Linux host also works. **Docker Desktop is unsupported for the full
+tutorial**, including Harbor task proofs and evaluation runs: the tested Docker
+Desktop kernel lacks the `CONFIG_NFT_FIB_INET` capability needed for isolated
+verification. Reading and trace analysis can run locally without Docker.
 
-Supporting detail: [fixture world](fixtures/README.md),
+Supporting detail: [fictional world](fixtures/README.md),
 [trace artifacts](traces/README.md),
 [harness patterns](docs/harness-patterns.md), and
 [extending the environment for RL](docs/gym-extension.md).
 
 The public example uses synthetic records throughout. Replace the workload,
-fixtures, trace adapter, and task environment to apply the same method to a real
+fictional world, trace adapter, and task environment to apply the same method to a real
 agent.
