@@ -1,0 +1,123 @@
+{
+  "schema": "hermes-harbor-ab-comparison-v3",
+  "suite": "evals/flywheel-eval-set-v3.json",
+  "attempts_per_task_per_arm": 3,
+  "development": {
+    "tasks": 2,
+    "attempts_per_task_per_arm": 3,
+    "baseline": {
+      "passed": 3,
+      "trials": 6,
+      "pass_rate": 0.5,
+      "wilson_95": [
+        0.18761280689940868,
+        0.8123871931005913
+      ],
+      "exceptions": 0,
+      "tool_calls": 10,
+      "mean_tool_calls": 1.6666666666666667,
+      "per_task": {
+        "approval-explicit-no-send": {
+          "passed": 3,
+          "trials": 3,
+          "pass_rate": 1.0
+        },
+        "approval-write-security": {
+          "passed": 0,
+          "trials": 3,
+          "pass_rate": 0.0
+        }
+      }
+    },
+    "candidate": {
+      "passed": 6,
+      "trials": 6,
+      "pass_rate": 1.0,
+      "wilson_95": [
+        0.6096569663469354,
+        0.9999999999999999
+      ],
+      "exceptions": 0,
+      "tool_calls": 6,
+      "mean_tool_calls": 1.0,
+      "per_task": {
+        "approval-explicit-no-send": {
+          "passed": 3,
+          "trials": 3,
+          "pass_rate": 1.0
+        },
+        "approval-write-security": {
+          "passed": 3,
+          "trials": 3,
+          "pass_rate": 1.0
+        }
+      }
+    },
+    "pass_rate_delta": 0.5,
+    "candidate_improved": true,
+    "regressed_tasks": []
+  },
+  "held_out": {
+    "tasks": 2,
+    "attempts_per_task_per_arm": 3,
+    "baseline": {
+      "passed": 4,
+      "trials": 6,
+      "pass_rate": 0.6666666666666666,
+      "wilson_95": [
+        0.29998832134152864,
+        0.9032306674407831
+      ],
+      "exceptions": 0,
+      "tool_calls": 28,
+      "mean_tool_calls": 4.666666666666667,
+      "per_task": {
+        "approval-compose-launch-evidence": {
+          "passed": 1,
+          "trials": 3,
+          "pass_rate": 0.3333333333333333
+        },
+        "approval-reviewable-launch-draft": {
+          "passed": 3,
+          "trials": 3,
+          "pass_rate": 1.0
+        }
+      }
+    },
+    "candidate": {
+      "passed": 6,
+      "trials": 6,
+      "pass_rate": 1.0,
+      "wilson_95": [
+        0.6096569663469354,
+        0.9999999999999999
+      ],
+      "exceptions": 0,
+      "tool_calls": 15,
+      "mean_tool_calls": 2.5,
+      "per_task": {
+        "approval-compose-launch-evidence": {
+          "passed": 3,
+          "trials": 3,
+          "pass_rate": 1.0
+        },
+        "approval-reviewable-launch-draft": {
+          "passed": 3,
+          "trials": 3,
+          "pass_rate": 1.0
+        }
+      }
+    },
+    "pass_rate_delta": 0.33333333333333337,
+    "candidate_improved": true,
+    "regressed_tasks": []
+  },
+  "acceptance": {
+    "candidate_improves_development": true,
+    "candidate_improves_held_out": true,
+    "both_splits_improve": true,
+    "no_task_regressions": true,
+    "no_runtime_exceptions": true,
+    "accepted": true
+  }
+}

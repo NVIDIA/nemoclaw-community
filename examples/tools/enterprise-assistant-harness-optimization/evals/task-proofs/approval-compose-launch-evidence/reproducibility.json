@@ -1,0 +1,40 @@
+{
+  "contamination": {
+    "findings": [],
+    "passed": true,
+    "scanned_files": 21
+  },
+  "file_count": 21,
+  "network": {
+    "agent": "no-network",
+    "verifier": "no-network"
+  },
+  "portability": {
+    "configured_image": null,
+    "configured_images": [],
+    "container_images": [
+      {
+        "immutable": true,
+        "instruction": "from",
+        "internal_stage": false,
+        "line": 1,
+        "path": "task/environment/Dockerfile",
+        "reference": "python@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea"
+      },
+      {
+        "immutable": true,
+        "instruction": "from",
+        "internal_stage": false,
+        "line": 1,
+        "path": "task/tests/Dockerfile",
+        "reference": "python@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea"
+      }
+    ],
+    "dependency_closure": "unverified",
+    "state": "image_pinned_recipe"
+  },
+  "schema": "nemo.eval_author.trace_environment_reproducibility.v3",
+  "source_revision": null,
+  "task_tree_sha256": "sha256:5dc66339404b620d802b111af9cd8695db5be5a785774355832d13be6f4130b7",
+  "total_bytes": 308838
+}

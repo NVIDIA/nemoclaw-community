@@ -1,0 +1,148 @@
+{
+  "schema": "hermes-agent-optimization-artifact-chain-v3",
+  "review_status": "pending_human_review",
+  "runtime": {
+    "agent_sandbox": "OpenShell",
+    "mcp": {
+      "location": "host_outside_sandbox",
+      "transport": "streamable-http",
+      "host": "host.openshell.internal",
+      "ports": [
+        8765
+      ]
+    }
+  },
+  "stages": [
+    {
+      "id": "production_corpus",
+      "path": "traces/world-v3/production/index.json",
+      "sha256": "a2fd89488bcf896ddac7839c9f274a5269e66fd4697d57be9650c0f491f8fff8",
+      "consumes": []
+    },
+    {
+      "id": "production_insights",
+      "path": "results/production-insights.yml",
+      "sha256": "4c7f75bcf3ae60149903b66522ad34656a0edd287335f5ea19c1c3567b20a353",
+      "consumes": [
+        "production_corpus"
+      ]
+    },
+    {
+      "id": "eval_suite",
+      "path": "evals/flywheel-eval-set-v3.json",
+      "sha256": "d2e3b6e6767a5a0206899674209a61a2d575c26d0dfbde81e5ddf729bff40c81",
+      "consumes": [
+        "production_corpus",
+        "production_insights"
+      ]
+    },
+    {
+      "id": "baseline_development_traces",
+      "path": "traces/world-v3/baseline-development/insights.jsonl",
+      "sha256": "fc5d6590e75651f587a0e1fe4888195df1f076fc4a72fe17d88132021a8e126b",
+      "consumes": [
+        "eval_suite"
+      ]
+    },
+    {
+      "id": "baseline_development_insights",
+      "path": "results/baseline-development-insights.yml",
+      "sha256": "ad22ebe5b6d444392d1a4d82f769a9a4b4318a10438737653239808da4063122",
+      "consumes": [
+        "baseline_development_traces"
+      ]
+    },
+    {
+      "id": "candidate_proposal",
+      "path": "results/candidate-proposal.md",
+      "sha256": "c5ed5e3abbb396e5eea24e73184a14f54a98c28552d5abd445ea1035615d6255",
+      "consumes": [
+        "production_insights",
+        "baseline_development_insights"
+      ]
+    },
+    {
+      "id": "candidate_profile",
+      "path": "profiles/candidate-soul.md",
+      "sha256": "596b2aa2429fe0fdd0473586cb2ff6aeec677ad7afccbfa409778bb91627a261",
+      "consumes": [
+        "candidate_proposal"
+      ]
+    },
+    {
+      "id": "verification_production_insights",
+      "path": "results/verification-production-insights.yml",
+      "sha256": "58999804f6d021a880b66395b8bf88a51eabea3d2999d17c4b04099b11818edb",
+      "consumes": [
+        "production_corpus"
+      ]
+    },
+    {
+      "id": "baseline_development_run",
+      "path": "results/baseline-development-summary.json",
+      "sha256": "1f93b483edfe65221da7b06d2853ecccdb8a872d595e37a033c736d776e0b46a",
+      "consumes": [
+        "eval_suite"
+      ]
+    },
+    {
+      "id": "verification_baseline_development_traces",
+      "path": "traces/world-v3/verification-baseline-development/insights.jsonl",
+      "sha256": "fe05b5b8888f676fde8e4d6037d59b68f2c6432128ebb5f6a94802ee1612320b",
+      "consumes": [
+        "baseline_development_run"
+      ]
+    },
+    {
+      "id": "verification_baseline_development_insights",
+      "path": "results/verification-baseline-development-insights.yml",
+      "sha256": "461b03f7b86dce1c9e63c236f8b379508e7beaa711d43781f1cc28a38989e910",
+      "consumes": [
+        "verification_baseline_development_traces"
+      ]
+    },
+    {
+      "id": "candidate_development_run",
+      "path": "results/candidate-development-summary.json",
+      "sha256": "49decb9def4bf3ad46642cc9aede78857dde0ebddbf9ef803c61bf2ef037eb97",
+      "consumes": [
+        "eval_suite",
+        "candidate_profile"
+      ]
+    },
+    {
+      "id": "baseline_held_out_run",
+      "path": "results/baseline-held-out-summary.json",
+      "sha256": "cad74fe7262d74caf408e2cbbeb98f8084df30b0fb6a3359c217f86986054d83",
+      "consumes": [
+        "eval_suite"
+      ]
+    },
+    {
+      "id": "candidate_held_out_run",
+      "path": "results/candidate-held-out-summary.json",
+      "sha256": "1d8ed87104df72e49e1f9e479596a4999d276f53f97383656136a9cea033d092",
+      "consumes": [
+        "eval_suite",
+        "candidate_profile"
+      ]
+    },
+    {
+      "id": "measured_ab",
+      "path": "results/measured-ab-v3.json",
+      "sha256": "2a903d66111a6166640392e7c1ec899a83b804a499cadd7b84e0805d95a176bd",
+      "consumes": [
+        "baseline_development_run",
+        "candidate_development_run",
+        "baseline_held_out_run",
+        "candidate_held_out_run"
+      ]
+    }
+  ],
+  "notes": [
+    "Candidate design consumes the original production and development reports; later verification reports corroborate the frozen profile.",
+    "Verification baseline input is joined to the measured baseline native Relay identities, task IDs and Harbor rewards.",
+    "Published report trace links are repository-relative; raw CLI reports are retained privately. Finding text and cited trace IDs are unchanged.",
+    "Technical pilot only: passing controls and an accepted measured comparison do not establish human task review."
+  ]
+}

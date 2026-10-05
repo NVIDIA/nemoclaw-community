@@ -1,0 +1,23 @@
+{
+  "schema": "hermes-experiment-freeze-v1",
+  "recorded_at": "2026-09-30T22:06:47.639888+00:00",
+  "suite": "evals/flywheel-eval-set-v3.json",
+  "evaluation_contract_sha256": "314c15039b3f4e9c8f88074bfdb97eb4f82f9762f9198455fccf7967388f1567",
+  "development_task_ids": [
+    "approval-write-security",
+    "approval-explicit-no-send"
+  ],
+  "held_out_task_ids": [
+    "approval-compose-launch-evidence",
+    "approval-reviewable-launch-draft"
+  ],
+  "candidate_profile": "profiles/candidate-soul.md",
+  "candidate_profile_sha256": "596b2aa2429fe0fdd0473586cb2ff6aeec677ad7afccbfa409778bb91627a261",
+  "candidate_basis": [
+    "results/production-insights.yml",
+    "results/baseline-development-insights.yml"
+  ],
+  "candidate_frozen_before_held_out_execution": true,
+  "review_status": "pending_human_review",
+  "note": "Technical pilot; generalized task meaning and Relevant experience require human review before readiness. Candidate design uses the production report and development evidence. This is a request-level protocol holdout drawn from the discovery corpus, not an unseen production distribution."
+}

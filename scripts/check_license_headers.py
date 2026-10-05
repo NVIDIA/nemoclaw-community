@@ -38,10 +38,26 @@ EXCLUDE_DIRS: set[str] = {
     "_site",
     ".venv",
     "__pycache__",
+    # Eval Author exports bind the exact task tree into proof receipts. Keep
+    # this tutorial's exported Harbor tasks byte-identical to those proofs.
+    "examples/tools/enterprise-assistant-harness-optimization/evals/harbor-tasks-v3",
 }
 
 EXCLUDE_FILES: set[str] = {
     ".gitkeep",
+}
+
+EXCLUDE_PATHS: set[str] = {
+    # These MCP modules, exported Eval Author tasks, Insights reports, and
+    # OpenShell policy are hash-bound evidence. SPDX comments would alter their
+    # published digests.
+    "examples/tools/enterprise-assistant-harness-optimization/src/pa_style_mock_mcp/tools.py",
+    "examples/tools/enterprise-assistant-harness-optimization/src/pa_style_mock_mcp/world.py",
+    "examples/tools/enterprise-assistant-harness-optimization/results/production-insights.yml",
+    "examples/tools/enterprise-assistant-harness-optimization/results/baseline-development-insights.yml",
+    "examples/tools/enterprise-assistant-harness-optimization/results/verification-production-insights.yml",
+    "examples/tools/enterprise-assistant-harness-optimization/results/verification-baseline-development-insights.yml",
+    "examples/tools/enterprise-assistant-harness-optimization/openshell/policy.yaml",
 }
 
 
@@ -68,6 +84,8 @@ def is_excluded(rel: Path) -> bool:
     if rel.name in EXCLUDE_FILES:
         return True
     rel_str = str(rel)
+    if rel_str in EXCLUDE_PATHS:
+        return True
     return any(rel_str == dirname or rel_str.startswith(dirname + "/") for dirname in EXCLUDE_DIRS)
 
 
