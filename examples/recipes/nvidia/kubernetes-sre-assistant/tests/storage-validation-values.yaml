@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-License-Identifier: Apache-2.0
+# Disposable isolated validation only; no external notifications or LLM calls.
+fullnameOverride: sre-storage-ocp
+rbac:
+  profile: read-only
+llm:
+  enabled: false
+notifications:
+  events: [healed, heal_failed, escalated, approval_needed]
+  email:
+    enabled: true
+    smtpHost: storage-validation
+    smtpPort: 2525
+    starttls: false
+    from: sre-validation@example.invalid
+    to: [admin@example.invalid]
+agentConfig:
+  scope:
+    include_namespaces: [sre-storage-validation-20261005]
+    include_cluster_scope: false
+  policy:
+    mode: safe
+    disabled_actions: [restart_pod, rollout_restart, rollout_undo, scale, bump_memory_limit, delete_evicted_pods, force_delete_pod, cordon_node, uncordon_node]
+  detection:
+    interval_seconds: 15
+    include_posture_audit: false
+  storage:
+    enabled: true
+    mode: recommendation
+    threshold_percent: 85
+    growth_percent: 15
+    sustain_seconds: 300
+    allowed_storage_classes: [ocs-storagecluster-ceph-rbd]
+    capacity_rounding:
+      ocs-storagecluster-ceph-rbd: 1Gi # observed real CSI rounding in this disposable validation only
+    targets:
+      - namespace: sre-storage-validation-20261005
+        name: validation-data
+    metrics:
+      url: http://storage-validation:8080
+      cluster_value: storage-validation
+      allow_http: true

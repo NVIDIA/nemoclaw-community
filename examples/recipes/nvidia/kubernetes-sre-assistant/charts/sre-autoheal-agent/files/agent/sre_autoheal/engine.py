@@ -16,9 +16,10 @@ from .knowledge import Knowledge
 from .llm import LLMClient, LLMUnavailable
 from .memory import Memory
 from .models import MEDIUM, Diagnosis, Finding, Incident, Resource, iso
-from .notify import Notifier, build_message, cluster_health_line
+from .notify import Message, Section, Notifier, build_message, cluster_health_line
 from .policy import Decision, Policy
 from .verify import subject_healthy, verify_resolved
+from .storage import StorageController
 
 log = logging.getLogger(__name__)
 
@@ -134,13 +135,51 @@ class Engine:
                 log.exception("unhandled error while handling %s: %s", finding.subject.short, exc)
         if posture and self.notifier.wants("posture"):
             self._notify_posture(posture)
+        storage_records = []
+        if self.config.get("storage.enabled", False):
+            try:
+                storage_namespaces = [ns for ns in (list_namespaces or []) if self.policy.namespace_in_scope(ns)]
+                writes_allowed = (not snap.errors and not self.dry_run
+                                  and not self.config.get("policy.paused", False)
+                                  and self.config.get("policy.mode") in {"safe", "assisted"})
+                storage_records = StorageController(
+                    self.config.section("storage"), self.client, self.memory,
+                    self.notifier, storage_namespaces, policy=self.policy,
+                ).run_cycle(act=act, writes_allowed=writes_allowed)
+                self.memory.data.pop("storage_collector_error", None)
+            except Exception as exc:
+                log.warning("storage controller withheld action: %s", type(exc).__name__)
+                storage_records = [{"outcome": "controller_error", "detail": type(exc).__name__}]
+                self._notify_storage_collector_error(type(exc).__name__)
         self.memory.save()
         self.last_cycle = {
             "started_at": iso(started), "duration_seconds": round(time.time() - started, 1),
             "cluster": self.cluster_summary, "findings": len(findings),
             "incidents": [i.to_dict() for i in incidents], "posture_findings": len(posture),
+            "storage": storage_records,
         }
         return self.last_cycle
+
+    def _notify_storage_collector_error(self, error_type):
+        """Three failed observations before escalation; retry delivery, not resize."""
+        state = self.memory.data.setdefault("storage_collector_error", {"count": 0, "sinks": {}})
+        state["count"] += 1
+        if state["count"] < 3 or not self.notifier.wants("escalated"):
+            return
+        message = Message("escalated", "Storage monitoring unavailable - human review needed", [
+            Section("text", "Observed evidence", f"Three consecutive storage collection cycles failed ({error_type}). Storage recovery cannot be verified; no new expansion was authorized by this failed collection."),
+            Section("text", "Admin checks", "Check agent logs, scoped namespace configuration, Kubernetes read permissions, metrics endpoint reachability and authentication. Inspect exact PVC capacity and resize conditions before retrying. This is a collector failure, not a confirmed storage root cause.")
+        ], "high", {})
+        now = time.time()
+        for sink in self.notifier.sinks:
+            status = state["sinks"].setdefault(sink.name, {"ok": False, "attempts": 0, "last": 0})
+            if status["ok"] or status["attempts"] >= 3 or (status["attempts"] and now - status["last"] < 60):
+                continue
+            status.update(attempts=status["attempts"] + 1, last=now)
+            try:
+                status["ok"] = bool(sink.send(message))
+            except Exception:
+                status["ok"] = False
 
     # ------------------------------------------------------------------
     def handle_finding(self, finding: Finding, snap: Snapshot, act: bool = True) -> Incident:

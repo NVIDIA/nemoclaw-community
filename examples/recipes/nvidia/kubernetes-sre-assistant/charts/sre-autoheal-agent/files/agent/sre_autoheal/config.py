@@ -22,6 +22,18 @@ from typing import Any, Dict, List, Optional
 ENV_PREFIX = "SRE_AUTOHEAL_"
 
 DEFAULTS: Dict[str, Any] = {
+    # Optional deterministic storage controller. Guest mutation is not enabled.
+    "storage": {
+        "enabled": False, "mode": "recommendation", "threshold_percent": 85,
+        "growth_percent": 15, "sustain_seconds": 300, "max_size": "2Ti",
+        "verification_seconds": 300, "cooldown_seconds": 86400,
+        "notification_dedupe_seconds": 3600, "notification_retry_seconds": 60,
+        "notification_max_attempts": 3, "max_expansions_per_cycle": 1,
+        "allowed_storage_classes": [], "targets": [], "capacity_rounding": {},
+        "metrics": {"url": "", "ca_file": "", "token_file": "",
+                    "cluster_label": "cluster", "cluster_value": "",
+                    "timeout_seconds": 15, "max_age_seconds": 180, "allow_http": False},
+    },
     "cluster": {
         # auto | kubernetes | openshift
         "platform": "auto",

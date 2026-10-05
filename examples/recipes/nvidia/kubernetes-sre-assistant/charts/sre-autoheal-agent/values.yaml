@@ -14,6 +14,9 @@ image:
   digest: ""            # e.g. sha256:...; when set it overrides tag
   pullPolicy: IfNotPresent
 imagePullSecrets: []
+metricsCA:
+  configMapName: "" # optional operator-managed serving CA in release namespace
+  key: service-ca.crt # mounted at /etc/sre-autoheal/metrics-ca/ca.crt
 
 agentSource:
   # true: mount the agent package + knowledge base from a chart-rendered ConfigMap
@@ -132,6 +135,31 @@ notifications:
 
 # Everything below is rendered verbatim into the agent config (see agent/sre_autoheal/config.py).
 agentConfig:
+  storage:
+    enabled: false
+    mode: recommendation # recommendation | automatic; global observe/dry-run/pause still wins
+    threshold_percent: 85
+    growth_percent: 15
+    sustain_seconds: 300
+    max_size: 2Ti
+    verification_seconds: 300
+    cooldown_seconds: 86400
+    notification_dedupe_seconds: 3600
+    notification_retry_seconds: 60
+    notification_max_attempts: 3
+    max_expansions_per_cycle: 1
+    allowed_storage_classes: []
+    capacity_rounding: {} # optional verified CSI allocation unit per class, at most 1Gi; no implicit relaxation
+    targets: [] # automatic: [{namespace: app-ns, name: exact-pvc}], plus storage opt-in label
+    metrics:
+      url: "" # Prometheus/Thanos base URL, no embedded credentials
+      cluster_label: cluster
+      cluster_value: "" # required exact source-cluster identity; no cross-cluster joins
+      ca_file: ""
+      token_file: "" # read mounted token on each request for credential rotation
+      timeout_seconds: 15
+      max_age_seconds: 180
+      allow_http: false # isolated test only; bearer tokens are always HTTPS-only
   scope:
     include_namespaces: []
     exclude_namespaces: [kube-system, kube-public, kube-node-lease, openshift, "openshift-*", "agent-sandbox-system"]

@@ -268,7 +268,7 @@ allow-listed and tiered:
 | --- | --- | --- |
 | SAFE | restart pod, rollout restart, delete evicted pods, notify only | executed automatically |
 | MEDIUM | rollout undo, scale, bump memory limit, force delete pod, cordon, uncordon | only with an approval annotation on that workload |
-| NEVER_AUTO | drain, approve CSR, fix image, probe, storage or config, grant RBAC, control-plane work | always escalated to a human |
+| NEVER_AUTO | drain, approve CSR, fix image, probe, generic storage or config repair, grant RBAC, control-plane work | always escalated to a human |
 
 Namespace scope, an opt-out label, flap detection, a cooldown, and per-cycle
 and per-hour budgets apply on top. Policy mode is `observe`, `safe` or
@@ -297,6 +297,35 @@ kubectl -n nemoclaw-sre-assistant logs deploy/<release>-autoheal -f
 
 Every decision is recorded in the release's memory ConfigMap, which also drives
 the learning that promotes or demotes an action for a recurring fingerprint.
+
+### PVC expansion and manual KubeVirt guest follow-up
+
+The separate storage controller is disabled by default. When enabled, its
+default is recommendation mode: 85% usage sustained for 300 seconds recommends
+15% growth. Automatic mode requires an explicit PVC target, opt-in label,
+allowlisted expansion-enabled StorageClass, quota and safety checks, and global
+remediation policy approval. This narrow PVC-expansion exception does not permit
+generic storage repair or guest command execution.
+
+For KubeVirt, the controller observes the mapped guest filesystem rather than
+the host disk image. After verified PVC expansion it emails the admin with the
+namespace, exact VM/PVC, original/requested/capacity sizes, mapped device,
+filesystem and mount, and human follow-up. The admin confirms a usable backup
+or snapshot and shares an approved procedure with the VM owner. Only current,
+simple ext4/XFS partition mappings receive conditional command examples;
+unknown, LVM, encrypted or unsupported layouts require manual inspection.
+Failed or unverified PVC expansion never receives guest-resize commands.
+Storage emails have no JSON attachment.
+
+The agent never uses guest SSH, executes guest commands, patches DataVolumes,
+or stops/reboots VMs. An OpenShift platform flag does not enable guest writes.
+Monitoring continues after manual work, but untimestamped guest-agent data does
+not certify recovery. Further growth stays locked until the admin verifies
+recovery and reconciles the recorded operation; restart or email retry cannot
+trigger another resize. Never clear the lock while CSI resize is outstanding.
+
+See the [storage implementation ledger](docs/2026-10-05-storage-autoheal-plan.md)
+for scoped configuration, recovery checks and cluster validation boundaries.
 
 The controller reloads file-backed Kubernetes API tokens before each request,
 so projected ServiceAccount token rotation does not require a restart. If the
