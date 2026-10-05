@@ -65,9 +65,11 @@ DEFAULTS: Dict[str, Any] = {
         "approval_annotation": "sre-autoheal.nvidia.com/approve",
         # Cron-like maintenance windows are out of scope; a simple global gate:
         "paused": False,
-        # Minimum LLM confidence (0-1) required before acting on an LLM-chosen
-        # action that the rule engine did not already rank first.
+        # Minimum LLM confidence (0-1) required for every LLM-chosen mutation,
+        # including actions also recommended by the rule engine.
         "min_llm_confidence": 0.6,
+        "max_heal_attempts": 3,
+        "retry_delay_seconds": 60,
         # Pods whose controller has fewer ready replicas than this fraction are
         # treated as an availability risk and get the higher severity.
         "unavailable_ratio_high": 0.5,
@@ -84,6 +86,7 @@ DEFAULTS: Dict[str, Any] = {
         "log_tail_lines": 40,
         "max_findings_per_cycle": 50,
         "include_posture_audit": True,
+        "transient_grace_seconds": 300,
     },
     "llm": {
         "enabled": True,
@@ -96,6 +99,8 @@ DEFAULTS: Dict[str, Any] = {
         "timeout_seconds": 120,
         "max_tokens": 4096,
         "temperature": 0.1,
+        "max_attempts": 3,
+        "retry_backoff_seconds": 2,
         # anthropic only: low | medium | high
         "effort": "medium",
         # Evidence sent to the LLM is capped to this many characters.

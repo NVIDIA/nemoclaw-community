@@ -57,6 +57,8 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- $_ := set $cfg "memory" $mem -}}
 {{- $llm := dict "enabled" .Values.llm.enabled "provider" .Values.llm.provider "base_url" .Values.llm.baseUrl "model" .Values.llm.model "timeout_seconds" .Values.llm.timeoutSeconds "max_tokens" .Values.llm.maxTokens "effort" .Values.llm.effort "redact_logs" .Values.llm.redactLogs "api_key_env" "SRE_AUTOHEAL_LLM_API_KEY" -}}
 {{- $_ := set $cfg "llm" $llm -}}
+{{- $_ := set $llm "max_attempts" (default 3 .Values.llm.maxAttempts) -}}
+{{- $_ := set $llm "retry_backoff_seconds" .Values.llm.retryBackoffSeconds -}}
 {{- $n := .Values.notifications -}}
 {{- $notify := dict
       "environment" $n.environment

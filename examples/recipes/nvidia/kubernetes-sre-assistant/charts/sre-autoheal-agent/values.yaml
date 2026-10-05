@@ -82,6 +82,8 @@ llm:
   model: ""                   # empty = first model advertised by /models (openai provider)
   timeoutSeconds: 120
   maxTokens: 2048
+  maxAttempts: 3              # total diagnosis attempts, not retries plus first call
+  retryBackoffSeconds: 2
   effort: medium              # anthropic only
   redactLogs: false           # true = omit pod log tails from the model prompt; tails are always credential-redacted and are never persisted to memory
   apiKeySecret:
@@ -148,6 +150,8 @@ agentConfig:
     disabled_actions: []
     approval_annotation: sre-autoheal.nvidia.com/approve
     min_llm_confidence: 0.6
+    max_heal_attempts: 3      # only Deployment restart_pod may repeat; other actions run once
+    retry_delay_seconds: 60  # cooldown_seconds remains an additional gate
   detection:
     interval_seconds: 60
     crashloop_min_restarts: 3
@@ -160,6 +164,7 @@ agentConfig:
     log_tail_lines: 40
     max_findings_per_cycle: 50
     include_posture_audit: true
+    transient_grace_seconds: 300
   memory:
     max_incidents: 2000
     learning:

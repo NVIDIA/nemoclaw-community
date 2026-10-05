@@ -74,7 +74,7 @@ seed Job ── sre plugin: verify skill bundle, stage oc/kubectl, write kubecon
 | You will get | Everything the Kubernetes Deployer provides (gateway, sandboxed Hermes, dashboard, API, terminal), plus the `kubernetes-sre` skill, a bundled OpenShift client, an authenticated cluster API proxy with `safe` or `broad-no-delete` RBAC, optional model deployment, metrics, and exact-resource model deletion, and an opt-in auto-heal controller that detects failure patterns and executes only allow-listed, risk-tiered remediations. |
 | Runs on | Kubernetes 1.33+ or OpenShift 4.20+ with an Agent Sandbox controller and a ReadWriteOnce StorageClass. |
 | Requires | Helm 3.14+, a clone of this repository (the deployer is a `file://` sibling dependency), privileged sandbox admission, a pre-created model API-key Secret, and the deployer's issuer-discovery decision. |
-| Verified on | OpenShift 4.22.6 on amd64 with Kubernetes 1.35.5, Agent Sandbox controller v0.4.5, and OpenShell 0.0.116 (recipe 0.1.0 on deployer 0.4.0, safe mode, 2026-09-04). Also on a single-node kubeadm cluster, Kubernetes 1.36.2 on amd64 with Ubuntu 26.04 LTS and containerd 2.3.1, with the auto-heal controller in `assisted` mode (2026-09-11). |
+| Verified on | OpenShift 4.22.6 on amd64 with Kubernetes 1.35.5, Agent Sandbox controller v0.4.5, and OpenShell 0.0.116 (recipe 0.1.0 on deployer 0.4.0, safe mode, 2026-09-04). Also on a single-node kubeadm cluster, Kubernetes 1.36.2 on amd64 with Ubuntu 26.04 LTS and containerd 2.3.1, with the auto-heal controller in `assisted` mode (2026-09-11). Both re-verified on 2026-09-16 with OpenShift Client `4.20.38` staged through a re-seed. |
 | Evidence level | Live end-to-end for OpenShift safe mode: seed plugin log, skill and client mounts inside the sandbox, an authenticated read through the proxy, a denied DELETE, and a Hermes answer to a cluster question. Live on standard Kubernetes for install and for the auto-heal loop, including one executed rolling restart that resolved a stale-configuration crash loop and one correct escalation of an unfixable one. Local/static for `broad-no-delete`, model deployment, metrics, and deletion. |
 | Support and maturity | Experimental with best-effort community support. See the repository [support policy](../../../../SUPPORT.md). |
 | External access, data, and actions | Everything the deployer does, plus: downloads the checksum-pinned OpenShift client archive; creates a ClusterRole and ClusterRoleBinding for the proxy identity; sends cluster resource data returned through the proxy to the configured model endpoint. Safe mode can scale Deployments and StatefulSets. Opt-ins can create and patch workloads, read monitoring data, or delete allowlisted model resources. |
@@ -86,7 +86,7 @@ seed Job ── sre plugin: verify skill bundle, stage oc/kubectl, write kubecon
 - Kubernetes Deployer chart `0.4.0` (sibling `file://` dependency): NemoClaw
   `v0.0.117` managed Hermes `0.19.0` image and OpenShell `0.0.116`, all as
   immutable digests; see its README for the full list
-- OpenShift Client: `4.20.28`; official amd64 and arm64 archives are selected
+- OpenShift Client: `4.20.38`; official amd64 and arm64 archives are selected
   by node architecture and verified against pinned SHA-256 checksums
 - Helper image: immutable multi-architecture Python digest for the proxies and
   the client stager; the recipe builds no image
@@ -94,6 +94,8 @@ seed Job ── sre plugin: verify skill bundle, stage oc/kubectl, write kubecon
   skill trees, split into size-bounded ConfigMap chunks; its digest is pinned
   in `values.yaml` (`global.sre.bundle.sha256`) and joins the Sandbox
   configuration identity
+
+Changing `global.sre.cli.version` only restages the binary when the seed runs again, and the sandbox keeps its old mount until it is recreated. Upgrade with `deployer.lifecycle.seed.runOnUpgrade=true` plus `deployer.lifecycle.seed.dangerousAcknowledgement=I_ACKNOWLEDGE_SANDBOX_STOPPED`, then cycle `deployer.lifecycle.sandbox.desiredState` through `absent` and back to `present`.
 
 For a cluster outside the documented client-version skew, override
 `global.sre.cli.version` plus both architecture URLs and checksums together

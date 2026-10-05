@@ -15,6 +15,8 @@ is discarded and treated as "escalate".
 from __future__ import annotations
 
 import json
+import math
+import time
 import logging
 import re
 import urllib.error
@@ -73,7 +75,10 @@ SYSTEM_PROMPT = system_prompt(None)
 
 
 class LLMUnavailable(RuntimeError):
-    pass
+    def __init__(self, message: str, retryable: bool = False, truncated: bool = False):
+        super().__init__(message)
+        self.retryable = retryable
+        self.truncated = truncated
 
 
 class LLMClient:
@@ -92,7 +97,7 @@ class LLMClient:
                 import anthropic  # type: ignore
             except ImportError as exc:
                 raise LLMUnavailable("provider=anthropic needs `pip install anthropic`") from exc
-            kwargs: Dict[str, Any] = {"timeout": self.timeout}
+            kwargs: Dict[str, Any] = {"timeout": self.timeout, "max_retries": 0}
             if self.api_key:
                 kwargs["api_key"] = self.api_key
             if self.base_url:
@@ -141,10 +146,9 @@ class LLMClient:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", "replace")[:300]
-            raise LLMUnavailable(f"LLM HTTP {exc.code}: {detail}") from None
+            raise LLMUnavailable(f"LLM HTTP {exc.code}", retryable=exc.code in {408, 429, 500, 502, 503, 504}) from None
         except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
-            raise LLMUnavailable(f"LLM request failed: {exc}") from None
+            raise LLMUnavailable(f"LLM request failed ({type(exc).__name__})", retryable=True) from None
         try:
             choice = data["choices"][0]
             message = choice["message"]
@@ -152,12 +156,11 @@ class LLMClient:
             if isinstance(content, list):  # some servers return content parts
                 content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
         except (KeyError, IndexError, TypeError) as exc:
-            raise LLMUnavailable(f"unexpected LLM response shape: {str(data)[:200]}") from exc
+            raise LLMUnavailable("unexpected LLM response shape", retryable=True) from exc
         # Reasoning models can spend the budget on thinking and cut the JSON off;
-        # retry once with a much larger budget before giving up.
-        if choice.get("finish_reason") == "length" and (max_tokens or self.max_tokens) < 16384:
-            log.info("LLM output truncated at %s tokens; retrying with a larger budget", max_tokens or self.max_tokens)
-            return self._complete_openai(system, user, max_tokens=16384)
+        # diagnose() increases the budget within its bounded total attempts.
+        if choice.get("finish_reason") == "length":
+            raise LLMUnavailable("LLM output truncated", retryable=True, truncated=True)
         return content
 
     def _complete_anthropic(self, system: str, user: str) -> str:
@@ -174,11 +177,11 @@ class LLMClient:
                 output_config={"effort": effort},
             )
         except anthropic.RateLimitError as exc:
-            raise LLMUnavailable(f"anthropic rate limited: {exc}") from None
+            raise LLMUnavailable("anthropic rate limited", retryable=True) from None
         except anthropic.APIStatusError as exc:
-            raise LLMUnavailable(f"anthropic API error {exc.status_code}: {exc.message}") from None
+            raise LLMUnavailable(f"anthropic API error {exc.status_code}", retryable=exc.status_code in {408, 429, 500, 502, 503, 504, 529}) from None
         except anthropic.APIConnectionError as exc:
-            raise LLMUnavailable(f"anthropic connection error: {exc}") from None
+            raise LLMUnavailable("anthropic connection error", retryable=True) from None
         if response.stop_reason == "refusal":
             raise LLMUnavailable("anthropic model refused the request")
         return "".join(block.text for block in response.content if getattr(block, "type", "") == "text")
@@ -195,10 +198,36 @@ class LLMClient:
         if len(user) > limit:
             user = user[:limit] + "\n...[truncated]"
         environment = (payload.get("policy") or {}).get("environment") if isinstance(payload, dict) else None
-        raw = self.complete(system_prompt(environment), user)
-        parsed = parse_json_object(raw)
-        if parsed is None:
-            raise LLMUnavailable(f"LLM did not return JSON: {raw[:200]!r}")
+        attempts = max(1, min(3, int(self.cfg.get("max_attempts", 3))))
+        original_budget = self.max_tokens
+        try:
+            for attempt in range(attempts):
+                try:
+                    raw = self.complete(system_prompt(environment), user)
+                    if not isinstance(raw, str):
+                        raise LLMUnavailable("LLM completion is not text", retryable=True)
+                    parsed = parse_json_object(raw)
+                    if parsed is None:
+                        raise LLMUnavailable("LLM did not return a JSON object", retryable=True)
+                    if not {"root_cause", "confidence", "action"}.issubset(parsed):
+                        raise LLMUnavailable("LLM diagnosis is missing required fields", retryable=True)
+                    if not isinstance(parsed["root_cause"], str) or not (parsed["action"] is None or isinstance(parsed["action"], str)):
+                        raise LLMUnavailable("LLM diagnosis field types are invalid", retryable=True)
+                    try:
+                        valid_confidence = not isinstance(parsed["confidence"], bool) and math.isfinite(float(parsed["confidence"])) and 0 <= float(parsed["confidence"]) <= 1
+                    except (ValueError, TypeError):
+                        valid_confidence = False
+                    if not valid_confidence or not isinstance(parsed.get("params", {}), dict):
+                        raise LLMUnavailable("LLM diagnosis confidence or params are invalid", retryable=True)
+                    break
+                except LLMUnavailable as exc:
+                    if not exc.retryable or attempt + 1 == attempts:
+                        raise
+                    if exc.truncated:
+                        self.max_tokens = max(self.max_tokens, 16384)
+                    time.sleep(min(30, max(0, float(self.cfg.get("retry_backoff_seconds", 2))) * 2 ** attempt))
+        finally:
+            self.max_tokens = original_budget
         action = parsed.get("action")
         if action in {"", "null", "none", "None"}:
             action = None

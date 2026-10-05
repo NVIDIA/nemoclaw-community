@@ -594,14 +594,29 @@ class Detector:
             if not selector or not self.in_scope(ns) or spec.get("type") == "ExternalName":
                 continue
             matching = [p for p in pods_by_ns.get(ns, []) if all((p.get("metadata", {}).get("labels") or {}).get(k_) == v for k_, v in selector.items())]
-            if matching:
+            endpoint = next((ep for ep in self.snap.endpoints if ep.get("metadata", {}).get("namespace") == ns
+                             and ep.get("metadata", {}).get("name") == name), None)
+            if endpoint is not None and any(sub.get("addresses") for sub in endpoint.get("subsets", [])):
+                continue
+            if matching and endpoint is None and any(condition(p, "Ready").get("status") == "True" for p in matching):
+                continue
+            # Intentional scale-to-zero is not an outage and must never be undone.
+            if not matching and any(
+                obj.get("metadata", {}).get("namespace") == ns and obj.get("spec", {}).get("replicas", 1) == 0
+                and all(obj.get("spec", {}).get("template", {}).get("metadata", {}).get("labels", {}).get(key) == value
+                        for key, value in selector.items())
+                for obj in self.snap.deployments + self.snap.statefulsets
+            ):
                 continue
             if age_seconds(meta.get("creationTimestamp"), self.now) < int(self.cfg.get("rollout_stuck_min_age_seconds", 600)):
                 continue
-            # No pod matches the selector at all -> likely selector/label mismatch (or scaled to zero)
+            state = "matched-pods-not-ready" if matching else "selector-matches-no-pods"
+            if matching and any(condition(p, "Ready").get("status") == "True" for p in matching):
+                state = "endpoints-empty-despite-ready-pods"
             out.append(Finding("service-no-endpoints", "medium", Resource("Service", name, ns, "v1"),
-                               f"{ns}/service/{name} selector {selector} matches no pods", None, None,
-                               {"selector": selector, "ports": spec.get("ports"),
+                               f"{ns}/service/{name}: {state}", None, None,
+                               {"selector": selector, "ports": spec.get("ports"), "endpoint_state": state,
+                                "matching_pods": len(matching), "ready_pods": sum(condition(p, "Ready").get("status") == "True" for p in matching),
                                 "candidate_label_sets": _nearby_label_sets(pods_by_ns.get(ns, []), selector)}))
         return out
 

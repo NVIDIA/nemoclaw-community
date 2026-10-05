@@ -567,7 +567,7 @@ class RecipeTest(unittest.TestCase):
         self.assertIn('value: "GET,PATCH"', proxy)
         self.assertIn('name: PROXY_MAX_REQUEST_BYTES\n              value: "10485760"', proxy)
         self.assertIn("value: /proxy-tls/tls.crt", proxy)
-        self.assertIn("image: \"docker.io/library/python:3.13.7-slim@sha256:", proxy)
+        self.assertIn("image: \"docker.io/library/python:3.13.15-slim@sha256:", proxy)
         self.assertIn("name: sre-sre-runtime", proxy)
         self.assertIn("type: kubernetes.io/tls", tls_secret)
         self.assertIn('"ca.crt":', tls_secret)

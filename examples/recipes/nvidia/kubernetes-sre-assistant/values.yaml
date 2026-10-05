@@ -23,17 +23,17 @@ global:
         - sre-skills.part-000
     # Immutable multi-architecture Python image for the API proxies and the
     # OpenShift CLI stager. Identical to the deployer's utility image.
-    utilityImage: docker.io/library/python:3.13.7-slim@sha256:5f55cdf0c5d9dc1a415637a5ccc4a9e18663ad203673173b8cda8f8dcacef689
+    utilityImage: docker.io/library/python:3.13.15-slim@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285
     cli:
       # Official, checksum-pinned OpenShift client archives. The utility image
       # verifies and stages oc/kubectl; this chart builds no helper image.
-      version: 4.20.28
+      version: 4.20.38
       amd64:
-        url: https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/4.20.28/openshift-client-linux.tar.gz
-        sha256: 6250bbbbdb46c5c4dfc8c1b083a349938bec8546cbb88d226a410a2e0d5d9bbe
+        url: https://mirror.openshift.com/pub/openshift-v4/x86_64/clients/ocp/4.20.38/openshift-client-linux.tar.gz
+        sha256: bb3ad31f12d6be75c379798d67f3bc85699e299f8b9107f44afc1ae3d9caa272
       arm64:
-        url: https://mirror.openshift.com/pub/openshift-v4/arm64/clients/ocp/4.20.28/openshift-client-linux.tar.gz
-        sha256: 47582d3d77e34a5f4cebbb9dc266978b1501618e05de9b133e3904fa5960570a
+        url: https://mirror.openshift.com/pub/openshift-v4/arm64/clients/ocp/4.20.38/openshift-client-linux.tar.gz
+        sha256: d3d49702e1d485a614545de69c7c68f95253835f9915728d8b4e4e50b91d1ecf
     rbac:
       # safe: read common non-secret resources cluster-wide and scale only
       # Deployments/StatefulSets. Full workload patches are intentionally denied.
@@ -159,7 +159,7 @@ autoheal:
   # pins digests.
   image:
     repository: docker.io/library/python
-    digest: sha256:5f55cdf0c5d9dc1a415637a5ccc4a9e18663ad203673173b8cda8f8dcacef689
+    digest: sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285
   # Required verbatim when policy mode is not `observe`, because the agent
   # then changes live workloads without being asked.
   dangerousAcknowledgement: ""

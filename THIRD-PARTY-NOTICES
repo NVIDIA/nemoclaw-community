@@ -510,7 +510,7 @@ License: Apache-2.0
 URL: https://github.com/kubernetes/kubernetes
 
 Project: OpenShift Client (oc and the accompanying kubectl binary)
-Version: 4.20.28
+Version: 4.20.38
 License: Apache-2.0
 URL: https://github.com/openshift/oc
 Release archives: https://mirror.openshift.com/pub/openshift-v4/

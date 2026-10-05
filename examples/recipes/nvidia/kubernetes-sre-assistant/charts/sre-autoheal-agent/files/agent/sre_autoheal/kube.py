@@ -202,7 +202,13 @@ class HttpTransport(Transport):
         # Reopen the projected path on each request, including after an atomic
         # symlink replacement. A failed read must not reuse a stale credential.
         token = self._read_token(self._token_file) if self._token_file else self._token
-        headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+        # The pod-log subresource is text even when the application prints JSON.
+        # A resource named "log" is not the pod-log subresource.
+        path_parts = urllib.parse.urlsplit(path).path.strip("/").split("/")
+        is_log = (method == "GET" and len(path_parts) == 7
+                  and path_parts[:3] == ["api", "v1", "namespaces"]
+                  and path_parts[4] == "pods" and path_parts[6] == "log")
+        headers = {"Authorization": f"Bearer {token}", "Accept": "text/plain" if is_log else "application/json"}
         if body is not None:
             data = json.dumps(body).encode("utf-8")
             headers["Content-Type"] = content_type
@@ -220,12 +226,18 @@ class HttpTransport(Transport):
             raise KubeError(message + f": {raw_body[:300]}", exc.code, raw_body) from None
         except urllib.error.URLError as exc:
             raise KubeError(f"{method} {path} failed: {exc.reason}") from None
+        except OSError as exc:
+            raise KubeError(f"{method} {path} failed: {type(exc).__name__}") from None
         if not raw:
             return None
         text = raw.decode("utf-8", "replace")
-        if text.startswith("{") or text.startswith("["):
+        if is_log:
+            return text
+        try:
             return json.loads(text)
-        return text
+        except json.JSONDecodeError as exc:
+            # Do not include resource bodies (which can contain sensitive data).
+            raise KubeError(f"{method} {path}: invalid resource JSON at character {exc.pos}") from None
 
     def whoami(self) -> str:
         try:
@@ -369,7 +381,7 @@ class KubeClient:
             query["previous"] = "true"
         try:
             out = self.transport.request("GET", ResourceRef("", "v1", "pods", namespace, name, "log").path(query))
-        except KubeError as exc:
+        except (KubeError, json.JSONDecodeError, UnicodeError) as exc:
             return f"<logs unavailable: {str(exc)[:120]}>"
         if out is None:
             return ""

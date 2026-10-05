@@ -431,12 +431,30 @@ def verify_existing_sandbox() -> bool:
     return True
 
 
+# Labels that describe the sandbox's desired configuration rather than who owns
+# it. They change on a routine upgrade, so ownership must never depend on them:
+# bumping the managed image makes `image-id` differ, and that is precisely when
+# the sandbox has to be deleted and recreated.
+CONFIGURATION_LABELS = frozenset(
+    {
+        "nemoclaw.nvidia.com/config-id",
+        "nemoclaw.nvidia.com/image-id",
+    }
+)
+
+
 def release_identity_labels() -> dict[str, str]:
-    """Labels that identify this release's sandbox regardless of its configuration identity."""
+    """Labels that identify this release's sandbox regardless of its configuration identity.
+
+    Ownership is `release-id` (a hash of namespace/name), `release` and
+    `managed-by`. Those are stable for the life of the release, so a sandbox
+    this release created stays recognisable across image and config changes
+    while one owned by anything else still fails the check.
+    """
     return {
         key: value
         for key, value in CONFIG["labels"].items()
-        if key != "nemoclaw.nvidia.com/config-id"
+        if key not in CONFIGURATION_LABELS
     }
 
 
