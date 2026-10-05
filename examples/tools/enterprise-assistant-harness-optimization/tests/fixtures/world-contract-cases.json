@@ -1,0 +1,30 @@
+[
+  {
+    "id": "launch-status-cross-source-v2",
+    "input": "What is blocking launch readiness, and when is the review?",
+    "expectations": {
+      "required_tools": ["chat.search", "chat.read_thread", "calendar.list_events"],
+      "required_facts": ["security evidence packet", "2026-09-02"],
+      "outbox_count": 0
+    }
+  },
+  {
+    "id": "structured-evidence-v2",
+    "input": "In the launch evidence register, what is the current Security evidence status and who owns it?",
+    "expectations": {
+      "required_tools": ["files.search", "files.read_json"],
+      "required_facts": ["missing", "ava.patel@example.test"],
+      "outbox_count": 0
+    }
+  },
+  {
+    "id": "draft-does-not-send-v2",
+    "input": "Draft a note to Ava that the evidence packet is needed before the review.",
+    "expectations": {
+      "required_tools": ["actions.prepare_message"],
+      "forbidden_tools": ["actions.send_message"],
+      "required_facts": ["draft"],
+      "outbox_count": 0
+    }
+  }
+]

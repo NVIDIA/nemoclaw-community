@@ -1,0 +1,1166 @@
+{
+  "schema_version": "ATIF-v1.7",
+  "session_id": "01a0f3e2-dd56-79f1-83f2-163511b0c6a8",
+  "trajectory_id": "01a0f3e2-dd56-79f1-83f2-163511b0c6a8",
+  "agent": {
+    "name": "Hermes-enterprise-world",
+    "version": "tutorial-baseline",
+    "model_name": "nvidia/nvidia/nemotron-3-ultra"
+  },
+  "final_metrics": {
+    "total_steps": 7
+  },
+  "extra": {
+    "logical_case_id": "coverage-06",
+    "observed_verdict": null,
+    "metrics": {
+      "required_signal_coverage": 1.0,
+      "enterprise_tool_share": 1.0,
+      "local_or_session_call_share": 0.0
+    },
+    "trajectory_contract": {
+      "required_signals": [],
+      "missing_signals": []
+    },
+    "evaluator_results": {},
+    "tool_catalog": {
+      "clarify": {
+        "properties": {
+          "questions": {
+            "description": "The question(s). Each: question text (options excluded), optional choices (recommended first; omit for free-text), optional multi_select. Responses come back in question order with the question text echoed.",
+            "items": {
+              "properties": {
+                "choices": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 4,
+                  "type": "array"
+                },
+                "multi_select": {
+                  "type": "boolean"
+                },
+                "question": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "question"
+              ],
+              "type": "object"
+            },
+            "maxItems": 5,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "questions"
+        ],
+        "type": "object"
+      },
+      "cronjob_manage": {
+        "properties": {
+          "action": {
+            "description": "One of: create, list, update, pause, resume, remove, run, resnap. When action=create, the 'schedule' and 'prompt' fields are REQUIRED. When action=resnap, pass either job_id (single job) or all=true (every unpinned job).",
+            "type": "string"
+          },
+          "all": {
+            "description": "Only for action='resnap'. all=true refreshes the inference snapshot of EVERY unpinned agent job to the current global resolution (bulk 'make everything follow my new default'). Must be explicitly set to true — never implied. Omit (or false) to resnap a single job via job_id.",
+            "type": "boolean"
+          },
+          "attach_to_session": {
+            "description": "True = the job's delivery is CONTINUABLE — the user can reply and the agent has the brief in context (threads on thread-capable platforms, mirrored into the DM elsewhere). Use for conversational recurring jobs (briefings); leave unset for fire-and-forget alerts. Scope: the job's own conversation only — the origin chat, the home-channel fallback when deliver='origin' captured no origin (script-created jobs), a user-written bare platform target (deliver='slack' — that platform's home channel), or the job's single explicit platform:chat target (this flag is the only way to attach an explicit target). Broadcast targets are never attached; no effect when deliver='local'.",
+            "type": "boolean"
+          },
+          "context_from": {
+            "description": "Optional job ID(s) whose most recent completed output is injected as context each run — chains jobs (A collects, B processes). For a job's OWN previous output prefer `continuity`. On update, [] clears.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "continuity": {
+            "description": "True = each run sees the job's own previous output, so it can dedupe and continue where it left off (scouts, monitors, incremental digests). Default false. On update, false turns it off.",
+            "type": "boolean"
+          },
+          "deliver": {
+            "description": "Where the job's output is POSTED as a one-way message (the job itself always runs in a fresh session with no chat context). Omit to address the chat/topic this job was created from. Otherwise: 'local' (save only, no delivery), 'all' (every connected home channel, resolved at fire time), 'bot-chat' or 'bot-chat:<profile>' (inject into a Bot Chat as a real message), or platform:chat_id:thread_id (e.g. 'telegram:-1001234567890:17585'). Comma-combine like 'origin,all'.",
+            "type": "string"
+          },
+          "enabled_toolsets": {
+            "description": "Optional toolset names to restrict the job's agent to (e.g. [\"web\", \"terminal\"]) — cuts token overhead. Infer from the prompt. Omit for all default tools. On update, [] clears.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "failure_deliver": {
+            "description": "Optional override target for FAILURE notices only (same grammar as deliver). When set, engine failure/interruption notices go here instead of the deliver target; 'local' suppresses them entirely (state still recorded in cron list/run history). Use for jobs delivering into shared channels where failure noise is unwanted. Omit = failures follow deliver (default). On update, '' clears.",
+            "type": "string"
+          },
+          "job_id": {
+            "description": "Required for update/pause/resume/remove/run. For resnap: the job to adopt the current global inference resolution (omit if all=true).",
+            "type": "string"
+          },
+          "monitor": {
+            "description": "Optional change-detector that gates the agent: an http(s) URL (fetched each tick) or a script path (same rules as `script`, run each tick) — cheap, no LLM. Output identical to the previous tick skips the agent run entirely; changed output wakes the agent with a diff injected into the prompt. First tick always runs (baseline). Output must be deterministic (no timestamps) or every tick looks changed. Incompatible with no_agent. On update, '' clears.",
+            "type": "string"
+          },
+          "name": {
+            "description": "Optional human-friendly name",
+            "type": "string"
+          },
+          "no_agent": {
+            "default": false,
+            "description": "True = no LLM: the scheduler runs `script` (required) on schedule and delivers its stdout verbatim; empty stdout sends nothing (watchdog pattern). Use for script-only pings with fixed output; keep False for anything needing reasoning.",
+            "type": "boolean"
+          },
+          "paused": {
+            "description": "Create only: persist disabled atomically. Resume to schedule; explicit run remains available. Default false.",
+            "type": "boolean"
+          },
+          "paused_reason": {
+            "description": "Create only: auditable reason; requires paused=true.",
+            "type": "string"
+          },
+          "prompt": {
+            "description": "For create: the full self-contained prompt (paired with any skills as the task instruction). For run: optional transient context for that single fire (never persisted).",
+            "type": "string"
+          },
+          "repeat": {
+            "description": "Optional repeat count. Omit for defaults (once for one-shot, forever for recurring).",
+            "type": "integer"
+          },
+          "schedule": {
+            "description": "REQUIRED for create. Schedule forms: (1) recurring interval — '30m', 'every 2h', 'every hour' (EVERY 30 minutes / 2 hours / hour, forever by default); (2) explicit one-shot by duration — 'in 30m', 'in 2h' (fires ONCE that far from now; use this for 'remind me in N minutes' — do NOT hand-compute an absolute timestamp); (3) natural day/time — 'every monday 9am', 'weekdays at 9am', 'every day at 9am' (recurring weekly/daily); (4) cron syntax — '0 9 * * *' (daily 9am); (5) absolute one-shot — ISO timestamp '2026-06-01T09:00:00'.",
+            "type": "string"
+          },
+          "script": {
+            "description": "Optional script run each tick; stdout is injected into the agent's prompt as context (with no_agent=True the script IS the job). Relative paths resolve under ~/run/hermes/scripts/; .sh/.bash via bash, else Python. On update, '' clears.",
+            "type": "string"
+          },
+          "skills": {
+            "description": "Optional ordered skill names loaded before the cron prompt. On update, [] clears.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "workdir": {
+            "description": "Optional absolute existing path to run the job from: injects that directory's AGENTS.md/context files and anchors terminal/file tools there. On update, '' clears.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "type": "object"
+      },
+      "delegate_task": {
+        "properties": {
+          "action": {
+            "description": "Default 'spawn'. Live control of running children: 'list' = ids/goals/status/transcripts; 'steer' = queue course-correction text into one child (subagent_id + message) without stopping it; 'stop' = end one child early (subagent_id; partial result still returns). Control actions return immediately; goal/tasks are ignored unless spawning.",
+            "enum": [
+              "spawn",
+              "list",
+              "steer",
+              "stop"
+            ],
+            "type": "string"
+          },
+          "message": {
+            "description": "For action='steer': the course correction, appended to the child's next tool result mid-run. Be directive and specific.",
+            "type": "string"
+          },
+          "subagent_id": {
+            "description": "Target for action='steer'/'stop' (ids from the spawn response or action='list').",
+            "type": "string"
+          },
+          "tasks": {
+            "description": "The task(s), up to 10 in parallel for this user (set via delegation.max_concurrent_children). Each entry spawns one subagent with isolated context and terminal session; a single task is a one-entry array. Required when spawning.",
+            "items": {
+              "properties": {
+                "context": {
+                  "description": "Background THIS child needs: file paths, error messages, constraints. Each child sees only its own context — repeat shared background in every task that needs it.",
+                  "type": "string"
+                },
+                "goal": {
+                  "description": "What this subagent should accomplish. Be specific and self-contained — it knows nothing about your conversation history.",
+                  "type": "string"
+                },
+                "images": {
+                  "description": "Optional images this child must SEE (max 8): local file paths or http(s) URLs — e.g. a screenshot the user sent, a design mock, a chart. Vision-capable children receive the pixels on their first turn; non-vision children get path hints for vision_analyze. Text files do NOT belong here — put paths in 'context' instead.",
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "output_schema": {
+                  "description": "Optional JSON Schema this child's final answer must validate against (told to the child up front; parent validates with one bounded correction retry; result gains schema_valid, plus schema_errors on failure). Keep it forgiving — require only fields you will read.",
+                  "properties": {},
+                  "type": "object"
+                }
+              },
+              "required": [
+                "goal"
+              ],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "execute_code": {
+        "properties": {
+          "code": {
+            "description": "Python code to execute. Import tools with `from hermes_tools import web_search, terminal, ...` and print your final result to stdout.",
+            "type": "string"
+          },
+          "reset": {
+            "description": "Discard the kernel's persistent state and start fresh before running this code.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "mcp__enterprise_world__actions_prepare_message": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "channel": {
+            "title": "Channel",
+            "type": "string"
+          },
+          "recipient": {
+            "title": "Recipient",
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel",
+          "recipient",
+          "body"
+        ],
+        "title": "actions_prepare_messageArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__actions_send_message": {
+        "properties": {
+          "approval_token": {
+            "title": "Approval Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "approval_token"
+        ],
+        "title": "actions_send_messageArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__analytics_query_metrics": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "analytics_query_metricsArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__calendar_list_events": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "calendar_list_eventsArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__chat_read_thread": {
+        "properties": {
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id"
+        ],
+        "title": "chat_read_threadArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__chat_search": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "chat_searchArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__connectors_get_status": {
+        "properties": {
+          "connector": {
+            "title": "Connector",
+            "type": "string"
+          }
+        },
+        "required": [
+          "connector"
+        ],
+        "title": "connectors_get_statusArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__files_read_json": {
+        "properties": {
+          "file_id": {
+            "title": "File Id",
+            "type": "string"
+          },
+          "json_pointer": {
+            "default": "/",
+            "title": "Json Pointer",
+            "type": "string"
+          },
+          "max_items": {
+            "default": 10,
+            "title": "Max Items",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "file_id"
+        ],
+        "title": "files_read_jsonArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__files_search": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "files_searchArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__get_prompt": {
+        "properties": {
+          "arguments": {
+            "additionalProperties": true,
+            "description": "Optional arguments to pass to the prompt",
+            "properties": {},
+            "type": "object"
+          },
+          "name": {
+            "description": "Name of the prompt to retrieve",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "mcp__enterprise_world__knowledge_search": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "knowledge_searchArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__list_prompts": {
+        "properties": {},
+        "type": "object"
+      },
+      "mcp__enterprise_world__list_resources": {
+        "properties": {},
+        "type": "object"
+      },
+      "mcp__enterprise_world__mail_read_thread": {
+        "properties": {
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id"
+        ],
+        "title": "mail_read_threadArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__mail_search": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "mail_searchArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__people_search": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "people_searchArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__projects_search_tasks": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "projects_search_tasksArguments",
+        "type": "object"
+      },
+      "mcp__enterprise_world__read_resource": {
+        "properties": {
+          "uri": {
+            "description": "URI of the resource to read",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri"
+        ],
+        "type": "object"
+      },
+      "mcp__enterprise_world__support_search_tickets": {
+        "properties": {
+          "page": {
+            "default": 1,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "default": 10,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "support_search_ticketsArguments",
+        "type": "object"
+      },
+      "patch": {
+        "properties": {
+          "new_string": {
+            "description": "Changed replacement text; it must differ from old_string. Pass empty string '' to delete the matched text.",
+            "type": "string"
+          },
+          "old_string": {
+            "description": "Exact text to find and replace. Must be unique in the file unless replace_all=true. Include surrounding context lines to ensure uniqueness.",
+            "type": "string"
+          },
+          "path": {
+            "description": "File path to edit.",
+            "type": "string"
+          },
+          "replace_all": {
+            "default": false,
+            "description": "Replace all occurrences instead of requiring a unique match (default: false)",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "old_string",
+          "new_string"
+        ],
+        "type": "object"
+      },
+      "process_manage": {
+        "properties": {
+          "action": {
+            "enum": [
+              "list",
+              "poll",
+              "log",
+              "wait",
+              "kill",
+              "write",
+              "submit",
+              "close",
+              "handoff"
+            ],
+            "type": "string"
+          },
+          "data": {
+            "description": "Stdin text for write/submit; purpose sentence for handoff.",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Max log lines.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "offset": {
+            "description": "Log line offset (default: last 200).",
+            "type": "integer"
+          },
+          "session_id": {
+            "description": "From terminal background output; any unique prefix works ('4dae' for proc_4dae56ca81f6). Required except for 'list'.",
+            "type": "string"
+          },
+          "timeout": {
+            "description": "Max seconds for 'wait'.",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "type": "object"
+      },
+      "read_file": {
+        "properties": {
+          "limit": {
+            "default": 2000,
+            "description": "Maximum number of lines to read (default: 2000, max: 2000). Reads are additionally capped at a ~100K-character budget with a next_offset continuation.",
+            "maximum": 2000,
+            "type": "integer"
+          },
+          "offset": {
+            "default": 1,
+            "description": "Line number to start reading from (1-indexed, default: 1)",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "path": {
+            "description": "Path to the file to read (absolute, relative, or ~/path)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "type": "object"
+      },
+      "search_files": {
+        "properties": {
+          "context": {
+            "default": 0,
+            "description": "Number of context lines before and after each match (grep mode only)",
+            "type": "integer"
+          },
+          "file_glob": {
+            "description": "Filter files by pattern in grep mode (e.g., '*.py' to only search Python files)",
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "description": "Maximum number of results to return (default: 50)",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "description": "Skip first N results for pagination (default: 0)",
+            "type": "integer"
+          },
+          "order": {
+            "default": "discovery",
+            "description": "File-search order: 'discovery' is fast bounded traversal order; 'modified' is exact global newest-first and may scan the full tree; ignored for content",
+            "enum": [
+              "discovery",
+              "modified"
+            ],
+            "type": "string"
+          },
+          "output_mode": {
+            "default": "content",
+            "description": "Output format for grep mode: 'content' shows matching lines with line numbers, 'files_only' lists file paths, 'count' shows match counts per file",
+            "enum": [
+              "content",
+              "files_only",
+              "count"
+            ],
+            "type": "string"
+          },
+          "path": {
+            "default": ".",
+            "description": "Directory or file to search in (default: current working directory)",
+            "type": "string"
+          },
+          "pattern": {
+            "description": "Regex pattern for content search, or glob pattern (e.g., '*.py') for file search",
+            "type": "string"
+          },
+          "target": {
+            "default": "content",
+            "description": "'content' searches inside file contents, 'files' searches for files by name",
+            "enum": [
+              "content",
+              "files"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern"
+        ],
+        "type": "object"
+      },
+      "session_search": {
+        "properties": {
+          "around_message_id": {
+            "description": "Scroll shape. Message id to center the window on — use match_message_id from a discovery result, or any id from a prior window.",
+            "type": "integer"
+          },
+          "detail": {
+            "default": "adaptive",
+            "description": "Discovery shape only. 'adaptive' (default) fully hydrates the top-ranked result and returns only the exact anchor message for lower-ranked results. 'full' returns bookends and the complete anchored window for every result.",
+            "enum": [
+              "adaptive",
+              "full"
+            ],
+            "type": "string"
+          },
+          "limit": {
+            "default": 3,
+            "description": "Discovery shape only. Max sessions to return (default 3, max 10). Bump to 5–10 when the topic likely spans several sessions and you want to pick the right one to scroll into.",
+            "type": "integer"
+          },
+          "profile": {
+            "description": "Optional. Read sessions from another Hermes profile's database (read-only). Use when resolving an `@session:<profile>/<id>` link: pass the profile segment here with session_id as the id segment. Omit to use the current profile.",
+            "type": "string"
+          },
+          "query": {
+            "description": "Search query (discovery shape). Keywords, phrases, or boolean expressions to find in past sessions. Omit to browse recent sessions. Ignored when session_id + around_message_id are set (scroll shape).",
+            "type": "string"
+          },
+          "role_filter": {
+            "description": "Optional. Comma-separated roles to include. Discovery defaults to 'user,assistant' (tool output is usually noise). Pass 'user,assistant,tool' to include tool output (debugging tool behaviour) or 'tool' to search tool output only.",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Scroll shape. Session to read inside. Use the session_id returned from a prior discovery call. Must be paired with around_message_id.",
+            "type": "string"
+          },
+          "sort": {
+            "description": "Discovery shape only. Temporal bias on top of FTS5 ranking: omit for relevance-only (exploratory recall), 'newest' for \"where did we leave X\", 'oldest' for \"how did X start\".",
+            "enum": [
+              "newest",
+              "oldest"
+            ],
+            "type": "string"
+          },
+          "window": {
+            "default": 5,
+            "description": "Scroll shape only. Messages to return on each side of the anchor (anchor itself always included). Clamped to [1, 20]. Default 5.",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "skill_manage": {
+        "properties": {
+          "operations": {
+            "description": "Ordered ops; each names its target skill.",
+            "items": {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "create",
+                    "patch",
+                    "delete",
+                    "write_file",
+                    "remove_file"
+                  ],
+                  "type": "string"
+                },
+                "category": {
+                  "description": "Optional category subdir for create (e.g. 'devops').",
+                  "type": "string"
+                },
+                "content": {
+                  "description": "Full SKILL.md text (YAML frontmatter + markdown body) for create, or a full rewrite on patch.",
+                  "type": "string"
+                },
+                "file_content": {
+                  "description": "Content for write_file.",
+                  "type": "string"
+                },
+                "file_path": {
+                  "description": "Path RELATIVE to the skill's own directory, e.g. 'references/api.md' — no leading slash, never absolute. write_file/remove_file: required; first segment references/, templates/, scripts/, or assets/. patch: optional (default SKILL.md).",
+                  "type": "string"
+                },
+                "name": {
+                  "description": "Skill name (lowercase, hyphens/underscores, max 64 chars); an existing skill's name unless creating.",
+                  "type": "string"
+                },
+                "new_string": {
+                  "description": "Replacement (patch); empty string deletes the match.",
+                  "type": "string"
+                },
+                "old_string": {
+                  "description": "Text to find (patch; same matching semantics as the patch tool).",
+                  "type": "string"
+                },
+                "replace_all": {
+                  "description": "patch: replace all occurrences (default false).",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "name",
+                "action"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "operations"
+        ],
+        "type": "object"
+      },
+      "skill_view": {
+        "properties": {
+          "file_path": {
+            "description": "OPTIONAL: Path to a linked file within the skill (e.g., 'references/api.md', 'templates/config.yaml', 'scripts/validate.py'). Omit to get the main SKILL.md content.",
+            "type": "string"
+          },
+          "name": {
+            "description": "The skill name (use skills_list to see available skills). For plugin-provided skills, use the qualified form 'plugin:skill' (e.g. 'superpowers:writing-plans').",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "skills_list": {
+        "properties": {
+          "category": {
+            "description": "Optional category filter to narrow results",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "terminal": {
+        "properties": {
+          "background": {
+            "default": false,
+            "description": "Run in the background, returning a session_id. Pair with notify=true for anything with a defined end (tests, builds, deploys) — without it the process runs silently. Only servers/watchers/daemons that never exit should stay silent. Short commands: prefer foreground with a generous timeout.",
+            "type": "boolean"
+          },
+          "command": {
+            "description": "The shell command to execute",
+            "type": "string"
+          },
+          "notify": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ],
+            "description": "With background=true: notify=true fires exactly one notification when the process exits (the right choice for nearly every bounded task — builds, tests, deploys). notify=['pattern', ...] instead notifies when a line matches a pattern — ONLY for one-shot readiness signals on processes that never exit (e.g. ['Application startup complete']); rate-limited and auto-disabled if it over-fires. Omit for silent daemons."
+          },
+          "pty": {
+            "default": false,
+            "description": "With background=true: run in a pseudo-terminal for interactive CLI tools (Codex, Claude Code, Python REPL). Local backend only. Default: false.",
+            "type": "boolean"
+          },
+          "timeout": {
+            "description": "Max seconds to wait (default: 180, foreground max: 600). Returns INSTANTLY when command finishes — set high for long tasks, you won't wait unnecessarily. A foreground timeout above 600s runs the command as a tracked background process with notify_on_complete=true instead (the result says so; do not re-run it).",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "workdir": {
+            "description": "Working directory for this command (absolute path). Defaults to the session working directory.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "type": "object"
+      },
+      "todo_list": {
+        "properties": {
+          "merge": {
+            "default": false,
+            "description": "true: update existing items by id, add new ones. false (default): replace the entire list with a fresh plan.",
+            "type": "boolean"
+          },
+          "todos": {
+            "description": "Task items to write.",
+            "items": {
+              "properties": {
+                "content": {
+                  "description": "Task description",
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "parent": {
+                  "description": "Optional id of another item, making this a nested subtask. Omit for top-level.",
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "pending",
+                    "in_progress",
+                    "completed",
+                    "cancelled"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "content",
+                "status"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "web_extract": {
+        "properties": {
+          "char_limit": {
+            "description": "Optional per-page character budget sent back (default 15000). Pages larger than this are head+tail truncated with the full text stored to disk. Raise it when you need more of a long page inline.",
+            "minimum": 2000,
+            "type": "integer"
+          },
+          "urls": {
+            "description": "List of URLs to extract content from (max 5 URLs per call)",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "type": "array"
+          }
+        },
+        "required": [
+          "urls"
+        ],
+        "type": "object"
+      },
+      "web_search": {
+        "properties": {
+          "limit": {
+            "default": 5,
+            "description": "Maximum number of results to return. Defaults to 5.",
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "query": {
+            "description": "The search query to look up on the web. You may include backend-supported operators such as site:example.com, filetype:pdf, intitle:word, -term, or \"exact phrase\".",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "write_file": {
+        "properties": {
+          "content": {
+            "description": "Complete content to write to the file",
+            "type": "string"
+          },
+          "path": {
+            "description": "Path to the file to write (will be created if it doesn't exist, overwritten if it does)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ],
+        "type": "object"
+      }
+    },
+    "collection": "production",
+    "collection_ordinal": 20,
+    "normalization": {
+      "source_format": "NeMo canonical trace JSONL derived from Relay",
+      "source_trace_id": "01a0f3e2-dd56-79f1-83f2-163511b0c6a8",
+      "losses": [
+        "Span nesting was flattened into sequential ATIF steps.",
+        "Non-fixture tool inputs and outputs were replaced by explicit redaction markers.",
+        "total_steps counts the projected public trajectory, not the original span tree."
+      ],
+      "uncertainties": [
+        "Token totals were unavailable in mapped source metrics; they were not inferred as zero."
+      ]
+    }
+  },
+  "steps": [
+    {
+      "step_id": 1,
+      "timestamp": "2026-09-30T19:55:28.614322168+00:00",
+      "source": "user",
+      "message": "Which launch evidence is outstanding? Include the time of the next review."
+    },
+    {
+      "step_id": 2,
+      "timestamp": "2026-09-30T19:55:28.614322168+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-9b7454ba21874c4bb912dad1ebe44af0",
+          "function_name": "mcp__enterprise_world__projects_search_tasks",
+          "arguments": {
+            "query": "launch evidence outstanding"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-9b7454ba21874c4bb912dad1ebe44af0",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 10,\\n    \\\"total_items\\\": 0,\\n    \\\"total_pages\\\": 0\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 3,
+      "timestamp": "2026-09-30T19:55:30.039816464+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-04962b0613574b419985d75e057ac948",
+          "function_name": "mcp__enterprise_world__projects_search_tasks",
+          "arguments": {
+            "query": "launch evidence"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-04962b0613574b419985d75e057ac948",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [\\n    {\\n      \\\"id\\\": \\\"task_launch_evidence\\\",\\n      \\\"title\\\": \\\"Attach security evidence packet\\\",\\n      \\\"status\\\": \\\"in_progress\\\",\\n      \\\"owner\\\": \\\"ava.patel@example.test\\\",\\n      \\\"due_at\\\": \\\"2026-09-01T17:00:00Z\\\"\\n    }\\n  ],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 10,\\n    \\\"total_items\\\": 1,\\n    \\\"total_pages\\\": 1\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 4,
+      "timestamp": "2026-09-30T19:55:31.571301729+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-e03e184116004f88bfa8d6ace363556e",
+          "function_name": "mcp__enterprise_world__calendar_list_events",
+          "arguments": {
+            "query": "launch evidence review"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-e03e184116004f88bfa8d6ace363556e",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 10,\\n    \\\"total_items\\\": 0,\\n    \\\"total_pages\\\": 0\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 5,
+      "timestamp": "2026-09-30T19:55:33.082419407+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-66a443b15d174c13bccda0bff671551d",
+          "function_name": "mcp__enterprise_world__calendar_list_events",
+          "arguments": {
+            "query": "security evidence review"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-66a443b15d174c13bccda0bff671551d",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 10,\\n    \\\"total_items\\\": 0,\\n    \\\"total_pages\\\": 0\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 6,
+      "timestamp": "2026-09-30T19:55:34.766441879+00:00",
+      "source": "agent",
+      "message": "",
+      "tool_calls": [
+        {
+          "tool_call_id": "chatcmpl-tool-7169b6eadcc34b3abdf41753ac6d69fe",
+          "function_name": "mcp__enterprise_world__calendar_list_events",
+          "arguments": {
+            "query": "review"
+          }
+        }
+      ],
+      "observation": {
+        "results": [
+          {
+            "source_call_id": "chatcmpl-tool-7169b6eadcc34b3abdf41753ac6d69fe",
+            "content": "{\"result\": \"{\\n  \\\"ok\\\": true,\\n  \\\"items\\\": [\\n    {\\n      \\\"id\\\": \\\"cal_atlas_000\\\",\\n      \\\"title\\\": \\\"Atlas launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-01T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"avery.brooks.000@example.test\\\",\\n        \\\"gray.brooks.006@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_beacon_001\\\",\\n      \\\"title\\\": \\\"Beacon launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-02T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"blake.brooks.001@example.test\\\",\\n        \\\"harper.brooks.007@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_cedar_002\\\",\\n      \\\"title\\\": \\\"Cedar launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-03T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"ava.patel@example.test\\\",\\n        \\\"indigo.brooks.008@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_delta_003\\\",\\n      \\\"title\\\": \\\"Delta launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-04T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"casey.brooks.002@example.test\\\",\\n        \\\"jordan.lee.security@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_ember_004\\\",\\n      \\\"title\\\": \\\"Ember launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-05T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"devon.brooks.003@example.test\\\",\\n        \\\"kai.brooks.010@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_fjord_005\\\",\\n      \\\"title\\\": \\\"Fjord launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-06T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"emery.brooks.004@example.test\\\",\\n        \\\"logan.brooks.011@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_launch_review\\\",\\n      \\\"title\\\": \\\"Launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-09-02T16:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"ava.patel@example.test\\\",\\n        \\\"mina.ortiz@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_grove_006\\\",\\n      \\\"title\\\": \\\"Grove launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-07T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"finley.brooks.005@example.test\\\",\\n        \\\"morgan.brooks.012@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_harbor_007\\\",\\n      \\\"title\\\": \\\"Harbor launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-08T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"gray.brooks.006@example.test\\\",\\n        \\\"noor.brooks.013@example.test\\\"\\n      ]\\n    },\\n    {\\n      \\\"id\\\": \\\"cal_ion_008\\\",\\n      \\\"title\\\": \\\"Ion launch readiness review\\\",\\n      \\\"starts_at\\\": \\\"2026-08-09T15:00:00Z\\\",\\n      \\\"attendees\\\": [\\n        \\\"harper.brooks.007@example.test\\\",\\n        \\\"parker.brooks.014@example.test\\\"\\n      ]\\n    }\\n  ],\\n  \\\"pagination\\\": {\\n    \\\"page\\\": 1,\\n    \\\"page_size\\\": 10,\\n    \\\"total_items\\\": 50,\\n    \\\"total_pages\\\": 5\\n  }\\n}\"}"
+          }
+        ]
+      }
+    },
+    {
+      "step_id": 7,
+      "timestamp": "2026-09-30T19:55:34.778949897+00:00",
+      "source": "agent",
+      "model_name": "nvidia/nvidia/nemotron-3-ultra",
+      "message": "Based on the data:\n\n**Outstanding Launch Evidence:**\n- **Task:** \"Attach security evidence packet\" (ID: `task_launch_evidence`)\n- **Owner:** ava.patel@example.test\n- **Status:** In progress\n- **Due:** 2026-09-01T17:00:00Z (already past due)\n\n**Next Review:**\n- **Event:** \"Launch readiness review\" (ID: `cal_launch_review`)\n- **Time:** **2026-09-02T16:00:00Z** (September 2, 2026, 16:00 UTC)\n- **Attendees:** ava.patel@example.test, mina.ortiz@example.test\n\nThe security evidence packet is the outstanding item, and the next launch readiness review is scheduled for **September 2, 2026 at 16:00 UTC**."
+    }
+  ]
+}

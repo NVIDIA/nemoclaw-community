@@ -1,0 +1,137 @@
+{
+  "world_version": "v1",
+  "clock": "2026-09-01T09:00:00Z",
+  "connector_status": {
+    "mail": {"status": "connected"},
+    "chat": {"status": "connected"},
+    "calendar": {"status": "connected"},
+    "knowledge": {"status": "connected"},
+    "crm": {"status": "needs_auth"}
+  },
+  "people": [
+    {"id": "person_ava", "name": "Ava Patel", "email": "ava.patel@example.test", "team": "Platform"},
+    {"id": "person_liam", "name": "Liam Chen", "email": "liam.chen@example.test", "team": "Sales"},
+    {"id": "person_mina", "name": "Mina Ortiz", "email": "mina.ortiz@example.test", "team": "Security"}
+  ],
+  "mail_threads": [
+    {
+      "id": "mail_q3_launch",
+      "subject": "Q3 launch readiness",
+      "participants": ["ava.patel@example.test", "mina.ortiz@example.test"],
+      "updated_at": "2026-08-30T16:00:00Z",
+      "messages": [
+        {"id": "mail_q3_1", "author": "mina.ortiz@example.test", "body": "Security sign-off is pending the final evidence packet."},
+        {"id": "mail_q3_2", "author": "ava.patel@example.test", "body": "I will send the packet before Tuesday's review."}
+      ]
+    },
+    {
+      "id": "mail_budget", "subject": "Budget review notes",
+      "participants": ["liam.chen@example.test", "ava.patel@example.test"],
+      "updated_at": "2026-08-25T12:00:00Z",
+      "messages": [
+        {"id": "mail_budget_1", "author": "liam.chen@example.test", "body": "The approved budget ceiling is 120k."}
+      ]
+    }
+  ],
+  "chat_threads": [
+    {
+      "id": "chat_launch_blocker",
+      "channel": "proj-launch",
+      "updated_at": "2026-08-31T15:00:00Z",
+      "messages": [
+        {"id": "chat_launch_1", "author": "ava.patel@example.test", "body": "The launch blocker is the missing security evidence packet."},
+        {"id": "chat_launch_2", "author": "mina.ortiz@example.test", "body": "Once it is attached, Security can sign off in one business day."}
+      ]
+    },
+    {
+      "id": "chat_noise", "channel": "social",
+      "updated_at": "2026-08-31T14:00:00Z",
+      "messages": [
+        {"id": "chat_noise_1", "author": "liam.chen@example.test", "body": "Launch party ideas are welcome."}
+      ]
+    }
+  ],
+  "calendar_events": [
+    {
+      "id": "cal_launch_review",
+      "title": "Launch readiness review",
+      "starts_at": "2026-09-02T16:00:00Z",
+      "attendees": ["ava.patel@example.test", "mina.ortiz@example.test"]
+    }
+  ],
+  "knowledge_documents": [
+    {
+      "id": "kb_launch_checklist",
+      "title": "Launch checklist",
+      "body": "Launch requires product approval, security evidence, and an approved change record.",
+      "updated_at": "2026-08-29T10:00:00Z"
+    }
+  ],
+  "files": [
+    {
+      "id": "file_security_packet",
+      "name": "security-evidence-packet.pdf",
+      "owner": "ava.patel@example.test",
+      "body": "Draft evidence packet for Security review. It is not yet approved.",
+      "updated_at": "2026-08-31T12:00:00Z"
+    }
+  ],
+  "structured_files": [
+    {
+      "id": "json_launch_evidence_register",
+      "name": "launch-evidence-register.json",
+      "owner": "ava.patel@example.test",
+      "content_type": "application/json",
+      "updated_at": "2026-08-31T13:00:00Z",
+      "content": {
+        "release": {
+          "name": "Q3 launch",
+          "review": {"starts_at": "2026-09-02T16:00:00Z", "status": "scheduled"}
+        },
+        "evidence": {
+          "security": {"status": "missing", "owner": "ava.patel@example.test", "required_artifact": "security-evidence-packet.pdf"},
+          "product": {"status": "approved", "reference": "product-signoff-17"},
+          "change_record": {"status": "approved", "reference": "change-842"}
+        },
+        "history": [
+          {"at": "2026-08-27T09:00:00Z", "event": "evidence request opened"},
+          {"at": "2026-08-30T16:00:00Z", "event": "draft packet announced"},
+          {"at": "2026-08-31T15:00:00Z", "event": "security evidence remains missing"}
+        ]
+      }
+    }
+  ],
+  "project_tasks": [
+    {
+      "id": "task_launch_evidence",
+      "title": "Attach security evidence packet",
+      "status": "in_progress",
+      "owner": "ava.patel@example.test",
+      "due_at": "2026-09-01T17:00:00Z"
+    }
+  ],
+  "analytics_metrics": [
+    {
+      "id": "metric_launch_adoption",
+      "name": "launch_adoption",
+      "value": 42,
+      "period": "2026-08"
+    }
+  ],
+  "support_tickets": [
+    {
+      "id": "ticket_network_42",
+      "title": "Network incident follow-up",
+      "status": "resolved",
+      "body": "The test incident was resolved; no launch impact was recorded."
+    }
+  ],
+  "faults": [
+    {
+      "tool": "chat.search",
+      "when": {"query": "network incident"},
+      "error": {"code": "TEMPORARY_UNAVAILABLE", "message": "Chat search is temporarily unavailable; retry once or use another authoritative source."},
+      "max_occurrences_per_session": 1
+    }
+  ]
+}

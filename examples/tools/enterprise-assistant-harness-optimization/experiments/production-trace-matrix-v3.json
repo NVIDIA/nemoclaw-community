@@ -1,0 +1,73 @@
+{
+  "purpose": "Generate a broad production-like discovery corpus from distinct requests against the frozen synthetic enterprise world.",
+  "fixture": "fixtures/world-v2.json",
+  "rules": [
+    "Collect actual Hermes and Relay trajectories from the unchanged baseline in OpenShell.",
+    "Each matrix row is a distinct user request; do not inflate corpus size by repeating prompts.",
+    "Use the same fixture, model route, and baseline harness throughout collection.",
+    "This matrix is a workload sampler, not an evaluation suite. Eval Author selects tasks from observed trace evidence."
+  ],
+  "collection_defaults": {
+    "trace_count": 42,
+    "requests_per_behavior_family": 7,
+    "tool_catalog": "extended",
+    "tool_catalog_tool_count": 15
+  },
+  "scenarios": [
+    {"id":"coverage-01","behavior_family":"multi_source_coverage","prompt":"What is blocking Orion launch readiness, and when is the review?"},
+    {"id":"coverage-02","behavior_family":"multi_source_coverage","prompt":"Give me the open Security issue for the launch and the calendar time set aside to review it."},
+    {"id":"coverage-03","behavior_family":"multi_source_coverage","prompt":"Before the launch review, what evidence is still missing and what time does the team meet?"},
+    {"id":"coverage-04","behavior_family":"multi_source_coverage","prompt":"Summarize the launch blocker and the scheduled readiness review using the latest records."},
+    {"id":"coverage-05","behavior_family":"multi_source_coverage","prompt":"What should I flag for the launch readiness meeting, and when does that meeting start?"},
+    {"id":"coverage-06","behavior_family":"multi_source_coverage","prompt":"Which launch evidence is outstanding? Include the time of the next review."},
+    {"id":"coverage-07","behavior_family":"multi_source_coverage","prompt":"I need a short launch status: name the unresolved evidence item and the upcoming review time."},
+
+    {"id":"read-01","behavior_family":"search_then_read","prompt":"What did Security say about the Orion launch blocker?"},
+    {"id":"read-02","behavior_family":"search_then_read","prompt":"Find the latest Security discussion of the missing launch evidence and tell me its substance."},
+    {"id":"read-03","behavior_family":"search_then_read","prompt":"What is the decision in the current launch thread from Security?"},
+    {"id":"read-04","behavior_family":"search_then_read","prompt":"Look up the recent conversation about the Orion evidence packet and summarize the actual message."},
+    {"id":"read-05","behavior_family":"search_then_read","prompt":"Did Security explain why the launch packet is incomplete? Please use the current thread."},
+    {"id":"read-06","behavior_family":"search_then_read","prompt":"What does the latest relevant Security message say about launch approval?"},
+    {"id":"read-07","behavior_family":"search_then_read","prompt":"Search for the launch blocker conversation, inspect the matching message, and report what Security said."},
+
+    {"id":"retry-01","behavior_family":"bounded_retry_and_fallback","prompt":"Find the chat context for the network incident and check support if chat has no useful result."},
+    {"id":"retry-02","behavior_family":"bounded_retry_and_fallback","prompt":"Look for the network outage discussion; if the chat connector has no record, find the related support ticket."},
+    {"id":"retry-03","behavior_family":"bounded_retry_and_fallback","prompt":"What is the latest context on the office network incident? Use support as a fallback when chat is empty."},
+    {"id":"retry-04","behavior_family":"bounded_retry_and_fallback","prompt":"Search chat once for the network incident, handle a temporary failure carefully, then use the support record if needed."},
+    {"id":"retry-05","behavior_family":"bounded_retry_and_fallback","prompt":"Can you find the network incident update? If chat returns no match, check the incident ticket."},
+    {"id":"retry-06","behavior_family":"bounded_retry_and_fallback","prompt":"Check for discussion of the network disruption and use the relevant support case if no chat context exists."},
+    {"id":"retry-07","behavior_family":"bounded_retry_and_fallback","prompt":"Retrieve the network incident context with a bounded retry, then consult support only if chat has no result."},
+
+    {"id":"auth-01","behavior_family":"connector_authentication_awareness","prompt":"Check whether CRM is available before looking up the account."},
+    {"id":"auth-02","behavior_family":"connector_authentication_awareness","prompt":"Is the CRM integration authenticated and ready for an account search?"},
+    {"id":"auth-03","behavior_family":"connector_authentication_awareness","prompt":"Before querying CRM, tell me whether its connector currently needs attention."},
+    {"id":"auth-04","behavior_family":"connector_authentication_awareness","prompt":"Can we use the CRM connector right now, or is sign-in required?"},
+    {"id":"auth-05","behavior_family":"connector_authentication_awareness","prompt":"Check CRM connection health and explain whether account lookup can proceed."},
+    {"id":"auth-06","behavior_family":"connector_authentication_awareness","prompt":"Is the account system connected? Verify connector status before searching."},
+    {"id":"auth-07","behavior_family":"connector_authentication_awareness","prompt":"I need an account lookup, but first confirm that CRM access is working."},
+
+    {"id":"approval-01","behavior_family":"approval_boundary","prompt":"Draft a note to Ava asking for the evidence packet."},
+    {"id":"approval-02","behavior_family":"approval_boundary","prompt":"Prepare an email to Ava Patel requesting the missing launch evidence."},
+    {"id":"approval-03","behavior_family":"approval_boundary","prompt":"Write a message asking Ava to share the Security packet before review."},
+    {"id":"approval-04","behavior_family":"approval_boundary","prompt":"Create a reviewable draft to Ava about the outstanding launch artifact."},
+    {"id":"approval-05","behavior_family":"approval_boundary","prompt":"Please draft a concise request to Ava for the current evidence register."},
+    {"id":"approval-06","behavior_family":"approval_boundary","prompt":"Prepare, but do not send, a note to Ava about the missing packet."},
+    {"id":"approval-07","behavior_family":"approval_boundary","prompt":"Compose a message to Ava asking when she can provide the launch evidence."},
+
+    {"id":"json-01","behavior_family":"bounded_structured_inspection","prompt":"In the launch evidence register, what is the current Security evidence status and who owns it?"},
+    {"id":"json-02","behavior_family":"bounded_structured_inspection","prompt":"Find the latest launch evidence register and report the Security artifact's status and owner."},
+    {"id":"json-03","behavior_family":"bounded_structured_inspection","prompt":"Who is responsible for the missing Security item in the current launch register?"},
+    {"id":"json-04","behavior_family":"bounded_structured_inspection","prompt":"Check the structured evidence register for the present state of the Security packet."},
+    {"id":"json-05","behavior_family":"bounded_structured_inspection","prompt":"What does the current Q3 launch evidence data say about the Security artifact and its owner?"},
+    {"id":"json-06","behavior_family":"bounded_structured_inspection","prompt":"Inspect the launch register and tell me whether Security evidence is complete and who maintains it."},
+    {"id":"json-07","behavior_family":"bounded_structured_inspection","prompt":"Give me the status and owner recorded for Security evidence in the current launch register."}
+  ],
+  "go_no_go": {
+    "minimum_source_traces": 36,
+    "maximum_source_traces": 48,
+    "minimum_distinct_requests": 30,
+    "baseline_attempts_per_eval_task": 3,
+    "held_out_comparison_required": true,
+    "guardrails": ["answer_quality", "source_coverage", "trajectory", "approval_safety", "tool_call_efficiency"]
+  }
+}

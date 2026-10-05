@@ -213,9 +213,9 @@ class ExampleStackFactsTests(unittest.TestCase):
             Counter(
                 {
                     # Includes the Kubernetes Deployer, SRE Assistant, the
-                    # Workday HR assistant, and the NeMo Platform Harness
-                    # Optimization example.
-                    "unconfirmed": 13,
+                    # Workday HR assistant, and both harness optimization
+                    # examples: NeMo Platform and Enterprise Assistant.
+                    "unconfirmed": 14,
                     "unpinned": 12,
                     "unknown": 1,
                     "not-applicable": 1,

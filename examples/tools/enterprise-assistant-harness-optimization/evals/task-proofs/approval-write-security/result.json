@@ -1,0 +1,91 @@
+{
+  "candidate_evidence_steps": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "environment": {
+    "isolation_status": "isolated",
+    "review_status": "unreviewed",
+    "status": "unproven",
+    "technical_status": "passed",
+    "verifier_environment_mode": "separate"
+  },
+  "ground_truth": {
+    "artifact_count": 1,
+    "availability": "available",
+    "use": "verification"
+  },
+  "privacy": {
+    "contextual_review_complete": true,
+    "images_omitted": 0,
+    "redaction_count": 12,
+    "reviewer_kind": "agent"
+  },
+  "reason_codes": [],
+  "repairs": 0,
+  "reproducibility": {
+    "agent_network_mode": "no-network",
+    "contamination_passed": true,
+    "dependency_closure": "unverified",
+    "file_count": 21,
+    "portability_state": "image_pinned_recipe",
+    "source_revision": null,
+    "task_tree_sha256": "sha256:ecde20b1e319203def143f408eee5a37f7b089ccbe3d1329413f6ef5e5738610",
+    "total_bytes": 308855
+  },
+  "schema": "nemo.eval_author.trace_environment_product.v4",
+  "state_basis": "reconstructed",
+  "status": "candidate",
+  "task_id": "approval-write-security",
+  "technical_validation": {
+    "check_evidence": "per_check",
+    "container_freshness": "unverified",
+    "copy_probes": {
+      "runs": [],
+      "status": "not_run"
+    },
+    "distinct_jobs": true,
+    "harbor_version": "0.22.0",
+    "minimum_runs": {
+      "copy": 0,
+      "negative": 1,
+      "nop": 2,
+      "oracle": 2
+    },
+    "passed": true,
+    "runs": {
+      "copy": [],
+      "negative": [
+        {
+          "exception_present": false,
+          "reward": 0.0
+        }
+      ],
+      "nop": [
+        {
+          "exception_present": false,
+          "reward": 0.0
+        },
+        {
+          "exception_present": false,
+          "reward": 0.0
+        }
+      ],
+      "oracle": [
+        {
+          "exception_present": false,
+          "reward": 1.0
+        },
+        {
+          "exception_present": false,
+          "reward": 1.0
+        }
+      ]
+    },
+    "task_checksum": "fd5709ae18a3e042898c464971620f2c25d3c1ea7eeb511db863ae4c7ab513a6",
+    "task_tree_sha256": "sha256:ecde20b1e319203def143f408eee5a37f7b089ccbe3d1329413f6ef5e5738610",
+    "verifier_environment_mode": "separate"
+  }
+}
