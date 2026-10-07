@@ -11,7 +11,7 @@ saved report for a fresh analysis or mix source corpora.
 
 ## Evidence
 
-- Production Trace Analyst report: `results/production-insights.yml`
+- Production report: `results/production-insights.yml`
 - Corpus index: `traces/world-v3/production/index.json`
 - Every ATIF trace in that index (inspect the complete 36–48 trace denominator)
 - Intended behavior: `ETHOS.md`
