@@ -38,13 +38,37 @@ async def collect(
     semaphore = asyncio.Semaphore(args.concurrency)
     records: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
+    jobs = [
+        (index, scenario, attempt)
+        for index, (scenario, attempt) in enumerate(
+            (
+                (scenario, attempt)
+                for scenario in scenarios
+                for attempt in range(1, args.attempts + 1)
+            ),
+            start=1,
+        )
+    ]
+    print(
+        f"Collecting {len(jobs)} trace(s) from {len(scenarios)} request(s), "
+        f"concurrency {args.concurrency}",
+        file=sys.stderr,
+        flush=True,
+    )
 
-    async def run_one(scenario: dict[str, Any], attempt: int) -> None:
+    async def run_one(index: int, scenario: dict[str, Any], attempt: int) -> None:
         case_id = scenario["id"]
         run_id = f"{case_id}-{attempt:02d}"
         run_dir = output / run_id
         errors: list[str] = []
+
+        def progress(message: str) -> None:
+            print(f"[{index}/{len(jobs)}] {run_id}: {message}", file=sys.stderr, flush=True)
+
+        progress("starting")
         for retry in range(args.retries + 1):
+            if retry:
+                progress(f"retry {retry + 1}/{args.retries + 1}")
             try_dir = run_dir if retry == 0 else run_dir / f"retry-{retry:02d}"
             agent = OpenShellHermesFlywheel(
                 logs_dir=try_dir / "agent",
@@ -71,7 +95,9 @@ async def collect(
                         f"OpenShell run produced no Relay ATIF: {run_id}"
                     )
             except (OSError, RuntimeError, TimeoutError) as exc:
-                errors.append(f"{type(exc).__name__}: {str(exc)[-1000:]}")
+                detail = f"{type(exc).__name__}: {str(exc)[-1000:]}"
+                errors.append(detail)
+                progress(f"attempt {retry + 1} failed: {detail.splitlines()[-1][:240]}")
                 continue
 
             call_log = try_dir / "artifacts" / "tool-calls.jsonl"
@@ -91,8 +117,10 @@ async def collect(
                     ),
                 }
             )
+            progress("finished")
             return
 
+        progress("failed")
         failures.append(
             {
                 "run_id": run_id,
@@ -104,11 +132,7 @@ async def collect(
         )
 
     await asyncio.gather(
-        *(
-            run_one(scenario, attempt)
-            for scenario in scenarios
-            for attempt in range(1, args.attempts + 1)
-        )
+        *(run_one(index, scenario, attempt) for index, scenario, attempt in jobs)
     )
     return (
         sorted(records, key=lambda item: item["run_id"]),

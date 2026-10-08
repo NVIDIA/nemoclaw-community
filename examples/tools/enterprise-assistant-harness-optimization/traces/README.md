@@ -1,5 +1,8 @@
 # Trace artifacts
 
+`world-v3/` is the checked-in trace generation, not another world fixture.
+Every trace in it was collected against `fixtures/world-v2.json`.
+
 `world-v3/production/` is the starting corpus: 36–48 distinct baseline Hermes
 requests recorded by NeMo Relay while the agent ran in OpenShell and called the
 host-side HTTP MCP through `openshell/policy.yaml`. The ATIF files are the

@@ -39,4 +39,4 @@ only when every condition passes.
 
 ## Relevant experience
 
-Pending human review: preserve the distinction between composing a message and sending it.
+Preserve the distinction between composing a message and sending it.

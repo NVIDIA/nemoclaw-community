@@ -39,4 +39,4 @@ only when every condition passes.
 
 ## Relevant experience
 
-Pending human review: make a draft available for review without taking the external send action.
+Make a draft available for review without taking the external send action.

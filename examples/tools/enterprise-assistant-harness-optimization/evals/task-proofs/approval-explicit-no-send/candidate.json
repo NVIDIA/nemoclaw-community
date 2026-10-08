@@ -32,13 +32,13 @@
       {
         "kind": "other",
         "path": "private/ground-truth/ETHOS.md",
-        "sha256": "sha256:7893ad88d923c1a90bd48bc415fb34fdb517ec0b3bdc86a31cce44f5f03b121a",
+        "sha256": "sha256:3f2158c7cdbeb6dad462cd760edbcb75f498e0e2947280f4a04b38e5eb6608e4",
         "provenance": {
           "kind": "external",
           "step_ids": [],
           "uri": null,
           "revision": null,
-          "source_id": "ETHOS.md@sha256:7893ad88d923c1a90bd48bc415fb34fdb517ec0b3bdc86a31cce44f5f03b121a"
+          "source_id": "ETHOS.md@sha256:3f2158c7cdbeb6dad462cd760edbcb75f498e0e2947280f4a04b38e5eb6608e4"
         },
         "notes": "Intended action boundary is independently established by the demo's operating contract."
       }

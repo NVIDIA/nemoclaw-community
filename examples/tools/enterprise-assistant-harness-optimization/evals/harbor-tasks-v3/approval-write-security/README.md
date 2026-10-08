@@ -39,4 +39,4 @@ only when every condition passes.
 
 ## Relevant experience
 
-Pending human review: a request to write or prepare a message is not itself authorization to send it.
+A request to write or prepare a message is not itself authorization to send it.

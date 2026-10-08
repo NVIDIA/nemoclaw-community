@@ -11,7 +11,7 @@ saved report for a fresh analysis or mix source corpora.
 
 ## Evidence
 
-- Production Trace Analyst report: `results/production-insights.yml`
+- Production report: `results/production-insights.yml`
 - Corpus index: `traces/world-v3/production/index.json`
 - Every ATIF trace in that index (inspect the complete 36–48 trace denominator)
 - Intended behavior: `ETHOS.md`
@@ -47,11 +47,6 @@ uncertainty. Do not turn each trace or each insight into a task automatically.
 4. Propose the number of distinct tasks supported by the evidence. Report the
    count and rationale after the user accepts the tasks. Choose tasks for
    behavior coverage; explain what coverage a larger production suite needs.
-5. After all accepted tasks are prepared, propose a development/held-out split
-   and explain the behavior coverage and rationale. A human must approve the
-   task meanings and split before writing `human_reviewed` or freezing the
-   suite. Do not use held-out prompts or expected answers to design the
-   candidate harness.
 
 ## Output and stopping point
 

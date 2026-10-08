@@ -140,7 +140,7 @@ Package: FreeCAD
 License: LGPL-2.1-or-later
 URL: https://github.com/FreeCAD/FreeCAD
 Notes: Required and driven over its MCP addon by
-examples/tools/nemo-platform-harness-optimization. Installed by the reader on
+examples/tools/cae-freecad-agent-harness-optimization. Installed by the reader on
 their own machine; not redistributed here.
 
 Package: FFmpeg
@@ -243,7 +243,7 @@ Package: nemo-platform
 License: Apache-2.0
 URL: https://github.com/NVIDIA-NeMo/nemo-platform
 Notes: Installed by the reader as a CLI tool (uv tool install) and used by
-examples/tools/nemo-platform-harness-optimization; not vendored here.
+examples/tools/cae-freecad-agent-harness-optimization; not vendored here.
 
 Package: psycopg[binary]
 License: LGPL-3.0-only
@@ -360,7 +360,7 @@ License: BSD-3-Clause and included component licenses (upstream distribution
 metadata records BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0)
 URL: https://github.com/numpy/numpy
 Notes: Declared by
-examples/tools/nemo-platform-harness-optimization/requirements.txt for that
+examples/tools/cae-freecad-agent-harness-optimization/requirements.txt for that
 example's offline test suite only. Its live scorer runs inside FreeCAD's
 bundled interpreter, which supplies its own NumPy.
 
@@ -564,7 +564,7 @@ Version: 0.1.24
 License: MIT
 URL: https://github.com/neka-nat/freecad-mcp
 Notes: Fetched and run by uvx at agent start, pinned to 0.1.24 in
-examples/tools/nemo-platform-harness-optimization/agent/agent.yaml. Not
+examples/tools/cae-freecad-agent-harness-optimization/agent/agent.yaml. Not
 vendored in this repository.
 
 Project: lfdevs Blender Linux ARM64 build
@@ -645,10 +645,10 @@ Asset: devx-jupyterapp-bridge/ source directory under examples/recipes/nvidia/ag
 Owner: NVIDIA
 Notes: First-party JupyterLab federated extension (~2 KB) hand-crafted for this example; sets window.jupyterapp for the workshop's in-lesson buttons. Distributed as inspectable, SPDX-headed source (package.json + static/remoteEntry.js) — no prebuilt archive. Mirrors only the structure of a prebuilt labextension and contains no third-party code. Provenance documented in the skill's references/sandbox-internals.md.
 
-Asset: reference_mug.obj under examples/tools/nemo-platform-harness-optimization/meshes/
+Asset: reference_mug.obj under examples/tools/cae-freecad-agent-harness-optimization/meshes/
 Owner: NVIDIA
 Notes: First-party ground-truth geometry authored for this example in FreeCAD and exported to Wavefront OBJ. The example's out-of-loop scorer measures agent output against it.
 
-Asset: NeMo Studio screenshots under examples/tools/nemo-platform-harness-optimization/assets/
+Asset: NeMo Studio screenshots under examples/tools/cae-freecad-agent-harness-optimization/assets/
 Owner: NVIDIA
 Notes: Trace and Insight views of this example's own agent runs on a local platform instance. No third-party or personal content.

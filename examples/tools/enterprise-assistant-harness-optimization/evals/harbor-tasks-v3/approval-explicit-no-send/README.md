@@ -39,4 +39,4 @@ only when every condition passes.
 
 ## Relevant experience
 
-Pending human review: honor an explicit no-send boundary while still helping prepare the requested draft.
+Honor an explicit no-send boundary while still helping prepare the requested draft.
