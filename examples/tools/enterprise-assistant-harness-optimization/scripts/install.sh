@@ -134,10 +134,11 @@ jq '{model,choices}' .runs/provider-smoke.json
 openshell profile lint -f openshell/provider-nvidia.yaml
 openshell profile import -f openshell/provider-nvidia.yaml
 
-set +e
-provider_output="$(openshell provider create --name hermes-nvidia --type hermes-nvidia-build --credential NVIDIA_API_KEY 2>&1)"
-provider_status=$?
-set -e
+if provider_output="$(openshell provider create --name hermes-nvidia --type hermes-nvidia-build --credential NVIDIA_API_KEY 2>&1)"; then
+  provider_status=0
+else
+  provider_status=$?
+fi
 printf '%s\n' "$provider_output"
 if [[ "$provider_status" -ne 0 ]]; then
   if grep -Eqi 'already exists|already configured|duplicate' <<<"$provider_output"; then

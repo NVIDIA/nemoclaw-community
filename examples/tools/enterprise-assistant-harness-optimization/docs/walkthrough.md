@@ -1,15 +1,18 @@
 # NemoClaw Enterprise Assistant Harness Optimization Tutorial
 
+
+Most agent failures don't show up in a single interaction, they show up in the traces. This guide walks through the full process of finding these failures, writing tests to measure them, and creating fixes. At the end you should know how to turn traces into repeatable eval tasks, know why a held-out set matters so a fix doesn’t overfit, and know how to resolve failures with small changes in the agent's instructions and verify those fixes in measurable ways.
+
 The tutorial walks through a multi-step optimization process for a fictional Enterprise Assistant agent:
 - Create traces by asking the agent a series of questions that use the fictional MCP tools
 - Use [NeMo Compass](https://github.com/NVIDIA-NeMo/labs-nemo-compass) to analyze the traces and identify common failures
-- Use a coding agent like Codex with the [NeMo Eval Author skills](https://github.com/NVIDIA-NeMo/labs-eval-author) to create Harbor evaluation cases that (a) reflect the most common patterns from the traces, and (b) reproduce any identified failures
+- Use a coding agent like Codex with the [NeMo Eval Author skills](https://github.com/NVIDIA-NeMo/labs-eval-author) to create [Harbor evaluation cases](https://www.harborframework.com/) that (a) reflect the most common patterns from the traces, and (b) reproduce any identified failures
 - Propose a change to the agent that fixes the failure
-- Run the Harbor eval causes with the proposed fix, confirming improvement without introducing regressions
+- Run the Harbor evaluation cases with the proposed fix, confirming improvement without introducing regressions
 
-After completing this tutorial, you will have the core understanding of the NeMo libraries to re-implement this optimization loop with your own agent.
+After completing this tutorial, you will have a core understanding of the NeMo libraries to re-implement this optimization loop with your own agent.
 
-The repository includes checked-in artifacts for each step of this process, allowing you to reproduce the results or skip steps that you do not want to re-run. For the tutorial run through that is checked into the repository:
+The repository includes checked-in artifacts for each step of this process, allowing you to reproduce the results or skip steps that you do not want to re-run. For the tutorial run-through that is checked into the repository:
 
 - NeMo Compass identified an issue in the 42 checked-in traces where the agent would draft/write messages without user confirmation
 - Eval tasks were created to reproduce this issue
@@ -18,7 +21,7 @@ The repository includes checked-in artifacts for each step of this process, allo
 
 Your run of the tutorial may identify different results.
 
-## Pre-requisites
+## Prerequisites
 
 - Ubuntu 24.04 with Docker, 8 CPU, 32GB RAM, 100 GB Storage. [NVIDIA Brev](https://brev.nvidia.com/) is one
 place to choose a compatible CPU instance.
@@ -54,25 +57,24 @@ openshell sandbox connect hermes-try
 In the sandbox shell, load the prepared Hermes environment and start its TUI:
 
 ```bash
-cd /workspace/run
+cd run
 source interactive-env.sh
-hermes chat --tui --model nvidia/nemotron-3-ultra-550b-a55b --provider nvidia
+hermes mcp list # should show the enterprise mcp server
+hermes --model nvidia/nemotron-3-ultra-550b-a55b # drops you into Hermes TUI
 ```
 
-Try “What is blocking Orion launch readiness, and when is the review?” The
-agent can search the fictional mail, chat, calendar, knowledge and project
-tools. After leaving the TUI, press Ctrl-C in the first host terminal.
+Try asking “What are the blockers for Q3 launch??” The agent can search the fictional mail, chat, calendar, knowledge and project tools. After leaving the TUI, press Ctrl-C in the first host terminal.
 
 ## Collect source traces
 
 In this step, we run the agent through a bunch of tasks and collect the traces.
 
-### Skip and use pre-exisitng traces
+### Skip and use pre-existing traces
 
-Set the environment variable `TRACE_CORPUS` which causes the remaining steps to use the traces checked into the repository.
+Set the environment variable `TRACE_CORPUS`, which causes the remaining steps to use the traces checked into the repository.
 
 ```bash
-TRACE_CORPUS="$PWD/traces/world-v3/production"
+export TRACE_CORPUS="$PWD/traces/world-v3/production"
 python3 scripts/validate_trace_corpus.py "$TRACE_CORPUS/index.json"
 jq '{trace_count: (.traces | length), families: ([.traces[].behavior_family] | unique)}' \
   "$TRACE_CORPUS/index.json"
@@ -96,7 +98,7 @@ This command runs the agent against a series of tasks. Each task starts Hermes i
   --matrix experiments/production-trace-matrix-v3.json \
   --output .runs/production-corpus
 python3 scripts/validate_trace_corpus.py .runs/production-corpus/index.json
-TRACE_CORPUS="$PWD/.runs/production-corpus"
+export TRACE_CORPUS="$PWD/.runs/production-corpus"
 ```
 
 That command asks the agent these 42 tasks:
@@ -148,7 +150,7 @@ That command asks the agent these 42 tasks:
 
 ## Discover issues
 
-Use NeMo Compass to understand patterns in the traces and identify re-curring errors.
+Use NeMo Compass to understand patterns in the traces and identify recurring errors.
 
 ### Install [NeMo Compass](https://github.com/NVIDIA-NeMo/labs-nemo-compass):
 
@@ -172,7 +174,7 @@ NeMo Compass performs analysis on the traces collected earlier. To inform that a
 Run the analysis on the traces collected earlier:
 
 ```bash
-PRODUCTION_INSIGHTS="$PWD/.runs/production-insights.yml"
+export PRODUCTION_INSIGHTS="$PWD/.runs/production-insights.yml"
 mkdir -p .runs
 insight-agent --config configs/trace-analyst.yaml \
   --trace.filesystem.path "$TRACE_CORPUS/insights.jsonl" \
@@ -208,7 +210,7 @@ NeMo Compass looks at traces from the agent and identifies issues. Before we can
 
 Like other parts of the tutorial, you can skip this step and re-use the eval tasks that are checked-in to the repository.
 
-### Setup the coding agent that will help author the tasks
+### Set up the coding agent that will help author the tasks
 
 The following steps install and configure Codex, but you can use a different coding agent if you prefer.
 
@@ -251,30 +253,39 @@ npx --yes skills@1.7.0 list --agent codex
 codex
 ```
 
-Inside Codex, provide `TRACE_CORPUS` and `PRODUCTION_INSIGHTS` from prior steps as context. Also provide the `ETHOS.md` file. Then ask Codex to follow the steps in the [the authoring prompt](../prompts/eval-author-from-traces.md).
+Inside Codex, paste this prompt. The exported `TRACE_CORPUS` and `PRODUCTION_INSIGHTS` values are available to Codex's shell. The instructions are in [prompts/eval-author-from-traces.md](../prompts/eval-author-from-traces.md):
+
+```text
+Read TRACE_CORPUS and PRODUCTION_INSIGHTS from the shell environment and resolve them to absolute paths. Follow prompts/eval-author-from-traces.md exactly. Use these paths instead of the saved-example defaults in that file:
+
+- Production corpus: $TRACE_CORPUS
+- Corpus index: $TRACE_CORPUS/index.json
+- Production NeMo Compass report: $PRODUCTION_INSIGHTS
+- Intended behavior: ETHOS.md
+```
 
 Codex will follow the skills to:
 -  Create tasks that represent key behaviors discovered in the traces and any problems identified by NeMo Compass
 - Create verifiers that judge whether an agent attempting the tasks gets them correct
-- Codex will ask for your confirmation that the evals it proposes match tasks and behaviors you want covered by tests --- consider this a sanity check where you can double check the tests based on your understanding of the agent
+- Codex will ask for your confirmation that the evals it proposes match tasks and behaviors you want covered by tests --- consider this a sanity check where you can double-check the tests based on your understanding of the agent
 
-Once the eval tasks are reviewed, set the following environment variables to use your new tasks for the remainder of the tutorial:
+Once the eval author work is complete, set the following environment variables to use your new tasks for the remainder of the tutorial:
 
 ```bash
-SUITE="$PWD/.runs/authored-eval/suite.json"
-TASKS_DIR="$PWD/.runs/authored-eval/tasks"
+export SUITE="$PWD/.runs/authored-eval/suite.json"
+export TASKS_DIR="$PWD/.runs/authored-eval/tasks"
 PROOFS_DIR="$PWD/.runs/authored-eval/proofs"
 ```
 
-To continue with the checked-in example use:
+To continue with the checked-in examples use:
 
 ```bash
-SUITE="$PWD/evals/flywheel-eval-set-v3.json"
-TASKS_DIR="$PWD/evals/harbor-tasks-v3"
+export SUITE="$PWD/evals/flywheel-eval-set-v3.json"
+export TASKS_DIR="$PWD/evals/harbor-tasks-v3"
 PROOFS_DIR="$PWD/evals/task-proofs"
 ```
 
-**Important Limitation: In the checked-in artifacts fro this tutorial, Eval Author created a limited set of tests focused on a single behavior. For production agents, it is important to create a wide range of evaluations that cover as much of your agent behavior as possible. Over time, NeMo Compass and NeMo Eval Author can be used together to identify issues and create evaluation tests that cover those issues --- similar to coding regression tests. BUT it is important to start with a solid baseline of evaluation cases to avoid over-fitting the optimization process to a few specific scenarios.**
+**Important Limitation: In the checked-in artifacts for this tutorial, Eval Author created a limited set of tests focused on a single behavior. For production agents, it is important to create a wide range of evaluations that cover as much of your agent behavior as possible. Over time, NeMo Compass and NeMo Eval Author can be used together to identify issues and create evaluation tests that cover those issues --- similar to coding regression tests. BUT it is important to start with a solid baseline of evaluation cases to avoid over-fitting the optimization process to a few specific scenarios.**
 
 ## Hold-out set
 
@@ -317,11 +328,11 @@ Now that we have created evaluation tests we are ready for the optimization flyw
 
 - run the eval tests with our current agent and collect traces
 - run NeMo Compass on the traces from our eval set
-- ask a coding agent to analyze (a) the NeMo Compass report fron our original traces, (b) the NeMo Compass report from our eval test traces and propose a change to improve our agent
+- ask a coding agent to analyze (a) the NeMo Compass report from our original traces, (b) the NeMo Compass report from our eval test traces, and propose a change to improve our agent
 - run the eval tests with the proposed improved agent and check that the tests now pass
 - run the held-out tests to be sure the proposal did not cheat or introduce regressions
 
-For each step that involves running the eval tests, we will run each test multiple times. This replication helps ensure we are making changes based on repeatable agent behaviors rather then relying on single lucky or unlucky runs.
+For each step that involves running the eval tests, we will run each test multiple times. This replication helps ensure we are making changes based on repeatable agent behaviors rather than relying on single lucky or unlucky runs.
 
 ### Run the eval test with our current agent
 
@@ -355,9 +366,9 @@ As expected, the current agent does not pass the evaluation task. This failure i
 
 ### Analyze the eval tests with NeMo Compass
 
-Earlier in the tutorial we used NeMo Compass to create a report of issues based on all the traces we collected. That step was meant to mimick running NeMo Compass on production traces from a real agent environment.
+Earlier in the tutorial we used NeMo Compass to create a report of issues based on all the traces we collected. That step was meant to mimic running NeMo Compass on production traces from a real agent environment.
 
-Now, we will run NeMo Compass again, but this time to analyze the traces collected from running the agent on the eval cases. By design, NeMo Compass should find similar issues since eval case was built to reflect the production traces. The second run of NeMo Compass is a sanity check that will provide further information for the coding agent when it proposes an agent improvement.
+Now, we will run NeMo Compass again, but this time to analyze the traces collected from running the agent on the eval cases. By design, NeMo Compass should find similar issues since the eval case was built to reflect the production traces. The second run of NeMo Compass is a sanity check that will provide further information for the coding agent when it proposes an agent improvement.
 
 ```bash
 .harbor-venv/bin/python scripts/convert_atif_for_insights.py \
@@ -373,7 +384,7 @@ insight-agent --config configs/trace-analyst.yaml \
 The saved [scored-baseline report](../results/baseline-development-insights.yml)
 cites two unauthorized sends among three write-message attempts. Its title is
 “Agent sends messages without user approval for approval-write-security task
-(chat channel).
+(chat channel).”
 
 
 ### Propose a model improvement
@@ -382,10 +393,10 @@ Next, use the results gathered so far to propose a harness improvement.
 
 **Important: Start a new coding agent session with fresh context to prevent the held-out test cases from being seen.**
 
-In the new coding agent session, supply the prompt. It uses the `TRACE_CORPUS`, `PRODUCTION_INSIGHTS`, `SUITE`, and `TASKS_DIR` values already set in this shell:
+In the new coding agent session, supply the prompt. The four paths are exported above for either your own artifacts or the checked-in examples. Launch Codex from that same shell.
 
 ```text
-Start from the current shell environment. Read these paths and do not search the repository for other eval results:
+Read TRACE_CORPUS, PRODUCTION_INSIGHTS, SUITE, and TASKS_DIR from the shell environment and resolve them to absolute paths. Read these paths and do not search the repository for other eval results:
 
 - Production corpus: $TRACE_CORPUS
 - Production NeMo Compass report: $PRODUCTION_INSIGHTS
@@ -402,7 +413,7 @@ From $SUITE, use only cases whose case_kind is "development", and open only thos
 Use the production findings, the development findings, and the traces they cite to propose one general change to Hermes. Show the evidence, hypothesis, and a diff against profiles/baseline-soul.md. Keep the rationale under 200 words. Use only development tasks for design. Write the proposal to .runs/candidate-proposal.md. Do not modify the baseline profile, suite, tasks, or traces. After I accept the proposal, apply that accepted change to profiles/candidate-soul.md.
 ```
 
-For the checked-in walkthrough, Codex proposed these changes to the Heremes agent SOUL.md:
+For the checked-in walkthrough, Codex proposed these changes to the Hermes agent SOUL.md:
 
 | Observation | Candidate instruction |
 | --- | --- |
@@ -456,7 +467,7 @@ Summarize the runs and compare them:
   --output .runs/measured-ab.json
 ```
 
-For the checked-in tutorial run through, the results were:
+For the checked-in tutorial run-through, the results were:
 
 | Split | Baseline | Candidate | Tool calls |
 | --- | ---: | ---: | ---: |
@@ -468,3 +479,5 @@ Changes to the baseline confirm that the proposed change addressed the issue the
 ** Important to note that in this tutorial we created a very small number of eval tasks. For a production agent, the held-out set should cover a wide variety of agent behaviors.**
 
 ## Conclusion
+
+This tutorial demonstrated how to create traces from a NemoClaw reference agent: Hermes running in OpenShell with NVIDIA Nemotron. Adapt the same pattern to your agent using NeMo Compass to identify patterns and problems and NeMo Eval Author to create Harbor evaluation tasks representing those findings. Together these libraries create the foundation for an optimization flywheel.

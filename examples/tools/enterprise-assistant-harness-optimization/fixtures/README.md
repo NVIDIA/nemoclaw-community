@@ -12,7 +12,10 @@ PYTHONPATH=src:. python3 scripts/validate_world_v2.py
 ```
 
 `generate_world_v2.py` deterministically expands the small `world-v1.json`
-seed. Data Designer can instead propose additional fictional source records,
+seed. There is no `world-v3` fixture. Names that end in `v3`, including
+`traces/world-v3/` and `experiments/production-trace-matrix-v3.json`, are the
+trace and evaluation generation that runs against this `world-v2` fixture.
+Data Designer can instead propose additional fictional source records,
 but generated rows should be reviewed, frozen as a new version, and paired with
 new traces and evaluation contracts. It should not generate traces, judgments,
 or evidence the tested agent never retrieved.

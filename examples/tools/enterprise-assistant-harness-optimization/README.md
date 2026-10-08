@@ -6,18 +6,20 @@
 | Catalog field | Value |
 | --- | --- |
 | Description | Improve an Enterprise Personal Assistant NemoClaw agent using a trace-to-evaluation optimization loop |
-| Industry | Enterprise |
-| Requirements | Ubuntu with Docker, NVIDIA Build API key, Codex or an equivalent coding agent|
+| Industry | ✨ Other |
+| Requirements | Ubuntu with Docker, NVIDIA Build API key, Codex or an equivalent coding agent |
 | NemoClaw | 0.0.131 |
 | Harness | Hermes 0.21.3 |
 | OpenShell | 0.1.2 |
 
-This repository is a NemoClaw reference tutorial for optimizing an Enterprise Personal Assistant agent. The agent is built with Hermes running in OpenShell with Nemotron 3 Ultra as the LLM. The agent connects to an MCP service that contains fictional tools mimicking services like Outlook, Teams, Slack, Jira, and Confluence.
+Most agent failures don't show up in a single interaction, they show up in the traces. This guide walks through the full process of finding these failures, writing tests to measure them, and creating fixes. At the end you should know how to turn traces into repeatable eval tasks, know why a held-out set matters so a fix doesn’t overfit, and know how to resolve failures with small changes in the agent's instructions and verify those fixes in measurable ways.
+
+This repository is a NemoClaw reference tutorial for optimizing an Enterprise Personal Assistant agent. The setup follows the NemoClaw structure: an agent is built with Hermes running in OpenShell with Nemotron 3 Ultra as the LLM. The agent connects to an MCP service that contains fictional tools mimicking services like Outlook, Teams, Slack, Jira, and Confluence.
 
 The tutorial walks through a multi-step optimization process:
 - Create traces by asking the agent a series of questions that use the fictional MCP tools
 - Use [NeMo Compass](https://github.com/NVIDIA-NeMo/labs-nemo-compass) to analyze the traces and identify common failures
-- Use a coding agent like Codex with the [NeMo Eval Author skills](https://github.com/NVIDIA-NeMo/labs-eval-author) to create Harbor evaluation cases that (a) reflect the most common patterns from the traces, and (b) reproduce any identified failures
+- Use a coding agent like Codex with the [NeMo Eval Author skills](https://github.com/NVIDIA-NeMo/labs-eval-author) to create [Harbor evaluation cases](https://www.harborframework.com/) that (a) reflect the most common patterns from the traces, and (b) reproduce any identified failures
 - Propose a change to the agent that fixes the failure
 - Run the Harbor eval cases with the proposed fix, confirming improvement without introducing regressions
 

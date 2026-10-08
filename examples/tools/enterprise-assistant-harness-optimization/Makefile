@@ -1,4 +1,4 @@
-.PHONY: test validate validate-pilot validate-world-v1 validate-fixture insights-jsonl-atof harbor-materialize
+.PHONY: test validate validate-pilot validate-fixture insights-jsonl-atof harbor-materialize
 
 PYTHON ?= python3
 REVIEW_FLAGS ?=
@@ -19,9 +19,6 @@ validate:
 # Integrity checks for the experimental example; never claims human readiness.
 validate-pilot:
 	$(MAKE) validate PYTHON=$(PYTHON) REVIEW_FLAGS=--allow-unreviewed
-
-validate-world-v1:
-	PYTHONPATH=src $(PYTHON) scripts/validate_contract.py --fixture fixtures/world-v1.json --cases tests/fixtures/world-contract-cases.json
 
 validate-fixture:
 	@test -n "$(FIXTURE)" || (echo "Set FIXTURE=fixtures/world-vN.json" && exit 2)
