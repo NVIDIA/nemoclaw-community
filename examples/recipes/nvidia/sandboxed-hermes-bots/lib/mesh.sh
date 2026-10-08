@@ -57,7 +57,10 @@ mesh_sync() {
   local a b n=0 line bots=""
   # Validate every live participant before the first write. A tracked foreign
   # collision must stop the operation, never receive a plugin or peer config.
-  while IFS= read -r line; do
+  # Iterate over a list, not a while-read on stdin: the ownership check runs
+  # `openshell sandbox exec`, which reads stdin and would swallow the rest of
+  # the bot list, leaving one bot and no mesh.
+  for line in $(bot_list); do
     [[ -n "$line" ]] || continue
     [[ "$(sandbox_phase "$(sandbox_of "$line")")" == Ready ]] || continue
     bot_require_owned "$line"
@@ -65,7 +68,7 @@ mesh_sync() {
       || die "$line is missing its key or port; refusing a partial mesh update"
     bots+="$line "
     n=$((n + 1))
-  done < <(bot_list)
+  done
   (( n < 2 )) && { dim "mesh: fewer than two bots"; return 0; }
   for a in $bots; do
     _mesh_install_plugin "$(sandbox_of "$a")"

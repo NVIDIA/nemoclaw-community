@@ -109,7 +109,7 @@ cmd_up() {
 
 cmd_add() {
   local name="${1:-}"; shift || true
-  valid_name "$name" || die "usage: swarm add NAME [--soul FILE | --role \"text\"]  (lowercase, digits, dashes)"
+  valid_name "$name" || die "usage: swarm add NAME [--soul FILE | --role \"text\"]; $(name_rule "$name")"
   local soul="" role="" soul_set="" role_set=""
   while (($#)); do
     case "$1" in
@@ -137,7 +137,7 @@ cmd_add() {
 
 cmd_rm() {
   local name="${1:-}" yes="${2:-}"
-  valid_name "$name" || die "usage: swarm rm NAME [--yes]"
+  valid_name_loose "$name" || die "usage: swarm rm NAME [--yes]  (lowercase letters, digits, single hyphens)"
   if [[ "$yes" != "--yes" ]]; then
     read -r -p "remove bot $name, its sandbox, profile, and key? [y/N] " a
     [[ "$a" == y || "$a" == Y ]] || { dim "aborted"; return 0; }
@@ -191,6 +191,9 @@ cmd_down() {
   [[ -z "$all" && -n "$extra" ]] && dim "kept (not in BOTS): $extra; use swarm rm NAME or swarm down --all"
   (( failed )) && die "one or more bots were not fully removed; their state was kept for recovery"
   [[ -n "$all" ]] && tracing_collector_remove
+  # The one host gateway is the default profile's process, shared with anything
+  # else this user runs through Hermes; leave it up. Say so once.
+  [[ "$HOST_GATEWAY" == on ]] && host_gateway_running && dim "host gateway left running (it is the default profile's; stop with: hermes gateway stop)"
   return 0
 }
 

@@ -140,10 +140,12 @@ In this order. Stop at the first failure.
 
 ## Failures that look like something else
 
-- **Bot works over HTTP but is missing from the roster.** Two gateways per bot:
-  one inside the sandbox (serves the api_server), one on the host (`hermes -p
-  <bot> gateway run`) that makes the profile report `running`. The roster
-  lists only the second. `swarm up` starts both; `swarm status` checks both.
+- **Bot works over HTTP but is missing from the roster.** Two gateways are
+  involved: one inside the sandbox (serves the api_server), and one on the host
+  (`hermes gateway run`, from the default profile, shared by every bot) that
+  makes each bot profile report `running`. The roster lists only the second.
+  Hermes 0.21.4+ refuses a per-profile gateway, so never run `hermes -p <bot>
+  gateway run`. `swarm up` starts both; `swarm status` checks both.
 - **`403` vs `502` vs `000` from inside a sandbox.** 403: policy denied it
   (host not allowed, *or the calling binary is not listed*; policies bind to
   both). 502: allowed, but nothing listening, usually a service on host
@@ -178,7 +180,8 @@ In this order. Stop at the first failure.
 
 ## Traps in your own diagnostics
 
-- **`gateway.pid` holds JSON**, not a bare PID. Ask `hermes profile list`.
+- **Bot profiles have no gateway.pid.** The one host gateway records its pid and
+  `served_profiles` in `~/.hermes/gateway_state.json`. Ask `hermes profile list`.
 - **Nested shell quoting mangles keys** and yields 401s from healthy endpoints.
   Read keys from files inside a script; never interpolate them through
   `ssh '… "… \"…\" …" …'`. Same for `python -c` through `sandbox exec`: two
