@@ -65,6 +65,8 @@ app.kubernetes.io/instance: {{ .Release.Name }}
       "cluster_name" $n.clusterName
       "runbook_base_url" $n.runbookBaseUrl
       "events" $n.events
+      "escalation_min_severity" (default "high" $n.escalationMinSeverity)
+      "healed_delivery" (default "immediate" $n.healedDelivery)
       "dedupe_seconds" $n.dedupeSeconds
       "posture_dedupe_seconds" $n.postureDedupeSeconds
       "stdout" (dict "enabled" $n.stdout)

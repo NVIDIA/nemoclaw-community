@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 import logging
 import time
 import uuid
@@ -138,7 +139,15 @@ class Engine:
         storage_records = []
         if self.config.get("storage.enabled", False):
             try:
-                storage_namespaces = [ns for ns in (list_namespaces or []) if self.policy.namespace_in_scope(ns)]
+                configured_namespaces = self.config.get("storage.namespaces", []) or list_namespaces or []
+                if not isinstance(configured_namespaces, list) or any(
+                    not isinstance(namespace, str) or len(namespace) > 63
+                    or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", namespace)
+                    for namespace in configured_namespaces
+                ):
+                    raise ValueError("storage monitoring requires exact namespace names")
+                storage_namespaces = [namespace for namespace in dict.fromkeys(configured_namespaces)
+                                      if self.policy.namespace_in_scope(namespace)]
                 writes_allowed = (not snap.errors and not self.dry_run
                                   and not self.config.get("policy.paused", False)
                                   and self.config.get("policy.mode") in {"safe", "assisted"})

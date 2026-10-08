@@ -328,6 +328,8 @@ class StorageController:
             if record.get('vm'):
                 message.sections.append(Section('steps', 'Admin / VM owner follow-up (manual only)', guest_steps(record)))
             for sink in self.notifier.sinks:
+                if hasattr(self.notifier, 'allows_sink') and not self.notifier.allows_sink(message, sink.name):
+                    continue
                 status = entry['sinks'].setdefault(sink.name, {'attempts': 0, 'ok': False, 'last': 0})
                 if status['ok'] or status['attempts'] >= self.cfg['notification_max_attempts']:
                     continue

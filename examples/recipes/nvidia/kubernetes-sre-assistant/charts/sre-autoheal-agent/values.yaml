@@ -94,6 +94,8 @@ llm:
     key: api-key
 
 notifications:
+  escalationMinSeverity: high # high and critical; lower incidents remain in audit
+  healedDelivery: immediate # digest only with a verified external report reader
   # Optional deployment label shown in the subject and body. Empty omits it.
   environment: ""
   clusterName: ""
@@ -138,6 +140,7 @@ agentConfig:
   storage:
     enabled: false
     mode: recommendation # recommendation | automatic; global observe/dry-run/pause still wins
+    namespaces: [] # exact storage-monitoring namespaces; empty inherits scope.include_namespaces
     threshold_percent: 85
     growth_percent: 15
     sustain_seconds: 300
@@ -189,7 +192,7 @@ agentConfig:
     pvc_pending_min_age_seconds: 300
     node_not_ready_min_age_seconds: 300
     events_lookback_seconds: 1800
-    log_tail_lines: 40
+    log_tail_lines: 50
     max_findings_per_cycle: 50
     include_posture_audit: true
     transient_grace_seconds: 300

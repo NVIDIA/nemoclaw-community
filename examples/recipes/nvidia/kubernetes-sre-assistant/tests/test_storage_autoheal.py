@@ -203,6 +203,36 @@ class StorageTests(unittest.TestCase):
             engine.run_cycle()
             self.assertEqual(len(self.notify.sinks[0].messages), 1)
 
+    def test_storage_namespace_scope_does_not_narrow_general_detection(self):
+        self.sample[('test', 'data')]['timestamp'] = time.time()
+        config = load_config(environ={})
+        config.data['storage'] = {**config.data['storage'], **self.cfg, 'namespaces': ['test']}
+        config.data['scope']['include_namespaces'] = []
+        self.state.data['fingerprints'] = {}
+        engine = Engine(config, self.cluster, None, self.state, self.notify, None)
+        with mock.patch('sre_autoheal.engine.Snapshot.load', return_value=SimpleNamespace(errors=[])) as snapshot, \
+             mock.patch.object(engine, 'describe_cluster', return_value={}), \
+             mock.patch('sre_autoheal.engine.Detector') as detector, \
+             mock.patch('sre_autoheal.storage.PrometheusMetrics.__call__', return_value=self.sample):
+            detector.return_value.run.return_value = []
+            result = engine.run_cycle()
+        self.assertEqual(result['storage'][0]['outcome'], 'recommended')
+        self.assertIsNone(snapshot.call_args.kwargs['namespaces'])
+
+    def test_storage_scope_rejects_wildcards_before_controller_reads(self):
+        config = load_config(environ={})
+        config.data['storage'] = {**config.data['storage'], **self.cfg, 'namespaces': ['*']}
+        self.state.data['fingerprints'] = {}
+        engine = Engine(config, self.cluster, None, self.state, self.notify, None)
+        with mock.patch('sre_autoheal.engine.Snapshot.load', return_value=SimpleNamespace(errors=[])), \
+             mock.patch.object(engine, 'describe_cluster', return_value={}), \
+             mock.patch('sre_autoheal.engine.Detector') as detector, \
+             mock.patch('sre_autoheal.engine.StorageController') as controller:
+            detector.return_value.run.return_value = []
+            result = engine.run_cycle()
+        self.assertEqual(result['storage'][0]['outcome'], 'controller_error')
+        controller.assert_not_called()
+
     def test_persistence_failure_refuses_expansion(self):
         class BrokenBackend:
             def save(self, data):

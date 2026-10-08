@@ -427,11 +427,11 @@ class Detector:
         """
         if not self.client:
             return ""
-        tail = int(self.cfg.get("log_tail_lines", 40))
+        tail = min(50, max(1, int(self.cfg.get("log_tail_lines", 50))))
         for mode in (previous, not previous):
             text = self.client.pod_logs(ns, pod, container, tail=tail, previous=mode)
             if text and not text.startswith("unable to retrieve container logs") and not text.startswith("<logs unavailable"):
-                return redact(text)[-4000:]
+                return redact(text)[-12000:]
         return text[:200] if text else ""
 
     # -- workloads -----------------------------------------------------------

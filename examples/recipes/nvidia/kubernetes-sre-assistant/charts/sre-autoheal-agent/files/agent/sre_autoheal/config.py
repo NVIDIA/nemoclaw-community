@@ -24,7 +24,7 @@ ENV_PREFIX = "SRE_AUTOHEAL_"
 DEFAULTS: Dict[str, Any] = {
     # Optional deterministic storage controller. Guest mutation is not enabled.
     "storage": {
-        "enabled": False, "mode": "recommendation", "threshold_percent": 85,
+        "enabled": False, "mode": "recommendation", "namespaces": [], "threshold_percent": 85,
         "growth_percent": 15, "sustain_seconds": 300, "max_size": "2Ti",
         "verification_seconds": 300, "cooldown_seconds": 86400,
         "notification_dedupe_seconds": 3600, "notification_retry_seconds": 60,
@@ -95,7 +95,7 @@ DEFAULTS: Dict[str, Any] = {
         "pvc_pending_min_age_seconds": 300,
         "node_not_ready_min_age_seconds": 300,
         "events_lookback_seconds": 1800,
-        "log_tail_lines": 40,
+        "log_tail_lines": 50,
         "max_findings_per_cycle": 50,
         "include_posture_audit": True,
         "transient_grace_seconds": 300,
@@ -143,6 +143,9 @@ DEFAULTS: Dict[str, Any] = {
         "poll_seconds": 15,
     },
     "notify": {
+        "escalation_min_severity": "high",
+        # digest requires an external scheduled reader of durable incident memory.
+        "healed_delivery": "immediate",
         "slack": {
             "enabled": False,
             "webhook_url_env": "SRE_AUTOHEAL_SLACK_WEBHOOK_URL",

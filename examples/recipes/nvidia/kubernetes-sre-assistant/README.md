@@ -317,6 +317,20 @@ unknown, LVM, encrypted or unsupported layouts require manual inspection.
 Failed or unverified PVC expansion never receives guest-resize commands.
 Storage emails have no JSON attachment.
 
+`agentConfig.storage.namespaces` can scope storage monitoring independently of
+general workload detection. It accepts exact namespace names only and still
+honors the global namespace policy. An empty list inherits
+`agentConfig.scope.include_namespaces`; storage never silently monitors all
+namespaces. Recommendation mode cannot resize or delete PVCs.
+
+High/Critical workload escalations include up to the last 50 collected application
+log lines inline, credential-redacted and capped at 12,000 characters. If logs
+are unavailable, the email states that explicitly. The message includes the
+attempt count, action result, failed verification, and read-only next checks;
+there is no JSON dump or attachment. Only policy-eligible Deployment restarts
+may repeat, up to three attempts with the configured retry delay. Safety-denied
+or nonrepeatable actions do not receive three destructive retries.
+
 The agent never uses guest SSH, executes guest commands, patches DataVolumes,
 or stops/reboots VMs. An OpenShift platform flag does not enable guest writes.
 Monitoring continues after manual work, but untimestamped guest-agent data does
@@ -472,6 +486,22 @@ Through this recipe's values, the agent container image is repinned from the sub
 mutable `3.12-slim` tag to the same immutable digest this recipe already uses
 elsewhere. The agent is pure Python standard library and installs nothing at
 start-up.
+
+## Auto-heal escalation policy
+
+`notifications.escalationMinSeverity` defaults to `high`: High and Critical
+unresolved incidents reach configured external sinks; Low and Medium remain in
+the stdout audit. Human email, Slack and Markdown summaries omit raw incident
+JSON. Existing action-catalog, namespace, risk-tier and approval gates remain.
+The recovery episode budget defaults to three attempts, with fresh observation
+and verification; only eligible Deployment pod restarts are repeatable. LLM
+suggestions are not executed as arbitrary shell commands.
+
+`notifications.healedDelivery` defaults to `immediate` for this standalone chart.
+An integrating chart may opt into `digest` only when it supplies a durable memory
+reader and a working infrastructure report delivery path. In digest mode,
+successful-heal external messages are suppressed; the audit remains available
+for that report. An unconfigured digest consumer would hide success notifications.
 
 ## Third-Party Dependencies
 
