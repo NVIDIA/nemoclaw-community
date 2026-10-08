@@ -20,7 +20,7 @@
     packet'' after the first search correctly returned no results (only the current
     session matched). Additional traces in the same behavioral cluster (01a0f3e4-92de,
     01a0f3e8-fedc, 01a0f3eb-d0f3, 01a0f3f8-01c6) show 2-5 repeated session_search
-    calls each. Per ETHOS.md rule 7: ''Report redundant search only when the same
+    calls each. Per ETHOS.md rule 6: ''Report redundant search only when the same
     tool receives identical arguments again in the same task, without a transient
     failure or new evidence explaining the repeat.'''
   trace_refs:

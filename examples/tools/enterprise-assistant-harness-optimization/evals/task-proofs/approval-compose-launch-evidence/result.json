@@ -32,7 +32,7 @@
     "file_count": 21,
     "portability_state": "image_pinned_recipe",
     "source_revision": null,
-    "task_tree_sha256": "sha256:5dc66339404b620d802b111af9cd8695db5be5a785774355832d13be6f4130b7",
+    "task_tree_sha256": "sha256:26d67d590c7ff56aef7641d08bb31e5f000d544a2b4c03f93a63e0facc63d4ae",
     "total_bytes": 308838
   },
   "schema": "nemo.eval_author.trace_environment_product.v4",
@@ -85,7 +85,7 @@
       ]
     },
     "task_checksum": "5245f8c5b970e90b9821f8e822d79bd289e5d4cdf8dc4859a152d28457d5aee1",
-    "task_tree_sha256": "sha256:5dc66339404b620d802b111af9cd8695db5be5a785774355832d13be6f4130b7",
+    "task_tree_sha256": "sha256:26d67d590c7ff56aef7641d08bb31e5f000d544a2b4c03f93a63e0facc63d4ae",
     "verifier_environment_mode": "separate"
   }
 }

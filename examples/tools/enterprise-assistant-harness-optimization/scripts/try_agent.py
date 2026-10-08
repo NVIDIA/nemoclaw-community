@@ -50,13 +50,20 @@ async def serve(args: argparse.Namespace) -> None:
              "--no-git-ignore", "--detach", "--no-tty"], timeout=180,
         )
         created = True
-        print(f"Sandbox ready: {args.name}\nArtifacts: {output}", flush=True)
+        print(
+            "Host MCP service: http://127.0.0.1:8765/mcp\n"
+            f"Sandbox ready: {args.name}\n"
+            f"Artifacts: {output}",
+            flush=True,
+        )
         print(
             f"In another host terminal: openshell sandbox connect {args.name}\n"
             "Inside the sandbox: cd /workspace/run && source interactive-env.sh\n"
             f"Start Hermes: hermes chat --tui --model {args.model} --provider nvidia\n"
-            "Leave this terminal running. Press Ctrl-C here after exiting Hermes "
-            "to collect the session and remove this sandbox.", flush=True,
+            "Leave this terminal running so the MCP service stays up. "
+            "Press Ctrl-C here after exiting Hermes to collect the session and "
+            "remove this sandbox and the MCP service.",
+            flush=True,
         )
         await wait_for_exit()
     finally:
@@ -100,6 +107,13 @@ def main() -> int:
         asyncio.run(serve(args))
     except KeyboardInterrupt:
         return 0
+    except Exception as exc:
+        print(
+            "ERROR: could not start the host MCP service and sandbox: "
+            f"{exc}",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
