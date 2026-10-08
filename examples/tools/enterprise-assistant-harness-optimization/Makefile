@@ -7,6 +7,7 @@ test:
 	PYTHONPATH=src:. $(PYTHON) -m unittest discover -s tests -v
 
 validate:
+	$(PYTHON) scripts/sync_walkthrough_notebook.py --check
 	$(PYTHON) scripts/generate_world_v2.py --check
 	PYTHONPATH=src:. $(PYTHON) scripts/validate_world_v2.py
 	PYTHONPATH=src $(PYTHON) scripts/validate_contract.py --fixture fixtures/world-v2.json --cases tests/fixtures/world-contract-cases.json

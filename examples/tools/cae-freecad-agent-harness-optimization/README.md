@@ -3,7 +3,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- markdownlint-enable MD013 -->
 
-# NeMo Platform Harness Optimization
+# CAE FreeCAD Agent Harness Optimization
 
 | Catalog field | Value |
 | --- | --- |
@@ -136,7 +136,7 @@ nemo skills install --agent claude     # also: codex, cursor, opencode
 ## Start Here
 
 ```bash
-cd examples/tools/nemo-platform-harness-optimization
+cd examples/tools/cae-freecad-agent-harness-optimization
 ```
 
 ### Step 1: Define the agent
@@ -963,7 +963,7 @@ event; freeze the suite and use `--no-insight` for comparable runs.
 **Evidence level:** local/static
 
 ```bash
-cd examples/tools/nemo-platform-harness-optimization
+cd examples/tools/cae-freecad-agent-harness-optimization
 python3 -m pip install -r requirements.txt
 python3 -m unittest discover -s tests
 ```

@@ -104,4 +104,4 @@ Your run of the tutorial may produce different results. This optimization loop w
 
 ## Start here
 
-Follow the [walkthrough](docs/walkthrough.md) for the full tutorial guide.
+Follow the [walkthrough](docs/walkthrough.md) for the full tutorial guide, or read the [notebook version](docs/walkthrough.ipynb). The notebook preserves the walkthrough's shell commands as Markdown so you can run them in the host and OpenShell terminals described in the guide.
