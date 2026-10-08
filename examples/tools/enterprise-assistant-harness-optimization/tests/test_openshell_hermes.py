@@ -295,6 +295,14 @@ class OpenShellRuntimeTest(unittest.TestCase):
             )
             self.assertEqual(config["tools"]["tool_search"]["enabled"], "off")
 
+    def test_tool_scope_offers_only_clarify_and_enterprise_tools(self) -> None:
+        import yaml
+
+        with tempfile.TemporaryDirectory() as temp:
+            agent = OpenShellHermesFlywheel(logs_dir=Path(temp) / "logs", arm="tool-scope")
+            config = yaml.safe_load(agent._build_config_yaml("nvidia/nemotron-3-ultra-550b-a55b"))
+        self.assertEqual(config["platform_toolsets"], {"cli": ["clarify", "enterprise-world"]})
+
     def test_only_profile_fingerprint_changes_between_arms(self) -> None:
         import yaml
 

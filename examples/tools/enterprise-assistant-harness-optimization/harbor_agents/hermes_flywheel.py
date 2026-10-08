@@ -38,6 +38,12 @@ ARM_CONFIG = {
         "tool_search": "off",
     },
 }
+# The baseline offering only the enterprise MCP tools and clarify.
+# `hermes chat` reads platform_toolsets.cli; it ignores the `toolsets` key.
+ARM_CONFIG["tool-scope"] = {
+    **ARM_CONFIG["baseline"],
+    "platform_toolsets": {"cli": ["clarify", "enterprise-world"]},
+}
 
 
 class HermesFlywheel(Hermes):
@@ -90,6 +96,8 @@ class HermesFlywheel(Hermes):
             "delegation": {"max_iterations": 12},
             "checkpoints": {"enabled": False},
         }
+        if "platform_toolsets" in arm:
+            config["platform_toolsets"] = arm["platform_toolsets"]
         return yaml.safe_dump(config, default_flow_style=False)
 
     async def _stage_harness(self, environment: BaseEnvironment) -> None:
