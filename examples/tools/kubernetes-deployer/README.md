@@ -103,11 +103,10 @@ kubectl port-forward ───────────────────�
 
 No Dockerfile or image build is part of installation.
 
-Newer managed images exist. NemoClaw `v0.0.124` and later ship Hermes `0.20.6`,
-and their blueprint declares OpenShell `0.0.116`, which is the version this
-chart vendors, so on paper they are the better-aligned pair. The chart stays on
-`v0.0.117` because Hermes `0.20.6` adds a feasibility check on the auxiliary
-compression model and rejects every request under this chart:
+This chart pins the managed NemoClaw image to `v0.0.117` with Hermes `0.19.0`.
+A contributor's earlier evaluation of NemoClaw `v0.0.124` with Hermes `0.20.6`
+reported an auxiliary compression-model context-window error with this chart's
+configuration:
 
 ```text
 Auxiliary compression model nvidia/nemotron-3-super-120b-a12b has a context
@@ -115,15 +114,14 @@ window of 16,384 tokens, which is below the minimum 64,000 required by Hermes
 Agent.
 ```
 
-The managed image bakes that placeholder model name into
-`/sandbox/.hermes/config.yaml` and lets OpenShell rewrite only the base URL, so
-the name never matches the endpoint actually serving the model. Hermes `0.20.6`
-resolves the baked name's context window rather than the endpoint's. Clearing
-it needs `auxiliary.compression.context_length` in that file, which this chart
-has no mechanism to set and Hermes does not read from the environment. Moving
-to `v0.0.124`+ therefore requires that mechanism first. The chart does not
-create a custom image or substitute a generic Hermes container, since neither
-carries the NemoClaw/OpenShell runtime contract.
+The reported failure used the image's placeholder model name in
+`/sandbox/.hermes/config.yaml`, rather than the serving endpoint's model
+configuration. The proposed workaround was to set
+`auxiliary.compression.context_length` in that file. This chart does not expose
+that setting. This historical report is not a compatibility claim for every
+newer release; evaluate a candidate image and its compression-model settings
+before changing the pin. The chart does not build a custom image or substitute
+a generic Hermes container for the managed NemoClaw/OpenShell runtime.
 
 ## Prerequisites
 

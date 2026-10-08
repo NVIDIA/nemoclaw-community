@@ -8,6 +8,29 @@ This supersedes the earlier publication hold, not the remaining validation gaps:
 successful native Kubernetes CSI expansion and live guest follow-up remain unverified.
 The entries below retain the chronology of implementation and validation.
 
+## Current review status — October 8, 2026
+
+The implementation is published in draft pull request (PR)
+[#201](https://github.com/NVIDIA/nemoclaw-community/pull/201) from
+`anuguda/nemoclaw-community`. PR #197 is closed and links to the replacement.
+The earlier unpublished-state and publication-hold statements below are
+historical records, not the current draft-publication status.
+
+The current local checks pass: 133 SRE recipe tests, 94 Kubernetes Deployer
+tests, child-chart Helm lint, license-header checks, label-taxonomy checks,
+and the complete pull request whitespace check. Storage namespaces can be
+configured independently of workload monitoring through
+`agentConfig.storage.namespaces`; they must be exact names and remain subject
+to the global namespace policy. An empty list inherits the exact, bounded
+workload namespace selection. Explicit storage namespaces do not use that
+workload selection's 20-namespace limit.
+
+Successful native Kubernetes CSI expansion, live KubeVirt guest follow-up, and
+external email/Slack delivery for the final revision remain unverified. The
+historical cluster results below apply only to their recorded revisions.
+Publishing a draft does not establish operational readiness or authorize
+automatic expansion without the documented opt-in and policy checks.
+
 ## Tasks
 
 1. RED/GREEN: metrics validation, quantity arithmetic, policy and preflight.
@@ -22,8 +45,8 @@ The entries below retain the chronology of implementation and validation.
 - Scope: deploy the auto-heal child chart under new release names, not another
   full Hermes/community backend. This validates the changed controller without
   duplicating existing interactive assistants.
-- Existing state: preserve the unrelated ledger_rag/run.py mode change and the
-  Hermes CoCo testing worktree. A fresh local backup was retained before edits.
+- Existing state: preserve unrelated local changes and the separate agent
+  testing worktree. A fresh local backup was retained before edits.
 - Guest access: use read-only KubeVirt filesystemlist with exact volume/device
   mapping. Do not run SSH commands, growpart, resize2fs, or reboot in this phase.
   Unverified guest growth is a partial outcome requiring human action.
@@ -36,7 +59,8 @@ The entries below retain the chronology of implementation and validation.
 
 ## Evidence
 
-Implementation is uncommitted. No publication authorized until validation.
+At this stage, the implementation was uncommitted and publication was not
+authorized. The current review status above supersedes this historical hold.
 
 - Regression tests reproduced and fixed: nonpersistent memory acceptance,
   metrics reporting filesystem capacity larger than PVC capacity, direct
@@ -123,8 +147,9 @@ source-label checks remain mandatory.
 - Ruling: guest telemetry cannot prove recovery without source freshness;
   report partial/needs-human-review, rather than certify stale data as healed.
   Cost: more manual guest verification even when a disk may already have grown.
-- Deferred minor: storage currently requires explicit scope of at most 20
-  namespaces. Wildcard/large-scope enumeration needs its own integration test.
+- At this stage, storage inherited the workload selection's exact scope of at
+  most 20 namespaces. The current implementation also accepts exact storage
+  namespaces independently. Wildcard storage namespaces remain unsupported.
 - Review deliberately excluded parent Helm Git source integration, CSI-driver
   internals, production multiprocess persistence, external Slack/SMTP delivery
   and guest command execution. Tests here cover child-controller deployment and
@@ -146,7 +171,7 @@ source-label checks remain mandatory.
   above 1Gi. The normal sustain window remains 300 seconds.
 - Native `local-path` has expansion disabled. Safe rejection is not evidence of
   successful native CSI resize; publication remains blocked on that live test.
-- Existing Hermes/CoCo releases and their PVCs remain outside validation scope.
+- Existing agent releases and their PVCs remain outside validation scope.
 
 ## Final validation evidence — October 5, 2026
 
@@ -188,7 +213,7 @@ source-label checks remain mandatory.
   `94c9eae154aefc486af8ef6cacb532a8e37031ec` is an ancestor; no rebase or
   force-push. Upstream PR remains #197. These new changes are uncommitted.
 - A fresh local backup was retained for the guest follow-up update.
-  Existing storage work, unrelated ledger_rag mode change and Hermes CoCo
+  Existing storage work, unrelated local changes, and the separate agent
   testing worktree were preserved.
 - Added deterministic human-only admin/VM-owner instructions. Emails identify
   VM/PVC and observed device/mount/filesystem. Admin verifies attachment and

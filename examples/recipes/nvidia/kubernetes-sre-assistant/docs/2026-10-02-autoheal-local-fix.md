@@ -2,9 +2,31 @@
 
 Initial review: October 2, 2026. Updated October 5, 2026 for publication on the fork's `aguda/nemoclaw-kubernetes` branch. Cluster rollout is a separate verification step.
 
-## Source and preservation
+## Current review status — October 8, 2026
 
-The operator-selected GitHub baseline is `NVIDIA/nemoclaw-community` main, resolved to `6b28b5ca32297a83629aeeb6c1150d22295908d2` in a separate reference checkout. This was not merged into or used to reset the dirty local checkout. The local branch remains `aguda/nemoclaw-kubernetes`, with all pre-existing staged changes preserved. GitHub itself has not changed.
+The changes are published on `anuguda/nemoclaw-community` in draft pull request
+(PR) [#201](https://github.com/NVIDIA/nemoclaw-community/pull/201). It replaces
+the closed PR #197. The sections below record the earlier implementation and
+validation; references to unpublished work describe that earlier stage.
+
+The current escalation policy includes up to 50 credential-redacted application
+log lines inline, capped at 12,000 characters. It states when logs are unavailable
+and includes no raw incident JSON or attachments. This supersedes the earlier
+no-log email wording below. See the recipe [README](../README.md) for the current
+namespace, severity, recovery-budget, and notification-delivery settings.
+
+Current local validation: 133 SRE recipe tests and 94 Kubernetes Deployer tests
+pass. Child-chart Helm lint, license-header checks, label-taxonomy checks, and
+the complete pull request whitespace check pass. These checks do not establish
+live recovery or external notification delivery for the final revision.
+
+## Historical source and preservation
+
+At the initial review, the operator-selected GitHub baseline was
+`NVIDIA/nemoclaw-community` main at `6b28b5ca32297a83629aeeb6c1150d22295908d2`
+in a separate reference checkout. It was not used to reset the working tree.
+The branch remained `aguda/nemoclaw-kubernetes`, with pre-existing staged
+changes preserved. No changes had been published at that stage.
 
 The runtime being edited is `charts/sre-autoheal-agent/files/agent/sre_autoheal/` within this recipe. These changes must be published to a reviewed community revision before a GitHub-only build can consume them. A local test candidate must be explicitly identified as unpublished, not represented as upstream main.
 
@@ -18,7 +40,7 @@ The local patch recognizes the exact namespaced Pod `/log` subresource, requests
 
 This collector defect is separate from the LLM. A newly tested model edge case is also handled: a non-text completion becomes a controlled retryable `LLMUnavailable` rather than an uncaught Python `TypeError`.
 
-## Previously approved changes retained here
+## Previously approved changes at the initial review
 
 - Three total model diagnosis attempts for retryable malformed/truncated output or transient provider failure; authentication failures are not retried.
 - Confidence and policy gates for every LLM-selected mutation.
@@ -26,7 +48,7 @@ This collector defect is separate from the LLM. A newly tested model edge case i
 - Short preliminary RCA emails without embedded raw incident JSON or raw logs, with resource-specific read-only next checks. Detailed sanitized data remains in controlled incident/memory channels.
 - Persistent incident/outcome memory; verified recovery is required before recording healing success. No autonomous model retraining or permission expansion.
 
-## Verification
+## Historical verification
 
 `tests/test_autoheal_runtime.py` imports the runtime shipped by this child chart. Its test-only `SRE_AUTOHEAL_TEST_SOURCE` override permits comparison against a separate upstream checkout without modifying either source tree.
 

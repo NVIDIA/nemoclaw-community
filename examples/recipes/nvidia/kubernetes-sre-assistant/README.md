@@ -95,7 +95,22 @@ seed Job ── sre plugin: verify skill bundle, stage oc/kubectl, write kubecon
   in `values.yaml` (`global.sre.bundle.sha256`) and joins the Sandbox
   configuration identity
 
-Changing `global.sre.cli.version` only restages the binary when the seed runs again, and the sandbox keeps its old mount until it is recreated. Upgrade with `deployer.lifecycle.seed.runOnUpgrade=true` plus `deployer.lifecycle.seed.dangerousAcknowledgement=I_ACKNOWLEDGE_SANDBOX_STOPPED`, then cycle `deployer.lifecycle.sandbox.desiredState` through `absent` and back to `present`.
+Changing `global.sre.cli.version` only restages the binary when the seed runs
+again. The sandbox keeps its old mount until it is recreated. To change the
+client version:
+
+1. Stop the release's sandbox with `deployer.lifecycle.sandbox.desiredState=absent`
+   and `deployer.lifecycle.sandbox.dangerousAcknowledgement=I_ACKNOWLEDGE_SANDBOX_DELETE`,
+   as shown in [Teardown](#teardown). Do not uninstall the release. Deleting the
+   sandbox ends its active Hermes sessions; wait until it is absent.
+2. Upgrade with the matching client version, archive URLs, and checksums. Set
+   `deployer.lifecycle.seed.runOnUpgrade=true` and
+   `deployer.lifecycle.seed.dangerousAcknowledgement=I_ACKNOWLEDGE_SANDBOX_STOPPED`.
+   Set `deployer.lifecycle.sandbox.desiredState=present` to recreate the sandbox
+   after the seed completes.
+3. After the upgrade, set `deployer.lifecycle.seed.runOnUpgrade=false` on later
+   upgrades unless another reseed is required. Confirm the client version inside
+   the recreated sandbox.
 
 For a cluster outside the documented client-version skew, override
 `global.sre.cli.version` plus both architecture URLs and checksums together
