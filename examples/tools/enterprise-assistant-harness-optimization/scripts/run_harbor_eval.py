@@ -35,7 +35,7 @@ def check_job_result(job_dir: Path, expected_trials: int) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--arm", choices=("baseline", "candidate"), required=True)
+    parser.add_argument("--arm", choices=("baseline", "candidate", "tool-scope"), required=True)
     parser.add_argument("--split", choices=("development", "held-out"), required=True)
     parser.add_argument(
         "--runtime",
