@@ -44,7 +44,7 @@ def main() -> int:
         "--runtime",
         choices=("openshell", "direct"),
         default="openshell",
-        help="Run Hermes in OpenShell (default) or directly in the Harbor task image.",
+        help="Run Hermes in OpenShell (default); direct Harbor mode supports NVIDIA Build only.",
     )
     parser.add_argument("--attempts", type=int, default=3)
     parser.add_argument("--concurrency", type=int, default=2)
