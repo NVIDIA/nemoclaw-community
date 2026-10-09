@@ -87,6 +87,10 @@ if [[ -z "$NEMOCLAW_SOURCE" ]]; then
   fi
 fi
 
+if [[ -r /etc/nemoclaw/gateway-management.env \
+      && "${NEMOCLAW_OPENSHELL_GATEWAY_CONTAINER_PATCH:-}" == 1 ]]; then
+  python3 "$ROOT/scripts/prepare-brev-gateway-compat.py" --nemoclaw-source "$NEMOCLAW_SOURCE"
+fi
 python3 "$ROOT/scripts/prepare-hermes-image.py" --nemoclaw-source "$NEMOCLAW_SOURCE"
 
 HERMES_DOCKERFILE="$NEMOCLAW_SOURCE/agents/hermes/Dockerfile"
