@@ -42,6 +42,19 @@ class RunHarborEvalTest(unittest.TestCase):
 
     @patch("scripts.run_harbor_eval.subprocess.run")
     @patch("scripts.run_harbor_eval.check_job_result", return_value=0)
+    def test_environment_model_and_endpoint_reach_harbor(self, check, run) -> None:
+        with patch.dict(os.environ, {
+            "MODEL_SLUG": "my-custom-nemotron",
+            "MODEL_BASE_URL": "https://models.example.test/v1",
+        }):
+            self.assertEqual(self.invoke(run, "development", "baseline"), 0)
+        command = run.call_args.args[0]
+        self.assertEqual(command[command.index("-m") + 1], "my-custom-nemotron")
+        self.assertIn("provider_base_url=https://models.example.test/v1", command)
+        self.assertTrue(any(str(item).startswith("openshell_provider=hermes-model-") for item in command))
+
+    @patch("scripts.run_harbor_eval.subprocess.run")
+    @patch("scripts.run_harbor_eval.check_job_result", return_value=0)
     def test_custom_agent_is_importable_from_clean_shell(self, check, run) -> None:
         run.return_value.returncode = 0
         with tempfile.TemporaryDirectory() as raw:
