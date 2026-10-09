@@ -10,7 +10,7 @@
 | Description | Adds a Chrome side panel that sends your prompt, readable page text, and the visible viewport to a NemoClaw agent running with Hermes. |
 | Industry | ✨ Other |
 | Requirements | NemoClaw with Hermes · x86-64 Linux and Docker · Chrome 116+ · inference provider API key · Brev or another Linux host |
-| NemoClaw | Unpinned |
+| NemoClaw | 0.0.123 |
 | Harness | Hermes Unpinned |
 | OpenShell | Unpinned |
 
@@ -115,15 +115,19 @@ The result should report `Driver=overlay2`.
 
 Review the NemoClaw license and third-party software notice before running the
 next command. By setting the acceptance variable, you confirm that you accept
-those terms. The command updates NemoClaw without starting onboarding because
-it removes inference credentials from the installer process:
+those terms. The command installs the tested release and explicitly defers
+onboarding. It also removes inference credentials from the installer process.
+Keep the release pin until a newer version has passed deployment tests:
 
 ```bash
 cd /tmp
 curl -fsSL https://www.nvidia.com/nemoclaw.sh \
-  | env -u NVIDIA_INFERENCE_API_KEY -u NVIDIA_API_KEY \
+  | env -u NVIDIA_INFERENCE_API_KEY -u NVIDIA_API_KEY -u NEMOCLAW_PROVIDER_KEY \
       NEMOCLAW_AGENT=hermes \
+      NEMOCLAW_PROVIDER=build \
+      NEMOCLAW_INSTALL_REF=v0.0.123 \
       NEMOCLAW_NON_INTERACTIVE=1 \
+      NEMOCLAW_DEFER_ONBOARDING=1 \
       NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1 \
       bash
 ```
@@ -158,6 +162,17 @@ Run the recipe’s onboarding script:
 ```bash
 bash scripts/onboard.sh --fresh
 ```
+
+If the pinned gateway cannot run natively on your Brev host, explicitly enable
+its authenticated compatibility container:
+
+```bash
+NEMOCLAW_OPENSHELL_GATEWAY_CONTAINER_PATCH=1 bash scripts/onboard.sh --fresh
+```
+
+This mode uses the host network and Docker socket. The recipe runs it as the
+host user with all Linux capabilities dropped and `no-new-privileges` enabled.
+See [Brev setup](docs/brev.md) for the pinned launcher adjustment.
 
 Enter your inference credential through the normal NemoClaw prompt. For
 viewport understanding, select
@@ -227,7 +242,7 @@ Link as the extension URL; its redirect-based login flow isn’t an API ingress.
 ### 5. Load the Chrome extension
 
 Download the
-[prebuilt portable extension](release/ask-nemoclaw-extension-0.10.12.zip) and
+[prebuilt portable extension](release/ask-nemoclaw-extension-0.10.15.zip) and
 extract the ZIP file. It contains no deployment URL or credential.
 
 Then load the extracted directory:
@@ -262,6 +277,9 @@ If the tab or document changes during capture, the extension discards the
 capture and asks you to try again. Keep the target tab active until capture
 finishes.
 
+When selecting another conversation, wait for it to load before sending a
+message. Send stays disabled while the selection loads.
+
 The agent chooses skills from your prompt, not from the page URL. For example,
 a Google Docs skill is used only when it’s installed, authorized, allowed by
 OpenShell policy, and relevant to what you ask.
@@ -287,6 +305,12 @@ already sent to the provider can finish or time out, but its result is ignored.
 At most two such HTTP requests can remain active. Stop also prevents prompt
 submission during initialization. After submission, it requests a session
 interrupt; it does not undo actions that the agent has already completed.
+
+Stop also prevents submission during page capture. If an upload is already in
+progress, the extension requests cancellation after it receives the job
+identifier. If a timeout requires a replacement Hermes session, the next
+message includes the page context again. The visible conversation history is
+retained, but the replacement session does not inherit that history.
 
 ## Verify the example
 
