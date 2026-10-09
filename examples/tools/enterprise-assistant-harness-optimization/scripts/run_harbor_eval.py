@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from harbor_agents.model_settings import model_base_url, model_slug, provider_name
+from harbor_agents.model_settings import DEFAULT_BASE_URL, model_base_url, model_slug, provider_name
 
 
 def check_job_result(job_dir: Path, expected_trials: int) -> int:
@@ -69,6 +69,13 @@ def main() -> int:
         args.provider_base_url = model_base_url(args.provider_base_url)
     except ValueError as exc:
         parser.error(str(exc))
+    if args.runtime == "direct" and (
+        args.provider_base_url != DEFAULT_BASE_URL or not args.model.startswith("nvidia/")
+    ):
+        parser.error(
+            "--runtime direct supports NVIDIA Build model IDs only; "
+            "use --runtime openshell for a custom model or endpoint"
+        )
     args.openshell_provider = args.openshell_provider or provider_name(args.provider_base_url)
     if args.attempts < 1 or args.concurrency < 1:
         parser.error("--attempts and --concurrency must be positive")

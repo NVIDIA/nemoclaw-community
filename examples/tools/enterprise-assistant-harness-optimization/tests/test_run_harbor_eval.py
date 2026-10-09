@@ -97,6 +97,23 @@ class RunHarborEvalTest(unittest.TestCase):
         self.assertIn("harbor_agents.hermes_flywheel:HermesFlywheel", command)
         self.assertFalse(any(str(arg).startswith("openshell_image=") for arg in command))
 
+    @patch("scripts.run_harbor_eval.subprocess.run")
+    def test_direct_runtime_rejects_custom_model_settings_before_harbor(self, run) -> None:
+        for settings in (
+            {"MODEL_SLUG": "my-custom-nemotron"},
+            {"MODEL_BASE_URL": "https://models.example.test/v1"},
+        ):
+            with self.subTest(settings=settings), patch.dict(os.environ, settings):
+                with tempfile.TemporaryDirectory() as raw:
+                    suite = Path(raw) / "suite.json"
+                    suite.write_text(json.dumps({"cases": [{"id": "dev-1", "case_kind": "development"}]}))
+                    argv = ["run_harbor_eval.py", "--arm", "baseline", "--split", "development",
+                            "--runtime", "direct", "--suite", str(suite)]
+                    with patch.object(sys, "argv", argv), self.assertRaises(SystemExit) as raised:
+                        main()
+                    self.assertEqual(raised.exception.code, 2)
+        run.assert_not_called()
+
     def test_recorded_job_requires_terminal_complete_exception_free_trials(self):
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
