@@ -25,20 +25,24 @@ Your run of the tutorial may identify different results.
 
 - Ubuntu 24.04 with Docker, 8 CPU, 32GB RAM, 100 GB Storage. [NVIDIA Brev](https://brev.nvidia.com/) is one
 place to choose a compatible CPU instance.
-- NVIDIA API Key from [build.nvidia.com](https://build.nvidia.com/)
+- NVIDIA API Key from [build.nvidia.com](https://build.nvidia.com/) for NeMo Compass
 - Codex CLI or equivalent coding harness
 
 ## Run the agent
 
-Clone this repository and run the installer. It installs host packages, Harbor, OpenShell, the Hermes image, and the fictional MCP service, then checks the NVIDIA Build API key and stores it as an OpenShell credential. If a step fails, the script prints that step's name and stops. Re-run the same command after fixing the problem; completed steps are safe to repeat.
+Clone this repository and run the installer. It installs host packages, Harbor, OpenShell, the Hermes image, and the fictional MCP service, then checks the model provider API key and stores it as an OpenShell credential. If a step fails, the script prints that step's name and stops. Re-run the same command after fixing the problem; completed steps are safe to repeat.
+
+Nemotron 3 Ultra on NVIDIA Build is the default. For another OpenAI-compatible endpoint, such as a Nemotron model hosted by Baseten, set `MODEL_SLUG` and `MODEL_BASE_URL` before installation; the interactive agent, trace collection, and Harbor runs use them throughout.
 
 ```bash
 git clone https://github.com/NVIDIA/nemoclaw-community.git
 cd nemoclaw-community/examples/tools/enterprise-assistant-harness-optimization
+# Optional, for Baseten: export MODEL_SLUG='nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B'
+# Optional, for Baseten: export MODEL_BASE_URL='https://inference.baseten.co/v1'
 ./scripts/install.sh
 ```
 
-The first run may stop after adding your user to the `docker` group. Disconnect and reconnect to the host, then run `./scripts/install.sh` again. The script prompts for the NVIDIA Build API key and does not leave it in the shell. OpenShell's [provider profile](../openshell/provider-nvidia.yaml) limits model access to NVIDIA's inference endpoint.
+The first run may stop after adding your user to the `docker` group. Disconnect and reconnect to the host, re-export any model settings, then run `./scripts/install.sh` again. The script prompts for the selected provider's key (or reads `MODEL_API_KEY`). Its OpenShell profile limits credential use to the selected endpoint.
 
 ### Try Hermes against the fictional world
 
@@ -60,7 +64,7 @@ In the sandbox shell, load the prepared Hermes environment and start its TUI:
 cd run
 source interactive-env.sh
 hermes mcp list # should show the enterprise mcp server
-hermes --model nvidia/nemotron-3-ultra-550b-a55b # drops you into Hermes TUI
+hermes --model "$MODEL_SLUG" --provider nvidia # drops you into Hermes TUI
 ```
 
 Try asking “What are the blockers for Q3 launch??” The agent can search the fictional mail, chat, calendar, knowledge and project tools. After leaving the TUI, press Ctrl-C in the first host terminal.

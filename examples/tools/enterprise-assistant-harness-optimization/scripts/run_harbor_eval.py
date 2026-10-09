@@ -13,6 +13,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from harbor_agents.model_settings import DEFAULT_BASE_URL, model_base_url, model_slug, provider_name
 
 
 def check_job_result(job_dir: Path, expected_trials: int) -> int:
@@ -41,7 +44,7 @@ def main() -> int:
         "--runtime",
         choices=("openshell", "direct"),
         default="openshell",
-        help="Run Hermes in OpenShell (default) or directly in the Harbor task image.",
+        help="Run Hermes in OpenShell (default); direct Harbor mode supports NVIDIA Build only.",
     )
     parser.add_argument("--attempts", type=int, default=3)
     parser.add_argument("--concurrency", type=int, default=2)
@@ -56,12 +59,24 @@ def main() -> int:
     parser.add_argument(
         "--tasks-dir", type=Path, default=ROOT / "evals" / "harbor-tasks-v3"
     )
-    parser.add_argument("--model", default="nvidia/nemotron-3-ultra-550b-a55b")
+    parser.add_argument("--model", default=model_slug())
     parser.add_argument("--openshell-bin", default="openshell")
     parser.add_argument("--openshell-image", default="hermes-flywheel-openshell:0.3")
-    parser.add_argument("--openshell-provider", default="hermes-nvidia")
-    parser.add_argument("--provider-base-url", default="")
+    parser.add_argument("--openshell-provider")
+    parser.add_argument("--provider-base-url", default=model_base_url())
     args = parser.parse_args()
+    try:
+        args.provider_base_url = model_base_url(args.provider_base_url)
+    except ValueError as exc:
+        parser.error(str(exc))
+    if args.runtime == "direct" and (
+        args.provider_base_url != DEFAULT_BASE_URL or not args.model.startswith("nvidia/")
+    ):
+        parser.error(
+            "--runtime direct supports NVIDIA Build model IDs only; "
+            "use --runtime openshell for a custom model or endpoint"
+        )
+    args.openshell_provider = args.openshell_provider or provider_name(args.provider_base_url)
     if args.attempts < 1 or args.concurrency < 1:
         parser.error("--attempts and --concurrency must be positive")
     if args.agent_timeout_multiplier <= 0:
