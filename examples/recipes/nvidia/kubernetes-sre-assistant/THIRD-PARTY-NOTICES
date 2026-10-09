@@ -9,6 +9,8 @@ immutable artifacts:
 - Python 3.13.7 slim utility image, used for the authenticated API proxies and
   the OpenShift CLI stager (Python Software Foundation License and included
   Debian component licenses): https://hub.docker.com/_/python
+- PyYAML, used by the model-planning helpers to read chart-managed configuration
+  (MIT License): https://github.com/yaml/pyyaml
 - OpenShift Client 4.20.38 archives containing oc and kubectl, downloaded and
   SHA-256-verified inside the seed Job (Apache-2.0):
   https://github.com/openshift/oc and

@@ -599,6 +599,26 @@ class RecipeTest(unittest.TestCase):
         profile = self.render("-f", str(CHART_DIR / "values-broad-no-delete.yaml"))
         self.assertIn('rbacMode: "broad-no-delete"', self.rendered_from_source(profile, f"{RECIPE_SOURCE}/000-validate.yaml"))
 
+    def test_model_hf_metadata_policy_is_get_only_and_disabled_without_skill(self) -> None:
+        rendered = self.render(*MODEL_SKILL)
+        block = self.network_policy_block(self.rendered_policy(rendered), "huggingface_metadata")
+        self.assertIn("host: huggingface.co", block)
+        self.assertRegex(block, r'method: GET\s+path: /api/models/\*\*')
+        self.assertRegex(block, r'method: GET\s+path: /api/resolve-cache/models/\*\*')
+        self.assertIn("path: /opt/hermes/.venv/bin/python", block)
+        self.assertNotIn("method: POST", block)
+        self.assertNotIn('path: "/**"', block)
+        self.assertNotIn("huggingface_metadata", self.rendered_policy(self.render()))
+
+    def test_model_recipe_policy_is_read_only_and_scoped(self) -> None:
+        block = self.network_policy_block(self.rendered_policy(self.render(*MODEL_SKILL)), "vllm_recipe_metadata")
+        self.assertIn("host: recipes.vllm.ai", block)
+        self.assertRegex(block, r'method: GET\s+path: /models\.json')
+        self.assertRegex(block, r'method: GET\s+path: /\*/\*\.json')
+        self.assertRegex(block, r'method: GET\s+path: /\*/\*/hw/\*\.json')
+        self.assertNotIn("method: POST", block)
+        self.assertNotIn("vllm_recipe_metadata", self.rendered_policy(self.render()))
+
     def test_full_model_skill_requires_broad_no_delete_mode(self) -> None:
         self.assert_helm_rejected(
             "template", "sre", str(CHART_DIR), "--set", "global.sre.openshiftLlmDeploy.enabled=true",
@@ -906,7 +926,23 @@ class RecipeTest(unittest.TestCase):
                 clear=False,
             ):
                 module.reconcile_sre_skills(True, payloads)
+                configured_defaults = json.loads(os.environ["DYNAMO_DEFAULTS_JSON"])
+                configured_defaults["modelRuntimeOverrides"] = {"example/model": {"maxModelLen": 32768}}
+                configured_defaults["allowOCSStorageTaintedNodes"] = True
+                with mock.patch.dict(os.environ, {"DYNAMO_DEFAULTS_JSON": json.dumps(configured_defaults)}):
+                    configured_text = module.model_configuration_payloads()["openshift-llm-deploy/dynamo-defaults.yaml"].decode()
+                self.assertIn("allowOCSStorageTaintedNodes: true", configured_text)
+                encoded_overrides = next(line.split(": ", 1)[1] for line in configured_text.splitlines()
+                                         if line.startswith("modelRuntimeOverridesJSON:"))
+                self.assertEqual(json.loads(json.loads(encoded_overrides)), configured_defaults["modelRuntimeOverrides"])
+                configured_defaults["allowOCSStorageTaintedNodes"] = "false"
+                with mock.patch.dict(os.environ, {"DYNAMO_DEFAULTS_JSON": json.dumps(configured_defaults)}):
+                    with self.assertRaisesRegex(SystemExit, "invalid storage taint allowance"):
+                        module.model_configuration_payloads()
             self.assertTrue((skills / "openshift-llm-deploy" / "dynamo-defaults.yaml").is_file())
+            defaults_text = (skills / "openshift-llm-deploy" / "dynamo-defaults.yaml").read_text(encoding="utf-8")
+            self.assertIn("allowOCSStorageTaintedNodes: false", defaults_text)
+            self.assertIn('modelRuntimeOverridesJSON: "{}"', defaults_text)
             self.assertIn("secretName: \"hf-token\"", (skills / "openshift-llm-deploy" / "hf-token-intake.yaml").read_text(encoding="utf-8"))
 
     def test_seed_plugin_accepts_kubernetes_secret_projection_symlink(self) -> None:

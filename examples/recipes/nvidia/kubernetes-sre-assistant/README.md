@@ -376,6 +376,33 @@ container's logs cannot redirect a restart to another pod.
 
 ## Skill bundle and seeding
 
+Hermes integrations must preserve their policy-managed proxy and CA settings
+when invoking code tools. Configure `terminal.env_passthrough` with the exact
+operational proxy/CA variable names (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`,
+`NO_PROXY`, their lowercase equivalents, `SSL_CERT_FILE`, `SSL_CERT_DIR`,
+`REQUESTS_CA_BUNDLE`, and `CURL_CA_BUNDLE`), never credential wildcards or
+`HF_TOKEN`. Ensure terminal shell initialization retains `/chart-bin` on PATH.
+These are harness settings, not additional OpenShell network permissions.
+Use installed scripts through the terminal tool instead of ad-hoc subprocess
+networking, and retain final model deployment confirmation.
+
+The model skill includes `scripts/plan-hf-gpus.py` for read-only HF revision,
+GPU request headroom, node readiness, and hardware planning checks. If OpenShell
+denies the direct HF `resolve/<revision>/config.json` GET, the planner retries
+only the same-origin `/api/resolve-cache/models/<model>/<revision>/config.json`
+endpoint using the revision fetched from the HF API. Keep that GET permitted
+in the sandbox HF metadata policy; no wildcard network bypass or credential
+dump is required. A denied cache request, invalid metadata, changed revision,
+or changed recipe hash still blocks deployment. The planner does not apply
+resources or authorize deployment. Runtime recipe resolution and final
+confirmation remain separate requirements; an NVFP4 profile must match the
+actual quantized repository, not an unquantized model with a similar name.
+Explicit same-model hardware profile paths in the official catalog are also
+planning evidence; runtime resolution must still validate the selected hardware
+profile and pin the image digest before deployment.
+Do not let an agent edit planners, validators, runtime defaults, or approval
+hashes to make a blocked deployment pass.
+
 The two skill trees under `files/skills/` are packaged by
 `scripts/build-sre-skills-bundle.py` into one deterministic archive with a
 manifest, split into ConfigMap chunks, and pinned by digest in `values.yaml`.
@@ -423,6 +450,13 @@ endpoint) confirmed:
   revision recreated it.
 
 Run the local/static checks from this recipe directory:
+
+Install PyYAML in the Python environment used for these checks. The model
+planning helpers use it to read the chart-managed YAML configuration:
+
+```bash
+python3 -m pip install pyyaml
+```
 
 ```bash
 helm dependency build .
@@ -501,6 +535,16 @@ Through this recipe's values, the agent container image is repinned from the sub
 mutable `3.12-slim` tag to the same immutable digest this recipe already uses
 elsewhere. The agent is pure Python standard library and installs nothing at
 start-up.
+
+## Model deployment handoff
+
+The installed `openshift-llm-deploy/scripts/preflight-model.py` saves the complete
+verified deployment plan with its SHA-256 identity. After explicit final user
+confirmation, `scripts/deploy-plan.py --plan PATH --approved-plan-sha256 HASH
+--confirm` invokes the existing guarded wrapper with all required arguments and
+streams progress. Omit `--confirm` to validate without deployment. Plans expire
+after 30 minutes; changed plans require fresh confirmation. Neither helper
+authorizes arbitrary recipes, bypasses policy, or reads HF Secret data.
 
 ## Auto-heal escalation policy
 

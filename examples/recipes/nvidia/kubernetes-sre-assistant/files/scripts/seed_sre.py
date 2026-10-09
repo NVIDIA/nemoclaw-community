@@ -279,12 +279,18 @@ def model_configuration_payloads() -> dict[str, bytes]:
         raise SystemExit("incomplete Dynamo defaults")
     if not isinstance(defaults["modelRuntimeOverrides"], dict):
         raise SystemExit("invalid model runtime overrides")
+    allow_storage_taints = defaults.get("allowOCSStorageTaintedNodes", False)
+    if not isinstance(allow_storage_taints, bool):
+        raise SystemExit("invalid storage taint allowance")
 
     lines = [
         f"{key}: {json.dumps(defaults[key], separators=(',', ':'))}"
         for key in required_defaults
         if key != "modelRuntimeOverrides"
     ]
+    lines.append(f"allowOCSStorageTaintedNodes: {json.dumps(allow_storage_taints)}")
+    lines.append("modelRuntimeOverridesJSON: " + json.dumps(json.dumps(
+        defaults["modelRuntimeOverrides"], separators=(',', ':'))))
     lines.append("modelRuntimeOverrides:")
     for model, override in sorted(defaults["modelRuntimeOverrides"].items()):
         if not isinstance(model, str) or not model or not isinstance(override, dict):
