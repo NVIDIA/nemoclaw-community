@@ -74,7 +74,7 @@ seed Job ── sre plugin: verify skill bundle, stage oc/kubectl, write kubecon
 | You will get | Everything the Kubernetes Deployer provides (gateway, sandboxed Hermes, dashboard, API, terminal), plus the `kubernetes-sre` skill, a bundled OpenShift client, an authenticated cluster API proxy with `safe` or `broad-no-delete` RBAC, optional model deployment, metrics, and exact-resource model deletion, and an opt-in auto-heal controller that detects failure patterns and executes only allow-listed, risk-tiered remediations. |
 | Runs on | Kubernetes 1.33+ or OpenShift 4.20+ with an Agent Sandbox controller and a ReadWriteOnce StorageClass. |
 | Requires | Helm 3.14+, a clone of this repository (the deployer is a `file://` sibling dependency), privileged sandbox admission, a pre-created model API-key Secret, and the deployer's issuer-discovery decision. |
-| Verified on | OpenShift 4.22.6 on amd64 with Kubernetes 1.35.5, Agent Sandbox controller v0.4.5, and OpenShell 0.0.116 (recipe 0.1.0 on deployer 0.4.0, safe mode, 2026-09-04). Also on a single-node kubeadm cluster, Kubernetes 1.36.2 on amd64 with Ubuntu 26.04 LTS and containerd 2.3.1, with the auto-heal controller in `assisted` mode (2026-09-11). |
+| Verified on | OpenShift 4.22.6 on amd64 with Kubernetes 1.35.5, Agent Sandbox controller v0.4.5, and OpenShell 0.0.116 (recipe 0.1.0 on deployer 0.4.0, safe mode, 2026-09-04). Also on a single-node kubeadm cluster, Kubernetes 1.36.2 on amd64 with Ubuntu 26.04 LTS and containerd 2.3.1, with the auto-heal controller in `assisted` mode (2026-09-11). Both re-verified on 2026-09-16 with OpenShift Client `4.20.38` staged through a re-seed. |
 | Evidence level | Live end-to-end for OpenShift safe mode: seed plugin log, skill and client mounts inside the sandbox, an authenticated read through the proxy, a denied DELETE, and a Hermes answer to a cluster question. Live on standard Kubernetes for install and for the auto-heal loop, including one executed rolling restart that resolved a stale-configuration crash loop and one correct escalation of an unfixable one. Local/static for `broad-no-delete`, model deployment, metrics, and deletion. |
 | Support and maturity | Experimental with best-effort community support. See the repository [support policy](../../../../SUPPORT.md). |
 | External access, data, and actions | Everything the deployer does, plus: downloads the checksum-pinned OpenShift client archive; creates a ClusterRole and ClusterRoleBinding for the proxy identity; sends cluster resource data returned through the proxy to the configured model endpoint. Safe mode can scale Deployments and StatefulSets. Opt-ins can create and patch workloads, read monitoring data, or delete allowlisted model resources. |
@@ -86,7 +86,7 @@ seed Job ── sre plugin: verify skill bundle, stage oc/kubectl, write kubecon
 - Kubernetes Deployer chart `0.4.0` (sibling `file://` dependency): NemoClaw
   `v0.0.117` managed Hermes `0.19.0` image and OpenShell `0.0.116`, all as
   immutable digests; see its README for the full list
-- OpenShift Client: `4.20.28`; official amd64 and arm64 archives are selected
+- OpenShift Client: `4.20.38`; official amd64 and arm64 archives are selected
   by node architecture and verified against pinned SHA-256 checksums
 - Helper image: immutable multi-architecture Python digest for the proxies and
   the client stager; the recipe builds no image
@@ -94,6 +94,23 @@ seed Job ── sre plugin: verify skill bundle, stage oc/kubectl, write kubecon
   skill trees, split into size-bounded ConfigMap chunks; its digest is pinned
   in `values.yaml` (`global.sre.bundle.sha256`) and joins the Sandbox
   configuration identity
+
+Changing `global.sre.cli.version` only restages the binary when the seed runs
+again. The sandbox keeps its old mount until it is recreated. To change the
+client version:
+
+1. Stop the release's sandbox with `deployer.lifecycle.sandbox.desiredState=absent`
+   and `deployer.lifecycle.sandbox.dangerousAcknowledgement=I_ACKNOWLEDGE_SANDBOX_DELETE`,
+   as shown in [Teardown](#teardown). Do not uninstall the release. Deleting the
+   sandbox ends its active Hermes sessions; wait until it is absent.
+2. Upgrade with the matching client version, archive URLs, and checksums. Set
+   `deployer.lifecycle.seed.runOnUpgrade=true` and
+   `deployer.lifecycle.seed.dangerousAcknowledgement=I_ACKNOWLEDGE_SANDBOX_STOPPED`.
+   Set `deployer.lifecycle.sandbox.desiredState=present` to recreate the sandbox
+   after the seed completes.
+3. After the upgrade, set `deployer.lifecycle.seed.runOnUpgrade=false` on later
+   upgrades unless another reseed is required. Confirm the client version inside
+   the recreated sandbox.
 
 For a cluster outside the documented client-version skew, override
 `global.sre.cli.version` plus both architecture URLs and checksums together
@@ -266,7 +283,7 @@ allow-listed and tiered:
 | --- | --- | --- |
 | SAFE | restart pod, rollout restart, delete evicted pods, notify only | executed automatically |
 | MEDIUM | rollout undo, scale, bump memory limit, force delete pod, cordon, uncordon | only with an approval annotation on that workload |
-| NEVER_AUTO | drain, approve CSR, fix image, probe, storage or config, grant RBAC, control-plane work | always escalated to a human |
+| NEVER_AUTO | drain, approve CSR, fix image, probe, generic storage or config repair, grant RBAC, control-plane work | always escalated to a human |
 
 Namespace scope, an opt-out label, flap detection, a cooldown, and per-cycle
 and per-hour budgets apply on top. Policy mode is `observe`, `safe` or
@@ -296,6 +313,49 @@ kubectl -n nemoclaw-sre-assistant logs deploy/<release>-autoheal -f
 Every decision is recorded in the release's memory ConfigMap, which also drives
 the learning that promotes or demotes an action for a recurring fingerprint.
 
+### PVC expansion and manual KubeVirt guest follow-up
+
+The separate storage controller is disabled by default. When enabled, its
+default is recommendation mode: 85% usage sustained for 300 seconds recommends
+15% growth. Automatic mode requires an explicit PVC target, opt-in label,
+allowlisted expansion-enabled StorageClass, quota and safety checks, and global
+remediation policy approval. This narrow PVC-expansion exception does not permit
+generic storage repair or guest command execution.
+
+For KubeVirt, the controller observes the mapped guest filesystem rather than
+the host disk image. After verified PVC expansion it emails the admin with the
+namespace, exact VM/PVC, original/requested/capacity sizes, mapped device,
+filesystem and mount, and human follow-up. The admin confirms a usable backup
+or snapshot and shares an approved procedure with the VM owner. Only current,
+simple ext4/XFS partition mappings receive conditional command examples;
+unknown, LVM, encrypted or unsupported layouts require manual inspection.
+Failed or unverified PVC expansion never receives guest-resize commands.
+Storage emails have no JSON attachment.
+
+`agentConfig.storage.namespaces` can scope storage monitoring independently of
+general workload detection. It accepts exact namespace names only and still
+honors the global namespace policy. An empty list inherits
+`agentConfig.scope.include_namespaces`; storage never silently monitors all
+namespaces. Recommendation mode cannot resize or delete PVCs.
+
+High/Critical workload escalations include up to the last 50 collected application
+log lines inline, credential-redacted and capped at 12,000 characters. If logs
+are unavailable, the email states that explicitly. The message includes the
+attempt count, action result, failed verification, and read-only next checks;
+there is no JSON dump or attachment. Only policy-eligible Deployment restarts
+may repeat, up to three attempts with the configured retry delay. Safety-denied
+or nonrepeatable actions do not receive three destructive retries.
+
+The agent never uses guest SSH, executes guest commands, patches DataVolumes,
+or stops/reboots VMs. An OpenShift platform flag does not enable guest writes.
+Monitoring continues after manual work, but untimestamped guest-agent data does
+not certify recovery. Further growth stays locked until the admin verifies
+recovery and reconciles the recorded operation; restart or email retry cannot
+trigger another resize. Never clear the lock while CSI resize is outstanding.
+
+See the [storage implementation ledger](docs/2026-10-05-storage-autoheal-plan.md)
+for scoped configuration, recovery checks and cluster validation boundaries.
+
 The controller reloads file-backed Kubernetes API tokens before each request,
 so projected ServiceAccount token rotation does not require a restart. If the
 file cannot be read or is empty, the request fails without reusing an old token.
@@ -315,6 +375,33 @@ honoured only when it belongs to the failing workload, so text inside a
 container's logs cannot redirect a restart to another pod.
 
 ## Skill bundle and seeding
+
+Hermes integrations must preserve their policy-managed proxy and CA settings
+when invoking code tools. Configure `terminal.env_passthrough` with the exact
+operational proxy/CA variable names (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`,
+`NO_PROXY`, their lowercase equivalents, `SSL_CERT_FILE`, `SSL_CERT_DIR`,
+`REQUESTS_CA_BUNDLE`, and `CURL_CA_BUNDLE`), never credential wildcards or
+`HF_TOKEN`. Ensure terminal shell initialization retains `/chart-bin` on PATH.
+These are harness settings, not additional OpenShell network permissions.
+Use installed scripts through the terminal tool instead of ad-hoc subprocess
+networking, and retain final model deployment confirmation.
+
+The model skill includes `scripts/plan-hf-gpus.py` for read-only HF revision,
+GPU request headroom, node readiness, and hardware planning checks. If OpenShell
+denies the direct HF `resolve/<revision>/config.json` GET, the planner retries
+only the same-origin `/api/resolve-cache/models/<model>/<revision>/config.json`
+endpoint using the revision fetched from the HF API. Keep that GET permitted
+in the sandbox HF metadata policy; no wildcard network bypass or credential
+dump is required. A denied cache request, invalid metadata, changed revision,
+or changed recipe hash still blocks deployment. The planner does not apply
+resources or authorize deployment. Runtime recipe resolution and final
+confirmation remain separate requirements; an NVFP4 profile must match the
+actual quantized repository, not an unquantized model with a similar name.
+Explicit same-model hardware profile paths in the official catalog are also
+planning evidence; runtime resolution must still validate the selected hardware
+profile and pin the image digest before deployment.
+Do not let an agent edit planners, validators, runtime defaults, or approval
+hashes to make a blocked deployment pass.
 
 The two skill trees under `files/skills/` are packaged by
 `scripts/build-sre-skills-bundle.py` into one deterministic archive with a
@@ -363,6 +450,13 @@ endpoint) confirmed:
   revision recreated it.
 
 Run the local/static checks from this recipe directory:
+
+Install PyYAML in the Python environment used for these checks. The model
+planning helpers use it to read the chart-managed YAML configuration:
+
+```bash
+python3 -m pip install pyyaml
+```
 
 ```bash
 helm dependency build .
@@ -441,6 +535,32 @@ Through this recipe's values, the agent container image is repinned from the sub
 mutable `3.12-slim` tag to the same immutable digest this recipe already uses
 elsewhere. The agent is pure Python standard library and installs nothing at
 start-up.
+
+## Model deployment handoff
+
+The installed `openshift-llm-deploy/scripts/preflight-model.py` saves the complete
+verified deployment plan with its SHA-256 identity. After explicit final user
+confirmation, `scripts/deploy-plan.py --plan PATH --approved-plan-sha256 HASH
+--confirm` invokes the existing guarded wrapper with all required arguments and
+streams progress. Omit `--confirm` to validate without deployment. Plans expire
+after 30 minutes; changed plans require fresh confirmation. Neither helper
+authorizes arbitrary recipes, bypasses policy, or reads HF Secret data.
+
+## Auto-heal escalation policy
+
+`notifications.escalationMinSeverity` defaults to `high`: High and Critical
+unresolved incidents reach configured external sinks; Low and Medium remain in
+the stdout audit. Human email, Slack and Markdown summaries omit raw incident
+JSON. Existing action-catalog, namespace, risk-tier and approval gates remain.
+The recovery episode budget defaults to three attempts, with fresh observation
+and verification; only eligible Deployment pod restarts are repeatable. LLM
+suggestions are not executed as arbitrary shell commands.
+
+`notifications.healedDelivery` defaults to `immediate` for this standalone chart.
+An integrating chart may opt into `digest` only when it supplies a durable memory
+reader and a working infrastructure report delivery path. In digest mode,
+successful-heal external messages are suppressed; the audit remains available
+for that report. An unconfigured digest consumer would hide success notifications.
 
 ## Third-Party Dependencies
 

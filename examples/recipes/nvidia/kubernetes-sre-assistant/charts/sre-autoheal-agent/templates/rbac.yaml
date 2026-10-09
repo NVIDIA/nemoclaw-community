@@ -13,6 +13,17 @@ metadata:
     # The agent never reads Secrets, never changes RBAC/SCC and never deletes
     # anything except Pods. Human-only actions are documented, not granted.
 rules:
+{{- if .Values.agentConfig.storage.enabled }}
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
+    verbs: [get, list, watch]
+  - apiGroups: [kubevirt.io]
+    resources: [virtualmachines, virtualmachineinstances, kubevirts]
+    verbs: [get, list, watch]
+  - apiGroups: [subresources.kubevirt.io]
+    resources: [virtualmachineinstances/filesystemlist]
+    verbs: [get]
+{{- end }}
   # --- read paths used by the detectors ---------------------------------
   - apiGroups: [""]
     resources: [namespaces, nodes, pods, pods/log, services, endpoints, events, persistentvolumeclaims, persistentvolumes, resourcequotas, limitranges]

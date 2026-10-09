@@ -15,6 +15,7 @@ from __future__ import annotations
 import html as html_module
 import json
 import logging
+import shlex
 import smtplib
 import ssl
 import urllib.error
@@ -23,6 +24,7 @@ from email.message import EmailMessage
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .models import Incident, iso
+from .detect import redact
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +50,7 @@ FACT_LABELS = {
     "node": "Node", "pod": "Pod",
 }
 COMMAND_PREFIXES = ("kubectl", "oc ", "helm", "argocd", "curl", "python3")
-MAX_LOG_TAIL_CHARS = 2000
+MAX_LOG_TAIL_CHARS = 12000
 
 
 class Section:
@@ -140,12 +142,7 @@ class Message:
         ]
         for section in self.sections:
             blocks.append(self._html_section(section))
-        blocks.append(
-            '<details style="margin-top:22px"><summary style="cursor:pointer;color:#6b7280;font-size:13px">'
-            "Raw incident JSON</summary>"
-            '<pre style="background:#f3f4f6;padding:12px;overflow-x:auto;font-size:12px;line-height:1.4">'
-            f"{_esc(json.dumps(self.payload, indent=1, default=str)[:60000])}</pre></details>"
-        )
+        # Detailed JSON stays in incident history/webhook payloads, never email.
         blocks.append("</div>")
         return "<!doctype html><html><body>" + "".join(blocks) + "</body></html>"
 
@@ -225,6 +222,44 @@ def _step_html(step: str) -> str:
     return _esc(text)
 
 
+def checked_steps(finding: Dict[str, Any]) -> List[str]:
+    """Generate read-only commands from observed identifiers, not LLM prose.
+
+    These are syntax/target checked templates, not proof of live authorization
+    or root cause. Never embed arbitrary model commands in operator emails.
+    """
+    subject = finding.get("owner") or finding.get("resource") or {}
+    evidence = finding.get("evidence") or {}
+    kind, name = subject.get("kind"), subject.get("name")
+    kinds = {"Pod", "Deployment", "StatefulSet", "DaemonSet", "Service", "Node", "PersistentVolumeClaim", "Job", "HorizontalPodAutoscaler"}
+    if kind not in kinds or not isinstance(name, str) or not name:
+        return ["Review the retained incident evidence; no supported resource target is available."]
+    q = shlex.quote
+    ns = subject.get("namespace")
+    suffix = f" -n {q(ns)}" if isinstance(ns, str) and ns else ""
+    steps = [f"kubectl describe {kind.lower()} {q(name)}{suffix}"]
+    resource = finding.get("resource") or {}
+    pod_name = resource.get("name") if resource.get("kind") == "Pod" else evidence.get("pod")
+    if isinstance(pod_name, str) and pod_name and ns:
+        steps.append(f"kubectl get events{suffix} --field-selector {q('involvedObject.kind=Pod,involvedObject.name=' + pod_name)} --sort-by=.lastTimestamp")
+        container = evidence.get("container")
+        flag = f" -c {q(container)}" if isinstance(container, str) and container else " --all-containers=true"
+        steps.append(f"kubectl logs {q(pod_name)}{suffix}{flag} --tail=50")
+        if evidence.get("restart_count", 0):
+            steps.append(f"kubectl logs {q(pod_name)}{suffix}{flag} --previous --tail=50")
+    if kind == "Service":
+        steps.append(f"kubectl get endpointslices{suffix} -l {q('kubernetes.io/service-name=' + name)}")
+        selector = evidence.get("selector") or {}
+        if selector:
+            steps.append(f"kubectl get pods{suffix} -l {q(','.join(f'{key}={value}' for key, value in selector.items()))} -o wide")
+    node = evidence.get("node") or finding.get("node")
+    if isinstance(node, str) and node:
+        steps.append(f"kubectl describe node {q(node)}")
+    if kind == "StatefulSet":
+        steps.append(f"kubectl get pvc{suffix}")
+    return steps[:6]
+
+
 # ---------------------------------------------------------------------------
 # Message construction
 # ---------------------------------------------------------------------------
@@ -256,7 +291,6 @@ def build_message(incident: Incident, event: str, context: Dict[str, Any], clust
         ("Pattern", finding.get("pattern_id")),
         ("Detected (UTC)", finding.get("detected_at_iso")),
         ("Incident", incident.id),
-        ("Fingerprint", incident.fingerprint),
     ]
     sections.append(Section("kv", "Overview", _clean_kv(overview)))
     sections.append(Section("text", "Symptom", finding.get("summary")))
@@ -275,8 +309,8 @@ def build_message(incident: Incident, event: str, context: Dict[str, Any], clust
 
     events = evidence.get("events") or []
     event_rows = [
-        (item.get("reason") or "", f"x{item.get('count') or 1}", (item.get("message") or "")[:400])
-        for item in events[:5]
+        (item.get("reason") or "", f"x{item.get('count') or 1}", (item.get("message") or "")[:240])
+        for item in events[:3]
     ]
     sections.append(Section("table", "Recent cluster events", (["Reason", "Count", "Message"], event_rows)))
 
@@ -286,14 +320,23 @@ def build_message(incident: Incident, event: str, context: Dict[str, Any], clust
             ("Source", diagnosis.get("source")),
             ("Confidence", f"{round(float(confidence) * 100)}%" if confidence is not None else None),
         ])
-        sections.append(Section("text", "Root cause", diagnosis.get("root_cause")))
+        sections.append(Section("text", "Preliminary RCA - hypothesis (unconfirmed)", str(diagnosis.get("root_cause") or "Cause not established")[:500]))
         sections.append(Section("kv", "Diagnosis details", details))
-        sections.append(Section("text", "Rationale", diagnosis.get("rationale")))
 
     sections.extend(_outcome_sections(incident, event, context))
 
-    steps = (diagnosis.get("human_steps") or [])[:12]
-    sections.append(Section("steps", "Suggested next steps", steps))
+    if event in {"heal_failed", "escalated", "approval_needed"}:
+        logs = redact(str(evidence.get("logs_tail") or ""))
+        excerpt = "\n".join(logs.splitlines()[-50:])
+        if excerpt:
+            if len(excerpt) > MAX_LOG_TAIL_CHARS:
+                excerpt = excerpt[-MAX_LOG_TAIL_CHARS:]
+                sections.append(Section("text", "Log excerpt limit", "Excerpt truncated to the last 12,000 characters."))
+            sections.append(Section("code", "Application logs (last up to 50 collected lines, redacted)", excerpt))
+        else:
+            sections.append(Section("text", "Application logs", "Application logs were not available for this finding; use the read-only checks below."))
+
+    sections.append(Section("steps", "Evidence-based next checks (read-only)", checked_steps(finding)))
 
     health = _clean_kv([
         ("Unhealthy pods", cluster_summary.get("unhealthy_pods")),
@@ -309,9 +352,7 @@ def build_message(incident: Incident, event: str, context: Dict[str, Any], clust
         runbook = f"{str(context['runbook_base_url']).rstrip('/')}/{finding.get('pattern_id')}"
         sections.append(Section("kv", "Runbook", [("Pattern runbook", runbook)]))
 
-    logs = evidence.get("logs_tail")
-    if logs:
-        sections.append(Section("code", "Container log tail", str(logs)[-MAX_LOG_TAIL_CHARS:]))
+    sections.append(Section("text", "Evidence record", "Detailed incident evidence is retained in agent history. Only bounded, redacted log excerpts appear inline; no JSON dump or attachment is included."))
 
     payload = {"event": event, "incident": incident.to_dict(), "cluster": cluster_summary, "context": context}
     return Message(event, title, sections, severity, payload)
@@ -324,6 +365,7 @@ def _outcome_sections(incident: Incident, event: str, context: Dict[str, Any]) -
         return [Section("kv", "Action taken", _clean_kv([
             ("Action", incident.action),
             ("Result", result.get("detail")),
+            ("Attempt", f"{result.get('attempt')}/{result.get('max_attempts')}" if result.get("attempt") else None),
             ("Verification", ("PASSED - " if incident.verified else "FAILED - ") + (incident.verify_detail or "")),
             ("Rollback hint", result.get("rollback_hint")),
         ]))]
@@ -331,6 +373,7 @@ def _outcome_sections(incident: Incident, event: str, context: Dict[str, Any]) -
         return [Section("kv", "Action attempted", _clean_kv([
             ("Action", incident.action),
             ("Result", result.get("detail")),
+            ("Attempt", f"{result.get('attempt')}/{result.get('max_attempts')}" if result.get("attempt") else None),
             ("Verification", "FAILED - " + (incident.verify_detail or "")),
             ("Why escalating", incident.decision_reason),
         ]))]
@@ -507,9 +550,16 @@ class WebhookSink(Sink):
 
 
 class Notifier:
-    def __init__(self, sinks: List[Sink], events: List[str]):
+    def __init__(self, sinks: List[Sink], events: List[str], escalation_min_severity: str = "high", healed_delivery: str = "immediate"):
         self.sinks = sinks
         self.events = set(events)
+        ranks = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+        if escalation_min_severity not in ranks:
+            raise ValueError("notify.escalation_min_severity must be a known severity")
+        if healed_delivery not in {"immediate", "digest"}:
+            raise ValueError("notify.healed_delivery must be immediate or digest")
+        self.escalation_min_severity = ranks[escalation_min_severity]
+        self.healed_delivery = healed_delivery
 
     @classmethod
     def build(cls, cfg: Dict[str, Any], secret_lookup) -> "Notifier":
@@ -528,7 +578,8 @@ class Notifier:
         hook = cfg.get("webhook") or {}
         if hook.get("enabled"):
             sinks.append(WebhookSink(secret_lookup(hook.get("url_env", "")), hook.get("headers") or {}))
-        return cls(sinks, cfg.get("events") or ["healed", "escalated", "approval_needed"])
+        return cls(sinks, cfg.get("events") or ["healed", "escalated", "approval_needed"],
+                   cfg.get("escalation_min_severity", "high"), cfg.get("healed_delivery", "immediate"))
 
     def wants(self, event: str) -> bool:
         if event == "heal_failed":
@@ -538,9 +589,22 @@ class Notifier:
     def send(self, message: Message) -> Dict[str, bool]:
         results = {}
         for sink in self.sinks:
+            if not self.allows_sink(message, sink.name):
+                continue
             try:
                 results[sink.name] = sink.send(message)
             except Exception as exc:  # noqa: BLE001 - one sink must not block the others
                 log.warning("sink %s raised: %s", sink.name, exc)
                 results[sink.name] = False
         return results
+
+    def allows_sink(self, message: Message, sink_name: str) -> bool:
+        """Shared policy for standard sends and storage's independent sink retries."""
+        if sink_name == "stdout":
+            return True
+        if message.event == "healed" and self.healed_delivery == "digest":
+            return False
+        if message.event in {"escalated", "heal_failed", "approval_needed"}:
+            rank = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}.get(message.severity, -1)
+            return rank >= self.escalation_min_severity
+        return True
