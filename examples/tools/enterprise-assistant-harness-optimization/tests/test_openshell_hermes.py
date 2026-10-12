@@ -270,13 +270,15 @@ class OpenShellRuntimeTest(unittest.TestCase):
             root = Path(temp)
             agent = OpenShellHermesFlywheel(
                 logs_dir=root / "logs",
-                model_name="nvidia/custom-model",
+                model_name="my-custom-nemotron",
                 arm="baseline",
+                provider_base_url="https://models.example.test/v1",
             )
             runtime = root / "run"
             agent._write_runtime(runtime, "Find launch evidence.")
             script = (runtime / "run.sh").read_text()
-            self.assertIn("--model nvidia/custom-model", script)
+            self.assertIn("--model my-custom-nemotron", script)
+            self.assertIn("export NVIDIA_BASE_URL=https://models.example.test/v1", script)
 
     def test_baseline_eagerly_exposes_mcp_tools(self) -> None:
         import yaml

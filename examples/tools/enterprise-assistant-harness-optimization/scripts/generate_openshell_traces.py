@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from harbor_agents.openshell_hermes import OpenShellHermesFlywheel
+from harbor_agents.model_settings import model_base_url, model_slug, provider_name
 from scripts.production_workload import validate_matrix
 
 
@@ -155,12 +156,17 @@ def main() -> int:
     )
     parser.add_argument("--case", action="append", help="Run only this matrix case (repeatable).")
     parser.add_argument("--output", type=Path, default=ROOT / ".runs" / "source-traces")
-    parser.add_argument("--model", default="nvidia/nemotron-3-ultra-550b-a55b")
+    parser.add_argument("--model", default=model_slug())
     parser.add_argument("--openshell-bin", default="openshell")
     parser.add_argument("--openshell-image", default="hermes-flywheel-openshell:0.3")
-    parser.add_argument("--openshell-provider", default="hermes-nvidia")
-    parser.add_argument("--provider-base-url", default="")
+    parser.add_argument("--openshell-provider")
+    parser.add_argument("--provider-base-url", default=model_base_url())
     args = parser.parse_args()
+    try:
+        args.provider_base_url = model_base_url(args.provider_base_url)
+    except ValueError as exc:
+        parser.error(str(exc))
+    args.openshell_provider = args.openshell_provider or provider_name(args.provider_base_url)
     if args.attempts < 1 or args.concurrency < 1 or args.retries < 0:
         parser.error("--attempts/concurrency must be positive and --retries nonnegative")
     if not args.matrix.is_file():

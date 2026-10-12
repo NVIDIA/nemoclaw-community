@@ -94,47 +94,59 @@ if [[ ! -x "$MCP_PYTHON" ]]; then
 fi
 uv pip install --python "$MCP_PYTHON" -e '.[remote-mcp]'
 
-step "Configure the NVIDIA Build provider"
-if [[ -z "${NVIDIA_API_KEY:-}" ]]; then
+step "Configure the model provider"
+MODEL_SLUG="${MODEL_SLUG:-nvidia/nemotron-3-ultra-550b-a55b}"
+model_profile_path="$ROOT/.runs/model-provider.yaml"
+provider_settings="$(python3 -m harbor_agents.model_settings \
+  --base-url "${MODEL_BASE_URL:-https://integrate.api.nvidia.com/v1}" \
+  --profile "$model_profile_path")"
+read -r model_provider profile_type MODEL_BASE_URL <<< "$provider_settings"
+MODEL_API_KEY="${MODEL_API_KEY:-}"
+if [[ -z "$MODEL_API_KEY" && "$MODEL_BASE_URL" == "https://integrate.api.nvidia.com/v1" ]]; then
+  MODEL_API_KEY="${NVIDIA_API_KEY:-}"
+fi
+if [[ -z "$MODEL_API_KEY" ]]; then
   if [[ ! -t 0 ]]; then
     trap - ERR
     echo ""
-    echo "ERROR: Configure the NVIDIA Build provider failed."
-    echo "NVIDIA_API_KEY is not set, and this is not an interactive terminal."
-    echo "Export NVIDIA_API_KEY and re-run ./scripts/install.sh"
+    echo "ERROR: Configure the model provider failed."
+    echo "MODEL_API_KEY is not set, and this is not an interactive terminal."
+    echo "Export MODEL_API_KEY and re-run ./scripts/install.sh"
     exit 1
   fi
-  printf 'NVIDIA Build API key: '
-  read -rs NVIDIA_API_KEY
+  printf 'Model provider API key: '
+  read -rs MODEL_API_KEY
   printf '\n'
-  export NVIDIA_API_KEY
 fi
-if [[ -z "${NVIDIA_API_KEY}" ]]; then
+if [[ -z "$MODEL_API_KEY" ]]; then
   trap - ERR
   echo ""
-  echo "ERROR: Configure the NVIDIA Build provider failed."
-  echo "No NVIDIA Build API key was provided."
+  echo "ERROR: Configure the model provider failed."
+  echo "No model provider API key was provided."
   exit 1
 fi
+export NVIDIA_API_KEY="$MODEL_API_KEY"
 
-if ! curl --fail-with-body -sS https://integrate.api.nvidia.com/v1/chat/completions \
+if ! curl --fail-with-body -sS "$MODEL_BASE_URL/chat/completions" \
   -H "Authorization: Bearer ${NVIDIA_API_KEY}" -H 'Content-Type: application/json' \
-  -d '{"model":"nvidia/nemotron-3-ultra-550b-a55b","messages":[{"role":"user","content":"Reply with OK."}],"max_tokens":256,"reasoning_effort":"none","stream":false}' \
+  -d "$(jq -nc --arg model "$MODEL_SLUG" '{model: $model, messages: [{role: "user", content: "Reply with OK."}], max_tokens: 256, stream: false}')" \
   -o .runs/provider-smoke.json; then
   trap - ERR
   echo ""
-  echo "ERROR: Configure the NVIDIA Build provider failed."
-  echo "NVIDIA Build rejected the API key. Response:"
+  echo "ERROR: Configure the model provider failed."
+  echo "The model endpoint rejected the request. Response:"
   cat .runs/provider-smoke.json >&2 || true
   echo ""
-  echo "Confirm the key from https://build.nvidia.com/ and re-run ./scripts/install.sh"
+  echo "Confirm MODEL_SLUG, MODEL_BASE_URL, and MODEL_API_KEY, then re-run ./scripts/install.sh"
   exit 1
 fi
 jq '{model,choices}' .runs/provider-smoke.json
-openshell profile lint -f openshell/provider-nvidia.yaml
-openshell profile import -f openshell/provider-nvidia.yaml
+openshell profile lint -f "$model_profile_path"
+if ! openshell profile describe "$profile_type" >/dev/null 2>&1; then
+  openshell profile import -f "$model_profile_path"
+fi
 
-if provider_output="$(openshell provider create --name hermes-nvidia --type hermes-nvidia-build --credential NVIDIA_API_KEY 2>&1)"; then
+if provider_output="$(openshell provider create --name "$model_provider" --type "$profile_type" --credential NVIDIA_API_KEY 2>&1)"; then
   provider_status=0
 else
   provider_status=$?
@@ -142,16 +154,16 @@ fi
 printf '%s\n' "$provider_output"
 if [[ "$provider_status" -ne 0 ]]; then
   if grep -Eqi 'already exists|already configured|duplicate' <<<"$provider_output"; then
-    echo "OpenShell provider hermes-nvidia is already configured; continuing."
+    echo "OpenShell provider $model_provider is already configured; continuing."
   else
     trap - ERR
     echo ""
-    echo "ERROR: Configure the NVIDIA Build provider failed."
-    echo "Could not create the OpenShell provider hermes-nvidia."
+    echo "ERROR: Configure the model provider failed."
+    echo "Could not create the OpenShell provider $model_provider."
     exit 1
   fi
 fi
-unset NVIDIA_API_KEY
+unset NVIDIA_API_KEY MODEL_API_KEY
 
 trap - ERR
 echo ""
