@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import secrets
+import shlex
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from harbor_agents.openshell_hermes import OpenShellHermesFlywheel
+from harbor_agents.model_settings import model_base_url, model_slug, provider_name
 
 
 async def wait_for_exit() -> None:
@@ -26,7 +28,9 @@ async def serve(args: argparse.Namespace) -> None:
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     agent = OpenShellHermesFlywheel(
-        logs_dir=output / "logs", model_name=args.model, arm=args.arm
+        logs_dir=output / "logs", model_name=args.model, arm=args.arm,
+        openshell_provider=args.openshell_provider,
+        provider_base_url=args.provider_base_url,
     )
     artifacts = output / "artifacts"
     artifacts.mkdir()
@@ -37,7 +41,9 @@ async def serve(args: argparse.Namespace) -> None:
         "export HERMES_HOME=/workspace/run/hermes\n"
         "export TERMINAL_ENV=local\n"
         "export HERMES_NEMO_RELAY_PLUGINS_TOML="
-        "/workspace/run/hermes/nemo-relay/relay-plugins.toml\n",
+        "/workspace/run/hermes/nemo-relay/relay-plugins.toml\n"
+        f"export NVIDIA_BASE_URL={shlex.quote(args.provider_base_url)}\n"
+        f"export MODEL_SLUG={shlex.quote(args.model)}\n",
         encoding="utf-8",
     )
     process, log = await agent._start_remote_mcp(artifacts, token, 8765)
@@ -95,10 +101,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--name", default="hermes-try")
     parser.add_argument("--arm", choices=("baseline", "candidate"), default="baseline")
-    parser.add_argument("--model", default="nvidia/nemotron-3-ultra-550b-a55b")
+    parser.add_argument("--model", default=model_slug())
+    parser.add_argument("--provider-base-url", default=model_base_url())
+    parser.add_argument("--openshell-provider")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
     parser.add_argument("--output", type=Path, default=ROOT / ".runs/interactive" / stamp)
     args = parser.parse_args()
+    try:
+        args.provider_base_url = model_base_url(args.provider_base_url)
+    except ValueError as exc:
+        parser.error(str(exc))
+    args.openshell_provider = args.openshell_provider or provider_name(args.provider_base_url)
     if not args.name or len(args.name) > 15 or not all(
         char in "abcdefghijklmnopqrstuvwxyz0123456789-" for char in args.name
     ):

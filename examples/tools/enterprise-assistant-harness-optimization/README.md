@@ -14,7 +14,7 @@
 
 Most agent failures don't show up in a single interaction, they show up in the traces. This guide walks through the full process of finding these failures, writing tests to measure them, and creating fixes. At the end you should know how to turn traces into repeatable eval tasks, know why a held-out set matters so a fix doesn’t overfit, and know how to resolve failures with small changes in the agent's instructions and verify those fixes in measurable ways.
 
-This repository is a NemoClaw reference tutorial for optimizing an Enterprise Personal Assistant agent. The setup follows the NemoClaw structure: an agent is built with Hermes running in OpenShell with Nemotron 3 Ultra as the LLM. The agent connects to an MCP service that contains fictional tools mimicking services like Outlook, Teams, Slack, Jira, and Confluence.
+This repository is a NemoClaw reference tutorial for optimizing an Enterprise Personal Assistant agent. The setup follows the NemoClaw structure: an agent is built with Hermes running in OpenShell with Nemotron 3 Ultra as the default LLM. The agent connects to an MCP service that contains fictional tools mimicking services like Outlook, Teams, Slack, Jira, and Confluence.
 
 The tutorial walks through a multi-step optimization process:
 - Create traces by asking the agent a series of questions that use the fictional MCP tools
@@ -32,7 +32,7 @@ The repository includes checked-in artifacts for each step of this process, allo
 The optimization tutorial starts with a fictional agent. The agent is built following the NemoClaw reference pattern:
 - Hermes Agent Harness
 - OpenShell Runtime
-- Nemotron 3 Ultra LLM
+- Nemotron 3 Ultra LLM by default
 
 The agent is given a set of fictional MCP tools and is asked to perform tasks for a company product launch: researching
 across mail, calendar, chat, files, enterprise knowledge, directory, project,

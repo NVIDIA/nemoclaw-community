@@ -42,6 +42,19 @@ class RunHarborEvalTest(unittest.TestCase):
 
     @patch("scripts.run_harbor_eval.subprocess.run")
     @patch("scripts.run_harbor_eval.check_job_result", return_value=0)
+    def test_environment_model_and_endpoint_reach_harbor(self, check, run) -> None:
+        with patch.dict(os.environ, {
+            "MODEL_SLUG": "my-custom-nemotron",
+            "MODEL_BASE_URL": "https://models.example.test/v1",
+        }):
+            self.assertEqual(self.invoke(run, "development", "baseline"), 0)
+        command = run.call_args.args[0]
+        self.assertEqual(command[command.index("-m") + 1], "my-custom-nemotron")
+        self.assertIn("provider_base_url=https://models.example.test/v1", command)
+        self.assertTrue(any(str(item).startswith("openshell_provider=hermes-model-") for item in command))
+
+    @patch("scripts.run_harbor_eval.subprocess.run")
+    @patch("scripts.run_harbor_eval.check_job_result", return_value=0)
     def test_custom_agent_is_importable_from_clean_shell(self, check, run) -> None:
         run.return_value.returncode = 0
         with tempfile.TemporaryDirectory() as raw:
@@ -83,6 +96,23 @@ class RunHarborEvalTest(unittest.TestCase):
         command = run.call_args.args[0]
         self.assertIn("harbor_agents.hermes_flywheel:HermesFlywheel", command)
         self.assertFalse(any(str(arg).startswith("openshell_image=") for arg in command))
+
+    @patch("scripts.run_harbor_eval.subprocess.run")
+    def test_direct_runtime_rejects_custom_model_settings_before_harbor(self, run) -> None:
+        for settings in (
+            {"MODEL_SLUG": "my-custom-nemotron"},
+            {"MODEL_BASE_URL": "https://models.example.test/v1"},
+        ):
+            with self.subTest(settings=settings), patch.dict(os.environ, settings):
+                with tempfile.TemporaryDirectory() as raw:
+                    suite = Path(raw) / "suite.json"
+                    suite.write_text(json.dumps({"cases": [{"id": "dev-1", "case_kind": "development"}]}))
+                    argv = ["run_harbor_eval.py", "--arm", "baseline", "--split", "development",
+                            "--runtime", "direct", "--suite", str(suite)]
+                    with patch.object(sys, "argv", argv), self.assertRaises(SystemExit) as raised:
+                        main()
+                    self.assertEqual(raised.exception.code, 2)
+        run.assert_not_called()
 
     def test_recorded_job_requires_terminal_complete_exception_free_trials(self):
         with tempfile.TemporaryDirectory() as raw:
