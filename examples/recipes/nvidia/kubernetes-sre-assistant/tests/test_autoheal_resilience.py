@@ -10,10 +10,13 @@ from pathlib import Path
 import io
 import json
 import os
+import subprocess
 import sys
 import unittest
 import urllib.error
 from unittest.mock import patch
+
+import yaml
 
 RECIPE = Path(__file__).resolve().parents[1]
 AGENT_SOURCE = Path(os.environ.get(
@@ -34,6 +37,22 @@ class AutohealCollectorTests(unittest.TestCase):
     def test_imports_the_selected_recipe_runtime(self):
         self.assertEqual(Path(kube.__file__).resolve().parent.parent, AGENT_SOURCE)
 
+    def test_log_endpoint_accepts_wildcard_before_streaming(self):
+        def negotiated_response(request, **kwargs):
+            if request.get_header("Accept") == "text/plain":
+                raise urllib.error.HTTPError(
+                    request.full_url, 406, "NotAcceptable", {},
+                    io.BytesIO(b'{"reason":"NotAcceptable"}'),
+                )
+            return io.BytesIO(b"model startup failed\n")
+
+        with patch("urllib.request.urlopen", side_effect=negotiated_response):
+            for previous in (False, True):
+                self.assertEqual(
+                    self.client.pod_logs("gpu", "worker", "main", previous=previous),
+                    "model startup failed\n",
+                )
+
     def test_json_prefix_followed_by_text_is_preserved(self):
         raw = b'{\n  "gpu": 2\n}\nNVML initialization failed\n'
         with patch("urllib.request.urlopen", return_value=io.BytesIO(raw)):
@@ -53,7 +72,7 @@ class AutohealCollectorTests(unittest.TestCase):
         with patch("urllib.request.urlopen", return_value=io.BytesIO(b"previous log\n")) as call:
             self.assertEqual(self.client.pod_logs("gpu", "discovery-1", "discovery", previous=True), "previous log\n")
         request = call.call_args.args[0]
-        self.assertEqual(request.get_header("Accept"), "text/plain")
+        self.assertEqual(request.get_header("Accept"), "*/*")
         self.assertIn("previous=true", request.full_url)
 
     def test_empty_logs_are_an_empty_string(self):
@@ -92,6 +111,30 @@ class AutohealCollectorTests(unittest.TestCase):
     def test_alternate_transport_decoder_error_is_isolated(self):
         with patch.object(self.transport, "request", side_effect=json.JSONDecodeError("mixed log", "x", 0)):
             self.assertIn("logs unavailable", self.client.pod_logs("gpu", "discovery-1", "discovery"))
+
+
+class AutohealPodLogRbacTests(unittest.TestCase):
+    def test_pod_log_reads_are_get_only_in_each_builtin_profile(self):
+        chart = AGENT_SOURCE.parents[1]
+        for profile in ("read-only", "safe", "safe+nodes"):
+            with self.subTest(profile=profile):
+                rendered = subprocess.run(
+                    ["helm", "template", "log-rbac", str(chart), "--set",
+                     f"rbac.profile={profile}", "--show-only", "templates/rbac.yaml"],
+                    capture_output=True, text=True,
+                )
+                self.assertEqual(rendered.returncode, 0, rendered.stderr)
+                role = next(doc for doc in yaml.safe_load_all(rendered.stdout)
+                            if doc and doc["kind"] == "ClusterRole")
+                log_rules = [rule for rule in role["rules"]
+                             if "pods/log" in rule.get("resources", [])]
+                self.assertEqual(len(log_rules), 1)
+                self.assertEqual(log_rules[0]["apiGroups"], [""])
+                self.assertEqual(log_rules[0]["verbs"], ["get"])
+                for rule in role["rules"]:
+                    self.assertNotIn("secrets", rule.get("resources", []))
+                    self.assertNotIn("pods/exec", rule.get("resources", []))
+                    self.assertNotIn("*", rule.get("resources", []))
 
 
 class AutohealModelRetryTests(unittest.TestCase):

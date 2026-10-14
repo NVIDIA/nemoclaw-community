@@ -208,7 +208,9 @@ class HttpTransport(Transport):
         is_log = (method == "GET" and len(path_parts) == 7
                   and path_parts[:3] == ["api", "v1", "namespaces"]
                   and path_parts[4] == "pods" and path_parts[6] == "log")
-        headers = {"Authorization": f"Bearer {token}", "Accept": "text/plain" if is_log else "application/json"}
+        # Kubernetes validates Accept before streaming pod logs on some versions.
+        # Negotiate any media type, but keep log bodies as raw text below.
+        headers = {"Authorization": f"Bearer {token}", "Accept": "*/*" if is_log else "application/json"}
         if body is not None:
             data = json.dumps(body).encode("utf-8")
             headers["Content-Type"] = content_type

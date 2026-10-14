@@ -346,6 +346,10 @@ there is no JSON dump or attachment. Only policy-eligible Deployment restarts
 may repeat, up to three attempts with the configured retry delay. Safety-denied
 or nonrepeatable actions do not receive three destructive retries.
 
+See [application logs in escalation emails](docs/application-log-email.md) for
+the Pod-log HTTP negotiation fix, required role-based access control (RBAC),
+and checks that distinguish log collection, SMTP acceptance, and inbox delivery.
+
 The agent never uses guest SSH, executes guest commands, patches DataVolumes,
 or stops/reboots VMs. An OpenShift platform flag does not enable guest writes.
 Monitoring continues after manual work, but untimestamped guest-agent data does

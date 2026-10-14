@@ -25,8 +25,12 @@ rules:
     verbs: [get]
 {{- end }}
   # --- read paths used by the detectors ---------------------------------
+  # Application logs use GET, including previous=true.
   - apiGroups: [""]
-    resources: [namespaces, nodes, pods, pods/log, services, endpoints, events, persistentvolumeclaims, persistentvolumes, resourcequotas, limitranges]
+    resources: [pods/log]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [namespaces, nodes, pods, services, endpoints, events, persistentvolumeclaims, persistentvolumes, resourcequotas, limitranges]
     verbs: [get, list, watch]
   - apiGroups: [apps]
     resources: [deployments, replicasets, statefulsets, daemonsets]
