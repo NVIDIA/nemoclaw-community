@@ -475,7 +475,7 @@ helm template test . -f values-kubernetes.yaml --api-versions agents.x-k8s.io/v1
 **Expected result:**
 
 ```text
-Ran 53 tests
+Ran 182 tests
 OK
 ```
 
