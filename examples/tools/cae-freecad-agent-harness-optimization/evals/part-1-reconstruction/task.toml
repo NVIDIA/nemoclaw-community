@@ -1,0 +1,24 @@
+schema_version = "1.3"
+# The agent runs on the host (harness/helix_cad_agent.py) and hands over only the
+# saved FreeCAD document. Harbor restores it at this path in the separate verifier.
+artifacts = ["/app/model.FCStd"]
+
+[metadata]
+category = "cad"
+tags = ["freecad", "parametric-modeling", "mesh-reconstruction"]
+
+[agent]
+timeout_sec = 1800.0
+
+[verifier]
+timeout_sec = 900.0
+environment_mode = "separate"
+network_mode = "no-network"
+
+[verifier.environment]
+network_mode = "no-network"
+
+[environment]
+network_mode = "no-network"
+build_timeout_sec = 600.0
+os = "linux"

@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+[project]
+name = "helix-cad-agent"
+version = "0.1.0"
+description = "Harbor agent that runs the NeMo Helix cad-agent deployment against a live FreeCAD session."
+requires-python = ">=3.12"
+dependencies = ["harbor==0.22.0"]
+
+[tool.setuptools]
+py-modules = ["helix_cad_agent"]

@@ -1,0 +1,138 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+"""Grade a saved FreeCAD document. Run with: freecadcmd check_model.py (env MODEL, MESH).
+
+Writes one ``<check-id>\\tPASS|FAIL`` row per check to /logs/verifier/results.
+"""
+
+import contextlib
+import io
+import os
+import re
+import sys
+import tempfile
+
+import FreeCAD
+
+RESULTS = "/logs/verifier/results"
+IOU_MIN = 0.90
+# Features that build geometry from sketches.
+SKETCH_FEATURES = {
+    "PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove",
+    "PartDesign::AdditiveLoft", "PartDesign::SubtractiveLoft", "PartDesign::AdditivePipe",
+    "PartDesign::SubtractivePipe", "PartDesign::AdditiveHelix", "PartDesign::SubtractiveHelix",
+}
+# A shape assigned by a script rather than built by a feature.
+WRAPPERS = {"PartDesign::Feature", "PartDesign::FeaturePython", "Part::Feature", "Part::FeaturePython"}
+DRIVING = {"Distance", "DistanceX", "DistanceY", "Radius", "Diameter", "Angle"}
+# Datum helpers that carry no model geometry.
+ORIGIN = {"App::Origin", "App::Line", "App::Plane", "App::Point"}
+
+
+def row(check, ok):
+    with open(RESULTS, "a") as f:
+        f.write(f"{check}\t{'PASS' if ok else 'FAIL'}\n")
+    print(check, "PASS" if ok else "FAIL")
+
+
+def fingerprint(body):
+    shape = body.Shape
+    box = shape.BoundBox
+    return (round(shape.Volume, 6), round(box.XLength, 6), round(box.YLength, 6), round(box.ZLength, 6))
+
+
+def iou(body):
+    brep = tempfile.mktemp(suffix=".brep")
+    body.Shape.exportBrep(brep)
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    sys.argv = ["iou_core", brep, os.environ["MESH"]]
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        exec(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "iou_core.py")).read(),
+             {"__name__": "__main__"})
+    match = re.search(r"IOU ([0-9.]+)", out.getvalue())
+    return float(match.group(1)) if match else 0.0
+
+
+def drivers(doc):
+    """Named dimensions: named driving sketch constraints, and numeric properties
+    that expressions in the document reference (e.g. ``Parameters.Height``)."""
+    for obj in doc.Objects:
+        if obj.TypeId == "Sketcher::SketchObject":
+            for c in obj.Constraints:
+                if c.Name and c.Type in DRIVING and c.Driving:
+                    yield ("constraint", obj, c.Name)
+    seen = set()
+    for obj in doc.Objects:
+        for _, expression in getattr(obj, "ExpressionEngine", []) or []:
+            for name, prop in re.findall(r"\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)\b", expression):
+                target = doc.getObject(name) or next(iter(doc.getObjectsByLabel(name)), None)
+                if target is None or (target.Name, prop) in seen:
+                    continue
+                seen.add((target.Name, prop))
+                if isinstance(getattr(target, prop, None), (int, float, FreeCAD.Units.Quantity)):
+                    yield ("property", target, prop)
+
+
+def moves_geometry(doc, body, kind, obj, name):
+    before = fingerprint(body)
+    if kind == "constraint":
+        value = obj.getDatum(name)
+        obj.setDatum(name, value * 1.1)
+    else:
+        value = getattr(obj, name)
+        setattr(obj, name, value * 1.1)
+    doc.recompute()
+    after = fingerprint(body) if not body.Shape.isNull() else before
+    if kind == "constraint":
+        obj.setDatum(name, value)
+    else:
+        setattr(obj, name, value)
+    doc.recompute()
+    return after != before
+
+
+def single_visible_object(doc, body):
+    """Exactly one visible model: every visible object with geometry is the Body or
+    its tip feature (how PartDesign shows a Body). Origin axes and planes are ignored."""
+    if body is None:
+        return False
+    shown = [o for o in doc.Objects
+             if getattr(o, "Visibility", False) and o.TypeId not in ORIGIN
+             and hasattr(o, "Shape") and not o.Shape.isNull()]
+    return bool(shown) and all(o in (body, body.Tip) for o in shown)
+
+
+def main():
+    open(RESULTS, "w").close()
+    doc = FreeCAD.openDocument(os.environ["MODEL"])
+    doc.recompute()
+    bodies = [o for o in doc.Objects if o.TypeId == "PartDesign::Body"]
+    body = bodies[0] if len(bodies) == 1 else None
+    solid = body is not None and not body.Shape.isNull() and body.Shape.isValid() \
+        and len(body.Shape.Solids) == 1
+    row("single-valid-solid", solid)
+
+    features = [o for o in (body.Group if body else []) if o.TypeId.startswith(("PartDesign::", "Part::"))]
+    sketch_driven = [o for o in features if o.TypeId in SKETCH_FEATURES]
+    wrappers = [o for o in features if o.TypeId in WRAPPERS]
+    row("native-feature-tree", bool(sketch_driven) and not wrappers)
+
+    fidelity = iou(body) if solid else 0.0
+    print("mesh-fidelity IoU", round(fidelity, 4))
+    row("mesh-fidelity", fidelity >= IOU_MIN)
+
+    driven = False
+    if solid:
+        for candidate in drivers(doc):
+            try:
+                if moves_geometry(doc, body, *candidate):
+                    driven = True
+                    break
+            except Exception as exc:  # a driver that cannot be changed does not count
+                print("driver", candidate[2], "failed:", exc)
+    row("named-dimension-drives-geometry", driven)
+    row("single-visible-object", single_visible_object(doc, body))
+
+
+main()

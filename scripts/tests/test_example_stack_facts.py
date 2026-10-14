@@ -214,7 +214,7 @@ class ExampleStackFactsTests(unittest.TestCase):
                 {
                     # Includes the Kubernetes Deployer, SRE Assistant, the
                     # Workday HR assistant, and both harness optimization
-                    # examples: NeMo Platform and Enterprise Assistant.
+                    # examples: CAE FreeCAD (on NeMo Helix) and Enterprise Assistant.
                     "unconfirmed": 14,
                     "unpinned": 12,
                     "unknown": 1,

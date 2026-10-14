@@ -1,0 +1,59 @@
+# Part 1 reconstruction in FreeCAD
+
+## Difficulty explanation
+
+The agent must turn a triangle mesh into an editable CAD model inside a live FreeCAD
+session. Matching the shape is not enough: the model has to be a native sketch-based
+PartDesign tree whose named dimensions actually rebuild it. Agents tend to shortcut
+this by assigning a scripted shape to a generic feature, or by declaring success from
+bounds and validity checks without measuring similarity to the mesh. In the source
+runs every reconstruction was reported complete, and none met all requirements.
+
+## Environment and software requirements
+
+- The agent runs on the host, outside the task container: a NeMo Helix deployment
+  (`cad-agent`, Deep Agents) driving the FreeCAD 1.1.3 GUI through freecad-mcp 0.1.24
+  over XML-RPC on `127.0.0.1:9875`. `harness/helix_cad_agent.py` is the Harbor agent
+  that invokes it and hands the saved document to the task as `/app/model.FCStd`.
+- Trials must run serially: there is one FreeCAD session.
+- The verifier image installs FreeCAD 1.1.3 from conda-forge at build time and grades
+  offline. All software is open source.
+- Both containers run without network access. Docker Desktop on macOS cannot
+  enforce that; a Docker engine whose kernel supports nftables `fib` rules can
+  (native Linux, or Colima on macOS).
+
+## Ground-truth provenance
+
+The reference mesh is the first-party mesh the instruction names, retained by the
+verifier only. The 0.9 IoU threshold and the editability requirements come from the
+agent's `ETHOS.md`. The reference solution is a passing reconstruction produced by
+the same agent in an earlier run (IoU 0.9038). The task was derived from one recorded
+Helix trace whose run was flagged by two NeMo Compass Insights.
+
+## Solution explanation
+
+A passing model measures the mesh, builds the body from sketches with native
+additive and subtractive features (the reference uses lofts through sketched
+sections), drives those sketches from named parameters, and matches the mesh
+closely.
+
+## Verification explanation
+
+The verifier opens the saved document in FreeCAD and reports five checks:
+`single-valid-solid` (one PartDesign body with one valid solid),
+`native-feature-tree` (sketch-driven PartDesign features and no scripted shape
+wrappers), `named-dimension-drives-geometry` (changing a named constraint or a
+referenced named parameter by 10% changes the recomputed geometry),
+`mesh-fidelity` (IoU against the reference mesh, recomputed with the same algorithm
+as the host scorer, is at least 0.9), and `single-visible-object` (every visible
+object with geometry is the Body or its tip feature, as the instruction's "exactly one
+object visible" requires; origin axes and planes are ignored). The reward is 1 only
+when all five pass. `single-visible-object` was added on 2026-10-14 from a NeMo Eval
+Author proposal (a Compass Insight showed passing models with 63 of 66 objects
+visible) and re-proved with the same controls.
+
+## Relevant experience
+
+Authored and reviewed by [Author], who builds CAD and simulation agents and reviewed
+the four checks against hands-on FreeCAD PartDesign modeling and the agent's
+recorded failures.

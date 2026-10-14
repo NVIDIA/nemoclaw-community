@@ -1,19 +1,9 @@
 # Credentials
 .env
 
-# Optimizer run output: cached LLM responses, materialized task copies, the
-# per-candidate agent sources, logs. None of it is authored content.
-harness/experiment/
-harness/run.out
-# Bytecode for the optimizer run, kept out of candidate trees (see Step 7).
-harness/.pycache/
-
-# Agent runtime output. The deployment writes next to agent/agent.yaml; a trial
-# writes next to the candidate copy it builds the agent from.
+# Agent runtime output. The deployment writes next to agent/agent.yaml.
 agent/artifacts/
 agent/traces/
-harness/agent_source/artifacts/
-harness/agent_source/traces/
 **/.fabric/
 
 # FreeCAD documents and their rolling backups. The agent writes these while it
@@ -22,10 +12,11 @@ harness/agent_source/traces/
 *.FCStd[0-9]
 *.FCBak
 
-# Scratch geometry. meshes/reference_mug.obj is the one tracked mesh; anything
+# Scratch geometry. The reference_part meshes are the tracked ones; anything
 # else dropped in here is a local substitution and should not be committed.
 meshes/*
-!meshes/reference_mug.obj
+!meshes/reference_part.obj
+!meshes/reference_part_2.obj
 
 # Other build and export artifacts from scoring runs.
 *.brep
@@ -33,7 +24,8 @@ meshes/*
 *.stp
 *.stl
 *.obj
-!meshes/reference_mug.obj
+!meshes/reference_part.obj
+!meshes/reference_part_2.obj
 results/runs/
 
 # Python
@@ -42,3 +34,27 @@ __pycache__/
 .venv/
 
 .DS_Store
+
+# Local Analyst findings and baseline prompts
+insights.yml
+analyst.local.yaml
+baseline-prompts/
+
+.venv-checks/
+
+# Eval Author's private task workspaces, and the skills installed into a coding
+# agent. This example's own skill is tracked under skills/.
+.eval-author/
+.claude/
+.agents/
+.cursor/
+.pi/
+
+# The experiment workspace (candidate agents, traces, eval runs, reports) stays
+# local. results/ holds the measured outcome and the final agents.
+experiments/
+
+# The eval suite ships its reference solution and the verifier's copy of the mesh
+!evals/*/solution/*.FCStd
+!evals/*/tests/reference_part*.obj
+skills-lock.json

@@ -52,7 +52,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # Reference meshes live outside the agent directory: the agent spec fileset is
 # capped at 900,000 bytes. FreeCAD reads them straight from disk, so they never
 # need to be staged with the agent.
-DEFAULT_MESH = os.path.join(os.path.dirname(HERE), "meshes", "reference_mug.obj")
+DEFAULT_MESH = os.path.join(os.path.dirname(HERE), "meshes", "reference_part.obj")
 CORE = os.path.join(HERE, "iou_core.py")
 RPC = os.environ.get("FREECAD_RPC", "http://127.0.0.1:9875")
 
@@ -104,7 +104,7 @@ print("EXPORTED", ok)
 
 
 def main():
-    doc = sys.argv[1] if len(sys.argv) > 1 else "EvalMug"
+    doc = sys.argv[1] if len(sys.argv) > 1 else "EvalPart"
     mesh = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_MESH
     if not os.path.isfile(mesh):
         die(f"reference mesh not found: {mesh}; pass one as argv[2]")
