@@ -44,12 +44,14 @@ The verifier opens the saved document in FreeCAD and reports five checks:
 shape check, including self-intersections),
 `native-feature-tree` (sketch-driven PartDesign features and no scripted shape
 wrappers), `named-dimension-drives-geometry` (changing a named constraint or a
-referenced named parameter by 10% changes the recomputed geometry),
+referenced named parameter by 10% leaves one clean solid and changes a bounding-box
+length by at least 1%),
 `mesh-fidelity` (IoU against the reference mesh, recomputed with the same algorithm
 as the host scorer, is at least 0.9), and `single-visible-object` (every visible
 object with geometry is the Body or its tip feature, as the instruction's "exactly one
 object visible" requires; origin axes and planes are ignored). The reward is 1 only
-when all five pass. `single-visible-object` was added on 2026-10-14 from a NeMo Eval
+when all five pass. The verifier also logs the model's feature, sketch and face
+counts (`complexity.json`) without grading them. `single-visible-object` was added on 2026-10-14 from a NeMo Eval
 Author proposal (a Compass Insight showed passing models with 63 of 66 objects
 visible) and re-proved with the same controls.
 

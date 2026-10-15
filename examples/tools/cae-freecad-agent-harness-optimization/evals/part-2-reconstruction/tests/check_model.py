@@ -7,6 +7,7 @@ Writes one ``<check-id>\\tPASS|FAIL`` row per check to /logs/verifier/results.
 
 import contextlib
 import io
+import json
 import os
 import re
 import sys
@@ -85,6 +86,21 @@ def drivers(doc):
                     yield ("property", target, prop)
 
 
+# A 10% change to a named dimension must leave one clean solid whose overall size
+# (a bounding-box length) changes by at least this fraction: a dimension that only
+# nudges the volume of one detail does not let a designer resize the part.
+SIZE_CHANGE_MIN = 0.01
+
+
+def resizes_cleanly(body, before):
+    shape = body.Shape
+    if shape.isNull() or not shape.isValid() or len(shape.Solids) != 1 or not clean(shape):
+        return False
+    box = shape.BoundBox
+    after = (box.XLength, box.YLength, box.ZLength)
+    return any(abs(a - b) >= SIZE_CHANGE_MIN * b for a, b in zip(after, before[1:]) if b > 0)
+
+
 def moves_geometry(doc, body, kind, obj, name):
     before = fingerprint(body)
     if kind == "constraint":
@@ -94,13 +110,13 @@ def moves_geometry(doc, body, kind, obj, name):
         value = getattr(obj, name)
         setattr(obj, name, value * 1.1)
     doc.recompute()
-    after = fingerprint(body) if not body.Shape.isNull() else before
+    moved = resizes_cleanly(body, before)
     if kind == "constraint":
         obj.setDatum(name, value)
     else:
         setattr(obj, name, value)
     doc.recompute()
-    return after != before
+    return moved
 
 
 def single_visible_object(doc, body):
@@ -144,6 +160,22 @@ def main():
                 print("driver", candidate[2], "failed:", exc)
     row("named-dimension-drives-geometry", driven)
     row("single-visible-object", single_visible_object(doc, body))
+    log_complexity(body)
+
+
+def log_complexity(body):
+    """Not a check: record how complex the model is, for the results tables."""
+    group = body.Group if body else []
+    sketches = [o for o in group if o.TypeId == "Sketcher::SketchObject"]
+    stats = {
+        "features": len([o for o in group if o.TypeId in SKETCH_FEATURES]),
+        "sketches": len(sketches),
+        "sketch_geometry": sum(len(o.Geometry) for o in sketches),
+        "faces": len(body.Shape.Faces) if body and not body.Shape.isNull() else 0,
+    }
+    print("complexity", json.dumps(stats))
+    with open(os.path.join(os.path.dirname(RESULTS), "complexity.json"), "w") as f:
+        json.dump(stats, f)
 
 
 main()

@@ -100,6 +100,26 @@
             "runs": 1,
             "reward": 0
           }
+        },
+        "reproved_2026_10_15_named_dimension_and_complexity": {
+          "reason": "named-dimension-drives-geometry now requires the edited model to stay one clean solid and change a bounding-box length by at least 1%; a non-gating complexity log (features, sketches, faces) is recorded per run; owner-approved",
+          "nop": {
+            "runs": 2,
+            "reward": 0
+          },
+          "oracle": {
+            "runs": 2,
+            "reward": 1,
+            "iou": 0.9038,
+            "complexity": {
+              "features": 3,
+              "faces": 7
+            }
+          },
+          "negative": {
+            "runs": 1,
+            "reward": 0
+          }
         }
       },
       "eval_author_status": {
@@ -154,6 +174,26 @@
             "runs": 2,
             "reward": 1,
             "iou": 0.9985
+          },
+          "negative": {
+            "runs": 1,
+            "reward": 0
+          }
+        },
+        "reproved_2026_10_15_named_dimension_and_complexity": {
+          "reason": "named-dimension-drives-geometry now requires the edited model to stay one clean solid and change a bounding-box length by at least 1%; a non-gating complexity log (features, sketches, faces) is recorded per run; owner-approved",
+          "nop": {
+            "runs": 2,
+            "reward": 0
+          },
+          "oracle": {
+            "runs": 2,
+            "reward": 1,
+            "iou": 0.9985,
+            "complexity": {
+              "features": 5,
+              "faces": 36
+            }
           },
           "negative": {
             "runs": 1,

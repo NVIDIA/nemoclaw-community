@@ -91,7 +91,7 @@ A run passes only when all five checks of the eval pass:
 | --- | --- |
 | `single-valid-solid` | The document holds one PartDesign body with one clean solid: it passes FreeCAD's full shape check, including self-intersections. |
 | `native-feature-tree` | The solid is built from sketches by native PartDesign features, not a scripted shape. |
-| `named-dimension-drives-geometry` | Changing a named dimension by 10% changes the rebuilt solid, so the model is editable. |
+| `named-dimension-drives-geometry` | Changing a named dimension by 10% rebuilds one clean solid whose size changes by at least 1%, so the model is editable. |
 | `mesh-fidelity` | The solid overlaps the reference mesh with IoU ≥ 0.9. |
 | `single-visible-object` | Only the finished model is visible, as the task asks. |
 
