@@ -41,7 +41,8 @@ closely.
 ## Verification explanation
 
 The verifier opens the saved document in FreeCAD and reports five checks:
-`single-valid-solid` (one PartDesign body with one valid solid),
+`single-valid-solid` (one PartDesign body with one solid that passes FreeCAD's full
+shape check, including self-intersections),
 `native-feature-tree` (sketch-driven PartDesign features and no scripted shape
 wrappers), `named-dimension-drives-geometry` (changing a named constraint or a
 referenced named parameter by 10% changes the recomputed geometry),

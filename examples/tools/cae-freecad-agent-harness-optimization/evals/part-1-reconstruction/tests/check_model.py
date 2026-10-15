@@ -35,6 +35,17 @@ def row(check, ok):
     print(check, "PASS" if ok else "FAIL")
 
 
+def clean(shape):
+    """FreeCAD's full shape check, including self-intersections: a loft that folds
+    through itself can pass isValid() and still overlap the mesh closely."""
+    try:
+        shape.check(True)
+        return True
+    except Exception as exc:  # check() raises with the list of faults
+        print("shape check failed:", str(exc).splitlines()[0])
+        return False
+
+
 def fingerprint(body):
     shape = body.Shape
     box = shape.BoundBox
@@ -110,7 +121,7 @@ def main():
     bodies = [o for o in doc.Objects if o.TypeId == "PartDesign::Body"]
     body = bodies[0] if len(bodies) == 1 else None
     solid = body is not None and not body.Shape.isNull() and body.Shape.isValid() \
-        and len(body.Shape.Solids) == 1
+        and len(body.Shape.Solids) == 1 and clean(body.Shape)
     row("single-valid-solid", solid)
 
     features = [o for o in (body.Group if body else []) if o.TypeId.startswith(("PartDesign::", "Part::"))]

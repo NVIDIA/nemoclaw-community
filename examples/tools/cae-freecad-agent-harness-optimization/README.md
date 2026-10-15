@@ -89,7 +89,7 @@ A run passes only when all five checks of the eval pass:
 
 | Check | What it verifies |
 | --- | --- |
-| `single-valid-solid` | The document holds one PartDesign body with one valid solid. |
+| `single-valid-solid` | The document holds one PartDesign body with one clean solid: it passes FreeCAD's full shape check, including self-intersections. |
 | `native-feature-tree` | The solid is built from sketches by native PartDesign features, not a scripted shape. |
 | `named-dimension-drives-geometry` | Changing a named dimension by 10% changes the rebuilt solid, so the model is editable. |
 | `mesh-fidelity` | The solid overlaps the reference mesh with IoU ≥ 0.9. |
@@ -356,7 +356,9 @@ Keep credentials in Helix (`nemo setup`) or `.env`, never in `agent.yaml`.
   every part. An agent
   you mean to ship needs a set of tasks covering the work it will see.
 - **The reconstructions are close, not clean.** The routine lofts measured slices, so
-  part 1 has a ragged rim, and its sketches are free B-spline profiles with no
+  part 1 has a ragged rim where the lofts fold through themselves. The results above
+  were graded before `single-valid-solid` became strict; under the strict check the
+  final agent's part-1 models fail, and its sketches are free B-spline profiles with no
   Sketcher constraints: one named dimension (`Params.Height`) drives every section,
   which the eval accepts but a designer would want more of. Compass raised the second
   point in round 10.

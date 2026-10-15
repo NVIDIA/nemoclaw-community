@@ -103,6 +103,12 @@ Sketcher constraints, a finished model is not saved and reopened to check it, an
 after a FreeCAD stall the agent spends many calls on recovery. The first two are
 listed under Known limitations; the third is part of going off-plan.
 
+**Graded before the strict solid check.** Every round above used the original
+`single-valid-solid`, which ran FreeCAD's quick `isValid()`. Since 2026-10-15 the check
+also runs FreeCAD's full shape check. Under it, the final agent's part-1 models fail:
+their lofts fold through themselves, which is what makes the rim jagged. Its part-2
+models still pass.
+
 ## Limits
 
 See [Known limitations](../README.md#known-limitations). The 10-minute budget is a

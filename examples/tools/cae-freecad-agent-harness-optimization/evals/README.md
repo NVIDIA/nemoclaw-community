@@ -61,6 +61,11 @@ IoU threshold:
 | Oracle (2 runs) | 1, 1 (IoU 0.9038) | 1, 1 (IoU 0.9985) |
 | Negative (1 run) | 0 (IoU 0.3223) | 0 |
 
+On 2026-10-15 `single-valid-solid` was made strict: the solid must pass FreeCAD's full
+shape check, including self-intersections, because a reconstruction that folded through
+itself had passed the quick `isValid()` test. Both tasks were re-proved with the same
+controls and results: NOP 0 and 0, Oracle 1 and 1, negative 0.
+
 Eval Author's finalized receipts cover part-1's first, four-check version.
 
 Agent results, round by round, are in [results/](../results/README.md).

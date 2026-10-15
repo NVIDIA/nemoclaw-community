@@ -2,7 +2,7 @@
 schema_version: 1
 name: cad-agent
 created_timestamp: 2026-09-10T13:45:00+02:00
-updated_timestamp: 2026-10-14T18:00:00+02:00
+updated_timestamp: 2026-10-15T10:00:00+02:00
 author: NVIDIA
 owner: NVIDIA
 ---
@@ -68,10 +68,14 @@ declared tool schemas. The agent stops when it reports the finished document.
 - The feature tree is the deliverable. Shape accuracy is necessary but not sufficient.
 - Trust the read-back, not the summary. The agent's own report is the least reliable
   signal.
+- Build the model a designer would: a clean solid from the fewest features that reach
+  the fidelity target, not a dense stack of slices that happens to overlap the mesh.
 
 ## Success Criteria
 
-- One valid solid: `isValid()` is true, exactly one solid, non-null shape.
+- One clean solid: exactly one solid, non-null, that passes FreeCAD's full shape check
+  (`check(True)`, which includes self-intersections). A loft that folds through itself
+  can still overlap the mesh closely; it is not a valid part.
 - A native sketch-based PartDesign tree, with sketches driving features. A pile of fused
   boolean primitives, or a scripted static shape wrapped as a `PartDesign::Feature` or
   `FeaturePython`, does not count.
@@ -122,7 +126,9 @@ part, all graded by the same checks; the agent is measured on every part.
 
 IoU measures shape overlap only. It cannot show that the model is editable, that its
 dimensions drive the geometry, or that it survives save and reopen; those need
-structural checks of the saved document. IoU is not pose-aligned, so it is specific to
+structural checks of the saved document. Nor can it show that the surface is clean: a
+jagged, self-intersecting model can score as high as a smooth one, so the full shape
+check is part of the bar. IoU is not pose-aligned, so it is specific to
 each reference mesh.
 
 ## Vision
