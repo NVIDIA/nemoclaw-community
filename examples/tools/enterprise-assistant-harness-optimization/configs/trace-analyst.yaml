@@ -9,10 +9,10 @@ output_path: .runs/trace-analyst-output.yml
 model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
 api_base: https://integrate.api.nvidia.com/v1
 max_tokens: 16384
-evidence_streams:
+compass_signals:
   anomaly_and_patterns: true
   tool_issues: true
-  eval_failure_patterns: true
+  grader_failure_patterns: true
   ethos_divergence:
     ethos_path: ETHOS.md
   user_sentiment: false
