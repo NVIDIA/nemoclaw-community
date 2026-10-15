@@ -24,13 +24,20 @@ finds recurring problems in those traces;
 proven eval; and each change to the agent is kept only if the eval says it is better.
 
 The agent runs on **Nemotron 3 Ultra** and must rebuild any part it is given as a
-mesh, as an editable FreeCAD model. RESULTS_SUMMARY
+mesh, as an editable FreeCAD model. The eval holds two different parts. The base agent
+saved no model in 5 minutes. Four rounds of the loop, each one pass through Steps 1 to 4
+below, took it to **4 of 4**, and a confirmation run to **10 of 10**, with all seven
+checks passing, in about 20 seconds of agent time per run.
 
 ## Screenshot
 
 ![Each reference mesh in blue beside the final agent's reconstruction in orange](assets/results.png)
 
-SCREENSHOT_CAPTION
+The task: rebuild each blue mesh as an editable FreeCAD model. Orange is the final
+agent's reconstruction: a native PartDesign body of four ruled lofts through sketched
+sections, driven by one named dimension (IoU 0.970 and 0.943, 50 and 62 faces). The
+same skill built both; nothing in it is specific to either part. Rendered headless from
+the saved files.
 
 ## At A Glance
 
@@ -111,7 +118,33 @@ the rest of your machine.
 
 ## Results
 
-RESULTS_SECTION
+A run passes only when all seven checks of the eval pass:
+
+| Check | What it verifies |
+| --- | --- |
+| `recomputes-after-reopen` | Every feature rebuilds from its inputs after the file is reopened. |
+| `single-valid-solid` | One PartDesign body with one solid that passes FreeCAD's full shape check, including self-intersections. |
+| `native-feature-tree` | The solid is built from sketches by native PartDesign features, not a scripted shape. |
+| `named-dimension-drives-geometry` | Changing a named dimension by 10% rebuilds one clean solid whose size changes by at least 1%. |
+| `mesh-fidelity` | The solid overlaps the reference mesh with IoU ≥ 0.9. |
+| `single-visible-object` | Only the finished model is visible when the file is opened. |
+| `compact-model` | At most 10× the faces of the reference solution: a designer's model, not a stack of slices. |
+
+Each round ran both parts twice, all four runs in parallel (eight when two candidates
+were measured at once), 5 minutes per run:
+
+| Round | Change to the agent | Runs passed | Checks (of 28) | Part 1 IoU | Part 2 IoU | Tokens per run |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0. Base agent | | 0/4 | 0 | | | 1.9 M |
+| 1. A skill with a helper script | Time budget in the prompt; a skill whose script builds, saves and checks the model in one command (stacked slices) | 0/4 | 22 | 0.91, 0.92 | 0.78 | 0.04 M |
+| 2. Ruled lofts (rejected) | One loft per segment instead of slices | 0/4 | 18 | invalid solid | 0.85 | 0.08 M |
+| 3. **Valid joints, a sound IoU estimate** | Joints as flat steps with shared sections; a ray-cast IoU estimate the agent can trust | **4/4** | **28** | **0.97** | **0.94** | **0.02 M** |
+
+After round 1, Compass found that the model was "a dense stack of slice sketches and
+pads" that passed every check; Eval Author added `compact-model` and proved it, and
+rounds 0 and 1 are shown re-graded with it. The final agent
+([results/final-agent](results/final-agent/agent.yaml)) then passed **10 of 10** runs,
+five per part. What each round found and taught is in [results/](results/README.md).
 
 ## Prerequisites
 
@@ -283,7 +316,26 @@ The 5-minute run limit and 3 GiB memory cap live in each task's
 
 ## Known limitations
 
-KNOWN_LIMITATIONS
+- **Two parts, few runs.** Two runs per part per round, ten for the final agent; the eval
+  shows the method works for two different parts, not for every part. An agent you mean
+  to ship needs tasks covering the work it will see.
+- **Compact, not yet a designer's tree.** The final models are four ruled lofts through
+  24-27 sections driven by one named dimension. They pass `compact-model`, but a designer
+  would revolve what is round and name more dimensions. Compass raised this; Eval Author
+  found no geometry-agnostic check for it yet ([results/](results/README.md#insights-that-stayed-open)).
+- **The agent's report overstates.** It reported "only the Body visible" when origin
+  datums and a spreadsheet were too; the saved file is what is graded.
+- **`single-visible-object` reads saved visibility.** A file whose Body is hidden but whose
+  tip is visible passes; whether FreeCAD's GUI then shows the part is unconfirmed.
+- **The eval's network rule is per host.** The agent's container can reach any port on
+  the Helix host, not only Helix.
+- **Span status is always "success".** Intake shows every span of these traces as
+  successful, even a failed tool call; Compass reads the tool output instead. Platform
+  feedback for Helix.
+- **Helix deployments cannot run this agent.** Helix's Deep Agents adapter gives the agent
+  a virtual file system and no shell, so the agent runs in the task container and Helix
+  provides the model, traces and analysis. Platform feedback: a real-path workspace and a
+  shell backend would let the same agent deploy on Helix.
 
 ## Verification
 

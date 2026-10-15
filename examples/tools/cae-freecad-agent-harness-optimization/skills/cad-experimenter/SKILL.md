@@ -42,7 +42,7 @@ This skill was written for this example only. It is a worked pattern for the
   `evals/*/solution/`, and never mirror the grader. If the agent must measure similarity
   to the mesh, write an independent measurement.
 - At most **two candidates**, each a different strategy.
-- **Test code headlessly** with `freecadcmd`, the FreeCAD the agent runs.
+- **Test code headlessly** in the agent's image, with the `freecadcmd` the agent runs.
 
 ## Levers
 
@@ -72,20 +72,19 @@ targets, the lever, and the checks it should move on both parts.
 
 **3. Build.** For each candidate, copy the round's `agent/` to `candidates/<short-name>/agent/`, edit
 the copy, and set its top-level `name:` to the one the orchestrator gave you. Test any
-code a skill relies on, headlessly, on both reference meshes
-(`evals/*/environment/reference.obj`):
+code a skill relies on in the agent's own image, on both reference meshes
+(`evals/*/environment/reference.obj`), exactly as the agent will run it:
 
 ```bash
-freecadcmd -c "exec(open('my_test.py').read())"
+docker build -t cad-env evals/part-1-reconstruction/environment   # once
+docker run --rm -v "$PWD":/w -w /w cad-env timeout 120 freecadcmd my_test.py
 ```
 
-Test the code exactly as the agent will run it. The routine must leave a model that
-passes FreeCAD's full shape check (`shape.check(True)`). Give every test a hard time
-limit and one configuration per process, so a hang costs minutes, not the round:
-
-```bash
-perl -e 'alarm 120; exec @ARGV' freecadcmd -c "exec(open('my_test.py').read())"
-```
+Run scripts as files, one configuration per process, under a hard time limit, so a hang
+costs minutes, not the round. The routine must leave a model that passes FreeCAD's full
+shape check (`shape.check(True)`). Hand over only candidates that do, on both parts. To
+smoke-test a candidate end to end, run one task once with `--ak agent_dir=<candidate>`
+(README Step 4); the orchestrator does the real measurement.
 
 A step that hangs or takes over about 60 s is itself a finding: the whole run has
 5 minutes. Hand over at least one candidate within about
