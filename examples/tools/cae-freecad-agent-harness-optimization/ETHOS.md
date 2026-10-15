@@ -2,7 +2,7 @@
 schema_version: 1
 name: cad-agent
 created_timestamp: 2026-09-10T13:45:00+02:00
-updated_timestamp: 2026-10-15T10:00:00+02:00
+updated_timestamp: 2026-10-15T18:00:00+02:00
 author: NVIDIA
 owner: NVIDIA
 ---
@@ -36,14 +36,39 @@ reference mesh, and it is never sufficient on its own.
 
 freecad-mcp 0.1.24 over stdio with text-only feedback. It reaches the FreeCAD GUI over
 XML-RPC on `127.0.0.1:9875`, so every call changes what is on the user's screen. The
-main instrument is `execute_code` (FreeCAD Python). The Deep Agents built-in file tools
-read the skills library at `/skills/`.
+main instrument is `execute_code` (FreeCAD Python):
+
+- It runs on FreeCAD's GUI thread. Over 90 s the bridge aborts the call but the work
+  keeps running, and every later call fails until it ends.
+- It rejects a `timeout` argument. Names defined in one call stay defined for the next.
+
+Blocked, because they do not work here and only feed retry loops:
+`execute_code_headless` (cannot find `freecadcmd`), `execute_code_async` (no job
+handle) and `get_async_status` (not implemented). `get_view` is blocked because the
+model reads no images.
+
+The Deep Agents built-in file tools (`read_file`, `write_file`, `ls`, ...) read the
+skills library at `/skills/`. `read_file` returns 100 lines unless given a larger
+`limit`; its header shows `next offset`.
 
 ## Harness
 
-LangChain Deep Agents, configured by `agent/agent.yaml` and deployed on NeMo Helix in
-subprocess mode. Helix records each run as an ATIF trace in Intake, including the
-declared tool schemas. The agent stops when it reports the finished document.
+LangChain Deep Agents on Nemotron 3 Ultra (text only), configured by
+`agent/agent.yaml` and deployed on NeMo Helix in subprocess mode. Helix records each
+run as an ATIF trace in Intake, including the declared tool schemas. The agent stops
+when it reports the finished document.
+
+Where things run:
+
+- The agent's file tools see a virtual file system: `/` is the deployment's folder,
+  where Helix copies the agent folder (so `/skills/` is the agent's `skills/`). FreeCAD
+  runs on the host and resolves paths against the real disk, so it cannot open
+  `/skills/...` or files the agent writes by those paths. The mesh path in the task is
+  a real host path: valid inside FreeCAD, not in the file tools.
+- Helix's `skills.paths` setting does not load on this version: skills ship as
+  `skills/<name>/` in the agent folder.
+- FreeCAD restarts before every run, so nothing carries over between runs. Each run is
+  stopped after 5 minutes.
 
 ## Behavior
 
@@ -95,12 +120,17 @@ declared tool schemas. The agent stops when it reports the finished document.
   0.95.
 - Extra verification is worth its token cost; re-deriving the whole model to chase the
   last few points of IoU is not.
+- How the agent is changed: a short system prompt with methods in skills and helper
+  files, over a long prompt with code embedded in it. Fixed code only when the agent
+  cannot do the job without it, delivered in the simplest way. The smallest change
+  that fixes the root cause.
 
 ## Constraints
 
 - FreeCAD is a live GUI shared with the user. Keep each `execute_code` call bounded:
   heavy calls have crashed FreeCAD, and the bridge aborts any call over 90 s.
 - Trials run serially against the one FreeCAD session.
+- A run must finish within 5 minutes.
 - Text only: no screenshots; read geometry back as numbers.
 - The agent directory is uploaded with the deployment and readable by the agent. The
   scorer, this ethos and the evals stay outside it.
@@ -110,6 +140,7 @@ declared tool schemas. The agent stops when it reports the finished document.
 - System prompt: yes
 - Skills under the agent's skills library: yes
 - Subagents: yes
+- Tool gating: yes
 - Model selection: with-approval
 - MCP server and its version: with-approval
 - Task instruction, reference mesh, scorer and evals: no
