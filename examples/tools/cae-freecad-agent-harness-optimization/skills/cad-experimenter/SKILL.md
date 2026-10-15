@@ -45,6 +45,9 @@ This skill was written for this example only. It is a worked pattern for the
   owner's approval: propose them, do not make them.
 - At most **two candidates**, each a different strategy. Prefer the smallest change that
   addresses the root cause. For a small model, removing work often beats adding rules.
+- **Guide through results, not rules.** A small model acts on what it has just read.
+  When the agent must do something next (retry, stop, run the next step), have the
+  output of the code it runs say so, rather than adding another rule to the prompt.
 - **Do not use the FreeCAD GUI while an eval runs.** Test code headlessly with
   `freecadcmd`; use the GUI only when the orchestrator says it is free.
 
@@ -111,5 +114,7 @@ measures them.
 The orchestrator measures each candidate on both tasks, two attempts per part, and keeps
 it only when it passes more runs than the agent under study, with no part and no check
 worse. Otherwise the agent under study stays, and the next round diagnoses again with
-fresh evidence. Two attempts per part is a quick, noisy signal, so the final agent is
+fresh evidence. A run lost to the infrastructure rather than the agent (FreeCAD
+killed by something else, a leftover run from another agent, a container that would
+not start) is void: it is re-run, not counted. Two attempts per part is a quick, noisy signal, so the final agent is
 measured again with more attempts before it is reported.

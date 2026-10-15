@@ -30,6 +30,7 @@ import os
 import re
 import shlex
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -119,6 +120,38 @@ def freecad(code: str) -> str:
     if not result.get('success'):
         raise RuntimeError(f'FreeCAD RPC failed: {result}')
     return result.get('message', '')
+
+
+def rpc_port_open(url: str = FREECAD_RPC, timeout: float = 3.0) -> bool:
+    """Whether FreeCAD's RPC server accepts connections. A plain TCP connect: it never
+    touches the GUI, so it is safe to poll while the agent works."""
+    address = url.split('://', 1)[-1].rstrip('/')
+    host, _, port = address.rpartition(':')
+    try:
+        with socket.create_connection((host or '127.0.0.1', int(port)), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def invoke_watched(instruction: str, poll: float = 10.0, grace: int = 3) -> tuple[int, str, bool]:
+    """Invoke the deployment, and stop the run early if FreeCAD stays down for `grace`
+    polls in a row: an agent that crashed FreeCAD cannot finish, so waiting out the
+    timeout only wastes time. Returns (returncode, output, crashed)."""
+    proc = subprocess.Popen(
+        [NEMO, 'agents', 'invoke', '--agent-deployment', DEPLOYMENT,
+         '--timeout', str(int(TIMEOUT)), '--input', instruction],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    deadline, down = time.time() + TIMEOUT + 60, 0
+    while proc.poll() is None and time.time() < deadline:
+        time.sleep(poll)
+        down = 0 if rpc_port_open() else down + 1
+        if down >= grace:
+            proc.kill()
+            return -9, proc.communicate()[0] or '', True
+    if proc.poll() is None:
+        proc.kill()
+    return proc.wait(), proc.communicate()[0] or '', False
 
 
 def document_open(name: str) -> bool:
@@ -224,15 +257,13 @@ class HelixCadAgent(BaseAgent):
             restart_freecad()
 
     async def _invoke(self, instruction: str, context: AgentContext) -> None:
-        completed = await asyncio.to_thread(
-            subprocess.run,
-            [NEMO, 'agents', 'invoke', '--agent-deployment', DEPLOYMENT,
-             '--timeout', str(int(TIMEOUT)), '--input', instruction],
-            capture_output=True, text=True, timeout=TIMEOUT + 60,
-        )
-        context.metadata = {'invoke_returncode': completed.returncode}
-        if completed.returncode != 0:  # the agent failed; the verifier grades what is left
-            context.metadata['invoke_error'] = (completed.stderr + completed.stdout).strip()[-600:]
+        returncode, output, crashed = await asyncio.to_thread(invoke_watched, instruction)
+        context.metadata = {'invoke_returncode': returncode}
+        if crashed:  # FreeCAD died mid-run: nothing is left to grade, so stop waiting
+            context.metadata['invoke_error'] = 'FreeCAD crashed during the run; run stopped'
+            await asyncio.to_thread(stop_leftover_run)
+        elif returncode != 0:  # the agent failed; the verifier grades what is left
+            context.metadata['invoke_error'] = output.strip()[-600:]
             await asyncio.to_thread(stop_leftover_run)
 
     def _collect(self, document: str, model: Path, mesh: Path, context: AgentContext) -> float | None:

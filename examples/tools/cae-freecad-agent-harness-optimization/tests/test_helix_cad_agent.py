@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "harness"))
 
-from helix_cad_agent import MESHES, document_name, pick_trace, task_mesh  # noqa: E402
+from helix_cad_agent import MESHES, document_name, pick_trace, rpc_port_open, task_mesh  # noqa: E402
 
 STARTED = datetime(2026, 10, 9, 8, 23, 0, tzinfo=timezone.utc)
 
@@ -56,3 +56,20 @@ class PickTrace(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RpcPortTest(unittest.TestCase):
+    def test_closed_port_reads_as_down(self):
+        import socket as _socket
+        with _socket.socket() as sock:  # find a free port, then release it
+            sock.bind(('127.0.0.1', 0))
+            port = sock.getsockname()[1]
+        self.assertFalse(rpc_port_open(f'http://127.0.0.1:{port}', timeout=0.5))
+
+    def test_open_port_reads_as_up(self):
+        import socket as _socket
+        with _socket.socket() as sock:
+            sock.bind(('127.0.0.1', 0))
+            sock.listen(1)
+            port = sock.getsockname()[1]
+            self.assertTrue(rpc_port_open(f'http://127.0.0.1:{port}', timeout=0.5))
