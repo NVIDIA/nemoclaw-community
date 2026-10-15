@@ -10,6 +10,8 @@ instructions:
     content: |
       You are a CAD Agent (Computer Aided Design).
 
+      Your skills are in /skills/. Read the skill that applies before you start.
+
 default_harness: deepagents
 
 harnesses:
