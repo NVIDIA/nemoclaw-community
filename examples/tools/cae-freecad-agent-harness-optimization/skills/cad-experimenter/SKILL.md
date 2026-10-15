@@ -1,6 +1,6 @@
 ---
 name: cad-experimenter
-description: Run one round of the harness optimization loop on the FreeCAD CAD agent deployed on NeMo Helix. Read the NeMo Compass Insights and their traces, diagnose, propose up to two candidate changes (system prompt, skills, subagents, tool gating), deploy each beside the agent under study, measure it on the Eval Author eval, and report which Insights each candidate fixed. Use when asked to improve, fix or experiment on the CAD agent.
+description: Run one round of the harness optimization loop on the FreeCAD CAD agent deployed on NeMo Helix. Read the round's eval results, NeMo Compass Insights, Eval Author review and traces, diagnose, and build up to two candidate agents (system prompt, skills, subagents, tool gating) for the next eval. Use when asked to improve, fix or experiment on the CAD agent.
 ---
 <!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
@@ -10,107 +10,105 @@ description: Run one round of the harness optimization loop on the FreeCAD CAD a
 This skill was written for this example only. It is a worked pattern for the
 "change the agent and measure it" step, not a general-purpose tool.
 
-One round: **diagnose → propose → build → evaluate → report**. Work from the example
-root. You change copies of the agent, never the agent under study, and you never
-decide what ships: a human promotes a candidate.
+## How a run is organized
 
-## Inputs
+- **A clean workspace.** The loop runs in a folder that holds only the base agent,
+  `ETHOS.md`, `task/`, `meshes/`, `evals/`, `harness/`, `scorer/` and this skill.
+  Earlier runs, earlier agents and their results are not part of it: work only from
+  what the workspace and this round's evidence show.
+- **An orchestrator** deploys each agent, runs the eval, runs Compass and an Eval
+  Author review of the new Insights, and keeps or rejects candidates by the rule below.
+- **A fresh experimenter each round**, with no memory of other rounds. That is you:
+  diagnose this round's failures and build at most two candidates. Earlier rounds of
+  this run are summarized in `LOG.md`; read it so you do not repeat a rejected idea.
 
-- `insights.yml`: the Compass Insights, each with its supporting trace IDs.
-- Eval Author's review of those Insights, if one was made: whether the eval already
-  catches each one, or needs a new check.
-- `evals/manifest.json`: which eval check tests which Insight.
-- `ETHOS.md`: the requirements and, under **Change Scope**, what you may change.
-- The agent under study (`agent/` or a previous round's candidate) and its own eval
-  job, which is the baseline the candidates are compared with.
+## Inputs (in `rounds/<N>/`)
+
+- `agent/`: the agent under study (prompt, skills, tool gating).
+- `runs/eval/`: its eval job, both tasks, six attempts per part. Each trial's
+  `verifier/results` lists the five checks; `result.json` holds the host IoU and the
+  trace ID under `agent_result.metadata`.
+- `insights.yml`: Compass Insights on this round's traces, each citing traces.
+- `EVAL-AUTHOR.md`: whether the eval already catches each Insight.
+- `ETHOS.md` (workspace root): the requirements and, under **Change Scope**, what you
+  may change.
 
 ## Rules
 
-- Change only what Change Scope marks `yes`. Never edit `evals/`, `scorer/`,
-  `meshes/`, `task/`, `ETHOS.md` or `harness/`.
-- Fix the behavior, not the test: no mesh values, check names, reference model
-  details or verifier logic in the agent's instructions. Do not read `scorer/` or
-  `evals/*/tests/`. If the agent needs to measure similarity to the mesh, write an
-  independent measurement rather than mirroring the grader.
-- At most **two candidates per round**, each a different strategy, not two wordings
-  of one idea. Prefer the smallest change that addresses the root cause; for a small
-  model, removing work (a tested routine in a skill) often beats adding rules.
-- **One eval job at a time.** FreeCAD is one shared session; the Harbor agent refuses
-  a second job. Never invoke a candidate directly while an eval runs.
-- Tear every candidate down when its evaluation ends.
+- **Geometry-agnostic.** The agent must handle any part given as a mesh. The eval holds
+  two different parts so that a change tuned to one shape fails the other. Never put
+  part-specific values, shapes or names in the agent.
+- **Fix the behavior, not the test.** Do not read `scorer/`, `evals/*/tests/` or
+  `evals/*/solution/`, and never mirror the grader. If the agent must measure similarity to the mesh, write an
+  independent measurement.
+- Change only what Change Scope marks `yes`. Model and MCP server changes need the
+  owner's approval: propose them, do not make them.
+- At most **two candidates**, each a different strategy. Prefer the smallest change that
+  addresses the root cause. For a small model, removing work often beats adding rules.
+- **Do not use the FreeCAD GUI while an eval runs.** Test code headlessly with
+  `freecadcmd`; use the GUI only when the orchestrator says it is free.
+
+## Platform facts
+
+Facts about this environment, learned the hard way. They are not solutions.
+
+| Fact | Consequence |
+| --- | --- |
+| Deep Agents' `read_file` returns 100 lines unless you pass a larger `limit`. | An agent reading a long skill once sees only its start. Tell it the limit or keep files short. |
+| The agent's file tools run in a sandbox. FreeCAD cannot see `/skills` or files the agent writes; the mesh path is valid only inside FreeCAD. | Code in a skill reaches FreeCAD only as the `code` argument of `execute_code`, copied by the model. |
+| `execute_code` runs on FreeCAD's GUI thread. Over 90 s the bridge aborts the call but the work keeps running, and every later call fails until it ends. | Keep each call bounded. |
+| `execute_code` rejects a `timeout` argument. Names defined in one call stay defined for the next. | Never pass `timeout`. Long code can be split across calls. |
+| `execute_code_headless` fails (`freecadcmd not found`), `get_async_status` is not implemented, and `execute_code_async` gives no job handle. | These tools only feed retry loops. |
+| Nemotron 3.5 Lightning reads no images; the task is text-only. | Screenshots (`get_view`) only cost tokens. |
+| Deep Agents' `skills.paths` does not load on this Helix version. | Ship skills as `skills/<name>/` in the agent folder with `environment.workspace: .`, and point to them from the prompt. |
+| Stopping `nemo agents invoke` does not stop the run inside the deployment. | Orchestrator: kill the deployment's adapter process before reusing FreeCAD. |
 
 ## Levers
 
 | Lever | Where in `agent.yaml` |
 | --- | --- |
 | System prompt | `instructions.system.content` |
-| Skills | `skills/<name>/SKILL.md` in the agent folder, with `environment.workspace: .`, and a prompt line per skill that says when to use it and to read `/skills/<name>/SKILL.md` with `read_file`. Deep Agents' own `skills.paths` does not load on this Helix version. |
-| Subagents | `harnesses.deepagents.settings.deepagents.subagents`: a list of `{name, description, system_prompt, tools?}` |
+| Skills | `skills/<name>/` in the agent folder (see Platform facts), plus a prompt line per skill saying when to read it. |
+| Subagents | `harnesses.deepagents.settings.deepagents.subagents`: a list of `{name, description, system_prompt, tools?}`. The agent delegates with its `task` tool. |
 | Tool gating | `tools.enabled` / `tools.blocked` |
-| Model | `models.default.model`. Change Scope says `with-approval`: ask first. |
+| Model | `models.default.model`. `with-approval`: propose only. |
 
 Middleware is not configurable from the agent spec.
 
 ## Steps
 
-Create a round folder, `experiments/<YYYY-MM-DD>-<short-name>/` (git-ignored).
-
-**1. Diagnose.** For each Insight, read its description and open at least two of its
-traces:
+**1. Diagnose.** Read `LOG.md`, then this round's results per check and per part. For
+each Insight and each failing check, open at least two traces:
 
 ```bash
-nemo intake spans list --filter.trace-id=TRACE_ID --mode=detailed --sort=started_at --all-pages --output-format=json
+nemo intake spans list --filter.trace-id=TRACE_ID --all-pages --output-format=json
 ```
 
-Find the steps where the behavior happens: the code the agent ran, what it checked,
-what it claimed. Write `DIAGNOSIS.md`: per Insight, the root cause in two or three
-sentences, citing trace IDs and steps. Note when Insights share a cause.
+Find where the behavior happens: the code the agent ran, what came back, what it
+claimed. Write `DIAGNOSIS.md`: per problem, the root cause in two or three sentences,
+citing trace IDs. Note shared causes, and what already works and must be kept.
 
-**2. Propose.** Write `PLAN.md`: up to two candidates, each naming the Insights it
-targets, the lever, and the checks it should move.
+**2. Propose.** Write `PLAN.md`: up to two candidates, each naming the problems it
+targets, the lever, and the checks it should move on both parts.
 
-**3. Build.** Copy the agent under study (with its `skills/`), edit the copy, and
-deploy it under its own name:
+**3. Build.** For each candidate, copy `agent/` to `candidates/<short-name>/agent/`, edit
+the copy, and set its top-level `name:` to the one the orchestrator gave you. Test any
+code a skill relies on, headlessly, on both reference meshes:
 
 ```bash
-C=experiments/<round>/<candidate>; NAME=cad-agent-<candidate>
-mkdir -p $C/agent && cp -R <agent under study>/. $C/agent/
-# edit $C/agent/agent.yaml (and skills/); set its top-level `name:` to $NAME
-nemo agents create --name $NAME --agent-config "$PWD/$C/agent/agent.yaml"
-nemo agents deploy --agent $NAME --name $NAME-deployment --mode subprocess
+freecadcmd -c "exec(open('my_test.py').read())"
 ```
 
-Test a new skill's code in FreeCAD yourself before the agent relies on it.
+Test the code exactly as the agent will run it. The routine must leave a model that
+passes FreeCAD's full shape check (`shape.check(True)`).
 
-**4. Evaluate.** Three attempts, one at a time; add attempts when the result is close
-to the baseline's:
+**4. Report.** Write `CANDIDATES.md`: per candidate, the diff against `agent/`, what you
+tested and its results, and what you expect on each check. The orchestrator deploys and
+measures them.
 
-```bash
-CAD_AGENT=$NAME CAD_DEPLOYMENT=$NAME-deployment PYTHONPATH=harness \
-  harbor run -p evals/part-1-reconstruction \
-  -a helix_cad_agent:HelixCadAgent --n-attempts 3 -n 1 --jobs-dir $C/runs --job-name eval
-cat $C/runs/eval/*/verifier/results | sort | uniq -c   # passes per check
-nemo agents undeploy --agent $NAME --yes && nemo agents delete $NAME --yes
-```
+## The keep rule
 
-Each trial's `result.json` holds the host IoU and trace ID under
-`agent_result.metadata`. Write `$C/results.md`: per check, baseline and candidate
-pass counts; passing runs; IoU per run; and tokens per run (`total_tokens` of each
-trace in Intake). Read the failed runs' traces: a failure the change never reached is
-variance, not evidence against it.
-
-**5. Report.** Write `SUMMARY.md`: per Insight, fixed, improved, unchanged or worse,
-and by which candidate; the recommended candidate (or none) with its diff and token
-cost change; and what to try next.
-
-Recommend promotion only when the candidate passes at least as many runs as the
-baseline, makes no check worse, and improves the check for at least one Insight. The
-next round starts with fresh source runs of the promoted agent, then Compass and Eval
-Author on those traces. One task and a few attempts cannot show generalization; say
-so.
-
-## Environment
-
-Set up Helix, Harbor, Colima and FreeCAD as in the example README's Prerequisites, and
-export the Step 2 settings (`DOCKER_HOST`, `CAD_AGENT_TIMEOUT=600`,
-`CAD_FREECAD_RESTART`) so candidates are measured as the baseline was.
+The orchestrator measures each candidate on both tasks, six attempts per part, and keeps
+it only when it passes more runs than the agent under study, with no part and no check
+worse. Otherwise the agent under study stays, and the next round diagnoses again with
+fresh evidence. A round may stop early when three runs fail the same way.
