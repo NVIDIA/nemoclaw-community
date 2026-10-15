@@ -12,6 +12,14 @@ from scripts.run_harbor_eval import ROOT, check_job_result, main
 
 
 class RunHarborEvalTest(unittest.TestCase):
+    def setUp(self) -> None:
+        # Model settings exported for a custom endpoint must not leak into these tests.
+        patcher = patch.dict(os.environ)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        os.environ.pop("MODEL_BASE_URL", None)
+        os.environ.pop("MODEL_SLUG", None)
+
     def invoke(self, run, split: str, arm: str) -> int:
         run.return_value.returncode = 0
         with tempfile.TemporaryDirectory() as raw:
