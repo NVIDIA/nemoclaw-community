@@ -5,8 +5,8 @@
   python publish.py scores JOB_DIR          # verifier results -> each run's Intake trace
   uv run --with pyyaml python publish.py insights insights.yml [--agent cad-agent]
 
-scores: for every trial of a Harbor job, attaches the verifier's reward, IoU and failed
-checks to the run's trace (its ID is the first line of agent/run.log), so NeMo
+scores: for every trial of a Harbor job, attaches the verifier's reward, IoU, failed
+checks and model complexity (features, sketches, faces, ...) to the run's trace (its ID is the first line of agent/run.log), so NeMo
 Compass sees how each run was graded.
 insights: Compass finding -> Helix Insight (name -> title, evidence -> trace_refs);
 Helix has no CLI command for this yet.
@@ -36,14 +36,16 @@ def api(service: str, path: str, body: dict | None = None) -> dict:
 
 
 def grade(trial: Path) -> dict:
-    """The verifier's reward, IoU and failed checks for one trial."""
+    """The verifier's reward, IoU, failed checks and complexity counts for one trial."""
     verifier = trial / 'verifier'
     log = (verifier / 'check.log').read_text() if (verifier / 'check.log').exists() else ''
     iou = re.search(r'^mesh-fidelity IoU ([\d.]+)', log, re.MULTILINE)
     rows = (verifier / 'results').read_text().splitlines() if (verifier / 'results').exists() else []
+    stats = verifier / 'complexity.json'
     return {'reward': float((verifier / 'reward.txt').read_text()),
             'iou': float(iou.group(1)) if iou else 0.0,
-            'failed': [row.split('\t')[0] for row in rows if row.endswith('\tFAIL')]}
+            'failed': [row.split('\t')[0] for row in rows if row.endswith('\tFAIL')],
+            'complexity': json.loads(stats.read_text()) if stats.exists() else {}}
 
 
 def trace_id(run_log: str) -> str | None:
@@ -64,9 +66,11 @@ def scores(job: Path) -> None:
             continue
         result = grade(trial)
         target = {'session_id': session, 'span_id': span}
-        for name in ('reward', 'iou'):
+        numbers = {'reward': result['reward'], 'iou': result['iou'],
+                   **{f'complexity.{k}': v for k, v in result['complexity'].items()}}
+        for name, value in numbers.items():
             api('intake', 'evaluator-results', {**target, 'name': name, 'data_type': 'NUMERIC',
-                                                'value': result[name]})
+                                                'value': value})
         api('intake', 'evaluator-results', {**target, 'name': 'failed-checks', 'data_type': 'TEXT',
                                             'string_value': ', '.join(result['failed']) or 'none'})
         print(trial.name, session, result)

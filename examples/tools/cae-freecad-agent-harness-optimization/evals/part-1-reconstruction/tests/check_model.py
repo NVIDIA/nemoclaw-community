@@ -23,8 +23,10 @@ SKETCH_FEATURES = {
     "PartDesign::AdditiveLoft", "PartDesign::SubtractiveLoft", "PartDesign::AdditivePipe",
     "PartDesign::SubtractivePipe", "PartDesign::AdditiveHelix", "PartDesign::SubtractiveHelix",
 }
-# A shape assigned by a script rather than built by a feature.
-WRAPPERS = {"PartDesign::Feature", "PartDesign::FeaturePython", "Part::Feature", "Part::FeaturePython"}
+# A shape assigned by a script rather than built by a feature, including a Body's
+# BaseFeature (a shape brought in from outside the tree).
+WRAPPERS = {"PartDesign::Feature", "PartDesign::FeaturePython", "Part::Feature", "Part::FeaturePython",
+            "PartDesign::FeatureBase"}
 DRIVING = {"Distance", "DistanceX", "DistanceY", "Radius", "Diameter", "Angle"}
 # Datum helpers that carry no model geometry.
 ORIGIN = {"App::Origin", "App::Line", "App::Plane", "App::Point"}
@@ -133,7 +135,16 @@ def single_visible_object(doc, body):
 def main():
     open(RESULTS, "w").close()
     doc = FreeCAD.openDocument(os.environ["MODEL"])
+    # Rebuild every feature from its inputs, as reopening in FreeCAD and editing would:
+    # a plain recompute only rebuilds objects saved as touched, and a failed rebuild
+    # keeps the stored shape. The checks below then grade the rebuilt model.
+    for obj in doc.Objects:
+        obj.touch()
     doc.recompute()
+    broken = [o.Name for o in doc.Objects if "Invalid" in o.State or "Error" in o.State]
+    if broken:
+        print("invalid after recompute:", broken)
+    row("recomputes-after-reopen", bool(doc.Objects) and not broken)
     bodies = [o for o in doc.Objects if o.TypeId == "PartDesign::Body"]
     body = bodies[0] if len(bodies) == 1 else None
     solid = body is not None and not body.Shape.isNull() and body.Shape.isValid() \

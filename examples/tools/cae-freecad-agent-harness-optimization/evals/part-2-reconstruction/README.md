@@ -14,7 +14,7 @@ bounds and validity checks without measuring similarity to the mesh.
   (`freecadcmd`) and the reference mesh at `/app`: a Deep Agents agent with a shell,
   built from `agent/agent.yaml` by `harness/cad_agent.py`, the Harbor agent. It
   reaches only the NeMo Helix inference gateway and Intake on the host, and saves
-  its model to `/app/model.FCStd`. The container is capped at 4 GiB of memory.
+  its model to `/app/model.FCStd`. The container is capped at 3 GiB of memory.
 - Every trial has its own container, so trials run in parallel.
 - The verifier image installs FreeCAD 1.1.3 from conda-forge at build time and grades
   offline. All software is open source.
@@ -42,22 +42,28 @@ closely.
 
 ## Verification explanation
 
-The verifier opens the saved document in FreeCAD and reports five checks:
-`single-valid-solid` (one PartDesign body with one solid that passes FreeCAD's full
-shape check, including self-intersections),
-`native-feature-tree` (sketch-driven PartDesign features and no scripted shape
-wrappers), `named-dimension-drives-geometry` (changing a named constraint or a
-referenced named parameter by 10% leaves one clean solid and changes a bounding-box
-length by at least 1%),
-`mesh-fidelity` (IoU against the reference mesh at 0.1 mm resolution
-is at least 0.9), and `single-visible-object` (every visible
-object with geometry is the Body or its tip feature, as the instruction's "exactly one
-object visible" requires; origin axes and planes are ignored). The reward is 1 only
-when all five pass. The verifier also logs the model's feature, sketch and face
-counts (`complexity.json`) without grading them.
+The verifier opens the saved model in FreeCAD, rebuilds every feature from its inputs,
+and reports six checks; the reward is 1 only when all pass:
+
+- `recomputes-after-reopen`: after the rebuild no object is invalid or in error, so the
+  model survives save and reopen (the stored shape alone could hide a broken tree).
+- `single-valid-solid`: one PartDesign Body with one solid that passes FreeCAD's full
+  shape check, including self-intersections.
+- `native-feature-tree`: sketch-driven PartDesign features, and no scripted shape
+  wrappers or scripted base shape (`BaseFeature`).
+- `named-dimension-drives-geometry`: changing a named constraint or a referenced named
+  parameter by 10% leaves one clean solid and changes a bounding-box length by at
+  least 1%.
+- `mesh-fidelity`: IoU against the reference mesh at 0.1 mm resolution is at least 0.9.
+- `single-visible-object`: every visible object with geometry is the Body or its tip,
+  as saved in the file (origin axes and planes are ignored). FreeCAD without its GUI
+  does not hide sketches, so the agent must.
+
+The verifier also logs the model's feature, sketch and face counts
+(`complexity.json`) without grading them.
 
 ## Relevant experience
 
 Authored and reviewed by [Author], who builds CAD and simulation agents and reviewed
-the five checks against hands-on FreeCAD PartDesign modeling and the agent's
+the checks against hands-on FreeCAD PartDesign modeling and the agent's
 recorded failures.

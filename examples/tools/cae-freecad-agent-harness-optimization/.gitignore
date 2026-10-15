@@ -1,11 +1,13 @@
 # Credentials
 .env
 
-# FreeCAD documents and their backups, except the eval suite's reference solutions.
+# FreeCAD documents and their backups, except the eval suite's reference solutions
+# and the negative controls.
 *.FCStd
 *.FCStd[0-9]
 *.FCBak
 !evals/*/solution/*.FCStd
+!controls/*/*.FCStd
 
 # Python
 __pycache__/
@@ -31,3 +33,6 @@ skills-lock.json
 # The experiment workspace (candidate agents, eval runs, reports) stays local.
 # results/ holds the measured outcome and the final agent.
 experiments/
+
+# Harbor jobs from the commands in evals/README.md
+runs/

@@ -16,8 +16,8 @@ only in XY.
 import numpy as np
 
 # XY sampling pitch, in mm, is resolved from part size so one scorer covers an
-# 11 mm mug and a 450 mm wheel rim at comparable cost (~1-4 s): a fixed 0.1 mm
-# would make a car part take minutes, and a fixed 0.5 mm would blur the mug's
+# 11 mm part and a 450 mm part at comparable cost (~1-4 s): a fixed 0.1 mm
+# would make the large part take minutes, and a fixed 0.5 mm would blur the small part's
 # walls.
 CELL_DIVISOR = 2000  # target ~2000 columns across the bounding diagonal
 CELL_MIN = 0.10
