@@ -121,6 +121,19 @@ def moves_geometry(doc, body, kind, obj, name):
     return moved
 
 
+# A designer's model has about as many faces as the part has surfaces. Stacked slices
+# and faceted profiles add faces with every band and polygon segment, so a model may
+# have at most this many times the faces of the task's reference solution (REF_FACES).
+FACES_RATIO_MAX = 10
+
+
+def compact(body):
+    reference = int(os.environ.get("REF_FACES", "0"))
+    faces = len(body.Shape.Faces)
+    print("compact-model faces", faces, "reference", reference, "limit", FACES_RATIO_MAX * reference)
+    return reference > 0 and faces <= FACES_RATIO_MAX * reference
+
+
 def single_visible_object(doc, body):
     """Exactly one visible model: every visible object with geometry is the Body or
     its tip feature (how PartDesign shows a Body). Origin axes and planes are ignored."""
@@ -171,6 +184,7 @@ def main():
                 print("driver", candidate[2], "failed:", exc)
     row("named-dimension-drives-geometry", driven)
     row("single-visible-object", single_visible_object(doc, body))
+    row("compact-model", solid and compact(body))
     log_complexity(body)
 
 

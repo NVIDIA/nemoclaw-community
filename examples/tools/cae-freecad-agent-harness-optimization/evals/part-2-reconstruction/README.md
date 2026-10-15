@@ -43,7 +43,7 @@ closely.
 ## Verification explanation
 
 The verifier opens the saved model in FreeCAD, rebuilds every feature from its inputs,
-and reports six checks; the reward is 1 only when all pass:
+and reports seven checks; the reward is 1 only when all pass:
 
 - `recomputes-after-reopen`: after the rebuild no object is invalid or in error, so the
   model survives save and reopen (the stored shape alone could hide a broken tree).
@@ -58,9 +58,13 @@ and reports six checks; the reward is 1 only when all pass:
 - `single-visible-object`: every visible object with geometry is the Body or its tip,
   as saved in the file (origin axes and planes are ignored). FreeCAD without its GUI
   does not hide sketches, so the agent must.
+- `compact-model`: the solid has at most 10 times the faces of the reference
+  solution (`REF_FACES` in `tests/test.sh`). A designer's model has about one face per
+  surface of the part; stacked slices and faceted profiles add faces with every band
+  and segment. Added from a Compass Insight after slice stacks passed every other check.
 
 The verifier also logs the model's feature, sketch and face counts
-(`complexity.json`) without grading them.
+(`complexity.json`).
 
 ## Relevant experience
 

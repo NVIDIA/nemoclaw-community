@@ -98,8 +98,8 @@ them.
 ## The keep rule
 
 The orchestrator measures each candidate on both tasks, two attempts per part, and keeps
-it only when it passes more runs than the agent under study, with no part and no check
-worse. Otherwise the agent under study stays, and the next round diagnoses again with
+it only when it passes more runs than the agent under study, or as many runs and more
+checks in total, with no part and no check worse. Otherwise the agent under study stays, and the next round diagnoses again with
 fresh evidence. A run lost to the infrastructure rather than the agent (the
 model gateway down, a container that would not start) is void: it is re-run, not counted. Two attempts per part is a quick, noisy signal, so the final agent is
 measured again with more attempts before it is reported.

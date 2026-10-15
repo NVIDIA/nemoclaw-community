@@ -8,7 +8,8 @@
     "native-feature-tree",
     "named-dimension-drives-geometry",
     "mesh-fidelity",
-    "single-visible-object"
+    "single-visible-object",
+    "compact-model"
   ],
   "tasks": [
     {
@@ -31,10 +32,14 @@
         {
           "title": "CAD completion skips save-and-reopen validation",
           "check": "recomputes-after-reopen"
+        },
+        {
+          "title": "Mesh conversion always emits a dense stack of slice sketches and pads",
+          "check": "compact-model"
         }
       ],
       "controls": {
-        "proved": "2026-10-15, container setup, Harbor 0.22.0 on Colima",
+        "proved": "2026-10-16, container setup, Harbor 0.22.0 on Colima",
         "nop": {
           "runs": 2,
           "reward": 0,
@@ -43,7 +48,8 @@
         "oracle": {
           "runs": 2,
           "reward": 1,
-          "iou": 0.9039
+          "iou": 0.9039,
+          "faces": 7
         },
         "negatives": {
           "visible": {
@@ -65,6 +71,13 @@
               "native-feature-tree",
               "named-dimension-drives-geometry"
             ]
+          },
+          "slices": {
+            "reward": 0,
+            "fails": [
+              "compact-model"
+            ],
+            "model": "a real agent run: 32 stacked pads, IoU 0.9116, 1658 faces"
           }
         },
         "isolation": {
@@ -79,7 +92,7 @@
       "source_trace": null,
       "reason": "a second first-party part, so the suite tests that the agent's method is geometry-agnostic as ETHOS.md requires; same instruction, verifier and checks as part-1-reconstruction, different mesh",
       "controls": {
-        "proved": "2026-10-15, container setup, Harbor 0.22.0 on Colima",
+        "proved": "2026-10-16, container setup, Harbor 0.22.0 on Colima",
         "nop": {
           "runs": 2,
           "reward": 0,
@@ -88,7 +101,8 @@
         "oracle": {
           "runs": 2,
           "reward": 1,
-          "iou": 0.9985
+          "iou": 0.9985,
+          "faces": 36
         },
         "negatives": {
           "visible": {

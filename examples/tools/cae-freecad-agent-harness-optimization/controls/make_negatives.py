@@ -9,6 +9,9 @@ broken.FCStd:   the last feature's profile removed, saved     -> fails recompute
                 without rebuilding (the stored shape still looks right)
 scripted.FCStd: the solution's solid as a scripted shape     -> fails native-feature-tree
                 under the Body (BaseFeature)
+
+part-1-reconstruction/slices.FCStd is not generated: it is a real agent run (32 stacked
+pads, IoU 0.91) that passes every other check and fails compact-model.
 """
 import os
 
