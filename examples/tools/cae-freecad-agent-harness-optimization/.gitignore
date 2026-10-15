@@ -54,7 +54,9 @@ baseline-prompts/
 # local. results/ holds the measured outcome and the final agents.
 experiments/
 
-# The eval suite ships its reference solution and the verifier's copy of the mesh
+# The eval suite ships its reference solution and the agent's and verifier's copies
+# of the mesh
 !evals/*/solution/*.FCStd
+!evals/*/environment/reference_part*.obj
 !evals/*/tests/reference_part*.obj
 skills-lock.json

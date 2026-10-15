@@ -23,15 +23,16 @@ Run every command from the example root
 - A Docker engine that can run containers without network access. Docker Desktop on
   macOS cannot; [Colima](https://github.com/abiosoft/colima) can, for files under
   your home folder: `colima start` and
-  `export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"`.
-- For agent runs only: the Helix services, the `cad-agent-deployment`, and FreeCAD
-  with its RPC server. The
-  Harbor agent is [`harness/helix_cad_agent.py`](../harness/helix_cad_agent.py).
-  Agent runs must be serial (`-n 1`): there is one FreeCAD session.
+  `export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"`. Keep jobs folders
+  under your home folder too.
+- For agent runs only: the Helix services (`NHX_BASE_URL`, e.g.
+  `http://127.0.0.1:8080`) and the `nemo` CLI. The Harbor agent is
+  [`harness/cad_agent.py`](../harness/cad_agent.py): it runs the agent inside each
+  task container, next to headless FreeCAD, so trials run in parallel.
 
 ## Rerun
 
-`-p evals` runs both tasks. Task controls, which need no agent or FreeCAD:
+`-p evals` runs both tasks. Task controls, which need no agent or Helix:
 
 ```bash
 harbor run -p evals -a nop    --jobs-dir results/runs --job-name nop
@@ -42,7 +43,7 @@ The agent:
 
 ```bash
 PYTHONPATH=harness harbor run -p evals \
-  -a helix_cad_agent:HelixCadAgent --n-attempts 3 -n 1 \
+  -a cad_agent:CadAgent -m <model> --n-attempts 3 -n 4 \
   --jobs-dir results/runs --job-name <name>
 ```
 
@@ -65,6 +66,11 @@ On 2026-10-15 `single-valid-solid` was made strict: the solid must pass FreeCAD'
 shape check, including self-intersections, because a reconstruction that folded through
 itself had passed the quick `isValid()` test. Both tasks were re-proved with the same
 controls and results: NOP 0 and 0, Oracle 1 and 1, negative 0.
+
+Later on 2026-10-15 the agent moved into the task container, next to headless FreeCAD,
+and the instruction now asks for the model saved to `/app/model.FCStd`. Both tasks were
+re-proved with the same controls and results: NOP 0 and 0, Oracle 1 and 1 (IoU 0.9038
+and 0.9985), negative 0.
 
 Eval Author's finalized receipts cover part-1's first, four-check version.
 

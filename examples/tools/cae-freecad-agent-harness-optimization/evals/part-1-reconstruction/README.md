@@ -2,30 +2,31 @@
 
 ## Difficulty explanation
 
-The agent must turn a triangle mesh into an editable CAD model inside a live FreeCAD
-session. Matching the shape is not enough: the model has to be a native sketch-based
-PartDesign tree whose named dimensions actually rebuild it. Agents tend to shortcut
+The agent must turn a triangle mesh into an editable CAD model with FreeCAD. Matching
+the shape is not enough: the model has to be a native sketch-based PartDesign tree
+whose named dimensions actually rebuild it. Agents tend to shortcut
 this by assigning a scripted shape to a generic feature, or by declaring success from
 bounds and validity checks without measuring similarity to the mesh. In the source
 runs every reconstruction was reported complete, and none met all requirements.
 
 ## Environment and software requirements
 
-- The agent runs on the host, outside the task container: a NeMo Helix deployment
-  (`cad-agent`, Deep Agents) driving the FreeCAD 1.1.3 GUI through freecad-mcp 0.1.24
-  over XML-RPC on `127.0.0.1:9875`. `harness/helix_cad_agent.py` is the Harbor agent
-  that invokes it and hands the saved document to the task as `/app/model.FCStd`.
-- Trials must run serially: there is one FreeCAD session.
+- The agent runs inside the task container, next to headless FreeCAD 1.1.3
+  (`freecadcmd`) and the reference mesh at `/app`: a Deep Agents agent with a shell,
+  built from `agent/agent.yaml` by `harness/cad_agent.py`, the Harbor agent. It
+  reaches only the NeMo Helix inference gateway and Intake on the host, and saves
+  its model to `/app/model.FCStd`. The container is capped at 4 GiB of memory.
+- Every trial has its own container, so trials run in parallel.
 - The verifier image installs FreeCAD 1.1.3 from conda-forge at build time and grades
   offline. All software is open source.
-- Both containers run without network access. Docker Desktop on macOS cannot
+- The verifier runs without network access. Docker Desktop on macOS cannot
   enforce that; a Docker engine whose kernel supports nftables `fib` rules can
   (native Linux, or Colima on macOS).
 
 ## Ground-truth provenance
 
-The reference mesh is the first-party mesh the instruction names, retained by the
-verifier only. The 0.9 IoU threshold and the editability requirements come from the
+The reference mesh is the first-party mesh the instruction names, copied into the
+agent's and the verifier's images. The 0.9 IoU threshold and the editability requirements come from the
 agent's `ETHOS.md`. The reference solution is a passing reconstruction produced by
 the same agent in an earlier run (IoU 0.9038). The task was derived from one recorded
 Helix trace whose run was flagged by two NeMo Compass Insights.
@@ -47,7 +48,7 @@ wrappers), `named-dimension-drives-geometry` (changing a named constraint or a
 referenced named parameter by 10% leaves one clean solid and changes a bounding-box
 length by at least 1%),
 `mesh-fidelity` (IoU against the reference mesh, recomputed with the same algorithm
-as the host scorer, is at least 0.9), and `single-visible-object` (every visible
+as the agent-side scorer, is at least 0.9), and `single-visible-object` (every visible
 object with geometry is the Body or its tip feature, as the instruction's "exactly one
 object visible" requires; origin axes and planes are ignored). The reward is 1 only
 when all five pass. The verifier also logs the model's feature, sketch and face

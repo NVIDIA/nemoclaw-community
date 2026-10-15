@@ -1,11 +1,10 @@
 Turn the mesh at
-`@MESH_PATH:reference_part_2.obj@`
+`/app/reference_part_2.obj`
 into a fully parametric FreeCAD model that a CAD designer can open and edit.
 
 Build it in a new FreeCAD document named `EvalPart`, constructed
-from scratch. Other documents may be open from earlier work: do not open,
-copy, merge or `saveCopy` any of them. Confirm the document does not
-already exist before you create it.
+from scratch. Confirm the document does not already exist before you
+create it.
 
 Requirements:
 - The result must be a single valid solid.
@@ -14,7 +13,7 @@ Requirements:
 - A designer must be able to change a named dimension and have the model rebuild.
 - It must match the original mesh closely.
 
-Leave the document open when you finish, with exactly one object visible:
-the finished model. The result is scored from the open document.
+Save the finished model to `/app/model.FCStd`, with exactly one object
+visible: the finished model. The result is scored from that file.
 
 Do not take screenshots; verify numerically.
