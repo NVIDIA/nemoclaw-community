@@ -250,6 +250,8 @@ class HelixCadAgent(BaseAgent):
 
     @staticmethod
     def _ready() -> None:
+        if RESTART:  # every run starts from a fresh FreeCAD: no documents, names or
+            restart_freecad()  # slowdown carried over from an earlier run
         try:
             await_idle(timeout=30 if RESTART else 600)
             freecad('pass')  # "healthy" status alone missed a GUI blocked after a crash

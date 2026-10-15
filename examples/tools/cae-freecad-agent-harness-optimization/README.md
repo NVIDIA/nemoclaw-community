@@ -224,7 +224,8 @@ PYTHONPATH=harness harbor run -p evals \
 This uses the eval that Step 4 explains; here it is simply a way to run and score the
 agent. Runs go one at a time because there is one FreeCAD session.
 `CAD_AGENT_TIMEOUT=600` gives each run the 10 minutes the results used, and the restart
-script relaunches FreeCAD if a run freezes it. Before each run the Harbor agent also
+script relaunches FreeCAD before every run, so no run inherits another's documents,
+code or slowdown. Before each run the Harbor agent also
 installs a small guard ([harness/freecad_guard.py](harness/freecad_guard.py)): FreeCAD
 1.1 aborts outright when `Part.Shape()` is given something other than a shape, and the
 guard turns that into an ordinary error. If FreeCAD still goes down mid-run, the run is
