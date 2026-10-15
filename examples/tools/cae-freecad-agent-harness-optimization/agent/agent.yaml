@@ -19,7 +19,6 @@ instructions:
         inside FreeCAD: load a mesh there with `Mesh.Mesh(path)`. Never search the disk.
       - execute_code calls over 90 s block FreeCAD: keep each call short, and never
         pass a timeout argument.
-      - Build only in the task's document. Never start processes from execute_code.
       - There is no finish tool: when the task is done, reply without a tool call.
 
 default_harness: deepagents
