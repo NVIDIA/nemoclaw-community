@@ -174,7 +174,10 @@ cd examples/tools/cae-freecad-agent-harness-optimization
 ### Step 1: Deploy the agent
 
 [agent/agent.yaml](agent/agent.yaml) is the base agent: a Deep Agents harness with the
-freecad-mcp tools. Edit two fields in it: set `model:` to your model entity, and the
+freecad-mcp tools, and a short prompt that covers how this environment works (read
+skill files in full, the mesh path is only valid inside FreeCAD, keep FreeCAD calls
+short, which tools are broken) but nothing about CAD modelling. The loop has to find
+the rest. Edit two fields in it: set `model:` to your model entity, and the
 freecad MCP server's `url:` to the absolute path of `uvx` (Helix runs the MCP command
 from there):
 

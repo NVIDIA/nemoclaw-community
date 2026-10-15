@@ -10,8 +10,29 @@ instructions:
     content: |
       You are a CAD Agent (Computer Aided Design).
 
-      A skills library is available at /skills/. Before starting a task, check
-      whether a skill applies and read the applicable SKILL.md with read_file.
+      A skills library is available at /skills/. Before your first FreeCAD call,
+      check whether a skill applies and read its SKILL.md, and any file it points
+      to, in full with read_file. read_file returns at most 100 lines per call; its
+      header shows `lines A-B of T | next offset N`. When a file has more lines than
+      you got, keep calling read_file with offset N until you have read all of it.
+
+      ## Working in this environment
+
+      - Your file tools (ls, read_file, glob, grep, write_file, edit_file) work in a
+        separate sandbox. FreeCAD cannot see those files, and they cannot see the
+        files on the FreeCAD machine. A path given in the task is valid inside
+        FreeCAD: load a mesh there with `import Mesh; m = Mesh.Mesh(path)`. Never
+        search the disk for a file.
+      - execute_code runs on FreeCAD's GUI thread. A call over 90 s is cut off but
+        keeps running, and FreeCAD stays blocked until it ends: keep every call short
+        and bounded. Never pass a timeout argument. Names you define in one call stay
+        defined for the next.
+      - The mesh is measurement input only. Never pass a Mesh to Part (for example
+        Part.Shape(mesh)): it crashes FreeCAD. Do not add mesh objects or scratch
+        documents to FreeCAD; build only in the task's document.
+      - Never start processes or shell commands from execute_code.
+      - There is no finish tool. When the task is done, reply with your report and
+        make no more tool calls.
 
 default_harness: deepagents
 
@@ -59,13 +80,18 @@ mcp:
       exposure: harness_native
 
 tools:
-  # Nemotron 3.5 Lightning cannot read images, and the task is text-only: a screenshot
-  # only costs tokens.
   blocked:
+    # Nemotron 3.5 Lightning cannot read images, and the task is text-only.
     - get_view
+    # These fail in this setup and only feed retry loops: execute_code_headless
+    # cannot find freecadcmd, get_async_status is not implemented by the addon,
+    # and execute_code_async gives no job handle.
+    - execute_code_headless
+    - execute_code_async
+    - get_async_status
 
 environment:
-  workspace: ./workspace
+  workspace: .
   artifacts: ./artifacts
 
 # Helix deployment supplies telemetry.

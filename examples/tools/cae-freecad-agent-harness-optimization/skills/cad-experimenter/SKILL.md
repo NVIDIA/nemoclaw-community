@@ -12,17 +12,18 @@ This skill was written for this example only. It is a worked pattern for the
 
 ## How a run is organized
 
-- **A clean workspace.** The loop runs in a folder that holds only the base agent,
-  `ETHOS.md`, `task/`, `meshes/`, `evals/`, `harness/`, `scorer/` and this skill.
-  Earlier runs, earlier agents and their results are not part of it: work only from
-  what the workspace and this round's evidence show.
+- **Work in the example folder.** Each run has its own folder,
+  `experiments/<run>/`, with one subfolder per round. Judge only from this run's
+  evidence: do not read `results/`, the README's results, or other folders under
+  `experiments/`.
 - **An orchestrator** deploys each agent, runs the eval, runs Compass and an Eval
   Author review of the new Insights, and keeps or rejects candidates by the rule below.
 - **A fresh experimenter each round**, with no memory of other rounds. That is you:
   diagnose this round's failures and build at most two candidates. Earlier rounds of
-  this run are summarized in `LOG.md`; read it so you do not repeat a rejected idea.
+  this run are summarized in the run's `LOG.md`; read it so you do not repeat a
+  rejected idea.
 
-## Inputs (in `rounds/<N>/`)
+## Inputs (in `experiments/<run>/round-<N>/`)
 
 - `agent/`: the agent under study (prompt, skills, tool gating).
 - `runs/eval/`: its eval job, both tasks, two attempts per part. Each trial's
@@ -30,7 +31,7 @@ This skill was written for this example only. It is a worked pattern for the
   trace ID under `agent_result.metadata`.
 - `insights.yml`: Compass Insights on this round's traces, each citing traces.
 - `EVAL-AUTHOR.md`: whether the eval already catches each Insight.
-- `ETHOS.md` (workspace root): the requirements and, under **Change Scope**, what you
+- `ETHOS.md` (example root): the requirements and, under **Change Scope**, what you
   may change.
 
 ## Rules
@@ -57,7 +58,7 @@ Facts about this environment, learned the hard way. They are not solutions.
 
 | Fact | Consequence |
 | --- | --- |
-| Deep Agents' `read_file` returns 100 lines unless you pass a larger `limit`. | An agent reading a long skill once sees only its start. Tell it the limit or keep files short. |
+| Deep Agents' `read_file` returns 100 lines unless you pass a larger `limit`; its header shows `next offset`. | The base agent's prompt tells it to keep reading; with that line Nemotron read a 300-line file whole in 5 of 5 tests. Skills can be ordinary files of any length. |
 | The agent's file tools run in a sandbox. FreeCAD cannot see `/skills` or files the agent writes; the mesh path is valid only inside FreeCAD. | Code in a skill reaches FreeCAD only as the `code` argument of `execute_code`, copied by the model. |
 | `execute_code` runs on FreeCAD's GUI thread. Over 90 s the bridge aborts the call but the work keeps running, and every later call fails until it ends. | Keep each call bounded. |
 | `execute_code` rejects a `timeout` argument. Names defined in one call stay defined for the next. | Never pass `timeout`. Long code can be split across calls. |
@@ -94,7 +95,7 @@ citing trace IDs. Note shared causes, and what already works and must be kept.
 **2. Propose.** Write `PLAN.md`: up to two candidates, each naming the problems it
 targets, the lever, and the checks it should move on both parts.
 
-**3. Build.** For each candidate, copy `agent/` to `candidates/<short-name>/agent/`, edit
+**3. Build.** For each candidate, copy the round's `agent/` to `candidates/<short-name>/agent/`, edit
 the copy, and set its top-level `name:` to the one the orchestrator gave you. Test any
 code a skill relies on, headlessly, on both reference meshes:
 
