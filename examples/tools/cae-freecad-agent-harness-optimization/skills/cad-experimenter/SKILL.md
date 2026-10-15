@@ -25,7 +25,7 @@ This skill was written for this example only. It is a worked pattern for the
 ## Inputs (in `rounds/<N>/`)
 
 - `agent/`: the agent under study (prompt, skills, tool gating).
-- `runs/eval/`: its eval job, both tasks, six attempts per part. Each trial's
+- `runs/eval/`: its eval job, both tasks, two attempts per part. Each trial's
   `verifier/results` lists the five checks; `result.json` holds the host IoU and the
   trace ID under `agent_result.metadata`.
 - `insights.yml`: Compass Insights on this round's traces, each citing traces.
@@ -108,7 +108,8 @@ measures them.
 
 ## The keep rule
 
-The orchestrator measures each candidate on both tasks, six attempts per part, and keeps
+The orchestrator measures each candidate on both tasks, two attempts per part, and keeps
 it only when it passes more runs than the agent under study, with no part and no check
 worse. Otherwise the agent under study stays, and the next round diagnoses again with
-fresh evidence. A round may stop early when three runs fail the same way.
+fresh evidence. Two attempts per part is a quick, noisy signal, so the final agent is
+measured again with more attempts before it is reported.
