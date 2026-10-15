@@ -1,113 +1,25 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-config_format: nemo-agents-spec-v1
+# The CAD agent. harness/run_agent.py builds a LangChain Deep Agents agent from this
+# file inside each task container; the folder's skills/ is uploaded beside it.
 name: cad-agent
-description: A CAD agent executed with DeepAgents against a live FreeCAD session
+description: A CAD agent executed with Deep Agents next to headless FreeCAD
 
 instructions:
   system:
     content: |
       You are a CAD Agent (Computer Aided Design).
 
-      Your skills are in /skills/. Read the skill that applies before you start.
+      Your skills are in /agent/skills/. Read the skill that applies before you start.
 
-      Paths in the task are on the FreeCAD machine: open them in FreeCAD with
-      execute_code. Your file tools see only your own folder (/skills/); do not
-      search the disk.
-
-default_harness: deepagents
-
-harnesses:
-  deepagents:
-    kind: deepagents
-    settings:
-      deepagents: {}
-
+      You have a shell with headless FreeCAD 1.1 (`freecadcmd`); work in /app.
 
 models:
   default:
-    provider: nvidia
     # SUBSTITUTE: model entities are auto-discovered per workspace, so this name
     # does not exist on your platform. List yours with `nemo models list
-    # --all-pages` (that command paginates at 100 results) and paste one here.
-    # This example was measured with Nemotron 3 Ultra, typically discovered as
-    # nvidia-nvidia-nemotron-3-ultra.
+    # --all-pages` (that command paginates at 100 results) and paste one here, or
+    # pass it per run with `harbor run -m <model>`. This example was measured with
+    # Nemotron 3 Ultra, typically discovered as nvidia-nvidia-nemotron-3-ultra.
     model: REPLACE_WITH_YOUR_MODEL_NAME
-    # The agent reaches its model through Helix's inference gateway: base_url must
-    # match your Helix URL (default http://localhost:8080). The runner injects
-    # NEMO_AGENTS_IGW_API_KEY for deployments.
-    api_key_env: NEMO_AGENTS_IGW_API_KEY
-    base_url: http://localhost:8080/apis/inference-gateway/v2/workspaces/default/openai/-/v1
-
-mcp:
-  servers:
-    freecad:
-      transport: stdio
-      # SUBSTITUTE: for stdio transport, `url` is the executable path, and the
-      # harness subprocess does not reliably inherit your PATH — so an absolute
-      # path is required. Find yours with `command -v uvx`. The value below is
-      # the Homebrew location on macOS; a Linux install typically lands in
-      # ~/.local/bin/uvx or ~/.cargo/bin/uvx.
-      url: /opt/homebrew/bin/uvx
-      args:
-        # Pinned so an upstream freecad-mcp release cannot change tool behaviour
-        # underneath this example. 0.1.24 is the version this was verified on.
-        - --from
-        - freecad-mcp==0.1.24
-        - freecad-mcp
-        # Suppresses screenshot ImageContent. Keep this while the model is
-        # text-only; drop it only alongside a vision-capable model.
-        - --only-text-feedback
-      exposure: harness_native
-
-tools:
-  blocked:
-    # The model reads no images, and the task is text-only.
-    - get_view
-    # These fail in this setup and only feed retry loops: execute_code_headless
-    # cannot find freecadcmd, get_async_status is not implemented by the addon,
-    # and execute_code_async gives no job handle.
-    - execute_code_headless
-    - execute_code_async
-    - get_async_status
-
-environment:
-  workspace: .
-  artifacts: ./artifacts
-
-# Helix deployment supplies telemetry.
-
-# Declares the agent's tools in each trace so NeMo Compass can check tool calls:
-# the Deep Agents built-ins by name, then the freecad-mcp schemas. Regenerate the
-# schemas with the MCP client's list_tools when freecad-mcp changes.
-telemetry:
-  atif:
-    tool_definitions:
-      - {"name":"DeepAgent"}
-      - {"name":"task"}
-      - {"name":"ls"}
-      - {"name":"read_file"}
-      - {"name":"write_file"}
-      - {"name":"edit_file"}
-      - {"name":"glob"}
-      - {"name":"grep"}
-      - {"name":"write_todos"}
-      - {"name":"execute"}
-      - {"name":"create_document","parameters":{"properties":{"name":{"title":"Name","type":"string"}},"required":["name"],"type":"object","title":"create_documentArguments"}}
-      - {"name":"create_object","parameters":{"properties":{"doc_name":{"title":"Doc Name","type":"string"},"obj_type":{"title":"Obj Type","type":"string"},"obj_name":{"title":"Obj Name","type":"string"},"analysis_name":{"anyOf":[{"type":"string"},{"type":"null"}],"default":null,"title":"Analysis Name"},"obj_properties":{"additionalProperties":true,"default":null,"title":"Obj Properties","type":"object"},"include_screenshot":{"default":true,"title":"Include Screenshot","type":"boolean"},"view_name":{"default":"Isometric","enum":["Isometric","Front","Top","Right","Back","Left","Bottom","Dimetric","Trimetric"],"title":"View Name","type":"string"}},"required":["doc_name","obj_type","obj_name"],"type":"object","title":"create_objectArguments"}}
-      - {"name":"edit_object","parameters":{"properties":{"doc_name":{"title":"Doc Name","type":"string"},"obj_name":{"title":"Obj Name","type":"string"},"obj_properties":{"additionalProperties":true,"title":"Obj Properties","type":"object"},"include_screenshot":{"default":true,"title":"Include Screenshot","type":"boolean"},"view_name":{"default":"Isometric","enum":["Isometric","Front","Top","Right","Back","Left","Bottom","Dimetric","Trimetric"],"title":"View Name","type":"string"}},"required":["doc_name","obj_name","obj_properties"],"type":"object","title":"edit_objectArguments"}}
-      - {"name":"delete_object","parameters":{"properties":{"doc_name":{"title":"Doc Name","type":"string"},"obj_name":{"title":"Obj Name","type":"string"},"include_screenshot":{"default":true,"title":"Include Screenshot","type":"boolean"},"view_name":{"default":"Isometric","enum":["Isometric","Front","Top","Right","Back","Left","Bottom","Dimetric","Trimetric"],"title":"View Name","type":"string"}},"required":["doc_name","obj_name"],"type":"object","title":"delete_objectArguments"}}
-      - {"name":"execute_code_async","parameters":{"properties":{"code":{"title":"Code","type":"string"}},"required":["code"],"type":"object","title":"execute_code_asyncArguments"}}
-      - {"name":"execute_code_headless","parameters":{"properties":{"code":{"title":"Code","type":"string"},"timeout":{"default":600,"title":"Timeout","type":"number"}},"required":["code"],"type":"object","title":"execute_code_headlessArguments"}}
-      - {"name":"get_async_status","parameters":{"properties":{"job_id":{"default":"","title":"Job Id","type":"string"}},"type":"object","title":"get_async_statusArguments"}}
-      - {"name":"execute_code","parameters":{"properties":{"code":{"title":"Code","type":"string"},"include_screenshot":{"default":true,"title":"Include Screenshot","type":"boolean"},"view_name":{"default":"Isometric","enum":["Isometric","Front","Top","Right","Back","Left","Bottom","Dimetric","Trimetric"],"title":"View Name","type":"string"},"timeout":{"anyOf":[{"type":"number"},{"type":"null"}],"default":null,"title":"Timeout"}},"required":["code"],"type":"object","title":"execute_codeArguments"}}
-      - {"name":"get_view","parameters":{"properties":{"view_name":{"enum":["Isometric","Front","Top","Right","Back","Left","Bottom","Dimetric","Trimetric"],"title":"View Name","type":"string"},"width":{"anyOf":[{"type":"integer"},{"type":"null"}],"default":null,"title":"Width"},"height":{"anyOf":[{"type":"integer"},{"type":"null"}],"default":null,"title":"Height"},"focus_object":{"anyOf":[{"type":"string"},{"type":"null"}],"default":null,"title":"Focus Object"}},"required":["view_name"],"type":"object","title":"get_viewArguments"}}
-      - {"name":"insert_part_from_library","parameters":{"properties":{"relative_path":{"title":"Relative Path","type":"string"},"include_screenshot":{"default":true,"title":"Include Screenshot","type":"boolean"},"view_name":{"default":"Isometric","enum":["Isometric","Front","Top","Right","Back","Left","Bottom","Dimetric","Trimetric"],"title":"View Name","type":"string"}},"required":["relative_path"],"type":"object","title":"insert_part_from_libraryArguments"}}
-      - {"name":"get_objects","parameters":{"properties":{"doc_name":{"title":"Doc Name","type":"string"},"include_screenshot":{"default":true,"title":"Include Screenshot","type":"boolean"},"view_name":{"default":"Isometric","enum":["Isometric","Front","Top","Right","Back","Left","Bottom","Dimetric","Trimetric"],"title":"View Name","type":"string"}},"required":["doc_name"],"type":"object","title":"get_objectsArguments"}}
-      - {"name":"get_object","parameters":{"properties":{"doc_name":{"title":"Doc Name","type":"string"},"obj_name":{"title":"Obj Name","type":"string"},"include_screenshot":{"default":true,"title":"Include Screenshot","type":"boolean"},"view_name":{"default":"Isometric","enum":["Isometric","Front","Top","Right","Back","Left","Bottom","Dimetric","Trimetric"],"title":"View Name","type":"string"}},"required":["doc_name","obj_name"],"type":"object","title":"get_objectArguments"}}
-      - {"name":"get_parts_list","parameters":{"properties":{},"type":"object","title":"get_parts_listArguments"}}
-      - {"name":"reload_document","parameters":{"properties":{"doc_name":{"title":"Doc Name","type":"string"}},"required":["doc_name"],"type":"object","title":"reload_documentArguments"}}
-      - {"name":"list_documents","parameters":{"properties":{},"type":"object","title":"list_documentsArguments"}}
-      - {"name":"get_rpc_status","parameters":{"properties":{},"type":"object","title":"get_rpc_statusArguments"}}
-      - {"name":"run_fem_analysis","parameters":{"properties":{"doc_name":{"title":"Doc Name","type":"string"},"analysis_name":{"title":"Analysis Name","type":"string"},"timeout":{"default":600,"title":"Timeout","type":"integer"},"include_screenshot":{"default":true,"title":"Include Screenshot","type":"boolean"},"view_name":{"default":"Isometric","enum":["Isometric","Front","Top","Right","Back","Left","Bottom","Dimetric","Trimetric"],"title":"View Name","type":"string"}},"required":["doc_name","analysis_name"],"type":"object","title":"run_fem_analysisArguments"}}
