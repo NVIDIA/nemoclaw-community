@@ -7,6 +7,7 @@ with NeMo Relay to Intake.  python run_agent.py AGENT_DIR INSTRUCTION
 import asyncio
 import os
 import runpy
+import subprocess
 import sys
 from pathlib import Path
 
@@ -25,8 +26,9 @@ from nemo_relay.plugin import PluginConfig
 # as the container reaches it (inference gateway for the model, Intake for traces).
 TIMEOUT = int(os.environ['CAD_AGENT_TIMEOUT'])
 HELIX = os.environ['CAD_HELIX_URL'].rstrip('/')
-GATEWAY = f'{HELIX}/apis/inference-gateway/v2/workspaces/default/openai/-/v1'
-INTAKE = f'{HELIX}/apis/intake/v2/workspaces/default/ingest/atif'
+WORKSPACE = os.environ.get('NHX_WORKSPACE', 'default')
+GATEWAY = f'{HELIX}/apis/inference-gateway/v2/workspaces/{WORKSPACE}/openai/-/v1'
+INTAKE = f'{HELIX}/apis/intake/v2/workspaces/{WORKSPACE}/ingest/atif'
 
 
 async def main(agent_dir: str, instruction: str) -> None:
@@ -55,7 +57,10 @@ async def main(agent_dir: str, instruction: str) -> None:
                     {'messages': [{'role': 'user', 'content': instruction}]}), TIMEOUT)
             except TimeoutError:
                 print(f'stopped after {TIMEOUT} s', flush=True)
-    os._exit(0)  # the trace is sent; don't wait for a shell command still running
+    # Time is up and the trace is sent: stop any FreeCAD still running, so nothing is
+    # saved after the limit, and exit without waiting for its shell command.
+    subprocess.run(['pkill', '-9', 'freecadcmd'])
+    os._exit(0)
 
 
 if __name__ == '__main__':

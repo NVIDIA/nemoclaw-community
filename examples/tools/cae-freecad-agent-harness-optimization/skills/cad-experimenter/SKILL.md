@@ -29,9 +29,10 @@ This skill was written for this example only. It is a worked pattern for the
   the agent runs, what you may change (**Change Scope**) and how changes should be made
   (**Trade-offs**).
 - `agent/`: the agent under study (prompt, model, skills).
-- `runs/eval/`: its eval job, both tasks, two attempts per part. Each trial's
-  `verifier/results` lists the five checks; `result.json` holds the IoU and the
-  trace ID under `agent_result.metadata`.
+- `runs/eval/`: its eval job, both tasks, two attempts per part. Per trial:
+  `verifier/results` lists the five checks, `verifier/check.log` the IoU and details,
+  `verifier/reward.txt` the reward, and the first line of `agent/run.log` the trace ID
+  (`trace <id>`). The same reward, IoU and failed checks are attached to each trace.
 - `insights.yml`: Compass Insights on this round's traces, each citing traces.
 - `EVAL-AUTHOR.md`: whether the eval already catches each Insight.
 

@@ -32,5 +32,7 @@ memory_mb = 3072
 
 [environment.env]
 CAD_AGENT_TIMEOUT = "300"
-# NeMo Helix as the container reaches it; the agent's network allows only this host.
+# NeMo Helix as the container reaches it. The agent's network allows only
+# host.docker.internal: for Helix on another host, change allowed_hosts above too.
 CAD_HELIX_URL = "${CAD_HELIX_URL:-http://host.docker.internal:8080}"
+NHX_WORKSPACE = "${NHX_WORKSPACE:-default}"

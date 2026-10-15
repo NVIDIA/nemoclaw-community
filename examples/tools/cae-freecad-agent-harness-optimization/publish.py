@@ -11,21 +11,24 @@ Compass sees how each run was graded.
 insights: Compass finding -> Helix Insight (name -> title, evidence -> trace_refs);
 Helix has no CLI command for this yet.
 
-Reads NHX_BASE_URL like the Helix CLI.
+Reads NHX_BASE_URL and NHX_WORKSPACE like the Helix CLI. Re-running scores is safe:
+Intake keeps one result per trace and name.
 """
 
 import argparse
 import json
 import os
 import re
+import urllib.error
 import urllib.request
 from pathlib import Path
 
 BASE = os.environ.get('NHX_BASE_URL', 'http://localhost:8080').rstrip('/')
+WORKSPACE = os.environ.get('NHX_WORKSPACE', 'default')
 
 
 def api(service: str, path: str, body: dict | None = None) -> dict:
-    url = f'{BASE}/apis/{service}/v2/workspaces/default/{path}'
+    url = f'{BASE}/apis/{service}/v2/workspaces/{WORKSPACE}/{path}'
     request = urllib.request.Request(url, data=body and json.dumps(body).encode(),
                                      headers={'Content-Type': 'application/json'})
     with urllib.request.urlopen(request) as response:
@@ -43,13 +46,22 @@ def grade(trial: Path) -> dict:
             'failed': [row.split('\t')[0] for row in rows if row.endswith('\tFAIL')]}
 
 
+def trace_id(run_log: str) -> str | None:
+    """The Intake trace ID that harness/run_agent.py prints first."""
+    found = re.search(r'^trace (\S+)$', run_log, re.MULTILINE)
+    return found and found.group(1)
+
+
 def scores(job: Path) -> None:
     for log in sorted(job.glob('*/agent/run.log')):
-        trial, found = log.parent.parent, re.search(r'^trace (\S+)$', log.read_text(), re.MULTILINE)
-        if not found or not (trial / 'verifier' / 'reward.txt').exists():
+        trial, session = log.parent.parent, trace_id(log.read_text())
+        if not session or not (trial / 'verifier' / 'reward.txt').exists():
             continue
-        session = found.group(1)
-        span = api('intake', f'traces/{session}')['root_span_id']
+        try:
+            span = api('intake', f'traces/{session}')['root_span_id']
+        except urllib.error.HTTPError as error:  # e.g. a run killed before its trace was sent
+            print(trial.name, session, 'skipped:', error)
+            continue
         result = grade(trial)
         target = {'session_id': session, 'span_id': span}
         for name in ('reward', 'iou'):

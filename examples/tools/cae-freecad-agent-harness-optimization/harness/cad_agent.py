@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Harbor agent: runs the CAD agent in each task's container, next to headless FreeCAD.
 
-    PYTHONPATH=harness harbor run -p evals -a cad_agent:CadAgent -m MODEL -n 4
+    PYTHONPATH=harness harbor run -p evals -a cad_agent:CadAgent -m MODEL -n 4 [--ak agent_dir=DIR]
 """
 
 import shlex
@@ -14,7 +14,12 @@ HERE = Path(__file__).resolve().parent
 
 
 class CadAgent(BaseInstalledAgent):
-    """Uploads agent/ (prompt, model, skills) and runs it with harness/run_agent.py."""
+    """Uploads an agent folder (agent.yaml, skills/; default agent/) and runs it with
+    harness/run_agent.py."""
+
+    def __init__(self, *args, agent_dir: str | None = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.agent_dir = Path(agent_dir) if agent_dir else HERE.parent / 'agent'
 
     @staticmethod
     def name() -> str:
@@ -25,7 +30,7 @@ class CadAgent(BaseInstalledAgent):
         await self.exec_as_agent(environment, 'command -v freecadcmd && python -c "import deepagents"')
 
     async def run(self, instruction: str, environment, context) -> None:
-        await environment.upload_dir(HERE.parent / 'agent', '/agent')
+        await environment.upload_dir(self.agent_dir, '/agent')
         await environment.upload_file(HERE / 'run_agent.py', '/installed-agent/run_agent.py')
         await self.exec_as_agent(
             environment, f'python /installed-agent/run_agent.py /agent {shlex.quote(instruction)}'
