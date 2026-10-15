@@ -43,7 +43,7 @@ def grade(trial: Path) -> dict:
     rows = (verifier / 'results').read_text().splitlines() if (verifier / 'results').exists() else []
     stats = verifier / 'complexity.json'
     return {'reward': float((verifier / 'reward.txt').read_text()),
-            'iou': float(iou.group(1)) if iou else 0.0,
+            'iou': float(iou.group(1)) if iou else None,  # not measured: no valid solid
             'failed': [row.split('\t')[0] for row in rows if row.endswith('\tFAIL')],
             'complexity': json.loads(stats.read_text()) if stats.exists() else {}}
 
@@ -68,6 +68,7 @@ def scores(job: Path) -> None:
         target = {'session_id': session, 'span_id': span}
         numbers = {'reward': result['reward'], 'iou': result['iou'],
                    **{f'complexity.{k}': v for k, v in result['complexity'].items()}}
+        numbers = {name: value for name, value in numbers.items() if value is not None}
         for name, value in numbers.items():
             api('intake', 'evaluator-results', {**target, 'name': name, 'data_type': 'NUMERIC',
                                                 'value': value})

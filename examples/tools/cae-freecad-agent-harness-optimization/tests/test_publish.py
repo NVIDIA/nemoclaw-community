@@ -40,7 +40,7 @@ class GradeTest(unittest.TestCase):
     def test_no_model(self):
         # No model saved: the verifier writes only the reward and failing rows.
         trial = self.trial({'reward.txt': '0\n', 'results': 'mesh-fidelity\tFAIL\n'})
-        self.assertEqual(grade(trial), {'reward': 0.0, 'iou': 0.0, 'failed': ['mesh-fidelity'],
+        self.assertEqual(grade(trial), {'reward': 0.0, 'iou': None, 'failed': ['mesh-fidelity'],
                                         'complexity': {}})
 
 
