@@ -51,6 +51,8 @@ except ImportError:  # pragma: no cover - exercised by the tests
     AgentContext = Any  # type: ignore[assignment,misc]
 
 EXAMPLE_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from freecad_guard import GUARD  # noqa: E402
 
 AGENT = os.environ.get('CAD_AGENT', 'cad-agent')
 DEPLOYMENT = os.environ.get('CAD_DEPLOYMENT', 'cad-agent-deployment')
@@ -255,6 +257,7 @@ class HelixCadAgent(BaseAgent):
             if not RESTART:
                 raise
             restart_freecad()
+        freecad(GUARD)  # a bad Part.Shape() call raises instead of aborting FreeCAD
 
     async def _invoke(self, instruction: str, context: AgentContext) -> None:
         returncode, output, crashed = await asyncio.to_thread(invoke_watched, instruction)
