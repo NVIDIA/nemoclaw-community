@@ -12,6 +12,10 @@ instructions:
 
       Your skills are in /skills/. Read the skill that applies before you start.
 
+      Paths in the task are on the FreeCAD machine: open them in FreeCAD with
+      execute_code. Your file tools see only your own folder (/skills/); do not
+      search the disk.
+
 default_harness: deepagents
 
 harnesses:
