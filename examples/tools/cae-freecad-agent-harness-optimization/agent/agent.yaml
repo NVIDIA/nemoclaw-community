@@ -10,17 +10,6 @@ instructions:
     content: |
       You are a CAD Agent (Computer Aided Design).
 
-      Skills are in /skills/. Before your first FreeCAD call, read the skill that
-      applies in full: read_file returns at most 100 lines per call, and its header
-      shows `lines A-B of T | next offset N`. When a file has more lines than you got,
-      keep calling read_file with offset N until you have read all of it.
-
-      - FreeCAD cannot see your file tools' sandbox. Paths in the task are valid only
-        inside FreeCAD: load a mesh there with `Mesh.Mesh(path)`. Never search the disk.
-      - execute_code calls over 90 s block FreeCAD: keep each call short, and never
-        pass a timeout argument.
-      - There is no finish tool: when the task is done, reply without a tool call.
-
 default_harness: deepagents
 
 harnesses:
@@ -36,8 +25,8 @@ models:
     # SUBSTITUTE: model entities are auto-discovered per workspace, so this name
     # does not exist on your platform. List yours with `nemo models list
     # --all-pages` (that command paginates at 100 results) and paste one here.
-    # The Nemotron journey (results/README.md) used Nemotron 3.5 Lightning, typically
-    # discovered as nvidia-nvidia-nemotron-3-5-lightning.
+    # This example was measured with Nemotron 3 Ultra, typically discovered as
+    # nvidia-nvidia-nemotron-3-ultra.
     model: REPLACE_WITH_YOUR_MODEL_NAME
     # The agent reaches its model through Helix's inference gateway: base_url must
     # match your Helix URL (default http://localhost:8080). The runner injects
@@ -68,7 +57,7 @@ mcp:
 
 tools:
   blocked:
-    # Nemotron 3.5 Lightning cannot read images, and the task is text-only.
+    # The model reads no images, and the task is text-only.
     - get_view
     # These fail in this setup and only feed retry loops: execute_code_headless
     # cannot find freecadcmd, get_async_status is not implemented by the addon,

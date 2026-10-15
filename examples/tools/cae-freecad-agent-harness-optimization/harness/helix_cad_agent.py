@@ -51,8 +51,6 @@ except ImportError:  # pragma: no cover - exercised by the tests
     AgentContext = Any  # type: ignore[assignment,misc]
 
 EXAMPLE_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from freecad_guard import GUARD  # noqa: E402
 
 AGENT = os.environ.get('CAD_AGENT', 'cad-agent')
 DEPLOYMENT = os.environ.get('CAD_DEPLOYMENT', 'cad-agent-deployment')
@@ -62,7 +60,7 @@ MESHES = EXAMPLE_ROOT / 'meshes'
 # A task names its mesh as @MESH_PATH@ (reference_part.obj) or @MESH_PATH:<file>@.
 MESH_TOKEN = re.compile(r'@MESH_PATH(?::([\w.-]+))?@')
 SCORER = EXAMPLE_ROOT / 'scorer' / 'score.py'
-TIMEOUT = float(os.environ.get('CAD_AGENT_TIMEOUT', '1800'))
+TIMEOUT = float(os.environ.get('CAD_AGENT_TIMEOUT', '300'))
 TRACE_WAIT = float(os.environ.get('CAD_AGENT_TRACE_WAIT', '300'))
 MODEL_ARTIFACT = '/app/model.FCStd'
 RESTART = os.environ.get('CAD_FREECAD_RESTART')
@@ -259,7 +257,6 @@ class HelixCadAgent(BaseAgent):
             if not RESTART:
                 raise
             restart_freecad()
-        freecad(GUARD)  # a bad Part.Shape() call raises instead of aborting FreeCAD
 
     async def _invoke(self, instruction: str, context: AgentContext) -> None:
         returncode, output, crashed = await asyncio.to_thread(invoke_watched, instruction)

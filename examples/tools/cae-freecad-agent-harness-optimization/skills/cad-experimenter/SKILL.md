@@ -45,10 +45,15 @@ This skill was written for this example only. It is a worked pattern for the
 - Change only what Change Scope marks `yes`. Model and MCP server changes need the
   owner's approval: propose them, do not make them.
 - At most **two candidates**, each a different strategy. Prefer the smallest change that
-  addresses the root cause. For a small model, removing work often beats adding rules.
-- **Guide through results, not rules.** A small model acts on what it has just read.
-  When the agent must do something next (retry, stop, run the next step), have the
-  output of the code it runs say so, rather than adding another rule to the prompt.
+  addresses the root cause. Removing work often beats adding rules.
+- **Skills over a long prompt.** Put methods and code in skills and helper files, not in
+  the system prompt. Keep the prompt short; add fixed code only when a skill cannot do
+  the job, and look for the simplest way to get code to FreeCAD.
+- **Guide through results, not rules.** When the agent must do something next (retry,
+  stop, run the next step), have the output of the code it runs say so, rather than
+  adding another rule to the prompt.
+- **Five minutes per run.** Each agent run is stopped after 5 minutes; a method must
+  finish well inside that.
 - **Do not use the FreeCAD GUI while an eval runs.** Test code headlessly with
   `freecadcmd`; use the GUI only when the orchestrator says it is free.
 
@@ -58,12 +63,12 @@ Facts about this environment, learned the hard way. They are not solutions.
 
 | Fact | Consequence |
 | --- | --- |
-| Deep Agents' `read_file` returns 100 lines unless you pass a larger `limit`; its header shows `next offset`. | The base agent's prompt tells it to keep reading; with that line Nemotron read a 300-line file whole in 5 of 5 tests. Skills can be ordinary files of any length. |
+| Deep Agents' `read_file` returns 100 lines unless you pass a larger `limit`; its header shows `next offset`. | A long file is read in pages. |
 | The agent's file tools run in a sandbox. FreeCAD cannot see `/skills` or files the agent writes; the mesh path is valid only inside FreeCAD. | Code in a skill reaches FreeCAD only as the `code` argument of `execute_code`, copied by the model. |
 | `execute_code` runs on FreeCAD's GUI thread. Over 90 s the bridge aborts the call but the work keeps running, and every later call fails until it ends. | Keep each call bounded. |
 | `execute_code` rejects a `timeout` argument. Names defined in one call stay defined for the next. | Never pass `timeout`. Long code can be split across calls. |
 | `execute_code_headless` fails (`freecadcmd not found`), `get_async_status` is not implemented, and `execute_code_async` gives no job handle. | These tools only feed retry loops. |
-| Nemotron 3.5 Lightning reads no images; the task is text-only. | Screenshots (`get_view`) only cost tokens. |
+| The model reads no images; the task is text-only. | Screenshots (`get_view`) only cost tokens. |
 | Deep Agents' `skills.paths` does not load on this Helix version. | Ship skills as `skills/<name>/` in the agent folder with `environment.workspace: .`, and point to them from the prompt. |
 | Stopping `nemo agents invoke` does not stop the run inside the deployment. | Orchestrator: kill the deployment's adapter process before reusing FreeCAD. |
 
