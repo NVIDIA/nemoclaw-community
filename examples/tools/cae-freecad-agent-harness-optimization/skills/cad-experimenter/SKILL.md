@@ -103,7 +103,16 @@ freecadcmd -c "exec(open('my_test.py').read())"
 ```
 
 Test the code exactly as the agent will run it. The routine must leave a model that
-passes FreeCAD's full shape check (`shape.check(True)`).
+passes FreeCAD's full shape check (`shape.check(True)`). Give every test a hard time
+limit and one configuration per process, so a hang costs minutes, not the round:
+
+```bash
+perl -e 'alarm 120; exec @ARGV' freecadcmd -c "exec(open('my_test.py').read())"
+```
+
+A step that hangs or takes over about 60 s is itself a finding: the agent's
+`execute_code` calls are cut off at 90 s. Hand over at least one candidate within about
+45 minutes, even if it is the simpler idea; the eval measures it.
 
 **4. Report.** Write `CANDIDATES.md`: per candidate, the diff against `agent/`, what you
 tested and its results, and what you expect on each check. The orchestrator deploys and
