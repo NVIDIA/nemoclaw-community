@@ -30,9 +30,7 @@ This skill was written for this example only. It is a worked pattern for the
   `verifier/results` lists the five checks; `result.json` holds the host IoU and the
   trace ID under `agent_result.metadata`.
 - `insights.yml`: Compass Insights on this round's traces, each citing traces.
-- `EVAL-AUTHOR.md`, when the orchestrator asked for one: whether the eval already
-  catches each Insight. It is run only when Compass suggests the eval may miss
-  something.
+- `EVAL-AUTHOR.md`: whether the eval already catches each Insight.
 - `ETHOS.md` (example root): the requirements and, under **Change Scope**, what you
   may change.
 
@@ -114,8 +112,8 @@ perl -e 'alarm 120; exec @ARGV' freecadcmd -c "exec(open('my_test.py').read())"
 ```
 
 A step that hangs or takes over about 60 s is itself a finding: the agent's
-`execute_code` calls are cut off at 90 s. Hand over one candidate within about 20
-minutes, even if it is the simpler idea; the eval measures it.
+`execute_code` calls are cut off at 90 s. Hand over at least one candidate within about
+45 minutes, even if it is the simpler idea; the eval measures it.
 
 **4. Report.** Write `CANDIDATES.md`: per candidate, the diff against `agent/`, what you
 tested and its results, and what you expect on each check. The orchestrator deploys and
