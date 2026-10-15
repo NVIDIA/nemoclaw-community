@@ -1,16 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Platform guards installed in the FreeCAD session before each trial.
+"""Platform guard installed in the FreeCAD session before each trial.
 
-Two FreeCAD 1.1 traps that cost runs, turned into ordinary errors:
-
-- ``Part.Shape(x)`` aborts FreeCAD outright when ``x`` is not a shape or a sequence of
-  shapes (a Mesh, a number, a string): the C++ exception is never caught, and every
-  open document is lost. It now raises a ``TypeError``. ``isinstance(obj, Part.Shape)``
-  keeps working, and valid calls are unchanged.
-- ``App.newDocument(name)`` silently creates ``name1``, ``name2``... when ``name`` is
-  already open, so an agent that re-runs its setup builds in a document nobody grades.
-  It now raises a ``NameError`` that says to use ``App.getDocument(name)``.
+FreeCAD 1.1 aborts outright when ``Part.Shape(x)`` is given anything that is not a
+shape or a sequence of shapes (a Mesh, a number, a string): the C++ exception is never
+caught, and every open document is lost. The guard makes that call raise a Python
+``TypeError`` instead, so a mistake costs the agent one failed call, not the run.
+``isinstance(obj, Part.Shape)`` keeps working, and valid calls are unchanged.
 """
 
 GUARD = r'''
@@ -46,19 +42,4 @@ if not getattr(Part, "_shape_guard", False):
     Shape.__doc__ = _TopoShape.__doc__
     Part.Shape = Shape
     Part._shape_guard = True
-
-import FreeCAD
-if not getattr(FreeCAD, "_document_guard", False):
-    _newDocument = FreeCAD.newDocument
-
-    def newDocument(name=None, *args, **kwargs):
-        if name and name in FreeCAD.listDocuments():
-            raise NameError(
-                "Document %r already exists: use FreeCAD.getDocument(%r) instead of "
-                "creating it again." % (name, name))
-        return _newDocument(name, *args, **kwargs) if name else _newDocument(*args, **kwargs)
-
-    newDocument.__doc__ = _newDocument.__doc__
-    FreeCAD.newDocument = newDocument
-    FreeCAD._document_guard = True
 '''
