@@ -8,8 +8,8 @@ category = "cad"
 tags = ["freecad", "parametric-modeling", "mesh-reconstruction"]
 
 [agent]
-# The agent itself is stopped after CAD_AGENT_TIMEOUT (300 s); the rest is scoring.
-timeout_sec = 600.0
+# A hard stop shortly after the agent's own CAD_AGENT_TIMEOUT, which lets the trace flush.
+timeout_sec = 360.0
 # The agent reaches only the NeMo Helix inference gateway and Intake on the host.
 network_mode = "allowlist"
 allowed_hosts = ["host.docker.internal"]
@@ -28,4 +28,9 @@ build_timeout_sec = 600.0
 os = "linux"
 # A heavy FreeCAD call fails this trial instead of exhausting the Docker VM shared
 # by the parallel trials.
-memory_mb = 4096
+memory_mb = 3072
+
+[environment.env]
+CAD_AGENT_TIMEOUT = "300"
+# NeMo Helix as the container reaches it; the agent's network allows only this host.
+CAD_HELIX_URL = "${CAD_HELIX_URL:-http://host.docker.internal:8080}"

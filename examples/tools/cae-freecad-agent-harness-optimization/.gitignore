@@ -1,46 +1,23 @@
 # Credentials
 .env
 
-# Agent runtime output. The deployment writes next to agent/agent.yaml.
-agent/artifacts/
-agent/traces/
-**/.fabric/
-
-# FreeCAD documents and their rolling backups. The agent writes these while it
-# works; the deliverable is the score, not the .FCStd.
+# FreeCAD documents and their backups, except the eval suite's reference solutions.
 *.FCStd
 *.FCStd[0-9]
 *.FCBak
-
-# Scratch geometry. The reference_part meshes are the tracked ones; anything
-# else dropped in here is a local substitution and should not be committed.
-meshes/*
-!meshes/reference_part.obj
-!meshes/reference_part_2.obj
-
-# Other build and export artifacts from scoring runs.
-*.brep
-*.step
-*.stp
-*.stl
-*.obj
-!meshes/reference_part.obj
-!meshes/reference_part_2.obj
-results/runs/
+!evals/*/solution/*.FCStd
 
 # Python
 __pycache__/
 *.py[cod]
 .venv/
+.venv-checks/
 
 .DS_Store
 
-# Local Analyst findings and baseline prompts
+# Compass findings written locally
 insights.yml
 analyst.local.yaml
-baseline-prompts/
-
-.venv-checks/
 
 # Eval Author's private task workspaces, and the skills installed into a coding
 # agent. This example's own skill is tracked under skills/.
@@ -49,14 +26,8 @@ baseline-prompts/
 .agents/
 .cursor/
 .pi/
-
-# The experiment workspace (candidate agents, traces, eval runs, reports) stays
-# local. results/ holds the measured outcome and the final agents.
-experiments/
-
-# The eval suite ships its reference solution and the agent's and verifier's copies
-# of the mesh
-!evals/*/solution/*.FCStd
-!evals/*/environment/reference_part*.obj
-!evals/*/tests/reference_part*.obj
 skills-lock.json
+
+# The experiment workspace (candidate agents, eval runs, reports) stays local.
+# results/ holds the measured outcome and the final agent.
+experiments/

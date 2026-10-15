@@ -1,5 +1,5 @@
 Turn the mesh at
-`/app/reference_part_2.obj`
+`/app/reference.obj`
 into a fully parametric FreeCAD model that a CAD designer can open and edit.
 
 Build it in a new FreeCAD document named `EvalPart`, constructed

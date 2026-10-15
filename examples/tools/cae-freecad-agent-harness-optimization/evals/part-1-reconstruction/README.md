@@ -47,8 +47,8 @@ shape check, including self-intersections),
 wrappers), `named-dimension-drives-geometry` (changing a named constraint or a
 referenced named parameter by 10% leaves one clean solid and changes a bounding-box
 length by at least 1%),
-`mesh-fidelity` (IoU against the reference mesh, recomputed with the same algorithm
-as the agent-side scorer, is at least 0.9), and `single-visible-object` (every visible
+`mesh-fidelity` (IoU against the reference mesh at 0.1 mm resolution
+is at least 0.9), and `single-visible-object` (every visible
 object with geometry is the Body or its tip feature, as the instruction's "exactly one
 object visible" requires; origin axes and planes are ignored). The reward is 1 only
 when all five pass. The verifier also logs the model's feature, sketch and face

@@ -37,7 +37,7 @@ This skill was written for this example only. It is a worked pattern for the
 
 ## Rules
 
-- **Fix the behavior, not the test.** Do not read `scorer/`, `evals/*/tests/` or
+- **Fix the behavior, not the test.** Do not read `evals/*/tests/` or
   `evals/*/solution/`, and never mirror the grader. If the agent must measure similarity
   to the mesh, write an independent measurement.
 - At most **two candidates**, each a different strategy.
@@ -45,14 +45,13 @@ This skill was written for this example only. It is a worked pattern for the
 
 ## Levers
 
-| Lever | Where in `agent.yaml` |
+| Lever | Where |
 | --- | --- |
-| System prompt | `instructions.system.content` |
-| Skills | `skills/<name>/` in the agent folder. |
-| Subagents | `subagents`: a list of `{name, description, system_prompt, tools?}`. The agent delegates with its `task` tool. |
-| Model | `models.default.model`. `with-approval`: propose only. |
-
-Middleware is not configurable from `agent.yaml`.
+| System prompt | `system_prompt` in `agent.yaml` |
+| Skills | `skills/<name>/SKILL.md` in the agent folder, with any helper files beside it. Deep Agents lists each skill's description in the prompt and the agent reads it when it applies; helper scripts are real files the agent can run with `freecadcmd`. |
+| Subagents | `subagents` in `agent.yaml`: a list of `{name, description, system_prompt, tools?}`. The agent delegates with its `task` tool. |
+| Middleware | `agent/middleware.py` exporting `MIDDLEWARE`, a list of Deep Agents middleware (e.g. trimming tool output, stopping loops). Use it only for what a prompt or skill cannot do. |
+| Model | `model` in `agent.yaml`. `with-approval`: propose only. |
 
 ## Steps
 
@@ -72,7 +71,8 @@ targets, the lever, and the checks it should move on both parts.
 
 **3. Build.** For each candidate, copy the round's `agent/` to `candidates/<short-name>/agent/`, edit
 the copy, and set its top-level `name:` to the one the orchestrator gave you. Test any
-code a skill relies on, headlessly, on both reference meshes:
+code a skill relies on, headlessly, on both reference meshes
+(`evals/*/environment/reference.obj`):
 
 ```bash
 freecadcmd -c "exec(open('my_test.py').read())"

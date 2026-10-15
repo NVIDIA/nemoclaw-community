@@ -54,7 +54,9 @@ Where things run:
 - Every run has its own container: headless FreeCAD 1.1.3, the agent's skills at
   `/agent/skills/`, and the task's files under `/app`. Paths in the task are real
   paths in that container. Nothing carries over between runs.
-- Trials run in parallel, one container each. Each run is stopped after 5 minutes.
+- Trials run in parallel, one container each, with 3 GiB of memory. Each run is
+  stopped after 5 minutes.
+- The container's network reaches only NeMo Helix (model and traces).
 
 ## Behavior
 
@@ -97,7 +99,7 @@ Where things run:
   `recompute`, the volume or bounding box changes. A model once carried five named
   parameters, of which one was connected to anything.
 - It reloads and recomputes cleanly after save and reopen.
-- IoU ≥ 0.9 against the task's reference mesh, measured by `scorer/score.py`, on every
+- IoU ≥ 0.9 against the task's reference mesh, measured by the eval's verifier, on every
   part the agent is evaluated on, not only on one.
 
 ## Trade-offs
@@ -117,25 +119,26 @@ Where things run:
   call can exhaust the container's memory and end the run.
 - A run must finish within 5 minutes.
 - Text only: read geometry back as numbers.
-- The agent directory is uploaded with every run and readable by the agent. The
-  scorer, this ethos and the evals stay outside it.
+- The agent directory is uploaded with every run and readable by the agent. This
+  ethos and the evals stay outside it.
 
 ## Change Scope
 
 - System prompt: yes
 - Skills under the agent's skills library: yes
 - Subagents: yes
+- Middleware (`agent/middleware.py`): yes
 - Model selection: with-approval
-- Task instruction, reference mesh, scorer and evals: no
+- Task instruction, reference mesh and evals: no
 
 ## Evaluation Setup
 
-`scorer/score.py` scores the saved model by IoU against the task's reference mesh at
-0.1 mm XY resolution, in the run's container after the agent stops. The Harbor agent
-records that IoU on the run's Intake trace, and NeMo Compass analyzes those traces
-against this ethos. The Harbor tasks in `evals/`, authored with NeMo Eval Author, hold
-one task per reference part, all graded by the same checks; the agent is measured on
-every part.
+The Harbor tasks in `evals/`, authored with NeMo Eval Author, hold one task per
+reference part, all graded by the same checks; the agent is measured on every part.
+Each task's verifier grades the saved model in its own container, including IoU against
+the reference mesh at 0.1 mm XY resolution. `publish.py scores` attaches each run's
+reward, IoU and failed checks to its Intake trace, and NeMo Compass analyzes those
+traces against this ethos.
 
 ## Metric Semantics
 

@@ -1,18 +1,14 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Run the CAD agent inside a task container, next to headless FreeCAD.
-
-Builds a Deep Agents agent from ``agent.yaml`` with a real shell in ``/app``,
-gives it the task for at most ``CAD_AGENT_TIMEOUT`` seconds, and traces the run
-with NeMo Relay: one ATIF trajectory, posted to Intake, whose session ID it
-prints. ``cad_agent.py`` uploads and starts this script.
-
-    python run_agent.py AGENT_YAML INSTRUCTION
+"""Run the CAD agent in a task container: Deep Agents with a shell in /app, traced
+with NeMo Relay to Intake.  python run_agent.py AGENT_DIR INSTRUCTION
 """
 
 import asyncio
 import os
+import runpy
 import sys
+from pathlib import Path
 
 import yaml
 from deepagents import create_deep_agent
@@ -21,43 +17,45 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from langchain_openai import ChatOpenAI
 from nemo_relay import ScopeType, plugin, scope
 from nemo_relay.integrations.deepagents import add_nemo_relay_integration
+from nemo_relay.observability import (AtifConfig, ComponentSpec, HttpStorageConfig,
+                                      ObservabilityConfig)
+from nemo_relay.plugin import PluginConfig
 
-TIMEOUT = int(os.environ.get('CAD_AGENT_TIMEOUT', '300'))
-# A Helix API, e.g. HELIX % 'intake'; cad_agent.py passes the URL as the container sees it.
-HELIX = (f"{os.environ['NHX_BASE_URL']}/apis/%s/v2/workspaces/"
-         f"{os.environ.get('NHX_WORKSPACE', 'default')}")
-
-
-def relay_config(name: str, model: str, tools: list[dict], intake: str) -> dict:
-    """One ATIF trajectory per run, carrying the agent's name, model and tool schemas."""
-    atif = {'enabled': True, 'agent_name': name, 'model_name': model, 'tool_definitions': tools,
-            'storage': [{'type': 'http', 'endpoint': intake}]}
-    return {'version': 1, 'components': [
-        {'kind': 'observability', 'enabled': True, 'config': {'version': 3, 'atif': atif}}]}
+# Set by the task (task.toml [environment].env): the run's time limit, and NeMo Helix
+# as the container reaches it (inference gateway for the model, Intake for traces).
+TIMEOUT = int(os.environ['CAD_AGENT_TIMEOUT'])
+HELIX = os.environ['CAD_HELIX_URL'].rstrip('/')
+GATEWAY = f'{HELIX}/apis/inference-gateway/v2/workspaces/default/openai/-/v1'
+INTAKE = f'{HELIX}/apis/intake/v2/workspaces/default/ingest/atif'
 
 
-async def main(spec_path: str, instruction: str) -> None:
-    with open(spec_path) as f:
-        spec = yaml.safe_load(f)
-    name, model = spec['name'], os.environ.get('CAD_MODEL') or spec['models']['default']['model']
+async def main(agent_dir: str, instruction: str) -> None:
+    spec = yaml.safe_load((Path(agent_dir) / 'agent.yaml').read_text())
+    model = os.environ.get('CAD_MODEL') or spec['model']
+    # Optional: agent/middleware.py exports MIDDLEWARE, a list of Deep Agents middleware.
+    extra = Path(agent_dir) / 'middleware.py'
+    middleware = runpy.run_path(str(extra))['MIDDLEWARE'] if extra.exists() else []
     agent = create_deep_agent(**add_nemo_relay_integration(
-        name=name, system_prompt=spec['instructions']['system']['content'],
-        subagents=spec.get('subagents'),
+        name=spec['name'], system_prompt=spec['system_prompt'], subagents=spec.get('subagents'),
+        skills=[f'{agent_dir}/skills/'], middleware=middleware,
         # The Helix inference gateway needs no key; the client requires one.
-        model=ChatOpenAI(model=model, base_url=HELIX % 'inference-gateway' + '/openai/-/v1',
-                         api_key='unused', max_retries=6),  # ride out gateway blips
+        model=ChatOpenAI(model=model, base_url=GATEWAY, api_key='unused', max_retries=6),
         backend=LocalShellBackend(root_dir='/app', virtual_mode=False, inherit_env=True,
                                   timeout=TIMEOUT)))
     tools = [convert_to_openai_tool(t)['function']
              for t in agent.nodes['tools'].bound.tools_by_name.values()]
-    async with plugin.plugin(relay_config(name, model, tools, HELIX % 'intake' + '/ingest/atif')):
-        with scope.scope(name, ScopeType.Agent) as run:
-            print(f'trace session {run.uuid}', flush=True)  # the Intake session ID
+    atif = AtifConfig(enabled=True, agent_name=spec['name'], model_name=model,
+                      tool_definitions=tools, storage=[HttpStorageConfig(endpoint=INTAKE)])
+    config = PluginConfig(components=[ComponentSpec(config=ObservabilityConfig(atif=atif))])
+    async with plugin.plugin(config):
+        with scope.scope(spec['name'], ScopeType.Agent) as run:
+            print(f'trace {run.uuid}', flush=True)  # the Intake trace ID, for publish.py
             try:
                 await asyncio.wait_for(agent.ainvoke(
                     {'messages': [{'role': 'user', 'content': instruction}]}), TIMEOUT)
             except TimeoutError:
-                print(f'stopped after {TIMEOUT} s', file=sys.stderr)
+                print(f'stopped after {TIMEOUT} s', flush=True)
+    os._exit(0)  # the trace is sent; don't wait for a shell command still running
 
 
 if __name__ == '__main__':

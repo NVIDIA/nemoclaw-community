@@ -3,5 +3,5 @@
 FROM condaforge/miniforge3:24.11.3-2
 RUN mamba install -y -q python=3.12 freecad=1.1.3 numpy && mamba clean -a -y
 RUN pip install --no-cache-dir deepagents==0.7.25 langchain-openai==1.7.2 nemo-relay==0.7.3
-COPY reference_part_2.obj /app/reference_part_2.obj
+COPY reference.obj /app/reference.obj
 WORKDIR /app

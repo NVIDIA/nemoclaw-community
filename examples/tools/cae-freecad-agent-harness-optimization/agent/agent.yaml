@@ -1,25 +1,14 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# The CAD agent. harness/run_agent.py builds a LangChain Deep Agents agent from this
-# file inside each task container; the folder's skills/ is uploaded beside it.
+# The CAD agent: harness/run_agent.py builds a LangChain Deep Agents agent from this
+# file, with the skills in skills/ beside it. Optional: subagents (Deep Agents format),
+# and middleware.py exporting MIDDLEWARE, a list of Deep Agents middleware.
 name: cad-agent
-description: A CAD agent executed with Deep Agents next to headless FreeCAD
+# A model on your NeMo Helix inference gateway (`nemo models list --all-pages`), or
+# pass one per run with `harbor run -m`. Measured with nvidia-nvidia-nemotron-3-ultra.
+model: REPLACE_WITH_YOUR_MODEL_NAME
+system_prompt: |
+  You are a CAD Agent (Computer Aided Design).
 
-instructions:
-  system:
-    content: |
-      You are a CAD Agent (Computer Aided Design).
-
-      Your skills are in /agent/skills/. Read the skill that applies before you start.
-
-      You have a shell with headless FreeCAD 1.1 (`freecadcmd`); work in /app.
-
-models:
-  default:
-    # SUBSTITUTE: model entities are auto-discovered per workspace, so this name
-    # does not exist on your platform. List yours with `nemo models list
-    # --all-pages` (that command paginates at 100 results) and paste one here, or
-    # pass it per run with `harbor run -m <model>`. This example was measured with
-    # Nemotron 3 Ultra, typically discovered as nvidia-nvidia-nemotron-3-ultra.
-    model: REPLACE_WITH_YOUR_MODEL_NAME
+  You have a shell with headless FreeCAD 1.1 (`freecadcmd`); work in /app.
