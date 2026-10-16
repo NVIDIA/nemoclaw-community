@@ -14,6 +14,7 @@ from pathlib import Path
 import yaml
 from deepagents import create_deep_agent
 from deepagents.backends import LocalShellBackend
+from langchain.agents.middleware import ModelRetryMiddleware
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from langchain_openai import ChatOpenAI
 from nemo_relay import ScopeType, plugin, scope
@@ -37,6 +38,9 @@ async def main(agent_dir: str, instruction: str) -> None:
     # Optional: agent/middleware.py exports MIDDLEWARE, a list of Deep Agents middleware.
     extra = Path(agent_dir) / 'middleware.py'
     middleware = runpy.run_path(str(extra))['MIDDLEWARE'] if extra.exists() else []
+    # Harness, not agent: ride out model-gateway blips instead of losing the run.
+    middleware = [ModelRetryMiddleware(max_retries=4, initial_delay=2.0, max_delay=30.0),
+                  *middleware]
     agent = create_deep_agent(**add_nemo_relay_integration(
         name=spec['name'], system_prompt=spec['system_prompt'], subagents=spec.get('subagents'),
         skills=[f'{agent_dir}/skills/'], middleware=middleware,
