@@ -56,8 +56,6 @@ def main(argv):
 
     bb = cand.BoundBox; bb.add(ref.BoundBox)
     cand_tris, ref_tris = tris_from_mesh(cand), tris_from_mesh(ref)
-    missing = largest_missing_fraction(cand_tris, ref_tris, (bb.XMin, bb.YMin, bb.ZMin),
-                                       (bb.XMax, bb.YMax, bb.ZMax), bb.DiagonalLength)
     cell = resolve_cell(bb.DiagonalLength)
     bb.enlarge(cell)
     xs, ys, nx, ny = grid_axes(bb.XMin, bb.YMin, bb.XMax, bb.YMax, cell)
@@ -67,12 +65,19 @@ def main(argv):
 
     iou, bad, cols = iou_from_crossings(ca, ra)
 
-    # Diagnostics go to stderr: stdout carries only the IOU line, which the
+    # Diagnostics go to stderr: stdout carries only the IOU and MISSING lines, which the
     # caller parses.
     print("DBG cell", cell, "cols", cols, "degenerate", bad,
           "cand_vol", round(cand.Volume, 2), "ref_vol", round(ref.Volume, 2),
           "secs", round(time.time() - t0, 1), file=sys.stderr)
-    print("IOU", round(iou, 4))
+    print("IOU", round(iou, 4), flush=True)
+    try:  # no-missing-feature; a failure here must not take mesh-fidelity with it
+        missing = largest_missing_fraction(cand_tris, ref_tris, (bb.XMin, bb.YMin, bb.ZMin),
+                                           (bb.XMax, bb.YMax, bb.ZMax),
+                                           ref.BoundBox.DiagonalLength)
+    except Exception as exc:
+        print("DBG missing-feature failed:", exc, file=sys.stderr)
+        missing = 1.0
     print("MISSING", round(missing, 4))
 
 

@@ -272,6 +272,12 @@ class TestLargestMissingFraction(unittest.TestCase):
         shrunk = [box((0.1, 0.1, 0.1), (9.9, 9.9, 9.9)), box((11.1, 3.1, 3.1), (14.9, 6.9, 6.9))]
         self.assertAlmostEqual(self.fraction(shrunk), 0.0)
 
+    def test_missing_boss_attached_to_the_body(self):
+        # The boss shares the body's x = 10 face: a branch that grows out of the part.
+        ref = stack([box(*self.BODY), box((10, 3, 3), (14, 7, 7))])
+        missing = largest_missing_fraction(stack([box(*self.BODY)]), ref, (0, 0, 0), (14, 10, 10), 20.0)
+        self.assertAlmostEqual(missing, 64 / 1064, delta=0.015)
+
 
 if __name__ == "__main__":
     unittest.main()

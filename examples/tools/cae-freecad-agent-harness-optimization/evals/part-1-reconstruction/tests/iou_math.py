@@ -140,7 +140,8 @@ MISSING_OPEN_CELLS = 3
 
 
 def _inside(cols, nx, ny, zc):
-    """Voxel occupancy from crossings, and the columns with an odd crossing count."""
+    """Voxel occupancy from crossings. A column with an odd crossing count (a ray through a
+    shared edge) copies a neighbouring good column, so it neither adds nor cuts material."""
     grid = np.zeros((nx, ny, zc.size), bool)
     odd = np.zeros((nx, ny), bool)
     for col, zs in cols.items():
@@ -150,7 +151,12 @@ def _inside(cols, nx, ny, zc):
             odd[i, j] = True
         else:
             grid[i, j] = np.searchsorted(zs, zc) % 2 == 1
-    return grid, odd
+    for i, j in zip(*np.nonzero(odd)):
+        for a, b in ((i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)):
+            if 0 <= a < nx and 0 <= b < ny and not odd[a, b]:
+                grid[i, j] = grid[a, b]
+                break
+    return grid
 
 
 def _erode(a):
@@ -171,6 +177,7 @@ def _dilate(a):
 def _largest_component(a):
     """The largest 6-connected component of a boolean grid."""
     from collections import deque
+    a = np.pad(a, 1)  # an empty border, so a flat-index step never wraps to another row
     flat = a.ravel()
     seen = np.zeros(flat.size, bool)
     steps = (a.shape[1] * a.shape[2], -a.shape[1] * a.shape[2], a.shape[2], -a.shape[2], 1, -1)
@@ -192,24 +199,24 @@ def _largest_component(a):
             best = comp
     out = np.zeros(flat.size, bool)
     out[best] = True
-    return out.reshape(a.shape)
+    return out.reshape(a.shape)[1:-1, 1:-1, 1:-1]
 
 
 def largest_missing_fraction(cand_tris, ref_tris, lo, hi, diagonal):
     """Largest connected reference volume not covered by the candidate, after an opening,
-    as a fraction of the reference volume. ``lo``/``hi``: (x, y, z) bounds of both."""
+    as a fraction of the reference volume. ``lo``/``hi``: (x, y, z) bounds of both;
+    ``diagonal``: the reference's own, so the candidate cannot coarsen the grid."""
     h = diagonal / MISSING_DIVISOR
     xs, ys, nx, ny = grid_axes(lo[0] - h, lo[1] - h, hi[0] + h, hi[1] + h, h)
     zc = lo[2] - h + h * (np.arange(int((hi[2] - lo[2] + 2 * h) / h) + 1) + 0.5)
-    cand, cand_odd = _inside(crossings(*cand_tris, xs, ys, nx, ny, h), nx, ny, zc)
-    ref, ref_odd = _inside(crossings(*ref_tris, xs, ys, nx, ny, h), nx, ny, zc)
-    usable = ~(cand_odd | ref_odd)[:, :, None]
-    missing = ref & ~cand & usable
+    cand = _inside(crossings(*cand_tris, xs, ys, nx, ny, h), nx, ny, zc)
+    ref = _inside(crossings(*ref_tris, xs, ys, nx, ny, h), nx, ny, zc)
+    missing = ref & ~cand
     region = missing
     for _ in range(MISSING_OPEN_CELLS):
         region = _erode(region)
-    region = _largest_component(region) if region.any() else region
+    region = _largest_component(region)
     for _ in range(MISSING_OPEN_CELLS):
         region = _dilate(region) & missing
-    reference = (ref & usable).sum()
+    reference = ref.sum()
     return region.sum() / reference if reference else 1.0
