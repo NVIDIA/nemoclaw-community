@@ -24,20 +24,25 @@ finds recurring problems in those traces;
 proven eval; and each change to the agent is kept only if the eval says it is better.
 
 The agent runs on **Nemotron 3 Ultra** and must rebuild any part it is given as a
-mesh, as an editable FreeCAD model. The eval holds two different parts. The base agent
-saved no model in 5 minutes. Four rounds of the loop, each one pass through Steps 1 to 4
-below, took it to **4 of 4**, and a confirmation run to **10 of 10**, with all seven
-checks passing, in about 20 seconds of agent time per run.
+mesh, as an editable FreeCAD model. The eval holds two different parts. The story has
+two chapters. First, four rounds of the loop took the base agent from no model saved to
+**10 of 10**, by running one reconstruction script. That met the Ethos, but not the
+intent: the model was a stretched trace, not something a designer would build. The owner
+revised the Ethos, Eval Author added one check, the previous agent fell to **0 of 10**,
+and four more rounds produced an agent that measures the part, chooses the features and
+writes its own FreeCAD code: **10 of 10** again, with all eight checks passing.
 
 ## Screenshot
 
 ![Each reference mesh in blue beside the final agent's reconstruction in orange](assets/results.png)
 
 The task: rebuild each blue mesh as an editable FreeCAD model. Orange is the final
-agent's reconstruction: a native PartDesign body of four ruled lofts through sketched
-sections, driven by one named dimension (IoU 0.970 and 0.943, 50 and 62 faces). The
-same skill built both; nothing in it is specific to either part. Rendered headless from
-the saved files.
+agent's reconstruction from a typical confirmation run (IoU 0.930 and 0.922, 32 and 42
+faces): a body lofted through measured sections, a cavity cut from the measured floor,
+and a branch (a swept tube on the left, a lofted arm on the right), with named
+dimensions such as height, floor and branch length. The agent chose and wrote these
+features itself. Rendered headless from the saved files with
+[skills/cad-experimenter/render](skills/cad-experimenter/render/).
 
 ## At A Glance
 
@@ -46,7 +51,7 @@ the saved files.
 | Category | Developer Tool |
 | Contributor or provenance | NVIDIA |
 | Use this when | You have a specialised agent that drives an engineering tool, and you want to find its failures in traces, turn them into a regression eval, and improve the agent against measurement. |
-| You will get | A containerized Deep Agents CAD agent with every run traced to Helix; Compass Insights in Studio; a proven Harbor eval of two parts with seven checks each; and a measured, round-by-round journey with its final agent. |
+| You will get | A containerized Deep Agents CAD agent with every run traced to Helix; Compass Insights in Studio; a proven Harbor eval of two parts with eight checks each; and a measured, round-by-round journey, including an Ethos revision, with its final agent. |
 | Runs on | Any host with Docker and NeMo Helix; verified on macOS with Colima. |
 | Requires | See [Prerequisites](#prerequisites). |
 | Verified on | macOS, Colima (4 CPU, 16 GiB), FreeCAD 1.1.3 (conda-forge, in the images), NeMo Helix 0.7.1, Deep Agents 0.7.25, NeMo Relay 0.7.3, NeMo Compass `462f09c`, NeMo Eval Author `20f95a0`, Harbor 0.22.0. |
@@ -118,7 +123,7 @@ the rest of your machine.
 
 ## Results
 
-A run passes only when all seven checks of the eval pass:
+A run passes only when all eight checks of the eval pass:
 
 | Check | What it verifies |
 | --- | --- |
@@ -126,25 +131,33 @@ A run passes only when all seven checks of the eval pass:
 | `single-valid-solid` | One PartDesign body with one solid that passes FreeCAD's full shape check, including self-intersections. |
 | `native-feature-tree` | The solid is built from sketches by native PartDesign features, not a scripted shape. |
 | `named-dimension-drives-geometry` | Changing a named dimension by 10% rebuilds one clean solid whose size changes by at least 1%. |
+| `independent-dimensions` | Two named dimensions each move the part in a different way: design intent, not one stretch. |
 | `mesh-fidelity` | The solid overlaps the reference mesh with IoU ≥ 0.9. |
 | `single-visible-object` | Only the finished model is visible when the file is opened. |
 | `compact-model` | At most 10× the faces of the reference solution: a designer's model, not a stack of slices. |
 
-Each round ran both parts twice, all four runs in parallel (eight when two candidates
-were measured at once), 5 minutes per run:
+Each round ran both parts twice, all runs in parallel, 5 minutes per run. Checks are out
+of 28 in chapter 1 (seven checks) and 32 in chapter 2 (eight):
 
-| Round | Change to the agent | Runs passed | Checks (of 28) | Part 1 IoU | Part 2 IoU | Tokens per run |
+| Round | Change to the agent | Runs | Checks | Part 1 IoU | Part 2 IoU | Tokens / run |
 | --- | --- | --- | --- | --- | --- | --- |
+| **Chapter 1: the original Ethos** | | | | | | |
 | 0. Base agent | | 0/4 | 0 | | | 1.9 M |
-| 1. A skill with a helper script | Time budget in the prompt; a skill whose script builds, saves and checks the model in one command (stacked slices) | 0/4 | 22 | 0.91, 0.92 | 0.78 | 0.04 M |
+| 1. A skill with a helper script | Time budget in the prompt; a script that builds, saves and checks the model in one command (stacked slices) | 0/4 | 22 | 0.91, 0.92 | 0.78 | 0.04 M |
 | 2. Ruled lofts (rejected) | One loft per segment instead of slices | 0/4 | 18 | invalid solid | 0.85 | 0.08 M |
-| 3. **Valid joints, a sound IoU estimate** | Joints as flat steps with shared sections; a ray-cast IoU estimate the agent can trust | **4/4** | **28** | **0.97** | **0.94** | **0.02 M** |
+| 3. Valid joints, a sound IoU estimate | Joints as flat steps; a ray-cast IoU estimate | **4/4** | 28 | 0.97 | 0.94 | 0.02 M |
+| **Ethos revision**: the agent must model, with design-intent dimensions | Eval Author adds `independent-dimensions`; round 3's agent re-graded: 0/10 | | | | | |
+| **Chapter 2: the revised Ethos** | | | | | | |
+| 5. Round 3's agent | (fails `independent-dimensions` only) | 0/4 | 28 | 0.97 | 0.94 | 0.03 M |
+| 6. The agent models (rejected) | Knowledge skills; the agent plans and writes its own build script | 0/4 | 3 | | | 1.0 M |
+| 7. Feature-level blocks | Sections and features in world coordinates over named parameters; save the body first | 2/4 | 30 | 0.90, 0.92 | 0.27, 0.80 | 0.24 M |
+| 8. **A clock and "where is it wrong"** | Middleware clock; saves list the features and the missing regions; a structure summary | **4/4** | **32** | **0.93, 0.93** | **0.95, 0.92** | **0.25 M** |
 
-After round 1, Compass found that the model was "a dense stack of slice sketches and
-pads" that passed every check; Eval Author added `compact-model` and proved it, and
-rounds 0 and 1 are shown re-graded with it. The final agent
-([results/final-agent](results/final-agent/agent.yaml)) then passed **10 of 10** runs,
-five per part. What each round found and taught is in [results/](results/README.md).
+Compass found the slice stacks of round 1, which led to `compact-model`, and named the
+fixed script after the Ethos revision. The final agent
+([results/final-agent](results/final-agent/agent.yaml): a short prompt, three knowledge
+skills and a clock middleware) then passed **10 of 10** runs, five per part, in about
+4 minutes each. What each round found and taught is in [results/](results/README.md).
 
 ## Prerequisites
 
@@ -188,7 +201,7 @@ cd examples/tools/cae-freecad-agent-harness-optimization
 
 ### Step 1: Run the agent and score every run
 
-[agent/agent.yaml](agent/agent.yaml) is the base agent: three lines of prompt and no
+[agent/agent.yaml](agent/agent.yaml) is the base agent: a two-sentence prompt and no
 skills. Pick a model from `nemo models list --all-pages` and run both tasks, two
 attempts each, four at a time:
 
@@ -199,7 +212,7 @@ python publish.py scores runs/base
 ```
 
 The first build of the task image takes a few minutes. Each trial's
-`verifier/results` lists the seven checks; `agent/run.log` starts with the run's trace
+`verifier/results` lists the eight checks; `agent/run.log` starts with the run's trace
 ID, and `publish.py scores` attaches the reward, IoU, failed checks and complexity to
 that trace, so Compass can see how each run was graded.
 
@@ -317,14 +330,18 @@ The 5-minute run limit and 3 GiB memory cap live in each task's
 ## Known limitations
 
 - **Two parts, few runs.** Two runs per part per round, ten for the final agent; the eval
-  shows the method works for two different parts, not for every part. An agent you mean
-  to ship needs tasks covering the work it will see.
-- **Compact, not yet a designer's tree.** The final models are four ruled lofts through
-  24-27 sections driven by one named dimension. They pass `compact-model`, but a designer
-  would revolve what is round and name more dimensions. Compass raised this; Eval Author
-  found no geometry-agnostic check for it yet ([results/](results/README.md#insights-that-stayed-open)).
-- **The agent's report overstates.** It reported "only the Body visible" when origin
-  datums and a spreadsheet were too; the saved file is what is graded.
+  shows the method works for two different parts, not for every part, and no rotated or
+  held-out part was tested. An agent you mean to ship needs tasks covering the work it
+  will see.
+- **The measurement scripts suggest feature calls.** The agent decides the features and
+  writes the model, and Compass found no Ethos divergence, but the hints sit close to the
+  Ethos's "no reconstruction routine" line.
+- **IoU barely sees a missing small feature.** A model without its branch can stay above
+  0.9; the agent's own save checks that every planned feature is present, the eval does
+  not. Margins are moderate (IoU 0.92-0.96).
+- **`independent-dimensions` can be met by two stretches along different axes.** It is a
+  starting point for design intent; Compass reads the Ethos for the rest.
+- **The agent's report can overstate.** The saved file is what is graded.
 - **`single-visible-object` reads saved visibility.** A file whose Body is hidden but whose
   tip is visible passes; whether FreeCAD's GUI then shows the part is unconfirmed.
 - **The eval's network rule is per host.** The agent's container can reach any port on
@@ -359,7 +376,7 @@ and grades, without credentials, services or Docker.
 
 **This does not verify:** the live path. For that, run the controls in
 [evals/](evals/README.md#rerun) (NOP 0, Oracle 1, every negative 0), then Step 1: four
-trials that each report seven checks, and their traces in Intake with `reward` and
+trials that each report eight checks, and their traces in Intake with `reward` and
 `iou` attached.
 
 ## Teardown
