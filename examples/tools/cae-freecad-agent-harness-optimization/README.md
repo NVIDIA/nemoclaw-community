@@ -26,20 +26,24 @@ agent is for, what success looks like, and what it must and must not do. Every p
 loop reads it, and the loop optimizes exactly what it says. Here the agent first reached a
 perfect score while missing what the owner actually wanted; one revision of the Ethos,
 and the checks that came from it, steered the next rounds to an agent that models the part
-the way an engineer would. The final agent, on **Nemotron 3 Ultra**, passes every check on
-10 of 10 runs ([Results](#results)).
+the way an engineer would. The final agent, on **Nemotron 3 Ultra**, passes all nine checks
+on 10 of 10 runs ([Results](#results)).
 
 ## Screenshot
 
 ![Each reference mesh in blue beside the final agent's reconstruction in orange](assets/results.png)
 
 The task: rebuild each blue mesh as an editable FreeCAD model. Orange is the final
-agent's reconstruction from a typical run: a body lofted through measured cross-sections,
-a cavity cut from the measured floor, and a branch (a swept tube on the left, a lofted arm
-on the right), driven by named dimensions such as height, floor and branch length. The
-agent chose these features and wrote the code itself. Its overlap with the mesh (IoU, see
-below) is 0.930 and 0.922. Rendered headless from the saved files with
-[skills/cad-experimenter/render](skills/cad-experimenter/render/).
+agent's reconstruction from a typical run: a smooth body lofted through measured
+cross-sections, a cavity cut from the measured floor, and a branch (a tube swept along the
+measured centre line on the left, an arm lofted from the rim on the right), driven by
+named dimensions such as height, floor and branch length. The agent chose these features
+and wrote the code itself. Its overlap with the mesh (IoU, see below) is 0.949 and 0.915,
+with 18 and 39 faces. Rendered headless from the saved files with
+[skills/cad-experimenter/render](skills/cad-experimenter/render/), which the experimenter
+also uses from four directions to look for artefacts:
+
+![The same two models from four directions: iso, front, right and top](assets/results-views.png)
 
 ## At A Glance
 
@@ -48,7 +52,7 @@ below) is 0.930 and 0.922. Rendered headless from the saved files with
 | Category | Developer Tool |
 | Contributor or provenance | NVIDIA |
 | Use this when | You have a specialised agent that drives an engineering tool, and you want to find its failures in traces, turn them into a regression eval, and improve the agent against measurement. |
-| You will get | A containerized Deep Agents CAD agent with every run traced to Helix; Compass Insights in Studio; a proven Harbor eval of two parts with eight checks each; and a measured, round-by-round journey, including an Ethos revision, with its final agent. |
+| You will get | A containerized Deep Agents CAD agent with every run traced to Helix; Compass Insights in Studio; a proven Harbor eval of two parts with nine checks each; and a measured, round-by-round journey, including an Ethos revision, with its final agent. |
 | Runs on | Any host with Docker and NeMo Helix; verified on macOS with Colima. |
 | Requires | See [Prerequisites](#prerequisites). |
 | Verified on | macOS, Colima (4 CPU, 16 GiB), FreeCAD 1.1.3 (conda-forge, in the images), NeMo Helix 0.7.1, Deep Agents 0.7.25, NeMo Relay 0.7.3, NeMo Compass `462f09c`, NeMo Eval Author `20f95a0`, Harbor 0.22.0. |
@@ -103,7 +107,7 @@ point; a precise one, with clear intent, success criteria and things not to do, 
 Compass something to judge traces against and gives Eval Author something to turn into
 checks. Each check closes one way to pass while getting worse, so the more distinct
 behaviours the checks cover, the more a passing score means. In this example Eval Author
-grew the eval from five checks to eight, each from evidence in the traces, and each new
+grew the eval from five checks to nine, each from evidence in the traces, and each new
 check changed which agent the loop kept.
 
 **Not tied to any infrastructure.** Compass is an agent that reads traces, and Eval
@@ -168,8 +172,9 @@ the eval's solution, or the rest of your machine.
 **Final agent** ([results/final-agent](results/final-agent/agent.yaml)): a short prompt,
 three knowledge skills (measure the mesh, build features, verify the model) with small
 building blocks the agent composes in its own build script, and a clock middleware. On
-Nemotron 3 Ultra it passed **10 of 10** confirmation runs, five per part, every check
-passing, IoU 0.918-0.958, about 4 minutes per run.
+Nemotron 3 Ultra it passed **10 of 10** confirmation runs, five per part, all nine checks
+passing: IoU 0.949-0.952 with 18 faces on part 1, 0.910-0.924 with 38-39 faces on part 2,
+about 3.5 minutes and 0.12 M tokens per run.
 
 A run passes only when all nine checks pass:
 
@@ -185,7 +190,7 @@ A run passes only when all nine checks pass:
 | `single-visible-object` | Only the finished model is visible when the file is opened. |
 | `compact-model` | At most 10× the faces of the reference solution: a designer's model, not a stack of slices. |
 
-### How it got there: two chapters
+### How it got there: three chapters
 
 **Chapter 1, the first Ethos.** It asked for a valid, editable, native feature tree that
 matches the mesh. Starting from a two-sentence prompt, the loop reached 10 of 10 in four
@@ -202,10 +207,20 @@ Eval Author turned the second into one proven check, `independent-dimensions`. R
 the chapter-1 agent fell from 10 of 10 to 0 of 10, and Compass, reading its traces
 against the revised Ethos, reported that it "delegates the modelling to a fixed script".
 
-**Chapter 2, the revised Ethos.** Four more rounds produced the final agent.
+**Chapter 2, the revised Ethos.** Four more rounds produced an agent that models the part
+itself and passes every check.
+
+**Chapter 3, looking at the models.** Rendered from four directions, the chapter-2 models
+showed artefacts no check measured: creases where a branch meets the body, seams between
+sections, a pinched, hexagonal arm. The experimenter skill now asks for this review on
+every round. Removing the artefacts exposed one more gap: some runs built the model without
+its branch and still passed, because IoU barely notices a small missing feature. Eval
+Author added `no-missing-feature` from those runs, and the last round made the branch
+reliable.
 
 Each round ran both parts twice, all runs in parallel, 5 minutes per run. *Checks* counts
-passing checks across the four runs (out of 28 with seven checks, 32 with eight):
+passing checks across the four runs, out of the checks the eval had at the time (28 with
+seven, 32 with eight, 36 with nine):
 
 | Round | What the traces and Insights showed | Change to the agent, and why | Runs passed | Checks | IoU (part 1 · part 2) |
 | --- | --- | --- | --- | --- | --- |
@@ -221,6 +236,11 @@ passing checks across the four runs (out of 28 with seven checks, 32 with eight)
 | 5 (rejected) | | **Knowledge skills** (measure, build features, verify) and the agent writes its own build script: *what the revised Ethos asks for.* A second candidate added a measuring **subagent**. Both failed: 200-line scripts of raw FreeCAD calls, geometry in the wrong place, nothing saved; 10-minute runs did not help. | 0/4 | 3/32 | none |
 | 6 (kept) | API mistakes and mixed coordinate frames ate every run. | **Feature-level building blocks** in world coordinates, any number an expression over named dimensions, and *build the body first and save*: *leave the decisions to the agent, take the plumbing away.* Two variants: the agent alone, and one with a **planner subagent** that plans the features first. Both passed 2/4; the planner variant passed more checks and was kept. | 2/4 | 30/32 | 0.90, 0.92 · 0.27, 0.80 |
 | 7 (kept) | Single wrong decisions the agent never saw (a body lofted too high, a cut through a floor, a branch never built), and runs stopped before reporting. | **A clock** (middleware: the time used on every tool result, a stop-and-report at 4 minutes), **a save that names the missing regions and the feature responsible**, and a structure summary: *let the agent see what it cannot measure.* The planner subagent added nothing and was dropped. | **4/4** | **32/32** | 0.93, 0.93 · 0.95, 0.92 |
+| **Chapter 3** | | | | | |
+| 8 (rejected) | Multi-view renders: creases at the branch roots, seams, a faceted floor; on part 2 a pinched, hexagonal arm with a blunt end. | **A smooth body loft, no sections where a branch merges, smoothed outlines, and branches lofted across their own axis**: *remove each artefact at its cause.* Part 1's artefacts went (IoU 0.95, 18 faces), but fusing part 2's arm failed and the agent saved it without. | smoke only | | 0.95 · 0.63 |
+| 9 (4/4, then 3/4 under the new check) | The arm's underside and the bowl's end wall met at a grazing angle that cannot be fused cleanly. | **The arm starts on the rim's flat face** and ends in a smooth tip measured from the mesh: *meet in one shared plane.* | 4/4 | 32/32 | 0.95, 0.92 · 0.92, 0.93 |
+| | Two runs saved part 1 without its branch and passed every check. | Eval Author added `no-missing-feature`; round 9 re-graded to 3/4. | | | |
+| 10 (kept) | The agent hand-edited the branch's path ends and got one wrong, so the sweep failed and was dropped; nothing told it the model was incomplete. | **The measured path with its ends in the wall, a tube that repairs or falls back to it, and a save that reports COMPLETE or INCOMPLETE**: *never finish without a planned feature.* | **4/4** | **36/36** | **0.95, 0.95 · 0.92, 0.93** |
 
 Then the 10-run confirmation above. What each round taught is in
 [results/](results/README.md#what-the-rounds-taught).
@@ -423,9 +443,11 @@ The 5-minute run limit and 3 GiB memory cap live in each task's
 - **The measurement scripts suggest feature calls.** The agent decides the features and
   writes the model, and Compass found no Ethos divergence, but the hints sit close to the
   Ethos's "no reconstruction routine" line.
-- **IoU barely sees a missing small feature.** A model without its branch can stay above
-  0.9; the agent's own save checks that every planned feature is present, the eval does
-  not. Margins are moderate (IoU 0.92-0.96).
+- **Thin missing features.** `no-missing-feature` sees a missing piece thicker than about 3%
+  of the part's size; a thinner one, with IoU still above 0.9, would pass. The agent's own
+  save also compares the measured structure with the model.
+- **Remaining artefacts.** Mild waviness on part 1's body and a faint square on its cavity
+  floor; a slight crease under part 2's arm at the rim and a shallow groove at its tip.
 - **`independent-dimensions` can be met by two stretches along different axes.** It is a
   starting point for design intent; Compass reads the Ethos for the rest.
 - **The agent's report can overstate.** The saved file is what is graded.

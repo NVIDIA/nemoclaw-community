@@ -11,9 +11,11 @@ Author review of the new Insights, and a fresh experimenter
 candidates. A candidate was kept only if it passed more runs than the agent under study
 (or as many runs and more checks), with no part and no check worse.
 
-The story has two chapters. In the first, the loop met everything the Ethos asked for,
+The story has three chapters. In the first, the loop met everything the Ethos asked for,
 with an agent that ran one reconstruction script. Looking at the result, the owner saw
-that the Ethos had missed part of the intent, revised it, and let the loop run again.
+that the Ethos had missed part of the intent, revised it, and let the loop run again. In
+the third, renders from several directions showed artefacts that no check measured, and
+removing them exposed one more gap in the eval.
 
 The final agent is in [final-agent/](final-agent/).
 
@@ -64,11 +66,30 @@ Checks are out of 32 (eight per run).
 | 6. Feature-level blocks (kept) | | `cadkit.py`: sections and features in world coordinates, any number an expression over named parameters; build the body first and save, then one feature at a time. | 2/4 | 30 | 0.90, 0.92 | 0.27, 0.80 | 0.24 M |
 | 7. A clock and "where is it wrong" (kept) | Single wrong decisions the agent never saw (body lofted to the bounding box top, a cavity through the floor, a branch never built); no sense of time. | Middleware: a clock on every tool result and a stop-and-report at 240 s. Saves list the features in the model and the regions that are missing or extra; measurements end with a STRUCTURE summary. | **4/4** | **32** | 0.93, 0.93 | 0.95, 0.92 | 0.25 M |
 
-**Confirmation** of the final agent: **10 of 10**, five per part, every check passing:
-part 1 IoU 0.925-0.932, part 2 IoU 0.918-0.958, 3-4 PartDesign features and 28-55 faces,
-about 4 minutes and 0.25 M tokens per run. Compass's Ethos-divergence signal found
-nothing; its remaining Insights are about margins (a late repair that timed out, excess
-material where the body meets a curved branch).
+This agent (`cad-u9a`) passed a 10-run confirmation with every check (part 1 IoU
+0.925-0.932, part 2 0.918-0.958).
+
+## Chapter 3: looking at the models
+
+The owner asked the experimenter to render every model from several directions and look
+for anything a designer would object to. The chapter-2 models had creases where the branch
+meets the body, seams between loft sections and a faceted cavity floor on part 1, and a
+pinched, hexagonal arm with a blunt end on part 2 ([render](../assets/results-views.png)
+shows the final agent from the same four directions). Checks are out of 32 (eight per
+run), then 36 (nine).
+
+| Round | What the renders, traces and Insights showed | Change | Runs | Checks | Part 1 IoU | Part 2 IoU | Tokens / run |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 8. Smooth bodies (rejected) | Every artefact came from a building block, the same in all ten confirmation runs. | A smooth body loft, no sections where a branch merges into the outline, smoothed outlines, branches lofted across their own axis. Part 1's artefacts went; fusing part 2's arm to the smoothed rim failed. | smoke only | | 0.95 | 0.63 | |
+| 9. The arm on the rim (4/4, then 3/4) | The arm's underside and the bowl's end wall met at a grazing angle that cannot be fused cleanly. | The arm starts on the rim's flat face, so the two meet in one shared plane; a smooth tip measured from the mesh. | **4/4** | **32** | 0.92, 0.95 | 0.92, 0.93 | 0.16 M |
+| | Two part-1 runs saved the model without its branch and passed every check: IoU 0.918. | Eval Author added `no-missing-feature`: the largest connected piece of the part the model leaves out must be at most 1.2% of its volume. Round 9 re-graded: 3/4. | | | | | |
+| 10. A branch that is never dropped (kept) | The agent hand-edited the branch path's ends and got one wrong, so the sweep failed and was dropped; nothing told it the model was incomplete. | The measurement prints the full path with its ends in the wall; the tube repairs a bad path or falls back to the measured one; the save compares the measured structure with the model and reports COMPLETE or INCOMPLETE. | **4/4** | **36** | 0.95, 0.95 | 0.92, 0.93 | 0.13 M |
+
+**Confirmation** of the final agent (`cad-u14a`): **10 of 10**, five per part, all nine
+checks passing: part 1 IoU 0.949-0.952 with 18 faces, part 2 IoU 0.910-0.924 with 38-39
+faces, the branch present in every run, about 3.5 minutes and 0.12 M tokens per run.
+Against chapter 2 it ties on runs and checks; it was kept because its renders are clearly
+cleaner and its mean IoU is no lower (the keep rule's tie-break).
 
 ## What the rounds taught
 
@@ -89,7 +110,12 @@ material where the body meets a curved branch).
   the missing region and the feature responsible, and a structure summary removed the
   single wrong decisions that made runs fail.
 - **Look at the models.** Renders showed a missing arm and a cut through a floor before
-  the numbers did; the experimenter skill now renders every model it diagnoses.
+  the numbers did, and four views showed artefacts no check measured. The experimenter
+  skill now renders every model from several directions and lists what a designer would
+  object to.
+- **A cleaner model can expose an eval gap.** Removing artefacts made the agent's branch
+  less reliable, and the eval did not notice a model without it. One more proven check,
+  from those runs, put the gap back under measurement.
 - **More time is not more skill.** Doubling the run to 10 minutes bought more failed
   rewrites, not convergence.
 
@@ -100,8 +126,9 @@ material where the body meets a curved branch).
   the new one is untested there.
 - **The measurement scripts suggest feature calls.** The agent still decides and writes the
   model, and Compass found no Ethos divergence, but it sits close to the Ethos's line.
-- **Fidelity margins are moderate** (0.92-0.96), and IoU barely notices a missing small
-  feature; the agent's own save checks feature presence, the eval does not.
+- **Thin missing features.** `no-missing-feature` sees a missing piece thicker than about
+  3% of the part's size; a thinner one could still pass. Part 2's fidelity margin is
+  moderate (IoU 0.91-0.92).
 
 Run folders, traces, Compass outputs and experimenter notes stay in the git-ignored
 `experiments/` folder.
