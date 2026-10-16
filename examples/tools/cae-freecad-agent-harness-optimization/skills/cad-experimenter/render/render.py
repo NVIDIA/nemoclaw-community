@@ -1,10 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Render saved models beside their reference meshes: mesh in blue, model in orange,
-one isometric panel per pair, side by side in one PNG.
+"""Render saved models beside their reference meshes (mesh blue, model orange), from
+several directions: one row per model, one column per view, in one PNG.
 
     docker run --rm -v "$PWD":/w -w /w cad-render xvfb-run -a -s "-screen 0 1920x1200x24" \
-      freecadcmd render.py   # with RENDER="model1.FCStd:mesh1.obj model2.FCStd:mesh2.obj" OUT=out.png
+      freecadcmd render.py   # with RENDER="model1.FCStd:mesh1.obj ..." OUT=out.png
+                             # VIEWS=iso,front,right,top (default; also rear, left, bottom)
 """
 import os
 
@@ -16,8 +17,19 @@ Gui.showMainWindow()
 from PySide import QtGui  # noqa: E402  (needs the GUI started)
 
 app = QtGui.QApplication.instance()
-panels = []
-for i, pair in enumerate(os.environ['RENDER'].split()):
+VIEWS = os.environ.get('VIEWS', 'iso,front,right,top').split(',')
+METHODS = {'iso': 'viewIsometric', 'front': 'viewFront', 'rear': 'viewRear', 'right': 'viewRight',
+           'left': 'viewLeft', 'top': 'viewTop', 'bottom': 'viewBottom'}
+W, H = 1000, 700
+
+
+def settle():
+    for _ in range(20):
+        app.processEvents()
+
+
+rows = []
+for pair in os.environ['RENDER'].split():
     model, mesh_path = pair.split(':')
     doc = App.openDocument(os.path.abspath(model))
     for o in doc.Objects:  # rebuild as the verifier does, so the render shows what is graded
@@ -40,24 +52,26 @@ for i, pair in enumerate(os.environ['RENDER'].split()):
         o.ViewObject.ShapeColor, o.ViewObject.DisplayMode = (0.95, 0.55, 0.15), 'Shaded'
     view = Gui.ActiveDocument.ActiveView
     view.setAnimationEnabled(False)
-    view.viewIsometric()
-    for _ in range(20):
-        app.processEvents()
-    view.fitAll()
-    for _ in range(20):
-        app.processEvents()
-    panels.append(f'/tmp/panel{i}.png')
-    view.saveImage(panels[-1], 1400, 900, 'White')
+    row = []
+    for name in VIEWS:
+        getattr(view, METHODS[name])()
+        settle()
+        view.fitAll()
+        settle()
+        path = f'/tmp/panel{len(rows)}_{name}.png'
+        view.saveImage(path, W, H, 'White')
+        row.append((name, path))
+    rows.append(row)
     App.closeDocument(doc.Name)
 
-images = [QtGui.QImage(p) for p in panels]
-out = QtGui.QImage(sum(im.width() for im in images), max(im.height() for im in images),
-                   QtGui.QImage.Format_RGB32)
+out = QtGui.QImage(W * len(VIEWS), H * len(rows), QtGui.QImage.Format_RGB32)
 out.fill(QtGui.QColor('white'))
-painter, x = QtGui.QPainter(out), 0
-for im in images:
-    painter.drawImage(x, 0, im)
-    x += im.width()
+painter = QtGui.QPainter(out)
+painter.setFont(QtGui.QFont('Sans', 20))
+for r, row in enumerate(rows):
+    for c, (name, path) in enumerate(row):
+        painter.drawImage(c * W, r * H, QtGui.QImage(path))
+        painter.drawText(c * W + 16, r * H + 36, name)
 painter.end()
 out.save(os.environ.get('OUT', 'render.png'))
 os._exit(0)  # the GUI would otherwise keep running

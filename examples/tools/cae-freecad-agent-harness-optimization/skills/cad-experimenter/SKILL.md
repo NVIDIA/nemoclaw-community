@@ -65,8 +65,19 @@ nemo intake spans list --filter.trace-id=TRACE_ID --all-pages --output-format=js
 
 Find where the behavior happens: the code the agent ran, what came back, what it
 claimed. Look at the saved models too: [render/](render/) draws each one beside its mesh
-(mesh blue, model orange), headless. Read the image: a missing or misplaced feature is
-often obvious there before it is in the numbers.
+(mesh blue, model orange), headless, from several directions (iso, front, right and top
+by default; `VIEWS=` for others). Read every view, passing runs included, and list the
+artefacts a designer would object to even when every check passes:
+
+- a missing, misplaced or wrongly shaped feature (a round arm built square, a branch
+  that stops short);
+- notches, pinches, steps or gaps where features meet;
+- ripples, creases, seams or faceting on surfaces that should be smooth;
+- bulges or excess material, and walls, floors or ends that are too thin or too thick.
+
+For each artefact, name the view, the feature that causes it and why. Artefacts are
+problems to diagnose like failing checks: they often cost IoU margin, and a model that
+passes with them is not the model a designer would build.
 
 ```bash
 docker build -t cad-env evals/part-1-reconstruction/environment          # once: the agent's image
@@ -109,7 +120,9 @@ them.
 
 The orchestrator measures each candidate on both tasks, two attempts per part, and keeps
 it only when it passes more runs than the agent under study, or as many runs and more
-checks in total, with no part and no check worse. Otherwise the agent under study stays, and the next round diagnoses again with
+checks in total, with no part and no check worse. With equal runs and checks, the
+orchestrator may keep a candidate whose renders show clearly fewer artefacts, if its IoU
+is no lower; that is a judgement, recorded with the renders. Otherwise the agent under study stays, and the next round diagnoses again with
 fresh evidence. A run lost to the infrastructure rather than the agent (the
 model gateway down, a container that would not start) is void: it is re-run, not counted. Two attempts per part is a quick, noisy signal, so the final agent is
 measured again with more attempts before it is reported.
