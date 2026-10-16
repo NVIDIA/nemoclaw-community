@@ -237,6 +237,13 @@ take an agent like this to production:
 - **More checks from the Ethos.** Every principle the eval cannot check (here: whether a
   missing small feature is caught, whether the model would work in any orientation) is a
   way to pass while getting worse; Eval Author can turn each into a proven check.
+- **Your organisation's design knowledge.** The agent here learned from two meshes and a
+  made-up example. In practice, give it what your engineers already have: design
+  guidelines and modelling standards as skills (how features are ordered, which
+  dimensions are named and how, tolerances and conventions), and reference models of
+  previous designs as examples it can study for how a feature tree is structured. The
+  same material belongs in the Ethos where it states intent, so Compass and Eval Author
+  hold the agent to it.
 
 ## Prerequisites
 
