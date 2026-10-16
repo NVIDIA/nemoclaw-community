@@ -475,7 +475,7 @@ uv run --python 3.13 --with-requirements requirements.txt python -m unittest dis
 **Expected result:**
 
 ```text
-Ran 42 tests
+Ran 46 tests
 
 OK
 ```
