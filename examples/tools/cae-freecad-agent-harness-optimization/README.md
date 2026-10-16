@@ -366,13 +366,14 @@ uv run --python 3.13 --with-requirements requirements.txt python -m unittest dis
 **Expected result:**
 
 ```text
-Ran 39 tests
+Ran 42 tests
 
 OK
 ```
 
-**This verifies:** the verifier's IoU arithmetic and how `publish.py` reads trace IDs
-and grades, without credentials, services or Docker.
+**This verifies:** the verifier's IoU arithmetic, how `publish.py` reads trace IDs and
+grades, and that the two tasks' verifier copies, check lists and reference face counts
+agree, without credentials, services or Docker.
 
 **This does not verify:** the live path. For that, run the controls in
 [evals/](evals/README.md#rerun) (NOP 0, Oracle 1, every negative 0), then Step 1: four
