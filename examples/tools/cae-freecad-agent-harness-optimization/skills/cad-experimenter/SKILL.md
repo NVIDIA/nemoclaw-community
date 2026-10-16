@@ -49,7 +49,7 @@ This skill was written for this example only. It is a worked pattern for the
 | Lever | Where |
 | --- | --- |
 | System prompt | `system_prompt` in `agent.yaml` |
-| Skills | `skills/<name>/SKILL.md` in the agent folder, with any helper files beside it. Deep Agents lists each skill's description in the prompt and the agent reads it when it applies; helper scripts are real files the agent can run with `freecadcmd`. |
+| Skills | `skills/<name>/SKILL.md` in the agent folder, with any files beside it. Deep Agents lists each skill's description in the prompt and the agent reads it when it applies. Skills carry knowledge and small building blocks the agent composes in its own scripts, not a complete reconstruction routine (ETHOS). |
 | Subagents | `subagents` in `agent.yaml`: a list of `{name, description, system_prompt, tools?}`. The agent delegates with its `task` tool. |
 | Middleware | `agent/middleware.py` exporting `MIDDLEWARE`, a list of Deep Agents middleware (e.g. trimming tool output, stopping loops). Use it only for what a prompt or skill cannot do. |
 | Model | `model` in `agent.yaml`. `with-approval`: propose only. |

@@ -83,6 +83,14 @@ Where things run:
   signal.
 - Build the model a designer would: a clean solid from the fewest features that reach
   the fidelity target, not a dense stack of slices that happens to overlap the mesh.
+- The agent does the modelling. It reads the measurements, decides which features
+  describe the part, and writes its own FreeCAD code for that part. Skills and subagents
+  give it knowledge (how to measure, how to build each kind of feature, the FreeCAD API,
+  how to verify), not a routine that turns any mesh into a model in one command: a run
+  whose only modelling step is executing a fixed reconstruction script misses the
+  purpose even when it passes.
+- Generalize: the method must work for parts, proportions and orientations the eval
+  has not shown it. Tuning to the evaluated parts is a failure.
 
 ## Success Criteria
 
@@ -98,6 +106,9 @@ Where things run:
 - At least one named dimension that moves the geometry: after `setDatum` and
   `recompute`, the volume or bounding box changes. A model once carried five named
   parameters, of which one was connected to anything.
+- Dimensions that express design intent: the ones a designer would change (a diameter,
+  a height, a wall thickness, a hole size), each driving its own feature. One parameter
+  that stretches the whole part along one axis is not design intent.
 - It reloads and recomputes cleanly after save and reopen.
 - Compact: about one face per surface of the part, not one per slice or polygon
   segment; the eval allows at most 10 times the faces of the task's reference solution.
@@ -110,10 +121,11 @@ Where things run:
   0.95.
 - Extra verification is worth its token cost; re-deriving the whole model to chase the
   last few points of IoU is not.
-- How the agent is changed: a short system prompt with methods in skills and helper
-  files, over a long prompt with code embedded in it. Fixed code only when the agent
-  cannot do the job without it, delivered in the simplest way. The smallest change
-  that fixes the root cause.
+- How the agent is changed: a short system prompt, with knowledge in skills and work
+  split across subagents where that helps; middleware only for what they cannot do.
+  Code in a skill is small, reusable building blocks the agent composes (measuring a
+  section, checking a solid), never a complete reconstruction routine. The smallest
+  change that fixes the root cause.
 
 ## Constraints
 
