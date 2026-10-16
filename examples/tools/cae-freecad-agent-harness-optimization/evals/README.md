@@ -109,7 +109,7 @@ verifier, no network):
 | Oracle (2 runs) | 1, 1 (IoU 0.9039, 7 faces) | 1, 1 (IoU 0.9985, 36 faces) | none |
 | `visible`: solution with every feature and sketch visible | 0 | 0 | `single-visible-object` |
 | `broken`: solution with its last feature's profile removed | 0 | 0 | `recomputes-after-reopen`, `named-dimension-drives-geometry`, `independent-dimensions` |
-| `scripted`: solution's solid as a scripted base shape | 0 | 0 | `native-feature-tree`, `named-dimension-drives-geometry`, `independent-dimensions` |
+| `scripted`: solution's solid as a scripted base shape, plus one sketch-driven pocket | 0 | 0 | `native-feature-tree`, `named-dimension-drives-geometry`, `independent-dimensions` |
 | `slices`: a real agent run, 32 stacked pads (IoU 0.91, 1,658 faces) | 0 | n/a | `independent-dimensions`, `compact-model` |
 | `one-dimension`: a real run of the final agent, 4 ruled lofts driven by one `Params.Length` (IoU 0.970 / 0.943) | 0 | 0 | `independent-dimensions` |
 

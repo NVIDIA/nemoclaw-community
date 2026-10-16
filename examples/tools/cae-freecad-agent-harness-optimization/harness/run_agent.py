@@ -32,6 +32,12 @@ GATEWAY = f'{HELIX}/apis/inference-gateway/v2/workspaces/{WORKSPACE}/openai/-/v1
 INTAKE = f'{HELIX}/apis/intake/v2/workspaces/{WORKSPACE}/ingest/atif'
 
 
+def transient(error: Exception) -> bool:
+    """A gateway blip worth retrying, not a request that will fail again."""
+    return any(s in str(error) for s in ('Connection error', 'timed out', 'Timeout',
+                                         'Rate limit', ' 502', ' 503', ' 504'))
+
+
 async def main(agent_dir: str, instruction: str) -> None:
     spec = yaml.safe_load((Path(agent_dir) / 'agent.yaml').read_text())
     model = os.environ.get('CAD_MODEL') or spec['model']
@@ -40,8 +46,8 @@ async def main(agent_dir: str, instruction: str) -> None:
     middleware = runpy.run_path(str(extra))['MIDDLEWARE'] if extra.exists() else []
     # Harness, not agent: ride out model-gateway blips. The client's own retries did not
     # catch them (they surfaced through NeMo Relay's wrapper and ended the run).
-    middleware = [ModelRetryMiddleware(max_retries=4, initial_delay=2.0, max_delay=30.0),
-                  *middleware]
+    middleware = [ModelRetryMiddleware(max_retries=4, initial_delay=2.0, max_delay=30.0,
+                                       retry_on=transient), *middleware]
     agent = create_deep_agent(**add_nemo_relay_integration(
         name=spec['name'], system_prompt=spec['system_prompt'], subagents=spec.get('subagents'),
         skills=[f'{agent_dir}/skills/'], middleware=middleware,

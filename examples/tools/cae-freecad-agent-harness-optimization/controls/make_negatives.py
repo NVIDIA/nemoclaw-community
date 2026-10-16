@@ -8,13 +8,16 @@ visible.FCStd:  every feature and sketch left visible       -> fails single-visi
 broken.FCStd:   the last feature's profile removed, saved     -> fails recomputes-after-reopen
                 without rebuilding (the stored shape still looks right)
 scripted.FCStd: the solution's solid as a scripted shape     -> fails native-feature-tree
-                under the Body (BaseFeature)
+                under the Body (BaseFeature), plus one small sketch-driven
+                Pocket, so only the scripted base fails the check
 
 slices.FCStd and one-dimension.FCStd are real agent runs, not generated (evals/README.md).
 """
 import os
 
 import FreeCAD as App
+import Part
+import Sketcher
 
 out = os.environ["OUT"]
 
@@ -44,6 +47,19 @@ base = doc.addObject("Part::Feature", "Scripted")
 base.Shape = solid
 body = doc.addObject("PartDesign::Body", "Body")
 body.BaseFeature = base
+doc.recompute()
+# A small pocket straight down into the highest point of the part: a real sketch feature.
+top = max(solid.Vertexes, key=lambda v: v.Point.z).Point
+r = 0.02 * solid.BoundBox.DiagonalLength
+sketch = body.newObject("Sketcher::SketchObject", "Sketch")
+sketch.AttachmentSupport = [(body.Origin.OriginFeatures[3], "")]  # XY plane
+sketch.MapMode = "FlatFace"
+sketch.AttachmentOffset = App.Placement(App.Vector(0, 0, top.z), App.Rotation())
+sketch.addGeometry(Part.Circle(App.Vector(top.x, top.y, 0), App.Vector(0, 0, 1), r))
+sketch.renameConstraint(sketch.addConstraint(Sketcher.Constraint("Radius", 0, r)), "Radius")
+pocket = body.newObject("PartDesign::Pocket", "Pocket")
+pocket.Profile = sketch
+pocket.Length = r
 doc.recompute()
 for obj in doc.Objects:
     obj.Visibility = obj is body

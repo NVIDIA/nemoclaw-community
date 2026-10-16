@@ -3,6 +3,7 @@
 """Each Harbor task carries its own copy of the verifier (a task's tests/ must stand alone);
 the copies must stay identical, and test.sh must list exactly the checks the verifier writes."""
 
+import json
 import re
 import unittest
 from pathlib import Path
@@ -22,6 +23,13 @@ class EvalsInSyncTest(unittest.TestCase):
         for task in TASKS:
             listed = re.search(r'for id in ([\w\s-]+); do', (task / 'tests' / 'test.sh').read_text())
             self.assertEqual(set(listed.group(1).split()), rows, task.name)
+
+    def test_ref_faces_matches_the_oracle(self):
+        manifest = json.loads((EVALS / 'manifest.json').read_text())
+        for task in manifest['tasks']:
+            test_sh = (EVALS / task['path'] / 'tests' / 'test.sh').read_text()
+            faces = int(re.search(r'REF_FACES=(\d+)', test_sh).group(1))
+            self.assertEqual(faces, task['controls']['oracle']['faces'], task['id'])
 
 
 if __name__ == '__main__':

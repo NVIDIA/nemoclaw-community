@@ -81,7 +81,8 @@
               "native-feature-tree",
               "named-dimension-drives-geometry",
               "independent-dimensions"
-            ]
+            ],
+            "model": "the solution's solid as a scripted base shape plus one sketch-driven pocket"
           },
           "slices": {
             "reward": 0,
@@ -139,7 +140,8 @@
               "native-feature-tree",
               "named-dimension-drives-geometry",
               "independent-dimensions"
-            ]
+            ],
+            "model": "the solution's solid as a scripted base shape plus one sketch-driven pocket"
           },
           "one-dimension": {
             "reward": 0,

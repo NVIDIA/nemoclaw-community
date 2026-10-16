@@ -94,22 +94,22 @@ def drivers(doc):
 SIZE_CHANGE_MIN = 0.01
 
 
-def set_value(obj, name, value):
-    """Set a named parameter; a spreadsheet alias is set through its cell, which takes any
-    number (setattr rejects a float for a whole-number alias)."""
-    if obj.TypeId == "Spreadsheet::Sheet":
-        obj.set(obj.getCellFromAlias(name), str(value))
-    else:
-        setattr(obj, name, value)
-
-
-def response(doc, body, before, kind, obj, name):
+def response(doc, body, kind, obj, name):
     """Change one named dimension by 10%, rebuild, and return (clean, relative change of
-    volume, X, Y and Z length) against `before`. The value is restored."""
+    volume, X, Y and Z length). The value is restored."""
+    before = fingerprint(body)
     if kind == "constraint":
-        value, put = obj.getDatum(name), (lambda v: obj.setDatum(name, v))
+        value = obj.getDatum(name)
+        put, restore = (lambda v: obj.setDatum(name, v)), (lambda: obj.setDatum(name, value))
+    elif obj.TypeId == "Spreadsheet::Sheet":
+        # Through the cell, which takes any number, and restored to its exact contents, so a
+        # formula such as =Length/2 stays a formula.
+        cell, value = obj.getCellFromAlias(name), getattr(obj, name)
+        contents = obj.getContents(cell)
+        put, restore = (lambda v: obj.set(cell, str(v))), (lambda: obj.set(cell, contents))
     else:
-        value, put = getattr(obj, name), (lambda v: set_value(obj, name, v))
+        value = getattr(obj, name)
+        put, restore = (lambda v: setattr(obj, name, v)), (lambda: setattr(obj, name, value))
     try:
         put(value * 1.1)
         doc.recompute()
@@ -122,7 +122,7 @@ def response(doc, body, before, kind, obj, name):
             return True, delta
         return (True, delta) if clean(shape) else (False, (0.0,) * len(before))
     finally:
-        put(value)
+        restore()
         doc.recompute()
 
 
@@ -133,7 +133,8 @@ def moves_geometry(change):
 
 # Design intent: two named dimensions that each move the volume or a bounding-box length
 # by INTENT_CHANGE_MIN and change the part differently (cosine of their changes below
-# INTENT_COSINE_MAX), compared with each other, so any part and orientation works.
+# INTENT_COSINE_MAX in magnitude: opposite changes are the same stretch), compared with
+# each other, so any part and orientation works.
 INTENT_CHANGE_MIN = 0.005
 INTENT_COSINE_MAX = 0.9
 
@@ -171,9 +172,10 @@ def single_visible_object(doc, body):
 def main():
     open(RESULTS, "w").close()
     doc = FreeCAD.openDocument(os.environ["MODEL"])
-    # Rebuild every feature from its inputs, as reopening in FreeCAD and editing would:
-    # a plain recompute only rebuilds objects saved as touched, and a failed rebuild
-    # keeps the stored shape. The checks below then grade the rebuilt model.
+    # Rebuild every feature from its inputs, as reopening in FreeCAD and editing would: a
+    # plain recompute only rebuilds objects saved as touched. A feature whose rebuild fails
+    # keeps its stored shape, so the checks below may still see that shape; this check
+    # fails the run.
     for obj in doc.Objects:
         obj.touch()
     doc.recompute()
@@ -193,16 +195,18 @@ def main():
     row("native-feature-tree", bool(sketch_driven) and not wrappers)
 
     fidelity = iou(body) if solid else 0.0
-    print("mesh-fidelity IoU", round(fidelity, 4))
+    if solid:
+        print("mesh-fidelity IoU", round(fidelity, 4))
+    else:
+        print("mesh-fidelity not measured: no valid solid")
     row("mesh-fidelity", fidelity >= IOU_MIN)
 
     driven, intent = False, False
     moving = []  # (name, relative change) of each dimension that moves the part
     if solid:
-        before = fingerprint(body)
         for candidate in drivers(doc):
             try:
-                change = response(doc, body, before, *candidate)
+                change = response(doc, body, *candidate)
             except Exception as exc:  # a driver that cannot be changed does not count
                 print("driver", candidate[2], "failed:", exc)
                 continue
@@ -211,7 +215,7 @@ def main():
             driven = driven or moves_geometry(change)
             if change[0] and max(abs(d) for d in change[1]) >= INTENT_CHANGE_MIN:
                 for name, other in moving:
-                    if cosine(change[1], other) < INTENT_COSINE_MAX:
+                    if abs(cosine(change[1], other)) < INTENT_COSINE_MAX:
                         print("independent dimensions:", name, "and", candidate[2])
                         intent = True
                 moving.append((candidate[2], change[1]))
