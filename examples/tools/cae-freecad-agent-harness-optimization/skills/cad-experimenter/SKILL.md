@@ -64,7 +64,17 @@ nemo intake spans list --filter.trace-id=TRACE_ID --all-pages --output-format=js
 ```
 
 Find where the behavior happens: the code the agent ran, what came back, what it
-claimed. Write `DIAGNOSIS.md`: per problem, the root cause in two or three sentences,
+claimed. Look at the saved models too: [render/](render/) draws each one beside its mesh
+(mesh blue, model orange), headless. Read the image: a missing or misplaced feature is
+often obvious there before it is in the numbers.
+
+```bash
+docker build -t cad-env evals/part-1-reconstruction/environment          # once
+docker build -t cad-render skills/cad-experimenter/render                # once
+docker run --rm -v "$PWD":/w -w /w -e OUT=render.png \
+  -e RENDER="<trial>/artifacts/app/model.FCStd:evals/part-1-reconstruction/environment/reference.obj" \
+  cad-render xvfb-run -a -s "-screen 0 1920x1200x24" freecadcmd skills/cad-experimenter/render/render.py
+``` Write `DIAGNOSIS.md`: per problem, the root cause in two or three sentences,
 citing trace IDs. Note shared causes, and what already works and must be kept.
 
 **2. Propose.** Write `PLAN.md`: up to two candidates, each naming the problems it
