@@ -218,29 +218,31 @@ its branch and still passed, because IoU barely notices a small missing feature.
 Author added `no-missing-feature` from those runs, and the last round made the branch
 reliable.
 
-Each round ran both parts twice, all runs in parallel, 5 minutes per run. *Checks* counts
-passing checks across the four runs, out of the checks the eval had at the time (28 with
-seven, 32 with eight, 36 with nine):
+Each round ran both parts twice, all runs in parallel, 5 minutes per run. *Surface changed*
+names what the experimenter edited in the agent folder (system prompt, skills and their
+files, middleware, subagents). *Checks* counts passing checks across the four runs, out of
+the checks the eval had at the time (28 with seven, 32 with eight, 36 with nine).
+*Tokens / run* is the median per run, from the traces:
 
-| Round | What the traces and Insights showed | Change to the agent, and why | Runs passed | Checks | IoU (part 1 · part 2) |
-| --- | --- | --- | --- | --- | --- |
-| **Chapter 1** | | | | | |
-| 0 | The base agent spent its 5 minutes studying the mesh and learning FreeCAD by trial and error; it saved nothing. | none (base agent) | 0/4 | 0/28 | none |
-| 1 (kept) | No method and no sense of time. | **A skill with a script** that builds, saves and checks a model in one command, plus a time budget in the prompt: *give the agent a method and get a model saved early.* | 0/4 | 22/28 | 0.91 · 0.78 |
-| | Compass: the models are dense stacks of slices, and they pass every check. | Eval Author added `compact-model`. | | | |
-| 2 (rejected) | 1,700-face slice stacks; flat slices stair-step slanted walls. | **Lofts** through cross-sections instead of slices: *fewer faces, smoother walls.* The lofts did not fuse into one valid solid. | 0/4 | 18/28 | invalid · 0.85 |
-| 3 (kept) | Nearly tangent walls at a branch joint; the script's own IoU estimate misled the agent. | **Valid joints and a trustworthy IoU estimate**: *one clean solid, and retries the agent can rank.* | **4/4** | **28/28** | 0.97 · 0.94 |
-| **Ethos revision** | The model is a stretched trace from one script, not a designer's model. | The owner revises ETHOS.md; Eval Author adds `independent-dimensions`; round 3's agent falls to 0/10. | | | |
-| **Chapter 2** | | | | | |
-| 4 | Round 3's agent fails only `independent-dimensions`; Compass: it delegates the modelling to a fixed script. | none (new baseline) | 0/4 | 28/32 | 0.97 · 0.94 |
-| 5 (rejected) | | **Knowledge skills** (measure, build features, verify) and the agent writes its own build script: *what the revised Ethos asks for.* A second candidate added a measuring **subagent**. Both failed: 200-line scripts of raw FreeCAD calls, geometry in the wrong place, nothing saved; 10-minute runs did not help. | 0/4 | 3/32 | none |
-| 6 (kept) | API mistakes and mixed coordinate frames ate every run. | **Feature-level building blocks** in world coordinates, any number an expression over named dimensions, and *build the body first and save*: *leave the decisions to the agent, take the plumbing away.* Two variants: the agent alone, and one with a **planner subagent** that plans the features first. Both passed 2/4; the planner variant passed more checks and was kept. | 2/4 | 30/32 | 0.90, 0.92 · 0.27, 0.80 |
-| 7 (kept) | Single wrong decisions the agent never saw (a body lofted too high, a cut through a floor, a branch never built), and runs stopped before reporting. | **A clock** (middleware: the time used on every tool result, a stop-and-report at 4 minutes), **a save that names the missing regions and the feature responsible**, and a structure summary: *let the agent see what it cannot measure.* The planner subagent added nothing and was dropped. | **4/4** | **32/32** | 0.93, 0.93 · 0.95, 0.92 |
-| **Chapter 3** | | | | | |
-| 8 (rejected) | Multi-view renders: creases at the branch roots, seams, a faceted floor; on part 2 a pinched, hexagonal arm with a blunt end. | **A smooth body loft, no sections where a branch merges, smoothed outlines, and branches lofted across their own axis**: *remove each artefact at its cause.* Part 1's artefacts went (IoU 0.95, 18 faces), but fusing part 2's arm failed and the agent saved it without. | smoke only | | 0.95 · 0.63 |
-| 9 (4/4, then 3/4 under the new check) | The arm's underside and the bowl's end wall met at a grazing angle that cannot be fused cleanly. | **The arm starts on the rim's flat face** and ends in a smooth tip measured from the mesh: *meet in one shared plane.* | 4/4 | 32/32 | 0.95, 0.92 · 0.92, 0.93 |
-| | Two runs saved part 1 without its branch and passed every check. | Eval Author added `no-missing-feature`; round 9 re-graded to 3/4. | | | |
-| 10 (kept) | The agent hand-edited the branch's path ends and got one wrong, so the sweep failed and was dropped; nothing told it the model was incomplete. | **The measured path with its ends in the wall, a tube that repairs or falls back to it, and a save that reports COMPLETE or INCOMPLETE**: *never finish without a planned feature.* | **4/4** | **36/36** | **0.95, 0.95 · 0.92, 0.93** |
+| Round | Surface changed | What the traces and Insights showed | Change to the agent, and why | Runs passed | Checks | IoU (part 1 · part 2) | Tokens / run |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **Chapter 1** | | | | | | | |
+| 0 | none: a two-sentence system prompt, no skills | The base agent spent its 5 minutes studying the mesh and learning FreeCAD by trial and error; it saved nothing. | none (base agent) | 0/4 | 0/28 | none | 1.9 M |
+| 1 (kept) | system prompt (+3 lines); new skill `mesh-to-partdesign` (`SKILL.md`, script `mesh2pd.py`) | No method and no sense of time. | **A skill with a script** that builds, saves and checks a model in one command, plus a time budget in the prompt: *give the agent a method and get a model saved early.* | 0/4 | 22/28 | 0.91 · 0.78 | 0.04 M |
+| | | Compass: the models are dense stacks of slices, and they pass every check. | Eval Author added `compact-model`. | | | | |
+| 2 (rejected) | skill `mesh-to-partdesign`: `mesh2pd.py` rewritten, `SKILL.md` retry rules | 1,700-face slice stacks; flat slices stair-step slanted walls. | **Lofts** through cross-sections instead of slices: *fewer faces, smoother walls.* The lofts did not fuse into one valid solid. | 0/4 | 18/28 | invalid · 0.85 | 0.08 M |
+| 3 (kept) | skill `mesh-to-partdesign`: `mesh2pd.py` (joints, IoU estimate), `SKILL.md` | Nearly tangent walls at a branch joint; the script's own IoU estimate misled the agent. | **Valid joints and a trustworthy IoU estimate**: *one clean solid, and retries the agent can rank.* | **4/4** | **28/28** | 0.97 · 0.94 | 0.02 M |
+| **Ethos revision** | | The model is a stretched trace from one script, not a designer's model. | The owner revises ETHOS.md; Eval Author adds `independent-dimensions`; round 3's agent falls to 0/10. | | | | |
+| **Chapter 2** | | | | | | | |
+| 4 | none | Round 3's agent fails only `independent-dimensions`; Compass: it delegates the modelling to a fixed script. | none (new baseline) | 0/4 | 28/32 | 0.97 · 0.94 | 0.03 M |
+| 5 (rejected) | system prompt rewritten; `mesh-to-partdesign` removed; new skills `measure-mesh`, `partdesign-features`, `verify-model`; second candidate: a `measurer` subagent | | **Knowledge skills** (measure, build features, verify) and the agent writes its own build script: *what the revised Ethos asks for.* A second candidate added a measuring **subagent**. Both failed: 200-line scripts of raw FreeCAD calls, geometry in the wrong place, nothing saved; 10-minute runs did not help. | 0/4 | 3/32 | none | 1.0 M |
+| 6 (kept) | system prompt (build order); skill `build-features` (`cadkit.py`); `measure-mesh` (`branch.py`, `extent.py`); a `planner` subagent | API mistakes and mixed coordinate frames ate every run. | **Feature-level building blocks** in world coordinates, any number an expression over named dimensions, and *build the body first and save*: *leave the decisions to the agent, take the plumbing away.* Two variants: the agent alone, and one with a **planner subagent** that plans the features first. Both passed 2/4; the planner variant passed more checks and was kept. | 2/4 | 30/32 | 0.90, 0.92 · 0.27, 0.80 | 0.24 M |
+| 7 (kept) | new middleware (`middleware.py`, clock); `verify-model` (`where.py`); `build-features` (`cadkit.py` save); `measure-mesh` (`measure.py` STRUCTURE); system prompt; `planner` subagent removed | Single wrong decisions the agent never saw (a body lofted too high, a cut through a floor, a branch never built), and runs stopped before reporting. | **A clock** (middleware: the time used on every tool result, a stop-and-report at 4 minutes), **a save that names the missing regions and the feature responsible**, and a structure summary: *let the agent see what it cannot measure.* The planner subagent added nothing and was dropped. | **4/4** | **32/32** | 0.93, 0.93 · 0.95, 0.92 | 0.25 M |
+| **Chapter 3** | | | | | | | |
+| 8 (rejected) | skill `build-features` (`cadkit.py`, `SKILL.md`); `measure-mesh` (`branch.py`) | Multi-view renders: creases at the branch roots, seams, a faceted floor; on part 2 a pinched, hexagonal arm with a blunt end. | **A smooth body loft, no sections where a branch merges, smoothed outlines, and branches lofted across their own axis**: *remove each artefact at its cause.* Part 1's artefacts went (IoU 0.95, 18 faces), but fusing part 2's arm failed and the agent saved it without. | smoke only | | 0.95 · 0.63 | smoke only |
+| 9 (4/4, then 3/4 under the new check) | skill `build-features` (`cadkit.py`: `branch_loft`, `SKILL.md`) | The arm's underside and the bowl's end wall met at a grazing angle that cannot be fused cleanly. | **The arm starts on the rim's flat face** and ends in a smooth tip measured from the mesh: *meet in one shared plane.* | 4/4 | 32/32 | 0.95, 0.92 · 0.92, 0.93 | 0.16 M |
+| | | Two runs saved part 1 without its branch and passed every check. | Eval Author added `no-missing-feature`; round 9 re-graded to 3/4. | | | | |
+| 10 (kept) | skills `measure-mesh` (`branch.py` PATH), `build-features` (`cadkit.py`: `tube`, `save`), `verify-model` (`where.py`); system prompt (done = COMPLETE) | The agent hand-edited the branch's path ends and got one wrong, so the sweep failed and was dropped; nothing told it the model was incomplete. | **The measured path with its ends in the wall, a tube that repairs or falls back to it, and a save that reports COMPLETE or INCOMPLETE**: *never finish without a planned feature.* | **4/4** | **36/36** | **0.95, 0.95 · 0.92, 0.93** | **0.13 M** |
 
 Then the 10-run confirmation above. What each round taught is in
 [results/](results/README.md#what-the-rounds-taught).
