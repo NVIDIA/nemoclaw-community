@@ -6,8 +6,8 @@
   uv run --with pyyaml python publish.py insights insights.yml [--agent cad-agent]
 
 scores: for every trial of a Harbor job, attaches the verifier's reward, IoU, failed
-checks and model complexity (features, sketches, faces, ...) to the run's trace (its ID is the first line of agent/run.log), so NeMo
-Compass sees how each run was graded.
+checks and model complexity (features, sketches, faces, ...) to the run's trace (its ID
+is the first line of agent/run.log), so NeMo Compass sees how each run was graded.
 insights: Compass finding -> Helix Insight (name -> title, evidence -> trace_refs);
 Helix has no CLI command for this yet.
 
@@ -68,8 +68,9 @@ def scores(job: Path) -> None:
         target = {'session_id': session, 'span_id': span}
         numbers = {'reward': result['reward'], 'iou': result['iou'],
                    **{f'complexity.{k}': v for k, v in result['complexity'].items()}}
-        numbers = {name: value for name, value in numbers.items() if value is not None}
         for name, value in numbers.items():
+            if value is None:  # IoU the verifier could not measure
+                continue
             api('intake', 'evaluator-results', {**target, 'name': name, 'data_type': 'NUMERIC',
                                                 'value': value})
         api('intake', 'evaluator-results', {**target, 'name': 'failed-checks', 'data_type': 'TEXT',

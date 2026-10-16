@@ -151,7 +151,7 @@ The Harbor tasks in `evals/`, authored with NeMo Eval Author, hold one task per
 reference part, all graded by the same checks; the agent is measured on every part.
 Each task's verifier grades the saved model in its own container, including IoU against
 the reference mesh at 0.1 mm XY resolution. `publish.py scores` attaches each run's
-reward, IoU and failed checks to its Intake trace, and NeMo Compass analyzes those
+reward, IoU, failed checks and complexity counts to its Intake trace, and NeMo Compass analyzes those
 traces against this ethos.
 
 ## Metric Semantics

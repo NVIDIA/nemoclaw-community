@@ -12,6 +12,11 @@
     "single-visible-object",
     "compact-model"
   ],
+  "proved": "2026-10-16, container setup, Harbor 0.22.0 on Colima, eight checks",
+  "isolation": {
+    "agent": "allowlist host.docker.internal (per host, all ports); public hosts blocked",
+    "verifier": "no network"
+  },
   "tasks": [
     {
       "id": "part-1-reconstruction",
@@ -44,7 +49,6 @@
         }
       ],
       "controls": {
-        "proved": "2026-10-16, container setup, Harbor 0.22.0 on Colima, eight checks",
         "nop": {
           "runs": 2,
           "reward": 0,
@@ -92,12 +96,8 @@
             "fails": [
               "independent-dimensions"
             ],
-            "model": "a real run of the final agent (cad-u3b): 4 ruled lofts through 24 B-spline sections, every height driven by one Params.Length, IoU 0.970, 50 faces"
+            "model": "a real run of the final agent: 4 ruled lofts through 24 B-spline sections, every height driven by one Params.Length, IoU 0.970, 50 faces"
           }
-        },
-        "isolation": {
-          "agent": "allowlist host.docker.internal (per host, all ports); public hosts blocked",
-          "verifier": "no network"
         }
       }
     },
@@ -107,7 +107,6 @@
       "source_trace": null,
       "reason": "a second first-party part, so the suite tests that the agent's method is geometry-agnostic as ETHOS.md requires; same instruction, verifier and checks as part-1-reconstruction, different mesh",
       "controls": {
-        "proved": "2026-10-16, container setup, Harbor 0.22.0 on Colima, eight checks",
         "nop": {
           "runs": 2,
           "reward": 0,
@@ -147,12 +146,8 @@
             "fails": [
               "independent-dimensions"
             ],
-            "model": "a real run of the final agent (cad-u3b): 4 ruled lofts through 27 B-spline sections, every height driven by one Params.Length, IoU 0.943, 62 faces"
+            "model": "a real run of the final agent: 4 ruled lofts through 27 B-spline sections, every height driven by one Params.Length, IoU 0.943, 62 faces"
           }
-        },
-        "isolation": {
-          "agent": "allowlist host.docker.internal (per host, all ports); public hosts blocked",
-          "verifier": "no network"
         }
       }
     }

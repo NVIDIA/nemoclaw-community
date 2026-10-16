@@ -30,9 +30,9 @@ This skill was written for this example only. It is a worked pattern for the
   (**Trade-offs**).
 - `agent/`: the agent under study (prompt, model, skills).
 - `runs/eval/`: its eval job, both tasks, two attempts per part. Per trial:
-  `verifier/results` lists the five checks, `verifier/check.log` the IoU and details,
+  `verifier/results` lists the checks, `verifier/check.log` the IoU and details,
   `verifier/reward.txt` the reward, and the first line of `agent/run.log` the trace ID
-  (`trace <id>`). The same reward, IoU and failed checks are attached to each trace.
+  (`trace <id>`). The same reward, IoU, failed checks and complexity counts are attached to each trace.
 - `insights.yml`: Compass Insights on this round's traces, each citing traces.
 - `EVAL-AUTHOR.md`: whether the eval already catches each Insight.
 
@@ -69,12 +69,14 @@ claimed. Look at the saved models too: [render/](render/) draws each one beside 
 often obvious there before it is in the numbers.
 
 ```bash
-docker build -t cad-env evals/part-1-reconstruction/environment          # once
-docker build -t cad-render skills/cad-experimenter/render                # once
+docker build -t cad-env evals/part-1-reconstruction/environment          # once: the agent's image
+docker build -t cad-render skills/cad-experimenter/render                # once: plus a display
 docker run --rm -v "$PWD":/w -w /w -e OUT=render.png \
   -e RENDER="<trial>/artifacts/app/model.FCStd:evals/part-1-reconstruction/environment/reference.obj" \
   cad-render xvfb-run -a -s "-screen 0 1920x1200x24" freecadcmd skills/cad-experimenter/render/render.py
-``` Write `DIAGNOSIS.md`: per problem, the root cause in two or three sentences,
+```
+
+Write `DIAGNOSIS.md`: per problem, the root cause in two or three sentences,
 citing trace IDs. Note shared causes, and what already works and must be kept.
 
 **2. Propose.** Write `PLAN.md`: up to two candidates, each naming the problems it
@@ -86,7 +88,6 @@ code a skill relies on in the agent's own image, on both reference meshes
 (`evals/*/environment/reference.obj`), exactly as the agent will run it:
 
 ```bash
-docker build -t cad-env evals/part-1-reconstruction/environment   # once
 docker run --rm -v "$PWD":/w -w /w cad-env timeout 120 freecadcmd my_test.py
 ```
 

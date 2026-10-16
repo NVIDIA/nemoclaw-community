@@ -28,7 +28,7 @@ runs every reconstruction was reported complete, and none met all requirements.
 The reference mesh is the first-party mesh the instruction names, copied into the
 agent's and the verifier's images. The 0.9 IoU threshold and the editability requirements come from the
 agent's `ETHOS.md`. The reference solution is a passing reconstruction produced by
-the same agent in an earlier run (IoU 0.9038). The task was derived from one recorded
+the same agent in an earlier run (IoU 0.9039). The task was derived from one recorded
 Helix trace whose run was flagged by two NeMo Compass Insights.
 
 ## Solution explanation
@@ -56,8 +56,7 @@ and reports eight checks; the reward is 1 only when all pass:
   leave one clean solid and move the volume or a bounding-box length by at least 0.5%,
   and change the part in different ways (cosine below 0.9 between their relative
   changes of volume, X, Y and Z). One parameter that stretches the whole part, or
-  several that stretch it along the same axis, fails. Added from a Compass Insight
-  after the final agent passed every other check with one `Params.Length`.
+  several that stretch it along the same axis, fails.
 - `mesh-fidelity`: IoU against the reference mesh at 0.1 mm resolution is at least 0.9.
 - `single-visible-object`: every visible object with geometry is the Body or its tip,
   as saved in the file (origin axes and planes are ignored). FreeCAD without its GUI
@@ -65,7 +64,7 @@ and reports eight checks; the reward is 1 only when all pass:
 - `compact-model`: the solid has at most 10 times the faces of the reference
   solution (`REF_FACES` in `tests/test.sh`). A designer's model has about one face per
   surface of the part; stacked slices and faceted profiles add faces with every band
-  and segment. Added from a Compass Insight after slice stacks passed every other check.
+  and segment.
 
 The verifier also logs the model's feature, sketch and face counts
 (`complexity.json`).

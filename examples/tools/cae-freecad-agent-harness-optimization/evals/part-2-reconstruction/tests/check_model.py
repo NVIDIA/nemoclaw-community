@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Grade a saved FreeCAD document. Run with: freecadcmd check_model.py (env MODEL, MESH).
+"""Grade a saved FreeCAD document. Run with: freecadcmd check_model.py (env MODEL, MESH,
+REF_FACES: the reference solution's face count, for compact-model).
 
 Writes one ``<check-id>\\tPASS|FAIL`` row per check to /logs/verifier/results.
 """
@@ -88,58 +89,51 @@ def drivers(doc):
                     yield ("property", target, prop)
 
 
-# A 10% change to a named dimension must leave one clean solid whose overall size
-# (a bounding-box length) changes by at least this fraction: a dimension that only
-# nudges the volume of one detail does not let a designer resize the part.
+# A named dimension moves the part when a 10% change leaves one clean solid whose
+# bounding-box length changes by at least this fraction.
 SIZE_CHANGE_MIN = 0.01
 
 
 def set_value(obj, name, value):
-    """Set a named parameter. A spreadsheet alias that holds a whole number does not take
-    a float through setattr, so its cell is set instead."""
-    if obj.TypeId == "Spreadsheet::Sheet" and int in (type(value), type(getattr(obj, name))):
+    """Set a named parameter; a spreadsheet alias is set through its cell, which takes any
+    number (setattr rejects a float for a whole-number alias)."""
+    if obj.TypeId == "Spreadsheet::Sheet":
         obj.set(obj.getCellFromAlias(name), str(value))
     else:
         setattr(obj, name, value)
 
 
-def response(doc, body, kind, obj, name):
-    """Change one named dimension by 10%, rebuild, and return how the part changed:
-    (clean, relative change of volume, X, Y and Z length). The value is restored."""
-    before = fingerprint(body)
-    value = obj.getDatum(name) if kind == "constraint" else getattr(obj, name)
+def response(doc, body, before, kind, obj, name):
+    """Change one named dimension by 10%, rebuild, and return (clean, relative change of
+    volume, X, Y and Z length) against `before`. The value is restored."""
+    if kind == "constraint":
+        value, put = obj.getDatum(name), (lambda v: obj.setDatum(name, v))
+    else:
+        value, put = getattr(obj, name), (lambda v: set_value(obj, name, v))
     try:
-        if kind == "constraint":
-            obj.setDatum(name, value * 1.1)
-        else:
-            set_value(obj, name, value * 1.1)
+        put(value * 1.1)
         doc.recompute()
         shape = body.Shape
-        ok = not shape.isNull() and shape.isValid() and len(shape.Solids) == 1 and clean(shape)
-        after = fingerprint(body) if ok else before
-        return ok, tuple((a - b) / b if b else 0.0 for a, b in zip(after, before))
+        if shape.isNull() or not shape.isValid() or len(shape.Solids) != 1:
+            return False, (0.0,) * len(before)
+        delta = tuple((a - b) / b if b else 0.0 for a, b in zip(fingerprint(body), before))
+        # The full shape check is costly; it only matters when the part moved enough to count.
+        if max(abs(d) for d in delta) < INTENT_CHANGE_MIN:
+            return True, delta
+        return (True, delta) if clean(shape) else (False, (0.0,) * len(before))
     finally:
-        if kind == "constraint":
-            obj.setDatum(name, value)
-        else:
-            set_value(obj, name, value)
+        put(value)
         doc.recompute()
 
 
 def moves_geometry(change):
-    """One clean solid whose overall size (a bounding-box length) changed by SIZE_CHANGE_MIN."""
     ok, delta = change
     return ok and any(abs(d) >= SIZE_CHANGE_MIN for d in delta[1:])
 
 
-# Design intent: a designer edits a part through several dimensions that each change it
-# in their own way (a height, a diameter, a wall thickness, a hole size). The check needs
-# two named dimensions that each, changed by 10%, leave one clean solid and move the
-# volume or a bounding-box length by at least INTENT_CHANGE_MIN, and whose changes are
-# not the same change: the cosine between their (volume, X, Y, Z) relative changes is
-# below INTENT_COSINE_MAX. One parameter that stretches the whole part, or several that
-# each stretch it along the same axis, does not pass. Works for any part and orientation:
-# it compares the dimensions with each other, not with a reference.
+# Design intent: two named dimensions that each move the volume or a bounding-box length
+# by INTENT_CHANGE_MIN and change the part differently (cosine of their changes below
+# INTENT_COSINE_MAX), compared with each other, so any part and orientation works.
 INTENT_CHANGE_MIN = 0.005
 INTENT_COSINE_MAX = 0.9
 
@@ -183,7 +177,7 @@ def main():
     for obj in doc.Objects:
         obj.touch()
     doc.recompute()
-    broken = [o.Name for o in doc.Objects if "Invalid" in o.State or "Error" in o.State]
+    broken = [o.Name for o in doc.Objects if not o.isValid()]
     if broken:
         print("invalid after recompute:", broken)
     row("recomputes-after-reopen", bool(doc.Objects) and not broken)
@@ -205,9 +199,10 @@ def main():
     driven, intent = False, False
     moving = []  # (name, relative change) of each dimension that moves the part
     if solid:
+        before = fingerprint(body)
         for candidate in drivers(doc):
             try:
-                change = response(doc, body, *candidate)
+                change = response(doc, body, before, *candidate)
             except Exception as exc:  # a driver that cannot be changed does not count
                 print("driver", candidate[2], "failed:", exc)
                 continue

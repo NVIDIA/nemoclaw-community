@@ -38,14 +38,15 @@ async def main(agent_dir: str, instruction: str) -> None:
     # Optional: agent/middleware.py exports MIDDLEWARE, a list of Deep Agents middleware.
     extra = Path(agent_dir) / 'middleware.py'
     middleware = runpy.run_path(str(extra))['MIDDLEWARE'] if extra.exists() else []
-    # Harness, not agent: ride out model-gateway blips instead of losing the run.
+    # Harness, not agent: ride out model-gateway blips. The client's own retries did not
+    # catch them (they surfaced through NeMo Relay's wrapper and ended the run).
     middleware = [ModelRetryMiddleware(max_retries=4, initial_delay=2.0, max_delay=30.0),
                   *middleware]
     agent = create_deep_agent(**add_nemo_relay_integration(
         name=spec['name'], system_prompt=spec['system_prompt'], subagents=spec.get('subagents'),
         skills=[f'{agent_dir}/skills/'], middleware=middleware,
         # The Helix inference gateway needs no key; the client requires one.
-        model=ChatOpenAI(model=model, base_url=GATEWAY, api_key='unused', max_retries=6),
+        model=ChatOpenAI(model=model, base_url=GATEWAY, api_key='unused'),
         backend=LocalShellBackend(root_dir='/app', virtual_mode=False, inherit_env=True,
                                   timeout=TIMEOUT)))
     tools = [convert_to_openai_tool(t)['function']

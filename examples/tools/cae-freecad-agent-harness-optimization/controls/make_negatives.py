@@ -10,11 +10,7 @@ broken.FCStd:   the last feature's profile removed, saved     -> fails recompute
 scripted.FCStd: the solution's solid as a scripted shape     -> fails native-feature-tree
                 under the Body (BaseFeature)
 
-part-1-reconstruction/slices.FCStd is not generated: it is a real agent run (32 stacked
-pads, IoU 0.91) that passes every other check and fails compact-model.
-<task>/one-dimension.FCStd is not generated either: a real run of the final agent (4 ruled
-lofts, every section height a fraction of one Params.Length) that passes every other
-check and fails independent-dimensions.
+slices.FCStd and one-dimension.FCStd are real agent runs, not generated (evals/README.md).
 """
 import os
 

@@ -79,10 +79,10 @@ Controls, which need no agent or Helix:
 harbor run -y -p evals -a nop    --n-attempts 2 -n 4 --jobs-dir runs --job-name nop
 harbor run -y -p evals -a oracle --n-attempts 2 -n 4 --jobs-dir runs --job-name oracle
 # Negative controls: each task's solution broken one way (controls/make_negatives.py)
-for t in part-1-reconstruction part-2-reconstruction; do for n in visible broken scripted slices one-dimension; do
-  [ -f controls/$t/$n.FCStd ] && PYTHONPATH=controls harbor run -y -p evals/$t -a replay_agent:ReplayModel \
-    --ak model=controls/$t/$n.FCStd --jobs-dir runs --job-name $t-$n
-done; done
+for f in controls/*/*.FCStd; do t=$(basename $(dirname $f)); n=$(basename $f .FCStd)
+  PYTHONPATH=controls harbor run -y -p evals/$t -a replay_agent:ReplayModel \
+    --ak model=$f --jobs-dir runs --job-name $t-$n
+done
 ```
 
 The agent (`-m` overrides the model in `agent/agent.yaml`; `--ak agent_dir=...` runs

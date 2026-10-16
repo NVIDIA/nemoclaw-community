@@ -20,6 +20,8 @@ panels = []
 for i, pair in enumerate(os.environ['RENDER'].split()):
     model, mesh_path = pair.split(':')
     doc = App.openDocument(os.path.abspath(model))
+    for o in doc.Objects:  # rebuild as the verifier does, so the render shows what is graded
+        o.touch()
     doc.recompute()
     Gui.ActiveDocument = Gui.getDocument(doc.Name)
     body = next(o for o in doc.Objects if o.TypeId == 'PartDesign::Body')
@@ -46,6 +48,7 @@ for i, pair in enumerate(os.environ['RENDER'].split()):
         app.processEvents()
     panels.append(f'/tmp/panel{i}.png')
     view.saveImage(panels[-1], 1400, 900, 'White')
+    App.closeDocument(doc.Name)
 
 images = [QtGui.QImage(p) for p in panels]
 out = QtGui.QImage(sum(im.width() for im in images), max(im.height() for im in images),
