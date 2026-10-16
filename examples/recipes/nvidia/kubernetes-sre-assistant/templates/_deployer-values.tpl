@@ -128,6 +128,37 @@ cluster_metrics:
     - { path: /chart-bin/kubectl }
 {{- end }}
 {{- if $sre.openshiftLlmDeploy.enabled }}
+huggingface_metadata:
+  name: huggingface_metadata
+  endpoints:
+    - host: huggingface.co
+      port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+        - allow: { method: GET, path: "/api/models/**" }
+        - allow: { method: GET, path: "/api/resolve-cache/models/**" }
+  binaries:
+    - { path: /usr/bin/curl }
+    - { path: /usr/local/bin/curl }
+    - { path: /usr/bin/python3* }
+    - { path: /opt/hermes/.venv/bin/python }
+vllm_recipe_metadata:
+  name: vllm_recipe_metadata
+  endpoints:
+    - host: recipes.vllm.ai
+      port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+        - allow: { method: GET, path: "/models.json" }
+        - allow: { method: GET, path: "/*/*.json" }
+        - allow: { method: GET, path: "/*/*/hw/*.json" }
+  binaries:
+    - { path: /usr/bin/curl }
+    - { path: /usr/local/bin/curl }
+    - { path: /usr/bin/python3* }
+    - { path: /opt/hermes/.venv/bin/python }
 model_release_metadata:
   name: model_release_metadata
   endpoints:

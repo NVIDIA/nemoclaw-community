@@ -362,6 +362,9 @@ model_runner_service_account=$(hf_intake_value modelRunnerServiceAccount)
   [ "$model_runner_service_account" = "${OPENSHIFT_LLM_RUNNER_SERVICE_ACCOUNT:-}" ] || \
   emit_failure 'model-skill-runtime-config-mismatch' 'The mounted skill configuration does not match the chart-managed runtime environment.'
 
+oc -n "$namespace" get serviceaccount "$model_runner_service_account" -o name >/dev/null 2>&1 || \
+  emit_failure 'model-runner-unavailable' 'The configured model-runner account is unavailable in the target namespace. Have the operator reconcile it; do not create arbitrary accounts or grant permissions.'
+
 umask 077
 workdir=$(mktemp -d "${TMPDIR:-/tmp}/hermes-model-deploy.XXXXXX") || exit 1
 trap 'rm -rf "$workdir"' EXIT HUP INT TERM

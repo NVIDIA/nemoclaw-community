@@ -1,0 +1,45 @@
+{{/* SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. */}}
+{{/* SPDX-License-Identifier: Apache-2.0 */}}
+{{/* Optional PVC writes are exact-resource namespace Roles, never ClusterRole writes. */}}
+{{- $storage := default dict .Values.agentConfig.storage -}}
+{{- if and .Values.rbac.create $storage.enabled (eq (default "recommendation" $storage.mode) "automatic") -}}
+{{- if or (eq .Values.memory.backend "none") (and (eq .Values.memory.backend "file") (not .Values.memory.persistence.enabled)) -}}
+{{- fail "automatic storage expansion requires configmap memory or persistent file memory" -}}
+{{- end -}}
+{{- if not $storage.targets -}}
+{{- fail "automatic storage expansion requires exact storage.targets" -}}
+{{- end -}}
+{{- $root := . -}}
+{{- range $index, $target := $storage.targets }}
+{{- $namespace := required "storage target namespace required" $target.namespace }}
+{{- $name := required "storage target PVC name required" $target.name }}
+{{- if not (has $namespace $root.Values.agentConfig.scope.include_namespaces) }}
+{{- fail "storage target namespace must be explicitly listed in scope.include_namespaces" }}
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "sre-autoheal.fullname" $root }}-storage-{{ $index }}
+  namespace: {{ $namespace | quote }}
+rules:
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    resourceNames: [{{ $name | quote }}]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "sre-autoheal.fullname" $root }}-storage-{{ $index }}
+  namespace: {{ $namespace | quote }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "sre-autoheal.fullname" $root }}-storage-{{ $index }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "sre-autoheal.serviceAccountName" $root }}
+    namespace: {{ $root.Release.Namespace }}
+{{- end }}
+{{- end }}
