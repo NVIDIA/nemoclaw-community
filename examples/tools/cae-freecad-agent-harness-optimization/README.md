@@ -155,7 +155,7 @@ flowchart LR
 | [harness/cad_agent.py](harness/cad_agent.py) | The Harbor agent: uploads the agent folder and starts the runner in each trial's container. |
 | [evals/](evals/README.md) | Two Harbor tasks with one instruction and one verifier. |
 | [publish.py](publish.py) | After a job, attaches each run's grade to its trace; publishes Compass Insights to Studio. |
-| [controls/](controls/) | Negative controls that prove each check fails what it should. |
+| [controls/](controls/) | Generates negative controls from the reference solutions, and grades a saved model, to prove each check fails what it should. |
 | [skills/cad-experimenter](skills/cad-experimenter/SKILL.md) | The process one round of the loop follows, including rendering models to look at them. |
 
 The agent sees real paths: the mesh at `/app/reference.obj`, its skills under

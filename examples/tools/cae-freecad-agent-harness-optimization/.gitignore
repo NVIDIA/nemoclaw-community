@@ -1,13 +1,11 @@
 # Credentials
 .env
 
-# FreeCAD documents and their backups, except the eval suite's reference solutions
-# and the negative controls.
+# FreeCAD documents and their backups, except the eval suite's reference solutions.
 *.FCStd
 *.FCStd[0-9]
 *.FCBak
 !evals/*/solution/*.FCStd
-!controls/*/*.FCStd
 
 # Python
 __pycache__/

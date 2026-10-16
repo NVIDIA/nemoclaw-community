@@ -78,10 +78,15 @@ Controls, which need no agent or Helix:
 ```bash
 harbor run -y -p evals -a nop    --n-attempts 2 -n 4 --jobs-dir runs --job-name nop
 harbor run -y -p evals -a oracle --n-attempts 2 -n 4 --jobs-dir runs --job-name oracle
-# Negative controls: each task's solution broken one way (controls/make_negatives.py)
-for f in controls/*/*.FCStd; do t=$(basename $(dirname $f)); n=$(basename $f .FCStd)
-  PYTHONPATH=controls harbor run -y -p evals/$t -a replay_agent:ReplayModel \
-    --ak model=$f --jobs-dir runs --job-name $t-$n
+# Negative controls: each task's solution broken one way, generated in the task image
+docker build -t cad-env evals/part-1-reconstruction/environment
+for t in part-1-reconstruction part-2-reconstruction; do mkdir -p controls/$t
+  docker run --rm -v "$PWD":/x -w /x -e SOLUTION=evals/$t/solution/reference-solution.FCStd \
+    -e OUT=controls/$t cad-env freecadcmd controls/make_negatives.py
+  for n in visible broken scripted; do
+    PYTHONPATH=controls harbor run -y -p evals/$t -a replay_agent:ReplayModel \
+      --ak model=controls/$t/$n.FCStd --jobs-dir runs --job-name $t-$n
+  done
 done
 ```
 
@@ -113,6 +118,11 @@ verifier, no network):
 | `slices`: a real agent run, 32 stacked pads (IoU 0.91, 1,658 faces) | 0 | n/a | `independent-dimensions`, `compact-model` |
 | `no-branch`: a real agent run that left out its branch (IoU 0.918) | 0 | n/a | `no-missing-feature` |
 | `one-dimension`: a real run of the final agent, 4 ruled lofts driven by one `Params.Length` (IoU 0.970 / 0.943) | 0 | 0 | `independent-dimensions` |
+
+`visible`, `broken` and `scripted` are generated from each task's reference solution by
+[controls/make_negatives.py](../controls/make_negatives.py) (see Rerun). `slices`,
+`no-branch` and `one-dimension` were real agent runs; their results are recorded here, and
+the models are not shipped.
 
 Isolation, probed with Harbor 0.22.0 on Colima: the agent reaches only
 `host.docker.internal` (public hosts are blocked; the allowlist is per host, so every

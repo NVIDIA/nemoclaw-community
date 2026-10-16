@@ -11,7 +11,8 @@ scripted.FCStd: the solution's solid as a scripted shape     -> fails native-fea
                 under the Body (BaseFeature), plus one small sketch-driven
                 Pocket, so only the scripted base fails the check
 
-slices.FCStd and one-dimension.FCStd are real agent runs, not generated (evals/README.md).
+The proof table in evals/README.md also lists controls taken from real agent runs
+(slices, one-dimension, no-branch); those models are not shipped.
 """
 import os
 
