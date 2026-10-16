@@ -14,34 +14,31 @@
 | Harness | LangChain Deep Agents 0.7.25 |
 | OpenShell | N/A |
 
-A worked, end-to-end harness optimization loop for an agent that drives an engineering
-tool. The agent runs where the tool runs: each run gets its own container with
-headless [FreeCAD](https://www.freecad.org/) and a shell, so runs are isolated and go
-in parallel. [NeMo Helix](https://github.com/NVIDIA-NeMo/nemo-helix) serves the model
-and keeps every run's trace; [NeMo Compass](https://github.com/NVIDIA-NeMo/nemo-compass)
-finds recurring problems in those traces;
-[NeMo Eval Author](https://github.com/NVIDIA-NeMo/eval-author) turns them into a
-proven eval; and each change to the agent is kept only if the eval says it is better.
+A worked, end-to-end loop for improving an AI agent that drives an engineering tool.
+The agent here turns a 3D scan-like mesh of a part into an editable CAD model in
+[FreeCAD](https://www.freecad.org/). Each round, the agent runs on a small benchmark,
+its runs are analysed for recurring problems, the benchmark gains checks for the
+problems that matter, a coding agent changes the agent, and the change is kept only if
+the benchmark says it is better.
 
-The agent runs on **Nemotron 3 Ultra** and must rebuild any part it is given as a
-mesh, as an editable FreeCAD model. The eval holds two different parts. The story has
-two chapters. First, four rounds of the loop took the base agent from no model saved to
-**10 of 10**, by running one reconstruction script. That met the Ethos, but not the
-intent: the model was a stretched trace, not something a designer would build. The owner
-revised the Ethos, Eval Author added one check, the previous agent fell to **0 of 10**,
-and four more rounds produced an agent that measures the part, chooses the features and
-writes its own FreeCAD code: **10 of 10** again, with all eight checks passing.
+The example's main lesson is about the **Ethos**, a short document that states what the
+agent is for, what success looks like, and what it must and must not do. Every part of the
+loop reads it, and the loop optimizes exactly what it says. Here the agent first reached a
+perfect score while missing what the owner actually wanted; one revision of the Ethos,
+and the checks that came from it, steered the next rounds to an agent that models the part
+the way an engineer would. The final agent, on **Nemotron 3 Ultra**, passes every check on
+10 of 10 runs ([Results](#results)).
 
 ## Screenshot
 
 ![Each reference mesh in blue beside the final agent's reconstruction in orange](assets/results.png)
 
 The task: rebuild each blue mesh as an editable FreeCAD model. Orange is the final
-agent's reconstruction from a typical confirmation run (IoU 0.930 and 0.922, 32 and 42
-faces): a body lofted through measured sections, a cavity cut from the measured floor,
-and a branch (a swept tube on the left, a lofted arm on the right), with named
-dimensions such as height, floor and branch length. The agent chose and wrote these
-features itself. Rendered headless from the saved files with
+agent's reconstruction from a typical run: a body lofted through measured cross-sections,
+a cavity cut from the measured floor, and a branch (a swept tube on the left, a lofted arm
+on the right), driven by named dimensions such as height, floor and branch length. The
+agent chose these features and wrote the code itself. Its overlap with the mesh (IoU, see
+below) is 0.930 and 0.922. Rendered headless from the saved files with
 [skills/cad-experimenter/render](skills/cad-experimenter/render/).
 
 ## At A Glance
@@ -63,67 +60,118 @@ features itself. Rendered headless from the saved files with
 
 ## Why this exists
 
-General-purpose harnesses are strong at orchestration, but they do not carry your
-domain. Turning a mesh into a **parametric CAD model** is a good example: the result
-has to be a real feature tree of sketches and features with dimensions a designer
-can change. A model that looks right but cannot be edited is worthless, and an agent
-that reports success is not evidence that it succeeded.
+General-purpose agent harnesses are strong at orchestration, but they do not carry your
+domain. Turning a mesh into a **parametric CAD model** is a good example: the result has
+to be a real feature tree of sketches and features, with dimensions a designer can
+change. A model that looks right but cannot be edited is worthless, and an agent that
+reports success is not evidence that it succeeded.
 
-Closing that gap is **harness engineering**: changing the system prompt, skills,
-subagents and middleware until a general harness behaves like a specialist. This
-example makes every change answer to measurement:
+Closing that gap is **harness engineering**: changing the agent's system prompt, skills,
+subagents and middleware until a general harness behaves like a specialist. Done by hand,
+it is guesswork. This example makes every change answer to measurement, with these parts:
+
+| Part | What it is |
+| --- | --- |
+| **Ethos** ([ETHOS.md](ETHOS.md)) | The agent's specification in plain language: its purpose, its success criteria, what to do and what never to do, and what may be changed. Written by the agent's owner. |
+| **Eval** ([evals/](evals/README.md)) | The benchmark: two tasks (two different parts), each graded by a set of pass/fail **checks**. A run scores 1 only if every check passes. Run with [Harbor](https://www.harborframework.com/). |
+| **IoU** | Intersection over union: how much the model's volume and the mesh's volume overlap, from 0 (none) to 1 (identical). One of the checks requires IoU ≥ 0.9. |
+| **[NeMo Helix](https://github.com/NVIDIA-NeMo/nemo-helix)** | The platform the agent uses: it serves the model and stores every run's trace, with its score, in Intake. |
+| **[NeMo Compass](https://github.com/NVIDIA-NeMo/nemo-compass)** | An analysis agent that reads many traces against the Ethos and reports recurring problems as **Insights**, each backed by the traces that show it. |
+| **[NeMo Eval Author](https://github.com/NVIDIA-NeMo/eval-author)** | Skills for your coding agent that build and review the eval: for each Insight, does a check already catch it, or does the eval need a new one? Every check is **proven**: an empty answer scores 0, a known-good answer 1, and a realistic wrong answer 0. |
+| **Experimenter** ([skills/cad-experimenter](skills/cad-experimenter/SKILL.md)) | Your coding agent following one skill: diagnose from the Insights and traces, build up to two candidate agents, test them. |
+
+One round of the loop:
 
 ```mermaid
 flowchart LR
-  A[Agent runs<br/>one container each] -->|traces + scores| B[Helix Intake]
-  B --> C[NeMo Compass<br/>Insights]
-  C --> D[NeMo Eval Author<br/>proven eval]
-  D --> E[Change the agent<br/>prompt · skills · middleware]
-  E -->|rerun the eval| A
+  E["ETHOS.md<br/>intent · success criteria<br/>do · don't"]
+  R["1 · Run the agent on the eval<br/>one container per run, in parallel"]
+  T["2 · Traces + scores<br/>in Helix Intake"]
+  C["3 · NeMo Compass<br/>recurring problems → Insights"]
+  A["4 · NeMo Eval Author<br/>is each Insight caught?<br/>add and prove checks"]
+  X["5 · Experimenter (your coding agent)<br/>change prompt · skills · subagents · middleware"]
+  R --> T --> C --> A --> X
+  X -- "keep only if the eval says better,<br/>then start the next round" --> R
+  E -.-> C
+  E -.-> A
+  E -.-> X
 ```
 
-Nothing here is CAD-specific: swap FreeCAD for your solver, mesher or CAD kernel.
+**Why the Ethos and the checks matter most.** The loop optimizes what it can measure, and
+it measures what the Ethos asks for. A vague Ethos lets the agent pass while missing the
+point; a precise one, with clear intent, success criteria and things not to do, gives
+Compass something to judge traces against and gives Eval Author something to turn into
+checks. Each check closes one way to pass while getting worse, so the more distinct
+behaviours the checks cover, the more a passing score means. In this example Eval Author
+grew the eval from five checks to eight, each from evidence in the traces, and each new
+check changed which agent the loop kept.
+
+**Not tied to any infrastructure.** Compass is an agent that reads traces, and Eval
+Author is a set of skills for a coding agent; neither prescribes how your agent is built,
+which framework it uses or where it is deployed. The experiment step is delegated to your
+coding agent. So the same loop fits whatever framework and infrastructure your agent
+already uses. Here the agent is LangChain Deep Agents in a container per run, and nothing
+is CAD-specific: swap FreeCAD for your solver, mesher or CAD kernel.
 
 ## How it runs
 
-Each eval trial is one container, built from the task's
-[environment](evals/part-1-reconstruction/environment/Dockerfile): FreeCAD 1.1.3
-(headless `freecadcmd`), the Deep Agents runtime, NeMo Relay, and the part's mesh.
+Each eval run (a *trial*) gets its own container, built from the task's
+[environment](evals/part-1-reconstruction/environment/Dockerfile): headless FreeCAD 1.1.3,
+the Deep Agents runtime, NeMo Relay for tracing, and the part's mesh. A separate container
+with no network grades the saved model.
 
-```text
-harbor run -n 4 (host)                                 NeMo Helix (host)
- │                                                     ┌──────────────────────────┐
- ├─ trial ─▶ task container ───── model calls ────────▶│ inference gateway → model │
- │           /agent  agent.yaml, skills/ (uploaded)    │ Intake: traces + scores   │
- │           /app    reference.obj → model.FCStd       │ Compass · Studio          │
- │           shell + freecadcmd, 5 min, 3 GiB ─ trace ▶└──────────────────────────┘
- │                    │ model.FCStd
- │                    ▼
- │           verifier container (no network): 7 checks → reward
- ├─ trial ─▶ … (in parallel, one container each)
- └─ publish.py scores: reward, IoU, failed checks, complexity → each trace
+```mermaid
+flowchart LR
+  subgraph host["Your machine"]
+    H["harbor run -n 4"]
+    P["publish.py scores"]
+  end
+  subgraph trial["One trial · many in parallel"]
+    C["Task container · 5 min · 3 GiB<br/>headless FreeCAD + Deep Agents<br/>/agent: prompt, skills, middleware<br/>/app: reference.obj → model.FCStd"]
+    V["Verifier container · no network<br/>8 checks → reward"]
+  end
+  subgraph helix["NeMo Helix"]
+    G["Inference gateway<br/>Nemotron 3 Ultra"]
+    I["Intake<br/>traces + scores"]
+    S["Compass · Studio"]
+  end
+  H --> C
+  C -- "model calls" --> G
+  C -- "trace (NeMo Relay)" --> I
+  C -- "model.FCStd" --> V
+  V -- "reward, checks" --> P
+  P -- "scores on each trace" --> I
+  I --> S
 ```
 
 | Piece | What it does |
 | --- | --- |
-| [agent/agent.yaml](agent/agent.yaml) | The agent: name, model, a short system prompt. `skills/` and an optional `middleware.py` sit beside it. This folder is all the loop changes. |
-| [harness/run_agent.py](harness/run_agent.py) | Inside the container: builds the Deep Agents agent from the folder with a real shell rooted at `/app` (`LocalShellBackend`), its skills and middleware; reaches the model through the Helix gateway; traces the run with NeMo Relay to Intake; stops it after 5 minutes. |
+| [agent/](agent/agent.yaml) | The agent: `agent.yaml` (name, model, a short system prompt), with `skills/` and an optional `middleware.py` beside it. This folder is all the loop changes. |
+| [harness/run_agent.py](harness/run_agent.py) | Inside the container: builds the Deep Agents agent from the folder with a real shell rooted at `/app`, its skills, subagents and middleware; reaches the model through the Helix gateway; traces the run with NeMo Relay; stops it after 5 minutes. |
 | [harness/cad_agent.py](harness/cad_agent.py) | The Harbor agent: uploads the agent folder and starts the runner in each trial's container. |
-| [evals/](evals/README.md) | Two Harbor tasks with one instruction and one verifier: the agent saves `/app/model.FCStd`, and a separate, network-less container grades it. |
-| [publish.py](publish.py) | After a job, attaches each run's grade to its Intake trace; publishes Compass Insights to Studio. |
+| [evals/](evals/README.md) | Two Harbor tasks with one instruction and one verifier. |
+| [publish.py](publish.py) | After a job, attaches each run's grade to its trace; publishes Compass Insights to Studio. |
 | [controls/](controls/) | Negative controls that prove each check fails what it should. |
-| [ETHOS.md](ETHOS.md) | What the agent is for, how and where it runs, and what may be changed. Compass, Eval Author and the experimenter all read it. |
-| [skills/cad-experimenter](skills/cad-experimenter/SKILL.md) | The process one round of the loop follows. |
+| [skills/cad-experimenter](skills/cad-experimenter/SKILL.md) | The process one round of the loop follows, including rendering models to look at them. |
 
 The agent sees real paths: the mesh at `/app/reference.obj`, its skills under
-`/agent/skills/`, and any file it writes. A skill can ship helper scripts that the
-agent runs with `freecadcmd`, with no code copied through the prompt. The container's
-network reaches only Helix, so a run cannot see other runs, the eval's solution, or
-the rest of your machine.
+`/agent/skills/`, and any file it writes, so a skill can ship code the agent runs with
+`freecadcmd`. The container's network reaches only Helix, so a run cannot see other runs,
+the eval's solution, or the rest of your machine.
 
 ## Results
 
-A run passes only when all eight checks of the eval pass:
+> These are the end results of the whole optimization: the final agent first, then the
+> rounds that led to it. [Start Here](#start-here) walks through running each step
+> yourself; [results/](results/README.md) has every round in detail.
+
+**Final agent** ([results/final-agent](results/final-agent/agent.yaml)): a short prompt,
+three knowledge skills (measure the mesh, build features, verify the model) with small
+building blocks the agent composes in its own build script, and a clock middleware. On
+Nemotron 3 Ultra it passed **10 of 10** confirmation runs, five per part, every check
+passing, IoU 0.918-0.958, about 4 minutes per run.
+
+A run passes only when all eight checks pass:
 
 | Check | What it verifies |
 | --- | --- |
@@ -132,32 +180,63 @@ A run passes only when all eight checks of the eval pass:
 | `native-feature-tree` | The solid is built from sketches by native PartDesign features, not a scripted shape. |
 | `named-dimension-drives-geometry` | Changing a named dimension by 10% rebuilds one clean solid whose size changes by at least 1%. |
 | `independent-dimensions` | Two named dimensions each move the part in a different way: design intent, not one stretch. |
-| `mesh-fidelity` | The solid overlaps the reference mesh with IoU ≥ 0.9. |
+| `mesh-fidelity` | IoU with the reference mesh ≥ 0.9. |
 | `single-visible-object` | Only the finished model is visible when the file is opened. |
 | `compact-model` | At most 10× the faces of the reference solution: a designer's model, not a stack of slices. |
 
-Each round ran both parts twice, all runs in parallel, 5 minutes per run. Checks are out
-of 28 in chapter 1 (seven checks) and 32 in chapter 2 (eight):
+### How it got there: two chapters
 
-| Round | Change to the agent | Runs | Checks | Part 1 IoU | Part 2 IoU | Tokens / run |
-| --- | --- | --- | --- | --- | --- | --- |
-| **Chapter 1: the original Ethos** | | | | | | |
-| 0. Base agent | | 0/4 | 0 | | | 1.9 M |
-| 1. A skill with a helper script | Time budget in the prompt; a script that builds, saves and checks the model in one command (stacked slices) | 0/4 | 22 | 0.91, 0.92 | 0.78 | 0.04 M |
-| 2. Ruled lofts (rejected) | One loft per segment instead of slices | 0/4 | 18 | invalid solid | 0.85 | 0.08 M |
-| 3. Valid joints, a sound IoU estimate | Joints as flat steps; a ray-cast IoU estimate | **4/4** | 28 | 0.97 | 0.94 | 0.02 M |
-| **Ethos revision**: the agent must model, with design-intent dimensions | Eval Author adds `independent-dimensions`; round 3's agent re-graded: 0/10 | | | | | |
-| **Chapter 2: the revised Ethos** | | | | | | |
-| 5. Round 3's agent | (fails `independent-dimensions` only) | 0/4 | 28 | 0.97 | 0.94 | 0.03 M |
-| 6. The agent models (rejected) | Knowledge skills; the agent plans and writes its own build script | 0/4 | 3 | | | 1.0 M |
-| 7. Feature-level blocks | Sections and features in world coordinates over named parameters; save the body first | 2/4 | 30 | 0.90, 0.92 | 0.27, 0.80 | 0.24 M |
-| 8. **A clock and "where is it wrong"** | Middleware clock; saves list the features and the missing regions; a structure summary | **4/4** | **32** | **0.93, 0.93** | **0.95, 0.92** | **0.25 M** |
+**Chapter 1, the first Ethos.** It asked for a valid, editable, native feature tree that
+matches the mesh. Starting from a two-sentence prompt, the loop reached 10 of 10 in four
+rounds. Along the way Compass found that the agent's models were dense stacks of slices
+that passed every check, so Eval Author added `compact-model`.
 
-Compass found the slice stacks of round 1, which led to `compact-model`, and named the
-fixed script after the Ethos revision. The final agent
-([results/final-agent](results/final-agent/agent.yaml): a short prompt, three knowledge
-skills and a clock middleware) then passed **10 of 10** runs, five per part, in about
-4 minutes each. What each round found and taught is in [results/](results/README.md).
+**The Ethos revision.** The chapter-1 agent passed by running one reconstruction script,
+and its only dimension stretched a traced shape along one axis: a designer could make
+the part taller, nothing else. That met the Ethos as written, not the owner's intent. The
+owner added three principles to [ETHOS.md](ETHOS.md): the agent does the modelling and
+writes its own code (skills carry knowledge, not a finished routine); dimensions express
+design intent, such as a diameter or a wall thickness; and the method must generalize.
+Eval Author turned the second into one proven check, `independent-dimensions`. Re-graded,
+the chapter-1 agent fell from 10 of 10 to 0 of 10, and Compass, reading its traces
+against the revised Ethos, reported that it "delegates the modelling to a fixed script".
+
+**Chapter 2, the revised Ethos.** Four more rounds produced the final agent.
+
+Each round ran both parts twice, all runs in parallel, 5 minutes per run. *Checks* counts
+passing checks across the four runs (out of 28 with seven checks, 32 with eight):
+
+| Round | What the traces and Insights showed | Change to the agent, and why | Runs passed | Checks | IoU (part 1 · part 2) |
+| --- | --- | --- | --- | --- | --- |
+| **Chapter 1** | | | | | |
+| 0 | The base agent spent its 5 minutes studying the mesh and learning FreeCAD by trial and error; it saved nothing. | none (base agent) | 0/4 | 0/28 | none |
+| 1 (kept) | No method and no sense of time. | **A skill with a script** that builds, saves and checks a model in one command, plus a time budget in the prompt: *give the agent a method and get a model saved early.* | 0/4 | 22/28 | 0.91 · 0.78 |
+| | Compass: the models are dense stacks of slices, and they pass every check. | Eval Author added `compact-model`. | | | |
+| 2 (rejected) | 1,700-face slice stacks; flat slices stair-step slanted walls. | **Lofts** through cross-sections instead of slices: *fewer faces, smoother walls.* The lofts did not fuse into one valid solid. | 0/4 | 18/28 | invalid · 0.85 |
+| 3 (kept) | Nearly tangent walls at a branch joint; the script's own IoU estimate misled the agent. | **Valid joints and a trustworthy IoU estimate**: *one clean solid, and retries the agent can rank.* | **4/4** | **28/28** | 0.97 · 0.94 |
+| **Ethos revision** | The model is a stretched trace from one script, not a designer's model. | The owner revises ETHOS.md; Eval Author adds `independent-dimensions`; round 3's agent falls to 0/10. | | | |
+| **Chapter 2** | | | | | |
+| 4 | Round 3's agent fails only `independent-dimensions`; Compass: it delegates the modelling to a fixed script. | none (new baseline) | 0/4 | 28/32 | 0.97 · 0.94 |
+| 5 (rejected) | | **Knowledge skills** (measure, build features, verify) and the agent writes its own build script: *what the revised Ethos asks for.* A second candidate added a measuring **subagent**. Both failed: 200-line scripts of raw FreeCAD calls, geometry in the wrong place, nothing saved; 10-minute runs did not help. | 0/4 | 3/32 | none |
+| 6 (kept) | API mistakes and mixed coordinate frames ate every run. | **Feature-level building blocks** in world coordinates, any number an expression over named dimensions, and *build the body first and save*: *leave the decisions to the agent, take the plumbing away.* Two variants: the agent alone, and one with a **planner subagent** that plans the features first. Both passed 2/4; the planner variant passed more checks and was kept. | 2/4 | 30/32 | 0.90, 0.92 · 0.27, 0.80 |
+| 7 (kept) | Single wrong decisions the agent never saw (a body lofted too high, a cut through a floor, a branch never built), and runs stopped before reporting. | **A clock** (middleware: the time used on every tool result, a stop-and-report at 4 minutes), **a save that names the missing regions and the feature responsible**, and a structure summary: *let the agent see what it cannot measure.* The planner subagent added nothing and was dropped. | **4/4** | **32/32** | 0.93, 0.93 · 0.95, 0.92 |
+
+Then the 10-run confirmation above. What each round taught is in
+[results/](results/README.md#what-the-rounds-taught).
+
+## Taking this further
+
+Two parts are enough to show the loop working, not to show the agent generalizes. To
+take an agent like this to production:
+
+- **Many more tasks**, covering the parts and edge cases the agent will meet.
+- **A train set and a test set.** Let the experimenter iterate against the train tasks
+  only, and report the agent on test tasks it never saw, so a change that overfits the
+  training parts shows up as a drop on the test set. Here the experimenters saw both
+  parts, so the 10 of 10 is a training score.
+- **More checks from the Ethos.** Every principle the eval cannot check (here: whether a
+  missing small feature is caught, whether the model would work in any orientation) is a
+  way to pass while getting worse; Eval Author can turn each into a proven check.
 
 ## Prerequisites
 

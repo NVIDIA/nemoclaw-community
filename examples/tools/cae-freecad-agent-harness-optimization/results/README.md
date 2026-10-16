@@ -58,11 +58,11 @@ Checks are out of 32 (eight per run).
 
 | Round | What Compass, Eval Author and the traces showed | Change | Runs | Checks | Part 1 IoU | Part 2 IoU | Tokens / run |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 5. Chapter-1 agent | Fails `independent-dimensions`; Compass: delegates the modelling to a fixed script. | | 0/4 | 28 | 0.97 | 0.94 | 0.03 M |
-| 6. The agent models (rejected) | | Knowledge skills (measure, build features, verify) with small blocks; the agent plans and writes its own `build.py`. | 0/4 | 3 | | | 1.0 M |
+| 4. Chapter-1 agent | Fails `independent-dimensions`; Compass: delegates the modelling to a fixed script. | | 0/4 | 28 | 0.97 | 0.94 | 0.03 M |
+| 5. The agent models (rejected) | | Knowledge skills (measure, build features, verify) with small blocks; the agent plans and writes its own `build.py`. | 0/4 | 3 | | | 1.0 M |
 | | 21 rewrites of 200-line API scripts in 9 minutes: API errors, mixed coordinate frames, frozen dimensions, nothing saved. 10 minutes per run did not help. | | | | | | |
-| 7. Feature-level blocks (kept) | | `cadkit.py`: sections and features in world coordinates, any number an expression over named parameters; build the body first and save, then one feature at a time. | 2/4 | 30 | 0.90, 0.92 | 0.27, 0.80 | 0.24 M |
-| 8. A clock and "where is it wrong" (kept) | Single wrong decisions the agent never saw (body lofted to the bounding box top, a cavity through the floor, a branch never built); no sense of time. | Middleware: a clock on every tool result and a stop-and-report at 240 s. Saves list the features in the model and the regions that are missing or extra; measurements end with a STRUCTURE summary. | **4/4** | **32** | 0.93, 0.93 | 0.95, 0.92 | 0.25 M |
+| 6. Feature-level blocks (kept) | | `cadkit.py`: sections and features in world coordinates, any number an expression over named parameters; build the body first and save, then one feature at a time. | 2/4 | 30 | 0.90, 0.92 | 0.27, 0.80 | 0.24 M |
+| 7. A clock and "where is it wrong" (kept) | Single wrong decisions the agent never saw (body lofted to the bounding box top, a cavity through the floor, a branch never built); no sense of time. | Middleware: a clock on every tool result and a stop-and-report at 240 s. Saves list the features in the model and the regions that are missing or extra; measurements end with a STRUCTURE summary. | **4/4** | **32** | 0.93, 0.93 | 0.95, 0.92 | 0.25 M |
 
 **Confirmation** of the final agent: **10 of 10**, five per part, every check passing:
 part 1 IoU 0.925-0.932, part 2 IoU 0.918-0.958, 3-4 PartDesign features and 28-55 faces,
@@ -81,6 +81,10 @@ material where the body meets a curved branch).
 - **Give the model decisions, not plumbing.** The agent failed while it wrote raw FreeCAD
   API, and succeeded once feature-level blocks took the API away and left the choice of
   features and dimensions to it.
+- **Subagents were tried and dropped.** A measuring subagent (round 5) and a planner
+  subagent (rounds 6-7) handed the main agent a lossy summary: one reported a floor at 0,
+  another turned a flat arm into a round tube. The single agent with good measurement
+  output did better.
 - **Let the agent see what it cannot measure.** A clock (middleware), a save that names
   the missing region and the feature responsible, and a structure summary removed the
   single wrong decisions that made runs fail.
