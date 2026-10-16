@@ -7,6 +7,7 @@
     "single-valid-solid",
     "native-feature-tree",
     "named-dimension-drives-geometry",
+    "independent-dimensions",
     "mesh-fidelity",
     "single-visible-object",
     "compact-model"
@@ -36,10 +37,14 @@
         {
           "title": "Mesh conversion always emits a dense stack of slice sketches and pads",
           "check": "compact-model"
+        },
+        {
+          "title": "Generic mesh slicing produces dense loft trees instead of design-intent CAD features",
+          "check": "independent-dimensions"
         }
       ],
       "controls": {
-        "proved": "2026-10-16, container setup, Harbor 0.22.0 on Colima",
+        "proved": "2026-10-16, container setup, Harbor 0.22.0 on Colima, eight checks",
         "nop": {
           "runs": 2,
           "reward": 0,
@@ -62,22 +67,32 @@
             "reward": 0,
             "fails": [
               "recomputes-after-reopen",
-              "named-dimension-drives-geometry"
+              "named-dimension-drives-geometry",
+              "independent-dimensions"
             ]
           },
           "scripted": {
             "reward": 0,
             "fails": [
               "native-feature-tree",
-              "named-dimension-drives-geometry"
+              "named-dimension-drives-geometry",
+              "independent-dimensions"
             ]
           },
           "slices": {
             "reward": 0,
             "fails": [
+              "independent-dimensions",
               "compact-model"
             ],
             "model": "a real agent run: 32 stacked pads, IoU 0.9116, 1658 faces"
+          },
+          "one-dimension": {
+            "reward": 0,
+            "fails": [
+              "independent-dimensions"
+            ],
+            "model": "a real run of the final agent (cad-u3b): 4 ruled lofts through 24 B-spline sections, every height driven by one Params.Length, IoU 0.970, 50 faces"
           }
         },
         "isolation": {
@@ -92,7 +107,7 @@
       "source_trace": null,
       "reason": "a second first-party part, so the suite tests that the agent's method is geometry-agnostic as ETHOS.md requires; same instruction, verifier and checks as part-1-reconstruction, different mesh",
       "controls": {
-        "proved": "2026-10-16, container setup, Harbor 0.22.0 on Colima",
+        "proved": "2026-10-16, container setup, Harbor 0.22.0 on Colima, eight checks",
         "nop": {
           "runs": 2,
           "reward": 0,
@@ -115,15 +130,24 @@
             "reward": 0,
             "fails": [
               "recomputes-after-reopen",
-              "named-dimension-drives-geometry"
+              "named-dimension-drives-geometry",
+              "independent-dimensions"
             ]
           },
           "scripted": {
             "reward": 0,
             "fails": [
               "native-feature-tree",
-              "named-dimension-drives-geometry"
+              "named-dimension-drives-geometry",
+              "independent-dimensions"
             ]
+          },
+          "one-dimension": {
+            "reward": 0,
+            "fails": [
+              "independent-dimensions"
+            ],
+            "model": "a real run of the final agent (cad-u3b): 4 ruled lofts through 27 B-spline sections, every height driven by one Params.Length, IoU 0.943, 62 faces"
           }
         },
         "isolation": {

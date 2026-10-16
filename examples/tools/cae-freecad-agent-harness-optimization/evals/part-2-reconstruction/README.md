@@ -43,7 +43,7 @@ closely.
 ## Verification explanation
 
 The verifier opens the saved model in FreeCAD, rebuilds every feature from its inputs,
-and reports seven checks; the reward is 1 only when all pass:
+and reports eight checks; the reward is 1 only when all pass:
 
 - `recomputes-after-reopen`: after the rebuild no object is invalid or in error, so the
   model survives save and reopen (the stored shape alone could hide a broken tree).
@@ -54,6 +54,12 @@ and reports seven checks; the reward is 1 only when all pass:
 - `named-dimension-drives-geometry`: changing a named constraint or a referenced named
   parameter by 10% leaves one clean solid and changes a bounding-box length by at
   least 1%.
+- `independent-dimensions`: design intent. Two named dimensions each, changed by 10%,
+  leave one clean solid and move the volume or a bounding-box length by at least 0.5%,
+  and change the part in different ways (cosine below 0.9 between their relative
+  changes of volume, X, Y and Z). One parameter that stretches the whole part, or
+  several that stretch it along the same axis, fails. Added from a Compass Insight
+  after the final agent passed every other check with one `Params.Length`.
 - `mesh-fidelity`: IoU against the reference mesh at 0.1 mm resolution is at least 0.9.
 - `single-visible-object`: every visible object with geometry is the Body or its tip,
   as saved in the file (origin axes and planes are ignored). FreeCAD without its GUI

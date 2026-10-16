@@ -7,7 +7,7 @@ if [ -f /app/model.FCStd ]; then
   MODEL=/app/model.FCStd MESH=/tests/reference_part.obj REF_FACES=7 freecadcmd /tests/check_model.py \
     > /logs/verifier/check.log 2>&1
 fi
-for id in single-valid-solid native-feature-tree named-dimension-drives-geometry mesh-fidelity single-visible-object recomputes-after-reopen compact-model; do
+for id in single-valid-solid native-feature-tree named-dimension-drives-geometry independent-dimensions mesh-fidelity single-visible-object recomputes-after-reopen compact-model; do
   grep -q "^$id"$'\t' /logs/verifier/results || printf '%s\tFAIL\n' "$id" >> /logs/verifier/results
 done
 if grep -q $'\tFAIL$' /logs/verifier/results; then echo 0 > /logs/verifier/reward.txt; else echo 1 > /logs/verifier/reward.txt; fi

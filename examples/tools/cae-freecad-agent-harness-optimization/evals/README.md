@@ -9,7 +9,7 @@ trace-to-task workflow and run with [Harbor](https://www.harborframework.com/) 0
 
 ## Cases
 
-Both tasks share one instruction, one verifier and the same seven checks; only the
+Both tasks share one instruction, one verifier and the same eight checks; only the
 reference mesh and solution differ, so the suite tests that the agent's method works
 for more than one shape.
 
@@ -20,9 +20,10 @@ for more than one shape.
 
 The agent gets the [instruction](part-1-reconstruction/instruction.md): rebuild
 `/app/reference.obj` as an editable PartDesign model and save it to `/app/model.FCStd`.
-The verifier grades that file in its own container with seven checks, all of which must
+The verifier grades that file in its own container with eight checks, all of which must
 pass: `recomputes-after-reopen`, `single-valid-solid`, `native-feature-tree`,
-`named-dimension-drives-geometry`, `mesh-fidelity` (IoU ≥ 0.9),
+`named-dimension-drives-geometry`, `independent-dimensions` (two named dimensions that
+each change the part in a different way), `mesh-fidelity` (IoU ≥ 0.9),
 `single-visible-object` and `compact-model` (at most 10× the reference solution's
 faces). See the [grading explanation](part-1-reconstruction/README.md#verification-explanation).
 
@@ -78,7 +79,7 @@ Controls, which need no agent or Helix:
 harbor run -y -p evals -a nop    --n-attempts 2 -n 4 --jobs-dir runs --job-name nop
 harbor run -y -p evals -a oracle --n-attempts 2 -n 4 --jobs-dir runs --job-name oracle
 # Negative controls: each task's solution broken one way (controls/make_negatives.py)
-for t in part-1-reconstruction part-2-reconstruction; do for n in visible broken scripted slices; do
+for t in part-1-reconstruction part-2-reconstruction; do for n in visible broken scripted slices one-dimension; do
   [ -f controls/$t/$n.FCStd ] && PYTHONPATH=controls harbor run -y -p evals/$t -a replay_agent:ReplayModel \
     --ak model=controls/$t/$n.FCStd --jobs-dir runs --job-name $t-$n
 done; done
@@ -99,16 +100,18 @@ when all pass; `agent/run.log` starts with the run's Intake trace ID. Browse job
 
 ## Proof
 
-Re-proved on 2026-10-16 in the container setup above (separate verifier, no network):
+Re-proved on 2026-10-16 with eight checks in the container setup above (separate
+verifier, no network):
 
 | Control | part-1 | part-2 | Fails |
 | --- | --- | --- | --- |
 | NOP (2 runs) | 0, 0 | 0, 0 | every check |
 | Oracle (2 runs) | 1, 1 (IoU 0.9039, 7 faces) | 1, 1 (IoU 0.9985, 36 faces) | none |
 | `visible`: solution with every feature and sketch visible | 0 | 0 | `single-visible-object` |
-| `broken`: solution with its last feature's profile removed | 0 | 0 | `recomputes-after-reopen`, `named-dimension-drives-geometry` |
-| `scripted`: solution's solid as a scripted base shape | 0 | 0 | `native-feature-tree`, `named-dimension-drives-geometry` |
-| `slices`: a real agent run, 32 stacked pads (IoU 0.91, 1,658 faces) | 0 | n/a | `compact-model` |
+| `broken`: solution with its last feature's profile removed | 0 | 0 | `recomputes-after-reopen`, `named-dimension-drives-geometry`, `independent-dimensions` |
+| `scripted`: solution's solid as a scripted base shape | 0 | 0 | `native-feature-tree`, `named-dimension-drives-geometry`, `independent-dimensions` |
+| `slices`: a real agent run, 32 stacked pads (IoU 0.91, 1,658 faces) | 0 | n/a | `independent-dimensions`, `compact-model` |
+| `one-dimension`: a real run of the final agent, 4 ruled lofts driven by one `Params.Length` (IoU 0.970 / 0.943) | 0 | 0 | `independent-dimensions` |
 
 Isolation, probed with Harbor 0.22.0 on Colima: the agent reaches only
 `host.docker.internal` (public hosts are blocked; the allowlist is per host, so every

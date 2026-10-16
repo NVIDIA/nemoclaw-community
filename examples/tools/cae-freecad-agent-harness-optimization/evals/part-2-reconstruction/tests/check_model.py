@@ -94,31 +94,60 @@ def drivers(doc):
 SIZE_CHANGE_MIN = 0.01
 
 
-def resizes_cleanly(body, before):
-    shape = body.Shape
-    if shape.isNull() or not shape.isValid() or len(shape.Solids) != 1 or not clean(shape):
-        return False
-    box = shape.BoundBox
-    after = (box.XLength, box.YLength, box.ZLength)
-    return any(abs(a - b) >= SIZE_CHANGE_MIN * b for a, b in zip(after, before[1:]) if b > 0)
-
-
-def moves_geometry(doc, body, kind, obj, name):
-    before = fingerprint(body)
-    if kind == "constraint":
-        value = obj.getDatum(name)
-        obj.setDatum(name, value * 1.1)
-    else:
-        value = getattr(obj, name)
-        setattr(obj, name, value * 1.1)
-    doc.recompute()
-    moved = resizes_cleanly(body, before)
-    if kind == "constraint":
-        obj.setDatum(name, value)
+def set_value(obj, name, value):
+    """Set a named parameter. A spreadsheet alias that holds a whole number does not take
+    a float through setattr, so its cell is set instead."""
+    if obj.TypeId == "Spreadsheet::Sheet" and int in (type(value), type(getattr(obj, name))):
+        obj.set(obj.getCellFromAlias(name), str(value))
     else:
         setattr(obj, name, value)
-    doc.recompute()
-    return moved
+
+
+def response(doc, body, kind, obj, name):
+    """Change one named dimension by 10%, rebuild, and return how the part changed:
+    (clean, relative change of volume, X, Y and Z length). The value is restored."""
+    before = fingerprint(body)
+    value = obj.getDatum(name) if kind == "constraint" else getattr(obj, name)
+    try:
+        if kind == "constraint":
+            obj.setDatum(name, value * 1.1)
+        else:
+            set_value(obj, name, value * 1.1)
+        doc.recompute()
+        shape = body.Shape
+        ok = not shape.isNull() and shape.isValid() and len(shape.Solids) == 1 and clean(shape)
+        after = fingerprint(body) if ok else before
+        return ok, tuple((a - b) / b if b else 0.0 for a, b in zip(after, before))
+    finally:
+        if kind == "constraint":
+            obj.setDatum(name, value)
+        else:
+            set_value(obj, name, value)
+        doc.recompute()
+
+
+def moves_geometry(change):
+    """One clean solid whose overall size (a bounding-box length) changed by SIZE_CHANGE_MIN."""
+    ok, delta = change
+    return ok and any(abs(d) >= SIZE_CHANGE_MIN for d in delta[1:])
+
+
+# Design intent: a designer edits a part through several dimensions that each change it
+# in their own way (a height, a diameter, a wall thickness, a hole size). The check needs
+# two named dimensions that each, changed by 10%, leave one clean solid and move the
+# volume or a bounding-box length by at least INTENT_CHANGE_MIN, and whose changes are
+# not the same change: the cosine between their (volume, X, Y, Z) relative changes is
+# below INTENT_COSINE_MAX. One parameter that stretches the whole part, or several that
+# each stretch it along the same axis, does not pass. Works for any part and orientation:
+# it compares the dimensions with each other, not with a reference.
+INTENT_CHANGE_MIN = 0.005
+INTENT_COSINE_MAX = 0.9
+
+
+def cosine(a, b):
+    dot = sum(x * y for x, y in zip(a, b))
+    norm = (sum(x * x for x in a) * sum(y * y for y in b)) ** 0.5
+    return dot / norm if norm else 1.0
 
 
 # A designer's model has about as many faces as the part has surfaces. Stacked slices
@@ -173,16 +202,28 @@ def main():
     print("mesh-fidelity IoU", round(fidelity, 4))
     row("mesh-fidelity", fidelity >= IOU_MIN)
 
-    driven = False
+    driven, intent = False, False
+    moving = []  # (name, relative change) of each dimension that moves the part
     if solid:
         for candidate in drivers(doc):
             try:
-                if moves_geometry(doc, body, *candidate):
-                    driven = True
-                    break
+                change = response(doc, body, *candidate)
             except Exception as exc:  # a driver that cannot be changed does not count
                 print("driver", candidate[2], "failed:", exc)
+                continue
+            print("driver", candidate[1].Name, candidate[2], "clean", change[0],
+                  "dV dX dY dZ", [round(d, 4) for d in change[1]])
+            driven = driven or moves_geometry(change)
+            if change[0] and max(abs(d) for d in change[1]) >= INTENT_CHANGE_MIN:
+                for name, other in moving:
+                    if cosine(change[1], other) < INTENT_COSINE_MAX:
+                        print("independent dimensions:", name, "and", candidate[2])
+                        intent = True
+                moving.append((candidate[2], change[1]))
+            if driven and intent:
+                break
     row("named-dimension-drives-geometry", driven)
+    row("independent-dimensions", intent)
     row("single-visible-object", single_visible_object(doc, body))
     row("compact-model", solid and compact(body))
     log_complexity(body)
