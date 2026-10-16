@@ -17,7 +17,8 @@ Usage, from a FreeCAD interpreter::
 
 ``FreeCAD -c`` reads stdin as an interactive console and mis-parses multi-line
 blocks, which is why the caller uses ``exec()`` of this file rather than a
-heredoc. Output contract: one ``IOU <value>`` line on stdout; diagnostics go to
+heredoc. Output contract: one ``IOU <value>`` line and one ``MISSING <value>`` line
+(``iou_math.largest_missing_fraction``) on stdout; diagnostics go to
 stderr.
 """
 
@@ -31,7 +32,7 @@ import Part, Mesh, MeshPart
 
 # score.py puts this file's directory on sys.path in the preamble it feeds to
 # FreeCAD, so a plain import is enough.
-from iou_math import crossings, grid_axes, iou_from_crossings, resolve_cell
+from iou_math import crossings, grid_axes, iou_from_crossings, largest_missing_fraction, resolve_cell
 
 
 def tris_from_mesh(m):
@@ -54,12 +55,15 @@ def main(argv):
     ref = Mesh.Mesh(meshf)
 
     bb = cand.BoundBox; bb.add(ref.BoundBox)
+    cand_tris, ref_tris = tris_from_mesh(cand), tris_from_mesh(ref)
+    missing = largest_missing_fraction(cand_tris, ref_tris, (bb.XMin, bb.YMin, bb.ZMin),
+                                       (bb.XMax, bb.YMax, bb.ZMax), bb.DiagonalLength)
     cell = resolve_cell(bb.DiagonalLength)
     bb.enlarge(cell)
     xs, ys, nx, ny = grid_axes(bb.XMin, bb.YMin, bb.XMax, bb.YMax, cell)
 
-    ca = crossings(*tris_from_mesh(cand), xs, ys, nx, ny, cell)
-    ra = crossings(*tris_from_mesh(ref), xs, ys, nx, ny, cell)
+    ca = crossings(*cand_tris, xs, ys, nx, ny, cell)
+    ra = crossings(*ref_tris, xs, ys, nx, ny, cell)
 
     iou, bad, cols = iou_from_crossings(ca, ra)
 
@@ -69,6 +73,7 @@ def main(argv):
           "cand_vol", round(cand.Volume, 2), "ref_vol", round(ref.Volume, 2),
           "secs", round(time.time() - t0, 1), file=sys.stderr)
     print("IOU", round(iou, 4))
+    print("MISSING", round(missing, 4))
 
 
 main(sys.argv)

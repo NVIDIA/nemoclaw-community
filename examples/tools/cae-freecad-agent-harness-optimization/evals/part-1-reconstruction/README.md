@@ -41,7 +41,7 @@ closely.
 ## Verification explanation
 
 The verifier opens the saved model in FreeCAD, rebuilds every feature from its inputs,
-and reports eight checks; the reward is 1 only when all pass:
+and reports nine checks; the reward is 1 only when all pass:
 
 - `recomputes-after-reopen`: after the rebuild no object is invalid or in error, so the
   model survives save and reopen (the stored shape alone could hide a broken tree).
@@ -58,6 +58,10 @@ and reports eight checks; the reward is 1 only when all pass:
   changes of volume, X, Y and Z). One parameter that stretches the whole part, or
   several that stretch it along the same axis, fails.
 - `mesh-fidelity`: IoU against the reference mesh at 0.1 mm resolution is at least 0.9.
+- `no-missing-feature`: the largest connected piece of the reference that the model leaves
+  out is at most 1.2% of the reference volume. IoU barely notices a missing branch or boss;
+  this check does. Features thinner than about 3% of the part's size are below its
+  resolution.
 - `single-visible-object`: every visible object with geometry is the Body or its tip,
   as saved in the file (origin axes and planes are ignored). FreeCAD without its GUI
   does not hide sketches, so the agent must.

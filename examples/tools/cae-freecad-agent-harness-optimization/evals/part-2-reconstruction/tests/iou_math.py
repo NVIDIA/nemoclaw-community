@@ -128,3 +128,88 @@ def iou_from_crossings(cand_cols, ref_cols):
         inter += ov
         union += lp + lq - ov
     return (inter / union if union > 0 else 0.0), bad, len(cols)
+
+
+# Missing feature: the largest connected region of reference volume the candidate leaves
+# uncovered, as a fraction of the reference volume. Sampled on voxels of 1/MISSING_DIVISOR
+# of the bounding diagonal. An opening of MISSING_OPEN_CELLS voxels first removes thin
+# skins (a model slightly under size all over), so only a thick, connected gap remains:
+# a whole branch, boss or arm the model does not have.
+MISSING_DIVISOR = 200
+MISSING_OPEN_CELLS = 3
+
+
+def _inside(cols, nx, ny, zc):
+    """Voxel occupancy from crossings, and the columns with an odd crossing count."""
+    grid = np.zeros((nx, ny, zc.size), bool)
+    odd = np.zeros((nx, ny), bool)
+    for col, zs in cols.items():
+        i, j = divmod(col, ny)
+        zs = np.sort(zs)
+        if zs.size % 2:
+            odd[i, j] = True
+        else:
+            grid[i, j] = np.searchsorted(zs, zc) % 2 == 1
+    return grid, odd
+
+
+def _erode(a):
+    b = a.copy()
+    b[1:] &= a[:-1]; b[:-1] &= a[1:]; b[:, 1:] &= a[:, :-1]
+    b[:, :-1] &= a[:, 1:]; b[:, :, 1:] &= a[:, :, :-1]; b[:, :, :-1] &= a[:, :, 1:]
+    b[0] = b[-1] = False; b[:, 0] = b[:, -1] = False; b[:, :, 0] = b[:, :, -1] = False
+    return b
+
+
+def _dilate(a):
+    b = a.copy()
+    b[1:] |= a[:-1]; b[:-1] |= a[1:]; b[:, 1:] |= a[:, :-1]
+    b[:, :-1] |= a[:, 1:]; b[:, :, 1:] |= a[:, :, :-1]; b[:, :, :-1] |= a[:, :, 1:]
+    return b
+
+
+def _largest_component(a):
+    """The largest 6-connected component of a boolean grid."""
+    from collections import deque
+    flat = a.ravel()
+    seen = np.zeros(flat.size, bool)
+    steps = (a.shape[1] * a.shape[2], -a.shape[1] * a.shape[2], a.shape[2], -a.shape[2], 1, -1)
+    best = []
+    for start in np.flatnonzero(flat):
+        if seen[start]:
+            continue
+        seen[start] = True
+        comp, queue = [start], deque([start])
+        while queue:
+            v = queue.popleft()
+            for d in steps:
+                w = v + d
+                if 0 <= w < flat.size and flat[w] and not seen[w]:
+                    seen[w] = True
+                    queue.append(w)
+                    comp.append(w)
+        if len(comp) > len(best):
+            best = comp
+    out = np.zeros(flat.size, bool)
+    out[best] = True
+    return out.reshape(a.shape)
+
+
+def largest_missing_fraction(cand_tris, ref_tris, lo, hi, diagonal):
+    """Largest connected reference volume not covered by the candidate, after an opening,
+    as a fraction of the reference volume. ``lo``/``hi``: (x, y, z) bounds of both."""
+    h = diagonal / MISSING_DIVISOR
+    xs, ys, nx, ny = grid_axes(lo[0] - h, lo[1] - h, hi[0] + h, hi[1] + h, h)
+    zc = lo[2] - h + h * (np.arange(int((hi[2] - lo[2] + 2 * h) / h) + 1) + 0.5)
+    cand, cand_odd = _inside(crossings(*cand_tris, xs, ys, nx, ny, h), nx, ny, zc)
+    ref, ref_odd = _inside(crossings(*ref_tris, xs, ys, nx, ny, h), nx, ny, zc)
+    usable = ~(cand_odd | ref_odd)[:, :, None]
+    missing = ref & ~cand & usable
+    region = missing
+    for _ in range(MISSING_OPEN_CELLS):
+        region = _erode(region)
+    region = _largest_component(region) if region.any() else region
+    for _ in range(MISSING_OPEN_CELLS):
+        region = _dilate(region) & missing
+    reference = (ref & usable).sum()
+    return region.sum() / reference if reference else 1.0

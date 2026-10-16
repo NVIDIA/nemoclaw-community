@@ -18,6 +18,9 @@ import FreeCAD
 
 RESULTS = "/logs/verifier/results"
 IOU_MIN = 0.90
+# no-missing-feature: the largest connected region of the reference the model leaves out
+# (iou_math.largest_missing_fraction) may be at most this fraction of the reference volume.
+MISSING_MAX = 0.012
 # Features that build geometry from sketches.
 SKETCH_FEATURES = {
     "PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove",
@@ -65,8 +68,9 @@ def iou(body):
     with contextlib.redirect_stdout(out):
         exec(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "iou_core.py")).read(),
              {"__name__": "__main__"})
-    match = re.search(r"IOU ([0-9.]+)", out.getvalue())
-    return float(match.group(1)) if match else 0.0
+    fid = re.search(r"IOU ([0-9.]+)", out.getvalue())
+    gap = re.search(r"MISSING ([0-9.]+)", out.getvalue())
+    return (float(fid.group(1)) if fid else 0.0), (float(gap.group(1)) if gap else 1.0)
 
 
 def drivers(doc):
@@ -194,12 +198,14 @@ def main():
     wrappers = [o for o in features if o.TypeId in WRAPPERS]
     row("native-feature-tree", bool(sketch_driven) and not wrappers)
 
-    fidelity = iou(body) if solid else 0.0
+    fidelity, missing = iou(body) if solid else (0.0, 1.0)
     if solid:
         print("mesh-fidelity IoU", round(fidelity, 4))
+        print("no-missing-feature largest uncovered region", round(missing, 4), "limit", MISSING_MAX)
     else:
         print("mesh-fidelity not measured: no valid solid")
     row("mesh-fidelity", fidelity >= IOU_MIN)
+    row("no-missing-feature", missing <= MISSING_MAX)
 
     driven, intent = False, False
     moving = []  # (name, relative change) of each dimension that moves the part

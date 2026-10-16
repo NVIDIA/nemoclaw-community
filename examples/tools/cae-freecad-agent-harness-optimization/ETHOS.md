@@ -112,6 +112,8 @@ Where things run:
 - It reloads and recomputes cleanly after save and reopen.
 - Compact: about one face per surface of the part, not one per slice or polygon
   segment; the eval allows at most 10 times the faces of the task's reference solution.
+- Every feature of the part is there: a model that leaves out a branch or a boss is wrong
+  even when its overall overlap is high.
 - IoU ≥ 0.9 against the task's reference mesh, measured by the eval's verifier, on every
   part the agent is evaluated on, not only on one.
 

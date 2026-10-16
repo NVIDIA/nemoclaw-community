@@ -9,10 +9,11 @@
     "named-dimension-drives-geometry",
     "independent-dimensions",
     "mesh-fidelity",
+    "no-missing-feature",
     "single-visible-object",
     "compact-model"
   ],
-  "proved": "2026-10-16, container setup, Harbor 0.22.0 on Colima, eight checks",
+  "proved": "2026-10-16, container setup, Harbor 0.22.0 on Colima, nine checks",
   "isolation": {
     "agent": "allowlist host.docker.internal (per host, all ports); public hosts blocked",
     "verifier": "no network"
@@ -46,6 +47,10 @@
         {
           "title": "Generic mesh slicing produces dense loft trees instead of design-intent CAD features",
           "check": "independent-dimensions"
+        },
+        {
+          "title": "A run that should score 0 scored 1: a model without its branch passed every check",
+          "check": "no-missing-feature"
         }
       ],
       "controls": {
@@ -98,6 +103,13 @@
               "independent-dimensions"
             ],
             "model": "a real run of the final agent: 4 ruled lofts through 24 B-spline sections, every height driven by one Params.Length, IoU 0.970, 50 faces"
+          },
+          "no-branch": {
+            "reward": 0,
+            "fails": [
+              "no-missing-feature"
+            ],
+            "model": "a real agent run that passed eight checks without its branch (IoU 0.918, largest missing piece 4.4% of the volume)"
           }
         }
       }

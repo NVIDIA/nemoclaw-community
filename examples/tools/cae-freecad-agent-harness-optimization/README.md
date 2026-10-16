@@ -128,7 +128,7 @@ flowchart LR
   end
   subgraph trial["One trial · many in parallel"]
     C["Task container · 5 min · 3 GiB<br/>headless FreeCAD + Deep Agents<br/>/agent: prompt, skills, middleware<br/>/app: reference.obj → model.FCStd"]
-    V["Verifier container · no network<br/>8 checks → reward"]
+    V["Verifier container · no network<br/>9 checks → reward"]
   end
   subgraph helix["NeMo Helix"]
     G["Inference gateway<br/>Nemotron 3 Ultra"]
@@ -171,7 +171,7 @@ building blocks the agent composes in its own build script, and a clock middlewa
 Nemotron 3 Ultra it passed **10 of 10** confirmation runs, five per part, every check
 passing, IoU 0.918-0.958, about 4 minutes per run.
 
-A run passes only when all eight checks pass:
+A run passes only when all nine checks pass:
 
 | Check | What it verifies |
 | --- | --- |
@@ -181,6 +181,7 @@ A run passes only when all eight checks pass:
 | `named-dimension-drives-geometry` | Changing a named dimension by 10% rebuilds one clean solid whose size changes by at least 1%. |
 | `independent-dimensions` | Two named dimensions each move the part in a different way: design intent, not one stretch. |
 | `mesh-fidelity` | IoU with the reference mesh ≥ 0.9. |
+| `no-missing-feature` | No whole feature is left out: the largest piece of the part the model misses is at most 1.2% of its volume. |
 | `single-visible-object` | Only the finished model is visible when the file is opened. |
 | `compact-model` | At most 10× the faces of the reference solution: a designer's model, not a stack of slices. |
 
@@ -298,7 +299,7 @@ python publish.py scores runs/base
 ```
 
 The first build of the task image takes a few minutes. Each trial's
-`verifier/results` lists the eight checks; `agent/run.log` starts with the run's trace
+`verifier/results` lists the nine checks; `agent/run.log` starts with the run's trace
 ID, and `publish.py scores` attaches the reward, IoU, failed checks and complexity to
 that trace, so Compass can see how each run was graded.
 
@@ -463,7 +464,7 @@ agree, without credentials, services or Docker.
 
 **This does not verify:** the live path. For that, run the controls in
 [evals/](evals/README.md#rerun) (NOP 0, Oracle 1, every negative 0), then Step 1: four
-trials that each report eight checks, and their traces in Intake with `reward` and
+trials that each report nine checks, and their traces in Intake with `reward` and
 `iou` attached.
 
 ## Teardown

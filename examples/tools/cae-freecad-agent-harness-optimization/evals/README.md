@@ -9,7 +9,7 @@ trace-to-task workflow and run with [Harbor](https://www.harborframework.com/) 0
 
 ## Cases
 
-Both tasks share one instruction, one verifier and the same eight checks; only the
+Both tasks share one instruction, one verifier and the same nine checks; only the
 reference mesh and solution differ, so the suite tests that the agent's method works
 for more than one shape.
 
@@ -20,12 +20,12 @@ for more than one shape.
 
 The agent gets the [instruction](part-1-reconstruction/instruction.md): rebuild
 `/app/reference.obj` as an editable PartDesign model and save it to `/app/model.FCStd`.
-The verifier grades that file in its own container with eight checks, all of which must
+The verifier grades that file in its own container with nine checks, all of which must
 pass: `recomputes-after-reopen`, `single-valid-solid`, `native-feature-tree`,
 `named-dimension-drives-geometry`, `independent-dimensions` (two named dimensions that
 each change the part in a different way), `mesh-fidelity` (IoU ≥ 0.9),
-`single-visible-object` and `compact-model` (at most 10× the reference solution's
-faces). See the [grading explanation](part-1-reconstruction/README.md#verification-explanation).
+`no-missing-feature` (no whole feature left out), `single-visible-object` and
+`compact-model` (at most 10× the reference solution's faces). See the [grading explanation](part-1-reconstruction/README.md#verification-explanation).
 
 ## How a trial runs
 
@@ -100,7 +100,7 @@ when all pass; `agent/run.log` starts with the run's Intake trace ID. Browse job
 
 ## Proof
 
-Re-proved on 2026-10-16 with eight checks in the container setup above (separate
+Re-proved on 2026-10-16 with nine checks in the container setup above (separate
 verifier, no network):
 
 | Control | part-1 | part-2 | Fails |
@@ -111,6 +111,7 @@ verifier, no network):
 | `broken`: solution with its last feature's profile removed | 0 | 0 | `recomputes-after-reopen`, `named-dimension-drives-geometry`, `independent-dimensions` |
 | `scripted`: solution's solid as a scripted base shape, plus one sketch-driven pocket | 0 | 0 | `native-feature-tree`, `named-dimension-drives-geometry`, `independent-dimensions` |
 | `slices`: a real agent run, 32 stacked pads (IoU 0.91, 1,658 faces) | 0 | n/a | `independent-dimensions`, `compact-model` |
+| `no-branch`: a real agent run that left out its branch (IoU 0.918) | 0 | n/a | `no-missing-feature` |
 | `one-dimension`: a real run of the final agent, 4 ruled lofts driven by one `Params.Length` (IoU 0.970 / 0.943) | 0 | 0 | `independent-dimensions` |
 
 Isolation, probed with Harbor 0.22.0 on Colima: the agent reaches only
