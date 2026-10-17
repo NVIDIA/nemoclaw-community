@@ -33,6 +33,20 @@ spec:
     kubernetes:
       envoyService:
         type: {{ $serviceType | quote }}
+      {{- if or .Values.ingress.gateway.nodeSelector .Values.ingress.gateway.tolerations }}
+      # Pin the dataplane next to GPU pods when a target node is set. Envoy does
+      # not request GPUs; tolerations are only so it can land on a GPU-tainted node.
+      envoyDeployment:
+        pod:
+          {{- with .Values.ingress.gateway.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.ingress.gateway.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- end }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -140,6 +154,10 @@ spec:
       name: {{ $openShellRouteName }}
   loadBalancer:
     type: LeastRequest
+  # One HTTP connection per OpenClaw sandbox otherwise stays on the first
+  # GPU. New HPA pods then sit at 0% and the average cannot climb to 8.
+  circuitBreaker:
+    maxRequestsPerConnection: 1
   timeout:
     http:
       connectionIdleTimeout: {{ .Values.ingress.gateway.connectionIdleTimeout | default "60s" | quote }}
@@ -189,6 +207,8 @@ spec:
       name: {{ $routeName }}
   loadBalancer:
     type: LeastRequest
+  circuitBreaker:
+    maxRequestsPerConnection: 1
   timeout:
     http:
       connectionIdleTimeout: {{ .Values.ingress.gateway.connectionIdleTimeout | default "60s" | quote }}
