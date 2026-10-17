@@ -19,7 +19,7 @@ what each script in this directory does — it has no instructions of its own.
 | `hpa-load-test-brev-4xl40s.sh` | HPA load test for **4× L40S** on AWS (Brev). Same GPU-util default / latency env vars. |
 | `agentscaling_gpuutil.sh` | Sandbox provision + GPU-util HPA. Keeps current GPUs at 1 (`maxReplicas=8`) until `client.sh`. |
 | `agentscaling_latency.sh` | Same sandboxes, LLM-latency HPA. Keeps current GPUs at 1 (`maxReplicas=8`) until `client.sh`. |
-| `client.sh` | End users: 1:1 HTTP to `http://dgx-ip:18789+i`. One client for both metrics. GPU util: `INFLIGHT=2 MAX_TOKENS=2048`. Latency: `INFLIGHT=2 MAX_TOKENS=64`. Stops new chats at 8 GPUs, then prints the table after HPA is back to 1. Laptop: `E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh`. |
+| `client.sh` | End users: 1:1 HTTP to `http://dgx-ip:18789+i`. One client for both metrics. Stop at 8. Latency: 2048 until 6 GPUs, then short prompts (`E2E_USERS=5 ./scripts/client.sh`). GPU util flags: `INFLIGHT=2 MAX_TOKENS=2048`. Laptop: `E2E_CLIENT_HOST=dgx-ip E2E_USERS=5 ./scripts/client.sh`. |
 | `agentscaling-common.sh` | Shared HPA apply + sandbox steps. Do not run it directly. |
 | `setup-openclaw-ollama-e2e-sandboxes.sh` | Sandbox create/start/stop used by the agentscaling scripts |
 | `e2e-openclaw-ollama-load-test.py` | Implementation used by `client.sh` |

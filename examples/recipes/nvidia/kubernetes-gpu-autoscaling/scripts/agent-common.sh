@@ -20,16 +20,15 @@ agent_common_validate() {
 # ../README.md#6a-openclaw--ollama
 agent_common_print_laptop_client_usage() {
   local script_name="${1:?client script}"
-  echo "Default — any remote machine: E2E_CLIENT_HOST=dgx-ip E2E_USERS=${E2E_USERS:-5} ./scripts/${script_name}"
-  echo "simpler option — from the same DGX in another terminal: E2E_USERS=${E2E_USERS:-5} ./scripts/${script_name}"
+  echo "Default - any remote machine: E2E_CLIENT_HOST=dgx-ip E2E_USERS=${E2E_USERS:-5} ./scripts/${script_name}"
+  echo "simpler option - from the same DGX in another terminal: E2E_USERS=${E2E_USERS:-5} ./scripts/${script_name}"
 }
 
-# Same client.sh for both HPA metrics. GPU util: INFLIGHT=2 MAX_TOKENS=2048.
-# Latency: INFLIGHT=2 MAX_TOKENS=64. INFLIGHT and MAX_TOKENS on the command
-# override these defaults. The client sends until 8 GPUs, then stops new
-# chats. The DGX path pins
-# MAX_TOKENS. OpenClaw stays up after stop; uninstall-e2e.sh removes it
-# when the pairing is done.
+# Same client.sh for both HPA metrics. Stop at 8. Latency ignores
+# INFLIGHT and MAX_TOKENS (INFLIGHT=1, 2048 until 6 GPUs, then short
+# prompts). GPU util uses INFLIGHT and MAX_TOKENS (default 2 and 2048)
+# until stop. The DGX path pins MAX_TOKENS. OpenClaw stays up after
+# stop; uninstall-e2e.sh removes it when the pairing is done.
 agent_common_hpa_metric() {
   local metric="${HPA_METRIC:-}"
   if [[ -z "${metric}" ]] && command -v kubectl >/dev/null 2>&1; then
@@ -57,22 +56,22 @@ agent_common_resolve_max_tokens() {
   local agent="${1:-openclaw}"
   local raw="${MAX_TOKENS:-}"
   local metric
-  # MAX_TOKENS is the flag for both metrics. Fallbacks apply only when it is omitted.
-  if [[ -z "${raw}" ]]; then
-    metric="$(agent_common_hpa_metric)"
-    case "${metric}" in
-      *latency*)
-        raw="${E2E_LATENCY_TOKEN_START:-64}"
-        ;;
-      *)
+  metric="$(agent_common_hpa_metric)"
+  case "${metric}" in
+    *latency*)
+      # Leftover MAX_TOKENS from GPU util must not change the latency demo.
+      raw="${E2E_LATENCY_TOKEN_START:-2048}"
+      ;;
+    *)
+      if [[ -z "${raw}" ]]; then
         case "${agent}" in
           openclaw) raw=2048 ;;
           deepagents) raw=2048 ;;
           *) raw=1024 ;;
         esac
-        ;;
-    esac
-  fi
+      fi
+      ;;
+  esac
   [[ "${raw}" =~ ^[1-9][0-9]*$ ]] || {
     echo "ERROR: MAX_TOKENS must be a positive integer (got '${raw}')" >&2
     return 1
@@ -91,12 +90,24 @@ agent_common_export_client_tokens() {
   export E2E_GPUUTIL_TOKEN_START="${MAX_TOKENS}"
 }
 
-# Demo default when INFLIGHT is omitted. INFLIGHT on the command wins
-# over a leftover E2E_INFLIGHT_PER_USER from an earlier run in this shell.
+# Latency always uses INFLIGHT=1. GPU util uses INFLIGHT on the command,
+# or 2 when it is omitted.
 agent_common_export_demo_workload() {
-  if [[ -z "${INFLIGHT:-}" ]]; then
-    INFLIGHT=2
+  local metric
+  metric="$(agent_common_hpa_metric)"
+  if [[ -n "${metric}" ]]; then
+    export HPA_METRIC="${metric}"
   fi
+  case "${HPA_METRIC:-}" in
+    *latency*)
+      INFLIGHT=1
+      ;;
+    *)
+      if [[ -z "${INFLIGHT:-}" ]]; then
+        INFLIGHT=2
+      fi
+      ;;
+  esac
   export INFLIGHT
 }
 
@@ -120,7 +131,14 @@ agent_common_export_client_inflight() {
 agent_common_print_load_banner() {
   local duration="${1:?}"
   local _hold="${2:?}"
-  echo "Applied flags: INFLIGHT=${INFLIGHT} MAX_TOKENS=${MAX_TOKENS}"
+  case "${HPA_METRIC:-}" in
+    *latency*)
+      echo "Latency: INFLIGHT=${INFLIGHT} MAX_TOKENS=${MAX_TOKENS} until 6 GPUs, then short prompts, stop at 8."
+      ;;
+    *)
+      echo "GPU util: INFLIGHT=${INFLIGHT} MAX_TOKENS=${MAX_TOKENS} until stop at 8."
+      ;;
+  esac
   echo "Send ceiling: ${duration}s (stops earlier when HPA reaches 8 GPUs)."
   echo "Prints the chat table after HPA is back to 1 GPU."
 }

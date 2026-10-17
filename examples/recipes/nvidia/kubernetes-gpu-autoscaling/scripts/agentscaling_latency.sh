@@ -10,7 +10,7 @@
 # Isolated eval without TLS must set ALLOW_INSECURE_HTTP=1 explicitly.
 # Provision keeps current replicas at 1 (maxReplicas stays 8). Run
 # ./scripts/client.sh after :18789 is up
-# (laptop: E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=64 E2E_USERS=5).
+# (laptop: E2E_CLIENT_HOST=dgx-ip E2E_USERS=5).
 # The client does not set HPA_METRIC. For GPU-util HPA use
 # ./scripts/agentscaling_gpuutil.sh.
 #
@@ -36,5 +36,5 @@ hpa_common_load_local_env "${CHART_DIR}"
 
 export HPA_METRIC="latency_avg"
 export HPA_TARGET_LATENCY_MS="${HPA_TARGET_LATENCY_MS:-3000}"
-export MAX_TOKENS="${MAX_TOKENS:-${E2E_LATENCY_TOKEN_START:-64}}"
+export MAX_TOKENS="${MAX_TOKENS:-${E2E_LATENCY_TOKEN_START:-2048}}"
 agentscaling_common_main "${1:-bringup}"

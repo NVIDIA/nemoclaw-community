@@ -106,6 +106,12 @@ assert ":t{turn}" not in helper
 assert '"sessions.delete"' in helper
 assert "_read_latency_ramp" not in helper
 assert "E2E_LATENCY_RAMP" not in helper
+assert "def _replica_count()" in helper
+assert "_replica_count() >= 6" in helper
+assert "def _latency_metric()" in helper
+assert "_latency_metric() and _replica_count() >= 6" in helper
+assert "pin_short_max_tokens_for_demo" not in SCRIPT.read_text()
+assert "hpa_common_set_dcgm_peak_window 15" in SCRIPT.read_text()
 pin_src = (chart / "files" / "pin-openclaw-ollama-model.py").read_text()
 assert '"write"' in pin_src
 assert '"read"' in pin_src
@@ -116,9 +122,15 @@ assert 'maint["maxEntries"] = 100000' in pin_src
 assert 'maint["mode"] = "warn"' in pin_src
 assert 'tools["profile"] = "minimal"' in pin_src
 agent_common = (chart / "scripts" / "agent-common.sh").read_text()
+assert "PIN_RESET_SESSIONS" not in agent_common
+assert "agent_common_repin_openclaw_max_tokens" not in agent_common
 assert '"write"' in agent_common
 assert 'maint["maxEntries"] = 100000' in agent_common
 assert "openclaw) raw=2048" in agent_common
+assert 'raw="${E2E_LATENCY_TOKEN_START:-2048}"' in agent_common
+assert "*latency*)" in agent_common
+assert "INFLIGHT=1" in agent_common.split("agent_common_export_demo_workload")[1].split("agent_common_export_client_inflight")[0]
+assert "Leftover MAX_TOKENS from GPU util must not change the latency demo." in agent_common
 discovery = (chart / "files" / "e2e-http-discovery.py").read_text()
 assert 'E2E_PUBLISH_BIND' in discovery
 assert 'return "127.0.0.1"' in discovery
@@ -223,6 +235,10 @@ assert '--scale-down-wait-loops "${SCALE_DOWN_WAIT_LOOPS}"' in client
 assert "--scale-down-wait-loops 0" not in client
 assert "Successful chats = chats that got a reply" in SCRIPT.read_text()
 assert "resume_hpa_scale_down_for_demo" in SCRIPT.read_text()
+assert "wait_sec=float(timeout_sec) + 5.0" not in SCRIPT.read_text()
+assert "join_deadline = time.monotonic() + max(0.0, drain)" in helper
+assert "max(timeout, drain)" not in helper
+assert 'stabilizationWindowSeconds","value":0' in hpa_common.replace(" ", "")
 assert "--chats" not in client
 assert "E2E_CHATS_PER_USER" not in client
 assert "E2E_CHATS_PER_USER" not in common

@@ -12,8 +12,11 @@ import os
 import signal
 import socket
 import struct
+import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 import uuid
 
 
@@ -102,10 +105,65 @@ def _gateway_token() -> str:
 def _max_tokens() -> int:
     """MAX_TOKENS is the client flag. It selects the prompt; chat.send has no maxTokens."""
     try:
-        raw = int(os.environ.get("MAX_TOKENS") or "64")
+        raw = int(os.environ.get("MAX_TOKENS") or "2048")
     except ValueError:
-        raw = 64
+        raw = 2048
     return max(8, raw)
+
+
+def _latency_metric() -> bool:
+    """Short-at-6 is latency only. GPU util keeps MAX_TOKENS until stop at 8."""
+    return "latency" in (os.environ.get("HPA_METRIC") or "")
+
+
+def _replica_count() -> int:
+    """Live GPU count from discovery /hpa. 0/0 is treated as 1, not 8."""
+    now = time.monotonic()
+    cached = getattr(_replica_count, "_cache", None)
+    if cached is not None and now - cached[0] < 2.0:
+        return int(cached[1])
+    host = os.environ.get("E2E_HPA_HOST") or "127.0.0.1"
+    try:
+        port = int(os.environ.get("E2E_DISCOVERY_PORT") or "18788")
+    except ValueError:
+        port = 18788
+    n = 0
+    try:
+        with urllib.request.urlopen(f"http://{host}:{port}/hpa", timeout=2) as resp:
+            data = json.loads(resp.read().decode())
+        if isinstance(data, dict):
+            current = int(data.get("current") or 0)
+            desired = int(data.get("desired") or 0)
+            n = max(current, desired)
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, TypeError, ValueError):
+        n = 0
+    if n < 1:
+        try:
+            raw = subprocess.check_output(
+                [
+                    "kubectl",
+                    "get",
+                    "hpa",
+                    os.environ.get("HPA_NAME") or "nemoclaw-gpu-metrics-proxy",
+                    "-n",
+                    os.environ.get("NAMESPACE") or "nemoclaw-gpu",
+                    "-o",
+                    "jsonpath={.status.currentReplicas} {.status.desiredReplicas}",
+                ],
+                text=True,
+                timeout=5,
+                stderr=subprocess.DEVNULL,
+            )
+            parts = raw.split()
+            current = int(parts[0]) if parts and parts[0].isdigit() else 0
+            desired = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+            n = max(current, desired)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError, OSError, ValueError):
+            n = 0
+    if n < 1:
+        n = 1
+    _replica_count._cache = (now, n)
+    return n
 
 
 def estimate_tokens(text: str) -> int:
@@ -319,7 +377,7 @@ def run_load(prompt: str, timeout: float, token: str) -> int:
         "Do not use tools. Write a detailed 2000-word description of how Ollama serves models and batches concurrent chat requests, with examples. Keep writing until the answer is long.",
     ]
     short_prompts = [
-        prompt or "Do not use tools. In one sentence, what is Kubernetes HPA?",
+        "Do not use tools. In one sentence, what is Kubernetes HPA?",
         "Do not use tools. In one sentence, what is GPU utilization?",
         "Do not use tools. In one sentence, what is Ollama?",
     ]
@@ -338,6 +396,8 @@ def run_load(prompt: str, timeout: float, token: str) -> int:
                 pause = max(0.0, float(pause_raw))
             except ValueError:
                 pause = 0.0
+        if _latency_metric() and _replica_count() >= 6:
+            return short_prompts, pause
         if env_max_tokens <= 128:
             return short_prompts, pause
         if env_max_tokens <= 1024:
@@ -432,7 +492,7 @@ def run_load(prompt: str, timeout: float, token: str) -> int:
     # Wait for already-sent chats to get a final reply (or timeout). Those
     # counts are ok (got a reply) or err (sent, no reply).
     drain = float(os.environ.get("E2E_DRAIN_SEC", "0"))
-    join_deadline = time.monotonic() + max(timeout, drain)
+    join_deadline = time.monotonic() + max(0.0, drain)
     for worker_thread in workers:
         remaining = join_deadline - time.monotonic()
         if remaining <= 0:

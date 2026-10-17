@@ -31,7 +31,7 @@ Each GPU pod is **2/2 Ready** when healthy: inference (`ollama` / `vllm` / `nim`
 Isolated eval uses `ALLOW_INSECURE_HTTP=1` (Envoy with no TLS overlay). HTTPS Envoy uses [TLS values](#tls-values).
 
 ```text
-End users (1 pairing sandbox, or M sandboxes — one per user)
+M end users (1 sandbox per user)
         ↓
 CPU-only OpenShell sandboxes (AGENT_NAME=openclaw | hermes | deepagents)
         ↓

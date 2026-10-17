@@ -11,11 +11,11 @@
 #   ./scripts/agentscaling_gpuutil.sh
 #   ./scripts/agentscaling_latency.sh
 #
-# One client for both HPA metrics. Demo defaults come from the live metric:
-#   GPU util: INFLIGHT=2 MAX_TOKENS=2048
-#   latency:  INFLIGHT=2 MAX_TOKENS=64
-#   E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
-#   INFLIGHT=2 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
+# One client for both HPA metrics. Both stop at 8. Demo defaults come
+# from the live metric. Latency drops to short prompts at 6 GPUs.
+# Latency: E2E_USERS=5 ./scripts/client.sh
+# GPU util: INFLIGHT=2 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
+#   E2E_CLIENT_HOST=dgx-ip E2E_USERS=5 ./scripts/client.sh
 # UI user N: http://dgx-ip:$((18789+N))/u/0
 # Both paths send chat.send to published :18789+i. They do not copy a load
 # helper into the sandbox. The DGX path pauses HPA scale-down during the
@@ -70,7 +70,7 @@ command -v python3 >/dev/null 2>&1 || fail "missing command: python3"
 
 if [[ -n "${E2E_CLIENT_HOST}" ]]; then
   agent_common_print_laptop_client_usage "client.sh"
-  echo "Client HTTP: ${E2E_USERS} end users → ${E2E_CLIENT_HOST}:18789 … $((18789 + E2E_USERS - 1))"
+  echo "Client HTTP: ${E2E_USERS} end users -> ${E2E_CLIENT_HOST}:18789 ... $((18789 + E2E_USERS - 1))"
   agent_common_print_load_banner "${DURATION_SEC}" "${MAX_REPLICAS_HOLD_SEC}"
   python3 - "${E2E_CLIENT_HOST}" "${E2E_USERS}" <<'PY'
 import sys, urllib.error, urllib.request
@@ -90,28 +90,28 @@ for i in range(users):
         print(f"ERROR: user {i} {url} HTTP {code}", file=sys.stderr)
         failed = 1
         continue
-    print(f"  user {i} → {url}")
+    print(f"  user {i} -> {url}")
 if failed:
     raise SystemExit("client will not send chat until every http://dgx-ip:18789+i/health answers")
-print(f"UI (one port per user): http://{host}:18789/u/0 … :{18789 + users - 1}/u/0")
+print(f"UI (one port per user): http://{host}:18789/u/0 ... :{18789 + users - 1}/u/0")
 PY
 mkdir -p "${E2E_OUTPUT_DIR}"
 agent_common_start_hpa_timeline "${E2E_OUTPUT_DIR}" 0
 cd "${CHART_DIR}" || fail "cannot cd to ${CHART_DIR}"
 exec python3 "${SCRIPT_DIR}/e2e-openclaw-ollama-load-test.py" \
-    --users "${E2E_USERS}" \
-    --prefix "${SANDBOX_PREFIX}" \
-    --output "${E2E_OUTPUT_DIR}" \
-    --duration "${DURATION_SEC}" \
-    --inflight-per-user "${E2E_INFLIGHT_PER_USER}" \
-    --inflight-start "${E2E_INFLIGHT_START_PER_USER}" \
-    --target-pods "${TARGET_PODS}" \
-    --hold-sec "${MAX_REPLICAS_HOLD_SEC}" \
-    --hpa-namespace "${NAMESPACE}" \
-    --hpa-name "${HPA_NAME}" \
-    --scale-down-wait-loops "${SCALE_DOWN_WAIT_LOOPS}" \
-    --host "${E2E_CLIENT_HOST}" \
-    --chat-only
+  --users "${E2E_USERS}" \
+  --prefix "${SANDBOX_PREFIX}" \
+  --output "${E2E_OUTPUT_DIR}" \
+  --duration "${DURATION_SEC}" \
+  --inflight-per-user "${E2E_INFLIGHT_PER_USER}" \
+  --inflight-start "${E2E_INFLIGHT_START_PER_USER}" \
+  --target-pods "${TARGET_PODS}" \
+  --hold-sec "${MAX_REPLICAS_HOLD_SEC}" \
+  --hpa-namespace "${NAMESPACE}" \
+  --hpa-name "${HPA_NAME}" \
+  --scale-down-wait-loops "${SCALE_DOWN_WAIT_LOOPS}" \
+  --host "${E2E_CLIENT_HOST}" \
+  --chat-only
 fi
 
 command -v openshell >/dev/null 2>&1 \
@@ -125,7 +125,7 @@ hpa_common_require_live_runtime "${NAMESPACE}" "${HPA_NAME}" "${INFERENCE_RUNTIM
 
 export E2E_CLIENT_QUIET_HPA=1
 agent_common_print_laptop_client_usage "client.sh"
-echo "Client: ${E2E_USERS} end users → ${E2E_USERS} OpenShell sandboxes (1:1)."
+echo "Client: ${E2E_USERS} end users -> ${E2E_USERS} OpenShell sandboxes (1:1)."
 agent_common_print_load_banner "${DURATION_SEC}" "${MAX_REPLICAS_HOLD_SEC}"
 missing=0
 for ((i = 0; i < E2E_USERS; i += 1)); do
@@ -135,7 +135,7 @@ for ((i = 0; i < E2E_USERS; i += 1)); do
     missing=1
     continue
   fi
-  echo "  user ${i} → sandbox ${i} :18789"
+  echo "  user ${i} -> sandbox ${i} :18789"
 done
 ((missing == 0)) || fail "clients do not create sandboxes; start them with ./scripts/agentscaling_gpuutil.sh or ./scripts/agentscaling_latency.sh"
 
@@ -145,7 +145,7 @@ for ((i = 0; i < E2E_USERS; i += 1)); do
   code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 2 "http://127.0.0.1:${port}/health" 2>/dev/null || true)"
   case "${code}" in
     200 | 401)
-      echo "  user ${i} → http://127.0.0.1:${port}/health"
+      echo "  user ${i} -> http://127.0.0.1:${port}/health"
       ;;
     *)
       echo "ERROR: http://127.0.0.1:${port}/health HTTP ${code:-down}. Run agentscaling_gpuutil.sh or agentscaling_latency.sh so :18789+i is published." >&2
@@ -162,14 +162,15 @@ for ((i = 0; i < E2E_USERS; i += 1)); do
 done
 # OpenClaw gateway.reload=off: this pin lands in openclaw.json for the next
 # start of the OpenClaw agent. Do not stop that agent; leave it for later chats.
-# "gateway" here is OpenClaw's process name, not the OpenShell gateway.
+# OpenClaw process name gateway, not the OpenShell gateway.
 
 mkdir -p "${E2E_OUTPUT_DIR}"
 agent_common_start_hpa_timeline "${E2E_OUTPUT_DIR}" 0
 cd "${CHART_DIR}" || fail "cannot cd to ${CHART_DIR}"
 hpa_common_arm_hpa_for_client "${NAMESPACE}" "${HPA_NAME}" "${TARGET_PODS:-8}"
-# Keep scale-up only until 8 so a new idle GPU cannot bounce during the climb.
-# Resume scale-down when the client exits so 8→1 can start after the sit-at-8 hold.
+# Pause 8→1 only during 1→8. A new idle GPU-util replica at 0% would
+# otherwise bounce the count. The load test resumes scale-down as soon as
+# HPA reaches 8. The EXIT trap resumes again if the client stops early.
 _hpa_metric="$(agent_common_hpa_metric)"
 case "${_hpa_metric}" in
   *gpu_utilization* | gpu)
@@ -189,21 +190,25 @@ _client_finish() {
       ;;
   esac
   # OpenClaw stays up for later use. Do not pin maxReplicas=1: HPA must
-  # walk 8→1 after the sit-at-8 hold. Tear down with uninstall-e2e.sh.
+  # walk 8→1. Tear down with uninstall-e2e.sh.
 }
 trap '_client_finish' EXIT
+load_args=(
+  "${SCRIPT_DIR}/e2e-openclaw-ollama-load-test.py"
+  --users "${E2E_USERS}"
+  --prefix "${SANDBOX_PREFIX}"
+  --output "${E2E_OUTPUT_DIR}"
+  --duration "${DURATION_SEC}"
+  --inflight-per-user "${E2E_INFLIGHT_PER_USER}"
+  --inflight-start "${E2E_INFLIGHT_START_PER_USER}"
+  --target-pods "${TARGET_PODS}"
+  --hold-sec "${MAX_REPLICAS_HOLD_SEC}"
+  --hpa-namespace "${NAMESPACE}"
+  --hpa-name "${HPA_NAME}"
+  --scale-down-wait-loops "${SCALE_DOWN_WAIT_LOOPS}"
+  --host 127.0.0.1
+  --chat-only
+)
 load_rc=0
-python3 "${SCRIPT_DIR}/e2e-openclaw-ollama-load-test.py" \
-  --users "${E2E_USERS}" \
-  --prefix "${SANDBOX_PREFIX}" \
-  --output "${E2E_OUTPUT_DIR}" \
-  --duration "${DURATION_SEC}" \
-  --inflight-per-user "${E2E_INFLIGHT_PER_USER}" \
-  --inflight-start "${E2E_INFLIGHT_START_PER_USER}" \
-  --target-pods "${TARGET_PODS}" \
-  --hold-sec "${MAX_REPLICAS_HOLD_SEC}" \
-  --hpa-namespace "${NAMESPACE}" \
-  --hpa-name "${HPA_NAME}" \
-  --scale-down-wait-loops "${SCALE_DOWN_WAIT_LOOPS}" \
-  --host 127.0.0.1 --chat-only || load_rc=$?
+python3 "${load_args[@]}" || load_rc=$?
 exit "${load_rc}"

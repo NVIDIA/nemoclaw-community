@@ -2063,9 +2063,15 @@ hpa_common_pause_hpa_scale_down() {
 hpa_common_resume_hpa_scale_down() {
   local ns="${1:?namespace}"
   local hpa="${2:?hpaName}"
-  kubectl patch hpa "${hpa}" -n "${ns}" --type=json \
-    -p '[{"op":"remove","path":"/spec/behavior/scaleDown/selectPolicy"}]' \
-    >/dev/null 2>&1 || true
+  # Re-enable 8→1. Stabilization 0 so HPA does not sit at 8 for 60s after
+  # latency_avg hits 0. One replica per 10s still walks 8→1.
+  if ! kubectl patch hpa "${hpa}" -n "${ns}" --type=json \
+    -p '[{"op":"replace","path":"/spec/behavior/scaleDown/selectPolicy","value":"Max"},{"op":"replace","path":"/spec/behavior/scaleDown/stabilizationWindowSeconds","value":0}]' \
+    >/dev/null; then
+    kubectl patch hpa "${hpa}" -n "${ns}" --type=json \
+      -p '[{"op":"add","path":"/spec/behavior/scaleDown/selectPolicy","value":"Max"},{"op":"replace","path":"/spec/behavior/scaleDown/stabilizationWindowSeconds","value":0}]' \
+      >/dev/null
+  fi
 }
 
 # DCGM peak window in Prometheus Adapter. 90s during GPU-util climb; 15s after

@@ -123,9 +123,9 @@ def endpoint_for_user(users: list[dict[str, object]], user_id: int) -> dict[str,
 
 def load_prompt() -> str:
     try:
-        max_tokens = int(os.environ.get("MAX_TOKENS") or "64")
+        max_tokens = int(os.environ.get("MAX_TOKENS") or "2048")
     except ValueError:
-        max_tokens = 1024
+        max_tokens = 2048
     if max_tokens <= 128:
         return "Do not use tools. In one sentence, what is Kubernetes HPA?"
     if max_tokens <= 1024:
@@ -514,24 +514,32 @@ def print_chat_table(
 
 
 def resume_hpa_scale_down_for_demo(namespace: str, hpa_name: str) -> None:
-    """Let 8→1 start after already-sent chats finish. Laptop without kubectl is a no-op."""
+    """Let 8→1 start as soon as new chats stop. Laptop without kubectl is a no-op."""
     script = Path(__file__).resolve().parent / "hpa-common.sh"
     if not script.is_file() or shutil.which("kubectl") is None:
         return
-    subprocess.run(
+    completed = subprocess.run(
         [
             "bash",
             "-c",
-            'source "$1" && hpa_common_resume_hpa_scale_down "$2" "$3" || true && hpa_common_set_dcgm_peak_window 15 || true',
+            'source "$1" && hpa_common_resume_hpa_scale_down "$2" "$3"; '
+            "hpa_common_set_dcgm_peak_window 15 || true",
             "resume-hpa",
             str(script),
             namespace,
             hpa_name,
         ],
         check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
     )
+    if completed.returncode != 0:
+        err = (completed.stderr or completed.stdout or "").strip()
+        print(
+            f"[load] could not resume HPA scale-down: {err or 'kubectl patch failed'}",
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 async def terminate_proc(proc: asyncio.subprocess.Process, wait_sec: float = 2) -> None:
@@ -600,7 +608,11 @@ async def simulate_user_http(
     env["E2E_ESCALATE_INTERVAL_SEC"] = "15"
     env["E2E_ESCALATE_FACTOR"] = "0.35"
     env["E2E_DRAIN_SEC"] = str(os.environ.get("E2E_DRAIN_SEC") or "0")
-    env["MAX_TOKENS"] = str(os.environ.get("MAX_TOKENS") or "64")
+    env["MAX_TOKENS"] = str(os.environ.get("MAX_TOKENS") or "2048")
+    env["HPA_METRIC"] = os.environ.get("HPA_METRIC") or ""
+    env["E2E_HPA_HOST"] = os.environ.get("E2E_HPA_HOST") or host
+    if os.environ.get("E2E_DISCOVERY_PORT"):
+        env["E2E_DISCOVERY_PORT"] = os.environ["E2E_DISCOVERY_PORT"]
     if os.environ.get("E2E_CHAT_PAUSE_SEC"):
         env["E2E_CHAT_PAUSE_SEC"] = os.environ["E2E_CHAT_PAUSE_SEC"]
     proc = await asyncio.create_subprocess_exec(
@@ -633,7 +645,8 @@ async def simulate_user_http(
             except asyncio.TimeoutError:
                 continue
         if stop_event.is_set() and proc.returncode is None:
-            await terminate_proc(proc, wait_sec=float(timeout_sec) + 5.0)
+            drain = float(os.environ.get("E2E_DRAIN_SEC") or "0")
+            await terminate_proc(proc, wait_sec=max(2.0, drain))
         else:
             await proc.wait()
     finally:
@@ -680,6 +693,9 @@ async def run_test(args: argparse.Namespace) -> int:
         endpoints = users_from_http_host(args.host, args.users, args.discovery_port)
     elif args.endpoints:
         endpoints = load_endpoints(Path(args.endpoints))
+    if args.host:
+        os.environ["E2E_HPA_HOST"] = str(args.host)
+    os.environ.setdefault("E2E_DISCOVERY_PORT", str(args.discovery_port))
     if not endpoints:
         print(
             "OpenClaw client must use --host (published :18789+i). "
@@ -710,9 +726,9 @@ async def run_test(args: argparse.Namespace) -> int:
 
     skip_hpa = bool(args.chat_only and not args.host)
     try:
-        pinned_tokens = int(os.environ.get("MAX_TOKENS") or "64")
+        pinned_tokens = int(os.environ.get("MAX_TOKENS") or "2048")
     except ValueError:
-        pinned_tokens = 64
+        pinned_tokens = 2048
     print(
         f"[load] max_tokens={pinned_tokens} inflight={args.inflight_per_user}",
         flush=True,
@@ -745,6 +761,11 @@ async def run_test(args: argparse.Namespace) -> int:
                 at_stop, args.hold_sec, at_max_since, time.monotonic()
             )
             if stop_now:
+                await asyncio.to_thread(
+                    resume_hpa_scale_down_for_demo,
+                    args.hpa_namespace,
+                    args.hpa_name,
+                )
                 stop_load.set()
             elif at_stop and not hold_announced:
                 hold_announced = True
