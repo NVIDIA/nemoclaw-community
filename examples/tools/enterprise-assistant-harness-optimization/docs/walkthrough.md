@@ -173,7 +173,7 @@ export INSIGHT_AGENT_API_KEY
 ```
 ### Run the analysis
 
-NeMo Compass performs analysis on the traces collected earlier. To inform that analysis, NeMo Compass accepts a file called [ETHOS.md](../ETHOS.md), a document you supply describing what your agent should do and which mistakes count as failures. This example includes one for the fictional assistant.
+NeMo Compass performs analysis on the traces collected earlier. To inform that analysis, NeMo Compass accepts a file called [ETHOS.md](../ETHOS.md), a document you generate using the [Ethos skills](https://github.com/NVIDIA/skills/blob/main/skills/ethos-orchestrate/README.md#how-to-use). The skills help define critical business rules, functionality, and which mistakes count as failures. This example includes one for the fictional assistant.
 
 Run the analysis on the traces collected earlier:
 
