@@ -110,6 +110,17 @@ behaviours the checks cover, the more a passing score means. In this example Eva
 grew the eval from five checks to nine, each from evidence in the traces, and each new
 check changed which agent the loop kept.
 
+**Why the eval is the hard part.** As the
+[Eval Author team puts it](https://github.com/NVIDIA-NeMo/eval-author/blob/main/docs/dev-notes/posts/2026-10-08-introducing-eval-author.md),
+building agentic evals splits into *measurement* (turn what the agent should do, here the
+Ethos, into goals, and find where the eval falls short of them) and *generation* (for each
+gap, a task: an input, an environment and a verifier, each checked for accuracy). Their
+warning, that agents readily take shortcuts that pass a task while missing the behaviour it
+was meant to test, is exactly what happened here: a one-command script passed every check.
+In this loop Compass supplies the evidence for measurement, Eval Author generates and
+proves the checks (an empty answer scores 0, the reference solution 1, a realistic wrong
+answer 0), and each new check removed one shortcut.
+
 **Not tied to any infrastructure.** Compass is an agent that reads traces, and Eval
 Author is a set of skills for a coding agent; neither prescribes how your agent is built,
 which framework it uses or where it is deployed. The experiment step is delegated to your
@@ -190,62 +201,59 @@ A run passes only when all nine checks pass:
 | `single-visible-object` | Only the finished model is visible when the file is opened. |
 | `compact-model` | At most 10× the faces of the reference solution: a designer's model, not a stack of slices. |
 
-### How it got there: three chapters
+### How it got there
 
-**Chapter 1, the first Ethos.** It asked for a valid, editable, native feature tree that
-matches the mesh. Starting from a two-sentence prompt, the loop reached 10 of 10 in four
-rounds. Along the way Compass found that the agent's models were dense stacks of slices
-that passed every check, so Eval Author added `compact-model`.
+The run had three chapters. **First**, from a two-sentence prompt, the loop reached 10 of
+10 in four rounds, with an agent that ran one reconstruction script. **Then** the owner
+saw that this met the Ethos as written but not the intent (a designer could only make
+the part taller) and revised the Ethos: the agent writes its own model, dimensions carry
+design intent, the method generalizes. Eval Author turned that into a new check and the
+same agent fell to 0 of 10. **Last**, four more rounds produced an agent that models the
+part itself; rendering the models showed artefacts no check measured, and fixing those
+exposed one more gap in the eval, closed with one more check.
 
-**The Ethos revision.** The chapter-1 agent passed by running one reconstruction script,
-and its only dimension stretched a traced shape along one axis: a designer could make
-the part taller, nothing else. That met the Ethos as written, not the owner's intent. The
-owner added three principles to [ETHOS.md](ETHOS.md): the agent does the modelling and
-writes its own code (skills carry knowledge, not a finished routine); dimensions express
-design intent, such as a diameter or a wall thickness; and the method must generalize.
-Eval Author turned the second into one proven check, `independent-dimensions`. Re-graded,
-the chapter-1 agent fell from 10 of 10 to 0 of 10, and Compass, reading its traces
-against the revised Ethos, reported that it "delegates the modelling to a fixed script".
+![Checks passed, best IoU per part and tokens per run, by round](assets/results-rounds.png)
 
-**Chapter 2, the revised Ethos.** Four more rounds produced an agent that models the part
-itself and passes every check.
+| Round | What changed | Runs passed | Checks | IoU (part 1 · part 2) |
+| --- | --- | --- | --- | --- |
+| 0 | Base agent: a two-sentence prompt | 0/4 | 0% | none |
+| 1 | A skill with a one-command reconstruction script | 0/4 | 79% | 0.92 · 0.78 |
+| 2 | Lofts instead of stacked slices (rejected) | 0/4 | 64% | none · 0.85 |
+| 3 | Valid joints and a trustworthy overlap estimate | **4/4** | 100% | 0.97 · 0.94 |
+| | *Ethos revised; `independent-dimensions` added* | | | |
+| 4 | Round 3's agent, re-graded | 0/4 | 88% | 0.97 · 0.94 |
+| 5 | The agent writes its own model from knowledge skills (rejected) | 0/4 | 9% | none |
+| 6 | Feature-level building blocks; a planner subagent | 2/4 | 94% | 0.92 · 0.80 |
+| 7 | A clock, and a save that says what is missing; subagent dropped | **4/4** | 100% | 0.93 · 0.95 |
+| 8 | Smoother bodies and branches (smoke test only) | | | 0.95 · 0.63 |
+| 9 | The branch starts on the rim's flat face | 4/4 | 100% | 0.95 · 0.93 |
+| | *`no-missing-feature` added; round 9 re-graded to 3/4* | | | |
+| 10 | A branch that is never dropped | **4/4** | 100% | 0.95 · 0.93 |
 
-**Chapter 3, looking at the models.** Rendered from four directions, the chapter-2 models
-showed artefacts no check measured: creases where a branch meets the body, seams between
-sections, a pinched, hexagonal arm. The experimenter skill now asks for this review on
-every round. Removing the artefacts exposed one more gap: some runs built the model without
-its branch and still passed, because IoU barely notices a small missing feature. Eval
-Author added `no-missing-feature` from those runs, and the last round made the branch
-reliable.
+*Checks* is the share of the eval's checks passed over the round's four runs (the eval
+grew from seven to nine checks). [results/](results/README.md) has what each round's traces
+and Insights showed and why each change was made, and
+[results/insights](results/insights/README.md) every Compass Insight, which check caught it
+and which round fixed it.
 
-Each round ran both parts twice, all runs in parallel, 5 minutes per run. *Surface changed*
-names what the experimenter edited in the agent folder (system prompt, skills and their
-files, middleware, subagents). *Checks* counts passing checks across the four runs, out of
-the checks the eval had at the time (28 with seven, 32 with eight, 36 with nine).
-*Tokens / run* is the median per run, from the traces:
+## What the loop built
 
-| Round | Surface changed | What the traces and Insights showed | Change to the agent, and why | Runs passed | Checks | IoU (part 1 · part 2) | Tokens / run |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| **Chapter 1** | | | | | | | |
-| 0 | none: a two-sentence system prompt, no skills | The base agent spent its 5 minutes studying the mesh and learning FreeCAD by trial and error; it saved nothing. | none (base agent) | 0/4 | 0/28 | none | 1.9 M |
-| 1 (kept) | system prompt (+3 lines); new skill `mesh-to-partdesign` (`SKILL.md`, script `mesh2pd.py`) | No method and no sense of time. | **A skill with a script** that builds, saves and checks a model in one command, plus a time budget in the prompt: *give the agent a method and get a model saved early.* | 0/4 | 22/28 | 0.91 · 0.78 | 0.04 M |
-| | | Compass: the models are dense stacks of slices, and they pass every check. | Eval Author added `compact-model`. | | | | |
-| 2 (rejected) | skill `mesh-to-partdesign`: `mesh2pd.py` rewritten, `SKILL.md` retry rules | 1,700-face slice stacks; flat slices stair-step slanted walls. | **Lofts** through cross-sections instead of slices: *fewer faces, smoother walls.* The lofts did not fuse into one valid solid. | 0/4 | 18/28 | invalid · 0.85 | 0.08 M |
-| 3 (kept) | skill `mesh-to-partdesign`: `mesh2pd.py` (joints, IoU estimate), `SKILL.md` | Nearly tangent walls at a branch joint; the script's own IoU estimate misled the agent. | **Valid joints and a trustworthy IoU estimate**: *one clean solid, and retries the agent can rank.* | **4/4** | **28/28** | 0.97 · 0.94 | 0.02 M |
-| **Ethos revision** | | The model is a stretched trace from one script, not a designer's model. | The owner revises ETHOS.md; Eval Author adds `independent-dimensions`; round 3's agent falls to 0/10. | | | | |
-| **Chapter 2** | | | | | | | |
-| 4 | none | Round 3's agent fails only `independent-dimensions`; Compass: it delegates the modelling to a fixed script. | none (new baseline) | 0/4 | 28/32 | 0.97 · 0.94 | 0.03 M |
-| 5 (rejected) | system prompt rewritten; `mesh-to-partdesign` removed; new skills `measure-mesh`, `partdesign-features`, `verify-model`; second candidate: a `measurer` subagent | | **Knowledge skills** (measure, build features, verify) and the agent writes its own build script: *what the revised Ethos asks for.* A second candidate added a measuring **subagent**. Both failed: 200-line scripts of raw FreeCAD calls, geometry in the wrong place, nothing saved; 10-minute runs did not help. | 0/4 | 3/32 | none | 1.0 M |
-| 6 (kept) | system prompt (build order); skill `build-features` (`cadkit.py`); `measure-mesh` (`branch.py`, `extent.py`); a `planner` subagent | API mistakes and mixed coordinate frames ate every run. | **Feature-level building blocks** in world coordinates, any number an expression over named dimensions, and *build the body first and save*: *leave the decisions to the agent, take the plumbing away.* Two variants: the agent alone, and one with a **planner subagent** that plans the features first. Both passed 2/4; the planner variant passed more checks and was kept. | 2/4 | 30/32 | 0.90, 0.92 · 0.27, 0.80 | 0.24 M |
-| 7 (kept) | new middleware (`middleware.py`, clock); `verify-model` (`where.py`); `build-features` (`cadkit.py` save); `measure-mesh` (`measure.py` STRUCTURE); system prompt; `planner` subagent removed | Single wrong decisions the agent never saw (a body lofted too high, a cut through a floor, a branch never built), and runs stopped before reporting. | **A clock** (middleware: the time used on every tool result, a stop-and-report at 4 minutes), **a save that names the missing regions and the feature responsible**, and a structure summary: *let the agent see what it cannot measure.* The planner subagent added nothing and was dropped. | **4/4** | **32/32** | 0.93, 0.93 · 0.95, 0.92 | 0.25 M |
-| **Chapter 3** | | | | | | | |
-| 8 (rejected) | skill `build-features` (`cadkit.py`, `SKILL.md`); `measure-mesh` (`branch.py`) | Multi-view renders: creases at the branch roots, seams, a faceted floor; on part 2 a pinched, hexagonal arm with a blunt end. | **A smooth body loft, no sections where a branch merges, smoothed outlines, and branches lofted across their own axis**: *remove each artefact at its cause.* Part 1's artefacts went (IoU 0.95, 18 faces), but fusing part 2's arm failed and the agent saved it without. | smoke only | | 0.95 · 0.63 | smoke only |
-| 9 (4/4, then 3/4 under the new check) | skill `build-features` (`cadkit.py`: `branch_loft`, `SKILL.md`) | The arm's underside and the bowl's end wall met at a grazing angle that cannot be fused cleanly. | **The arm starts on the rim's flat face** and ends in a smooth tip measured from the mesh: *meet in one shared plane.* | 4/4 | 32/32 | 0.95, 0.92 · 0.92, 0.93 | 0.16 M |
-| | | Two runs saved part 1 without its branch and passed every check. | Eval Author added `no-missing-feature`; round 9 re-graded to 3/4. | | | | |
-| 10 (kept) | skills `measure-mesh` (`branch.py` PATH), `build-features` (`cadkit.py`: `tube`, `save`), `verify-model` (`where.py`); system prompt (done = COMPLETE) | The agent hand-edited the branch's path ends and got one wrong, so the sweep failed and was dropped; nothing told it the model was incomplete. | **The measured path with its ends in the wall, a tube that repairs or falls back to it, and a save that reports COMPLETE or INCOMPLETE**: *never finish without a planned feature.* | **4/4** | **36/36** | **0.95, 0.95 · 0.92, 0.93** | **0.13 M** |
+The loop only ever changed the agent folder: system prompt, skills, subagents and
+middleware. From the [base agent](agent/agent.yaml) (two sentences, nothing else) to the
+[final agent](results/final-agent/):
 
-Then the 10-run confirmation above. What each round taught is in
-[results/](results/README.md#what-the-rounds-taught).
+| Layer | Base agent | Final agent | Why (round) |
+| --- | --- | --- | --- |
+| System prompt | "You are a CAD Agent… work in /app." | Five steps: measure, plan the features with world numbers and 2-3 named dimensions, build and save, fix what the save reports, stop and report in time. | Runs spent their time learning FreeCAD or ended mid-build (0, 7) |
+| Skill `measure-mesh` | none | One command that prints the mesh's sections along each axis, branch centre lines and a STRUCTURE summary. | The agent misread the part's structure: a body lofted too high, a cut through the floor (7) |
+| Skill `build-features` | none | `cadkit.py`: sketches, lofts through the mesh's own sections, pipes, holes, named dimensions, all in world coordinates; the agent composes them in its own build script. | Raw FreeCAD API code failed in every run (5, 6) |
+| Skill `verify-model` | none | Reopens the saved model: one clean solid, an overlap estimate, which regions are wrong, whether the named dimensions move the part independently. | Success was claimed without evidence (1, 3, 7) |
+| Middleware | none | A clock on every tool result and a stop-and-report one minute before the limit. | Runs ended mid-build with no report (7) |
+| Subagents | none | none | A measuring subagent (5) and a planner subagent (6) handed the main agent lossy summaries; dropped in round 7 |
+
+The agent still decides which features describe the part and writes the code; the
+skills take the FreeCAD API and the measuring away. One model, Nemotron 3 Ultra, does
+all of it.
 
 ## Taking this further
 
@@ -356,7 +364,9 @@ uv run --with pyyaml python publish.py insights insights.yml
 ```
 
 [analyst.yaml](analyst.yaml) points Compass at Intake and gives it `ETHOS.md` and the
-agent folder, so it can check each finding against the agent's configuration.
+agent folder, so it can check each finding against the agent's configuration. The Insights it
+produced in each round of this run, and how each was resolved, are in
+[results/insights](results/insights/README.md).
 
 ![NeMo Studio's Insights page listing open Insights for a CAD agent, each with its supporting traces](assets/helix-insights.png)
 

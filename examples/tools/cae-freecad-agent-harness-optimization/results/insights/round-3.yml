@@ -1,0 +1,76 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# NeMo Compass Insights, published round 3
+# Agent: cad-u3b (kept). Compass ran per candidate; this is the kept candidate's. cad-u3a's only Insight repeats the first one here.
+# Raw Compass output; only names and paths are neutralised.
+- name: Saved FreeCAD models contain multiple visible objects despite success claims
+  description: For requests that require `/app/model.FCStd` to open with exactly one
+    visible object, the mesh-to-PartDesign workflow saves and reopens files with `Body`,
+    `Origin001`, and `Loft04` visible. Even the run that tried to repair visibility
+    still read back both `Body` and `Loft04` as visible, yet the agent reported that
+    only the Body was visible. Update the save/repair logic to hide every non-final
+    object's ViewObject, reopen the saved file, count visible objects, and withhold
+    the success claim unless the count is exactly one.
+  evidence:
+  - trace_id: 01a141e6-c134-7691-ab0a-f57f26b37efc
+    spans:
+    - span_id: span-8777d980b20438c20e576a58a8922874
+    - span_id: span-d6b9557b3fc0869d7f7a2becb2a93963
+    - span_id: span-51846a3fc193e97291bb0bc8e9acb1e7
+  - trace_id: 01a141e6-c69f-79e1-a243-ce8a63a943aa
+    spans:
+    - span_id: span-bb8beb03292e5af6cc3f748ddb691cd3
+    - span_id: span-c9513cdb86578a6293bf5a4cc26e172b
+    - span_id: span-0bc1d14986d9ac5e87f6817916806436
+  - trace_id: 01a141e6-c2f3-77a0-a8e9-9d5b385e8e1b
+    spans:
+    - span_id: span-e76eee5c7954b0a9da17c9c7208f503c
+    - span_id: span-64c903728d18c3825e76ac333449a720
+    - span_id: span-15c0a887c977231af2e42d6f728438be
+  - trace_id: 01a141e6-c57b-7532-8f5b-3b67dc70d427
+    spans:
+    - span_id: span-23932e83b042354385769081349a2f2f
+    - span_id: span-44aa9b4cb187eda3faebab2b2d7eed8c
+    - span_id: span-fe87b46457ad334dbd43e29105fb7da9
+  updated_date: &id001 2026-10-15 23:33:14.174202+00:00
+  confidence: high
+  severity: high
+- name: Generic mesh slicing produces dense loft trees instead of design-intent CAD
+    features
+  description: Editable, fully parametric reconstruction requests are routed to the
+    same generic axis-slicing helper. It turns each mesh into four AdditiveLofts driven
+    by 24–27 B-spline section sketches and ties section heights to the single `Params.Length`
+    dimension; the final responses confirm this same structure. Although the files
+    are valid and closely match the mesh, this slice-derived tree degrades designer
+    editability and does not reconstruct geometry with appropriate revolutions, extrusions,
+    holes, ribs, or other design-intent features. Replace the one-size-fits-all helper
+    path with geometry classification and feature-specific, constrained reconstruction
+    strategies.
+  evidence:
+  - trace_id: 01a141e6-c134-7691-ab0a-f57f26b37efc
+    spans:
+    - span_id: span-8777d980b20438c20e576a58a8922874
+    - span_id: span-cbce8fc8098feaa1c96ad7b590986a5f
+    - span_id: span-d6b9557b3fc0869d7f7a2becb2a93963
+    - span_id: span-51846a3fc193e97291bb0bc8e9acb1e7
+  - trace_id: 01a141e6-c69f-79e1-a243-ce8a63a943aa
+    spans:
+    - span_id: span-bb8beb03292e5af6cc3f748ddb691cd3
+    - span_id: span-a754e8e5d107e143b9974418200561f0
+    - span_id: span-c9513cdb86578a6293bf5a4cc26e172b
+    - span_id: span-0bc1d14986d9ac5e87f6817916806436
+  - trace_id: 01a141e6-c2f3-77a0-a8e9-9d5b385e8e1b
+    spans:
+    - span_id: span-e76eee5c7954b0a9da17c9c7208f503c
+    - span_id: span-c681afaffd83877d42bfaa8ab83e1452
+    - span_id: span-e7bc84f27cd8f19f514be58b01191eff
+    - span_id: span-15c0a887c977231af2e42d6f728438be
+  - trace_id: 01a141e6-c57b-7532-8f5b-3b67dc70d427
+    spans:
+    - span_id: span-23932e83b042354385769081349a2f2f
+    - span_id: span-d198a0e275cada22f9ccf2560372989d
+    - span_id: span-44aa9b4cb187eda3faebab2b2d7eed8c
+    - span_id: span-fe87b46457ad334dbd43e29105fb7da9
+  updated_date: *id001
+  confidence: high
+  severity: med
