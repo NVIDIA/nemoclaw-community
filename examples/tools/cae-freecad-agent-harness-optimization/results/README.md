@@ -22,13 +22,13 @@ in the [README](../README.md#what-the-loop-built). The chart is drawn by
 
 Checks are out of 28 (four runs, seven checks).
 
-| Round | What the evidence showed | Change | Runs | Checks | IoU (part 1 · part 2) |
-| --- | --- | --- | --- | --- | --- |
-| 0 | Runs spent their 5 minutes learning FreeCAD; none saved a model. | none (base agent) | 0/4 | 0 | none |
-| 1 (kept) | No method, no sense of time. | A skill whose script builds and saves a model in one command; a time budget. | 0/4 | 22 | 0.92 · 0.78 |
-| | **Compass:** the models are dense stacks of slices, and they pass every check. | **Eval Author adds `compact-model`.** | | | |
-| 2 | Slice stacks fail the new check. | Lofts instead of slices: compact, but not one valid solid. | 0/4 | 18 | none · 0.85 |
-| 3 (kept) | Joints that fail the shape check; a misleading overlap estimate. | Valid joints and a trustworthy overlap estimate. | **4/4** | **28** | 0.97 · 0.94 |
+| Round | What Compass, Eval Author and the traces showed | Change | Runs | Checks | Part 1 IoU | Part 2 IoU | Tokens / run |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 0. Base agent | Every run spent its 5 minutes studying the mesh or learning FreeCAD by trial and error; none saved a model. | | 0/4 | 0 | | | 1.9 M |
+| 1. A skill with a script (kept) | No plan and no sense of time. | Three prompt lines (a time budget; save a checked model early) and a skill whose script builds the model in one command: a stack of flat slices, one named size, save, reopen, self-check. | 0/4 | 22 | 0.91, 0.92 | 0.78 | 0.04 M |
+| | **Compass:** "every model is a dense stack of slices", and on part 1 the stacks passed every check. | **Eval Author added `compact-model`** (at most 10 times the faces of a designer's model); the slice stack became its proof that the check fails what it should. | | | | | |
+| 2. Smooth lofts (rejected) | The 1,700-face stacks fail the new check, and flat slices turn sloped walls into stairs. | One smooth shape through the cross-sections of each stretch of the part. The pieces did not join into one valid solid. | 0/4 | 18 | invalid solid | 0.85 | 0.08 M |
+| 3. Clean joints and a trustworthy estimate (kept) | Where the branch meets the body two walls almost touched; the script's own overlap estimate ranked the attempts wrongly. | Joints as small flat steps; a better overlap estimate; "a model that fails FreeCAD's shape check is invalid". | **4/4** | **28** | 0.97 | 0.94 | 0.02 M |
 
 A confirmation passed **10 of 10**: the agent read one skill and ran one command, and all
 ten models were identical.
@@ -50,13 +50,13 @@ Compass reported that "the agent delegates the modelling to a fixed script".
 
 Checks are out of 32 (four runs, eight checks).
 
-| Round | What the evidence showed | Change | Runs | Checks | IoU (part 1 · part 2) |
-| --- | --- | --- | --- | --- | --- |
-| 4 | **Compass:** the agent delegates the modelling to a fixed script. | none (new baseline) | 0/4 | 28 | 0.97 · 0.94 |
-| 5 | | Knowledge skills; the agent writes its own build script. A measuring subagent in one candidate. | 0/4 | 3 | none |
-| | 200-line scripts of raw FreeCAD calls, wrong coordinates, nothing saved. | | | | |
-| 6 (kept) | | Feature-level building blocks (`cadkit.py`); build the body first and save. A planner subagent. | 2/4 | 30 | 0.92 · 0.80 |
-| 7 (kept) | **Compass:** models below the fidelity bar; runs end with no reply. Single wrong decisions the agent never saw. | A clock (middleware); a save that names what is missing; a structure summary. Planner dropped. | **4/4** | **32** | 0.93 · 0.95 |
+| Round | What Compass, Eval Author and the traces showed | Change | Runs | Checks | Part 1 IoU | Part 2 IoU | Tokens / run |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 4. Chapter-1 agent | Fails only `independent-dimensions`. **Compass:** "the agent delegates the modelling to a fixed script". | | 0/4 | 28 | 0.97 | 0.94 | 0.03 M |
+| 5. The agent models (rejected) | | Knowledge skills (how to measure, build and check) with small helpers; the agent plans and writes its own build script. A measuring subagent in the second candidate. | 0/4 | 3 | | | 1.0 M |
+| | 21 rewrites of 200-line scripts calling FreeCAD directly in 9 minutes: errors, mixed-up coordinates, sizes that drive nothing, nothing saved. 10-minute runs did not help. | | | | | | |
+| 6. Building blocks per feature (kept) | | `cadkit.py`: a body through measured cross-sections, holes, tubes and more, in world coordinates, every size a named dimension; build the body first and save, then one feature at a time. A planner subagent. | 2/4 | 30 | 0.90, 0.92 | 0.27, 0.80 | 0.24 M |
+| 7. A clock and "what is wrong where" (kept) | **Compass:** models below the overlap target; runs that end with no reply. One wrong decision per run that the agent never saw (the body built to the top of the bounding box, a hole through the floor, a branch never built); no sense of time. | Middleware: a clock on every tool result and a request to report at 240 s. A save that lists the missing and extra regions; a structure summary of the part. Planner dropped. | **4/4** | **32** | 0.93, 0.93 | 0.95, 0.92 | 0.25 M |
 
 This agent passed a 10-run confirmation with every check.
 
@@ -66,12 +66,12 @@ Rendered from four directions, the chapter-2 models had creases where the branch
 body, seams between sections and a pinched arm, none of which a check measured. Checks
 are out of 32, then 36 (nine checks).
 
-| Round | What the evidence showed | Change | Runs | Checks | IoU (part 1 · part 2) |
-| --- | --- | --- | --- | --- | --- |
-| 8 | Every artefact came from a building block. | Smoother bodies and branches; fusing part 2's arm failed (smoke test only). | | | 0.95 · 0.63 |
-| 9 | The arm met the body at a grazing angle. | The arm starts on the rim's flat face. | **4/4** | **32** | 0.95 · 0.93 |
-| | Two runs left part 1's branch out and still passed. | **Eval Author adds `no-missing-feature`**; round 9 re-graded to 3/4. | | | |
-| 10 (kept) | The agent got the branch path wrong and dropped the branch unnoticed. | The measured path; a tube that repairs or falls back; a save that reports COMPLETE or INCOMPLETE. | **4/4** | **36** | 0.95 · 0.93 |
+| Round | What Compass, Eval Author and the traces showed | Change | Runs | Checks | Part 1 IoU | Part 2 IoU | Tokens / run |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 8. Smoother bodies (rejected) | Every blemish came from a building block, the same in all ten runs. | A smooth body, no seams where the branch joins, smoothed outlines, branches built along their own direction. Part 1's blemishes went; part 2's arm would no longer join the smoothed rim. | smoke only | | 0.95 | 0.63 | |
+| 9. The arm on the rim (4/4, then 3/4) | The arm met the body at such a shallow angle that FreeCAD could not join them cleanly. | The arm starts on the rim's flat top, so the two meet on one flat surface; a rounded tip measured from the mesh. | **4/4** | **32** | 0.92, 0.95 | 0.92, 0.93 | 0.16 M |
+| | Two part-1 runs saved the model without its branch and still passed every check (IoU 0.918). | **Eval Author added `no-missing-feature`**: the largest piece of the part the model leaves out must be at most 1.2% of its volume. Round 9 re-graded: 3/4. | | | | | |
+| 10. A branch that is never dropped (kept) | The agent edited the branch path's ends by hand and got one wrong; the branch failed, was left out, and nothing told the agent. | The measurement prints the whole path with its ends inside the wall; the tube repairs a bad path or falls back to the measured one; the save reports COMPLETE or INCOMPLETE. | **4/4** | **36** | 0.95, 0.95 | 0.92, 0.93 | 0.13 M |
 
 **Confirmation** of the final agent: **10 of 10**, five per part, all nine checks passing:
 part 1 IoU 0.949-0.952 with 18 faces, part 2 0.910-0.924 with 38-39 faces, about 3.5

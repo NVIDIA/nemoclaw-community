@@ -214,27 +214,36 @@ exposed one more gap in the eval, closed with one more check.
 
 ![Checks passed, best IoU per part and tokens per run, by round](assets/results-rounds.png)
 
-| Round | What changed | Runs passed | Checks | IoU (part 1 · part 2) |
-| --- | --- | --- | --- | --- |
-| 0 | Base agent: a two-sentence prompt | 0/4 | 0% | none |
-| 1 | A skill with a one-command reconstruction script | 0/4 | 79% | 0.92 · 0.78 |
-| 2 | Lofts instead of stacked slices (rejected) | 0/4 | 64% | none · 0.85 |
-| 3 | Valid joints and a trustworthy overlap estimate | **4/4** | 100% | 0.97 · 0.94 |
-| | *Ethos revised; `independent-dimensions` added* | | | |
-| 4 | Round 3's agent, re-graded | 0/4 | 88% | 0.97 · 0.94 |
-| 5 | The agent writes its own model from knowledge skills (rejected) | 0/4 | 9% | none |
-| 6 | Feature-level building blocks; a planner subagent | 2/4 | 94% | 0.92 · 0.80 |
-| 7 | A clock, and a save that says what is missing; subagent dropped | **4/4** | 100% | 0.93 · 0.95 |
-| 8 | Smoother bodies and branches (smoke test only) | | | 0.95 · 0.63 |
-| 9 | The branch starts on the rim's flat face | 4/4 | 100% | 0.95 · 0.93 |
-| | *`no-missing-feature` added; round 9 re-graded to 3/4* | | | |
-| 10 | A branch that is never dropped | **4/4** | 100% | 0.95 · 0.93 |
+Each round ran both parts twice, all runs in parallel, 5 minutes per run. *Surface changed*
+is what the experimenter edited in the agent folder (system prompt, skills and their
+files, middleware, subagents). *Checks* counts the checks passed over the four runs, out of
+the checks the eval had at the time (28 with seven, 32 with eight, 36 with nine). *IoU* is
+how much the model and the mesh overlap (the check needs 0.9). *Tokens / run* is the median
+per run, from the traces.
 
-*Checks* is the share of the eval's checks passed over the round's four runs (the eval
-grew from seven to nine checks). [results/](results/README.md) has what each round's traces
-and Insights showed and why each change was made, and
-[results/insights](results/insights/README.md) every Compass Insight, which check caught it
-and which round fixed it.
+| Round | Surface changed | What the traces and Insights showed | Change to the agent, and why | Runs passed | Checks | IoU (part 1 · part 2) | Tokens / run |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **Chapter 1** | | | | | | | |
+| 0 | none: a two-sentence system prompt, no skills | The agent spent all 5 minutes studying the mesh and learning FreeCAD by trial and error; it never saved a model. | none (base agent) | 0/4 | 0/28 | none | 1.9 M |
+| 1 (kept) | system prompt (+3 lines); new skill `mesh-to-partdesign` (`SKILL.md`, script `mesh2pd.py`) | No plan and no sense of time. | **A skill with a script** that builds, saves and checks a model in one command, and a time budget in the prompt: *give the agent a method and get something saved early.* | 0/4 | 22/28 | 0.91 · 0.78 | 0.04 M |
+| | | **Compass:** every model is a tall stack of thin flat slices, and it still passes every check. | **Eval Author added `compact-model`**: at most 10 times the faces of a designer's model. | | | | |
+| 2 (rejected) | skill `mesh-to-partdesign`: `mesh2pd.py` rewritten, `SKILL.md` retry rules | The slice stacks have about 1,700 faces, and flat slices turn sloped walls into stairs. | **Smooth shapes between cross-sections (lofts) instead of slices**: *fewer faces, smoother walls.* The pieces did not join into one valid solid. | 0/4 | 18/28 | invalid · 0.85 | 0.08 M |
+| 3 (kept) | skill `mesh-to-partdesign`: `mesh2pd.py` (joints, overlap estimate), `SKILL.md` | Where the branch meets the body two walls almost touched, which broke the solid; the script's own overlap estimate was wrong, so the agent kept the worse attempt. | **Clean joints and an overlap estimate the agent can trust**: *one valid solid, and attempts it can rank.* | **4/4** | **28/28** | 0.97 · 0.94 | 0.02 M |
+| **Ethos revision** | | The model is one traced shape stretched in one direction by one script, not a model a designer would build. | The owner revises ETHOS.md; **Eval Author adds `independent-dimensions`** (two sizes that change the part in different ways); round 3's agent falls to 0/10. | | | | |
+| **Chapter 2** | | | | | | | |
+| 4 | none | Round 3's agent fails only the new check. **Compass:** it hands the modelling to a fixed script. | none (new starting point) | 0/4 | 28/32 | 0.97 · 0.94 | 0.03 M |
+| 5 (rejected) | system prompt rewritten; `mesh-to-partdesign` removed; new skills `measure-mesh`, `partdesign-features`, `verify-model`; second candidate: a `measurer` subagent | The agent wrote 200-line scripts calling FreeCAD directly: errors, shapes in the wrong place, nothing saved. 10-minute runs did not help. | **Knowledge instead of a script**: skills that explain how to measure, build and check, and the agent writes its own code, as the revised Ethos asks. A second candidate added a measuring **subagent**. Both failed. | 0/4 | 3/32 | none | 1.0 M |
+| 6 (kept) | system prompt (build order); skill `build-features` (`cadkit.py`); `measure-mesh` (`branch.py`, `extent.py`); a `planner` subagent | FreeCAD API mistakes and mixed-up coordinates used up every run. | **Ready-made building blocks for each kind of feature** (a body through measured cross-sections, a hole, a tube), every size a named dimension, and *build the body first and save*: *the agent decides, the blocks do the FreeCAD plumbing.* Two variants: alone, and with a **planner subagent** that plans the features first; both passed 2/4, the planner variant more checks, so it was kept. | 2/4 | 30/32 | 0.90, 0.92 · 0.27, 0.80 | 0.24 M |
+| 7 (kept) | new middleware (`middleware.py`, clock); `verify-model` (`where.py`); `build-features` (`cadkit.py` save); `measure-mesh` (`measure.py` structure summary); system prompt; `planner` subagent removed | **Compass:** models below the overlap target, and runs that end with no reply. One wrong decision per run that the agent never noticed: the body built too tall, a hole cut through the floor, a branch never built. | **A clock** (middleware: the time used on every tool result, and a request to report at 4 minutes), **a save that says what is missing and which feature to fix**, and a summary of the part's structure: *let the agent see what it cannot measure.* The planner subagent added nothing and was dropped. | **4/4** | **32/32** | 0.93, 0.93 · 0.95, 0.92 | 0.25 M |
+| **Chapter 3** | | | | | | | |
+| 8 (rejected) | skill `build-features` (`cadkit.py`, `SKILL.md`); `measure-mesh` (`branch.py`) | Rendered from four sides, the models showed creases where the branch meets the body, visible seams, and on part 2 a pinched, six-sided arm with a blunt end. | **Smooth the body, keep seams away from the branch, smooth the outlines**: *fix each blemish where it comes from.* Part 1 came out clean (IoU 0.95), but part 2's arm would no longer join the body. | smoke only | | 0.95 · 0.63 | smoke only |
+| 9 (4/4, then 3/4 under the new check) | skill `build-features` (`cadkit.py`: `branch_loft`, `SKILL.md`) | The arm met the body at such a shallow angle that FreeCAD could not join them cleanly. | **Start the arm on the rim's flat top** and end it with a rounded tip measured from the mesh: *meet on one flat surface.* | 4/4 | 32/32 | 0.95, 0.92 · 0.92, 0.93 | 0.16 M |
+| | | Two runs saved part 1 without its branch and still passed every check. | **Eval Author added `no-missing-feature`**; round 9 re-graded to 3/4. | | | | |
+| 10 (kept) | skills `measure-mesh` (`branch.py` path), `build-features` (`cadkit.py`: `tube`, `save`), `verify-model` (`where.py`); system prompt (done = COMPLETE) | The agent edited the branch's path by hand and got one end wrong; the branch failed, was silently left out, and nothing told the agent. | **The measured path with its ends inside the wall, a tube that repairs a bad path, and a save that says COMPLETE or INCOMPLETE**: *never finish with a feature missing.* | **4/4** | **36/36** | **0.95, 0.95 · 0.92, 0.93** | **0.13 M** |
+
+Then a 10-run confirmation (above). [results/](results/README.md) has the same rounds
+chapter by chapter, and [results/insights](results/insights/README.md) every Compass
+Insight, which check caught it and which round fixed it.
 
 ## What the loop built
 
