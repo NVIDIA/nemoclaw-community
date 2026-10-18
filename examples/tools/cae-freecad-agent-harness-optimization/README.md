@@ -72,17 +72,77 @@ reports success is not evidence that it succeeded.
 
 Closing that gap is **harness engineering**: changing the agent's system prompt, skills,
 subagents and middleware until a general harness behaves like a specialist. Done by hand,
-it is guesswork. This example makes every change answer to measurement, with these parts:
+it is guesswork. This example makes every change answer to measurement.
 
-| Part | What it is |
-| --- | --- |
-| **Ethos** ([ETHOS.md](ETHOS.md)) | The agent's specification in plain language: its purpose, its success criteria, what to do and what never to do, and what may be changed. Written by the agent's owner. |
-| **Eval** ([evals/](evals/README.md)) | The benchmark: two tasks (two different parts), each graded by a set of pass/fail **checks**. A run scores 1 only if every check passes. Run with [Harbor](https://www.harborframework.com/). |
-| **IoU** | Intersection over union: how much the model's volume and the mesh's volume overlap, from 0 (none) to 1 (identical). One of the checks requires IoU ≥ 0.9. |
-| **[NeMo Helix](https://github.com/NVIDIA-NeMo/nemo-helix)** | The platform the agent uses: it serves the model and stores every run's trace, with its score, in Intake. |
-| **[NeMo Compass](https://github.com/NVIDIA-NeMo/nemo-compass)** | An analysis agent that reads many traces against the Ethos and reports recurring problems as **Insights**, each backed by the traces that show it. |
-| **[NeMo Eval Author](https://github.com/NVIDIA-NeMo/eval-author)** | Skills for your coding agent that build and review the eval: for each Insight, does a check already catch it, or does the eval need a new one? Every check is **proven**: an empty answer scores 0, a known-good answer 1, and a realistic wrong answer 0. |
-| **Experimenter** ([skills/cad-experimenter](skills/cad-experimenter/SKILL.md)) | Your coding agent following one skill: diagnose from the Insights and traces, build up to two candidate agents, test them. |
+### The pieces, and which you need
+
+| Piece | What it does in this example | Needed? | Can be replaced by |
+| --- | --- | --- | --- |
+| **Ethos** ([ETHOS.md](ETHOS.md)) | The agent's specification in plain language: purpose, success criteria, what to do and never do, what may change. Compass, Eval Author and the experimenter all read it. | Yes: the loop optimizes what it says | Any written spec, in this format |
+| **Eval** ([evals/](evals/README.md)), run with **[Harbor](https://github.com/harbor-framework/harbor)** | Two tasks (two parts), each graded by nine pass/fail **checks** in a separate container with no network. A run scores 1 only if every check passes. Harbor runs each trial in its own container, in parallel. | Yes | Another runner that isolates and grades a task |
+| **Inference provider** | Serves the models: a tool-calling model for the agent (here **Nemotron 3 Ultra**) and a model with structured output for Compass. | Yes | Any OpenAI-compatible endpoint |
+| **[NeMo Helix](https://github.com/NVIDIA-NeMo/nemo-helix)** | The platform around the agent: an **inference gateway** in front of your provider (the agent calls one URL, without a key), **Intake**, which stores every run's trace with its score, and **Studio**, where Insights are shown. | Wired in, not essential: see [Without NeMo Helix](#without-nemo-helix) | Your provider's endpoint, and trace files on disk |
+| **[NeMo Relay](https://github.com/NVIDIA/NeMo-Relay)** | Records each run as a trace in the open ATIF format, every model call and tool call with the tool schemas, and sends it to Intake. | Yes: Compass and Eval Author read the traces | Relay can also write to S3 or an OpenTelemetry endpoint; any tracer that produces ATIF |
+| **[LangChain Deep Agents](https://github.com/langchain-ai/deepagents)** | The agent runtime: the model loop, a shell, skills, subagents and middleware. The agent is a folder of these ([agent/](agent/agent.yaml)). | Yes, as built | Another agent framework, with the agent folder ported |
+| **FreeCAD 1.1.3**, headless | The engineering tool the agent drives, inside the trial's container. | Yes, for this task | Your own solver, mesher or CAD kernel |
+| **[NeMo Compass](https://github.com/NVIDIA-NeMo/nemo-compass)** | An analysis agent that reads a round's traces against the Ethos and reports recurring problems as **Insights**, each backed by the traces that show it. | Yes: it decides what to fix | It reads Intake, local ATIF files, Braintrust, LangSmith, Langfuse or MLflow |
+| **[NeMo Eval Author](https://github.com/NVIDIA-NeMo/eval-author)** | Skills for your coding agent that build and review the eval: for each Insight, does a check already catch it, or does the eval need a new one? Every check is **proven**: an empty answer scores 0, a known-good answer 1, a realistic wrong answer 0. | Yes: it keeps the eval honest | Hand-written, hand-proven checks |
+| **Coding agent** and the **experimenter** ([skills/cad-experimenter](skills/cad-experimenter/SKILL.md)) | Your coding agent (Claude Code, Codex, Cursor and others) runs Eval Author's skills and the experimenter skill, which diagnoses from the Insights and traces and builds candidate agents. | Yes | Any coding agent Eval Author supports, or a person |
+| **Docker** ([Colima](https://github.com/abiosoft/colima) on macOS) | Runs every trial in its own container with its network limited to Helix. | Yes | Any Docker engine that enforces per-container network rules |
+
+**IoU** (intersection over union), used throughout, is how much the model's volume and the
+mesh's volume overlap: 0 is none, 1 is identical. One check requires IoU ≥ 0.9.
+
+How the pieces connect, for one trial and the analysis after it:
+
+```mermaid
+flowchart LR
+  subgraph host["Your machine"]
+    H["Harbor<br/>runs trials in parallel"]
+    P["publish.py<br/>scores → traces"]
+    CA["Coding agent<br/>Eval Author · experimenter"]
+    CO["NeMo Compass<br/>traces → Insights"]
+  end
+  subgraph trial["One trial (container) · many in parallel"]
+    C["Deep Agents agent<br/>+ headless FreeCAD<br/>NeMo Relay records the run"]
+    V["Verifier container<br/>no network · 9 checks"]
+  end
+  subgraph helix["NeMo Helix"]
+    G["Inference gateway"]
+    I["Intake<br/>traces + scores"]
+    S["Studio<br/>Insights"]
+  end
+  M["Inference provider<br/>Nemotron 3 Ultra"]
+  H --> C
+  C -- "model calls" --> G --> M
+  C -- "ATIF trace" --> I
+  C -- "model.FCStd" --> V
+  V -- "reward, checks" --> P --> I
+  I --> CO --> S
+  CO -- "Insights" --> CA
+  CA -- "new checks · new candidate agent" --> H
+```
+
+### Without NeMo Helix
+
+The example is wired to Helix, but Helix's three jobs here can each be done another way,
+for example with your own inference provider and ATIF files on disk. These are the changes
+you would make; this path has not been run end to end in this example:
+
+- **Model calls.** [harness/run_agent.py](harness/run_agent.py) builds an OpenAI-compatible
+  client on the Helix gateway's URL. Point it at your provider's base URL and API key, and
+  add the provider's host to `allowed_hosts` in each task's `task.toml`, since the trial's
+  container may reach only the hosts listed there.
+- **Traces.** `run_agent.py` tells NeMo Relay to send each trace to Intake. Have it write the
+  ATIF trace to a file instead (or to S3 or an OpenTelemetry endpoint), then point Compass at
+  those files (`--trace.atif.path`).
+- **Scores.** `publish.py scores` attaches each run's grade to its trace in Intake, which is
+  what lets Compass relate behaviour to scores. With trace files, write the grade into or
+  next to each trace in the form Compass reads.
+- **Insights.** Compass writes `insights.yml` either way; Studio only displays them.
+
+Eval Author, the eval, the Ethos, the experimenter and the agent folder do not depend on
+Helix.
 
 One round of the loop:
 
@@ -133,31 +193,8 @@ is CAD-specific: swap FreeCAD for your solver, mesher or CAD kernel.
 Each eval run (a *trial*) gets its own container, built from the task's
 [environment](evals/part-1-reconstruction/environment/Dockerfile): headless FreeCAD 1.1.3,
 the Deep Agents runtime, NeMo Relay for tracing, and the part's mesh. A separate container
-with no network grades the saved model.
-
-```mermaid
-flowchart LR
-  subgraph host["Your machine"]
-    H["harbor run -n 4"]
-    P["publish.py scores"]
-  end
-  subgraph trial["One trial · many in parallel"]
-    C["Task container · 5 min · 3 GiB<br/>headless FreeCAD + Deep Agents<br/>/agent: prompt, skills, middleware<br/>/app: reference.obj → model.FCStd"]
-    V["Verifier container · no network<br/>9 checks → reward"]
-  end
-  subgraph helix["NeMo Helix"]
-    G["Inference gateway<br/>Nemotron 3 Ultra"]
-    I["Intake<br/>traces + scores"]
-    S["Compass · Studio"]
-  end
-  H --> C
-  C -- "model calls" --> G
-  C -- "trace (NeMo Relay)" --> I
-  C -- "model.FCStd" --> V
-  V -- "reward, checks" --> P
-  P -- "scores on each trace" --> I
-  I --> S
-```
+with no network grades the saved model. The diagram in
+[Why this exists](#the-pieces-and-which-you-need) shows how the trial connects to the rest.
 
 | Piece | What it does |
 | --- | --- |
