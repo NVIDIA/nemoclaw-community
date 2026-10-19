@@ -209,13 +209,7 @@ INFLIGHT=2 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
 ```
 <img width="630" height="303" alt="util3" src="https://github.com/user-attachments/assets/7e516b0b-6e4b-4236-b423-bcbf88bb993e" />
 
-```bash
-# Laptop HTTP sends chats but does not pause scale-down. New 0% GPUs pull the
-# average under 40% and HPA walks back down (6→5→4). Use the DGX client for 1→8.
-# E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
-```
 
-Wait until `get-hpa.sh` shows **1** current replica. Then switch HPA to latency.
 
 **LLM latency.** Same sandboxes and the same `client.sh`. Provision switches HPA to `latency_avg` (target 3000 ms) and keeps **current** GPUs at **1** replica (`maxReplicas=8`). OpenClaw start must not scale. `client.sh` sends 2048-token chats until 6 GPUs, then short prompts, and stops at 8. Do not set `INFLIGHT` or `MAX_TOKENS`. `get-hpa.sh` prints milliseconds (`46514/3000`). Successful chats are chats that got a reply; the table prints after HPA is back to 1. Short replies drain fast, so 8→1 is shorter than GPU util. The 30s latency window lets HPA scale down when current latency is below 3000 ms. A `DURATION_SEC=180` cap stopped an earlier run at 5 GPUs.
 
