@@ -127,6 +127,10 @@ assert "agent_common_repin_openclaw_max_tokens" not in agent_common
 assert '"write"' in agent_common
 assert 'maint["maxEntries"] = 100000' in agent_common
 assert "openclaw) raw=2048" in agent_common
+assert 'openclaw) echo "onprem-openclaw"' in agent_common
+uninstall = (chart / "scripts" / "uninstall-e2e.sh").read_text()
+assert "onprem-openclaw" in uninstall
+assert "onprem-ollama" not in uninstall
 assert 'raw="${E2E_LATENCY_TOKEN_START:-2048}"' in agent_common
 assert "*latency*)" in agent_common
 assert "INFLIGHT=1" in agent_common.split("agent_common_export_demo_workload")[1].split("agent_common_export_client_inflight")[0]

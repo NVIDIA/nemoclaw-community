@@ -134,7 +134,7 @@ openshell status
 
 ### 6. E2E test with multiple end users and sandboxes
 
-Queries from end users go **into the sandboxes**, one sandbox per end user. Any pairing can be first after steps 1–5. Provision waits for one Ready GPU replica (up to 240s, `HPA_BASELINE_WAIT_SEC`). Latency HPA may show desired 0 until chats produce the metric; that is idle, not leftover load. One end user ↔ one sandbox ↔ one agent. End users do not log into the DGX. Provision scripts do not take `INFLIGHT` or `MAX_TOKENS`. Put those flags on the client. From a laptop set `E2E_CLIENT_HOST=dgx-ip`. From the DGX omit `E2E_CLIENT_HOST`. The OpenClaw remote laptop UI is [OpenClaw simple test](#openclaw-simple-test).
+Queries from end users go **into the sandboxes**, one sandbox per end user. Any pairing can be first after steps 1–5. Provision waits for one Ready GPU replica (up to 240s, `HPA_BASELINE_WAIT_SEC`). Latency HPA may show desired 0 until chats produce the metric; that is idle, not leftover load. One end user ↔ one sandbox ↔ one agent. End users do not log into the DGX. Provision scripts do not take `INFLIGHT` or `MAX_TOKENS`. OpenClaw GPU util, Hermes, and Deep Agents take those flags on the client. OpenClaw latency omits them (`E2E_USERS=5 ./scripts/client.sh`). From a laptop set `E2E_CLIENT_HOST=dgx-ip`. From the DGX omit `E2E_CLIENT_HOST`. The OpenClaw remote laptop UI is [OpenClaw simple test](#openclaw-simple-test).
 
 | | Agent | Default `INFERENCE_RUNTIME` | Default model | Provision | Client |
 |--|-------|------------------------------|---------------|-----------|--------|
@@ -156,7 +156,7 @@ Validation is on DGX 8× H100 (80 GB) on-prem. The DGX H100 demo uses 5 end user
 
 - `AGENT_SANDBOX_CPU` **1**, `AGENT_SANDBOX_MEMORY` **8Gi** (1Gi, 2Gi, and 4Gi OOM-kill OpenClaw before `:18789` binds)
 - One OpenClaw agent per sandbox (one sandbox per user)
-- inflight = concurrent chats per user on that one agent. Same `client.sh` for both HPA metrics. GPU util: `INFLIGHT=2 MAX_TOKENS=2048`. Latency: `INFLIGHT=2 MAX_TOKENS=64`. Pass those flags on the client. Laptop HTTP uses the same flags with `E2E_CLIENT_HOST=dgx-ip`. The client stops new chats at 8 GPUs, waits for already-sent chats to get a reply, then waits until HPA is back to **1** before it prints the chat table. Record GPU util first, wait until current replicas are **1**, then record latency. The DGX client omits `E2E_CLIENT_HOST` and pauses HPA scale-down during the climb. OpenClaw stays up after stop for later use; `./scripts/uninstall-e2e.sh` removes the sandboxes when you are done. The client does not copy a load helper into the sandbox.
+- inflight = concurrent chats per user on that one agent. Same `client.sh` for both HPA metrics. GPU util: `INFLIGHT=2 MAX_TOKENS=2048` until stop at 8. Latency: `E2E_USERS=5 ./scripts/client.sh` (INFLIGHT=1, 2048 until 6 GPUs, then short prompts, stop at 8). The latency client ignores leftover `INFLIGHT` and `MAX_TOKENS`. Laptop HTTP adds `E2E_CLIENT_HOST=dgx-ip`. The client stops new chats at 8 GPUs, waits for already-sent chats to get a reply, then waits until HPA is back to **1** before it prints the chat table. Record GPU util first, wait until current replicas are **1**, then record latency. The DGX client omits `E2E_CLIENT_HOST` and pauses HPA scale-down during the climb. OpenClaw stays up after stop for later use; `./scripts/uninstall-e2e.sh` removes the sandboxes when you switch pairings. The client does not copy a load helper into the sandbox.
 
 Agent sandboxes can run on a **different CPU node** with more memory. Keep GPU inference on the H100 node. See [FAQ](#agents-and-sandboxes-run-on-cpu--what-limits-how-many-i-can-run).
 
@@ -211,7 +211,7 @@ INFLIGHT=2 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
 
 Wait until `get-hpa.sh` shows **1** current replica. Then switch HPA to latency.
 
-**LLM latency.** Same sandboxes and the same `client.sh`. Provision switches HPA to `latency_avg` (target 3000 ms) and keeps **current** GPUs at **1** replica (`maxReplicas=8`). OpenClaw start must not scale. `client.sh` then sends short chats (`INFLIGHT=2 MAX_TOKENS=64`) until 8 GPUs. `get-hpa.sh` prints milliseconds (`46514/3000`). Successful chats are chats that got a reply; the table prints after HPA is back to 1. Short replies drain fast, so 8→1 is shorter than GPU util. The 30s latency window lets HPA scale down when current latency is below 3000 ms. A `DURATION_SEC=180` cap stopped an earlier run at 5 GPUs.
+**LLM latency.** Same sandboxes and the same `client.sh`. Provision switches HPA to `latency_avg` (target 3000 ms) and keeps **current** GPUs at **1** replica (`maxReplicas=8`). OpenClaw start must not scale. `client.sh` sends 2048-token chats until 6 GPUs, then short prompts, and stops at 8. Do not set `INFLIGHT` or `MAX_TOKENS`. `get-hpa.sh` prints milliseconds (`46514/3000`). Successful chats are chats that got a reply; the table prints after HPA is back to 1. Short replies drain fast, so 8→1 is shorter than GPU util. The 30s latency window lets HPA scale down when current latency is below 3000 ms. A `DURATION_SEC=180` cap stopped an earlier run at 5 GPUs.
 
 ```bash
 # Terminal A
@@ -229,15 +229,15 @@ E2E_USERS=5 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_latency.sh
 
 
 ```bash
-# Terminal C — laptop HTTP. Pass MAX_TOKENS=64 so leftover GPU-util 2048 does not win.
-E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=64 E2E_USERS=5 ./scripts/client.sh
+# Terminal C — laptop HTTP. Do not set INFLIGHT or MAX_TOKENS.
+E2E_CLIENT_HOST=dgx-ip E2E_USERS=5 ./scripts/client.sh
 ```
 <img width="671" height="288" alt="Screenshot 2026-10-06 at 8 59 44 PM" src="https://github.com/user-attachments/assets/1065ffe2-af3e-467b-9d66-e08a0472050d" />
 
 
 ```bash
-# Terminal C — on the DGX instead. Same client; pass the latency flags.
-INFLIGHT=2 MAX_TOKENS=64 E2E_USERS=5 ./scripts/client.sh
+# Terminal C — on the DGX instead. Same client; omit INFLIGHT and MAX_TOKENS.
+E2E_USERS=5 ./scripts/client.sh
 ```
 
 
@@ -262,6 +262,8 @@ If `HF_TOKEN` is set, the script also creates Secret `hf-token`. Put only the **
 export VLLM_IMAGE_PULL_SECRET=ngc-registry
 # export VLLM_HF_TOKEN_SECRET=hf-token   # only if you set HF_TOKEN
 ```
+
+If OpenClaw 6a sandboxes are still up, stop `client.sh` and run `./scripts/uninstall-e2e.sh`. Keep `./scripts/openshell-port-forward.sh` attached. Do not helm-uninstall OpenShell or `nemoclaw-gpu`. That script removes OpenClaw CPU sandboxes and `onprem-openclaw`. GPU inference, Envoy, and Prometheus stay. Then continue here.
 
 After steps 1–5 (`openshell status` Connected, `gatewayclass eg` present). **One OpenShell gateway** for all sandboxes. This DGX demo uses `E2E_USERS=5`, `INFLIGHT=1`, and **4Gi** sandboxes. Pass `INFLIGHT` and `MAX_TOKENS` on `client_hermes.sh`. Laptop HTTP and the DGX path use the same flags. GPU util demo: `INFLIGHT=1 MAX_TOKENS=1024`. Latency demo: `INFLIGHT=3 MAX_TOKENS=64`. Clients do not stop or restart Hermes. Sandboxes stay up after stop; `./scripts/uninstall-e2e.sh` removes them.
 
@@ -740,7 +742,9 @@ After scale-up you should see multiple series. If latency graphs stay empty, che
 
 There is **one** OpenShell gateway for every sandbox (OpenClaw, Hermes, and Deep Agents). Do not install a second gateway.
 
-Use **one** script for e2e teardown. `uninstall-e2e.sh` removes all pairing CPU sandboxes (`openclaw-ollama-e2e-*`, `hermes-vllm-e2e-*`, `deepagent-nim-e2e-*`) and OpenShell providers (`onprem-ollama` / `onprem-hermes` / `onprem-deepagents`). It does **not** uninstall GPU inference (Ollama / vLLM / NIM), OpenShell, Envoy, or Prometheus. The next `agentscaling_*` helm-upgrades the same GPU release to `INFERENCE_RUNTIME`.
+Use **one** script for e2e teardown. `uninstall-e2e.sh` removes all pairing CPU sandboxes (`openclaw-ollama-e2e-*`, `hermes-vllm-e2e-*`, `deepagent-nim-e2e-*`) and OpenShell providers (`onprem-openclaw` / `onprem-hermes` / `onprem-deepagents`). It does **not** uninstall GPU inference (Ollama / vLLM / NIM), OpenShell, Envoy, or Prometheus. The next `agentscaling_*` helm-upgrades the same GPU release to `INFERENCE_RUNTIME`.
+
+To leave OpenClaw and start Hermes, stop `client.sh`, keep the OpenShell port-forward, then run the command below. Continue at [6b Hermes + vLLM](#6b-hermes--vllm). Do not helm-uninstall OpenShell or `nemoclaw-gpu`. Later OpenClaw runs `./scripts/agentscaling_gpuutil.sh` again on this same stack.
 
 ```bash
 # Stop client.sh / client_hermes.sh / client_deepagents.sh first (Ctrl-C).
@@ -784,7 +788,7 @@ On the DGX omit `E2E_CLIENT_HOST`:
 INFLIGHT=2 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
 ```
 
-OpenClaw latency uses `INFLIGHT=2 MAX_TOKENS=64` on that same client. Hermes and Deep Agents use `client_hermes.sh` / `client_deepagents.sh` with the flags in 6b / 6c. The OpenClaw remote UI is [OpenClaw simple test](#openclaw-simple-test). End users do not log into the DGX. Published HTTP does not return gateway tokens or API keys.
+OpenClaw latency uses `E2E_CLIENT_HOST=dgx-ip E2E_USERS=5 ./scripts/client.sh` on that same client (no `INFLIGHT` or `MAX_TOKENS`). Hermes and Deep Agents use `client_hermes.sh` / `client_deepagents.sh` with the flags in 6b / 6c. The OpenClaw remote UI is [OpenClaw simple test](#openclaw-simple-test). End users do not log into the DGX. Published HTTP does not return gateway tokens or API keys.
 
 ### Agents and sandboxes run on CPU — what limits how many I can run?
 

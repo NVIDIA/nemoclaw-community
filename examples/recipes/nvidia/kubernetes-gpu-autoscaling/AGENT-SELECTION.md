@@ -38,7 +38,7 @@ OpenShell Kubernetes sandbox and talks to GPU inference through
 | Health surface used by this recipe | `:18789/health` + plugin inspection | `:8642/health` + version/config checks | `dcode --version` + `config.toml` check (no gateway) |
 | Runtime script | `run-agent-sandbox.sh` (foreground, keep terminal open) | `run-agent-sandbox.sh` (foreground, keep terminal open) | `run-agent-prompt.sh "<prompt>"` (one-shot, exits) |
 | Default sandbox name | `nemoclaw-onprem` | `hermes-onprem` | `deepagents-onprem` |
-| Default OpenShell provider name | `onprem-ollama` | `onprem-hermes` | `onprem-deepagents` |
+| Default OpenShell provider name | `onprem-openclaw` | `onprem-hermes` | `onprem-deepagents` |
 | Upstream policy grants `integrate.api.nvidia.com`? | Yes — removed by `create-agent-sandbox.sh` | Yes — removed by `create-agent-sandbox.sh` | No — nothing to remove |
 | Official installer CLI (`NEMOCLAW_AGENT`) | `nemoclaw` (`openclaw`) | `nemohermes` (`hermes`) | `nemo-deepagents` (`langchain-deepagents-code`) |
 | Official first prompt | `nemoclaw launch <sandbox>` or `openclaw tui` | `nemohermes launch <sandbox>` or `hermes` | `nemo-deepagents launch <sandbox>` or `dcode` / `dcode -n` |

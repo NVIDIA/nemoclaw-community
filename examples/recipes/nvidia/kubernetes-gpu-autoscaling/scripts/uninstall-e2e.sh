@@ -4,7 +4,7 @@
 #
 # Stop one agent e2e so another pairing can start. Removes CPU agents:
 #   - OpenClaw / Hermes / Deep Agents sandboxes (e2e prefixes and pairing names)
-#   - OpenShell providers (onprem-ollama / onprem-hermes / onprem-deepagents)
+#   - OpenShell providers (onprem-openclaw / onprem-hermes / onprem-deepagents)
 #
 # Does not uninstall GPU inference (Ollama/vLLM/NIM), OpenShell, Envoy
 # GatewayClass eg, or Prometheus. Idle GPU pods stay so a later pairing can
@@ -147,7 +147,7 @@ delete_providers() {
     return 0
   fi
   echo "  deleting OpenShell providers"
-  for provider in onprem-ollama onprem-hermes onprem-deepagents; do
+  for provider in onprem-openclaw onprem-hermes onprem-deepagents; do
     if openshell provider get "${provider}" >/dev/null 2>&1; then
       echo "    ${provider}"
       openshell provider delete "${provider}" >/dev/null 2>&1 || true

@@ -408,7 +408,7 @@ agent_common_default_sandbox_name() {
 
 agent_common_default_provider_name() {
   case "$1" in
-    openclaw) echo "onprem-ollama" ;;
+    openclaw) echo "onprem-openclaw" ;;
     hermes) echo "onprem-hermes" ;;
     deepagents) echo "onprem-deepagents" ;;
   esac
