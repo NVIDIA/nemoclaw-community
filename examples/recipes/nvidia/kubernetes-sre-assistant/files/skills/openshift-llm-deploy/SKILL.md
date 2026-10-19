@@ -5,6 +5,98 @@ description: Use when inspecting GPU/model capacity, live GPU utilization, GPU m
 
 # Local Cluster LLM Deployment
 
+## Required execution path
+
+The preflight emits a private complete `HF_PREFLIGHT_PLAN` JSON file and
+`HF_PREFLIGHT_PLAN_SHA256`. Present the saved namespace, release, revision,
+GPU, PVC, host-memory request/limit, pinned runtime, and endpoint exposure.
+Copy the literal emitted `HF_PREFLIGHT_VALIDATE_COMMAND` for read-only validation;
+copy `HF_PREFLIGHT_DEPLOY_COMMAND` only after fresh final confirmation. Do not
+invent switches, reconstruct shell variables, or invoke tools with empty inputs.
+For WebUI/Gateway API use, ask for confirmation in ordinary response text,
+not via the `clarify` tool.
+Memory is a conservative source-size estimate, not measured usage or a
+schedulability guarantee. Use `--platform kubernetes` for Kubernetes.
+OpenShift plans include a model Route by default; use `--no-expose` for an
+explicitly internal-only request. Kubernetes plans remain internal-only unless
+`--expose` is requested. Exposure remains part of the plan requiring final confirmation.
+The preflight derives the release from the HF model name, for example
+`Qwen/Qwen3.8-27B` becomes `qwen3-8-27b`. Never use the WebUI/chart release
+as a model release. An optional `--release` must match this derived name;
+do not rename, delete, or migrate an existing misnamed workload automatically.
+After fresh explicit confirmation of that exact plan, run:
+
+```sh
+/opt/hermes/.venv/bin/python "${HERMES_HOME:-/sandbox/.hermes}/skills/openshift-llm-deploy/scripts/deploy-plan.py" \
+  --plan "<exact HF_PREFLIGHT_PLAN>" \
+  --approved-plan-sha256 "<exact HF_PREFLIGHT_PLAN_SHA256>" --confirm
+```
+
+Use a 600-second terminal timeout. Without `--confirm`, validation is read-only.
+Plans expire after 30 minutes and require replanning and new confirmation.
+Never reconstruct deployment arguments, invoke bare `deploy-model.sh`, edit
+plan files or validators, fabricate artifacts, or inspect writer credentials.
+The helper invokes the existing guarded wrapper once and streams its output.
+`pending` is not serving success; inspect existing resources instead of retrying.
+This saved-plan path takes precedence over low-level wrapper examples below.
+
+After token readiness, use `scripts/preflight-model.py --model MODEL_ID
+--namespace TARGET_NAMESPACE --release RELEASE --storage-class STORAGE_CLASS
+--max-model-len 32768` through the terminal tool with a 150-second timeout.
+This bounded read-only command runs token, storage, recipe, GPU, and runtime
+checks. Report its result instead of recreating manual inventory or overrides.
+`HF_PREFLIGHT_STATUS=ready` still requires explicit final confirmation before
+applying model resources. Temporary nonsecret planning artifacts are expected.
+
+Use the `terminal` tool for installed planners, with
+`PATH=/chart-bin:/toolbox:/opt/hermes/.venv/bin:/usr/local/bin:/usr/bin:/bin`
+and `/opt/hermes/.venv/bin/python` for Python scripts. If orchestrating through
+`execute_code`, use `terminal` from `hermes_tools`, not direct `subprocess` or
+network calls. Keep read-only checks bounded to 45 seconds and stop after a
+repeated identical error. Never patch validators or fabricate recipe approvals.
+Use the configured model namespace for HF Secret existence checks; do not read
+Secret data. A discovery approval is not final deployment confirmation.
+
+## Bounded HF/GPU preflight
+
+Then run the bounded GPU/runtime planner before presenting a deployment plan.
+Set `MODEL_ID`, `NAMESPACE`, `MAX_MODEL_LEN`, and a verified `VLLM_RECIPE_URL`
+first. A chart-owned recipe also requires its resolver-generated planning
+artifact and hash. Do not invent an artifact, reinterpret an unquantized model
+as NVFP4, edit validators, or replace approved hashes to force a deployment.
+If exact model-sizing or hardware evidence is missing, stop rather than guess.
+The planner verifies the HF revision and config using the policy-permitted
+same-origin cache endpoint when the direct resolve GET is denied. This does not
+skip metadata validation, change the policy, or authorize resource application.
+
+```sh
+ALLOW_OCS_STORAGE_TAINTED_NODES=$(awk -F ': *' '/^allowOCSStorageTaintedNodes:/ {print $2; exit}' "$SKILL_ROOT/dynamo-defaults.yaml")
+case "$ALLOW_OCS_STORAGE_TAINTED_NODES" in
+true|false) ;;
+*) echo "invalid allowOCSStorageTaintedNodes runtime default" >&2; exit 1 ;;
+esac
+plan_hf_gpus() {
+  set -- "$SKILL_ROOT/scripts/plan-hf-gpus.py" \
+    --model "$MODEL_ID" --namespace "$NAMESPACE" \
+    --max-model-len "$MAX_MODEL_LEN" --recipe-url "$VLLM_RECIPE_URL"
+  case "$VLLM_RECIPE_URL" in
+    chart-owned:*) set -- "$@" --recipe-artifact "$VLLM_RECIPE_ARTIFACT" \
+      --recipe-artifact-sha256 "$VLLM_RECIPE_SHA256" ;;
+  esac
+  if [ "$ALLOW_OCS_STORAGE_TAINTED_NODES" = true ]; then
+    set -- "$@" --allow-ocs-storage-tainted-nodes
+  fi
+  "$@"
+}
+GPU_PLAN=$(plan_hf_gpus) || exit $?
+printf '%s\n' "$GPU_PLAN"
+```
+
+Revalidate the selected node, recipe, model revision, storage, and runtime image
+before asking for final deployment confirmation. Discovery-report approval is
+not that final confirmation. Request-based GPU headroom is not utilization or
+a guarantee that a pod will schedule.
+
 Use this skill for model-serving work on the cluster that hosts this Hermes
 Sandbox. `oc` and `kubectl` use a chart-generated kubeconfig that reaches
 the authenticated SRE proxy. The Hermes Sandbox never receives a Kubernetes
