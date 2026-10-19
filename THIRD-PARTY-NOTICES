@@ -239,10 +239,10 @@ Package: nemo-flow
 License: Apache-2.0
 URL: https://github.com/NVIDIA/NeMo-Flow
 
-Package: nemo-platform
+Package: nemo-helix
 License: Apache-2.0
-URL: https://github.com/NVIDIA-NeMo/nemo-platform
-Notes: Installed by the reader as a CLI tool (uv tool install) and used by
+URL: https://github.com/NVIDIA-NeMo/nemo-helix
+Notes: Reader-installed services, CLI, and SDK for
 examples/tools/cae-freecad-agent-harness-optimization; not vendored here.
 
 Package: psycopg[binary]
@@ -564,8 +564,8 @@ Version: 0.1.24
 License: MIT
 URL: https://github.com/neka-nat/freecad-mcp
 Notes: Fetched and run by uvx at agent start, pinned to 0.1.24 in
-examples/tools/cae-freecad-agent-harness-optimization/agent/agent.yaml. Not
-vendored in this repository.
+examples/tools/cae-freecad-agent-harness-optimization/agent/agent.yaml and its
+results/ agents. Not vendored in this repository.
 
 Project: lfdevs Blender Linux ARM64 build
 License: GPL-3.0-or-later and included Blender notices
@@ -645,10 +645,36 @@ Asset: devx-jupyterapp-bridge/ source directory under examples/recipes/nvidia/ag
 Owner: NVIDIA
 Notes: First-party JupyterLab federated extension (~2 KB) hand-crafted for this example; sets window.jupyterapp for the workshop's in-lesson buttons. Distributed as inspectable, SPDX-headed source (package.json + static/remoteEntry.js) — no prebuilt archive. Mirrors only the structure of a prebuilt labextension and contains no third-party code. Provenance documented in the skill's references/sandbox-internals.md.
 
-Asset: reference_mug.obj under examples/tools/cae-freecad-agent-harness-optimization/meshes/
+Asset: reference_part.obj under examples/tools/cae-freecad-agent-harness-optimization/meshes/
 Owner: NVIDIA
 Notes: First-party ground-truth geometry authored for this example in FreeCAD and exported to Wavefront OBJ. The example's out-of-loop scorer measures agent output against it.
 
-Asset: NeMo Studio screenshots under examples/tools/cae-freecad-agent-harness-optimization/assets/
+Asset: reference_part_2.obj under examples/tools/cae-freecad-agent-harness-optimization/meshes/
 Owner: NVIDIA
-Notes: Trace and Insight views of this example's own agent runs on a local platform instance. No third-party or personal content.
+Notes: Second first-party ground-truth part, modelled in FreeCAD for this example and exported to Wavefront OBJ. A copy sits with the verifier in evals/part-2-reconstruction/tests/, and the task's reference solution is the FreeCAD model it was exported from.
+
+Asset: NeMo Studio screenshot and FreeCAD renders under examples/tools/cae-freecad-agent-harness-optimization/assets/
+Owner: NVIDIA
+Notes: Insight view of this example's own agent runs on a local Helix instance,
+and FreeCAD renders of the reference mesh beside the example's agents' own
+reconstructions. No third-party or personal content.
+
+Component: NeMo Compass (insight-agent) and trace-ingest
+License: Apache-2.0
+Source: https://github.com/NVIDIA-NeMo/nemo-compass
+Notes: Installed by the reader as a tool for examples/tools/cae-freecad-agent-harness-optimization.
+Not vendored. Helix's Insights plugin uses its own pinned revision.
+Reader-installed dependencies retain their upstream licenses.
+
+Component: NeMo Eval Author skills
+License: Apache-2.0
+Source: https://github.com/NVIDIA-NeMo/eval-author
+Notes: Installed by the reader into a coding assistant for
+examples/tools/cae-freecad-agent-harness-optimization. Not vendored; the example ships
+the Harbor task the skills authored.
+
+Component: Harbor
+License: Apache-2.0
+Source: https://pypi.org/project/harbor/
+Notes: Installed by the reader (harbor==0.22.0) to run the eval in
+examples/tools/cae-freecad-agent-harness-optimization. Not vendored.
