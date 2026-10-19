@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# NeMo Compass Insights, published round 2
+# Agent: cad-u2d. Four runs.
+# Raw Compass output; only names and paths are neutralised.
+- name: Generated CAD models repeatedly fail the required mesh-fidelity check
+  description: The loft-based reconstruction workflow saved models in all four runs
+    that the external evaluator rejected for mesh fidelity (IoU 0.0 or 0.8457, below
+    the required 0.9), even though the final responses presented the models as successful.
+    Improve the reconstruction method and validate the saved artifact with a fidelity
+    check aligned to the evaluator before claiming completion.
+  evidence:
+  - trace_id: 01a141ca-a619-7291-a717-ed2129c650c4
+    spans:
+    - span_id: span-f248e5d16c1e0d9eaf70a45fcfd0e9b7
+  - trace_id: 01a141ca-a619-7a72-bd1b-a04913466d1a
+    spans:
+    - span_id: span-ca860c341c1055e516b739325f2c6654
+  - trace_id: 01a141ca-a619-7bc2-8e8d-182957d42f43
+    spans:
+    - span_id: span-22b602547783931a14abd67f6e2952d2
+  - trace_id: 01a141ca-a619-7d61-8b8a-bffd79c3bbc9
+    spans:
+    - span_id: span-3624929e706ad2041849575a2182e2dd
+  updated_date: &id001 2026-10-15 23:03:18.740186+00:00
+  confidence: high
+  severity: high
+- name: Strict FreeCAD validation failures are dismissed and invalid solids are delivered
+  description: In two runs, the saved model's FreeCAD check(True) reported BOPAlgo
+    GeomAbs_C0 edge failures and the evaluator failed single-valid-solid, but the
+    agent called the body a valid solid and treated the failures as non-fatal. The
+    workflow should reject or repair any model that does not pass strict topology
+    validation before delivery.
+  evidence:
+  - trace_id: 01a141ca-a619-7291-a717-ed2129c650c4
+    spans:
+    - span_id: span-f248e5d16c1e0d9eaf70a45fcfd0e9b7
+    - span_id: span-ba91ecac09b05864c4126efbd06de3cc
+  - trace_id: 01a141ca-a619-7a72-bd1b-a04913466d1a
+    spans:
+    - span_id: span-ca860c341c1055e516b739325f2c6654
+    - span_id: span-98e0a2638792b5de7fce541acb5bb4cb
+  updated_date: *id001
+  confidence: high
+  severity: high
+- name: Local named-dimension test does not satisfy the delivered-artifact check
+  description: In two runs, the agent claimed that changing Params.Length proved the
+    model was parametrically driven, but the external evaluator failed named-dimension-drives-geometry
+    on the saved artifacts. Align the parameterization and saved-file verification
+    with the evaluator's structural requirement rather than relying only on a bounding-box
+    movement test.
+  evidence:
+  - trace_id: 01a141ca-a619-7291-a717-ed2129c650c4
+    spans:
+    - span_id: span-f248e5d16c1e0d9eaf70a45fcfd0e9b7
+  - trace_id: 01a141ca-a619-7a72-bd1b-a04913466d1a
+    spans:
+    - span_id: span-ca860c341c1055e516b739325f2c6654
+  updated_date: *id001
+  confidence: high
+  severity: high
+- name: Section-heavy loft models fail the compact-model requirement
+  description: Two delivered models used 32–38 section sketches and 75–83 faces and
+    were rejected by the evaluator's compact-model check, while the agent treated
+    any count in the tens as acceptable. The reconstruction workflow should use the
+    contract's reference-relative compactness criterion and simplify the feature tree
+    before delivery.
+  evidence:
+  - trace_id: 01a141ca-a619-7291-a717-ed2129c650c4
+    spans:
+    - span_id: span-f248e5d16c1e0d9eaf70a45fcfd0e9b7
+  - trace_id: 01a141ca-a619-7a72-bd1b-a04913466d1a
+    spans:
+    - span_id: span-ca860c341c1055e516b739325f2c6654
+  updated_date: *id001
+  confidence: high
+  severity: high

@@ -1,0 +1,66 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# NeMo Compass Insights, published round 4
+# Agent: cad-u5 (the round-3 agent under the revised Ethos). Four runs.
+# Raw Compass output; only names and paths are neutralised.
+- name: Fixed mesh reconstruction fails independent design-intent dimensions
+  description: For requests that explicitly require multiple independently editable,
+    design-intent dimensions, the agent delegates modeling to the fixed mesh2pd axial-loft
+    script and validates only the single Params.Length parameter, which stretches
+    all section heights together. The evaluator records `failed-checks=independent-dimensions`
+    and reward 0 even though the agent reports the model as meeting the requirements.
+    Replace or augment this generic reconstruction with part-specific features and
+    separate named dimensions, and test that each parameter changes only its intended
+    feature.
+  evidence:
+  - trace_id: 01a143af-c39b-7112-adb7-2daf386278e0
+    spans:
+    - span_id: span-584c127c7657e61aeeb5a258c2baa4cb
+    - span_id: span-b1c8f385df78d61e72d4b860ee24323c
+    - span_id: span-f47b9cfeab9019c95e6c6a86122fe1f0
+  - trace_id: 01a143af-c39b-7363-8125-a90848b5b780
+    spans:
+    - span_id: span-bac0e83b27ba500e409653b617f89264
+    - span_id: span-c3089d5bba284a392660645f99e3da82
+    - span_id: span-ea3b90ee2997069efc2d6cf95b0fc61d
+  - trace_id: 01a143af-c39b-79c3-95ec-f1f9414aa2cd
+    spans:
+    - span_id: span-1a0cea43cda9c158e7ec4f592f9cfb81
+    - span_id: span-e022cf152acd4b4ddd8152286c8cf4ba
+    - span_id: span-1634cefec5659e5180ac03cdcf1f47e0
+  - trace_id: 01a143af-c39b-7ec0-894e-f15a7511d28d
+    spans:
+    - span_id: span-bf0d765b68a44262263020236e1afa6e
+    - span_id: span-796d959c63b672696d29b68f8870bc5c
+    - span_id: span-3bc5b647e0709a929ebb3e68e415ee9b
+  updated_date: &id001 2026-10-16 07:51:21.813249+00:00
+  confidence: high
+  severity: high
+- name: Saved FreeCAD models leave helper objects visible
+  description: 'The saved model violates the requirement that only the finished model
+    be visible on reopen: the script''s own read-back lists Body, Origin001, and Loft04,
+    and a later inspection also exposes origins, axes, planes, and Params. The agent
+    does not repair and re-save visibility state, and some final responses incorrectly
+    claim only Body is visible. Explicitly hide all helper and origin objects, persist
+    the file, then reopen it and assert that the finished Body is the sole visible
+    object.'
+  evidence:
+  - trace_id: 01a143af-c39b-7112-adb7-2daf386278e0
+    spans:
+    - span_id: span-584c127c7657e61aeeb5a258c2baa4cb
+    - span_id: span-b1c8f385df78d61e72d4b860ee24323c
+  - trace_id: 01a143af-c39b-7363-8125-a90848b5b780
+    spans:
+    - span_id: span-bac0e83b27ba500e409653b617f89264
+    - span_id: span-c3089d5bba284a392660645f99e3da82
+  - trace_id: 01a143af-c39b-79c3-95ec-f1f9414aa2cd
+    spans:
+    - span_id: span-1a0cea43cda9c158e7ec4f592f9cfb81
+    - span_id: span-e022cf152acd4b4ddd8152286c8cf4ba
+  - trace_id: 01a143af-c39b-7ec0-894e-f15a7511d28d
+    spans:
+    - span_id: span-bf0d765b68a44262263020236e1afa6e
+    - span_id: span-5b417bebc9d6978f2292c87d0c741ca7
+  updated_date: *id001
+  confidence: high
+  severity: med

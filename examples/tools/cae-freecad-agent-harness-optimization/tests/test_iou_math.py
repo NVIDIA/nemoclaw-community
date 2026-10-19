@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for the pure-NumPy half of the IoU scorer.
+"""Tests for the pure-NumPy half of the verifier's IoU (evals/*/tests/iou_math.py).
 
 Every expected value here is computed by hand. Requires NumPy only: no
 FreeCAD, no running FreeCAD session, no network, no API key.
@@ -17,11 +17,12 @@ import unittest
 import numpy as np
 
 sys.path.insert(
-    0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scorer"))
+    0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    "evals", "part-1-reconstruction", "tests"))
 
 from iou_math import (  # noqa: E402
     CELL_MIN, X_OFFSET, Y_OFFSET, crossings, grid_axes, intervals,
-    iou_from_crossings, length, overlap, resolve_cell)
+    iou_from_crossings, largest_missing_fraction, length, overlap, resolve_cell)
 
 
 def triangle(z_at):
@@ -238,6 +239,44 @@ class TestEndToEndColumn(unittest.TestCase):
         # 0..6 vs 4..8: intersection 2, union 6 + 4 - 2 = 8 -> 0.25
         iou, _, _ = iou_from_crossings(ca, ra)
         self.assertAlmostEqual(iou, 0.25)
+
+
+def box(lo, hi):
+    """The 12 triangles of a closed axis-aligned box."""
+    (x0, y0, z0), (x1, y1, z1) = lo, hi
+    quads = [((x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z)) for z in (z0, z1)]
+    quads += [((x, y0, z0), (x, y1, z0), (x, y1, z1), (x, y0, z1)) for x in (x0, x1)]
+    quads += [((x0, y, z0), (x1, y, z0), (x1, y, z1), (x0, y, z1)) for y in (y0, y1)]
+    tris = [(q[0], q[1], q[2]) for q in quads] + [(q[0], q[2], q[3]) for q in quads]
+    return tuple(np.array([t[k] for t in tris], dtype=float) for k in range(3))
+
+
+class TestLargestMissingFraction(unittest.TestCase):
+    """A 10 mm cube with a 4 x 4 x 4 mm boss beside it: 64 / 1064 of the volume."""
+
+    BODY = ((0, 0, 0), (10, 10, 10))
+    BOSS = ((11, 3, 3), (15, 7, 7))
+
+    def fraction(self, cand):
+        ref = stack([box(*self.BODY), box(*self.BOSS)])
+        return largest_missing_fraction(stack(cand), ref, (0, 0, 0), (15, 10, 10), 20.6)
+
+    def test_missing_boss_is_the_largest_region(self):
+        self.assertAlmostEqual(self.fraction([box(*self.BODY)]), 64 / 1064, delta=0.01)
+
+    def test_complete_model_misses_nothing(self):
+        self.assertAlmostEqual(self.fraction([box(*self.BODY), box(*self.BOSS)]), 0.0)
+
+    def test_model_a_little_under_size_all_over_misses_no_region(self):
+        # A 0.1 mm skin short on every face: thin, so the opening removes it.
+        shrunk = [box((0.1, 0.1, 0.1), (9.9, 9.9, 9.9)), box((11.1, 3.1, 3.1), (14.9, 6.9, 6.9))]
+        self.assertAlmostEqual(self.fraction(shrunk), 0.0)
+
+    def test_missing_boss_attached_to_the_body(self):
+        # The boss shares the body's x = 10 face: a branch that grows out of the part.
+        ref = stack([box(*self.BODY), box((10, 3, 3), (14, 7, 7))])
+        missing = largest_missing_fraction(stack([box(*self.BODY)]), ref, (0, 0, 0), (14, 10, 10), 20.0)
+        self.assertAlmostEqual(missing, 64 / 1064, delta=0.015)
 
 
 if __name__ == "__main__":
