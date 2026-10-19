@@ -191,17 +191,23 @@ export KUBECONFIG="${HOME}/.kube/config"
 # Default INFERENCE_RUNTIME=ollama. Do not set vllm/nim unless you intend to override.
 E2E_USERS=5 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_gpuutil.sh
 ```
+<img width="771" height="438" alt="util2" src="https://github.com/user-attachments/assets/f1f71e97-49c0-49d6-b037-2cb1acc5eb68" />
 
 
 ```bash
 # Terminal B — film this HPA watch
 ./scripts/get-hpa.sh -n nemoclaw-gpu -w
 ```
+<img width="817" height="574" alt="util1" src="https://github.com/user-attachments/assets/72a7fbfc-6ce2-4e59-abe8-261a1ca10348" />
 
 ```bash
-# Terminal C — on the DGX. This path pauses HPA scale-down so 1→8 does not bounce.
+# Terminal C — laptop HTTP.
+E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
+
+# Terminal C — on the DGX instead. 
 INFLIGHT=2 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
 ```
+<img width="630" height="303" alt="util3" src="https://github.com/user-attachments/assets/7e516b0b-6e4b-4236-b423-bcbf88bb993e" />
 
 ```bash
 # Laptop HTTP sends chats but does not pause scale-down. New 0% GPUs pull the
@@ -217,28 +223,29 @@ Wait until `get-hpa.sh` shows **1** current replica. Then switch HPA to latency.
 # Terminal A
 E2E_USERS=5 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_latency.sh
 ```
-<img width="849" height="466" alt="Screenshot 2026-10-06 at 9 02 49 PM" src="https://github.com/user-attachments/assets/1b2602a9-a8f4-482e-a071-9fb5f87e2ac1" />
+<img width="780" height="470" alt="latency2" src="https://github.com/user-attachments/assets/713e3642-80c1-4af9-b0c5-ecce644e8a37" />
+
+
 
 
 ```bash
 # Terminal B
 ./scripts/get-hpa.sh -n nemoclaw-gpu -w
 ```
-<img width="854" height="635" alt="Screenshot 2026-10-06 at 9 03 08 PM" src="https://github.com/user-attachments/assets/9797b59d-01f1-437c-baeb-775eb2c96977" />
+<img width="780" height="470" alt="latency2" src="https://github.com/user-attachments/assets/4cff67ad-f3a6-44d7-b615-b1563e19e01b" />
+<img width="846" height="425" alt="latency1" src="https://github.com/user-attachments/assets/af597137-2f4a-45d9-a303-86477133dd17" />
+
 
 
 
 ```bash
-# Terminal C — laptop HTTP. Do not set INFLIGHT or MAX_TOKENS.
+# Terminal C — laptop HTTP.
 E2E_CLIENT_HOST=dgx-ip E2E_USERS=5 ./scripts/client.sh
-```
-<img width="671" height="288" alt="Screenshot 2026-10-06 at 8 59 44 PM" src="https://github.com/user-attachments/assets/1065ffe2-af3e-467b-9d66-e08a0472050d" />
 
-
-```bash
-# Terminal C — on the DGX instead. Same client; omit INFLIGHT and MAX_TOKENS.
+# Terminal C — on the DGX instead. 
 E2E_USERS=5 ./scripts/client.sh
 ```
+<img width="780" height="470" alt="latency2" src="https://github.com/user-attachments/assets/1913698a-dc1e-4a1b-9a73-fcea7a7b9b22" />
 
 
 
