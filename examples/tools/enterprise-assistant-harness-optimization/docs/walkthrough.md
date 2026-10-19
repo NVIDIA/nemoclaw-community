@@ -164,16 +164,16 @@ Use NeMo Compass to understand patterns in the traces and identify recurring err
 
 ```bash
 uv tool install \
-  'insight-agent @ git+https://github.com/NVIDIA-NeMo/nemo-compass.git@main'
+  'compass @ git+https://github.com/NVIDIA-NeMo/nemo-compass.git@main'
 ```
 
 ### Configure your `NVIDIA_API_KEY` for NeMo Compass.
 
 ```bash
 printf 'NVIDIA Build API key for NeMo Compass: '
-read -rs INSIGHT_AGENT_API_KEY
+read -rs COMPASS_API_KEY
 printf '\n'
-export INSIGHT_AGENT_API_KEY
+export COMPASS_API_KEY
 ```
 ### Run the analysis
 
@@ -184,7 +184,7 @@ Run the analysis on the traces collected earlier:
 ```bash
 export PRODUCTION_INSIGHTS="$PWD/.runs/production-insights.yml"
 mkdir -p .runs
-insight-agent --config configs/trace-analyst.yaml \
+compass --config configs/trace-analyst.yaml \
   --trace.filesystem.path "$TRACE_CORPUS/insights.jsonl" \
   --output-path "$PRODUCTION_INSIGHTS"
 ```
@@ -384,7 +384,7 @@ Now, we will run NeMo Compass again, but this time to analyze the traces collect
   --output .runs/baseline-development-insights.jsonl
 .harbor-venv/bin/python scripts/validate_scored_trace_bundle.py \
   .runs/baseline-development-insights.jsonl --minimum-attempts 3
-insight-agent --config configs/trace-analyst.yaml \
+compass --config configs/trace-analyst.yaml \
   --trace.filesystem.path .runs/baseline-development-insights.jsonl \
   --output-path .runs/baseline-development-insights.yml
 ```
