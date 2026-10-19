@@ -164,7 +164,7 @@ Use NeMo Compass to understand patterns in the traces and identify recurring err
 
 ```bash
 uv tool install \
-  'compass @ git+https://github.com/NVIDIA-NeMo/nemo-compass.git@main'
+  'nemo-compass @ git+https://github.com/NVIDIA-NeMo/nemo-compass.git@main'
 ```
 
 ### Configure your `NVIDIA_API_KEY` for NeMo Compass.
