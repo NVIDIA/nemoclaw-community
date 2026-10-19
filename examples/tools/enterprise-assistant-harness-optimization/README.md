@@ -18,10 +18,14 @@ This repository is a NemoClaw reference tutorial for optimizing an Enterprise Pe
 
 The tutorial walks through a multi-step optimization process:
 - Create traces by asking the agent a series of questions that use the fictional MCP tools
-- Use [NeMo Compass](https://github.com/NVIDIA-NeMo/labs-nemo-compass) to analyze the traces and identify common failures
-- Use a coding agent like Codex with the [NeMo Eval Author skills](https://github.com/NVIDIA-NeMo/labs-eval-author) to create [Harbor evaluation cases](https://www.harborframework.com/) that (a) reflect the most common patterns from the traces, and (b) reproduce any identified failures
+- Use [NeMo Compass](https://github.com/NVIDIA-NeMo/nemo-compass) to analyze the traces and identify common failures
+- Use a coding agent like Codex with the [NeMo Eval Author skills](https://github.com/NVIDIA-NeMo/eval-author) to create [Harbor evaluation cases](https://www.harborframework.com/) that (a) reflect the most common patterns from the traces, and (b) reproduce any identified failures
 - Propose a change to the agent that fixes the failure
 - Run the Harbor eval cases with the proposed fix, confirming improvement without introducing regressions
+
+NeMo Compass analyzes stored agent traces and evaluation evidence to find recurring failures, expose evaluation gaps, and prioritize what teams should improve next.
+
+NeMo Eval Author measures evaluation coverage and generates candidate agent-specific tasks, environments, and verifiers to address identified coverage gaps.
 
 After completing this tutorial, you will have a core understanding of the NeMo libraries to re-implement this optimization loop with your own agent.
 
@@ -86,7 +90,7 @@ Your run of the tutorial may produce different results. This optimization loop w
 
 | Folder | Purpose |
 | --- | --- |
-| [configs/](configs/) | Trace Analyst settings; [ETHOS.md](ETHOS.md) supplies the intended behavior used by analysis and task authoring. |
+| [configs/](configs/) | NeMo Compass settings; [ETHOS.md](ETHOS.md) supplies the intended behavior used by analysis and task authoring. |
 | [docs/](docs/) | The walkthrough, measured results, harness patterns and future Gym extension. |
 | [evals/](evals/) | Eval-suite manifest, runnable Harbor tasks, proof receipts and human review sheet. |
 | [experiments/](experiments/) | The 42-request workload used to collect production-like traces—not an eval suite. |
@@ -99,7 +103,7 @@ Your run of the tutorial may produce different results. This optimization loop w
 | [scripts/](scripts/) | Commands for trace collection/conversion, eval execution and validation. |
 | [src/](src/) | The mock MCP implementation, shared world/tool behavior and trace utilities. |
 | [tests/](tests/) | Automated tests for the environment, adapters, runners and artifact checks. |
-| [traces/](traces/) | Checked-in agent trajectories, corpus indexes and Trace Analyst inputs. |
+| [traces/](traces/) | Checked-in agent trajectories, corpus indexes and NeMo Compass inputs. |
 
 
 ## Start here

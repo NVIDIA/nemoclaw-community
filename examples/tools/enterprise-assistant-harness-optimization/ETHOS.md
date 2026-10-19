@@ -1,7 +1,7 @@
 # Enterprise assistant: intended behavior
 
 This document states the behavior expected of the fictional assistant.
-Trace Analyst and Eval Author use it to interpret traces and design tests.
+NeMo Compass and NeMo Eval Author use it to interpret traces and design tests.
 For your own agent, supply the equivalent document you have created.
 
 ## Mission
