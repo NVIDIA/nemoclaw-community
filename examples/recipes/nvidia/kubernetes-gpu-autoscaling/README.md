@@ -227,7 +227,7 @@ E2E_USERS=5 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_latency.sh
 # Terminal B
 ./scripts/get-hpa.sh -n nemoclaw-gpu -w
 ```
-<img width="780" height="470" alt="latency2" src="https://github.com/user-attachments/assets/4cff67ad-f3a6-44d7-b615-b1563e19e01b" />
+
 <img width="846" height="425" alt="latency1" src="https://github.com/user-attachments/assets/af597137-2f4a-45d9-a303-86477133dd17" />
 
 
