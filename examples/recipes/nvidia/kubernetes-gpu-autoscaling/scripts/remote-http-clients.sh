@@ -3,11 +3,12 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Helper used by setup-*-e2e-sandboxes.sh to publish sandbox loopback HTTP
-# onto the DGX host (one host port per user). This is not a client and does
-# not replace client.sh / client_hermes.sh / client_deepagents.sh.
-# Those scripts still run from the same DGX in another terminal:
-#   E2E_USERS=5 ./scripts/client.sh
-# Optional laptop: E2E_CLIENT_HOST=dgx-ip ./scripts/client.sh
+# onto the DGX host (one host port per user). User i uses 18789+i (UI) and
+# 8642+i (Hermes API). Last ports are those bases plus E2E_USERS-1.
+# This is not a client and does not replace client.sh / client_hermes.sh /
+# client_deepagents.sh. Those scripts still run from the same DGX in another
+# terminal: E2E_USERS=N ./scripts/client.sh
+# Optional laptop: E2E_CLIENT_HOST=dgx-ip E2E_USERS=N ./scripts/client.sh
 #
 # Sourced by setup. Do not run this file directly.
 #
@@ -429,6 +430,73 @@ remote_http_restart_openclaw() {
   return 1
 }
 
+remote_http_chart_dir() {
+  cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd
+}
+
+# Cap matches create_sandboxes (refusing more than 200 sandboxes).
+remote_http_clamp_user_count() {
+  local n="${1:-0}"
+  [[ "${n}" =~ ^[0-9]+$ ]] || n=0
+  if ((n > 200)); then
+    n=200
+  fi
+  printf '%s' "${n}"
+}
+
+remote_http_json_user_count() {
+  python3 - "$@" <<'PY'
+import json, pathlib, sys
+
+n = 0
+for raw in sys.argv[1:]:
+    path = pathlib.Path(raw)
+    if not path.is_file():
+        continue
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        continue
+    users = data.get("users") if isinstance(data, dict) else None
+    if isinstance(users, list) and len(users) > n:
+        n = len(users)
+print(n)
+PY
+}
+
+# Stop enough listeners for this E2E_USERS and any earlier published N.
+remote_http_recorded_user_count() {
+  local chart n json_n
+  chart="$(remote_http_chart_dir)"
+  n=0
+  if [[ "${E2E_USERS:-}" =~ ^[1-9][0-9]*$ ]]; then
+    n="${E2E_USERS}"
+  fi
+  json_n="$(remote_http_json_user_count \
+    "${chart}/e2e-results/hermes/remote-endpoints.json" \
+    "${chart}/e2e-results/openclaw-ollama/remote-endpoints.json")"
+  [[ "${json_n}" =~ ^[0-9]+$ ]] || json_n=0
+  if ((json_n > n)); then
+    n="${json_n}"
+  fi
+  remote_http_clamp_user_count "${n}"
+}
+
+remote_http_stop_ports_for_count() {
+  local count="${1:?count}"
+  local i port
+  count="$(remote_http_clamp_user_count "${count}")"
+  ((count > 0)) || return 0
+  for ((i = 0; i < count; i += 1)); do
+    for port in $((18789 + i)) $((8642 + i)) $((28642 + i)) $((28789 + i)); do
+      if command -v fuser >/dev/null 2>&1; then
+        fuser -k "${port}/tcp" >/dev/null 2>&1 || true
+      fi
+      remote_http_stop_port "${port}"
+    done
+  done
+}
+
 # OpenClaw: one Control UI per user (own host port). CLI uses the same ports.
 # This publish path is the remote-host opt-in, so public ports bind 0.0.0.0
 # unless E2E_PUBLISH_BIND is set. Inner OpenClaw forwards stay on 127.0.0.1.
@@ -437,12 +505,17 @@ remote_http_publish_openclaw() {
   local count="${1:?count}"
   local prefix="${2:?prefix}"
   local out="${3:?json}"
-  local host port name token i
+  local host port name token i stop_n
   local -a users_json=()
   local restart_ui=0
   export E2E_PUBLISH_BIND="${E2E_PUBLISH_BIND:-0.0.0.0}"
   remote_http_load_optional_secrets
   host="$(remote_http_advertise_host)"
+  stop_n="$(remote_http_recorded_user_count)"
+  if ((count > stop_n)); then
+    stop_n="${count}"
+  fi
+  remote_http_stop_ports_for_count "${stop_n}"
   for ((i = 0; i < count; i += 1)); do
     name="$(printf '%s%04d' "${prefix}" "${i}")"
     port=$((18789 + i))
@@ -513,10 +586,15 @@ remote_http_publish_hermes() {
   local count="${1:?count}"
   local prefix="${2:?prefix}"
   local out="${3:?json}"
-  local host dash_port api_port name i inner inner_api token
+  local host dash_port api_port name i inner inner_api token stop_n
   local -a users_json=()
   export E2E_PUBLISH_BIND="${E2E_PUBLISH_BIND:-0.0.0.0}"
   host="$(remote_http_advertise_host)"
+  stop_n="$(remote_http_recorded_user_count)"
+  if ((count > stop_n)); then
+    stop_n="${count}"
+  fi
+  remote_http_stop_ports_for_count "${stop_n}"
   for ((i = 0; i < count; i += 1)); do
     name="$(printf '%s%04d' "${prefix}" "${i}")"
     dash_port=$((18789 + i))
@@ -575,16 +653,7 @@ open(path, "a").write("\n")
 }
 
 remote_http_stop_e2e_forwards() {
-  local port
   echo "Stopping laptop HTTP forwards (dashboard / API)"
   remote_http_stop_discovery
-  for port in $(seq 18789 18799); do
-    if command -v fuser >/dev/null 2>&1; then
-      fuser -k "${port}/tcp" >/dev/null 2>&1 || true
-    fi
-    remote_http_stop_port "${port}"
-  done
-  for port in $(seq 28642 28652) $(seq 28789 28799) $(seq 8642 8652); do
-    remote_http_stop_port "${port}"
-  done
+  remote_http_stop_ports_for_count "$(remote_http_recorded_user_count)"
 }

@@ -18,8 +18,8 @@
 # or hermes-onprem.
 #
 # Usage:
-#   ./scripts/agentscaling_hermes_gpuutil.sh                      # default E2E_USERS=3, GPU util HPA
-#   E2E_USERS=3 ./scripts/agentscaling_hermes_latency.sh bringup   # LLM latency HPA
+#   ./scripts/agentscaling_hermes_gpuutil.sh                      # default E2E_USERS=10, GPU util HPA
+#   E2E_USERS=10 ./scripts/agentscaling_hermes_latency.sh bringup  # LLM latency HPA
 #   ./scripts/setup-hermes-vllm-e2e-sandboxes.sh 3
 #   ./scripts/setup-hermes-vllm-e2e-sandboxes.sh start
 #   ./scripts/setup-hermes-vllm-e2e-sandboxes.sh refresh-inference
@@ -58,7 +58,7 @@ require_cmd python3
 export PATH="${HOME}/.local/bin:${PATH}"
 
 E2E_USERS_FROM_ENV="${E2E_USERS:-}"
-E2E_USERS="${E2E_USERS:-3}"
+E2E_USERS="${E2E_USERS:-10}"
 ACTION="${1:-}"
 if [[ -z "${ACTION}" ]]; then
   ACTION="${E2E_USERS}"

@@ -38,7 +38,7 @@ agentscaling_hermes_common_pin() {
   export INGRESS_SERVICE_TYPE="${INGRESS_SERVICE_TYPE:-ClusterIP}"
   # 2Gi + inflight 2 OOMed dgx-19. Use 4Gi with inflight 1. 8Gi is OpenClaw's
   # gateway floor (Node workers); hermes -z does not need that.
-  export E2E_USERS="${E2E_USERS:-3}"
+  export E2E_USERS="${E2E_USERS:-10}"
   export SANDBOX_PREFIX="${SANDBOX_PREFIX:-hermes-vllm-e2e-}"
   AGENT_SANDBOX_IMAGE="$(agent_common_resolve_sandbox_image hermes)"
   export AGENT_SANDBOX_IMAGE

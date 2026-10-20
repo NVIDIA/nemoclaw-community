@@ -7,7 +7,7 @@
 # Public ports bind 0.0.0.0 unless E2E_PUBLISH_BIND is set.
 # Does not wait for clients. Does not print API keys.
 #
-#   E2E_USERS=5 ./scripts/publish-hermes-remote-http.sh
+#   E2E_USERS=10 ./scripts/publish-hermes-remote-http.sh
 #
 # If openshell-port-forward.sh dropped, those openshell forward processes
 # die. Start step 5 again, then rerun this script before the laptop client.
@@ -20,7 +20,7 @@ CHART_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/remote-http-clients.sh"
 
 export PATH="${HOME}/.local/bin:${PATH}"
-export E2E_USERS="${E2E_USERS:-5}"
+export E2E_USERS="${E2E_USERS:-10}"
 export SANDBOX_PREFIX="${SANDBOX_PREFIX:-hermes-vllm-e2e-}"
 export OPENSHELL_NAMESPACE="${OPENSHELL_NAMESPACE:-nemoclaw-sandboxes}"
 OUT="${CHART_DIR}/e2e-results/hermes/remote-endpoints.json"

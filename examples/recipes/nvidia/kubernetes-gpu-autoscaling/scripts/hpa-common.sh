@@ -183,7 +183,7 @@ def fmt_pct(n):
 def fmt_ms(n):
     """Latency as a plain millisecond number (unit documented in header/README)."""
     if n is None:
-        return "?"
+        return "0"
     if abs(n - round(n)) < 0.05:
         return str(int(round(n)))
     return f"{n:.2f}".rstrip("0").rstrip(".")
@@ -221,14 +221,14 @@ def metric_kind(name):
         return "latency"
     return "other"
 
-def pod_gpu_values():
+def pod_metric_values(metric_name):
     try:
         raw = subprocess.check_output(
             [
                 "kubectl",
                 "get",
                 "--raw",
-                f"/apis/custom.metrics.k8s.io/v1beta1/namespaces/{ns}/pods/*/gpu_utilization_percent",
+                f"/apis/custom.metrics.k8s.io/v1beta1/namespaces/{ns}/pods/*/{metric_name}",
             ],
             stderr=subprocess.DEVNULL,
             text=True,
@@ -244,15 +244,24 @@ def pod_gpu_values():
             vals.append(value)
     return vals
 
-def gpu_display_current(cur_raw, replicas):
-    """Print the per-pod mean. One idle GPU at 0% only dilutes; it is not avg 0%.
+def hold_display_current(metric_name, cur_raw, replicas):
+    """Keep the last per-pod mean across custom-metrics gaps.
 
-    HPA currentMetrics=0 on an empty scrape is not that average. Keep the last
-    non-zero mean for 45s so a miss cannot look like every replica is idle.
+    OpenClaw, Hermes, and Deep Agents share this watch. Terminating GPU
+    pods make HPA TARGETS <unknown> during scale-down. Ready-pod samples
+    replace the hold, including 0. Do not expire on a timer.
     """
-    state = Path(f"/tmp/nemoclaw-hpa-gpu-mean-{ns}")
-    pods = pod_gpu_values()
-    mean = (sum(pods) / len(pods)) if pods else qty(cur_raw)
+    safe = "".join(ch if ch.isalnum() else "-" for ch in metric_name)
+    state = Path(f"/tmp/nemoclaw-hpa-mean-{ns}-{safe}")
+    pods = pod_metric_values(metric_name)
+    if pods:
+        mean = sum(pods) / len(pods)
+        try:
+            state.write_text(f"{mean}\n{time.time()}\n", encoding="utf-8")
+        except OSError:
+            pass
+        return mean
+    mean = qty(cur_raw)
     if mean is not None and mean > 0:
         try:
             state.write_text(f"{mean}\n{time.time()}\n", encoding="utf-8")
@@ -261,18 +270,21 @@ def gpu_display_current(cur_raw, replicas):
         return mean
     last_mean = None
     try:
-        raw = state.read_text(encoding="utf-8").splitlines()
-        last_mean = float(raw[0])
-        age = time.time() - float(raw[1])
-        if last_mean <= 0 or age > 45:
-            last_mean = None
+        last_mean = float(state.read_text(encoding="utf-8").splitlines()[0])
     except (OSError, IndexError, ValueError):
         last_mean = None
     if last_mean is not None:
         return last_mean
-    if (mean == 0 or mean is None) and replicas is not None and int(replicas) > 1:
-        return None
-    return mean
+    if replicas is not None and int(replicas) <= 1:
+        return 0.0
+    return None
+
+def gpu_display_current(cur_raw, replicas):
+    return hold_display_current("gpu_utilization_percent", cur_raw, replicas)
+
+def latency_display_current(cur_raw, replicas):
+    value = hold_display_current("nemoclaw_llm_latency_avg_milliseconds", cur_raw, replicas)
+    return 0.0 if value is None else value
 
 def targets(h):
     spec_metrics = h.get("spec", {}).get("metrics") or []
@@ -292,7 +304,10 @@ def targets(h):
             if kind == "gpu_utilization":
                 parts.append(f"{fmt_pct(gpu_display_current(cur_raw, replicas))}/{fmt_pct(qty(tgt_raw))}")
             elif kind == "latency":
-                parts.append(f"{fmt_ms(qty(cur_raw))}/{fmt_ms(qty(tgt_raw))}")
+                tgt_ms = qty(tgt_raw)
+                parts.append(
+                    f"{fmt_ms(latency_display_current(cur_raw, replicas))}/{fmt_ms(3000.0 if tgt_ms is None else tgt_ms)}"
+                )
             elif kind == "rate":
                 parts.append(f"{fmt_rate(qty(cur_raw))}/{fmt_rate(qty(tgt_raw))}")
             else:

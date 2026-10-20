@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """
 OpenClaw + Ollama client: N end users send prompts into N OpenShell sandboxes.
-Default N is E2E_USERS=5 (one sandbox per user). GPU inference is Ollama.
+N comes from --users. client.sh passes E2E_USERS. GPU inference is Ollama.
 
 Run agentscaling_gpuutil.sh or agentscaling_latency.sh first. This module is started by ./scripts/client.sh.
 The client does not set the HPA metric.
@@ -22,7 +22,7 @@ Hermes + vLLM is a later e2e and is not this script.
 
 Usage (laptop HTTP):
     E2E_CLIENT_HOST=dgx-ip E2E_USERS=5 ./scripts/client.sh
-    python3 scripts/e2e-openclaw-ollama-load-test.py --host dgx-ip --chat-only
+    python3 scripts/e2e-openclaw-ollama-load-test.py --host dgx-ip --users 5 --chat-only
 Do not install OpenShell on the laptop.
 """
 
@@ -934,9 +934,9 @@ async def run_test(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="OpenClaw + Ollama client: N users send OpenClaw prompts into N sandboxes (not Envoy-direct); default E2E_USERS=5"
+        description="OpenClaw + Ollama client: N users send OpenClaw prompts into N sandboxes (not Envoy-direct); pass --users"
     )
-    parser.add_argument("--users", type=int, default=int(os.environ.get("E2E_USERS", "5")))
+    parser.add_argument("--users", type=int, required=True)
     parser.add_argument("--prefix", default=os.environ.get("SANDBOX_PREFIX", "openclaw-ollama-e2e-"))
     parser.add_argument("--output", default=os.environ.get("E2E_OUTPUT_DIR", "./e2e-results/openclaw-ollama"))
     parser.add_argument("--duration", type=int, default=int(os.environ.get("DURATION_SEC", "900")))

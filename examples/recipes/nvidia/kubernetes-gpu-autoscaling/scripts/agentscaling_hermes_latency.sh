@@ -14,8 +14,8 @@
 # ./scripts/agentscaling_hermes_gpuutil.sh.
 #
 # Usage:
-#   E2E_USERS=3 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_hermes_latency.sh
-#   E2E_USERS=3 ./scripts/agentscaling_hermes_latency.sh start
+#   E2E_USERS=10 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_hermes_latency.sh
+#   E2E_USERS=10 ./scripts/agentscaling_hermes_latency.sh start
 #   ./scripts/agentscaling_hermes_latency.sh stop
 #   ./scripts/agentscaling_hermes_latency.sh cleanup
 

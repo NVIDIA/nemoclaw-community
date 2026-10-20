@@ -169,6 +169,9 @@ assert "remote_http_prepare_hermes_home" in forward
 assert "os.chown(home, 0, 0)" in forward
 assert "E2E_HERMES_API_KEY_FILE" in forward
 assert "inner_api=$((28642 + i))" in forward
+assert "remote_http_stop_ports_for_count" in forward
+assert "seq 18789 18799" not in forward
+assert "seq 8642 8652" not in forward
 assert 'remote_http_start_forward "${name}" 18789 "${inner}"' in forward.split("remote_http_publish_hermes")[1]
 assert "Laptop HTTP does not set a Bearer token." in forward
 hermes_api_proxy = (chart / "files" / "e2e-hermes-api-auth-proxy.py").read_text()
@@ -291,6 +294,18 @@ assert "[90s]" in adapter
 assert "client.sh shortens this to 15s" in adapter
 assert "stabilizationWindowSeconds=120" not in (chart / "scripts" / "hpa-common.sh").read_text()
 hpa_common = (chart / "scripts" / "hpa-common.sh").read_text()
+hold_disp = hpa_common.split("def hold_display_current")[1].split("def gpu_display_current")[0]
+assert "if pods:" in hold_disp
+assert "age > 45" not in hold_disp
+assert "int(replicas) > 1" not in hold_disp
+assert "int(replicas) <= 1" in hold_disp
+assert 'hold_display_current("gpu_utilization_percent"' in hpa_common
+assert 'hold_display_current("nemoclaw_llm_latency_avg_milliseconds"' in hpa_common
+assert "fmt_ms(latency_display_current" in hpa_common
+fmt_ms = hpa_common.split("def fmt_ms")[1].split("def fmt_rate")[0]
+assert 'return "?"' not in fmt_ms
+assert 'return "0"' in fmt_ms
+assert "0.0 if value is None else value" in hpa_common
 gateway = (chart / "templates" / "gateway.yaml").read_text()
 assert "maxRequestsPerConnection: 1" in gateway
 assert "hpa_common_set_dcgm_peak_window" in hpa_common
@@ -317,10 +332,30 @@ assert "[h]ermes.real -m .* -z" in hermes_load
 assert "[h]ermes -z'" not in hermes_load
 assert deep_load.count("stop_sandbox_chats(") >= 3
 assert "INFLIGHT=2, MAX_TOKENS=64" in readme
-assert "INFLIGHT=2 and MAX_TOKENS=64" in readme
+assert "`INFLIGHT=2`, `MAX_TOKENS=64`" in readme
+assert "OpenClaw latency defaults: `INFLIGHT=1`, `MAX_TOKENS=2048`" in readme
+assert "Hermes latency defaults: `INFLIGHT=2`, `MAX_TOKENS=64`" in readme
 assert "INFLIGHT=2 MAX_TOKENS=64" in hermes
 assert "INFLIGHT=2 MAX_TOKENS=1024" in hermes
 assert "INFLIGHT=2 MAX_TOKENS=1024" in readme
+assert 'export E2E_USERS="${E2E_USERS:-10}"' in hermes
+assert 'parser.add_argument("--users", type=int, required=True)' in hermes_load
+assert 'parser.add_argument("--users", type=int, required=True)' in SCRIPT.read_text()
+assert 'parser.add_argument("--users", type=int, required=True)' in deep_load
+assert 'default=int(os.environ.get("E2E_USERS"' not in hermes_load
+assert 'default=int(os.environ.get("E2E_USERS"' not in SCRIPT.read_text()
+assert 'default=int(os.environ.get("E2E_USERS"' not in deep_load
+assert 'export E2E_USERS="${E2E_USERS:-10}"' in (chart / "scripts" / "agentscaling-hermes-common.sh").read_text()
+assert 'export E2E_USERS="${E2E_USERS:-10}"' in publish_hermes
+assert 'export E2E_USERS="${E2E_USERS:-5}"' in client
+assert "10 end users send requests to 10 Hermes agents" in readme
+assert "5 end users send requests to 5 OpenClaw agents" in readme
+assert "5 end users send requests to 5 Deep Agents" in readme
+assert "`E2E_USERS=10`" in readme
+assert "`8642+i`" in readme
+assert "`18789+i`" in readme
+assert "Last ports are `8642+N-1`" in readme
+assert ":8642 … :8646" not in readme
 assert "INFLIGHT=1 MAX_TOKENS=1024" not in readme
 assert "INFLIGHT=1 MAX_TOKENS=1024" not in hermes
 assert "Set those flags on the client." in readme

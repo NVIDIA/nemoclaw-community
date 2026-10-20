@@ -88,7 +88,7 @@ export INFERENCE_MODEL=llama3.2:3b
 ./scripts/verify-agent-sandbox.sh
 ```
 
-Multi-user HPA e2e: N sandboxes (one per end user). This DGX demo uses `E2E_USERS=5`. Provision with [`scripts/agentscaling_gpuutil.sh`](scripts/agentscaling_gpuutil.sh) (GPU util) or [`scripts/agentscaling_latency.sh`](scripts/agentscaling_latency.sh) (LLM latency). Send chats with the same [`scripts/client.sh`](scripts/client.sh). **Hermes + vLLM next:** [`scripts/agentscaling_hermes_gpuutil.sh`](scripts/agentscaling_hermes_gpuutil.sh) then [`scripts/client_hermes.sh`](scripts/client_hermes.sh). Run [`scripts/uninstall-e2e.sh`](scripts/uninstall-e2e.sh) first if OpenClaw sandboxes or `client.sh` are still running.
+Multi-user HPA e2e: N sandboxes (one per end user). The OpenClaw DGX demo uses `E2E_USERS=5`. Provision with [`scripts/agentscaling_gpuutil.sh`](scripts/agentscaling_gpuutil.sh) (GPU util) or [`scripts/agentscaling_latency.sh`](scripts/agentscaling_latency.sh) (LLM latency). Send chats with the same [`scripts/client.sh`](scripts/client.sh). **Hermes + vLLM next:** `E2E_USERS=10` with [`scripts/agentscaling_hermes_gpuutil.sh`](scripts/agentscaling_hermes_gpuutil.sh) then [`scripts/client_hermes.sh`](scripts/client_hermes.sh). Run [`scripts/uninstall-e2e.sh`](scripts/uninstall-e2e.sh) first if OpenClaw sandboxes or `client.sh` are still running.
 
 ### Hermes
 

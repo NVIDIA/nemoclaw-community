@@ -11,12 +11,12 @@
 #   ./scripts/agentscaling_hermes_gpuutil.sh   # GPU util HPA
 #   ./scripts/agentscaling_hermes_latency.sh   # LLM latency HPA (same client)
 #
-# Default: 3 users, inflight 2, 4Gi sandboxes. 2Gi + inflight 2 OOMed dgx-19.
+# Default: 10 users, inflight 2, 4Gi sandboxes. 2Gi + inflight 2 OOMed dgx-19.
 #
 # Laptop HTTP: UI http://dgx-ip:18789/  CLI user i → http://dgx-ip:8642+i/v1
 # The laptop does not set a Hermes API key. The DGX injects it.
-#   GPU util: E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=1024 E2E_USERS=5 ./scripts/client_hermes.sh
-#   latency:  E2E_CLIENT_HOST=dgx-ip E2E_USERS=5 ./scripts/client_hermes.sh
+#   GPU util: E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=1024 E2E_USERS=10 ./scripts/client_hermes.sh
+#   latency:  E2E_CLIENT_HOST=dgx-ip E2E_USERS=10 ./scripts/client_hermes.sh
 # GPU util takes INFLIGHT and MAX_TOKENS on the client (default 2 and 1024).
 # Latency omits them (INFLIGHT=2 MAX_TOKENS=64) and ignores leftovers.
 # Do not copy a load helper into the sandbox. Do not pause HPA scale-down.
@@ -38,7 +38,7 @@ fail() {
 }
 
 export PATH="${HOME}/.local/bin:${PATH}"
-export E2E_USERS="${E2E_USERS:-3}"
+export E2E_USERS="${E2E_USERS:-10}"
 export SANDBOX_PREFIX="${SANDBOX_PREFIX:-hermes-vllm-e2e-}"
 INFERENCE_RUNTIME="${INFERENCE_RUNTIME:-$(agent_common_default_inference_runtime hermes)}"
 export INFERENCE_RUNTIME

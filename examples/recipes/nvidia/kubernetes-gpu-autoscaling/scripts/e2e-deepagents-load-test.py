@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """
 Deep Agents Code + NIM client: N end users send prompts into N OpenShell sandboxes.
-Default N is E2E_USERS=3 (one sandbox per user). GPU inference is NIM.
+N comes from --users. client_deepagents.sh passes E2E_USERS. GPU inference is NIM.
 
 Run agentscaling_deepagents_gpuutil.sh or agentscaling_deepagents_latency.sh first.
 This module is started by ./scripts/client_deepagents.sh.
@@ -558,9 +558,9 @@ async def run_test(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Deep Agents Code + NIM client: N users send dcode -n into N sandboxes; default E2E_USERS=3"
+        description="Deep Agents Code + NIM client: N users send dcode -n into N sandboxes; pass --users"
     )
-    parser.add_argument("--users", type=int, default=int(os.environ.get("E2E_USERS", "3")))
+    parser.add_argument("--users", type=int, required=True)
     parser.add_argument("--prefix", default=os.environ.get("SANDBOX_PREFIX", "deepagent-nim-e2e-"))
     parser.add_argument("--output", default=os.environ.get("E2E_OUTPUT_DIR", "./e2e-results/deepagents"))
     parser.add_argument("--duration", type=int, default=int(os.environ.get("DURATION_SEC", "900")))
