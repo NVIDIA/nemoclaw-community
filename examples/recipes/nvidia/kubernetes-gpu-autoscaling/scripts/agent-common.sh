@@ -78,20 +78,13 @@ agent_common_resolve_max_tokens() {
       esac
       ;;
     *)
-      case "${agent}" in
-        deepagents)
-          # Leftover MAX_TOKENS from OpenClaw or Hermes must not change 6c.
-          raw="${E2E_DEEPAGENTS_TOKEN_START:-1024}"
-          ;;
-        *)
-          if [[ -z "${raw}" ]]; then
-            case "${agent}" in
-              openclaw) raw=2048 ;;
-              *) raw=1024 ;;
-            esac
-          fi
-          ;;
-      esac
+      if [[ -z "${raw}" ]]; then
+        case "${agent}" in
+          openclaw) raw=2048 ;;
+          deepagents) raw=1024 ;;
+          *) raw=1024 ;;
+        esac
+      fi
       ;;
   esac
   [[ "${raw}" =~ ^[1-9][0-9]*$ ]] || {
@@ -114,8 +107,8 @@ agent_common_export_client_tokens() {
 
 # OpenClaw and Hermes latency use INFLIGHT=1. GPU util uses INFLIGHT on
 # the command. OpenClaw GPU util is 4 when it is omitted; Hermes GPU util
-# is 2 when it is omitted. Deep Agents is INFLIGHT=1 MAX_TOKENS=1024 in
-# the code for GPU util and for latency.
+# is 2 when it is omitted; Deep Agents GPU util is 1 when it is omitted.
+# Deep Agents latency is INFLIGHT=1 MAX_TOKENS=1024 in the code.
 agent_common_export_demo_workload() {
   local agent="${1:-openclaw}"
   local metric
@@ -132,19 +125,13 @@ agent_common_export_demo_workload() {
       esac
       ;;
     *)
-      case "${agent}" in
-        deepagents)
-          INFLIGHT="${E2E_DEEPAGENTS_INFLIGHT:-1}"
-          ;;
-        *)
-          if [[ -z "${INFLIGHT:-}" ]]; then
-            case "${agent}" in
-              openclaw) INFLIGHT=4 ;;
-              *) INFLIGHT=2 ;;
-            esac
-          fi
-          ;;
-      esac
+      if [[ -z "${INFLIGHT:-}" ]]; then
+        case "${agent}" in
+          openclaw) INFLIGHT=4 ;;
+          deepagents) INFLIGHT=1 ;;
+          *) INFLIGHT=2 ;;
+        esac
+      fi
       ;;
   esac
   export INFLIGHT

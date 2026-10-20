@@ -299,6 +299,19 @@ assert "[90s]" in adapter
 assert "client.sh shortens this to 15s" in adapter
 assert "stabilizationWindowSeconds=120" not in (chart / "scripts" / "hpa-common.sh").read_text()
 hpa_common = (chart / "scripts" / "hpa-common.sh").read_text()
+assert "hpa_common_resolve_allow_insecure_http" in hpa_common
+assert "Unset inherits the live chart" in hpa_common
+assert "ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_gpuutil.sh" not in readme
+assert "ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_latency.sh" not in readme
+assert "ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_hermes_gpuutil.sh" not in readme
+assert "ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_deepagents_gpuutil.sh" not in readme
+assert "ALLOW_INSECURE_HTTP=1 \\\n  ./scripts/install-hpa.sh" not in readme
+assert "If you did not set up TLS, add `ALLOW_INSECURE_HTTP=1`" in readme
+assert "This DGX demo did **not** use this overlay." in readme
+assert "Do not add the flag on those commands." in readme
+assert 'export ALLOW_INSECURE_HTTP="${ALLOW_INSECURE_HTTP:-0}"' not in (chart / "scripts" / "agentscaling-common.sh").read_text()
+assert 'export ALLOW_INSECURE_HTTP="${ALLOW_INSECURE_HTTP:-0}"' not in (chart / "scripts" / "agentscaling-hermes-common.sh").read_text()
+assert 'export ALLOW_INSECURE_HTTP="${ALLOW_INSECURE_HTTP:-0}"' not in (chart / "scripts" / "agentscaling-deepagents-common.sh").read_text()
 hold_disp = hpa_common.split("def hold_display_current")[1].split("def gpu_display_current")[0]
 assert "if pods:" in hold_disp
 assert "age > 45" not in hold_disp
@@ -370,13 +383,25 @@ assert "`8642+i`" in readme
 assert "`18789+i`" in readme
 assert "Last ports are `8642+N-1`" in readme
 assert ":8642 … :8646" not in readme
-assert "Default is `INFLIGHT=1 MAX_TOKENS=1024` for GPU util and for latency" in readme
+assert "INFLIGHT=1 MAX_TOKENS=1024" in readme
 assert "INFLIGHT=1 MAX_TOKENS=1024" in deep
 assert "INFLIGHT=1 MAX_TOKENS=1024" not in hermes
 assert "INFLIGHT=3 MAX_TOKENS=64" not in readme
+assert "Default is `INFLIGHT=1 MAX_TOKENS=1024` for GPU util and for latency" in readme
 assert "INFLIGHT=1 MAX_TOKENS=1024 E2E_USERS=10 ./scripts/client_deepagents.sh" not in readme
-assert 'raw="${E2E_DEEPAGENTS_TOKEN_START:-1024}"' in agent_common
-assert 'INFLIGHT="${E2E_DEEPAGENTS_INFLIGHT:-1}"' in agent_common
+assert "INFLIGHT=1 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client_deepagents.sh" not in readme
+assert "E2E_USERS=5 ./scripts/client_deepagents.sh" not in readme
+for line in readme.splitlines():
+    stripped = line.lstrip()
+    if stripped.startswith("#") or not stripped.startswith(
+        ("INFLIGHT=", "MAX_TOKENS=", "E2E_USERS=", "E2E_CLIENT_HOST=")
+    ):
+        continue
+    if "client_deepagents.sh" not in stripped:
+        continue
+    assert "INFLIGHT=" not in stripped, stripped
+    assert "MAX_TOKENS=" not in stripped, stripped
+assert "deepagents) INFLIGHT=1 ;;" in agent_common
 assert "Set those flags on the client." in readme
 assert "[user {uid} sandbox {uid}]" in hermes
 assert "thread.join(timeout=2)" not in hermes

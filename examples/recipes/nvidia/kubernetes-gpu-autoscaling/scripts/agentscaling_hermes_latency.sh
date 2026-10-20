@@ -7,14 +7,14 @@
 # and client path as GPU-util: users send hermes -z into each sandbox.
 #
 # Switches the cluster HPA metric, then creates sandboxes.
-# Isolated eval without TLS must set ALLOW_INSECURE_HTTP=1 explicitly.
+# Isolated eval: step 4 sets ALLOW_INSECURE_HTTP=1. Unset inherits that install.
 # Provision keeps current replicas at 1 (maxReplicas stays 8). Run
 # ./scripts/client_hermes.sh after sandboxes are Ready (laptop: E2E_CLIENT_HOST=dgx-ip).
 # The client does not set HPA_METRIC. For GPU-util HPA use
 # ./scripts/agentscaling_hermes_gpuutil.sh.
 #
 # Usage:
-#   E2E_USERS=10 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_hermes_latency.sh
+#   E2E_USERS=10 ./scripts/agentscaling_hermes_latency.sh
 #   E2E_USERS=10 ./scripts/agentscaling_hermes_latency.sh start
 #   ./scripts/agentscaling_hermes_latency.sh stop
 #   ./scripts/agentscaling_hermes_latency.sh cleanup

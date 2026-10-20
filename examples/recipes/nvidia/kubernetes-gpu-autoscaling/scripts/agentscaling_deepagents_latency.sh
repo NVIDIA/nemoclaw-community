@@ -7,7 +7,7 @@
 # and client path as GPU-util: users send dcode -n into each sandbox.
 #
 # Switches the cluster HPA metric, then creates sandboxes.
-# Isolated eval without TLS must set ALLOW_INSECURE_HTTP=1 explicitly.
+# Isolated eval: step 4 sets ALLOW_INSECURE_HTTP=1. Unset inherits that install.
 # NIM needs NGC Secrets (apply-local-secrets.sh or create-nim-ngc-secrets.sh).
 # Provision keeps current replicas at 1 (maxReplicas stays 8). Run
 # ./scripts/client_deepagents.sh after sandboxes are Ready (no HTTP UI).
@@ -15,7 +15,7 @@
 # ./scripts/agentscaling_deepagents_gpuutil.sh.
 #
 # Usage:
-#   E2E_USERS=10 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_deepagents_latency.sh
+#   E2E_USERS=10 ./scripts/agentscaling_deepagents_latency.sh
 #   E2E_USERS=10 ./scripts/agentscaling_deepagents_latency.sh start
 #   ./scripts/agentscaling_deepagents_latency.sh stop
 #   ./scripts/agentscaling_deepagents_latency.sh cleanup

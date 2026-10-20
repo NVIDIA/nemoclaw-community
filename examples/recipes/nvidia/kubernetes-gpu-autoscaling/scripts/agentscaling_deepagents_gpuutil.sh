@@ -8,7 +8,7 @@
 # Envoy → NIM.
 #
 # Default is 10 users at 4Gi. Client default is INFLIGHT=1 MAX_TOKENS=1024.
-# Isolated eval without TLS must set ALLOW_INSECURE_HTTP=1 explicitly.
+# Isolated eval: step 4 sets ALLOW_INSECURE_HTTP=1. Unset inherits that install.
 # NIM needs NGC Secrets (apply-local-secrets.sh or create-nim-ngc-secrets.sh).
 # Run ./scripts/uninstall-e2e.sh first if OpenClaw or Hermes sandboxes or
 # clients are still running. GPU inference can stay; this script helm-upgrades
@@ -27,7 +27,7 @@
 # Other agent: agentscaling_gpuutil.sh or agentscaling_hermes_gpuutil.sh
 #
 # Usage:
-#   E2E_USERS=10 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_deepagents_gpuutil.sh
+#   E2E_USERS=10 ./scripts/agentscaling_deepagents_gpuutil.sh
 #   E2E_USERS=10 ./scripts/agentscaling_deepagents_gpuutil.sh start
 #   ./scripts/agentscaling_deepagents_gpuutil.sh stop
 #   ./scripts/agentscaling_deepagents_gpuutil.sh cleanup

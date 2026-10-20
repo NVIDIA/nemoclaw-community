@@ -28,7 +28,6 @@ agentscaling_hermes_common_pin() {
     agentscaling_hermes_common_fail "uses NAMESPACE=nemoclaw-gpu RELEASE=nemoclaw-gpu (got ${NAMESPACE}/${RELEASE})"
   fi
   export ENABLE_ENVOY_LB="${ENABLE_ENVOY_LB:-1}"
-  export ALLOW_INSECURE_HTTP="${ALLOW_INSECURE_HTTP:-0}"
   export ENABLE_AUTOSCALING="${ENABLE_AUTOSCALING:-1}"
   export MIN_REPLICAS="${MIN_REPLICAS:-1}"
   export MAX_REPLICAS="${MAX_REPLICAS:-8}"
@@ -104,7 +103,6 @@ agentscaling_hermes_common_apply_hpa() {
       INFERENCE_RUNTIME="${INFERENCE_RUNTIME}" \
       INFERENCE_MODEL="${INFERENCE_MODEL}" \
       HPA_METRIC="${wanted}" \
-      ALLOW_INSECURE_HTTP="${ALLOW_INSECURE_HTTP}" \
       "${SCRIPT_DIR}/install-hpa.sh"
   fi
   hpa_common_require_live_runtime "${NAMESPACE}" "${HPA_NAME}" "${INFERENCE_RUNTIME}" \

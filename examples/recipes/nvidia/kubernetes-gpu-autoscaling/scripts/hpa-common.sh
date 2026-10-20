@@ -1455,13 +1455,52 @@ PY
   return 0
 }
 
+hpa_common_resolve_allow_insecure_http() {
+  # Explicit 0 or 1 wins. Unset inherits the live chart (step 4 isolated eval).
+  # Missing release stays 0 so a first install still requires TLS or the flag.
+  case "${ALLOW_INSECURE_HTTP:-}" in
+    0 | 1)
+      printf '%s' "${ALLOW_INSECURE_HTTP}"
+      return 0
+      ;;
+    "") ;;
+    *)
+      echo "ALLOW_INSECURE_HTTP must be 0 or 1" >&2
+      return 1
+      ;;
+  esac
+  local ns="${NAMESPACE:-nemoclaw-gpu}"
+  local release="${RELEASE:-nemoclaw-gpu}"
+  local live="0"
+  if command -v helm >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
+    live="$(
+      helm get values "${release}" -n "${ns}" --all -o json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    print("0")
+    raise SystemExit(0)
+value = (data.get("ingress") or {}).get("allowInsecureHttp")
+print("1" if value is True or value == "true" else "0")
+' || true
+    )"
+  fi
+  case "${live}" in
+    1) printf '1' ;;
+    *) printf '0' ;;
+  esac
+}
+
 hpa_common_ingress_allow_insecure_value() {
   # Cleartext Gateway exposure only applies when Envoy LB is enabled.
   if ! hpa_common_envoy_lb_enabled; then
     printf 'false'
     return 0
   fi
-  case "${ALLOW_INSECURE_HTTP:-0}" in
+  local allow_insecure
+  allow_insecure="$(hpa_common_resolve_allow_insecure_http)" || return 1
+  case "${allow_insecure}" in
     0)
       printf 'false'
       ;;

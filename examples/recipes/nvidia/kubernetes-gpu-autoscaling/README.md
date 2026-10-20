@@ -28,7 +28,7 @@ HPA scales to **N** inference pods (1 GPU each). The load balancer is **Envoy** 
 
 Each GPU pod is **2/2 Ready** when healthy: inference (`ollama` / `vllm` / `nim`) + `metrics-proxy` (auth, `/v1`, health, `/metrics`). Metrics-proxy, HPA, and the Envoy load balancer stay the same. Official pairings: [6a OpenClaw + Ollama](#6a-openclaw--ollama), [6b Hermes + vLLM](#6b-hermes--vllm), [6c Deep Agents + NIM](#6c-deep-agents-code--nim).
 
-Isolated eval uses `ALLOW_INSECURE_HTTP=1` (Envoy with no TLS overlay). HTTPS Envoy uses [TLS values](#tls-values).
+This DGX isolated eval did **not** install an Envoy TLS overlay. That is not for production. Use [TLS values](#tls-values) for HTTPS Envoy. OpenShell client mTLS in step 5 is separate.
 
 ```text
 M end users (1 sandbox per user)
@@ -99,10 +99,12 @@ OPENSHELL_UNAUTHENTICATED_ACK=dedicated-cluster-port-forward-only \
 
 Skip this if `kubectl get gatewayclass eg` succeeds. The e2e scripts update the GPU chart; they do not install the Envoy load balancer.
 
+TLS is required by default. If you did not set up TLS, add `ALLOW_INSECURE_HTTP=1` to this command. That flag is isolated eval only. It is not for production. This DGX demo uses that isolated-eval path (ClusterIP, no Envoy TLS overlay). Later 6a / 6b / 6c inherit the live Helm value. Do not add the flag on those commands. For HTTPS Envoy, use [TLS values](#tls-values).
+
 ```bash
 # MicroK8s GPU addon: DCGM_NAMESPACE=gpu-operator-resources
 # Helm GPU Operator: DCGM_NAMESPACE=gpu-operator
-DCGM_NAMESPACE=gpu-operator-resources MAX_REPLICAS=8 ENABLE_ENVOY_LB=1 ALLOW_INSECURE_HTTP=1 \
+DCGM_NAMESPACE=gpu-operator-resources MAX_REPLICAS=8 ENABLE_ENVOY_LB=1 \
   ./scripts/install-hpa.sh
 kubectl get gatewayclass eg
 ```
@@ -191,10 +193,8 @@ Keep [step 5](#5-connect-the-openshell-cli) in another terminal: `./scripts/open
 
 ```bash
 # Terminal A
-# Isolated eval (no TLS overlay): keep ALLOW_INSECURE_HTTP=1 from step 4.
-# A TLS install can omit that variable.
 # Default INFERENCE_RUNTIME=ollama. Do not set vllm/nim unless you intend to override.
-E2E_USERS=5 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_gpuutil.sh
+E2E_USERS=5 ./scripts/agentscaling_gpuutil.sh
 ```
 <img width="752" height="465" alt="util1" src="https://github.com/user-attachments/assets/00cecc7e-5dfc-4d23-b8f1-b05fbc13977f" />
 
@@ -204,11 +204,6 @@ E2E_USERS=5 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_gpuutil.sh
 ./scripts/get-hpa.sh -n nemoclaw-gpu -w
 ```
 <img width="815" height="996" alt="util2" src="https://github.com/user-attachments/assets/ccd8910b-8230-43ea-af76-9a17e2a749af" />
-<<<<<<< HEAD
-=======
-
-
->>>>>>> 4bc2fce746a4e596a58841cb3ac2fc30816dac45
 
 ```bash
 # Terminal C — laptop HTTP.
@@ -218,10 +213,6 @@ E2E_CLIENT_HOST=dgx-ip INFLIGHT=4 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.s
 INFLIGHT=4 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
 ```
 <img width="665" height="346" alt="util3" src="https://github.com/user-attachments/assets/7117e094-f782-4bd9-8df7-c8c5fd8ee801" />
-<<<<<<< HEAD
-=======
-
->>>>>>> 4bc2fce746a4e596a58841cb3ac2fc30816dac45
 
 
 
@@ -229,7 +220,7 @@ INFLIGHT=4 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
 
 ```bash
 # Terminal A
-E2E_USERS=5 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_latency.sh
+E2E_USERS=5 ./scripts/agentscaling_latency.sh
 ```
 <img width="780" height="470" alt="latency2" src="https://github.com/user-attachments/assets/713e3642-80c1-4af9-b0c5-ecce644e8a37" />
 
@@ -320,8 +311,7 @@ Keep [step 5](#5-connect-the-openshell-cli) in another terminal: `./scripts/open
 
 ```bash
 # Terminal A
-# Isolated eval (no TLS overlay): keep ALLOW_INSECURE_HTTP=1 from step 4.
-E2E_USERS=10 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_hermes_gpuutil.sh
+E2E_USERS=10 ./scripts/agentscaling_hermes_gpuutil.sh
 ```
 <img width="752" height="631" alt="util1" src="https://github.com/user-attachments/assets/936d783d-9be3-49a9-a908-2faf52a25aac" />
 
@@ -337,33 +327,26 @@ E2E_USERS=10 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_hermes_gpuutil.sh
 #   E2E_USERS=10 ./scripts/publish-hermes-remote-http.sh
 E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=1024 E2E_USERS=10 ./scripts/client_hermes.sh
 ```
-
 <img width="727" height="482" alt="util3" src="https://github.com/user-attachments/assets/5e306a05-81dc-423c-9427-07eb8c05275f" />
-
 
 ```bash
 # Terminal C — on the DGX instead
 INFLIGHT=2 MAX_TOKENS=1024 E2E_USERS=10 ./scripts/client_hermes.sh
 ```
 
-
-
-**LLM latency.**  `client_hermes.sh` uses `INFLIGHT=1`, `MAX_TOKENS=2048` by default.
-
+**LLM latency.** `client_hermes.sh` uses `INFLIGHT=1`, `MAX_TOKENS=2048` by default.
 
 ```bash
 # Terminal A
-E2E_USERS=10 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_hermes_latency.sh
+E2E_USERS=10 ./scripts/agentscaling_hermes_latency.sh
 ```
 <img width="777" height="632" alt="latency3" src="https://github.com/user-attachments/assets/5969f28a-aa24-4b4c-8e33-227cfb58e37e" />
-
 
 ```bash
 # Terminal B
 ./scripts/get-hpa.sh -n nemoclaw-gpu -w
 ```
 <img width="848" height="890" alt="latency2" src="https://github.com/user-attachments/assets/f7523cbd-db7c-4061-bb86-803df7c3fe14" />
-
 
 ```bash
 # Terminal C — laptop HTTP. INFLIGHT=1 MAX_TOKENS=2048 by default
@@ -373,12 +356,8 @@ E2E_CLIENT_HOST=dgx-ip E2E_USERS=10 ./scripts/client_hermes.sh
 ```
 <img width="731" height="480" alt="latency1" src="https://github.com/user-attachments/assets/e0cc260c-dd78-46a9-ac7e-ec624be68e55" />
 
-
-
-
-
 ```bash
-# Terminal C — on the DGX instead. 
+# Terminal C — on the DGX instead.
 E2E_USERS=10 ./scripts/client_hermes.sh
 ```
 
@@ -430,14 +409,12 @@ export PATH="${HOME}/.local/bin:${PATH}"
 export KUBECONFIG="${HOME}/.kube/config"
 ```
 
-**GPU Utilization.** (target 40%):
+**GPU Utilization.** (target 40%). Default is `INFLIGHT=1 MAX_TOKENS=1024`. Do not add those flags.
 ```bash
 # Terminal A
-# Isolated eval (no TLS overlay): keep ALLOW_INSECURE_HTTP=1 from step 4.
-E2E_USERS=10 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_deepagents_gpuutil.sh
+E2E_USERS=10 ./scripts/agentscaling_deepagents_gpuutil.sh
 ```
 <img width="749" height="616" alt="util1" src="https://github.com/user-attachments/assets/2d76dbf6-0322-46ef-aa5d-b772759af72a" />
-
 
 ```bash
 # Terminal B
@@ -445,25 +422,19 @@ E2E_USERS=10 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_deepagents_gpuutil.sh
 ```
 <img width="824" height="647" alt="util2" src="https://github.com/user-attachments/assets/63b58dfa-91c4-45b3-9345-a7aea5cee8d3" />
 
-
-
 ```bash
-# Terminal C — on DGX 
-INFLIGHT=1 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client_deepagents.sh
+# Terminal C — on the DGX. Deep Agents has no laptop HTTP.
+E2E_USERS=10 ./scripts/client_deepagents.sh
 ```
 <img width="711" height="451" alt="util3" src="https://github.com/user-attachments/assets/32e8e0d1-56d7-452a-b360-42044b6fd775" />
 
-
-
-**LLM latency.**  `client_deepagents.sh` sends `dcode -n`.
-
+**LLM latency.** Same default. `client_deepagents.sh` sends `dcode -n`. Do not add those flags.
 
 ```bash
 # Terminal A
-E2E_USERS=10 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_deepagents_latency.sh
+E2E_USERS=10 ./scripts/agentscaling_deepagents_latency.sh
 ```
 <img width="776" height="617" alt="latency1" src="https://github.com/user-attachments/assets/f1cdf30c-bd10-4b3c-937f-6cd7766a349b" />
-
 
 ```bash
 # Terminal B
@@ -471,9 +442,8 @@ E2E_USERS=10 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_deepagents_latency.sh
 ```
 <img width="848" height="498" alt="latency2" src="https://github.com/user-attachments/assets/8a31ad79-a9f4-4992-8806-78535ba7952a" />
 
-
 ```bash
-# Terminal C — from the same DGX. Deep Agents has no laptop HTTP.
+# Terminal C — on the DGX. Deep Agents has no laptop HTTP.
 E2E_USERS=10 ./scripts/client_deepagents.sh
 ```
 <img width="710" height="451" alt="latency3" src="https://github.com/user-attachments/assets/b7881b64-3d3b-4580-b53c-9a7a84d5ee56" />
@@ -498,7 +468,9 @@ Intermittent `401` is a control-plane aggregated-API client cert problem. This r
 
 ### TLS values
 
-HTTPS Envoy needs a TLS overlay. Isolated eval uses `ALLOW_INSECURE_HTTP=1` (no overlay). **Every** recipe `helm upgrade` that serves HTTPS needs an overlay with `ingress.tls` — chart `values.yaml` alone is not enough.
+This DGX demo did **not** use this overlay. The chart requires TLS unless you add `ALLOW_INSECURE_HTTP=1` to step 4 `./scripts/install-hpa.sh`. That flag acknowledges cleartext HTTP on ClusterIP. It is isolated eval only. It is not for production.
+
+Use this section when you want HTTPS Envoy. **Every** recipe `helm upgrade` that serves HTTPS needs an overlay with `ingress.tls` — chart `values.yaml` alone is not enough.
 
 1. Create the TLS Secret in `nemoclaw-gpu` (SAN must include `ingress.host`).
 2. Overlay `./hpa-tls-values.yaml`.
@@ -538,7 +510,7 @@ ingress:
 The Envoy dataplane Service is **ClusterIP** only (`NodePort` / `LoadBalancer` rejected). Use `kubectl port-forward` from outside.
 
 - External HTTPS: Gateway Basic auth + inference key as `X-Api-Key`. OpenShell HTTPRoute: Bearer only.
-- TLS required by default. Isolated eval: `ALLOW_INSECURE_HTTP=1` (ClusterIP). Preflight checks reported exposure; it does not prove private-network isolation.
+- TLS required by default. If you did not set up [TLS values](#tls-values), add `ALLOW_INSECURE_HTTP=1` on step 4 only. 6a / 6b / 6c inherit that choice. Preflight checks reported exposure; it does not prove private-network isolation.
 - Auth Secrets use Helm `keep`. Delete to rotate; never commit keys.
 - No NetworkPolicy from the chart — add one if the cluster needs it.
 
@@ -606,12 +578,12 @@ The HPA-only test has been verified on DGX 8xH100 on-prem `maxReplicas=8`, and [
 
 If you already ran Quick start 4 or the OpenClaw + Ollama e2e (`agentscaling_gpuutil.sh` / `agentscaling_latency.sh`), HPA is already installed. Skip `install-hpa.sh` and run a load-test script below.
 
-If you did **not** run e2e, install Prometheus, Envoy, and the GPU chart + HPA first (default Ollama / `llama3.2:3b`):
+If you did **not** run e2e, install Prometheus, Envoy, and the GPU chart + HPA first (default Ollama / `llama3.2:3b`). If you did not set up TLS, add `ALLOW_INSECURE_HTTP=1` the same way as step 4.
 
 ```bash
 # MicroK8s GPU addon: DCGM_NAMESPACE=gpu-operator-resources
 # Helm GPU Operator: DCGM_NAMESPACE=gpu-operator
-DCGM_NAMESPACE=gpu-operator-resources MAX_REPLICAS=8 ENABLE_ENVOY_LB=1 ALLOW_INSECURE_HTTP=1 \
+DCGM_NAMESPACE=gpu-operator-resources MAX_REPLICAS=8 ENABLE_ENVOY_LB=1 \
   ./scripts/install-hpa.sh
 ```
 
