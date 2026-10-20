@@ -428,20 +428,23 @@ export KUBECONFIG="${HOME}/.kube/config"
 # Isolated eval (no TLS overlay): keep ALLOW_INSECURE_HTTP=1 from step 4.
 E2E_USERS=5 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_deepagents_gpuutil.sh
 ```
-<img width="820" height="827" alt="Screenshot 2026-10-01 at 10 49 59 PM" src="https://github.com/user-attachments/assets/cd71a258-3ff3-4f62-b1ca-baf440e8c220" />
+<img width="749" height="616" alt="util1" src="https://github.com/user-attachments/assets/2d76dbf6-0322-46ef-aa5d-b772759af72a" />
+
 
 ```bash
 # Terminal B
 ./scripts/get-hpa.sh -n nemoclaw-gpu -w
 ```
+<img width="824" height="647" alt="util2" src="https://github.com/user-attachments/assets/63b58dfa-91c4-45b3-9345-a7aea5cee8d3" />
 
-<img width="830" height="443" alt="Screenshot 2026-10-01 at 10 48 31 PM" src="https://github.com/user-attachments/assets/23be5f75-0822-4b39-b6db-31b27f8a2f48" />
+
 
 ```bash
-# Terminal C — from the same DGX in another terminal
+# Terminal C — on DGX 
 INFLIGHT=1 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client_deepagents.sh
 ```
 
+<img width="711" height="451" alt="util3" src="https://github.com/user-attachments/assets/32e8e0d1-56d7-452a-b360-42044b6fd775" />
 
 
 **LLM latency.** Same sandboxes and the same `client_deepagents.sh`. Provision switches HPA to `latency_avg` (target 3000 ms) and keeps current GPUs at 1 replica (`maxReplicas=8`). `client_deepagents.sh` sends `dcode -n`.
@@ -450,19 +453,22 @@ INFLIGHT=1 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client_deepagents.sh
 # Terminal A
 E2E_USERS=5 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_deepagents_latency.sh
 ```
-<img width="849" height="797" alt="Screenshot 2026-10-01 at 11 13 50 PM" src="https://github.com/user-attachments/assets/83f6963e-63a4-46bc-92c4-e29f43b30256" />
+<img width="776" height="617" alt="latency1" src="https://github.com/user-attachments/assets/f1cdf30c-bd10-4b3c-937f-6cd7766a349b" />
+
 
 ```bash
 # Terminal B
 ./scripts/get-hpa.sh -n nemoclaw-gpu -w
 ```
-<img width="853" height="320" alt="Screenshot 2026-10-01 at 11 10 09 PM" src="https://github.com/user-attachments/assets/3179e6de-1002-4fc1-be71-03a6ef4875d2" />
+<img width="848" height="498" alt="latency2" src="https://github.com/user-attachments/assets/8a31ad79-a9f4-4992-8806-78535ba7952a" />
+
 
 
 ```bash
 # Terminal C — from the same DGX in another terminal
 INFLIGHT=3 MAX_TOKENS=64 E2E_USERS=5 ./scripts/client_deepagents.sh
 ```
+<img width="710" height="451" alt="latency3" src="https://github.com/user-attachments/assets/b7881b64-3d3b-4580-b53c-9a7a84d5ee56" />
 
 
 
