@@ -314,27 +314,28 @@ Keep [step 5](#5-connect-the-openshell-cli) in another terminal: `./scripts/open
 # Isolated eval (no TLS overlay): keep ALLOW_INSECURE_HTTP=1 from step 4.
 E2E_USERS=5 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_hermes_gpuutil.sh
 ```
-<img width="869" height="929" alt="Screenshot 2026-10-01 at 1 54 32 PM" src="https://github.com/user-attachments/assets/60b7f887-3a80-46b3-84a0-1caebf6ea807" />
+<img width="752" height="631" alt="util1" src="https://github.com/user-attachments/assets/936d783d-9be3-49a9-a908-2faf52a25aac" />
+
 
 ```bash
 # Terminal B — film this HPA watch
 ./scripts/get-hpa.sh -n nemoclaw-gpu -w
 ```
-<img width="821" height="383" alt="Screenshot 2026-10-01 at 6 24 21 PM" src="https://github.com/user-attachments/assets/99f9ae4a-8427-4651-a5d8-69118d00f6f3" />
+<img width="813" height="557" alt="util2" src="https://github.com/user-attachments/assets/9525c978-b679-453f-90a2-986688b929f0" />
+
 
 ```bash
 # Terminal C — laptop HTTP. Needs published :8642 … :8646.
 # If Connection refused, keep step 5 attached, then on the DGX:
 #   E2E_USERS=5 ./scripts/publish-hermes-remote-http.sh
 E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=1024 E2E_USERS=5 ./scripts/client_hermes.sh
-```
 
-```bash
 # Terminal C — on the DGX instead
 INFLIGHT=2 MAX_TOKENS=1024 E2E_USERS=5 ./scripts/client_hermes.sh
 ```
 
-Wait until `get-hpa.sh` shows **1** current replica. Then switch HPA to latency.
+<img width="727" height="482" alt="util3" src="https://github.com/user-attachments/assets/5e306a05-81dc-423c-9427-07eb8c05275f" />
+
 
 **LLM latency.** Same sandboxes and the same `client_hermes.sh`. Provision switches HPA to `latency_avg` (target 3000 ms) and keeps **current** GPUs at **1** replica (`maxReplicas=8`). `client_hermes.sh` uses INFLIGHT=2 and MAX_TOKENS=64 from the client code. Do not set `INFLIGHT` or `MAX_TOKENS`.
 
