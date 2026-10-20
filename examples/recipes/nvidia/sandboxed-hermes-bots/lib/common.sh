@@ -25,7 +25,20 @@ die()  { fail "$*"; exit 1; }
 # openshell prints ANSI colour codes; strip them BEFORE comparing or awk-ing.
 strip_ansi() { sed -r 's/\x1B\[[0-9;]*[mK]//g'; }
 
-valid_name() { [[ "$1" =~ ^[a-z][a-z0-9-]{0,30}$ ]]; }
+# OpenShell sandbox names: 1-19 chars, lowercase letters/digits/hyphens, start
+# with a letter, end with a letter or digit, no doubled hyphen. The sandbox is
+# SANDBOX_PREFIX + name, so the limit applies to the combined string; the
+# default fleet's longest, nemoclaw-researcher, is exactly 19.
+SANDBOX_NAME_MAX=19
+valid_name() {
+  local sb="${SANDBOX_PREFIX:-}$1"
+  [[ "$1" =~ ^[a-z][a-z0-9-]*$ ]] && [[ "$sb" =~ ^[a-z]([a-z0-9]|-[a-z0-9])*$ ]] && (( ${#sb} <= SANDBOX_NAME_MAX ))
+}
+# For removal: same character rules, no length cap. State for a name that was
+# never creatable (older versions wrote it before OpenShell refused the name)
+# must still be removable, and the name is a path component either way.
+valid_name_loose() { [[ "$1" =~ ^[a-z][a-z0-9-]*$ ]] && [[ "${SANDBOX_PREFIX:-}$1" =~ ^[a-z]([a-z0-9]|-[a-z0-9])*$ ]]; }
+name_rule() { printf 'sandbox name %s%s must be 1-%d chars: lowercase letters, digits, single hyphens; start with a letter, end with a letter or digit' "${SANDBOX_PREFIX:-}" "$1" "$SANDBOX_NAME_MAX"; }
 
 # Escape an arbitrary literal for use inside an extended regular expression.
 # Sandbox prefixes are operator-configurable, so process-match patterns must

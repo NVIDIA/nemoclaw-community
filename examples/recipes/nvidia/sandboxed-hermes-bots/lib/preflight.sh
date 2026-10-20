@@ -25,10 +25,12 @@ preflight_run() {
 
   local hv
   hv=$(hermes --version 2>/dev/null | head -1 | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' || true)
-  if [[ -n "$hv" ]] && [[ "$(printf '%s\n' v0.21.0 "$hv" | sort -V | head -1)" == v0.21.0 ]]; then
-    pf_ok "host hermes $hv (>= v0.21.0)"
+  # 0.21.4 is where one host gateway serves every profile; this tool starts
+  # exactly one, so older Hermes would leave the Desktop roster empty.
+  if [[ -n "$hv" ]] && [[ "$(printf '%s\n' v0.21.4 "$hv" | sort -V | head -1)" == v0.21.4 ]]; then
+    pf_ok "host hermes $hv (>= v0.21.4, one gateway serves every profile)"
   else
-    pf_fail "host hermes ${hv:-missing}; need >= v0.21.0 (hermes update)"
+    pf_fail "host hermes ${hv:-missing}; need >= v0.21.4 (hermes update)"
   fi
 
   # The bridge is where sandboxes reach the host (host.openshell.internal) and
