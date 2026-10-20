@@ -193,10 +193,7 @@ ingress:
   path: /
   pathType: Prefix
   tls: []
-  # The chart refuses to render a routable Gateway unless ingress.tls is configured or this
-  # value is explicitly true. The scripts keep this false unless ALLOW_INSECURE_HTTP=1 passes
-  # their Kubernetes exposure preflight. Ignored when ingress.gateway.enabled is false.
-  # See README "Ingress security".
+  # Unused. This recipe does not render Envoy TLS. OpenShell client mTLS is separate.
   allowInsecureHttp: false
   gateway:
     # Optional user choice: Envoy Gateway + LeastRequest. Default on.

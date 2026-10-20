@@ -8,7 +8,7 @@
 # Envoy → vLLM.
 #
 # Default is 10 users at 4Gi (2Gi + inflight 2 OOMed dgx-19).
-# Isolated eval: step 4 sets ALLOW_INSECURE_HTTP=1. Unset inherits that install.
+# This recipe does not use Envoy TLS. OpenShell client mTLS is step 5.
 # Run ./scripts/uninstall-e2e.sh first if OpenClaw sandboxes or client.sh
 # are still running. GPU inference can stay; this script helm-upgrades the
 # same release to INFERENCE_RUNTIME (default vllm).

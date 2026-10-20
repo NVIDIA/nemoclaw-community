@@ -306,9 +306,17 @@ assert "ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_latency.sh" not in readme
 assert "ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_hermes_gpuutil.sh" not in readme
 assert "ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_deepagents_gpuutil.sh" not in readme
 assert "ALLOW_INSECURE_HTTP=1 \\\n  ./scripts/install-hpa.sh" not in readme
-assert "If you did not set up TLS, add `ALLOW_INSECURE_HTTP=1`" in readme
-assert "This DGX demo did **not** use this overlay." in readme
-assert "Do not add the flag on those commands." in readme
+assert "ALLOW_INSECURE_HTTP=1" not in readme
+assert "TLS required by default" not in readme
+assert "### TLS values" not in readme
+assert "This recipe does not use Envoy TLS." in readme
+assert "OpenShell client mTLS is step 5." in readme
+gw = (chart / "templates" / "gateway.yaml").read_text()
+assert "protocol: HTTPS" not in gw
+assert "ingress.tls is empty and ingress.allowInsecureHttp is false" not in gw
+assert "TLS is required when ENABLE_ENVOY_LB=1" not in (
+    chart / "scripts" / "install-hpa.sh"
+).read_text()
 assert 'export ALLOW_INSECURE_HTTP="${ALLOW_INSECURE_HTTP:-0}"' not in (chart / "scripts" / "agentscaling-common.sh").read_text()
 assert 'export ALLOW_INSECURE_HTTP="${ALLOW_INSECURE_HTTP:-0}"' not in (chart / "scripts" / "agentscaling-hermes-common.sh").read_text()
 assert 'export ALLOW_INSECURE_HTTP="${ALLOW_INSECURE_HTTP:-0}"' not in (chart / "scripts" / "agentscaling-deepagents-common.sh").read_text()

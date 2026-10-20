@@ -122,9 +122,9 @@ case "${ENABLE_ENVOY_LB:-1}" in
     ;;
 esac
 # OpenShell's hostname-unrestricted cleartext HTTP listener must not be exposed via
-# NodePort/LoadBalancer (would bypass hostname-scoped HTTPS redirect and Basic auth).
+# NodePort/LoadBalancer (would bypass Basic auth).
 if hpa_common_envoy_lb_enabled && [[ "${INGRESS_SERVICE_TYPE}" != "ClusterIP" ]]; then
-  echo "ENABLE_ENVOY_LB=1 requires INGRESS_SERVICE_TYPE=ClusterIP while the OpenShell cleartext HTTP listener is present. NodePort/LoadBalancer would expose that route externally and bypass Gateway TLS and Basic authentication. Use ClusterIP (port-forward), or set ENABLE_ENVOY_LB=0." >&2
+  echo "ENABLE_ENVOY_LB=1 requires INGRESS_SERVICE_TYPE=ClusterIP while the OpenShell cleartext HTTP listener is present. NodePort/LoadBalancer would expose that route externally and bypass Basic authentication. Use ClusterIP (port-forward), or set ENABLE_ENVOY_LB=0." >&2
   exit 1
 fi
 ALLOW_INSECURE_HTTP="$(hpa_common_resolve_allow_insecure_http)" || exit 1
@@ -132,31 +132,6 @@ export ALLOW_INSECURE_HTTP
 if [[ "${ALLOW_INSECURE_HTTP}" == "1" && "${INGRESS_SERVICE_TYPE}" != "ClusterIP" ]]; then
   echo "ALLOW_INSECURE_HTTP=1 requires INGRESS_SERVICE_TYPE=ClusterIP" >&2
   exit 1
-fi
-
-# TLS / cleartext Gateway policy applies only when Envoy LB is enabled.
-if hpa_common_envoy_lb_enabled; then
-  case "${ALLOW_INSECURE_HTTP}" in
-    0)
-      INGRESS_RENDER_ERROR=""
-      if ! INGRESS_RENDER_ERROR="$(helm template ingress-policy-check "${CHART_DIR}" -f "${HPA_VALUES}" \
-        --set ingress.gateway.enabled=true \
-        --set ingress.allowInsecureHttp=false \
-        --set ingress.auth.enabled=false 2>&1 >/dev/null)"; then
-        if [[ "${INGRESS_RENDER_ERROR}" == *"ingress.tls is empty"* ]]; then
-          echo "TLS is required when ENABLE_ENVOY_LB=1. Configure ingress.tls in HPA_VALUES, or set ALLOW_INSECURE_HTTP=1 for an isolated cluster." >&2
-        else
-          printf '%s\n' "${INGRESS_RENDER_ERROR}" >&2
-        fi
-        exit 1
-      fi
-      ;;
-    1) ;;
-    *)
-      echo "ALLOW_INSECURE_HTTP must be 0 or 1" >&2
-      exit 1
-      ;;
-  esac
 fi
 
 aggregated_api_ready() {

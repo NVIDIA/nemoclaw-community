@@ -7,7 +7,7 @@
 # and client path as GPU-util: users talk only to :18789.
 #
 # Switches the cluster HPA metric, then creates/starts sandboxes.
-# Isolated eval: step 4 sets ALLOW_INSECURE_HTTP=1. Unset inherits that install.
+# This recipe does not use Envoy TLS. OpenShell client mTLS is step 5.
 # Provision keeps current replicas at 1 (maxReplicas stays 8). Run
 # ./scripts/client.sh after :18789 is up
 # (laptop: E2E_CLIENT_HOST=dgx-ip E2E_USERS=5).

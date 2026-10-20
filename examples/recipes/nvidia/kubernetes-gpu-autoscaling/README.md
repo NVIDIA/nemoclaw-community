@@ -28,7 +28,7 @@ HPA scales to **N** inference pods (1 GPU each). The load balancer is **Envoy** 
 
 Each GPU pod is **2/2 Ready** when healthy: inference (`ollama` / `vllm` / `nim`) + `metrics-proxy` (auth, `/v1`, health, `/metrics`). Metrics-proxy, HPA, and the Envoy load balancer stay the same. Official pairings: [6a OpenClaw + Ollama](#6a-openclaw--ollama), [6b Hermes + vLLM](#6b-hermes--vllm), [6c Deep Agents + NIM](#6c-deep-agents-code--nim).
 
-This DGX isolated eval did **not** install an Envoy TLS overlay. That is not for production. Use [TLS values](#tls-values) for HTTPS Envoy. OpenShell client mTLS in step 5 is separate.
+Envoy stays ClusterIP HTTP. This recipe does not use Envoy TLS. OpenShell client mTLS in step 5 is separate.
 
 ```text
 M end users (1 sandbox per user)
@@ -97,9 +97,7 @@ OPENSHELL_UNAUTHENTICATED_ACK=dedicated-cluster-port-forward-only \
 
 ### 4. Install GPU inference and the Envoy load balancer once
 
-Skip this if `kubectl get gatewayclass eg` succeeds. The e2e scripts update the GPU chart; they do not install the Envoy load balancer.
-
-TLS is required by default. If you did not set up TLS, add `ALLOW_INSECURE_HTTP=1` to this command. That flag is isolated eval only. It is not for production. This DGX demo uses that isolated-eval path (ClusterIP, no Envoy TLS overlay). Later 6a / 6b / 6c inherit the live Helm value. Do not add the flag on those commands. For HTTPS Envoy, use [TLS values](#tls-values).
+Skip this if `kubectl get gatewayclass eg` succeeds. The e2e scripts update the GPU chart; they do not install the Envoy load balancer. This recipe does not use Envoy TLS. OpenShell client mTLS is step 5.
 
 ```bash
 # MicroK8s GPU addon: DCGM_NAMESPACE=gpu-operator-resources
@@ -466,38 +464,6 @@ done
 
 Intermittent `401` is a control-plane aggregated-API client cert problem. This recipe does not manage those certificates.
 
-### TLS values
-
-This DGX demo did **not** use this overlay. The chart requires TLS unless you add `ALLOW_INSECURE_HTTP=1` to step 4 `./scripts/install-hpa.sh`. That flag acknowledges cleartext HTTP on ClusterIP. It is isolated eval only. It is not for production.
-
-Use this section when you want HTTPS Envoy. **Every** recipe `helm upgrade` that serves HTTPS needs an overlay with `ingress.tls` — chart `values.yaml` alone is not enough.
-
-1. Create the TLS Secret in `nemoclaw-gpu` (SAN must include `ingress.host`).
-2. Overlay `./hpa-tls-values.yaml`.
-3. `local.env.example` → `local.env` for `HPA_VALUES` / `INGRESS_HOST`.
-
-```bash
-kubectl create namespace nemoclaw-gpu --dry-run=client -o yaml | kubectl apply -f -
-kubectl create secret tls nemoclaw-example-tls \
-  --namespace nemoclaw-gpu \
-  --cert=/path/to/tls.crt --key=/path/to/tls.key \
-  --dry-run=client -o yaml | kubectl apply -f -
-cp values.yaml ./hpa-tls-values.yaml
-cp local.env.example local.env
-```
-
-```yaml
-# ./hpa-tls-values.yaml
-ingress:
-  host: nemoclaw.example.com
-  tls:
-    - secretName: nemoclaw-example-tls
-      hosts:
-        - nemoclaw.example.com
-```
-
-`local.env` resolves paths from **its own directory**. Manual export from the recipe directory: `export HPA_VALUES="$PWD/hpa-tls-values.yaml"`. Explicit env wins over `local.env`. The chart never creates or rotates the TLS Secret.
-
 ### Scheduling
 
 - Unset `NEMOCLAW_TARGET_NODE` for portable scheduling. Multi-node needs RWX (or disable persistence — [Persistence](#persistence)); default hostPath is single-node.
@@ -509,8 +475,8 @@ ingress:
 
 The Envoy dataplane Service is **ClusterIP** only (`NodePort` / `LoadBalancer` rejected). Use `kubectl port-forward` from outside.
 
-- External HTTPS: Gateway Basic auth + inference key as `X-Api-Key`. OpenShell HTTPRoute: Bearer only.
-- TLS required by default. If you did not set up [TLS values](#tls-values), add `ALLOW_INSECURE_HTTP=1` on step 4 only. 6a / 6b / 6c inherit that choice. Preflight checks reported exposure; it does not prove private-network isolation.
+- Gateway Basic auth + inference key as `X-Api-Key`. OpenShell HTTPRoute: Bearer only.
+- This recipe does not use Envoy TLS. OpenShell client mTLS in step 5 stays required.
 - Auth Secrets use Helm `keep`. Delete to rotate; never commit keys.
 - No NetworkPolicy from the chart — add one if the cluster needs it.
 
@@ -578,7 +544,7 @@ The HPA-only test has been verified on DGX 8xH100 on-prem `maxReplicas=8`, and [
 
 If you already ran Quick start 4 or the OpenClaw + Ollama e2e (`agentscaling_gpuutil.sh` / `agentscaling_latency.sh`), HPA is already installed. Skip `install-hpa.sh` and run a load-test script below.
 
-If you did **not** run e2e, install Prometheus, Envoy, and the GPU chart + HPA first (default Ollama / `llama3.2:3b`). If you did not set up TLS, add `ALLOW_INSECURE_HTTP=1` the same way as step 4.
+If you did **not** run e2e, install Prometheus, Envoy, and the GPU chart + HPA first (default Ollama / `llama3.2:3b`):
 
 ```bash
 # MicroK8s GPU addon: DCGM_NAMESPACE=gpu-operator-resources
