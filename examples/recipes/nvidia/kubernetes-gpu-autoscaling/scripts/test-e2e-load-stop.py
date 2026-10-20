@@ -147,9 +147,12 @@ assert '"-m"' in hermes_load
 assert "inference_model()" in hermes_load
 assert 'raw="${E2E_LATENCY_TOKEN_START:-2048}"' in agent_common
 assert 'raw="${E2E_HERMES_LATENCY_TOKEN_START:-2048}"' in agent_common
+assert 'raw="${E2E_DEEPAGENTS_LATENCY_TOKEN_START:-1024}"' in agent_common
 assert "*latency*)" in agent_common
 assert "INFLIGHT=1" in agent_common.split("agent_common_export_demo_workload")[1].split("agent_common_export_client_inflight")[0]
-assert 'INFLIGHT="${E2E_HERMES_LATENCY_INFLIGHT:-2}"' in agent_common
+assert 'INFLIGHT="${E2E_HERMES_LATENCY_INFLIGHT:-1}"' in agent_common
+assert 'INFLIGHT="${E2E_DEEPAGENTS_LATENCY_INFLIGHT:-1}"' in agent_common
+assert "agent_common_export_demo_workload deepagents" in (chart / "scripts" / "client_deepagents.sh").read_text()
 assert "Leftover MAX_TOKENS from GPU util must not change the latency demo." in agent_common
 assert "agent_common_export_demo_workload hermes" in (chart / "scripts" / "client_hermes.sh").read_text()
 discovery = (chart / "files" / "e2e-http-discovery.py").read_text()
@@ -258,6 +261,8 @@ assert 'headers["Authorization"] = f"Bearer {token}"' in hermes
 assert "export E2E_OUTPUT_DIR" in hermes
 deep = (chart / "scripts" / "client_deepagents.sh").read_text()
 assert "agent_common_print_laptop_client_usage" not in deep
+assert "Deep Agents has no laptop HTTP" in deep
+assert 'E2E_CLIENT_HOST:-' in deep
 common = (chart / "scripts" / "agent-common.sh").read_text()
 assert "client_deepagents.sh)" in common
 assert 'script="$(basename "${0}")"' in common
@@ -331,13 +336,20 @@ assert hermes_load.count("stop_sandbox_chats(") >= 3
 assert "[h]ermes.real -m .* -z" in hermes_load
 assert "[h]ermes -z'" not in hermes_load
 assert deep_load.count("stop_sandbox_chats(") >= 3
-assert "INFLIGHT=2, MAX_TOKENS=2048" in readme
 assert "`INFLIGHT=1`, `MAX_TOKENS=2048`" in readme
 assert "OpenClaw latency defaults: `INFLIGHT=1`, `MAX_TOKENS=2048`" in readme
-assert "Hermes latency defaults: `INFLIGHT=2`, `MAX_TOKENS=2048`" in readme
-assert "INFLIGHT=2 MAX_TOKENS=2048" in hermes
+assert "mean of **completed** samples in the last **30s**" in readme
+assert "no new completed sample for 15s" in readme
+assert "OpenClaw, Hermes, and Deep Agents share this metric" in readme
+assert "That 0 lets HPA scale down. It does not mean chat latency was 0 ms." in readme
+assert "Hermes latency is `INFLIGHT=1`, `MAX_TOKENS=2048` in the code" in readme
+assert "Do not add those flags." in readme
+assert "INFLIGHT=1 MAX_TOKENS=2048" in hermes
 assert "INFLIGHT=2 MAX_TOKENS=1024" in hermes
 assert "INFLIGHT=2 MAX_TOKENS=1024" in readme
+assert "INFLIGHT=4 MAX_TOKENS=2048" in readme
+assert "INFLIGHT=4 MAX_TOKENS=2048" in client
+assert "openclaw) INFLIGHT=4 ;;" in agent_common
 assert 'export E2E_USERS="${E2E_USERS:-10}"' in hermes
 assert 'parser.add_argument("--users", type=int, required=True)' in hermes_load
 assert 'parser.add_argument("--users", type=int, required=True)' in SCRIPT.read_text()
@@ -350,14 +362,21 @@ assert 'export E2E_USERS="${E2E_USERS:-10}"' in publish_hermes
 assert 'export E2E_USERS="${E2E_USERS:-5}"' in client
 assert "10 end users send requests to 10 Hermes agents" in readme
 assert "5 end users send requests to 5 OpenClaw agents" in readme
-assert "5 end users send requests to 5 Deep Agents" in readme
+assert "10 end users send requests to 10 Deep Agents" in readme
+assert 'export E2E_USERS="${E2E_USERS:-10}"' in (chart / "scripts" / "agentscaling-deepagents-common.sh").read_text()
+assert 'export E2E_USERS="${E2E_USERS:-10}"' in deep
 assert "`E2E_USERS=10`" in readme
 assert "`8642+i`" in readme
 assert "`18789+i`" in readme
 assert "Last ports are `8642+N-1`" in readme
 assert ":8642 … :8646" not in readme
-assert "INFLIGHT=1 MAX_TOKENS=1024" not in readme
+assert "Default is `INFLIGHT=1 MAX_TOKENS=1024` for GPU util and for latency" in readme
+assert "INFLIGHT=1 MAX_TOKENS=1024" in deep
 assert "INFLIGHT=1 MAX_TOKENS=1024" not in hermes
+assert "INFLIGHT=3 MAX_TOKENS=64" not in readme
+assert "INFLIGHT=1 MAX_TOKENS=1024 E2E_USERS=10 ./scripts/client_deepagents.sh" not in readme
+assert 'raw="${E2E_DEEPAGENTS_TOKEN_START:-1024}"' in agent_common
+assert 'INFLIGHT="${E2E_DEEPAGENTS_INFLIGHT:-1}"' in agent_common
 assert "Set those flags on the client." in readme
 assert "[user {uid} sandbox {uid}]" in hermes
 assert "thread.join(timeout=2)" not in hermes

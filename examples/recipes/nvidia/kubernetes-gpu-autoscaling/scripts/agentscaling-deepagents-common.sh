@@ -39,7 +39,7 @@ agentscaling_deepagents_common_pin() {
   export SKIP_MONITORING="${SKIP_MONITORING:-1}"
   export USE_EXISTING_PROMETHEUS="${USE_EXISTING_PROMETHEUS:-1}"
   export INGRESS_SERVICE_TYPE="${INGRESS_SERVICE_TYPE:-ClusterIP}"
-  export E2E_USERS="${E2E_USERS:-3}"
+  export E2E_USERS="${E2E_USERS:-10}"
   export SANDBOX_PREFIX="${SANDBOX_PREFIX:-deepagent-nim-e2e-}"
   AGENT_SANDBOX_IMAGE="$(agent_common_resolve_sandbox_image deepagents)"
   export AGENT_SANDBOX_IMAGE

@@ -18,9 +18,9 @@
 # or deepagents-onprem.
 #
 # Usage:
-#   ./scripts/agentscaling_deepagents_gpuutil.sh                      # default E2E_USERS=3, GPU util HPA
-#   E2E_USERS=3 ./scripts/agentscaling_deepagents_latency.sh bringup   # LLM latency HPA
-#   ./scripts/setup-deepagent-nim-e2e-sandboxes.sh 3
+#   ./scripts/agentscaling_deepagents_gpuutil.sh                      # default E2E_USERS=10, GPU util HPA
+#   E2E_USERS=10 ./scripts/agentscaling_deepagents_latency.sh bringup  # LLM latency HPA
+#   ./scripts/setup-deepagent-nim-e2e-sandboxes.sh 10
 #   ./scripts/setup-deepagent-nim-e2e-sandboxes.sh start
 #   ./scripts/setup-deepagent-nim-e2e-sandboxes.sh refresh-inference
 #   ./scripts/setup-deepagent-nim-e2e-sandboxes.sh stop
@@ -56,7 +56,7 @@ require_cmd python3
 export PATH="${HOME}/.local/bin:${PATH}"
 
 E2E_USERS_FROM_ENV="${E2E_USERS:-}"
-E2E_USERS="${E2E_USERS:-3}"
+E2E_USERS="${E2E_USERS:-10}"
 ACTION="${1:-}"
 if [[ -z "${ACTION}" ]]; then
   ACTION="${E2E_USERS}"

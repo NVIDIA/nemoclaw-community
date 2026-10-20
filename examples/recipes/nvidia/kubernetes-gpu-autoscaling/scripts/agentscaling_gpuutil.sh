@@ -8,7 +8,7 @@
 #
 # This is the path that scaled on this DGX: 5 users, 8Gi sandboxes,
 # llama3.2:3b, then laptop HTTP:
-#   E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
+#   E2E_CLIENT_HOST=dgx-ip INFLIGHT=4 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
 # Isolated eval without TLS must set ALLOW_INSECURE_HTTP=1 explicitly.
 #
 # The client does not know this metric. Use ./scripts/client.sh after

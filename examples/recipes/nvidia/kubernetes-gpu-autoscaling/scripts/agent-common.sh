@@ -73,17 +73,25 @@ agent_common_resolve_max_tokens() {
       # Leftover MAX_TOKENS from GPU util must not change the latency demo.
       case "${agent}" in
         hermes) raw="${E2E_HERMES_LATENCY_TOKEN_START:-2048}" ;;
+        deepagents) raw="${E2E_DEEPAGENTS_LATENCY_TOKEN_START:-1024}" ;;
         *) raw="${E2E_LATENCY_TOKEN_START:-2048}" ;;
       esac
       ;;
     *)
-      if [[ -z "${raw}" ]]; then
-        case "${agent}" in
-          openclaw) raw=2048 ;;
-          deepagents) raw=2048 ;;
-          *) raw=1024 ;;
-        esac
-      fi
+      case "${agent}" in
+        deepagents)
+          # Leftover MAX_TOKENS from OpenClaw or Hermes must not change 6c.
+          raw="${E2E_DEEPAGENTS_TOKEN_START:-1024}"
+          ;;
+        *)
+          if [[ -z "${raw}" ]]; then
+            case "${agent}" in
+              openclaw) raw=2048 ;;
+              *) raw=1024 ;;
+            esac
+          fi
+          ;;
+      esac
       ;;
   esac
   [[ "${raw}" =~ ^[1-9][0-9]*$ ]] || {
@@ -104,8 +112,10 @@ agent_common_export_client_tokens() {
   export E2E_GPUUTIL_TOKEN_START="${MAX_TOKENS}"
 }
 
-# OpenClaw latency uses INFLIGHT=1. Hermes latency uses 2. GPU util uses
-# INFLIGHT on the command, or 2 when it is omitted.
+# OpenClaw and Hermes latency use INFLIGHT=1. GPU util uses INFLIGHT on
+# the command. OpenClaw GPU util is 4 when it is omitted; Hermes GPU util
+# is 2 when it is omitted. Deep Agents is INFLIGHT=1 MAX_TOKENS=1024 in
+# the code for GPU util and for latency.
 agent_common_export_demo_workload() {
   local agent="${1:-openclaw}"
   local metric
@@ -116,14 +126,25 @@ agent_common_export_demo_workload() {
   case "${HPA_METRIC:-}" in
     *latency*)
       case "${agent}" in
-        hermes) INFLIGHT="${E2E_HERMES_LATENCY_INFLIGHT:-2}" ;;
+        hermes) INFLIGHT="${E2E_HERMES_LATENCY_INFLIGHT:-1}" ;;
+        deepagents) INFLIGHT="${E2E_DEEPAGENTS_LATENCY_INFLIGHT:-1}" ;;
         *) INFLIGHT=1 ;;
       esac
       ;;
     *)
-      if [[ -z "${INFLIGHT:-}" ]]; then
-        INFLIGHT=2
-      fi
+      case "${agent}" in
+        deepagents)
+          INFLIGHT="${E2E_DEEPAGENTS_INFLIGHT:-1}"
+          ;;
+        *)
+          if [[ -z "${INFLIGHT:-}" ]]; then
+            case "${agent}" in
+              openclaw) INFLIGHT=4 ;;
+              *) INFLIGHT=2 ;;
+            esac
+          fi
+          ;;
+      esac
       ;;
   esac
   export INFLIGHT
@@ -172,7 +193,8 @@ agent_common_fail_openshell_for_client() {
   echo "ERROR: $*." >&2
   case "${script}" in
     client_deepagents.sh)
-      echo "  Run on the DGX with OpenShell connected: E2E_USERS=${E2E_USERS:-3} ./scripts/${script}" >&2
+      echo "  Deep Agents has no laptop HTTP. Run on the DGX with OpenShell connected:" >&2
+      echo "  INFLIGHT=${INFLIGHT:-1} MAX_TOKENS=${MAX_TOKENS:-2048} E2E_USERS=${E2E_USERS:-10} ./scripts/${script}" >&2
       ;;
     *)
       echo "  From a laptop use HTTP: E2E_CLIENT_HOST=dgx-ip E2E_USERS=${E2E_USERS:-5} ./scripts/${script}" >&2

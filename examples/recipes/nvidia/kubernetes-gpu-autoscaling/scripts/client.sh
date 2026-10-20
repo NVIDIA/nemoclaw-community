@@ -14,7 +14,7 @@
 # One client for both HPA metrics. Both stop at 8. Demo defaults come
 # from the live metric. Latency drops to short prompts at 6 GPUs.
 # Latency: E2E_USERS=5 ./scripts/client.sh
-# GPU util: INFLIGHT=2 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
+# GPU util: INFLIGHT=4 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
 #   E2E_CLIENT_HOST=dgx-ip E2E_USERS=5 ./scripts/client.sh
 # UI user N: http://dgx-ip:$((18789+N))/u/0
 # Both paths send chat.send to published :18789+i. They do not copy a load

@@ -20,7 +20,7 @@ This does not copy a load helper into the sandbox.
 This is not the OpenClaw e2e (chat.send on :18789).
 
 Usage:
-    E2E_USERS=5 ./scripts/client_deepagents.sh
+    E2E_USERS=10 ./scripts/client_deepagents.sh
 Deep Agents has no HTTP dashboard.
 """
 

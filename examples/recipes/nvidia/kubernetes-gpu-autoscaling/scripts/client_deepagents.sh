@@ -11,14 +11,15 @@
 #   ./scripts/agentscaling_deepagents_gpuutil.sh   # GPU util HPA
 #   ./scripts/agentscaling_deepagents_latency.sh   # LLM latency HPA (same client)
 #
-# Default: 3 users, inflight 1, 4Gi sandboxes. 2Gi + inflight 2 OOMed dgx-19.
+# Default: 10 users, inflight 1, 4Gi sandboxes. 2Gi + inflight 2 OOMed dgx-19.
 #
-# Deep Agents has no HTTP dashboard. Run after agentscaling_deepagents_*.
-#   INFLIGHT=1 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client_deepagents.sh
-# Pass INFLIGHT and MAX_TOKENS on this client. GPU util demo: INFLIGHT=1 MAX_TOKENS=2048.
-# Latency demo: INFLIGHT=3 MAX_TOKENS=64. Do not copy a load helper into
-# the sandbox. Do not pause HPA scale-down. Clients do not stop or restart
-# Deep Agents. Sandboxes stay up after stop; ./scripts/uninstall-e2e.sh removes them.
+# Deep Agents has no laptop HTTP. Run on the DGX after agentscaling_deepagents_*.
+#   E2E_USERS=10 ./scripts/client_deepagents.sh
+# Default is INFLIGHT=1 MAX_TOKENS=1024 for GPU util and for latency. Do not
+# add those flags. Leftover INFLIGHT and MAX_TOKENS from OpenClaw or Hermes
+# are ignored. Do not copy a load helper into the sandbox. Do not pause HPA
+# scale-down. Clients do not stop or restart Deep Agents. Sandboxes stay up
+# after stop; ./scripts/uninstall-e2e.sh removes them.
 
 set -euo pipefail
 
@@ -35,7 +36,7 @@ fail() {
 }
 
 export PATH="${HOME}/.local/bin:${PATH}"
-export E2E_USERS="${E2E_USERS:-3}"
+export E2E_USERS="${E2E_USERS:-10}"
 export SANDBOX_PREFIX="${SANDBOX_PREFIX:-deepagent-nim-e2e-}"
 INFERENCE_RUNTIME="${INFERENCE_RUNTIME:-$(agent_common_default_inference_runtime deepagents)}"
 export INFERENCE_RUNTIME
@@ -47,6 +48,7 @@ export TARGET_PODS="${TARGET_PODS:-8}"
 export DURATION_SEC="${DURATION_SEC:-900}"
 export E2E_PROMPT_TIMEOUT_SEC="${E2E_PROMPT_TIMEOUT_SEC:-300}"
 # One agent per sandbox. Longer completions keep NIM busy (Hermes-style 7→8 climb).
+agent_common_export_demo_workload deepagents
 agent_common_export_client_tokens deepagents
 agent_common_export_client_inflight
 # Stop new chats at 8 GPUs. Do not hold replicas or pause HPA scale-down.
@@ -54,6 +56,11 @@ export MAX_REPLICAS_HOLD_SEC="${MAX_REPLICAS_HOLD_SEC:-0}"
 export SCALE_DOWN_WAIT_LOOPS="${SCALE_DOWN_WAIT_LOOPS:-40}"
 E2E_OUTPUT_DIR="${E2E_OUTPUT_DIR:-${CHART_DIR}/e2e-results/deepagents}"
 
+if [[ -n "${E2E_CLIENT_HOST:-}" ]]; then
+  echo "ERROR: Deep Agents has no laptop HTTP (dcode -n needs OpenShell on the DGX)." >&2
+  echo "  Run on the DGX: E2E_USERS=${E2E_USERS} ./scripts/client_deepagents.sh" >&2
+  exit 1
+fi
 command -v openshell >/dev/null 2>&1 \
   || agent_common_fail_openshell_for_client "missing command: openshell"
 command -v kubectl >/dev/null 2>&1 || fail "missing command: kubectl"
@@ -66,9 +73,9 @@ hpa_common_require_live_runtime "${NAMESPACE}" "${HPA_NAME}" "${INFERENCE_RUNTIM
   || fail "client_deepagents.sh will not send chats until GPU pods are ${INFERENCE_RUNTIME}. Re-run agentscaling_deepagents_* with INFERENCE_RUNTIME=${INFERENCE_RUNTIME}."
 
 export E2E_CLIENT_QUIET_HPA=1
-echo "Run from the same DGX in another terminal: E2E_USERS=${E2E_USERS:-5} ./scripts/client_deepagents.sh"
+echo "Run from the same DGX in another terminal: E2E_USERS=${E2E_USERS:-10} ./scripts/client_deepagents.sh"
 echo "Client: ${E2E_USERS} end users → ${E2E_USERS} OpenShell sandboxes (1:1 dcode -n)."
-agent_common_print_load_banner "${DURATION_SEC}" "${MAX_REPLICAS_HOLD_SEC}"
+agent_common_print_load_banner "${DURATION_SEC}" "${MAX_REPLICAS_HOLD_SEC}" deepagents
 missing=0
 for ((i = 0; i < E2E_USERS; i += 1)); do
   name="$(printf '%s%04d' "${SANDBOX_PREFIX}" "${i}")"
