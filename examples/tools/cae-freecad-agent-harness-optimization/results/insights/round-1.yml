@@ -1,0 +1,89 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# NeMo Compass Insights, published round 1
+# Agent: cad-u1a. Four runs.
+# Raw Compass output; only names and paths are neutralised.
+- name: Late reconstruction retries exhaust the run and prevent the final verification
+    report
+  description: After successfully saving and numerically verifying a model, the agent
+    starts another mesh reconstruction with only 1–9 seconds left in the run. That
+    final execute call has no result in all four traces, and the agent then returns
+    only whitespace instead of the required numerical verification. Reserve time for
+    the final response and stop launching expensive reconstruction retries near the
+    execution deadline.
+  evidence:
+  - trace_id: 01a1414d-36be-7d80-869f-07775339a4b3
+    spans:
+    - span_id: span-3d9bf72e11d678a4dc9fe55ba4547040
+    - span_id: span-167319d44b6fd2d39f4f6abc95549f28
+    - span_id: span-39040b03ba6d534bda4fa93ac8e8c53b
+  - trace_id: 01a1414d-36be-7602-a646-5f991878edae
+    spans:
+    - span_id: span-d38b27a5f2025d6201fc0e7fdc528673
+    - span_id: span-08d34c2e93b547eacbf63863a1f2dc7f
+    - span_id: span-f53a42c1743c54d198a000b0e221164f
+  - trace_id: 01a1414d-3868-7410-907d-c0d540c6d36e
+    spans:
+    - span_id: span-8625009fe71516d05a8e6ac81fcd7643
+    - span_id: span-6c0ad5750652ee5df94be50e9b93327b
+    - span_id: span-4264509be54878363ab942659f13fa35
+  - trace_id: 01a1414d-3871-7751-af7f-e71eaad3fc59
+    spans:
+    - span_id: span-b8e17793552d743ee8b4015c51646b0d
+    - span_id: span-962b7bb612f62bbc3d294b2d969ad678
+    - span_id: span-28b60cfeda73b13db8450413e56bc7a2
+  updated_date: &id001 2026-10-15 20:53:13.242150+00:00
+  confidence: high
+  severity: med
+- name: Mesh conversion always emits a dense stack of slice sketches and pads
+  description: For every mesh, the agent uses the same band-slicing helper rather
+    than selecting geometry-appropriate PartDesign features. The delivered files contain
+    32–47 sketches/features and 1,214–1,668 sketch elements, with tool output explicitly
+    describing successive bands merged from slices. This produces bloated, difficult-to-edit
+    models and, on the complex mesh, still does not preserve fidelity. Add geometry
+    classification and construct compact revolves, extrusions, lofts, or sweeps instead
+    of defaulting to one sketch/pad per slice.
+  evidence:
+  - trace_id: 01a1414d-36be-7d80-869f-07775339a4b3
+    spans:
+    - span_id: span-3d9bf72e11d678a4dc9fe55ba4547040
+    - span_id: span-167319d44b6fd2d39f4f6abc95549f28
+    - span_id: span-39040b03ba6d534bda4fa93ac8e8c53b
+  - trace_id: 01a1414d-36be-7602-a646-5f991878edae
+    spans:
+    - span_id: span-d38b27a5f2025d6201fc0e7fdc528673
+    - span_id: span-08d34c2e93b547eacbf63863a1f2dc7f
+    - span_id: span-f53a42c1743c54d198a000b0e221164f
+  - trace_id: 01a1414d-3868-7410-907d-c0d540c6d36e
+    spans:
+    - span_id: span-8625009fe71516d05a8e6ac81fcd7643
+    - span_id: span-6c0ad5750652ee5df94be50e9b93327b
+    - span_id: span-4264509be54878363ab942659f13fa35
+  - trace_id: 01a1414d-3871-7751-af7f-e71eaad3fc59
+    spans:
+    - span_id: span-b8e17793552d743ee8b4015c51646b0d
+    - span_id: span-962b7bb612f62bbc3d294b2d969ad678
+    - span_id: span-28b60cfeda73b13db8450413e56bc7a2
+  updated_date: *id001
+  confidence: high
+  severity: med
+- name: Agent delivers a model despite its own severe mesh-fidelity warning
+  description: In two runs on the complex 18,988-facet mesh, the final 47-pad model
+    reopened as one valid solid and had a near-matching volume ratio of 0.972, but
+    the agent's own section check reported IoU 0.229. The agent nevertheless left
+    that model for delivery; the evaluator later measured IoU 0.7803, failed mesh-fidelity,
+    and assigned reward 0. Treat a sub-threshold fidelity check as a delivery blocker
+    and switch reconstruction strategy rather than relying on volume and bounding-box
+    agreement.
+  evidence:
+  - trace_id: 01a1414d-36be-7602-a646-5f991878edae
+    spans:
+    - span_id: span-d38b27a5f2025d6201fc0e7fdc528673
+    - span_id: span-08d34c2e93b547eacbf63863a1f2dc7f
+  - trace_id: 01a1414d-3868-7410-907d-c0d540c6d36e
+    spans:
+    - span_id: span-8625009fe71516d05a8e6ac81fcd7643
+    - span_id: span-6f8fad1f465ababd843f01f1baa59e65
+  updated_date: *id001
+  confidence: high
+  severity: high

@@ -151,16 +151,16 @@ Each wrapper pins **`AGENT_NAME`**. Do not pass `AGENT_NAME=hermes` into `agents
 **`INFERENCE_MODEL`** is set on provision (Ollama tag, vLLM HF id, or NIM catalog id).
 
 
-Validation is on DGX 8× H100 (80 GB) on-prem. The DGX H100 demo uses 5 end users, `E2E_USERS=5` and one sandbox per user. This 8×H100 demo runs those sandboxes on the DGX H100 **CPU cores and DRAM**. Sandboxes can run on a different CPU node with more memory to support more sandboxes and end users. Size `E2E_USERS` so `E2E_USERS × AGENT_SANDBOX_MEMORY` fits the CPU node.
+Validation is on DGX 8× H100 (80 GB) on-prem. The DGX H100 demo uses 5 end users, `E2E_USERS=5` and one sandbox per user. This 8×H100 demo runs those sandboxes on the DGX H100 **CPU cores and DRAM**. Sandboxes can run on a different CPU node with more memory to support more sandboxes and end users. Size `E2E_USERS` so `E2E_USERS × AGENT_SANDBOX_MEMORY` fits the CPU node. Keep GPU inference on the GPU node.
 
 
 #### 6a. OpenClaw + Ollama
 
 - `AGENT_SANDBOX_CPU` **1**, `AGENT_SANDBOX_MEMORY` **8Gi** (1Gi, 2Gi, and 4Gi OOM-kill OpenClaw before `:18789` binds)
 - One OpenClaw agent per sandbox (one sandbox per user)
-- inflight = concurrent chats per user on that one agent. Same `client.sh` for both HPA metrics. GPU util: `INFLIGHT=2 MAX_TOKENS=2048` until stop at 8. Latency: `E2E_USERS=5 ./scripts/client.sh` (INFLIGHT=1, 2048 until 6 GPUs, then short prompts, stop at 8). The latency client ignores leftover `INFLIGHT` and `MAX_TOKENS`. Laptop HTTP adds `E2E_CLIENT_HOST=dgx-ip`. The client stops new chats at 8 GPUs, waits for already-sent chats to get a reply, then waits until HPA is back to **1** before it prints the chat table. Record GPU util first, wait until current replicas are **1**, then record latency. The DGX client omits `E2E_CLIENT_HOST` and pauses HPA scale-down during the climb. OpenClaw stays up after stop for later use; `./scripts/uninstall-e2e.sh` removes the sandboxes when you switch pairings. The client does not copy a load helper into the sandbox.
+- inflight = concurrent chats per user on that one agent. Laptop HTTP adds `E2E_CLIENT_HOST=dgx-ip`.
+  
 
-Agent sandboxes can run on a **different CPU node** with more memory. Keep GPU inference on the H100 node. See [FAQ](#agents-and-sandboxes-run-on-cpu--what-limits-how-many-i-can-run).
 
 ```text
 E2E test: OpenClaw + Ollama
@@ -179,7 +179,8 @@ E2E test: OpenClaw + Ollama
             1 GPU  →  demand rises  →  8 GPUs  →  idle  →  1 GPU
 ```
 
-**GPU util** HPA metric `gpu_utilization_percent`, target 40%. Provision keeps **current** GPUs at **1** replica (`maxReplicas=8`). `client.sh` sends `INFLIGHT=2 MAX_TOKENS=2048` until 8 GPUs, then stops new chats. Set those flags on the client. `MAX_TOKENS` selects the prompt; OpenClaw `chat.send` does not take `maxTokens`. Successful chats are chats that got a reply; err is chats that were sent and got no reply. The table prints after HPA is back to 1. The DGX client disables HPA scale-down during the climb so a new 0% GPU cannot bounce the replica count. Tear down with `./scripts/uninstall-e2e.sh`. It does not copy a load helper into the sandbox. kubectl TARGETS like `67500m/40` means **67.5%/40%**. Watch percentages with `get-hpa.sh`.
+
+**GPU utilization** HPA metric `gpu_utilization_percent`, target 40%. Provision keeps current GPUs at 1 replica (`maxReplicas=8`). `client.sh` sends `INFLIGHT=2 MAX_TOKENS=2048` until 8 GPUs, then stops new chats. Successful chats are chats that got a reply; err is chats that were sent and got no reply. kubectl TARGETS like `67500m/40` means **67.5%/40%**. Watch percentages with `get-hpa.sh`.
 
 ```bash
 export PATH="${HOME}/.local/bin:${PATH}"
@@ -195,57 +196,58 @@ Keep [step 5](#5-connect-the-openshell-cli) in another terminal: `./scripts/open
 # Default INFERENCE_RUNTIME=ollama. Do not set vllm/nim unless you intend to override.
 E2E_USERS=5 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_gpuutil.sh
 ```
+<img width="771" height="438" alt="util2" src="https://github.com/user-attachments/assets/f1f71e97-49c0-49d6-b037-2cb1acc5eb68" />
 
 
 ```bash
 # Terminal B — film this HPA watch
 ./scripts/get-hpa.sh -n nemoclaw-gpu -w
 ```
+<img width="817" height="574" alt="util1" src="https://github.com/user-attachments/assets/72a7fbfc-6ce2-4e59-abe8-261a1ca10348" />
 
 ```bash
-# Terminal C — on the DGX. This path pauses HPA scale-down so 1→8 does not bounce.
+# Terminal C — laptop HTTP.
+E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
+
+# Terminal C — on the DGX instead. 
 INFLIGHT=2 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
 ```
+<img width="630" height="303" alt="util3" src="https://github.com/user-attachments/assets/7e516b0b-6e4b-4236-b423-bcbf88bb993e" />
 
-```bash
-# Laptop HTTP sends chats but does not pause scale-down. New 0% GPUs pull the
-# average under 40% and HPA walks back down (6→5→4). Use the DGX client for 1→8.
-# E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
-```
 
-Wait until `get-hpa.sh` shows **1** current replica. Then switch HPA to latency.
 
-**LLM latency.** Same sandboxes and the same `client.sh`. Provision switches HPA to `latency_avg` (target 3000 ms) and keeps **current** GPUs at **1** replica (`maxReplicas=8`). OpenClaw start must not scale. `client.sh` sends 2048-token chats until 6 GPUs, then short prompts, and stops at 8. Do not set `INFLIGHT` or `MAX_TOKENS`. `get-hpa.sh` prints milliseconds (`46514/3000`). Successful chats are chats that got a reply; the table prints after HPA is back to 1. Short replies drain fast, so 8→1 is shorter than GPU util. The 30s latency window lets HPA scale down when current latency is below 3000 ms. A `DURATION_SEC=180` cap stopped an earlier run at 5 GPUs.
+**LLM latency.**  HPA uses the metric `latency_avg` (target 3000 ms) and keeps current GPUs at 1 replica (`maxReplicas=8`). OpenClaw start must not scale. `get-hpa.sh` prints milliseconds (`46514/3000`). Successful chats are chats that got a reply. The 30s latency window lets HPA scale down when current latency is below 3000 ms. 
 
 ```bash
 # Terminal A
 E2E_USERS=5 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_latency.sh
 ```
-<img width="849" height="466" alt="Screenshot 2026-10-06 at 9 02 49 PM" src="https://github.com/user-attachments/assets/1b2602a9-a8f4-482e-a071-9fb5f87e2ac1" />
+<img width="780" height="470" alt="latency2" src="https://github.com/user-attachments/assets/713e3642-80c1-4af9-b0c5-ecce644e8a37" />
+
+
 
 
 ```bash
 # Terminal B
 ./scripts/get-hpa.sh -n nemoclaw-gpu -w
 ```
-<img width="854" height="635" alt="Screenshot 2026-10-06 at 9 03 08 PM" src="https://github.com/user-attachments/assets/9797b59d-01f1-437c-baeb-775eb2c96977" />
+
+<img width="846" height="425" alt="latency1" src="https://github.com/user-attachments/assets/af597137-2f4a-45d9-a303-86477133dd17" />
+
 
 
 
 ```bash
-# Terminal C — laptop HTTP. Do not set INFLIGHT or MAX_TOKENS.
+# Terminal C — laptop HTTP.
 E2E_CLIENT_HOST=dgx-ip E2E_USERS=5 ./scripts/client.sh
-```
-<img width="671" height="288" alt="Screenshot 2026-10-06 at 8 59 44 PM" src="https://github.com/user-attachments/assets/1065ffe2-af3e-467b-9d66-e08a0472050d" />
 
-
-```bash
-# Terminal C — on the DGX instead. Same client; omit INFLIGHT and MAX_TOKENS.
+# Terminal C — on the DGX instead. 
 E2E_USERS=5 ./scripts/client.sh
 ```
+<img width="780" height="470" alt="latency2" src="https://github.com/user-attachments/assets/1913698a-dc1e-4a1b-9a73-fcea7a7b9b22" />
 
 
-
+ `./scripts/uninstall-e2e.sh` removes the sandboxes when you switch to other agent + inference runtime pairings.
 
 
 #### 6b. Hermes + vLLM
@@ -784,7 +786,7 @@ RESET_GPU_REPLICAS=1 ./scripts/uninstall-e2e.sh
 
 ### Full recipe uninstall
 
-Sandboxes first, same script. Then, only if you want OpenShell and the GPU chart gone too (keep the port-forward up until `uninstall-e2e.sh` finishes):
+Sandboxes first, same as above. Then, run helm uninstall only if you want OpenShell and the GPU chart gone too (keep the port-forward up until `uninstall-e2e.sh` finishes):
 
 ```bash
 ./scripts/uninstall-e2e.sh

@@ -1,0 +1,48 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# NeMo Compass Insights, published round 7
+# Agent: cad-u9a (kept). Four runs. The Ethos-divergence signal found nothing.
+# Raw Compass output; only names and paths are neutralised.
+- name: Late repair builds time out and force submission of an older flawed CAD model
+  description: During iterative FreeCAD reconstruction, the agent starts another long
+    repair build without enough remaining execution budget. The build times out, so
+    the final response falls back to an earlier saved model with known geometric mismatches;
+    in one trace that fallback is also below the stated 0.92 IoU target. Budget repair
+    attempts against the remaining run time and stop or shorten verification builds
+    before they can consume the reporting window.
+  evidence:
+  - trace_id: 01a1449a-91ab-7b03-a250-5a4d83ba9234
+    spans:
+    - span_id: span-5e766053df337be7a6e77b1ad2d246b8
+    - span_id: span-2208aef479f54dbb6faad1058139e487
+    - span_id: span-01c18892c41b2bcd5ace748fd451b033
+  - trace_id: 01a1449a-92b6-73f1-b25c-68132f88329a
+    spans:
+    - span_id: span-73b5874b6d99508b218cc72b33ff1c47
+    - span_id: span-e6d8ce8b91779d629e68eac1e01f6036
+    - span_id: span-eeee03b4c50734f84f8dacba733f3d64
+    - span_id: span-babd938e61c157030cff0262ebf426ad
+  updated_date: &id001 2026-10-16 12:13:12.008245+00:00
+  confidence: high
+  severity: med
+- name: Body section loft adds excess material where it intersects the curved branch
+  description: 'The final saved FreeCAD models in multiple runs retain a localized
+    geometry error at the body/branch merge: numerical comparison attributes 2.1–2.3%
+    extra mesh volume to Body001, and the final reports identify the body loft as
+    swelling into or absorbing the branch region. The outputs remain valid solids
+    and exceed the global IoU threshold, but their shape quality is degraded. Build
+    the body from body-only sections or otherwise separate body-loop selection from
+    the branch before adding the branch feature.'
+  evidence:
+  - trace_id: 01a1449a-92b6-73f1-b25c-68132f88329a
+    spans:
+    - span_id: span-73b5874b6d99508b218cc72b33ff1c47
+    - span_id: span-eeee03b4c50734f84f8dacba733f3d64
+    - span_id: span-babd938e61c157030cff0262ebf426ad
+  - trace_id: 01a1449a-94dc-7780-96e3-f324cff7bf1e
+    spans:
+    - span_id: span-b1863e5ce7cc860840f259f2b5a238a2
+    - span_id: span-3584708d01cf97ec829971049678a342
+  updated_date: *id001
+  confidence: high
+  severity: med
