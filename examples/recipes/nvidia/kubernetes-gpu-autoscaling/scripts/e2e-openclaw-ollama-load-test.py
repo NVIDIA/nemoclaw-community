@@ -607,7 +607,7 @@ async def simulate_user_http(
     env["E2E_SESSION_KEY"] = f"agent:main:{sandbox}"
     env["E2E_ESCALATE_INTERVAL_SEC"] = "15"
     env["E2E_ESCALATE_FACTOR"] = "0.35"
-    env["E2E_DRAIN_SEC"] = str(os.environ.get("E2E_DRAIN_SEC") or "0")
+    env["E2E_DRAIN_SEC"] = str(os.environ.get("E2E_DRAIN_SEC") or timeout_sec)
     env["MAX_TOKENS"] = str(os.environ.get("MAX_TOKENS") or "2048")
     env["HPA_METRIC"] = os.environ.get("HPA_METRIC") or ""
     env["E2E_HPA_HOST"] = os.environ.get("E2E_HPA_HOST") or host
@@ -645,8 +645,13 @@ async def simulate_user_http(
             except asyncio.TimeoutError:
                 continue
         if stop_event.is_set() and proc.returncode is None:
-            drain = float(os.environ.get("E2E_DRAIN_SEC") or "0")
-            await terminate_proc(proc, wait_sec=max(2.0, drain))
+            # SIGTERM: helper starts no new chats. Wait for already-sent replies.
+            drain = float(os.environ.get("E2E_DRAIN_SEC") or timeout_sec)
+            proc.terminate()
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=max(1.0, drain))
+            except asyncio.TimeoutError:
+                await terminate_proc(proc, wait_sec=5.0)
         else:
             await proc.wait()
     finally:
@@ -828,6 +833,7 @@ async def run_test(args: argparse.Namespace) -> int:
         results = list(await asyncio.gather(*user_tasks, return_exceptions=True))
     finally:
         stop_load.set()
+        print("[load] already-sent chats finished", flush=True)
         kill_sandbox_load_helpers(args.prefix, args.users)
     normalized: list[dict[str, object]] = []
     for item in results:

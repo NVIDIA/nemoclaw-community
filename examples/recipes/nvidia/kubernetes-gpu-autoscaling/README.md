@@ -115,6 +115,8 @@ Keep this attached:
 ./scripts/openshell-port-forward.sh
 ```
 
+kubectl may print `Error copying from remote stream` and `broken pipe` when a sandbox command ends. That line is from kubectl, not a failed OpenShell tunnel. Leave the script running. Stop it only if `openshell status` shows Connection refused.
+
 In another terminal, copy client TLS and register the gateway. After a reinstall, refresh the certs or you get `BadSignature`.
 
 ```bash
@@ -134,7 +136,7 @@ openshell status
 
 ### 6. E2E test with multiple end users and sandboxes
 
-Queries from end users go **into the sandboxes**, one sandbox per end user. Any pairing can be first after steps 1–5. Provision waits for one Ready GPU replica (up to 240s, `HPA_BASELINE_WAIT_SEC`). Latency HPA may show desired 0 until chats produce the metric; that is idle, not leftover load. One end user ↔ one sandbox ↔ one agent. End users do not log into the DGX. Provision scripts do not take `INFLIGHT` or `MAX_TOKENS`. OpenClaw GPU util, Hermes, and Deep Agents take those flags on the client. OpenClaw latency omits them (`E2E_USERS=5 ./scripts/client.sh`). From a laptop set `E2E_CLIENT_HOST=dgx-ip`. From the DGX omit `E2E_CLIENT_HOST`. The OpenClaw remote laptop UI is [OpenClaw simple test](#openclaw-simple-test).
+Queries from end users go **into the sandboxes**, one sandbox per end user. Any pairing can be first after steps 1–5. Provision waits for one Ready GPU replica (up to 240s, `HPA_BASELINE_WAIT_SEC`). Latency HPA may show desired 0 until chats produce the metric; that is idle, not leftover load. One end user ↔ one sandbox ↔ one agent. End users do not log into the DGX. Provision scripts do not take `INFLIGHT` or `MAX_TOKENS`. OpenClaw and Hermes GPU util take those flags on the client. OpenClaw and Hermes latency omit them (`E2E_USERS=5 ./scripts/client.sh` / `./scripts/client_hermes.sh`). From a laptop set `E2E_CLIENT_HOST=dgx-ip`. From the DGX omit `E2E_CLIENT_HOST`. The OpenClaw remote laptop UI is [OpenClaw simple test](#openclaw-simple-test).
 
 | | Agent | Default `INFERENCE_RUNTIME` | Default model | Provision | Client |
 |--|-------|------------------------------|---------------|-----------|--------|
@@ -183,6 +185,8 @@ E2E test: OpenClaw + Ollama
 export PATH="${HOME}/.local/bin:${PATH}"
 export KUBECONFIG="${HOME}/.kube/config"
 ```
+
+Keep [step 5](#5-connect-the-openshell-cli) in another terminal: `./scripts/openshell-port-forward.sh`. If `openshell status` shows Connection refused, start that script again.
 
 ```bash
 # Terminal A
@@ -246,26 +250,36 @@ E2E_USERS=5 ./scripts/client.sh
 
 #### 6b. Hermes + vLLM
 
-vLLM pulls the image `nvcr.io/nvidia/vllm`. Kubelet needs an `nvcr.io` **image-pull** Secret before `agentscaling_hermes_gpuutil.sh`. The `nvapi-` value in `secrets.env` is that pull password. `apply-local-secrets.sh` stores it as Kubernetes Secret `ngc-registry` (`dockerconfigjson`). The vLLM **container** never gets `NGC_API_KEY`; only NIM uses that in-container env for model-profile download.
+vLLM pulls the image `nvcr.io/nvidia/vllm`. Kubelet needs Kubernetes Secret `ngc-registry` in `nemoclaw-gpu` before `agentscaling_hermes_gpuutil.sh`. The vLLM container never gets `NGC_API_KEY`.
+
+`secrets.env` is gitignored. Git has `secrets.env.example` only. Create `secrets.env` only when Secret `ngc-registry` is missing.
+
+```bash
+kubectl get secret ngc-registry -n nemoclaw-gpu
+```
+
+If that Secret exists, skip `apply-local-secrets.sh`. Put the Secret name in gitignored `local.env` and continue.
+
+If that Secret is missing, copy the example, paste `NGC_API_KEY`, then apply:
 
 ```bash
 cp -n secrets.env.example secrets.env
-# edit secrets.env: paste NGC_API_KEY=nvapi-...  (required — becomes Secret ngc-registry for kubelet)
+# edit secrets.env: paste NGC_API_KEY=nvapi-...
 # optional: HF_TOKEN=hf_... only if Hugging Face returns 401 for the model
 ./scripts/apply-local-secrets.sh
 ```
 
-If `HF_TOKEN` is set, the script also creates Secret `hf-token`. Put only the **Secret names** in gitignored `local.env`:
+`apply-local-secrets.sh` creates Secret `ngc-registry` (`dockerconfigjson`). If `HF_TOKEN` is set, it also creates Secret `hf-token`. Put only Secret names in `local.env`:
 
 ```bash
 # local.env — names, not key values
 export VLLM_IMAGE_PULL_SECRET=ngc-registry
-# export VLLM_HF_TOKEN_SECRET=hf-token   # only if you set HF_TOKEN
+# export VLLM_HF_TOKEN_SECRET=hf-token   # only if Secret hf-token exists
 ```
 
 If OpenClaw 6a sandboxes are still up, stop `client.sh` and run `./scripts/uninstall-e2e.sh`. Keep `./scripts/openshell-port-forward.sh` attached. Do not helm-uninstall OpenShell or `nemoclaw-gpu`. That script removes OpenClaw CPU sandboxes and `onprem-openclaw`. GPU inference, Envoy, and Prometheus stay. Then continue here.
 
-After steps 1–5 (`openshell status` Connected, `gatewayclass eg` present). **One OpenShell gateway** for all sandboxes. This DGX demo uses `E2E_USERS=5`, `INFLIGHT=1`, and **4Gi** sandboxes. Pass `INFLIGHT` and `MAX_TOKENS` on `client_hermes.sh`. Laptop HTTP and the DGX path use the same flags. GPU util demo: `INFLIGHT=1 MAX_TOKENS=1024`. Latency demo: `INFLIGHT=3 MAX_TOKENS=64`. Clients do not stop or restart Hermes. Sandboxes stay up after stop; `./scripts/uninstall-e2e.sh` removes them.
+After steps 1–5 (`openshell status` Connected, `gatewayclass eg` present). **One OpenShell gateway** for all sandboxes. This DGX demo uses `E2E_USERS=5` and **4Gi** sandboxes. GPU util: `INFLIGHT=2 MAX_TOKENS=1024` on `client_hermes.sh`. Latency: `E2E_USERS=5 ./scripts/client_hermes.sh` (INFLIGHT=2, MAX_TOKENS=64). The latency client ignores leftover `INFLIGHT` and `MAX_TOKENS`. Laptop HTTP adds `E2E_CLIENT_HOST=dgx-ip`. The client does not copy a load helper into the sandbox. It does not pause HPA scale-down. Clients do not stop or restart Hermes. Sandboxes stay up after stop; `./scripts/uninstall-e2e.sh` removes them.
 
 ```text
 E2E test: Hermes + vLLM
@@ -289,8 +303,10 @@ export PATH="${HOME}/.local/bin:${PATH}"
 export KUBECONFIG="${HOME}/.kube/config"
 ```
 
+Keep [step 5](#5-connect-the-openshell-cli) in another terminal: `./scripts/openshell-port-forward.sh`. If `openshell status` shows Connection refused, start that script again.
 
-**GPU Utilization.** (target 40%):
+**GPU util** HPA metric `gpu_utilization_percent`, target 40%. Provision keeps **current** GPUs at **1** replica (`maxReplicas=8`). `client_hermes.sh` sends `INFLIGHT=2 MAX_TOKENS=1024` until 8 GPUs, then stops new chats. Set those flags on the client. Do not set them for latency. Successful chats are chats that got a reply; the table prints after HPA is back to 1. The laptop does not set a Hermes API key. The DGX injects it, same as OpenClaw.
+
 ```bash
 # Terminal A
 # Isolated eval (no TLS overlay): keep ALLOW_INSECURE_HTTP=1 from step 4.
@@ -299,21 +315,26 @@ E2E_USERS=5 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_hermes_gpuutil.sh
 <img width="869" height="929" alt="Screenshot 2026-10-01 at 1 54 32 PM" src="https://github.com/user-attachments/assets/60b7f887-3a80-46b3-84a0-1caebf6ea807" />
 
 ```bash
-# Terminal B
+# Terminal B — film this HPA watch
 ./scripts/get-hpa.sh -n nemoclaw-gpu -w
 ```
 <img width="821" height="383" alt="Screenshot 2026-10-01 at 6 24 21 PM" src="https://github.com/user-attachments/assets/99f9ae4a-8427-4651-a5d8-69118d00f6f3" />
 
 ```bash
-# Terminal C — from a remote terminal such as your laptop (HTTP)
-E2E_CLIENT_HOST=dgx-ip E2E_USERS=5 INFLIGHT=1 MAX_TOKENS=1024 ./scripts/client_hermes.sh
-
-
-# simpler option — from the same DGX in another terminal
-INFLIGHT=1 MAX_TOKENS=1024 E2E_USERS=5 ./scripts/client_hermes.sh
+# Terminal C — laptop HTTP. Needs published :8642 … :8646.
+# If Connection refused, keep step 5 attached, then on the DGX:
+#   E2E_USERS=5 ./scripts/publish-hermes-remote-http.sh
+E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=1024 E2E_USERS=5 ./scripts/client_hermes.sh
 ```
 
-**LLM latency.** Same sandboxes and the same `client_hermes.sh`. Provision switches HPA to `latency_avg` (target 3000 ms) and keeps current GPUs at 1 replica (`maxReplicas=8`). `client_hermes.sh` sends `hermes -z`.
+```bash
+# Terminal C — on the DGX instead
+INFLIGHT=2 MAX_TOKENS=1024 E2E_USERS=5 ./scripts/client_hermes.sh
+```
+
+Wait until `get-hpa.sh` shows **1** current replica. Then switch HPA to latency.
+
+**LLM latency.** Same sandboxes and the same `client_hermes.sh`. Provision switches HPA to `latency_avg` (target 3000 ms) and keeps **current** GPUs at **1** replica (`maxReplicas=8`). `client_hermes.sh` uses INFLIGHT=2 and MAX_TOKENS=64 from the client code. Do not set `INFLIGHT` or `MAX_TOKENS`.
 
 ```bash
 # Terminal A
@@ -328,12 +349,15 @@ E2E_USERS=5 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_hermes_latency.sh
 <img width="849" height="521" alt="Screenshot 2026-10-01 at 1 53 17 PM" src="https://github.com/user-attachments/assets/2c0c3b90-761a-4b9b-9a34-0551219d4441" />
 
 ```bash
-# Terminal C — from a remote terminal such as your laptop (HTTP)
-E2E_CLIENT_HOST=dgx-ip E2E_USERS=5 INFLIGHT=3 MAX_TOKENS=64 ./scripts/client_hermes.sh
+# Terminal C — laptop HTTP. Do not set INFLIGHT or MAX_TOKENS.
+# If Connection refused on :8642, republish on the DGX (step 5 still attached):
+#   E2E_USERS=5 ./scripts/publish-hermes-remote-http.sh
+E2E_CLIENT_HOST=dgx-ip E2E_USERS=5 ./scripts/client_hermes.sh
+```
 
-
-# simpler option — from the same DGX in another terminal
-INFLIGHT=3 MAX_TOKENS=64 E2E_USERS=5 ./scripts/client_hermes.sh
+```bash
+# Terminal C — on the DGX instead. Same client; omit INFLIGHT and MAX_TOKENS.
+E2E_USERS=5 ./scripts/client_hermes.sh
 ```
 
 
@@ -360,7 +384,7 @@ export NIM_IMAGE_PULL_SECRET=ngc-registry
 export NIM_NGC_API_KEY_SECRET=nim-ngc-key
 ```
 
-After steps 1–5 (`openshell status` Connected, `gatewayclass eg` present). **One OpenShell gateway** for all sandboxes. Clients use `dcode -n` (no per-sandbox Deep Agents listener). This DGX demo uses `E2E_USERS=5`, `INFLIGHT=1`, and **4Gi** sandboxes. Pass `INFLIGHT` and `MAX_TOKENS` on `client_deepagents.sh`. GPU util demo: `INFLIGHT=1 MAX_TOKENS=2048`. Latency demo: `INFLIGHT=3 MAX_TOKENS=64`. Clients do not stop or restart Deep Agents. Sandboxes stay up after stop; `./scripts/uninstall-e2e.sh` removes them.
+After steps 1–5 (`openshell status` Connected, `gatewayclass eg` present). **One OpenShell gateway** for all sandboxes. Clients use `dcode -n` (no per-sandbox Deep Agents listener). This DGX demo uses `E2E_USERS=5`, `INFLIGHT=1`, and **4Gi** sandboxes. Pass `INFLIGHT` and `MAX_TOKENS` on `client_deepagents.sh`. GPU util demo: `INFLIGHT=1 MAX_TOKENS=2048`. Latency demo: `INFLIGHT=3 MAX_TOKENS=64`. The client does not copy a load helper into the sandbox. It does not pause HPA scale-down. Clients do not stop or restart Deep Agents. Sandboxes stay up after stop; `./scripts/uninstall-e2e.sh` removes them.
 
 ```text
 E2E test: Deep Agents Code + NIM
@@ -788,7 +812,7 @@ On the DGX omit `E2E_CLIENT_HOST`:
 INFLIGHT=2 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
 ```
 
-OpenClaw latency uses `E2E_CLIENT_HOST=dgx-ip E2E_USERS=5 ./scripts/client.sh` on that same client (no `INFLIGHT` or `MAX_TOKENS`). Hermes and Deep Agents use `client_hermes.sh` / `client_deepagents.sh` with the flags in 6b / 6c. The OpenClaw remote UI is [OpenClaw simple test](#openclaw-simple-test). End users do not log into the DGX. Published HTTP does not return gateway tokens or API keys.
+OpenClaw latency uses `E2E_CLIENT_HOST=dgx-ip E2E_USERS=5 ./scripts/client.sh` on that same client (no `INFLIGHT` or `MAX_TOKENS`). Hermes GPU util uses `client_hermes.sh` with `INFLIGHT=2 MAX_TOKENS=1024`. Hermes latency is `E2E_CLIENT_HOST=dgx-ip E2E_USERS=5 ./scripts/client_hermes.sh`. If the laptop gets Connection refused on `:8642`, keep step 5 attached and run `E2E_USERS=5 ./scripts/publish-hermes-remote-http.sh` on the DGX. Deep Agents uses `client_deepagents.sh` with the flags in 6c. The OpenClaw remote UI is [OpenClaw simple test](#openclaw-simple-test). End users do not log into the DGX. Published HTTP does not return gateway tokens or API keys.
 
 ### Agents and sandboxes run on CPU — what limits how many I can run?
 

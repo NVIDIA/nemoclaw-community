@@ -43,6 +43,7 @@ fi
 
 echo "Forwarding ${NAMESPACE}/service/${SERVICE} to 127.0.0.1:${LOCAL_PORT}."
 echo "Leave this running. In another terminal: openshell status"
+echo "kubectl may print broken pipe when a sandbox command ends. That is not a failed tunnel."
 
 while true; do
   kubectl -n "${NAMESPACE}" port-forward "service/${SERVICE}" \

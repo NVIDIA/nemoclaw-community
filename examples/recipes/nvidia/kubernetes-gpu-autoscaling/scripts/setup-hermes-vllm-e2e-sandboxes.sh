@@ -251,33 +251,65 @@ EOF
   ' >/dev/null
 }
 
+prepare_hermes_sandbox_home() {
+  local name="${1:?sandbox}"
+  # OpenShell Kubernetes workspaces are 02777 / 02750. GNU chmod keeps
+  # directory setgid. Hermes start allows sandbox:sandbox 0755 on /sandbox
+  # and 0700 on /sandbox/.hermes.
+  # /v1/chat/completions stays 503 gateway_draining unless /sandbox/.nemoclaw
+  # is root:root without group/world write. hermes -z does not use that gate.
+  # Laptop HTTP does.
+  kubectl exec -n "${E2E_SANDBOX_NS}" "${name}" -c agent -- python3 -c '
+import os
+from pathlib import Path
+os.chmod("/sandbox", 0o755)
+os.chmod("/sandbox/.hermes", 0o700)
+home = Path("/sandbox/.nemoclaw")
+home.mkdir(exist_ok=True)
+os.chown(home, 0, 0)
+os.chmod(home, 0o755)
+' >/dev/null
+}
+
 start_one_gateway() {
   local name="${1:?sandbox}"
   local log="${STATE_DIR}/${name}.log"
   local pidfile="${STATE_DIR}/${name}.pid"
+  local attempt old_pid i
+  prepare_hermes_sandbox_home "${name}" \
+    || fail "${name}: could not set /sandbox to mode 0755"
   if gateway_health_ok "${name}"; then
     return 0
   fi
-  if [[ -f "${pidfile}" ]]; then
-    local old_pid
-    old_pid="$(cat "${pidfile}" 2>/dev/null || true)"
-    if [[ -n "${old_pid}" ]] && kill -0 "${old_pid}" 2>/dev/null; then
-      echo "  ${name}: waiting for existing nemoclaw-start pid ${old_pid}"
-    else
-      rm -f "${pidfile}"
+  # First start after minting API_SERVER_KEY can refuse
+  # HERMES_LAZY_INSTALL_TARGET. A second start then becomes healthy.
+  for attempt in 1 2; do
+    if [[ -f "${pidfile}" ]]; then
+      old_pid="$(cat "${pidfile}" 2>/dev/null || true)"
+      if [[ -n "${old_pid}" ]] && kill -0 "${old_pid}" 2>/dev/null; then
+        echo "  ${name}: waiting for existing nemoclaw-start pid ${old_pid}"
+      else
+        rm -f "${pidfile}"
+      fi
     fi
-  fi
-  if [[ ! -f "${pidfile}" ]]; then
-    openshell sandbox exec -n "${name}" --no-tty -- \
-      /usr/local/bin/nemoclaw-start >"${log}" 2>&1 &
-    echo $! >"${pidfile}"
-  fi
-  local i
-  for ((i = 1; i <= 90; i += 1)); do
-    if gateway_health_ok "${name}"; then
-      return 0
+    if [[ ! -f "${pidfile}" ]]; then
+      openshell sandbox exec -n "${name}" --no-tty -- \
+        /usr/local/bin/nemoclaw-start >"${log}" 2>&1 &
+      echo $! >"${pidfile}"
     fi
-    sleep 2
+    for ((i = 1; i <= 90; i += 1)); do
+      if gateway_health_ok "${name}"; then
+        echo "  ${name}: Hermes gateway healthy"
+        return 0
+      fi
+      old_pid="$(cat "${pidfile}" 2>/dev/null || true)"
+      if [[ -z "${old_pid}" ]] || ! kill -0 "${old_pid}" 2>/dev/null; then
+        rm -f "${pidfile}"
+        echo "  ${name}: start exited early (attempt ${attempt}/2); see ${log}"
+        break
+      fi
+      sleep 2
+    done
   done
   echo "ERROR: ${name} Hermes gateway did not become healthy; see ${log}" >&2
   return 1
@@ -398,7 +430,9 @@ bringup_one() {
     create_one_sandbox "${name}" || return 1
   fi
   skip_connect_shell_nproc "${name}" || return 1
-  agent_common_pin_hermes_model "${name}" "${INFERENCE_MODEL}" || return 1
+  # Do not run `hermes config set` here. It rewrites config.yaml and
+  # nemoclaw-start then fails with HERMES_MCP_CONFIG_DRIFT. client_hermes.sh
+  # passes the chart model as `hermes -z -m`.
 }
 
 bringup_sandboxes() {

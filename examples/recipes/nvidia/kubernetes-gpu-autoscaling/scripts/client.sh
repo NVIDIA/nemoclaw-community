@@ -58,9 +58,8 @@ export MAX_REPLICAS_HOLD_SEC="${MAX_REPLICAS_HOLD_SEC:-0}"
 export E2E_CHAT_PAUSE_SEC="${E2E_CHAT_PAUSE_SEC:-0}"
 # Start all users at once so 1→8 does not wait on a stagger.
 export E2E_USER_STAGGER_SEC="${E2E_USER_STAGGER_SEC:-0}"
-# Do not drain in-flight chat.send after SIGTERM. That leftover generation
-# kept GPUs busy after the client stopped.
-export E2E_DRAIN_SEC="${E2E_DRAIN_SEC:-0}"
+# After stop-new-chats, wait for already-sent chats to get a reply.
+export E2E_DRAIN_SEC="${E2E_DRAIN_SEC:-${E2E_PROMPT_TIMEOUT_SEC:-180}}"
 export SCALE_DOWN_WAIT_LOOPS="${SCALE_DOWN_WAIT_LOOPS:-40}"
 E2E_OUTPUT_DIR="${E2E_OUTPUT_DIR:-${CHART_DIR}/e2e-results/openclaw-ollama}"
 E2E_CLIENT_HOST="${E2E_CLIENT_HOST:-}"

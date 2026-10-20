@@ -92,6 +92,24 @@ print(token.strip())
 ' 2>/dev/null
 }
 
+remote_http_prepare_hermes_home() {
+  local name="${1:?sandbox}"
+  local ns="${OPENSHELL_NAMESPACE:-${E2E_SANDBOX_NS:-nemoclaw-sandboxes}}"
+  # Laptop HTTP uses /v1/chat/completions. That path stays 503
+  # gateway_draining unless /sandbox/.nemoclaw is root:root without
+  # group/world write. hermes -z does not use that gate.
+  kubectl exec -n "${ns}" "${name}" -c agent -- python3 -c '
+import os
+from pathlib import Path
+os.chmod("/sandbox", 0o755)
+os.chmod("/sandbox/.hermes", 0o700)
+home = Path("/sandbox/.nemoclaw")
+home.mkdir(exist_ok=True)
+os.chown(home, 0, 0)
+os.chmod(home, 0o755)
+' >/dev/null
+}
+
 remote_http_hermes_token() {
   local name="${1:?sandbox}"
   local ns="${OPENSHELL_NAMESPACE:-${E2E_SANDBOX_NS:-nemoclaw-sandboxes}}"
@@ -104,7 +122,10 @@ except OSError:
     sys.exit(1)
 for line in text.splitlines():
     if line.startswith("API_SERVER_KEY="):
-        print(line.split("=", 1)[1].strip().strip('"').strip("'"))
+        val = line.split("=", 1)[1].strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in (chr(34), chr(39)):
+            val = val[1:-1]
+        print(val)
         raise SystemExit(0)
 sys.exit(1)
 ' 2>/dev/null
@@ -199,6 +220,45 @@ remote_http_start_ui_shortcut() {
   umask "${old_umask}"
   chmod 600 "${token_file}"
   nohup env E2E_OPENCLAW_GATEWAY_TOKEN_FILE="${token_file}" \
+    python3 "${script}" "${public_port}" 127.0.0.1 "${backend_port}" \
+    >>"${log}" 2>&1 &
+  echo $! >"${pidfile}"
+}
+
+remote_http_start_hermes_ui_proxy() {
+  local public_port="${1:?public}"
+  local backend_port="${2:?backend}"
+  local log="${3:?log}"
+  local script pidfile
+  script="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/files/e2e-hermes-ui-host-proxy.py"
+  pidfile="${log}.pid"
+  remote_http_stop_ui_shortcut "${pidfile}" "${public_port}"
+  mkdir -p "$(dirname "${log}")"
+  nohup python3 "${script}" "${public_port}" 127.0.0.1 "${backend_port}" \
+    "127.0.0.1:18789" >>"${log}" 2>&1 &
+  echo $! >"${pidfile}"
+}
+
+# Public :8642+i — inject Hermes API_SERVER_KEY on the backend hop. The key
+# stays in a 0600 file on this host. Laptop HTTP does not set a Bearer token.
+remote_http_start_hermes_api_proxy() {
+  local public_port="${1:?public}"
+  local backend_port="${2:?backend}"
+  local token="${3:?token}"
+  local log="${4:?log}"
+  local script pidfile token_file
+  script="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/files/e2e-hermes-api-auth-proxy.py"
+  pidfile="${log}.pid"
+  token_file="${log}.token"
+  remote_http_stop_ui_shortcut "${pidfile}" "${public_port}"
+  mkdir -p "$(dirname "${log}")"
+  local old_umask
+  old_umask="$(umask)"
+  umask 077
+  printf '%s' "${token}" >"${token_file}"
+  umask "${old_umask}"
+  chmod 600 "${token_file}"
+  nohup env E2E_HERMES_API_KEY_FILE="${token_file}" \
     python3 "${script}" "${public_port}" 127.0.0.1 "${backend_port}" \
     >>"${log}" 2>&1 &
   echo $! >"${pidfile}"
@@ -453,7 +513,7 @@ remote_http_publish_hermes() {
   local count="${1:?count}"
   local prefix="${2:?prefix}"
   local out="${3:?json}"
-  local host dash_port api_port name i
+  local host dash_port api_port name i inner inner_api token
   local -a users_json=()
   export E2E_PUBLISH_BIND="${E2E_PUBLISH_BIND:-0.0.0.0}"
   host="$(remote_http_advertise_host)"
@@ -461,10 +521,30 @@ remote_http_publish_hermes() {
     name="$(printf '%s%04d' "${prefix}" "${i}")"
     dash_port=$((18789 + i))
     api_port=$((8642 + i))
-    remote_http_start_forward "${name}" 18789 "${dash_port}" \
+    inner=$((28789 + i))
+    inner_api=$((28642 + i))
+    remote_http_prepare_hermes_home "${name}" \
+      || {
+        echo "ERROR: could not prepare /sandbox/.nemoclaw on ${name}" >&2
+        return 1
+      }
+    # Dashboard uvicorn requires Host 127.0.0.1:18789. Inner forward stays
+    # loopback; the host proxy is the public :18789+i.
+    remote_http_start_forward "${name}" 18789 "${inner}" \
+      "${out%.json}-ui-forward-${name}.log" "127.0.0.1"
+    remote_http_start_hermes_ui_proxy "${dash_port}" "${inner}" \
       "${out%.json}-ui-${name}.log"
-    remote_http_start_forward "${name}" 8642 "${api_port}" \
+    remote_http_stop_port "${api_port}"
+    remote_http_start_forward "${name}" 8642 "${inner_api}" \
+      "${out%.json}-api-forward-${name}.log" "127.0.0.1"
+    token="$(remote_http_hermes_token "${name}")" \
+      || {
+        echo "ERROR: could not read Hermes API key from ${name}" >&2
+        return 1
+      }
+    remote_http_start_hermes_api_proxy "${api_port}" "${inner_api}" "${token}" \
       "${out%.json}-api-${name}.log"
+    unset token
     remote_http_wait_http "http://127.0.0.1:${dash_port}/" || true
     if ! remote_http_wait_http "http://127.0.0.1:${api_port}/health"; then
       echo "ERROR: Hermes API :${api_port} for ${name} did not answer /health" >&2
@@ -504,7 +584,7 @@ remote_http_stop_e2e_forwards() {
     fi
     remote_http_stop_port "${port}"
   done
-  for port in $(seq 28789 28799) $(seq 8642 8652); do
+  for port in $(seq 28642 28652) $(seq 28789 28799) $(seq 8642 8652); do
     remote_http_stop_port "${port}"
   done
 }

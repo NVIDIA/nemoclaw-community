@@ -89,7 +89,9 @@ else:
     raise AssertionError("simulate_user must not copy e2e-openclaw-load into sandboxes")
 chart = Path(__file__).resolve().parent.parent
 helper = (chart / "files" / "openclaw-e2e-ws-prompt.py").read_text()
-assert 'os.environ.get("E2E_DRAIN_SEC", "0")' in helper
+assert 'os.environ.get("E2E_DRAIN_SEC")' in helper
+assert 'os.environ.get("E2E_PROMPT_TIMEOUT_SEC")' in helper
+assert 'os.environ.get("E2E_DRAIN_SEC", "0")' not in helper
 assert 'os.environ.get("E2E_DRAIN_SEC", "8")' not in helper
 assert "return 2, 0" in helper
 assert 'event_payload.get("state") == "final"' in helper
@@ -131,10 +133,25 @@ assert 'openclaw) echo "onprem-openclaw"' in agent_common
 uninstall = (chart / "scripts" / "uninstall-e2e.sh").read_text()
 assert "onprem-openclaw" in uninstall
 assert "onprem-ollama" not in uninstall
+hermes_setup = (chart / "scripts" / "setup-hermes-vllm-e2e-sandboxes.sh").read_text()
+assert "prepare_hermes_sandbox_home" in hermes_setup
+assert 'os.chmod("/sandbox", 0o755)' in hermes_setup
+assert 'os.chown("/sandbox/.nemoclaw", 0, 0)' in hermes_setup or 'os.chown(home, 0, 0)' in hermes_setup
+assert 'os.chmod(home, 0o755)' in hermes_setup
+assert "503 gateway_draining" in hermes_setup
+assert 'os.chmod("/sandbox/.hermes", 0o700)' in hermes_setup
+assert "start exited early (attempt" in hermes_setup
+assert "agent_common_pin_hermes_model" not in hermes_setup
+hermes_load = (chart / "scripts" / "e2e-hermes-load-test.py").read_text()
+assert '"-m"' in hermes_load
+assert "inference_model()" in hermes_load
 assert 'raw="${E2E_LATENCY_TOKEN_START:-2048}"' in agent_common
+assert 'raw="${E2E_HERMES_LATENCY_TOKEN_START:-64}"' in agent_common
 assert "*latency*)" in agent_common
 assert "INFLIGHT=1" in agent_common.split("agent_common_export_demo_workload")[1].split("agent_common_export_client_inflight")[0]
+assert 'INFLIGHT="${E2E_HERMES_LATENCY_INFLIGHT:-2}"' in agent_common
 assert "Leftover MAX_TOKENS from GPU util must not change the latency demo." in agent_common
+assert "agent_common_export_demo_workload hermes" in (chart / "scripts" / "client_hermes.sh").read_text()
 discovery = (chart / "files" / "e2e-http-discovery.py").read_text()
 assert 'E2E_PUBLISH_BIND' in discovery
 assert 'return "127.0.0.1"' in discovery
@@ -143,6 +160,45 @@ shortcut = (chart / "files" / "e2e-openclaw-ui-shortcut.py").read_text()
 assert 'E2E_PUBLISH_BIND' in shortcut
 assert 'sock.bind(("0.0.0.0"' not in shortcut
 forward = (chart / "scripts" / "remote-http-clients.sh").read_text()
+hermes_ui_proxy = (chart / "files" / "e2e-hermes-ui-host-proxy.py").read_text()
+assert "rewrite_host_header" in hermes_ui_proxy
+assert 'sock.bind(("0.0.0.0"' not in hermes_ui_proxy
+assert "remote_http_start_hermes_ui_proxy" in forward
+assert "remote_http_start_hermes_api_proxy" in forward
+assert "remote_http_prepare_hermes_home" in forward
+assert "os.chown(home, 0, 0)" in forward
+assert "E2E_HERMES_API_KEY_FILE" in forward
+assert "inner_api=$((28642 + i))" in forward
+assert 'remote_http_start_forward "${name}" 18789 "${inner}"' in forward.split("remote_http_publish_hermes")[1]
+assert "Laptop HTTP does not set a Bearer token." in forward
+hermes_api_proxy = (chart / "files" / "e2e-hermes-api-auth-proxy.py").read_text()
+assert "E2E_HERMES_API_KEY_FILE" in hermes_api_proxy
+assert "inject_authorization" in hermes_api_proxy
+assert "sys.argv[4]" not in hermes_api_proxy
+ha_spec = importlib.util.spec_from_file_location(
+    "e2e_hermes_api_auth_proxy", chart / "files" / "e2e-hermes-api-auth-proxy.py"
+)
+assert ha_spec and ha_spec.loader
+ha = importlib.util.module_from_spec(ha_spec)
+ha_spec.loader.exec_module(ha)
+injected = ha.inject_authorization(
+    b"POST /v1/chat/completions HTTP/1.1\r\nHost: 10.184.164.109:8642\r\n\r\n",
+    "SECRET",
+)
+assert b"Authorization: Bearer SECRET" in injected
+assert b"Host: 10.184.164.109:8642" in injected
+hp_spec = importlib.util.spec_from_file_location(
+    "e2e_hermes_ui_host_proxy", chart / "files" / "e2e-hermes-ui-host-proxy.py"
+)
+assert hp_spec and hp_spec.loader
+hp = importlib.util.module_from_spec(hp_spec)
+hp_spec.loader.exec_module(hp)
+rewritten = hp.rewrite_host_header(
+    b"GET / HTTP/1.1\r\nHost: 10.184.164.109:18789\r\nAccept: text/html",
+    b"127.0.0.1:18789",
+)
+assert b"Host: 127.0.0.1:18789" in rewritten
+assert b"10.184.164.109" not in rewritten
 assert "E2E_PUBLISH_BIND:-127.0.0.1" in forward
 assert 'E2E_PUBLISH_BIND:-0.0.0.0' in forward
 assert "E2E_OPENCLAW_GATEWAY_TOKEN_FILE" in forward
@@ -205,6 +261,20 @@ assert 'script="$(basename "${0}")"' in common
 assert "hermes vllm nvidia/NVIDIA-Nemotron-3-Nano-4B-FP8" in common
 assert "deepagents nim nvidia/nemotron-3-nano" in common
 readme = (chart / "README.md").read_text()
+assert "`secrets.env` is gitignored." in readme
+assert "Keep [step 5](#5-connect-the-openshell-cli) in another terminal:" in readme
+publish_hermes = (chart / "scripts" / "publish-hermes-remote-http.sh").read_text()
+assert "remote_http_publish_hermes" in publish_hermes
+assert "Does not print API keys." in publish_hermes
+assert "publish-hermes-remote-http.sh" in readme
+assert "The laptop does not set a Hermes API key." in readme
+assert "broken pipe" in readme
+assert "not a failed OpenShell tunnel" in readme
+forward_sh = (chart / "scripts" / "openshell-port-forward.sh").read_text()
+assert "kubectl may print broken pipe" in forward_sh
+assert "Git has `secrets.env.example` only." in readme
+assert "kubectl get secret ngc-registry -n nemoclaw-gpu" in readme
+assert "If that Secret exists, skip `apply-local-secrets.sh`." in readme
 assert "## Simple HPA-only test (optional)" in readme
 assert "[Simple HPA-only test (optional)](#simple-hpa-only-test-optional)" in readme
 assert "Simple HPA only test" not in readme
@@ -231,6 +301,37 @@ assert "Restarting OpenClaw so max_tokens=" not in client
 assert "hold_hpa_until_client" not in client
 assert "hold_hpa_until_client" not in hermes
 assert "hold_hpa_until_client" not in deep
+assert "pause_hpa_scale_down" not in hermes
+assert "pause_hpa_scale_down" not in deep
+assert "kubectl cp" not in hermes_load
+assert "e2e-sandbox-saturate" not in hermes_load
+assert "e2e-openclaw-load" not in hermes_load
+assert "does not copy a load helper into the sandbox" in hermes_load
+deep_load = (chart / "scripts" / "e2e-deepagents-load-test.py").read_text()
+assert "kubectl cp" not in deep_load
+assert "e2e-sandbox-saturate" not in deep_load
+assert "e2e-openclaw-load" not in deep_load
+assert "does not copy a load helper into the sandbox" in deep_load
+assert hermes_load.count("stop_sandbox_chats(") >= 3
+assert "[h]ermes.real -m .* -z" in hermes_load
+assert "[h]ermes -z'" not in hermes_load
+assert deep_load.count("stop_sandbox_chats(") >= 3
+assert "INFLIGHT=2, MAX_TOKENS=64" in readme
+assert "INFLIGHT=2 and MAX_TOKENS=64" in readme
+assert "INFLIGHT=2 MAX_TOKENS=64" in hermes
+assert "INFLIGHT=2 MAX_TOKENS=1024" in hermes
+assert "INFLIGHT=2 MAX_TOKENS=1024" in readme
+assert "INFLIGHT=1 MAX_TOKENS=1024" not in readme
+assert "INFLIGHT=1 MAX_TOKENS=1024" not in hermes
+assert "Set those flags on the client." in readme
+assert "[user {uid} sandbox {uid}]" in hermes
+assert "thread.join(timeout=2)" not in hermes
+assert "already-sent chats finished" in hermes
+assert "already-sent chats finished" in hermes_load
+assert "already-sent chats finished" in deep_load
+assert "Do not drain in-flight" not in client
+assert 'E2E_DRAIN_SEC:-${E2E_PROMPT_TIMEOUT_SEC' in client
+assert "INFLIGHT=${INFLIGHT} MAX_TOKENS=${MAX_TOKENS}" in agent_common
 assert "Restarting idle OpenClaw" not in client
 assert "MAX_REPLICAS_HOLD_SEC:-0" in client
 assert "E2E_CHAT_PAUSE_SEC:-0" in client

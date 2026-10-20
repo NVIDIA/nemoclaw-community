@@ -491,12 +491,14 @@ def run_load(prompt: str, timeout: float, token: str) -> int:
     stop.set()
     # Wait for already-sent chats to get a final reply (or timeout). Those
     # counts are ok (got a reply) or err (sent, no reply).
-    drain = float(os.environ.get("E2E_DRAIN_SEC", "0"))
+    drain = float(
+        os.environ.get("E2E_DRAIN_SEC")
+        or os.environ.get("E2E_PROMPT_TIMEOUT_SEC")
+        or str(timeout)
+    )
     join_deadline = time.monotonic() + max(0.0, drain)
     for worker_thread in workers:
-        remaining = join_deadline - time.monotonic()
-        if remaining <= 0:
-            break
+        remaining = max(0.0, join_deadline - time.monotonic())
         worker_thread.join(timeout=remaining)
     print(f"[load] done inflight={current} ok={ok} err={err} tokens={tokens}", flush=True)
     return 0 if ok > 0 else 1

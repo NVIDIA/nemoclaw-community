@@ -11,12 +11,15 @@
 #   ./scripts/agentscaling_hermes_gpuutil.sh   # GPU util HPA
 #   ./scripts/agentscaling_hermes_latency.sh   # LLM latency HPA (same client)
 #
-# Default: 3 users, inflight 1, 4Gi sandboxes. 2Gi + inflight 2 OOMed dgx-19.
+# Default: 3 users, inflight 2, 4Gi sandboxes. 2Gi + inflight 2 OOMed dgx-19.
 #
 # Laptop HTTP: UI http://dgx-ip:18789/  CLI user i → http://dgx-ip:8642+i/v1
-#   E2E_CLIENT_HOST=dgx-ip E2E_USERS=5 INFLIGHT=1 MAX_TOKENS=1024 ./scripts/client_hermes.sh
-# Pass INFLIGHT and MAX_TOKENS on this client. Laptop and DGX use the same flags.
-# GPU util demo: INFLIGHT=1 MAX_TOKENS=1024. Latency demo: INFLIGHT=3 MAX_TOKENS=64.
+# The laptop does not set a Hermes API key. The DGX injects it.
+#   GPU util: E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=1024 E2E_USERS=5 ./scripts/client_hermes.sh
+#   latency:  E2E_CLIENT_HOST=dgx-ip E2E_USERS=5 ./scripts/client_hermes.sh
+# GPU util takes INFLIGHT and MAX_TOKENS on the client (default 2 and 1024).
+# Latency omits them (INFLIGHT=2 MAX_TOKENS=64) and ignores leftovers.
+# Do not copy a load helper into the sandbox. Do not pause HPA scale-down.
 # Clients do not stop or restart Hermes. Sandboxes stay up after stop;
 # ./scripts/uninstall-e2e.sh removes them.
 
@@ -40,15 +43,18 @@ export SANDBOX_PREFIX="${SANDBOX_PREFIX:-hermes-vllm-e2e-}"
 INFERENCE_RUNTIME="${INFERENCE_RUNTIME:-$(agent_common_default_inference_runtime hermes)}"
 export INFERENCE_RUNTIME
 agent_common_validate_inference_runtime "${INFERENCE_RUNTIME}"
+INFERENCE_MODEL="$(agent_common_resolve_inference_model "${INFERENCE_RUNTIME}")"
+export INFERENCE_MODEL
 export OPENSHELL_NAMESPACE="${OPENSHELL_NAMESPACE:-nemoclaw-sandboxes}"
 export NAMESPACE="${NAMESPACE:-nemoclaw-gpu}"
 export HPA_NAME="${HPA_NAME:-nemoclaw-gpu-metrics-proxy}"
 export TARGET_PODS="${TARGET_PODS:-8}"
 export DURATION_SEC="${DURATION_SEC:-900}"
 export E2E_PROMPT_TIMEOUT_SEC="${E2E_PROMPT_TIMEOUT_SEC:-180}"
+agent_common_export_demo_workload hermes
 agent_common_export_client_tokens hermes
 agent_common_export_client_inflight
-# Stop new chats after a short sit at 8 GPUs.
+# Stop new chats at 8 GPUs. Do not hold replicas or pause HPA scale-down.
 export MAX_REPLICAS_HOLD_SEC="${MAX_REPLICAS_HOLD_SEC:-0}"
 export SCALE_DOWN_WAIT_LOOPS="${SCALE_DOWN_WAIT_LOOPS:-40}"
 E2E_OUTPUT_DIR="${E2E_OUTPUT_DIR:-${CHART_DIR}/e2e-results/hermes}"
@@ -62,7 +68,7 @@ if [[ -n "${E2E_CLIENT_HOST}" ]]; then
   agent_common_print_laptop_client_usage "client_hermes.sh"
   echo "Client HTTP: ${E2E_USERS} end users → ${E2E_CLIENT_HOST}:8642 … $((8642 + E2E_USERS - 1))/v1"
   echo "UI (sandbox 0): http://${E2E_CLIENT_HOST}:18789/"
-  agent_common_print_load_banner "${DURATION_SEC}" "${MAX_REPLICAS_HOLD_SEC}"
+  agent_common_print_load_banner "${DURATION_SEC}" "${MAX_REPLICAS_HOLD_SEC}" hermes
   mkdir -p "${E2E_OUTPUT_DIR}"
   agent_common_start_hpa_timeline "${E2E_OUTPUT_DIR}" 0
   python3 - "${E2E_CLIENT_HOST}" "${E2E_USERS}" "${DURATION_SEC}" "${E2E_PROMPT_TIMEOUT_SEC}" "${MAX_TOKENS}" "${TARGET_PODS}" "${SCRIPT_DIR}" <<'PY'
@@ -153,6 +159,64 @@ def write_ticks():
         except Exception:
             continue
 
+def completion_tokens(body):
+    if not isinstance(body, dict):
+        return 0
+    usage = body.get("usage")
+    if isinstance(usage, dict):
+        try:
+            ntok = int(usage.get("completion_tokens") or 0)
+            if ntok > 0:
+                return ntok
+        except (TypeError, ValueError):
+            pass
+        try:
+            ntok = int(usage.get("total_tokens") or 0)
+            if ntok > 0:
+                return ntok
+        except (TypeError, ValueError):
+            pass
+    text = ""
+    choices = body.get("choices")
+    if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+        msg = choices[0].get("message")
+        if isinstance(msg, dict):
+            text = str(msg.get("content") or "")
+    if text.strip():
+        return max(1, len(text) // 4)
+    return 0
+
+def print_chat_table():
+    print(
+        f"After HPA scaled up and back to 1 ({inflight}→{inflight} inflight per user). "
+        + (
+            "every sandbox returned replies with err=0"
+            if all(e == 0 for e in err_by)
+            else "per-user chat counts"
+        )
+        + "."
+    )
+    print("est. tokens ≈ reply length / 4 when Hermes omits usage.")
+    print("")
+    print(f"{'User':<8} {'Sandbox':<12} {'Successful chats':>16} {'err':>6} {'est. tokens':>12}")
+    print(f"{'-' * 8} {'-' * 12} {'-' * 16} {'-' * 6} {'-' * 12}")
+    total_ok = total_err = total_tok = 0
+    for uid in range(users):
+        total_ok += ok_by[uid]
+        total_err += err_by[uid]
+        total_tok += tok_by[uid]
+        print(
+            f"{'user ' + str(uid):<8} {'sandbox ' + str(uid):<12} "
+            f"{ok_by[uid]:>16} {err_by[uid]:>6} {tok_by[uid]:>12}"
+        )
+    print(f"{'-' * 8} {'-' * 12} {'-' * 16} {'-' * 6} {'-' * 12}")
+    print(f"{'total':<8} {'':<12} {total_ok:>16} {total_err:>6} {total_tok:>12}")
+    print("")
+    print(
+        "Path in use: user → Hermes HTTP API → OpenShell sandbox → "
+        "inference.local → Envoy load balancer → vLLM."
+    )
+
 def one_chat(uid):
     global ok, err
     headers = {"Content-Type": "application/json"}
@@ -162,6 +226,7 @@ def one_chat(uid):
     req = urllib.request.Request(
         f"http://{host}:{8642 + uid}/v1/chat/completions",
         data=json.dumps({
+            "model": os.environ.get("INFERENCE_MODEL", "nvidia/NVIDIA-Nemotron-3-Nano-4B-FP8"),
             "messages": [{"role": "user", "content": prompts[0]}],
             "max_tokens": max_tokens,
             "stream": False,
@@ -172,23 +237,21 @@ def one_chat(uid):
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             body = json.loads(resp.read().decode())
-        ntok = 0
-        usage = body.get("usage") if isinstance(body, dict) else None
-        if isinstance(usage, dict):
-            try:
-                ntok = int(usage.get("completion_tokens") or usage.get("total_tokens") or 0)
-            except (TypeError, ValueError):
-                ntok = 0
+        ntok = completion_tokens(body)
         with counts:
             ok += 1
             ok_by[uid] += 1
             tok_by[uid] += ntok
-            print(f"[user {uid}] ok={ok} err={err}", flush=True)
+            print(
+                f"[user {uid} sandbox {uid}] ok={ok_by[uid]} err={err_by[uid]} "
+                f"tokens={tok_by[uid]}",
+                flush=True,
+            )
     except Exception as exc:
         with counts:
             err += 1
             err_by[uid] += 1
-            print(f"[user {uid}] {exc}", flush=True)
+            print(f"[user {uid} sandbox {uid}] {exc}", flush=True)
 
 def worker(uid):
     while not stop_load.is_set() and time.monotonic() < deadline:
@@ -231,9 +294,23 @@ try:
 finally:
     stop_load.set()
     stop_tl.set()
+    join_deadline = time.monotonic() + timeout
     for thread in workers:
-        thread.join(timeout=2)
+        remaining = max(0.0, join_deadline - time.monotonic())
+        thread.join(timeout=remaining)
 print(f"[load] done ok={ok} err={err}", flush=True)
+print("[load] already-sent chats finished; waiting until HPA is back to 1 GPU", flush=True)
+try:
+    wait_loops = max(0, int(os.environ.get("SCALE_DOWN_WAIT_LOOPS") or "40"))
+except ValueError:
+    wait_loops = 40
+for _ in range(wait_loops):
+    current, _desired, _metric = hpa_status()
+    if current <= 1:
+        print("[load] HPA is back to 1 GPU", flush=True)
+        break
+    time.sleep(15)
+print_chat_table()
 raise SystemExit(0 if ok else 1)
 PY
   exit $?
@@ -253,7 +330,7 @@ hpa_common_require_live_runtime "${NAMESPACE}" "${HPA_NAME}" "${INFERENCE_RUNTIM
 export E2E_CLIENT_QUIET_HPA=1
 agent_common_print_laptop_client_usage "client_hermes.sh"
 echo "Client: ${E2E_USERS} end users → ${E2E_USERS} OpenShell sandboxes (1:1 hermes -z)."
-agent_common_print_load_banner "${DURATION_SEC}" "${MAX_REPLICAS_HOLD_SEC}"
+agent_common_print_load_banner "${DURATION_SEC}" "${MAX_REPLICAS_HOLD_SEC}" hermes
 missing=0
 for ((i = 0; i < E2E_USERS; i += 1)); do
   name="$(printf '%s%04d' "${SANDBOX_PREFIX}" "${i}")"

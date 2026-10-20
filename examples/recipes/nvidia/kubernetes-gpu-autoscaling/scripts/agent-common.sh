@@ -20,8 +20,19 @@ agent_common_validate() {
 # ../README.md#6a-openclaw--ollama
 agent_common_print_laptop_client_usage() {
   local script_name="${1:?client script}"
-  echo "Default - any remote machine: E2E_CLIENT_HOST=dgx-ip E2E_USERS=${E2E_USERS:-5} ./scripts/${script_name}"
-  echo "simpler option - from the same DGX in another terminal: E2E_USERS=${E2E_USERS:-5} ./scripts/${script_name}"
+  local users="${E2E_USERS:-5}"
+  local metric
+  metric="$(agent_common_hpa_metric)"
+  case "${metric}" in
+    *latency*)
+      echo "Default - any remote machine: E2E_CLIENT_HOST=dgx-ip E2E_USERS=${users} ./scripts/${script_name}"
+      echo "simpler option - from the same DGX in another terminal: E2E_USERS=${users} ./scripts/${script_name}"
+      ;;
+    *)
+      echo "Default - any remote machine: E2E_CLIENT_HOST=dgx-ip INFLIGHT=${INFLIGHT} MAX_TOKENS=${MAX_TOKENS} E2E_USERS=${users} ./scripts/${script_name}"
+      echo "simpler option - from the same DGX in another terminal: INFLIGHT=${INFLIGHT} MAX_TOKENS=${MAX_TOKENS} E2E_USERS=${users} ./scripts/${script_name}"
+      ;;
+  esac
 }
 
 # Same client.sh for both HPA metrics. Stop at 8. Latency ignores
@@ -60,7 +71,10 @@ agent_common_resolve_max_tokens() {
   case "${metric}" in
     *latency*)
       # Leftover MAX_TOKENS from GPU util must not change the latency demo.
-      raw="${E2E_LATENCY_TOKEN_START:-2048}"
+      case "${agent}" in
+        hermes) raw="${E2E_HERMES_LATENCY_TOKEN_START:-64}" ;;
+        *) raw="${E2E_LATENCY_TOKEN_START:-2048}" ;;
+      esac
       ;;
     *)
       if [[ -z "${raw}" ]]; then
@@ -90,9 +104,10 @@ agent_common_export_client_tokens() {
   export E2E_GPUUTIL_TOKEN_START="${MAX_TOKENS}"
 }
 
-# Latency always uses INFLIGHT=1. GPU util uses INFLIGHT on the command,
-# or 2 when it is omitted.
+# OpenClaw latency always uses INFLIGHT=1. Hermes latency uses 2.
+# GPU util uses INFLIGHT on the command, or 2 when it is omitted.
 agent_common_export_demo_workload() {
+  local agent="${1:-openclaw}"
   local metric
   metric="$(agent_common_hpa_metric)"
   if [[ -n "${metric}" ]]; then
@@ -100,7 +115,10 @@ agent_common_export_demo_workload() {
   fi
   case "${HPA_METRIC:-}" in
     *latency*)
-      INFLIGHT=1
+      case "${agent}" in
+        hermes) INFLIGHT="${E2E_HERMES_LATENCY_INFLIGHT:-2}" ;;
+        *) INFLIGHT=1 ;;
+      esac
       ;;
     *)
       if [[ -z "${INFLIGHT:-}" ]]; then
@@ -131,9 +149,14 @@ agent_common_export_client_inflight() {
 agent_common_print_load_banner() {
   local duration="${1:?}"
   local _hold="${2:?}"
+  local agent="${3:-openclaw}"
   case "${HPA_METRIC:-}" in
     *latency*)
-      echo "Latency: INFLIGHT=${INFLIGHT} MAX_TOKENS=${MAX_TOKENS} until 6 GPUs, then short prompts, stop at 8."
+      if [[ "${agent}" == "openclaw" ]]; then
+        echo "Latency: INFLIGHT=${INFLIGHT} MAX_TOKENS=${MAX_TOKENS} until 6 GPUs, then short prompts, stop at 8."
+      else
+        echo "Latency: INFLIGHT=${INFLIGHT} MAX_TOKENS=${MAX_TOKENS} until stop at 8."
+      fi
       ;;
     *)
       echo "GPU util: INFLIGHT=${INFLIGHT} MAX_TOKENS=${MAX_TOKENS} until stop at 8."

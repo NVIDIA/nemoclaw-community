@@ -16,6 +16,7 @@ dcode -n does not need the Deep Agents gateway on :8642.
 The agent inside the sandbox then calls https://inference.local (Envoy → NIM HPA).
 This is not files/load-generator.ts (that Job POSTs chat/completions at pod IPs).
 This is not in-sandbox curl to inference.local.
+This does not copy a load helper into the sandbox.
 This is not the OpenClaw e2e (chat.send on :18789).
 
 Usage:
@@ -360,10 +361,18 @@ async def simulate_user(
                 break
             done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
             for task in done:
-                task.result()
+                exc = task.exception() if not task.cancelled() else None
+                if exc is not None:
+                    err += 1
+                    print(
+                        f"[user {user_id} sandbox {user_id}] {type(exc).__name__}: {exc}",
+                        file=sys.stderr,
+                    )
+    finally:
+        # Already-sent dcode -n must finish before any pkill.
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
-    finally:
+            pending.clear()
         log_handle.write(f"ok={ok} err={err} tokens={tokens}\n")
         log_handle.close()
     return {
@@ -392,6 +401,7 @@ async def run_test(args: argparse.Namespace) -> int:
     print("  Each user sends chats to that user's sandbox.")
     print(f"  Concurrent chats per user: {args.inflight_start}→{args.inflight_per_user}")
     print("=" * 70)
+    stop_sandbox_chats(args.prefix, args.users)
 
     try:
         pinned_tokens = int(os.environ.get("MAX_TOKENS") or "64")
@@ -480,6 +490,7 @@ async def run_test(args: argparse.Namespace) -> int:
         results = list(await asyncio.gather(*user_tasks, return_exceptions=True))
     finally:
         stop_load.set()
+        print("[load] already-sent chats finished", flush=True)
         stop_sandbox_chats(args.prefix, args.users)
     normalized: list[dict[str, object]] = []
     for item in results:

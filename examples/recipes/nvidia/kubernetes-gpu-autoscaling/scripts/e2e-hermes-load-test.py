@@ -11,11 +11,12 @@ The client does not set the HPA metric.
 Each user talks only to its sandbox (hermes -z). 1:1 mapping.
 hermes -z does not need the Hermes gateway on :8642.
 
-    openshell sandbox exec -n hermes-vllm-e2e-NNNN -- hermes -z "..."
+    openshell sandbox exec -n hermes-vllm-e2e-NNNN -- hermes -z -m MODEL "..."
 
 The agent inside the sandbox then calls https://inference.local (Envoy → vLLM HPA).
 This is not files/load-generator.ts (that Job POSTs chat/completions at pod IPs).
 This is not in-sandbox curl to inference.local.
+This does not copy a load helper into the sandbox.
 This is not the OpenClaw e2e (chat.send on :18789).
 
 Usage (laptop HTTP):
@@ -179,7 +180,7 @@ def stop_sandbox_chats(prefix: str, users: int) -> None:
                     "--",
                     "bash",
                     "-c",
-                    "pkill -TERM -f '[h]ermes -z' || true; sleep 1; pkill -KILL -f '[h]ermes -z' || true",
+                    "pkill -TERM -f '[h]ermes.real -m .* -z' || true; pkill -TERM -f '[b]ash -lc hermes -m' || true; sleep 1; pkill -KILL -f '[h]ermes.real -m .* -z' || true; pkill -KILL -f '[b]ash -lc hermes -m' || true",
                 ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -250,6 +251,16 @@ async def terminate_proc(proc: asyncio.subprocess.Process) -> None:
         await proc.wait()
 
 
+def inference_model() -> str:
+    """Chart vLLM id. Do not use hermes config set; that drifts the sealed hash."""
+    model = os.environ.get(
+        "INFERENCE_MODEL", "nvidia/NVIDIA-Nemotron-3-Nano-4B-FP8"
+    ).strip()
+    if not model or model.startswith("-"):
+        raise SystemExit("INFERENCE_MODEL is missing or looks like a flag")
+    return model
+
+
 async def send_user_query(sandbox: str, prompt: str, timeout_sec: int) -> tuple[bool, str]:
     """One end-user turn: prompt goes to the sandbox Hermes agent, not to Envoy."""
     openshell = shutil.which("openshell")
@@ -264,6 +275,8 @@ async def send_user_query(sandbox: str, prompt: str, timeout_sec: int) -> tuple[
         "--no-tty",
         "--",
         "hermes",
+        "-m",
+        inference_model(),
         "-z",
         prompt,
         stdout=asyncio.subprocess.PIPE,
@@ -360,10 +373,18 @@ async def simulate_user(
                 break
             done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
             for task in done:
-                task.result()
+                exc = task.exception() if not task.cancelled() else None
+                if exc is not None:
+                    err += 1
+                    print(
+                        f"[user {user_id} sandbox {user_id}] {type(exc).__name__}: {exc}",
+                        file=sys.stderr,
+                    )
+    finally:
+        # Already-sent hermes -z must finish before any pkill.
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
-    finally:
+            pending.clear()
         log_handle.write(f"ok={ok} err={err} tokens={tokens}\n")
         log_handle.close()
     return {
@@ -392,6 +413,7 @@ async def run_test(args: argparse.Namespace) -> int:
     print("  Each user sends chats to that user's sandbox.")
     print(f"  Concurrent chats per user: {args.inflight_start}→{args.inflight_per_user}")
     print("=" * 70)
+    stop_sandbox_chats(args.prefix, args.users)
 
     try:
         pinned_tokens = int(os.environ.get("MAX_TOKENS") or "64")
@@ -480,6 +502,7 @@ async def run_test(args: argparse.Namespace) -> int:
         results = list(await asyncio.gather(*user_tasks, return_exceptions=True))
     finally:
         stop_load.set()
+        print("[load] already-sent chats finished", flush=True)
         stop_sandbox_chats(args.prefix, args.users)
     normalized: list[dict[str, object]] = []
     for item in results:
