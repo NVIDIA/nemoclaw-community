@@ -204,6 +204,11 @@ E2E_USERS=5 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_gpuutil.sh
 ./scripts/get-hpa.sh -n nemoclaw-gpu -w
 ```
 <img width="815" height="996" alt="util2" src="https://github.com/user-attachments/assets/ccd8910b-8230-43ea-af76-9a17e2a749af" />
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> 4bc2fce746a4e596a58841cb3ac2fc30816dac45
 
 ```bash
 # Terminal C — laptop HTTP.
@@ -213,6 +218,10 @@ E2E_CLIENT_HOST=dgx-ip INFLIGHT=4 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.s
 INFLIGHT=4 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
 ```
 <img width="665" height="346" alt="util3" src="https://github.com/user-attachments/assets/7117e094-f782-4bd9-8df7-c8c5fd8ee801" />
+<<<<<<< HEAD
+=======
+
+>>>>>>> 4bc2fce746a4e596a58841cb3ac2fc30816dac45
 
 
 
@@ -327,15 +336,29 @@ E2E_USERS=10 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_hermes_gpuutil.sh
 # If Connection refused, keep step 5 attached, then on the DGX:
 #   E2E_USERS=10 ./scripts/publish-hermes-remote-http.sh
 E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=1024 E2E_USERS=10 ./scripts/client_hermes.sh
+<<<<<<< HEAD
+=======
 ```
+
 <img width="727" height="482" alt="util3" src="https://github.com/user-attachments/assets/5e306a05-81dc-423c-9427-07eb8c05275f" />
 
+```bash
+# Terminal C — on the DGX instead
+INFLIGHT=2 MAX_TOKENS=1024 E2E_USERS=10 ./scripts/client_hermes.sh
+>>>>>>> 4bc2fce746a4e596a58841cb3ac2fc30816dac45
+```
+
+<<<<<<< HEAD
 ```bash
 # Terminal C — on the DGX instead
 INFLIGHT=2 MAX_TOKENS=1024 E2E_USERS=10 ./scripts/client_hermes.sh
 ```
 
 Wait until `get-hpa.sh` shows **1** current replica. Then switch HPA to latency.
+=======
+
+
+>>>>>>> 4bc2fce746a4e596a58841cb3ac2fc30816dac45
 
 **LLM latency.** Same sandboxes and the same `client_hermes.sh`. Provision switches HPA to `latency_avg` (target 3000 ms) and keeps **current** GPUs at **1** replica (`maxReplicas=8`). `client_hermes.sh` uses `INFLIGHT=1`, `MAX_TOKENS=2048` in the code. Do not add those flags. Same 30s completed-sample window and 15s idle 0 as OpenClaw.
 
@@ -344,12 +367,21 @@ Wait until `get-hpa.sh` shows **1** current replica. Then switch HPA to latency.
 E2E_USERS=10 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_hermes_latency.sh
 ```
 <img width="777" height="632" alt="latency3" src="https://github.com/user-attachments/assets/5969f28a-aa24-4b4c-8e33-227cfb58e37e" />
+<<<<<<< HEAD
+=======
+
+>>>>>>> 4bc2fce746a4e596a58841cb3ac2fc30816dac45
 
 ```bash
 # Terminal B
 ./scripts/get-hpa.sh -n nemoclaw-gpu -w
 ```
 <img width="848" height="890" alt="latency2" src="https://github.com/user-attachments/assets/f7523cbd-db7c-4061-bb86-803df7c3fe14" />
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> 4bc2fce746a4e596a58841cb3ac2fc30816dac45
 
 ```bash
 # Terminal C — laptop HTTP. INFLIGHT=1 MAX_TOKENS=2048 is in the code. Do not add those flags.
@@ -358,6 +390,11 @@ E2E_USERS=10 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_hermes_latency.sh
 E2E_CLIENT_HOST=dgx-ip E2E_USERS=10 ./scripts/client_hermes.sh
 ```
 <img width="731" height="480" alt="latency1" src="https://github.com/user-attachments/assets/e0cc260c-dd78-46a9-ac7e-ec624be68e55" />
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> 4bc2fce746a4e596a58841cb3ac2fc30816dac45
 
 ```bash
 # Terminal C — on the DGX instead. Same client; INFLIGHT=1 MAX_TOKENS=2048 is in the code.
@@ -419,32 +456,61 @@ export KUBECONFIG="${HOME}/.kube/config"
 E2E_USERS=10 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_deepagents_gpuutil.sh
 ```
 <img width="749" height="616" alt="util1" src="https://github.com/user-attachments/assets/2d76dbf6-0322-46ef-aa5d-b772759af72a" />
+<<<<<<< HEAD
+=======
+
+>>>>>>> 4bc2fce746a4e596a58841cb3ac2fc30816dac45
 
 ```bash
 # Terminal B
 ./scripts/get-hpa.sh -n nemoclaw-gpu -w
 ```
 <img width="824" height="647" alt="util2" src="https://github.com/user-attachments/assets/63b58dfa-91c4-45b3-9345-a7aea5cee8d3" />
+<<<<<<< HEAD
 
 ```bash
 # Terminal C — from the same DGX. Deep Agents has no laptop HTTP.
 E2E_USERS=10 ./scripts/client_deepagents.sh
+=======
+
+
+
+```bash
+# Terminal C — on DGX 
+INFLIGHT=1 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client_deepagents.sh
+>>>>>>> 4bc2fce746a4e596a58841cb3ac2fc30816dac45
 ```
 <img width="711" height="451" alt="util3" src="https://github.com/user-attachments/assets/32e8e0d1-56d7-452a-b360-42044b6fd775" />
 
+<<<<<<< HEAD
 **LLM latency.** Same sandboxes and the same `client_deepagents.sh`. Provision switches HPA to `latency_avg` (target 3000 ms) and keeps current GPUs at 1 replica (`maxReplicas=8`). `client_deepagents.sh` sends `dcode -n`. Same 30s completed-sample window and 15s idle 0 as OpenClaw.
+=======
+<img width="711" height="451" alt="util3" src="https://github.com/user-attachments/assets/32e8e0d1-56d7-452a-b360-42044b6fd775" />
+
+
+**LLM latency.** Same sandboxes and the same `client_deepagents.sh`. Provision switches HPA to `latency_avg` (target 3000 ms) and keeps current GPUs at 1 replica (`maxReplicas=8`). `client_deepagents.sh` sends `dcode -n`.
+>>>>>>> 4bc2fce746a4e596a58841cb3ac2fc30816dac45
 
 ```bash
 # Terminal A
 E2E_USERS=10 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_deepagents_latency.sh
 ```
 <img width="776" height="617" alt="latency1" src="https://github.com/user-attachments/assets/f1cdf30c-bd10-4b3c-937f-6cd7766a349b" />
+<<<<<<< HEAD
+=======
+
+>>>>>>> 4bc2fce746a4e596a58841cb3ac2fc30816dac45
 
 ```bash
 # Terminal B
 ./scripts/get-hpa.sh -n nemoclaw-gpu -w
 ```
 <img width="848" height="498" alt="latency2" src="https://github.com/user-attachments/assets/8a31ad79-a9f4-4992-8806-78535ba7952a" />
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> 4bc2fce746a4e596a58841cb3ac2fc30816dac45
 
 ```bash
 # Terminal C — from the same DGX. Deep Agents has no laptop HTTP.
