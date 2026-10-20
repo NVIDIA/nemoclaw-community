@@ -72,7 +72,7 @@ agent_common_resolve_max_tokens() {
     *latency*)
       # Leftover MAX_TOKENS from GPU util must not change the latency demo.
       case "${agent}" in
-        hermes) raw="${E2E_HERMES_LATENCY_TOKEN_START:-64}" ;;
+        hermes) raw="${E2E_HERMES_LATENCY_TOKEN_START:-2048}" ;;
         *) raw="${E2E_LATENCY_TOKEN_START:-2048}" ;;
       esac
       ;;
@@ -104,8 +104,8 @@ agent_common_export_client_tokens() {
   export E2E_GPUUTIL_TOKEN_START="${MAX_TOKENS}"
 }
 
-# OpenClaw latency always uses INFLIGHT=1. Hermes latency uses 2.
-# GPU util uses INFLIGHT on the command, or 2 when it is omitted.
+# OpenClaw and Hermes latency use INFLIGHT=1. GPU util uses INFLIGHT on
+# the command, or 2 when it is omitted.
 agent_common_export_demo_workload() {
   local agent="${1:-openclaw}"
   local metric
@@ -116,7 +116,7 @@ agent_common_export_demo_workload() {
   case "${HPA_METRIC:-}" in
     *latency*)
       case "${agent}" in
-        hermes) INFLIGHT="${E2E_HERMES_LATENCY_INFLIGHT:-2}" ;;
+        hermes) INFLIGHT="${E2E_HERMES_LATENCY_INFLIGHT:-1}" ;;
         *) INFLIGHT=1 ;;
       esac
       ;;
