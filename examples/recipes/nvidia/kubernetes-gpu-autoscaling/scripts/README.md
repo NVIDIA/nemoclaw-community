@@ -28,7 +28,7 @@ what each script in this directory does — it has no instructions of its own.
 | `e2e-hermes-load-test.py` | Per-user driver used by `client_hermes.sh` |
 | `agentscaling_hermes_gpuutil.sh` | Hermes + vLLM sandbox provision + GPU-util HPA. Keeps current GPUs at 1 (`maxReplicas=8`) until `client_hermes.sh`. |
 | `agentscaling_hermes_latency.sh` | Same Hermes sandboxes, LLM-latency HPA. Keeps current GPUs at 1 (`maxReplicas=8`) until `client_hermes.sh`. |
-| `client_hermes.sh` | End users: 1:1 HTTP to Hermes (`E2E_USERS=10`). GPU util: `INFLIGHT=2 MAX_TOKENS=1024`. Latency: `E2E_USERS=10 ./scripts/client_hermes.sh` (INFLIGHT=1 MAX_TOKENS=2048). Does not copy a load helper or pause HPA scale-down. Laptop UI `http://dgx-ip:18789/` ; CLI `E2E_CLIENT_HOST=dgx-ip`. |
+| `client_hermes.sh` | End users: 1:1 HTTP to Hermes (`E2E_USERS=10`). GPU util: `INFLIGHT=2 MAX_TOKENS=1024`. Latency: `E2E_USERS=10 ./scripts/client_hermes.sh` (INFLIGHT=2 MAX_TOKENS=2048). Does not copy a load helper or pause HPA scale-down. Laptop UI `http://dgx-ip:18789/` ; CLI `E2E_CLIENT_HOST=dgx-ip`. |
 | `publish-hermes-remote-http.sh` | DGX: republish Hermes UI `:18789+i` and API `:8642+i` for the laptop. The DGX injects the Hermes key; the laptop does not set one. Keep step 5 attached. |
 | `agentscaling_deepagents_gpuutil.sh` | Deep Agents + NIM sandbox provision + GPU-util HPA. Keeps current GPUs at 1 (`maxReplicas=8`) until `client_deepagents.sh`. |
 | `agentscaling_deepagents_latency.sh` | Same Deep Agents sandboxes, LLM-latency HPA. Keeps current GPUs at 1 (`maxReplicas=8`) until `client_deepagents.sh`. |

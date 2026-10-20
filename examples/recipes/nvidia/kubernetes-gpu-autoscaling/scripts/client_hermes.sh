@@ -18,7 +18,7 @@
 #   GPU util: E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=1024 E2E_USERS=10 ./scripts/client_hermes.sh
 #   latency:  E2E_CLIENT_HOST=dgx-ip E2E_USERS=10 ./scripts/client_hermes.sh
 # GPU util takes INFLIGHT and MAX_TOKENS on the client (default 2 and 1024).
-# Latency omits them (INFLIGHT=1 MAX_TOKENS=2048) and ignores leftovers.
+# Latency omits them (INFLIGHT=2 MAX_TOKENS=2048) and ignores leftovers.
 # Do not copy a load helper into the sandbox. Do not pause HPA scale-down.
 # Clients do not stop or restart Hermes. Sandboxes stay up after stop;
 # ./scripts/uninstall-e2e.sh removes them.

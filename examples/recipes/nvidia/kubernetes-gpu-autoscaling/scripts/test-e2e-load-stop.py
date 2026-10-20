@@ -149,7 +149,7 @@ assert 'raw="${E2E_LATENCY_TOKEN_START:-2048}"' in agent_common
 assert 'raw="${E2E_HERMES_LATENCY_TOKEN_START:-2048}"' in agent_common
 assert "*latency*)" in agent_common
 assert "INFLIGHT=1" in agent_common.split("agent_common_export_demo_workload")[1].split("agent_common_export_client_inflight")[0]
-assert 'INFLIGHT="${E2E_HERMES_LATENCY_INFLIGHT:-1}"' in agent_common
+assert 'INFLIGHT="${E2E_HERMES_LATENCY_INFLIGHT:-2}"' in agent_common
 assert "Leftover MAX_TOKENS from GPU util must not change the latency demo." in agent_common
 assert "agent_common_export_demo_workload hermes" in (chart / "scripts" / "client_hermes.sh").read_text()
 discovery = (chart / "files" / "e2e-http-discovery.py").read_text()
@@ -331,11 +331,11 @@ assert hermes_load.count("stop_sandbox_chats(") >= 3
 assert "[h]ermes.real -m .* -z" in hermes_load
 assert "[h]ermes -z'" not in hermes_load
 assert deep_load.count("stop_sandbox_chats(") >= 3
-assert "INFLIGHT=1, MAX_TOKENS=2048" in readme
+assert "INFLIGHT=2, MAX_TOKENS=2048" in readme
 assert "`INFLIGHT=1`, `MAX_TOKENS=2048`" in readme
 assert "OpenClaw latency defaults: `INFLIGHT=1`, `MAX_TOKENS=2048`" in readme
-assert "Hermes latency defaults: `INFLIGHT=1`, `MAX_TOKENS=2048`" in readme
-assert "INFLIGHT=1 MAX_TOKENS=2048" in hermes
+assert "Hermes latency defaults: `INFLIGHT=2`, `MAX_TOKENS=2048`" in readme
+assert "INFLIGHT=2 MAX_TOKENS=2048" in hermes
 assert "INFLIGHT=2 MAX_TOKENS=1024" in hermes
 assert "INFLIGHT=2 MAX_TOKENS=1024" in readme
 assert 'export E2E_USERS="${E2E_USERS:-10}"' in hermes
