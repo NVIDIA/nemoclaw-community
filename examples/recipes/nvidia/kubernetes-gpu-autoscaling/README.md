@@ -196,14 +196,16 @@ Keep [step 5](#5-connect-the-openshell-cli) in another terminal: `./scripts/open
 # Default INFERENCE_RUNTIME=ollama. Do not set vllm/nim unless you intend to override.
 E2E_USERS=5 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_gpuutil.sh
 ```
-<img width="771" height="438" alt="util2" src="https://github.com/user-attachments/assets/f1f71e97-49c0-49d6-b037-2cb1acc5eb68" />
+<img width="752" height="465" alt="util1" src="https://github.com/user-attachments/assets/00cecc7e-5dfc-4d23-b8f1-b05fbc13977f" />
 
 
 ```bash
 # Terminal B — film this HPA watch
 ./scripts/get-hpa.sh -n nemoclaw-gpu -w
 ```
-<img width="817" height="574" alt="util1" src="https://github.com/user-attachments/assets/72a7fbfc-6ce2-4e59-abe8-261a1ca10348" />
+<img width="815" height="996" alt="util2" src="https://github.com/user-attachments/assets/ccd8910b-8230-43ea-af76-9a17e2a749af" />
+
+
 
 ```bash
 # Terminal C — laptop HTTP.
@@ -212,7 +214,8 @@ E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.s
 # Terminal C — on the DGX instead. 
 INFLIGHT=2 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
 ```
-<img width="630" height="303" alt="util3" src="https://github.com/user-attachments/assets/7e516b0b-6e4b-4236-b423-bcbf88bb993e" />
+<img width="665" height="346" alt="util3" src="https://github.com/user-attachments/assets/7117e094-f782-4bd9-8df7-c8c5fd8ee801" />
+
 
 
 
@@ -327,13 +330,17 @@ E2E_USERS=10 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_hermes_gpuutil.sh
 # If Connection refused, keep step 5 attached, then on the DGX:
 #   E2E_USERS=10 ./scripts/publish-hermes-remote-http.sh
 E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=1024 E2E_USERS=10 ./scripts/client_hermes.sh
+```
 
+<img width="727" height="482" alt="util3" src="https://github.com/user-attachments/assets/5e306a05-81dc-423c-9427-07eb8c05275f" />
+
+```bash
 # Terminal C — on the DGX instead
 INFLIGHT=2 MAX_TOKENS=1024 E2E_USERS=10 ./scripts/client_hermes.sh
 ```
-<img width="727" height="482" alt="util3" src="https://github.com/user-attachments/assets/5e306a05-81dc-423c-9427-07eb8c05275f" />
 
-Wait until `get-hpa.sh` shows **1** current replica. Then switch HPA to latency.
+
+
 
 **LLM latency.** Same sandboxes and the same `client_hermes.sh`. Provision switches HPA to `latency_avg` (target 3000 ms) and keeps **current** GPUs at **1** replica (`maxReplicas=8`). `client_hermes.sh` defaults: `INFLIGHT=2`, `MAX_TOKENS=2048`. Do not set `INFLIGHT` or `MAX_TOKENS`.
 
@@ -341,13 +348,16 @@ Wait until `get-hpa.sh` shows **1** current replica. Then switch HPA to latency.
 # Terminal A
 E2E_USERS=10 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_hermes_latency.sh
 ```
-<img width="847" height="827" alt="Screenshot 2026-10-01 at 10 52 48 PM" src="https://github.com/user-attachments/assets/f81b1fea-7421-4d99-8e6d-c493472650e9" />
+<img width="777" height="632" alt="latency3" src="https://github.com/user-attachments/assets/5969f28a-aa24-4b4c-8e33-227cfb58e37e" />
+
 
 ```bash
 # Terminal B
 ./scripts/get-hpa.sh -n nemoclaw-gpu -w
 ```
-<img width="849" height="521" alt="Screenshot 2026-10-01 at 1 53 17 PM" src="https://github.com/user-attachments/assets/2c0c3b90-761a-4b9b-9a34-0551219d4441" />
+<img width="848" height="890" alt="latency2" src="https://github.com/user-attachments/assets/f7523cbd-db7c-4061-bb86-803df7c3fe14" />
+
+
 
 ```bash
 # Terminal C — laptop HTTP. Do not set INFLIGHT or MAX_TOKENS.
@@ -355,6 +365,9 @@ E2E_USERS=10 ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_hermes_latency.sh
 #   E2E_USERS=10 ./scripts/publish-hermes-remote-http.sh
 E2E_CLIENT_HOST=dgx-ip E2E_USERS=10 ./scripts/client_hermes.sh
 ```
+<img width="731" height="480" alt="latency1" src="https://github.com/user-attachments/assets/e0cc260c-dd78-46a9-ac7e-ec624be68e55" />
+
+
 
 ```bash
 # Terminal C — on the DGX instead. Same client; omit INFLIGHT and MAX_TOKENS.
