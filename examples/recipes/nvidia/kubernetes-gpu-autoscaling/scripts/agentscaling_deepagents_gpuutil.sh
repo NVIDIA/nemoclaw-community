@@ -8,7 +8,6 @@
 # Envoy → NIM.
 #
 # Default is 10 users at 4Gi. Client default is INFLIGHT=1 MAX_TOKENS=1024.
-# This recipe does not use Envoy TLS. OpenShell client mTLS is step 5.
 # NIM needs NGC Secrets (apply-local-secrets.sh or create-nim-ngc-secrets.sh).
 # Run ./scripts/uninstall-e2e.sh first if OpenClaw or Hermes sandboxes or
 # clients are still running. GPU inference can stay; this script helm-upgrades

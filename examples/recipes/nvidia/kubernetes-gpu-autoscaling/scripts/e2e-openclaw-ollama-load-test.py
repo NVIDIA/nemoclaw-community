@@ -114,7 +114,10 @@ def users_from_http_host(host: str, users: int, discovery_port: int) -> list[dic
 
 def endpoint_for_user(users: list[dict[str, object]], user_id: int) -> dict[str, object]:
     for item in users:
-        if int(item.get("user_id") or -1) == user_id:
+        raw = item.get("user_id")
+        if raw is None:
+            continue
+        if int(raw) == user_id:
             return item
     if user_id < len(users):
         return users[user_id]
@@ -913,12 +916,12 @@ async def run_test(args: argparse.Namespace) -> int:
         args.duration,
         args.inflight_start,
         args.inflight_per_user,
-        check_listeners=not (args.chat_only or bool(endpoints)),
+        check_listeners=not args.chat_only,
     )
     if successful < 1:
         print("No successful user→sandbox OpenClaw queries.", file=sys.stderr)
         return 1
-    if args.chat_only or bool(endpoints):
+    if args.chat_only:
         return 0
     if not summary["reached_target"]:
         print(

@@ -99,6 +99,8 @@ def quantity(raw: object) -> float | None:
     try:
         if text.endswith("m") and text[:-1].replace(".", "", 1).lstrip("-").isdigit():
             return float(text[:-1]) / 1000.0
+        if text[-1] in "kK" and text[:-1].replace(".", "", 1).lstrip("-").isdigit():
+            return float(text[:-1]) * 1000.0
         return float(text)
     except ValueError:
         return None
@@ -179,5 +181,5 @@ async def tick_until(stop_event: Any, write_fn: Any) -> None:
         except asyncio.TimeoutError:
             try:
                 write_fn()
-            except Exception:
+            except OSError:
                 continue

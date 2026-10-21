@@ -498,8 +498,8 @@ remote_http_stop_ports_for_count() {
 }
 
 # OpenClaw: one Control UI per user (own host port). CLI uses the same ports.
-# This publish path is the remote-host opt-in, so public ports bind 0.0.0.0
-# unless E2E_PUBLISH_BIND is set. Inner OpenClaw forwards stay on 127.0.0.1.
+# Bring-up publishes loopback. Laptop HTTP uses publish-*-remote-http.sh, which
+# sets E2E_PUBLISH_BIND=0.0.0.0. Inner OpenClaw forwards stay on 127.0.0.1.
 # Published HTTP does not include gateway tokens.
 remote_http_publish_openclaw() {
   local count="${1:?count}"
@@ -508,7 +508,7 @@ remote_http_publish_openclaw() {
   local host port name token i stop_n
   local -a users_json=()
   local restart_ui=0
-  export E2E_PUBLISH_BIND="${E2E_PUBLISH_BIND:-0.0.0.0}"
+  export E2E_PUBLISH_BIND="${E2E_PUBLISH_BIND:-127.0.0.1}"
   remote_http_load_optional_secrets
   host="$(remote_http_advertise_host)"
   stop_n="$(remote_http_recorded_user_count)"
@@ -582,13 +582,14 @@ open(path, "a").write("\n")
 }
 
 # Hermes: one dashboard UI (sandbox 0) plus OpenAI HTTP API per user.
+# Bring-up publishes loopback. Laptop HTTP uses publish-hermes-remote-http.sh.
 remote_http_publish_hermes() {
   local count="${1:?count}"
   local prefix="${2:?prefix}"
   local out="${3:?json}"
   local host dash_port api_port name i inner inner_api token stop_n
   local -a users_json=()
-  export E2E_PUBLISH_BIND="${E2E_PUBLISH_BIND:-0.0.0.0}"
+  export E2E_PUBLISH_BIND="${E2E_PUBLISH_BIND:-127.0.0.1}"
   host="$(remote_http_advertise_host)"
   stop_n="$(remote_http_recorded_user_count)"
   if ((count > stop_n)); then

@@ -192,9 +192,6 @@ ingress:
   host: nemoclaw.local
   path: /
   pathType: Prefix
-  tls: []
-  # Unused. This recipe does not render Envoy TLS. OpenShell client mTLS is separate.
-  allowInsecureHttp: false
   gateway:
     # Optional user choice: Envoy Gateway + LeastRequest. Default on.
     # Scripts: ENABLE_ENVOY_LB=0|1. See README Architecture.

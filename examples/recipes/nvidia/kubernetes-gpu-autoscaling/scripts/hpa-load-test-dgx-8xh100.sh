@@ -26,8 +26,7 @@ if [[ -n "${TARGET_PODS:-}" && "${TARGET_PODS}" != "8" ]]; then
   exit 1
 fi
 
-# H100 defaults. Keep ALLOW_INSECURE_HTTP explicit: it is a security
-# acknowledgement, not a portable chart default.
+# H100 defaults.
 : "${MAX_REPLICAS:=8}"
 TARGET_PODS=8
 HPA_LOAD_PROFILE=dgx-8xh100
@@ -143,8 +142,6 @@ HPA_RESTORE_HELM_ARGS=()
 # shellcheck disable=SC2034 # passed by name to hpa_common_log_hpa_if_changed
 LAST_HPA_LINE=""
 
-ALLOW_INSECURE_VALUE="$(hpa_common_ingress_allow_insecure_value)"
-
 kubectl get apiservice v1beta1.metrics.k8s.io 2>/dev/null | grep -q True || {
   echo "metrics-server not ready" >&2
   exit 1
@@ -181,7 +178,6 @@ HPA_HELM_ARGS=(
   --set "autoscaling.metric=${HPA_METRIC:-gpu_utilization}"
   --set "autoscaling.targetGPUUtilizationPercentage=${HPA_CONFIGURED_GPU_TARGET}"
   --set "autoscaling.targetLatencyMilliseconds=${HPA_TARGET_LATENCY_MS:-5000}"
-  --set "ingress.allowInsecureHttp=${ALLOW_INSECURE_VALUE}"
   --set "ingress.gateway.enabled=$(hpa_common_envoy_lb_helm_value)"
   --set "ingress.gateway.serviceType=${INGRESS_SERVICE_TYPE:-ClusterIP}"
   --set "ingress.gateway.className=${INGRESS_CLASS:-eg}"

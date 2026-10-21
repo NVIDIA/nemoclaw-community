@@ -57,8 +57,7 @@ agent_common_export_client_inflight
 # Stop new chats at 8 GPUs. Do not hold replicas or pause HPA scale-down.
 export MAX_REPLICAS_HOLD_SEC="${MAX_REPLICAS_HOLD_SEC:-0}"
 export SCALE_DOWN_WAIT_LOOPS="${SCALE_DOWN_WAIT_LOOPS:-40}"
-E2E_OUTPUT_DIR="${E2E_OUTPUT_DIR:-${CHART_DIR}/e2e-results/hermes}"
-export E2E_OUTPUT_DIR
+export E2E_OUTPUT_DIR="${E2E_OUTPUT_DIR:-${CHART_DIR}/e2e-results/hermes}"
 E2E_CLIENT_HOST="${E2E_CLIENT_HOST:-}"
 
 command -v python3 >/dev/null 2>&1 || fail "missing command: python3"

@@ -98,8 +98,6 @@ SERVICE_PORT="${SERVICE_PORT:-8081}"
 # shellcheck disable=SC2034 # passed by name to hpa_common_log_hpa_if_changed
 LAST_HPA_LINE=""
 
-ALLOW_INSECURE_VALUE="$(hpa_common_ingress_allow_insecure_value)"
-
 kubectl get apiservice v1beta1.metrics.k8s.io 2>/dev/null | grep -q True || {
   echo "metrics-server not ready" >&2
   exit 1
@@ -133,7 +131,6 @@ HPA_HELM_ARGS=(
   --set "autoscaling.metric=${HPA_METRIC:-gpu_utilization}"
   --set "autoscaling.targetGPUUtilizationPercentage=${HPA_TARGET_GPU}"
   --set "autoscaling.targetLatencyMilliseconds=${HPA_TARGET_LATENCY_MS:-5000}"
-  --set "ingress.allowInsecureHttp=${ALLOW_INSECURE_VALUE}"
   --set "ingress.gateway.enabled=$(hpa_common_envoy_lb_helm_value)"
   --set "ingress.gateway.serviceType=${INGRESS_SERVICE_TYPE:-ClusterIP}"
   --set "ingress.gateway.className=${INGRESS_CLASS:-eg}"

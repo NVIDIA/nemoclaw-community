@@ -7,7 +7,6 @@
 # and client path as GPU-util: users send dcode -n into each sandbox.
 #
 # Switches the cluster HPA metric, then creates sandboxes.
-# This recipe does not use Envoy TLS. OpenShell client mTLS is step 5.
 # NIM needs NGC Secrets (apply-local-secrets.sh or create-nim-ngc-secrets.sh).
 # Provision keeps current replicas at 1 (maxReplicas stays 8). Run
 # ./scripts/client_deepagents.sh after sandboxes are Ready (no HTTP UI).

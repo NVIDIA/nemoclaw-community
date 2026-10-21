@@ -765,151 +765,6 @@ hpa_common_release_selector() {
   printf 'app.kubernetes.io/name=%s,app.kubernetes.io/instance=%s' "${chart}" "${release}"
 }
 
-# Reject cleartext when Kubernetes reports a node or Envoy Gateway dataplane exposure path.
-# The operator must separately restrict access from other hosts on the private network.
-hpa_common_verify_insecure_ingress_isolation() {
-  local ingress_ns="${INGRESS_NS:-envoy-gateway-system}"
-  local app_ns="${NAMESPACE:-nemoclaw-gpu}"
-  local service_type="${INGRESS_SERVICE_TYPE:-ClusterIP}"
-
-  require_cmd kubectl
-  require_cmd python3
-  python3 - "${ingress_ns}" "${app_ns}" "${service_type}" <<'PY'
-import ipaddress
-import json
-import subprocess
-import sys
-
-control_plane_ns, app_ns, service_type = sys.argv[1:]
-
-
-def kubectl_json(*args):
-    try:
-        raw = subprocess.check_output(
-            ["kubectl", *args, "-o", "json"],
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        return json.loads(raw)
-    except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError) as exc:
-        print(f"cannot verify cleartext ingress isolation: kubectl {' '.join(args)} failed", file=sys.stderr)
-        raise SystemExit(1) from exc
-
-
-private_ranges = tuple(
-    ipaddress.ip_network(cidr)
-    for cidr in (
-        "10.0.0.0/8",
-        "127.0.0.0/8",
-        "169.254.0.0/16",
-        "172.16.0.0/12",
-        "192.168.0.0/16",
-        "::1/128",
-        "fc00::/7",
-        "fe80::/10",
-    )
-)
-
-nodes = kubectl_json("get", "nodes").get("items") or []
-internal_ips = []
-external_ips = []
-for node in nodes:
-    for address in (node.get("status") or {}).get("addresses") or []:
-        if address.get("type") == "InternalIP":
-            internal_ips.append(address.get("address", ""))
-        elif address.get("type") == "ExternalIP":
-            external_ips.append(address.get("address", ""))
-
-if not internal_ips:
-    print("cleartext ingress denied: cluster nodes have no verifiable InternalIP", file=sys.stderr)
-    raise SystemExit(1)
-if external_ips:
-    print("cleartext ingress denied: cluster nodes expose ExternalIP addresses", file=sys.stderr)
-    raise SystemExit(1)
-for raw in internal_ips:
-    try:
-        address = ipaddress.ip_address(raw)
-    except ValueError as exc:
-        print(f"cleartext ingress denied: invalid node InternalIP {raw!r}", file=sys.stderr)
-        raise SystemExit(1) from exc
-    if not any(address in network for network in private_ranges):
-        print(f"cleartext ingress denied: node InternalIP {raw} is not private", file=sys.stderr)
-        raise SystemExit(1)
-
-controller_pods = kubectl_json(
-    "get", "pods", "-n", control_plane_ns, "-l", "control-plane=envoy-gateway"
-).get("items") or []
-if not controller_pods:
-    print("cleartext ingress denied: Envoy Gateway control-plane pods not found", file=sys.stderr)
-    raise SystemExit(1)
-for pod in controller_pods:
-    name = (pod.get("metadata") or {}).get("name", "<unknown>")
-    spec = pod.get("spec") or {}
-    if spec.get("hostNetwork"):
-        print(f"cleartext ingress denied: pod {name} uses hostNetwork", file=sys.stderr)
-        raise SystemExit(1)
-    for container in spec.get("containers") or []:
-        for port in container.get("ports") or []:
-            if port.get("hostPort"):
-                print(f"cleartext ingress denied: pod {name} uses hostPort", file=sys.stderr)
-                raise SystemExit(1)
-
-# Dataplane Services are created with the chart Gateway. Envoy Gateway deploys them into
-# the control-plane namespace by default. Before the first Gateway exists, require the
-# configured Service type to remain ClusterIP.
-proxy_services = kubectl_json(
-    "get",
-    "services",
-    "-n",
-    control_plane_ns,
-    "-l",
-    "app.kubernetes.io/component=proxy,app.kubernetes.io/managed-by=envoy-gateway",
-).get("items") or []
-if not proxy_services:
-    if service_type != "ClusterIP":
-        print(
-            "cleartext ingress denied: Envoy dataplane Service type must be ClusterIP "
-            "before the Gateway exists",
-            file=sys.stderr,
-        )
-        raise SystemExit(1)
-else:
-    for service in proxy_services:
-        name = (service.get("metadata") or {}).get("name", "<unknown>")
-        spec = service.get("spec") or {}
-        status = service.get("status") or {}
-        if spec.get("type") != "ClusterIP":
-            print(f"cleartext ingress denied: Service {name} is not ClusterIP", file=sys.stderr)
-            raise SystemExit(1)
-        if spec.get("externalIPs"):
-            print(f"cleartext ingress denied: Service {name} has externalIPs", file=sys.stderr)
-            raise SystemExit(1)
-        if ((status.get("loadBalancer") or {}).get("ingress") or []):
-            print(f"cleartext ingress denied: Service {name} has a load-balancer address", file=sys.stderr)
-            raise SystemExit(1)
-
-    proxy_pods = kubectl_json(
-        "get",
-        "pods",
-        "-n",
-        control_plane_ns,
-        "-l",
-        "app.kubernetes.io/component=proxy,app.kubernetes.io/managed-by=envoy-gateway",
-    ).get("items") or []
-    for pod in proxy_pods:
-        name = (pod.get("metadata") or {}).get("name", "<unknown>")
-        spec = pod.get("spec") or {}
-        if spec.get("hostNetwork"):
-            print(f"cleartext ingress denied: pod {name} uses hostNetwork", file=sys.stderr)
-            raise SystemExit(1)
-        for container in spec.get("containers") or []:
-            for port in container.get("ports") or []:
-                if port.get("hostPort"):
-                    print(f"cleartext ingress denied: pod {name} uses hostPort", file=sys.stderr)
-                    raise SystemExit(1)
-PY
-}
-
 hpa_common_sha_htpasswd_line() {
   local username="${1:?username}"
   local password="${2:?password}"
@@ -1455,69 +1310,6 @@ PY
   return 0
 }
 
-hpa_common_resolve_allow_insecure_http() {
-  # Explicit 0 or 1 wins. Unset inherits the live chart (step 4 isolated eval).
-  # Missing release stays 0 so a first install still requires TLS or the flag.
-  case "${ALLOW_INSECURE_HTTP:-}" in
-    0 | 1)
-      printf '%s' "${ALLOW_INSECURE_HTTP}"
-      return 0
-      ;;
-    "") ;;
-    *)
-      echo "ALLOW_INSECURE_HTTP must be 0 or 1" >&2
-      return 1
-      ;;
-  esac
-  local ns="${NAMESPACE:-nemoclaw-gpu}"
-  local release="${RELEASE:-nemoclaw-gpu}"
-  local live="0"
-  if command -v helm >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
-    live="$(
-      helm get values "${release}" -n "${ns}" --all -o json 2>/dev/null | python3 -c '
-import json, sys
-try:
-    data = json.load(sys.stdin)
-except Exception:
-    print("0")
-    raise SystemExit(0)
-value = (data.get("ingress") or {}).get("allowInsecureHttp")
-print("1" if value is True or value == "true" else "0")
-' || true
-    )"
-  fi
-  case "${live}" in
-    1) printf '1' ;;
-    *) printf '0' ;;
-  esac
-}
-
-hpa_common_ingress_allow_insecure_value() {
-  # Cleartext Gateway exposure only applies when Envoy LB is enabled.
-  if ! hpa_common_envoy_lb_enabled; then
-    printf 'false'
-    return 0
-  fi
-  local allow_insecure
-  allow_insecure="$(hpa_common_resolve_allow_insecure_http)" || return 1
-  case "${allow_insecure}" in
-    0)
-      printf 'false'
-      ;;
-    1)
-      if ! hpa_common_verify_insecure_ingress_isolation; then
-        echo "Configure ingress.tls instead, or restrict the reported exposure path before retrying cleartext." >&2
-        return 1
-      fi
-      printf 'true'
-      ;;
-    *)
-      echo "ALLOW_INSECURE_HTTP must be 0 or 1" >&2
-      return 1
-      ;;
-  esac
-}
-
 # Historical chart releases mistakenly named the GPU front door Deployment/Service/
 # HPA/Gateway with a `*-agent` suffix (labels component=agent|gpu-agent). That
 # workload was never the OpenClaw/NemoClaw AI agent — it is now explicitly
@@ -1777,9 +1569,6 @@ hpa_common_gpu_helm_upgrade() {
   # compatibility with callers that don't pass this optional 10th argument.
   local inference_runtime="${10:-${INFERENCE_RUNTIME:-ollama}}"
 
-  local allow_insecure_http
-  allow_insecure_http="$(hpa_common_ingress_allow_insecure_value)"
-
   local auth_password auth_htpasswd
   IFS=$'\t' read -r auth_password auth_htpasswd < <(
     hpa_common_ingress_basic_auth_credentials "${ns}" "${release}"
@@ -1793,7 +1582,6 @@ hpa_common_gpu_helm_upgrade() {
     --set "namespace.name=${ns}"
     -f "${hpa_values}"
     --set probes.readinessChecksInference=true
-    --set "ingress.allowInsecureHttp=${allow_insecure_http}"
     --set "ingress.gateway.enabled=$(hpa_common_envoy_lb_helm_value)"
     --set "ingress.gateway.serviceType=${INGRESS_SERVICE_TYPE:-ClusterIP}"
     --set "ingress.gateway.className=${INGRESS_CLASS:-eg}"
@@ -1893,9 +1681,6 @@ hpa_common_ensure_metrics_proxy_ready() {
   local deploy
   deploy="$(RELEASE="${release}" hpa_common_metrics_proxy_deployment)"
 
-  local allow_insecure_http
-  allow_insecure_http="$(hpa_common_ingress_allow_insecure_value)"
-
   local auth_password auth_htpasswd
   IFS=$'\t' read -r auth_password auth_htpasswd < <(
     hpa_common_ingress_basic_auth_credentials "${ns}" "${release}"
@@ -1907,7 +1692,6 @@ hpa_common_ensure_metrics_proxy_ready() {
     --set "namespace.name=${ns}"
     --set "autoscaling.enabled=false"
     --set "gpuScaling.count=1"
-    --set "ingress.allowInsecureHttp=${allow_insecure_http}"
     --set "ingress.gateway.enabled=$(hpa_common_envoy_lb_helm_value)"
     --set "ingress.gateway.serviceType=${INGRESS_SERVICE_TYPE:-ClusterIP}"
     --set "ingress.gateway.className=${INGRESS_CLASS:-eg}"

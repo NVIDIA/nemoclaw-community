@@ -131,16 +131,16 @@ agentscaling_hermes_common_main() {
   command -v python3 >/dev/null 2>&1 || agentscaling_hermes_common_fail "missing command: python3"
   openshell status >/dev/null \
     || agentscaling_hermes_common_fail "OpenShell is not connected. In another terminal run ./scripts/openshell-port-forward.sh. Then rerun this command."
-  hpa_common_verify_target_node 1 || exit 1
-  hpa_common_verify_gpu_capacity "${MAX_REPLICAS}" || exit 1
-  kubectl get apiservice v1beta1.metrics.k8s.io 2>/dev/null | grep -q True \
-    || agentscaling_hermes_common_fail "metrics-server not ready"
-  if ! kubectl get gatewayclass "${INGRESS_CLASS:-eg}" >/dev/null 2>&1; then
-    agentscaling_hermes_common_fail "GatewayClass ${INGRESS_CLASS:-eg} is missing"
-  fi
   case "${cmd}" in
     stop | cleanup | layout | refresh-inference) ;;
     *)
+      hpa_common_verify_target_node 1 || exit 1
+      hpa_common_verify_gpu_capacity "${MAX_REPLICAS}" || exit 1
+      kubectl get apiservice v1beta1.metrics.k8s.io 2>/dev/null | grep -q True \
+        || agentscaling_hermes_common_fail "metrics-server not ready"
+      if ! kubectl get gatewayclass "${INGRESS_CLASS:-eg}" >/dev/null 2>&1; then
+        agentscaling_hermes_common_fail "GatewayClass ${INGRESS_CLASS:-eg} is missing"
+      fi
       command -v helm >/dev/null 2>&1 || agentscaling_hermes_common_fail "missing command: helm"
       agentscaling_hermes_common_apply_hpa
       ;;

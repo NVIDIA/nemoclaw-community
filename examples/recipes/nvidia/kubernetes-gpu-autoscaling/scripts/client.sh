@@ -61,7 +61,7 @@ export E2E_USER_STAGGER_SEC="${E2E_USER_STAGGER_SEC:-0}"
 # After stop-new-chats, wait for already-sent chats to get a reply.
 export E2E_DRAIN_SEC="${E2E_DRAIN_SEC:-${E2E_PROMPT_TIMEOUT_SEC:-180}}"
 export SCALE_DOWN_WAIT_LOOPS="${SCALE_DOWN_WAIT_LOOPS:-40}"
-E2E_OUTPUT_DIR="${E2E_OUTPUT_DIR:-${CHART_DIR}/e2e-results/openclaw-ollama}"
+export E2E_OUTPUT_DIR="${E2E_OUTPUT_DIR:-${CHART_DIR}/e2e-results/openclaw-ollama}"
 E2E_CLIENT_HOST="${E2E_CLIENT_HOST:-}"
 
 command -v python3 >/dev/null 2>&1 || fail "missing command: python3"

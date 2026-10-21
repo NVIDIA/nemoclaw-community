@@ -127,12 +127,6 @@ if hpa_common_envoy_lb_enabled && [[ "${INGRESS_SERVICE_TYPE}" != "ClusterIP" ]]
   echo "ENABLE_ENVOY_LB=1 requires INGRESS_SERVICE_TYPE=ClusterIP while the OpenShell cleartext HTTP listener is present. NodePort/LoadBalancer would expose that route externally and bypass Basic authentication. Use ClusterIP (port-forward), or set ENABLE_ENVOY_LB=0." >&2
   exit 1
 fi
-ALLOW_INSECURE_HTTP="$(hpa_common_resolve_allow_insecure_http)" || exit 1
-export ALLOW_INSECURE_HTTP
-if [[ "${ALLOW_INSECURE_HTTP}" == "1" && "${INGRESS_SERVICE_TYPE}" != "ClusterIP" ]]; then
-  echo "ALLOW_INSECURE_HTTP=1 requires INGRESS_SERVICE_TYPE=ClusterIP" >&2
-  exit 1
-fi
 
 aggregated_api_ready() {
   local api_service="$1"

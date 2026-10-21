@@ -35,6 +35,7 @@ assert mod.hpa_should_stop_new_chats(8, 8, 8) is True
 assert mod.hpa_replicas_back_to_one(0, 0) is False
 assert mod.hpa_replicas_back_to_one(1, 1) is True
 assert mod.hpa_replicas_back_to_one(2, 1) is False
+assert mod.endpoint_for_user([{"user_id": 0, "url": "http://u0"}], 0)["url"] == "http://u0"
 
 hold = mod.should_stop_after_hold
 stop_now, since = hold(False, 60, None, 10.0)
@@ -50,14 +51,19 @@ assert stop_now is True
 stop_now, _since = hold(True, 0, None, 10.0)
 assert stop_now is True
 
+import os
 import subprocess
 import sys
 
+missing_host_env = os.environ.copy()
+missing_host_env.pop("E2E_CLIENT_HOST", None)
+missing_host_env.pop("E2E_ENDPOINTS", None)
 missing_host = subprocess.run(
     [sys.executable, str(SCRIPT), "--users", "1", "--output", "/tmp/e2e-openclaw-host-required"],
     check=False,
     capture_output=True,
     text=True,
+    env=missing_host_env,
 )
 assert missing_host.returncode == 2, missing_host.stderr
 assert "in-sandbox load helpers" in missing_host.stderr
@@ -76,6 +82,10 @@ assert "interrupt_openclaw_inflight" not in start_source
 assert "prune_stale_openclaw_sessions" not in start_source
 assert "publish_ramp_to_sandboxes" not in start_source
 assert "e2e_latency_load_ramp" not in SCRIPT.read_text()
+assert 'item.get("user_id") or -1' not in SCRIPT.read_text()
+assert "if args.chat_only or bool(endpoints):" not in SCRIPT.read_text()
+assert "check_listeners=not args.chat_only," in SCRIPT.read_text()
+assert "if args.chat_only:" in SCRIPT.read_text()
 assert "clear_ramp_from_sandboxes" not in SCRIPT.read_text()
 assert "Each user sends chats to that user's sandbox." not in start_source
 # Start must not restart the gateway (that races the max_tokens pin).
@@ -206,7 +216,7 @@ rewritten = hp.rewrite_host_header(
 assert b"Host: 127.0.0.1:18789" in rewritten
 assert b"10.184.164.109" not in rewritten
 assert "E2E_PUBLISH_BIND:-127.0.0.1" in forward
-assert 'E2E_PUBLISH_BIND:-0.0.0.0' in forward
+assert 'E2E_PUBLISH_BIND:-0.0.0.0' not in forward
 assert "E2E_OPENCLAW_GATEWAY_TOKEN_FILE" in forward
 assert '"token": sys.argv[7]' not in forward
 assert "Location: /#token=" not in shortcut
@@ -259,9 +269,11 @@ assert 'exit "${load_rc}"' in client
 hermes = (chart / "scripts" / "client_hermes.sh").read_text()
 assert 'headers["Authorization"] = f"Bearer {token}"' in hermes
 assert "export E2E_OUTPUT_DIR" in hermes
+assert "export E2E_OUTPUT_DIR" in client
 deep = (chart / "scripts" / "client_deepagents.sh").read_text()
 assert "agent_common_print_laptop_client_usage" not in deep
 assert "Deep Agents has no laptop HTTP" in deep
+assert "export E2E_OUTPUT_DIR" in deep
 assert 'E2E_CLIENT_HOST:-' in deep
 common = (chart / "scripts" / "agent-common.sh").read_text()
 assert "client_deepagents.sh)" in common
@@ -272,8 +284,11 @@ readme = (chart / "README.md").read_text()
 assert "`secrets.env` is gitignored." in readme
 assert "Keep [step 5](#5-connect-the-openshell-cli) in another terminal:" in readme
 publish_hermes = (chart / "scripts" / "publish-hermes-remote-http.sh").read_text()
+publish_openclaw = (chart / "scripts" / "publish-openclaw-remote-http.sh").read_text()
 assert "remote_http_publish_hermes" in publish_hermes
 assert "Does not print API keys." in publish_hermes
+assert 'E2E_PUBLISH_BIND:-0.0.0.0' in publish_hermes
+assert 'E2E_PUBLISH_BIND:-0.0.0.0' in publish_openclaw
 assert "publish-hermes-remote-http.sh" in readme
 assert "The laptop does not set a Hermes API key." in readme
 assert "broken pipe" in readme
@@ -299,27 +314,47 @@ assert "[90s]" in adapter
 assert "client.sh shortens this to 15s" in adapter
 assert "stabilizationWindowSeconds=120" not in (chart / "scripts" / "hpa-common.sh").read_text()
 hpa_common = (chart / "scripts" / "hpa-common.sh").read_text()
-assert "hpa_common_resolve_allow_insecure_http" in hpa_common
-assert "Unset inherits the live chart" in hpa_common
-assert "ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_gpuutil.sh" not in readme
-assert "ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_latency.sh" not in readme
-assert "ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_hermes_gpuutil.sh" not in readme
-assert "ALLOW_INSECURE_HTTP=1 ./scripts/agentscaling_deepagents_gpuutil.sh" not in readme
-assert "ALLOW_INSECURE_HTTP=1 \\\n  ./scripts/install-hpa.sh" not in readme
-assert "ALLOW_INSECURE_HTTP=1" not in readme
+assert "hpa_common_resolve_allow_insecure_http" not in hpa_common
+assert "hpa_common_verify_insecure_ingress_isolation" not in hpa_common
+assert "ingress.allowInsecureHttp" not in hpa_common
+assert "ALLOW_INSECURE_HTTP" not in readme
+assert "allowInsecureHttp" not in (chart / "values.yaml").read_text()
+assert "tls: []" not in (chart / "values.yaml").read_text()
 assert "TLS required by default" not in readme
 assert "### TLS values" not in readme
-assert "This recipe does not use Envoy TLS." in readme
-assert "OpenShell client mTLS is step 5." in readme
+assert "This recipe does not use Envoy TLS." not in readme
+assert "copy the OpenShell gateway client certs" in readme
+assert "not for Envoy" in readme
+assert "openshell-client-tls" in readme
+assert "| Envoy load balancer | **443**" not in readme
 gw = (chart / "templates" / "gateway.yaml").read_text()
 assert "protocol: HTTPS" not in gw
-assert "ingress.tls is empty and ingress.allowInsecureHttp is false" not in gw
+assert "allowInsecureHttp" not in gw
 assert "TLS is required when ENABLE_ENVOY_LB=1" not in (
     chart / "scripts" / "install-hpa.sh"
 ).read_text()
-assert 'export ALLOW_INSECURE_HTTP="${ALLOW_INSECURE_HTTP:-0}"' not in (chart / "scripts" / "agentscaling-common.sh").read_text()
-assert 'export ALLOW_INSECURE_HTTP="${ALLOW_INSECURE_HTTP:-0}"' not in (chart / "scripts" / "agentscaling-hermes-common.sh").read_text()
-assert 'export ALLOW_INSECURE_HTTP="${ALLOW_INSECURE_HTTP:-0}"' not in (chart / "scripts" / "agentscaling-deepagents-common.sh").read_text()
+assert "ALLOW_INSECURE_HTTP" not in (chart / "scripts" / "agentscaling-common.sh").read_text()
+assert "ALLOW_INSECURE_HTTP" not in (chart / "scripts" / "agentscaling-hermes-common.sh").read_text()
+assert "ALLOW_INSECURE_HTTP" not in (chart / "scripts" / "agentscaling-deepagents-common.sh").read_text()
+assert "ingress.allowInsecureHttp" not in dgx
+assert "ingress.allowInsecureHttp" not in (chart / "scripts" / "hpa-load-test-brev-4xl40s.sh").read_text()
+for name, main_fn in (
+    ("agentscaling-common.sh", "agentscaling_common_main()"),
+    ("agentscaling-hermes-common.sh", "agentscaling_hermes_common_main()"),
+    ("agentscaling-deepagents-common.sh", "agentscaling_deepagents_common_main()"),
+):
+    main = (chart / "scripts" / name).read_text().split(main_fn, 1)[1]
+    before, after = main.split('case "${cmd}" in', 1)
+    assert "hpa_common_verify_target_node" not in before, name
+    assert "hpa_common_verify_target_node" in after, name
+deep_common = (chart / "scripts" / "agentscaling-deepagents-common.sh").read_text()
+pin = deep_common.split("agentscaling_deepagents_common_pin()")[1].split(
+    "agentscaling_deepagents_common_main()"
+)[0]
+assert "hpa_common_require_nim_credentials" not in pin
+assert "hpa_common_require_nim_credentials" in deep_common.split(
+    "agentscaling_deepagents_common_main()"
+)[1]
 hold_disp = hpa_common.split("def hold_display_current")[1].split("def gpu_display_current")[0]
 assert "if pods:" in hold_disp
 assert "age > 45" not in hold_disp
@@ -460,6 +495,10 @@ print("OK: WS helper counts a reply as ok and a sent chat with no reply as err")
 assert "e2e_timeline" in (chart / "scripts" / "e2e-openclaw-ollama-load-test.py").read_text()
 assert "client-timeline.jsonl" in (chart / "scripts" / "e2e-openclaw-ollama-load-test.py").read_text()
 assert "e2e-hpa-timeline.py" in (chart / "scripts" / "agent-common.sh").read_text()
+timeline_src = (chart / "scripts" / "e2e_timeline.py").read_text()
+assert "except Exception:" not in timeline_src
+assert "except OSError:" in timeline_src
+assert 'text[-1] in "kK"' in timeline_src
 print("OK: inner forwards bind 127.0.0.1; remote publish binds 0.0.0.0 unless E2E_PUBLISH_BIND is set")
 print("OK: published HTTP and argv do not include gateway tokens or API keys")
 print("OK: client cleanup, Hermes Bearer, pairings, and Helm restore match review fixes")

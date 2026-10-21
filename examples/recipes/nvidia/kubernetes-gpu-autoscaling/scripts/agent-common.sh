@@ -181,7 +181,7 @@ agent_common_fail_openshell_for_client() {
   case "${script}" in
     client_deepagents.sh)
       echo "  Deep Agents has no laptop HTTP. Run on the DGX with OpenShell connected:" >&2
-      echo "  INFLIGHT=${INFLIGHT:-1} MAX_TOKENS=${MAX_TOKENS:-2048} E2E_USERS=${E2E_USERS:-10} ./scripts/${script}" >&2
+      echo "  E2E_USERS=${E2E_USERS:-10} ./scripts/${script}" >&2
       ;;
     *)
       echo "  From a laptop use HTTP: E2E_CLIENT_HOST=dgx-ip E2E_USERS=${E2E_USERS:-5} ./scripts/${script}" >&2

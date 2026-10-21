@@ -28,7 +28,7 @@ HPA scales to **N** inference pods (1 GPU each). The load balancer is **Envoy** 
 
 Each GPU pod is **2/2 Ready** when healthy: inference (`ollama` / `vllm` / `nim`) + `metrics-proxy` (auth, `/v1`, health, `/metrics`). Metrics-proxy, HPA, and the Envoy load balancer stay the same. Official pairings: [6a OpenClaw + Ollama](#6a-openclaw--ollama), [6b Hermes + vLLM](#6b-hermes--vllm), [6c Deep Agents + NIM](#6c-deep-agents-code--nim).
 
-Envoy stays ClusterIP HTTP. This recipe does not use Envoy TLS. OpenShell client mTLS in step 5 is separate.
+Envoy is ClusterIP HTTP. Step 5 copies OpenShell gateway client certs so the CLI can use HTTPS.
 
 ```text
 M end users (1 sandbox per user)
@@ -97,7 +97,7 @@ OPENSHELL_UNAUTHENTICATED_ACK=dedicated-cluster-port-forward-only \
 
 ### 4. Install GPU inference and the Envoy load balancer once
 
-Skip this if `kubectl get gatewayclass eg` succeeds. The e2e scripts update the GPU chart; they do not install the Envoy load balancer. This recipe does not use Envoy TLS. OpenShell client mTLS is step 5.
+Skip this if `kubectl get gatewayclass eg` succeeds. The e2e scripts update the GPU chart; they do not install the Envoy load balancer.
 
 ```bash
 # MicroK8s GPU addon: DCGM_NAMESPACE=gpu-operator-resources
@@ -117,7 +117,7 @@ Keep this attached:
 
 kubectl may print `Error copying from remote stream` and `broken pipe` when a sandbox command ends. That line is from kubectl, not a failed OpenShell tunnel. Leave the script running. Stop it only if `openshell status` shows Connection refused.
 
-In another terminal, copy client TLS and register the gateway. After a reinstall, refresh the certs or you get `BadSignature`.
+In another terminal, copy the OpenShell gateway client certs (`openshell-client-tls`) and register the gateway. These files are for `openshell` on `https://127.0.0.1:18080`, not for Envoy. After a reinstall, refresh the certs or you get `BadSignature`.
 
 ```bash
 MTLS_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/openshell/gateways/nemoclaw-k8s/mtls"
@@ -476,7 +476,6 @@ Intermittent `401` is a control-plane aggregated-API client cert problem. This r
 The Envoy dataplane Service is **ClusterIP** only (`NodePort` / `LoadBalancer` rejected). Use `kubectl port-forward` from outside.
 
 - Gateway Basic auth + inference key as `X-Api-Key`. OpenShell HTTPRoute: Bearer only.
-- This recipe does not use Envoy TLS. OpenShell client mTLS in step 5 stays required.
 - Auth Secrets use Helm `keep`. Delete to rotate; never commit keys.
 - No NetworkPolicy from the chart — add one if the cluster needs it.
 
@@ -600,7 +599,7 @@ A non-empty answer plus the final `OK:` line is a pass. Wording varies; small mo
 
 **Remote UI test** (from any browser). After [6a](#6a-openclaw--ollama) has the five sandboxes up, open these URLs from any remote machine that can reach the DGX. Each user is a **different host port**. You do not type a token. Leave Password empty.
 
-Remote publish binds `0.0.0.0` so any remote machine can reach `dgx-ip:18789`. Restrict that bind to a trusted network. Set `E2E_PUBLISH_BIND=127.0.0.1` on the DGX to keep the ports on the DGX only. Published HTTP does not return gateway tokens. `/u/0` redirects to `/` with no `#token=`.
+Run `./scripts/publish-openclaw-remote-http.sh` on the DGX for laptop HTTP. That script binds `0.0.0.0`. Restrict it to a trusted network. Set `E2E_PUBLISH_BIND=127.0.0.1` to keep the ports on the DGX only. Bring-up publishes loopback only. Published HTTP does not return gateway tokens. `/u/0` redirects to `/` with no `#token=`.
 
 | User | Open this in a browser on the remote machine |
 |------|-----------------------------------------|
@@ -661,6 +660,8 @@ unset INFERENCE_API_KEY
 - Apply Agent Sandbox CRDs yourself (`install-openshell-k8s.sh` does not).
 - Each agent has its own published GHCR image: OpenClaw `openclaw-sandbox`, Hermes `hermes-sandbox`, Deep Agents `langchain-deepagents-code-sandbox`. Deep Agents never uses the Hermes image. No API key is in the image.
 - OIDC is default. Unauthenticated mode is dedicated-cluster + port-forward only. ClusterIP does not isolate from other pods.
+
+Same OpenShell gateway client certs as [step 5](#5-connect-the-openshell-cli):
 
 ```bash
 MTLS_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/openshell/gateways/nemoclaw-k8s/mtls"
@@ -817,7 +818,7 @@ Prometheus scrapes `/metrics`. The adapter exposes the same name. HPA uses Pods 
 | OpenShell CLI | **18080** | Host. `./scripts/openshell-port-forward.sh`. `openshell status` uses `https://127.0.0.1:18080`. |
 | OpenClaw agent | **18789** | Inside each OpenClaw sandbox netns. Host port is `18789+i` for user i. Last port is `18789+N-1`. |
 | Hermes gateway | **8642** | Inside each Hermes sandbox. Host API is `8642+i`. Host UI is `18789+i`. Last ports are `8642+N-1` and `18789+N-1`. |
-| Envoy load balancer | **443** / **80** | Cluster. Sandboxes use `https://inference.local`. |
+| Envoy load balancer | **80** | Cluster HTTP. Sandboxes still call OpenShell `https://inference.local`. |
 | Metrics-proxy | **8081** | Cluster `service/nemoclaw-gpu-metrics-proxy`. Optional host forward `8081:8081`. |
 | Ollama | **11434** | Inside each Ollama GPU pod. |
 | vLLM / NIM | **8000** | Inside each vLLM or NIM GPU pod. |

@@ -19,6 +19,8 @@ assert 0.05 < timeline.seconds_until_next_tick(1_700_000_001.0) <= 2.0
 assert timeline.quantity("32500m") == 32.5
 assert timeline.quantity("40") == 40.0
 assert timeline.quantity("46514") == 46514.0
+assert timeline.quantity("3k") == 3000.0
+assert timeline.quantity("3K") == 3000.0
 
 timeline.reset_counts()
 timeline.note_user(0, 3, 1, 120)

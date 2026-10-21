@@ -7,7 +7,6 @@
 # and client path as GPU-util: users send hermes -z into each sandbox.
 #
 # Switches the cluster HPA metric, then creates sandboxes.
-# This recipe does not use Envoy TLS. OpenShell client mTLS is step 5.
 # Provision keeps current replicas at 1 (maxReplicas stays 8). Run
 # ./scripts/client_hermes.sh after sandboxes are Ready (laptop: E2E_CLIENT_HOST=dgx-ip).
 # The client does not set HPA_METRIC. For GPU-util HPA use
