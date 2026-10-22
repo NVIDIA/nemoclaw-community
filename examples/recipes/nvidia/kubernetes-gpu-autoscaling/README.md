@@ -8,23 +8,23 @@
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Kubernetes Horizontal Pod Autoscaler (HPA) automatically scale GPU inference capacity to demand, by pairing replicas of inference runtimes running on GPUs with demand from end users sending to agents in Openshell sandboxes. |
+| Description | A cost-efficient architecture that runs AI agents securely inside CPU-only OpenShell sandboxes (one sandbox per end user) while scaling GPU-backed inference dynamically. |
 | Industry | ☁️ Cloud Services |
 | Requirements | Kubernetes 1.25+ · Helm 3 · NVIDIA GPU Operator/DCGM · Metrics Server · Docker Buildx + registry · OpenShell + Agent Sandbox CRDs pinned in versions.env · OIDC or acknowledged isolated-eval exception · experimental |
 | NemoClaw | v0.0.104 |
 | Harness | OpenClaw 2026.7.1 |
 | OpenShell | 0.0.85 |
 
-This experimental recipe demonstrates a cost-efficient architecture that runs AI agents securely inside CPU-only OpenShell sandboxes (one sandbox per end user) while independently autoscaling GPU-backed inference. It can be deployed both on-prem and on cloud. The agents running in OpenShell sandboxes are one of **[`Openclaw | hermes | deepagents`](https://github.com/NVIDIA/NemoClaw/tree/main/agents)**. Because GPU inference is the primary compute and cost bottleneck, Kubernetes HPA dynamically adjusts capacity from one to **N** replicas (1 GPU each) as demand changes, maintaining responsiveness during traffic spikes while releasing idle GPU resources when demand falls.
+This experimental recipe demonstrates a cost-efficient architecture that runs AI agents securely inside CPU-only OpenShell sandboxes (one sandbox per end user) while scaling GPU-backed inference dynamically. It can be deployed both on-prem and on cloud. The agents running in OpenShell sandboxes are one of **[`Openclaw | hermes | deepagents`](https://github.com/NVIDIA/NemoClaw/tree/main/agents)**. Since GPU inference is the primary compute and cost bottleneck, Kubernetes HPA dynamically adjusts capacity from **1** to **N** replicas (1 GPU each) as demand changes, maintaining responsiveness during traffic spikes while releasing idle GPU resources when demand falls.
 
-Supported GPU inference runtimes include **`ollama` / `vllm` / `nim`**.  Example pairings for e2e demo include: OpenClaw + Ollama (`AGENT_NAME=openclaw`), Hermes + vLLM (`AGENT_NAME=hermes`), Deep Agents Code + NIM (`AGENT_NAME=deepagents`). Users of this recipe can extend the pairings as far as the agents support the inference runtimes.  
+Supported GPU inference runtimes include **`ollama` / `vllm` / `nim`**.  Example pairings for e2e demo include: OpenClaw + Ollama (`AGENT_NAME=openclaw`), Hermes + vLLM (`AGENT_NAME=hermes`), Deep Agents Code + NIM (`AGENT_NAME=deepagents`). You can extend the pairings as far as the agents support the inference runtimes.  
 
-Kubernetes HPA scales those inference pods using a Pods **`AverageValue`** metric (average across Ready pods). Example HPA metrics: **GPU utilization** (target **40%**) and **LLM latency** (target **3000 ms**). See [Kubernetes HPA metrics](#kubernetes-hpa-metrics).
+Kubernetes HPA scales those inference pods using a Pods **`AverageValue`** metric (average across **Ready** pods). Example HPA metrics: **GPU utilization** (target **40%**) and **LLM latency** (target **3000 ms**). See [Kubernetes HPA metrics](#kubernetes-hpa-metrics).
 
 
 ## Deployment Architecture
 
-Multiple end users send inference requests to agents, each agent serving one end users. Agents run in OpenShell sandboxes, one agent per sandbox. Sandboxes reach GPUs at `https://inference.local`. The load balancer is **Envoy** with LeastRequest policy. HPA scales to **N** inference pods (1 GPU each). Each GPU pod is **2/2 Ready** when healthy: inference runtimes (`ollama` / `vllm` / `nim`) + `metrics-proxy` (auth, `/v1`, health, `/metrics`).
+Queries from end users go to the agents running in the sandboxes, one sandbox per end user. One end user ↔ one sandbox ↔ one agent. Sandboxes reach GPUs at `https://inference.local`. The load balancer is **Envoy** with LeastRequest policy. HPA scales from **1** to **N** inference pods (1 GPU each). Each GPU pod is **2/2 Ready** when healthy: inference runtimes (`ollama` / `vllm` / `nim`) + `metrics-proxy` (auth, `/v1`, health, `/metrics`). The chart generates a local inference API key (Bearer on `/v1`). OpenShell injects it for the sandbox. 
 
 ```text
 M end users (1 sandbox per user)
@@ -44,12 +44,12 @@ HPA (GPU util >40% or latency >3000 ms)
 ```
 
 
-The chart generates a local inference API key (Bearer on `/v1`). OpenShell injects it for the sandbox. 
+
 `latency_avg` is metrics-proxy **chat completions duration** on that GPU pod (in-pod fetch until the full response, including streams). It averages **completed** samples from the last 30s. In-flight chats do not count. After 15s with no completed sample the gauge publishes 0 so HPA can scale down. That 0 is not 0 ms latency. `get-hpa.sh` prints milliseconds (`46514/3000` = 46514 ms / 3000 ms). See [How is LLM latency calculated for HPA?](#how-is-llm-latency-calculated-for-hpa).
 
 ## Prerequisites
 
-Install Kubernetes and make sure `kubectl get nodes` succeeds. Cluster install scripts: [How to install Kubernetes](#how-to-install-kubernetes).
+Install Kubernetes and make sure `kubectl get nodes` succeeds. See [How to install Kubernetes](#how-to-install-kubernetes).
 
 ## Quick start guide
 
@@ -131,8 +131,8 @@ openshell status
 
 ### 6. E2E test with multiple end users and sandboxes
 
-Queries from end users go to the agents running in the sandboxes, one sandbox per end user. One end user ↔ one sandbox ↔ one agent. 
- OpenClaw latency omits them (`E2E_USERS=5 ./scripts/client.sh`). OpenClaw latency defaults: `INFLIGHT=1`, `MAX_TOKENS=2048` until 6 GPUs, then short prompts. Hermes latency omits them (`E2E_USERS=10 ./scripts/client_hermes.sh`). Hermes latency is `INFLIGHT=1`, `MAX_TOKENS=2048` in the code.  Deep Agents omits them (`E2E_USERS=10 ./scripts/client_deepagents.sh`). Default is `INFLIGHT=1`, `MAX_TOKENS=1024` for GPU util and for latency. From a laptop set `E2E_CLIENT_HOST=dgx-ip`. From the DGX omit `E2E_CLIENT_HOST`. The OpenClaw remote laptop UI is [OpenClaw simple test](#openclaw-simple-test).
+ 
+Scripts of running the examples of agents + inference runtimes are in below table. Validation is on one DGX 8× H100 (80 GB) on-prem. The sandboxes run on the DGX's CPU cores and DRAM. Sandboxes can run on a different CPU node with more memory to support more sandboxes and end users. You can change the number of `E2E_USERS` as far as `E2E_USERS × AGENT_SANDBOX_MEMORY` fits the CPU node. Keep GPU inference on the GPUs. You can switch to other inference runtimes as far as the agents support them. 
 
 | | Agent | Default `INFERENCE_RUNTIME` | Default model | End users | Provision | Client |
 |--|-------|------------------------------|---------------|-----------|-----------|--------|
@@ -140,21 +140,18 @@ Queries from end users go to the agents running in the sandboxes, one sandbox pe
 | **6b** | Hermes | `vllm` | `nvidia/NVIDIA-Nemotron-3-Nano-4B-FP8` | `E2E_USERS=10` | `agentscaling_hermes_gpuutil.sh` | `client_hermes.sh` |
 | **6c** | Deep Agents | `nim` | `nvidia/nemotron-3-nano` | `E2E_USERS=10` | `agentscaling_deepagents_gpuutil.sh` | `client_deepagents.sh` |
 
-Each wrapper pins **`AGENT_NAME`**. Do not pass `AGENT_NAME=hermes` into `agentscaling_gpuutil.sh`.
-
-**`INFERENCE_RUNTIME`** selects which GPU backend this run connects to (`ollama` | `vllm` | `nim`). Example pairings are in the table but you can switch to other inference runtime.
-
-**`INFERENCE_MODEL`** is set on provision (Ollama tag, vLLM HF id, or NIM catalog id).
 
 
-Validation is on DGX 8× H100 (80 GB) on-prem. The table is this recording: OpenClaw `E2E_USERS=5`, Hermes and Deep Agents `E2E_USERS=10`. Set the same `E2E_USERS` on provision, publish, and the client. N can be 7, 8, 9, 10, or any positive integer that fits CPU RAM. One sandbox per user. This 8×H100 demo runs those sandboxes on the DGX H100 **CPU cores and DRAM**. Sandboxes can run on a different CPU node with more memory to support more sandboxes and end users. Size `E2E_USERS` so `E2E_USERS × AGENT_SANDBOX_MEMORY` fits the CPU node. Keep GPU inference on the GPU node.
 
 
 #### 6a. OpenClaw + Ollama
 
-- `AGENT_SANDBOX_CPU` **1**, `AGENT_SANDBOX_MEMORY` **8Gi** (1Gi, 2Gi, and 4Gi OOM-kill OpenClaw before `:18789` binds)
-- One OpenClaw agent per sandbox (one sandbox per user)
-- inflight = concurrent chats per user on that one agent. Laptop HTTP adds `E2E_CLIENT_HOST=dgx-ip`.
+
+- `AGENT_SANDBOX_CPU` **1**, one CPU per sandbox.
+- `AGENT_SANDBOX_MEMORY` **8Gi** per sandbox (1Gi, 2Gi, and 4Gi OOM-kill OpenClaw before `:18789` binds).
+- One OpenClaw agent per sandbox (one sandbox per user).
+- `INFLIGHT` is the concurrent chats per user on that one agent, default: `INFLIGHT=1`.
+- `MAX_TOKENS` is the maximum length of each model reply in tokens, defaults: `MAX_TOKENS=2048`.
   
 
 
@@ -186,7 +183,7 @@ export KUBECONFIG="${HOME}/.kube/config"
 Keep [step 5](#5-connect-the-openshell-cli) in another terminal: `./scripts/openshell-port-forward.sh`. If `openshell status` shows Connection refused, start that script again.
 
 ```bash
-# Terminal A
+# Terminal A: GPU Inference
 # Default INFERENCE_RUNTIME=ollama. Do not set vllm/nim unless you intend to override.
 E2E_USERS=5 ./scripts/agentscaling_gpuutil.sh
 ```
@@ -194,48 +191,45 @@ E2E_USERS=5 ./scripts/agentscaling_gpuutil.sh
 
 
 ```bash
-# Terminal B — film this HPA watch
+# Terminal B: HPA watch
 ./scripts/get-hpa.sh -n nemoclaw-gpu -w
 ```
 <img width="815" height="996" alt="util2" src="https://github.com/user-attachments/assets/ccd8910b-8230-43ea-af76-9a17e2a749af" />
 
 ```bash
-# Terminal C — laptop HTTP.
+# Terminal C: Clients from a remote laptop (HTTP). Set `E2E_CLIENT_HOST=dgx-ip`. 
 E2E_CLIENT_HOST=dgx-ip INFLIGHT=4 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
+The OpenClaw remote laptop UI is [OpenClaw simple test](#openclaw-simple-test).
 
-# Terminal C — on the DGX instead. 
+# Or Terminal C: test clients on the DGX instead.
 INFLIGHT=4 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
 ```
 <img width="665" height="346" alt="util3" src="https://github.com/user-attachments/assets/7117e094-f782-4bd9-8df7-c8c5fd8ee801" />
 
 
-
-**LLM latency.** HPA uses the metric `latency_avg` (target 3000 ms) and keeps current GPUs at 1 replica (`maxReplicas=8`). OpenClaw start must not scale. `client.sh` defaults: `INFLIGHT=1`, `MAX_TOKENS=2048` until 6 GPUs, then short prompts. Do not set `INFLIGHT` or `MAX_TOKENS`. `get-hpa.sh` prints milliseconds (`46514/3000`). Successful chats are chats that got a reply. The 30s window and 15s idle 0 are the shared metrics-proxy gauge; see [How is LLM latency calculated for HPA?](#how-is-llm-latency-calculated-for-hpa). 
+ 
+**LLM latency.** HPA uses the metric `latency_avg` (target 3000 ms).`client.sh` defaults: `INFLIGHT=1`, `MAX_TOKENS=2048` until 6 GPUs, then short prompts. Do not set `INFLIGHT` or `MAX_TOKENS`. `get-hpa.sh` prints milliseconds (`46514/3000`). Successful chats are chats that got a reply. The 30s window and 15s idle 0 are the shared metrics-proxy gauge; see [How is LLM latency calculated for HPA?](#how-is-llm-latency-calculated-for-hpa). 
 
 ```bash
-# Terminal A
+# Terminal A: GPU Inference
 E2E_USERS=5 ./scripts/agentscaling_latency.sh
 ```
 <img width="780" height="470" alt="latency2" src="https://github.com/user-attachments/assets/713e3642-80c1-4af9-b0c5-ecce644e8a37" />
 
 
-
-
 ```bash
-# Terminal B
+# Terminal B: HPA watch
 ./scripts/get-hpa.sh -n nemoclaw-gpu -w
 ```
 
 <img width="846" height="425" alt="latency1" src="https://github.com/user-attachments/assets/af597137-2f4a-45d9-a303-86477133dd17" />
 
 
-
-
 ```bash
-# Terminal C — laptop HTTP.
+# Terminal C: Clients from a remote laptop (HTTP). Set `E2E_CLIENT_HOST=dgx-ip`. 
 E2E_CLIENT_HOST=dgx-ip E2E_USERS=5 ./scripts/client.sh
 
-# Terminal C — on the DGX instead. 
+# Or Terminal C: test clients on the DGX instead.
 E2E_USERS=5 ./scripts/client.sh
 ```
 <img width="780" height="470" alt="latency2" src="https://github.com/user-attachments/assets/1913698a-dc1e-4a1b-9a73-fcea7a7b9b22" />
@@ -328,6 +322,7 @@ E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=1024 E2E_USERS=10 ./scripts/client_
 INFLIGHT=2 MAX_TOKENS=1024 E2E_USERS=10 ./scripts/client_hermes.sh
 ```
 
+ Hermes latency omits them (`E2E_USERS=10 ./scripts/client_hermes.sh`). Hermes latency is `INFLIGHT=1`, `MAX_TOKENS=2048` in the code.  Deep Agents omits them (`E2E_USERS=10 ./scripts/client_deepagents.sh`). Default is `INFLIGHT=1`, `MAX_TOKENS=1024` for GPU util and for latency. 
 **LLM latency.** `client_hermes.sh` uses `INFLIGHT=1`, `MAX_TOKENS=2048` by default.
 
 ```bash
