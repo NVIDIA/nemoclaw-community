@@ -304,9 +304,22 @@ assert "Same two steps as 6b: first pull the inference server image, then pull t
 assert "https://org.ngc.nvidia.com/account/api-keys" in readme
 assert "https://org.ngc.nvidia.com" in readme
 assert "Skip `apply-local-secrets.sh` only when **both** Secrets exist" in readme
-assert "The two Secrets use the same NGC API key" in readme
-assert "Kubernetes cannot store one credential as both Secret types." in readme
+assert "`docker pull` uses that one key." in readme
+assert "kubelet uses `ngc-registry`" in readme
+assert "the running NIM uses `nim-ngc-key`" in readme
 assert "./scripts/apply-local-secrets.sh --replace" in readme
+apply_secrets = (chart / "scripts" / "apply-local-secrets.sh").read_text()
+assert "vLLM only uses ngc-registry" not in apply_secrets
+assert "vLLM image pull: VLLM_IMAGE_PULL_SECRET=ngc-registry" not in apply_secrets
+assert "Public vLLM (6b) does not use these Secrets." in apply_secrets
+assert "NIM Secrets: NIM_IMAGE_PULL_SECRET=ngc-registry" in apply_secrets
+local_ex = (chart / "local.env.example").read_text()
+assert "kubelet still needs ngc-registry" not in local_ex
+assert "Public vLLM (6b) needs no NGC Secret." in local_ex
+secrets_ex = (chart / "secrets.env.example").read_text()
+assert "nvcr.io/nvidia/vllm" not in secrets_ex
+assert "Public vLLM (6b) needs neither Secret." in secrets_ex
+assert "https://org.ngc.nvidia.com/account/api-keys" in secrets_ex
 assert "one OpenClaw agent per sandbox" in readme
 assert "### Disk (already under Persistence)" not in readme
 assert "### Aggregated metrics API" not in readme
@@ -325,6 +338,10 @@ assert "[90s]" in adapter
 assert "client.sh shortens this to 15s" in adapter
 assert "stabilizationWindowSeconds=120" not in (chart / "scripts" / "hpa-common.sh").read_text()
 hpa_common = (chart / "scripts" / "hpa-common.sh").read_text()
+assert "./scripts/apply-local-secrets.sh --replace" in hpa_common
+assert "Public vLLM (6b) does not create ngc-registry." in hpa_common
+assert 'if [[ "${inference_runtime}" == "nim" ]]; then' in hpa_common
+assert 'if [[ "${inference_runtime}" == "vllm" ]]; then' in hpa_common
 assert "hpa_common_resolve_allow_insecure_http" not in hpa_common
 assert "hpa_common_verify_insecure_ingress_isolation" not in hpa_common
 assert "ingress.allowInsecureHttp" not in hpa_common
@@ -410,7 +427,7 @@ assert "no new completed sample for 15s" in readme
 assert "OpenClaw, Hermes, and Deep Agents share this metric" in readme
 assert "That 0 lets HPA scale down. It does not mean chat latency was 0 ms." in readme
 assert "Hermes latency is `INFLIGHT=1`, `MAX_TOKENS=2048` in the code" in readme
-assert "Do not add those flags." in readme
+assert "Do not add those flags." not in readme
 assert "INFLIGHT=1 MAX_TOKENS=2048" in hermes
 assert "INFLIGHT=2 MAX_TOKENS=1024" in hermes
 assert "INFLIGHT=2 MAX_TOKENS=1024" in readme

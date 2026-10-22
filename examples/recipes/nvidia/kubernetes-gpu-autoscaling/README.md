@@ -132,7 +132,9 @@ openshell status
 ### 6. E2E test with multiple end users and sandboxes
 
  
-Scripts of running the examples of agents + inference runtimes are in below table. Validation is on one DGX 8× H100 (80 GB) on-prem. The sandboxes run on the DGX's CPU cores and DRAM. They can run on a different CPU node with more memory. That node can hold more sandboxes and more end users. Keep inference runtimes and autoscaling on the GPUs. You can change the number of `E2E_USERS` as far as `E2E_USERS × AGENT_SANDBOX_MEMORY` fits the CPU node. You can switch to other inference runtimes as far as the agents support them. 
+Scripts of running the examples of agents + inference runtimes are in below table. Validation is on one DGX 8× H100 (80 GB) on-prem. The sandboxes run on the DGX's CPU cores and DRAM. They can run on a different CPU node with more memory. That node can hold more sandboxes and more end users. You can change the number of `E2E_USERS` as far as `E2E_USERS × AGENT_SANDBOX_MEMORY` fits the CPU node. 
+
+Keep inference runtimes and autoscaling on the GPUs. You can switch to other inference runtimes as far as the agents support them. 
 
 | | Agent | Default `INFERENCE_RUNTIME` | Default model | End users | Provision | Client |
 |--|-------|------------------------------|---------------|-----------|-----------|--------|
@@ -143,7 +145,7 @@ Scripts of running the examples of agents + inference runtimes are in below tabl
 
 #### 6a. OpenClaw + Ollama
 
-This example uses `E2E_USERS=5` and **8Gi** sandboxes (1Gi, 2Gi, and 4Gi OOM-kill OpenClaw before `:18789` binds), in total 40Gi CPU RAM. One sandbox per user, one OpenClaw agent per sandbox.
+This example uses `E2E_USERS=5` and `AGENT_SANDBOX_MEMORY=8Gi` sandboxes (1Gi, 2Gi, and 4Gi OOM-kill OpenClaw before `:18789` binds), in total 40Gi CPU RAM. One sandbox per user, one OpenClaw agent per sandbox.
 - `INFLIGHT` is the concurrent chats per user on that one agent, default: `INFLIGHT=1`.
 - `MAX_TOKENS` is the maximum length of each model reply in tokens, defaults: `MAX_TOKENS=2048`.
 
@@ -167,8 +169,6 @@ E2E test: OpenClaw + Ollama
 
 Keep [step 5](#5-connect-the-openshell-cli) in another terminal: `./scripts/openshell-port-forward.sh`. If `openshell status` shows Connection refused, start that script again.
 
-Terminal C is any remote machine that can reach the DGX.
-
 **GPU utilization** HPA metric `gpu_utilization_percent`, target 40%. Provision keeps current GPUs at 1 replica (`maxReplicas=8`). `client.sh` sends `INFLIGHT=4 MAX_TOKENS=2048` until 8 GPUs, then stops new chats. Successful chats are chats that got a reply; err is chats that were sent and got no reply. kubectl TARGETS like `67500m/40` means **67.5%/40%**. Watch GPU utilization percentages with `get-hpa.sh`.
 
 ```bash
@@ -186,7 +186,7 @@ E2E_USERS=5 ./scripts/agentscaling_gpuutil.sh
 <img width="815" height="996" alt="util2" src="https://github.com/user-attachments/assets/ccd8910b-8230-43ea-af76-9a17e2a749af" />
 
 ```bash
-# Terminal C: Clients from a remote laptop (HTTP). Set `E2E_CLIENT_HOST=dgx-ip`.
+# Terminal C: Clients from any remote machine or laptop (HTTP). Set `E2E_CLIENT_HOST=dgx-ip`.
 E2E_CLIENT_HOST=dgx-ip INFLIGHT=4 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
 ```
 
@@ -218,7 +218,7 @@ E2E_USERS=5 ./scripts/agentscaling_latency.sh
 
 
 ```bash
-# Terminal C: Clients from a remote laptop (HTTP). Set `E2E_CLIENT_HOST=dgx-ip`. 
+# Terminal C: Clients from any remote machine or laptop (HTTP). Set `E2E_CLIENT_HOST=dgx-ip`.
 E2E_CLIENT_HOST=dgx-ip E2E_USERS=5 ./scripts/client.sh
 
 # Or Terminal C: test clients on the DGX instead.
@@ -233,7 +233,7 @@ E2E_USERS=5 ./scripts/client.sh
 #### 6b. Hermes + vLLM
 
 
-This example uses `E2E_USERS=10` and **4Gi** sandboxes (40Gi CPU RAM in total). One sandbox per user, one Hermes agent per sandbox.
+This example uses `E2E_USERS=10` and `AGENT_SANDBOX_MEMORY=4Gi` sandboxes (40Gi CPU RAM in total). One sandbox per user, one Hermes agent per sandbox.
 
 
 ```text
@@ -256,9 +256,6 @@ E2E test: Hermes + vLLM
 
 After steps 1–5 (`openshell status` Connected, `gatewayclass eg` present). Keep [step 5](#5-connect-the-openshell-cli) in another terminal: `./scripts/openshell-port-forward.sh`. If `openshell status` shows Connection refused, start that script again.
 
-Terminal C is any remote machine that can reach the DGX.
-
-
 Kubelet pulls the [official NVIDIA vLLM NGC Container](https://catalog.ngc.nvidia.com/orgs/nvidia/-/containers/vllm/-?_lr=1) (`nvcr.io/nvidia/vllm`). This recipe already pins the image. After the image is on the node, vLLM downloads `nvidia/NVIDIA-Nemotron-3-Nano-4B-FP8` from Hugging Face. The default vLLM NGC image and Hugging Face model are public, so no extra secret.
 
 **GPU util** HPA metric `gpu_utilization_percent`, target 40%. Provision keeps **current** GPUs at **1** replica (`maxReplicas=8`). `client_hermes.sh` sends `INFLIGHT=2 MAX_TOKENS=1024` until 8 GPUs, then stops new chats. Set those flags on the client. Successful chats are chats that got a reply; the table prints after HPA is back to 1. The laptop does not set a Hermes API key. The DGX injects it. 
@@ -276,7 +273,7 @@ E2E_USERS=10 ./scripts/agentscaling_hermes_gpuutil.sh
 <img width="813" height="557" alt="util2" src="https://github.com/user-attachments/assets/9525c978-b679-453f-90a2-986688b929f0" />
 
 ```bash
-# Terminal C: Clients from a remote laptop (HTTP). Set `E2E_CLIENT_HOST=dgx-ip`.
+# Terminal C: Clients from any remote machine or laptop (HTTP). Set `E2E_CLIENT_HOST=dgx-ip`.
 # User i uses :8642+i (this demo N=10 → :8642 … :8651).
 # If Connection refused on :8642, keep step 5 attached, then on the DGX:
 #   E2E_USERS=10 ./scripts/publish-hermes-remote-http.sh
@@ -290,7 +287,7 @@ INFLIGHT=2 MAX_TOKENS=1024 E2E_USERS=10 ./scripts/client_hermes.sh
 ```
  
 
-**LLM latency.** Hermes latency is `INFLIGHT=1`, `MAX_TOKENS=2048` in the code. Do not add those flags.
+**LLM latency.** Hermes latency is `INFLIGHT=1`, `MAX_TOKENS=2048` in the code.
 
 ```bash
 # Terminal A: GPU Inference
@@ -305,7 +302,7 @@ E2E_USERS=10 ./scripts/agentscaling_hermes_latency.sh
 <img width="848" height="890" alt="latency2" src="https://github.com/user-attachments/assets/f7523cbd-db7c-4061-bb86-803df7c3fe14" />
 
 ```bash
-# Terminal C: Clients from a remote laptop (HTTP). Set `E2E_CLIENT_HOST=dgx-ip`.
+# Terminal C: Clients from any remote machine or laptop (HTTP). Set `E2E_CLIENT_HOST=dgx-ip`.
 E2E_CLIENT_HOST=dgx-ip E2E_USERS=10 ./scripts/client_hermes.sh
 ```
 <img width="731" height="480" alt="latency1" src="https://github.com/user-attachments/assets/e0cc260c-dd78-46a9-ac7e-ec624be68e55" />
@@ -320,11 +317,9 @@ E2E_USERS=10 ./scripts/client_hermes.sh
 
 #### 6c. Deep Agents Code + NIM
 
-NIM needs **both** Secrets from one `NGC_API_KEY` before `agentscaling_deepagents_gpuutil.sh`. That key is an [NVIDIA NGC](https://org.ngc.nvidia.com) API key. Create it at [NGC API keys](https://org.ngc.nvidia.com/account/api-keys).
+This Kubernetes path needs **both** Secrets from one `NGC_API_KEY` before `agentscaling_deepagents_gpuutil.sh`. That key is an [NVIDIA NGC](https://org.ngc.nvidia.com) API key. Create it at [NGC API keys](https://org.ngc.nvidia.com/account/api-keys). `docker pull` uses that one key. Kubernetes needs two Secret types: kubelet uses `ngc-registry` (`dockerconfigjson`) to pull the NIM image (`nvcr.io/nim/nvidia/nemotron-3-nano`), and the running NIM uses `nim-ngc-key` (Opaque env `NGC_API_KEY`) to pull the model profile.
 
-Same two steps as 6b: first pull the inference server image, then pull the model weights. Kubelet pulls the NIM server image (`nvcr.io/nim/nvidia/nemotron-3-nano`). After the container starts, NIM downloads the GPU-optimized model weights (the model profile). Both NIM steps are on NGC, so both need an API key. Public vLLM (6b) does not create `ngc-registry`.
-
-The two Secrets use the same NGC API key because Kubernetes cannot store one credential as both Secret types. `ngc-registry` must be `dockerconfigjson` so kubelet can pull the NIM image. `nim-ngc-key` must be Opaque so the running NIM can read env `NGC_API_KEY` and download the model profile.
+Same two steps as 6b: first pull the inference server image, then pull the model weights. Public vLLM (6b) does not create `ngc-registry`.
 
 `secrets.env` is gitignored. Git has `secrets.env.example` only. Skip `apply-local-secrets.sh` only when **both** Secrets exist in `nemoclaw-gpu`. After 6b, `ngc-registry` is often missing even if `nim-ngc-key` remains. Then use `--replace` so the script can create both.
 
@@ -345,7 +340,7 @@ export NIM_IMAGE_PULL_SECRET=ngc-registry
 export NIM_NGC_API_KEY_SECRET=nim-ngc-key
 ```
 
-This example uses `E2E_USERS=10` and **4Gi** sandboxes (40Gi CPU RAM in total). One sandbox per user, one Deep Agents agent per sandbox. Default is `INFLIGHT=1 MAX_TOKENS=1024` for GPU util and for latency. Do not add those flags.
+This example uses `E2E_USERS=10` and `AGENT_SANDBOX_MEMORY=4Gi` sandboxes (40Gi CPU RAM in total). One sandbox per user, one Deep Agents agent per sandbox. Default is `INFLIGHT=1 MAX_TOKENS=1024` for GPU util and for latency.
 
 ```text
 E2E test: Deep Agents Code + NIM
@@ -366,7 +361,7 @@ E2E test: Deep Agents Code + NIM
 
 After steps 1–5 (`openshell status` Connected, `gatewayclass eg` present). Clients use `dcode -n` (no per-sandbox Deep Agents listener).
 
-**GPU Utilization.** (target 40%). Default is `INFLIGHT=1 MAX_TOKENS=1024`. Do not add those flags.
+**GPU Utilization.** (target 40%). Default is `INFLIGHT=1 MAX_TOKENS=1024`.
 ```bash
 # Terminal A: GPU Inference
 E2E_USERS=10 ./scripts/agentscaling_deepagents_gpuutil.sh
@@ -385,7 +380,7 @@ E2E_USERS=10 ./scripts/client_deepagents.sh
 ```
 <img width="711" height="451" alt="util3" src="https://github.com/user-attachments/assets/32e8e0d1-56d7-452a-b360-42044b6fd775" />
 
-**LLM latency.** Default is `INFLIGHT=1 MAX_TOKENS=1024`. Do not add those flags. `client_deepagents.sh` sends `dcode -n`. 
+**LLM latency.** Default is `INFLIGHT=1 MAX_TOKENS=1024`. `client_deepagents.sh` sends `dcode -n`. 
 
 ```bash
 # Terminal A: GPU Inference
@@ -482,12 +477,12 @@ kubectl get --raw \
 
 Other Prometheus → Adapter metrics: extend `monitoring/prometheus-adapter-gpu-values.yaml` and `nemoclaw-gpu.hpaMetric`.
 
-## Simple HPA-only test (optional)
+## Simple HPA-only test 
 
-This is the **OpenClaw + Ollama** HPA-only path (same defaults as Quick start 6a: `INFERENCE_RUNTIME=ollama`, `INFERENCE_MODEL=llama3.2:3b`). It only checks that Kubernetes HPA can change GPU pod count from synthetic inference load (`files/load-generator.ts`). It does **not** create OpenClaw sandboxes and does **not** use `client.sh`.
+It only checks that Kubernetes HPA can change GPU pod count from synthetic inference load (`files/load-generator.ts`). It does **not** create OpenClaw sandboxes and does **not** use `client.sh`.
 The HPA-only test has been verified on DGX 8xH100 on-prem `maxReplicas=8`, and [Brev AWS](https://brev.nvidia.com) **4× L40S** (48 GB), `MAX_REPLICAS=4`.
 
-This is not 6a. It does not need OpenShell sandboxes or `client.sh`. It needs the same GPU stack as [step 4](#4-install-gpu-inference-and-the-envoy-load-balancer-once) (Prometheus, Envoy, GPU chart, HPA).
+It needs the same GPU stack as [step 4](#4-install-gpu-inference-and-the-envoy-load-balancer-once) (Prometheus, Envoy, GPU chart, HPA).
 
 If `kubectl get gatewayclass eg` succeeds, skip `install-hpa.sh`. If it fails, run step 4 first. Then run a load-test script below.
 
@@ -513,9 +508,7 @@ HPA_METRIC=latency_avg HPA_TARGET_LATENCY_MS=3000 ./scripts/hpa-load-test-dgx-8x
 HPA_METRIC=latency_avg HPA_TARGET_LATENCY_MS=3000 ./scripts/hpa-load-test-brev-4xl40s.sh
 ```
 
-## Example test
-
-### OpenClaw simple test
+## Simple OpenClaw test
 
 Ask **In one sentence, what is an AI agent sandbox?** through authenticated inference. This is the pairing check for OpenClaw (`AGENT_NAME=openclaw`). Keep `./scripts/run-agent-sandbox.sh` attached so `:18789` is up.
 
@@ -550,7 +543,7 @@ Remote laptop UI
 
 
 
-### Hermes simple test
+## Simple Hermes test
 
 This is the pairing check for Hermes. It is a one-shot through the in-sandbox
 `hermes` binary and on-prem `https://inference.local`. It does **not** open a

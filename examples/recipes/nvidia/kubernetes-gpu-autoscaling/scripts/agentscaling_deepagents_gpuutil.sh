@@ -8,7 +8,9 @@
 # Envoy → NIM.
 #
 # Default is 10 users at 4Gi. Client default is INFLIGHT=1 MAX_TOKENS=1024.
-# NIM needs NGC Secrets (apply-local-secrets.sh or create-nim-ngc-secrets.sh).
+# Kubernetes needs both NIM Secrets (kubelet image pull + running NIM model
+# profile). After 6b, run ./scripts/apply-local-secrets.sh --replace if
+# ngc-registry is missing.
 # Run ./scripts/uninstall-e2e.sh first if OpenClaw or Hermes sandboxes or
 # clients are still running. GPU inference can stay; this script helm-upgrades
 # the same release to INFERENCE_RUNTIME (default nim).

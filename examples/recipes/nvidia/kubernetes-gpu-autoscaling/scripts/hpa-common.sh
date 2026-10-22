@@ -67,12 +67,14 @@ hpa_common_verify_metrics_proxy_servicemonitor_release() {
   hpa_common_log "Prometheus scrape: ServiceMonitor ${sm} release=${expected}"
 }
 
-# NIM needs a credential for two separate operations: kubelet's nvcr.io image pull and
-# the NIM container's model-profile download. Keep the credential out of Helm values by
-# preferring the pre-created Secret pair made by create-nim-ngc-secrets.sh.
+# Kubernetes needs both Secrets from one NGC API key: kubelet's nvcr.io image
+# pull and the running NIM model-profile download. docker pull uses that one
+# key. Prefer names in local.env after apply-local-secrets.sh. Public vLLM (6b)
+# does not create ngc-registry.
 hpa_common_require_nim_credentials() {
   local runtime="${1:?runtime}"
   local namespace="${2:?namespace}"
+  local ngc_secret pull_secret missing
 
   [[ "${runtime}" == "nim" ]] || return 0
 
@@ -80,23 +82,44 @@ hpa_common_require_nim_credentials() {
     echo "Set only one of NIM_NGC_API_KEY or NIM_NGC_API_KEY_SECRET for NIM, not both." >&2
     return 1
   fi
-  if [[ -n "${NIM_NGC_API_KEY:-}" || -n "${NIM_NGC_API_KEY_SECRET:-}" ]]; then
+  if [[ -n "${NIM_NGC_API_KEY:-}" ]]; then
     return 0
   fi
 
+  ngc_secret="${NIM_NGC_API_KEY_SECRET:-nim-ngc-key}"
+  pull_secret="${NIM_IMAGE_PULL_SECRET:-ngc-registry}"
+  if [[ -n "${NIM_NGC_API_KEY_SECRET:-}" ]]; then
+    missing=()
+    command -v kubectl >/dev/null 2>&1 || {
+      echo "kubectl is required to confirm NIM Secrets in ${namespace}." >&2
+      return 1
+    }
+    kubectl get secret "${ngc_secret}" -n "${namespace}" >/dev/null 2>&1 || missing+=("${ngc_secret}")
+    kubectl get secret "${pull_secret}" -n "${namespace}" >/dev/null 2>&1 || missing+=("${pull_secret}")
+    if ((${#missing[@]} == 0)); then
+      return 0
+    fi
+    cat >&2 <<EOF
+Kubernetes needs both NIM Secrets in ${namespace}. Missing: ${missing[*]}
+Public vLLM (6b) does not create ngc-registry. Copy secrets.env.example to secrets.env, paste NGC_API_KEY, then:
+  ./scripts/apply-local-secrets.sh --replace
+See README.md#6c-deep-agents-code--nim.
+EOF
+    return 1
+  fi
+
   cat >&2 <<EOF
-NIM requires an NGC API key before this command can run.
+Kubernetes requires both NIM Secrets before this command can run.
 
-Preferred one-time setup (the key is prompted for without echoing and is stored only in Kubernetes Secrets):
-  NAMESPACE=${namespace} ./scripts/create-nim-ngc-secrets.sh
+Copy secrets.env.example to secrets.env, paste NGC_API_KEY, then:
+  ./scripts/apply-local-secrets.sh --replace
 
-Then add these names—not the key itself—to gitignored local.env:
+Add these names—not the key itself—to gitignored local.env:
   export INFERENCE_RUNTIME=nim
   export NIM_NGC_API_KEY_SECRET=nim-ngc-key
   export NIM_IMAGE_PULL_SECRET=ngc-registry
 
-For a short-lived evaluation only, export NIM_NGC_API_KEY=nvapi-... before running instead.
-See README.md#inference-runtimes.
+See README.md#6c-deep-agents-code--nim.
 EOF
   return 1
 }
@@ -1537,20 +1560,24 @@ hpa_common_append_inference_runtime_helm_sets() {
   local inference_model="${3:-${INFERENCE_MODEL:-llama3.2:3b}}"
   __helm_args+=(--set "inference.runtime=${inference_runtime}")
   __helm_args+=(--set "inference.model=${inference_model}")
-  if [[ -n "${NIM_NGC_API_KEY:-}" ]]; then
-    __helm_args+=(--set-string "nim.ngcApiKey.value=${NIM_NGC_API_KEY}")
+  if [[ "${inference_runtime}" == "nim" ]]; then
+    if [[ -n "${NIM_NGC_API_KEY:-}" ]]; then
+      __helm_args+=(--set-string "nim.ngcApiKey.value=${NIM_NGC_API_KEY}")
+    fi
+    if [[ -n "${NIM_NGC_API_KEY_SECRET:-}" ]]; then
+      __helm_args+=(--set-string "nim.ngcApiKey.existingSecret=${NIM_NGC_API_KEY_SECRET}")
+    fi
+    if [[ -n "${NIM_IMAGE_PULL_SECRET:-}" ]]; then
+      __helm_args+=(--set-string "nim.imagePullSecret.existingSecret=${NIM_IMAGE_PULL_SECRET}")
+    fi
   fi
-  if [[ -n "${NIM_NGC_API_KEY_SECRET:-}" ]]; then
-    __helm_args+=(--set-string "nim.ngcApiKey.existingSecret=${NIM_NGC_API_KEY_SECRET}")
-  fi
-  if [[ -n "${NIM_IMAGE_PULL_SECRET:-}" ]]; then
-    __helm_args+=(--set-string "nim.imagePullSecret.existingSecret=${NIM_IMAGE_PULL_SECRET}")
-  fi
-  if [[ -n "${VLLM_IMAGE_PULL_SECRET:-}" ]]; then
-    __helm_args+=(--set-string "vllm.imagePullSecret.existingSecret=${VLLM_IMAGE_PULL_SECRET}")
-  fi
-  if [[ -n "${VLLM_HF_TOKEN_SECRET:-}" ]]; then
-    __helm_args+=(--set-string "vllm.huggingFaceToken.existingSecret=${VLLM_HF_TOKEN_SECRET}")
+  if [[ "${inference_runtime}" == "vllm" ]]; then
+    if [[ -n "${VLLM_IMAGE_PULL_SECRET:-}" ]]; then
+      __helm_args+=(--set-string "vllm.imagePullSecret.existingSecret=${VLLM_IMAGE_PULL_SECRET}")
+    fi
+    if [[ -n "${VLLM_HF_TOKEN_SECRET:-}" ]]; then
+      __helm_args+=(--set-string "vllm.huggingFaceToken.existingSecret=${VLLM_HF_TOKEN_SECRET}")
+    fi
   fi
 }
 

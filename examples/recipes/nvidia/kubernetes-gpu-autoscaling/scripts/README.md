@@ -6,7 +6,7 @@
 # Scripts
 
 All setup, verification, security, and teardown instructions for this recipe live in the
-main [`../README.md`](../README.md) (architecture, Quick start, TLS/security details,
+main [`../README.md`](../README.md) (architecture, Quick start, security details,
 inference runtimes, HPA/Envoy testing, Grafana, uninstall) and
 [`../AGENT-SELECTION.md`](../AGENT-SELECTION.md) (per-agent comparison, recipe
 quick starts, env vars, and support notes). This page is a quick reference for
@@ -14,6 +14,8 @@ what each script in this directory does — it has no instructions of its own.
 
 | Script | Purpose |
 |--------|---------|
+| `apply-local-secrets.sh` | NIM (6c): create `ngc-registry` and `nim-ngc-key` from gitignored `secrets.env`. Public vLLM (6b) does not use this. Use `--replace` if 6b left only one Secret. |
+| `create-nim-ngc-secrets.sh` | Implementation used by `apply-local-secrets.sh`. Do not run it as the README 6c path. |
 | `install-hpa.sh` | Monitoring + chart + HPA (+ Envoy if enabled). This is the autoscaling install path. |
 | `hpa-load-test-dgx-8xh100.sh` | **Keep.** Fast HPA-only test for **8× H100** (metrics-proxy pod-IP Job, `files/load-generator.ts`). GPU util default, or `HPA_METRIC=latency_avg HPA_TARGET_LATENCY_MS=3000`. The sandbox e2e does not replace this. |
 | `hpa-load-test-brev-4xl40s.sh` | HPA load test for **4× L40S** on AWS (Brev). Same GPU-util default / latency env vars. |
@@ -28,7 +30,7 @@ what each script in this directory does — it has no instructions of its own.
 | `e2e-hermes-load-test.py` | Per-user driver used by `client_hermes.sh` |
 | `agentscaling_hermes_gpuutil.sh` | Hermes + vLLM sandbox provision + GPU-util HPA. Keeps current GPUs at 1 (`maxReplicas=8`) until `client_hermes.sh`. |
 | `agentscaling_hermes_latency.sh` | Same Hermes sandboxes, LLM-latency HPA. Keeps current GPUs at 1 (`maxReplicas=8`) until `client_hermes.sh`. |
-| `client_hermes.sh` | End users: 1:1 HTTP to Hermes (`E2E_USERS=10`). GPU util: `INFLIGHT=2 MAX_TOKENS=1024`. Latency: `E2E_USERS=10 ./scripts/client_hermes.sh` (`INFLIGHT=1 MAX_TOKENS=2048` in the code; do not add those flags). Does not copy a load helper or pause HPA scale-down. Laptop UI `http://dgx-ip:18789/` ; CLI `E2E_CLIENT_HOST=dgx-ip`. |
+| `client_hermes.sh` | End users: 1:1 HTTP to Hermes (`E2E_USERS=10`). GPU util: `INFLIGHT=2 MAX_TOKENS=1024`. Latency: `E2E_USERS=10 ./scripts/client_hermes.sh` (`INFLIGHT=1 MAX_TOKENS=2048` in the code). Does not copy a load helper or pause HPA scale-down. Laptop UI `http://dgx-ip:18789/` ; CLI `E2E_CLIENT_HOST=dgx-ip`. |
 | `publish-hermes-remote-http.sh` | DGX: republish Hermes UI `:18789+i` and API `:8642+i` for the laptop. The DGX injects the Hermes key; the laptop does not set one. Keep step 5 attached. |
 | `agentscaling_deepagents_gpuutil.sh` | Deep Agents + NIM sandbox provision + GPU-util HPA. Keeps current GPUs at 1 (`maxReplicas=8`) until `client_deepagents.sh`. |
 | `agentscaling_deepagents_latency.sh` | Same Deep Agents sandboxes, LLM-latency HPA. Keeps current GPUs at 1 (`maxReplicas=8`) until `client_deepagents.sh`. |

@@ -2,9 +2,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# One-time, Secret-first NIM registry setup. Prompts for an NGC key without echoing it,
-# then creates the two namespace-scoped Secrets NIM needs: NGC_API_KEY for the running
-# container and a dockerconfigjson imagePullSecret for kubelet's nvcr.io pull.
+# Create the two namespace-scoped Secrets NIM needs. Called by
+# apply-local-secrets.sh (preferred). Public vLLM (6b) does not need these.
+# Prompts for an NGC key without echoing it when NGC_API_KEY is unset.
 #
 # Usage:
 #   NAMESPACE=nemoclaw-gpu ./scripts/create-nim-ngc-secrets.sh

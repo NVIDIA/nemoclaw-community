@@ -5,7 +5,7 @@
 # Sandbox-side provision for Hermes + vLLM with GPU-utilization HPA
 # (DCGM gpu_utilization_percent, target 40%). One sandbox per end user.
 # Clients send hermes -z into each sandbox. They call inference.local →
-# Envoy → vLLM.
+# Envoy → vLLM. Public vLLM default needs no NGC Secret.
 #
 # Default is 10 users at 4Gi (2Gi + inflight 2 OOMed dgx-19).
 # Run ./scripts/uninstall-e2e.sh first if OpenClaw sandboxes or client.sh

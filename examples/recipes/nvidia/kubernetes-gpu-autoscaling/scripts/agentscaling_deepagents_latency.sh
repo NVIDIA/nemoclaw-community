@@ -7,7 +7,9 @@
 # and client path as GPU-util: users send dcode -n into each sandbox.
 #
 # Switches the cluster HPA metric, then creates sandboxes.
-# NIM needs NGC Secrets (apply-local-secrets.sh or create-nim-ngc-secrets.sh).
+# Kubernetes needs both NIM Secrets (kubelet image pull + running NIM model
+# profile). After 6b, run ./scripts/apply-local-secrets.sh --replace if
+# ngc-registry is missing.
 # Provision keeps current replicas at 1 (maxReplicas stays 8). Run
 # ./scripts/client_deepagents.sh after sandboxes are Ready (no HTTP UI).
 # The client does not set HPA_METRIC. For GPU-util HPA use
