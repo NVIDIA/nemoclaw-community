@@ -4,31 +4,27 @@
   SPDX-License-Identifier: Apache-2.0
 -->
 
-# NemoClaw Kubernetes GPU autoscaling
+# Agent Scaling: NemoClaw Kubernetes autoscaling on multi-GPUs
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Helps Kubernetes operators match GPU inference capacity to demand by pairing a CPU-only OpenShell sandbox with Ollama replicas that scale on utilization or latency and return to one after load. |
+| Description | Kubernetes Horizontal Pod Autoscaler (HPA) automatically scale GPU inference capacity to demand, by pairing replicas of inference runtimes running on GPUs with demand from end users sending to agents in Openshell sandboxes. |
 | Industry | ☁️ Cloud Services |
 | Requirements | Kubernetes 1.25+ · Helm 3 · NVIDIA GPU Operator/DCGM · Metrics Server · Docker Buildx + registry · OpenShell + Agent Sandbox CRDs pinned in versions.env · OIDC or acknowledged isolated-eval exception · experimental |
 | NemoClaw | v0.0.104 |
 | Harness | OpenClaw 2026.7.1 |
 | OpenShell | 0.0.85 |
 
-This experimental recipe demonstrates a cost-efficient architecture that runs AI agents securely inside CPU-only OpenShell sandboxes (one sandbox per end user) while independently autoscaling GPU-backed inference. It is used on-prem and in the data center (DGX) as well as in cloud Kubernetes. The agents running in OpenShell sandboxes are one of **[`Openclaw | hermes | deepagents`](https://github.com/NVIDIA/NemoClaw/tree/main/agents)**. Because GPU inference is the primary compute and cost bottleneck, Kubernetes HPA dynamically adjusts capacity from one to **N** replicas (1 GPU each) as demand changes—maintaining responsiveness during traffic spikes while releasing idle GPU resources when demand falls.
+This experimental recipe demonstrates a cost-efficient architecture that runs AI agents securely inside CPU-only OpenShell sandboxes (one sandbox per end user) while independently autoscaling GPU-backed inference. It can be deployed both on-prem and on cloud. The agents running in OpenShell sandboxes are one of **[`Openclaw | hermes | deepagents`](https://github.com/NVIDIA/NemoClaw/tree/main/agents)**. Because GPU inference is the primary compute and cost bottleneck, Kubernetes HPA dynamically adjusts capacity from one to **N** replicas (1 GPU each) as demand changes, maintaining responsiveness during traffic spikes while releasing idle GPU resources when demand falls.
 
-Supported GPU inference runtimes include **`ollama` / `vllm` / `nim`**.  Example pairings for e2e demo include: OpenClaw + Ollama (`AGENT_NAME=openclaw`), Hermes + vLLM (`AGENT_NAME=hermes`), Deep Agents Code + NIM (`AGENT_NAME=deepagents`).
+Supported GPU inference runtimes include **`ollama` / `vllm` / `nim`**.  Example pairings for e2e demo include: OpenClaw + Ollama (`AGENT_NAME=openclaw`), Hermes + vLLM (`AGENT_NAME=hermes`), Deep Agents Code + NIM (`AGENT_NAME=deepagents`). Users of this recipe can extend the pairings as far as the agents support the inference runtimes.  
 
-Kubernetes HPA scales those inference pods using a Pods **`AverageValue`** metric (average across Ready pods). Example HPA metrics: **GPU utilization** (target **40%**) and **LLM latency** (target **3000 ms**). Kubernetes does not scale on every sample above the target; see [Kubernetes HPA metrics](#kubernetes-hpa-metrics).
+Kubernetes HPA scales those inference pods using a Pods **`AverageValue`** metric (average across Ready pods). Example HPA metrics: **GPU utilization** (target **40%**) and **LLM latency** (target **3000 ms**). See [Kubernetes HPA metrics](#kubernetes-hpa-metrics).
 
 
 ## Deployment Architecture
 
-HPA scales to **N** inference pods (1 GPU each). The load balancer is **Envoy** (LeastRequest). Sandboxes reach GPUs at `https://inference.local`. Set install `MAX_REPLICAS` to the GPUs you intend to use (**N**). Load-test with the matching script in [Simple HPA-only test (optional)](#simple-hpa-only-test-optional).
-
-Each GPU pod is **2/2 Ready** when healthy: inference (`ollama` / `vllm` / `nim`) + `metrics-proxy` (auth, `/v1`, health, `/metrics`). Metrics-proxy, HPA, and the Envoy load balancer stay the same. Official pairings: [6a OpenClaw + Ollama](#6a-openclaw--ollama), [6b Hermes + vLLM](#6b-hermes--vllm), [6c Deep Agents + NIM](#6c-deep-agents-code--nim).
-
-Envoy is ClusterIP HTTP. Step 5 copies OpenShell gateway client certs so the CLI can use HTTPS.
+Multiple end users send inference requests to agents, each agent serving one end users. Agents run in OpenShell sandboxes, one agent per sandbox. Sandboxes reach GPUs at `https://inference.local`. The load balancer is **Envoy** with LeastRequest policy. HPA scales to **N** inference pods (1 GPU each). Each GPU pod is **2/2 Ready** when healthy: inference runtimes (`ollama` / `vllm` / `nim`) + `metrics-proxy` (auth, `/v1`, health, `/metrics`).
 
 ```text
 M end users (1 sandbox per user)
@@ -48,9 +44,8 @@ HPA (GPU util >40% or latency >3000 ms)
 ```
 
 
-The chart generates a local inference API key (Bearer on `/v1`). OpenShell injects it for the sandbox. It is not an Ollama pull key, OpenAI key, or `NVIDIA_API_KEY`.
-
-`latency_avg` is metrics-proxy **chat/completions duration** on that GPU pod (in-pod fetch until the full response, including streams). OpenClaw, Hermes, and Deep Agents use the same gauge. It averages **completed** samples from the last 30s. In-flight chats do not count. After 15s with no completed sample the gauge publishes 0 so HPA can scale down. That 0 is not 0 ms latency. `get-hpa.sh` prints milliseconds (`46514/3000` = 46514 ms / 3000 ms). See [How is LLM latency calculated for HPA?](#how-is-llm-latency-calculated-for-hpa).
+The chart generates a local inference API key (Bearer on `/v1`). OpenShell injects it for the sandbox. 
+`latency_avg` is metrics-proxy **chat completions duration** on that GPU pod (in-pod fetch until the full response, including streams). It averages **completed** samples from the last 30s. In-flight chats do not count. After 15s with no completed sample the gauge publishes 0 so HPA can scale down. That 0 is not 0 ms latency. `get-hpa.sh` prints milliseconds (`46514/3000` = 46514 ms / 3000 ms). See [How is LLM latency calculated for HPA?](#how-is-llm-latency-calculated-for-hpa).
 
 ## Prerequisites
 
@@ -83,7 +78,7 @@ kubectl get pods -n "${DCGM_NAMESPACE:-gpu-operator-resources}" -l app=nvidia-dc
 
 ### 3. Install the OpenShell gateway once
 
-Skip this if `kubectl -n nemoclaw-sandboxes get svc openshell` succeeds. The e2e scripts do not create this namespace.
+Skip this if `kubectl -n nemoclaw-sandboxes get svc openshell` succeeds. 
 
 ```bash
 source versions.env
@@ -97,7 +92,7 @@ OPENSHELL_UNAUTHENTICATED_ACK=dedicated-cluster-port-forward-only \
 
 ### 4. Install GPU inference and the Envoy load balancer once
 
-Skip this if `kubectl get gatewayclass eg` succeeds. The e2e scripts update the GPU chart; they do not install the Envoy load balancer.
+Skip this if `kubectl get gatewayclass eg` succeeds. 
 
 ```bash
 # MicroK8s GPU addon: DCGM_NAMESPACE=gpu-operator-resources
@@ -117,7 +112,7 @@ Keep this attached:
 
 kubectl may print `Error copying from remote stream` and `broken pipe` when a sandbox command ends. That line is from kubectl, not a failed OpenShell tunnel. Leave the script running. Stop it only if `openshell status` shows Connection refused.
 
-In another terminal, copy the OpenShell gateway client certs (`openshell-client-tls`) and register the gateway. These files are for `openshell` on `https://127.0.0.1:18080`, not for Envoy. After a reinstall, refresh the certs or you get `BadSignature`.
+In another terminal, copy the OpenShell gateway client certs (`openshell-client-tls`) and register the gateway. These files are for `openshell` on `https://127.0.0.1:18080`. After a reinstall, refresh the certs or you get `BadSignature`.
 
 ```bash
 MTLS_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/openshell/gateways/nemoclaw-k8s/mtls"
@@ -132,11 +127,12 @@ openshell gateway add https://127.0.0.1:18080 --local --name nemoclaw-k8s
 openshell status
 ```
 
-`openshell status` must succeed before the e2e.
+`openshell status` must succeed before the e2e test.
 
 ### 6. E2E test with multiple end users and sandboxes
 
-Queries from end users go **into the sandboxes**, one sandbox per end user. Any pairing can be first after steps 1–5. Provision waits for one Ready GPU replica (up to 240s, `HPA_BASELINE_WAIT_SEC`). Latency HPA may show desired 0 until chats produce the metric; that is idle, not leftover load. One end user ↔ one sandbox ↔ one agent. End users do not log into the DGX. Provision scripts do not take `INFLIGHT` or `MAX_TOKENS`. OpenClaw and Hermes GPU util take those flags on the client. OpenClaw latency omits them (`E2E_USERS=5 ./scripts/client.sh`). OpenClaw latency defaults: `INFLIGHT=1`, `MAX_TOKENS=2048` until 6 GPUs, then short prompts. Hermes latency omits them (`E2E_USERS=10 ./scripts/client_hermes.sh`). Hermes latency is `INFLIGHT=1`, `MAX_TOKENS=2048` in the code. Do not add those flags. Deep Agents omits them (`E2E_USERS=10 ./scripts/client_deepagents.sh`). Default is `INFLIGHT=1`, `MAX_TOKENS=1024` for GPU util and for latency. From a laptop set `E2E_CLIENT_HOST=dgx-ip`. From the DGX omit `E2E_CLIENT_HOST`. The OpenClaw remote laptop UI is [OpenClaw simple test](#openclaw-simple-test).
+Queries from end users go to the agents running in the sandboxes, one sandbox per end user. One end user ↔ one sandbox ↔ one agent. 
+ OpenClaw latency omits them (`E2E_USERS=5 ./scripts/client.sh`). OpenClaw latency defaults: `INFLIGHT=1`, `MAX_TOKENS=2048` until 6 GPUs, then short prompts. Hermes latency omits them (`E2E_USERS=10 ./scripts/client_hermes.sh`). Hermes latency is `INFLIGHT=1`, `MAX_TOKENS=2048` in the code.  Deep Agents omits them (`E2E_USERS=10 ./scripts/client_deepagents.sh`). Default is `INFLIGHT=1`, `MAX_TOKENS=1024` for GPU util and for latency. From a laptop set `E2E_CLIENT_HOST=dgx-ip`. From the DGX omit `E2E_CLIENT_HOST`. The OpenClaw remote laptop UI is [OpenClaw simple test](#openclaw-simple-test).
 
 | | Agent | Default `INFERENCE_RUNTIME` | Default model | End users | Provision | Client |
 |--|-------|------------------------------|---------------|-----------|-----------|--------|
