@@ -406,26 +406,18 @@ E2E_USERS=10 ./scripts/client_deepagents.sh
 
 ## Install details
 
-### Aggregated metrics API
-
-The installer needs Metrics Server and Prometheus Adapter custom-metrics to stay reachable, not merely `True` once:
-
-```bash
-for endpoint in /apis/metrics.k8s.io/v1beta1 /apis/custom.metrics.k8s.io/v1beta1; do
-  for attempt in 1 2 3; do
-    kubectl get --raw "${endpoint}" >/dev/null && echo "${endpoint}: ok" || echo "${endpoint}: failed"
-  done
-done
-```
-
-Intermittent `401` is a control-plane aggregated-API client cert problem. This recipe does not manage those certificates.
-
 ### Scheduling
 
-- Unset `NEMOCLAW_TARGET_NODE` for portable scheduling. Multi-node needs RWX (or disable persistence — [Persistence](#persistence)); default hostPath is single-node.
-- Pin with `export NEMOCLAW_TARGET_NODE=<node>` after Ready + GPU label + allocatable GPUs ≥ `MAX_REPLICAS`.
-- `MAX_REPLICAS` and load-test `TARGET_PODS` must not exceed allocatable GPUs in scope. Host `nvidia-smi` processes are not reserved.
-- Keep `HPA_VALUES`, `INGRESS_HOST`, and `NEMOCLAW_TARGET_NODE` consistent across install, reset, and load test.
+Default: do not set NEMOCLAW_TARGET_NODE. The scheduler picks any GPU node (any cluster).
+Optional: export NEMOCLAW_TARGET_NODE=<node> to keep GPU pods (and Envoy) on one node. Use this on a shared cluster or this DGX (dgx-20). The node must be Ready, have the GPU label, and have allocatable GPUs ≥ MAX_REPLICAS.
+MAX_REPLICAS must not exceed GPUs in that scope (the whole cluster if unset, that node if pinned). Processes you already see in nvidia-smi are not reserved for this chart.
+
+### Disk (already under Persistence)
+
+Portable scheduling does not by itself share the model cache across nodes. Default hostPath is a folder on one machine. If pods land on two nodes, each node downloads its own copy.
+
+One GPU node (this DGX): hostPath is enough.
+Several GPU nodes, NEMOCLAW_TARGET_NODE unset: use RWX shared storage, or turn persistence off.
 
 ### Ingress security
 
