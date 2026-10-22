@@ -825,9 +825,11 @@ Prometheus scrapes `/metrics`. The adapter exposes the same name. HPA uses Pods 
 
 ### How to install Kubernetes?
 
-Pick one of [k3s](https://docs.k3s.io/quick-start), [MicroK8s](https://microk8s.io/docs/getting-started), or [minikube](https://minikube.sigs.k8s.io/docs/start/). Then `kubectl get nodes` must succeed. Return to [Quick start](#quick-start-guide).
+See Kubernetes official document to get started. [https://kubernetes.io/docs/setup/]. 
+We have used **k3s** [k3s](https://docs.k3s.io/quick-start) on the DGX validation and **MicroK8s** [MicroK8s](https://microk8s.io/docs/getting-started) on [Brev](https://brev.nvidia.com) AWS instance of 4× L40S HPA validation. You could also use **minikube**  or [minikube](https://minikube.sigs.k8s.io/docs/start/) by reference this doc [minikube NVIDIA GPU tutorial](https://minikube.sigs.k8s.io/docs/tutorials/nvidia/).
+After successful installation, `kubectl get nodes` should succeed. 
 
-This DGX demo uses **k3s**. The [Brev](https://brev.nvidia.com) 4× L40S HPA test used **MicroK8s**.
+
 
 #### k3s
 
@@ -872,4 +874,4 @@ export KUBECONFIG="${HOME}/.kube/config"
 kubectl get nodes
 ```
 
-GPU on minikube is outside this DGX path. Use the [minikube NVIDIA GPU tutorial](https://minikube.sigs.k8s.io/docs/tutorials/nvidia/) if you need GPUs there.
+
