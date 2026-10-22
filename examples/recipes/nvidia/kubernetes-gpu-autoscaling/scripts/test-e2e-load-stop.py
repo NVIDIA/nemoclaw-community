@@ -296,10 +296,17 @@ assert "not a failed OpenShell tunnel" in readme
 forward_sh = (chart / "scripts" / "openshell-port-forward.sh").read_text()
 assert "kubectl may print broken pipe" in forward_sh
 assert "Git has `secrets.env.example` only." in readme
-assert "For this public default, no extra secret." in readme
+assert "The default vLLM NGC image and Hugging Face model are public, so no extra secret." in readme
 assert "https://catalog.ngc.nvidia.com/orgs/nvidia/-/containers/vllm/" in readme
 assert "Public vLLM (6b) needs no NGC key." in readme
-assert "skip `apply-local-secrets.sh`" in readme
+assert "Public vLLM (6b) does not create `ngc-registry`." in readme
+assert "Same two steps as 6b: first pull the inference server image, then pull the model weights." in readme
+assert "https://org.ngc.nvidia.com/account/api-keys" in readme
+assert "https://org.ngc.nvidia.com" in readme
+assert "Skip `apply-local-secrets.sh` only when **both** Secrets exist" in readme
+assert "The two Secrets use the same NGC API key" in readme
+assert "Kubernetes cannot store one credential as both Secret types." in readme
+assert "./scripts/apply-local-secrets.sh --replace" in readme
 assert "one OpenClaw agent per sandbox" in readme
 assert "### Disk (already under Persistence)" not in readme
 assert "### Aggregated metrics API" not in readme
