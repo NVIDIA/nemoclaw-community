@@ -296,10 +296,14 @@ assert "not a failed OpenShell tunnel" in readme
 forward_sh = (chart / "scripts" / "openshell-port-forward.sh").read_text()
 assert "kubectl may print broken pipe" in forward_sh
 assert "Git has `secrets.env.example` only." in readme
-assert "kubectl get secret ngc-registry -n nemoclaw-gpu" in readme
-assert "If that Secret exists, skip `apply-local-secrets.sh`." in readme
+assert "For this public default, no extra secret." in readme
+assert "https://catalog.ngc.nvidia.com/orgs/nvidia/-/containers/vllm/" in readme
+assert "Public vLLM (6b) needs no NGC key." in readme
+assert "skip `apply-local-secrets.sh`" in readme
+assert "one OpenClaw agent per sandbox" in readme
+assert "### Disk (already under Persistence)" not in readme
+assert "### Aggregated metrics API" not in readme
 assert "## Simple HPA-only test (optional)" in readme
-assert "[Simple HPA-only test (optional)](#simple-hpa-only-test-optional)" in readme
 assert "Simple HPA only test" not in readme
 assert "DCGM_NAMESPACE=gpu-operator-resources MAX_REPLICAS=8" in readme
 assert "It is a one-shot through the in-sandbox" in readme
@@ -324,7 +328,7 @@ assert "TLS required by default" not in readme
 assert "### TLS values" not in readme
 assert "This recipe does not use Envoy TLS." not in readme
 assert "copy the OpenShell gateway client certs" in readme
-assert "not for Envoy" in readme
+assert "not for Envoy" not in readme
 assert "openshell-client-tls" in readme
 assert "| Envoy load balancer | **443**" not in readme
 gw = (chart / "templates" / "gateway.yaml").read_text()

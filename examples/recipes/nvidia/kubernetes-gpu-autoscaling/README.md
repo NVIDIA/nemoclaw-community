@@ -143,7 +143,7 @@ Scripts of running the examples of agents + inference runtimes are in below tabl
 
 #### 6a. OpenClaw + Ollama
 
-This example uses `E2E_USERS=5` and **8Gi** sandboxes (1Gi, 2Gi, and 4Gi OOM-kill OpenClaw before `:18789` binds), in total 40Gi CPU RAM. One sandbox per user, one Hermes agent per sandbox.
+This example uses `E2E_USERS=5` and **8Gi** sandboxes (1Gi, 2Gi, and 4Gi OOM-kill OpenClaw before `:18789` binds), in total 40Gi CPU RAM. One sandbox per user, one OpenClaw agent per sandbox.
 - `INFLIGHT` is the concurrent chats per user on that one agent, default: `INFLIGHT=1`.
 - `MAX_TOKENS` is the maximum length of each model reply in tokens, defaults: `MAX_TOKENS=2048`.
 
@@ -185,10 +185,13 @@ E2E_USERS=5 ./scripts/agentscaling_gpuutil.sh
 <img width="815" height="996" alt="util2" src="https://github.com/user-attachments/assets/ccd8910b-8230-43ea-af76-9a17e2a749af" />
 
 ```bash
-# Terminal C: Clients from a remote laptop (HTTP). Set `E2E_CLIENT_HOST=dgx-ip`. 
+# Terminal C: Clients from a remote laptop (HTTP). Set `E2E_CLIENT_HOST=dgx-ip`.
 E2E_CLIENT_HOST=dgx-ip INFLIGHT=4 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
+```
+
 The OpenClaw remote laptop UI is [OpenClaw simple test](#openclaw-simple-test).
 
+```bash
 # Or Terminal C: test clients on the DGX instead.
 INFLIGHT=4 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
 ```
@@ -196,7 +199,7 @@ INFLIGHT=4 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
 
 
  
-**LLM latency.** HPA uses the metric `latency_avg` (target 3000 ms).`client.sh` defaults: `INFLIGHT=1`, `MAX_TOKENS=2048` until 6 GPUs, then short prompts. Do not set `INFLIGHT` or `MAX_TOKENS`. `get-hpa.sh` prints milliseconds (`46514/3000`). Successful chats are chats that got a reply. The 30s window and 15s idle 0 are the shared metrics-proxy gauge; see [How is LLM latency calculated for HPA?](#how-is-llm-latency-calculated-for-hpa). 
+**LLM latency.** HPA uses the metric `latency_avg` (target 3000 ms). OpenClaw latency defaults: `INFLIGHT=1`, `MAX_TOKENS=2048` until 6 GPUs, then short prompts. Do not set `INFLIGHT` or `MAX_TOKENS`. `get-hpa.sh` prints milliseconds (`46514/3000`). Successful chats are chats that got a reply. The 30s window and 15s idle 0 are the shared metrics-proxy gauge; see [How is LLM latency calculated for HPA?](#how-is-llm-latency-calculated-for-hpa). 
 
 ```bash
 # Terminal A: GPU Inference
@@ -253,10 +256,9 @@ E2E test: Hermes + vLLM
 After steps 1–5 (`openshell status` Connected, `gatewayclass eg` present). Keep [step 5](#5-connect-the-openshell-cli) in another terminal: `./scripts/openshell-port-forward.sh`.  If `openshell status` shows Connection refused, start that script again.
 
 
-Kubelet needs to pull and use the official NVIDIA vLLM NGC Container. After the image is on the node, vLLM starts and downloads nvidia/NVIDIA-Nemotron-3-Nano-4B-FP8 from Hugging Face. For this public default, no extra secret. 
+Kubelet pulls the [official NVIDIA vLLM NGC Container](https://catalog.ngc.nvidia.com/orgs/nvidia/-/containers/vllm/-?_lr=1) (`nvcr.io/nvidia/vllm`). This recipe already pins the image. After the image is on the node, vLLM downloads `nvidia/NVIDIA-Nemotron-3-Nano-4B-FP8` from Hugging Face. For this public default, no extra secret.
 
-
-**GPU util** HPA metric `gpu_utilization_percent`, target 40%. Provision keeps **current** GPUs at **1** replica (`maxReplicas=8`). `client_hermes.sh` sends `INFLIGHT=2 MAX_TOKENS=1024` until 8 GPUs, then stops new chats. Set those flags on the client.  Successful chats are chats that got a reply; the table prints after HPA is back to 1. 
+**GPU util** HPA metric `gpu_utilization_percent`, target 40%. Provision keeps **current** GPUs at **1** replica (`maxReplicas=8`). `client_hermes.sh` sends `INFLIGHT=2 MAX_TOKENS=1024` until 8 GPUs, then stops new chats. Set those flags on the client. Successful chats are chats that got a reply; the table prints after HPA is back to 1. The laptop does not set a Hermes API key. The DGX injects it. 
 
 ```bash
 # Terminal A: GPU Inference
@@ -271,9 +273,10 @@ E2E_USERS=10 ./scripts/agentscaling_hermes_gpuutil.sh
 <img width="813" height="557" alt="util2" src="https://github.com/user-attachments/assets/9525c978-b679-453f-90a2-986688b929f0" />
 
 ```bash
-# Terminal C: Clients from a remote laptop (HTTP). Set `E2E_CLIENT_HOST=dgx-ip`.User i uses :8642+i (this demo N=10 → :8642 … :8651).
-# If Connection refused on :8642, republish on the DGX (step 5 still attached):
-# E2E_USERS=10 ./scripts/publish-hermes-remote-http.sh
+# Terminal C: Clients from a remote laptop (HTTP). Set `E2E_CLIENT_HOST=dgx-ip`.
+# User i uses :8642+i (this demo N=10 → :8642 … :8651).
+# If Connection refused on :8642, keep step 5 attached, then on the DGX:
+#   E2E_USERS=10 ./scripts/publish-hermes-remote-http.sh
 E2E_CLIENT_HOST=dgx-ip INFLIGHT=2 MAX_TOKENS=1024 E2E_USERS=10 ./scripts/client_hermes.sh
 ```
 <img width="727" height="482" alt="util3" src="https://github.com/user-attachments/assets/5e306a05-81dc-423c-9427-07eb8c05275f" />
@@ -284,7 +287,7 @@ INFLIGHT=2 MAX_TOKENS=1024 E2E_USERS=10 ./scripts/client_hermes.sh
 ```
  
 
-**LLM latency.** `client_hermes.sh` uses `INFLIGHT=1`, `MAX_TOKENS=2048` by default.
+**LLM latency.** Hermes latency is `INFLIGHT=1`, `MAX_TOKENS=2048` in the code. Do not add those flags.
 
 ```bash
 # Terminal A: GPU Inference
@@ -299,9 +302,7 @@ E2E_USERS=10 ./scripts/agentscaling_hermes_latency.sh
 <img width="848" height="890" alt="latency2" src="https://github.com/user-attachments/assets/f7523cbd-db7c-4061-bb86-803df7c3fe14" />
 
 ```bash
-# Terminal C: Clients from a remote laptop (HTTP). Set `E2E_CLIENT_HOST=dgx-ip`. INFLIGHT=1, MAX_TOKENS=2048 by default
-# If Connection refused on :8642, republish on the DGX (step 5 still attached):
-# E2E_USERS=10 ./scripts/publish-hermes-remote-http.sh
+# Terminal C: Clients from a remote laptop (HTTP). Set `E2E_CLIENT_HOST=dgx-ip`.
 E2E_CLIENT_HOST=dgx-ip E2E_USERS=10 ./scripts/client_hermes.sh
 ```
 <img width="731" height="480" alt="latency1" src="https://github.com/user-attachments/assets/e0cc260c-dd78-46a9-ac7e-ec624be68e55" />
@@ -316,10 +317,12 @@ E2E_USERS=10 ./scripts/client_hermes.sh
 
 #### 6c. Deep Agents Code + NIM
 
-NIM needs **both** NGC_API_KEY before `agentscaling_deepagents_gpuutil.sh`.
+NIM needs **both** Secrets from one `NGC_API_KEY` before `agentscaling_deepagents_gpuutil.sh`.
 
 - Kubernetes Secret `ngc-registry` (`dockerconfigjson`) — kubelet pulls `nvcr.io/nim/nvidia/nemotron-3-nano`
 - Kubernetes Secret `nim-ngc-key` (Opaque, key `NGC_API_KEY`) — the **running NIM container** downloads the model profile
+
+`secrets.env` is gitignored. Git has `secrets.env.example` only. If those Secrets already exist in `nemoclaw-gpu`, skip `apply-local-secrets.sh`.
 
 ```bash
 cp -n secrets.env.example secrets.env
@@ -335,9 +338,7 @@ export NIM_IMAGE_PULL_SECRET=ngc-registry
 export NIM_NGC_API_KEY_SECRET=nim-ngc-key
 ```
 
-This example uses `E2E_USERS=10` and **4Gi** sandboxes (40Gi CPU RAM in total). One sandbox per user, one deep agent per sandbox. 
-
- 
+This example uses `E2E_USERS=10` and **4Gi** sandboxes (40Gi CPU RAM in total). One sandbox per user, one Deep Agents agent per sandbox. Default is `INFLIGHT=1 MAX_TOKENS=1024` for GPU util and for latency. Do not add those flags.
 
 ```text
 E2E test: Deep Agents Code + NIM
@@ -358,12 +359,7 @@ E2E test: Deep Agents Code + NIM
 
 After steps 1–5 (`openshell status` Connected, `gatewayclass eg` present). Clients use `dcode -n` (no per-sandbox Deep Agents listener).
 
-```bash
-export PATH="${HOME}/.local/bin:${PATH}"
-export KUBECONFIG="${HOME}/.kube/config"
-```
-
-**GPU Utilization.** (target 40%). Default is `INFLIGHT=1 MAX_TOKENS=1024`.
+**GPU Utilization.** (target 40%). Default is `INFLIGHT=1 MAX_TOKENS=1024`. Do not add those flags.
 ```bash
 # Terminal A: GPU Inference
 E2E_USERS=10 ./scripts/agentscaling_deepagents_gpuutil.sh
@@ -382,7 +378,7 @@ E2E_USERS=10 ./scripts/client_deepagents.sh
 ```
 <img width="711" height="451" alt="util3" src="https://github.com/user-attachments/assets/32e8e0d1-56d7-452a-b360-42044b6fd775" />
 
-**LLM latency.** Default is `INFLIGHT=1 MAX_TOKENS=1024`. `client_deepagents.sh` sends `dcode -n`. 
+**LLM latency.** Default is `INFLIGHT=1 MAX_TOKENS=1024`. Do not add those flags. `client_deepagents.sh` sends `dcode -n`. 
 
 ```bash
 # Terminal A: GPU Inference
@@ -408,16 +404,9 @@ E2E_USERS=10 ./scripts/client_deepagents.sh
 
 ### Scheduling
 
-Default: do not set NEMOCLAW_TARGET_NODE. The scheduler picks any GPU node (any cluster).
-Optional: export NEMOCLAW_TARGET_NODE=<node> to keep GPU pods (and Envoy) on one node. Use this on a shared cluster or this DGX (dgx-20). The node must be Ready, have the GPU label, and have allocatable GPUs ≥ MAX_REPLICAS.
-MAX_REPLICAS must not exceed GPUs in that scope (the whole cluster if unset, that node if pinned). Processes you already see in nvidia-smi are not reserved for this chart.
-
-### Disk (already under Persistence)
-
-Portable scheduling does not by itself share the model cache across nodes. Default hostPath is a folder on one machine. If pods land on two nodes, each node downloads its own copy.
-
-One GPU node (this DGX): hostPath is enough.
-Several GPU nodes, NEMOCLAW_TARGET_NODE unset: use RWX shared storage, or turn persistence off.
+- Default: do not set `NEMOCLAW_TARGET_NODE`. The scheduler picks any GPU node.
+- Optional: `export NEMOCLAW_TARGET_NODE=<node>` keeps GPU pods and Envoy on one node. Use this on a shared cluster or this DGX (`dgx-20`). The node must be Ready, have the GPU label, and have allocatable GPUs ≥ `MAX_REPLICAS`.
+- `MAX_REPLICAS` must not exceed GPUs in that scope (the cluster if unset, that node if pinned). Host `nvidia-smi` processes are not reserved for this chart.
 
 ### Ingress security
 
@@ -437,13 +426,15 @@ The Envoy dataplane Service is **ClusterIP** only (`NodePort` / `LoadBalancer` r
 | **vLLM** | `nvidia/NVIDIA-Nemotron-3-Nano-4B-FP8` | `nvcr.io/nvidia/vllm` | `VLLM_IMAGE_PULL_SECRET` only if nvcr.io requires it; `VLLM_HF_TOKEN_SECRET` only for gated HF | ~5.3 GB |
 | **NIM** | `nvidia/nemotron-3-nano` | `nvcr.io/nim/nvidia/nemotron-3-nano` | `apply-local-secrets.sh` then `NIM_IMAGE_PULL_SECRET` + `NIM_NGC_API_KEY_SECRET` | ~8 GB |
 
-These are registry/model credentials, not the chart inference API key. Put **Secret names** in `local.env`, never key values. For `nvcr.io` pulls (vLLM image and NIM), run `./scripts/apply-local-secrets.sh` from gitignored `secrets.env` — do not put `nvapi-` keys on the kubectl command line.
+These are registry/model credentials, not the chart inference API key. Put **Secret names** in `local.env`, never key values. Public vLLM (6b) needs no NGC key. NIM (6c) needs `./scripts/apply-local-secrets.sh` from gitignored `secrets.env`. Do not put `nvapi-` keys on the kubectl command line.
 
 Default models and how to override them (or switch agent) are in [Quick start 6](#6-e2e-test-with-multiple-end-users-and-sandboxes). Check VRAM against `gpuScaling.perPodMemory`.
 
 #### Persistence
 
-This is the **on-disk cache for downloaded model weights**, not a database. On this single-node DGX the chart writes them to a folder on the GPU node (`/var/lib/nemoclaw-gpu/ollama`, `/vllm`, or `/nim`). The first pod pulls the model once; later HPA replicas on the same node reuse that folder. If you turn persistence off, each new pod downloads the model again. Shared storage (RWX) is only needed if inference pods run on more than one node.
+This is the **on-disk cache for downloaded model weights**, not a database. On this single-node DGX the chart writes them to a folder on the GPU node (`/var/lib/nemoclaw-gpu/ollama`, `/vllm`, or `/nim`). The first pod pulls the model once; later HPA replicas on the same node reuse that folder. If you turn persistence off, each new pod downloads the model again.
+
+Portable scheduling (`NEMOCLAW_TARGET_NODE` unset) does not share that cache across nodes. One GPU node: hostPath is enough. Several GPU nodes: use RWX shared storage, or turn persistence off.
 
 ### Kubernetes HPA metrics
 
