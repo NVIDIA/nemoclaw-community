@@ -141,9 +141,6 @@ Scripts of running the examples of agents + inference runtimes are in below tabl
 | **6c** | Deep Agents | `nim` | `nvidia/nemotron-3-nano` | `E2E_USERS=10` | `agentscaling_deepagents_gpuutil.sh` | `client_deepagents.sh` |
 
 
-
-
-
 #### 6a. OpenClaw + Ollama
 
 This example uses `E2E_USERS=5` and **8Gi** sandboxes (1Gi, 2Gi, and 4Gi OOM-kill OpenClaw before `:18789` binds), in total 40Gi CPU RAM. One sandbox per user, one Hermes agent per sandbox.
@@ -168,15 +165,10 @@ E2E test: OpenClaw + Ollama
             1 GPU  →  demand rises  →  8 GPUs  →  idle  →  1 GPU
 ```
 
+Keep [step 5](#5-connect-the-openshell-cli) in another terminal: `./scripts/openshell-port-forward.sh`. If `openshell status` shows Connection refused, start that script again.
+
 
 **GPU utilization** HPA metric `gpu_utilization_percent`, target 40%. Provision keeps current GPUs at 1 replica (`maxReplicas=8`). `client.sh` sends `INFLIGHT=4 MAX_TOKENS=2048` until 8 GPUs, then stops new chats. Successful chats are chats that got a reply; err is chats that were sent and got no reply. kubectl TARGETS like `67500m/40` means **67.5%/40%**. Watch GPU utilization percentages with `get-hpa.sh`.
-
-```bash
-export PATH="${HOME}/.local/bin:${PATH}"
-export KUBECONFIG="${HOME}/.kube/config"
-```
-
-Keep [step 5](#5-connect-the-openshell-cli) in another terminal: `./scripts/openshell-port-forward.sh`. If `openshell status` shows Connection refused, start that script again.
 
 ```bash
 # Terminal A: GPU Inference
@@ -236,36 +228,6 @@ E2E_USERS=5 ./scripts/client.sh
 
 #### 6b. Hermes + vLLM
 
-Kubelet needs Kubernetes Secret `ngc-registry` for pulling the image `nvcr.io/nvidia/vllm`. 
-
-After the image is on the node, vLLM starts and downloads nvidia/NVIDIA-Nemotron-3-Nano-4B-FP8 from Hugging Face. That path does not read NGC_API_KEY. For this public default, no extra secret. If Hugging Face returns 401, you add Secret hf-token (HF_TOKEN).
-
-`secrets.env` is gitignored. Git has `secrets.env.example` only. Create `secrets.env` only when Secret `ngc-registry` is missing.
-
-```bash
-kubectl get secret ngc-registry -n nemoclaw-gpu
-```
-
-If that Secret exists, skip `apply-local-secrets.sh`. Put the Secret name in gitignored `local.env` and continue.
-
-If that Secret is missing, copy the example, paste `NGC_API_KEY`, then apply:
-
-```bash
-cp -n secrets.env.example secrets.env
-# edit secrets.env: paste NGC_API_KEY=nvapi-...
-# optional: HF_TOKEN=hf_... only if Hugging Face returns 401 for the model
-./scripts/apply-local-secrets.sh
-```
-
-`apply-local-secrets.sh` creates Secret `ngc-registry` (`dockerconfigjson`). If `HF_TOKEN` is set, it also creates Secret `hf-token`. Put only Secret names in `local.env`:
-
-```bash
-# local.env — names, not key values
-export VLLM_IMAGE_PULL_SECRET=ngc-registry
-# export VLLM_HF_TOKEN_SECRET=hf-token   # only if Secret hf-token exists
-```
-
-
 
 This example uses `E2E_USERS=10` and **4Gi** sandboxes (40Gi CPU RAM in total). One sandbox per user, one Hermes agent per sandbox.
 
@@ -291,10 +253,8 @@ E2E test: Hermes + vLLM
 After steps 1–5 (`openshell status` Connected, `gatewayclass eg` present). Keep [step 5](#5-connect-the-openshell-cli) in another terminal: `./scripts/openshell-port-forward.sh`.  If `openshell status` shows Connection refused, start that script again.
 
 
-```bash
-export PATH="${HOME}/.local/bin:${PATH}"
-export KUBECONFIG="${HOME}/.kube/config"
-```
+Kubelet needs to pull and use the official NVIDIA vLLM NGC Container. After the image is on the node, vLLM starts and downloads nvidia/NVIDIA-Nemotron-3-Nano-4B-FP8 from Hugging Face. For this public default, no extra secret. 
+
 
 **GPU util** HPA metric `gpu_utilization_percent`, target 40%. Provision keeps **current** GPUs at **1** replica (`maxReplicas=8`). `client_hermes.sh` sends `INFLIGHT=2 MAX_TOKENS=1024` until 8 GPUs, then stops new chats. Set those flags on the client.  Successful chats are chats that got a reply; the table prints after HPA is back to 1. 
 
