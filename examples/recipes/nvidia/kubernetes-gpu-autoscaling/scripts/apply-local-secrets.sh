@@ -9,7 +9,7 @@
 # Opaque Secret hf-token for a gated Hugging Face vLLM model.
 #
 # Usage:
-#   # paste NGC_API_KEY=nvapi-... into secrets.env first
+#   # paste NGC_API_KEY= into secrets.env first (NGC key, not nvapi-)
 #   ./scripts/apply-local-secrets.sh
 #   ./scripts/apply-local-secrets.sh --replace
 
@@ -43,7 +43,7 @@ esac
 source "${SECRETS_FILE}"
 
 [[ -n "${NGC_API_KEY:-}" ]] || {
-  echo "ERROR: NGC_API_KEY is empty in secrets.env. Paste the nvapi- key (NIM image and model profile on NGC)." >&2
+  echo "ERROR: NGC_API_KEY is empty in secrets.env. Paste the NGC key (pulls the NIM image and downloads the NIM model profile)." >&2
   exit 1
 }
 
@@ -62,5 +62,6 @@ fi
 
 unset NGC_API_KEY HF_TOKEN
 echo "NIM Secrets: NIM_IMAGE_PULL_SECRET=ngc-registry NIM_NGC_API_KEY_SECRET=nim-ngc-key"
+echo "Set these in gitignored local.env for NIM (6c)."
 echo "Public vLLM (6b) does not use these Secrets."
 echo "Do not commit secrets.env."

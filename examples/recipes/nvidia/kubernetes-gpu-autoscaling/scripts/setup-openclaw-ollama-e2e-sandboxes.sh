@@ -378,14 +378,6 @@ wait_names_healthy() {
   done
 }
 
-finish_one_agent() {
-  local name="${1:?sandbox}"
-  if ! inference_local_ok "${name}"; then
-    echo "ERROR: $(sandbox_label "${name}"): https://inference.local not reachable after agent start" >&2
-    return 1
-  fi
-}
-
 stop_one_agent() {
   local name="${1:?sandbox}"
   local pidfile="${STATE_DIR}/${name}.pid"

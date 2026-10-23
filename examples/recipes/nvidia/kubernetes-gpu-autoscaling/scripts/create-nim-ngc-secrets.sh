@@ -69,8 +69,8 @@ if [[ -z "${NGC_API_KEY:-}" ]]; then
   printf '\n' >&2
 fi
 
-# NGC API keys have the nvapi- form. Restrict the accepted alphabet so the key can be
-# embedded safely in the generated dockerconfigjson without exposing it on command argv.
+# Restrict the accepted alphabet so the NGC key can be embedded safely in the
+# generated dockerconfigjson without exposing it on command argv.
 if [[ ! "${NGC_API_KEY}" =~ ^[A-Za-z0-9._-]+$ ]]; then
   echo "NGC_API_KEY is empty or contains unsupported characters." >&2
   exit 1

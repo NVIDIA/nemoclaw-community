@@ -200,7 +200,7 @@ INFLIGHT=4 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
 
 
  
-**LLM latency.** HPA uses the metric `latency_avg` (target 3000 ms). OpenClaw latency defaults: `INFLIGHT=1`, `MAX_TOKENS=2048` until 6 GPUs, then short prompts. Do not set `INFLIGHT` or `MAX_TOKENS`. `get-hpa.sh` prints milliseconds (`46514/3000`). Successful chats are chats that got a reply. The 30s window and 15s idle 0 are the shared metrics-proxy gauge; see [How is LLM latency calculated for HPA?](#how-is-llm-latency-calculated-for-hpa). 
+**LLM latency.** HPA uses the metric `latency_avg` (target 3000 ms). `get-hpa.sh` prints milliseconds (`46514/3000`). Successful chats are chats that got a reply. The 30s window and 15s idle 0 are the shared metrics-proxy gauge; see [How is LLM latency calculated for HPA?](#how-is-llm-latency-calculated-for-hpa). 
 
 ```bash
 # Terminal A: GPU Inference
@@ -256,7 +256,7 @@ E2E test: Hermes + vLLM
 
 After steps 1–5 (`openshell status` Connected, `gatewayclass eg` present). Keep [step 5](#5-connect-the-openshell-cli) in another terminal: `./scripts/openshell-port-forward.sh`. If `openshell status` shows Connection refused, start that script again.
 
-Kubelet pulls the [official NVIDIA vLLM NGC Container](https://catalog.ngc.nvidia.com/orgs/nvidia/-/containers/vllm/-?_lr=1) (`nvcr.io/nvidia/vllm`). This recipe already pins the image. After the image is on the node, vLLM downloads `nvidia/NVIDIA-Nemotron-3-Nano-4B-FP8` from Hugging Face. The default vLLM NGC image and Hugging Face model are public, so no extra secret.
+Kubelet pulls the [official NVIDIA vLLM NGC Container](https://catalog.ngc.nvidia.com/orgs/nvidia/-/containers/vllm/-?_lr=1) (`nvcr.io/nvidia/vllm`). This recipe already pins the image. After the image is on the node, vLLM downloads `nvidia/NVIDIA-Nemotron-3-Nano-4B-FP8` from Hugging Face. The default vLLM NGC image and Hugging Face model are public, so no extra Secret is required.
 
 **GPU util** HPA metric `gpu_utilization_percent`, target 40%. Provision keeps **current** GPUs at **1** replica (`maxReplicas=8`). `client_hermes.sh` sends `INFLIGHT=2 MAX_TOKENS=1024` until 8 GPUs, then stops new chats. Set those flags on the client. Successful chats are chats that got a reply; the table prints after HPA is back to 1. The laptop does not set a Hermes API key. The DGX injects it. 
 
@@ -317,30 +317,8 @@ E2E_USERS=10 ./scripts/client_hermes.sh
 
 #### 6c. Deep Agents Code + NIM
 
-This Kubernetes path needs **both** Secrets from one `NGC_API_KEY` before `agentscaling_deepagents_gpuutil.sh`. That key is an [NVIDIA NGC](https://org.ngc.nvidia.com) API key. Create it at [NGC API keys](https://org.ngc.nvidia.com/account/api-keys). `docker pull` uses that one key. Kubernetes needs two Secret types: kubelet uses `ngc-registry` (`dockerconfigjson`) to pull the NIM image (`nvcr.io/nim/nvidia/nemotron-3-nano`), and the running NIM uses `nim-ngc-key` (Opaque env `NGC_API_KEY`) to pull the model profile.
 
-Same two steps as 6b: first pull the inference server image, then pull the model weights. Public vLLM (6b) does not create `ngc-registry`.
-
-`secrets.env` is gitignored. Git has `secrets.env.example` only. Skip `apply-local-secrets.sh` only when **both** Secrets exist in `nemoclaw-gpu`. After 6b, `ngc-registry` is often missing even if `nim-ngc-key` remains. Then use `--replace` so the script can create both.
-
-```bash
-# If this prints both Secrets, skip apply-local-secrets.sh
-kubectl -n nemoclaw-gpu get secret ngc-registry nim-ngc-key
-# If either is missing (typical after 6b):
-cp -n secrets.env.example secrets.env
-# edit secrets.env: paste NGC_API_KEY=nvapi-...  (required — both Secrets)
-./scripts/apply-local-secrets.sh --replace
-```
-
-Put only the **Secret names** in gitignored `local.env`:
-
-```bash
-# local.env — names, not key values
-export NIM_IMAGE_PULL_SECRET=ngc-registry
-export NIM_NGC_API_KEY_SECRET=nim-ngc-key
-```
-
-This example uses `E2E_USERS=10` and `AGENT_SANDBOX_MEMORY=4Gi` sandboxes (40Gi CPU RAM in total). One sandbox per user, one Deep Agents agent per sandbox. Default is `INFLIGHT=1 MAX_TOKENS=1024` for GPU util and for latency.
+This example uses `E2E_USERS=10` and `AGENT_SANDBOX_MEMORY=4Gi` sandboxes (40Gi CPU RAM in total). One sandbox per user, one Deep Agents agent per sandbox.
 
 ```text
 E2E test: Deep Agents Code + NIM
@@ -361,6 +339,29 @@ E2E test: Deep Agents Code + NIM
 
 After steps 1–5 (`openshell status` Connected, `gatewayclass eg` present). Clients use `dcode -n` (no per-sandbox Deep Agents listener).
 
+This Kubernetes path needs **both** Secrets from one `NGC_API_KEY` before `agentscaling_deepagents_gpuutil.sh`. That key is an [NVIDIA NGC](https://org.ngc.nvidia.com) API key. Create it at [NGC API keys](https://org.ngc.nvidia.com/account/api-keys). Kubernetes needs two Secret types: kubelet uses `ngc-registry` (`dockerconfigjson`) to pull the NIM image (`nvcr.io/nim/nvidia/nemotron-3-nano`), and the running NIM uses `nim-ngc-key` (Opaque env `NGC_API_KEY`) to pull the model weights. 
+
+`secrets.env` is gitignored. Git has `secrets.env.example` only. Skip `apply-local-secrets.sh` only when **both** Secrets exist in `nemoclaw-gpu`. 
+
+```bash
+# If this prints both Secrets, skip apply-local-secrets.sh
+kubectl -n nemoclaw-gpu get secret ngc-registry nim-ngc-key
+# If either is missing 
+cp -n secrets.env.example secrets.env
+# edit secrets.env: paste NGC_API_KEY=  
+./scripts/apply-local-secrets.sh --replace
+```
+
+Put only the **Secret names** in gitignored `local.env`:
+
+```bash
+# local.env — names, not key values
+export NIM_IMAGE_PULL_SECRET=ngc-registry
+export NIM_NGC_API_KEY_SECRET=nim-ngc-key
+```
+
+
+
 **GPU Utilization.** (target 40%). Default is `INFLIGHT=1 MAX_TOKENS=1024`.
 ```bash
 # Terminal A: GPU Inference
@@ -380,7 +381,7 @@ E2E_USERS=10 ./scripts/client_deepagents.sh
 ```
 <img width="711" height="451" alt="util3" src="https://github.com/user-attachments/assets/32e8e0d1-56d7-452a-b360-42044b6fd775" />
 
-**LLM latency.** Default is `INFLIGHT=1 MAX_TOKENS=1024`. `client_deepagents.sh` sends `dcode -n`. 
+**LLM latency.** Same default. `client_deepagents.sh` sends `dcode -n`. 
 
 ```bash
 # Terminal A: GPU Inference
@@ -407,7 +408,7 @@ E2E_USERS=10 ./scripts/client_deepagents.sh
 ### Scheduling
 
 - Default: do not set `NEMOCLAW_TARGET_NODE`. The scheduler picks any GPU node.
-- Optional: `export NEMOCLAW_TARGET_NODE=<node>` keeps GPU pods and Envoy on one node. Use this on a shared cluster or this DGX (`dgx-20`). The node must be Ready, have the GPU label, and have allocatable GPUs ≥ `MAX_REPLICAS`.
+- Optional: `export NEMOCLAW_TARGET_NODE=<node>` keeps GPU pods and Envoy on one node. Use this on a shared cluster or this DGX. The node must be Ready, have the GPU label, and have allocatable GPUs ≥ `MAX_REPLICAS`.
 - `MAX_REPLICAS` must not exceed GPUs in that scope (the cluster if unset, that node if pinned). Host `nvidia-smi` processes are not reserved for this chart.
 
 ### Ingress security
@@ -428,7 +429,7 @@ The Envoy dataplane Service is **ClusterIP** only (`NodePort` / `LoadBalancer` r
 | **vLLM** | `nvidia/NVIDIA-Nemotron-3-Nano-4B-FP8` | `nvcr.io/nvidia/vllm` | `VLLM_IMAGE_PULL_SECRET` only if nvcr.io requires it; `VLLM_HF_TOKEN_SECRET` only for gated HF | ~5.3 GB |
 | **NIM** | `nvidia/nemotron-3-nano` | `nvcr.io/nim/nvidia/nemotron-3-nano` | `apply-local-secrets.sh` then `NIM_IMAGE_PULL_SECRET` + `NIM_NGC_API_KEY_SECRET` | ~8 GB |
 
-These are registry/model credentials, not the chart inference API key. Put **Secret names** in `local.env`, never key values. Public vLLM (6b) needs no NGC key. NIM (6c) needs `./scripts/apply-local-secrets.sh` from gitignored `secrets.env`. Do not put `nvapi-` keys on the kubectl command line.
+These are registry/model credentials, not the chart inference API key. Put **Secret names** in `local.env`, never key values. Public vLLM (6b) needs no NGC key. NIM (6c) needs `./scripts/apply-local-secrets.sh` from gitignored `secrets.env`. Do not put NGC keys on the kubectl command line.
 
 Default models and how to override them (or switch agent) are in [Quick start 6](#6-e2e-test-with-multiple-end-users-and-sandboxes).
 
@@ -445,7 +446,7 @@ Portable scheduling (`NEMOCLAW_TARGET_NODE` unset) does not share that cache acr
 | `gpu_utilization` (default) | avg GPU util **40%** | `./scripts/agentscaling_gpuutil.sh` / `agentscaling_hermes_gpuutil.sh` / `agentscaling_deepagents_gpuutil.sh` |
 | `latency_avg` | avg chat proxy latency **3000 ms** | `./scripts/agentscaling_latency.sh` / `agentscaling_hermes_latency.sh` / `agentscaling_deepagents_latency.sh` |
 
-This recipe sets those **targets** only. It does **not** set a 10% threshold in `install-hpa.sh` or `values.yaml`.
+This recipe sets those **targets** only.
 
 Kubernetes HPA uses the ratio of current metric to target. From [Horizontal Pod Autoscaling — algorithm details](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/#algorithm-details):
 
@@ -455,11 +456,9 @@ desiredReplicas = ceil(currentReplicas × currentMetricValue / desiredMetricValu
 
 When a `targetAverageValue` (this chart) or `targetAverageUtilization` is set, `currentMetricValue` is the **average** of that metric across the pods in the HPA scale target (`gpu_utilization_percent` or `nemoclaw_llm_latency_avg_milliseconds`).
 
-Examples: replica `1` x current `3706m` / desired `3000m` = 1.235
+Worked example: at 1 replica, current `3706m` and desired `3000m` give `ceil(1 × 3706/3000) = ceil(1.235) = 2` desired replicas.
 
-ceiling to 2 desired replicas
-
-The control plane **skips** a scale if that ratio is close to 1.0 (within a configurable tolerance, **0.1 by default**). The cluster-wide flag is kube-controller-manager `--horizontal-pod-autoscaler-tolerance`. This recipe does not set it.
+The control plane **skips** a scale if that ratio is close to 1.0 (within a configurable tolerance, **0.1 by default**, a 10% band). The cluster-wide flag is kube-controller-manager `--horizontal-pod-autoscaler-tolerance`. This recipe does not set that flag in `install-hpa.sh` or `values.yaml`.
 
 Example with this recipe’s 3000 ms latency target (`./scripts/get-hpa.sh -n nemoclaw-gpu -w`):
 
@@ -510,7 +509,7 @@ HPA_METRIC=latency_avg HPA_TARGET_LATENCY_MS=3000 ./scripts/hpa-load-test-brev-4
 
 ## Simple OpenClaw test
 
-Ask **In one sentence, what is an AI agent sandbox?** through authenticated inference. This is the pairing check for OpenClaw (`AGENT_NAME=openclaw`). Keep `./scripts/run-agent-sandbox.sh` attached so `:18789` is up.
+Ask **In one sentence, what is an AI agent sandbox?** through authenticated inference. This is the pairing check for OpenClaw (`AGENT_NAME=openclaw`). Keep `./scripts/openshell-port-forward.sh` attached so `openshell status` succeeds.
 
 | Path | Port-forward | Local URL |
 |------|----------------|-----------|
@@ -526,9 +525,9 @@ A non-empty answer plus the final `OK:` line is a pass. Wording varies; small mo
 
 
 
-**Remote UI test** (from any browser). After [6a](#6a-openclaw--ollama) has the five sandboxes up, open these URLs from any remote machine that can reach the DGX. Each user is a **different host port**. You do not type a token. Leave Password empty.
+**Remote UI test** (from any browser). After [6a](#6a-openclaw--ollama) has the five sandboxes up, run `./scripts/publish-openclaw-remote-http.sh` on the DGX. That script binds `0.0.0.0` and serves the page over plain HTTP. Restrict it to a trusted network. Set `E2E_PUBLISH_BIND=127.0.0.1` to keep the ports on the DGX only. Bring-up publishes loopback only. Published HTTP does not return gateway tokens. `/u/0` redirects to `/` with no `#token=`.
 
-Run `./scripts/publish-openclaw-remote-http.sh` on the DGX for laptop HTTP. That script binds `0.0.0.0`. Restrict it to a trusted network. Set `E2E_PUBLISH_BIND=127.0.0.1` to keep the ports on the DGX only. Bring-up publishes loopback only. Published HTTP does not return gateway tokens. `/u/0` redirects to `/` with no `#token=`.
+Each user is a **different host port**. You do not type a token. Leave Password empty.
 
 | User | Open this in a browser on the remote machine |
 |------|-----------------------------------------|
@@ -636,7 +635,9 @@ After scale-up you should see multiple series. If latency graphs stay empty, che
 
 ## Uninstall
 
-E2E example teardown: `uninstall-e2e.sh` removes all pairing CPU sandboxes (`openclaw-ollama-e2e-*`, `hermes-vllm-e2e-*`, `deepagent-nim-e2e-*`) and OpenShell providers (`onprem-openclaw` / `onprem-hermes` / `onprem-deepagents`). It does **not** uninstall GPU inference (Ollama / vLLM / NIM), OpenShell, Envoy, or Prometheus. 
+### E2E example teardown
+
+Run `uninstall-e2e.sh` to remove all pairing CPU sandboxes (`openclaw-ollama-e2e-*`, `hermes-vllm-e2e-*`, `deepagent-nim-e2e-*`) and OpenShell providers (`onprem-openclaw` / `onprem-hermes` / `onprem-deepagents`). It does **not** uninstall GPU inference (Ollama / vLLM / NIM), OpenShell, Envoy, or Prometheus. 
 
 To leave OpenClaw and start Hermes, stop `client.sh`, keep the OpenShell port-forward, then run the command below. Continue at [6b Hermes + vLLM](#6b-hermes--vllm). Do not helm-uninstall OpenShell or `nemoclaw-gpu`. Later OpenClaw runs `./scripts/agentscaling_gpuutil.sh` again on this same stack.
 

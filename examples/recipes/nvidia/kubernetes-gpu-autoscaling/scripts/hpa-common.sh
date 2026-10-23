@@ -1449,20 +1449,6 @@ hpa_common_migrate_pre_metrics_proxy_resources() {
   done
 }
 
-# Compatibility aliases (historical helper names).
-hpa_common_legacy_agent_basename() { hpa_common_pre_metrics_proxy_basename; }
-hpa_common_list_legacy_agent_deployments() { hpa_common_list_pre_metrics_proxy_deployments "$@"; }
-hpa_common_migrate_legacy_agent_resources() { hpa_common_migrate_pre_metrics_proxy_resources "$@"; }
-
-# Backward-compatible wrapper used by older script call sites.
-hpa_common_gpu_recreate_stale_workload() {
-  local ns="${1:?namespace}"
-  local _deploy="${2:-}"
-  local _svc="${3:-}"
-  local release="${RELEASE:-nemoclaw-gpu}"
-  hpa_common_migrate_pre_metrics_proxy_resources "${ns}" "${release}"
-}
-
 hpa_common_validate_node_name() {
   local node="${1:-}"
   [[ -n "${node}" && ${#node} -le 253 ]] || return 1
@@ -2096,35 +2082,6 @@ hpa_common_verify_gpu_hpa_metric() {
   return 1
 }
 
-# Human-readable HPA metric (optional; VERBOSE=1 for full legend).
-hpa_common_hpa_metric_display() {
-  local ns="${1:?namespace}"
-  local hpa_name="${2:-}"
-  if [[ "${VERBOSE:-0}" != "1" ]]; then
-    return 0
-  fi
-  if [[ -z "${hpa_name}" ]]; then
-    hpa_name="$(kubectl get hpa -n "${ns}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
-  fi
-  [[ -n "${hpa_name}" ]] || return 0
-
-  local metric spec_target spec_type
-  spec_type="$(kubectl get "horizontalpodautoscaler/${hpa_name}" -n "${ns}" \
-    -o jsonpath='{.spec.metrics[0].type}' 2>/dev/null || true)"
-  if [[ "${spec_type}" == "Pods" ]]; then
-    metric="$(kubectl get "horizontalpodautoscaler/${hpa_name}" -n "${ns}" \
-      -o jsonpath='{.spec.metrics[0].pods.metric.name}' 2>/dev/null || true)"
-    spec_target="$(kubectl get "horizontalpodautoscaler/${hpa_name}" -n "${ns}" \
-      -o jsonpath='{.spec.metrics[0].pods.target.averageValue}' 2>/dev/null || true)"
-  elif [[ "${spec_type}" == "Resource" ]]; then
-    metric="$(kubectl get "horizontalpodautoscaler/${hpa_name}" -n "${ns}" \
-      -o jsonpath='{.spec.metrics[0].resource.name}' 2>/dev/null || true)"
-    spec_target="$(kubectl get "horizontalpodautoscaler/${hpa_name}" -n "${ns}" \
-      -o jsonpath='{.spec.metrics[0].resource.target.averageUtilization}' 2>/dev/null || true)"
-  fi
-  echo "HPA metric: ${metric:-unknown} target=${spec_target:-?}"
-}
-
 # Default HPA custom metric name for the selected autoscaling.metric / HPA_METRIC.
 hpa_common_gpu_hpa_metric_name() {
   case "${HPA_METRIC:-gpu_utilization}" in
@@ -2135,8 +2092,4 @@ hpa_common_gpu_hpa_metric_name() {
       return 1
       ;;
   esac
-}
-
-hpa_common_print_hpa_status() {
-  hpa_common_print_hpa "${1:?namespace}"
 }

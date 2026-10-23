@@ -320,6 +320,9 @@ secrets_ex = (chart / "secrets.env.example").read_text()
 assert "nvcr.io/nvidia/vllm" not in secrets_ex
 assert "Public vLLM (6b) needs neither Secret." in secrets_ex
 assert "https://org.ngc.nvidia.com/account/api-keys" in secrets_ex
+assert secrets_ex.split("NGC_API_KEY=", 1)[1].splitlines()[0] == ""
+assert "paste NGC_API_KEY=nvapi-" not in readme
+assert "Paste the nvapi- key" not in apply_secrets
 assert "one OpenClaw agent per sandbox" in readme
 assert "### Disk (already under Persistence)" not in readme
 assert "### Aggregated metrics API" not in readme
@@ -328,6 +331,17 @@ assert "Simple HPA only test" not in readme
 assert "DCGM_NAMESPACE=gpu-operator-resources MAX_REPLICAS=8" in readme
 assert "It is a one-shot through the in-sandbox" in readme
 assert "#token=" in readme and "with no `#token=`" in readme
+assert "Keep `./scripts/run-agent-sandbox.sh` attached so `:18789` is up." not in readme
+assert "Keep `./scripts/openshell-port-forward.sh` attached so `openshell status` succeeds." in readme
+assert "It does **not** set a 10% threshold" not in readme
+assert "ceiling to 2 desired replicas" not in readme
+assert "ceil(1 × 3706/3000) = ceil(1.235) = 2" in readme
+assert "That script binds `0.0.0.0` and serves the page over plain HTTP." in readme
+_remote_ui = readme.find("**Remote UI test**")
+_plain_http = readme.find("That script binds `0.0.0.0` and serves the page over plain HTTP.")
+_url_table = readme.find("| User | Open this in a browser on the remote machine |")
+assert -1 not in (_remote_ui, _plain_http, _url_table)
+assert _remote_ui < _plain_http < _url_table
 assert "hermes nim nvidia/nemotron-3-nano" not in common
 assert 'E2E_CLIENT_HOST' in common
 dgx = (chart / "scripts" / "hpa-load-test-dgx-8xh100.sh").read_text()
@@ -338,6 +352,16 @@ assert "[90s]" in adapter
 assert "client.sh shortens this to 15s" in adapter
 assert "stabilizationWindowSeconds=120" not in (chart / "scripts" / "hpa-common.sh").read_text()
 hpa_common = (chart / "scripts" / "hpa-common.sh").read_text()
+assert "hpa_common_legacy_agent_basename" not in hpa_common
+assert "hpa_common_list_legacy_agent_deployments" not in hpa_common
+assert "hpa_common_migrate_legacy_agent_resources" not in hpa_common
+assert "hpa_common_gpu_recreate_stale_workload" not in hpa_common
+assert "hpa_common_hpa_metric_display" not in hpa_common
+assert "hpa_common_print_hpa_status" not in hpa_common
+assert "hpa_common_migrate_pre_metrics_proxy_resources" in hpa_common
+assert "finish_one_agent" not in (
+    chart / "scripts" / "setup-openclaw-ollama-e2e-sandboxes.sh"
+).read_text()
 assert "./scripts/apply-local-secrets.sh --replace" in hpa_common
 assert "Public vLLM (6b) does not create ngc-registry." in hpa_common
 assert 'if [[ "${inference_runtime}" == "nim" ]]; then' in hpa_common
@@ -421,7 +445,8 @@ assert "[h]ermes.real -m .* -z" in hermes_load
 assert "[h]ermes -z'" not in hermes_load
 assert deep_load.count("stop_sandbox_chats(") >= 3
 assert "`INFLIGHT=1`, `MAX_TOKENS=2048`" in readme
-assert "OpenClaw latency defaults: `INFLIGHT=1`, `MAX_TOKENS=2048`" in readme
+assert "OpenClaw latency defaults:" not in readme
+assert "Do not set `INFLIGHT` or `MAX_TOKENS`." not in readme
 assert "mean of **completed** samples in the last **30s**" in readme
 assert "no new completed sample for 15s" in readme
 assert "OpenClaw, Hermes, and Deep Agents share this metric" in readme
