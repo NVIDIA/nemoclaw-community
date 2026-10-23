@@ -103,7 +103,7 @@ hpa_common_require_nim_credentials() {
 Kubernetes needs both NIM Secrets in ${namespace}. Missing: ${missing[*]}
 Public vLLM (6b) does not create ngc-registry. Copy secrets.env.example to secrets.env, paste NGC_API_KEY, then:
   ./scripts/apply-local-secrets.sh --replace
-See README.md#6c-deep-agents-code--nim.
+See README.md#6c-deep-agents-code-with-nim.
 EOF
     return 1
   fi
@@ -119,7 +119,7 @@ Add these names—not the key itself—to gitignored local.env:
   export NIM_NGC_API_KEY_SECRET=nim-ngc-key
   export NIM_IMAGE_PULL_SECRET=ngc-registry
 
-See README.md#6c-deep-agents-code--nim.
+See README.md#6c-deep-agents-code-with-nim.
 EOF
   return 1
 }

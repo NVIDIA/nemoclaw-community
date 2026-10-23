@@ -132,7 +132,7 @@ Keep inference runtimes and autoscaling on the GPUs. You can switch to other inf
 | **6c** | Deep Agents | `nim` | `nvidia/nemotron-3-nano` | `E2E_USERS=10` | `agentscaling_deepagents_gpuutil.sh` | `client_deepagents.sh` |
 
 
-#### 6a. OpenClaw + Ollama
+#### 6a. OpenClaw with Ollama
 
 This example uses `E2E_USERS=5` and `AGENT_SANDBOX_MEMORY=8Gi` sandboxes (1Gi, 2Gi, and 4Gi OOM-kill OpenClaw before `:18789` binds), in total 40Gi CPU RAM. One sandbox per user, one OpenClaw agent per sandbox.
 - `INFLIGHT` is the concurrent chats per user on that one agent, default: `INFLIGHT=1`.
@@ -177,7 +177,7 @@ E2E_USERS=5 ./scripts/agentscaling_gpuutil.sh
 E2E_CLIENT_HOST=dgx-ip INFLIGHT=4 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client.sh
 ```
 
-The OpenClaw remote laptop UI is [OpenClaw simple test](#openclaw-simple-test).
+The OpenClaw remote laptop UI is [OpenClaw simple test](#simple-openclaw-test).
 
 ```bash
 # Or Terminal C: test clients on the DGX instead.
@@ -217,7 +217,7 @@ E2E_USERS=5 ./scripts/client.sh
 
 
 
-#### 6b. Hermes + vLLM
+#### 6b. Hermes with vLLM
 
 
 This example uses `E2E_USERS=10` and `AGENT_SANDBOX_MEMORY=4Gi` sandboxes (40Gi CPU RAM in total). One sandbox per user, one Hermes agent per sandbox.
@@ -302,7 +302,7 @@ E2E_USERS=10 ./scripts/client_hermes.sh
  `./scripts/uninstall-e2e.sh` removes the sandboxes when you switch to other agent + inference runtime pairings.
 
 
-#### 6c. Deep Agents Code + NIM
+#### 6c. Deep Agents Code with NIM
 
 
 This example uses `E2E_USERS=10` and `AGENT_SANDBOX_MEMORY=4Gi` sandboxes (40Gi CPU RAM in total). One sandbox per user, one Deep Agents agent per sandbox.
@@ -512,7 +512,7 @@ A non-empty answer plus the final `OK:` line is a pass. Wording varies; small mo
 
 
 
-**Remote UI test** (from any browser). After [6a](#6a-openclaw--ollama) has the five sandboxes up, run `./scripts/publish-openclaw-remote-http.sh` on the DGX. That script binds `0.0.0.0` and serves the page over plain HTTP. Restrict it to a trusted network. Set `E2E_PUBLISH_BIND=127.0.0.1` to keep the ports on the DGX only. Bring-up publishes loopback only. Published HTTP does not return gateway tokens. `/u/0` redirects to `/` with no `#token=`.
+**Remote UI test** (from any browser). After [6a](#6a-openclaw-with-ollama) has the five sandboxes up, run `./scripts/publish-openclaw-remote-http.sh` on the DGX. That script binds `0.0.0.0` and serves the page over plain HTTP. Restrict it to a trusted network. Set `E2E_PUBLISH_BIND=127.0.0.1` to keep the ports on the DGX only. Bring-up publishes loopback only. Published HTTP does not return gateway tokens. `/u/0` redirects to `/` with no `#token=`.
 
 Each user is a **different host port**. You do not type a token. Leave Password empty.
 
@@ -599,9 +599,7 @@ avg by (pod) (
 )
 ```
 
-<p align="center">
 <img width="1505" height="847" alt="Grafana GPU utilization by pod" src="https://github.com/user-attachments/assets/7b20b03f-fe4a-4d9c-8c04-722dd8863c70" />
-</p>
 
 Successful requests by pod (distribution, not an HPA metric):
 
@@ -614,9 +612,7 @@ sum by (pod) (
 )
 ```
 
-<p align="center">
 <img width="1502" height="852" alt="Grafana successful inference requests by pod" src="https://github.com/user-attachments/assets/9858911e-73cf-4d60-87b6-70972df6d90c" />
-</p>
 
 After scale-up you should see multiple series. If latency graphs stay empty, check `kubectl get servicemonitor -n nemoclaw-gpu`.
 
@@ -626,7 +622,7 @@ After scale-up you should see multiple series. If latency graphs stay empty, che
 
 Run `uninstall-e2e.sh` to remove all pairing CPU sandboxes (`openclaw-ollama-e2e-*`, `hermes-vllm-e2e-*`, `deepagent-nim-e2e-*`) and OpenShell providers (`onprem-openclaw` / `onprem-hermes` / `onprem-deepagents`). It does **not** uninstall GPU inference (Ollama / vLLM / NIM), OpenShell, Envoy, or Prometheus. 
 
-To leave OpenClaw and start Hermes, stop `client.sh`, keep the OpenShell port-forward, then run the command below. Continue at [6b Hermes + vLLM](#6b-hermes--vllm). Do not helm-uninstall OpenShell or `nemoclaw-gpu`. Later OpenClaw runs `./scripts/agentscaling_gpuutil.sh` again on this same stack.
+To leave OpenClaw and start Hermes, stop `client.sh`, keep the OpenShell port-forward, then run the command below. Continue at [6b Hermes + vLLM](#6b-hermes-with-vllm). Do not helm-uninstall OpenShell or `nemoclaw-gpu`. Later OpenClaw runs `./scripts/agentscaling_gpuutil.sh` again on this same stack.
 
 ```bash
 # Stop client.sh / client_hermes.sh / client_deepagents.sh first (Ctrl-C).

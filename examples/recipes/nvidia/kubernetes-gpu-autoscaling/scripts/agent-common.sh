@@ -17,7 +17,7 @@ agent_common_validate() {
 }
 
 # Laptop clients talk HTTP to dgx-ip (published host ports). See
-# ../README.md#6a-openclaw--ollama
+# ../README.md#6a-openclaw-with-ollama
 agent_common_print_laptop_client_usage() {
   local script_name="${1:?client script}"
   local users="${E2E_USERS:-5}"
