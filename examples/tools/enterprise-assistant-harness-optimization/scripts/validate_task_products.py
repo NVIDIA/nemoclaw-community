@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Check published task bytes against Eval Author's declassified proof receipts.
 
-The tree-digest framing follows labs-eval-author's trace_environment.py v1.4.0.
+The tree-digest framing follows eval-author's trace_environment.py v1.4.0.
 This checks integrity of retained evidence; it does not rerun Harbor controls.
 """
 from __future__ import annotations

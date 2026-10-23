@@ -85,8 +85,8 @@ it is guesswork. This example makes every change answer to measurement.
 | **[NeMo Relay](https://github.com/NVIDIA/NeMo-Relay)** | Records each run as a trace in the open ATIF format (every model call and tool call, with the tool schemas) and sends it to Intake. |
 | **[LangChain Deep Agents](https://github.com/langchain-ai/deepagents)** | The agent runtime: the model loop, a shell, skills, subagents and middleware. The agent is a folder of these ([agent/](agent/agent.yaml)). |
 | **FreeCAD 1.1.3**, headless | The engineering tool the agent drives, inside the trial's container. |
-| **[NeMo Compass](https://github.com/NVIDIA-NeMo/nemo-compass)** | An analysis agent that reads a round's traces against the Ethos and reports recurring problems as **Insights**, each backed by the traces that show it. Here it reads from Intake; it also reads local ATIF files and other trace stores (Braintrust, LangSmith, Langfuse, MLflow). |
-| **[NeMo Eval Author](https://github.com/NVIDIA-NeMo/eval-author)** | Skills for your coding agent that build and review the eval: for each Insight, does a check already catch it, or does the eval need a new one? Every check is **proven**: an empty answer scores 0, a known-good answer 1, a realistic wrong answer 0. |
+| **[NeMo Compass](https://github.com/NVIDIA-NeMo/nemo-compass)** | NeMo Compass analyzes stored agent traces and evaluation evidence to find recurring failures, expose evaluation gaps, and prioritize what teams should improve next. Here it reads from Intake; it also reads local ATIF files and other trace stores (Braintrust, LangSmith, Langfuse, MLflow). |
+| **[NeMo Eval Author](https://github.com/NVIDIA-NeMo/eval-author)** | NeMo Eval Author measures evaluation coverage and generates candidate agent-specific tasks, environments, and verifiers to address identified coverage gaps. Here its skills help a coding agent build and review the eval, and every check is proven against empty, known-good, and realistic wrong answers. |
 | **Coding agent** and the **experimenter** ([skills/cad-experimenter](skills/cad-experimenter/SKILL.md)) | Your coding agent (Claude Code, Codex, Cursor and others) runs Eval Author's skills and the experimenter skill, which diagnoses from the Insights and traces and builds candidate agents. |
 | **Docker** ([Colima](https://github.com/abiosoft/colima) on macOS) | Runs every trial in its own container, its network limited to Helix. |
 
@@ -361,7 +361,7 @@ that trace, so Compass can see how each run was graded.
 The [Ethos](ETHOS.md) is what those scores are for: what the agent is for, what it
 must not do, and what success looks like (here, an IoU of 0.9 or more *from a native,
 editable, compact feature tree*, never one without the other). See the
-[Ethos guide](https://github.com/NVIDIA-NeMo/eval-author/blob/main/ethos/README.md).
+[Ethos guide](https://github.com/NVIDIA/skills/blob/main/skills/ethos-orchestrate/README.md#how-to-use).
 
 ### Step 2: Find the problems with NeMo Compass
 
