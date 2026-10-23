@@ -78,7 +78,8 @@ kubectl get pods -n "${DCGM_NAMESPACE:-gpu-operator-resources}" -l app=nvidia-dc
 
 ### 3. Install the OpenShell gateway once
 
-Skip this if `kubectl -n nemoclaw-sandboxes get svc openshell` succeeds. 
+Skip this if `kubectl -n nemoclaw-sandboxes get svc openshell` succeeds.
+
 
 ```bash
 source versions.env
@@ -89,6 +90,9 @@ ALLOW_UNAUTHENTICATED_OPENSHELL=1 \
 OPENSHELL_UNAUTHENTICATED_ACK=dedicated-cluster-port-forward-only \
   ./scripts/install-openshell-k8s.sh
 ```
+
+The default is OIDC: set `OPENSHELL_OIDC_ISSUER` and leave `ALLOW_UNAUTHENTICATED_OPENSHELL=0`. This demo uses the isolated-eval exception instead. `ALLOW_UNAUTHENTICATED_OPENSHELL=1` turns off OIDC and exposes the OpenShell user API without user authentication. Use it only on a dedicated evaluation cluster with `./scripts/openshell-port-forward.sh`. ClusterIP does not block in-cluster pods. `OPENSHELL_UNAUTHENTICATED_ACK=dedicated-cluster-port-forward-only` records that choice.
+
 
 ### 4. Install GPU inference and the Envoy load balancer once
 
@@ -476,7 +480,7 @@ kubectl get --raw \
 
 Other Prometheus → Adapter metrics: extend `monitoring/prometheus-adapter-gpu-values.yaml` and `nemoclaw-gpu.hpaMetric`.
 
-## Simple HPA-only test 
+## Simple HPA-only test
 
 It only checks that Kubernetes HPA can change GPU pod count from synthetic inference load (`files/load-generator.ts`). It does **not** create OpenClaw sandboxes and does **not** use `client.sh`.
 The HPA-only test has been verified on DGX 8xH100 on-prem `maxReplicas=8`, and [Brev AWS](https://brev.nvidia.com) **4× L40S** (48 GB), `MAX_REPLICAS=4`.

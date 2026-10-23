@@ -296,15 +296,13 @@ assert "not a failed OpenShell tunnel" in readme
 forward_sh = (chart / "scripts" / "openshell-port-forward.sh").read_text()
 assert "kubectl may print broken pipe" in forward_sh
 assert "Git has `secrets.env.example` only." in readme
-assert "The default vLLM NGC image and Hugging Face model are public, so no extra secret." in readme
+assert "The default vLLM NGC image and Hugging Face model are public, so no extra Secret is required." in readme
 assert "https://catalog.ngc.nvidia.com/orgs/nvidia/-/containers/vllm/" in readme
 assert "Public vLLM (6b) needs no NGC key." in readme
-assert "Public vLLM (6b) does not create `ngc-registry`." in readme
-assert "Same two steps as 6b: first pull the inference server image, then pull the model weights." in readme
 assert "https://org.ngc.nvidia.com/account/api-keys" in readme
 assert "https://org.ngc.nvidia.com" in readme
 assert "Skip `apply-local-secrets.sh` only when **both** Secrets exist" in readme
-assert "`docker pull` uses that one key." in readme
+assert "**both** Secrets from one `NGC_API_KEY`" in readme
 assert "kubelet uses `ngc-registry`" in readme
 assert "the running NIM uses `nim-ngc-key`" in readme
 assert "./scripts/apply-local-secrets.sh --replace" in readme
@@ -326,7 +324,7 @@ assert "Paste the nvapi- key" not in apply_secrets
 assert "one OpenClaw agent per sandbox" in readme
 assert "### Disk (already under Persistence)" not in readme
 assert "### Aggregated metrics API" not in readme
-assert "## Simple HPA-only test (optional)" in readme
+assert "\n## Simple HPA-only test\n" in readme
 assert "Simple HPA only test" not in readme
 assert "DCGM_NAMESPACE=gpu-operator-resources MAX_REPLICAS=8" in readme
 assert "It is a one-shot through the in-sandbox" in readme
@@ -376,6 +374,10 @@ assert "TLS required by default" not in readme
 assert "### TLS values" not in readme
 assert "This recipe does not use Envoy TLS." not in readme
 assert "copy the OpenShell gateway client certs" in readme
+assert "`ALLOW_UNAUTHENTICATED_OPENSHELL=1` turns off OIDC" in readme
+assert "dedicated evaluation cluster" in readme
+assert "ClusterIP does not block in-cluster pods." in readme
+assert "OPENSHELL_UNAUTHENTICATED_ACK=dedicated-cluster-port-forward-only" in readme
 assert "not for Envoy" not in readme
 assert "openshell-client-tls" in readme
 assert "| Envoy load balancer | **443**" not in readme
@@ -483,7 +485,8 @@ assert "INFLIGHT=1 MAX_TOKENS=1024" in readme
 assert "INFLIGHT=1 MAX_TOKENS=1024" in deep
 assert "INFLIGHT=1 MAX_TOKENS=1024" not in hermes
 assert "INFLIGHT=3 MAX_TOKENS=64" not in readme
-assert "Default is `INFLIGHT=1 MAX_TOKENS=1024` for GPU util and for latency" in readme
+assert "**GPU Utilization.** (target 40%). Default is `INFLIGHT=1 MAX_TOKENS=1024`." in readme
+assert "**LLM latency.** Same default. `client_deepagents.sh` sends `dcode -n`." in readme
 assert "INFLIGHT=1 MAX_TOKENS=1024 E2E_USERS=10 ./scripts/client_deepagents.sh" not in readme
 assert "INFLIGHT=1 MAX_TOKENS=2048 E2E_USERS=5 ./scripts/client_deepagents.sh" not in readme
 assert "E2E_USERS=5 ./scripts/client_deepagents.sh" not in readme
