@@ -1,16 +1,25 @@
 #!/usr/bin/env bash
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-
-# Build a deployment-specific NemoClaw/OpenClaw image and push it to a registry that
-# the remote OpenShell Kubernetes gateway can pull. No inference API key enters the image.
+#
+# Build a deployment-specific NemoClaw sandbox image for the agent selected by AGENT_NAME
+# (openclaw | hermes | deepagents) and push it to a registry the remote OpenShell
+# Kubernetes gateway can pull. No inference API key enters the image.
+#
+# Usage:
+#   AGENT_NAME=openclaw AGENT_SANDBOX_IMAGE=registry.example.com/team/nemoclaw-openclaw-k8s:v0.0.104 \
+#     ./scripts/build-agent-sandbox-image.sh
+#   AGENT_NAME=hermes AGENT_SANDBOX_IMAGE=registry.example.com/team/nemoclaw-hermes-k8s:v0.0.104 \
+#     ./scripts/build-agent-sandbox-image.sh
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-# shellcheck source=../versions.env
+# shellcheck source=versions.env
 source "${CHART_DIR}/versions.env"
+# shellcheck source=agent-common.sh
+source "${SCRIPT_DIR}/agent-common.sh"
 
 fail() {
   echo "ERROR: $*" >&2
@@ -25,8 +34,13 @@ require_cmd docker
 require_cmd git
 require_cmd sed
 
-SANDBOX_IMAGE="${NEMOCLAW_SANDBOX_IMAGE:-}"
-MODEL="${INFERENCE_MODEL:-llama3.2:3b}"
+AGENT_NAME="${AGENT_NAME:-}"
+agent_common_validate "${AGENT_NAME}"
+agent_common_validate_runtime_pairing "${AGENT_NAME}" "${INFERENCE_RUNTIME:-}"
+AGENT_DISPLAY_NAME="$(agent_common_display_name "${AGENT_NAME}")"
+
+SANDBOX_IMAGE="${AGENT_SANDBOX_IMAGE:-}"
+MODEL="${INFERENCE_MODEL:-$(agent_common_default_inference_model "${INFERENCE_RUNTIME:-ollama}")}"
 PLATFORM="${NEMOCLAW_IMAGE_PLATFORM:-linux/amd64}"
 IMAGE_NAME="${SANDBOX_IMAGE##*/}"
 
@@ -35,15 +49,15 @@ IMAGE_NAME="${SANDBOX_IMAGE##*/}"
 [[ "${OPENSHELL_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
   || fail "versions.env contains an invalid OPENSHELL_VERSION"
 [[ -n "${SANDBOX_IMAGE}" ]] \
-  || fail "set NEMOCLAW_SANDBOX_IMAGE to a registry image with a non-latest tag"
+  || fail "set AGENT_SANDBOX_IMAGE to a registry image with a non-latest tag"
 [[ "${SANDBOX_IMAGE}" =~ ^[A-Za-z0-9][A-Za-z0-9._:/@-]+$ ]] \
-  || fail "NEMOCLAW_SANDBOX_IMAGE contains unsupported characters"
+  || fail "AGENT_SANDBOX_IMAGE contains unsupported characters"
 [[ "${SANDBOX_IMAGE}" == */* ]] \
-  || fail "NEMOCLAW_SANDBOX_IMAGE must include a registry/repository path"
+  || fail "AGENT_SANDBOX_IMAGE must include a registry/repository path"
 [[ "${SANDBOX_IMAGE}" != *@* && "${IMAGE_NAME}" == *:* ]] \
-  || fail "NEMOCLAW_SANDBOX_IMAGE must be a tagged build target, not a digest"
+  || fail "AGENT_SANDBOX_IMAGE must be a tagged build target, not a digest"
 [[ "${SANDBOX_IMAGE}" != *:latest ]] \
-  || fail "NEMOCLAW_SANDBOX_IMAGE must not use the mutable latest tag"
+  || fail "AGENT_SANDBOX_IMAGE must not use the mutable latest tag"
 [[ "${PLATFORM}" == "linux/amd64" || "${PLATFORM}" == "linux/arm64" ]] \
   || fail "NEMOCLAW_IMAGE_PLATFORM must be linux/amd64 or linux/arm64"
 [[ "${MODEL}" =~ ^[A-Za-z0-9][A-Za-z0-9._:/-]*$ ]] || fail "INFERENCE_MODEL is invalid"
@@ -67,6 +81,10 @@ find "${SOURCE_DIR}" -type d -exec chmod 755 {} +
 find "${SOURCE_DIR}" -type f ! -perm /111 -exec chmod 644 {} +
 find "${SOURCE_DIR}" -type f -perm /111 -exec chmod 755 {} +
 
+DOCKERFILE="${SOURCE_DIR}/$(agent_common_dockerfile_rel_path "${AGENT_NAME}")"
+[[ -f "${DOCKERFILE}" ]] \
+  || fail "NemoClaw ${NEMOCLAW_VERSION} is missing $(agent_common_dockerfile_rel_path "${AGENT_NAME}")"
+
 BLUEPRINT="${SOURCE_DIR}/nemoclaw-blueprint/blueprint.yaml"
 [[ -f "${BLUEPRINT}" ]] || fail "NemoClaw release is missing its blueprint"
 BLUEPRINT_MIN="$(sed -nE 's/^min_openshell_version:[[:space:]]*"([0-9.]+)"/\1/p' "${BLUEPRINT}")"
@@ -74,7 +92,22 @@ BLUEPRINT_MAX="$(sed -nE 's/^max_openshell_version:[[:space:]]*"([0-9.]+)"/\1/p'
 [[ "${BLUEPRINT_MIN}" == "${OPENSHELL_VERSION}" && "${BLUEPRINT_MAX}" == "${OPENSHELL_VERSION}" ]] \
   || fail "NemoClaw ${NEMOCLAW_VERSION} requires OpenShell ${BLUEPRINT_MIN}-${BLUEPRINT_MAX}, not ${OPENSHELL_VERSION}"
 
-echo "Building and pushing ${SANDBOX_IMAGE} for ${PLATFORM}..."
+BUILD_ARGS=(
+  --build-arg "BASE_IMAGE=$(agent_common_base_image_repo "${AGENT_NAME}"):${NEMOCLAW_VERSION}"
+  --build-arg "NEMOCLAW_MODEL=${MODEL}"
+)
+while IFS= read -r extra_arg; do
+  [[ -n "${extra_arg}" ]] && BUILD_ARGS+=(--build-arg "${extra_arg}")
+done < <(agent_common_extra_build_args "${AGENT_NAME}" "${MODEL}")
+BUILD_ARGS+=(
+  --build-arg "NEMOCLAW_INFERENCE_BASE_URL=https://inference.local/v1"
+  --build-arg "NEMOCLAW_INFERENCE_API=openai-completions"
+  --build-arg "NEMOCLAW_MANAGED_IMAGE_CAPABILITY_UNION=0"
+  --build-arg "NEMOCLAW_MANAGED_IMAGE_RUNTIME_USER=root"
+  --build-arg "NEMOCLAW_BUILD_ID=kubernetes-onprem-${NEMOCLAW_VERSION}"
+)
+
+echo "Building and pushing ${SANDBOX_IMAGE} for ${PLATFORM} (${AGENT_DISPLAY_NAME})..."
 docker buildx build \
   --platform "${PLATFORM}" \
   --pull \
@@ -82,15 +115,9 @@ docker buildx build \
   --provenance=true \
   --sbom=true \
   --tag "${SANDBOX_IMAGE}" \
-  --build-arg "BASE_IMAGE=ghcr.io/nvidia/nemoclaw/sandbox-base:${NEMOCLAW_VERSION}" \
-  --build-arg "NEMOCLAW_MODEL=${MODEL}" \
-  --build-arg "NEMOCLAW_PRIMARY_MODEL_REF=inference/${MODEL}" \
-  --build-arg "NEMOCLAW_INFERENCE_BASE_URL=https://inference.local/v1" \
-  --build-arg "NEMOCLAW_INFERENCE_API=openai-completions" \
-  --build-arg "NEMOCLAW_MANAGED_IMAGE_CAPABILITY_UNION=0" \
-  --build-arg "NEMOCLAW_MANAGED_IMAGE_RUNTIME_USER=root" \
-  --build-arg "NEMOCLAW_BUILD_ID=kubernetes-onprem-${NEMOCLAW_VERSION}" \
+  --file "${DOCKERFILE}" \
+  "${BUILD_ARGS[@]}" \
   "${SOURCE_DIR}"
 
-echo "Pushed deployment-specific NemoClaw sandbox image: ${SANDBOX_IMAGE}"
+echo "Pushed deployment-specific ${AGENT_DISPLAY_NAME} sandbox image: ${SANDBOX_IMAGE}"
 echo "The image contains no inference API key. OpenShell receives that key separately."
