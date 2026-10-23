@@ -24,28 +24,13 @@ Kubernetes HPA scales those inference pods using a Pods **`AverageValue`** metri
 
 ## Deployment Architecture
 
+
+
+<img width="1672" height="941" alt="architecture" src="https://github.com/user-attachments/assets/4e61491d-7a8b-4ce7-9910-9715965e4e7c" />
+
 Queries from end users go to the agents running in the sandboxes, one sandbox per end user. One end user ↔ one sandbox ↔ one agent. **One OpenShell gateway** for all sandboxes. Sandboxes reach GPUs at `https://inference.local`. The load balancer is **Envoy** with LeastRequest policy. HPA scales from **1** to **N** inference pods (1 GPU each). Each GPU pod is **2/2 Ready** when healthy: inference runtimes (`ollama` / `vllm` / `nim`) + `metrics-proxy` (auth, `/v1`, health, `/metrics`). The chart generates a local inference API key (Bearer on `/v1`). OpenShell injects it for the sandbox. 
 
-```text
-M end users (1 sandbox per user)
-        ↓
-CPU-only OpenShell sandboxes (AGENT_NAME=openclaw | hermes | deepagents)
-        ↓
-OpenShell https://inference.local
-        ↓
-Envoy load balancer — LeastRequest
-        ↓
-Authenticated inference endpoints
-├─ Inference pod (ollama|vllm|nim) → GPU 1
-├─ …
-└─ Inference pod (ollama|vllm|nim) → GPU N
-        ↑
-HPA (GPU util >40% or latency >3000 ms)
-```
-
-
-
-`latency_avg` is metrics-proxy **chat completions duration** on that GPU pod (in-pod fetch until the full response, including streams). It averages **completed** samples from the last 30s. In-flight chats do not count. After 15s with no completed sample the gauge publishes 0 so HPA can scale down. That 0 is not 0 ms latency. `get-hpa.sh` prints milliseconds (`46514/3000` = 46514 ms / 3000 ms). See [How is LLM latency calculated for HPA?](#how-is-llm-latency-calculated-for-hpa).
+The metric **LLM latency** `latency_avg` is **chat completions duration** on that GPU pod (in-pod fetch until the full response, including streams). It averages **completed** samples from the last 30s. In-flight chats do not count. After 15s with no completed sample the gauge publishes 0 so HPA can scale down. That 0 is not 0 ms latency. `get-hpa.sh` prints milliseconds (`46514/3000` = 46514 ms / 3000 ms). See [How is LLM latency calculated for HPA?](#how-is-llm-latency-calculated-for-hpa).
 
 ## Prerequisites
 
