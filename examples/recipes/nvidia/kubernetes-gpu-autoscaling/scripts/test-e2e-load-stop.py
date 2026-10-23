@@ -282,7 +282,8 @@ assert "hermes vllm nvidia/NVIDIA-Nemotron-3-Nano-4B-FP8" in common
 assert "deepagents nim nvidia/nemotron-3-nano" in common
 readme = (chart / "README.md").read_text()
 assert "`secrets.env` is gitignored." in readme
-assert "Keep [step 5](#5-connect-the-openshell-cli) in another terminal:" in readme
+assert "Keep [step 5](#5-connect-the-openshell-cli) in another terminal:" not in readme
+assert "Keep this attached for step 6." in readme
 publish_hermes = (chart / "scripts" / "publish-hermes-remote-http.sh").read_text()
 publish_openclaw = (chart / "scripts" / "publish-openclaw-remote-http.sh").read_text()
 assert "remote_http_publish_hermes" in publish_hermes

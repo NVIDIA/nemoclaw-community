@@ -108,11 +108,11 @@ kubectl get gatewayclass eg
 
 ### 5. Connect the OpenShell CLI
 
-Keep this attached:
-
 ```bash
 ./scripts/openshell-port-forward.sh
 ```
+
+Keep this attached for step 6.
 
 kubectl may print `Error copying from remote stream` and `broken pipe` when a sandbox command ends. That line is from kubectl, not a failed OpenShell tunnel. Leave the script running. Stop it only if `openshell status` shows Connection refused.
 
@@ -170,8 +170,6 @@ E2E test: OpenClaw + Ollama
         Ollama on GPUs
             1 GPU  →  demand rises  →  8 GPUs  →  idle  →  1 GPU
 ```
-
-Keep [step 5](#5-connect-the-openshell-cli) in another terminal: `./scripts/openshell-port-forward.sh`. If `openshell status` shows Connection refused, start that script again.
 
 **GPU utilization** HPA metric `gpu_utilization_percent`, target 40%. Provision keeps current GPUs at 1 replica (`maxReplicas=8`). `client.sh` sends `INFLIGHT=4 MAX_TOKENS=2048` until 8 GPUs, then stops new chats. Successful chats are chats that got a reply; err is chats that were sent and got no reply. kubectl TARGETS like `67500m/40` means **67.5%/40%**. Watch GPU utilization percentages with `get-hpa.sh`.
 
@@ -258,7 +256,7 @@ E2E test: Hermes + vLLM
 ```
 
 
-After steps 1–5 (`openshell status` Connected, `gatewayclass eg` present). Keep [step 5](#5-connect-the-openshell-cli) in another terminal: `./scripts/openshell-port-forward.sh`. If `openshell status` shows Connection refused, start that script again.
+After steps 1–5 (`openshell status` Connected, `gatewayclass eg` present).
 
 Kubelet pulls the [official NVIDIA vLLM NGC Container](https://catalog.ngc.nvidia.com/orgs/nvidia/-/containers/vllm/-?_lr=1) (`nvcr.io/nvidia/vllm`). This recipe already pins the image. After the image is on the node, vLLM downloads `nvidia/NVIDIA-Nemotron-3-Nano-4B-FP8` from Hugging Face. The default vLLM NGC image and Hugging Face model are public, so no extra Secret is required.
 
