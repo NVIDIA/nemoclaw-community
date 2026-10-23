@@ -341,7 +341,7 @@ E2E test: Deep Agents Code + NIM
 
 After steps 1–5 (`openshell status` Connected, `gatewayclass eg` present). Clients use `dcode -n` (no per-sandbox Deep Agents listener).
 
-This Kubernetes path needs **both** Secrets from one `NGC_API_KEY` before `agentscaling_deepagents_gpuutil.sh`. That key is an [NVIDIA NGC](https://org.ngc.nvidia.com) API key. Create it at [NGC API keys](https://org.ngc.nvidia.com/account/api-keys). Kubernetes needs two Secret types: kubelet uses `ngc-registry` (`dockerconfigjson`) to pull the NIM image (`nvcr.io/nim/nvidia/nemotron-3-nano`), and the running NIM uses `nim-ngc-key` (Opaque env `NGC_API_KEY`) to pull the model weights. 
+This Kubernetes path needs **both** Secrets from one `NGC_API_KEY` before `agentscaling_deepagents_gpuutil.sh`. Create `NGC_API_KEY` at [NGC API keys](https://org.ngc.nvidia.com/account/api-keys) on [NVIDIA NGC](https://org.ngc.nvidia.com). Kubernetes needs two Secret types: kubelet uses `ngc-registry` (`dockerconfigjson`) to pull the NIM image (`nvcr.io/nim/nvidia/nemotron-3-nano`), and the running NIM uses `nim-ngc-key` (Opaque env `NGC_API_KEY`) to pull the model weights. 
 
 `secrets.env` is gitignored. Git has `secrets.env.example` only. Skip `apply-local-secrets.sh` only when **both** Secrets exist in `nemoclaw-gpu`. 
 
