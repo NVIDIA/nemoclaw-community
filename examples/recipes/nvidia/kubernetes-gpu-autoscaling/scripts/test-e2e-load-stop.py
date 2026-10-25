@@ -545,7 +545,39 @@ for name, text in (
 assert 'os.environ.get("INFLIGHT")' in hermes
 assert "inflight=inflight" in hermes
 assert "MAX_REPLICAS_HOLD_SEC:-0" in hermes
+class _DiscoveryResponse:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args: object) -> bool:
+        return False
+
+    def read(self) -> bytes:
+        return json.dumps(
+            {
+                "users": [
+                    {
+                        "user_id": 0,
+                        "sandbox": "openclaw-ollama-e2e-0000",
+                        "ws_host": "10.184.164.109",
+                        "ws_port": 18789,
+                    }
+                ]
+            }
+        ).encode()
+
+
+_real_urlopen = mod.urllib.request.urlopen
+mod.urllib.request.urlopen = lambda *_args, **_kwargs: _DiscoveryResponse()
+try:
+    rewritten_users = mod.users_from_http_host("127.0.0.1", 1, 18788)
+finally:
+    mod.urllib.request.urlopen = _real_urlopen
+assert rewritten_users[0]["ws_host"] == "127.0.0.1"
+assert rewritten_users[0]["ws_port"] == 18789
+assert "10.184.164.109" not in str(rewritten_users[0]["ws_host"])
 print("OK: HPA helper reports the 8 GPU target without treating a failed poll as 8")
+print("OK: same-DGX OpenClaw client uses --host, not the discovery node IP")
 print("OK: OpenClaw client requires --host and does not start in-sandbox helpers")
 print("OK: client stop kills leftover helpers and leaves agents running")
 print("OK: WS helper counts a reply as ok and a sent chat with no reply as err")

@@ -95,7 +95,24 @@ def users_from_http_host(host: str, users: int, discovery_port: int) -> list[dic
             data = json.loads(resp.read().decode("utf-8"))
         rows = data.get("users") if isinstance(data, dict) else None
         if isinstance(rows, list) and rows:
-            return rows
+            # Discovery records the laptop address. --host is the address this
+            # process can open. Same-DGX bring-up listens on 127.0.0.1 only.
+            aligned: list[dict[str, object]] = []
+            for index, row in enumerate(rows):
+                if not isinstance(row, dict):
+                    continue
+                item = dict(row)
+                raw_id = item.get("user_id", index)
+                try:
+                    user_index = int(raw_id)
+                except (TypeError, ValueError):
+                    user_index = index
+                item["ws_host"] = host
+                item["host"] = host
+                item["ws_port"] = 18789 + user_index
+                aligned.append(item)
+            if aligned:
+                return aligned[:users]
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError):
         # Discovery is optional. Fall back to host:18789+i without a token file.
         pass
