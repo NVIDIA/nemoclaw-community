@@ -2,7 +2,7 @@
 schema_version: 1
 name: cad-agent
 created_timestamp: 2026-09-10T13:45:00+02:00
-updated_timestamp: 2026-10-15T21:00:00+02:00
+updated_timestamp: 2026-10-26T20:00:00+01:00
 author: NVIDIA
 owner: NVIDIA
 ---
@@ -86,9 +86,14 @@ Where things run:
 - The agent does the modelling. It reads the measurements, decides which features
   describe the part, and writes its own FreeCAD code for that part. Skills and subagents
   give it knowledge (how to measure, how to build each kind of feature, the FreeCAD API,
-  how to verify), not a routine that turns any mesh into a model in one command: a run
-  whose only modelling step is executing a fixed reconstruction script misses the
-  purpose even when it passes.
+  how to verify) and general tools, not a routine that turns any mesh into a model in one
+  command: a run whose only modelling step is executing a fixed reconstruction script
+  misses the purpose even when it passes.
+- General geometry tools are allowed: functions that work on any mesh and that the agent
+  calls with its own choices, such as fitting a section or a path, or building a loft,
+  sweep or pad from fitted data with named dimensions. The agent still decides which
+  features describe the part and where each tool applies. A tool holds no part-specific
+  numbers, feature lists or shapes, and uses only the task's input.
 - Generalize: the method must work for parts, proportions and orientations the eval
   has not shown it. Tuning to the evaluated parts is a failure.
 
@@ -112,6 +117,9 @@ Where things run:
 - It reloads and recomputes cleanly after save and reopen.
 - Compact: about one face per surface of the part, not one per slice or polygon
   segment; the eval allows at most 10 times the faces of the task's reference solution.
+- No visible artefact a designer would object to: notches, bulges, creases, seams, steps
+  or pinches the part does not have. The checks cannot measure these; renders of the
+  model beside the mesh show them.
 - Every feature of the part is there: a model that leaves out a branch or a boss is wrong
   even when its overall overlap is high.
 - IoU ≥ 0.9 against the task's reference mesh, measured by the eval's verifier, on every

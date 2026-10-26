@@ -34,7 +34,8 @@ This skill was written for this example only. It is a worked pattern for the
   `verifier/check.log` the details,
   `verifier/reward.txt` the reward, and the first line of `agent/run.log` the trace ID
   (`trace <id>`). The same reward, IoU, failed checks and complexity counts are attached to each trace.
-- `insights.yml`: Compass Insights on this round's traces, each citing traces.
+- `insights.yml`: Compass Insights on this round's traces, each citing traces. Read it
+  first; if it is missing, stop and say so: a round built without it repeats guesswork.
 - `EVAL-AUTHOR.md`: whether the eval already catches each Insight.
 
 ## Rules
@@ -42,7 +43,11 @@ This skill was written for this example only. It is a worked pattern for the
 - **Fix the behavior, not the test.** Do not read `evals/*/tests/` or
   `evals/*/solution/`, and never mirror the grader. If the agent must measure similarity
   to the mesh, write an independent measurement.
-- At most **two candidates**, each a different strategy.
+- At most **two candidates**, each a different strategy and **one change**, in one area:
+  knowledge (prompt, skill text), process (middleware), verification, or tools. One change
+  per candidate is what lets the measurement say what worked.
+- **Nothing specific to these parts** in the agent: no dimensions, coordinates, feature
+  lists or names of the parts. Scan your diff before you hand over.
 - **Test code headlessly** in the agent's image, with the `freecadcmd` the agent runs.
 
 ## Levers
@@ -52,7 +57,7 @@ This skill was written for this example only. It is a worked pattern for the
 | System prompt | `system_prompt` in `agent.yaml` |
 | Skills | `skills/<name>/SKILL.md` in the agent folder, with any files beside it. Deep Agents lists each skill's description in the prompt and the agent reads it when it applies. Skills carry knowledge and small building blocks the agent composes in its own scripts, not a complete reconstruction routine (ETHOS). |
 | Subagents | `subagents` in `agent.yaml`: a list of `{name, description, system_prompt, tools?}`. The agent delegates with its `task` tool. |
-| Middleware | `agent/middleware.py` exporting `MIDDLEWARE`, a list of Deep Agents middleware (e.g. trimming tool output, stopping loops). Use it only for what a prompt or skill cannot do. |
+| Middleware | `agent/middleware.py` exporting `MIDDLEWARE`, a list of Deep Agents middleware (e.g. trimming tool output, stopping loops). Use it for what a prompt or skill cannot do, including a rule the traces show the agent ignores in the prompt: a short hint added to the tool result where it applies is often followed where the prompt rule was not. |
 | Model | `model` in `agent.yaml`. `with-approval`: propose only. |
 
 ## Steps
@@ -112,8 +117,8 @@ A step that hangs or takes over about 60 s is itself a finding: the whole run ha
 5 minutes. Hand over at least one candidate within about
 45 minutes, even if it is the simpler idea; the eval measures it.
 
-**4. Report.** Write `CANDIDATES.md`: per candidate, the diff against `agent/`, what you
-tested and its results, and what you expect on each check. The orchestrator measures
+**4. Report.** Write `CANDIDATES.md`: per candidate, the Insights it addresses, the diff
+against `agent/`, what you tested and its results, and what you expect on each check. The orchestrator measures
 them.
 
 ## The keep rule

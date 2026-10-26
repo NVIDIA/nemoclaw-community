@@ -515,6 +515,10 @@ round at a time:
 4. **Stop** at the round budget, or after two rounds in a row with no kept candidate.
    Then confirm the final agent with 10 runs, five per part.
 
+To have your coding agent run all of it, from Step 0 to the confirmation and a report,
+paste [loop/START.md](loop/START.md) into a fresh session in this folder. It stops for
+your "go" once, before the first round.
+
 ## Environment variables
 
 Compass reads its model from `.env` ([.env.example](.env.example)). Everything else is
