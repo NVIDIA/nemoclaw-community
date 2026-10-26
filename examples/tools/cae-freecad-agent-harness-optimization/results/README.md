@@ -11,11 +11,11 @@ eval caught each Insight, and a fresh experimenter
 candidate was kept only if it passed more runs than the agent under study (or as many runs
 and more checks), with no part and no check worse.
 
-![Checks passed, best IoU per part and tokens per run, by round](../assets/results-rounds.png)
+![The base agent and each kept agent: checks passed, mean IoU per part, runs passed, and tokens per run](../assets/results-rounds.png)
 
 Every Compass Insight, the check that caught it and the round that fixed it:
 [insights/](insights/README.md). The final agent: [final-agent/](final-agent/), described
-in the [README](../README.md#what-the-loop-built). The chart is drawn by
+in the [README](../README.md#what-the-loop-built). The charts are drawn by
 [rounds_chart.py](rounds_chart.py).
 
 ## Chapter 1: the original Ethos

@@ -146,7 +146,7 @@ point; a precise one, with clear intent, success criteria and things not to do, 
 Compass something to judge traces against and gives Eval Author something to turn into
 checks. Each check closes one way to pass while getting worse, so the more distinct
 behaviours the checks cover, the more a passing score means. In this example Eval Author
-grew the eval from five checks to nine, each from evidence in the traces, and each new
+grew the eval from six checks to nine, each from evidence in the traces, and each new
 check changed which agent the loop kept.
 
 **Why the eval is the hard part.** As the
@@ -228,7 +228,11 @@ same agent fell to 0 of 10. **Last**, four more rounds produced an agent that mo
 part itself; rendering the models showed artefacts no check measured, and fixing those
 exposed one more gap in the eval, closed with one more check.
 
-![Checks passed, best IoU per part and tokens per run, by round](assets/results-rounds.png)
+![The base agent and each kept agent: checks passed, mean IoU per part, runs passed, and tokens per run](assets/results-rounds.png)
+
+The charts show the base agent and each agent the loop kept, then the final agent's
+10-run confirmation. Checks are the share passed over the agent's runs, out of the checks
+the eval had at the time, so the round-3 agent's full marks were before the Ethos revision.
 
 Each round ran both parts twice, all runs in parallel, 5 minutes per run. *Surface changed*
 is what the experimenter edited in the agent folder (system prompt, skills and their
