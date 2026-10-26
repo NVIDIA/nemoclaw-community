@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import publish  # noqa: E402
 from publish import grade, trace_id  # noqa: E402
 
 
@@ -31,6 +32,33 @@ class TraceIdTest(unittest.TestCase):
 
     def test_missing(self):
         self.assertIsNone(trace_id(self.trial('Traceback (most recent call last):\n')))
+
+
+class VoidTest(unittest.TestCase):
+    def trial(self, exception: str | None, ended: str | None) -> Path:
+        root = Path(tempfile.mkdtemp())
+        (root / 'verifier').mkdir()
+        (root / 'verifier' / 'reward.txt').write_text('0\n')
+        (root / 'verifier' / 'results').write_text('iou\tFAIL\n')
+        (root / 'result.json').write_text(json.dumps(
+            {'exception_info': exception and {'exception_type': exception}}))
+        if ended:
+            (root / 'agent').mkdir()
+            (root / 'agent' / 'outcome.json').write_text(json.dumps({'ended': ended}))
+        return root
+
+    def test_graded_run_counts(self):
+        self.assertIsNone(publish.void_reason(self.trial(None, 'timeout')))
+
+    def test_infrastructure_error_is_void(self):
+        self.assertEqual(publish.void_reason(self.trial('GatewayLost', None)), 'GatewayLost')
+
+    def test_agent_crash_named_by_its_output_counts(self):
+        # Harbor calls a crash whose traceback mentions a rate limit ApiRateLimitError.
+        self.assertIsNone(publish.void_reason(self.trial('ApiRateLimitError', 'crash')))
+
+    def test_gateway_outcome_is_void(self):
+        self.assertEqual(publish.void_reason(self.trial(None, 'gateway')), 'gateway')
 
 
 class GradeTest(unittest.TestCase):

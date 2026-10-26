@@ -64,14 +64,16 @@ def void_reason(trial: Path) -> str | None:
     """Why a run is VOID (lost to the infrastructure, so not counted), else None: a Harbor
     exception other than the agent's own (container, verifier time-out, GatewayLost), no
     grade, or the run lost to the model gateway (outcome.json `ended: gateway`)."""
-    result = trial / 'result.json'
+    result, ended = trial / 'result.json', outcome(trial).get('ended')
     if result.exists():
         error = (json.loads(result.read_text()).get('exception_info') or {}).get('exception_type')
-        if error not in AGENT_EXCEPTIONS:
+        # Harbor names some agent exits by their output (e.g. ApiRateLimitError); outcome.json
+        # says whether the run itself crashed, which is the agent's own failure.
+        if error not in AGENT_EXCEPTIONS and ended != 'crash':
             return error
     if not (trial / 'verifier' / 'reward.txt').exists() or not (trial / 'verifier' / 'results').exists():
         return 'no grade'
-    return 'gateway' if outcome(trial).get('ended') == 'gateway' else None
+    return 'gateway' if ended == 'gateway' else None
 
 
 def trace_id(trial: Path) -> str | None:

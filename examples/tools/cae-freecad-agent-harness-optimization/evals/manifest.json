@@ -13,7 +13,7 @@
     "single-visible-object",
     "compact-model"
   ],
-  "proved": "2026-10-18, container setup, Harbor 0.24.0 on Colima, nine checks, controls incl. nolast",
+  "proved": "2026-10-26, container setup, Harbor 0.24.0 on Colima, nine checks, controls incl. nolast",
   "isolation": {
     "agent": "allowlist host.docker.internal (per host, all ports); public hosts blocked",
     "verifier": "no network"

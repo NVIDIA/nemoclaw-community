@@ -15,7 +15,7 @@ and more checks), with no part and no check worse.
 
 Every Compass Insight, the check that caught it and the round that fixed it:
 [insights/](insights/README.md). The final agent: [final-agent/](final-agent/), described
-in the [README](../README.md#what-the-loop-built). The charts are drawn by
+in the [README](../README.md#what-the-loop-built). The charts grade every kept agent's runs again with the final eval, so all bars share one scale; they are drawn by
 [rounds_chart.py](rounds_chart.py).
 
 ## Chapter 1: the original Ethos

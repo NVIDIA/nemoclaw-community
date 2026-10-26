@@ -95,7 +95,8 @@ another agent folder):
 
 ```bash
 PYTHONPATH=harness harbor run -y -p evals -a cad_agent:CadAgent \
-  -m nvidia-nvidia-nemotron-3-ultra --n-attempts 2 -n 4 --jobs-dir runs --job-name agent
+  -m nvidia-nvidia-nemotron-3-ultra --n-attempts 2 -n 4 --max-retries 2 --retry-include GatewayLost \
+  --jobs-dir runs --job-name agent
 python publish.py scores runs/agent
 ```
 
@@ -105,15 +106,16 @@ when all pass; `agent/run.log` starts with the run's Intake trace ID. Browse job
 
 ## Proof
 
-Re-proved on 2026-10-18 with nine checks, Harbor 0.24.0, in the container setup above
-(separate verifier, no network), after four verifier fixes found by Eval Author during the
-vision run: `no-missing-feature` sized its voxels by the bounding diagonal only, so on
+Re-proved on 2026-10-26 with nine checks, Harbor 0.24.0, in the container setup above
+(separate verifier, no network), after four verifier fixes that Eval Author found after the first proof: `no-missing-feature` sized its voxels by the bounding diagonal only, so on
 part 2's thin walls it measured 0 even for a missing feature (the `nolast` control passed
 every check); the dimension checks could measure a part left shifted by an earlier probe;
 they measured FreeCAD's loose bounding box, which counts spline control points, so a
 dimension could seem to move a lofted part that did not move; and a model whose rebuild
-hung got no grade. Every control below gives the same result
-before and after, except `nolast` on part 2, which now fails as it should:
+hung got no grade. Every control below gives the same result before and after, except
+`nolast` on part 2, which now fails as it should. Regraded with the fixed verifier, the
+final agent's 10 confirmation runs still pass every check, and a live run of it on the
+pinned versions passed 4 of 4:
 
 | Control | part-1 | part-2 | Fails |
 | --- | --- | --- | --- |
@@ -132,7 +134,7 @@ before and after, except `nolast` on part 2, which now fails as it should:
 `no-branch` and `one-dimension` were real agent runs; their results are recorded here, and
 the models are not shipped.
 
-Isolation, probed with Harbor 0.22.0 on Colima (unchanged under 0.24.0, whose allowlist runs through an egress proxy): the agent reaches only
+Isolation, probed with Harbor 0.22.0 on Colima (not probed again under 0.24.0, whose allowlist runs through an egress proxy): the agent reaches only
 `host.docker.internal` (public hosts are blocked; the allowlist is per host, so every
 port on the host is reachable), and the verifier reaches nothing. The agent's
 container holds only the mesh; the solution and tests stay with the verifier.

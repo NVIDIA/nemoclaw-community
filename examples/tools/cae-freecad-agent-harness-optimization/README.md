@@ -230,9 +230,15 @@ exposed one more gap in the eval, closed with one more check.
 
 ![The base agent and each kept agent: checks passed, mean IoU per part, runs passed, and tokens per run](assets/results-rounds.png)
 
-The charts show the base agent and each agent the loop kept, then the final agent's
-10-run confirmation. Checks are the share passed over the agent's runs, out of the checks
-the eval had at the time, so the round-3 agent's full marks were before the Ethos revision.
+The charts show the base agent and each agent the loop kept, all graded again with the
+final eval (nine checks), so every bar is on the same scale. Grey is the share of runs that
+pass all nine checks, which the keep rule ranks first. The dotted lines mark where
+Eval Author added a check; it reviewed the eval after every round. The shape was close
+from round 1, but as slice stacks (round 1) and then one traced shape stretched by one
+parameter (round 3): models that pass IoU and are not what a designer would build. Round 6
+was the first to pass runs under the revised Ethos (part 1). Round 10 ties round 7 on every
+check; it was kept for what the checks do not measure, cleaner models in the renders and a
+branch that is never left out.
 
 Each round ran both parts twice, all runs in parallel, 5 minutes per run. *Surface changed*
 is what the experimenter edited in the agent folder (system prompt, skills and their
@@ -369,6 +375,23 @@ Each trial is capped at 3 GiB; 16 GiB fits four trials in parallel (`-n 4`).
 cd examples/tools/cae-freecad-agent-harness-optimization
 ```
 
+### Step 0: Show the task can be done
+
+Before optimizing a small model for a task, have a frontier model do it. Ask your coding
+agent (Claude Code, Codex or another) to solve each part itself in the agent's container,
+from the [Ethos](ETHOS.md), the instruction and the mesh alone, with no checks yet. Have it
+verify the result with its own measurements and renders. This tells you three things
+before you spend any time on the loop:
+
+- **The task is possible.** If a frontier model cannot meet the Ethos, no harness will
+  make a smaller one meet it.
+- **The eval has examples.** Its final models are positives every check must pass, and its
+  failed attempts are realistic negatives (Step 3).
+- **The experimenter has a teacher.** A summary of how it worked, with no numbers
+  specific to these parts, shows what knowledge and tools the small model lacks (Step 4).
+
+When we tried this, a frontier coding agent took 25 to 50 minutes per part.
+
 ### Step 1: Run the agent and score every run
 
 [agent/agent.yaml](agent/agent.yaml) is the base agent: a two-sentence prompt and no
@@ -377,7 +400,8 @@ attempts each, four at a time:
 
 ```bash
 PYTHONPATH=harness harbor run -y -p evals -a cad_agent:CadAgent \
-  -m nvidia-nvidia-nemotron-3-ultra --n-attempts 2 -n 4 --jobs-dir runs --job-name base
+  -m nvidia-nvidia-nemotron-3-ultra --n-attempts 2 -n 4 --max-retries 2 --retry-include GatewayLost \
+  --jobs-dir runs --job-name base
 python publish.py scores runs/base
 ```
 
@@ -465,13 +489,31 @@ Measure it exactly like Step 1, pointing Harbor at the candidate folder:
 ```bash
 PYTHONPATH=harness harbor run -y -p evals -a cad_agent:CadAgent -m <model> \
   --ak agent_dir=$PWD/experiments/<round>/candidates/<name>/agent \
-  --n-attempts 2 -n 4 --jobs-dir runs --job-name <name>
+  --n-attempts 2 -n 4 --max-retries 2 --retry-include GatewayLost --jobs-dir runs --job-name <name>
 python publish.py scores runs/<name>
 ```
 
 Keep a candidate only if it passes more runs than the agent under study (or as many
 runs and more checks), with no part and no check worse. Copy the winner over `agent/`,
 mark the Insights it fixed as resolved in Studio, and start the next round at Step 1.
+
+### Run the loop yourself
+
+Steps 1 to 4 are one round. To run the loop, have your coding agent repeat them, one
+round at a time:
+
+1. **Fix the rules before the first round:** the Ethos, the number of rounds, the runs per
+   part for each candidate, the run limit and the keep rule. Changed mid-run, they make
+   rounds impossible to compare.
+2. **Each round:** run the agent under study (Step 1), wait for Compass (Step 2) before
+   building candidates, have Eval Author check every Insight against the eval (Step 3),
+   then build and measure the candidates (Step 4).
+3. **When Eval Author adds or fixes a check,** prove it (an empty answer scores 0, the
+   reference solution 1, realistic wrong answers 0) and regrade the stored runs instead
+   of running them again, then decide on the new grades:
+   `PYTHONPATH=harness harbor jobs regrade runs/<job> -p evals --jobs-dir runs --job-name <job>-regraded`.
+4. **Stop** at the round budget, or after two rounds in a row with no kept candidate.
+   Then confirm the final agent with 10 runs, five per part.
 
 ## Environment variables
 
@@ -498,14 +540,19 @@ The default run limit and the 3 GiB memory cap live in each task's
 | The verifier or agent container fails to start | Docker Desktop on macOS cannot enforce Harbor's network rules. | Use Colima, with the example under your home folder. |
 | Every run fails to reach the model | The container cannot resolve or reach `CAD_HELIX_URL`. | Check Helix's port; on native Linux, map `host.docker.internal` to the host gateway. For Helix on another host, also change `allowed_hosts` in each `task.toml`. |
 | `publish.py scores` skips a trial | Its trace never reached Intake (the run was killed before NeMo Relay sent it). | Rerun the trial. |
+| `publish.py scores` prints `skipped: void` | The run was lost to the model gateway or the infrastructure, not to the agent; it is not graded on its trace. | Rerun the trial (`--max-retries` already retries a lost gateway once or twice). |
 | A trial is killed by memory | FreeCAD's full shape check on a model with thousands of faces needs several GB. | That is the 3 GiB cap working; such a model fails `compact-model` anyway. |
 
 ## Known limitations
 
-- **Two parts, few runs.** Two runs per part per round, ten for the final agent; the eval
+- **Two parts, few runs.** Two runs per part per round, ten in all for the final agent; the eval
   shows the method works for two different parts, not for every part, and no rotated or
   held-out part was tested. An agent you mean to ship needs tasks covering the work it
   will see.
+- **The building blocks were shaped on these two parts.** `cadkit.py` and the measure
+  scripts grew round by round on these meshes, and most of each model comes from them:
+  lofts through the mesh's own cross-sections and measured branch paths. The agent's part
+  is choosing and placing the features. A different kind of part may need new blocks.
 - **The measurement scripts suggest feature calls.** The agent decides the features and
   writes the model, and Compass found no Ethos divergence, but the hints sit close to the
   Ethos's "no reconstruction routine" line.
@@ -540,7 +587,7 @@ uv run --python 3.13 --with-requirements requirements.txt python -m unittest dis
 **Expected result:**
 
 ```text
-Ran 48 tests
+Ran 52 tests
 
 OK
 ```
