@@ -7,7 +7,8 @@
 
 scores: for every trial of a Harbor job, attaches the verifier's reward, IoU, failed
 checks and model complexity (features, sketches, faces, ...) to the run's trace (its ID
-is the first line of agent/run.log), so NeMo Compass sees how each run was graded.
+from agent/outcome.json, else the first line of agent/run.log), so NeMo Compass sees how
+each run was graded.
 insights: Compass finding -> Helix Insight (name -> title, evidence -> trace_refs);
 Helix has no CLI command for this yet.
 
@@ -36,28 +37,61 @@ def api(service: str, path: str, body: dict | None = None) -> dict:
 
 
 def grade(trial: Path) -> dict:
-    """The verifier's reward, IoU, failed checks and complexity counts for one trial."""
+    """The verifier's reward, IoU, checks passed of total, failed checks and complexity
+    counts for one trial."""
     verifier = trial / 'verifier'
-    log = (verifier / 'check.log').read_text() if (verifier / 'check.log').exists() else ''
-    iou = re.search(r'^mesh-fidelity IoU ([\d.]+)', log, re.MULTILINE)
     rows = (verifier / 'results').read_text().splitlines() if (verifier / 'results').exists() else []
-    stats = verifier / 'complexity.json'
+    stats = verifier / 'metrics.json'
+    metrics = json.loads(stats.read_text()) if stats.exists() else {}
     return {'reward': float((verifier / 'reward.txt').read_text()),
-            'iou': float(iou.group(1)) if iou else None,  # not measured: no valid solid
+            'iou': metrics.pop('iou', None),  # not measured: no valid solid
+            'checks': sum(row.endswith('\tPASS') for row in rows), 'of': len(rows),
             'failed': [row.split('\t')[0] for row in rows if row.endswith('\tFAIL')],
-            'complexity': json.loads(stats.read_text()) if stats.exists() else {}}
+            'complexity': metrics}
 
 
-def trace_id(run_log: str) -> str | None:
-    """The Intake trace ID that harness/run_agent.py prints first."""
-    found = re.search(r'^trace (\S+)$', run_log, re.MULTILINE)
-    return found and found.group(1)
+def outcome(trial: Path) -> dict:
+    """How the run ended (harness/run_agent.py): trace, ended, trace_delivered; {} if unknown."""
+    path = trial / 'agent' / 'outcome.json'
+    return json.loads(path.read_text()) if path.exists() else {}
+
+
+# The agent's own outcome: it ran out of time, or exited non-zero (its own crash).
+AGENT_EXCEPTIONS = {None, 'AgentTimeoutError', 'NonZeroAgentExitCodeError'}
+
+
+def void_reason(trial: Path) -> str | None:
+    """Why a run is VOID (lost to the infrastructure, so not counted), else None: a Harbor
+    exception other than the agent's own (container, verifier time-out, GatewayLost), no
+    grade, or the run lost to the model gateway (outcome.json `ended: gateway`)."""
+    result = trial / 'result.json'
+    if result.exists():
+        error = (json.loads(result.read_text()).get('exception_info') or {}).get('exception_type')
+        if error not in AGENT_EXCEPTIONS:
+            return error
+    if not (trial / 'verifier' / 'reward.txt').exists() or not (trial / 'verifier' / 'results').exists():
+        return 'no grade'
+    return 'gateway' if outcome(trial).get('ended') == 'gateway' else None
+
+
+def trace_id(trial: Path) -> str | None:
+    """The run's Intake trace ID: from outcome.json, else the `trace` line run_agent.py prints."""
+    found, log = outcome(trial).get('trace'), trial / 'agent' / 'run.log'
+    if not found and log.exists():
+        line = re.search(r'^trace (\S+)$', log.read_text(errors='replace'), re.MULTILINE)
+        found = line and line.group(1)
+    return found
 
 
 def scores(job: Path) -> None:
     for log in sorted(job.glob('*/agent/run.log')):
-        trial, session = log.parent.parent, trace_id(log.read_text())
+        trial = log.parent.parent
+        session = trace_id(trial)
         if not session or not (trial / 'verifier' / 'reward.txt').exists():
+            continue
+        void = void_reason(trial)
+        if void:  # not counted, so no grade on its trace: Compass does not judge it
+            print(trial.name, session, 'skipped: void', void)
             continue
         try:
             span = api('intake', f'traces/{session}')['root_span_id']
@@ -84,7 +118,7 @@ def insights(path: Path, agent: str) -> None:
     for insight in yaml.safe_load(path.read_text()) or []:
         body = {'title': insight['name'], 'agent': agent, 'description': insight['description'],
                 'trace_refs': [e['trace_id'] for e in insight['evidence']]}
-        print(api('insights', 'insights', body)['name'], insight['name'])
+        print(api('insights', 'insights', body)['id'], insight['name'])
 
 
 def main():
@@ -92,7 +126,7 @@ def main():
     commands = parser.add_subparsers(dest='command', required=True)
     commands.add_parser('scores').add_argument('job', type=Path, help='a Harbor job folder')
     found = commands.add_parser('insights')
-    found.add_argument('insights', type=Path, help='insights.yml written by insight-agent')
+    found.add_argument('insights', type=Path, help='insights.yml written by compass')
     found.add_argument('--agent', default='cad-agent')
     args = parser.parse_args()
     if args.command == 'scores':

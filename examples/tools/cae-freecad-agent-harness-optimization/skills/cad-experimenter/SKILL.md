@@ -30,7 +30,8 @@ This skill was written for this example only. It is a worked pattern for the
   (**Trade-offs**).
 - `agent/`: the agent under study (prompt, model, skills).
 - `runs/eval/`: its eval job, both tasks, two attempts per part. Per trial:
-  `verifier/results` lists the checks, `verifier/check.log` the IoU and details,
+  `verifier/results` lists the checks, `verifier/metrics.json` the IoU and complexity counts,
+  `verifier/check.log` the details,
   `verifier/reward.txt` the reward, and the first line of `agent/run.log` the trace ID
   (`trace <id>`). The same reward, IoU, failed checks and complexity counts are attached to each trace.
 - `insights.yml`: Compass Insights on this round's traces, each citing traces.
@@ -81,10 +82,9 @@ passes with them is not the model a designer would build.
 
 ```bash
 docker build -t cad-env evals/part-1-reconstruction/environment          # once: the agent's image
-docker build -t cad-render skills/cad-experimenter/render                # once: plus a display
 docker run --rm -v "$PWD":/w -w /w -e OUT=render.png \
   -e RENDER="<trial>/artifacts/app/model.FCStd:evals/part-1-reconstruction/environment/reference.obj" \
-  cad-render xvfb-run -a -s "-screen 0 1920x1200x24" freecadcmd skills/cad-experimenter/render/render.py
+  cad-env xvfb-run -a -s "-screen 0 1920x1200x24" freecadcmd skills/cad-experimenter/render/render.py
 ```
 
 Write `DIAGNOSIS.md`: per problem, the root cause in two or three sentences,

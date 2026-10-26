@@ -279,5 +279,16 @@ class TestLargestMissingFraction(unittest.TestCase):
         self.assertAlmostEqual(missing, 64 / 1064, delta=0.015)
 
 
+    def test_thin_walled_part_keeps_its_walls(self):
+        # A 1 mm plate with a 1 mm fin beside it (400 of 2,000 mm3): at diagonal / 200 the
+        # opening erases both, so only voxels sized to the mean thickness see the fin missing.
+        plate, fin = box((0, 0, 0), (40, 40, 1)), box((40, 0, 0), (50, 40, 1))
+        ref = stack([plate, fin])
+        args = (stack([plate]), ref, (0, 0, 0), (50, 40, 1), 64.0)
+        self.assertEqual(largest_missing_fraction(*args), 0.0)
+        thickness = 2 * 2000 / (2 * 50 * 40 + 2 * 50 * 1 + 2 * 40 * 1)
+        self.assertAlmostEqual(largest_missing_fraction(*args, thickness), 0.2, delta=0.05)
+
+
 if __name__ == "__main__":
     unittest.main()

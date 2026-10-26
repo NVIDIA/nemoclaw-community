@@ -132,11 +132,14 @@ def iou_from_crossings(cand_cols, ref_cols):
 
 # Missing feature: the largest connected region of reference volume the candidate leaves
 # uncovered, as a fraction of the reference volume. Sampled on voxels of 1/MISSING_DIVISOR
-# of the bounding diagonal. An opening of MISSING_OPEN_CELLS voxels first removes thin
+# of the bounding diagonal, or 1/MISSING_THICKNESS_CELLS of the mean wall thickness if
+# smaller (otherwise the opening erases a thin-walled part entirely). An opening of MISSING_OPEN_CELLS voxels first removes thin
 # skins (a model slightly under size all over), so only a thick, connected gap remains:
 # a whole branch, boss or arm the model does not have.
 MISSING_DIVISOR = 200
 MISSING_OPEN_CELLS = 3
+MISSING_THICKNESS_CELLS = 9
+MISSING_DIVISOR_MAX = 1000  # a floor on the voxel, so the grid stays bounded
 
 
 def _inside(cols, nx, ny, zc):
@@ -202,11 +205,14 @@ def _largest_component(a):
     return out.reshape(a.shape)[1:-1, 1:-1, 1:-1]
 
 
-def largest_missing_fraction(cand_tris, ref_tris, lo, hi, diagonal):
+def largest_missing_fraction(cand_tris, ref_tris, lo, hi, diagonal, thickness=np.inf):
     """Largest connected reference volume not covered by the candidate, after an opening,
     as a fraction of the reference volume. ``lo``/``hi``: (x, y, z) bounds of both;
-    ``diagonal``: the reference's own, so the candidate cannot coarsen the grid."""
-    h = diagonal / MISSING_DIVISOR
+    ``diagonal`` and ``thickness`` (mean, 2 x volume / area): the reference's own, so the
+    candidate cannot coarsen the grid. Voxels stay small enough for the opening to keep a
+    thin-walled part's walls."""
+    h = max(min(diagonal / MISSING_DIVISOR, thickness / MISSING_THICKNESS_CELLS),
+            diagonal / MISSING_DIVISOR_MAX)
     xs, ys, nx, ny = grid_axes(lo[0] - h, lo[1] - h, hi[0] + h, hi[1] + h, h)
     zc = lo[2] - h + h * (np.arange(int((hi[2] - lo[2] + 2 * h) / h) + 1) + 0.5)
     cand = _inside(crossings(*cand_tris, xs, ys, nx, ny, h), nx, ny, zc)

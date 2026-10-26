@@ -1,7 +1,7 @@
 {
   "suite": "cad-agent regression evals",
-  "authored_with": "NeMo Eval Author eval-author-trace-environment (github.com/NVIDIA-NeMo/eval-author at 20f95a0)",
-  "harbor": "0.22.0",
+  "authored_with": "NeMo Eval Author eval-author-trace-environment (github.com/NVIDIA-NeMo/eval-author at 48c2b3b)",
+  "harbor": "0.24.0",
   "checks": [
     "recomputes-after-reopen",
     "single-valid-solid",
@@ -13,7 +13,7 @@
     "single-visible-object",
     "compact-model"
   ],
-  "proved": "2026-10-16, container setup, Harbor 0.22.0 on Colima, nine checks",
+  "proved": "2026-10-18, container setup, Harbor 0.24.0 on Colima, nine checks, controls incl. nolast",
   "isolation": {
     "agent": "allowlist host.docker.internal (per host, all ports); public hosts blocked",
     "verifier": "no network"

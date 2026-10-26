@@ -50,8 +50,10 @@ and reports nine checks; the reward is 1 only when all pass:
 - `native-feature-tree`: sketch-driven PartDesign features, and no scripted shape
   wrappers or scripted base shape (`BaseFeature`).
 - `named-dimension-drives-geometry`: changing a named constraint or a referenced named
-  parameter by 10% leaves one clean solid and changes a bounding-box length by at
-  least 1%.
+  parameter by 10% (-10% if the sketch solver rejects +10%) leaves one clean solid and
+  changes the volume or a length of the part's exact bounding box by at least 1%, and
+  putting the value back puts the part back. Each dimension is probed on the part as saved; probing stops after
+  300 s, and a rebuild that hangs is stopped by `test.sh`, failing the dimension checks.
 - `independent-dimensions`: design intent. Two named dimensions each, changed by 10%,
   leave one clean solid and move the volume or a bounding-box length by at least 0.5%,
   and change the part in different ways (cosine below 0.9 between their relative
@@ -60,8 +62,8 @@ and reports nine checks; the reward is 1 only when all pass:
 - `mesh-fidelity`: IoU against the reference mesh at 0.1 mm resolution is at least 0.9.
 - `no-missing-feature`: the largest connected piece of the reference that the model leaves
   out is at most 1.2% of the reference volume. IoU barely notices a missing branch or boss;
-  this check does. Features thinner than about 3% of the part's size are below its
-  resolution.
+  this check does. It samples on voxels of 1/200 of the bounding diagonal, or 1/9 of the
+  reference's mean wall thickness if smaller, so thin walls are kept.
 - `single-visible-object`: every visible object with geometry is the Body or its tip,
   as saved in the file (origin axes and planes are ignored). FreeCAD without its GUI
   does not hide sketches, so the agent must.
@@ -70,8 +72,8 @@ and reports nine checks; the reward is 1 only when all pass:
   surface of the part; stacked slices and faceted profiles add faces with every band
   and segment.
 
-The verifier also logs the model's feature, sketch and face counts
-(`complexity.json`).
+The verifier also writes the IoU and the model's feature, sketch and face counts
+(`metrics.json`).
 
 ## Relevant experience
 

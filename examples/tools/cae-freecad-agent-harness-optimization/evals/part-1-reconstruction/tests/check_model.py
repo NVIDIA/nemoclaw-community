@@ -3,7 +3,8 @@
 """Grade a saved FreeCAD document. Run with: freecadcmd check_model.py (env MODEL, MESH,
 REF_FACES: the reference solution's face count, for compact-model).
 
-Writes one ``<check-id>\\tPASS|FAIL`` row per check to /logs/verifier/results.
+Writes one ``<check-id>\\tPASS|FAIL`` row per check to /logs/verifier/results, and the
+IoU and complexity counts to /logs/verifier/metrics.json.
 """
 
 import contextlib
@@ -13,6 +14,7 @@ import os
 import re
 import sys
 import tempfile
+import time
 
 import FreeCAD
 
@@ -55,7 +57,9 @@ def clean(shape):
 
 def fingerprint(body):
     shape = body.Shape
-    box = shape.BoundBox
+    # The exact box: BoundBox includes spline control points, so on a lofted part a
+    # dimension could seem to move the part when its surface does not move.
+    box = shape.optimalBoundingBox(False)
     return (round(shape.Volume, 6), round(box.XLength, 6), round(box.YLength, 6), round(box.ZLength, 6))
 
 
@@ -93,14 +97,16 @@ def drivers(doc):
                     yield ("property", target, prop)
 
 
-# A named dimension moves the part when a 10% change leaves one clean solid whose
-# bounding-box length changes by at least this fraction.
+# A named dimension moves the part when a 10% change leaves one clean solid whose volume
+# or a bounding-box length changes by at least this fraction (ETHOS: a hole size moves the
+# volume, not the box).
 SIZE_CHANGE_MIN = 0.01
 
 
 def response(doc, body, kind, obj, name):
-    """Change one named dimension by 10%, rebuild, and return (clean, relative change of
-    volume, X, Y and Z length). The value is restored."""
+    """Change one named dimension by 10% (-10% if the sketch solver rejects +10%), rebuild,
+    and return ((clean, relative change of volume, X, Y and Z length), restored): the value
+    is put back, and ``restored`` says whether the part came back with it."""
     before = fingerprint(body)
     if kind == "constraint":
         value = obj.getDatum(name)
@@ -114,25 +120,35 @@ def response(doc, body, kind, obj, name):
     else:
         value = getattr(obj, name)
         put, restore = (lambda v: setattr(obj, name, v)), (lambda: setattr(obj, name, value))
+    for factor in (1.1, 0.9):
+        try:
+            put(value * factor)
+            break
+        except Exception:  # e.g. an ellipse's minor axis may not exceed its major
+            if factor == 0.9:
+                raise
     try:
-        put(value * 1.1)
         doc.recompute()
         shape = body.Shape
         if shape.isNull() or not shape.isValid() or len(shape.Solids) != 1:
-            return False, (0.0,) * len(before)
-        delta = tuple((a - b) / b if b else 0.0 for a, b in zip(fingerprint(body), before))
-        # The full shape check is costly; it only matters when the part moved enough to count.
-        if max(abs(d) for d in delta) < INTENT_CHANGE_MIN:
-            return True, delta
-        return (True, delta) if clean(shape) else (False, (0.0,) * len(before))
+            change = False, (0.0,) * len(before)
+        else:
+            delta = tuple((a - b) / b if b else 0.0 for a, b in zip(fingerprint(body), before))
+            # The full shape check is costly; it only matters when the part moved enough to count.
+            if max(abs(d) for d in delta) < INTENT_CHANGE_MIN or clean(shape):
+                change = True, delta
+            else:
+                change = False, (0.0,) * len(before)
     finally:
         restore()
         doc.recompute()
+    restored = all(abs(a - b) <= 1e-3 * max(abs(b), 1.0) for a, b in zip(fingerprint(body), before))
+    return change, restored
 
 
 def moves_geometry(change):
     ok, delta = change
-    return ok and any(abs(d) >= SIZE_CHANGE_MIN for d in delta[1:])
+    return ok and any(abs(d) >= SIZE_CHANGE_MIN for d in delta)
 
 
 # Design intent: two named dimensions that each move the volume or a bounding-box length
@@ -141,6 +157,9 @@ def moves_geometry(change):
 # each other, so any part and orientation works.
 INTENT_CHANGE_MIN = 0.005
 INTENT_COSINE_MAX = 0.9
+# The dimension probes rebuild the model each time; on a model slow to rebuild they stop
+# after this long, so the run is graded on the dimensions probed instead of not at all.
+PROBE_SECONDS = 300
 
 
 def cosine(a, b):
@@ -173,22 +192,26 @@ def single_visible_object(doc, body):
     return bool(shown) and all(o in (body, body.Tip) for o in shown)
 
 
-def main():
-    open(RESULTS, "w").close()
+def load():
+    """Open the saved model and rebuild every feature from its inputs, as reopening in
+    FreeCAD and editing would: a plain recompute only rebuilds objects saved as touched."""
     doc = FreeCAD.openDocument(os.environ["MODEL"])
-    # Rebuild every feature from its inputs, as reopening in FreeCAD and editing would: a
-    # plain recompute only rebuilds objects saved as touched. A feature whose rebuild fails
-    # keeps its stored shape, so the checks below may still see that shape; this check
-    # fails the run.
     for obj in doc.Objects:
         obj.touch()
     doc.recompute()
+    bodies = [o for o in doc.Objects if o.TypeId == "PartDesign::Body"]
+    return doc, bodies[0] if len(bodies) == 1 else None
+
+
+def main():
+    open(RESULTS, "w").close()
+    doc, body = load()
+    # A feature whose rebuild fails keeps its stored shape, so the checks below may still
+    # see that shape; this check fails the run.
     broken = [o.Name for o in doc.Objects if not o.isValid()]
     if broken:
         print("invalid after recompute:", broken)
     row("recomputes-after-reopen", bool(doc.Objects) and not broken)
-    bodies = [o for o in doc.Objects if o.TypeId == "PartDesign::Body"]
-    body = bodies[0] if len(bodies) == 1 else None
     solid = body is not None and not body.Shape.isNull() and body.Shape.isValid() \
         and len(body.Shape.Solids) == 1 and clean(body.Shape)
     row("single-valid-solid", solid)
@@ -207,35 +230,54 @@ def main():
     row("mesh-fidelity", fidelity >= IOU_MIN)
     row("no-missing-feature", missing <= MISSING_MAX)
 
+    # Graded on the part as saved, before any dimension is changed, and written first: if a
+    # probe below hangs, test.sh stops the verifier and these rows stand.
+    row("single-visible-object", single_visible_object(doc, body))
+    row("compact-model", solid and compact(body))
+    log_metrics(body, fidelity if solid else None)
+
     driven, intent = False, False
     moving = []  # (name, relative change) of each dimension that moves the part
     if solid:
-        for candidate in drivers(doc):
+        saved = fingerprint(body)
+        deadline = time.time() + PROBE_SECONDS
+        for kind, owner, name in [(k, o.Name, n) for k, o, n in drivers(doc)]:
+            if time.time() > deadline:
+                print("dimension probes stopped after", PROBE_SECONDS, "s")
+                break
             try:
-                change = response(doc, body, *candidate)
+                change, restored = response(doc, body, kind, doc.getObject(owner), name)
             except Exception as exc:  # a driver that cannot be changed does not count
-                print("driver", candidate[2], "failed:", exc)
+                print("driver", name, "failed:", exc)
+                change, restored = None, False
+            if not restored:
+                # A dimension that cannot be changed and put back is not one a designer can
+                # edit; if the part moved, reopen, so the next one is measured on the part
+                # as saved.
+                if change and change[0]:
+                    print("driver", owner, name, "does not restore the part: not counted")
+                if fingerprint(body) != saved:
+                    FreeCAD.closeDocument(doc.Name)
+                    doc, body = load()
                 continue
-            print("driver", candidate[1].Name, candidate[2], "clean", change[0],
+            print("driver", owner, name, "clean", change[0],
                   "dV dX dY dZ", [round(d, 4) for d in change[1]])
             driven = driven or moves_geometry(change)
             if change[0] and max(abs(d) for d in change[1]) >= INTENT_CHANGE_MIN:
-                for name, other in moving:
+                for earlier, other in moving:
                     if abs(cosine(change[1], other)) < INTENT_COSINE_MAX:
-                        print("independent dimensions:", name, "and", candidate[2])
+                        print("independent dimensions:", earlier, "and", name)
                         intent = True
-                moving.append((candidate[2], change[1]))
+                moving.append((name, change[1]))
             if driven and intent:
                 break
     row("named-dimension-drives-geometry", driven)
     row("independent-dimensions", intent)
-    row("single-visible-object", single_visible_object(doc, body))
-    row("compact-model", solid and compact(body))
-    log_complexity(body)
 
 
-def log_complexity(body):
-    """Not a check: record how complex the model is, for the results tables."""
+def log_metrics(body, fidelity):
+    """Not a check: record the IoU (None: not measured) and how complex the model is, for
+    the results tables."""
     group = body.Group if body else []
     sketches = [o for o in group if o.TypeId == "Sketcher::SketchObject"]
     stats = {
@@ -245,8 +287,8 @@ def log_complexity(body):
         "faces": len(body.Shape.Faces) if body and not body.Shape.isNull() else 0,
     }
     print("complexity", json.dumps(stats))
-    with open(os.path.join(os.path.dirname(RESULTS), "complexity.json"), "w") as f:
-        json.dump(stats, f)
+    with open(os.path.join(os.path.dirname(RESULTS), "metrics.json"), "w") as f:
+        json.dump({"iou": fidelity, **stats}, f)
 
 
 main()

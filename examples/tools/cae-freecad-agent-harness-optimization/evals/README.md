@@ -5,7 +5,7 @@
 
 Regression evals for the CAD agent, authored with
 [NeMo Eval Author](https://github.com/NVIDIA-NeMo/eval-author)'s
-trace-to-task workflow and run with [Harbor](https://www.harborframework.com/) 0.22.0.
+trace-to-task workflow and run with [Harbor](https://www.harborframework.com/) 0.24.0.
 
 ## Cases
 
@@ -41,7 +41,7 @@ harbor run (host) ── per trial, in parallel ──┐
 
 [`harness/cad_agent.py`](../harness/cad_agent.py) uploads the agent folder and starts
 [`harness/run_agent.py`](../harness/run_agent.py), which runs the agent for at most
-5 minutes and sends its trace to Intake. After a job,
+5 minutes (`CAD_AGENT_TIMEOUT`) and sends its trace to Intake. After a job,
 [`publish.py scores`](../publish.py) attaches each run's reward, IoU, failed checks
 and complexity counts to its trace for NeMo Compass.
 
@@ -50,7 +50,7 @@ and complexity counts to its trace for NeMo Compass.
 Run every command from the example root
 (`examples/tools/cae-freecad-agent-harness-optimization`). You need:
 
-- Harbor 0.22.0: `uv tool install harbor==0.22.0`.
+- Harbor 0.24.0: `uv tool install harbor==0.24.0`.
 - A Docker engine that can enforce per-container network rules. Docker Desktop on
   macOS cannot; [Colima](https://github.com/abiosoft/colima) can. Give it room for
   parallel trials (each is capped at 3 GiB):
@@ -83,7 +83,7 @@ docker build -t cad-env evals/part-1-reconstruction/environment
 for t in part-1-reconstruction part-2-reconstruction; do mkdir -p controls/$t
   docker run --rm -v "$PWD":/x -w /x -e SOLUTION=evals/$t/solution/reference-solution.FCStd \
     -e OUT=controls/$t cad-env freecadcmd controls/make_negatives.py
-  for n in visible broken scripted; do
+  for n in visible broken scripted nolast; do
     PYTHONPATH=controls harbor run -y -p evals/$t -a replay_agent:ReplayModel \
       --ak model=controls/$t/$n.FCStd --jobs-dir runs --job-name $t-$n
   done
@@ -105,8 +105,15 @@ when all pass; `agent/run.log` starts with the run's Intake trace ID. Browse job
 
 ## Proof
 
-Re-proved on 2026-10-16 with nine checks in the container setup above (separate
-verifier, no network):
+Re-proved on 2026-10-18 with nine checks, Harbor 0.24.0, in the container setup above
+(separate verifier, no network), after four verifier fixes found by Eval Author during the
+vision run: `no-missing-feature` sized its voxels by the bounding diagonal only, so on
+part 2's thin walls it measured 0 even for a missing feature (the `nolast` control passed
+every check); the dimension checks could measure a part left shifted by an earlier probe;
+they measured FreeCAD's loose bounding box, which counts spline control points, so a
+dimension could seem to move a lofted part that did not move; and a model whose rebuild
+hung got no grade. Every control below gives the same result
+before and after, except `nolast` on part 2, which now fails as it should:
 
 | Control | part-1 | part-2 | Fails |
 | --- | --- | --- | --- |
@@ -115,16 +122,17 @@ verifier, no network):
 | `visible`: solution with every feature and sketch visible | 0 | 0 | `single-visible-object` |
 | `broken`: solution with its last feature's profile removed | 0 | 0 | `recomputes-after-reopen`, `named-dimension-drives-geometry`, `independent-dimensions` |
 | `scripted`: solution's solid as a scripted base shape, plus one sketch-driven pocket | 0 | 0 | `native-feature-tree`, `named-dimension-drives-geometry`, `independent-dimensions` |
+| `nolast`: solution with its last additive feature suppressed (part 2: IoU 0.966) | 0 | 0 | part 1: `mesh-fidelity`, `no-missing-feature`, `independent-dimensions`; part 2: `no-missing-feature` |
 | `slices`: a real agent run, 32 stacked pads (IoU 0.91, 1,658 faces) | 0 | n/a | `independent-dimensions`, `compact-model` |
 | `no-branch`: a real agent run that left out its branch (IoU 0.918) | 0 | n/a | `no-missing-feature` |
 | `one-dimension`: a real run of the final agent, 4 ruled lofts driven by one `Params.Length` (IoU 0.970 / 0.943) | 0 | 0 | `independent-dimensions` |
 
-`visible`, `broken` and `scripted` are generated from each task's reference solution by
+`visible`, `broken`, `scripted` and `nolast` are generated from each task's reference solution by
 [controls/make_negatives.py](../controls/make_negatives.py) (see Rerun). `slices`,
 `no-branch` and `one-dimension` were real agent runs; their results are recorded here, and
 the models are not shipped.
 
-Isolation, probed with Harbor 0.22.0 on Colima: the agent reaches only
+Isolation, probed with Harbor 0.22.0 on Colima (unchanged under 0.24.0, whose allowlist runs through an egress proxy): the agent reaches only
 `host.docker.internal` (public hosts are blocked; the allowlist is per host, so every
 port on the host is reachable), and the verifier reaches nothing. The agent's
 container holds only the mesh; the solution and tests stay with the verifier.

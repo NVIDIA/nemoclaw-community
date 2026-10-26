@@ -3,9 +3,10 @@
 """Render saved models beside their reference meshes (mesh blue, model orange), from
 several directions: one row per model, one column per view, in one PNG.
 
-    docker run --rm -v "$PWD":/w -w /w cad-render xvfb-run -a -s "-screen 0 1920x1200x24" \
+    docker run --rm -v "$PWD":/w -w /w cad-env xvfb-run -a -s "-screen 0 1920x1200x24" \
       freecadcmd render.py   # with RENDER="model1.FCStd:mesh1.obj ..." OUT=out.png
                              # VIEWS=iso,front,right,top (default; also rear, left, bottom)
+                             # INPLACE=1: the mesh translucent over the model, in place
 """
 import os
 
@@ -18,6 +19,7 @@ from PySide import QtGui  # noqa: E402  (needs the GUI started)
 
 app = QtGui.QApplication.instance()
 VIEWS = os.environ.get('VIEWS', 'iso,front,right,top').split(',')
+INPLACE = os.environ.get('INPLACE') == '1'  # shows misplacement; beside shows shape better
 METHODS = {'iso': 'viewIsometric', 'front': 'viewFront', 'rear': 'viewRear', 'right': 'viewRight',
            'left': 'viewLeft', 'top': 'viewTop', 'bottom': 'viewBottom'}
 W, H = 1000, 700
@@ -43,11 +45,12 @@ for pair in os.environ['RENDER'].split():
     box = body.Shape.BoundBox
     mesh = doc.addObject('Mesh::Feature', 'Reference')
     mesh.Mesh = Mesh.Mesh(os.path.abspath(mesh_path))
-    # Beside the model, offset along its shorter horizontal side.
-    mesh.Placement.Base = (App.Vector(-1.3 * box.XLength, 0, 0) if box.XLength <= box.YLength
-                           else App.Vector(0, 1.3 * box.YLength, 0))
+    if not INPLACE:  # beside the model, offset along its shorter horizontal side
+        mesh.Placement.Base = (App.Vector(-1.3 * box.XLength, 0, 0) if box.XLength <= box.YLength
+                               else App.Vector(0, 1.3 * box.YLength, 0))
     doc.recompute()
     mesh.ViewObject.ShapeColor = (0.35, 0.55, 0.85)
+    mesh.ViewObject.Transparency = 60 if INPLACE else 0
     for o in (body, body.Tip):
         o.ViewObject.ShapeColor, o.ViewObject.DisplayMode = (0.95, 0.55, 0.15), 'Shaded'
     view = Gui.ActiveDocument.ActiveView

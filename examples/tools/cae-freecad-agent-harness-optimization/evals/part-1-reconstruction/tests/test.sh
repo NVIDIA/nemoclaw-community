@@ -3,8 +3,9 @@
 mkdir -p /logs/verifier
 : > /logs/verifier/results
 if [ -f /app/model.FCStd ]; then
-  # REF_FACES: faces of the reference solution, for compact-model.
-  MODEL=/app/model.FCStd MESH=/tests/reference_part.obj REF_FACES=7 freecadcmd /tests/check_model.py \
+  # REF_FACES: faces of the reference solution, for compact-model. A model whose rebuild
+  # hangs is stopped well inside Harbor's verifier timeout; checks with no row then fail.
+  MODEL=/app/model.FCStd MESH=/tests/reference_part.obj REF_FACES=7 timeout -k 10 720 freecadcmd /tests/check_model.py \
     > /logs/verifier/check.log 2>&1
 fi
 for id in single-valid-solid native-feature-tree named-dimension-drives-geometry independent-dimensions mesh-fidelity no-missing-feature single-visible-object recomputes-after-reopen compact-model; do

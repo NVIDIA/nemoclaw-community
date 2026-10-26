@@ -9,9 +9,9 @@
 | --- | --- |
 | Description | Runs a CAD agent next to headless FreeCAD in one container per run, traces every run to NeMo Helix, finds what it gets wrong with NeMo Compass, turns that into a proven Harbor eval with NeMo Eval Author, and improves the agent against the eval. |
 | Industry | 🏭 Manufacturing |
-| Requirements | Python 3.12+ · NeMo Helix 0.7.1 · Docker (Colima on macOS) · Harbor 0.22.0 · a coding agent · inference credentials |
+| Requirements | Python 3.12+ · NeMo Helix 0.8.1 · Docker (Colima on macOS) · Harbor 0.24.0 · a coding agent · inference credentials |
 | NemoClaw | N/A |
-| Harness | LangChain Deep Agents 0.7.25 |
+| Harness | LangChain Deep Agents 0.7.32 |
 | OpenShell | N/A |
 
 A worked, end-to-end loop for improving an AI agent that drives an engineering tool.
@@ -55,7 +55,7 @@ also uses from four directions to look for artefacts:
 | You will get | A containerized Deep Agents CAD agent with every run traced to Helix; Compass Insights in Studio; a proven Harbor eval of two parts with nine checks each; and a measured, round-by-round journey, including an Ethos revision, with its final agent. |
 | Runs on | Any host with Docker and NeMo Helix; verified on macOS with Colima. |
 | Requires | See [Prerequisites](#prerequisites). |
-| Verified on | macOS, Colima (4 CPU, 16 GiB), FreeCAD 1.1.3 (conda-forge, in the images), NeMo Helix 0.7.1, Deep Agents 0.7.25, NeMo Relay 0.7.3, NeMo Compass `462f09c`, NeMo Eval Author `20f95a0`, Harbor 0.22.0. |
+| Verified on | macOS, Colima (4 CPU, 16 GiB), FreeCAD 1.1.3 (conda-forge, in the images), NeMo Helix 0.8.1, Deep Agents 0.7.32, NeMo Relay 0.10.4, NeMo Compass 0.1.0, NeMo Eval Author `48c2b3b`, Harbor 0.24.0. |
 | Evidence level | Live end to end with Nemotron 3 Ultra (see [Results](#results)); unit tests for the IoU math and `publish.py`. |
 | Support and maturity | Compass and Eval Author are research previews. [Best-effort community support](../../../SUPPORT.md). Pin versions. |
 | External access, data, and actions | Installation downloads packages and images. Live runs send prompts, geometry descriptions, traces and the Ethos to your inference endpoints and write telemetry to your Helix instance. The agent runs Python it writes, inside its own container, which can reach only Helix. |
@@ -178,7 +178,7 @@ with no network grades the saved model. The diagram in
 | Piece | What it does |
 | --- | --- |
 | [agent/](agent/agent.yaml) | The agent: `agent.yaml` (name, model, a short system prompt), with `skills/` and an optional `middleware.py` beside it. This folder is all the loop changes. |
-| [harness/run_agent.py](harness/run_agent.py) | Inside the container: builds the Deep Agents agent from the folder with a real shell rooted at `/app`, its skills, subagents and middleware; reaches the model through the Helix gateway; traces the run with NeMo Relay; stops it after 5 minutes. |
+| [harness/run_agent.py](harness/run_agent.py) | Inside the container: builds the Deep Agents agent from the folder with a real shell rooted at `/app`, its skills, subagents and middleware; reaches the model through the Helix gateway; traces the run with NeMo Relay; retries model-gateway errors and records a run lost to the gateway; stops it, and every process it started, at the run limit (5 minutes). |
 | [harness/cad_agent.py](harness/cad_agent.py) | The Harbor agent: uploads the agent folder and starts the runner in each trial's container. |
 | [evals/](evals/README.md) | Two Harbor tasks with one instruction and one verifier. |
 | [publish.py](publish.py) | After a job, attaches each run's grade to its trace; publishes Compass Insights to Studio. |
@@ -261,6 +261,30 @@ Then a 10-run confirmation (above). [results/](results/README.md) has the same r
 chapter by chapter, and [results/insights](results/insights/README.md) every Compass
 Insight, which check caught it and which round fixed it.
 
+### Eval Author and the Ethos against reward hacking
+
+An optimization loop finds the cheapest way to pass the checks, and several times
+that was not the part a designer wanted. Each time, the Ethos stated the intent, Compass
+or the renders showed the gap, and Eval Author closed it with a proven check: it fails
+an empty model (NOP), passes the reference solution (Oracle), and fails a realistic
+model that games the gap.
+
+- **Slice stacks.** Round 1's models were stacks of thin flat slices, about 1,700 faces,
+  and passed every check. Eval Author added `compact-model`.
+- **One stretch instead of design intent.** Round 3's agent met the Ethos as written with
+  one traced shape whose only real dimension made the part taller. The owner revised
+  the Ethos, and Eval Author added `independent-dimensions`.
+- **A missing feature.** In round 9, two runs saved part 1 without its branch and still
+  passed. Eval Author added `no-missing-feature`.
+- **Holes in the verifier itself.** Its first review probed the checks and found that a
+  tree broken on reopen passed `single-valid-solid`, and that a scripted base shape
+  passed `native-feature-tree`. Both holes were closed in the verifier.
+
+Eval Author also turned down proposed checks that failed the Oracle or only held for
+these two parts. The Ethos keeps further examples of passing without meeting the
+intent: a profile pinned by 43 `Block` constraints at IoU 0.903 with no named
+dimension, and five named parameters of which only one moved the geometry.
+
 ## What the loop built
 
 The loop only ever changed the agent folder: system prompt, skills, subagents and
@@ -315,9 +339,9 @@ take an agent like this to production:
 Install NeMo Helix, Harbor and Compass, then start Helix and Colima:
 
 ```bash
-uv tool install "nemo-helix[all]==0.7.1"
-uv tool install harbor==0.22.0
-uv tool install 'insight-agent @ git+https://github.com/NVIDIA-NeMo/nemo-compass.git@462f09c'
+uv tool install "nemo-helix[all]==0.8.1"
+uv tool install harbor==0.24.0
+uv tool install --with mcp 'nemo-compass @ git+https://github.com/NVIDIA-NeMo/nemo-compass.git@v0.1.0'  # mcp: missing from its dependencies
 nemo setup
 colima start --cpu 4 --memory 16
 export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
@@ -383,7 +407,7 @@ the window (UTC) of your Step 1 runs:
 
 ```bash
 cp .env.example .env
-insight-agent --config analyst.yaml --trace.intake.base-url $NHX_BASE_URL \
+compass --config analyst.yaml --trace.intake.base-url $NHX_BASE_URL \
   --trace.intake.query.started-at-gte <start> --trace.intake.query.started-at-lte <end>
 uv run --with pyyaml python publish.py insights insights.yml
 ```
@@ -456,8 +480,9 @@ read from your shell:
 | `CAD_HELIX_URL` | `http://host.docker.internal:8080` | Helix as the containers reach it: the model gateway and Intake. |
 | `NHX_WORKSPACE` | `default` | The Helix workspace, for both. |
 | `DOCKER_HOST` | Docker's default | The Colima socket on macOS. |
+| `CAD_AGENT_TIMEOUT` | `300` | The run limit in seconds, read when Harbor starts a trial. The published results use 5 minutes; up to 1800 fits the tasks' hard stop. |
 
-The 5-minute run limit and 3 GiB memory cap live in each task's
+The default run limit and the 3 GiB memory cap live in each task's
 [task.toml](evals/part-1-reconstruction/task.toml). Keep credentials in Helix
 (`nemo setup`) or `.env`, never in `agent.yaml`.
 
@@ -480,9 +505,6 @@ The 5-minute run limit and 3 GiB memory cap live in each task's
 - **The measurement scripts suggest feature calls.** The agent decides the features and
   writes the model, and Compass found no Ethos divergence, but the hints sit close to the
   Ethos's "no reconstruction routine" line.
-- **Thin missing features.** `no-missing-feature` sees a missing piece thicker than about 3%
-  of the part's size; a thinner one, with IoU still above 0.9, would pass. The agent's own
-  save also compares the measured structure with the model.
 - **Remaining artefacts.** Mild waviness on part 1's body and a faint square on its cavity
   floor; a slight crease under part 2's arm at the rim and a shallow groove at its tip.
 - **`independent-dimensions` can be met by two stretches along different axes.** It is a
@@ -493,8 +515,10 @@ The 5-minute run limit and 3 GiB memory cap live in each task's
 - **The eval's network rule is per host.** The agent's container can reach any port on
   the Helix host, not only Helix.
 - **Span status is always "success".** Intake shows every span of these traces as
-  successful, even a failed tool call; Compass reads the tool output instead. Platform
-  feedback for Helix.
+  successful, even a failed tool call; Compass reads the tool output instead. Fixed in
+  [NeMo-Relay#1416](https://github.com/NVIDIA/NeMo-Relay/pull/1416) (in the 0.11.0
+  pre-releases, not in 0.10.4); Intake also needs
+  [nemo-helix#1265](https://github.com/NVIDIA-NeMo/nemo-helix/pull/1265).
 - **Helix deployments cannot run this agent.** Helix's Deep Agents adapter gives the agent
   a virtual file system and no shell, so the agent runs in the task container and Helix
   provides the model, traces and analysis. Platform feedback: a real-path workspace and a
@@ -512,7 +536,7 @@ uv run --python 3.13 --with-requirements requirements.txt python -m unittest dis
 **Expected result:**
 
 ```text
-Ran 46 tests
+Ran 48 tests
 
 OK
 ```

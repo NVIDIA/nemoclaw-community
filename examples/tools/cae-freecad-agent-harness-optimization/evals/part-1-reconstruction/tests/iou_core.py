@@ -74,7 +74,7 @@ def main(argv):
     try:  # no-missing-feature; a failure here must not take mesh-fidelity with it
         missing = largest_missing_fraction(cand_tris, ref_tris, (bb.XMin, bb.YMin, bb.ZMin),
                                            (bb.XMax, bb.YMax, bb.ZMax),
-                                           ref.BoundBox.DiagonalLength)
+                                           ref.BoundBox.DiagonalLength, 2 * abs(ref.Volume) / ref.Area)
     except Exception as exc:
         print("DBG missing-feature failed:", exc, file=sys.stderr)
         missing = 1.0

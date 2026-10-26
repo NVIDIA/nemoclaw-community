@@ -8,8 +8,9 @@ category = "cad"
 tags = ["freecad", "parametric-modeling", "mesh-reconstruction"]
 
 [agent]
-# A hard stop shortly after the agent's own CAD_AGENT_TIMEOUT, which lets the trace flush.
-timeout_sec = 360.0
+# A hard stop after the agent's own CAD_AGENT_TIMEOUT, which lets the trace flush; room
+# for a limit raised up to 30 minutes.
+timeout_sec = 2040.0
 # The agent reaches only the NeMo Helix inference gateway and Intake on the host.
 network_mode = "allowlist"
 allowed_hosts = ["host.docker.internal"]
@@ -31,7 +32,10 @@ os = "linux"
 memory_mb = 3072
 
 [environment.env]
-CAD_AGENT_TIMEOUT = "300"
+# The run limit in seconds (5 minutes; the published results use it). Keep it below
+# [agent] timeout_sec minus about 240 s (the trace upload may take 180 s), or Harbor stops
+# the agent before its trace is sent.
+CAD_AGENT_TIMEOUT = "${CAD_AGENT_TIMEOUT:-300}"
 # NeMo Helix as the container reaches it. The agent's network allows only
 # host.docker.internal: for Helix on another host, change allowed_hosts above too.
 CAD_HELIX_URL = "${CAD_HELIX_URL:-http://host.docker.internal:8080}"
