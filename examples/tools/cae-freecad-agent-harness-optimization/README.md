@@ -7,7 +7,7 @@
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Runs a CAD agent next to headless FreeCAD in one container per run, traces every run to NeMo Helix, finds what it gets wrong with NeMo Compass, holds it to a proven Harbor eval built with NeMo Eval Author, and improves the agent round by round on train tasks, keeping only what improves it on tasks it never saw. |
+| Description | Runs a CAD agent next to headless FreeCAD, traces every run to NeMo Helix, finds its failures with NeMo Compass, holds it to a proven Harbor eval built with NeMo Eval Author, and keeps only changes that improve it on parts it never saw. |
 | Industry | 🏭 Manufacturing |
 | Requirements | Python 3.12+ · NeMo Helix 0.8.1 · Docker (Colima on macOS) · Harbor 0.24.0 · a coding agent · inference credentials |
 | NemoClaw | N/A |
@@ -93,7 +93,6 @@ How the pieces connect, for one trial and the analysis after it (grey runs on yo
 blue in the trial's containers, green in NeMo Helix):
 
 ```mermaid
-%%{init: {"themeVariables": {"fontSize": "17px"}, "flowchart": {"curve": "basis", "nodeSpacing": 30, "rankSpacing": 50, "wrappingWidth": 230}}}%%
 flowchart LR
   H["<b>Harbor</b><br/>runs trials in parallel"]
   C["<b>CAD agent</b><br/>Deep Agents · FreeCAD<br/>NeMo Relay traces it"]
@@ -129,7 +128,6 @@ flowchart LR
 One round of the loop:
 
 ```mermaid
-%%{init: {"themeVariables": {"fontSize": "17px"}, "flowchart": {"curve": "basis", "nodeSpacing": 40, "rankSpacing": 55, "wrappingWidth": 420}}}%%
 flowchart TB
   E[["<b>ETHOS.md</b><br/>intent · success criteria · do · don't<br/>read by every step · updated when ③ finds a gap"]]
   subgraph R["One round"]
