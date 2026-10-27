@@ -13,6 +13,7 @@ MESH=(); ARG=
 if [ $# -ge 1 ]; then  # mounted read-only; web.py turns it into reference.obj
   EXT=$(basename "$1" | tr A-Z a-z); EXT=${EXT##*.}
   case $EXT in obj|stl) ;; *) echo "chat.sh: $1 is not a mesh; give an .obj or .stl file" >&2; exit 2 ;; esac
+  [ -f "$1" ] || { echo "chat.sh: no such file: $1" >&2; exit 2; }
   MESH=(-v "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")":/mesh.$EXT:ro); ARG=/mesh.$EXT
 fi
 echo "CAD agent chat: http://localhost:$PORT  (work folder $WORK; Ctrl-C stops it)"

@@ -134,9 +134,7 @@ them.
 The orchestrator measures each candidate on the **val** split, two attempts per task, on
 tasks the experimenters never saw (`loop/eval.sh`, `loop/summary.py`), and keeps it only
 when it passes more runs than the agent under study, or as many runs and more checks, with
-no check passing fewer times. With equal runs and checks, the
-orchestrator may keep a candidate whose renders show clearly fewer artefacts, if its IoU
-is no lower; that is a judgement, recorded with the renders. Otherwise the agent under study stays, and the next round diagnoses again with
+no check passing fewer times. Otherwise the agent under study stays, and the next round diagnoses again with
 fresh evidence. A run lost to the infrastructure rather than the agent (the
 model gateway down, a container that would not start) is void: it is re-run, not counted. A few val runs are a quick, noisy signal, so the final agent is
 measured on **test**, once, with more attempts, before it is reported.

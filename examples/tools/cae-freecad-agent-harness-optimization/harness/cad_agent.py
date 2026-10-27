@@ -39,11 +39,17 @@ class CadAgent(BaseInstalledAgent):
         await environment.upload_file(HERE / 'run_agent.py', '/installed-agent/run_agent.py')
         await environment.upload_file(HERE / 'agent.py', '/installed-agent/agent.py')
         # pipefail: the runner's exit code, not tee's, so a crash is not hidden.
-        await self.exec_as_agent(
-            environment, 'set -o pipefail; python /installed-agent/run_agent.py /agent '
-            f'{shlex.quote(instruction)} 2>&1 | tee /logs/agent/run.log',
-            env={'CAD_MODEL': self.model_name or ''})
+        crash = None
+        try:
+            await self.exec_as_agent(
+                environment, 'set -o pipefail; python /installed-agent/run_agent.py /agent '
+                f'{shlex.quote(instruction)} 2>&1 | tee /logs/agent/run.log',
+                env={'CAD_MODEL': self.model_name or ''})
+        except Exception as e:  # a run lost to the gateway may also end in a crash: check first
+            crash = e
         # The output may carry a docker warning too, so look for the field rather than parse.
         read = await self.exec_as_agent(environment, 'cat /logs/agent/outcome.json 2>/dev/null || true')
         if '"ended": "gateway"' in (read.stdout or ''):
-            raise GatewayLost('lost to the model gateway (outcome.json)')
+            raise GatewayLost('lost to the model gateway (outcome.json)') from crash
+        if crash:
+            raise crash

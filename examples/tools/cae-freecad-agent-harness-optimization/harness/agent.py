@@ -1,7 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 """How a CAD agent folder becomes a Deep Agents agent, shared by the eval runner
-(run_agent.py) and the chat (chat/chat.py). No side effects on import.
+(run_agent.py) and the chat (chat/chat.py). Needs CAD_AGENT_TIMEOUT, which the task and
+chat.sh set.
 """
 import os
 import runpy

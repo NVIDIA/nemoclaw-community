@@ -10,7 +10,7 @@ AGENT=$(cd "$1" && pwd) || exit 1; SPLIT=$3; N=${4:-2}
 mkdir -p "$2" && OUT=$(cd "$2" && pwd) || exit 1
 cd "$(dirname "$0")/.."   # the example root: harness/, evals/, publish.py, .env
 [ -f .env ] && { set -a; . ./.env; set +a; }
-export DOCKER_HOST=${DOCKER_HOST:-unix://$HOME/.colima/default/docker.sock}
+[ -n "${DOCKER_HOST:-}" ] || [ ! -S "$HOME/.colima/default/docker.sock" ] || export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
 [ ! -e "$OUT/$SPLIT" ] || { echo "$OUT/$SPLIT exists"; exit 1; }
 date -u +%Y-%m-%dT%H:%M:%SZ > "$OUT/$SPLIT.started"
 PYTHONPATH=harness harbor run -y -p "evals/$SPLIT" -a cad_agent:CadAgent --ak agent_dir="$AGENT" \

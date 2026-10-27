@@ -225,6 +225,9 @@ class Handler(BaseHTTPRequestHandler):
                     saved = now
                     self.wfile.write(b'event: model\ndata: ""\n\n')
                 self.wfile.flush()
+            if stamp(MODEL) != saved:  # a save after the last step
+                self.wfile.write(b'event: model\ndata: ""\n\n')
+                self.wfile.flush()
         except OSError:
             pass  # the page went away
         finally:

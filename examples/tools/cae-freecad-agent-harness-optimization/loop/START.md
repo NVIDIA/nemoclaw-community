@@ -40,7 +40,8 @@ You run one harness-optimization run of the FreeCAD CAD agent, `<run>`, with a b
      runs are regraded (`harbor jobs regrade`), never re-run. Decide on the new grades.
    - Step 4: two experimenter subagents with the `cad-experimenter` skill, each given a
      different area. They read train only: never `evals/val`, `evals/test` or
-     `evals/splits.json`. Measure each candidate on val and on train (`loop/eval.sh`), and
+     `evals/splits.json`. Measure each candidate on val (2 runs per task) and on train (1 run per task) with
+     `loop/eval.sh`, and
      apply the keep rule on val (`loop/summary.py CANDIDATE_VAL AGENT_VAL`).
    - Append to `experiments/<run>/LOG.md`: time stamps, results, the decision and why.
 6. Never change the ETHOS, the keep rule, the splits, the runs per task or the run limit
