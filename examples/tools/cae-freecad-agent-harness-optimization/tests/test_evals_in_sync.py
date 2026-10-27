@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 
 EVALS = Path(__file__).resolve().parents[1] / 'evals'
-TASKS = sorted(p for p in EVALS.iterdir() if (p / 'tests' / 'check_model.py').exists())
+TASKS = sorted(p.parents[1] for p in EVALS.glob('*/*/tests/check_model.py'))  # evals/<split>/<task>
 
 
 class EvalsInSyncTest(unittest.TestCase):

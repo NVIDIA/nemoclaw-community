@@ -18,7 +18,7 @@ import numpy as np
 
 sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                    "evals", "part-1-reconstruction", "tests"))
+                    "evals", "test", "part-1-reconstruction", "tests"))
 
 from iou_math import (  # noqa: E402
     CELL_MIN, X_OFFSET, Y_OFFSET, crossings, grid_axes, intervals,

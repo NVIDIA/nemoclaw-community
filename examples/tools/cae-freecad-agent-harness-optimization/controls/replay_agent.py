@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Negative-control agent: hands over a saved model instead of building one.
 
-    PYTHONPATH=controls harbor run -p evals/<task> -a replay_agent:ReplayModel \\
+    PYTHONPATH=controls harbor run -p evals/<split>/<task> -a replay_agent:ReplayModel \\
       --ak model=controls/<task>/<negative>.FCStd -y
 """
 from pathlib import Path

@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+"""loop/summary.py JOB [BASE_JOB]: one agent's runs on one split, and, with BASE_JOB, the keep rule
+of the cad-experimenter skill (generated tasks): more runs passed, or as many runs and more
+checks, with no check passing fewer times. VOID runs (publish.void_reason) are left out."""
+import json, sys
+from collections import Counter
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from publish import grade, void_reason  # noqa: E402
+
+FAMILIES = {t: v['family'] for t, v in json.loads((ROOT / 'evals' / 'splits.json').read_text())['tasks'].items()}
+
+
+def load(job):
+    runs, void = [], 0
+    for trial in sorted(p for p in Path(job).glob('*__*') if p.is_dir()):
+        if void_reason(trial):
+            void += 1
+            continue
+        g = grade(trial)
+        g['task'] = trial.name.rsplit('__', 1)[0]
+        runs.append(g)
+    return runs, void
+
+
+def stats(runs):
+    per_check = Counter(c for g in runs for c in g['passed'])
+    total = Counter(FAMILIES.get(g['task'], '?') for g in runs)
+    ok = Counter(FAMILIES.get(g['task'], '?') for g in runs if g['reward'] == 1)
+    ious = [g['iou'] for g in runs if g['iou'] is not None]
+    return {'runs': len(runs), 'passed': sum(g['reward'] == 1 for g in runs), 'checks': sum(g['checks'] for g in runs),
+            'of': sum(g['of'] for g in runs), 'mean_iou': round(sum(ious) / len(ious), 3) if ious else None,
+            'per_check': dict(sorted(per_check.items())),
+            'per_family_passed': {f: f'{ok[f]}/{total[f]}' for f in sorted(total)}}
+
+
+def main():
+    runs, void = load(sys.argv[1])
+    s = stats(runs) | {'void': void}
+    print(json.dumps(s, indent=1))
+    if len(sys.argv) > 2:
+        b = stats(load(sys.argv[2])[0])
+        if s['runs'] != b['runs']:  # counts are compared, so both sides need the same runs
+            print(f"WARNING: {s['runs']} runs against {b['runs']}: re-run the VOID runs first", file=sys.stderr)
+        worse = [c for c in b['per_check'] if s['per_check'].get(c, 0) < b['per_check'][c]]
+        better = s['passed'] > b['passed'] or (s['passed'] == b['passed'] and s['checks'] > b['checks'])
+        print('KEEP' if better and not worse else 'DROP', f"passed {s['passed']} vs {b['passed']}, checks {s['checks']} vs {b['checks']}",
+              f'worse checks: {worse}' if worse else '')
+
+
+if __name__ == '__main__':
+    main()

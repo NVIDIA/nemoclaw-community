@@ -29,7 +29,8 @@ This skill was written for this example only. It is a worked pattern for the
   the agent runs, what you may change (**Change Scope**) and how changes should be made
   (**Trade-offs**).
 - `agent/`: the agent under study (prompt, model, skills).
-- `runs/eval/`: its eval job, both tasks, two attempts per part. Per trial:
+- `runs/train/`: its eval job on the **train** split (`evals/train/`), one attempt per
+  task (`loop/eval.sh`). Per trial:
   `verifier/results` lists the checks, `verifier/metrics.json` the IoU and complexity counts,
   `verifier/check.log` the details,
   `verifier/reward.txt` the reward, and the first line of `agent/run.log` the trace ID
@@ -40,14 +41,19 @@ This skill was written for this example only. It is a worked pattern for the
 
 ## Rules
 
-- **Fix the behavior, not the test.** Do not read `evals/*/tests/` or
-  `evals/*/solution/`, and never mirror the grader. If the agent must measure similarity
-  to the mesh, write an independent measurement.
+- **Fix the behavior, not the test.** Do not read any task's `tests/` or `solution/`
+  folder, and never mirror the grader. If the agent must measure similarity to the
+  mesh, write an independent measurement.
+- **Train only.** Read only the train tasks' meshes
+  (`evals/train/*/environment/reference.obj`) and train traces. Val and test
+  (`evals/val/`, `evals/test/`, `evals/splits.json`) are off limits: they are how your
+  change is judged.
 - At most **two candidates**, each a different strategy and **one change**, in one area:
   knowledge (prompt, skill text), process (middleware), verification, or tools. One change
   per candidate is what lets the measurement say what worked.
 - **Nothing specific to these parts** in the agent: no dimensions, coordinates, feature
-  lists or names of the parts. Scan your diff before you hand over.
+  lists, part names or kinds of part (no "if it is a mug"). A change must help a part the
+  agent has never seen. Scan your diff before you hand over.
 - **Test code headlessly** in the agent's image, with the `freecadcmd` the agent runs.
 
 ## Levers
@@ -59,10 +65,11 @@ This skill was written for this example only. It is a worked pattern for the
 | Subagents | `subagents` in `agent.yaml`: a list of `{name, description, system_prompt, tools?}`. The agent delegates with its `task` tool. |
 | Middleware | `agent/middleware.py` exporting `MIDDLEWARE`, a list of Deep Agents middleware (e.g. trimming tool output, stopping loops). Use it for what a prompt or skill cannot do, including a rule the traces show the agent ignores in the prompt: a short hint added to the tool result where it applies is often followed where the prompt rule was not. |
 | Model | `model` in `agent.yaml`. `with-approval`: propose only. |
+| Vision | If the agent's model reads images (ETHOS, Harness), a render it makes of its own model beside the mesh, read back with `read_file`, can show what numbers miss: a missing feature, a wrong orientation, an artefact. [render/](render/) is a working example of headless rendering with `xvfb-run`; the agent's own render tool belongs in its skills. |
 
 ## Steps
 
-**1. Diagnose.** Read `LOG.md`, then this round's results per check and per part. For
+**1. Diagnose.** Read `LOG.md`, then this round's results per check and per kind of part. For
 each Insight and each failing check, open at least two traces:
 
 ```bash
@@ -86,9 +93,9 @@ problems to diagnose like failing checks: they often cost IoU margin, and a mode
 passes with them is not the model a designer would build.
 
 ```bash
-docker build -t cad-env evals/part-1-reconstruction/environment          # once: the agent's image
+docker build -t cad-env "$(ls -d evals/train/*/environment | head -1)"   # once: the agent's image (every task's is the same)
 docker run --rm -v "$PWD":/w -w /w -e OUT=render.png \
-  -e RENDER="<trial>/artifacts/app/model.FCStd:evals/part-1-reconstruction/environment/reference.obj" \
+  -e RENDER="<trial>/artifacts/app/model.FCStd:evals/train/<task>/environment/reference.obj" \
   cad-env xvfb-run -a -s "-screen 0 1920x1200x24" freecadcmd skills/cad-experimenter/render/render.py
 ```
 
@@ -96,12 +103,12 @@ Write `DIAGNOSIS.md`: per problem, the root cause in two or three sentences,
 citing trace IDs. Note shared causes, and what already works and must be kept.
 
 **2. Propose.** Write `PLAN.md`: up to two candidates, each naming the problems it
-targets, the lever, and the checks it should move on both parts.
+targets, the lever, and the checks it should move.
 
 **3. Build.** For each candidate, copy the round's `agent/` to `candidates/<short-name>/agent/`, edit
 the copy, and set its top-level `name:` to the one the orchestrator gave you. Test any
-code a skill relies on in the agent's own image, on both reference meshes
-(`evals/*/environment/reference.obj`), exactly as the agent will run it:
+code a skill relies on in the agent's own image, on train meshes of at least three
+different shapes, exactly as the agent will run it:
 
 ```bash
 docker run --rm -v "$PWD":/w -w /w cad-env timeout 120 freecadcmd my_test.py
@@ -109,7 +116,8 @@ docker run --rm -v "$PWD":/w -w /w cad-env timeout 120 freecadcmd my_test.py
 
 Run scripts as files, one configuration per process, under a hard time limit, so a hang
 costs minutes, not the round. The routine must leave a model that passes FreeCAD's full
-shape check (`shape.check(True)`). Hand over only candidates that do, on both parts. To
+shape check (`shape.check(True)`). Hand over only candidates that do, on every mesh you
+tested. To
 smoke-test a candidate end to end, run one task once with `--ak agent_dir=<candidate>`
 (README Step 4); the orchestrator does the real measurement.
 
@@ -123,11 +131,12 @@ them.
 
 ## The keep rule
 
-The orchestrator measures each candidate on both tasks, two attempts per part, and keeps
-it only when it passes more runs than the agent under study, or as many runs and more
-checks in total, with no part and no check worse. With equal runs and checks, the
+The orchestrator measures each candidate on the **val** split, two attempts per task, on
+tasks the experimenters never saw (`loop/eval.sh`, `loop/summary.py`), and keeps it only
+when it passes more runs than the agent under study, or as many runs and more checks, with
+no check passing fewer times. With equal runs and checks, the
 orchestrator may keep a candidate whose renders show clearly fewer artefacts, if its IoU
 is no lower; that is a judgement, recorded with the renders. Otherwise the agent under study stays, and the next round diagnoses again with
 fresh evidence. A run lost to the infrastructure rather than the agent (the
-model gateway down, a container that would not start) is void: it is re-run, not counted. Two attempts per part is a quick, noisy signal, so the final agent is
-measured again with more attempts before it is reported.
+model gateway down, a container that would not start) is void: it is re-run, not counted. A few val runs are a quick, noisy signal, so the final agent is
+measured on **test**, once, with more attempts, before it is reported.

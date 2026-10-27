@@ -22,26 +22,32 @@ You run one harness-optimization run of the FreeCAD CAD agent, `<run>`, with a b
    Compass's), Docker reaches Colima, `harbor` and `compass` are installed, `.env` is filled.
    Run the eval's controls once (`evals/README.md`, Rerun): NOP 0, Oracle 1, every negative
    0. Stop and report anything that fails.
-3. Tell the owner, in five lines: the goal (the ETHOS success criteria), the budget, two runs
-   per part per candidate, the run limit, the keep rule (the skill's). Wait for one "go".
-4. Step 0, once: a frontier solve of each part in the agent's image, from the ETHOS, the
-   instruction and the mesh alone. Write `experiments/<run>/FRONTIER.md`: what worked, with
-   no numbers or shapes specific to these parts. Experimenters read only that.
-5. Each round `N` in `experiments/<run>/round-<N>/`:
-   - Step 1 on the agent under study (`--ak agent_dir=...`, `--max-retries 2
-     --retry-include GatewayLost`), then `publish.py scores`.
-   - Step 2: Compass on this round's traces, then `publish.py insights`. Start nothing
-     else until `insights.yml` exists.
+3. Tell the owner, in five lines: the goal (the ETHOS success criteria), the budget, the
+   splits (`evals/train`, `evals/val`, `evals/test`) with one run per train task and two per
+   val task, the run limit, the keep rule (the skill's). Wait for one "go".
+4. Step 0, once: a frontier solve of a few train parts of different families in the agent's
+   image, from the ETHOS, the instruction and the mesh alone. Write
+   `experiments/<run>/FRONTIER.md`: what worked, with no numbers or shapes specific to these
+   parts. Experimenters read only that.
+5. Each round `N` in `experiments/<run>/round-<N>/`, with the agent under study in its
+   `agent/` (round 0: a copy of `agent/`):
+   - Step 1: `loop/eval.sh` on train (1 run per task); in round 0 also on val (2 runs per
+     task), the baseline. A kept candidate brings its val runs with it.
+   - Step 2: `loop/compass.sh` on this round's train runs. Start nothing else until
+     `insights.yml` exists.
    - Step 3: Eval Author checks each Insight against the eval. A new or fixed check is
      proven (NOP 0, Oracle 1, a realistic negative 0) before it is applied, and stored
      runs are regraded (`harbor jobs regrade`), never re-run. Decide on the new grades.
    - Step 4: two experimenter subagents with the `cad-experimenter` skill, each given a
-     different area. Measure their candidates and apply the skill's keep rule.
+     different area. They read train only: never `evals/val`, `evals/test` or
+     `evals/splits.json`. Measure each candidate on val and on train (`loop/eval.sh`), and
+     apply the keep rule on val (`loop/summary.py CANDIDATE_VAL AGENT_VAL`).
    - Append to `experiments/<run>/LOG.md`: time stamps, results, the decision and why.
-6. Never change the ETHOS, the keep rule, the runs per part or the run limit during the run;
-   log the request for the next one. A run lost to the infrastructure is VOID: re-run it,
+6. Never change the ETHOS, the keep rule, the splits, the runs per task or the run limit
+   during the run; log the request for the next one. A run lost to the infrastructure is VOID: re-run it,
    never count it, and stop if the same failure repeats.
-7. Stop at the budget, or after two rounds in a row with no kept candidate. Confirm the
-   final agent against the base agent, 5 runs per part each, and write
+7. Stop at the budget, or after two rounds in a row with no kept candidate. Read test once:
+   the final agent and the base agent, 5 runs per task each (`loop/eval.sh ... test 5`), and
+   write
    `experiments/<run>/REPORT.md`: the eval and its changes, every round and decision, the
    Insights and what resolved each, and the final agent against the base agent.
