@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """loop/summary.py JOB [BASE_JOB]: one agent's runs on one split, and, with BASE_JOB, the keep rule
 of the cad-experimenter skill (generated tasks): more runs passed, or as many runs and more
-checks, with no check passing fewer times. VOID runs (publish.void_reason) are left out; with
-BASE_JOB, both jobs must then hold the same runs of the same tasks, or there is no decision."""
+checks, with no check passing fewer times. VOID runs (publish.void_reason) are left out, and a
+job with VOID or missing runs is INCOMPLETE (exit 1); with BASE_JOB, both jobs must hold the
+same runs of the same tasks, or there is no decision."""
 import json, sys
 from collections import Counter
 from pathlib import Path
@@ -16,15 +17,17 @@ FAMILIES = {t: v['family'] for t, v in json.loads((ROOT / 'evals' / 'splits.json
 
 
 def load(job):
+    trials = sorted(p for p in Path(job).glob('*__*') if p.is_dir())
+    missing = json.loads((Path(job) / 'result.json').read_text())['n_total_trials'] - len(trials)
     runs, void = [], 0
-    for trial in sorted(p for p in Path(job).glob('*__*') if p.is_dir()):
+    for trial in trials:
         if void_reason(trial):
             void += 1
             continue
         g = grade(trial)
         g['task'] = trial.name.rsplit('__', 1)[0]
         runs.append(g)
-    return runs, void
+    return runs, void, missing
 
 
 def stats(runs):
@@ -39,9 +42,11 @@ def stats(runs):
 
 
 def main():
-    runs, void = load(sys.argv[1])
-    s = stats(runs) | {'void': void}
+    runs, void, missing = load(sys.argv[1])
+    s = stats(runs) | {'void': void, 'missing': missing}
     print(json.dumps(s, indent=1))
+    if void or missing:  # trials Harbor never wrote are missing
+        sys.exit(f'INCOMPLETE: re-run the {void} VOID and {missing} missing runs first')
     if len(sys.argv) > 2:
         base = load(sys.argv[2])[0]
         ours, theirs = Counter(g['task'] for g in runs), Counter(g['task'] for g in base)

@@ -5,7 +5,7 @@
 # test), ATTEMPTS runs per task (default 2), then each run's grade onto its trace and a summary.
 # MODEL defaults to Nemotron 3.5 Super VL on the Helix gateway;
 # CAD_SLOTS trials run at once (default 4: 3 GiB each).
-set -u
+set -uo pipefail   # a failed step, or summary.py behind tee, fails the script
 AGENT=$(cd "$1" && pwd) || exit 1; SPLIT=$3; N=${4:-2}
 mkdir -p "$2" && OUT=$(cd "$2" && pwd) || exit 1
 cd "$(dirname "$0")/.."   # the example root: harness/, evals/, publish.py, .env
@@ -16,7 +16,7 @@ docker build -q -t cad-verifier evals/verifier > /dev/null || exit 1   # every t
 date -u +%Y-%m-%dT%H:%M:%SZ > "$OUT/$SPLIT.started"
 PYTHONPATH=harness harbor run -y -p "evals/$SPLIT" -a cad_agent:CadAgent --ak agent_dir="$AGENT" \
   -m "${MODEL:-nvidia-nvidia-nemotron-3-5-super-vl}" -k "$N" -n "${CAD_SLOTS:-4}" \
-  --max-retries 2 --retry-include GatewayLost --jobs-dir "$OUT" --job-name "$SPLIT" > "$OUT/$SPLIT.out" 2>&1
+  --max-retries 2 --retry-include GatewayLost --jobs-dir "$OUT" --job-name "$SPLIT" > "$OUT/$SPLIT.out" 2>&1 || { echo "harbor failed: see $OUT/$SPLIT.out"; exit 1; }
 date -u +%Y-%m-%dT%H:%M:%SZ > "$OUT/$SPLIT.ended"
-python3 publish.py scores "$OUT/$SPLIT" > "$OUT/$SPLIT.scores" 2>&1
+python3 publish.py scores "$OUT/$SPLIT" > "$OUT/$SPLIT.scores" 2>&1 || { echo "publish failed: see $OUT/$SPLIT.scores"; exit 1; }
 python3 loop/summary.py "$OUT/$SPLIT" | tee "$OUT/$SPLIT.summary"
