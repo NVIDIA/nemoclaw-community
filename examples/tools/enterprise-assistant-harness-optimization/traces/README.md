@@ -6,7 +6,7 @@ Every trace in it was collected against `fixtures/world-v2.json`.
 `world-v3/production/` is the starting corpus: 36–48 distinct baseline Hermes
 requests recorded by NeMo Relay while the agent ran in OpenShell and called the
 host-side HTTP MCP through `openshell/policy.yaml`. The ATIF files are the
-trace-derived task evidence; `insights.jsonl` is the canonical Trace Analyst
+trace-derived task evidence; `insights.jsonl` is the canonical NeMo Compass
 input; `index.json` records stable IDs, source prompts, and behavior families.
 It also binds the exact trace and analysis-input bytes with SHA-256 digests.
 Public projections redact non-fixture tool payloads and declare normalization
@@ -18,7 +18,7 @@ for new runs; recorded identifiers are preserved as provenance.
 
 `world-v3/baseline-development/insights.jsonl` contains every repeated baseline
 development rollout joined to its Harbor reward and verifier findings. It is
-the second Trace Analyst input and must contain exactly `D × K` traces with at
+the second NeMo Compass input and must contain exactly `D × K` traces with at
 least three per development task.
 
 `world-v3/verification-baseline-development/` holds the independent baseline

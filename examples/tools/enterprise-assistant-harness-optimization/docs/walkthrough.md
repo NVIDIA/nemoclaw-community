@@ -5,10 +5,14 @@ Most agent failures don't show up in a single interaction, they show up in the t
 
 The tutorial walks through a multi-step optimization process for a fictional Enterprise Assistant agent:
 - Create traces by asking the agent a series of questions that use the fictional MCP tools
-- Use [NeMo Compass](https://github.com/NVIDIA-NeMo/labs-nemo-compass) to analyze the traces and identify common failures
-- Use a coding agent like Codex with the [NeMo Eval Author skills](https://github.com/NVIDIA-NeMo/labs-eval-author) to create [Harbor evaluation cases](https://www.harborframework.com/) that (a) reflect the most common patterns from the traces, and (b) reproduce any identified failures
+- Use [NeMo Compass](https://github.com/NVIDIA-NeMo/nemo-compass) to analyze the traces and identify common failures
+- Use a coding agent like Codex with the [NeMo Eval Author skills](https://github.com/NVIDIA-NeMo/eval-author) to create [Harbor evaluation cases](https://www.harborframework.com/) that (a) reflect the most common patterns from the traces, and (b) reproduce any identified failures
 - Propose a change to the agent that fixes the failure
 - Run the Harbor evaluation cases with the proposed fix, confirming improvement without introducing regressions
+
+NeMo Compass analyzes stored agent traces and evaluation evidence to find recurring failures, expose evaluation gaps, and prioritize what teams should improve next.
+
+NeMo Eval Author measures evaluation coverage and generates candidate agent-specific tasks, environments, and verifiers to address identified coverage gaps.
 
 After completing this tutorial, you will have a core understanding of the NeMo libraries to re-implement this optimization loop with your own agent.
 
@@ -156,20 +160,20 @@ That command asks the agent these 42 tasks:
 
 Use NeMo Compass to understand patterns in the traces and identify recurring errors.
 
-### Install [NeMo Compass](https://github.com/NVIDIA-NeMo/labs-nemo-compass):
+### Install [NeMo Compass](https://github.com/NVIDIA-NeMo/nemo-compass):
 
 ```bash
 uv tool install \
-  'insight-agent @ git+https://github.com/NVIDIA-NeMo/labs-nemo-compass.git@main'
+  'nemo-compass @ git+https://github.com/NVIDIA-NeMo/nemo-compass.git@main'
 ```
 
 ### Configure your `NVIDIA_API_KEY` for NeMo Compass.
 
 ```bash
 printf 'NVIDIA Build API key for NeMo Compass: '
-read -rs INSIGHT_AGENT_API_KEY
+read -rs COMPASS_API_KEY
 printf '\n'
-export INSIGHT_AGENT_API_KEY
+export COMPASS_API_KEY
 ```
 ### Run the analysis
 
@@ -180,7 +184,7 @@ Run the analysis on the traces collected earlier:
 ```bash
 export PRODUCTION_INSIGHTS="$PWD/.runs/production-insights.yml"
 mkdir -p .runs
-insight-agent --config configs/trace-analyst.yaml \
+compass --config configs/trace-analyst.yaml \
   --trace.filesystem.path "$TRACE_CORPUS/insights.jsonl" \
   --output-path "$PRODUCTION_INSIGHTS"
 ```
@@ -210,7 +214,7 @@ The saved finding describes this sequence:
 
 NeMo Compass looks at traces from the agent and identifies issues. Before we can fix those issues, we need a set of tests that accurately recreate them. The tests should also cover other scenarios present in the traces so that we can check if any change we make accidentally breaks other parts of the agent's behavior.
 
-[NeMo Eval Author](https://github.com/NVIDIA-NeMo/labs-eval-author) is a set of skills that help your coding agent (e.g. Codex) create these tests. For agent behavior, these tests will take a very specific form: Harbor evaluation tasks.
+[NeMo Eval Author](https://github.com/NVIDIA-NeMo/eval-author) is a set of skills that help your coding agent (e.g. Codex) create these tests. For agent behavior, these tests will take a very specific form: Harbor evaluation tasks.
 
 Like other parts of the tutorial, you can skip this step and re-use the eval tasks that are checked-in to the repository.
 
@@ -249,10 +253,10 @@ Install Eval Author's skills for Codex:
 
 ```bash
 repo_root="$PWD"
-git clone https://github.com/NVIDIA-NeMo/labs-eval-author.git "$HOME/labs-eval-author"
-git -C "$HOME/labs-eval-author" checkout 542229dce6055a24527560bd8e0716e07ea5a78b
+git clone https://github.com/NVIDIA-NeMo/eval-author.git "$HOME/eval-author"
+git -C "$HOME/eval-author" checkout 542229dce6055a24527560bd8e0716e07ea5a78b
 cd "$repo_root"
-npx --yes skills@1.7.0 add "$HOME/labs-eval-author" --skill '*' --agent codex --yes --copy
+npx --yes skills@1.7.0 add "$HOME/eval-author" --skill '*' --agent codex --yes --copy
 npx --yes skills@1.7.0 list --agent codex
 codex
 ```
@@ -380,7 +384,7 @@ Now, we will run NeMo Compass again, but this time to analyze the traces collect
   --output .runs/baseline-development-insights.jsonl
 .harbor-venv/bin/python scripts/validate_scored_trace_bundle.py \
   .runs/baseline-development-insights.jsonl --minimum-attempts 3
-insight-agent --config configs/trace-analyst.yaml \
+compass --config configs/trace-analyst.yaml \
   --trace.filesystem.path .runs/baseline-development-insights.jsonl \
   --output-path .runs/baseline-development-insights.yml
 ```

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Validate a repeated Harbor baseline bundle before Trace Analyst ingestion."""
+"""Validate a repeated Harbor baseline bundle before NeMo Compass ingestion."""
 
 from __future__ import annotations
 

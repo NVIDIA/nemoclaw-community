@@ -1,6 +1,6 @@
 # Codex task: derive a reviewed Harbor suite with NeMo Eval Author
 
-Use the skills installed from `NVIDIA-NeMo/labs-eval-author`. Begin with its
+Use the skills installed from `NVIDIA-NeMo/eval-author`. Begin with its
 `eval-author` entry skill and select the supported trace-derived Harbor workflow.
 Use Codex as the coding agent. Confirm the intended behavior in the supplied
 `ETHOS.md` with the user before constructing tests.
