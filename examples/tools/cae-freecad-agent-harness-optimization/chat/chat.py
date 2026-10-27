@@ -167,7 +167,7 @@ def ingest(mesh: Path) -> None:
     old = [p for p in APP.iterdir() if p.name != '.jobs']
     if old:
         keep = APP / '.jobs' / time.strftime('%Y%m%d-%H%M%S')
-        keep.mkdir(parents=True)
+        keep.mkdir(parents=True, exist_ok=True)  # two uploads in one second share it
         for p in old:
             p.replace(keep / p.name)
     shutil.move('/tmp/reference.obj', APP / 'reference.obj')  # /tmp and /app are different file systems
