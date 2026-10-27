@@ -47,7 +47,7 @@ model and the mesh to images and look at them.
 
 LangChain Deep Agents on Nemotron 3.5 Super VL, which reads images as well as text,
 built from `agent/agent.yaml`
-by `harness/run_agent.py` inside each Harbor trial's task container. The model is
+by `harness/agent.py` and run by `harness/run_agent.py` inside each Harbor trial's task container. The model is
 reached through the NeMo Helix inference gateway, and NeMo Relay records each run as
 an ATIF trace in Intake, with the agent's tool schemas. The agent stops when it
 reports the finished model.

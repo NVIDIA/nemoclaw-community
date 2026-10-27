@@ -30,7 +30,7 @@ answers only requests addressed to `localhost`, from its own page.
 
 | Variable | Meaning |
 | --- | --- |
-| `CAD_WORK` | work folder, the agent's `/app` (default `./cad-work`) |
+| `CAD_WORK` | work folder, the agent's `/app` (default `cad-work/` in the example) |
 | `CAD_AGENT_DIR` | agent folder (default `results/final-agent`) |
 | `CAD_MODEL` | model name on the gateway (default: the agent's `agent.yaml`) |
 | `CAD_CHAT_TIMEOUT` | each message's time limit and longest shell command, seconds (default 900; the eval's `CAD_AGENT_TIMEOUT` is 300) |

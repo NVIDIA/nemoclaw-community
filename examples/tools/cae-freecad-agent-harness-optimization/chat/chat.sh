@@ -7,7 +7,7 @@ set -eu
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 [ -f "$HERE/.env" ] && { set -a; . "$HERE/.env"; set +a; }
 AGENT=$(cd "${CAD_AGENT_DIR:-$HERE/results/final-agent}" && pwd)
-WORK=${CAD_WORK:-cad-work}; mkdir -p "$WORK"; WORK=$(cd "$WORK" && pwd)
+WORK=${CAD_WORK:-$HERE/cad-work}; mkdir -p "$WORK"; WORK=$(cd "$WORK" && pwd)
 PORT=${CAD_WEB_PORT:-8765}
 MESH=(); ARG=
 if [ $# -ge 1 ]; then  # mounted read-only; web.py turns it into reference.obj

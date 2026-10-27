@@ -24,7 +24,6 @@ BASE_URL = os.environ.get('CHAT_BASE_URL') or gateway_url(
 API_KEY = os.environ.get('CHAT_API_KEY') or 'unused'
 APP = Path('/app')
 MODEL = APP / 'model.FCStd'
-IMAGES = ('.png', '.jpg', '.jpeg')  # read_file returns these to the model as images
 STARTUP = 120  # s for a task process to build its agent, before its own clock starts
 # Task processes fork from a clean server process that has the agent stack imported once, so a
 # message does not pay seconds of imports, and inherits nothing from the web server's threads.
@@ -47,25 +46,26 @@ def check_model(agent_dir: Path) -> None:
                  '(nemo models list --all-pages), or set model: in its agent.yaml (and its subagents\').')
 
 
-def steps(message, images: dict):
+def steps(message):
     """The chat's view of one message as (kind, text): a line per tool call ('call'), the last
-    lines of each tool result ('result'), the agent's text in full ('text'), and the path of
-    each image the agent reads ('image'), once read: images holds the reads still running,
-    by tool call id."""
+    lines of each tool result ('result'), the agent's text in full ('text'), and each image
+    the agent reads, as the model got it ('image', a data URL)."""
     if message.type == 'ai':
         for call in getattr(message, 'tool_calls', None) or []:
             args = call.get('args') or {}
             yield 'call', f"> {call['name']} {str(args.get('command') or args)[:300]}"
-            path = str(args.get('file_path') or '')
-            if call['name'] == 'read_file' and path.lower().endswith(IMAGES):
-                images[call['id']] = str(APP / path)  # a relative path is in /app
         if isinstance(message.content, str) and message.content.strip():
             yield 'text', message.content.strip()
     elif message.type == 'tool':
-        lines = str(message.content).strip().splitlines()
-        yield 'result', ' | '.join(lines[-3:])[:300]
-        if message.tool_call_id in images:  # the image as the model got it, not an earlier one
-            yield 'image', images.pop(message.tool_call_id)
+        blocks = message.content if isinstance(message.content, list) else []
+        images = [b for b in blocks if isinstance(b, dict) and b.get('type') == 'image' and b.get('base64')]
+        if images:  # read_file of an image: Deep Agents hands the model the image itself
+            yield 'result', f"image {message.additional_kwargs.get('read_file_path', '')}"
+            for b in images:
+                yield 'image', f"data:{b.get('mime_type') or 'image/png'};base64,{b['base64']}"
+        else:
+            lines = str(message.content).strip().splitlines()
+            yield 'result', ' | '.join(lines[-3:])[:300]
 
 
 def turn(agent_dir: Path, history: list, prompt: str):
@@ -76,14 +76,14 @@ def turn(agent_dir: Path, history: list, prompt: str):
     asked = [*history, {'role': 'user', 'content': prompt}]
     agent = build(agent_dir)
     yield 'ready', ''
-    shown, answer, images = None, '', {}  # shown by id: middleware may summarize (shrink) the list
+    shown, answer = None, ''  # shown by id: middleware may summarize (shrink) the list
     for state in agent.stream({'messages': asked}, stream_mode='values'):
         if shown is None:  # the first state is the input
             shown = {m.id for m in state['messages']}
         for message in state['messages']:
             if message.id not in shown:
                 shown.add(message.id)
-                for kind, text in steps(message, images):
+                for kind, text in steps(message):
                     if kind == 'text':
                         answer = text
                     yield kind, text

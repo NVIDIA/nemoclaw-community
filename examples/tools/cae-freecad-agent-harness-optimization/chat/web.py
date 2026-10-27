@@ -3,9 +3,8 @@
 """Chat with a CAD agent folder in the browser: the agent's steps as they happen (chat.py), and
 a 3D view of the mesh and the model. Single user; closing the tab stops the task.
 
-    python web.py AGENT_DIR [MESH]      (chat.sh starts it; see README.md)
+    CAD_AGENT_TIMEOUT=900 python web.py AGENT_DIR [MESH]      (chat.sh starts it; see README.md)
 """
-import base64
 import json
 import os
 import select
@@ -46,15 +45,6 @@ def stamp(path: Path):
         st = path.stat()
         return st.st_mtime_ns, st.st_size
     return None
-
-
-def picture(path: str) -> str:
-    """An image the agent has just read, as a data URL; '' when it is gone or over MAX_IMAGE."""
-    with suppress(OSError):
-        if Path(path).stat().st_size <= MAX_IMAGE:
-            kind = 'png' if path.lower().endswith('.png') else 'jpeg'
-            return f'data:image/{kind};base64,' + base64.b64encode(Path(path).read_bytes()).decode()
-    return ''
 
 
 def snapshot() -> dict:
@@ -229,9 +219,7 @@ class Handler(BaseHTTPRequestHandler):
         task, saved = Task(self.server.agent, HISTORY, prompt), stamp(MODEL)
         try:
             for kind, text in task.steps(self.connected):
-                if kind == 'image':
-                    text = picture(text)
-                if text or kind != 'image':
+                if kind != 'image' or len(text) <= MAX_IMAGE * 4 // 3:  # base64 of MAX_IMAGE bytes
                     self.wfile.write(f'event: {kind}\ndata: {json.dumps(text)}\n\n'.encode())
                 if (now := stamp(MODEL)) != saved:
                     saved = now

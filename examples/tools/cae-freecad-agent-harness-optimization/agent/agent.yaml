@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# The CAD agent: harness/run_agent.py builds a LangChain Deep Agents agent from this
+# The CAD agent: harness/agent.py builds a LangChain Deep Agents agent from this
 # file, with the skills in skills/ beside it. Optional: subagents (Deep Agents format),
 # and middleware.py exporting MIDDLEWARE, a list of Deep Agents middleware.
 name: cad-agent
