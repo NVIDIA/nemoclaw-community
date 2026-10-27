@@ -35,9 +35,11 @@ You run one harness-optimization run of the FreeCAD CAD agent, `<run>`, with a b
      task), the baseline. A kept candidate brings its val runs with it.
    - Step 2: `loop/compass.sh` on this round's train runs. Start nothing else until
      `insights.yml` exists.
-   - Step 3: Eval Author checks each Insight against the eval. A new or fixed check is
-     proven (NOP 0, Oracle 1, a realistic negative 0) before it is applied, and stored
-     runs are regraded (`harbor jobs regrade`), never re-run. Decide on the new grades.
+   - Step 3: Eval Author checks each Insight against the eval, and passing models against
+     the Ethos ([EVAL-AUTHOR.md](EVAL-AUTHOR.md)); stop for the owner on any proposal.
+     A new or fixed check is proven (NOP 0, Oracle 1, a realistic negative 0) before it
+     is applied, and stored runs are regraded (`harbor jobs regrade`), never re-run.
+     Decide on the new grades.
    - Step 4: two experimenter subagents with the `cad-experimenter` skill, each given a
      different area. They read train only: never `evals/val`, `evals/test` or
      `evals/splits.json`. Measure each candidate on val (2 runs per task) and on train (1 run per task) with

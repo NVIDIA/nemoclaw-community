@@ -57,6 +57,22 @@ passes all nine checks. Rendered headless with
 | Start here | [Prerequisites](#prerequisites) |
 | Confirm success | [Verification](#verification) |
 
+## Included artefacts
+
+What each step of the loop does, and what it left in this folder. Run folders, traces and
+renders of every run stay in the git-ignored `experiments/`.
+
+| Step | What you do | Checked-in artefacts | Made by |
+| --- | --- | --- | --- |
+| Specify | Write what the agent is for and must not do | [ETHOS.md](ETHOS.md) | you |
+| Eval | Tasks and checks, proven before use | [34 tasks in train, val and test](evals/), [splits](evals/splits.json), [proof](evals/README.md#proof), [manifest](evals/manifest.json) | NeMo Eval Author |
+| 1 · Run and score | The agent under study on train (and val), one container per run | [every agent's grades and tokens](results/rounds.json) | [loop/eval.sh](loop/eval.sh) |
+| 2 · Find problems | NeMo Compass on the round's train traces | [each round's Insights](results/insights/) | [loop/compass.sh](loop/compass.sh) |
+| 3 · Check the eval | Is each Insight caught? Do passing models fit the Ethos? | [Insight-to-check trail](results/insights/README.md) | [loop/EVAL-AUTHOR.md](loop/EVAL-AUTHOR.md) |
+| 4 · Experiment and keep | Candidates from train; the keep rule on val | [every candidate](results/README.md#every-candidate), [round charts](assets/rounds-val.png) | [cad-experimenter](skills/cad-experimenter/SKILL.md), [loop/summary.py](loop/summary.py) |
+| Test | The final agent and the base agent, once | [test results](results/README.md#the-final-agent-on-every-split), [renders](assets/final-test.png) | [loop/eval.sh](loop/eval.sh) |
+| Result | The agent the loop built | [final agent](results/final-agent/), [browser chat](chat/README.md) | the loop |
+
 ## Why this exists
 
 General-purpose agent harnesses are strong at orchestration, but they do not carry your
@@ -196,11 +212,22 @@ model.
 | [harness/run_agent.py](harness/run_agent.py) | Inside the container: runs that agent through the Helix gateway; traces the run with NeMo Relay; records a run lost to the gateway; stops it, and every process it started, at the run limit (5 minutes). |
 | [harness/cad_agent.py](harness/cad_agent.py) | The Harbor agent: uploads the agent folder and the runner and starts it in each trial's container. |
 | [evals/](evals/README.md) | 34 Harbor tasks with one instruction and one verifier, in `train/`, `val/` and `test/`. |
-| [loop/](loop/) | `eval.sh` runs an agent on one split and grades it; `summary.py` applies the keep rule; `compass.sh` runs Compass on a round; [START.md](loop/START.md) runs the whole loop. |
+| [loop/](loop/) | `eval.sh` runs an agent on one split and grades it; `summary.py` applies the keep rule; `compass.sh` runs Compass on a round; [EVAL-AUTHOR.md](loop/EVAL-AUTHOR.md) is the Step 3 prompt; [START.md](loop/START.md) runs the whole loop. |
 | [publish.py](publish.py) | After a job, attaches each run's grade to its trace; publishes Compass Insights to Studio. |
 | [controls/](controls/) | Generates negative controls from the reference solutions, and grades a saved model, to prove each check fails what it should. |
 | [skills/cad-experimenter](skills/cad-experimenter/SKILL.md) | The experiment step, written for this task: how one round diagnoses and builds candidates, including rendering models to look at them. Design your own for your agent. |
 | [chat/](chat/README.md) | A browser chat with any agent folder: upload a mesh, watch the agent work, compare and download its model. |
+
+**Bring your own tool.** To run the loop on your agent and tool, replace the CAD-specific
+pieces and keep the loop:
+
+| Replace | Keep |
+| --- | --- |
+| `agent/` (your agent: prompt, skills, middleware) | `loop/` (run, Compass, keep rule, the prompts) |
+| `ETHOS.md` (what your agent is for) | `harness/` (Deep Agents in a container, retries, tracing) |
+| Each task's `environment/Dockerfile` (your tool in place of FreeCAD) and its input | `publish.py` (grades onto traces, Insights to Studio) |
+| Each task's `tests/` (your checks, proven with Eval Author) | `analyst.yaml` (Compass on Intake) |
+| `skills/cad-experimenter` (how an experimenter reads your traces and tests a change) | `results/charts.py` (round charts from a results file) |
 
 The agent sees real paths: the mesh at `/app/reference.obj`, its skills under
 `/agent/skills/`, and any file it writes, so a skill can ship code the agent runs with
@@ -504,9 +531,10 @@ npx skills add NVIDIA-NeMo/eval-author --skill '*' --agent <your-coding-agent> -
 ```
 
 The eval here is already built ([How the eval was built](#how-the-eval-was-built)). Each
-round, ask Eval Author (`eval-author-task-create`, proposal mode) whether a check catches
-each new Insight, and have it review a few passing models against the Ethos: a model that
-passes every check can still miss the intent. If a gap shows, update the Ethos and have
+round, paste [loop/EVAL-AUTHOR.md](loop/EVAL-AUTHOR.md) into your coding agent: Eval Author
+(`eval-author-task-create`, proposal mode) decides whether a check catches each new Insight
+and reviews a few passing models against the Ethos, since a model that passes every check
+can still miss the intent. It writes its decisions to the round's folder and stops for you. If a gap shows, update the Ethos and have
 Eval Author propose and prove a new check ([evals/](evals/README.md) has the checks, the
 controls and how to rerun them).
 
