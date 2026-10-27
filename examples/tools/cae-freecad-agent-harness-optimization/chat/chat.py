@@ -9,6 +9,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from contextlib import suppress
 from pathlib import Path
@@ -166,8 +167,8 @@ def ingest(mesh: Path) -> None:
     to_obj(mesh, Path('/tmp/reference.obj'))
     old = [p for p in APP.iterdir() if p.name != '.jobs']
     if old:
-        keep = APP / '.jobs' / time.strftime('%Y%m%d-%H%M%S')
-        keep.mkdir(parents=True, exist_ok=True)  # two uploads in one second share it
+        (APP / '.jobs').mkdir(exist_ok=True)
+        keep = Path(tempfile.mkdtemp(prefix=time.strftime('%Y%m%d-%H%M%S-'), dir=APP / '.jobs'))  # unique
         for p in old:
             p.replace(keep / p.name)
     shutil.move('/tmp/reference.obj', APP / 'reference.obj')  # /tmp and /app are different file systems
