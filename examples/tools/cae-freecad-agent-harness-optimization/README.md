@@ -412,6 +412,14 @@ The test set says what to do next. To take an agent like this to production:
   skill in the weights, and the loop leaves what it needs: a proven eval, the harness, and
   traces graded check by check (for fine-tuning on passing runs, and as a reward for RL).
 
+## Adapt it to your own task
+
+Start from your tool and what your agent is for. Write your `ETHOS.md`, then have a frontier
+model solve a few of your tasks (Step 0). Build a small eval with Eval Author: tasks from your
+tool's real inputs, split into train, val and test, each check proven. Replace the
+CAD-specific pieces ([Bring your own tool](#how-it-runs)) and keep `loop/`. Measure the base
+agent (Step 1), then run the loop with [loop/START.md](loop/START.md), one round at a time.
+
 ## Prerequisites
 
 - **[uv](https://docs.astral.sh/uv/) 0.10.10 or later** and Python 3.12+.
