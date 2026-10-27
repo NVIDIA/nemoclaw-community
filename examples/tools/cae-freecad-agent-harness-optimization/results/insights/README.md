@@ -33,7 +33,7 @@ Compass run finished; their CANDIDATES files say so. In the table, val numbers a
 | [0](round-0.yml) | A wrong four-argument radius constraint crashes FreeCAD; no model saved | Caught, as above | Same skill: the three-argument form and building blocks (round 0) | Yes: not raised again |
 | [0](round-0.yml) | Runs end with mesh measurements and no saved model | Caught: every check fails without a model | Build-and-save middleware (r1-process, round 0, dropped: 0/14 on val); the skill's one-call measuring tools and "save a first model by minute 2" (r1-skills, round 0, kept) | Partly: a valid model on val 0/14 → 10/14; raised again in rounds 1 and 7 |
 | [1](round-1.yml) | Failed cavity lofts are saved anyway | Caught by `single-valid-solid` or `mesh-fidelity` | A save guard that reopens each save and rolls back a failing one (r2-process, round 1, dropped; then r3-lookguard, round 2, kept) | Yes, round 2: `single-valid-solid` 14/14 on val |
-| [1](round-1.yml) | Runs measure and never run a build | Caught: every check fails without a model | Same guard, plus a clock on every tool result and no silent end (r3-lookguard, round 2) | Yes on val from round 2 (a valid model on 14/14); raised again in round 7 |
+| [1](round-1.yml) | Runs measure and never run a build | Caught: every check fails without a model | Same guard, plus a clock on every tool result and no silent end (r3-lookguard, round 2) | Yes on val in rounds 2-3 and for the final agent (a valid model on 14/14); raised again in round 7 |
 | [1](round-1.yml) | Build errors are not recovered before the run ends | Caught by `recomputes-after-reopen` or `single-valid-solid` | Same guard: it flags a script not yet run and errors hidden behind exit code 0 (r3-lookguard, round 2) | Partly: not raised in rounds 3 and 4; in round 7 one train run's builds all failed |
 | [1](round-1.yml) | Valid solids miss fidelity and features | Caught by `mesh-fidelity` and `no-missing-feature` | Looking at renders (r2-vision, round 1, dropped); section fits (r3-shapes, round 2, dropped); section fits on the kept agent (r4-shapes, round 3, kept) | Partly, round 3: `mesh-fidelity` 5 → 9, `no-missing-feature` 4 → 7 on val; raised again in rounds 3, 4 and 7 |
 | [3](round-3.yml) | Valid models still fail the fidelity bar | Caught by `mesh-fidelity` | Section fits (r4-shapes, round 3, kept; built before this Insight) | Partly, as above |
@@ -52,7 +52,7 @@ Compass run finished; their CANDIDATES files say so. In the table, val numbers a
 ## Key chains
 
 - **No model saved** (rounds 0, 1, 7) → already graded → a toolkit skill (round 0), then a
-  save guard with rollback and a clock (round 2) → a valid model on every val run from round 2.
+  save guard with rollback and a clock (round 2) → a valid model on every val run in rounds 2-3 and for the final agent.
   It came back on train in round 7; a save-first gate cost passes and was dropped. The final
   agent saved a valid model on every val run.
 - **Valid solids that miss fidelity and features** (rounds 1, 3, 4, 7) → already graded →

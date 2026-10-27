@@ -216,7 +216,7 @@ eval's solution, or the rest of your machine.
 > rounds that led to it. [Start Here](#start-here) walks through running each step
 > yourself; [results/](results/README.md) has every agent the loop measured.
 
-**Final agent** ([results/final-agent](results/final-agent/agent.yaml)): a six-line prompt,
+**Final agent** ([results/final-agent](results/final-agent/agent.yaml)): a seven-line prompt,
 one skill (`cad-toolkit`: tools to find the part's frame, fit its sections, measure its
 profile and side features, build, verify and render) and a middleware that checks every
 save. On Nemotron 3.5 Super VL:
@@ -298,7 +298,7 @@ dropped, is in [results/](results/README.md#every-candidate).
 | --- | --- | --- | --- | --- | --- |
 | start | | Base agent: a two-sentence prompt, no skills | `agent.yaml` | 0/14 | 0/126 |
 | 0 | FreeCAD API mistakes (loft profiles, radius constraints); runs that end with measurements and no saved model (0) | Skill `cad-toolkit`: a frame finder for posed meshes, a section lister, sketch and feature building blocks, a verify | prompt; new skill `cad-toolkit` (`SKILL.md`, `measure.py`, `sections.py`, `sketchkit.py`, `verify.py`) | 4/14 | 85/126 |
-| 2 | Failed lofts saved anyway; runs that never run a build; build errors not recovered (1) | A save guard that reopens each save and rolls back a failing one, a status line with the time, and one look at a render after the first valid save | prompt; new middleware (`middleware.py`); skill: `SKILL.md`, new `look.py` | 4/14 | 107/126 |
+| 2 | Failed lofts saved anyway; runs that never run a build; build errors not recovered (1) | A save guard that reopens each save and rolls back a failing one, a status line with the time, and a look at a render after the first valid save (at most two) | prompt; new middleware (`middleware.py`); skill: `SKILL.md`, new `look.py` | 4/14 | 107/126 |
 | 3 | Valid solids that miss fidelity and features (1) | Section shapes: each section fitted as circle, ellipse, rectangle or polygon, and a survey of holes, walls and side loops | skill: `SKILL.md`, `sections.py`, `sketchkit.py` | 7/14 | 114/126 |
 | 6 | Models that leave out features; self-intersecting lofts that reach the grader (3, 4) | Side-feature tools, a verify 10× faster, and a guard that names missing side features at the first save | middleware; skill: `SKILL.md`, new `sides.py` and `SIDES.md`, `sketchkit.py`, `verify.py` | 11/14 (9/14 measured again) | 118/126 |
 | 8 | The revolve axis ignores off-axis sections (3); low-fidelity models (7) | `profile.py`: the revolve axis found ignoring arms, and the exact half-section to revolve | skill: `SKILL.md`, new `profile.py` | **11/14** | **123/126** |
@@ -350,14 +350,14 @@ middleware. From the [base agent](agent/agent.yaml) (two sentences, nothing else
 
 | Layer | Final agent | Why (round) |
 | --- | --- | --- |
-| System prompt | Six lines: read the toolkit, follow the `[status]` line, save a valid body first, then look once and fix the first difference. | The base agent measured until the clock ran out (0) |
+| System prompt | Seven lines: read the toolkit, follow the `[status]` line, save a valid body first, then look once and fix the first difference. | The base agent measured until the clock ran out (0) |
 | `measure.py` | Finds the part's own frame in a posed mesh. | Measuring in world axes wasted every run (0) |
 | `sections.py all` | One call: each section fitted as circle, ellipse, rectangle or polygon; holes, walls, side loops, where each starts and stops. | Raw section points led to rectangles where the part was oval (2, 3) |
 | `profile.py` | The revolve axis found ignoring arms; the exact half-section to revolve. | A handle tilted the frame, so round bodies were revolved about the wrong axis (8) |
 | `sides.py` and `SIDES.md` | Each feature off the body: its plane, thickness, and arc and section, or outline; the recipe read only when needed. | Ribs and handles were left out or guessed (4 to 6) |
 | `sketchkit.py`, `verify.py` | Building blocks with named dimensions; a verify that takes seconds. | API mistakes, and a verify that took minutes on lofts (0, 5) |
 | `look.py` | The mesh and the model rendered in the part's frame, read back as an image. | Saved models were grossly wrong in ways no number named (1, 2) |
-| Middleware | Reopens every save and rolls back a failing one; a status line with the time; one look after the first valid save; at that save, runs `sides.py` and names the missing features. | Runs ended with no model, an invalid one, or a skipped feature (1, 2, 6) |
+| Middleware | Reopens every save and rolls back a failing one; a status line with the time; a look after the first valid save (at most two); at that save, runs `sides.py` and names the missing features. | Runs ended with no model, an invalid one, or a skipped feature (1, 2, 6) |
 | Subagents | none | No experimenter proposed one; middleware and tools covered what the traces showed |
 
 The agent still decides which features describe the part and writes the code; the tools
@@ -566,6 +566,7 @@ builds it: upload a mesh, ask the agent to rebuild it, watch its steps and the r
 reads, compare its model with the mesh in 3D, and download `model.FCStd`.
 
 ```bash
+docker build -t cad-env "$(ls -d evals/train/*/environment | head -1)"   # once: the agent's image
 chat/chat.sh          # the final agent; open http://localhost:8765
 ```
 
@@ -652,8 +653,8 @@ OK
 ```
 
 **This verifies:** the verifier's IoU arithmetic, how `publish.py` reads trace IDs and
-grades, and that all 34 tasks' verifier copies and check lists agree and the hand-made
-tasks' reference face counts match their proof, without credentials, services or Docker.
+grades, and that all 34 tasks' verifier copies and check lists agree and each task's
+reference face count matches its reference solution, without credentials, services or Docker.
 
 **This does not verify:** the live path. For that, run the controls in
 [evals/](evals/README.md#rerun) (NOP 0 and Oracle 1 on every task, every negative 0), then

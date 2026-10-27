@@ -26,10 +26,13 @@ class EvalsInSyncTest(unittest.TestCase):
 
     def test_ref_faces_matches_the_oracle(self):
         manifest = json.loads((EVALS / 'manifest.json').read_text())
-        for task in manifest['tasks']:
-            test_sh = (EVALS / task['path'] / 'tests' / 'test.sh').read_text()
+        oracle = {t['path']: t['controls']['oracle']['faces'] for t in manifest['tasks']}
+        oracle |= manifest['generated']['oracle_faces']  # every task, by evals/<split>/<task>
+        self.assertEqual(set(oracle), {str(t.relative_to(EVALS)) for t in TASKS})
+        for path, expected in oracle.items():
+            test_sh = (EVALS / path / 'tests' / 'test.sh').read_text()
             faces = int(re.search(r'REF_FACES=(\d+)', test_sh).group(1))
-            self.assertEqual(faces, task['controls']['oracle']['faces'], task['id'])
+            self.assertEqual(faces, expected, path)
 
 
 if __name__ == '__main__':

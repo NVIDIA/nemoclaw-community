@@ -52,6 +52,7 @@
     <label class="btn">Upload mesh<input id="file" type="file" accept=".obj,.stl" hidden></label>
     <label class="btn"><input id="mesh" type="checkbox" checked><span class="dot" style="background:var(--mesh)"></span>mesh</label>
     <label class="btn"><input id="model" type="checkbox" checked><span class="dot" style="background:var(--model)"></span>model</label>
+    <label class="btn"><input id="apart" type="checkbox">side by side</label>
     <a id="download" class="btn" href="/model.FCStd" download aria-disabled="true">Download model.FCStd</a>
   </div>
 </main>
@@ -113,19 +114,31 @@ async function load(kind) {  // 404 means not there yet
     object.renderOrder = kind === 'mesh' ? 1 : 0;
     object.visible = $(kind).checked;
     clear(kind); scene.add(shown[kind] = object);
-    if (kind === 'mesh' || !shown.mesh) frame(object);
+    if ($('apart').checked) place();
+    else if (kind === 'mesh' || !shown.mesh) frame(object);
     render();
   } catch {  // a failed fetch: keep what is shown
   }
 }
 
-function frame(object) {
-  const box = new THREE.Box3().setFromObject(object), size = box.getSize(new THREE.Vector3()).length();
+function frame(...objects) {
+  const box = new THREE.Box3();
+  objects.forEach(o => box.expandByObject(o));
+  const size = box.getSize(new THREE.Vector3()).length();
   if (!(size > 0)) return;
   controls.target.copy(box.getCenter(new THREE.Vector3()));
   camera.position.copy(controls.target).add(new THREE.Vector3(1, -1.4, 0.9).multiplyScalar(size * 0.9));
   controls.update();
 }
+
+// Compare: overlaid (where they differ shows), or the model beside the mesh.
+function place() {
+  if (!shown.model) return;
+  const gap = shown.mesh && $('apart').checked ? new THREE.Box3().setFromObject(shown.mesh).getSize(new THREE.Vector3()).x * 1.2 : 0;
+  shown.model.position.set(gap, 0, 0);
+  frame(...Object.values(shown)); render();
+}
+$('apart').onchange = place;
 
 for (const kind of ['mesh', 'model']) $(kind).onchange = e => { if (shown[kind]) shown[kind].visible = e.target.checked; render(); };
 

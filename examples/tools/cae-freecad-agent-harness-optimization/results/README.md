@@ -4,8 +4,10 @@
 # Results: Nemotron 3.5 Super VL, round by round
 
 The agent runs on **Nemotron 3.5 Super VL**, one container per run with headless FreeCAD
-1.1.3, a shell and a virtual display, 5 minutes and 3 GiB per run. Each round measured
-the kept agent on **train** (20 tasks, one run each); NeMo Compass read those traces, the
+1.1.3, a shell and a virtual display, 5 minutes and 3 GiB per run. Each round with a new
+kept agent measured it on **train** (20 tasks, one run each); NeMo Compass read those traces
+(rounds 0, 1, 3, 4 and 7; the others reused the last Insights, see
+[insights/](insights/README.md)), the
 orchestrator checked whether the eval caught each Insight, and two fresh experimenters
 ([cad-experimenter](../skills/cad-experimenter/SKILL.md)) built one candidate each from
 train alone. Each candidate was measured on **val** (7 tasks, two runs each) and kept only

@@ -23,7 +23,7 @@ answers). A mesh (OBJ or STL), given here or uploaded in the page, becomes
 
 In the page: upload a mesh, chat (e.g. "rebuild this mesh as an editable model") and watch the
 agent's steps stream in, with each render it looks at; compare the saved model (orange) with
-the mesh (blue, translucent) with the two toggles, and download `model.FCStd`. Drag the chat's
+the mesh (blue, translucent), overlaid or side by side, and download `model.FCStd`. Drag the chat's
 left edge to widen it. A new mesh starts a new chat; an earlier model is kept as
 `model.previous.FCStd`. Closing the tab stops the task. The page is for this machine only: it
 answers only requests addressed to `localhost`, from its own page.
