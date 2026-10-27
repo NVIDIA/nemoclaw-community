@@ -4,11 +4,13 @@
 several directions: one row per model, one column per view, in one PNG.
 
     docker run --rm -v "$PWD":/w -w /w cad-env xvfb-run -a -s "-screen 0 1920x1200x24" \
-      freecadcmd render.py   # with RENDER="model1.FCStd:mesh1.obj ..." OUT=out.png
+      freecadcmd render.py   # with RENDER="model1.FCStd:mesh1.obj[.gz] ..." OUT=out.png
                              # VIEWS=iso,front,right,top (default; also rear, left, bottom)
                              # INPLACE=1: the mesh translucent over the model, in place
 """
+import gzip
 import os
+import shutil
 
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -44,6 +46,10 @@ for pair in os.environ['RENDER'].split():
             o.ViewObject.Visibility = o in (body, body.Tip)
     box = body.Shape.BoundBox
     mesh = doc.addObject('Mesh::Feature', 'Reference')
+    if mesh_path.endswith('.gz'):  # the tasks' meshes are stored gzipped
+        with gzip.open(mesh_path) as src, open('/tmp/mesh.obj', 'wb') as dst:
+            shutil.copyfileobj(src, dst)
+        mesh_path = '/tmp/mesh.obj'
     mesh.Mesh = Mesh.Mesh(os.path.abspath(mesh_path))
     if not INPLACE:  # beside the model, offset along its shorter horizontal side
         mesh.Placement.Base = (App.Vector(-1.3 * box.XLength, 0, 0) if box.XLength <= box.YLength

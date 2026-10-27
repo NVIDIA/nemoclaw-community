@@ -45,7 +45,7 @@ This skill was written for this example only. It is a worked pattern for the
   folder, and never mirror the grader. If the agent must measure similarity to the
   mesh, write an independent measurement.
 - **Train only.** Read only the train tasks' meshes
-  (`evals/train/*/environment/reference.obj`) and train traces. Val and test
+  (`evals/train/*/environment/reference.obj.gz`) and train traces. Val and test
   (`evals/val/`, `evals/test/`, `evals/splits.json`) are off limits: they are how your
   change is judged.
 - At most **two candidates**, each a different strategy and **one change**, in one area:
@@ -95,7 +95,7 @@ passes with them is not the model a designer would build.
 ```bash
 docker build -t cad-env "$(ls -d evals/train/*/environment | head -1)"   # once: the agent's image (every task's is the same)
 docker run --rm -v "$PWD":/w -w /w -e OUT=render.png \
-  -e RENDER="<trial>/artifacts/app/model.FCStd:evals/train/<task>/environment/reference.obj" \
+  -e RENDER="<trial>/artifacts/app/model.FCStd:evals/train/<task>/environment/reference.obj.gz" \
   cad-env xvfb-run -a -s "-screen 0 1920x1200x24" freecadcmd skills/cad-experimenter/render/render.py
 ```
 

@@ -9,9 +9,10 @@ trace-to-task workflow and run with [Harbor](https://www.harborframework.com/) 0
 
 ## Cases
 
-34 tasks share one instruction, one verifier and the same nine checks; only the reference
-mesh, the reference solution and the solution's face count (`REF_FACES` in `tests/test.sh`)
-differ. They are split three ways ([splits.json](splits.json) gives each task's split,
+34 tasks share one instruction and one verifier, [verifier/](verifier/) (the nine checks, built
+once as the `cad-verifier` image every task's `tests/Dockerfile` starts from). Only the
+meshes (stored gzipped), the reference solution and the solution's face count (`REF_FACES` in
+`tests/test.sh`) differ. They are split three ways ([splits.json](splits.json) gives each task's split,
 family and slice):
 
 | Split | Tasks | Used for |
@@ -26,13 +27,14 @@ The two hand-made parts came first:
 and [part-2-reconstruction](test/part-2-reconstruction/), a second first-party part added by
 the owner. The generated tasks are parametric FreeCAD parts in a random pose and mesh
 resolution; each one's reference solution is the model its mesh was exported from. The
-agent's mesh (`environment/reference.obj`) may be tessellated more coarsely than the
-verifier's (`tests/reference.obj`) and carry vertex noise.
+agent's mesh (`environment/reference.obj.gz`, unpacked to `/app/reference.obj`) may be
+tessellated more coarsely than the verifier's (`tests/reference.obj.gz`) and carry vertex
+noise.
 
 The agent gets the [instruction](test/part-1-reconstruction/instruction.md): rebuild
 `/app/reference.obj` as an editable PartDesign model and save it to `/app/model.FCStd`.
 The verifier grades that file in its own container with nine checks, all of which must
-pass: `recomputes-after-reopen`, `single-valid-solid`, `native-feature-tree`,
+pass ([verifier/check_model.py](verifier/check_model.py)): `recomputes-after-reopen`, `single-valid-solid`, `native-feature-tree`,
 `named-dimension-drives-geometry`, `independent-dimensions` (two named dimensions that
 each change the part in a different way), `mesh-fidelity` (IoU ≥ 0.9),
 `no-missing-feature` (no whole feature left out), `single-visible-object` and
@@ -44,7 +46,7 @@ each change the part in a different way), `mesh-fidelity` (IoU ≥ 0.9),
 harbor run (host) ── per trial, in parallel ──┐
                                               ▼
   task container (evals/<split>/<task>/environment)  verifier container (.../<task>/tests)
-  headless FreeCAD 1.1.3 + Deep Agents + NeMo Relay   FreeCAD 1.1.3, no network
+  headless FreeCAD 1.1.3 + Deep Agents + NeMo Relay   FROM cad-verifier: FreeCAD 1.1.3, no network
   /agent  ← agent/ (prompt, skills)                  grades /app/model.FCStd → reward
   /app    reference.obj → model.FCStd ─────────────▶
   network: NeMo Helix only (model gateway, Intake)
@@ -87,6 +89,7 @@ Run every command from the example root
 Controls, which need no agent or Helix:
 
 ```bash
+docker build -t cad-verifier evals/verifier   # every task's verifier starts from it
 for s in train val test; do   # one split per job
   harbor run -y -p evals/$s -a nop    -n 4 --jobs-dir runs --job-name nop-$s
   harbor run -y -p evals/$s -a oracle -n 4 --jobs-dir runs --job-name oracle-$s
@@ -103,8 +106,8 @@ for t in part-1-reconstruction part-2-reconstruction; do mkdir -p controls/$t
 done
 ```
 
-The agent on one split ([loop/eval.sh](../loop/eval.sh) wraps this, with grading onto
-the traces and a summary; `-m` overrides the model in `agent.yaml`, `--ak agent_dir=...`
+The agent on one split ([loop/eval.sh](../loop/eval.sh) wraps this, with the verifier
+image, grading onto the traces and a summary; `-m` overrides the model in `agent.yaml`, `--ak agent_dir=...`
 picks the agent folder):
 
 ```bash

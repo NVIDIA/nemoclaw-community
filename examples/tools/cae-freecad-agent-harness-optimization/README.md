@@ -211,7 +211,7 @@ model.
 | [harness/agent.py](harness/agent.py) | Builds the Deep Agents agent from the folder: a real shell rooted at `/app`, its skills, subagents and middleware, and retries of model-gateway errors. |
 | [harness/run_agent.py](harness/run_agent.py) | Inside the container: runs that agent through the Helix gateway; traces the run with NeMo Relay; records a run lost to the gateway; stops it, and every process it started, at the run limit (5 minutes). |
 | [harness/cad_agent.py](harness/cad_agent.py) | The Harbor agent: uploads the agent folder and the runner and starts it in each trial's container. |
-| [evals/](evals/README.md) | 34 Harbor tasks with one instruction and one verifier, in `train/`, `val/` and `test/`. |
+| [evals/](evals/README.md) | 34 Harbor tasks with one instruction, in `train/`, `val/` and `test/`, and the verifier they share in `verifier/`. |
 | [loop/](loop/) | `eval.sh` runs an agent on one split and grades it; `summary.py` applies the keep rule; `compass.sh` runs Compass on a round; [EVAL-AUTHOR.md](loop/EVAL-AUTHOR.md) is the Step 3 prompt; [START.md](loop/START.md) runs the whole loop. |
 | [publish.py](publish.py) | After a job, attaches each run's grade to its trace; publishes Compass Insights to Studio. |
 | [controls/](controls/) | Generates negative controls from the reference solutions, and grades a saved model, to prove each check fails what it should. |
@@ -226,7 +226,7 @@ pieces and keep the loop:
 | `agent/` (your agent: prompt, skills, middleware) | `loop/` (run, Compass, keep rule, the prompts) |
 | `ETHOS.md` (what your agent is for) | `harness/` (Deep Agents in a container, retries, tracing) |
 | Each task's `environment/Dockerfile` (your tool in place of FreeCAD) and its input | `publish.py` (grades onto traces, Insights to Studio) |
-| Each task's `tests/` (your checks, proven with Eval Author) | `analyst.yaml` (Compass on Intake) |
+| `evals/verifier/` (your checks, proven with Eval Author) and each task's `tests/` | `analyst.yaml` (Compass on Intake) |
 | `skills/cad-experimenter` (how an experimenter reads your traces and tests a change) | `results/charts.py` (round charts from a results file) |
 
 The agent sees real paths: the mesh at `/app/reference.obj`, its skills under
@@ -687,7 +687,7 @@ OK
 ```
 
 **This verifies:** the verifier's IoU arithmetic, how `publish.py` reads trace IDs and
-grades, and that all 34 tasks' verifier copies and check lists agree and each task's
+grades, that the verifier's check list is complete, and that each task's
 reference face count matches the one recorded from its reference solution in
 `evals/manifest.json`, without credentials, services or Docker.
 

@@ -3,7 +3,7 @@
 """Write SRC as an OBJ mesh at DST. Run with: SRC=... DST=... freecadcmd fc.py
 
 SRC is a mesh (OBJ or STL) or a FreeCAD model (.FCStd). A model is reopened as the scorer
-does (evals/*/tests/check_model.py, load: every object touched, recomputed; keep the two
+does (evals/verifier/check_model.py, load: every object touched, recomputed; keep the two
 alike) and its single PartDesign Body is tessellated, finely enough to see, relative to the
 part's size; with no Body, the visible top-level shapes are. Writes nothing when there is
 nothing to show.

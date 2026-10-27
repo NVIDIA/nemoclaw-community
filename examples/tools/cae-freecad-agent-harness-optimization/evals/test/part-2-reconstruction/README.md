@@ -24,7 +24,7 @@ bounds and validity checks without measuring similarity to the mesh.
 
 ## Ground-truth provenance
 
-The reference mesh `reference_part_2.obj` is a second first-party part, modelled in
+The reference mesh (`tests/reference.obj.gz`) is a second first-party part, modelled in
 FreeCAD for this example and exported to OBJ, copied into the agent's and the
 verifier's images. It was
 added so the evals cover more than one shape, as the agent's `ETHOS.md` requires a

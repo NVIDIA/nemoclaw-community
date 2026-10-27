@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for the pure-NumPy half of the verifier's IoU (evals/*/tests/iou_math.py).
+"""Tests for the pure-NumPy half of the verifier's IoU (evals/verifier/iou_math.py).
 
 Every expected value here is computed by hand. Requires NumPy only: no
 FreeCAD, no running FreeCAD session, no network, no API key.
@@ -18,7 +18,7 @@ import numpy as np
 
 sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                    "evals", "test", "part-1-reconstruction", "tests"))
+                    "evals", "verifier"))
 
 from iou_math import (  # noqa: E402
     CELL_MIN, X_OFFSET, Y_OFFSET, crossings, grid_axes, intervals,
