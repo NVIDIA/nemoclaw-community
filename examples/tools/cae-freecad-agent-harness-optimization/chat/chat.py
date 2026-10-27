@@ -164,11 +164,12 @@ def ingest(mesh: Path) -> None:
     """A new mesh starts a new job in an empty /app, as each eval run does: the earlier job's
     files move to /app/.jobs/<time>/, and the mesh becomes /app/reference.obj (the mesh itself
     is left as it is)."""
-    to_obj(mesh, Path('/tmp/reference.obj'))
+    tmp = Path('/tmp/reference.obj')  # converted first: a bad mesh leaves the job as it is
+    to_obj(mesh, tmp)
     old = [p for p in APP.iterdir() if p.name != '.jobs']
     if old:
         (APP / '.jobs').mkdir(exist_ok=True)
         keep = Path(tempfile.mkdtemp(prefix=time.strftime('%Y%m%d-%H%M%S-'), dir=APP / '.jobs'))  # unique
         for p in old:
             p.replace(keep / p.name)
-    shutil.move('/tmp/reference.obj', APP / 'reference.obj')  # /tmp and /app are different file systems
+    shutil.move(tmp, APP / 'reference.obj')  # /tmp and /app are different file systems
