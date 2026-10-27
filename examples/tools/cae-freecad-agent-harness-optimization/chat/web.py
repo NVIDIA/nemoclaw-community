@@ -111,27 +111,26 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path
+        source = {'/reference.obj': APP / 'reference.obj', '/model.obj': MODEL, '/model.FCStd': MODEL}.get(path)
         if not self.trusted():
             self.reply(403, b'forbidden')
         elif path == '/':
             self.send_file(PAGE, 'text/html; charset=utf-8')
-        elif path == '/reference.obj' and (APP / 'reference.obj').exists():
-            self.send_file(APP / 'reference.obj')
-        elif path in ('/model.obj', '/model.FCStd') and MODEL.exists():
-            done = snapshot()
-            if not done['copied']:
-                self.reply(404 if not MODEL.exists() else 503, done['error'].encode())
-            elif path == '/model.FCStd':  # the saved model, even when the viewer cannot show it
-                self.send_file(SNAPSHOT, 'application/octet-stream', 'model.FCStd')
-            elif done['error']:
-                self.reply(500, done['error'].encode())
-            else:
-                self.send_file(VIEW)
-        elif path in ('/reference.obj', '/model.obj', '/model.FCStd'):  # not there yet: no error in the page
+        elif source is None:
+            self.reply(404, b'not found')
+        elif not source.exists():  # not there yet: no error in the page
             self.send_response(204)
             self.end_headers()
+        elif source != MODEL:
+            self.send_file(source)
+        elif not (done := snapshot())['copied']:
+            self.reply(404 if not MODEL.exists() else 503, done['error'].encode())
+        elif path == '/model.FCStd':  # the saved model, even when the viewer cannot show it
+            self.send_file(SNAPSHOT, 'application/octet-stream', 'model.FCStd')
+        elif done['error']:
+            self.reply(500, done['error'].encode())
         else:
-            self.reply(404, b'not found')
+            self.send_file(VIEW)
 
     def read_body(self, left: int, out=None) -> int:
         """Read the request body into out (or discard it); returns the bytes that never came."""
@@ -223,20 +222,23 @@ class Handler(BaseHTTPRequestHandler):
         try:
             for kind, text in task.steps(self.connected):
                 if kind != 'image' or len(text) <= MAX_IMAGE * 4 // 3:  # base64 of MAX_IMAGE bytes
-                    self.wfile.write(f'event: {kind}\ndata: {json.dumps(text)}\n\n'.encode())
+                    self.event(kind, text)
                 if (now := stamp(MODEL)) != saved:
                     saved = now
-                    self.wfile.write(b'event: model\ndata: ""\n\n')
-                self.wfile.flush()
+                    self.event('model')
             if stamp(MODEL) != saved:  # a save after the last step
-                self.wfile.write(b'event: model\ndata: ""\n\n')
-                self.wfile.flush()
+                self.event('model')
         except OSError:
             pass  # the page went away
         finally:
             task.stop()
         if task.history is not None:
             HISTORY[:] = task.history
+
+    def event(self, kind: str, data: str = '') -> None:
+        """One server-sent event; data is JSON."""
+        self.wfile.write(f'event: {kind}\ndata: {json.dumps(data)}\n\n'.encode())
+        self.wfile.flush()
 
     def log_message(self, *args) -> None:
         pass

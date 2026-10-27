@@ -104,10 +104,10 @@ def _task(pipe, agent_dir: str, history: list, prompt: str) -> None:
 
 
 class Task:
-    """One message's task in its own process group. steps() yields (kind, text) until the task
-    ends, its TIMEOUT s have passed (counted from 'ready', as the agent's own clock), or alive()
-    is false; history is then the new conversation if the task completed, else None. The caller
-    stops it."""
+    """One message's task in its own process group. steps(alive) yields (kind, text) until the
+    task ends, its TIMEOUT s have passed (counted from 'ready', as the agent's own clock), or
+    alive() is false (the page closed); history is then the new conversation if the task
+    completed, else None. The caller stops it."""
 
     def __init__(self, agent_dir: Path, history: list, prompt: str):
         self.pipe, child = SPAWN.Pipe(duplex=False)
@@ -116,7 +116,7 @@ class Task:
         child.close()
         self.history, self.started, self.deadline = None, False, time.monotonic() + STARTUP
 
-    def steps(self, alive=lambda: True):
+    def steps(self, alive):
         try:
             while alive():
                 if time.monotonic() > self.deadline:
