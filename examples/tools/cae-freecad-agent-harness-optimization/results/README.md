@@ -1,110 +1,168 @@
 <!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# Results: Nemotron 3 Ultra, round by round
+# Results: Nemotron 3.5 Super VL, round by round
 
-The agent runs on **Nemotron 3 Ultra**, one container per run with headless FreeCAD 1.1.3
-and a shell, 5 minutes and 3 GiB per run. Each round ran both eval tasks twice, all runs in
-parallel; then NeMo Compass read the round's traces, NeMo Eval Author checked whether the
-eval caught each Insight, and a fresh experimenter
-([cad-experimenter](../skills/cad-experimenter/SKILL.md)) built up to two candidates. A
-candidate was kept only if it passed more runs than the agent under study (or as many runs
-and more checks), with no part and no check worse.
+The agent runs on **Nemotron 3.5 Super VL**, one container per run with headless FreeCAD
+1.1.3, a shell and a virtual display, 5 minutes and 3 GiB per run. Each round measured
+the kept agent on **train** (20 tasks, one run each); NeMo Compass read those traces, the
+orchestrator checked whether the eval caught each Insight, and two fresh experimenters
+([cad-experimenter](../skills/cad-experimenter/SKILL.md)) built one candidate each from
+train alone. Each candidate was measured on **val** (7 tasks, two runs each) and kept only
+if it passed more runs than the agent under study, or as many runs and more checks, with
+no check passing fewer times. **Test** was read once, at the end.
 
-![The base agent and each kept agent: checks passed, mean IoU per part, runs passed, and tokens per run](../assets/results-rounds.png)
+- [final-agent/](final-agent/): the final agent, described in the
+  [README](../README.md#what-the-loop-built).
+- [insights/](insights/README.md): every Compass Insight, whether the eval caught it, and what
+  resolved it.
+- [rounds.json](rounds.json): every agent's results on train, val and test, from which
+  [charts.py](charts.py) draws the charts below.
 
-Every Compass Insight, the check that caught it and the round that fixed it:
-[insights/](insights/README.md). The final agent: [final-agent/](final-agent/), described
-in the [README](../README.md#what-the-loop-built). The charts grade every kept agent's runs again with the final eval, so all bars share one scale; they are drawn by
-[rounds_chart.py](rounds_chart.py).
+## The kept agent of each round
 
-## Chapter 1: the original Ethos
+![Runs passing all nine checks, checks passed and mean IoU of the base agent and each kept agent, on val](../assets/rounds-val.png)
 
-Checks are out of 28 (four runs, seven checks).
+![The same on train](../assets/rounds-train.png)
 
-| Round | What Compass, Eval Author and the traces showed | Change | Runs | Checks | Part 1 IoU | Part 2 IoU | Tokens / run |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 0. Base agent | Every run spent its 5 minutes studying the mesh or learning FreeCAD by trial and error; none saved a model. | | 0/4 | 0 | | | 1.9 M |
-| 1. A skill with a script (kept) | No plan and no sense of time. | Three prompt lines (a time budget; save a checked model early) and a skill whose script builds the model in one command: a stack of flat slices, one named size, save, reopen, self-check. | 0/4 | 22 | 0.91, 0.92 | 0.78 | 0.04 M |
-| | **Compass:** "every model is a dense stack of slices", and on part 1 the stacks passed every check. | **Eval Author added `compact-model`** (at most 10 times the faces of a designer's model); the slice stack became its proof that the check fails what it should. | | | | | |
-| 2. Smooth lofts (rejected) | The 1,700-face stacks fail the new check, and flat slices turn sloped walls into stairs. | One smooth shape through the cross-sections of each stretch of the part. The pieces did not join into one valid solid. | 0/4 | 18 | invalid solid | 0.85 | 0.08 M |
-| 3. Clean joints and a trustworthy estimate (kept) | Where the branch meets the body two walls almost touched; the script's own overlap estimate ranked the attempts wrongly. | Joints as small flat steps; a better overlap estimate; "a model that fails FreeCAD's shape check is invalid". | **4/4** | **28** | 0.97 | 0.94 | 0.02 M |
+![Median tokens per run, on val](../assets/tokens-val.png)
 
-A confirmation passed **10 of 10**: the agent read one skill and ran one command, and all
-ten models were identical.
+![Median tokens per run, on train](../assets/tokens-train.png)
 
-## The Ethos revision
+## Every candidate
 
-The models matched the meshes and passed every check, but a designer could only make the
-part taller: one parameter stretched every section, and the agent's only modelling step was
-running the script. This is the shortcut the
-[Eval Author team warns about](https://github.com/NVIDIA-NeMo/eval-author/blob/main/docs/dev-notes/posts/2026-10-08-introducing-eval-author.md):
-a task passed while the behaviour it was meant to test was missing. The owner added to
-[ETHOS.md](../ETHOS.md): the agent writes its own model (skills carry knowledge, never a
-complete routine); dimensions express design intent; the method generalizes. Eval Author
-turned the second into **`independent-dimensions`**, two named dimensions that move the
-part in different ways. Re-graded, the chapter-1 agent fell from 10/10 to **0/10**, and
-Compass reported that "the agent delegates the modelling to a fixed script".
+Every candidate, by the round that measured it. Each round, two experimenters each built
+one candidate from the kept agent; *Where it changed* is the layer and files of the agent
+folder it edited (no candidate used a subagent). *Train* is one run per task, *val* two.
 
-## Chapter 2: the revised Ethos
+| Round | Candidate (change to the kept agent) | Where it changed | Train passed | Val passed | Val checks | Decision |
+| --- | --- | --- | --- | --- | --- | --- |
+| start | base agent: a two-sentence prompt, no skills | the base agent: `agent.yaml` | 0/20 | 0/14 | 0/126 | no run saved a model |
+| 0 | skill `cad-toolkit`: frame finder for posed meshes, section lister, sketch and feature building blocks, verify | prompt; new skill `cad-toolkit` (`SKILL.md`, `measure.py`, `sections.py`, `sketchkit.py`, `verify.py`) | 5/20 | 4/14 | 85/126 | **kept** |
+| 0 | clock, build gate after 90 s, no silent end (middleware) | prompt; new middleware (`middleware.py`) | 0/20 | 0/14 | 25/126 | dropped |
+| 1 | save guard: reopens each save, rolls back a failing one; status line; no silent end | prompt; new middleware (`middleware.py`) | 4/20 | 3/14 | 97/126 | dropped: more valid saves, one pass fewer |
+| 1 | `look.py`: the agent renders mesh and model in the part's frame and reads the image | prompt; skill: `SKILL.md`, new `look.py` | 4/20 | 4/14 | 74/126 | dropped: it caught gross errors, but each look cost a turn |
+| 2 | section shapes: each loop fitted as circle, ellipse, rectangle or polygon; a survey of holes, walls and side loops | skill: `SKILL.md`, `sections.py`, `sketchkit.py` | 5/20 | 6/14 | 91/126 | dropped by one run with no model (mean IoU 0.94 against 0.66) |
+| 2 | save guard and look combined: no look before a valid save, one after it, none under 90 s left | prompt; new middleware (`middleware.py`); skill: `SKILL.md`, new `look.py` | 4/20 | 4/14 | 107/126 | **kept** |
+| 3 | section shapes and survey on the guarded-look agent, one 7-step workflow | skill: `SKILL.md`, `sections.py`, `sketchkit.py` | 9/20 | 7/14 | 114/126 | **kept** (tubs pass) |
+| 3 | named dimensions: polygon edges move whole, a probe after each save | prompt; skill: `SKILL.md`, `sketchkit.py`, `verify.py` | 5/20 | 4/14 | 100/126 | dropped: the probe costs time |
+| 4 | side features: `sides.py` measures each feature off the body (arc and section, or outline) | skill: `SKILL.md`, new `sides.py`, `sketchkit.py` | 10/20 | 8/14 | 110/126 | dropped by one run with no model (cups with handles and brackets pass for the first time) |
+| 4 | the cheap half of the dimension fix | skill: `SKILL.md`, new `dims.py`, `sketchkit.py`, `verify.py` | 6/20 | 5/14 | 114/126 | dropped |
+| 5 | side-feature recipe in a file read on demand, after the first save | skill: `SKILL.md`, new `sides.py` and `SIDES.md`, `sketchkit.py` | 8/20 | 7/14 | 113/126 | dropped by one check |
+| 5 | the agent's own verify 10× faster (it had stalled loft runs for 47-167 s) | skill: `verify.py` | 4/20 | 5/14 | 112/126 | dropped |
+| 6 | a `build.py` skeleton: write once, then edit | middleware; skill: `SKILL.md`, new `build_skeleton.py` | 5/20 | 6/14 | 114/126 | dropped |
+| 6 | side-feature tools, fast verify, and the guard runs `sides.py` at the first save and names what is missing | middleware; skill: `SKILL.md`, new `sides.py` and `SIDES.md`, `sketchkit.py`, `verify.py` | 9/20 | 11/14, re-measured 9/14 | 118/126 | **kept by judgement** (below) |
+| 7 | a save-first gate: after 120 s with no valid model, only code that saves the model runs | middleware | 6/20 | 7/14 | 117/126 | dropped: an early forced save costs passes |
+| 7 | arms measured through 11 cross-sections (their radius had been 17-27% short), built in one call | skill: `SKILL.md`, `SIDES.md`, `sides.py`, `sketchkit.py` | 9/20 | 10/14 | 120/126 | dropped: the kept agent's pass rate over its two val measurements, but `no-missing-feature` 71% against 79% |
+| 8 | `profile.py`: the revolve axis found ignoring arms, the half-section printed exactly | skill: `SKILL.md`, new `profile.py` | 7/20 | **11/14** | **123/126** | **kept: the final agent** (every val run a valid model, mean IoU 0.95) |
+| 8 | the arm fit again, with flat-section arms and false arm reports fixed | skill: `SKILL.md`, `SIDES.md`, `sides.py`, `sketchkit.py` | 7/20 | 11/14 | 114/126 | dropped |
 
-Checks are out of 32 (four runs, eight checks).
+## Every agent the loop measured
 
-| Round | What Compass, Eval Author and the traces showed | Change | Runs | Checks | Part 1 IoU | Part 2 IoU | Tokens / run |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 4. Chapter-1 agent | Fails only `independent-dimensions`. **Compass:** "the agent delegates the modelling to a fixed script". | | 0/4 | 28 | 0.97 | 0.94 | 0.03 M |
-| 5. The agent models (rejected) | | Knowledge skills (how to measure, build and check) with small helpers; the agent plans and writes its own build script. A measuring subagent in the second candidate. | 0/4 | 3 | | | 1.0 M |
-| | 21 rewrites of 200-line scripts calling FreeCAD directly in 9 minutes: errors, mixed-up coordinates, sizes that drive nothing, nothing saved. 10-minute runs did not help. | | | | | | |
-| 6. Building blocks per feature (kept) | | `cadkit.py`: a body through measured cross-sections, holes, tubes and more, in world coordinates, every size a named dimension; build the body first and save, then one feature at a time. A planner subagent. | 2/4 | 30 | 0.90, 0.92 | 0.27, 0.80 | 0.24 M |
-| 7. A clock and "what is wrong where" (kept) | **Compass:** models below the overlap target; runs that end with no reply. One wrong decision per run that the agent never saw (the body built to the top of the bounding box, a hole through the floor, a branch never built); no sense of time. | Middleware: a clock on every tool result and a request to report at 240 s. A save that lists the missing and extra regions; a structure summary of the part. Planner dropped. | **4/4** | **32** | 0.93, 0.93 | 0.95, 0.92 | 0.25 M |
+*Round* is the round that measured the candidate. Train: one run per task; val: two.
+*Val IoU* is the mean over val runs that saved a model; *tokens* the median per val run,
+from the traces.
 
-This agent passed a 10-run confirmation with every check.
+| Round | Agent | Decision | Train passed | Train checks | Val passed | Val checks | Val IoU | Val tokens / run |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| start | `base` | base agent | 0/20 | 0/180 | 0/14 | 0/126 | – | 0.87 M |
+| 0 | `r1-skills` | **kept** | 5/20 | 92/180 | 4/14 | 85/126 | 0.66 | 0.45 M |
+| 0 | `r1-process` | dropped | 0/20 | 37/180 | 0/14 | 25/126 | 0.00 | 2.60 M |
+| 1 | `r2-process` | dropped | 4/20 | 127/180 | 3/14 | 97/126 | 0.53 | 0.52 M |
+| 1 | `r2-vision` | dropped | 4/20 | 98/180 | 4/14 | 74/126 | 0.61 | 0.35 M |
+| 2 | `r3-shapes` | dropped | 5/20 | 96/180 | 6/14 | 91/126 | 0.94 | 0.38 M |
+| 2 | `r3-lookguard` | **kept** | 4/20 | 149/180 | 4/14 | 107/126 | 0.61 | 0.60 M |
+| 3 | `r4-shapes` | **kept** | 9/20 | 151/180 | 7/14 | 114/126 | 0.92 | 0.39 M |
+| 3 | `r4-dims` | dropped | 5/20 | 152/180 | 4/14 | 100/126 | 0.61 | 0.46 M |
+| 4 | `r5-sides` | dropped | 10/20 | 150/180 | 8/14 | 110/126 | 0.86 | 0.37 M |
+| 4 | `r5-dims` | dropped | 6/20 | 156/180 | 5/14 | 114/126 | 0.91 | 0.39 M |
+| 5 | `r6-sides` | dropped | 8/20 | 156/180 | 7/14 | 113/126 | 0.88 | 0.38 M |
+| 5 | `r6-fast` | dropped | 4/20 | 149/180 | 5/14 | 112/126 | 0.83 | 0.66 M |
+| 6 | `r7-edit` | dropped | 5/20 | 153/180 | 6/14 | 114/126 | 0.93 | 0.58 M |
+| 6 | `r7-sides` | **kept by judgement** | 9/20 | 145/180 | 11/14 | 118/126 | 0.94 | 0.53 M |
+| 7 | `r8-safe` | dropped | 6/20 | 136/180 | 7/14 | 117/126 | 0.85 | 0.41 M |
+| 7 | `r8-arms` | dropped | 9/20 | 162/180 | 10/14 | 120/126 | 0.89 | 0.36 M |
+| 8 | `r9-body` | **kept: the final agent** | 7/20 | 157/180 | 11/14 | 123/126 | 0.95 | 0.42 M |
+| 8 | `r9-arms` | dropped | 7/20 | 134/180 | 11/14 | 114/126 | 0.95 | 0.43 M |
 
-## Chapter 3: looking at the models
+Agents are named as in the run's logs, in the order of [Every candidate](#every-candidate)
+(the base agent first). **The keep rule and one judgement.** `r7-sides` (round 6) failed the rule only
+because one of its 14 val runs saved no valid model (a self-intersecting solid), which
+costs every structural check at once. Measured again, it passed 9 of 14 against the kept
+agent's 7, and was kept by that judgement; rounds 7 and 8 compared candidates with both of
+its measurements. Every other decision is the rule's. The charts show its first
+measurement.
 
-Rendered from four directions, the chapter-2 models had creases where the branch meets the
-body, seams between sections and a pinched arm, none of which a check measured. Checks
-are out of 32, then 36 (nine checks).
+## The final agent on every split
 
-| Round | What Compass, Eval Author and the traces showed | Change | Runs | Checks | Part 1 IoU | Part 2 IoU | Tokens / run |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 8. Smoother bodies (rejected) | Every blemish came from a building block, the same in all ten runs. | A smooth body, no seams where the branch joins, smoothed outlines, branches built along their own direction. Part 1's blemishes went; part 2's arm would no longer join the smoothed rim. | smoke only | | 0.95 | 0.63 | |
-| 9. The arm on the rim (4/4, then 3/4) | The arm met the body at such a shallow angle that FreeCAD could not join them cleanly. | The arm starts on the rim's flat top, so the two meet on one flat surface; a rounded tip measured from the mesh. | **4/4** | **32** | 0.92, 0.95 | 0.92, 0.93 | 0.16 M |
-| | Two part-1 runs saved the model without its branch and still passed every check (IoU 0.918). | **Eval Author added `no-missing-feature`**: the largest piece of the part the model leaves out must be at most 1.2% of its volume. Round 9 re-graded: 3/4. | | | | | |
-| 10. A branch that is never dropped (kept) | The agent edited the branch path's ends by hand and got one wrong; the branch failed, was left out, and nothing told the agent. | The measurement prints the whole path with its ends inside the wall; the tube repairs a bad path or falls back to the measured one; the save reports COMPLETE or INCOMPLETE. | **4/4** | **36** | 0.95, 0.95 | 0.92, 0.93 | 0.13 M |
+Each sheet shows the final agent's best run per task: its model (orange) beside the mesh
+(blue).
 
-**Confirmation** of the final agent: **10 of 10**, five per part, all nine checks passing:
-part 1 IoU 0.949-0.952 with 18 faces, part 2 0.910-0.924 with 38-39 faces, about 3.5
-minutes and 0.12 M tokens per run.
+**Train** (one run per task; 7 of 20 passed). Every turned part passes, and two of the
+four brackets and one tub; no cup reaches the IoU bar (0.51-0.87), and no scoop does
+(0.06-0.29: its bowl and handle defeat the agent's reading of the part).
 
-## What the rounds taught
+![The final agent's best train model per task](../assets/final-train.png)
 
-- **The Ethos decides what "good" means.** The loop delivered what the first Ethos asked
-  for, and it was not what the owner wanted. One revision and one new check redirected it.
-- **Eval Author makes the Ethos bite.** Only a check changes the score: `compact-model`,
-  `independent-dimensions` and `no-missing-feature` each turned a passing agent into a
-  failing one and pointed the loop at the gap.
-- **Compass finds what to fix.** Its Insights named the slice stacks, the delegated
-  script, the low fidelity and the silent runs, each with the traces that show it
-  ([insights/](insights/README.md)).
-- **Give the model decisions, not plumbing.** Raw FreeCAD API code failed; feature-level
-  blocks that leave the choice of features to the agent succeeded.
-- **Subagents were tried and dropped.** A measuring subagent and a planner subagent handed
-  the main agent lossy summaries; one agent with good measurement output did better.
-- **Let the agent see what it cannot measure.** A clock, a save that names what is missing
-  and a structure summary removed the single wrong decisions that failed runs.
-- **Look at the models.** Renders showed artefacts no check measured, and fixing them
-  exposed the last gap in the eval.
-- **More time is not more skill.** 10-minute runs bought more failed rewrites, not
-  convergence.
+**Val** (two runs per task; 11 of 14 passed, and every task at least once).
+
+![The final agent's best val model per task](../assets/final-val.png)
+
+**Test** (five runs per task, read once):
+
+| Test slice | Base agent | Final agent |
+| --- | --- | --- |
+| Sizes outside the training range (3 tasks) | 0/15 | **7/15** (turned part 5/5, tub 1/5, cup 1/5) |
+| A family never trained on (2 tee fittings) | 0/10 | 0/10 |
+| The two hand-made parts | 0/10 | 0/10 |
+| **Runs passing all nine checks** | **0/35** | **7/35** |
+| **Checks passed** | **1/315** | **256/315 (81%)** |
+
+![The final agent's best test model per task](../assets/final-test.png)
+
+Every test run of the final agent saves a native feature tree that recomputes after
+reopening (35/35), and all but one a single valid solid; what fails is fidelity
+(`mesh-fidelity` 7/35) and missing features (`no-missing-feature` 17/35).
+
+## Why val reads higher than train
+
+The final agent passes 79% of val runs but 35% of train runs. No val task, mesh or trace
+is named in any agent or experimenter file, and the agent's container holds only its own
+task; the gap has two sources:
+
+- **The split was drawn without balancing families.** Val has no scoop, the family the
+  agent fails on train every time, and proportionally more turned parts, which it passes
+  every time. At its train pass rate per family, val would score about 6 of 14.
+- **Selection on 14 runs.** Each round kept the candidate that scored best on val, which
+  flatters the winner: `r7-sides` passed 11 of 14 and then 9 of 14 on the same agent.
+
+Test agrees with the lower number: 7 of 15 on new sizes of the trained families. A next
+run should draw val with every family in it, and use more tasks and runs per task.
+
+## What we learned
+
+- **Vision helps when it is gated.** The model reads its renders and catches errors no
+  number names (a solid where the part is hollow, a square body for a round one). Looking
+  before a valid model is saved costs the run; one look after it pays.
+- **Time is the binding constraint.** With 5-minute runs and model turns that can take a
+  minute, several dropped candidates lost a run to the clock. Knowledge that is printed by a
+  tool, ready to copy, costs less time than knowledge the model has to read and apply.
+- **The experimenters found real bugs by measuring.** An IoU estimate that tested 20,000
+  points one at a time; an arm radius 17-27% short because the arc was fitted only to the
+  surface outside the body; a polygon helper that turned rectangles into trapezoids.
+- **Small val sets need care.** Fourteen runs make one bad run decisive, and an
+  unbalanced split makes val easier than train. Re-measuring before a judgement, and
+  reading test once at the end, kept the report honest.
+- **Generated tasks generalize within their families.** The agent learned the generator's
+  parts, not yet parts in general.
 
 ## Open points
 
-- **Two parts, no held-out or rotated part.** Both scores are training scores.
-- **The measurement scripts suggest feature calls.** The agent still decides and writes the
-  model, and Compass found no Ethos divergence, but it sits close to the Ethos's line.
-- **Thin missing features.** `no-missing-feature` sees a missing piece thicker than about
-  3% of the part's size; part 2's fidelity margin is moderate (IoU 0.91-0.92).
+- **The method transfers within the families it was improved on**, not yet to a new
+  family (tee fittings, 0/10) or to the two hand-made parts (0/10).
+- **Tokens do not fall round by round.** Richer toolkits add some back; the final agent
+  uses about half the base agent's tokens (val 0.87 M to 0.42 M per run).
+- **Dimensions that move the part independently** pass every val run but fail 7 of 35
+  test runs.
 
-Run folders, traces and experimenter notes stay in the git-ignored `experiments/` folder;
-Compass's Insights per round are in [insights/](insights/).
+Run folders, traces and experimenter notes stay in the git-ignored `experiments/` folder.

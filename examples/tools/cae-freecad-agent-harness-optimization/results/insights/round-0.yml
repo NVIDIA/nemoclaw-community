@@ -1,52 +1,96 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-# NeMo Compass Insights, published round 0
-# Agent: cad-u0 (base agent). Four runs.
+# NeMo Compass Insights, round 0
+# Agent: cad-agent (base agent). Its 20 train runs, one per task.
 # Raw Compass output; only names and paths are neutralised.
-- name: CAD runs exhaust their budget on mesh analysis without starting model construction
-  description: For parametric FreeCAD conversions, the agent can spend the full run
-    repeatedly inspecting mesh topology, sections, boundaries, and profiles without
-    transitioning to construction or saving `/app/model.FCStd`. In both observed runs
-    the user-visible result was blank, while evaluation recorded IoU 0.0, reward 0.0,
-    and failures of the solid, native-feature-tree, driven-dimension, fidelity, visibility,
-    and reopen/recompute checks. Add explicit analysis and time limits, require an
-    early baseline model checkpoint, and reserve time to save, reopen, and verify
-    the scored artifact.
+- name: PartDesign Loft retries omit the initial Profile link
+  description: When building PartDesign::Loft from multiple sketches, the agent repeatedly
+    sets loft.Sections without assigning the initial loft.Profile. The same executed
+    programs report "Failed to get shape of Profile" and null or invalid shapes. Retrying
+    body membership, section formats, and sketch constraints preserves this missing
+    link; later experiments in one run also try a list of sketches as Profile and
+    receive a type error. No successful reconstruction recovery is recorded, and both
+    checked runs fail the scored native-model requirements. Supply a validated Loft
+    helper that assigns the first sketch to Profile and subsequent sketches to Sections,
+    checks shape validity after recompute, and stops retries that leave the same profile-link
+    failure unchanged. This is a specific linking misuse, not evidence that lofting
+    is unavailable or that it explains every failed grading check.
   evidence:
-  - trace_id: 01a14132-d1fe-7742-bb99-26e1dbaac99f
+  - trace_id: 01a1795a-72a2-7503-a345-b084c398248d
     spans:
-    - span_id: span-ee4e712a0e0ed755a096a3b21c6d56be
-    - span_id: span-70cd6df50dff1574a6ffa059360abb3e
-    - span_id: span-8b8b93cc110be60e94919f0430158ade
-  - trace_id: 01a14132-d36e-7343-b01d-8a92c7a2de82
+    - span_id: span-b84fd4a0d6210495e7989bafa512abcc
+    - span_id: span-b7d0b67b5c562240d439522ec6b08e06
+    - span_id: span-2cb28051289317f86103b9b9dc15f254
+    - span_id: span-b6dfe2c2b0bf291b1202c65d4ca7cb81
+  - trace_id: 01a1795a-7860-7202-9fae-5c913f23ae13
     spans:
-    - span_id: span-4b09a1163150f84ff2e946c1c477743d
-    - span_id: span-05ddbe77728ca134628e4739da3a717b
-    - span_id: span-56240be7651b030c594298a992748eb9
-  updated_date: &id001 2026-10-15 20:20:25.108545+00:00
-  confidence: high
+    - span_id: span-ee9dd89e6af0eb0479ad8fb2a5ac63c9
+    - span_id: span-1221dc609904d1d920b9909b5e4acd7d
+    - span_id: span-f7f3b863709e5a46691ce97a0079a248
+    - span_id: span-0327262e1564db6683b062219e2e8bdf
+  updated_date: &id001 2026-10-26 18:27:57.156817+00:00
+  confidence: low
   severity: high
-- name: FreeCAD model construction stalls in repeated failing API experiments
-  description: The agent repeatedly switches from building the requested artifact
-    to isolated experiments for sketch attachment, constraints, origin/datum planes,
-    spreadsheet parameters, and expressions. These experiments produce invalid-cell,
-    missing-attribute, expression, and process-termination failures, yet the agent
-    continues probing until the run ends without a successful save of `/app/model.FCStd`.
-    The two runs finish with blank or progress-only output and evaluation records
-    IoU 0.0, reward 0.0, and every acceptance check failing. Provide a tested, version-compatible
-    PartDesign construction template or helper library, cap exploratory API retries,
-    and checkpoint the target artifact early.
+  severity_reason: Repeated Loft attempts remain invalid and both runs fail the requested
+    parametric-model evaluation.
+- name: Four-argument Sketcher Radius experiments repeatedly fail without model delivery
+  description: In circle-constraint experiments during parametric reconstruction,
+    the agent uses four-argument Sketcher.Constraint("Radius", geometry_index, point_position,
+    radius) calls, including (0, -1, 20.0) and (0, 2, 10.0). Multiple separately executed
+    experiments return "Unknown exception while processing file" and native crash
+    backtraces; the first run explicitly reports SIGSEGV. Changing sketch placement
+    or using list-form addConstraint does not produce a completed model, and both
+    runs receive reward 0 with failed native-feature-tree, driving-dimension, and
+    reopen checks. Use a validated three-argument Radius helper and a minimal constraint
+    smoke test before full construction, and inspect substantive FreeCAD exceptions
+    even when shell pipelines return exit code 0. The traces associate these constructor
+    attempts with failed experiments; they do not identify the sole native-crash cause
+    or show all Sketcher operations to be unstable.
   evidence:
-  - trace_id: 01a14132-d218-7782-8a4f-48aa5bb1e0ec
+  - trace_id: 01a1795f-6b42-7d21-9b7a-0f04de55504f
     spans:
-    - span_id: span-b70b816245433075f42409fecb73e8f9
-    - span_id: span-5399b1312e30fbc0bec6a8774d3d9d82
-    - span_id: span-c31bd6811ba338869256b0b7a1b2863b
-  - trace_id: 01a14132-d3b3-7582-8351-045e78a3868b
+    - span_id: span-24a3286e6c5f7546510a7ff2774f8c90
+    - span_id: span-6114d3de8215f137cc7bebbd7d9a5cc1
+    - span_id: span-0da559d6af3af1b547bd67337da465a3
+    - span_id: span-615a887494bda60626f437fed71aeb65
+  - trace_id: 01a1795f-6bef-73c3-a332-d9a44ad3246a
     spans:
-    - span_id: span-31d264cb4e64c3366a303cfe7a7da23f
-    - span_id: span-7853a20c7f75255022801c67a4f5d0ba
-    - span_id: span-3a84f684974d14d656fc22e6417ad75f
+    - span_id: span-8ce81d7fe665f733a08bbca02ede472a
+    - span_id: span-a3971cf5c1ab23a6c083ab344a97913c
+    - span_id: span-62188b7f6390bb5cb7cc0e42b412f6f6
+    - span_id: span-b8cfd757f5815540dae0819084920178
   updated_date: *id001
-  confidence: high
+  confidence: low
   severity: high
+  severity_reason: The constraint experiments end in exceptions or crash traces and
+    both runs fail to deliver a scored parametric model.
+- name: Mesh-analysis runs end without a completed scored CAD deliverable
+  description: During mesh-to-parametric-FreeCAD tasks, the agent repeatedly executes
+    numerical reference-mesh analysis and ends with further measurements rather than
+    a demonstrated reconstruction saved to /app/model.FCStd. The checked examples
+    finish by rechecking the stepped tube's radial transitions or fitting the bent
+    tube's centerline and wall thickness; they show no tool input targeting the scored
+    model file. Their completed runs receive reward 0 and fail native-feature-tree,
+    named-dimension, and reopen/recompute checks. Reference measurements are not numerical
+    verification of an editable model. Add an explicit analysis-to-construction checkpoint
+    and reserve execution budget for saving, reopening, and testing the requested
+    file. The traces establish noncompletion, not why execution stopped or individual
+    defects in an inspected final file.
+  evidence:
+  - trace_id: 01a1795a-77d3-7970-b2fc-e74ba9d47b73
+    spans:
+    - span_id: span-84b083953afed13d38f26767700dfeef
+    - span_id: span-f39579995ae7bbb9f685c7a8b69f7ab3
+    - span_id: span-b54093e4cfca9411a7599c3802dd4c30
+    - span_id: span-940439720fccf1ada838ff882ebf20b8
+  - trace_id: 01a1795f-6b43-7da1-804d-9ec6030b0efb
+    spans:
+    - span_id: span-8870959378c68faa8fbdd48e7dd357ff
+    - span_id: span-f666d12ce59950bd924a1de9ef877f9b
+    - span_id: span-431fff5f7a8fd492a013544ea780dde5
+    - span_id: span-70fb791ef9e41a629ef83d38fba05587
+  updated_date: *id001
+  confidence: med
+  severity: high
+  severity_reason: The runs finish with reference-mesh measurements while the required
+    editable CAD deliverable fails evaluation.

@@ -1,89 +1,146 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-# NeMo Compass Insights, published round 1
-# Agent: cad-u1a. Four runs.
+# NeMo Compass Insights, round 1
+# Agent: r1-skills (kept in round 0). Its 20 train runs, one per task. Round 2 reused these Insights.
 # Raw Compass output; only names and paths are neutralised.
-- name: Late reconstruction retries exhaust the run and prevent the final verification
-    report
-  description: After successfully saving and numerically verifying a model, the agent
-    starts another mesh reconstruction with only 1–9 seconds left in the run. That
-    final execute call has no result in all four traces, and the agent then returns
-    only whitespace instead of the required numerical verification. Reserve time for
-    the final response and stop launching expensive reconstruction retries near the
-    execution deadline.
+- name: Subtractive loft failures are saved instead of rejected
+  description: Adding a cavity loft changes a valid, positive-volume outer solid into
+    invalid geometry or an empty result, yet K.finish saves /app/model.FCStd after
+    reporting a failed full shape check. One final save contains one solid with valid=False;
+    another contains zero solids and zero volume despite valid=True. The saved-file
+    evaluations fail single-valid-solid, and no corrected deliverable is recorded.
+    Gate saving on exactly one non-null, positive-volume valid solid passing check(True),
+    and retain a known-good file when subtraction fails.
   evidence:
-  - trace_id: 01a1414d-36be-7d80-869f-07775339a4b3
+  - trace_id: 01a17999-ca7d-7390-887c-4d915503b11d
     spans:
-    - span_id: span-3d9bf72e11d678a4dc9fe55ba4547040
-    - span_id: span-167319d44b6fd2d39f4f6abc95549f28
-    - span_id: span-39040b03ba6d534bda4fa93ac8e8c53b
-  - trace_id: 01a1414d-36be-7602-a646-5f991878edae
+    - span_id: span-b34ac500db92c4ef07a7cb2e6d401e2e
+    - span_id: span-7fe6b9a542f810e089e264e8dafd1a27
+    - span_id: span-d974a2da1f49fe581c439bed65984755
+    - span_id: span-f80a2d08590fa1d14befc3c2f655bc6e
+  - trace_id: 01a1799d-15f7-72a2-b8e2-ef12ac6182cd
     spans:
-    - span_id: span-d38b27a5f2025d6201fc0e7fdc528673
-    - span_id: span-08d34c2e93b547eacbf63863a1f2dc7f
-    - span_id: span-f53a42c1743c54d198a000b0e221164f
-  - trace_id: 01a1414d-3868-7410-907d-c0d540c6d36e
-    spans:
-    - span_id: span-8625009fe71516d05a8e6ac81fcd7643
-    - span_id: span-6c0ad5750652ee5df94be50e9b93327b
-    - span_id: span-4264509be54878363ab942659f13fa35
-  - trace_id: 01a1414d-3871-7751-af7f-e71eaad3fc59
-    spans:
-    - span_id: span-b8e17793552d743ee8b4015c51646b0d
-    - span_id: span-962b7bb612f62bbc3d294b2d969ad678
-    - span_id: span-28b60cfeda73b13db8450413e56bc7a2
-  updated_date: &id001 2026-10-15 20:53:13.242150+00:00
-  confidence: high
-  severity: med
-- name: Mesh conversion always emits a dense stack of slice sketches and pads
-  description: For every mesh, the agent uses the same band-slicing helper rather
-    than selecting geometry-appropriate PartDesign features. The delivered files contain
-    32–47 sketches/features and 1,214–1,668 sketch elements, with tool output explicitly
-    describing successive bands merged from slices. This produces bloated, difficult-to-edit
-    models and, on the complex mesh, still does not preserve fidelity. Add geometry
-    classification and construct compact revolves, extrusions, lofts, or sweeps instead
-    of defaulting to one sketch/pad per slice.
-  evidence:
-  - trace_id: 01a1414d-36be-7d80-869f-07775339a4b3
-    spans:
-    - span_id: span-3d9bf72e11d678a4dc9fe55ba4547040
-    - span_id: span-167319d44b6fd2d39f4f6abc95549f28
-    - span_id: span-39040b03ba6d534bda4fa93ac8e8c53b
-  - trace_id: 01a1414d-36be-7602-a646-5f991878edae
-    spans:
-    - span_id: span-d38b27a5f2025d6201fc0e7fdc528673
-    - span_id: span-08d34c2e93b547eacbf63863a1f2dc7f
-    - span_id: span-f53a42c1743c54d198a000b0e221164f
-  - trace_id: 01a1414d-3868-7410-907d-c0d540c6d36e
-    spans:
-    - span_id: span-8625009fe71516d05a8e6ac81fcd7643
-    - span_id: span-6c0ad5750652ee5df94be50e9b93327b
-    - span_id: span-4264509be54878363ab942659f13fa35
-  - trace_id: 01a1414d-3871-7751-af7f-e71eaad3fc59
-    spans:
-    - span_id: span-b8e17793552d743ee8b4015c51646b0d
-    - span_id: span-962b7bb612f62bbc3d294b2d969ad678
-    - span_id: span-28b60cfeda73b13db8450413e56bc7a2
-  updated_date: *id001
-  confidence: high
-  severity: med
-- name: Agent delivers a model despite its own severe mesh-fidelity warning
-  description: In two runs on the complex 18,988-facet mesh, the final 47-pad model
-    reopened as one valid solid and had a near-matching volume ratio of 0.972, but
-    the agent's own section check reported IoU 0.229. The agent nevertheless left
-    that model for delivery; the evaluator later measured IoU 0.7803, failed mesh-fidelity,
-    and assigned reward 0. Treat a sub-threshold fidelity check as a delivery blocker
-    and switch reconstruction strategy rather than relying on volume and bounding-box
-    agreement.
-  evidence:
-  - trace_id: 01a1414d-36be-7602-a646-5f991878edae
-    spans:
-    - span_id: span-d38b27a5f2025d6201fc0e7fdc528673
-    - span_id: span-08d34c2e93b547eacbf63863a1f2dc7f
-  - trace_id: 01a1414d-3868-7410-907d-c0d540c6d36e
-    spans:
-    - span_id: span-8625009fe71516d05a8e6ac81fcd7643
-    - span_id: span-6f8fad1f465ababd843f01f1baa59e65
-  updated_date: *id001
+    - span_id: span-123c8af46c66a0db434df855d223fd95
+    - span_id: span-f1531fde83ee7833009b91fb3a66768d
+    - span_id: span-3e1eaf24a2a03135ac84e66534faff32
+    - span_id: span-70d7ad791a6bad863d505078a678566d
+  updated_date: &id001 2026-10-26 19:49:07.664183+00:00
   confidence: high
   severity: high
+  severity_reason: The saved deliverables contain invalid or empty geometry and fail
+    the single-valid-solid requirement.
+- name: Mesh analysis ends before a model build is executed
+  description: Mesh-to-FreeCAD runs perform measurements, section sampling and additional
+    geometric probes, but end without executing a parametric build or saving /app/model.FCStd.
+    Three reviewed runs never write a build script; another writes /app/build.py but
+    never runs it. The final evaluations report zero reward and all deliverable checks
+    failed, with no artifact IoU or complexity metrics. The traces establish non-delivery,
+    not why execution stopped. Enforce a bounded analysis phase and an early executed,
+    saved baseline before further probing.
+  evidence:
+  - trace_id: 01a17999-a396-78d3-8728-5e62156d05c8
+    spans:
+    - span_id: span-37a16d1e0fe47252dc9a25ff5f2f7285
+    - span_id: span-aaa5444ae18a13013829a960b28f0f3f
+    - span_id: span-21724ff5198b6f4e0faf8442e47671bd
+    - span_id: span-05c9acd42c5b4959d9a52b0cdcbf967d
+  - trace_id: 01a1799a-0017-7e41-9cd4-c2ca34461ad1
+    spans:
+    - span_id: span-89eabb1e29de6140cf2ee2d67209a8c9
+    - span_id: span-3334b047c910de500ce76b16a0984019
+    - span_id: span-edb096cdedfc76eefb56884c600c324d
+    - span_id: span-cc3f56cb7100b25d1dc302da23a39cef
+  - trace_id: 01a1799e-8ad6-7b21-901c-7e337cfb3e3d
+    spans:
+    - span_id: span-9311c5936f23d7b5e629d0aa69207f96
+    - span_id: span-9789ce6eff1034f1c73602611336f92a
+    - span_id: span-c3b2028e1cd4644c43d4294334f76d76
+    - span_id: span-a9e983c6b2612148d11220549e2ecf60
+  - trace_id: 01a1799e-b9a7-73e2-ac6d-1c1f68d7f09d
+    spans:
+    - span_id: span-0523943c0b9eb88f82fdbb0728933647
+    - span_id: span-3346c6b496d71d8572da9b1365fdd898
+    - span_id: span-3a574d1456e194aa5bcaabfea2eed5b1
+    - span_id: span-0e8be0e0641cde2870f067e6700ef06b
+  updated_date: *id001
+  confidence: med
+  severity: high
+  severity_reason: The runs end without the requested CAD deliverable and fail every
+    deliverable check.
+- name: Build exceptions remain unrecovered before delivery
+  description: Executed FreeCAD build scripts abort before their save step, and the
+    runs reach neither a successful save nor saved-file verification. Observed exceptions
+    include an invalid spreadsheet alias, reversed ellipse-axis lengths, and arithmetic
+    mixing floats with expression strings. Two runs edit or rewrite the script after
+    failure without executing the final repair; the other stops at its build exception.
+    Final evaluations report zero reward and all deliverable checks failed, not nine
+    independently diagnosed artifact defects. Require rerunning repaired scripts and
+    confirming a saved, reopened model before completing the workflow.
+  evidence:
+  - trace_id: 01a17997-7e3c-7211-b6e2-68a23292776c
+    spans:
+    - span_id: span-e79068eba6fb4cd55df04d9d925fc9db
+    - span_id: span-ec8bd8a8a92d465862c384319c3a917f
+    - span_id: span-9a0da3b73c9b8455940e948abb0e6023
+    - span_id: span-00cba7be4e238dd3aaca970064406953
+    - span_id: span-f96b3e6ea16dd93716457de3cc054d89
+  - trace_id: 01a1799c-542f-7132-ace7-8d3cbfe998a8
+    spans:
+    - span_id: span-e1ecffd0409cf5a0c0adc4a37cc550f6
+    - span_id: span-513468520a441bd2df70a23948c89b64
+    - span_id: span-bbce67596d278e4f8b3836832648a658
+  - trace_id: 01a1799c-81d0-7f11-b9cf-bf3ed3350cdb
+    spans:
+    - span_id: span-ea58f2f7a7b617864ca56d76ea68be06
+    - span_id: span-979030b02c868e243d6cfef3e504b89e
+    - span_id: span-c63aff5caac742f53e702a105477b615
+    - span_id: span-21a38b69839929a3595efb46d3a27fc2
+    - span_id: span-2520c277d15e5f8de1e7200440293e5e
+    - span_id: span-5b55545503a3369a8c8d173eec803c5a
+  updated_date: *id001
+  confidence: med
+  severity: high
+  severity_reason: Unrecovered build failures leave no successfully saved model and
+    all deliverable checks fail.
+- name: Valid saved solids still fail mesh fidelity and feature coverage
+  description: 'Saved FreeCAD builds report one valid solid, no feature errors and
+    a successful full shape check, but the final saved-file evaluations still fail
+    mesh-fidelity and no-missing-feature. Reviewed IoUs range from 0.0012 to 0.6742.
+    These are not transient build errors: the low-fidelity files remain the evaluated
+    deliverables after any refinement. Coarse outer/cavity lofts are recurring examples;
+    a partial revolution also produces a severe mismatch. Treat solid validity as
+    only one checkpoint: numerically compare the saved geometry with the reference,
+    localize missing and extra material, and reserve time to correct discrepancies
+    before delivery.'
+  evidence:
+  - trace_id: 01a17997-7e1c-7122-9cb5-4e4ed475d465
+    spans:
+    - span_id: span-ede32f258fca1ecaa7c48d969a49c755
+    - span_id: span-6d2530537e9c4d636cf2af28e68fe86c
+    - span_id: span-5bc1b6dd494b5518ad997fa7c502a113
+  - trace_id: 01a17997-7e4b-7103-bc52-fed0373b7b2c
+    spans:
+    - span_id: span-105cf316b059b4c17af7a0ee0f142781
+    - span_id: span-c6413b49237640a2dd2aabf6446746da
+    - span_id: span-dd7ba922b3bc98fac45c0cd589de4a87
+  - trace_id: 01a17997-7e76-7c40-9666-f36232776660
+    spans:
+    - span_id: span-aadba06d1405c0ec1ba10c10ef942182
+    - span_id: span-b1f87ae519f91bfec2818fdf5c477f83
+    - span_id: span-02ec88be7b13a05bcb182a923a95e954
+  - trace_id: 01a17999-0807-7403-a350-f7bcba91eb35
+    spans:
+    - span_id: span-63c22dfcc036723920a38b08a4100d80
+    - span_id: span-153813a3ef860c1ed0b1910c9ae91804
+    - span_id: span-3edf501697dfa305fc669e469515fc8d
+  - trace_id: 01a1799c-87f6-76e2-94aa-0cd77460f232
+    spans:
+    - span_id: span-2640bb723cb2f41c93c7473bd7170f0d
+    - span_id: span-a60571407c11de7a79659e58653ec637
+    - span_id: span-4f1481fd49aebab94f0b73905c048317
+    - span_id: span-f3341e44d3b5a5a631ee6051597a0cf1
+  updated_date: *id001
+  confidence: med
+  severity: high
+  severity_reason: The final CAD files are valid solids but materially mismatch the
+    reference mesh and fail feature coverage.

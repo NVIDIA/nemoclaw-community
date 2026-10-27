@@ -1,76 +1,177 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-# NeMo Compass Insights, published round 3
-# Agent: cad-u3b (kept). Compass ran per candidate; this is the kept candidate's. cad-u3a's only Insight repeats the first one here.
+# NeMo Compass Insights, round 3
+# Agent: r3-lookguard (kept in round 2). Its 20 train runs, one per task.
 # Raw Compass output; only names and paths are neutralised.
-- name: Saved FreeCAD models contain multiple visible objects despite success claims
-  description: For requests that require `/app/model.FCStd` to open with exactly one
-    visible object, the mesh-to-PartDesign workflow saves and reopens files with `Body`,
-    `Origin001`, and `Loft04` visible. Even the run that tried to repair visibility
-    still read back both `Body` and `Loft04` as visible, yet the agent reported that
-    only the Body was visible. Update the save/repair logic to hide every non-final
-    object's ViewObject, reopen the saved file, count visible objects, and withhold
-    the success claim unless the count is exactly one.
+- name: Structurally valid deliverables still fail the mesh-fidelity target
+  description: 'Mesh-to-FreeCAD runs terminate with a saved, reopenable single solid
+    even though the final numerical verifier reports IoU below 0.9 and the saved-file
+    evaluator fails mesh-fidelity. Structural validity and aggregate volume are not
+    sufficient acceptance criteria: one finished tube has volume ratio 0.9996 but
+    IoU about 0.40, and another is reported as meeting all hard requirements at IoU
+    about 0.88. Gate completion on geometric fidelity and reserve time to correct
+    the localized missing/extra material; do not equate a valid saved solid with a
+    faithful reconstruction.'
   evidence:
-  - trace_id: 01a141e6-c134-7691-ab0a-f57f26b37efc
+  - trace_id: 01a17a27-81ea-7d12-b25f-10faa29adb2a
     spans:
-    - span_id: span-8777d980b20438c20e576a58a8922874
-    - span_id: span-d6b9557b3fc0869d7f7a2becb2a93963
-    - span_id: span-51846a3fc193e97291bb0bc8e9acb1e7
-  - trace_id: 01a141e6-c69f-79e1-a243-ce8a63a943aa
+    - span_id: span-378e8cbceccbdd0a081c7ed0d6b23643
+    - span_id: span-8c6a3d73a93c7039c0b7b79629b3bf1c
+    - span_id: span-971a3b0bbb6736c88ce0d200bd3d88c5
+  - trace_id: 01a17a27-8203-7cf0-80cd-1cf156149ff4
     spans:
-    - span_id: span-bb8beb03292e5af6cc3f748ddb691cd3
-    - span_id: span-c9513cdb86578a6293bf5a4cc26e172b
-    - span_id: span-0bc1d14986d9ac5e87f6817916806436
-  - trace_id: 01a141e6-c2f3-77a0-a8e9-9d5b385e8e1b
+    - span_id: span-4a475cb881c0e3d334ed9c97a736554c
+    - span_id: span-a8e6796e41d978743730b723f400e2b5
+    - span_id: span-1ac6a9d1839dafa60b932915e6346342
+  - trace_id: 01a17a2a-0c8a-7081-a413-c79a6543b482
     spans:
-    - span_id: span-e76eee5c7954b0a9da17c9c7208f503c
-    - span_id: span-64c903728d18c3825e76ac333449a720
-    - span_id: span-15c0a887c977231af2e42d6f728438be
-  - trace_id: 01a141e6-c57b-7532-8f5b-3b67dc70d427
+    - span_id: span-77b437019c9acc6414bbb4fe01718263
+    - span_id: span-80ca9f671b528c6e8daff925954e23ea
+  - trace_id: 01a17a2c-0926-7922-9dc4-c492c2179d55
     spans:
-    - span_id: span-23932e83b042354385769081349a2f2f
-    - span_id: span-44aa9b4cb187eda3faebab2b2d7eed8c
-    - span_id: span-fe87b46457ad334dbd43e29105fb7da9
-  updated_date: &id001 2026-10-15 23:33:14.174202+00:00
+    - span_id: span-e81a4d40248206da312c3c794173c9d0
+    - span_id: span-7d065a2b5d114e1d1f3417185dcacda0
+  - trace_id: 01a17a2c-84a6-7051-be66-763043380910
+    spans:
+    - span_id: span-5ad5af0af23abf492e9e0bb91b515811
+    - span_id: span-5967fdc844443efcdfc79573d1902867
+  - trace_id: 01a17a2e-4b3c-7d61-a83a-5d957804ce29
+    spans:
+    - span_id: span-241b3f7a627b9e7dd3bf2bedd9d8a8ff
+    - span_id: span-53f71f781d5439d2ab5ce1d5be26b951
+  - trace_id: 01a17a30-49ab-7d81-8441-12a514fc359a
+    spans:
+    - span_id: span-0aeefea191f423c71ec5d883007c182d
+    - span_id: span-6a3593ef169d70d5f2dd742137f8793f
+  updated_date: &id001 2026-10-26 21:59:31.329781+00:00
   confidence: high
   severity: high
-- name: Generic mesh slicing produces dense loft trees instead of design-intent CAD
-    features
-  description: Editable, fully parametric reconstruction requests are routed to the
-    same generic axis-slicing helper. It turns each mesh into four AdditiveLofts driven
-    by 24–27 B-spline section sketches and ties section heights to the single `Params.Length`
-    dimension; the final responses confirm this same structure. Although the files
-    are valid and closely match the mesh, this slice-derived tree degrades designer
-    editability and does not reconstruct geometry with appropriate revolutions, extrusions,
-    holes, ribs, or other design-intent features. Replace the one-size-fits-all helper
-    path with geometry classification and feature-specific, constrained reconstruction
-    strategies.
+  severity_reason: The final saved models fail geometric fidelity despite passing
+    single-solid validity checks.
+- name: Named size edits are inert or produce invalid rebuilds
+  description: The final saved-model verifier finds named size controls whose +10%
+    edits change neither measured volume nor bounds, or named controls whose edits
+    invalidate the rebuild. Thickness is inert in the prismatic plate; WallHeight
+    and HoleDiam are inert and PartHeight rebuilds invalidly in the six-hole plate.
+    The six-hole plate is nevertheless presented as having independently working dimensions.
+    Bind designer dimensions to the correct sketch and feature expressions and require
+    valid, nontrivial size responses before declaring parametric editability. Zero
+    volume/bounds response of positional hole controls alone is not evidence of an
+    inert parameter.
   evidence:
-  - trace_id: 01a141e6-c134-7691-ab0a-f57f26b37efc
+  - trace_id: 01a17a2a-0c8a-7081-a413-c79a6543b482
     spans:
-    - span_id: span-8777d980b20438c20e576a58a8922874
-    - span_id: span-cbce8fc8098feaa1c96ad7b590986a5f
-    - span_id: span-d6b9557b3fc0869d7f7a2becb2a93963
-    - span_id: span-51846a3fc193e97291bb0bc8e9acb1e7
-  - trace_id: 01a141e6-c69f-79e1-a243-ce8a63a943aa
+    - span_id: span-77b437019c9acc6414bbb4fe01718263
+    - span_id: span-80ca9f671b528c6e8daff925954e23ea
+  - trace_id: 01a17a27-81ea-7e91-a8e4-26de660545ec
     spans:
-    - span_id: span-bb8beb03292e5af6cc3f748ddb691cd3
-    - span_id: span-a754e8e5d107e143b9974418200561f0
-    - span_id: span-c9513cdb86578a6293bf5a4cc26e172b
-    - span_id: span-0bc1d14986d9ac5e87f6817916806436
-  - trace_id: 01a141e6-c2f3-77a0-a8e9-9d5b385e8e1b
+    - span_id: span-87a888a5b54b1b348cd3209944829e07
+    - span_id: span-b6cc3ef6139db0a2a70c7c815d6b51ba
+    - span_id: span-7c6437ea9b69917f1b76cc3e0da29ff6
+  - trace_id: 01a17a27-8203-7cf0-80cd-1cf156149ff4
     spans:
-    - span_id: span-e76eee5c7954b0a9da17c9c7208f503c
-    - span_id: span-c681afaffd83877d42bfaa8ab83e1452
-    - span_id: span-e7bc84f27cd8f19f514be58b01191eff
-    - span_id: span-15c0a887c977231af2e42d6f728438be
-  - trace_id: 01a141e6-c57b-7532-8f5b-3b67dc70d427
+    - span_id: span-4a475cb881c0e3d334ed9c97a736554c
+    - span_id: span-a8e6796e41d978743730b723f400e2b5
+  - trace_id: 01a17a2e-4b3c-7d61-a83a-5d957804ce29
     spans:
-    - span_id: span-23932e83b042354385769081349a2f2f
-    - span_id: span-d198a0e275cada22f9ccf2560372989d
-    - span_id: span-44aa9b4cb187eda3faebab2b2d7eed8c
-    - span_id: span-fe87b46457ad334dbd43e29105fb7da9
+    - span_id: span-241b3f7a627b9e7dd3bf2bedd9d8a8ff
+    - span_id: span-53f71f781d5439d2ab5ce1d5be26b951
   updated_date: *id001
-  confidence: high
-  severity: med
+  confidence: med
+  severity: high
+  severity_reason: Delivered models contain size controls that have no measured effect
+    or break the geometry when edited.
+- name: Off-axis section measurements are ignored when choosing the revolution axis
+  description: The agent builds origin-axis revolutions even when original mesh sections
+    place the shape off local z. One cup has section centers near (21.1,21.1), but
+    its first saved revolve is centered at (0,0); a subsequent world-space left-multiplied
+    body translation leaves final IoU 0.0000. Another off-axis thin shell is interpreted
+    as a round part and revolved about local z, producing a donut; its replacement
+    fails and the final saved-file IoU is 0.0316. Validate the measured centerline
+    and rotational symmetry before choosing a revolve, and compose translations in
+    the measured local frame rather than treating local offsets as world coordinates.
+    The shared failure is axis/pose validation, not proof that the classifier or translation
+    alone caused every geometric defect.
+  evidence:
+  - trace_id: 01a17a2c-0926-7922-9dc4-c492c2179d55
+    spans:
+    - span_id: span-2634c816634a67256b8e552fe3f37105
+    - span_id: span-6496ab7f47e3ae09f4ca3f41c82d85ea
+    - span_id: span-cda99f247e349e89e1383275e40ed191
+    - span_id: span-2b845f6140c20df000925103b792d137
+    - span_id: span-a5a066b3741d53ee43cf45e4385c2715
+    - span_id: span-7d065a2b5d114e1d1f3417185dcacda0
+  - trace_id: 01a17a2c-84a6-7051-be66-763043380910
+    spans:
+    - span_id: span-e615087e18d17389bc9619d7836889f9
+    - span_id: span-3b151c6dec44d631a77b19d5a031e2c5
+    - span_id: span-7ebc8bea9f763158b00c6c6526dfa84c
+    - span_id: span-5967fdc844443efcdfc79573d1902867
+    - span_id: span-7e56f43a360b0c19acb2fe5c6bda2fdd
+  updated_date: *id001
+  confidence: med
+  severity: high
+  severity_reason: The final saved parts are spatially wrong or have the wrong topology,
+    with near-zero mesh overlap.
+- name: High-overlap reconstructions still omit required features
+  description: Two completed bracket reconstructions have saved-file IoU above 0.93
+    yet fail the separate no-missing-feature evaluation. Final numerical read-backs
+    also show localized mesh-only material. In one run, the agent recognized sloped
+    support geometry but delivered rectangular walls and a non-cutting hole pocket;
+    in the other it delivered an L-pad and hole pockets while dismissing missing corner
+    reinforcement as taper or faceting. High aggregate overlap is not a feature-completeness
+    check. Track each measured support, hole and cavity through the final feature
+    tree and inspect localized residuals rather than waiving them after IoU passes.
+    The evaluator does not identify which individual omission caused its failure.
+  evidence:
+  - trace_id: 01a17a27-81ea-7e91-a8e4-26de660545ec
+    spans:
+    - span_id: span-87a888a5b54b1b348cd3209944829e07
+    - span_id: span-b6cc3ef6139db0a2a70c7c815d6b51ba
+    - span_id: span-34e8ce730e63b173591545901d5ff01c
+    - span_id: span-7c6437ea9b69917f1b76cc3e0da29ff6
+  - trace_id: 01a17a2c-4a43-76e3-b624-4183f72f67cf
+    spans:
+    - span_id: span-080c7a34adf2cd660b35979080e2170a
+    - span_id: span-971f2c0de68e0135cc8dbe613b6cde77
+    - span_id: span-e703accb2d67b0765085cfa60c6f2393
+    - span_id: span-a30ef137baa256d075b2b5f8d7752fa2
+  updated_date: *id001
+  confidence: med
+  severity: high
+  severity_reason: Both finished bracket models fail feature completeness despite
+    exceeding the overlap target.
+- name: Failed loft refinements leave earlier, acknowledged-wrong deliverables
+  description: After recognizing that a saved approximation has the wrong shape, the
+    agent attempts loft replacements that fail to construct valid geometry, then finishes
+    with the earlier incorrect artifact. A tube-like mesh remains an elliptical lens
+    after two polygonal subtractive-loft attempts fail with NullObject; the final
+    read-back still has the earlier volume 32326.6 and IoU about 0.263. A spoon/bulb
+    remains an origin-axis donut after its loft replacement produces multiple solids
+    and self-intersections; the final verifier confirms the old revolve. Preserving
+    a valid checkpoint prevents corruption but does not complete the reconstruction.
+    Validate section ordering, containment and intersections before full loft builds,
+    and budget time for an alternate complete construction rather than repeated failing
+    refinements. No single underlying OCC cause is established.
+  evidence:
+  - trace_id: 01a17a30-49ab-7d81-8441-12a514fc359a
+    spans:
+    - span_id: span-9343727b69c06e5bd2ee5f29fee5225d
+    - span_id: span-c0c15bc49399e70460f83afa66412864
+    - span_id: span-044057bf945a3fc29f8bbb9931fa64f5
+    - span_id: span-67c414441c451c18e8aa49c67277f657
+    - span_id: span-6a3593ef169d70d5f2dd742137f8793f
+    - span_id: span-ee90572e2e3d1ff63a68e75d3184cebb
+  - trace_id: 01a17a2c-84a6-7051-be66-763043380910
+    spans:
+    - span_id: span-3b151c6dec44d631a77b19d5a031e2c5
+    - span_id: span-28811b609f4dda10bb0e33a48295aeff
+    - span_id: span-8b623035ffd365a81af8e738a6420bba
+    - span_id: span-334413bc5a1647dda27c13efbb7bf945
+    - span_id: span-5967fdc844443efcdfc79573d1902867
+    - span_id: span-7e56f43a360b0c19acb2fe5c6bda2fdd
+  updated_date: *id001
+  confidence: med
+  severity: high
+  severity_reason: The final files retain acknowledged-wrong earlier shapes because
+    the intended loft replacements never succeed.

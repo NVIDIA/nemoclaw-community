@@ -1,0 +1,199 @@
+<!doctype html>
+<!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+     SPDX-License-Identifier: Apache-2.0
+     The CAD agent chat page (served by web.py): a 3D view of the mesh and the model, a chat column. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CAD Agent Chat</title>
+<style>
+  :root { --bg: #f6f6f4; --panel: #fff; --ink: #1d1d1b; --muted: #77776f; --line: #e2e2dc;
+          --mesh: #3b82f6; --model: #e8730c; --call: #0e7490; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #151514; --panel: #1e1e1c; --ink: #ececea; --muted: #8f8f87; --line: #30302d; --call: #5ec4d8; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; height: 100vh; display: grid; grid-template-columns: 1fr var(--chat, 420px); background: var(--bg);
+         color: var(--ink); font: 14px/1.45 system-ui, sans-serif; }
+  #view { position: relative; min-height: 0; }
+  #view canvas { display: block; width: 100%; height: 100%; }
+  .bar { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { font: inherit; padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px;
+         background: var(--panel); color: var(--ink); cursor: pointer; text-decoration: none; }
+  .btn[aria-disabled="true"] { opacity: .4; pointer-events: none; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin: 0 4px; }
+  aside { position: relative; display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--line); background: var(--panel); }
+  #grip { position: absolute; left: -4px; top: 0; bottom: 0; width: 8px; cursor: col-resize; touch-action: none; z-index: 1; }
+  #grip:hover, #grip.on { background: var(--line); }
+  #log { flex: 1; overflow: auto; padding: 14px; }
+  #log div { margin: 0 0 6px; white-space: pre-wrap; word-break: break-word; }
+  .you { font-weight: 600; margin-top: 14px !important; }
+  .call, .result, .note { font: 12px/1.4 ui-monospace, monospace; }
+  .call { color: var(--call); }
+  .result, .note { color: var(--muted); padding-left: 1em; }
+  .text { margin: 8px 0 !important; }
+  #log img { display: block; max-width: 100%; margin: 4px 0 8px; border: 1px solid var(--line); border-radius: 4px; cursor: zoom-in; }
+  form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); }
+  textarea { flex: 1; resize: none; font: inherit; padding: 8px; border: 1px solid var(--line); border-radius: 6px;
+             background: var(--bg); color: var(--ink); }
+  form .btn { background: var(--model); border-color: var(--model); color: #fff; }
+  @media (max-width: 760px) { body { grid-template-columns: 1fr; grid-template-rows: 50vh 1fr; }
+                              aside { border-left: 0; border-top: 1px solid var(--line); } #grip { display: none; } }
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+               "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+</script>
+</head>
+<body>
+<main id="view">
+  <div class="bar">
+    <label class="btn">Upload mesh<input id="file" type="file" accept=".obj,.stl" hidden></label>
+    <label class="btn"><input id="mesh" type="checkbox" checked><span class="dot" style="background:var(--mesh)"></span>mesh</label>
+    <label class="btn"><input id="model" type="checkbox" checked><span class="dot" style="background:var(--model)"></span>model</label>
+    <a id="download" class="btn" href="/model.FCStd" download aria-disabled="true">Download model.FCStd</a>
+  </div>
+</main>
+<aside>
+  <div id="grip" title="Drag to resize the chat"></div>
+  <div id="log"><div class="note">Upload a reference mesh, then ask, e.g. "rebuild this mesh as an editable model".</div></div>
+  <form id="ask"><textarea id="msg" rows="3" placeholder="Message the CAD agent (Enter sends)"></textarea><button class="btn">Send</button></form>
+</aside>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+
+const $ = id => document.getElementById(id);
+const view = $('view'), log = $('log');
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+// Viewer, rendered on demand. FreeCAD is Z-up; the mesh is translucent over the model.
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+view.prepend(renderer.domElement);
+const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(40, 1, 0.01, 1e5);
+camera.up.set(0, 0, 1);
+const controls = new OrbitControls(camera, renderer.domElement);
+const render = () => renderer.render(scene, camera);
+controls.addEventListener('change', render);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x666666, 2.2), camera);
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(1, 2, 3); camera.add(sun);
+const materials = {
+  mesh: new THREE.MeshStandardMaterial({ color: css('--mesh'), transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }),
+  // Pulled slightly toward the camera: where model and mesh coincide the model shows, not stripes.
+  model: new THREE.MeshStandardMaterial({ color: css('--model'), roughness: 0.6, side: THREE.DoubleSide,
+                                          polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 }),
+};
+const url = { mesh: '/reference.obj', model: '/model.obj' };
+const shown = {}, seq = { mesh: 0, model: 0 };  // seq: the latest load per kind; an earlier one is dropped
+const MAX_UPLOAD = 200 * 2 ** 20;  // as web.py: checked here so a too-large file is not sent at all
+
+new ResizeObserver(() => {
+  renderer.setSize(view.clientWidth, view.clientHeight, false);
+  camera.aspect = view.clientWidth / view.clientHeight; camera.updateProjectionMatrix(); render();
+}).observe(view);
+
+function clear(kind) {
+  if (!shown[kind]) return;
+  scene.remove(shown[kind]); shown[kind].traverse(o => o.geometry?.dispose()); delete shown[kind];
+}
+
+async function load(kind) {  // 404 means not there yet
+  const mine = ++seq[kind];
+  try {
+    const res = await fetch(url[kind], { cache: 'no-cache' });  // 304 when unchanged
+    const body = await res.text();
+    if (mine !== seq[kind]) return;
+    if (kind === 'model' && res.status !== 404) $('download').setAttribute('aria-disabled', 'false');
+    if (!res.ok) return void (res.status !== 404 && say('note', body));
+    const object = new OBJLoader().parse(body);
+    object.traverse(o => { if (o.isMesh) { o.material = materials[kind]; o.geometry.computeVertexNormals(); } });
+    object.renderOrder = kind === 'mesh' ? 1 : 0;
+    object.visible = $(kind).checked;
+    clear(kind); scene.add(shown[kind] = object);
+    if (kind === 'mesh' || !shown.mesh) frame(object);
+    render();
+  } catch {  // a failed fetch: keep what is shown
+  }
+}
+
+function frame(object) {
+  const box = new THREE.Box3().setFromObject(object), size = box.getSize(new THREE.Vector3()).length();
+  if (!(size > 0)) return;
+  controls.target.copy(box.getCenter(new THREE.Vector3()));
+  camera.position.copy(controls.target).add(new THREE.Vector3(1, -1.4, 0.9).multiplyScalar(size * 0.9));
+  controls.update();
+}
+
+for (const kind of ['mesh', 'model']) $(kind).onchange = e => { if (shown[kind]) shown[kind].visible = e.target.checked; render(); };
+
+// The chat's width: drag its left edge (kept for this browser).
+const width = w => document.body.style.setProperty('--chat', Math.min(Math.max(w, 280), innerWidth - 240) + 'px');
+try { const w = +localStorage.getItem('chat-width'); if (w) width(w); } catch {}
+addEventListener('resize', () => { const w = parseInt(document.body.style.getPropertyValue('--chat')); if (w) width(w); });
+$('grip').onpointerdown = e => {
+  if (e.button !== 0) return;
+  const grip = e.target; grip.setPointerCapture(e.pointerId); grip.classList.add('on');
+  grip.onpointermove = m => width(innerWidth - m.clientX);
+  grip.onpointerup = grip.onpointercancel = () => {
+    grip.onpointermove = grip.onpointerup = grip.onpointercancel = null; grip.classList.remove('on');
+    try { localStorage.setItem('chat-width', parseInt(document.body.style.getPropertyValue('--chat'))); } catch {}
+  };
+};
+
+// Chat: the server streams the agent's steps.
+function say(kind, text) {
+  const div = log.appendChild(document.createElement('div'));
+  div.className = kind; div.textContent = text;
+  log.scrollTop = log.scrollHeight;
+}
+
+function show(src) {  // what the agent looked at; a click opens it full size
+  const img = log.appendChild(document.createElement('img'));
+  img.src = src; img.alt = 'image the agent looked at'; img.onclick = () => window.open()?.document.body.appendChild(img.cloneNode());
+  img.onload = () => { log.scrollTop = log.scrollHeight; };
+}
+
+$('file').onchange = async e => {
+  const file = e.target.files[0]; e.target.value = '';
+  if (file.size > MAX_UPLOAD) return say('note', `${file.name} is larger than 200 MB.`);
+  let res;
+  try {
+    res = await fetch('/upload?name=' + encodeURIComponent(file.name),
+                      { method: 'POST', body: file, headers: { 'Content-Type': 'application/octet-stream' } });
+  } catch (err) { return say('note', String(err)); }
+  if (!res.ok) return say('note', await res.text());
+  seq.mesh++; seq.model++; clear('mesh'); clear('model'); $('download').setAttribute('aria-disabled', 'true');
+  log.replaceChildren(); say('note', `${file.name} is /app/reference.obj; new chat.`);
+  load('mesh');
+};
+
+$('ask').onsubmit = async e => {
+  e.preventDefault();
+  const message = $('msg').value.trim(), button = e.target.querySelector('button');
+  if (!message || button.disabled) return;
+  $('msg').value = ''; button.disabled = true; say('you', message);
+  try {
+    const res = await fetch('/chat', { method: 'POST', body: JSON.stringify({ message }),
+                                   headers: { 'Content-Type': 'application/json' } });
+    if (!res.ok) return say('note', await res.text());
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    let buffer = '';
+    for (let chunk; !(chunk = await reader.read()).done;) {
+      const events = (buffer += chunk.value).split('\n\n'); buffer = events.pop();
+      for (const raw of events) {
+        const kind = raw.match(/^event: (.*)$/m)[1], text = JSON.parse(raw.match(/^data: (.*)$/m)[1]);
+        if (kind === 'model') load('model'); else if (kind === 'image') show(text); else say(kind, text);
+      }
+    }
+  } catch (err) { say('note', String(err)); }
+  finally { button.disabled = false; }
+};
+$('msg').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('ask').requestSubmit(); } };
+
+await load('mesh'); load('model');
+</script>
+</body>
+</html>

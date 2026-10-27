@@ -1,66 +1,189 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-# NeMo Compass Insights, published round 4
-# Agent: cad-u5 (the round-3 agent under the revised Ethos). Four runs.
+# NeMo Compass Insights, round 4
+# Agent: r4-shapes (kept in round 3). Its 20 train runs, one per task. Rounds 5 and 6 reused these Insights.
 # Raw Compass output; only names and paths are neutralised.
-- name: Fixed mesh reconstruction fails independent design-intent dimensions
-  description: For requests that explicitly require multiple independently editable,
-    design-intent dimensions, the agent delegates modeling to the fixed mesh2pd axial-loft
-    script and validates only the single Params.Length parameter, which stretches
-    all section heights together. The evaluator records `failed-checks=independent-dimensions`
-    and reward 0 even though the agent reports the model as meeting the requirements.
-    Replace or augment this generic reconstruction with part-specific features and
-    separate named dimensions, and test that each parameter changes only its intended
-    feature.
+- name: Self-intersecting loft builds reach evaluation without verified recovery
+  description: 'Two section-loft runs report BOPAlgo SelfIntersect from actual executed
+    K.finish calls and finish with a failed single-valid-solid evaluation. The elliptical
+    lens reports two solids despite isValid=True; the long spoon-like body reports
+    one solid and isValid=True but fails the full BOP check. Later replacement scripts
+    or plans do not establish recovery: no subsequent successful executed build or
+    full-check verifier result is recorded, and the last verifier calls have no captured
+    result. Enforce check(True) as well as solid count, prioritize a verified safe
+    checkpoint within the time budget, and require execution plus saved-file verification
+    of a replacement rather than treating a written script as a repair. The traces
+    do not distinguish an absent final file from an invalid one.'
   evidence:
-  - trace_id: 01a143af-c39b-7112-adb7-2daf386278e0
+  - trace_id: 01a17a4c-2304-7f93-a621-27b786613872
     spans:
-    - span_id: span-584c127c7657e61aeeb5a258c2baa4cb
-    - span_id: span-b1c8f385df78d61e72d4b860ee24323c
-    - span_id: span-f47b9cfeab9019c95e6c6a86122fe1f0
-  - trace_id: 01a143af-c39b-7363-8125-a90848b5b780
+    - span_id: span-20b38220bfc87b7f464ce6b4c0e5961c
+    - span_id: span-a154ed04695c59dfb9c286abebabb012
+    - span_id: span-6f170fad0e67117df8cff49bf50acadb
+    - span_id: span-44653588de283d7953d61b36fd841ab0
+    - span_id: span-3ea127aecf7c86945ffed1c71087927b
+    - span_id: span-eb3abf2845044e9f620d4f144a6fa02f
+    - span_id: span-2d58029a18865ec3303dd2e9a3deb207
+  - trace_id: 01a17a51-0e62-7270-9452-2de11d8c77d7
     spans:
-    - span_id: span-bac0e83b27ba500e409653b617f89264
-    - span_id: span-c3089d5bba284a392660645f99e3da82
-    - span_id: span-ea3b90ee2997069efc2d6cf95b0fc61d
-  - trace_id: 01a143af-c39b-79c3-95ec-f1f9414aa2cd
-    spans:
-    - span_id: span-1a0cea43cda9c158e7ec4f592f9cfb81
-    - span_id: span-e022cf152acd4b4ddd8152286c8cf4ba
-    - span_id: span-1634cefec5659e5180ac03cdcf1f47e0
-  - trace_id: 01a143af-c39b-7ec0-894e-f15a7511d28d
-    spans:
-    - span_id: span-bf0d765b68a44262263020236e1afa6e
-    - span_id: span-796d959c63b672696d29b68f8870bc5c
-    - span_id: span-3bc5b647e0709a929ebb3e68e415ee9b
-  updated_date: &id001 2026-10-16 07:51:21.813249+00:00
-  confidence: high
+    - span_id: span-91df3cc0f76833609e2a5d9e85540707
+    - span_id: span-a6691c6746bde3d1c51999408de12cd4
+    - span_id: span-d272b311a59d8aeba815ad82b85e51a0
+    - span_id: span-d4fec9e20116d80886913d80ac5d8f70
+    - span_id: span-d0046bb794ac291b9f3303d998e93cd4
+    - span_id: span-897cbba6279f7f555db645f3e2d47a2c
+    - span_id: span-b9b6b572dc3123bda595a7b7fa57a29a
+  updated_date: &id001 2026-10-26 23:05:10.968985+00:00
+  confidence: med
   severity: high
-- name: Saved FreeCAD models leave helper objects visible
-  description: 'The saved model violates the requirement that only the finished model
-    be visible on reopen: the script''s own read-back lists Body, Origin001, and Loft04,
-    and a later inspection also exposes origins, axes, planes, and Params. The agent
-    does not repair and re-save visibility state, and some final responses incorrectly
-    claim only Body is visible. Explicitly hide all helper and origin objects, persist
-    the file, then reopen it and assert that the finished Body is the sole visible
-    object.'
+  severity_reason: Both runs fail the saved-file single-valid-solid requirement without
+    a recorded successful repair.
+- name: Saved models pass solidity but fail required mesh fidelity
+  description: The mesh-to-FreeCAD workflow leaves structurally valid saved models
+    whose final saved-file evaluations fail mesh-fidelity and score below 0.9 IoU.
+    Original verifier comparisons confirm the mismatch. In observed recovery attempts,
+    a tapered strip/block becomes a rectangular pad with a volume ratio of 6.00, a
+    ladle keeps its outer body without its cavity at a ratio of 3.23, and a mug keeps
+    an approximate handle despite near-perfect volume agreement. Passing solidity,
+    reopening, or volume checks is being used as a stopping point without recovering
+    the required geometric match. Make fidelity an independent acceptance gate for
+    the final saved file and retain the best verified overlap when a later build fails.
   evidence:
-  - trace_id: 01a143af-c39b-7112-adb7-2daf386278e0
+  - trace_id: 01a17a4c-2377-7231-b81e-71717325543e
     spans:
-    - span_id: span-584c127c7657e61aeeb5a258c2baa4cb
-    - span_id: span-b1c8f385df78d61e72d4b860ee24323c
-  - trace_id: 01a143af-c39b-7363-8125-a90848b5b780
+    - span_id: span-22fda320fab764ba1852b720a68daa06
+    - span_id: span-d6293939d71806c970286ca122104e1b
+    - span_id: span-3a75fb91a1c12c490aa3cdcc7b066018
+    - span_id: span-0422172e341d0b13422ba7219bcc67b1
+    - span_id: span-965efeeb6016f9a907a252f9decdc70e
+  - trace_id: 01a17a4e-ed67-70e2-ba44-979988f78212
     spans:
-    - span_id: span-bac0e83b27ba500e409653b617f89264
-    - span_id: span-c3089d5bba284a392660645f99e3da82
-  - trace_id: 01a143af-c39b-79c3-95ec-f1f9414aa2cd
+    - span_id: span-83ec5ccd21ced3fb1a56844bce5b849c
+    - span_id: span-33aeb1b880f0c30d3c3b9387a635d213
+    - span_id: span-2cc4b0c92498f5a08ae04c8889d5c182
+    - span_id: span-1b54433702f17ca66e05bcade9929841
+    - span_id: span-c015cb0545b46b1b1327df8ae6d6fea9
+  - trace_id: 01a17a4f-0053-77c2-94da-de8833c331b9
     spans:
-    - span_id: span-1a0cea43cda9c158e7ec4f592f9cfb81
-    - span_id: span-e022cf152acd4b4ddd8152286c8cf4ba
-  - trace_id: 01a143af-c39b-7ec0-894e-f15a7511d28d
+    - span_id: span-31c84c9504a858d1d62a7233a79eb77b
+    - span_id: span-09ab2504356f25f72254867c46a0068c
+    - span_id: span-052de43dbbc65f8829ec749895a7af2e
+    - span_id: span-25703c498a584e2712ebb4cb43270163
+  - trace_id: 01a17a50-7a7f-7602-b16f-e2ff5a7c1e2c
     spans:
-    - span_id: span-bf0d765b68a44262263020236e1afa6e
-    - span_id: span-5b417bebc9d6978f2292c87d0c741ca7
+    - span_id: span-41cd028776dc222abbf7874ceed83435
+    - span_id: span-1513d572db5e43fb74ad2f7decd95637
+    - span_id: span-9d5cb829599b7efb6b23bcdf2cdb0c63
+    - span_id: span-ac86f0641a95566e6922e22c42740f19
+  - trace_id: 01a17a51-02d4-7851-90a8-843f5b2531d2
+    spans:
+    - span_id: span-e5483e69215b2ebc7e3c584202e020f9
+    - span_id: span-b9ef57c559579c6f408f1f0cde612b3e
+    - span_id: span-1d088b6070c25538ef6726521814279e
+    - span_id: span-adba8cb083770b319100f85b1c128e18
+  - trace_id: 01a17a55-11c6-7ba1-ac11-306160a85283
+    spans:
+    - span_id: span-ea886a92f8d6bb9b321754553555c415
+    - span_id: span-55a21ce3907165ec69ac422200666767
+    - span_id: span-7fb8f39e83034e2e9fcb291033e243c0
+    - span_id: span-668216a031e550e38ec232dd33f2bac9
   updated_date: *id001
-  confidence: high
+  confidence: med
+  severity: high
+  severity_reason: The submitted files fail the mesh-fidelity check and materially
+    misrepresent the reference geometry.
+- name: Feature completeness is not enforced on the final saved solid
+  description: Saved sketch-based reconstructions pass the single-valid-solid check
+    while their final evaluations fail no-missing-feature. Concrete unrepaired omissions
+    include six mounting holes whose Pocket does not cut the first L-bracket, a side
+    tab/boss identified in the second bracket's measurements and render, and a ladle
+    cavity excluded from the last valid save. Both brackets exceed 0.9 evaluated IoU,
+    so aggregate overlap alone cannot detect these missing features. Track a feature
+    inventory from the section survey and verify that each feature actually changes
+    the final solid before reporting completion; a nominal feature-tree entry is not
+    enough.
+  evidence:
+  - trace_id: 01a17a4c-22ff-76b2-a1ea-0929377497c2
+    spans:
+    - span_id: span-4f6f83882db5d629416341ea25ecd4ff
+    - span_id: span-77b7675a0bba93efb0591ce83e6c6616
+    - span_id: span-a75da7c6dd66371e4cc4441ed329e24b
+    - span_id: span-2121d7566929443ce81ae9d1a78d7b36
+    - span_id: span-9e6445e93c307f41cc46706b65b63059
+  - trace_id: 01a17a50-bf5f-75b3-8408-f8957db1939b
+    spans:
+    - span_id: span-00fe0e00fe2bb996b032c91f0ba4aab5
+    - span_id: span-8b1c853c8876f3a692becd7d5a26105f
+    - span_id: span-81702fbb17976b6d54ce903ecd72e95a
+    - span_id: span-b9b8ef8ffc1e437f865cf8850b4e39da
+    - span_id: span-559d924e6ba4658dafc657a62a26fa84
+  - trace_id: 01a17a4c-2377-7231-b81e-71717325543e
+    spans:
+    - span_id: span-22fda320fab764ba1852b720a68daa06
+    - span_id: span-d6293939d71806c970286ca122104e1b
+    - span_id: span-3a75fb91a1c12c490aa3cdcc7b066018
+    - span_id: span-0422172e341d0b13422ba7219bcc67b1
+  - trace_id: 01a17a4f-0053-77c2-94da-de8833c331b9
+    spans:
+    - span_id: span-31c84c9504a858d1d62a7233a79eb77b
+    - span_id: span-09ab2504356f25f72254867c46a0068c
+    - span_id: span-052de43dbbc65f8829ec749895a7af2e
+    - span_id: span-25703c498a584e2712ebb4cb43270163
+  - trace_id: 01a17a50-7a7f-7602-b16f-e2ff5a7c1e2c
+    spans:
+    - span_id: span-41cd028776dc222abbf7874ceed83435
+    - span_id: span-1513d572db5e43fb74ad2f7decd95637
+    - span_id: span-9d5cb829599b7efb6b23bcdf2cdb0c63
+    - span_id: span-ac86f0641a95566e6922e22c42740f19
+  - trace_id: 01a17a51-02d4-7851-90a8-843f5b2531d2
+    spans:
+    - span_id: span-e5483e69215b2ebc7e3c584202e020f9
+    - span_id: span-b9ef57c559579c6f408f1f0cde612b3e
+    - span_id: span-1d088b6070c25538ef6726521814279e
+    - span_id: span-adba8cb083770b319100f85b1c128e18
+  - trace_id: 01a17a55-11c6-7ba1-ac11-306160a85283
+    spans:
+    - span_id: span-ea886a92f8d6bb9b321754553555c415
+    - span_id: span-55a21ce3907165ec69ac422200666767
+    - span_id: span-7fb8f39e83034e2e9fcb291033e243c0
+    - span_id: span-668216a031e550e38ec232dd33f2bac9
+  updated_date: *id001
+  confidence: med
+  severity: high
+  severity_reason: The delivered solids omit required holes, side features, or cavities,
+    even when overlap is high.
+- name: Named-dimension edits invalidate otherwise valid saved models
+  description: 'The saved-file verifier reopens valid single-solid models but reports
+    invalid geometry after +10% edits to named dimensions: Width in the bracket, CavityHeight
+    in the bossed elliptical shell, HandleCX1 in the mug, and HeadLength or TongueZCenter
+    in the spoon. These failures remain in the latest captured perturbation tests;
+    fully constrained sketches and named spreadsheet aliases do not establish independent,
+    usable rebuilding. Some final reports still assert that all named dimensions keep
+    the model valid. Validate parameter dependencies and supported edit ranges, prevent
+    edits that detach features or invalidate cavities, and report perturbation failures
+    instead of blanket parametric-success claims. This claim excludes zero-volume/bounding-box
+    changes alone, since legitimate position edits can preserve both.'
+  evidence:
+  - trace_id: 01a17a4c-234a-7432-9b86-3045616bcf6b
+    spans:
+    - span_id: span-5552bf918a928654ae19693e1f719563
+    - span_id: span-39b12bb190797b187fb8ddeba4a0a15e
+    - span_id: span-40550c2344f09b644f42a098456db5b4
+  - trace_id: 01a17a4c-22ff-76b2-a1ea-0929377497c2
+    spans:
+    - span_id: span-4f6f83882db5d629416341ea25ecd4ff
+    - span_id: span-2121d7566929443ce81ae9d1a78d7b36
+    - span_id: span-9e6445e93c307f41cc46706b65b63059
+  - trace_id: 01a17a4c-2377-7231-b81e-71717325543e
+    spans:
+    - span_id: span-22fda320fab764ba1852b720a68daa06
+    - span_id: span-0422172e341d0b13422ba7219bcc67b1
+  - trace_id: 01a17a50-7a7f-7602-b16f-e2ff5a7c1e2c
+    spans:
+    - span_id: span-41cd028776dc222abbf7874ceed83435
+    - span_id: span-ac86f0641a95566e6922e22c42740f19
+  updated_date: *id001
+  confidence: med
   severity: med
+  severity_reason: The saved solids open successfully, but tested named-dimension
+    edits produce invalid geometry.

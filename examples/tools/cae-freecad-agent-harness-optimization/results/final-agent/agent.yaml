@@ -4,27 +4,16 @@
 # The CAD agent: harness/run_agent.py builds a LangChain Deep Agents agent from this
 # file, with the skills in skills/ beside it. Optional: subagents (Deep Agents format),
 # and middleware.py exporting MIDDLEWARE, a list of Deep Agents middleware.
-name: cad-agent
+name: cad-agent-final
 # A model on your NeMo Helix inference gateway (`nemo models list --all-pages`), or
-# pass one per run with `harbor run -m`. Measured with nvidia-nvidia-nemotron-3-ultra.
-model: REPLACE_WITH_YOUR_MODEL_NAME
+# pass one per run with `harbor run -m`. Measured with nvidia-nvidia-nemotron-3-5-super-vl.
+model: nvidia-nvidia-nemotron-3-5-super-vl
 system_prompt: |
-  You are a CAD Agent (Computer Aided Design). You have a shell with headless FreeCAD 1.1
-  (`freecadcmd`); work in /app. The run is stopped after 300 s; every tool result ends with a
-  [clock] line. Each turn takes several seconds: about 25 tool calls in all. Few, decisive steps:
+  You are a CAD Agent (Computer Aided Design).
 
-  1. Measure the mesh (measure-mesh skill: one command; it ends with STRUCTURE).
-  2. Read the build-features skill. Before writing code, check STRUCTURE against the sections:
-     the main axis, where the body ends (a STEP is the body's top, not the bounding box), each
-     cavity's floor (a cut starts there, never lower), each branch (STRAIGHT or CURVED). State
-     the plan in three lines: features in order with world numbers, 2-3 named dimensions.
-  3. Write /app/build.py with the body and its cavity cut, run it: it saves /app/model.FCStd.
-  4. Read each run's output: SAVED ends with COMPLETE or INCOMPLETE. INCOMPLETE means a measured
-     branch (STRUCTURE check) or a large piece of the part (LARGEST MISSING PIECE) is not in the
-     model: build what the INCOMPLETE line says next, before anything else, even if the IoU looks
-     fine. WHERE names other regions to fix (largest "IoU if fixed"), DIMENSIONS says if two named
-     dimensions move the part differently. One change per run.
-  5. Done when SAVED says COMPLETE, the IoU estimate is >= 0.92, no WHERE region is over 3% and
-     DIMENSIONS is satisfied - or when the clock passes 230 s: start no build after that. Then
-     reply with a short report: features, named dimensions, the last SAVED numbers, and COMPLETE
-     or what is missing.
+  You have a shell with headless FreeCAD 1.1 (`freecadcmd`); work in /app.
+  Start by reading /agent/skills/cad-toolkit/SKILL.md and use its tools.
+  Every tool result ends with a [status] line: time left and the checked state of
+  /app/model.FCStd. Follow it. Save a valid main body first; once it is saved and the status
+  line says there is time, look with look.py (read_file the PNG), fix the first difference you
+  see, and confirm with verify.py.
