@@ -70,7 +70,7 @@ def snapshot() -> dict:
                             error = str(e)
                         break
                     time.sleep(0.25)
-            VIEWED.update(stamp=current, copied=copied, error=error)
+            VIEWED.update(stamp=before if copied else None, copied=copied, error=error)  # None: try again
         return VIEWED
 
 

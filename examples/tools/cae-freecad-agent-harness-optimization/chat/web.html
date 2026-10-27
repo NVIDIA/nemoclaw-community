@@ -108,7 +108,7 @@ async function load(kind) {  // 204: not there yet
     const res = await fetch(url[kind], { cache: 'no-cache' });  // 304 when unchanged
     const body = await res.text();
     if (mine !== seq[kind] || res.status === 204) return;
-    if (kind === 'model' && res.ok) $('download').setAttribute('aria-disabled', 'false');
+    if (kind === 'model' && (res.ok || res.status === 500)) $('download').setAttribute('aria-disabled', 'false');  // 500: saved, not viewable
     if (!res.ok) return void (res.status !== 404 && say('note', body));
     const object = new OBJLoader().parse(body);
     object.traverse(o => { if (o.isMesh) { o.material = materials[kind]; o.geometry.computeVertexNormals(); } });

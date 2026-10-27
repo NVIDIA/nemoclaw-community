@@ -5,6 +5,7 @@ eval builds it, one task per message in its own process, and a mesh turned into 
 reference."""
 import multiprocessing
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -159,8 +160,14 @@ def to_obj(src: Path, dst: Path) -> None:
 
 
 def ingest(mesh: Path) -> None:
-    """A new mesh starts a new job: it becomes /app/reference.obj and an earlier model is set
-    aside as model.previous.FCStd. The mesh itself is left as it is."""
-    to_obj(mesh, APP / 'reference.obj')
-    if MODEL.exists():
-        MODEL.replace(APP / 'model.previous.FCStd')
+    """A new mesh starts a new job in an empty /app, as each eval run does: the earlier job's
+    files move to /app/.jobs/<time>/, and the mesh becomes /app/reference.obj (the mesh itself
+    is left as it is)."""
+    to_obj(mesh, Path('/tmp/reference.obj'))
+    old = [p for p in APP.iterdir() if p.name != '.jobs']
+    if old:
+        keep = APP / '.jobs' / time.strftime('%Y%m%d-%H%M%S')
+        keep.mkdir(parents=True)
+        for p in old:
+            p.replace(keep / p.name)
+    shutil.move('/tmp/reference.obj', APP / 'reference.obj')  # /tmp and /app are different file systems

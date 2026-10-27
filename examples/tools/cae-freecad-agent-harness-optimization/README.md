@@ -23,7 +23,7 @@ the end, the final agent is measured once on a test set.
 
 The agent runs on **Nemotron 3.5 Super VL**, a model that reads images, so it can render
 its own model beside the mesh and look at the difference. From a two-sentence prompt
-that never saved a model, nine rounds built an agent that passes all nine checks on
+that saved no model on train or val, nine rounds built an agent that passes all nine checks on
 **11 of 14** validation runs, and **7 of 35** test runs against 0 for the base agent
 ([Results](#results)). The test set also shows where it stops: it builds valid, editable
 models of new sizes of the parts it was improved on, but not yet of a new family of
@@ -654,7 +654,8 @@ OK
 
 **This verifies:** the verifier's IoU arithmetic, how `publish.py` reads trace IDs and
 grades, and that all 34 tasks' verifier copies and check lists agree and each task's
-reference face count matches its reference solution, without credentials, services or Docker.
+reference face count matches the one recorded from its reference solution in
+`evals/manifest.json`, without credentials, services or Docker.
 
 **This does not verify:** the live path. For that, run the controls in
 [evals/](evals/README.md#rerun) (NOP 0 and Oracle 1 on every task, every negative 0), then

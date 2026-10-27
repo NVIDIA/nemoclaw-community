@@ -110,6 +110,15 @@
        "no-missing-feature"
       ],
       "model": "a real agent run that passed eight checks without its branch (IoU 0.918, largest missing piece 4.4% of the volume)"
+     },
+     "nolast": {
+      "reward": 0,
+      "fails": [
+       "mesh-fidelity",
+       "no-missing-feature",
+       "independent-dimensions"
+      ],
+      "model": "the solution with its last additive feature suppressed"
      }
     }
    }
@@ -161,6 +170,13 @@
        "independent-dimensions"
       ],
       "model": "a real agent run: 4 ruled lofts through 27 B-spline sections, every height driven by one Params.Length, IoU 0.943, 62 faces"
+     },
+     "nolast": {
+      "reward": 0,
+      "fails": [
+       "no-missing-feature"
+      ],
+      "model": "the solution with its last additive feature suppressed"
      }
     }
    }

@@ -15,7 +15,9 @@ chat/chat.sh [MESH]     # open the printed http://localhost:8765; Ctrl-C stops i
 
 The agent runs as the eval builds it ([harness/agent.py](../harness/agent.py)): inside the
 `cad-env` image, the agent folder mounted read-only at `/agent`, a work folder as `/app`, the
-model through the Helix gateway set in `.env` (`CAD_HELIX_URL`, `NHX_WORKSPACE`). Each message
+model through the Helix gateway (`CAD_HELIX_URL`, `NHX_WORKSPACE` from your shell, as for the
+eval; `.env` is read too). The agent is the eval's: its middleware pushes every message
+towards a saved, valid model, so it suits rebuild requests better than open questions. Each message
 is one task with its own time limit, run in its own process group: stopping it stops
 everything it started. The conversation carries over as text (your messages and the agent's
 answers). A mesh (OBJ or STL), given here or uploaded in the page, becomes
@@ -24,8 +26,8 @@ answers). A mesh (OBJ or STL), given here or uploaded in the page, becomes
 In the page: upload a mesh, chat (e.g. "rebuild this mesh as an editable model") and watch the
 agent's steps stream in, with each render it looks at; compare the saved model (orange) with
 the mesh (blue, translucent), overlaid or side by side, and download `model.FCStd`. Drag the chat's
-left edge to widen it. A new mesh starts a new chat; an earlier model is kept as
-`model.previous.FCStd`. Closing the tab stops the task. The page is for this machine only: it
+left edge to widen it. A new mesh starts a new chat in an empty work folder; the earlier
+job's files move to `.jobs/<time>/` in it. Closing the tab stops the task. The page is for this machine only: it
 answers only requests addressed to `localhost`, from its own page.
 
 | Variable | Meaning |
