@@ -7,6 +7,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CAD Agent Chat</title>
+<link rel="icon" href="data:,">
 <style>
   :root { --bg: #f6f6f4; --panel: #fff; --ink: #1d1d1b; --muted: #77776f; --line: #e2e2dc;
           --mesh: #3b82f6; --model: #e8730c; --call: #0e7490; }
@@ -101,12 +102,12 @@ function clear(kind) {
   scene.remove(shown[kind]); shown[kind].traverse(o => o.geometry?.dispose()); delete shown[kind];
 }
 
-async function load(kind) {  // 404 means not there yet
+async function load(kind) {  // 204: not there yet
   const mine = ++seq[kind];
   try {
     const res = await fetch(url[kind], { cache: 'no-cache' });  // 304 when unchanged
     const body = await res.text();
-    if (mine !== seq[kind]) return;
+    if (mine !== seq[kind] || res.status === 204) return;
     if (kind === 'model' && res.ok) $('download').setAttribute('aria-disabled', 'false');
     if (!res.ok) return void (res.status !== 404 && say('note', body));
     const object = new OBJLoader().parse(body);

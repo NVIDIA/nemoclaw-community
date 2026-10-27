@@ -50,12 +50,12 @@ def steps(message):
     """The chat's view of one message as (kind, text): a line per tool call ('call'), the last
     lines of each tool result ('result'), the agent's text in full ('text'), and each image
     the agent reads, as the model got it ('image', a data URL)."""
-    if message.type == 'ai':
+    if message.type == 'ai':  # its text first: the agent says what it is about to do
+        if isinstance(message.content, str) and message.content.strip():
+            yield 'text', message.content.strip()
         for call in getattr(message, 'tool_calls', None) or []:
             args = call.get('args') or {}
             yield 'call', f"> {call['name']} {str(args.get('command') or args)[:300]}"
-        if isinstance(message.content, str) and message.content.strip():
-            yield 'text', message.content.strip()
     elif message.type == 'tool':
         blocks = message.content if isinstance(message.content, list) else []
         images = [b for b in blocks if isinstance(b, dict) and b.get('type') == 'image' and b.get('base64')]

@@ -127,6 +127,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(500, done['error'].encode())
             else:
                 self.send_file(VIEW)
+        elif path in ('/reference.obj', '/model.obj', '/model.FCStd'):  # not there yet: no error in the page
+            self.send_response(204)
+            self.end_headers()
         else:
             self.reply(404, b'not found')
 
