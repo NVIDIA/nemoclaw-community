@@ -567,7 +567,8 @@ loop/eval.sh experiments/<run>/round-0/candidates/<name>/agent experiments/<run>
 python3 loop/summary.py experiments/<run>/round-0/candidates/<name>/runs/val experiments/<run>/round-0/runs/val
 ```
 
-`summary.py` prints KEEP or DROP by the [keep rule](#how-the-agent-got-there). Copy the winner over
+`summary.py` prints KEEP or DROP by the [keep rule](#how-the-agent-got-there), or no decision
+while VOID runs leave the two jobs with different runs (re-run them first). Copy the winner over
 the round's agent, mark the Insights it fixed as resolved in Studio, and start the next
 round at Step 1.
 

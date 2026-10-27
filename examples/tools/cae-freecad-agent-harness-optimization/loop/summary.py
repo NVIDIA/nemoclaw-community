@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """loop/summary.py JOB [BASE_JOB]: one agent's runs on one split, and, with BASE_JOB, the keep rule
 of the cad-experimenter skill (generated tasks): more runs passed, or as many runs and more
-checks, with no check passing fewer times. VOID runs (publish.void_reason) are left out."""
+checks, with no check passing fewer times. VOID runs (publish.void_reason) are left out; with
+BASE_JOB, both jobs must then hold the same runs of the same tasks, or there is no decision."""
 import json, sys
 from collections import Counter
 from pathlib import Path
@@ -42,9 +43,12 @@ def main():
     s = stats(runs) | {'void': void}
     print(json.dumps(s, indent=1))
     if len(sys.argv) > 2:
-        b = stats(load(sys.argv[2])[0])
-        if s['runs'] != b['runs']:  # counts are compared, so both sides need the same runs
-            print(f"WARNING: {s['runs']} runs against {b['runs']}: re-run the VOID runs first", file=sys.stderr)
+        base = load(sys.argv[2])[0]
+        ours, theirs = Counter(g['task'] for g in runs), Counter(g['task'] for g in base)
+        if ours != theirs:  # counts are compared, so both sides need the same runs of the same tasks
+            sys.exit(f'NO DECISION: re-run the VOID runs first; extra runs here {dict(ours - theirs)}, '
+                     f'in the base {dict(theirs - ours)}')
+        b = stats(base)
         worse = [c for c in b['per_check'] if s['per_check'].get(c, 0) < b['per_check'][c]]
         better = s['passed'] > b['passed'] or (s['passed'] == b['passed'] and s['checks'] > b['checks'])
         print('KEEP' if better and not worse else 'DROP', f"passed {s['passed']} vs {b['passed']}, checks {s['checks']} vs {b['checks']}",
