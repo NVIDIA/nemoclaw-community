@@ -75,14 +75,14 @@ class GradeTest(unittest.TestCase):
             'results': 'single-valid-solid\tPASS\nsingle-visible-object\tFAIL\n',
             'metrics.json': '{"iou": 0.9321, "features": 3, "faces": 7}'})
         self.assertEqual(grade(trial), {'reward': 0.0, 'iou': 0.9321, 'checks': 1, 'of': 2,
-                                        'failed': ['single-visible-object'],
+                                        'passed': ['single-valid-solid'], 'failed': ['single-visible-object'],
                                         'complexity': {'features': 3, 'faces': 7}})
 
     def test_no_model(self):
         # No model saved: the verifier writes only the reward and failing rows.
         trial = self.trial({'reward.txt': '0\n', 'results': 'mesh-fidelity\tFAIL\n'})
         self.assertEqual(grade(trial), {'reward': 0.0, 'iou': None, 'checks': 0, 'of': 1,
-                                        'failed': ['mesh-fidelity'], 'complexity': {}})
+                                        'passed': [], 'failed': ['mesh-fidelity'], 'complexity': {}})
 
 
 if __name__ == '__main__':

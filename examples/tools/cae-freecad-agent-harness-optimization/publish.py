@@ -37,8 +37,8 @@ def api(service: str, path: str, body: dict | None = None) -> dict:
 
 
 def grade(trial: Path) -> dict:
-    """The verifier's reward, IoU, checks passed of total, failed checks and complexity
-    counts for one trial."""
+    """The verifier's reward, IoU, checks passed of total, the passed and failed checks and
+    complexity counts for one trial."""
     verifier = trial / 'verifier'
     rows = (verifier / 'results').read_text().splitlines() if (verifier / 'results').exists() else []
     stats = verifier / 'metrics.json'
@@ -46,6 +46,7 @@ def grade(trial: Path) -> dict:
     return {'reward': float((verifier / 'reward.txt').read_text()),
             'iou': metrics.pop('iou', None),  # not measured: no valid solid
             'checks': sum(row.endswith('\tPASS') for row in rows), 'of': len(rows),
+            'passed': [row.split('\t')[0] for row in rows if row.endswith('\tPASS')],
             'failed': [row.split('\t')[0] for row in rows if row.endswith('\tFAIL')],
             'complexity': metrics}
 

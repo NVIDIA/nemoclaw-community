@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Harbor agent: runs the CAD agent in each task's container, next to headless FreeCAD.
 
-    PYTHONPATH=harness harbor run -p evals -a cad_agent:CadAgent -m MODEL -n 4 [--ak agent_dir=DIR]
+    PYTHONPATH=harness harbor run -p evals/<split> -a cad_agent:CadAgent -m MODEL -n 4 [--ak agent_dir=DIR]
 """
 
 import shlex
@@ -37,6 +37,7 @@ class CadAgent(BaseInstalledAgent):
     async def run(self, instruction: str, environment, context) -> None:
         await environment.upload_dir(self.agent_dir, '/agent')
         await environment.upload_file(HERE / 'run_agent.py', '/installed-agent/run_agent.py')
+        await environment.upload_file(HERE / 'agent.py', '/installed-agent/agent.py')
         # pipefail: the runner's exit code, not tee's, so a crash is not hidden.
         await self.exec_as_agent(
             environment, 'set -o pipefail; python /installed-agent/run_agent.py /agent '
