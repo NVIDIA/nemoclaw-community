@@ -10,7 +10,7 @@ if [ -f /app/model.FCStd ]; then
   gunzip -c /tests/reference.obj.gz > /tmp/reference.obj
   # A model whose rebuild hangs is stopped well inside Harbor's verifier timeout; checks
   # with no row then fail.
-  MODEL=/app/model.FCStd MESH=/tmp/reference.obj REF_FACES=$REF_FACES timeout -k 10 720 \
+  MODEL=/app/model.FCStd MESH=/tmp/reference.obj timeout -k 10 720 \
     freecadcmd /grader/check_model.py > /logs/verifier/check.log 2>&1
 fi
 for id in single-valid-solid native-feature-tree named-dimension-drives-geometry independent-dimensions mesh-fidelity no-missing-feature single-visible-object recomputes-after-reopen compact-model; do
