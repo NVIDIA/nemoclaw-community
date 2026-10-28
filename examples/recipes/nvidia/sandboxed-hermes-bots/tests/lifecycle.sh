@@ -60,6 +60,26 @@ check "forward pattern matches exact sandbox" \
 check "forward pattern rejects prefix-overlap sandbox" \
   "$([[ 'openshell forward service --target-port 18100 --local 127.0.0.1:18100 team.foo[1]bar' =~ $forward_pattern ]] && echo yes || echo no)" no
 
+# OpenShell caps sandbox names at 19 chars and the sandbox is prefix + name, so
+# the rule applies to the combined string. SANDBOX_PREFIX here is "test-" (5).
+check "name: 14 chars with prefix ok" "$(valid_name nemoclaw-abcde && echo ok || echo refused)" ok
+check "name: 15 chars with prefix refused" "$(valid_name nemoclaw-abcdef && echo ok || echo refused)" refused
+check "name: doubled hyphen refused" "$(valid_name ab--cd && echo ok || echo refused)" refused
+check "name: trailing hyphen refused" "$(valid_name abc- && echo ok || echo refused)" refused
+check "name: uppercase refused" "$(valid_name Abc && echo ok || echo refused)" refused
+check "name: rule text names the limit" "$(name_rule nemoclaw-abcdef | grep -c '1-19 chars')" 1
+( SANDBOX_PREFIX=""; check "name: nemoclaw-researcher (19) ok without prefix" "$(valid_name nemoclaw-researcher && echo ok || echo refused)" ok )
+check "rm accepts an over-long name so stale state can be removed" "$(valid_name_loose nemoclaw-zz-lifecycle && echo ok || echo refused)" ok
+check "rm still refuses a path-unsafe name" "$(valid_name_loose '../x' && echo ok || echo refused)" refused
+
+# `swarm down --all` assigns bot_list's output under the entrypoint's
+# `set -euo pipefail`. With no custom soul files, bot_list must still succeed,
+# or the teardown exits 1 with no output and removes nothing.
+bl_dir=$(mktemp -d); mkdir -p "$bl_dir/keys" "$bl_dir/souls"; : > "$bl_dir/keys/nemoclaw-a.key"
+check "bot_list succeeds under errexit with no custom souls" \
+  "$( (set -euo pipefail; SWARM_STATE="$bl_dir"; s=$(bot_list | tr '\n' ' '); echo "ok:$s") 2>/dev/null )" "ok:nemoclaw-a "
+rm -rf "$bl_dir"
+
 # Partial state and custom souls are part of inventory, while configured bots
 # remain first and are de-duplicated for `swarm up`.
 printf 'key\n' > "$(bot_key_file base-a)"
@@ -252,8 +272,22 @@ if (mesh_sync >/dev/null 2>&1); then mesh_result=mutated; else mesh_result=refus
 check "foreign mesh collision is refused" "$mesh_result" refused
 check "mesh preflight writes nothing before refusal" "$([[ -e "$MUTATIONS" ]] && echo yes || echo no)" no
 
+# `openshell sandbox exec` reads stdin. The ownership check inside mesh_sync's
+# loop runs it, so the loop must not read the bot list from stdin.
+LINKS="$TMP/links"
+bot_list() { printf 'alpha\nbeta\n'; }
+bot_require_owned() { timeout 2 cat >/dev/null 2>&1; return 0; }
+printf key > "$TMP/alpha.key"; printf key > "$TMP/beta.key"
+_mesh_install_plugin() { :; }
+_mesh_link() { printf '%s>%s\n' "$1" "$2" >> "$LINKS"; }
+mesh_peers_of() { :; }
+bot_start() { :; }
+bot_wait_api() { :; }
+(mesh_sync >/dev/null 2>&1 < /dev/null)
+check "mesh links every bot when the ownership check reads stdin" "$(sort "$LINKS" 2>/dev/null | tr '\n' ' ')" "alpha>beta beta>alpha "
+
 # Restore real helpers for stale teardown and profile-hook cleanup tests.
-unset -f bot_list sandbox_phase bot_require_owned bot_key_file bot_port _mesh_install_plugin
+unset -f bot_list sandbox_phase bot_require_owned bot_key_file bot_port _mesh_install_plugin _mesh_link mesh_peers_of bot_start bot_wait_api
 source "$SWARM_ROOT/lib/common.sh"
 source "$SWARM_ROOT/lib/sandbox.sh"
 source "$SWARM_ROOT/lib/bot.sh"
@@ -277,14 +311,20 @@ dir="$HOME/.hermes/profiles/$name"
 mkdir -p "$dir/plugins/dropbox"
 printf 'KEEP=1\nSWARM_VSS_SANDBOX=test-vss\n' > "$dir/.env"
 GATEWAY_EVENTS="$TMP/gateway-events"
-host_profile_state() { printf 'running\n'; }
+# One host gateway (Hermes 0.21.4+): the cleanup cycles it once, not a per-profile gateway.
+host_gateway_running() { return 0; }
 host_gateway_stop() { printf 'stop\n' >> "$GATEWAY_EVENTS"; }
-host_gateway_start() { printf 'start\n' >> "$GATEWAY_EVENTS"; }
+host_gateway_ensure() { printf 'start\n' >> "$GATEWAY_EVENTS"; }
 hermes() { return 0; }
 host_dropbox_remove "$name" >/dev/null
 check "legacy dropbox plugin is removed" "$([[ -e "$dir/plugins/dropbox" ]] && echo yes || echo no)" no
 check "legacy dropbox env is removed" "$(grep -c '^SWARM_VSS_SANDBOX=' "$dir/.env" || true)" 0
-check "loaded host gateway is restarted after cleanup" "$(tr '\n' ' ' < "$GATEWAY_EVENTS")" "stop start "
+check "loaded host gateway is cycled once after cleanup" "$(tr '\n' ' ' < "$GATEWAY_EVENTS")" "stop start "
+# No file to touch: cleanup must not restart a gateway that is not running.
+: > "$GATEWAY_EVENTS"; mkdir -p "$dir/plugins/dropbox"
+host_gateway_running() { return 1; }
+host_dropbox_remove "$name" >/dev/null
+check "stopped host gateway is left alone after cleanup" "$(tr '\n' ' ' < "$GATEWAY_EVENTS")" ""
 
 # The live e2e suite must never invoke commands that create, delete, or
 # reconfigure the operator's fleet.
