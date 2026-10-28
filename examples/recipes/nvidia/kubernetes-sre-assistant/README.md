@@ -22,7 +22,7 @@ gateway; this recipe adds the reviewed `kubernetes-sre` skill, a bundled
 OpenShift client, a policy-bounded HTTPS proxy in front of the cluster API, and
 the RBAC that proxy uses. In the default `safe` mode the assistant can read
 common non-secret resources cluster-wide and scale Deployments and
-StatefulSets; it can never read Secrets, change RBAC, exec into Pods, or delete
+StatefulSets; it cannot read Secret contents, change RBAC, exec into Pods, or delete
 anything. Broader no-delete access and the optional `openshift-llm-deploy`
 model deployment skill are separate, acknowledged opt-ins. The chart consumes
 the prebuilt managed image and never runs the NemoClaw CLI or bootstrap, hence
@@ -74,7 +74,7 @@ seed Job ── sre plugin: verify skill bundle, stage oc/kubectl, write kubecon
 | You will get | Everything the Kubernetes Deployer provides (gateway, sandboxed Hermes, dashboard, API, terminal), plus the `kubernetes-sre` skill, a bundled OpenShift client, an authenticated cluster API proxy with `safe` or `broad-no-delete` RBAC, optional model deployment, metrics, and exact-resource model deletion, and an opt-in auto-heal controller that detects failure patterns and executes only allow-listed, risk-tiered remediations. |
 | Runs on | Kubernetes 1.33+ or OpenShift 4.20+ with an Agent Sandbox controller and a ReadWriteOnce StorageClass. |
 | Requires | Helm 3.14+, a clone of this repository (the deployer is a `file://` sibling dependency), privileged sandbox admission, a pre-created model API-key Secret, and the deployer's issuer-discovery decision. |
-| Verified on | OpenShift 4.22.6 on amd64 with Kubernetes 1.35.5, Agent Sandbox controller v0.4.5, and OpenShell 0.0.116 (recipe 0.1.0 on deployer 0.4.0, safe mode, 2026-09-04). Also on a single-node kubeadm cluster, Kubernetes 1.36.2 on amd64 with Ubuntu 26.04 LTS and containerd 2.3.1, with the auto-heal controller in `assisted` mode (2026-09-11). |
+| Verified on | OpenShift 4.22.6 on amd64 with Kubernetes 1.35.5, Agent Sandbox controller v0.4.5, and OpenShell 0.0.116 (recipe 0.1.0 on deployer 0.4.0, safe mode, 2026-09-04). Also on a single-node kubeadm cluster, Kubernetes 1.36.2 on amd64 with Ubuntu 26.04 LTS and containerd 2.3.1, with the auto-heal controller in `assisted` mode (2026-09-11). Both re-verified on 2026-09-16 with OpenShift Client `4.20.38` staged through a re-seed. |
 | Evidence level | Live end-to-end for OpenShift safe mode: seed plugin log, skill and client mounts inside the sandbox, an authenticated read through the proxy, a denied DELETE, and a Hermes answer to a cluster question. Live on standard Kubernetes for install and for the auto-heal loop, including one executed rolling restart that resolved a stale-configuration crash loop and one correct escalation of an unfixable one. Local/static for `broad-no-delete`, model deployment, metrics, and deletion. |
 | Support and maturity | Experimental with best-effort community support. See the repository [support policy](../../../../SUPPORT.md). |
 | External access, data, and actions | Everything the deployer does, plus: downloads the checksum-pinned OpenShift client archive; creates a ClusterRole and ClusterRoleBinding for the proxy identity; sends cluster resource data returned through the proxy to the configured model endpoint. Safe mode can scale Deployments and StatefulSets. Opt-ins can create and patch workloads, read monitoring data, or delete allowlisted model resources. |
@@ -86,7 +86,7 @@ seed Job ── sre plugin: verify skill bundle, stage oc/kubectl, write kubecon
 - Kubernetes Deployer chart `0.4.0` (sibling `file://` dependency): NemoClaw
   `v0.0.117` managed Hermes `0.19.0` image and OpenShell `0.0.116`, all as
   immutable digests; see its README for the full list
-- OpenShift Client: `4.20.28`; official amd64 and arm64 archives are selected
+- OpenShift Client: `4.20.38`; official amd64 and arm64 archives are selected
   by node architecture and verified against pinned SHA-256 checksums
 - Helper image: immutable multi-architecture Python digest for the proxies and
   the client stager; the recipe builds no image
@@ -94,6 +94,23 @@ seed Job ── sre plugin: verify skill bundle, stage oc/kubectl, write kubecon
   skill trees, split into size-bounded ConfigMap chunks; its digest is pinned
   in `values.yaml` (`global.sre.bundle.sha256`) and joins the Sandbox
   configuration identity
+
+Changing `global.sre.cli.version` only restages the binary when the seed runs
+again. The sandbox keeps its old mount until it is recreated. To change the
+client version:
+
+1. Stop the release's sandbox with `deployer.lifecycle.sandbox.desiredState=absent`
+   and `deployer.lifecycle.sandbox.dangerousAcknowledgement=I_ACKNOWLEDGE_SANDBOX_DELETE`,
+   as shown in [Teardown](#teardown). Do not uninstall the release. Deleting the
+   sandbox ends its active Hermes sessions; wait until it is absent.
+2. Upgrade with the matching client version, archive URLs, and checksums. Set
+   `deployer.lifecycle.seed.runOnUpgrade=true` and
+   `deployer.lifecycle.seed.dangerousAcknowledgement=I_ACKNOWLEDGE_SANDBOX_STOPPED`.
+   Set `deployer.lifecycle.sandbox.desiredState=present` to recreate the sandbox
+   after the seed completes.
+3. After the upgrade, set `deployer.lifecycle.seed.runOnUpgrade=false` on later
+   upgrades unless another reseed is required. Confirm the client version inside
+   the recreated sandbox.
 
 For a cluster outside the documented client-version skew, override
 `global.sre.cli.version` plus both architecture URLs and checksums together
@@ -133,6 +150,23 @@ helm upgrade --install sre . \
   --wait --timeout 20m
 ```
 
+For a `WaitForFirstConsumer` StorageClass such as native Kubernetes
+`local-path`, omit `--wait` from these commands. The post-install preparation
+Job must first mount and bind the NemoClaw home PVC; waiting for that PVC before
+running hooks creates a wait cycle. On Helm 4, explicitly use
+`--wait=hookOnly`. The bootstrap hook waits for the gateway and Sandbox; verify
+the resulting Pods and Sandbox after installation. On Helm 4.2.x, avoid the
+default watcher strategy around hook cleanup; use `--wait=legacy` for classes
+that bind immediately.
+
+On a shared native Kubernetes node, other workloads using UID 1000 can exhaust
+NemoClaw's per-user process limit before the agent starts. Where Kubernetes,
+the container runtime, and storage support user namespaces, set
+`deployer.openshell.server.enableUserNamespaces=true` to isolate the sandbox's
+host identity. This preserves the managed image's process limit; it does not
+enable the OpenShift profile. Recreate an existing Sandbox through the deployer
+lifecycle after changing this setting.
+
 Keep the release name at 40 characters or fewer and free of `api`, `key`,
 `token`, `secret`, `password`, and `credential` segments; the chart derives
 every resource name from it and NemoClaw rejects such segments inside the
@@ -162,7 +196,7 @@ non-secret resources cluster-wide (Namespaces, Nodes, Pods and logs, Services,
 Events, ConfigMaps, PVCs, workloads, Jobs, HPAs, Ingresses, Routes, KServe and
 NIM resources, metrics) and write access only to the `/scale` subresource of
 Deployments and StatefulSets. The proxy admits only `GET` and `PATCH`, and
-additionally rejects Secret, ServiceAccount-token, exec, attach, port-forward,
+additionally rejects Secret contents, ServiceAccount-token, exec, attach, port-forward,
 pod-proxy, and node-proxy paths regardless of RBAC.
 
 Hermes authenticates to the proxy with a random chart-managed bearer token
@@ -201,6 +235,41 @@ nor Hermes reads, copies, changes, or deletes that Secret, and the one-time
 downloader receives the key only through `secretKeyRef` with no mounted
 ServiceAccount token.
 
+Preflight checks the configured Secret's existence through the trusted API
+proxy. Only a canonical GET of that exact namespace/name is accepted; the
+proxy requests Kubernetes metadata and returns a constructed name/namespace
+response without reading or forwarding the upstream body. Redirects are
+rejected before following their target or reading their body. Secret list/watch,
+other names, query parameters and writes remain blocked. A namespaced Role
+grants the proxy identity `get` on the configured Secret; the sandbox never
+receives that identity. This check does not validate the key or HF access:
+the download Job's `secretKeyRef` and download result validate those.
+The reference is optional by default (`hfTokenSecretRef.optional=true`): if the
+Secret or key is absent, Kubernetes starts the downloader without `HF_TOKEN`
+and it attempts an anonymous public-model download. Set `optional=false` for
+an operator policy that requires the Secret before any download. Access-denied
+or gated-model errors ask the operator to populate the referenced Secret and
+accept the model's terms, then confirm a retry. Never paste credentials into
+agent chat. Restricted/private planning metadata may also require approved
+operator inputs; the token is never exposed to the planning scripts.
+
+A failed download Job remains for 600 seconds after termination so its logs
+can be inspected. Updating the Secret does not restart that Job. Until TTL
+cleanup removes it, a confirmed retry returns
+`model-download-retry-awaiting-cleanup` with a pending result rather than
+replaying the previous authentication error. Wait for cleanup, then confirm
+the retry; the agent receives no additional deletion permission.
+
+The chart-owned, read-only `hf-token-intake.yaml` supplies the Secret name/key
+to both preflight and the deployment wrapper. The wrapper rejects another
+Secret name or namespace; only the downloader receives the token. These checks
+constrain this skill's deployment flow. They do not prevent another authorized
+workload in the namespace from mounting the same Secret. Kubernetes RBAC
+cannot restrict Secret mounts by workload; use namespace isolation and
+admission controls when that stronger boundary is required. The existing
+`broad-no-delete` proxy identity retains its wider RBAC permissions, so proxy
+enforcement remains the sandbox's boundary.
+
 ```yaml
 global:
   sre:
@@ -213,6 +282,7 @@ global:
       hfTokenSecretRef:
         name: hf-token
         key: HF_TOKEN
+        optional: true
 ```
 
 On OpenShift, a Dynamo workload may require `anyuid`. The skill reports the
@@ -266,7 +336,7 @@ allow-listed and tiered:
 | --- | --- | --- |
 | SAFE | restart pod, rollout restart, delete evicted pods, notify only | executed automatically |
 | MEDIUM | rollout undo, scale, bump memory limit, force delete pod, cordon, uncordon | only with an approval annotation on that workload |
-| NEVER_AUTO | drain, approve CSR, fix image, probe, storage or config, grant RBAC, control-plane work | always escalated to a human |
+| NEVER_AUTO | drain, approve CSR, fix image, probe, generic storage or config repair, grant RBAC, control-plane work | always escalated to a human |
 
 Namespace scope, an opt-out label, flap detection, a cooldown, and per-cycle
 and per-hour budgets apply on top. Policy mode is `observe`, `safe` or
@@ -296,6 +366,62 @@ kubectl -n nemoclaw-sre-assistant logs deploy/<release>-autoheal -f
 Every decision is recorded in the release's memory ConfigMap, which also drives
 the learning that promotes or demotes an action for a recurring fingerprint.
 
+### PVC expansion and manual KubeVirt guest follow-up
+
+The separate storage controller is disabled by default. When enabled, its
+default is recommendation mode: 85% usage sustained for 300 seconds recommends
+15% growth. Automatic mode requires an explicit PVC target, opt-in label,
+allowlisted expansion-enabled StorageClass, quota and safety checks, and global
+remediation policy approval. This narrow PVC-expansion exception does not permit
+generic storage repair or guest command execution.
+
+Each automatic expansion reserves its global action budget in persistent
+memory before submitting the PVC patch. A timeout or crash retains that
+reservation until the rolling hourly window expires, including across other
+PVCs and agent restarts. Successful submission is counted once. Unavailable
+or unreadable incident memory blocks new automatic actions rather than
+resetting the budget. File memory is flushed before replacement. Automatic
+storage mode requires a single watch replica or CronJob concurrency `Forbid`;
+the PVC UID/resourceVersion guard and operation annotation still apply.
+
+For KubeVirt, the controller observes the mapped guest filesystem rather than
+the host disk image. After verified PVC expansion it emails the admin with the
+namespace, exact VM/PVC, original/requested/capacity sizes, mapped device,
+filesystem and mount, and human follow-up. The admin confirms a usable backup
+or snapshot and shares an approved procedure with the VM owner. Only current,
+simple ext4/XFS partition mappings receive conditional command examples;
+unknown, LVM, encrypted or unsupported layouts require manual inspection.
+Failed or unverified PVC expansion never receives guest-resize commands.
+Storage emails have no JSON attachment.
+
+`agentConfig.storage.namespaces` can scope storage monitoring independently of
+general workload detection. It accepts exact namespace names only and still
+honors the global namespace policy. An empty list inherits
+`agentConfig.scope.include_namespaces`; storage never silently monitors all
+namespaces. Recommendation mode cannot resize or delete PVCs.
+
+High/Critical workload escalations include up to the last 50 collected application
+log lines inline, credential-redacted and capped at 12,000 characters. If logs
+are unavailable, the email states that explicitly. The message includes the
+attempt count, action result, failed verification, and read-only next checks;
+there is no JSON dump or attachment. Only policy-eligible Deployment restarts
+may repeat, up to three attempts with the configured retry delay. Safety-denied
+or nonrepeatable actions do not receive three destructive retries.
+
+See [application logs in escalation emails](docs/application-log-email.md) for
+the Pod-log HTTP negotiation fix, required role-based access control (RBAC),
+and checks that distinguish log collection, SMTP acceptance, and inbox delivery.
+
+The agent never uses guest SSH, executes guest commands, patches DataVolumes,
+or stops/reboots VMs. An OpenShift platform flag does not enable guest writes.
+Monitoring continues after manual work, but untimestamped guest-agent data does
+not certify recovery. Further growth stays locked until the admin verifies
+recovery and reconciles the recorded operation; restart or email retry cannot
+trigger another resize. Never clear the lock while CSI resize is outstanding.
+
+See the [storage implementation ledger](docs/2026-10-05-storage-autoheal-plan.md)
+for scoped configuration, recovery checks and cluster validation boundaries.
+
 The controller reloads file-backed Kubernetes API tokens before each request,
 so projected ServiceAccount token rotation does not require a restart. If the
 file cannot be read or is empty, the request fails without reusing an old token.
@@ -315,6 +441,33 @@ honoured only when it belongs to the failing workload, so text inside a
 container's logs cannot redirect a restart to another pod.
 
 ## Skill bundle and seeding
+
+Hermes integrations must preserve their policy-managed proxy and CA settings
+when invoking code tools. Configure `terminal.env_passthrough` with the exact
+operational proxy/CA variable names (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`,
+`NO_PROXY`, their lowercase equivalents, `SSL_CERT_FILE`, `SSL_CERT_DIR`,
+`REQUESTS_CA_BUNDLE`, and `CURL_CA_BUNDLE`), never credential wildcards or
+`HF_TOKEN`. Ensure terminal shell initialization retains `/chart-bin` on PATH.
+These are harness settings, not additional OpenShell network permissions.
+Use installed scripts through the terminal tool instead of ad-hoc subprocess
+networking, and retain final model deployment confirmation.
+
+The model skill includes `scripts/plan-hf-gpus.py` for read-only HF revision,
+GPU request headroom, node readiness, and hardware planning checks. If OpenShell
+denies the direct HF `resolve/<revision>/config.json` GET, the planner retries
+only the same-origin `/api/resolve-cache/models/<model>/<revision>/config.json`
+endpoint using the revision fetched from the HF API. Keep that GET permitted
+in the sandbox HF metadata policy; no wildcard network bypass or credential
+dump is required. A denied cache request, invalid metadata, changed revision,
+or changed recipe hash still blocks deployment. The planner does not apply
+resources or authorize deployment. Runtime recipe resolution and final
+confirmation remain separate requirements; an NVFP4 profile must match the
+actual quantized repository, not an unquantized model with a similar name.
+Explicit same-model hardware profile paths in the official catalog are also
+planning evidence; runtime resolution must still validate the selected hardware
+profile and pin the image digest before deployment.
+Do not let an agent edit planners, validators, runtime defaults, or approval
+hashes to make a blocked deployment pass.
 
 The two skill trees under `files/skills/` are packaged by
 `scripts/build-sre-skills-bundle.py` into one deterministic archive with a
@@ -339,9 +492,44 @@ retired first (see [Teardown](#teardown)) and the upgrade run with
 ## Verification
 
 **Evidence level:** contributor-reported live runs for OpenShift safe mode and
-standard Kubernetes, as listed above. Model deployment, metrics, and deletion
-have local/static coverage only. The token-rotation and cleanup-scope fixes
-have local regression coverage; they were not re-tested on a live cluster.
+standard Kubernetes, including the bounded native Kubernetes checks below.
+Full agent-driven GPU model deployment, metrics, and deletion have local/static
+coverage only. The token-rotation and cleanup-scope fixes have local regression
+coverage; they were not re-tested on a live cluster.
+
+The 2026-10-27 optional-HF-token staging check on Kubernetes 1.36.2,
+containerd 2.3.1, and Helm 4.2.1 confirmed:
+
+- The chart installed in a separate namespace without the configured HF Secret.
+  `local-path` storage required `--wait=hookOnly`; user namespaces isolated the
+  sandbox identity from other processes on the shared node. The managed Hermes
+  sandbox became Ready with its 512-process limit intact.
+- The shipped download template downloaded public `sshleifer/tiny-gpt2`
+  anonymously. A separate CPU inference Job used the same pinned stock vLLM
+  image to load those files offline and generate text; it did not run the
+  vLLM GPU-serving engine.
+- Downloading gated `meta-llama/Llama-3.1-8B-Instruct` without a token returned
+  `huggingface-authentication-required` with guidance to configure the referenced
+  Kubernetes Secret and accept model terms, without printing vendor errors.
+- A live `hermes --skills openshift-llm-deploy chat -q` request used cluster
+  tools to read the inference Job and its logs, checked only the configured
+  Secret's metadata, and returned `TOKENLESS_AGENT_CHECK_OK`. No HF Secret
+  existed, and no Secret contents were returned to the agent.
+- The node advertised shared GPU resources only; the existing model planner
+  requires dedicated `nvidia.com/gpu`. This check does not validate GPU
+  scheduling, a serving endpoint, or agent-driven model deployment.
+
+The 2026-10-28 native Kubernetes recheck replaced the old Sandbox and reseeded
+the fixed chart, then repeated anonymous download, CPU inference, and
+metadata-only Secret checks. The installed deployment wrapper returned
+`model-download-retry-awaiting-cleanup` for a retained failed Job instead of
+replaying its authentication error. A permission-denied file-memory check on
+the cluster host preserved the stored budget after access recovered. The
+storage controller read the live `local-path` StorageClass and refused
+unsupported expansion; the test PVC remained Bound at its original size.
+High utilization was injected for this safety check, not measured from a full
+volume. This is not evidence of successful CSI expansion. The revised
+OpenShift profile was rendered locally, not deployed on a live OpenShift cluster.
 
 The 0.1.0 evaluation on OpenShift 4.22.6 (safe mode, cluster-local model
 endpoint) confirmed:
@@ -364,6 +552,13 @@ endpoint) confirmed:
 
 Run the local/static checks from this recipe directory:
 
+Install PyYAML in the Python environment used for these checks. The model
+planning helpers use it to read the chart-managed YAML configuration:
+
+```bash
+python3 -m pip install pyyaml
+```
+
 ```bash
 helm dependency build .
 helm lint . --set deployer.openshell.agentSandbox.preflight.enabled=false \
@@ -377,7 +572,7 @@ helm template test . -f values-kubernetes.yaml --api-versions agents.x-k8s.io/v1
 **Expected result:**
 
 ```text
-Ran 53 tests
+Ran 215 tests
 OK
 ```
 
@@ -388,8 +583,9 @@ contents, file-backed API token rotation, finding-scoped failed-Pod cleanup,
 and that the deployer alone carries no SRE material.
 
 **These local checks do not verify:** live token rotation or cleanup,
-`broad-no-delete` mode, model deployment, metrics, or deletion against a live
-cluster, production scale, or availability.
+`broad-no-delete` mode beyond the bounded staging checks above, full GPU model
+deployment, metrics, or deletion against a live cluster, production scale, or
+availability.
 
 ## Teardown
 
@@ -441,6 +637,32 @@ Through this recipe's values, the agent container image is repinned from the sub
 mutable `3.12-slim` tag to the same immutable digest this recipe already uses
 elsewhere. The agent is pure Python standard library and installs nothing at
 start-up.
+
+## Model deployment handoff
+
+The installed `openshift-llm-deploy/scripts/preflight-model.py` saves the complete
+verified deployment plan with its SHA-256 identity. After explicit final user
+confirmation, `scripts/deploy-plan.py --plan PATH --approved-plan-sha256 HASH
+--confirm` invokes the existing guarded wrapper with all required arguments and
+streams progress. Omit `--confirm` to validate without deployment. Plans expire
+after 30 minutes; changed plans require fresh confirmation. Neither helper
+authorizes arbitrary recipes, bypasses policy, or reads HF Secret data.
+
+## Auto-heal escalation policy
+
+`notifications.escalationMinSeverity` defaults to `high`: High and Critical
+unresolved incidents reach configured external sinks; Low and Medium remain in
+the stdout audit. Human email, Slack and Markdown summaries omit raw incident
+JSON. Existing action-catalog, namespace, risk-tier and approval gates remain.
+The recovery episode budget defaults to three attempts, with fresh observation
+and verification; only eligible Deployment pod restarts are repeatable. LLM
+suggestions are not executed as arbitrary shell commands.
+
+`notifications.healedDelivery` defaults to `immediate` for this standalone chart.
+An integrating chart may opt into `digest` only when it supplies a durable memory
+reader and a working infrastructure report delivery path. In digest mode,
+successful-heal external messages are suppressed; the audit remains available
+for that report. An unconfigured digest consumer would hide success notifications.
 
 ## Third-Party Dependencies
 
