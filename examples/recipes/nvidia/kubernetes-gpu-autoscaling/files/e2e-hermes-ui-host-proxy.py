@@ -10,10 +10,25 @@ Host: 127.0.0.1:18789 on the backend hop. No tokens on argv or in URLs.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import socket
 import sys
 import threading
+from pathlib import Path
+
+
+def _relay_requests():
+    path = Path(__file__).resolve().parent / "e2e_http_header_relay.py"
+    spec = importlib.util.spec_from_file_location("e2e_http_header_relay", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"missing {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.relay_requests
+
+
+relay_requests = _relay_requests()
 
 
 def publish_bind() -> str:
@@ -73,14 +88,14 @@ def _handle(
         backend = socket.create_connection((backend_host, backend_port), timeout=10)
         backend.settimeout(None)
         client.settimeout(None)
-        if b"\r\n\r\n" in peeked:
-            head, extra = peeked.split(b"\r\n\r\n", 1)
-            backend.sendall(rewrite_host_header(head, rewrite_host) + b"\r\n\r\n" + extra)
-        else:
-            backend.sendall(peeked)
         up = threading.Thread(target=_pump, args=(backend, client), daemon=True)
         up.start()
-        _pump(client, backend)
+        relay_requests(
+            client,
+            backend,
+            lambda head: rewrite_host_header(head, rewrite_host),
+            peeked,
+        )
         up.join()
     except OSError:
         return

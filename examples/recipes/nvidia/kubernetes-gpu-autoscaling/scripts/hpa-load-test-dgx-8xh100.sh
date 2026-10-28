@@ -243,13 +243,18 @@ cleanup() {
   fi
   if [[ "${HPA_TEST_BEHAVIOR_APPLIED}" -eq 1 ]]; then
     hpa_common_log "Restoring the configured HPA scale behavior..."
-    helm "${HPA_RESTORE_HELM_ARGS[@]}" --force-conflicts >/dev/null \
-      || echo "Warning: could not restore configured HPA behavior; rerun ./scripts/install-hpa.sh" >&2
+    if hpa_common_append_helm_force_conflicts HPA_RESTORE_HELM_ARGS \
+      && helm "${HPA_RESTORE_HELM_ARGS[@]}" >/dev/null; then
+      :
+    else
+      echo "Warning: could not restore configured HPA behavior; rerun ./scripts/install-hpa.sh" >&2
+    fi
   fi
 }
 trap cleanup EXIT
 
-helm "${HPA_HELM_ARGS[@]}" --force-conflicts >/dev/null
+hpa_common_append_helm_force_conflicts HPA_HELM_ARGS
+helm "${HPA_HELM_ARGS[@]}" >/dev/null
 hpa_common_wait_for_envoy_dataplane_on_target_node "${NAMESPACE}" "${DEPLOYMENT}" 180
 
 IFS=$'\t' read -r DEPLOYED_INFERENCE_SECRET DEPLOYED_INFERENCE_SECRET_KEY < <(

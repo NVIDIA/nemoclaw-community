@@ -657,6 +657,42 @@ hpa_common_live_inference_runtime() {
     | grep -E '^(ollama|vllm|nim)$' | head -n 1
 }
 
+# Model the metrics-proxy ConfigMap gives the GPU container. The Deployment
+# reads this key; helm values can name a newer model before the ConfigMap does.
+hpa_common_live_inference_model() {
+  local ns="${1:?namespace}"
+  local deploy="${2:?deployment}"
+  kubectl get configmap "${deploy}" -n "${ns}" \
+    -o jsonpath='{.data.INFERENCE_MODEL}' 2>/dev/null || true
+}
+
+# Major version from `helm version --template`. Helm 3 is still the documented
+# prerequisite. Empty output is a failure, not a license to guess Helm 4.
+hpa_common_helm_major_version() {
+  local raw
+  raw="$(helm version --template '{{.Version}}' 2>/dev/null || true)"
+  if [[ "${raw}" =~ ^v([0-9]+) ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  echo "Cannot read helm version. Helm 3 remains supported; refusing to change the release." >&2
+  return 1
+}
+
+# Helm 4 server-side apply needs --force-conflicts after kubectl-patch owned
+# the HPA. Helm 3.19 rejects that flag with "unknown flag". Callers must run
+# this before deleting the HPA so a Helm 3 failure does not leave the
+# Deployment without autoscaling.
+hpa_common_append_helm_force_conflicts() {
+  # shellcheck disable=SC2178 # nameref to the caller's Helm argv array
+  local -n __helm_args="${1:?helm_args array name}"
+  local major
+  major="$(hpa_common_helm_major_version)" || return 1
+  if [[ "${major}" -ge 4 ]]; then
+    __helm_args+=(--force-conflicts)
+  fi
+}
+
 # Fail if the live Deployment is still the previous pairing (Helm values can lie).
 hpa_common_require_live_runtime() {
   local ns="${1:?namespace}"
@@ -1636,6 +1672,13 @@ hpa_common_gpu_helm_upgrade() {
   hpa_common_append_servicemonitor_release_helm_set helm_args
   hpa_common_append_inference_runtime_helm_sets helm_args "${inference_runtime}" "${inference_model}"
 
+  # Decide the Helm 4 flag before deleting anything. Helm 3 cannot accept
+  # --force-conflicts, and deleting the HPA first would leave this Deployment
+  # without autoscaling when the upgrade then fails.
+  if ! hpa_common_append_helm_force_conflicts helm_args; then
+    return 1
+  fi
+
   # hold/arm used kubectl patch, which owns .spec.maxReplicas as kubectl-patch.
   # Helm 4 server-side apply then fails: conflict with "kubectl-patch" on maxReplicas.
   # The metrics ConfigMap hits the same class of conflict on .data.metrics-proxy-metrics.ts.
@@ -1643,7 +1686,6 @@ hpa_common_gpu_helm_upgrade() {
   kubectl delete hpa "$(RELEASE="${release}" CHART_NAME=nemoclaw-gpu hpa_common_metrics_proxy_deployment)" \
     -n "${ns}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
 
-  helm_args+=(--force-conflicts)
   helm "${helm_args[@]}" >/dev/null
 }
 

@@ -215,6 +215,83 @@ rewritten = hp.rewrite_host_header(
 )
 assert b"Host: 127.0.0.1:18789" in rewritten
 assert b"10.184.164.109" not in rewritten
+assert "relay_requests" in hermes_api_proxy
+assert "relay_requests" in hermes_ui_proxy
+relay_spec = importlib.util.spec_from_file_location(
+    "e2e_http_header_relay", chart / "files" / "e2e_http_header_relay.py"
+)
+assert relay_spec and relay_spec.loader
+relay = importlib.util.module_from_spec(relay_spec)
+relay_spec.loader.exec_module(relay)
+
+
+class _Chunks:
+    def __init__(self, parts: list[bytes]) -> None:
+        self.parts = list(parts)
+        self.sent = bytearray()
+
+    def recv(self, _n: int) -> bytes:
+        if not self.parts:
+            return b""
+        part = self.parts.pop(0)
+        return part
+
+    def sendall(self, data: bytes) -> None:
+        self.sent.extend(data)
+
+
+def _auth(head: bytes) -> bytes:
+    return ha.inject_authorization(head, "SECRET")
+
+
+def _host(head: bytes) -> bytes:
+    return hp.rewrite_host_header(head, b"127.0.0.1:18789")
+
+
+# First header is split across reads. The second request follows on the same socket.
+_auth_stream = (
+    b"POST /v1/chat/completions HTTP/1.1\r\nHos",
+    b"t: 10.184.164.109:8642\r\nContent-Length: 2\r\n\r\nab",
+    b"POST /v1/chat/completions HTTP/1.1\r\nHost: 10.184.164.109:8642\r\nContent-Length: 1\r\n\r\nz",
+)
+_auth_out = _Chunks([])
+relay.relay_requests(_Chunks(list(_auth_stream)), _auth_out, _auth)
+assert _auth_out.sent.count(b"Authorization: Bearer SECRET") == 2
+assert _auth_out.sent.count(b"POST /v1/chat/completions") == 2
+_host_stream = (
+    b"GET / HTTP/1.1\r\nHost: 10.184.",
+    b"164.109:18789\r\n\r\nGET /assets/app.js HTTP/1.1\r\nHost: 10.184.164.109:18789\r\n\r\n",
+)
+_host_out = _Chunks([])
+relay.relay_requests(_Chunks(list(_host_stream)), _host_out, _host)
+assert _host_out.sent.count(b"Host: 127.0.0.1:18789") == 2
+assert b"10.184.164.109" not in _host_out.sent
+_chunked = _Chunks(
+    [
+        b"POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n"
+        b"2\r\nab\r\n0\r\n\r\n"
+        b"GET /next HTTP/1.1\r\nHost: h\r\n\r\n"
+    ]
+)
+_chunked_out = _Chunks([])
+relay.relay_requests(_chunked, _chunked_out, _auth)
+assert _chunked_out.sent.count(b"Authorization: Bearer SECRET") == 2
+assert b"\r\n2\r\nab\r\n0\r\n\r\n" in _chunked_out.sent
+# After an Upgrade request the stream is WebSocket frames, not HTTP. Copy it unchanged.
+_ws = _Chunks(
+    [
+        b"GET /ws HTTP/1.1\r\nHost: h\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n\x81\x05hello",
+        b"\x81\x03abc",
+    ]
+)
+_ws_out = _Chunks([])
+relay.relay_requests(_ws, _ws_out, _host)
+assert _ws_out.sent.count(b"Host: 127.0.0.1:18789") == 1
+assert _ws_out.sent.endswith(b"\r\n\r\n\x81\x05hello\x81\x03abc")
+_partial = _Chunks([b"GET / HTTP/1.1\r\nHost: h\r\n"])
+_partial_out = _Chunks([])
+relay.relay_requests(_partial, _partial_out, _host)
+assert _partial_out.sent == b""
 assert "E2E_PUBLISH_BIND:-127.0.0.1" in forward
 assert 'E2E_PUBLISH_BIND:-0.0.0.0' not in forward
 assert "E2E_OPENCLAW_GATEWAY_TOKEN_FILE" in forward
@@ -345,12 +422,35 @@ assert "hermes nim nvidia/nemotron-3-nano" not in common
 assert 'E2E_CLIENT_HOST' in common
 dgx = (chart / "scripts" / "hpa-load-test-dgx-8xh100.sh").read_text()
 assert "ingress.auth.password" in dgx
-assert "--force-conflicts" in dgx
+assert "--force-conflicts" not in dgx
+assert "hpa_common_append_helm_force_conflicts HPA_HELM_ARGS" in dgx
+assert "hpa_common_append_helm_force_conflicts HPA_RESTORE_HELM_ARGS" in dgx
+for _reuse_name in (
+    "agentscaling-common.sh",
+    "agentscaling-hermes-common.sh",
+    "agentscaling-deepagents-common.sh",
+):
+    _reuse = (chart / "scripts" / _reuse_name).read_text()
+    assert "hpa_common_live_inference_model" in _reuse
+    assert '"${current_model}" == "${INFERENCE_MODEL}"' in _reuse
+    assert (
+        '"${current_runtime}" == "${INFERENCE_RUNTIME}" && "${current_mode}" == "${wanted}"'
+        not in _reuse
+    )
 adapter = (chart / "monitoring" / "prometheus-adapter-gpu-values.yaml").read_text()
 assert "[90s]" in adapter
 assert "client.sh shortens this to 15s" in adapter
 assert "stabilizationWindowSeconds=120" not in (chart / "scripts" / "hpa-common.sh").read_text()
 hpa_common = (chart / "scripts" / "hpa-common.sh").read_text()
+assert "hpa_common_append_helm_force_conflicts" in hpa_common
+assert "Helm 3 remains supported" in hpa_common
+upgrade = hpa_common.split("hpa_common_gpu_helm_upgrade()", 1)[1].split(
+    "\nhpa_common_cleanup_load_test_resources()", 1
+)[0]
+assert upgrade.index("hpa_common_append_helm_force_conflicts helm_args") < upgrade.index(
+    "kubectl delete hpa"
+)
+assert upgrade.index("kubectl delete hpa") < upgrade.index('helm "${helm_args[@]}"')
 assert "hpa_common_legacy_agent_basename" not in hpa_common
 assert "hpa_common_list_legacy_agent_deployments" not in hpa_common
 assert "hpa_common_migrate_legacy_agent_resources" not in hpa_common

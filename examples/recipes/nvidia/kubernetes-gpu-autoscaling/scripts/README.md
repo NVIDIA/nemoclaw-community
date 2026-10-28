@@ -48,4 +48,4 @@ what each script in this directory does — it has no instructions of its own.
 | `test-metrics-proxy-newest-sample-window.ts` | Local contract: the 30s window ages from the newest sample so a 45s gap stays until 60s idle expire |
 | `test-e2e-load-stop.py` | Local contract: HPA helper reports 8 GPUs; OpenClaw client requires `--host`, does not copy helpers into sandboxes, and on stop leaves OpenClaw running |
 | `test-e2e-timeline.py` | Local contract: client and HPA JSONL rows share even-second UTC timestamps |
-| `test-hpa-idle-replicas-contract.sh` | Local contract: idle latency HPA `1/0` is a ready baseline; leftover `5/6` is not |
+| `test-hpa-idle-replicas-contract.sh` | Local contract: idle latency HPA `1/0` is a ready baseline; leftover `5/6` is not; Helm 3 omits `--force-conflicts` |

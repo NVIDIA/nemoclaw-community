@@ -84,17 +84,18 @@ agentscaling_common_wait_baseline() {
 }
 
 agentscaling_common_apply_hpa() {
-  local current_mode wanted="${HPA_METRIC}" current_runtime
+  local current_mode wanted="${HPA_METRIC}" current_runtime current_model
   HPA_NAME="${HPA_NAME:-$(RELEASE="${RELEASE}" CHART_NAME=nemoclaw-gpu hpa_common_metrics_proxy_deployment)}"
   export HPA_NAME
   export INFERENCE_SERVICE="${INFERENCE_SERVICE:-$(RELEASE="${RELEASE}" CHART_NAME=nemoclaw-gpu hpa_common_metrics_proxy_service)}"
   current_mode="$(agentscaling_common_hpa_mode)"
   current_runtime="$(agentscaling_common_chart_runtime)"
-  echo "Live GPU runtime=${current_runtime:-missing} HPA metric=${current_mode:-unknown} (want INFERENCE_RUNTIME=${INFERENCE_RUNTIME} + ${wanted})"
+  current_model="$(hpa_common_live_inference_model "${NAMESPACE}" "${HPA_NAME}")"
+  echo "Live GPU runtime=${current_runtime:-missing} model=${current_model:-missing} HPA metric=${current_mode:-unknown} (want INFERENCE_RUNTIME=${INFERENCE_RUNTIME} model=${INFERENCE_MODEL} + ${wanted})"
   if [[ "${SKIP_INSTALL_HPA}" == "1" ]]; then
     echo "SKIP_INSTALL_HPA=1; leaving runtime=${current_runtime:-unknown} HPA metric=${current_mode:-unknown}"
-  elif [[ "${current_runtime}" == "${INFERENCE_RUNTIME}" && "${current_mode}" == "${wanted}" ]]; then
-    echo "HPA ${NAMESPACE}/${HPA_NAME} already uses ${INFERENCE_RUNTIME} and ${wanted}"
+  elif [[ "${current_runtime}" == "${INFERENCE_RUNTIME}" && "${current_model}" == "${INFERENCE_MODEL}" && "${current_mode}" == "${wanted}" ]]; then
+    echo "HPA ${NAMESPACE}/${HPA_NAME} already uses ${INFERENCE_RUNTIME}, ${INFERENCE_MODEL}, and ${wanted}"
   else
     echo "Setting ${NAMESPACE}/${RELEASE} to INFERENCE_RUNTIME=${INFERENCE_RUNTIME} + HPA ${wanted} (minReplicas=1 maxReplicas=${MAX_REPLICAS})"
     SKIP_MONITORING=1 USE_EXISTING_PROMETHEUS=1 \
