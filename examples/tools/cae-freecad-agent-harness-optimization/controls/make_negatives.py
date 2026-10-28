@@ -10,6 +10,8 @@ broken.FCStd:   the last feature's profile removed, saved     -> fails recompute
 scripted.FCStd: the solution's solid as a scripted shape     -> fails native-feature-tree
                 under the Body (BaseFeature), plus one small sketch-driven
                 Pocket, so only the scripted base fails the check
+nolast.FCStd:   the solution with its last additive feature -> fails no-missing-feature
+                suppressed: a feature of the part left out
 
 The proof table in evals/README.md also lists controls taken from real agent runs
 (slices, one-dimension, no-branch); those models are not shipped.
@@ -38,6 +40,16 @@ App.closeDocument(doc.Name)
 doc, body = solution()
 body.Tip.Profile = None
 doc.saveAs(f"{out}/broken.FCStd")
+App.closeDocument(doc.Name)
+
+doc, body = solution()
+added = [o for o in body.Group if o.TypeId in ("PartDesign::Pad", "PartDesign::Revolution")
+         or o.TypeId.startswith("PartDesign::Additive")]
+added[-1].Suppressed = True
+doc.recompute()
+for obj in doc.Objects:
+    obj.Visibility = obj is body
+doc.saveAs(f"{out}/nolast.FCStd")
 App.closeDocument(doc.Name)
 
 doc, body = solution()

@@ -22,7 +22,7 @@ gateway; this recipe adds the reviewed `kubernetes-sre` skill, a bundled
 OpenShift client, a policy-bounded HTTPS proxy in front of the cluster API, and
 the RBAC that proxy uses. In the default `safe` mode the assistant can read
 common non-secret resources cluster-wide and scale Deployments and
-StatefulSets; it can never read Secrets, change RBAC, exec into Pods, or delete
+StatefulSets; it cannot read Secret contents, change RBAC, exec into Pods, or delete
 anything. Broader no-delete access and the optional `openshift-llm-deploy`
 model deployment skill are separate, acknowledged opt-ins. The chart consumes
 the prebuilt managed image and never runs the NemoClaw CLI or bootstrap, hence
@@ -150,6 +150,23 @@ helm upgrade --install sre . \
   --wait --timeout 20m
 ```
 
+For a `WaitForFirstConsumer` StorageClass such as native Kubernetes
+`local-path`, omit `--wait` from these commands. The post-install preparation
+Job must first mount and bind the NemoClaw home PVC; waiting for that PVC before
+running hooks creates a wait cycle. On Helm 4, explicitly use
+`--wait=hookOnly`. The bootstrap hook waits for the gateway and Sandbox; verify
+the resulting Pods and Sandbox after installation. On Helm 4.2.x, avoid the
+default watcher strategy around hook cleanup; use `--wait=legacy` for classes
+that bind immediately.
+
+On a shared native Kubernetes node, other workloads using UID 1000 can exhaust
+NemoClaw's per-user process limit before the agent starts. Where Kubernetes,
+the container runtime, and storage support user namespaces, set
+`deployer.openshell.server.enableUserNamespaces=true` to isolate the sandbox's
+host identity. This preserves the managed image's process limit; it does not
+enable the OpenShift profile. Recreate an existing Sandbox through the deployer
+lifecycle after changing this setting.
+
 Keep the release name at 40 characters or fewer and free of `api`, `key`,
 `token`, `secret`, `password`, and `credential` segments; the chart derives
 every resource name from it and NemoClaw rejects such segments inside the
@@ -179,7 +196,7 @@ non-secret resources cluster-wide (Namespaces, Nodes, Pods and logs, Services,
 Events, ConfigMaps, PVCs, workloads, Jobs, HPAs, Ingresses, Routes, KServe and
 NIM resources, metrics) and write access only to the `/scale` subresource of
 Deployments and StatefulSets. The proxy admits only `GET` and `PATCH`, and
-additionally rejects Secret, ServiceAccount-token, exec, attach, port-forward,
+additionally rejects Secret contents, ServiceAccount-token, exec, attach, port-forward,
 pod-proxy, and node-proxy paths regardless of RBAC.
 
 Hermes authenticates to the proxy with a random chart-managed bearer token
@@ -218,6 +235,41 @@ nor Hermes reads, copies, changes, or deletes that Secret, and the one-time
 downloader receives the key only through `secretKeyRef` with no mounted
 ServiceAccount token.
 
+Preflight checks the configured Secret's existence through the trusted API
+proxy. Only a canonical GET of that exact namespace/name is accepted; the
+proxy requests Kubernetes metadata and returns a constructed name/namespace
+response without reading or forwarding the upstream body. Redirects are
+rejected before following their target or reading their body. Secret list/watch,
+other names, query parameters and writes remain blocked. A namespaced Role
+grants the proxy identity `get` on the configured Secret; the sandbox never
+receives that identity. This check does not validate the key or HF access:
+the download Job's `secretKeyRef` and download result validate those.
+The reference is optional by default (`hfTokenSecretRef.optional=true`): if the
+Secret or key is absent, Kubernetes starts the downloader without `HF_TOKEN`
+and it attempts an anonymous public-model download. Set `optional=false` for
+an operator policy that requires the Secret before any download. Access-denied
+or gated-model errors ask the operator to populate the referenced Secret and
+accept the model's terms, then confirm a retry. Never paste credentials into
+agent chat. Restricted/private planning metadata may also require approved
+operator inputs; the token is never exposed to the planning scripts.
+
+A failed download Job remains for 600 seconds after termination so its logs
+can be inspected. Updating the Secret does not restart that Job. Until TTL
+cleanup removes it, a confirmed retry returns
+`model-download-retry-awaiting-cleanup` with a pending result rather than
+replaying the previous authentication error. Wait for cleanup, then confirm
+the retry; the agent receives no additional deletion permission.
+
+The chart-owned, read-only `hf-token-intake.yaml` supplies the Secret name/key
+to both preflight and the deployment wrapper. The wrapper rejects another
+Secret name or namespace; only the downloader receives the token. These checks
+constrain this skill's deployment flow. They do not prevent another authorized
+workload in the namespace from mounting the same Secret. Kubernetes RBAC
+cannot restrict Secret mounts by workload; use namespace isolation and
+admission controls when that stronger boundary is required. The existing
+`broad-no-delete` proxy identity retains its wider RBAC permissions, so proxy
+enforcement remains the sandbox's boundary.
+
 ```yaml
 global:
   sre:
@@ -230,6 +282,7 @@ global:
       hfTokenSecretRef:
         name: hf-token
         key: HF_TOKEN
+        optional: true
 ```
 
 On OpenShift, a Dynamo workload may require `anyuid`. The skill reports the
@@ -321,6 +374,15 @@ default is recommendation mode: 85% usage sustained for 300 seconds recommends
 allowlisted expansion-enabled StorageClass, quota and safety checks, and global
 remediation policy approval. This narrow PVC-expansion exception does not permit
 generic storage repair or guest command execution.
+
+Each automatic expansion reserves its global action budget in persistent
+memory before submitting the PVC patch. A timeout or crash retains that
+reservation until the rolling hourly window expires, including across other
+PVCs and agent restarts. Successful submission is counted once. Unavailable
+or unreadable incident memory blocks new automatic actions rather than
+resetting the budget. File memory is flushed before replacement. Automatic
+storage mode requires a single watch replica or CronJob concurrency `Forbid`;
+the PVC UID/resourceVersion guard and operation annotation still apply.
 
 For KubeVirt, the controller observes the mapped guest filesystem rather than
 the host disk image. After verified PVC expansion it emails the admin with the
@@ -430,9 +492,44 @@ retired first (see [Teardown](#teardown)) and the upgrade run with
 ## Verification
 
 **Evidence level:** contributor-reported live runs for OpenShift safe mode and
-standard Kubernetes, as listed above. Model deployment, metrics, and deletion
-have local/static coverage only. The token-rotation and cleanup-scope fixes
-have local regression coverage; they were not re-tested on a live cluster.
+standard Kubernetes, including the bounded native Kubernetes checks below.
+Full agent-driven GPU model deployment, metrics, and deletion have local/static
+coverage only. The token-rotation and cleanup-scope fixes have local regression
+coverage; they were not re-tested on a live cluster.
+
+The 2026-10-27 optional-HF-token staging check on Kubernetes 1.36.2,
+containerd 2.3.1, and Helm 4.2.1 confirmed:
+
+- The chart installed in a separate namespace without the configured HF Secret.
+  `local-path` storage required `--wait=hookOnly`; user namespaces isolated the
+  sandbox identity from other processes on the shared node. The managed Hermes
+  sandbox became Ready with its 512-process limit intact.
+- The shipped download template downloaded public `sshleifer/tiny-gpt2`
+  anonymously. A separate CPU inference Job used the same pinned stock vLLM
+  image to load those files offline and generate text; it did not run the
+  vLLM GPU-serving engine.
+- Downloading gated `meta-llama/Llama-3.1-8B-Instruct` without a token returned
+  `huggingface-authentication-required` with guidance to configure the referenced
+  Kubernetes Secret and accept model terms, without printing vendor errors.
+- A live `hermes --skills openshift-llm-deploy chat -q` request used cluster
+  tools to read the inference Job and its logs, checked only the configured
+  Secret's metadata, and returned `TOKENLESS_AGENT_CHECK_OK`. No HF Secret
+  existed, and no Secret contents were returned to the agent.
+- The node advertised shared GPU resources only; the existing model planner
+  requires dedicated `nvidia.com/gpu`. This check does not validate GPU
+  scheduling, a serving endpoint, or agent-driven model deployment.
+
+The 2026-10-28 native Kubernetes recheck replaced the old Sandbox and reseeded
+the fixed chart, then repeated anonymous download, CPU inference, and
+metadata-only Secret checks. The installed deployment wrapper returned
+`model-download-retry-awaiting-cleanup` for a retained failed Job instead of
+replaying its authentication error. A permission-denied file-memory check on
+the cluster host preserved the stored budget after access recovered. The
+storage controller read the live `local-path` StorageClass and refused
+unsupported expansion; the test PVC remained Bound at its original size.
+High utilization was injected for this safety check, not measured from a full
+volume. This is not evidence of successful CSI expansion. The revised
+OpenShift profile was rendered locally, not deployed on a live OpenShift cluster.
 
 The 0.1.0 evaluation on OpenShift 4.22.6 (safe mode, cluster-local model
 endpoint) confirmed:
@@ -475,7 +572,7 @@ helm template test . -f values-kubernetes.yaml --api-versions agents.x-k8s.io/v1
 **Expected result:**
 
 ```text
-Ran 182 tests
+Ran 215 tests
 OK
 ```
 
@@ -486,8 +583,9 @@ contents, file-backed API token rotation, finding-scoped failed-Pod cleanup,
 and that the deployer alone carries no SRE material.
 
 **These local checks do not verify:** live token rotation or cleanup,
-`broad-no-delete` mode, model deployment, metrics, or deletion against a live
-cluster, production scale, or availability.
+`broad-no-delete` mode beyond the bounded staging checks above, full GPU model
+deployment, metrics, or deletion against a live cluster, production scale, or
+availability.
 
 ## Teardown
 

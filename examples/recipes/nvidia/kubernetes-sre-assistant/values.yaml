@@ -18,7 +18,7 @@ global:
       # and the ordered ConfigMap chunk names (files/sre-skills.parts.json).
       # scripts/build-sre-skills-bundle.py rewrites both; rendering fails when
       # they disagree with the committed files.
-      sha256: 9854a4ba7227ea19c29391bd1ebf03939cb460f0d5bb97f31f5d8877680534c2
+      sha256: d5da8e798c3a78d9bb06f4c78ce08ec3742b163d87b44ce10d8a50bb5b876157
       parts:
         - sre-skills.part-000
     # Immutable multi-architecture Python image for the API proxies and the
@@ -70,11 +70,14 @@ global:
       modelRunnerServiceAccount:
         create: true
         name: ""
-      # Reference only. The chart never reads or copies this Secret. A future
+      # Reference only. Helm never reads or copies Secret data. The proxy checks
+      # only this exact Secret's existence and never returns its contents. The
       # model-download Job receives the selected key through secretKeyRef.
       hfTokenSecretRef:
         name: hf-token
         key: HF_TOKEN
+        # Public models download anonymously when this Secret/key is absent.
+        optional: true
       metrics:
         # Creates a separate read-only, exact-service proxy. On OpenShift it
         # binds cluster-monitoring-view; keep disabled unless telemetry is needed.

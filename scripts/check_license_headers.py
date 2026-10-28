@@ -41,8 +41,9 @@ EXCLUDE_DIRS: set[str] = {
     # Eval Author exports bind the exact task tree into proof receipts. Keep
     # this tutorial's exported Harbor tasks byte-identical to those proofs.
     "examples/tools/enterprise-assistant-harness-optimization/evals/harbor-tasks-v3",
-    "examples/tools/cae-freecad-agent-harness-optimization/evals/part-1-reconstruction",
-    "examples/tools/cae-freecad-agent-harness-optimization/evals/part-2-reconstruction",
+    "examples/tools/cae-freecad-agent-harness-optimization/evals/train",
+    "examples/tools/cae-freecad-agent-harness-optimization/evals/val",
+    "examples/tools/cae-freecad-agent-harness-optimization/evals/test",
 }
 
 EXCLUDE_FILES: set[str] = {

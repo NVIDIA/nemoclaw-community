@@ -599,6 +599,38 @@ class RecipeTest(unittest.TestCase):
         profile = self.render("-f", str(CHART_DIR / "values-broad-no-delete.yaml"))
         self.assertIn('rbacMode: "broad-no-delete"', self.rendered_from_source(profile, f"{RECIPE_SOURCE}/000-validate.yaml"))
 
+    def test_hf_secret_check_matches_skill_reference_and_has_exact_namespaced_rbac(self) -> None:
+        import yaml
+        for profile in ("values-kubernetes.yaml", "values-openshift.yaml"):
+            with self.subTest(profile=profile):
+                capabilities = ("--api-versions", "security.openshift.io/v1") if profile == "values-openshift.yaml" else ()
+                rendered = self.render("-f", str(CHART_DIR / profile), *MODEL_SKILL,
+                                       "--set", "global.sre.openshiftLlmDeploy.targetNamespace=models",
+                                       "--set", "global.sre.openshiftLlmDeploy.hfTokenSecretRef.name=model-hf",
+                                       "--set", "global.sre.openshiftLlmDeploy.hfTokenSecretRef.key=download-token", *capabilities)
+                proxy = self.rendered_from_source(rendered, f"{RECIPE_SOURCE}/sre-proxy.yaml")
+                self.assertIn('name: PROXY_HF_SECRET_NAMESPACE\n              value: "models"', proxy)
+                self.assertIn('name: PROXY_HF_SECRET_NAME\n              value: "model-hf"', proxy)
+                self.assertNotIn("download-token", proxy)
+                rbac = self.rendered_from_source(rendered, f"{RECIPE_SOURCE}/hf-secret-check-rbac.yaml")
+                role, binding = list(yaml.safe_load_all(rbac))
+                self.assertEqual(role["kind"], "Role")
+                self.assertEqual(role["metadata"]["namespace"], "models")
+                self.assertEqual(role["rules"], [{"apiGroups": [""], "resources": ["secrets"],
+                                                "resourceNames": ["model-hf"], "verbs": ["get"]}])
+                self.assertEqual(binding["subjects"], [{"kind": "ServiceAccount",
+                                                       "name": "sre-sre-proxy", "namespace": "ops"}])
+                seed = self.rendered_from_source(rendered, f"{DEPLOYER_SOURCE}/seed-job.yaml")
+                seed_env = {item["name"]: item.get("value") for item in
+                            yaml.safe_load(seed)["spec"]["template"]["spec"]["containers"][0]["env"]}
+                intake = json.loads(seed_env["HF_TOKEN_INTAKE_JSON"])
+                self.assertEqual((intake["namespace"], intake["secretName"], intake["secretKey"]),
+                                 ("models", "model-hf", "download-token"))
+        disabled = self.render()
+        self.assertNotIn("hf-secret-check-rbac.yaml", disabled)
+        proxy = self.rendered_from_source(disabled, f"{RECIPE_SOURCE}/sre-proxy.yaml")
+        self.assertNotIn("PROXY_HF_SECRET_", proxy)
+
     def test_model_hf_metadata_policy_is_get_only_and_disabled_without_skill(self) -> None:
         rendered = self.render(*MODEL_SKILL)
         block = self.network_policy_block(self.rendered_policy(rendered), "huggingface_metadata")

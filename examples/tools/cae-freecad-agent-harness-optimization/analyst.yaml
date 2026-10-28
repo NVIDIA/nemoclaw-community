@@ -1,8 +1,8 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 # NeMo Compass config. Run from the example root and set the time window (UTC) of the
-# runs to analyze on the command line (README Step 3), for example:
-#   insight-agent --config analyst.yaml --trace.intake.query.started-at-gte <start> \
+# runs to analyze on the command line (README Step 2), for example:
+#   compass --config analyst.yaml --trace.intake.query.started-at-gte <start> \
 #     --trace.intake.query.started-at-lte <end>
 max_tokens: 16384
 # The agent's own configuration, so findings can be checked against it.

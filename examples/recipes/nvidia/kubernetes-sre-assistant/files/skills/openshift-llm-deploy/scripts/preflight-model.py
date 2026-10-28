@@ -116,14 +116,23 @@ def main() -> int:
         except PreflightError as error:
             raise PreflightError('model-runner-unavailable:' + arguments.namespace + '/' + runner) from error
         print('HF_PREFLIGHT_MODEL_RUNNER=' + runner, flush=True)
-        if intake.get('requireTokenForHuggingFaceModels', True):
-            print('HF_PREFLIGHT_STAGE=token', flush=True)
-            run_stage(['/chart-bin/oc', '-n', arguments.namespace, 'get', 'secret',
-                       intake['secretName'], '-o', 'name'], deadline)
+        print('HF_PREFLIGHT_STAGE=token-reference', flush=True)
+        token_check = ['/chart-bin/oc', '-n', arguments.namespace, 'get', 'secret',
+                       intake['secretName'], '-o', 'name']
+        if not intake.get('requireTokenForHuggingFaceModels', True):
+            token_check.append('--ignore-not-found=true')
+            print('HF_PREFLIGHT_TOKEN_POLICY=optional-public-download', flush=True)
+        run_stage(token_check, deadline)
         print('HF_PREFLIGHT_STAGE=storage', flush=True)
         storage = run_stage([sys.executable, str(root / 'scripts/plan-hf-storage.py'),
                              '--model', arguments.model, '--namespace', arguments.namespace,
                              '--release', arguments.release, '--storage-class', arguments.storage_class], deadline)
+        if storage.get('HF_MODEL_STORAGE_ACTION') == 'blocked':
+            reason = storage.get('HF_MODEL_STORAGE_REASON', 'unavailable')
+            if reason in {'restricted-metadata', 'metadata-http-401', 'metadata-http-403'}:
+                print('HF_PREFLIGHT_ACTION=Hugging Face access or approved planning metadata is required. Have an operator configure the referenced Kubernetes Secret, accept required model terms, and supply approved planning inputs if metadata remains restricted. Never paste a token into agent chat.')
+                raise PreflightError('huggingface-authentication-required')
+            raise PreflightError('storage-planning-blocked:' + reason)
         print('HF_PREFLIGHT_STAGE=recipe', flush=True)
         catalog = run_stage([sys.executable, str(root / 'scripts/resolve-vllm-recipe.py'),
                              '--catalog-only', '--model', arguments.model,

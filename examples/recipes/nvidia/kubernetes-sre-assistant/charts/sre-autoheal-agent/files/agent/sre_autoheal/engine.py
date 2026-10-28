@@ -359,6 +359,10 @@ class Engine:
         retry_safe = action_id == "restart_pod" and finding.subject.kind == "Deployment"
         limit = max(1, min(3, int(self.config.get("policy.max_heal_attempts", 3)))) if retry_safe else 1
         if not self.dry_run:
+            if getattr(self.memory, "load_failed", False):
+                incident.decision = "heal_failed"
+                incident.decision_reason = "cannot recover remediation budget; no action executed"
+                return
             history["remediation_limit"] = limit
             history["remediation_attempts"] = history.get("remediation_attempts", 0) + 1
             self.policy.record_action()

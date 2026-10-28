@@ -51,6 +51,10 @@ spec:
             {{- if .Values.global.sre.openshiftLlmDeploy.enabled }}
             - name: PROXY_SERVICE_PROXY_NAMESPACE
               value: {{ include "sre-assistant.modelDeployNamespace" . | quote }}
+            - name: PROXY_HF_SECRET_NAMESPACE
+              value: {{ include "sre-assistant.modelDeployNamespace" . | quote }}
+            - name: PROXY_HF_SECRET_NAME
+              value: {{ .Values.global.sre.openshiftLlmDeploy.hfTokenSecretRef.name | quote }}
             {{- end }}
             - name: PROXY_CLIENT_TOKEN_FILE
               value: /proxy-auth/token

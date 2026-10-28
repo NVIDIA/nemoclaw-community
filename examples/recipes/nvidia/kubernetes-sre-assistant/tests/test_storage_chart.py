@@ -63,6 +63,16 @@ class StorageChartTests(unittest.TestCase):
         self.assertIn('name: "metrics-serving-ca"', pod)
         self.assertIn('key: "service-ca.crt"', pod)
 
+    def test_automatic_requires_single_writer(self):
+        for concurrency in ({'replicaCount': 2}, {'runMode': 'cronjob', 'cronjob': {'concurrencyPolicy': 'Allow'}}):
+            with self.subTest(concurrency=concurrency):
+                rendered = self.render({**concurrency, 'agentConfig': {
+                    'scope': {'include_namespaces': ['test']},
+                    'storage': {'enabled': True, 'mode': 'automatic',
+                                'targets': [{'namespace': 'test', 'name': 'data'}]}}})
+                self.assertNotEqual(rendered.returncode, 0)
+                self.assertIn('automatic storage expansion requires a single writer', rendered.stderr)
+
     def test_disabled_rbac_does_not_create_storage_write_roles(self):
         rendered = self.render({'rbac': {'create': False}, 'agentConfig': {
             'scope': {'include_namespaces': ['test']}, 'storage': {

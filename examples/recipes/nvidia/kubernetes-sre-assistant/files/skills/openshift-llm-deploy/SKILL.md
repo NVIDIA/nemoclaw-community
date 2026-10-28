@@ -129,9 +129,20 @@ or NodePort endpoint after deployment.
 - Read `${HERMES_HOME}/skills/openshift-llm-deploy/hf-token-intake.yaml`
   before handling a Hugging Face model. This standalone chart has no WebUI
   credential intake. Use only the existing namespace-local Secret name and key
-  recorded there. If the Secret does not exist, stop and give the human a
-  `kubectl create secret` or `oc create secret` command to run outside the
-  agent; never ask for or execute a command containing the raw token.
+  recorded there. By default the reference is optional: a missing Secret or
+  key permits an anonymous download of a public model. Do not ask for a token
+  before trying the public path. If the operator set
+  `hfTokenSecretRef.optional=false`, preflight requires that exact Secret.
+  On `huggingface-authentication-required`, explain that HF denied access and
+  the model may require a read token and accepted license terms. Ask the human
+  to create/update the configured Kubernetes Secret outside the agent and
+  reply only that it is ready; never ask for the token in chat or execute a
+  command containing it. Keep restricted-metadata planning gates in place.
+  Retry once only after confirmation and cleanup of the failed download Job.
+  If the wrapper returns `model-download-retry-awaiting-cleanup`, report pending
+  cleanup rather than another authentication failure. Wait for TTL deletion
+  (600 seconds after termination by default), then obtain retry confirmation.
+  Do not delete the retained Job or start a second release to bypass cleanup.
 - Default the target namespace to the namespace returned by
   `/chart-bin/oc project -q`. It contains the chart-selected model-runner
   ServiceAccount used by the one-time downloader and standard vLLM fallback.
@@ -425,14 +436,18 @@ oc adm policy add-scc-to-user anyuid -z "${RELEASE}-k8s-service-discovery" -n "$
 Do not run that `oc adm` command through the agent. After the operator applies
 it, ask for confirmation before retrying the deployment once.
 
-### 3. Download once from the existing Secret reference
+### 3. Download once, anonymously or with the optional Secret reference
 
 The wrapper renders a node-pinned model-download Job that is the **only**
-model-serving workload with an `HF_TOKEN` Secret reference. It writes the
+model-serving workload with an optional `HF_TOKEN` Secret reference. It writes the
 checkpoint under `/models/model` on the release PVC. The serving manifests
 receive only `/models/model`, never an HF token or Secret reference.
 
-The Secret is externally managed and is not deleted or read by Hermes. If the
+The Secret is externally managed and is not deleted or read by Hermes. Without
+it, the downloader explicitly disables implicit/cached authentication. An HF
+401/403 or gated-repository error requests operator action through a Secret
+reference; other download failures do not incorrectly demand a token. Never
+paste raw exceptions or signed download URLs into chat. If the
 Job is still running when the bounded observation window ends, report it as
 pending and do not start a serving workload. Never use `oc get secret`,
 `oc extract`, `--from-literal`, or `envFrom` for credentials.

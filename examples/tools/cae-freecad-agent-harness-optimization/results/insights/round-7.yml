@@ -1,48 +1,118 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-# NeMo Compass Insights, published round 7
-# Agent: cad-u9a (kept). Four runs. The Ethos-divergence signal found nothing.
+# NeMo Compass Insights, round 7
+# Agent: r7-sides (kept in round 6). Its 20 train runs, one per task. Round 8 reused these Insights.
 # Raw Compass output; only names and paths are neutralised.
-- name: Late repair builds time out and force submission of an older flawed CAD model
-  description: During iterative FreeCAD reconstruction, the agent starts another long
-    repair build without enough remaining execution budget. The build times out, so
-    the final response falls back to an earlier saved model with known geometric mismatches;
-    in one trace that fallback is also below the stated 0.92 IoU target. Budget repair
-    attempts against the remaining run time and stop or shorten verification builds
-    before they can consume the reporting window.
+- name: Runs end without saving a FreeCAD baseline
+  description: The mesh-to-FreeCAD workflow ends without creating /app/model.FCStd,
+    despite instructions to save a valid baseline by about minute two. One run remains
+    in repeated mesh surveys without executing a model build; another repeatedly fails
+    before persistence, while its successful diagnostic pads remain unsaved. Both
+    start without the artifact and finish with all saved-model checks failing. Enforce
+    a build-and-save checkpoint before further surveys or feature debugging, and save
+    a simple valid fallback as soon as a diagnostic build succeeds.
   evidence:
-  - trace_id: 01a1449a-91ab-7b03-a250-5a4d83ba9234
+  - trace_id: 01a17b1f-9607-7973-a268-277b02dc2c85
     spans:
-    - span_id: span-5e766053df337be7a6e77b1ad2d246b8
-    - span_id: span-2208aef479f54dbb6faad1058139e487
-    - span_id: span-01c18892c41b2bcd5ace748fd451b033
-  - trace_id: 01a1449a-92b6-73f1-b25c-68132f88329a
+    - span_id: span-a02dc3829998ffc91f7b8966a7dab7be
+    - span_id: span-511263b6c7498acdd5522b884b6ffe32
+    - span_id: span-992529cdfaf4c87833645ddc6eb71dce
+    - span_id: span-98b7ed747b2690acaa52be26535a4d2d
+    - span_id: span-a4d3a7953f7c7d50710d099a07ec0234
+    - span_id: span-17a9ffd12fb926522aeda36b3911af35
+  - trace_id: 01a17b20-0290-7350-a361-95272d61df2e
     spans:
-    - span_id: span-73b5874b6d99508b218cc72b33ff1c47
-    - span_id: span-e6d8ce8b91779d629e68eac1e01f6036
-    - span_id: span-eeee03b4c50734f84f8dacba733f3d64
-    - span_id: span-babd938e61c157030cff0262ebf426ad
-  updated_date: &id001 2026-10-16 12:13:12.008245+00:00
-  confidence: high
-  severity: med
-- name: Body section loft adds excess material where it intersects the curved branch
-  description: 'The final saved FreeCAD models in multiple runs retain a localized
-    geometry error at the body/branch merge: numerical comparison attributes 2.1–2.3%
-    extra mesh volume to Body001, and the final reports identify the body loft as
-    swelling into or absorbing the branch region. The outputs remain valid solids
-    and exceed the global IoU threshold, but their shape quality is degraded. Build
-    the body from body-only sections or otherwise separate body-loop selection from
-    the branch before adding the branch feature.'
+    - span_id: span-aaeeb30b9a26278dad7568d9b19554c8
+    - span_id: span-2c6fea222f2d1fc59a832f333cfacb96
+    - span_id: span-a4496ab311d75d9a3de26b05638d5c30
+    - span_id: span-cca85a796a22d117629eede2c14b245b
+  updated_date: &id001 2026-10-27 02:35:01.789007+00:00
+  confidence: med
+  severity: high
+  severity_reason: The runs end without the required saved CAD deliverable.
+- name: Verified low-fidelity CAD models remain the final deliverables
+  description: During mesh reconstruction, verify.py reports a valid single solid
+    but an IoU below the documented 0.9 target; terminal evaluation of the submitted
+    file still fails mesh fidelity. Structural validity is being treated as an adequate
+    stopping point despite unresolved geometric mismatch, including solid-filled hollow
+    regions and simplified or omitted features. Keep a valid baseline for safety,
+    but prioritize the verifier’s missing/extra-material measurements and recheck
+    geometric fidelity after each repair rather than treating a valid save or near-unit
+    volume ratio as completion.
   evidence:
-  - trace_id: 01a1449a-92b6-73f1-b25c-68132f88329a
+  - trace_id: 01a17b1b-4228-7d22-b19a-c5562364d1d2
     spans:
-    - span_id: span-73b5874b6d99508b218cc72b33ff1c47
-    - span_id: span-eeee03b4c50734f84f8dacba733f3d64
-    - span_id: span-babd938e61c157030cff0262ebf426ad
-  - trace_id: 01a1449a-94dc-7780-96e3-f324cff7bf1e
+    - span_id: span-9dbd147b096373c3b23e09dc7fa484d2
+    - span_id: span-e4f6bb4da00ce7e40377316b922ac867
+    - span_id: span-0f95b1bbb33d5ee475fe51a170b3ddb8
+  - trace_id: 01a17b1d-2dd6-7c20-8417-87871debe8b8
     spans:
-    - span_id: span-b1863e5ce7cc860840f259f2b5a238a2
-    - span_id: span-3584708d01cf97ec829971049678a342
+    - span_id: span-b0804dfc5f96ddbbae4a14aaeb511eb3
+    - span_id: span-45104bb3158d29c896337b5fd9376aef
+    - span_id: span-0934cff99b7ba4f3d8b75580d4c16051
+  - trace_id: 01a17b1b-4156-7442-b86d-1677edf2dbf5
+    spans:
+    - span_id: span-d0f933b0ca77cc99e70097365829d9a0
+    - span_id: span-e69195bff547face8cfed2ed5024d114
+    - span_id: span-1c00090dd8063588133276dca4bdafa4
+  - trace_id: 01a17b1b-415b-7040-80fb-3219855ccbf9
+    spans:
+    - span_id: span-1846ed3c93baa8bad1281c5fac574ae7
+    - span_id: span-03afc0f81e9c54c1ae832747933eaa05
+    - span_id: span-e63ac54929676ff32f1010bd0a11fdff
+  - trace_id: 01a17b1e-2d2c-7cd2-8dc1-de578473c3eb
+    spans:
+    - span_id: span-fa3db8ccc22d57788aa07e5ea1be9bc5
+    - span_id: span-599ac9d9465fe460040a23ca6ac57111
+    - span_id: span-0c429b0e54efffd91313d059ee2d77cc
+  - trace_id: 01a17b1f-6c86-76d1-802a-1089d6f61a93
+    spans:
+    - span_id: span-5e633662725c894f3166eaeded938369
+    - span_id: span-d740d42a02ae55f891c420fd2d43a5b9
+    - span_id: span-267ee4dc586d607d759c3753f8ab2f16
+  - trace_id: 01a17b20-2129-7383-9299-7bd55ca0d6bf
+    spans:
+    - span_id: span-28112adecd789d72f34679971e3ac37b
+    - span_id: span-9de2c32d693df55007ce6957ce0cacb7
+    - span_id: span-c1e47640174b550acaba4ce06e2e280f
+  - trace_id: 01a17b22-0808-7e91-9c6e-4c0a7e81772e
+    spans:
+    - span_id: span-567031bc3bbe356bfba511544e475912
+    - span_id: span-8449b523f9cfd45e126f129ceb049a31
+    - span_id: span-4fdbd73bc32a6f42cb121b716533c9af
   updated_date: *id001
-  confidence: high
-  severity: med
+  confidence: med
+  severity: high
+  severity_reason: The submitted CAD files remain geometrically incorrect despite
+    valid-solid checks.
+- name: Saved named dimensions fail independent edit tests
+  description: The last saved-file verification before termination exposes named dimensions
+    that either produce no volume or bounding-box response to a +10% edit or invalidate
+    the rebuilt shape. For example, HoleDia and HoleDiameter remain inert in the plate
+    reconstructions, and LeftX invalidates the scoop model. These failures occur even
+    when the unedited file is a valid single solid; naming parameters and constraining
+    sketches does not establish editable design intent. Require each advertised dimension
+    to pass an independent perturbation-and-recompute test, repair its geometry/expression
+    binding, and rerun the test after the final save.
+  evidence:
+  - trace_id: 01a17b1b-4228-7d22-b19a-c5562364d1d2
+    spans:
+    - span_id: span-9dbd147b096373c3b23e09dc7fa484d2
+    - span_id: span-0f95b1bbb33d5ee475fe51a170b3ddb8
+  - trace_id: 01a17b1d-2dd6-7c20-8417-87871debe8b8
+    spans:
+    - span_id: span-b0804dfc5f96ddbbae4a14aaeb511eb3
+    - span_id: span-0934cff99b7ba4f3d8b75580d4c16051
+  - trace_id: 01a17b1b-415b-7040-80fb-3219855ccbf9
+    spans:
+    - span_id: span-1846ed3c93baa8bad1281c5fac574ae7
+    - span_id: span-e63ac54929676ff32f1010bd0a11fdff
+  - trace_id: 01a17b20-2129-7383-9299-7bd55ca0d6bf
+    spans:
+    - span_id: span-28112adecd789d72f34679971e3ac37b
+    - span_id: span-c1e47640174b550acaba4ce06e2e280f
+  updated_date: *id001
+  confidence: med
+  severity: high
+  severity_reason: Some named edits leave the saved geometry unchanged or make the
+    rebuilt model invalid.

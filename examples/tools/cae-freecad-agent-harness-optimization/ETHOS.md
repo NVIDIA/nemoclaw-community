@@ -2,7 +2,7 @@
 schema_version: 1
 name: cad-agent
 created_timestamp: 2026-09-10T13:45:00+02:00
-updated_timestamp: 2026-10-15T21:00:00+02:00
+updated_timestamp: 2026-10-27T10:00:00+01:00
 author: NVIDIA
 owner: NVIDIA
 ---
@@ -39,12 +39,15 @@ FreeCAD 1.1 runs headless there as `freecadcmd` (FreeCAD Python, no GUI). Each
 command is a new process, so nothing stays in memory between calls; work persists
 only in files. `read_file`, `write_file`, `ls` and the other file tools take real
 paths; `read_file` returns 100 lines unless given a larger `limit`, and its header
-shows `next offset`.
+shows `next offset`; on an image (PNG, JPEG) it returns the image itself, which the model
+sees. `xvfb-run` gives headless FreeCAD a virtual display, so the agent can render its
+model and the mesh to images and look at them.
 
 ## Harness
 
-LangChain Deep Agents on Nemotron 3 Ultra (text only), built from `agent/agent.yaml`
-by `harness/run_agent.py` inside each Harbor trial's task container. The model is
+LangChain Deep Agents on Nemotron 3.5 Super VL, which reads images as well as text,
+built from `agent/agent.yaml`
+by `harness/agent.py` and run by `harness/run_agent.py` inside each Harbor trial's task container. The model is
 reached through the NeMo Helix inference gateway, and NeMo Relay records each run as
 an ATIF trace in Intake, with the agent's tool schemas. The agent stops when it
 reports the finished model.
@@ -86,9 +89,14 @@ Where things run:
 - The agent does the modelling. It reads the measurements, decides which features
   describe the part, and writes its own FreeCAD code for that part. Skills and subagents
   give it knowledge (how to measure, how to build each kind of feature, the FreeCAD API,
-  how to verify), not a routine that turns any mesh into a model in one command: a run
-  whose only modelling step is executing a fixed reconstruction script misses the
-  purpose even when it passes.
+  how to verify) and general tools, not a routine that turns any mesh into a model in one
+  command: a run whose only modelling step is executing a fixed reconstruction script
+  misses the purpose even when it passes.
+- General geometry tools are allowed: functions that work on any mesh and that the agent
+  calls with its own choices, such as fitting a section or a path, or building a loft,
+  sweep or pad from fitted data with named dimensions. The agent still decides which
+  features describe the part and where each tool applies. A tool holds no part-specific
+  numbers, feature lists or shapes, and uses only the task's input.
 - Generalize: the method must work for parts, proportions and orientations the eval
   has not shown it. Tuning to the evaluated parts is a failure.
 
@@ -112,6 +120,9 @@ Where things run:
 - It reloads and recomputes cleanly after save and reopen.
 - Compact: about one face per surface of the part, not one per slice or polygon
   segment; the eval allows at most 10 times the faces of the task's reference solution.
+- No visible artefact a designer would object to: notches, bulges, creases, seams, steps
+  or pinches the part does not have. The checks cannot measure these; renders of the
+  model beside the mesh show them.
 - Every feature of the part is there: a model that leaves out a branch or a boss is wrong
   even when its overall overlap is high.
 - IoU ≥ 0.9 against the task's reference mesh, measured by the eval's verifier, on every
@@ -131,10 +142,12 @@ Where things run:
 
 ## Constraints
 
-- FreeCAD runs headless: no GUI, no view objects, and no screenshots. A heavy FreeCAD
-  call can exhaust the container's memory and end the run.
+- FreeCAD runs headless: no GUI window. Renders come from a virtual display
+  (`xvfb-run`), and each costs seconds, so look when it decides something. A heavy
+  FreeCAD call can exhaust the container's memory and end the run.
 - A run must finish within 5 minutes.
-- Text only: read geometry back as numbers.
+- Look and measure: images show what is wrong and where; numbers decide whether it is
+  fixed. A render is never the only evidence of success.
 - The agent directory is uploaded with every run and readable by the agent. This
   ethos and the evals stay outside it.
 
@@ -149,8 +162,13 @@ Where things run:
 
 ## Evaluation Setup
 
-The Harbor tasks in `evals/`, authored with NeMo Eval Author, hold one task per
-reference part, all graded by the same checks; the agent is measured on every part.
+The Harbor tasks in `evals/`, all graded by the same checks authored with NeMo Eval
+Author, are split into train, val and test. Most are generated parametric parts of
+several families, each proved like the two hand-made parts (the reference solution
+passes every check, an empty answer fails, leaving out any feature fails one).
+Experimenters see only train; a change is kept on val; test, with sizes outside the
+training range, a family never trained on and the two hand-made parts, is read once at
+the end. The agent is judged on parts it was never tuned on.
 Each task's verifier grades the saved model in its own container, including IoU against
 the reference mesh at 0.1 mm XY resolution. `publish.py scores` attaches each run's
 reward, IoU, failed checks and complexity counts to its Intake trace, and NeMo Compass analyzes those
@@ -171,5 +189,4 @@ _(none)_
 
 ## Open Questions
 
-- How many and which reference parts are enough to show the agent generalizes, and
-  whether thin parts need a resolution-aware IoU target.
+- Whether thin parts need a resolution-aware IoU target.

@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for the pure-NumPy half of the verifier's IoU (evals/*/tests/iou_math.py).
+"""Tests for the pure-NumPy half of the verifier's IoU (evals/verifier/iou_math.py).
 
 Every expected value here is computed by hand. Requires NumPy only: no
 FreeCAD, no running FreeCAD session, no network, no API key.
@@ -18,7 +18,7 @@ import numpy as np
 
 sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                    "evals", "part-1-reconstruction", "tests"))
+                    "evals", "verifier"))
 
 from iou_math import (  # noqa: E402
     CELL_MIN, X_OFFSET, Y_OFFSET, crossings, grid_axes, intervals,
@@ -277,6 +277,17 @@ class TestLargestMissingFraction(unittest.TestCase):
         ref = stack([box(*self.BODY), box((10, 3, 3), (14, 7, 7))])
         missing = largest_missing_fraction(stack([box(*self.BODY)]), ref, (0, 0, 0), (14, 10, 10), 20.0)
         self.assertAlmostEqual(missing, 64 / 1064, delta=0.015)
+
+
+    def test_thin_walled_part_keeps_its_walls(self):
+        # A 1 mm plate with a 1 mm fin beside it (400 of 2,000 mm3): at diagonal / 200 the
+        # opening erases both, so only voxels sized to the mean thickness see the fin missing.
+        plate, fin = box((0, 0, 0), (40, 40, 1)), box((40, 0, 0), (50, 40, 1))
+        ref = stack([plate, fin])
+        args = (stack([plate]), ref, (0, 0, 0), (50, 40, 1), 64.0)
+        self.assertEqual(largest_missing_fraction(*args), 0.0)
+        thickness = 2 * 2000 / (2 * 50 * 40 + 2 * 50 * 1 + 2 * 40 * 1)
+        self.assertAlmostEqual(largest_missing_fraction(*args, thickness), 0.2, delta=0.05)
 
 
 if __name__ == "__main__":

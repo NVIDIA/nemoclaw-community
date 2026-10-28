@@ -2,6 +2,11 @@
 {{/* SPDX-License-Identifier: Apache-2.0 */}}
 {{/* Optional PVC writes are exact-resource namespace Roles, never ClusterRole writes. */}}
 {{- $storage := default dict .Values.agentConfig.storage -}}
+{{- if and $storage.enabled (eq (default "recommendation" $storage.mode) "automatic") -}}
+{{- if or (and (eq .Values.runMode "watch") (ne (int .Values.replicaCount) 1)) (and (eq .Values.runMode "cronjob") (ne .Values.cronjob.concurrencyPolicy "Forbid")) -}}
+{{- fail "automatic storage expansion requires a single writer: replicaCount=1 or cronjob.concurrencyPolicy=Forbid" -}}
+{{- end -}}
+{{- end -}}
 {{- if and .Values.rbac.create $storage.enabled (eq (default "recommendation" $storage.mode) "automatic") -}}
 {{- if or (eq .Values.memory.backend "none") (and (eq .Values.memory.backend "file") (not .Values.memory.persistence.enabled)) -}}
 {{- fail "automatic storage expansion requires configmap memory or persistent file memory" -}}

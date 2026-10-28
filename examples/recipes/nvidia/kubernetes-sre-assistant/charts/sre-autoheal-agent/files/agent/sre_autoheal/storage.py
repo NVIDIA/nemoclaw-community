@@ -503,6 +503,8 @@ class StorageController:
                             raise ValueError('global action budget exhausted')
                     if self.expansions >= self.cfg['max_expansions_per_cycle']:
                         raise ValueError('storage expansion cycle budget exhausted')
+                    if getattr(self.memory, 'load_failed', False):
+                        raise ValueError('incident memory could not be recovered; expansion refused')
                     operation = {'uid': meta['uid'], 'started': self.clock(), 'target': target,
                                  'original': pvc['spec']['resources']['requests']['storage'], 'outcome': 'expansion_requested'}
                     if sample.get('vm'):
@@ -513,6 +515,12 @@ class StorageController:
                     backend = getattr(self.memory, 'backend', None)
                     if isinstance(backend, NullBackend):
                         raise ValueError('automatic expansion requires persistent incident memory')
+                    # Reserve before the API write, as ordinary remediation does.
+                    # Keep the reservation after rejection, timeout or crash: the
+                    # API may have committed even if no response was received.
+                    if self.policy:
+                        self.policy.record_action()
+                        self.memory.data['action_times'] = list(self.policy._action_times)
                     try:
                         if backend is not None:
                             backend.save(self.memory.data)
@@ -525,9 +533,6 @@ class StorageController:
                             'spec': {'resources': {'requests': {'storage': target}}}}
                     self.client.patch(k.ResourceRef('', 'v1', 'persistentvolumeclaims', namespace, meta['name']), body)
                     self.expansions += 1
-                    if self.policy:
-                        self.policy.record_action()
-                        self.memory.data['action_times'] = self.policy._action_times
                     records.append(self._record(pvc, 'expansion_requested', 'atomic UID/resourceVersion-guarded PVC expansion submitted; verification pending; no guest mutation', target, sample))
                 except ValueError as exc:
                     records.append(self._record(pvc, 'blocked', str(exc), target, sample))
