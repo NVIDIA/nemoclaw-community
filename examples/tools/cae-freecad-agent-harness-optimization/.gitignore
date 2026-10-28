@@ -5,7 +5,7 @@
 *.FCStd
 *.FCStd[0-9]
 *.FCBak
-!evals/*/solution/*.FCStd
+!evals/*/*/solution/*.FCStd
 
 # Python
 __pycache__/
@@ -34,3 +34,6 @@ experiments/
 
 # Harbor jobs from the commands in evals/README.md
 runs/
+
+# The web chat's default work folder (chat/chat.sh)
+cad-work/

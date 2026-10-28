@@ -1,169 +1,236 @@
 {
-  "suite": "cad-agent regression evals",
-  "authored_with": "NeMo Eval Author eval-author-trace-environment (github.com/NVIDIA-NeMo/eval-author at 20f95a0)",
-  "harbor": "0.22.0",
-  "checks": [
-    "recomputes-after-reopen",
-    "single-valid-solid",
-    "native-feature-tree",
-    "named-dimension-drives-geometry",
-    "independent-dimensions",
-    "mesh-fidelity",
-    "no-missing-feature",
-    "single-visible-object",
-    "compact-model"
-  ],
-  "proved": "2026-10-16, container setup, Harbor 0.22.0 on Colima, nine checks",
-  "isolation": {
-    "agent": "allowlist host.docker.internal (per host, all ports); public hosts blocked",
-    "verifier": "no network"
-  },
-  "tasks": [
+ "suite": "cad-agent regression evals",
+ "authored_with": "NeMo Eval Author eval-author-trace-environment (github.com/NVIDIA-NeMo/eval-author at 48c2b3b)",
+ "harbor": "0.24.0",
+ "checks": [
+  "recomputes-after-reopen",
+  "single-valid-solid",
+  "native-feature-tree",
+  "named-dimension-drives-geometry",
+  "independent-dimensions",
+  "mesh-fidelity",
+  "no-missing-feature",
+  "single-visible-object",
+  "compact-model"
+ ],
+ "proved": "2026-10-26, container setup, Harbor 0.24.0 on Colima, nine checks, controls incl. nolast",
+ "isolation": {
+  "agent": "allowlist host.docker.internal (per host, all ports); public hosts blocked",
+  "verifier": "no network"
+ },
+ "tasks": [
+  {
+   "id": "part-1-reconstruction",
+   "path": "test/part-1-reconstruction",
+   "source_trace": "01a11fc2-cbe4-7353-837a-f20c04071618",
+   "insights": [
     {
-      "id": "part-1-reconstruction",
-      "path": "part-1-reconstruction",
-      "source_trace": "01a11fc2-cbe4-7353-837a-f20c04071618",
-      "insights": [
-        {
-          "title": "Hard-coded reconstructions are declared complete despite failing mesh similarity",
-          "check": "mesh-fidelity"
-        },
-        {
-          "title": "Scripted shape wrappers are presented as native PartDesign feature trees",
-          "check": "native-feature-tree"
-        },
-        {
-          "title": "FreeCAD tasks finish with many objects visible instead of one",
-          "check": "single-visible-object"
-        },
-        {
-          "title": "CAD completion skips save-and-reopen validation",
-          "check": "recomputes-after-reopen"
-        },
-        {
-          "title": "Mesh conversion always emits a dense stack of slice sketches and pads",
-          "check": "compact-model"
-        },
-        {
-          "title": "Generic mesh slicing produces dense loft trees instead of design-intent CAD features",
-          "check": "independent-dimensions"
-        },
-        {
-          "title": "A run that should score 0 scored 1: a model without its branch passed every check",
-          "check": "no-missing-feature"
-        }
-      ],
-      "controls": {
-        "nop": {
-          "runs": 2,
-          "reward": 0,
-          "fails": "every check"
-        },
-        "oracle": {
-          "runs": 2,
-          "reward": 1,
-          "iou": 0.9039,
-          "faces": 7
-        },
-        "negatives": {
-          "visible": {
-            "reward": 0,
-            "fails": [
-              "single-visible-object"
-            ]
-          },
-          "broken": {
-            "reward": 0,
-            "fails": [
-              "recomputes-after-reopen",
-              "named-dimension-drives-geometry",
-              "independent-dimensions"
-            ]
-          },
-          "scripted": {
-            "reward": 0,
-            "fails": [
-              "native-feature-tree",
-              "named-dimension-drives-geometry",
-              "independent-dimensions"
-            ],
-            "model": "the solution's solid as a scripted base shape plus one sketch-driven pocket"
-          },
-          "slices": {
-            "reward": 0,
-            "fails": [
-              "independent-dimensions",
-              "compact-model"
-            ],
-            "model": "a real agent run: 32 stacked pads, IoU 0.9116, 1658 faces"
-          },
-          "one-dimension": {
-            "reward": 0,
-            "fails": [
-              "independent-dimensions"
-            ],
-            "model": "a real run of the final agent: 4 ruled lofts through 24 B-spline sections, every height driven by one Params.Length, IoU 0.970, 50 faces"
-          },
-          "no-branch": {
-            "reward": 0,
-            "fails": [
-              "no-missing-feature"
-            ],
-            "model": "a real agent run that passed eight checks without its branch (IoU 0.918, largest missing piece 4.4% of the volume)"
-          }
-        }
-      }
+     "title": "Hard-coded reconstructions are declared complete despite failing mesh similarity",
+     "check": "mesh-fidelity"
     },
     {
-      "id": "part-2-reconstruction",
-      "path": "part-2-reconstruction",
-      "source_trace": null,
-      "reason": "a second first-party part, so the suite tests that the agent's method is geometry-agnostic as ETHOS.md requires; same instruction, verifier and checks as part-1-reconstruction, different mesh",
-      "controls": {
-        "nop": {
-          "runs": 2,
-          "reward": 0,
-          "fails": "every check"
-        },
-        "oracle": {
-          "runs": 2,
-          "reward": 1,
-          "iou": 0.9985,
-          "faces": 36
-        },
-        "negatives": {
-          "visible": {
-            "reward": 0,
-            "fails": [
-              "single-visible-object"
-            ]
-          },
-          "broken": {
-            "reward": 0,
-            "fails": [
-              "recomputes-after-reopen",
-              "named-dimension-drives-geometry",
-              "independent-dimensions"
-            ]
-          },
-          "scripted": {
-            "reward": 0,
-            "fails": [
-              "native-feature-tree",
-              "named-dimension-drives-geometry",
-              "independent-dimensions"
-            ],
-            "model": "the solution's solid as a scripted base shape plus one sketch-driven pocket"
-          },
-          "one-dimension": {
-            "reward": 0,
-            "fails": [
-              "independent-dimensions"
-            ],
-            "model": "a real run of the final agent: 4 ruled lofts through 27 B-spline sections, every height driven by one Params.Length, IoU 0.943, 62 faces"
-          }
-        }
-      }
+     "title": "Scripted shape wrappers are presented as native PartDesign feature trees",
+     "check": "native-feature-tree"
+    },
+    {
+     "title": "FreeCAD tasks finish with many objects visible instead of one",
+     "check": "single-visible-object"
+    },
+    {
+     "title": "CAD completion skips save-and-reopen validation",
+     "check": "recomputes-after-reopen"
+    },
+    {
+     "title": "Mesh conversion always emits a dense stack of slice sketches and pads",
+     "check": "compact-model"
+    },
+    {
+     "title": "Generic mesh slicing produces dense loft trees instead of design-intent CAD features",
+     "check": "independent-dimensions"
+    },
+    {
+     "title": "A run that should score 0 scored 1: a model without its branch passed every check",
+     "check": "no-missing-feature"
     }
-  ]
+   ],
+   "controls": {
+    "nop": {
+     "runs": 2,
+     "reward": 0,
+     "fails": "every check"
+    },
+    "oracle": {
+     "runs": 2,
+     "reward": 1,
+     "iou": 0.9039,
+     "faces": 7
+    },
+    "negatives": {
+     "visible": {
+      "reward": 0,
+      "fails": [
+       "single-visible-object"
+      ]
+     },
+     "broken": {
+      "reward": 0,
+      "fails": [
+       "recomputes-after-reopen",
+       "named-dimension-drives-geometry",
+       "independent-dimensions"
+      ]
+     },
+     "scripted": {
+      "reward": 0,
+      "fails": [
+       "native-feature-tree",
+       "named-dimension-drives-geometry",
+       "independent-dimensions"
+      ],
+      "model": "the solution's solid as a scripted base shape plus one sketch-driven pocket"
+     },
+     "slices": {
+      "reward": 0,
+      "fails": [
+       "independent-dimensions",
+       "compact-model"
+      ],
+      "model": "a real agent run: 32 stacked pads, IoU 0.9116, 1658 faces"
+     },
+     "one-dimension": {
+      "reward": 0,
+      "fails": [
+       "independent-dimensions"
+      ],
+      "model": "a real agent run: 4 ruled lofts through 24 B-spline sections, every height driven by one Params.Length, IoU 0.970, 50 faces"
+     },
+     "no-branch": {
+      "reward": 0,
+      "fails": [
+       "no-missing-feature"
+      ],
+      "model": "a real agent run that passed eight checks without its branch (IoU 0.918, largest missing piece 4.4% of the volume)"
+     },
+     "nolast": {
+      "reward": 0,
+      "fails": [
+       "mesh-fidelity",
+       "no-missing-feature",
+       "independent-dimensions"
+      ],
+      "model": "the solution with its last additive feature suppressed"
+     }
+    }
+   }
+  },
+  {
+   "id": "part-2-reconstruction",
+   "path": "test/part-2-reconstruction",
+   "source_trace": null,
+   "reason": "a second first-party part, so the suite tests that the agent's method is geometry-agnostic as ETHOS.md requires; same instruction, verifier and checks as part-1-reconstruction, different mesh",
+   "controls": {
+    "nop": {
+     "runs": 2,
+     "reward": 0,
+     "fails": "every check"
+    },
+    "oracle": {
+     "runs": 2,
+     "reward": 1,
+     "iou": 0.9985,
+     "faces": 36
+    },
+    "negatives": {
+     "visible": {
+      "reward": 0,
+      "fails": [
+       "single-visible-object"
+      ]
+     },
+     "broken": {
+      "reward": 0,
+      "fails": [
+       "recomputes-after-reopen",
+       "named-dimension-drives-geometry",
+       "independent-dimensions"
+      ]
+     },
+     "scripted": {
+      "reward": 0,
+      "fails": [
+       "native-feature-tree",
+       "named-dimension-drives-geometry",
+       "independent-dimensions"
+      ],
+      "model": "the solution's solid as a scripted base shape plus one sketch-driven pocket"
+     },
+     "one-dimension": {
+      "reward": 0,
+      "fails": [
+       "independent-dimensions"
+      ],
+      "model": "a real agent run: 4 ruled lofts through 27 B-spline sections, every height driven by one Params.Length, IoU 0.943, 62 faces"
+     },
+     "nolast": {
+      "reward": 0,
+      "fails": [
+       "no-missing-feature"
+      ],
+      "model": "the solution with its last additive feature suppressed"
+     }
+    }
+   }
+  }
+ ],
+ "generated": {
+  "splits": "splits.json",
+  "tasks": {
+   "train": 20,
+   "val": 7,
+   "test": 5
+  },
+  "families": [
+   "bracket",
+   "mug",
+   "scoop",
+   "tee",
+   "tub",
+   "turned"
+  ],
+  "proved": "Oracle 1.0 and NOP 0.0 on every generated task; leaving out any feature of the reference solution fails no-missing-feature",
+  "oracle_faces": {
+   "val/cad-0668520ae9": 7,
+   "train/cad-0ba93afa98": 6,
+   "train/cad-16d46ad58e": 8,
+   "test/cad-1f321a0bbb": 5,
+   "train/cad-368b251be4": 7,
+   "test/cad-3756f8c23a": 6,
+   "train/cad-38d06f99cb": 6,
+   "train/cad-39ee15bb3f": 8,
+   "train/cad-3ca648f166": 6,
+   "test/cad-480daa7d84": 8,
+   "train/cad-4d5513b7d8": 9,
+   "train/cad-4ef4243373": 17,
+   "val/cad-5483526844": 8,
+   "train/cad-660823eec1": 6,
+   "train/cad-78df216667": 17,
+   "val/cad-82293f4930": 8,
+   "train/cad-8aaf8f1d56": 10,
+   "val/cad-8d232e3285": 6,
+   "train/cad-9507378cd3": 8,
+   "train/cad-9609fac6af": 10,
+   "train/cad-99da71010c": 13,
+   "train/cad-9af1ab60b3": 10,
+   "test/cad-bec777bddd": 10,
+   "train/cad-c7166b0e25": 10,
+   "train/cad-d716535c03": 7,
+   "test/cad-ddd63d5b78": 7,
+   "val/cad-e0c7982a60": 5,
+   "train/cad-e53f36045c": 9,
+   "val/cad-ec498e72f2": 6,
+   "train/cad-ecbd5a4e15": 8,
+   "val/cad-f09ddddc6d": 17,
+   "train/cad-f2a757cfe5": 7
+  }
+ }
 }

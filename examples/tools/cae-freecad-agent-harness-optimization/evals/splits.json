@@ -1,0 +1,174 @@
+{
+ "tasks": {
+  "part-1-reconstruction": {
+   "split": "test",
+   "family": "original",
+   "slice": "originals"
+  },
+  "part-2-reconstruction": {
+   "split": "test",
+   "family": "original",
+   "slice": "originals"
+  },
+  "cad-0ba93afa98": {
+   "split": "train",
+   "family": "turned",
+   "slice": "train"
+  },
+  "cad-1f321a0bbb": {
+   "split": "test",
+   "family": "turned",
+   "slice": "unseen-region"
+  },
+  "cad-38d06f99cb": {
+   "split": "train",
+   "family": "turned",
+   "slice": "train"
+  },
+  "cad-d716535c03": {
+   "split": "train",
+   "family": "turned",
+   "slice": "train"
+  },
+  "cad-e53f36045c": {
+   "split": "train",
+   "family": "turned",
+   "slice": "train"
+  },
+  "cad-ec498e72f2": {
+   "split": "val",
+   "family": "turned",
+   "slice": "val"
+  },
+  "cad-8d232e3285": {
+   "split": "val",
+   "family": "turned",
+   "slice": "val"
+  },
+  "cad-3ca648f166": {
+   "split": "train",
+   "family": "tub",
+   "slice": "train"
+  },
+  "cad-368b251be4": {
+   "split": "train",
+   "family": "tub",
+   "slice": "train"
+  },
+  "cad-f2a757cfe5": {
+   "split": "train",
+   "family": "tub",
+   "slice": "train"
+  },
+  "cad-660823eec1": {
+   "split": "train",
+   "family": "tub",
+   "slice": "train"
+  },
+  "cad-3756f8c23a": {
+   "split": "test",
+   "family": "tub",
+   "slice": "unseen-region"
+  },
+  "cad-e0c7982a60": {
+   "split": "val",
+   "family": "tub",
+   "slice": "val"
+  },
+  "cad-0668520ae9": {
+   "split": "val",
+   "family": "tub",
+   "slice": "val"
+  },
+  "cad-ecbd5a4e15": {
+   "split": "train",
+   "family": "mug",
+   "slice": "train"
+  },
+  "cad-16d46ad58e": {
+   "split": "train",
+   "family": "mug",
+   "slice": "train"
+  },
+  "cad-82293f4930": {
+   "split": "val",
+   "family": "mug",
+   "slice": "val"
+  },
+  "cad-9507378cd3": {
+   "split": "train",
+   "family": "mug",
+   "slice": "train"
+  },
+  "cad-5483526844": {
+   "split": "val",
+   "family": "mug",
+   "slice": "val"
+  },
+  "cad-480daa7d84": {
+   "split": "test",
+   "family": "mug",
+   "slice": "unseen-region"
+  },
+  "cad-39ee15bb3f": {
+   "split": "train",
+   "family": "mug",
+   "slice": "train"
+  },
+  "cad-9af1ab60b3": {
+   "split": "train",
+   "family": "scoop",
+   "slice": "train"
+  },
+  "cad-c7166b0e25": {
+   "split": "train",
+   "family": "scoop",
+   "slice": "train"
+  },
+  "cad-9609fac6af": {
+   "split": "train",
+   "family": "scoop",
+   "slice": "train"
+  },
+  "cad-8aaf8f1d56": {
+   "split": "train",
+   "family": "scoop",
+   "slice": "train"
+  },
+  "cad-78df216667": {
+   "split": "train",
+   "family": "bracket",
+   "slice": "train"
+  },
+  "cad-f09ddddc6d": {
+   "split": "val",
+   "family": "bracket",
+   "slice": "val"
+  },
+  "cad-4d5513b7d8": {
+   "split": "train",
+   "family": "bracket",
+   "slice": "train"
+  },
+  "cad-4ef4243373": {
+   "split": "train",
+   "family": "bracket",
+   "slice": "train"
+  },
+  "cad-99da71010c": {
+   "split": "train",
+   "family": "bracket",
+   "slice": "train"
+  },
+  "cad-ddd63d5b78": {
+   "split": "test",
+   "family": "tee",
+   "slice": "unseen-family"
+  },
+  "cad-bec777bddd": {
+   "split": "test",
+   "family": "tee",
+   "slice": "unseen-family"
+  }
+ }
+}

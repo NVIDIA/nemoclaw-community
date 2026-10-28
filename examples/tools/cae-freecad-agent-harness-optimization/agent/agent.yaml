@@ -1,12 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# The CAD agent: harness/run_agent.py builds a LangChain Deep Agents agent from this
+# The CAD agent: harness/agent.py builds a LangChain Deep Agents agent from this
 # file, with the skills in skills/ beside it. Optional: subagents (Deep Agents format),
 # and middleware.py exporting MIDDLEWARE, a list of Deep Agents middleware.
 name: cad-agent
 # A model on your NeMo Helix inference gateway (`nemo models list --all-pages`), or
-# pass one per run with `harbor run -m`. Measured with nvidia-nvidia-nemotron-3-ultra.
+# pass one per run with `harbor run -m`. Measured with nvidia-nvidia-nemotron-3-5-super-vl.
 model: REPLACE_WITH_YOUR_MODEL_NAME
 system_prompt: |
   You are a CAD Agent (Computer Aided Design).
