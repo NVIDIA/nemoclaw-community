@@ -66,6 +66,8 @@ The suite checks:
 - viewport-only and multimodal requests;
 - same-session image attachment;
 - tab and document changes during page capture;
+- Stop during page capture or upload, conversation selection while loading,
+  and page-context restoration after a session timeout;
 - cancellation during initialization, image attachment, and inference;
 - cancellation during vision requests, capacity waits, and retry waits;
 - cancellation, timeout, and non-PTY behavior;
@@ -104,6 +106,10 @@ The Brev loopback flow is intended for one developer. A shared deployment
 needs normal Hermes authentication and an HTTPS ingress that supports browser
 extension API requests. `deploy/nginx/ask-nemoclaw-server.conf` is a reference
 reverse-proxy template for that integration.
+It preserves the caller's `Origin` and sets `client_max_body_size 6000000` to
+match the API's encoded request limit. Preserve that header and configure the
+same or a larger body limit in preceding proxies. An HTTP 413 response is shown
+as a request-size error in the extension.
 
 An operator can check a shared route without sending credentials:
 
