@@ -102,13 +102,20 @@ def _handle(
         client.settimeout(None)
         up = threading.Thread(target=_pump, args=(backend, client), daemon=True)
         up.start()
-        relay_requests(
-            client,
-            backend,
-            lambda head: inject_authorization(head, token),
-            peeked,
-        )
-        up.join()
+        try:
+            relay_requests(
+                client,
+                backend,
+                lambda head: inject_authorization(head, token),
+                peeked,
+            )
+        finally:
+            try:
+                # Forward client EOF so join does not wait on a backend still reading the body.
+                backend.shutdown(socket.SHUT_WR)
+            except OSError:
+                pass  # Backend already closed this half of the tunnel.
+            up.join()
     except OSError:
         return
     finally:

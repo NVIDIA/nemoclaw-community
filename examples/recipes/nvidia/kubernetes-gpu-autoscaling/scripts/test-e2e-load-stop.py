@@ -9,6 +9,8 @@ import importlib.util
 import asyncio
 import inspect
 import json
+import socket
+import threading
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parent / "e2e-openclaw-ollama-load-test.py"
@@ -292,6 +294,97 @@ _partial = _Chunks([b"GET / HTTP/1.1\r\nHost: h\r\n"])
 _partial_out = _Chunks([])
 relay.relay_requests(_partial, _partial_out, _host)
 assert _partial_out.sent == b""
+for _proxy_src, _proxy_name in (
+    (hermes_api_proxy, "e2e-hermes-api-auth-proxy.py"),
+    (hermes_ui_proxy, "e2e-hermes-ui-host-proxy.py"),
+):
+    _handle_src = _proxy_src[_proxy_src.index("def _handle") :]
+    assert "backend.shutdown(socket.SHUT_WR)" in _handle_src, _proxy_name
+    assert _handle_src.index("backend.shutdown(socket.SHUT_WR)") < _handle_src.index(
+        "up.join()"
+    ), _proxy_name
+
+
+def _assert_client_disconnect_unblocks_handle(handle, extra) -> None:
+    """A client close during the body must finish the handler without a backend timeout."""
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    port = listener.getsockname()[1]
+    finished = threading.Event()
+    client_proxy, client_peer = socket.socketpair()
+
+    def backend() -> None:
+        conn = None
+        try:
+            listener.settimeout(2.0)
+            conn, _addr = listener.accept()
+            conn.settimeout(None)
+            buf = bytearray()
+            while b"\r\n\r\n" not in buf:
+                chunk = conn.recv(65536)
+                if not chunk:
+                    return
+                buf.extend(chunk)
+            head, body = bytes(buf).split(b"\r\n\r\n", 1)
+            length = 0
+            for line in head.split(b"\r\n")[1:]:
+                if line.lower().startswith(b"content-length:"):
+                    length = int(line.split(b":", 1)[1].strip())
+                    break
+            while len(body) < length:
+                chunk = conn.recv(65536)
+                if not chunk:
+                    break
+                body += chunk
+        except OSError:
+            return
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except OSError:
+                    pass
+
+    def run() -> None:
+        try:
+            handle(client_proxy, "127.0.0.1", port, extra)
+        except OSError:
+            pass
+        finally:
+            finished.set()
+
+    backend_thread = threading.Thread(target=backend, daemon=True)
+    handle_thread = threading.Thread(target=run, daemon=True)
+    backend_thread.start()
+    handle_thread.start()
+    try:
+        client_peer.sendall(
+            b"POST /v1/chat/completions HTTP/1.1\r\n"
+            b"Host: 127.0.0.1\r\n"
+            b"Content-Length: 64\r\n\r\n"
+            b"short"
+        )
+        client_peer.close()
+        assert finished.wait(2.0), (
+            "handler must finish after a client disconnect during the request body"
+        )
+    finally:
+        try:
+            client_proxy.close()
+        except OSError:
+            pass
+        try:
+            listener.close()
+        except OSError:
+            pass
+        handle_thread.join(2.0)
+        backend_thread.join(2.0)
+
+
+_assert_client_disconnect_unblocks_handle(ha._handle, "")
+_assert_client_disconnect_unblocks_handle(hp._handle, b"127.0.0.1:18789")
 assert "E2E_PUBLISH_BIND:-127.0.0.1" in forward
 assert 'E2E_PUBLISH_BIND:-0.0.0.0' not in forward
 assert "E2E_OPENCLAW_GATEWAY_TOKEN_FILE" in forward
@@ -689,5 +782,6 @@ assert "except Exception:" not in timeline_src
 assert "except OSError:" in timeline_src
 assert 'text[-1] in "kK"' in timeline_src
 print("OK: inner forwards bind 127.0.0.1; remote publish binds 0.0.0.0 unless E2E_PUBLISH_BIND is set")
+print("OK: Hermes proxies forward a client disconnect before joining the response thread")
 print("OK: published HTTP and argv do not include gateway tokens or API keys")
 print("OK: client cleanup, Hermes Bearer, pairings, and Helm restore match review fixes")
