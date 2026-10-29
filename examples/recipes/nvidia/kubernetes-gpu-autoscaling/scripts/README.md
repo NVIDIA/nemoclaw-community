@@ -25,7 +25,7 @@ what each script in this directory does — it has no instructions of its own.
 | `agentscaling-common.sh` | Shared HPA apply + sandbox steps. Do not run it directly. |
 | `setup-openclaw-ollama-e2e-sandboxes.sh` | Sandbox create/start/stop used by the agentscaling scripts |
 | `e2e-openclaw-ollama-load-test.py` | Implementation used by `client.sh` |
-| `uninstall-e2e.sh` | Remove e2e sandboxes/providers before another pairing. Does not uninstall GPU inference or OpenShell. Next `agentscaling_*` helm-upgrades `INFERENCE_RUNTIME`. |
+| `uninstall-e2e.sh` | Remove e2e sandboxes/providers before another pairing. Does not uninstall GPU inference or OpenShell. Next `agentscaling_*` runs a Helm upgrade when the live inference runtime, HPA metric, or ConfigMap `INFERENCE_MODEL` differs. |
 | `setup-hermes-vllm-e2e-sandboxes.sh` | Create / start / stop / cleanup `hermes-vllm-e2e-*` only |
 | `e2e-hermes-load-test.py` | Per-user driver used by `client_hermes.sh` |
 | `agentscaling_hermes_gpuutil.sh` | Hermes + vLLM sandbox provision + GPU-util HPA. Keeps current GPUs at 1 (`maxReplicas=8`) until `client_hermes.sh`. |
@@ -48,4 +48,4 @@ what each script in this directory does — it has no instructions of its own.
 | `test-metrics-proxy-newest-sample-window.ts` | Local contract: the 30s window ages from the newest sample so a 45s gap stays until 60s idle expire |
 | `test-e2e-load-stop.py` | Local contract: HPA helper reports 8 GPUs; OpenClaw client requires `--host`, does not copy helpers into sandboxes, and on stop leaves OpenClaw running |
 | `test-e2e-timeline.py` | Local contract: client and HPA JSONL rows share even-second UTC timestamps |
-| `test-hpa-idle-replicas-contract.sh` | Local contract: idle latency HPA `1/0` is a ready baseline; leftover `5/6` is not; Helm 3 omits `--force-conflicts` |
+| `test-hpa-idle-replicas-contract.sh` | Local contract: Helm 3 omits `--force-conflicts`, Helm 4 adds it, and the check runs before the HPA is deleted |

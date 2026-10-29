@@ -10,7 +10,7 @@
 | --- | --- |
 | Description | A cost-efficient architecture that runs AI agents securely inside CPU-only OpenShell sandboxes (one sandbox per end user) while scaling GPU-backed inference dynamically. |
 | Industry | ☁️ Cloud Services |
-| Requirements | Kubernetes 1.25+ · Helm 3 · NVIDIA GPU Operator/DCGM · Metrics Server · Docker Buildx + registry · OpenShell + Agent Sandbox CRDs pinned in versions.env · OIDC or acknowledged isolated-eval exception · experimental |
+| Requirements | Kubernetes 1.25+ · Helm 3 (Helm 4 also works; the scripts add `--force-conflicts` only on Helm 4+) · NVIDIA GPU Operator/DCGM · Metrics Server · Docker Buildx + registry · OpenShell + Agent Sandbox CRDs pinned in versions.env · OIDC or acknowledged isolated-eval exception · experimental |
 | NemoClaw | v0.0.104 |
 | Harness | OpenClaw 2026.7.1 |
 | OpenShell | 0.0.85 |
@@ -123,7 +123,9 @@ openshell status
  
 Scripts of running the examples of agents + inference runtimes are in below table. Validation is on one DGX 8× H100 (80 GB) on-prem. The sandboxes run on the DGX's CPU cores and DRAM. They can run on a different CPU node with more memory. That node can hold more sandboxes and more end users. You can change the number of `E2E_USERS` as far as `E2E_USERS × AGENT_SANDBOX_MEMORY` fits the CPU node. 
 
-Keep inference runtimes and autoscaling on the GPUs. You can switch to other inference runtimes as far as the agents support them. 
+Keep inference runtimes and autoscaling on the GPUs. You can switch to other inference runtimes as far as the agents support them.
+
+`agentscaling_*` reuses the live GPU release when the live inference runtime, the HPA metric, and the metrics-proxy ConfigMap `INFERENCE_MODEL` all match. If `INFERENCE_MODEL` differs on the same inference runtime, that script runs a Helm upgrade.
 
 | | Agent | Default `INFERENCE_RUNTIME` | Default model | End users | Provision | Client |
 |--|-------|------------------------------|---------------|-----------|-----------|--------|
