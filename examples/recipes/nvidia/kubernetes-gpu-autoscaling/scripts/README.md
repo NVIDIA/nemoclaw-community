@@ -49,3 +49,4 @@ what each script in this directory does — it has no instructions of its own.
 | `test-e2e-load-stop.py` | Local contract: HPA helper reports 8 GPUs; OpenClaw client requires `--host`, does not copy helpers into sandboxes, and on stop leaves OpenClaw running |
 | `test-e2e-timeline.py` | Local contract: client and HPA JSONL rows share even-second UTC timestamps |
 | `test-hpa-idle-replicas-contract.sh` | Local contract: Helm 3 omits `--force-conflicts`, Helm 4 adds it, and the check runs before the HPA is deleted |
+| `test-sandbox-policy-contract.sh` | Local contract: skipping create-time smoke still applies and verifies the on-premises sandbox policy, and setup stops when that policy cannot be applied or verified |

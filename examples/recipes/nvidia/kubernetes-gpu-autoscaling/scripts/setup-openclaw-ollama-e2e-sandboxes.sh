@@ -7,9 +7,10 @@
 # in nemoclaw-gpu. Traffic: sandbox → inference.local → Envoy → Ollama HPA.
 #
 # Sandboxes are light CPU front ends (default 1 CPU / 8Gi). They do not run
-# inference; GPUs do. Create skips smoke, supervisor SSH waits, and NVIDIA
-# policy retries. Start is parallel, pins a slim OpenClaw config (nemoclaw
-# plugin only, empty extra channels), sets NEMOCLAW_MINIMAL_BOOTSTRAP=1, and
+# inference; GPUs do. Create skips smoke and supervisor SSH waits. It still
+# applies and verifies the on-premises sandbox policy, and stops if that
+# policy cannot be applied or verified. Start is parallel, pins a slim OpenClaw
+# config (nemoclaw plugin only, empty extra channels), sets NEMOCLAW_MINIMAL_BOOTSTRAP=1, and
 # strips unused .openclaw/npm plugin trees so start does not walk hundreds of
 # MiB of messaging node_modules. Do not spawn a second Node CLI. Prefer
 # ./scripts/agentscaling_gpuutil.sh or ./scripts/agentscaling_latency.sh

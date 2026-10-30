@@ -268,8 +268,12 @@ NemoClaw/Deep Agents Code has no long-running gateway; run one-shot prompts with
 
 - Each agent uses its official NemoClaw OpenShell policy.
 - This on-premises recipe removes the default `integrate.api.nvidia.com` access from
-  the OpenClaw and Hermes policies.
-- The Deep Agents Code policy does not grant access to that endpoint.
+  the OpenClaw and Hermes policies. Sandbox setup stops if that change cannot be
+  applied or the effective policy still allows the endpoint. The same check runs
+  when create-time smoke tests are skipped.
+- The Deep Agents Code policy does not grant access to that endpoint. Setup reads
+  the effective policy and stops if that endpoint is present or the policy cannot
+  be read.
 
 ## Notes
 

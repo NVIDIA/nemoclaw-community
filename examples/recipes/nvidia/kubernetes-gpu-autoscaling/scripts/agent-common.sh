@@ -509,6 +509,49 @@ agent_common_grants_nvidia_endpoint() {
   esac
 }
 
+# Apply the on-premises sandbox policy, then read it back.
+# OpenClaw and Hermes must lose integrate.api.nvidia.com. Every agent must
+# verify the effective policy. Create-time smoke skips do not call this off.
+# Returns 1 when the policy cannot be applied or verified.
+agent_common_enforce_onprem_sandbox_policy() {
+  local sandbox_name="${1:?sandbox}"
+  local agent="${2:?agent}"
+  local log_file="${3:?log}"
+  local attempt policy_ok=0 effective
+  if agent_common_grants_nvidia_endpoint "${agent}"; then
+    for attempt in 1 2 3; do
+      echo "  ${sandbox_name}: applying sandbox policy (${attempt}/3)"
+      if openshell policy update "${sandbox_name}" \
+        --remove-endpoint integrate.api.nvidia.com:443 \
+        --wait \
+        --timeout 20 \
+        >>"${log_file}" 2>&1; then
+        policy_ok=1
+        break
+      fi
+      if [[ "${attempt}" -lt 3 ]]; then
+        sleep 3
+      fi
+    done
+    if [[ "${policy_ok}" -ne 1 ]]; then
+      echo "ERROR: ${sandbox_name}: required sandbox policy could not be applied; see ${log_file}" >&2
+      return 1
+    fi
+  fi
+  if ! effective="$(openshell policy get "${sandbox_name}" --full -o json 2>>"${log_file}")"; then
+    echo "ERROR: ${sandbox_name}: required sandbox policy could not be verified; see ${log_file}" >&2
+    return 1
+  fi
+  if [[ ! "${effective}" =~ [^[:space:]] ]]; then
+    echo "ERROR: ${sandbox_name}: required sandbox policy could not be verified; see ${log_file}" >&2
+    return 1
+  fi
+  if grep -Fq 'integrate.api.nvidia.com' <<<"${effective}"; then
+    echo "ERROR: ${sandbox_name}: effective sandbox policy still permits NVIDIA-hosted inference" >&2
+    return 1
+  fi
+}
+
 # Extra docker buildx --build-arg values beyond the shared set, one per line.
 agent_common_extra_build_args() {
   local agent="${1:?agent}" model="${2:?model}"

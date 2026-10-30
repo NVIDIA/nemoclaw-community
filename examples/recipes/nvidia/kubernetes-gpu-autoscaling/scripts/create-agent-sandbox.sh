@@ -345,40 +345,23 @@ EOF
   ' >/dev/null 2>&1 || true
 fi
 
-# E2E create is light: pod Ready is enough. Supervisor SSH, NVIDIA policy, and
+# On-premises setup always removes NVIDIA-hosted inference from agents that
+# grant it, then reads the effective policy back. SKIP_CREATE_SMOKE skips
+# probes only.
+agent_common_enforce_onprem_sandbox_policy \
+  "${SANDBOX_NAME}" "${AGENT_NAME}" "${OPENSHELL_LOG}" \
+  || fail "${SANDBOX_NAME}: required sandbox policy was not applied and verified"
+
+# E2E create is light after that policy check. Supervisor SSH and
 # inference.local waits are the slow path and are not needed to schedule CPU
 # front ends. Pairing (SKIP_CREATE_SMOKE=0) still runs them.
 if [[ "${SKIP_CREATE_SMOKE:-0}" == "1" ]]; then
-  echo "  ${SANDBOX_NAME}: SKIP_CREATE_SMOKE=1; skipping supervisor/policy/smoke waits"
+  echo "  ${SANDBOX_NAME}: SKIP_CREATE_SMOKE=1; skipping supervisor, inference.local, and create-time smoke"
   echo "${AGENT_DISPLAY_NAME} sandbox ${SANDBOX_NAME} is ready without a GPU."
   exit 0
 fi
 
 wait_supervisor_exec "${SANDBOX_NAME}" || true
-
-if agent_common_grants_nvidia_endpoint "${AGENT_NAME}"; then
-  policy_ok=0
-  for attempt in 1 2 3; do
-    echo "  ${SANDBOX_NAME}: waiting for sandbox policy (${attempt}/3)"
-    if openshell policy update "${SANDBOX_NAME}" \
-      --remove-endpoint integrate.api.nvidia.com:443 \
-      --wait \
-      --timeout 20 \
-      >>"${OPENSHELL_LOG}" 2>&1; then
-      policy_ok=1
-      break
-    fi
-    sleep 3
-  done
-  if [[ "${policy_ok}" -ne 1 ]]; then
-    echo "  ${SANDBOX_NAME}: policy still applying (continuing; see ${OPENSHELL_LOG})"
-  fi
-fi
-EFFECTIVE_POLICY="$(openshell policy get "${SANDBOX_NAME}" --full -o json 2>/dev/null || true)"
-if grep -Fq 'integrate.api.nvidia.com' <<<"${EFFECTIVE_POLICY}"; then
-  echo "WARNING: effective sandbox policy still lists integrate.api.nvidia.com" >&2
-fi
-unset EFFECTIVE_POLICY
 case "${SKIP_WAIT_INFERENCE_LOCAL:-0}" in
   1)
     echo "  ${SANDBOX_NAME}: SKIP_WAIT_INFERENCE_LOCAL=1 (e2e checks inference.local in parallel after create)"
