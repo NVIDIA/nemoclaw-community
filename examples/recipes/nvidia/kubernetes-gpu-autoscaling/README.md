@@ -10,7 +10,7 @@
 | --- | --- |
 | Description | A cost-efficient architecture that runs AI agents securely inside CPU-only OpenShell sandboxes (one sandbox per end user) while scaling GPU-backed inference dynamically. |
 | Industry | ☁️ Cloud Services |
-| Requirements | Kubernetes 1.25+ · Helm 3 (Helm 4 also works; the scripts add `--force-conflicts` only on Helm 4+) · NVIDIA GPU Operator/DCGM · Metrics Server · Docker Buildx + registry · OpenShell + Agent Sandbox CRDs pinned in versions.env · OIDC or acknowledged isolated-eval exception · experimental |
+| Requirements | Kubernetes 1.25+ · Helm 3 or Helm 4 · NVIDIA GPU Operator/DCGM · Metrics Server · Docker Buildx + registry · OpenShell and Agent Sandbox CRDs from versions.env · OIDC or isolated-eval exception · experimental |
 | NemoClaw | v0.0.104 |
 | Harness | OpenClaw 2026.7.1 |
 | OpenShell | 0.0.85 |
