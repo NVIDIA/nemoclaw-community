@@ -2,7 +2,8 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 //
-// GPU metrics-proxy pod: health + Prometheus metrics + OpenAI-compatible proxy to local Ollama.
+// GPU metrics-proxy pod: health + Prometheus metrics + OpenAI-compatible proxy to a local
+// GPU inference runtime (Ollama, vLLM, or NVIDIA NIM — selected by INFERENCE_RUNTIME).
 
 import { timingSafeEqual } from "node:crypto";
 import http from "node:http";
@@ -12,7 +13,11 @@ import { llmMetricsLines, recordLlmLatency } from "./metrics-proxy-metrics.ts";
 
 const PORT = Number(process.env.PORT || 8081);
 const BASE_URL = (process.env.INFERENCE_BASE_URL || "http://127.0.0.1:11434/v1").replace(/\/$/, "");
-const OLLAMA_BASE = (process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
+// Root of the runtime's own API (no /v1) — used only for the readiness check below. Ollama's
+// native API lives here (/api/tags); vLLM/NIM expose their OpenAI-compatible list under
+// <root>/v1/models, so RUNTIME_ROOT doubles as the prefix for that call too.
+const RUNTIME = process.env.INFERENCE_RUNTIME || "ollama";
+const RUNTIME_ROOT = (process.env.INFERENCE_RUNTIME_BASE_URL || "http://127.0.0.1:11434").replace(/\/$/, "");
 const MODEL = process.env.INFERENCE_MODEL || "";
 const AUTH_REQUIRED = process.env.INFERENCE_AUTH_REQUIRED !== "false";
 const API_KEY = process.env.INFERENCE_API_KEY || "";
@@ -128,6 +133,11 @@ async function proxyChatCompletions(req, res) {
     res.end("invalid json\n");
     return;
   }
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    res.writeHead(400, { "content-type": "text/plain" });
+    res.end("request body must be a JSON object\n");
+    return;
+  }
   body.model = MODEL;
   const llmStart = performance.now();
   let llmOk = false;
@@ -164,11 +174,30 @@ async function proxyChatCompletions(req, res) {
   }
 }
 
+// Ollama's /api/tags lists pulled models as {name|model: "llama3.2:3b", ...}; a bare tag-less
+// MODEL should still match a tagged pull. vLLM/NIM's OpenAI-compatible /v1/models lists exactly
+// one served model as {id: "..."}; those runtimes report the served-model id verbatim so we
+// require an exact match there instead of the tag-prefix fallback Ollama needs.
+function readinessUrl() {
+  return RUNTIME === "ollama" ? `${RUNTIME_ROOT}/api/tags` : `${RUNTIME_ROOT}/v1/models`;
+}
+
+function modelNamesFrom(data) {
+  if (RUNTIME === "ollama") return (data.models || []).map((m) => m.name || m.model || "");
+  return (data.data || []).map((m) => m.id || "");
+}
+
+function modelMatches(names) {
+  if (!MODEL) return names.length > 0;
+  if (RUNTIME !== "ollama") return names.includes(MODEL);
+  return names.some((name) => name === MODEL || (!MODEL.includes(":") && name.startsWith(`${MODEL}:`)));
+}
+
 async function checkInference() {
   const now = Date.now();
   if (now - inferenceCache.at < INFERENCE_CACHE_MS) return inferenceCache.ok;
   try {
-    const res = await fetch(`${OLLAMA_BASE}/api/tags`, {
+    const res = await fetch(readinessUrl(), {
       signal: AbortSignal.timeout(10_000),
     });
     if (!res.ok) {
@@ -176,14 +205,7 @@ async function checkInference() {
       return false;
     }
     const data = await res.json();
-    const names = (data.models || []).map((m) => m.name || m.model || "");
-    const ok = MODEL
-      ? names.some(
-          (name) =>
-            name === MODEL ||
-            (!MODEL.includes(":") && name.startsWith(`${MODEL}:`)),
-        )
-      : names.length > 0;
+    const ok = modelMatches(modelNamesFrom(data));
     if (ok) {
       inferenceReadyEver = true;
       inferenceFailStreak = 0;
@@ -213,10 +235,10 @@ function metricsText() {
     "# HELP nemoclaw_http_requests_total Total HTTP requests to metrics-proxy pod",
     "# TYPE nemoclaw_http_requests_total counter",
     `nemoclaw_http_requests_total ${totalRequests}`,
-    "# HELP nemoclaw_http_inflight_requests In-flight HTTP requests",
+    "# HELP nemoclaw_http_inflight_requests In-flight HTTP requests (excludes /metrics /healthz /readyz)",
     "# TYPE nemoclaw_http_inflight_requests gauge",
     `nemoclaw_http_inflight_requests ${inflight}`,
-    "# HELP nemoclaw_inference_reachable 1 if local Ollama model is ready",
+    "# HELP nemoclaw_inference_reachable 1 if the local inference runtime's model is ready",
     "# TYPE nemoclaw_inference_reachable gauge",
     `nemoclaw_inference_reachable ${inferenceReachable}`,
     ...llmMetricsLines(),
@@ -236,26 +258,37 @@ const server = http.createServer(
   },
   async (req, res) => {
     totalRequests += 1;
-    inflight += 1;
+    const pathOnly = (req.url || "").split("?")[0];
+    const isProbe =
+      pathOnly === "/healthz" ||
+      pathOnly === "/health" ||
+      pathOnly === "/readyz" ||
+      pathOnly === "/ready" ||
+      pathOnly === "/metrics";
+    // /metrics is snapshotted during the request. Counting it leaves inflight=1 forever
+    // and the leftover-drain wait never lets HPA scale-down proceed in the test.
+    if (!isProbe) inflight += 1;
     try {
-      if (req.url === "/healthz" || req.url === "/health") {
+      // codeql[js/user-controlled-bypass] kubelet liveness/readiness must stay unauthenticated
+      if (pathOnly === "/healthz" || pathOnly === "/health") {
         res.writeHead(200, { "content-type": "text/plain" });
         res.end("ok\n");
         return;
       }
-      if (req.url === "/readyz" || req.url === "/ready") {
+      // codeql[js/user-controlled-bypass] kubelet readiness must stay unauthenticated
+      if (pathOnly === "/readyz" || pathOnly === "/ready") {
         const ok = await checkInference();
         inferenceReachable = ok ? 1 : 0;
         res.writeHead(ok ? 200 : 503, { "content-type": "text/plain" });
-        res.end(ok ? "ready\n" : "ollama model not ready\n");
+        res.end(ok ? "ready\n" : `${RUNTIME} model not ready\n`);
         return;
       }
-      if (req.url === "/metrics") {
+      // codeql[js/user-controlled-bypass] Prometheus scrape of /metrics must stay unauthenticated
+      if (pathOnly === "/metrics") {
         res.writeHead(200, { "content-type": "text/plain; version=0.0.4" });
         res.end(metricsText());
         return;
       }
-      const pathOnly = (req.url || "").split("?")[0];
       if (pathOnly === "/v1/models" && req.method === "GET") {
         if (!requireAuthorization(req, res)) return;
         res.writeHead(200, { "content-type": "application/json" });
@@ -280,9 +313,10 @@ const server = http.createServer(
         res.end(
           JSON.stringify({
             service: "nemoclaw-gpu-metrics-proxy",
+            runtime: RUNTIME,
             model: MODEL,
             inferenceBaseUrl: BASE_URL,
-            ollamaBaseUrl: OLLAMA_BASE,
+            runtimeBaseUrl: RUNTIME_ROOT,
             endpoints: [
               "/healthz",
               "/readyz",
@@ -291,15 +325,22 @@ const server = http.createServer(
               "POST /v1/chat/completions",
             ],
             inferenceAuthentication: AUTH_REQUIRED ? "Bearer" : "disabled",
-            note: "Local Ollama on GPU; scale replicas with kubectl or HPA (one pod per GPU)",
+            note: `Local ${RUNTIME} on GPU; scale replicas with kubectl or HPA (one pod per GPU)`,
           }),
         );
         return;
       }
       res.writeHead(404);
       res.end("not found\n");
+    } catch {
+      if (!res.headersSent) {
+        res.writeHead(500, { "content-type": "text/plain" });
+        res.end("internal error\n");
+      } else {
+        res.destroy();
+      }
     } finally {
-      inflight -= 1;
+      if (!isProbe) inflight -= 1;
     }
   },
 );

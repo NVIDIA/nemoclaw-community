@@ -8,16 +8,18 @@
 # verify concurrent Envoy traffic spreads across those pods, then scale back to 1.
 #
 # Usage:
-#   cd examples/recipes/nvidia/kubernetes-gpu-autoscaling
-#   ./scripts/hpa-load-test.sh
+#   ./scripts/hpa-load-test-brev-4xl40s.sh
 # Optional: SKIP_ENVOY_LB_TEST=1 to skip the Envoy distribution check.
-# ENABLE_ENVOY_LB=0 also skips that check (no Envoy Gateway to probe).
+# ENABLE_ENVOY_LB=0 also skips that check (no Envoy load balancer to probe).
+# Latency: HPA_METRIC=latency_avg HPA_TARGET_LATENCY_MS=3000 ./scripts/hpa-load-test-brev-4xl40s.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHART_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=hpa-common.sh
 source "${SCRIPT_DIR}/hpa-common.sh"
+# shellcheck source=agent-common.sh
+source "${SCRIPT_DIR}/agent-common.sh"
 hpa_common_load_local_env "${CHART_DIR}"
 NAMESPACE="${NAMESPACE:-nemoclaw-gpu}"
 RELEASE="${RELEASE:-nemoclaw-gpu}"
@@ -25,8 +27,11 @@ JOB_NAME="${JOB_NAME:-nemoclaw-gpu-hpa-load-test}"
 require_cmd kubectl
 require_cmd helm
 hpa_common_verify_gpu_nodes || exit 1
-ALLOC_GPUS="$(hpa_common_allocatable_gpus)"
-TARGET_PODS="${TARGET_PODS:-${ALLOC_GPUS}}"
+if [[ -n "${TARGET_PODS:-}" && "${TARGET_PODS}" != "4" ]]; then
+  echo "hpa-load-test-brev-4xl40s.sh always tests 4 pods." >&2
+  exit 1
+fi
+TARGET_PODS=4
 
 # Backoff / floor — never drive all GPUs to 0% when HPA has 2+ replicas (circuit breaker keeps probe load).
 ERROR_BACKOFF_FACTOR="${ERROR_BACKOFF_FACTOR:-0.92}"
@@ -39,7 +44,7 @@ READYZ_GRACE_SEC="${READYZ_GRACE_SEC:-45}"
 
 # Steady GPU saturation — scales to all allocatable GPUs (TARGET_PODS defaults to GPU count).
 # Defaults avoid overload → 502/503 → 0% GPU → retry spikes (see README.md).
-# Override any knob via env, e.g. INFLIGHT_PER_GPU=512 ./scripts/hpa-load-test.sh
+# Override any knob via env, e.g. INFLIGHT_PER_GPU=512 ./scripts/hpa-load-test-brev-4xl40s.sh
 # HPA target GPU util % (default 40 — easier scale-up vs 50 while load spreads across GPUs).
 if [[ "${TARGET_PODS}" -ge 4 ]]; then
   JOB_PARALLELISM="${JOB_PARALLELISM:-4}"
@@ -93,8 +98,6 @@ SERVICE_PORT="${SERVICE_PORT:-8081}"
 # shellcheck disable=SC2034 # passed by name to hpa_common_log_hpa_if_changed
 LAST_HPA_LINE=""
 
-ALLOW_INSECURE_VALUE="$(hpa_common_ingress_allow_insecure_value)"
-
 kubectl get apiservice v1beta1.metrics.k8s.io 2>/dev/null | grep -q True || {
   echo "metrics-server not ready" >&2
   exit 1
@@ -111,14 +114,15 @@ if ! hpa_common_ensure_metrics_proxy_ready "${NAMESPACE}" "${RELEASE}" "${CHART_
   exit 1
 fi
 
-INFERENCE_MODEL="${INFERENCE_MODEL:-llama3.2:3b}"
+INFERENCE_RUNTIME="${INFERENCE_RUNTIME:-ollama}"
+INFERENCE_MODEL="${INFERENCE_MODEL:-$(agent_common_default_inference_model "${INFERENCE_RUNTIME}")}"
 HPA_HELM_ARGS=(
   upgrade --install "${RELEASE}" "${CHART_DIR}"
   --namespace "${NAMESPACE}"
   --create-namespace
   --set namespace.create=false
+  --set "namespace.name=${NAMESPACE}"
   -f "${HPA_VALUES}"
-  --set inference.model="${INFERENCE_MODEL}"
   --set probes.readinessChecksInference=true
   --set autoscaling.enabled=true
   --set autoscaling.minReplicas=1
@@ -127,14 +131,15 @@ HPA_HELM_ARGS=(
   --set "autoscaling.metric=${HPA_METRIC:-gpu_utilization}"
   --set "autoscaling.targetGPUUtilizationPercentage=${HPA_TARGET_GPU}"
   --set "autoscaling.targetLatencyMilliseconds=${HPA_TARGET_LATENCY_MS:-5000}"
-  --set "ingress.allowInsecureHttp=${ALLOW_INSECURE_VALUE}"
   --set "ingress.gateway.enabled=$(hpa_common_envoy_lb_helm_value)"
   --set "ingress.gateway.serviceType=${INGRESS_SERVICE_TYPE:-ClusterIP}"
   --set "ingress.gateway.className=${INGRESS_CLASS:-eg}"
 )
-if [[ -n "${NEMOCLAW_TARGET_NODE:-}" ]]; then
-  HPA_HELM_ARGS+=(--set-string "$(hpa_common_target_node_helm_value)")
-fi
+hpa_common_append_target_node_helm_sets HPA_HELM_ARGS
+hpa_common_append_servicemonitor_release_helm_set HPA_HELM_ARGS
+hpa_common_append_inference_runtime_helm_sets HPA_HELM_ARGS \
+  "${INFERENCE_RUNTIME}" \
+  "${INFERENCE_MODEL}"
 helm "${HPA_HELM_ARGS[@]}" >/dev/null
 
 IFS=$'\t' read -r DEPLOYED_INFERENCE_SECRET DEPLOYED_INFERENCE_SECRET_KEY < <(

@@ -2,49 +2,61 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Shared Prometheus helpers for metrics-proxy /metrics (LLM latency, HTTP counters).
-// Rolling latency_avg gauge expires after idle so HPA can scale down once load stops.
+// HPA latency_avg is the mean of samples in the recent window (not all-time).
 
-const configuredLlmLatencyWindow = Number(process.env.LLM_LATENCY_WINDOW_SIZE ?? "128");
-const LLM_LATENCY_WINDOW =
-  Number.isSafeInteger(configuredLlmLatencyWindow) && configuredLlmLatencyWindow > 0
-    ? Math.min(configuredLlmLatencyWindow, 10_000)
-    : 128;
-// After this many ms with no new samples, clear the rolling window so the HPA
-// gauge reports 0 (below target) instead of retaining the last high latency.
-// 0 disables idle expiration. Default 60s is below the chart's scaleDown
-// stabilizationWindowSeconds (180) so scale-down can proceed after load stops.
+// After this many ms with no new samples, clear the HPA average so it reports 0
+// (below target) instead of retaining the last high latency. 0 disables idle
+// expiration. This does not drop in-flight chats.
 const configuredIdleExpireMs = Number(process.env.LLM_LATENCY_IDLE_EXPIRE_MS ?? "60000");
 const LLM_LATENCY_IDLE_EXPIRE_MS =
   Number.isFinite(configuredIdleExpireMs) && configuredIdleExpireMs >= 0
     ? configuredIdleExpireMs
     : 60_000;
 
-const llmDurationsMs = [];
+// Drop samples older than this so HPA tracks current latency while chats continue.
+// 0 keeps every sample until idle expire. No 128-sample cap.
+const configuredWindowMs = Number(process.env.LLM_LATENCY_WINDOW_MS ?? "30000");
+const LLM_LATENCY_WINDOW_MS =
+  Number.isFinite(configuredWindowMs) && configuredWindowMs >= 0 ? configuredWindowMs : 30_000;
+
+type HpaSample = { atMs: number; durationMs: number };
+
+let hpaSamples: HpaSample[] = [];
 let llmDurationSumSec = 0;
 let llmDurationCount = 0;
 let llmRequestsOk = 0;
 let llmRequestsError = 0;
 let lastLlmSampleAtMs = 0;
+let llmEverSampled = false;
 let nowMsProvider = () => Date.now();
 const llmHistogramBucketsSec = [0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300];
 const llmHistogramCounts = Array.from({ length: llmHistogramBucketsSec.length + 1 }, () => 0);
 
-function clearRollingLatencyWindow() {
-  llmDurationsMs.length = 0;
+function clearHpaLatencyAvg() {
+  hpaSamples = [];
   lastLlmSampleAtMs = 0;
 }
 
-function expireIdleRollingLatencyWindow(nowMs = nowMsProvider()) {
-  if (!llmDurationsMs.length || LLM_LATENCY_IDLE_EXPIRE_MS <= 0 || lastLlmSampleAtMs <= 0) {
+function pruneHpaSamples(nowMs = nowMsProvider()) {
+  if (!hpaSamples.length) {
     return;
   }
-  if (nowMs - lastLlmSampleAtMs >= LLM_LATENCY_IDLE_EXPIRE_MS) {
-    clearRollingLatencyWindow();
+  if (LLM_LATENCY_IDLE_EXPIRE_MS > 0 && lastLlmSampleAtMs > 0) {
+    if (nowMs - lastLlmSampleAtMs >= LLM_LATENCY_IDLE_EXPIRE_MS) {
+      clearHpaLatencyAvg();
+      return;
+    }
+  }
+  if (LLM_LATENCY_WINDOW_MS > 0) {
+    // Age samples from the newest completion, not wall-clock now, so a slow
+    // in-flight reply cannot empty the gauge before idle expire applies.
+    const newestMs = lastLlmSampleAtMs || nowMs;
+    hpaSamples = hpaSamples.filter((sample) => newestMs - sample.atMs <= LLM_LATENCY_WINDOW_MS);
   }
 }
 
 export function recordLlmLatency(durationMs, ok) {
-  // Normalize once so the rolling window and the cumulative counters/histogram
+  // Normalize once so the HPA average and the cumulative counters/histogram
   // below always agree on the same finite, non-negative value.
   const normalizedMs = Number.isFinite(durationMs) ? Math.max(0, durationMs) : 0;
   const sec = normalizedMs / 1000;
@@ -53,9 +65,11 @@ export function recordLlmLatency(durationMs, ok) {
   if (ok) llmRequestsOk += 1;
   else llmRequestsError += 1;
 
-  llmDurationsMs.push(normalizedMs);
-  if (llmDurationsMs.length > LLM_LATENCY_WINDOW) llmDurationsMs.shift();
-  lastLlmSampleAtMs = nowMsProvider();
+  const atMs = nowMsProvider();
+  hpaSamples.push({ atMs, durationMs: normalizedMs });
+  lastLlmSampleAtMs = atMs;
+  llmEverSampled = true;
+  pruneHpaSamples(atMs);
 
   let bucketIdx = llmHistogramBucketsSec.findIndex((bound) => sec <= bound);
   if (bucketIdx === -1) bucketIdx = llmHistogramBucketsSec.length;
@@ -65,10 +79,10 @@ export function recordLlmLatency(durationMs, ok) {
 }
 
 function llmLatencyAvgMs() {
-  expireIdleRollingLatencyWindow();
-  if (!llmDurationsMs.length) return 0;
-  const sum = llmDurationsMs.reduce((acc, v) => acc + v, 0);
-  return sum / llmDurationsMs.length;
+  pruneHpaSamples();
+  if (!hpaSamples.length) return 0;
+  const sum = hpaSamples.reduce((total, sample) => total + sample.durationMs, 0);
+  return sum / hpaSamples.length;
 }
 
 export function llmMetricsLines() {
@@ -91,10 +105,18 @@ export function llmMetricsLines() {
     `nemoclaw_llm_request_duration_seconds_bucket{le="+Inf"} ${llmHistogramCounts[llmHistogramCounts.length - 1]}`,
     `nemoclaw_llm_request_duration_seconds_sum ${llmDurationSumSec}`,
     `nemoclaw_llm_request_duration_seconds_count ${llmDurationCount}`,
-    "# HELP nemoclaw_llm_latency_avg_milliseconds Rolling average LLM latency (recent window; idle-expires)",
-    "# TYPE nemoclaw_llm_latency_avg_milliseconds gauge",
-    `nemoclaw_llm_latency_avg_milliseconds ${Math.round(avg)}`,
   );
+  // New GPU replicas have no samples yet. Exporting 0 here dilutes Pods
+  // AverageValue and stalls latency HPA around 4–5 GPUs. Omit the gauge until
+  // this replica has served a chat. After idle-expire, still export 0 so
+  // scale-down can proceed.
+  if (llmEverSampled) {
+    lines.push(
+      "# HELP nemoclaw_llm_latency_avg_milliseconds Average LLM latency of samples in the recent window",
+      "# TYPE nemoclaw_llm_latency_avg_milliseconds gauge",
+      `nemoclaw_llm_latency_avg_milliseconds ${Math.round(avg)}`,
+    );
+  }
   return lines;
 }
 
@@ -103,7 +125,8 @@ export function setLlmMetricsClockForTests(clockFn) {
   nowMsProvider = typeof clockFn === "function" ? clockFn : () => Date.now();
 }
 
-/** Test-only: clear rolling latency samples (does not reset cumulative counters). */
+/** Test-only: clear HPA latency average (does not reset cumulative counters). */
 export function resetLlmLatencyWindowForTests() {
-  clearRollingLatencyWindow();
+  clearHpaLatencyAvg();
+  llmEverSampled = false;
 }
