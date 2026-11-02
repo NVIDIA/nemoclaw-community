@@ -26,7 +26,11 @@ require_cmd() {
 require_cmd helm
 require_cmd kubectl
 
-SANDBOX_IMAGE="${NEMOCLAW_SANDBOX_IMAGE:-}"
+# The chart's server-wide default sandboxImage; each sandbox create call in
+# scripts/create-agent-sandbox.sh always overrides it with that agent's own `--from`
+# image, so this is effectively only ever used as a required placeholder — but it must
+# still be a valid, pullable image reference (the same one you built for AGENT_NAME).
+SANDBOX_IMAGE="${AGENT_SANDBOX_IMAGE:-}"
 NAMESPACE="${OPENSHELL_NAMESPACE:-nemoclaw-sandboxes}"
 RELEASE="${OPENSHELL_RELEASE:-openshell}"
 OIDC_ISSUER="${OPENSHELL_OIDC_ISSUER:-}"
@@ -35,15 +39,15 @@ ALLOW_UNAUTHENTICATED="${ALLOW_UNAUTHENTICATED_OPENSHELL:-0}"
 IMAGE_PULL_SECRET="${OPENSHELL_IMAGE_PULL_SECRET:-}"
 IMAGE_NAME="${SANDBOX_IMAGE##*/}"
 
-[[ -n "${SANDBOX_IMAGE}" ]] || fail "set NEMOCLAW_SANDBOX_IMAGE to the pushed sandbox image"
+[[ -n "${SANDBOX_IMAGE}" ]] || fail "set AGENT_SANDBOX_IMAGE to the pushed sandbox image"
 [[ "${SANDBOX_IMAGE}" =~ ^[A-Za-z0-9][A-Za-z0-9._:/@-]+$ ]] \
-  || fail "NEMOCLAW_SANDBOX_IMAGE contains unsupported characters"
+  || fail "AGENT_SANDBOX_IMAGE contains unsupported characters"
 if [[ "${SANDBOX_IMAGE}" == *@* ]]; then
   [[ "${SANDBOX_IMAGE}" =~ @sha256:[0-9a-f]{64}$ ]] \
-    || fail "NEMOCLAW_SANDBOX_IMAGE contains an invalid digest"
+    || fail "AGENT_SANDBOX_IMAGE contains an invalid digest"
 else
   [[ "${IMAGE_NAME}" == *:* && "${SANDBOX_IMAGE}" != *:latest ]] \
-    || fail "NEMOCLAW_SANDBOX_IMAGE must use a non-latest tag or an image digest"
+    || fail "AGENT_SANDBOX_IMAGE must use a non-latest tag or an image digest"
 fi
 [[ "${NAMESPACE}" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]] \
   || fail "OPENSHELL_NAMESPACE must be a valid lowercase Kubernetes namespace"

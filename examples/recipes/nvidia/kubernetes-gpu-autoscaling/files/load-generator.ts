@@ -2,10 +2,9 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 //
-// Drive GPU utilization for HPA: chat completions directly to each metrics-proxy pod IP.
-// Each Running metrics-proxy pod gets PER_POD_PEAK × compensation concurrent requests.
-// Compensation = HPA currentReplicas / loadTargetCount so cold pods at 0% GPU
-// do not drag the average to ~42% while a new replica is starting.
+// Drive GPU utilization / latency for HPA: chat completions directly to each
+// metrics-proxy pod IP (not through Envoy). Stop opening *new* chats once HPA
+// currentReplicas reaches TARGET_PODS; already in-flight asks still finish.
 
 import fs from "node:fs";
 import https from "node:https";
@@ -14,6 +13,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 const DURATION_SEC = Number(process.env.DURATION_SEC || 720);
 const TARGET_PODS = Number(process.env.TARGET_PODS || 4);
 const HPA_TARGET_GPU = Number(process.env.HPA_TARGET_GPU || 40);
+const HPA_LOAD_PROFILE = process.env.HPA_LOAD_PROFILE || "portable";
+const HPA_LOAD_PROFILE_REQUESTED = process.env.HPA_LOAD_PROFILE_REQUESTED || HPA_LOAD_PROFILE;
 const JOB_PARALLELISM = Number(process.env.JOB_PARALLELISM || 1);
 const METRICS_PROXY_PORT = Number(process.env.METRICS_PROXY_PORT || 8081);
 const INFLIGHT_PER_GPU = Number(process.env.INFLIGHT_PER_GPU || 384);
@@ -108,8 +109,7 @@ function k8sGet(path) {
   const token = fs.readFileSync(tokenPath, "utf8");
   const ca = fs.readFileSync(caPath);
   return new Promise((resolve) => {
-    // codeql[js/file-access-to-http] -- in-cluster K8s API auth: token/ca come from the
-    // kubelet-projected service-account files and are sent only to KUBERNETES_SERVICE_HOST.
+    // codeql[js/file-access-to-http]
     const req = https.request(
       {
         hostname: process.env.KUBERNETES_SERVICE_HOST,
@@ -482,8 +482,7 @@ async function ask(target, questions, stats) {
   let lastErr;
   for (let attempt = 0; attempt <= REQUEST_RETRIES; attempt++) {
     try {
-      // codeql[js/file-access-to-http] -- `q` is the synthetic sample-question payload
-      // this load generator bundles/reads by design, not attacker-controlled file data.
+      // codeql[js/file-access-to-http]
       const res = await fetch(`${target}/v1/chat/completions`, {
         method: "POST",
         headers: inferenceHeaders(),
@@ -568,6 +567,8 @@ async function main() {
     JSON.stringify({
       targetPods: TARGET_PODS,
       hpaTargetGpu: HPA_TARGET_GPU,
+      hpaLoadProfile: HPA_LOAD_PROFILE,
+      hpaLoadProfileRequested: HPA_LOAD_PROFILE_REQUESTED,
       jobParallelism: JOB_PARALLELISM,
       perPodPeak: PER_POD_PEAK,
       loadMultiplier: LOAD_MULTIPLIER,
@@ -592,10 +593,10 @@ async function main() {
       continue;
     }
 
-    const atMax =
-      hpaReplicas >= TARGET_PODS &&
-      hpaDesired >= TARGET_PODS &&
-      podTargets.length >= TARGET_PODS;
+    // Stop *new* chats when HPA is already at maxReplicas. Do not wait until
+    // every replica is a Ready load target — that kept sending after 8/8.
+    // In-flight asks still finish (worker awaits state.tasks).
+    const atMax = hpaReplicas >= TARGET_PODS;
     if (atMax) {
       if (atMaxSince == null) atMaxSince = Date.now();
       const heldSec = (Date.now() - atMaxSince) / 1000;
@@ -609,7 +610,8 @@ async function main() {
             targetPods: TARGET_PODS,
             heldSec: Math.round(heldSec),
             maxReplicasHoldSec: MAX_REPLICAS_HOLD_SEC,
-            message: "max replicas held — stopping new load so HPA can scale down",
+            message:
+              "max replicas reached — stopping new requests; in-flight chats will finish so HPA can scale down",
           }),
         );
         forceStopLoad = true;
