@@ -488,12 +488,15 @@ cleanup_sandboxes() {
 
 bringup_one() {
   local name="${1:?sandbox}"
+  local policy_log="${STATE_DIR}/${name}.policy.log"
   if sandbox_pod_ready "${name}" && agent_health_ok "${name}"; then
+    agent_common_accept_reused_sandbox "${name}" openclaw "${policy_log}" || return 1
     agent_common_pin_openclaw_max_tokens "${name}" "${MAX_TOKENS}" || return 1
     echo "  $(sandbox_label "${name}"): reusing existing OpenShell sandbox"
     return 0
   fi
   if sandbox_pod_ready "${name}"; then
+    agent_common_accept_reused_sandbox "${name}" openclaw "${policy_log}" || return 1
     echo "  $(sandbox_label "${name}"): reusing existing OpenShell sandbox"
   else
     create_one_sandbox "${name}" || return 1
@@ -598,6 +601,8 @@ create_sandboxes() {
         -o jsonpath='{.status.phase}' 2>/dev/null | grep -qx Running \
       && [[ "$(kubectl get pod "${name}" -n "${OPENSHELL_NAMESPACE:-nemoclaw-sandboxes}" \
         -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null)" == "true" ]]; then
+      agent_common_accept_reused_sandbox "${name}" openclaw "${STATE_DIR}/${name}.policy.log" \
+        || fail "$(sandbox_label "${name}"): required sandbox policy was not applied and verified"
       echo "  $(sandbox_label "${name}") already exists, skipping create"
       existing+=("${name}")
       continue

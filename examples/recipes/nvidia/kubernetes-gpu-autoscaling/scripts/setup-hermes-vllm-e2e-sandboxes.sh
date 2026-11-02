@@ -420,11 +420,14 @@ wait_inference_local_parallel() {
 
 bringup_one() {
   local name="${1:?sandbox}"
+  local policy_log="${STATE_DIR}/${name}.policy.log"
   if sandbox_pod_ready "${name}" && inference_local_ok "${name}"; then
+    agent_common_accept_reused_sandbox "${name}" hermes "${policy_log}" || return 1
     echo "  ${name}: reusing existing OpenShell sandbox"
     return 0
   fi
   if sandbox_pod_ready "${name}"; then
+    agent_common_accept_reused_sandbox "${name}" hermes "${policy_log}" || return 1
     echo "  ${name}: reusing existing OpenShell sandbox"
   else
     create_one_sandbox "${name}" || return 1
@@ -490,6 +493,8 @@ create_sandboxes() {
     name="$(sandbox_name "${i}")"
     all_names+=("${name}")
     if sandbox_pod_ready "${name}"; then
+      agent_common_accept_reused_sandbox "${name}" hermes "${STATE_DIR}/${name}.policy.log" \
+        || fail "${name}: required sandbox policy was not applied and verified"
       echo "  ${name} already exists, skipping create"
       existing+=("${name}")
       continue

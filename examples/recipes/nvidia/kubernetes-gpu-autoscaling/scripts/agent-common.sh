@@ -552,6 +552,17 @@ agent_common_enforce_onprem_sandbox_policy() {
   fi
 }
 
+# An existing Ready sandbox skips create-agent-sandbox.sh. Apply and verify
+# the on-premises policy before that sandbox is accepted. Returns 1 when the
+# policy cannot be applied or verified, so a failed update cannot be reused
+# as success on the next setup run.
+agent_common_accept_reused_sandbox() {
+  local sandbox_name="${1:?sandbox}"
+  local agent="${2:?agent}"
+  local log_file="${3:?log}"
+  agent_common_enforce_onprem_sandbox_policy "${sandbox_name}" "${agent}" "${log_file}"
+}
+
 # Extra docker buildx --build-arg values beyond the shared set, one per line.
 agent_common_extra_build_args() {
   local agent="${1:?agent}" model="${2:?model}"

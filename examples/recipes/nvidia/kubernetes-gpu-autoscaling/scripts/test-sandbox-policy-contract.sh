@@ -3,8 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Local contract: skipping create-time smoke tests still applies and verifies
-# the on-premises sandbox policy. Setup stops when that policy cannot be
-# applied or verified.
+# the on-premises sandbox policy. Reusing a Ready sandbox does the same
+# before it is accepted. Setup stops when that policy cannot be applied or
+# verified, and a later run retries the policy instead of reporting success.
 
 set -euo pipefail
 
@@ -107,6 +108,65 @@ grep -Fq 'policy get sandbox-b --full -o json' <<<"${record}"
 FAKE_POLICY_GET_BODY='{"endpoints":[{"host":"integrate.api.nvidia.com"}]}'
 assert_stopped "deepagents endpoint still granted" run_enforce sandbox-b deepagents
 
+reuse_once() {
+  local record="${log_dir}/record"
+  local log="${log_dir}/policy.log"
+  : >"${record}"
+  : >"${log}"
+  FAKE_OPENSHELL_RECORD="${record}" \
+    agent_common_accept_reused_sandbox sandbox-reuse hermes "${log}"
+}
+
+FAKE_POLICY_UPDATE_RC=1
+FAKE_POLICY_GET_RC=0
+FAKE_POLICY_GET_BODY='{"endpoints":[{"host":"inference.local"}]}'
+assert_stopped "reuse while policy update fails" reuse_once
+record="$(<"${log_dir}/record")"
+update_count="$(grep -c 'policy update ' <<<"${record}" || true)"
+[[ "${update_count}" -eq 3 ]]
+if grep -Fq 'policy get ' <<<"${record}"; then
+  echo "ERROR: failed reuse must stop before verification" >&2
+  exit 1
+fi
+
+FAKE_POLICY_UPDATE_RC=0
+reuse_once
+record="$(<"${log_dir}/record")"
+grep -Fq 'policy update sandbox-reuse --remove-endpoint integrate.api.nvidia.com:443 --wait --timeout 20' <<<"${record}"
+grep -Fq 'policy get sandbox-reuse --full -o json' <<<"${record}"
+
+python3 - \
+  "${SCRIPT_DIR}/setup-hermes-vllm-e2e-sandboxes.sh" \
+  "${SCRIPT_DIR}/setup-openclaw-ollama-e2e-sandboxes.sh" \
+  "${SCRIPT_DIR}/setup-deepagent-nim-e2e-sandboxes.sh" <<'PY'
+import sys
+
+markers = (
+    "reusing existing OpenShell sandbox",
+    "already exists, skipping create",
+)
+for path in sys.argv[1:]:
+    text = open(path, encoding="utf-8").read()
+    for marker in markers:
+        start = 0
+        found = 0
+        while True:
+            index = text.find(marker, start)
+            if index < 0:
+                break
+            found += 1
+            window = text[max(0, index - 700):index]
+            tail = [line for line in window.splitlines() if line.strip()][-12:]
+            joined = "\n".join(tail)
+            if "agent_common_accept_reused_sandbox" not in joined:
+                raise SystemExit(f"{path}: {marker} accepts a sandbox before policy")
+            if "|| return 1" not in joined and "|| fail" not in joined:
+                raise SystemExit(f"{path}: policy failure on reuse must stop setup")
+            start = index + len(marker)
+        if found < 1:
+            raise SystemExit(f"{path}: missing reuse marker {marker}")
+PY
+
 python3 - "${SCRIPT_DIR}/create-agent-sandbox.sh" <<'PY'
 import sys
 
@@ -121,4 +181,4 @@ if "policy still applying (continuing" in text or "WARNING: effective sandbox po
     raise SystemExit("policy apply and verify must stop setup")
 PY
 
-echo "OK: smoke skip still applies and verifies sandbox policy; apply and verify failures stop setup"
+echo "OK: smoke skip and sandbox reuse apply and verify policy; a failed update stops setup and the next run retries it"
