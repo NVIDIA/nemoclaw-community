@@ -399,6 +399,7 @@ E2E_USERS=10 ./scripts/client_deepagents.sh
 - Default: do not set `NEMOCLAW_TARGET_NODE`. The scheduler picks any GPU node.
 - Optional: `export NEMOCLAW_TARGET_NODE=<node>` keeps GPU pods and Envoy on one node. Use this on a shared cluster or this DGX. The node must be Ready, have the GPU label, and have allocatable GPUs ≥ `MAX_REPLICAS`.
 - `MAX_REPLICAS` must not exceed GPUs in that scope (the cluster if unset, that node if pinned). Host `nvidia-smi` processes are not reserved for this chart.
+- By default, `install-hpa.sh` also subtracts GPUs that pods outside the release hold. `HPA_SHARED_GPU_CEILING=1` checks `MAX_REPLICAS` against all allocatable GPUs instead, for a second runtime on the same GPUs. See [Two runtimes on shared GPUs](#two-runtimes-on-shared-gpus).
 
 ### Ingress security
 
@@ -427,6 +428,18 @@ Default models and how to override them (or switch agent) are in [Quick start 6]
 This is the **on-disk cache for downloaded model weights**, not a database. On this single-node DGX the chart writes them to a folder on the GPU node (`/var/lib/nemoclaw-gpu/ollama`, `/vllm`, or `/nim`). The first pod pulls the model once; later HPA replicas on the same node reuse that folder. If you turn persistence off, each new pod downloads the model again.
 
 Portable scheduling (`NEMOCLAW_TARGET_NODE` unset) does not share that cache across nodes. One GPU node: hostPath is enough. Several GPU nodes: use RWX shared storage, or turn persistence off.
+
+### Two runtimes on shared GPUs
+
+`./scripts/install-two-runtimes.sh` installs this chart twice on the same GPUs: release `nemoclaw-gpu-vllm` serves vLLM (for Hermes) and release `nemoclaw-gpu-ollama` serves Ollama (for OpenClaw). Each release gets its own namespace and HPA. Both use `maxReplicas` = `MAX_REPLICAS` (default 8). The first install sets up Prometheus, the Prometheus Adapter, and Envoy. The second install adds only the chart. An existing `nemoclaw-gpu` release stays in place.
+
+```bash
+DCGM_NAMESPACE=gpu-operator ./scripts/install-two-runtimes.sh
+```
+
+Both ceilings count the same GPUs, so they can add up to more GPUs than the cluster has. A replica that does not fit stays Pending until the other runtime scales down. Idle replicas keep their GPUs until their HPA scales them down. The script prints each release's metrics-proxy Service URL for the agents' inference endpoint. Set `VLLM_RELEASE` or `OLLAMA_RELEASE` to rename a release.
+
+Watch each pool with `./scripts/get-hpa.sh -n nemoclaw-gpu-vllm -w` and `./scripts/get-hpa.sh -n nemoclaw-gpu-ollama -w`.
 
 ### Kubernetes HPA metrics
 
