@@ -11,6 +11,11 @@
 #     ./scripts/build-agent-sandbox-image.sh
 #   AGENT_NAME=hermes AGENT_SANDBOX_IMAGE=registry.example.com/team/nemoclaw-hermes-k8s:v0.0.104 \
 #     ./scripts/build-agent-sandbox-image.sh
+#
+# The image targets the architectures of the current kubectl context's nodes
+# (linux/amd64, linux/arm64, or both), or this host's architecture when kubectl
+# cannot list nodes. Set NEMOCLAW_IMAGE_PLATFORM to override, for example
+# linux/arm64 or linux/amd64,linux/arm64.
 
 set -euo pipefail
 
@@ -30,6 +35,28 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "missing command: $1"
 }
 
+# Map node or host architecture names to the Docker platforms that the NemoClaw
+# base images publish, one per line.
+docker_platform_for_arch() {
+  case "$1" in
+    amd64 | x86_64) echo "linux/amd64" ;;
+    arm64 | aarch64) echo "linux/arm64" ;;
+    *) echo "linux/$1" ;;
+  esac
+}
+
+default_image_platform() {
+  local archs=""
+  if command -v kubectl >/dev/null 2>&1; then
+    archs="$(kubectl get nodes -o jsonpath='{range .items[*]}{.status.nodeInfo.architecture}{"\n"}{end}' 2>/dev/null || true)"
+  fi
+  [[ -n "${archs//[[:space:]]/}" ]] || archs="$(uname -m)"
+  local arch
+  while IFS= read -r arch; do
+    [[ -n "${arch}" ]] && docker_platform_for_arch "${arch}"
+  done <<<"${archs}" | sort -u | paste -sd, -
+}
+
 require_cmd docker
 require_cmd git
 require_cmd sed
@@ -41,7 +68,7 @@ AGENT_DISPLAY_NAME="$(agent_common_display_name "${AGENT_NAME}")"
 
 SANDBOX_IMAGE="${AGENT_SANDBOX_IMAGE:-}"
 MODEL="${INFERENCE_MODEL:-$(agent_common_default_inference_model "${INFERENCE_RUNTIME:-ollama}")}"
-PLATFORM="${NEMOCLAW_IMAGE_PLATFORM:-linux/amd64}"
+PLATFORM="${NEMOCLAW_IMAGE_PLATFORM:-$(default_image_platform)}"
 IMAGE_NAME="${SANDBOX_IMAGE##*/}"
 
 [[ "${NEMOCLAW_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
@@ -58,8 +85,8 @@ IMAGE_NAME="${SANDBOX_IMAGE##*/}"
   || fail "AGENT_SANDBOX_IMAGE must be a tagged build target, not a digest"
 [[ "${SANDBOX_IMAGE}" != *:latest ]] \
   || fail "AGENT_SANDBOX_IMAGE must not use the mutable latest tag"
-[[ "${PLATFORM}" == "linux/amd64" || "${PLATFORM}" == "linux/arm64" ]] \
-  || fail "NEMOCLAW_IMAGE_PLATFORM must be linux/amd64 or linux/arm64"
+[[ "${PLATFORM}" =~ ^linux/(amd64|arm64)(,linux/(amd64|arm64))?$ ]] \
+  || fail "sandbox image platform ${PLATFORM} is unsupported: the NemoClaw base images publish linux/amd64 and linux/arm64 only (set NEMOCLAW_IMAGE_PLATFORM)"
 [[ "${MODEL}" =~ ^[A-Za-z0-9][A-Za-z0-9._:/-]*$ ]] || fail "INFERENCE_MODEL is invalid"
 
 BUILD_ROOT="$(mktemp -d)"

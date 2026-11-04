@@ -102,7 +102,7 @@ OpenClaw's `:18789/health`). This recipe does not port-forward the Hermes dashbo
 ```bash
 source versions.env
 export AGENT_NAME=hermes
-export AGENT_SANDBOX_IMAGE=ghcr.io/nvidia/nemoclaw/hermes-sandbox@sha256:28b9578ab9676ef046de37fa6feb9b7b61824b87d77fd08978758bd01c03cb54
+export AGENT_SANDBOX_IMAGE=ghcr.io/nvidia/nemoclaw/hermes-sandbox@sha256:45cc0b5e8356ee09cb6e0cd60f281b2470cf5ef482b4bde4bd97f0cbe96bbd17
 export INFERENCE_RUNTIME=nim
 export INFERENCE_MODEL=nvidia/nemotron-3-nano
 ./scripts/create-agent-sandbox.sh
@@ -168,7 +168,7 @@ source versions.env
 export AGENT_NAME=deepagents
 export INFERENCE_RUNTIME=vllm
 export INFERENCE_MODEL=nvidia/NVIDIA-Nemotron-3-Nano-4B-FP8
-export AGENT_SANDBOX_IMAGE=ghcr.io/nvidia/nemoclaw/langchain-deepagents-code-sandbox@sha256:f7ad7ddc95cea260cff02d26b873903805806ccfef5d27436cbec4eba3455eff
+export AGENT_SANDBOX_IMAGE=ghcr.io/nvidia/nemoclaw/langchain-deepagents-code-sandbox@sha256:94a4a004108faa93fba22ff0e24caf867514f5e2ba35de34211f81c00979de02
 ./scripts/install-hpa.sh   # skip if the release is already on this runtime and model
 ./scripts/create-agent-sandbox.sh
 ./scripts/verify-agent-sandbox.sh   # real headless prompt through dcode -n

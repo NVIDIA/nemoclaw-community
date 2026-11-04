@@ -320,8 +320,8 @@ agent_common_resolve_inference_model() {
 # Published GHCR digests used by Quick start 6a/6b/6c e2e scripts.
 agent_common_default_sandbox_image() {
   case "${1:-}" in
-    hermes) printf '%s' "ghcr.io/nvidia/nemoclaw/hermes-sandbox@sha256:28b9578ab9676ef046de37fa6feb9b7b61824b87d77fd08978758bd01c03cb54" ;;
-    deepagents) printf '%s' "ghcr.io/nvidia/nemoclaw/langchain-deepagents-code-sandbox@sha256:f7ad7ddc95cea260cff02d26b873903805806ccfef5d27436cbec4eba3455eff" ;;
+    hermes) printf '%s' "ghcr.io/nvidia/nemoclaw/hermes-sandbox@sha256:45cc0b5e8356ee09cb6e0cd60f281b2470cf5ef482b4bde4bd97f0cbe96bbd17" ;;
+    deepagents) printf '%s' "ghcr.io/nvidia/nemoclaw/langchain-deepagents-code-sandbox@sha256:94a4a004108faa93fba22ff0e24caf867514f5e2ba35de34211f81c00979de02" ;;
     *) printf '%s' "ghcr.io/nvidia/nemoclaw/openclaw-sandbox@sha256:bd935f0198b99889d9479fea123b62a59e3797da13e392dcc2160f114216c1ba" ;;
   esac
 }
