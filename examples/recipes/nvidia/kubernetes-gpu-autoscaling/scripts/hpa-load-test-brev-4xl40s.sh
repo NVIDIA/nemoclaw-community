@@ -299,7 +299,7 @@ spec:
 ${LOAD_TEST_NODE_SELECTOR}
       containers:
         - name: load-generator
-          image: node:22-bookworm-slim@sha256:8607a9064d4a571140998ae9e52a3b3fcf9cff361d04642d5971e6cd76d39e27
+          image: node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3
           command: ["node", "/scripts/load-generator.ts"]
           env:
             - name: TARGET_PODS

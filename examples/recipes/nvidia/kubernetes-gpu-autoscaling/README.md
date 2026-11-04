@@ -36,6 +36,8 @@ The metric **LLM latency** `latency_avg` is **chat completions duration** on tha
 
 Install Kubernetes and make sure `kubectl get nodes` succeeds. See [How to install Kubernetes](#how-to-install-kubernetes).
 
+Nodes can be `linux/amd64` or `linux/arm64`. The chart pins multi-platform image digests for Ollama, vLLM, and the metrics proxy, and the default agent sandbox images also publish both architectures. Kubernetes pulls the variant that matches each node. If you override an image, choose a tag or digest that includes your node architecture. Run `docker buildx imagetools inspect <image>` to list its platforms. The NIM image also publishes both architectures, but NIM selects a model profile for the GPU at startup. Before you select `inference.runtime=nim`, confirm that the NIM supports your GPU.
+
 ## Quick start guide
 
 ### 1. Clone and tools
@@ -738,9 +740,10 @@ MicroK8s GPU addon: `install-hpa.sh` can run `microk8s enable gpu` and `microk8s
 #### minikube
 
 ```bash
-curl -LO https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64
-sudo install minikube-linux-amd64 /usr/local/bin/minikube
-rm -f minikube-linux-amd64
+case "$(uname -m)" in aarch64 | arm64) MINIKUBE_ARCH=arm64 ;; *) MINIKUBE_ARCH=amd64 ;; esac
+curl -LO "https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-${MINIKUBE_ARCH}"
+sudo install "minikube-linux-${MINIKUBE_ARCH}" /usr/local/bin/minikube
+rm -f "minikube-linux-${MINIKUBE_ARCH}"
 minikube start
 export KUBECONFIG="${HOME}/.kube/config"
 kubectl get nodes

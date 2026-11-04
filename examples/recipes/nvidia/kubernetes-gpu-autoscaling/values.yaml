@@ -24,12 +24,14 @@ ollama:
   image:
     repository: ollama/ollama
     # Pinned by digest so `helm install/upgrade` always pulls the exact image reviewed with
-    # this chart, not whatever `latest` currently resolves to. `tag` stays human-readable;
-    # the digest (not the tag) is what containerd actually resolves. To intentionally pick
-    # up a newer Ollama release, re-pin both: `docker manifest inspect ollama/ollama:latest`
-    # (or the registry API) for the new linux/amd64 digest, then bump `tag` to match.
-    tag: latest
-    digest: "sha256:f040603c11a11f125660eaf848170780e43b68973fc270e26f168536031ac258"
+    # this chart, not whatever a tag currently resolves to. `tag` stays human-readable;
+    # the digest (not the tag) is what containerd actually resolves. Pin the multi-platform
+    # index digest, not a single-platform manifest digest, so the same value runs on
+    # linux/amd64 and linux/arm64 nodes. To intentionally pick up a newer Ollama release,
+    # re-pin both: `docker buildx imagetools inspect ollama/ollama:<version>` prints the
+    # index `Digest` and must list linux/amd64 and linux/arm64; then bump `tag` to match.
+    tag: "0.32.3"
+    digest: "sha256:ec24bcaa2a810eb74171ce7c517813ef4821ed678988845e8d76cf62467036d4"
     pullPolicy: IfNotPresent
   port: 11434
   # Concurrent GPU batches per model (raise with care — VRAM limited).
@@ -54,9 +56,10 @@ vllm:
     repository: nvcr.io/nvidia/vllm
     # Same digest-pinning rationale as ollama.image above. Verify this tag/digest pair is still
     # current for your NGC access before first deploy — NVIDIA's vLLM container tags roll
-    # frequently; re-pin via `docker manifest inspect nvcr.io/nvidia/vllm:<tag>` when upgrading.
-    tag: latest
-    digest: "sha256:7be6c2f676c36059a494fe17254e69ae5c677535ba6191044e5fc8e42a91c773"
+    # frequently; re-pin from `docker buildx imagetools inspect nvcr.io/nvidia/vllm:<tag>`
+    # (the index digest, listing linux/amd64 and linux/arm64) when upgrading.
+    tag: "26.03.post1-py3"
+    digest: "sha256:fe21f1b1f3a53886515a191ba6309065a54b3e026fe8a43573e75e4ecdfd530d"
     pullPolicy: IfNotPresent
   # Optional existing kubernetes.io/dockerconfigjson Secret for nvcr.io. The public
   # default vLLM image needs none. Set this only if the registry requires kubelet
@@ -165,9 +168,9 @@ nim:
 metricsProxy:
   image:
     repository: node
-    # Same digest-pinning rationale as ollama.image above.
-    tag: "22-bookworm-slim"
-    digest: "sha256:8607a9064d4a571140998ae9e52a3b3fcf9cff361d04642d5971e6cd76d39e27"
+    # Same digest-pinning rationale as ollama.image above (multi-platform index digest).
+    tag: "22.23.1-bookworm-slim"
+    digest: "sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3"
     pullPolicy: IfNotPresent
 
 nameOverride: ""
