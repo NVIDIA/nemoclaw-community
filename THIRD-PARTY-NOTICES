@@ -688,3 +688,57 @@ License: Apache-2.0
 Source: https://pypi.org/project/harbor/
 Notes: Installed by the reader (harbor==0.22.0) to run the eval in
 examples/tools/cae-freecad-agent-harness-optimization. Not vendored.
+
+================================================================================
+Inline Decision Model Guard
+================================================================================
+
+Example: examples/tools/decision-model-guard
+
+Project: OpenShell (gateway and supervisor images, middleware protocol schemas)
+Version: 0.1.6; protocol source ac7f615cd12d5cc49cb16eb1f5f10ffeb1e90f47
+License: Apache-2.0
+URL: https://github.com/NVIDIA/OpenShell
+Usage: Compose runs the public gateway image. The services image build downloads
+checksum-verified schemas and generates bindings inside the image. The provider
+profile in config/llm-provider.yaml is adapted from OpenShell providers/nvidia.yaml.
+
+Project: SHADE-Arena (task pairs api_key_calendar_agendas_2, bank_transfer_2,
+spam_filter_update)
+License: MIT, Copyright (c) 2025 Jonathan Kutasov, Joe Benton, Henry Sleight,
+John Hughes, Ethan Perez, Scale AI
+URL: https://github.com/jkutaso/SHADE-Arena
+Usage: scenarios.json and workspace.py adapt the user tasks, secondary tasks,
+agent framing, and workspace setting. Not vendored.
+
+Project: MCP Python SDK
+Version: 2.0.0
+License: MIT
+URL: https://github.com/modelcontextprotocol/python-sdk
+
+Project: gRPC Python and grpcio-tools
+Version: 1.81.1
+License: Apache-2.0
+URL: https://github.com/grpc/grpc
+
+Project: Protocol Buffers (protobuf Python runtime)
+Version: 6.33.5
+License: BSD-3-Clause
+URL: https://github.com/protocolbuffers/protobuf
+
+Project: HTTPX
+Version: 0.28.1
+License: BSD-3-Clause
+URL: https://github.com/encode/httpx
+
+Project: Ruff (development checks)
+Version: 0.14.3
+License: MIT
+URL: https://github.com/astral-sh/ruff
+
+The example uses the public ghcr.io/nvidia/nemoclaw/hermes-sandbox-base image at
+sha256:c588bf76ba1c280f8a366bdfd672193e852de4f509a280662c7070a9b6e2fa48.
+It includes Hermes Agent 0.20.6 (MIT). Preserve the base image's included notices
+when building or redistributing an image. This example does not publish images
+or distribute LLM or decision model weights. Operators select model services and
+must review their respective model licenses and service terms.

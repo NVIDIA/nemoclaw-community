@@ -1,0 +1,27 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# OpenShell provider profile for the agent's LLM, copied from OpenShell's
+# providers/nvidia.yaml. The sandbox gets NVIDIA_API_KEY as a placeholder.
+# OpenShell substitutes the real key only for this endpoint and these binaries.
+id: llm
+display_name: Agent LLM
+description: NVIDIA inference endpoint for the Hermes agent in the decision guard example
+category: inference
+inference_capable: true
+credentials:
+  - name: api_key
+    description: NVIDIA API key
+    env_vars: [NVIDIA_API_KEY]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+discovery:
+  credentials: [api_key]
+endpoints:
+  - host: integrate.api.nvidia.com
+    port: 443
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+binaries: [/usr/bin/python3.13]

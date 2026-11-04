@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Hermes settings for the sandbox.
+model:
+  provider: custom
+  base_url: ${LLM_BASE_URL}
+  default: ${LLM_MODEL}
+  # An OpenShell placeholder. OpenShell substitutes the real key on the way out.
+  api_key: ${NVIDIA_API_KEY}
+  context_length: 65536
+# The workspace tools. Every tool call is an HTTP request that OpenShell sees.
+mcp_servers:
+  workspace:
+    url: http://host.openshell.internal:18580/mcp
+toolsets: [workspace]
+tools:
+  # Give the model the workspace tools directly, not through a search step.
+  tool_search:
+    enabled: false
+# The guard treats the latest model call as the conversation. Turn off
+# background model calls so that every model call comes from the agent loop.
+auxiliary:
+  title_generation:
+    enabled: false
+  background_review:
+    enabled: false
+memory:
+  memory_enabled: false
+  user_profile_enabled: false
+security:
+  allow_lazy_installs: false

@@ -8,17 +8,43 @@ on:
     branches: [main]
     paths:
       - examples/recipes/nvidia/agentic-ai-learning-path/**
+      - examples/tools/decision-model-guard/**
       - .github/workflows/example-validation.yml
   pull_request:
     branches: [main]
     paths:
       - examples/recipes/nvidia/agentic-ai-learning-path/**
+      - examples/tools/decision-model-guard/**
       - .github/workflows/example-validation.yml
 
 permissions:
   contents: read
 
 jobs:
+  decision-model-guard:
+    name: Validate decision-model-guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: examples/tools/decision-model-guard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        run: python -m pip install uv
+      - name: Install locked dependencies and generate pinned bindings
+        run: |
+          uv sync --locked
+          uv run setup_bindings.py
+      - name: Check classifier, middleware, and gRPC behavior
+        run: |
+          uv run python -m unittest discover -s tests -v
+          uv run ruff check .
+          uv run ruff format --check .
+
   agentic-ai-learning-path:
     name: Validate agentic-ai-learning-path
     runs-on: ${{ matrix.os }}

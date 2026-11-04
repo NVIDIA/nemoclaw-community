@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# One image for the host-side services: the guard, the workspace MCP server,
+# and the dashboard. The build downloads OpenShell's middleware proto files,
+# checks their checksums, and generates the guard's gRPC bindings.
+FROM python:3.12-slim
+WORKDIR /app
+RUN pip install --no-cache-dir uv==0.13.7
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-dev --no-install-project
+COPY setup_bindings.py contract.py classifier.py middleware.py workspace.py \
+     dashboard.py dashboard.html ./
+RUN uv run --no-sync setup_bindings.py
+ENV PATH="/app/.venv/bin:$PATH"

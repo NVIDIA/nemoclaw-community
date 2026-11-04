@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# The same sandbox policy without the guard. The LLM endpoint comes from the
+# provider attached with --provider.
+version: 1
+filesystem_policy:
+  include_workdir: true
+  read_only: [/opt, /usr, /lib, /proc, /dev/urandom, /etc, /var/log]
+  read_write: [/sandbox, /tmp, /dev/null]
+network_policies:
+  workspace:
+    endpoints:
+      - host: host.openshell.internal
+        port: 18580
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: {method: POST, path: /mcp}
+          - allow: {method: GET, path: /mcp}
+          - allow: {method: DELETE, path: /mcp}
+    binaries:
+      - path: /usr/bin/python3.13

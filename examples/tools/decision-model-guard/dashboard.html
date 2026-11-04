@@ -1,0 +1,279 @@
+<!doctype html>
+<!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Decision Guard Trace (DEMO)</title>
+<style>
+  :root {
+    --bg: #f6f6f3; --panel: #ffffff; --ink: #1c1c1a; --muted: #6a6a64; --line: #e1e1dc;
+    --code: #f1f1ed; --allow: #1d7a35; --allow-bg: #e3f3e7; --block: #b42318; --block-bg: #fdeceb;
+    --warn: #8a5a00; --warn-bg: #fdf1d3; --accent: #76b900;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121211; --panel: #1b1b19; --ink: #ececea; --muted: #a0a09a; --line: #2e2e2b;
+      --code: #242422; --allow: #5ccf7a; --allow-bg: #143220; --block: #ff7a70; --block-bg: #3a1714;
+      --warn: #f0c050; --warn-bg: #3a2d0c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .demo { position: sticky; top: 0; z-index: 2; background: #ffcc00; color: #1c1c1a;
+    font-weight: 700; text-align: center; padding: 8px 16px; border-bottom: 4px solid #1c1c1a; }
+  main { max-width: 1080px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 22px; margin: 8px 0 2px; }
+  h2 { font-size: 15px; margin: 22px 0 8px; }
+  .muted { color: var(--muted); font-weight: 400; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 14px 0; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+  .panel, .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+  .task { white-space: pre-wrap; margin: 0; }
+  .session { margin: 18px 0; }
+  .session > h3 { font-size: 13px; margin: 0 0 6px; color: var(--muted); font-weight: 600; }
+  .event { margin: 6px 0; }
+  .lite { padding: 6px 14px; border-left: 3px solid var(--line); color: var(--muted); }
+  .row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .time { font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); }
+  .kind { font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .05em; text-transform: uppercase; }
+  .chip { display: inline-block; font-weight: 700; font-size: 12px; padding: 2px 9px; border-radius: 999px; }
+  .chip.allow { color: var(--allow); background: var(--allow-bg); }
+  .chip.block { color: var(--block); background: var(--block-bg); }
+  .chip.warn { color: var(--warn); background: var(--warn-bg); }
+  .card.block { border-left: 4px solid var(--block); }
+  .card.allow { border-left: 4px solid var(--allow); }
+  .card.warn { border-left: 4px solid var(--warn); }
+  pre { background: var(--code); padding: 8px 10px; border-radius: 6px; margin: 6px 0; overflow: auto;
+    white-space: pre-wrap; word-break: break-word; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .label { font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 10px; }
+  .bars { display: grid; grid-template-columns: 44px minmax(80px, 260px) 46px; gap: 3px 8px; align-items: center;
+    font-size: 12px; font-variant-numeric: tabular-nums; }
+  .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+  .bar span { display: block; height: 100%; }
+  .outcome { margin-top: 10px; font-weight: 600; }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .msg { border-left: 3px solid var(--line); padding: 2px 10px; margin: 6px 0; }
+  .msg .role { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted); }
+  .empty { color: var(--muted); padding: 24px 0; }
+</style>
+</head>
+<body>
+<div class="demo">DEMO ONLY: a local teaching view built from the middleware's demo trace. It shows full conversation text. It is not a monitoring tool or a security control.</div>
+<main>
+  <h1>Decision model guard: live trace</h1>
+  <div class="muted" id="status">Waiting for data…</div>
+  <div class="stats" id="stats"></div>
+  <h2>User request <span class="muted">(the first user message the guard saw)</span></h2>
+  <div class="panel"><p class="task" id="task">No decision yet.</p></div>
+  <h2>Sessions <span class="muted">(newest first, events in order)</span></h2>
+  <div id="sessions"><div class="empty">Start a sandbox session to see events here.</div></div>
+</main>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const node = (tag, cls, text) => {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
+};
+const clock = (t) => new Date(t * 1000).toLocaleTimeString([], { hour12: false });
+const pretty = (v) => typeof v === "string" ? v : JSON.stringify(v, null, 2);
+const canon = (v) => Array.isArray(v) ? v.map(canon)
+  : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canon(v[k])])) : v;
+const same = (a, b) => JSON.stringify(canon(a)) === JSON.stringify(canon(b));
+const openDetails = new Set();
+let lastPayload = "";
+
+function messageText(m) {
+  let text = m.content;
+  if (Array.isArray(text)) text = text.map((p) => p.text ?? JSON.stringify(p)).join(" ");
+  text = text || "";
+  if (m.role === "tool") {
+    // Hermes wraps terminal results as {"output": ..., "exit_code": ...}.
+    try {
+      const result = JSON.parse(text);
+      if (typeof result.output === "string") text = `${result.output}  [exit ${result.exit_code}]`;
+    } catch (error) { /* Keep the raw text. */ }
+  }
+  for (const key of ["reasoning_content", "reasoning"]) {
+    if (typeof m[key] === "string" && m[key]) text = `[${key}] ${m[key]}\n` + text;
+  }
+  for (const call of m.tool_calls || []) {
+    text += `\n→ ${call.function?.name}(${call.function?.arguments})`;
+  }
+  return text.trim();
+}
+
+const isResponse = (e) => Boolean(e.proposed_action?.assistant_response);
+
+function chip(text, tone) { return node("span", `chip ${tone}`, text); }
+
+function verdict(e) {
+  if (e.allowed) return ["ALLOW", "allow"];
+  if (e.probabilities == null) return ["NO DECISION (fail closed)", "warn"];
+  return ["BLOCK", "block"];
+}
+
+function bars(probabilities) {
+  const grid = node("div", "bars");
+  const colors = { allow: "var(--allow)", ask: "var(--warn)", block: "var(--block)" };
+  for (const label of ["allow", "ask", "block"]) {
+    const value = probabilities?.[label] ?? 0;
+    const bar = node("div", "bar");
+    const fill = node("span");
+    fill.style.width = `${Math.round(value * 100)}%`;
+    fill.style.background = colors[label];
+    bar.append(fill);
+    grid.append(node("span", "", label), bar, node("span", "", value.toFixed(3)));
+  }
+  return grid;
+}
+
+function trajectory(e) {
+  const key = `traj:${e.request_id}`;
+  const box = document.createElement("details");
+  box.open = openDetails.has(key);
+  box.addEventListener("toggle", () => box.open ? openDetails.add(key) : openDetails.delete(key));
+  box.append(node("summary", "", `Conversation the decision model saw (${(e.trajectory || []).length} messages)`));
+  for (const m of e.trajectory || []) {
+    const item = node("div", "msg");
+    item.append(node("div", "role", m.role || "?"), node("pre", "", messageText(m) || "(empty)"));
+    box.append(item);
+  }
+  return box;
+}
+
+function groundTruth(effect) {
+  return effect.harmful ? chip(`HARMFUL: ${effect.reason}`, "block") : chip("harmless", "allow");
+}
+
+function decisionCard(e) {
+  const [label, tone] = verdict(e);
+  const card = node("div", `card event ${tone}`);
+  const head = node("div", "row");
+  head.append(node("span", "time", clock(e.time)), node("span", "kind",
+    isResponse(e) ? "Decision · model response" : "Decision · tool call"),
+    chip(label, tone), node("span", "muted", `${e.reason_code} · ${e.decision_seconds}s`));
+  card.append(head);
+  if (e.probabilities) card.append(bars(e.probabilities));
+  card.append(node("div", "label", "Proposed action"));
+  const action = e.proposed_action || {};
+  const text = action.assistant_response
+    ? messageText(action.assistant_response)
+    : action.tool ? `${action.tool}(${pretty(action.arguments)})` : `${action.method} ${action.path}\n${pretty(action.arguments)}`;
+  // Keep the tool calls (at the end) and trim long reasoning before them.
+  card.append(node("pre", "", text.length > 900 ? "…" + text.slice(-900) : text));
+  card.append(trajectory(e));
+  const outcome = node("div", "outcome");
+  if (isResponse(e)) {
+    outcome.textContent = e.allowed
+      ? "Hermes received this model response."
+      : "Withheld: Hermes received 403 middleware_denied instead, so none of these tool calls ran.";
+  } else if (!e.allowed) {
+    outcome.textContent = "Blocked before the service saw it: Hermes received 403 middleware_denied.";
+  } else if (e.effect) {
+    outcome.textContent = "Allowed: the mock service committed the action. ";
+    outcome.append(groundTruth(e.effect));
+  } else {
+    outcome.textContent = "Allowed: no matching effect recorded yet.";
+  }
+  card.append(outcome);
+  return card;
+}
+
+function liteRow(e, kind, text) {
+  const row = node("div", "lite event row");
+  row.append(node("span", "time", clock(e.time)), node("span", "kind", kind), node("span", "", text));
+  return row;
+}
+
+function render(data) {
+  const effects = data.effects.map((e) => ({ ...e, time: e.committed_at_ns / 1e9 }));
+  // Pair each request that OpenShell let through with the first identical
+  // effect that the mock service recorded within 30 seconds. A blocked request
+  // never reaches the service, so it claims no effect.
+  const used = new Set();
+  const claim = (action, after) => {
+    const i = effects.findIndex((f, j) => !used.has(j) && f.time >= after - 1
+      && f.time <= after + 30 && f.tool === action);
+    if (i < 0) return undefined;
+    used.add(i);
+    return effects[i];
+  };
+  for (const e of data.trace) {
+    if (e.kind === "decision" && !isResponse(e) && e.allowed) {
+      e.effect = claim(e.proposed_action?.tool, e.time);
+    }
+  }
+  const decisions = data.trace.filter((e) => e.kind === "decision");
+  const blocked = decisions.filter((e) => !e.allowed && e.probabilities != null).length;
+  const failed = decisions.filter((e) => e.probabilities == null).length;
+  const bad = effects.filter((e) => e.harmful).length;
+  $("stats").replaceChildren(...[
+    ["Decisions", decisions.length], ["Allowed", decisions.length - blocked - failed],
+    ["Blocked", blocked], ["Failed closed", failed],
+    ["Effects committed", effects.length], ["Harmful effects", bad],
+  ].map(([k, v]) => { const s = node("div", "stat"); s.append(node("b", "", String(v)), node("span", "muted", k)); return s; }));
+  const latest = decisions[decisions.length - 1];
+  const ask = latest && (latest.trajectory || []).find((m) => m.role === "user");
+  if (ask) $("task").textContent = messageText(ask);
+
+  const sessions = new Map();
+  for (const e of data.trace) {
+    const key = e.sandbox_id || "unknown";
+    if (!sessions.has(key)) sessions.set(key, { name: e.sandbox || key, events: [], start: e.time });
+    sessions.get(key).events.push(e);
+  }
+  const orphans = effects.filter((_, i) => !used.has(i));
+  const blocks = [];
+  for (const s of [...sessions.values()].sort((a, b) => b.start - a.start)) {
+    const box = node("section", "session");
+    box.append(node("h3", "", `Sandbox ${s.name} · started ${clock(s.start)}`));
+    for (const e of s.events) {
+      if (e.kind === "decision") box.append(decisionCard(e));
+      else if (e.kind === "model_request") {
+        const last = e.last_message || {};
+        box.append(liteRow(e, "Model request", `${e.message_count} messages · last ${last.role}: ${messageText(last).slice(0, 160)}`));
+      }
+    }
+    blocks.push(box);
+  }
+  if (orphans.length) {
+    const box = node("section", "session");
+    box.append(node("h3", "", "Effects with no guard decision (for example, an unguarded sandbox)"));
+    for (const f of orphans) {
+      const card = node("div", "card event warn");
+      const head = node("div", "row");
+      head.append(node("span", "time", clock(f.time)), node("span", "kind", `Effect · ${f.tool}`), groundTruth(f));
+      card.append(head, node("pre", "", pretty(f.arguments)));
+      box.append(card);
+    }
+    blocks.push(box);
+  }
+  $("sessions").replaceChildren(...(blocks.length ? blocks : [node("div", "empty", "Start a sandbox session to see events here.")]));
+}
+
+async function poll() {
+  try {
+    const response = await fetch("/data", { cache: "no-store" });
+    const text = await response.text();
+    if (text !== lastPayload) {
+      lastPayload = text;
+      render(JSON.parse(text));
+    }
+    $("status").textContent = `Updated ${new Date().toLocaleTimeString([], { hour12: false })} · refreshes every second`;
+  } catch (error) {
+    $("status").textContent = `Cannot reach dashboard.py: ${error}`;
+  }
+}
+poll();
+setInterval(poll, 1000);
+</script>
+</body>
+</html>
