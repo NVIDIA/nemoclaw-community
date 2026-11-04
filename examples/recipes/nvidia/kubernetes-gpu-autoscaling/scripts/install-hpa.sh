@@ -377,13 +377,19 @@ ensure_prometheus_stack() {
     rm -f "${merged_adapter_values}"
   else
     echo "Installing Prometheus Adapter ${ADAPTER_RELEASE} in namespace ${MONITORING_NS}." >&2
-    helm upgrade --install "${ADAPTER_RELEASE}" prometheus-community/prometheus-adapter \
-      --namespace "${MONITORING_NS}" \
-      --version "${ADAPTER_CHART_VERSION}" \
-      -f "${ADAPTER_VALUES}" \
-      --set "prometheus.url=${PROM_URL}" \
-      --set prometheus.port=9090 \
-      --wait --timeout 10m >/dev/null
+    # Helm 4 server-side apply conflicts with an adapter ConfigMap that kubectl applied earlier.
+    # The helper adds --force-conflicts on Helm 4+ only and fails before anything changes.
+    adapter_helm_args=(
+      upgrade --install "${ADAPTER_RELEASE}" prometheus-community/prometheus-adapter
+      --namespace "${MONITORING_NS}"
+      --version "${ADAPTER_CHART_VERSION}"
+      -f "${ADAPTER_VALUES}"
+      --set "prometheus.url=${PROM_URL}"
+      --set prometheus.port=9090
+      --wait --timeout 10m
+    )
+    hpa_common_append_helm_force_conflicts adapter_helm_args || exit 1
+    helm "${adapter_helm_args[@]}" >/dev/null
   fi
 
   for _ in $(seq 1 36); do
