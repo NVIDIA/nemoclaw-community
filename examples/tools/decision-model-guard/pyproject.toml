@@ -5,7 +5,7 @@ name = "decision-model-guard"
 version = "0.1.0"
 description = "Evaluate an inline decision model through OpenShell supervisor middleware"
 requires-python = ">=3.12,<3.14"
-dependencies = ["grpcio==1.81.1", "grpcio-tools==1.81.1", "protobuf==6.33.5", "httpx==0.28.1"]
+dependencies = ["grpcio==1.81.1", "grpcio-tools==1.81.1", "protobuf==6.33.5", "httpx==0.28.1", "mcp==2.0.0"]
 
 [dependency-groups]
 dev = ["ruff==0.14.3"]

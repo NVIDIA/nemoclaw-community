@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# The host side of the example: the workspace MCP server, the guard, an OpenShell
+# gateway that knows the guard, and the DEMO ONLY dashboard. Linux only: every
+# service uses host networking, and sandboxes reach it through host.openshell.internal.
+name: decision-guard
+
+x-service: &service
+  image: decision-guard-services:local
+  pull_policy: never
+  network_mode: host
+  extra_hosts: ["host.openshell.internal:host-gateway"]
+  restart: unless-stopped
+  volumes: ["./.cache/data:/data"]
+
+services:
+  workspace:
+    <<: *service
+    build: {context: ., dockerfile: Dockerfile.services}
+    command: [python, workspace.py, --listen=0.0.0.0, --data=/data]
+
+  guard:
+    <<: *service
+    command:
+      - python
+      - middleware.py
+      - --listen=0.0.0.0:18551
+      - --audit=/data/decisions.jsonl
+      - --demo-trace=/data/demo-trace.jsonl
+    environment:
+      DECISION_URL: ${DECISION_URL}
+      DECISION_MODEL: ${DECISION_MODEL}
+      DECISION_API_KEY: ${DECISION_API_KEY}
+      GUARD_SURFACE: ${GUARD_SURFACE:-both}
+    depends_on: [workspace]
+    healthcheck:
+      test: [CMD, python, -c, "import socket; socket.create_connection(('host.openshell.internal', 18551), 2)"]
+      interval: 2s
+      retries: 30
+
+  # One-time step: the gateway's token signing keys.
+  gateway-init:
+    image: ghcr.io/nvidia/openshell/gateway:0.1.6
+    user: root
+    command: [generate-certs, --output-dir=/var/openshell/tls]
+    volumes: [gateway-state:/var/openshell]
+
+  gateway:
+    image: ghcr.io/nvidia/openshell/gateway:0.1.6
+    user: root
+    network_mode: host
+    extra_hosts: ["host.openshell.internal:host-gateway"]
+    restart: unless-stopped
+    command:
+      - --config=/etc/openshell/gateway.toml
+      - --compute-driver=docker
+      - --bind-address=127.0.0.1
+      - --port=18080
+      - --health-port=18081
+      - --disable-tls
+      - --db-url=sqlite:/var/openshell/gateway.db
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config/gateway.toml:/etc/openshell/gateway.toml:ro
+      - gateway-state:/var/openshell
+    depends_on:
+      gateway-init: {condition: service_completed_successfully}
+      guard: {condition: service_healthy}
+
+  dashboard:
+    <<: *service
+    command: [python, dashboard.py, --trace=/data/demo-trace.jsonl, --effects=/data/effects.jsonl]
+    depends_on: [workspace]
+
+volumes:
+  gateway-state:

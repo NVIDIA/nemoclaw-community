@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+[openshell]
+version = 2
+
+[openshell.gateway.auth]
+# Local development: the CLI connects without signing in.
+allow_unauthenticated_users = true
+
+[openshell.gateway.gateway_jwt]
+# Keys from the gateway-init step in compose.yaml.
+signing_key_path = "/var/openshell/tls/jwt/signing.pem"
+public_key_path = "/var/openshell/tls/jwt/public.pem"
+kid_path = "/var/openshell/tls/jwt/kid"
+gateway_id = "decision-guard"
+
+# Register the guard. The gateway calls Describe at startup and stops if the
+# guard is not running. Sandbox policies attach the guard by this name.
+[[openshell.supervisor.middleware]]
+name = "decision-model-guard"
+grpc_endpoint = "http://host.openshell.internal:18551"
+allow_insecure_transport = true
+binding_policy = "exact"
+bindings = ["http_request_pre_credentials", "http_response_pre_return"]
+max_payload_bytes = 262144
+timeout = "10s"
+
+[openshell.drivers.docker]
+supervisor_image = "ghcr.io/nvidia/openshell/supervisor:0.1.6"
+# This gateway manages only sandboxes with this label.
+sandbox_label = "decision-guard"
