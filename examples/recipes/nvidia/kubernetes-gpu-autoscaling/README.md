@@ -450,6 +450,8 @@ Watch each pool with `./scripts/get-hpa.sh -n nemoclaw-gpu-vllm -w` and `./scrip
 
 This recipe sets those **targets** only.
 
+To switch an installed release between the two metrics without changing the inference runtime, the model, or any other chart value, run `./scripts/set-hpa-metric.sh gpu_utilization` or `./scripts/set-hpa-metric.sh latency_avg`. It runs `helm upgrade --reuse-values` on `RELEASE` in `NAMESPACE` (both default to `nemoclaw-gpu`). `GPU_TARGET` (default 40) and `HPA_TARGET_LATENCY_MS` (default 3000) set the targets. For one pool of [two runtimes](#two-runtimes-on-shared-gpus), run for example `NAMESPACE=nemoclaw-gpu-vllm RELEASE=nemoclaw-gpu-vllm ./scripts/set-hpa-metric.sh latency_avg`.
+
 Kubernetes HPA uses the ratio of current metric to target. From [Horizontal Pod Autoscaling — algorithm details](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/#algorithm-details):
 
 ```text

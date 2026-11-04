@@ -18,6 +18,7 @@ what each script in this directory does — it has no instructions of its own.
 | `create-nim-ngc-secrets.sh` | Implementation used by `apply-local-secrets.sh`. Do not run it as the README 6c path. |
 | `install-hpa.sh` | Monitoring + chart + HPA (+ Envoy if enabled). This is the autoscaling install path. `HPA_SHARED_GPU_CEILING=1` lets `MAX_REPLICAS` reach all allocatable GPUs while another runtime holds some. |
 | `install-two-runtimes.sh` | Install the chart twice on the same GPUs: vLLM (`nemoclaw-gpu-vllm`) and Ollama (`nemoclaw-gpu-ollama`), each with ceiling `MAX_REPLICAS` (default 8). Pods that do not fit stay Pending. |
+| `set-hpa-metric.sh` | Switch an installed release's HPA between `gpu_utilization` and `latency_avg` without changing the runtime or other values. |
 | `hpa-load-test-dgx-8xh100.sh` | **Keep.** Fast HPA-only test for **8× H100** (metrics-proxy pod-IP Job, `files/load-generator.ts`). GPU util default, or `HPA_METRIC=latency_avg HPA_TARGET_LATENCY_MS=3000`. The sandbox e2e does not replace this. |
 | `hpa-load-test-brev-4xl40s.sh` | HPA load test for **4× L40S** on AWS (Brev). Same GPU-util default / latency env vars. |
 | `agentscaling_gpuutil.sh` | Sandbox provision + GPU-util HPA. Keeps current GPUs at 1 (`maxReplicas=8`) until `client.sh`. |
