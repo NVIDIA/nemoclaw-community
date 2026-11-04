@@ -175,6 +175,8 @@ else
 fi
 
 section "10 host profiles (Desktop roster)"
+[[ "${HOST_GATEWAY:-on}" == on ]] && check "one host gateway running" "$(host_gateway_running && echo yes || echo no)" yes
+[[ "${HOST_GATEWAY:-on}" == on ]] && check "no per-profile gateways" "$(pgrep -f 'hermes -p [a-z0-9-]+ gateway run' | wc -l | tr -d ' ')" 0
 for b in "${BOTS_FOUND[@]}"; do
   check "$b host profile exists" "$([[ -f "$HOME/.hermes/profiles/$b/config.yaml" ]] && echo yes || echo no)" yes
   [[ "${HOST_GATEWAY:-on}" == on ]] && check "$b host profile running" "$(host_profile_state "$b")" running

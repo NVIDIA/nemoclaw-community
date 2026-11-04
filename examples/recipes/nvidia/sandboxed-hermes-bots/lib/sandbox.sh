@@ -80,9 +80,16 @@ sandbox_create() {
       die "a sandbox named $sb already exists and was not created by this deployment. Refusing to reconfigure it. Set SANDBOX_PREFIX in swarm.env to use different names, or remove it yourself if it is yours."
     fi
   else
-    timeout 180 openshell sandbox create --name "$sb" --from "$(image_tag)" \
-      --policy "$pol" --memory "$SANDBOX_MEMORY" --cpu "$SANDBOX_CPU" >/dev/null 2>&1 || true
+    # Keep the create's own error: OpenShell's reasons (INVALID_ARGUMENT on a
+    # name or policy, image missing) are the only way to tell why a sandbox
+    # never appeared. Readiness is still gated by the poll below.
+    local out
+    out=$(timeout 180 openshell sandbox create --name "$sb" --from "$(image_tag)" \
+      --policy "$pol" --memory "$SANDBOX_MEMORY" --cpu "$SANDBOX_CPU" 2>&1) || true
     created=1
+    if ! sandbox_exists "$sb" && [[ -n "$out" ]]; then
+      dim "openshell sandbox create: $(printf '%s' "$out" | strip_ansi | tail -n 3 | tr '\n' ' ' | cut -c1-300)"
+    fi
   fi
   for ((i = 0; i < 30; i++)); do
     phase=$(sandbox_phase "$sb")
@@ -93,7 +100,7 @@ sandbox_create() {
     [[ "$phase" == Error ]] && die "sandbox $sb entered Error; see: docker logs \$(docker ps -a --filter name=$sb -q | head -1)"
     sleep 6
   done
-  die "sandbox $sb not Ready after 3 min (phase: ${phase:-none})"
+  die "sandbox $sb not Ready after 3 min (phase: ${phase:-none})${out:+; create said: $(printf '%s' "$out" | strip_ansi | tail -n 1 | cut -c1-200)}"
 }
 
 # Returns non-zero while the sandbox still exists, so callers can stop before
@@ -128,8 +135,10 @@ sbx() {
     done
     script="base64 -d $f.b64 > $f && rm -f $f.b64 && . $f && rm -f $f"
   fi
+  # </dev/null: `openshell sandbox exec` reads stdin, and a caller inside a
+  # while-read loop would otherwise lose the rest of its input.
   timeout "$t" openshell sandbox exec -n "$sb" --timeout "$((t - 10 > 5 ? t - 10 : 5))" -- \
-    /bin/sh -c "$pre$script" 2>&1 | grep -v '^profile: Permission' || true
+    /bin/sh -c "$pre$script" < /dev/null 2>&1 | grep -v '^profile: Permission' || true
 }
 
 # Write a local file into the sandbox at DEST (mode 600). Uses base64 through
