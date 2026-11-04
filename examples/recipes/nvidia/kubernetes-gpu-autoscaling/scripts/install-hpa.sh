@@ -11,6 +11,10 @@
 # Usage:
 #   ./scripts/install-hpa.sh
 #   ENABLE_ENVOY_LB=0 ./scripts/install-hpa.sh
+#   HPA_SHARED_GPU_CEILING=1 MAX_REPLICAS=8 ./scripts/install-hpa.sh
+#
+# HPA_SHARED_GPU_CEILING=1 allows maxReplicas up to the node's allocatable
+# GPUs while another runtime already holds some. Extra pods stay Pending.
 
 set -euo pipefail
 
@@ -373,13 +377,19 @@ ensure_prometheus_stack() {
     rm -f "${merged_adapter_values}"
   else
     echo "Installing Prometheus Adapter ${ADAPTER_RELEASE} in namespace ${MONITORING_NS}." >&2
-    helm upgrade --install "${ADAPTER_RELEASE}" prometheus-community/prometheus-adapter \
-      --namespace "${MONITORING_NS}" \
-      --version "${ADAPTER_CHART_VERSION}" \
-      -f "${ADAPTER_VALUES}" \
-      --set "prometheus.url=${PROM_URL}" \
-      --set prometheus.port=9090 \
-      --wait --timeout 10m >/dev/null
+    # Helm 4 server-side apply conflicts with an adapter ConfigMap that kubectl applied earlier.
+    # The helper adds --force-conflicts on Helm 4+ only and fails before anything changes.
+    adapter_helm_args=(
+      upgrade --install "${ADAPTER_RELEASE}" prometheus-community/prometheus-adapter
+      --namespace "${MONITORING_NS}"
+      --version "${ADAPTER_CHART_VERSION}"
+      -f "${ADAPTER_VALUES}"
+      --set "prometheus.url=${PROM_URL}"
+      --set prometheus.port=9090
+      --wait --timeout 10m
+    )
+    hpa_common_append_helm_force_conflicts adapter_helm_args || exit 1
+    helm "${adapter_helm_args[@]}" >/dev/null
   fi
 
   for _ in $(seq 1 36); do
@@ -473,7 +483,14 @@ if [[ ! "${MAX_REPLICAS}" =~ ^[1-9][0-9]*$ ]]; then
   echo "MAX_REPLICAS must be a positive integer (got '${MAX_REPLICAS:-}')" >&2
   exit 1
 fi
-hpa_common_verify_gpu_capacity "${MAX_REPLICAS}" || exit 1
+case "${HPA_SHARED_GPU_CEILING:-0}" in
+  0) hpa_common_verify_gpu_capacity "${MAX_REPLICAS}" || exit 1 ;;
+  1) hpa_common_verify_shared_gpu_ceiling "${MAX_REPLICAS}" || exit 1 ;;
+  *)
+    echo "HPA_SHARED_GPU_CEILING must be 0 or 1" >&2
+    exit 1
+    ;;
+esac
 HPA_APPLY_MAX_REPLICAS="${HPA_APPLY_MAX_REPLICAS:-${MAX_REPLICAS}}"
 if [[ ! "${HPA_APPLY_MAX_REPLICAS}" =~ ^[1-9][0-9]*$ ]]; then
   echo "HPA_APPLY_MAX_REPLICAS must be a positive integer (got '${HPA_APPLY_MAX_REPLICAS}')" >&2
