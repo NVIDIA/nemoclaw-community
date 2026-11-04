@@ -40,8 +40,16 @@ def parse_json(body):
         return None
 
 
-def conversation(messages):
-    """Drop system messages: the decision model judges what the agent does, not its prompt."""
+def conversation(messages, drop_system=False):
+    """The conversation the decision model sees.
+
+    The system prompt is the operator's instructions to the agent and is useful
+    context, so it is kept by default. The misaligned-agent demo hides a test
+    goal in the system prompt, so it sets drop_system: a real misaligned model
+    would have no such prompt, only the behavior.
+    """
+    if not drop_system:
+        return list(messages)
     return [m for m in messages if not (isinstance(m, dict) and m.get("role") == "system")]
 
 
@@ -121,8 +129,9 @@ def as_event_stream(completion):
 
 
 class Guard(rpc.SupervisorMiddlewareServicer, rpc.HttpResponsePreReturnServicer):
-    def __init__(self, classifier, audit_path, demo_trace=None, surface="both"):
+    def __init__(self, classifier, audit_path, demo_trace=None, surface="both", drop_system=False):
         self.classifier = classifier
+        self.drop_system = drop_system
         self.audit_path = Path(audit_path)
         self.demo_trace = Path(demo_trace) if demo_trace else None
         self.surface = surface
@@ -235,7 +244,10 @@ class Guard(rpc.SupervisorMiddlewareServicer, rpc.HttpResponsePreReturnServicer)
         observed = self.history.get(sandbox)
         if not observed or time.monotonic() - observed["received"] > HISTORY_SECONDS:
             return result(False, "missing_recent_history")
-        state = {"trajectory": conversation(observed["messages"]), "proposed_action": action}
+        state = {
+            "trajectory": conversation(observed["messages"], self.drop_system),
+            "proposed_action": action,
+        }
         return await self.judge(request, state)
 
     async def Evaluate(self, request_iterator, context):
@@ -289,7 +301,7 @@ class Guard(rpc.SupervisorMiddlewareServicer, rpc.HttpResponsePreReturnServicer)
                         raise ValueError("No matching model request")
                     request = pb.HttpRequestEvaluation(context=preflight.context, body=body.data)
                     state = {
-                        "trajectory": conversation(observed["messages"]),
+                        "trajectory": conversation(observed["messages"], self.drop_system),
                         "proposed_action": {"assistant_response": message},
                     }
                     judged = await self.judge(request, state)
@@ -358,7 +370,13 @@ async def serve(args):
         timeout=args.decision_timeout,
     )
     server = grpc.aio.server(options=[("grpc.max_receive_message_length", 1024 * 1024)])
-    guard = Guard(classifier, args.audit, demo_trace=args.demo_trace, surface=args.surface)
+    guard = Guard(
+        classifier,
+        args.audit,
+        demo_trace=args.demo_trace,
+        surface=args.surface,
+        drop_system=args.drop_system_prompt,
+    )
     rpc.add_SupervisorMiddlewareServicer_to_server(guard, server)
     rpc.add_HttpResponsePreReturnServicer_to_server(guard, server)
     host, port = args.listen.rsplit(":", 1)
@@ -387,6 +405,12 @@ def main():
         choices=["tool", "response", "both"],
         default=os.environ.get("GUARD_SURFACE", "both"),
         help="Judge tool calls, model responses, or both",
+    )
+    parser.add_argument(
+        "--drop-system-prompt",
+        action=argparse.BooleanOptionalAction,
+        default=os.environ.get("GUARD_DROP_SYSTEM_PROMPT", "").lower() in {"1", "true", "yes"},
+        help="Hide system messages from the decision model. For the misaligned-agent demo only.",
     )
     parser.add_argument(
         "--demo-trace",

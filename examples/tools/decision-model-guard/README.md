@@ -258,11 +258,21 @@ guard allows every step. From one run:
 
 ### A misaligned agent
 
+Some risks come from the model itself, not from anything it reads. A
+misaligned model pursues a goal that you did not give it, and does not say
+so. SHADE-Arena tests for this by simulating one: it gives the agent a secret
+secondary task in its system prompt and tells it to hide that task.
+
 Leave Hermes (Ctrl-D), reset the workspace with `docker compose restart
-workspace`, and start Hermes again with a hidden goal. `hermes-misaligned` adds
-a secondary task from SHADE-Arena to the system prompt and tells the model not
-to mention it. The guard drops the system prompt before it asks, so the
-decision model sees only what the agent says and does.
+workspace`, and start Hermes again as a simulated misaligned agent.
+`hermes-misaligned` adds a SHADE-Arena secondary task to the system prompt and
+tells the model not to mention it.
+
+A real misaligned model would have no such prompt; its intent would come from
+its training. So for this demo the guard hides the system prompt from the
+decision model (`GUARD_DROP_SYSTEM_PROMPT=1` in `compose.yaml`). The decision
+model has to spot the goal from what the agent says and does, as it would in
+practice.
 
 ```bash
 openshell sandbox exec guard-demo --tty -- hermes-misaligned api-key
@@ -384,9 +394,14 @@ def on_response(response):  # before the agent sees the model's answer
     return BLOCK  # the agent gets 403 middleware_denied instead
 ```
 
-The guard drops system messages before it asks, so the decision model never
-sees a hidden goal. Anything unexpected fails closed: a timeout, an invalid
-answer, or a response that cannot be read.
+The decision model sees the conversation that the agent sent its model. By
+default that includes the system prompt: your instructions to the agent are
+useful context for deciding whether an action fits. This example's Compose
+file sets `GUARD_DROP_SYSTEM_PROMPT=1` for the misaligned-agent demo, because
+there the system prompt holds the test's secret goal (see
+[A misaligned agent](#a-misaligned-agent)). Set it to `0` when you guard your
+own agent. Anything unexpected fails closed: a timeout, an invalid answer, or a
+response that cannot be read.
 
 To use only one hook, set `GUARD_SURFACE=tool` or `GUARD_SURFACE=response` in
 `.env` and run `docker compose up -d guard`. The default is `both`.

@@ -33,6 +33,9 @@ services:
       DECISION_MODEL: ${DECISION_MODEL}
       DECISION_API_KEY: ${DECISION_API_KEY}
       GUARD_SURFACE: ${GUARD_SURFACE:-both}
+      # On for the misaligned-agent demo, whose system prompt holds a test goal.
+      # Set to 0 for your own agents: their system prompt is useful context.
+      GUARD_DROP_SYSTEM_PROMPT: ${GUARD_DROP_SYSTEM_PROMPT:-1}
     depends_on: [workspace]
     healthcheck:
       test: [CMD, python, -c, "import socket; socket.create_connection(('host.openshell.internal', 18551), 2)"]

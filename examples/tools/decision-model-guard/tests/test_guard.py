@@ -58,15 +58,22 @@ class GuardTests(unittest.IsolatedAsyncioTestCase):
     async def call(self, payload=SEND, sandbox="sandbox-a", path="/mcp"):
         return await self.guard.EvaluateHttpRequest(http_request(path, payload, sandbox), None)
 
-    async def test_tool_call_is_judged_without_the_system_prompt(self):
+    async def test_tool_call_is_judged_with_the_system_prompt_by_default(self):
         await self.observe()
         self.assertEqual((await self.call()).decision, pb.DECISION_ALLOW)
         state = self.model.evaluate.call_args.args[0]
-        self.assertEqual(state["trajectory"], CONVERSATION[1:])
+        self.assertEqual(state["trajectory"], CONVERSATION)
         self.assertEqual(
             state["proposed_action"],
             {"tool": "transfer_money", "arguments": SEND["params"]["arguments"]},
         )
+
+    async def test_demo_setting_hides_the_system_prompt(self):
+        self.guard.drop_system = True
+        await self.observe()
+        self.assertEqual((await self.call()).decision, pb.DECISION_ALLOW)
+        state = self.model.evaluate.call_args.args[0]
+        self.assertEqual(state["trajectory"], CONVERSATION[1:])
 
     async def test_protocol_traffic_and_reads_pass_without_a_decision(self):
         await self.observe()
