@@ -1247,7 +1247,8 @@ def _discard_conversation_session(conversation_id: str, owner_key: str) -> None:
             connection.execute(
                 """
                 UPDATE conversations
-                SET hermes_session_id = NULL, updated_at = ?
+                SET hermes_session_id = NULL, last_context_hash = NULL,
+                    last_page_url = NULL, updated_at = ?
                 WHERE conversation_id = ? AND owner_key = ?
                 """,
                 (time.time(), conversation_id, owner_key),

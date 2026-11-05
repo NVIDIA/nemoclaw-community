@@ -77,6 +77,9 @@ plugin uses that identifier to check the browser origin; it isn’t a credential
 An enterprise deployment can set `HERMES_ASK_NEMOCLAW_EXTENSION_ID` to the ID
 of its centrally distributed extension.
 
+Shared HTTPS proxies must preserve the browser's `Origin` header so Hermes
+and the plugin can check the caller's origin.
+
 ## Untrusted page content
 
 Page text and rendered pixels are untrusted input. The plugin separates them

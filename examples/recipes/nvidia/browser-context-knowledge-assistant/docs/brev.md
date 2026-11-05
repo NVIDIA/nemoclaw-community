@@ -39,11 +39,35 @@ Operation is not implemented or not supported
 `scripts/prepare-brev-gateway.sh` first proves that the legacy gateway contains
 no sandbox. It then stops and disables only `openshell-gateway.service`, removes
 the stale client registration, and leaves the old gateway data intact.
+It uses the endpoint declared by the launchable, including port `18080`,
+instead of a previously selected gateway. If the listener or its client TLS
+registration is unavailable, it reads only the sandbox count from the
+launchable's state database. A missing, unreadable, or nonempty database blocks
+that fallback.
 
 `scripts/onboard.sh` selects the repository’s `nemoclaw-managed` gateway
-declaration. Current NemoClaw uses the version-matched native gateway on the
-tested Brev host. It does not implicitly enable the more privileged
-compatibility-container mode, which requires an explicit operator opt-in.
+declaration and uses NemoClaw's version-matched native gateway by default.
+Compatibility-container mode requires an explicit operator opt-in.
+
+For NemoClaw `0.0.123`, a Brev host with an incompatible native gateway can use:
+
+```bash
+NEMOCLAW_OPENSHELL_GATEWAY_CONTAINER_PATCH=1 bash scripts/onboard.sh --fresh
+```
+
+Use the same environment variable when resuming that setup. This mode uses the
+host network and Docker socket. Before starting it,
+`prepare-brev-gateway-compat.py` adjusts the pinned source and compiled
+launcher to run as the host user, with the Docker socket's group added. It
+retains `--cap-drop ALL`, `no-new-privileges`, TLS authentication, and private
+file permissions. It stores the credential-encryption key under the persistent
+gateway state mount. An unexpected or incomplete launcher is rejected before
+either file is changed.
+
+On this pinned release, recreating a sandbox can stop with an ambiguous
+gateway port-owner error. Confirm the gateway's identity and that it contains
+no sandboxes before restarting it through its container manager, then resume.
+Do not signal an unverified process or delete its state.
 
 Don’t copy individual OpenShell binaries into `/usr/local/bin`. The CLI,
 gateway, and sandbox driver need to be from a compatible build.

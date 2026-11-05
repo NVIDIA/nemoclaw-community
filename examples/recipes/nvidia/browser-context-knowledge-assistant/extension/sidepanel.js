@@ -85,6 +85,8 @@ let dashboardSessionToken = null;
 let dashboardSessionTokenOrigin = null;
 let refreshGeneration = 0;
 let refreshController = null;
+let conversationLoadGeneration = 0;
+let submissionControl = null;
 let statusTimer = null;
 let currentStatus = null;
 let requestStartedAt = null;
@@ -177,6 +179,7 @@ function showSettings() {
 
 async function saveSettings(event) {
   event.preventDefault();
+  if (submissionControl) return;
   const candidateDashboard = normalizedDeploymentUrl(String(elements.nemoClawUrl.value || "").trim());
   if (!candidateDashboard) {
     elements.settingsError.textContent = "Enter a valid HTTPS NemoClaw URL, or an HTTP localhost URL, without credentials, a query, or a fragment.";
@@ -196,6 +199,12 @@ async function saveSettings(event) {
     elements.settingsError.hidden = false;
     return;
   }
+  ++refreshGeneration;
+  ++conversationLoadGeneration;
+  refreshController?.abort();
+  clearTimeout(pollTimer);
+  activeJob = null;
+  pendingSubmission = null;
   applyNemoClawUrl(candidateDashboard);
   await sessionAuth.clearSession();
   dashboardSessionToken = null;
@@ -219,6 +228,9 @@ async function saveSettings(event) {
 }
 
 async function disconnectNemoClaw() {
+  ++refreshGeneration;
+  ++conversationLoadGeneration;
+  refreshController?.abort();
   const previousOrigin = nemoClawOrigin;
   clearTimeout(pollTimer);
   activeJob = null;
@@ -955,9 +967,10 @@ function errorDetailFromResponse(response, body, fallback) {
 async function readJsonResponse(response, fallback) {
   let body = null;
   try { body = await response.json(); } catch (_) {}
-  if (response.redirected || response.url?.includes("/login") || response.headers.get("content-type")?.includes("text/html")) {
+  if (response.status === 401 || response.redirected || response.url?.includes("/login") || (response.ok && response.headers.get("content-type")?.includes("text/html"))) {
     throw authenticationError();
   }
+  if (response.status === 413) throw new Error("The page context exceeds the deployment's request-size limit (HTTP 413).");
   if (!response.ok) throw new Error(errorDetailFromResponse(response, body, fallback));
   if (body === null) throw new Error(fallback || "NemoClaw returned an invalid response.");
   return body;
@@ -986,10 +999,17 @@ function renderConversationMessages(messages) {
 }
 
 async function loadConversation(conversationId, resumePolling = true) {
+  const generation = ++conversationLoadGeneration;
+  const selectionGeneration = refreshGeneration;
+  const serviceUrl = nemoClawServiceUrl;
+  const isCurrent = () => generation === conversationLoadGeneration
+    && selectionGeneration === refreshGeneration && serviceUrl === nemoClawServiceUrl;
   const response = await authenticatedFetch(conversationUrl(conversationId));
   const body = await readJsonResponse(response, "NemoClaw could not load this conversation.");
+  if (!isCurrent()) return null;
+  await chrome.storage.local.set({ askNemoClawConversationId: body.conversation.conversation_id });
+  if (!isCurrent()) return null;
   activeConversationId = body.conversation.conversation_id;
-  await chrome.storage.local.set({ askNemoClawConversationId: activeConversationId });
   elements.conversationSelect.value = activeConversationId;
   renderConversationMessages(body.messages || []);
   if (resumePolling && body.active_job) {
@@ -1000,6 +1020,26 @@ async function loadConversation(conversationId, resumePolling = true) {
     hideStatus();
   }
   return body;
+}
+
+async function selectConversation(conversationId) {
+  const generation = ++refreshGeneration;
+  refreshController?.abort();
+  clearTimeout(pollTimer);
+  activeConversationId = null;
+  activeJob = null;
+  pendingSubmission = null;
+  elements.sendButton.disabled = true;
+  hideStatus();
+  clearError();
+  try {
+    await loadConversation(conversationId);
+  } catch (error) {
+    if (generation !== refreshGeneration) return;
+    showError("Conversation could not load", error.message, false, () => selectConversation(conversationId));
+  } finally {
+    if (generation === refreshGeneration) elements.sendButton.disabled = !activeConversationId;
+  }
 }
 
 async function loadConversationList(preferredId = null, initialResponse = null, loadSelected = true) {
@@ -1056,8 +1096,10 @@ async function refreshPageAndCreateConversation() {
   const controller = new AbortController();
   refreshController = controller;
   elements.refreshButton.disabled = true;
+  elements.sendButton.disabled = true;
   clearTimeout(pollTimer);
   activeJob = null;
+  activeConversationId = null;
   pendingSubmission = null;
   hideStatus();
   clearError();
@@ -1084,7 +1126,10 @@ async function refreshPageAndCreateConversation() {
     );
   } finally {
     if (refreshController === controller) refreshController = null;
-    if (generation === refreshGeneration) elements.refreshButton.disabled = false;
+    if (generation === refreshGeneration) {
+      elements.refreshButton.disabled = false;
+      elements.sendButton.disabled = false;
+    }
   }
 }
 
@@ -1094,8 +1139,10 @@ async function createNewConversation() {
   const controller = new AbortController();
   refreshController = controller;
   elements.newConversationButton.disabled = true;
+  elements.sendButton.disabled = true;
   clearTimeout(pollTimer);
   activeJob = null;
+  activeConversationId = null;
   pendingSubmission = null;
   hideStatus();
   clearError();
@@ -1111,7 +1158,10 @@ async function createNewConversation() {
     );
   } finally {
     if (refreshController === controller) refreshController = null;
-    if (generation === refreshGeneration) elements.newConversationButton.disabled = false;
+    if (generation === refreshGeneration) {
+      elements.newConversationButton.disabled = false;
+      elements.sendButton.disabled = false;
+    }
   }
 }
 
@@ -1182,15 +1232,30 @@ async function submitMessage(retryPending = false) {
   elements.refreshButton.disabled = false;
   elements.newConversationButton.disabled = true;
   elements.sendButton.disabled = true;
+  elements.conversationSelect.disabled = true;
+  elements.refreshButton.disabled = true;
+  elements.settingsButton.disabled = true;
+  elements.disconnectButton.disabled = true;
+  const control = { stopped: false, sending: false, controller: new AbortController() };
+  submissionControl = control;
+  const checkStopped = () => {
+    if (control.stopped) {
+      const error = new Error("The request was stopped before submission.");
+      error.cancelled = true;
+      throw error;
+    }
+  };
   try {
     showStatus(activeConversationId ? "capturing" : "starting", { resetElapsed: true });
     if (!activeConversationId) {
-      await createConversation({ preserveStatus: true });
+      await createConversation({ preserveStatus: true, signal: control.controller.signal });
+      checkStopped();
       showStatus("capturing");
     }
     let submission = retryPending ? pendingSubmission : null;
     if (!submission) {
       const context = await captureContext();
+      checkStopped();
       if (!context) {
         hideStatus();
         return;
@@ -1203,6 +1268,8 @@ async function submitMessage(retryPending = false) {
       pendingSubmission = submission;
     }
     clearError();
+    checkStopped();
+    control.sending = true;
     showStatus("sending");
     const response = await authenticatedFetch(conversationUrl(submission.conversationId, "/messages"), {
       method: "POST",
@@ -1215,6 +1282,10 @@ async function submitMessage(retryPending = false) {
     const body = await readJsonResponse(response, "NemoClaw did not accept this message.");
     activeJob = { ...body, conversation_id: submission.conversationId };
     elements.prompt.value = "";
+    if (control.stopped) {
+      await stopActiveJob();
+      return;
+    }
     if (activeConversationId === submission.conversationId) {
       await loadConversation(submission.conversationId, false);
       showStatus(body.status);
@@ -1223,18 +1294,34 @@ async function submitMessage(retryPending = false) {
   } catch (error) {
     activeJob = null;
     hideStatus();
-    if (error.authenticationRequired) {
+    if (control.stopped || error.cancelled) {
+      pendingSubmission = null;
+      showError("Request stopped", control.sending
+        ? "The request status could not be confirmed. Reload the conversation to check for a running request."
+        : "The message was stopped before submission.", false,
+        control.sending ? () => loadConversation(activeConversationId) : null);
+    } else if (error.authenticationRequired) {
       showError("Sign in to NemoClaw", "Your NemoClaw session is missing or expired. Sign in normally, then try again.", true, () => submitMessage(true));
     } else {
       showError("Request could not start", error.message || "NemoClaw did not accept the message.", false, () => submitMessage(true));
     }
   } finally {
+    submissionControl = null;
     elements.sendButton.disabled = false;
     elements.newConversationButton.disabled = false;
+    elements.conversationSelect.disabled = false;
+    elements.refreshButton.disabled = false;
+    elements.settingsButton.disabled = false;
+    elements.disconnectButton.disabled = false;
   }
 }
 
 async function stopActiveJob() {
+  if (submissionControl) {
+    submissionControl.stopped = true;
+    if (!submissionControl.sending) submissionControl.controller.abort();
+    showStatus("cancelling");
+  }
   const conversationId = activeJob?.conversation_id || activeConversationId;
   if (!conversationId || !activeJob?.job_id) return;
   elements.stopButton.disabled = true;
@@ -1320,15 +1407,7 @@ elements.disconnectButton.addEventListener("click", () => disconnectNemoClaw().c
   elements.settingsError.textContent = error.message || "The NemoClaw connection could not be removed.";
   elements.settingsError.hidden = false;
 }));
-elements.conversationSelect.addEventListener("change", async () => {
-  clearTimeout(pollTimer);
-  activeJob = null;
-  pendingSubmission = null;
-  hideStatus();
-  clearError();
-  try { await loadConversation(elements.conversationSelect.value); }
-  catch (error) { showError("Conversation could not load", error.message, false, () => loadConversation(elements.conversationSelect.value)); }
-});
+elements.conversationSelect.addEventListener("change", () => selectConversation(elements.conversationSelect.value));
 elements.stopButton.addEventListener("click", stopActiveJob);
 elements.signInButton.addEventListener("click", () => {
   if (nemoClawDashboardUrl) chrome.tabs.create({ url: new URL("/login", nemoClawDashboardUrl).href });
