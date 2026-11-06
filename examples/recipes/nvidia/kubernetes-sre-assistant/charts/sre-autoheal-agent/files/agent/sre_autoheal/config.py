@@ -22,6 +22,18 @@ from typing import Any, Dict, List, Optional
 ENV_PREFIX = "SRE_AUTOHEAL_"
 
 DEFAULTS: Dict[str, Any] = {
+    # Optional deterministic storage controller. Guest mutation is not enabled.
+    "storage": {
+        "enabled": False, "mode": "recommendation", "namespaces": [], "threshold_percent": 85,
+        "growth_percent": 15, "sustain_seconds": 300, "max_size": "2Ti",
+        "verification_seconds": 300, "cooldown_seconds": 86400,
+        "notification_dedupe_seconds": 3600, "notification_retry_seconds": 60,
+        "notification_max_attempts": 3, "max_expansions_per_cycle": 1,
+        "allowed_storage_classes": [], "targets": [], "capacity_rounding": {},
+        "metrics": {"url": "", "ca_file": "", "token_file": "",
+                    "cluster_label": "cluster", "cluster_value": "",
+                    "timeout_seconds": 15, "max_age_seconds": 180, "allow_http": False},
+    },
     "cluster": {
         # auto | kubernetes | openshift
         "platform": "auto",
@@ -65,9 +77,11 @@ DEFAULTS: Dict[str, Any] = {
         "approval_annotation": "sre-autoheal.nvidia.com/approve",
         # Cron-like maintenance windows are out of scope; a simple global gate:
         "paused": False,
-        # Minimum LLM confidence (0-1) required before acting on an LLM-chosen
-        # action that the rule engine did not already rank first.
+        # Minimum LLM confidence (0-1) required for every LLM-chosen mutation,
+        # including actions also recommended by the rule engine.
         "min_llm_confidence": 0.6,
+        "max_heal_attempts": 3,
+        "retry_delay_seconds": 60,
         # Pods whose controller has fewer ready replicas than this fraction are
         # treated as an availability risk and get the higher severity.
         "unavailable_ratio_high": 0.5,
@@ -81,9 +95,10 @@ DEFAULTS: Dict[str, Any] = {
         "pvc_pending_min_age_seconds": 300,
         "node_not_ready_min_age_seconds": 300,
         "events_lookback_seconds": 1800,
-        "log_tail_lines": 40,
+        "log_tail_lines": 50,
         "max_findings_per_cycle": 50,
         "include_posture_audit": True,
+        "transient_grace_seconds": 300,
     },
     "llm": {
         "enabled": True,
@@ -96,6 +111,8 @@ DEFAULTS: Dict[str, Any] = {
         "timeout_seconds": 120,
         "max_tokens": 4096,
         "temperature": 0.1,
+        "max_attempts": 3,
+        "retry_backoff_seconds": 2,
         # anthropic only: low | medium | high
         "effort": "medium",
         # Evidence sent to the LLM is capped to this many characters.
@@ -126,6 +143,9 @@ DEFAULTS: Dict[str, Any] = {
         "poll_seconds": 15,
     },
     "notify": {
+        "escalation_min_severity": "high",
+        # digest requires an external scheduled reader of durable incident memory.
+        "healed_delivery": "immediate",
         "slack": {
             "enabled": False,
             "webhook_url_env": "SRE_AUTOHEAL_SLACK_WEBHOOK_URL",

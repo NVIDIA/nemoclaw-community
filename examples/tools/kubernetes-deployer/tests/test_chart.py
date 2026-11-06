@@ -2314,7 +2314,7 @@ class ChartTest(unittest.TestCase):
         self.assertIn("mountPath: /plugins/demo", seed)
         self.assertIn("name: kubernetes-deployer-test-demo-seed", seed)
         self.assertIn("name: stage-demo", seed)
-        self.assertIn("image: docker.io/library/python:3.13.7-slim@sha256:", seed)
+        self.assertIn("image: docker.io/library/python:3.13.15-slim@sha256:", seed)
         self.assertIn("mountPath: /demo-staging", seed)
         config = self.bootstrap_config(rendered)
         mounts = {mount["mount_path"]: mount for mount in config["driverConfig"]["kubernetes"]["containers"]["agent"]["volume_mounts"]}
@@ -2457,7 +2457,18 @@ class ChartTest(unittest.TestCase):
             "nemoclaw_bootstrap_teardown",
             {"sandboxName": "release-her", "sandboxDesiredState": "absent", "labels": labels, "openshellMode": "managed"},
         )
-        owned = dict(labels, **{"nemoclaw.nvidia.com/config-id": "stale-config"})
+        # A sandbox this release created stays deletable after its desired
+        # configuration moves on. Both of these labels differ after a managed
+        # image bump, which is exactly when the sandbox must be recreated; a
+        # live upgrade refused to delete until image-id stopped counting as
+        # ownership.
+        owned = dict(
+            labels,
+            **{
+                "nemoclaw.nvidia.com/config-id": "stale-config",
+                "nemoclaw.nvidia.com/image-id": "stale-image",
+            },
+        )
         calls: list[list[str]] = []
         gets = iter(
             [

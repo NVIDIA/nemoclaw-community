@@ -13,7 +13,7 @@ import secrets
 import ssl
 from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urlsplit, urlunsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener, urlopen
 
 
 UPSTREAM = "https://kubernetes.default.svc"
@@ -136,6 +136,16 @@ def exact_delete_allowlist() -> set[tuple[str, str, str]]:
     return allowed
 
 
+def hf_secret_check(target: str, method: str, policy: str) -> bool:
+    """Only a canonical GET of the configured HF Secret may return existence."""
+    namespace = os.environ.get("PROXY_HF_SECRET_NAMESPACE", "")
+    name = os.environ.get("PROXY_HF_SECRET_NAME", "")
+    return bool(
+        policy == "general" and method == "GET" and namespace and name
+        and target == f"/api/v1/namespaces/{namespace}/secrets/{name}"
+    )
+
+
 def request_allowed(target: str, method: str, policy: str) -> bool:
     """Enforce proxy-specific restrictions beyond Kubernetes RBAC."""
     try:
@@ -169,7 +179,7 @@ def request_allowed(target: str, method: str, policy: str) -> bool:
         return method == "GET"
     _api_group, namespace, resource, _name, subresource, _tail = parsed
     if resource == "secrets":
-        return False
+        return hf_secret_check(target, method, policy)
     if resource == "serviceaccounts" and subresource == "token":
         return False
     if resource == "pods" and subresource in {
@@ -218,6 +228,13 @@ def direct_service_url(target: str) -> str:
             "",
         )
     )
+
+
+class NoSecretRedirects(HTTPRedirectHandler):
+    """Reject redirects before urllib reads their body or reuses credentials."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
 class ProxyHandler(BaseHTTPRequestHandler):
@@ -292,10 +309,19 @@ class ProxyHandler(BaseHTTPRequestHandler):
         try:
             target = validate_request_target(self.path)
             policy = os.environ.get("PROXY_POLICY", "general")
+            # Use the original path too: URL normalization can discard a bare '?'.
+            secret_check = hf_secret_check(self.path, self.command, policy)
+            parsed_resource = resource_target(target)
+            if parsed_resource and parsed_resource[2] == "secrets" and not secret_check:
+                self.reject(403, "request_forbidden_by_proxy_policy")
+                return
             if not request_allowed(target, self.command, policy):
                 self.reject(403, "request_forbidden_by_proxy_policy")
                 return
             body = self.request_body()
+            if secret_check and body:
+                self.reject(400, "invalid_request")
+                return
             service_account_token = read_bounded(SERVICE_ACCOUNT_TOKEN, maximum=16384)
         except (OSError, UnicodeError, ValueError):
             self.reject(400, "invalid_request")
@@ -305,6 +331,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
             "Authorization": f"Bearer {service_account_token}",
             "Accept": self.headers.get("Accept", "application/json"),
         }
+        if secret_check:
+            # No JSON fallback: ask Kubernetes for metadata, never Secret data.
+            headers["Accept"] = "application/json;as=PartialObjectMetadata;g=meta.k8s.io;v=v1"
         if self.headers.get("Content-Type"):
             headers["Content-Type"] = self.headers["Content-Type"]
         if policy == "exact-service-proxy":
@@ -323,7 +352,11 @@ class ProxyHandler(BaseHTTPRequestHandler):
         maximum_response = int(os.environ.get("PROXY_MAX_RESPONSE_BYTES", "33554432"))
 
         try:
-            upstream = urlopen(request, context=context, timeout=timeout)  # noqa: S310 - fixed upstream.
+            if secret_check:
+                opener = build_opener(HTTPSHandler(context=context), NoSecretRedirects())
+                upstream = opener.open(request, timeout=timeout)  # noqa: S310 - fixed upstream, no redirects.
+            else:
+                upstream = urlopen(request, context=context, timeout=timeout)  # noqa: S310 - fixed upstream.
         except HTTPError as error:
             upstream = error
         except (OSError, URLError, ValueError):
@@ -331,6 +364,20 @@ class ProxyHandler(BaseHTTPRequestHandler):
             return
 
         with upstream:
+            if secret_check:
+                # Never read/forward the upstream body, including errors or
+                # annotations. Keep 'oc get secret NAME -o name' compatible.
+                if upstream.status == 200:
+                    payload = json.dumps({
+                        "apiVersion": "v1", "kind": "Secret",
+                        "metadata": {"name": os.environ["PROXY_HF_SECRET_NAME"],
+                                     "namespace": os.environ["PROXY_HF_SECRET_NAMESPACE"]},
+                    }).encode("utf-8")
+                    self.send_payload(200, payload)
+                else:
+                    status = upstream.status if upstream.status in (403, 404) else 502
+                    self.reject(status, "hf_secret_not_found" if status == 404 else "hf_secret_check_unavailable")
+                return
             payload = upstream.read(maximum_response + 1)
             if len(payload) > maximum_response:
                 self.reject(502, "upstream_response_too_large")

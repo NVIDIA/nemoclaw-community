@@ -41,6 +41,8 @@ def _empty() -> Dict[str, Any]:
 
 
 class MemoryBackend:
+    load_failed = False
+
     def load(self) -> Dict[str, Any]:
         raise NotImplementedError
 
@@ -53,19 +55,28 @@ class FileBackend(MemoryBackend):
         self.path = Path(path)
 
     def load(self) -> Dict[str, Any]:
-        if not self.path.is_file():
-            return _empty()
         try:
             return json.loads(self.path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return _empty()
         except (OSError, json.JSONDecodeError) as exc:
+            self.load_failed = True
             log.warning("memory file unreadable (%s); starting fresh", exc)
             return _empty()
 
     def save(self, data: Dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, separators=(",", ":")), encoding="utf-8")
+        with tmp.open("w", encoding="utf-8") as stream:
+            stream.write(json.dumps(data, separators=(",", ":")))
+            stream.flush()
+            os.fsync(stream.fileno())
         os.replace(tmp, self.path)
+        descriptor = os.open(self.path.parent, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
 
 
 class ConfigMapBackend(MemoryBackend):
@@ -79,14 +90,17 @@ class ConfigMapBackend(MemoryBackend):
         except k.KubeNotFound:
             return _empty()
         except k.KubeError as exc:
+            self.load_failed = True
             log.warning("memory configmap unreadable (%s); starting fresh", exc)
             return _empty()
         raw = (cm.get("data") or {}).get(CONFIGMAP_KEY)
         if not raw:
+            self.load_failed = True
             return _empty()
         try:
             return json.loads(raw)
         except json.JSONDecodeError:
+            self.load_failed = True
             return _empty()
 
     def save(self, data: Dict[str, Any]) -> None:
@@ -119,7 +133,9 @@ class Memory:
         self.cfg = config
         self.learning = config.get("learning") or {}
         self.data = backend.load()
-        if self.data.get("version") != SCHEMA_VERSION:
+        self.load_failed = backend.load_failed
+        if not isinstance(self.data, dict) or self.data.get("version") != SCHEMA_VERSION:
+            self.load_failed = True
             self.data = _empty()
 
     @classmethod
@@ -135,6 +151,9 @@ class Memory:
         return cls(backend, config)
 
     def save(self) -> None:
+        if self.load_failed:
+            log.warning("memory recovery failed; preserving stored state for operator reconciliation")
+            return
         try:
             self.backend.save(self.data)
         except Exception as exc:  # noqa: BLE001 - memory must never crash the loop
