@@ -77,6 +77,14 @@ PathPrefix
 {{- end -}}
 {{- end }}
 
+{{- define "nemoclaw-gpu.nimImagePullSecretName" -}}
+{{- if .Values.nim.imagePullSecret.existingSecret -}}
+{{- .Values.nim.imagePullSecret.existingSecret -}}
+{{- else -}}
+{{- printf "%s-nim-ngc-registry" (include "nemoclaw-gpu.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end }}
+
 {{- define "nemoclaw-gpu.replicas" -}}
 {{- if .Values.gpuScaling.oneReplicaPerGpu -}}
 {{- .Values.gpuScaling.count | int }}
@@ -167,5 +175,81 @@ nemoclaw_llm_latency_avg_milliseconds
 GPU utilization % (DCGM)
 {{- else if eq $metric "latency_avg" -}}
 LLM chat proxy latency avg (ms)
+{{- end -}}
+{{- end }}
+
+{{- /*
+Selects which GPU inference container this chart renders (ollama | vllm | nim). The three
+values.yaml blocks are deliberately named to match these exact strings so templates can look
+up the active runtime's config with `index .Values (include "nemoclaw-gpu.runtime" .)`.
+*/}}
+{{- define "nemoclaw-gpu.runtime" -}}
+{{- $runtime := .Values.inference.runtime | default "ollama" -}}
+{{- if not (or (eq $runtime "ollama") (eq $runtime "vllm") (eq $runtime "nim")) -}}
+{{- fail (printf "inference.runtime %q is unsupported; use ollama, vllm, or nim" $runtime) -}}
+{{- end -}}
+{{- $runtime -}}
+{{- end }}
+
+{{- /* Renders a `repository:tag@digest` image reference, tolerating a blank tag or digest
+(some registries, e.g. nvcr.io NIM/vLLM images, are referenced by digest only). */}}
+{{- define "nemoclaw-gpu.imageRef" -}}
+{{- $img := . -}}
+{{- if not $img.repository -}}
+{{- fail "image.repository is required" -}}
+{{- end -}}
+{{- if and $img.tag $img.digest -}}
+{{- printf "%s:%s@%s" $img.repository $img.tag $img.digest -}}
+{{- else if $img.digest -}}
+{{- printf "%s@%s" $img.repository $img.digest -}}
+{{- else if $img.tag -}}
+{{- printf "%s:%s" $img.repository $img.tag -}}
+{{- else -}}
+{{- fail (printf "image repository %q requires image.tag or image.digest" $img.repository) -}}
+{{- end -}}
+{{- end }}
+
+{{- define "nemoclaw-gpu.runtimePort" -}}
+{{- $runtime := include "nemoclaw-gpu.runtime" . -}}
+{{- (index .Values $runtime).port | int -}}
+{{- end }}
+
+{{- /*
+Root URL (no /v1) for the active runtime's own API on loopback. Ollama's native API lives at
+this root (e.g. /api/tags); vLLM and NIM mount their OpenAI-compatible API under /v1 on the same
+root, so this also doubles as the prefix the metrics-proxy readiness check calls directly.
+*/}}
+{{- define "nemoclaw-gpu.runtimeRootUrl" -}}
+{{- printf "http://127.0.0.1:%d" (int (include "nemoclaw-gpu.runtimePort" .)) -}}
+{{- end }}
+
+{{- /* OpenAI-compatible chat-completions base URL the metrics-proxy proxies to. Auto-computed
+from the active runtime's port unless inference.baseUrl is explicitly overridden (advanced use:
+pointing at an inference endpoint outside this pod). */}}
+{{- define "nemoclaw-gpu.runtimeBaseUrl" -}}
+{{- if .Values.inference.baseUrl -}}
+{{- .Values.inference.baseUrl -}}
+{{- else -}}
+{{- printf "%s/v1" (include "nemoclaw-gpu.runtimeRootUrl" .) -}}
+{{- end -}}
+{{- end }}
+
+{{- define "nemoclaw-gpu.runtimeDataVolumeName" -}}
+{{- printf "%s-data" (include "nemoclaw-gpu.runtime" .) -}}
+{{- end }}
+
+{{- define "nemoclaw-gpu.runtimePvcName" -}}
+{{- printf "%s-%s" (include "nemoclaw-gpu.fullname" .) (include "nemoclaw-gpu.runtime" .) | trunc 63 | trimSuffix "-" -}}
+{{- end }}
+
+{{- /* Where each runtime caches downloaded model weights on the shared data volume. */}}
+{{- define "nemoclaw-gpu.runtimeMountPath" -}}
+{{- $runtime := include "nemoclaw-gpu.runtime" . -}}
+{{- if eq $runtime "ollama" -}}
+/root/.ollama
+{{- else if eq $runtime "vllm" -}}
+/root/.cache/huggingface
+{{- else if eq $runtime "nim" -}}
+/opt/nim/.cache
 {{- end -}}
 {{- end }}
