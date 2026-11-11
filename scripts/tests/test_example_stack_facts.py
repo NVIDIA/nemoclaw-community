@@ -217,7 +217,9 @@ class ExampleStackFactsTests(unittest.TestCase):
                     # examples: CAE FreeCAD (on NeMo Helix) and Enterprise Assistant.
                     "unconfirmed": 14,
                     "unpinned": 12,
-                    "unknown": 1,
+                    # Includes the Local-Only Workspace Assistant, whose
+                    # digest-pinned sandbox image has no established harness version.
+                    "unknown": 2,
                     "not-applicable": 1,
                 }
             ),
