@@ -49,6 +49,7 @@ Reusable NemoClaw agent workflows contributed independently by community members
 | --- | --- | --- |
 | [Axe A11y Browser Auditor](recipes/community/axe-a11y-browser-auditor/README.md) | 🌐 Consumer Internet | Helps web teams find WCAG issues through a dedicated sandbox and host-side real Chrome, returning rule-level findings with optional screenshots, PDFs, recordings, and network traces. |
 | [Deep Research Worker](recipes/community/deep-research-worker/README.md) | ✨ Other | Adds asynchronous research to a sandbox, so users can queue long-running jobs on a host-side worker, monitor persistent task state, and return later for text or JSON results. |
+| [Local-Only Workspace Assistant](recipes/community/local-only-workspace-assistant/README.md) | ✨ Other | Answers questions about a copy of one approved folder with a local NVIDIA Nemotron model on Ollama, and tests the sandbox with denied actions: file escapes, WSL2 Windows drive access, egress, and remote inference. The live suite passed on macOS with CPU inference; Linux, GPU, and WSL2 are untested. |
 
 ## [NVIDIA Field Demos](demos/field/README.md)
 

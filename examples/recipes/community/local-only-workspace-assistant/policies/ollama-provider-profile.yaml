@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# OpenShell provider profile for the recipe-owned Ollama server.
+#
+# OpenShell 0.1 has no managed inference route. A sandbox reaches a model only
+# through a provider that is attached to it, and the attached provider adds
+# this profile's endpoint to the sandbox's effective network policy. The
+# sandbox policy in local-only.yaml declares no network endpoint, so this
+# profile is the only egress the sandbox has.
+#
+# host.openshell.internal is the OpenShell name for the gateway host. Ollama
+# does not check credentials, so the profile declares none.
+#
+# scripts/verify.sh checks this file. Keep the plain block style: the check
+# reads the file without a YAML library.
+
+id: local-only-ollama
+display_name: Local-only Ollama
+description: Recipe-owned Ollama server on the gateway host, OpenAI-compatible API
+category: inference
+inference_capable: true
+credentials: []
+endpoints:
+  - host: host.openshell.internal
+    port: 11434
+    protocol: rest
+    enforcement: enforce
+    rules:
+      - allow:
+          method: POST
+          path: /v1/chat/completions
+      - allow:
+          method: POST
+          path: /v1/responses
+      - allow:
+          method: POST
+          path: /v1/completions
+      - allow:
+          method: POST
+          path: /v1/embeddings
+      - allow:
+          method: GET
+          path: /v1/models
+      - allow:
+          method: GET
+          path: /v1/models/**
+binaries:
+  - /usr/local/bin/openclaw
+  - /usr/local/bin/node
+  - /usr/bin/node
+  - /usr/bin/python3*
