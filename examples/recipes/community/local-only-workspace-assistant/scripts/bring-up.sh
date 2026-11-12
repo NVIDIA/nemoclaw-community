@@ -2,13 +2,14 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Start the recipe-owned inference server, point OpenShell at it, create a
-# dedicated sandbox with the local-only policy, and copy the approved folder
-# into that sandbox.
+# Start the recipe-owned inference server, register it with OpenShell as a
+# provider, create a dedicated sandbox with the local-only policy and that
+# provider attached, and copy the approved folder into the sandbox.
 #
-# This script downloads a container image and a model, and it changes the
-# inference route of the selected OpenShell gateway. Read the README section
-# "What Setup Changes" before you run it.
+# This script downloads two container images and a model, builds a local
+# image, and adds a provider profile and a provider to the selected OpenShell
+# gateway. Read the README section "What Setup Changes" before you run it.
+# It requires OpenShell 0.1 or later.
 
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -31,6 +32,7 @@ openshell status >/dev/null 2>&1 || {
   exit 1
 }
 localonly check-policy "${POLICY_FILE}"
+localonly check-profile "${PROFILE_FILE}" --base-url "${INFERENCE_BASE_URL}"
 localonly check-publish-host "${OLLAMA_PUBLISH_HOST}"
 localonly check-endpoint "${INFERENCE_BASE_URL}" --extra-hosts "${LOCAL_ENDPOINT_EXTRA_HOSTS}"
 localonly list-workspace "${WORKSPACE_DIR}" \
@@ -78,37 +80,35 @@ else
   compose exec -T ollama ollama pull "${INFERENCE_MODEL}"
 fi
 
-echo "== 5/7 point the OpenShell inference route at the local server =="
-# The route belongs to the gateway, not to one sandbox. Save the current
-# route so the operator can restore it after teardown.
-if [[ ! -f "${RUN_DIR}/previous-inference-route.txt" ]]; then
-  openshell inference get >"${RUN_DIR}/previous-inference-route.txt" 2>&1 || true
+echo "== 5/7 register the local server as an OpenShell provider =="
+# OpenShell 0.1 has no gateway-wide inference route. The sandbox calls the
+# Ollama server directly, and the attached provider's profile is what permits
+# that one endpoint. The provider carries no credential: Ollama checks none.
+if openshell profile describe "${PROFILE_ID}" >/dev/null 2>&1; then
+  state_has profile "${PROFILE_ID}" || {
+    echo "Provider profile ${PROFILE_ID} exists and this recipe did not import it." >&2
+    echo "Inspect it with 'openshell profile describe ${PROFILE_ID}'." >&2
+    exit 1
+  }
+  echo "Reusing provider profile ${PROFILE_ID}. Run scripts/teardown.sh to import a changed file."
+else
+  openshell profile lint -f "${PROFILE_FILE}"
+  openshell profile import -f "${PROFILE_FILE}"
+  state_add profile "${PROFILE_ID}"
 fi
-# Ollama does not check the API key. OpenShell requires a credential, so the
-# value is a placeholder, not a secret.
 if openshell provider get "${INFERENCE_PROVIDER_NAME}" >/dev/null 2>&1; then
   state_has provider "${INFERENCE_PROVIDER_NAME}" || {
     echo "Provider ${INFERENCE_PROVIDER_NAME} exists and this recipe did not create it." >&2
     echo "Set INFERENCE_PROVIDER_NAME to an unused name, then run this script again." >&2
     exit 1
   }
-  OPENAI_API_KEY="unused-local-placeholder" openshell provider update "${INFERENCE_PROVIDER_NAME}" \
-    --credential OPENAI_API_KEY \
-    --config "OPENAI_BASE_URL=${INFERENCE_BASE_URL}"
+  echo "Reusing provider ${INFERENCE_PROVIDER_NAME}."
 else
-  OPENAI_API_KEY="unused-local-placeholder" openshell provider create \
-    --name "${INFERENCE_PROVIDER_NAME}" \
-    --type openai \
-    --credential OPENAI_API_KEY \
-    --config "OPENAI_BASE_URL=${INFERENCE_BASE_URL}"
+  openshell provider create --name "${INFERENCE_PROVIDER_NAME}" --type "${PROFILE_ID}"
   state_add provider "${INFERENCE_PROVIDER_NAME}"
 fi
-openshell inference set \
-  --provider "${INFERENCE_PROVIDER_NAME}" \
-  --model "${INFERENCE_MODEL}" \
-  --timeout 300
 
-echo "== 6/7 create the dedicated sandbox =="
+echo "== 6/7 build the sandbox image and create the dedicated sandbox =="
 if [[ "$(sandbox_phase)" != "Missing" ]] && ! state_has sandbox "${SANDBOX_NAME}"; then
   echo "Sandbox ${SANDBOX_NAME} exists and this recipe did not create it." >&2
   echo "Setup replaces the sandbox policy, so it does not reuse that sandbox." >&2
@@ -121,15 +121,27 @@ elif [[ "$(sandbox_phase)" != "Missing" ]]; then
   echo "Wait for it, or run scripts/teardown.sh, then run this script again." >&2
   exit 1
 else
+  # OpenShell 0.1 creates a sandbox from an image, not from a Dockerfile.
+  docker build \
+    --build-arg "INFERENCE_MODEL=${INFERENCE_MODEL}" \
+    --build-arg "INFERENCE_BASE_URL=${INFERENCE_BASE_URL}" \
+    -t "${SANDBOX_IMAGE}" "${EXAMPLE_DIR}"
+  state_add image "${SANDBOX_IMAGE}"
   create_log="${RUN_DIR}/sandbox-create.log"
+  state_add sandbox "${SANDBOX_NAME}"
   openshell sandbox create \
     --name "${SANDBOX_NAME}" \
-    --from "${EXAMPLE_DIR}/Dockerfile" \
+    --from "${SANDBOX_IMAGE}" \
     --policy "${POLICY_FILE}" \
-    --env "NEMOCLAW_MODEL_OVERRIDE=${INFERENCE_MODEL}" \
-    --no-tty >"${create_log}" 2>&1 </dev/null &
-  create_pid=$!
-  state_add sandbox "${SANDBOX_NAME}"
+    --provider "${INFERENCE_PROVIDER_NAME}" \
+    --no-auto-providers \
+    --env "OPENAI_BASE_URL=${INFERENCE_BASE_URL}" \
+    --env "INFERENCE_MODEL=${INFERENCE_MODEL}" \
+    --detach --no-tty >"${create_log}" 2>&1 </dev/null || {
+    echo "Sandbox creation failed. See ${create_log}." >&2
+    tail -n 20 "${create_log}" >&2
+    exit 1
+  }
   ready=0
   for _ in $(seq 1 240); do
     if sandbox_is_ready; then
@@ -138,19 +150,15 @@ else
     fi
     sleep 2
   done
-  # The create command can stay attached after the sandbox is ready.
-  if kill -0 "${create_pid}" 2>/dev/null; then
-    kill "${create_pid}" 2>/dev/null || true
-  fi
-  wait "${create_pid}" 2>/dev/null || true
   if [[ "${ready}" != 1 ]]; then
     echo "Sandbox did not become ready in 8 minutes. See ${create_log}." >&2
     exit 1
   fi
 fi
 
-# Apply the policy again and read it back. A policy that cannot be read back
-# is not accepted.
+# Apply the policy again and read back the effective policy: the sandbox
+# policy plus the provider layer. A policy that cannot be read back is not
+# accepted.
 openshell policy set --policy "${POLICY_FILE}" --wait "${SANDBOX_NAME}"
 openshell policy get "${SANDBOX_NAME}" --full -o json | localonly check-effective-policy
 

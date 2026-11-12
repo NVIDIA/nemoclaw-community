@@ -45,13 +45,22 @@ def _report(problems: List[str], subject: str) -> int:
         for problem in problems:
             print("REJECTED: %s" % problem, file=sys.stderr)
         return 1
-    print("OK: %s permits egress only to inference.local" % subject)
+    print("OK: %s permits egress only to %s" % (subject, ", ".join(sorted(policy_facts.ALLOWED_EGRESS_HOSTS))))
     return 0
 
 
 def _cmd_check_policy(args: argparse.Namespace) -> int:
     text = Path(args.path).read_text(encoding="utf-8")
-    return _report(policy_facts.check_policy(text), "policy file")
+    problems = policy_facts.check_policy(text)
+    if problems:
+        return _report(problems, "sandbox policy file")
+    print("OK: sandbox policy file declares no network endpoint")
+    return 0
+
+
+def _cmd_check_profile(args: argparse.Namespace) -> int:
+    text = Path(args.path).read_text(encoding="utf-8")
+    return _report(policy_facts.check_profile(text, args.base_url), "provider profile")
 
 
 def _cmd_check_effective_policy(_args: argparse.Namespace) -> int:
@@ -124,9 +133,14 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_argument("host")
     sub.set_defaults(handler=_cmd_check_publish_host)
 
-    sub = commands.add_parser("check-policy", help="Check the recipe policy file.")
+    sub = commands.add_parser("check-policy", help="Check the recipe sandbox policy file.")
     sub.add_argument("path")
     sub.set_defaults(handler=_cmd_check_policy)
+
+    sub = commands.add_parser("check-profile", help="Check the recipe provider profile.")
+    sub.add_argument("path")
+    sub.add_argument("--base-url", help="URL the sandbox calls; the profile endpoint must match it.")
+    sub.set_defaults(handler=_cmd_check_profile)
 
     sub = commands.add_parser(
         "check-effective-policy", help="Check sandbox policy JSON read from standard input.",

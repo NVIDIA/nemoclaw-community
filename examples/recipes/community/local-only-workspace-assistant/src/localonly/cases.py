@@ -32,16 +32,25 @@ CANARY_PATH = "/srv/conformance/outside-canary.txt"
 
 _FS_DENIED = ("permission denied", "operation not permitted")
 _FS_ABSENT_OR_DENIED = _FS_DENIED + ("no such file or directory", "not found")
-_HTTP_DENIED = ("403",)
+# A connection that the sandbox refuses fails with EACCES before it leaves the
+# sandbox. An outage or a closed port fails with a different error.
+_NET_DENIED = ("permission denied",)
+# A request that reaches the proxy but breaks an endpoint rule. A bare "403"
+# could match a timing or an address in the output.
+_HTTP_DENIED = ("http error 403", "http/1.1 403", "policy_denied")
 
+# Setup creates the sandbox with OPENAI_BASE_URL and INFERENCE_MODEL set.
+# OpenShell 0.1 has no model rewrite, so the request names the real model.
 _CHAT_REQUEST = (
-    "python3 -c \"import json,urllib.request;"
-    "body=json.dumps({'model':'local','max_tokens':1,"
+    "python3 -c \"import json,os,urllib.request;"
+    "body=json.dumps({'model':os.environ['INFERENCE_MODEL'],'max_tokens':1,"
     "'messages':[{'role':'user','content':'ping'}]}).encode();"
-    "req=urllib.request.Request('https://inference.local/v1/chat/completions',"
+    "req=urllib.request.Request(os.environ['OPENAI_BASE_URL']+'/chat/completions',"
     "data=body,headers={'Content-Type':'application/json'});"
     "print(urllib.request.urlopen(req,timeout=120).read().decode())\""
 )
+# curl prints the connect error only in verbose output.
+_CURL = "curl -v -sS --max-time 8 -o /dev/null "
 
 
 @dataclass(frozen=True)
@@ -71,7 +80,7 @@ class Case:
 CASES: Tuple[Case, ...] = (
     Case(
         case_id="S00",
-        title="Send a chat request to the local inference route",
+        title="Send a chat request to the local inference server",
         priority="P0",
         expect=ALLOW,
         script=_CHAT_REQUEST,
@@ -148,16 +157,16 @@ CASES: Tuple[Case, ...] = (
         title="Reach an external HTTP endpoint with curl",
         priority="P0",
         expect=DENY,
-        script="curl -fsS --max-time 8 -o /dev/null http://example.com",
-        deny_signatures=_HTTP_DENIED,
+        script=_CURL + "http://example.com",
+        deny_signatures=_NET_DENIED + _HTTP_DENIED,
     ),
     Case(
         case_id="S06b",
         title="Reach an external HTTPS endpoint with curl",
         priority="P0",
         expect=DENY,
-        script="curl -fsS --max-time 8 -o /dev/null https://example.com",
-        deny_signatures=_HTTP_DENIED,
+        script=_CURL + "https://example.com",
+        deny_signatures=_NET_DENIED + _HTTP_DENIED,
     ),
     Case(
         case_id="S06c",
@@ -168,7 +177,7 @@ CASES: Tuple[Case, ...] = (
             "python3 -c \"import urllib.request;"
             "urllib.request.urlopen('http://example.com', timeout=8)\""
         ),
-        deny_signatures=_HTTP_DENIED + ("forbidden",),
+        deny_signatures=_NET_DENIED + _HTTP_DENIED + ("forbidden",),
         note="Egress rules name programs. One denied program does not prove another.",
     ),
     Case(
@@ -192,9 +201,32 @@ CASES: Tuple[Case, ...] = (
         title="Call a remote inference API directly",
         priority="P0",
         expect=DENY,
-        script="curl -fsS --max-time 8 -o /dev/null https://integrate.api.nvidia.com/v1/models",
-        deny_signatures=_HTTP_DENIED,
+        script=_CURL + "https://integrate.api.nvidia.com/v1/models",
+        deny_signatures=_NET_DENIED + _HTTP_DENIED,
         note="A stock agent policy can permit this host. The local-only policy must not.",
+    ),
+    Case(
+        case_id="S09b",
+        title="Call the model download API of the local inference server",
+        priority="P0",
+        expect=DENY,
+        script=(
+            "python3 -c \"import os,urllib.request;"
+            "base=os.environ['OPENAI_BASE_URL'].rsplit('/v1',1)[0];"
+            "req=urllib.request.Request(base+'/api/pull',data=b'{}',method='POST');"
+            "urllib.request.urlopen(req,timeout=8)\""
+        ),
+        deny_signatures=_HTTP_DENIED,
+        note="The provider profile permits the inference paths only, not the server's other APIs.",
+    ),
+    Case(
+        case_id="S09c",
+        title="Reach the local inference server with a program the profile does not name",
+        priority="P0",
+        expect=DENY,
+        script=_CURL + "\"$OPENAI_BASE_URL/models\"",
+        deny_signatures=_NET_DENIED + _HTTP_DENIED,
+        note="The profile names the programs that may call the endpoint. curl is not one of them.",
     ),
     Case(
         case_id="S10",

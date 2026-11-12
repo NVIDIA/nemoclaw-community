@@ -4,122 +4,121 @@
 # Status And Planned Work
 
 This page records what has run, on which host, and what the result was. It
-was last updated on 2026-11-11.
+was last updated on 2026-11-12.
 
 ## Summary
 
-The recipe does not complete setup yet. The static checks pass, and setup
-stages 1 to 4 ran on one host. Stage 5 fails with OpenShell 0.1.8. Nobody has
-created the sandbox, run the live test suite, or asked the agent a question.
+Setup, the live test suite, and teardown completed on one host: macOS on an
+Apple M1 with Docker Desktop, OpenShell 0.1.8, and CPU inference. Every ready
+case of the test suite passed. Nobody has run the recipe on Linux, on WSL2, or
+with a GPU, and the agent has not answered a question in the sandbox.
 
-The evidence level is `local/static`.
+The evidence level is `integration`. A `live end-to-end` claim needs a run on
+the target host with an agent answer.
 
 ## What Has Run
 
 | Item | State | Host and evidence |
 | --- | --- | --- |
-| Static checks: 71 unit tests, policy file, addresses, approved folder, Compose rendering | Pass | macOS, Python 3.9.6 and 3.12.16, Docker Compose 5.7.0 |
-| Setup stages 1 to 4: checks, device, Ollama container, model download | Pass on one host | macOS, Docker Desktop 29.9.3, CPU inference |
-| Default model answers a chat request and a tool-call request | Observed once, outside the sandbox | Ollama 0.32.3 container, Apple M1, CPU inference |
-| Setup stage 5: provider and inference route | Fails with OpenShell 0.1.8 | Same host |
-| Setup stages 6 and 7: sandbox, copy | Never run | None |
-| Live test suite | Never run | None |
+| Static checks: 82 unit tests, sandbox policy, provider profile, addresses, approved folder, Compose rendering | Pass | macOS, Python 3.9.6 and 3.12.16, Docker Compose 5.7.0 |
+| Setup, all seven stages | Pass | macOS, Docker Desktop 29.9.3, OpenShell 0.1.8 with the Docker driver in bridge network mode, CPU inference |
+| Setup a second time, reusing the profile, the provider, and the sandbox | Pass | Same host |
+| Effective policy read back: one provider entry for `host.openshell.internal` port 11434 | Pass | Same host |
+| Live test suite: 14 ready cases | All pass | Same host. S04 and S04b are `N/A` off WSL2 |
+| Teardown: sandbox, provider, profile, image, and container removed, model volume kept | Pass | Same host |
+| OpenClaw reaches the local model from the sandbox | Pass | Same host. The OpenShell log shows the request allowed by the provider entry, and Ollama returned HTTP 200 |
+| The agent answers a question about the folder | Not finished | Same host. With CPU inference, an agent turn did not finish within the time limit |
 | GPU serving | Never run | None |
 | Windows cases S04 and S04b on WSL2 | Never run | None |
-| The agent answers a question about the folder | Not built | None |
+| Any run on a Linux host | Never run | None |
+
+### Live Test Suite
+
+![Terminal output of the live test suite, ending in a PASS line](images/live-suite.png)
+
+The image shows the output of `bash scripts/verify.sh --live`. The command
+exited with status 0. These results are from the evidence file of that run:
+
+| Case | Verdict | Signature that decided it |
+| --- | --- | --- |
+| S00 | `PASS` | A completion, after 41 seconds, including the model load |
+| S01 | `PASS` | The workspace marker |
+| S02, S03, S05b | `PASS` | `permission denied` |
+| S05 | `PASS` | `not found`. The image has no `sudo` command |
+| S06, S06b, S06c, S09, S09c | `PASS` | `permission denied`. The connection failed inside the sandbox |
+| S09b | `PASS` | `http error 403`. The response named the provider entry and `POST /api/pull` |
+| S08 | `PASS` | `timed out`, after 120 seconds. No other server answered |
+
+The OpenShell log of the sandbox records each decision. Run
+`openshell logs local-only-assist` to read it. For example, it lists the denied
+connection of S09c as `DENIED /usr/bin/curl(0) -> host.openshell.internal:11434`.
+
+### Setup Run
+
+![Terminal output of setup: all seven stages succeed, and the effective policy check passes](images/setup-run.png)
+
+The image shows the output of `bash scripts/bring-up.sh`, without the progress
+lines of the image build and the file uploads. The command exited with status 0.
 
 ### Static Checks
 
 ![Terminal output of the static checks, ending in a PASS line with 0 skipped](images/static-checks.png)
 
 The image shows the output of `bash scripts/verify.sh`. The checks start no
-service and contact no external system. They show that the policy file is
-local-only, that the address checks reject remote addresses, that the copy
-filter rejects links and oversized files, and that the suite never reports a
-pass for a script that did not run in the sandbox.
+service and contact no external system.
 
-They do not show that OpenShell accepts or enforces the policy.
+### Agent Check
 
-### Setup Run
+One question was sent to OpenClaw in the sandbox with
+`openclaw agent --local`. OpenClaw called the model at the URL that the
+`Dockerfile` sets, and the OpenShell log showed the request allowed by the
+provider entry. With CPU inference on an 8 GB Apple M1, the model took longer
+than the OpenClaw idle limit to answer the agent prompt, so the turn did not
+finish. This check is not part of the test suite.
 
-![Terminal output of setup: stages 1 to 4 succeed, and stage 5 stops with a provider profile error](images/setup-run.png)
+## What Changed For OpenShell 0.1
 
-The image shows the output of `bash scripts/bring-up.sh` on macOS with Docker
-Desktop and OpenShell 0.1.8. The command exited with status 1. The last lines
-are:
+The first version of the recipe used the OpenShell 0.0 command set and stopped
+at stage 5 with OpenShell 0.1.8. OpenShell 0.1 changed the model, not only the
+commands:
 
-```text
-== 5/7 point the OpenShell inference route at the local server ==
-Error:   × provider profile 'openai' not found; import a matching profile before
-  │ using this provider type
-```
-
-No provider and no sandbox existed after the run.
-
-### Model Check
-
-One check of the default model ran against the recipe-owned Ollama container,
-without a sandbox:
-
-- A chat request through the OpenAI-compatible endpoint returned a completion.
-  The first request, which also loads the model, took 17 seconds.
-- A request with one tool definition returned a call to that tool. It took 25
-  seconds for 42 output tokens.
-- The loaded model used 2.9 GB of the 3.8 GB that Docker gave the container.
-
-These numbers describe CPU inference in a virtual machine on an Apple M1. They
-say nothing about GPU serving.
-
-## Why Stage 5 Fails
-
-The scripts follow the OpenShell commands that other examples in this
-repository use with versions 0.0.85 and 0.0.106. OpenShell 0.1.8 differs in
-four ways that matter to this recipe.
-
-| The scripts use | OpenShell 0.1.8 |
+| OpenShell 0.0 | OpenShell 0.1, as the recipe uses it |
 | --- | --- |
-| `openshell inference set` and `inference get` | Has no `inference` command |
-| `openshell provider create --type openai` | Requires a provider profile that was imported with `openshell profile import`. A new gateway has no profile |
-| `openshell sandbox create --from <Dockerfile>` | `--from` accepts an image reference or a root file system archive |
-| `openshell sandbox cp` | Has `openshell sandbox upload` |
+| A gateway-wide inference route, `inference.local`, set with `openshell inference set` | No route. A provider attached to one sandbox adds its profile's endpoints to that sandbox. The sandbox calls `host.openshell.internal` port 11434 |
+| The sandbox policy listed `inference.local` | The sandbox policy lists no network endpoint. The provider profile holds the one endpoint |
+| `openshell provider create --type openai` | `openshell profile import` first, then `openshell provider create --type local-only-ollama` |
+| `openshell sandbox create --from <Dockerfile>` | `docker build`, then `--from <image>` |
+| `openshell sandbox cp` | `openshell sandbox upload` |
+| Sandbox names of any length | At most 19 characters. The default is now `local-only-assist` |
+| The image entry point applied the model override | The entry point does not run. The `Dockerfile` writes the model and the URL into the OpenClaw configuration and turns off the explicit proxy that OpenShell 0.0 used |
 
-These commands are the same in both: `sandbox exec`, `policy set`,
-`policy get`, `sandbox list`, and `sandbox delete`.
-
-Nobody has run the recipe with OpenShell 0.0.85 or 0.0.106 either. The
-sandbox image in the `Dockerfile` is the one that another example pairs with
-OpenShell 0.0.85.
+On macOS with Docker Desktop, the gateway also needed
+`supervisor_network_mode = "bridge"` for its Docker driver. Without it, the
+sandbox supervisor could not reach the gateway.
 
 ## Planned Work
 
-The items are in the planned order. None of them has started.
+The items are in the planned order.
 
-1. **Port setup and teardown to OpenShell 0.1.** Import a provider profile for
-   the local endpoint, build the sandbox image with Docker and pass the image
-   reference, and copy files with `sandbox upload`. One question is open: how
-   OpenShell 0.1 routes inference for a provider that is attached to a
-   sandbox.
-2. **Complete one live run on Linux.** Adjust the policy allowlist until the
-   sandbox starts. Run the live test suite and keep the evidence file.
-3. **Run on a host with an NVIDIA GPU.** Record where Ollama loads the model.
-4. **Run on Windows 11 with WSL2.** This run gives cases S04 and S04b a
+1. **Complete one live run on Linux.** Run setup, the live test suite, and
+   teardown, and keep the evidence file.
+2. **Run on a host with an NVIDIA GPU.** Record where Ollama loads the model,
+   and send a question to the agent.
+3. **Run on Windows 11 with WSL2.** This run gives cases S04 and S04b a
    result.
-5. **Write the planned cases.** S06d, S07, S10, S11, and S12 have no script.
-6. **Connect the agent.** Start OpenClaw in the sandbox, ask a question about
-   the sample folder, and capture the answer.
-7. **Add a second backend.** Run the same case table against a native Windows
+4. **Write the planned cases.** S06d, S07, S10, S11, and S12 have no script.
+5. **Make the stopped-server case fail fast.** S08 now waits for the client
+   timeout.
+6. **Add a second backend.** Run the same case table against a native Windows
    sandbox. See [Test Suite, Add A Backend](test-suite.md#add-a-backend).
 
 ## What Evidence Each Claim Needs
 
-| Claim | Host that can test it |
-| --- | --- |
-| The sandbox denies file escapes, egress, and remote inference, and inference fails with an explicit error when the local server stops | Any Linux host with Docker and OpenShell. No GPU |
-| An NVIDIA GPU serves the model | A Linux or WSL2 host with an NVIDIA GPU and the NVIDIA Container Toolkit |
-| The sandbox cannot reach Windows drives or start Windows programs | Windows 11 with WSL2. No GPU |
-
-A small Docker virtual machine may not hold the model and the sandbox
-together. In the model check, the loaded model used most of a 3.8 GB limit.
+| Claim | Host that can test it | State |
+| --- | --- | --- |
+| The sandbox denies file escapes, egress, remote inference, and other APIs of the local server, and inference fails when the local server stops | Any host with Docker and OpenShell. No GPU | Passed on macOS |
+| An NVIDIA GPU serves the model | A Linux or WSL2 host with an NVIDIA GPU and the NVIDIA Container Toolkit | Not run |
+| The sandbox cannot reach Windows drives or start Windows programs | Windows 11 with WSL2. No GPU | Not run |
 
 [README, Known Limitations](../README.md#known-limitations) has the complete
 list of limits.

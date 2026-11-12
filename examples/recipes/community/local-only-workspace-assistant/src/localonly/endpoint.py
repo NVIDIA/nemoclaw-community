@@ -3,10 +3,11 @@
 
 """Reject an inference base URL that does not point at this machine.
 
-The OpenShell gateway, not the sandbox, sends prompts to the inference
-endpoint. The sandbox egress policy does not apply to the gateway, so setup
-calls this check before it registers the endpoint. The check is syntactic. It
-does not resolve names and it does not prove where a name resolves.
+Processes in the sandbox send prompts to this URL. Setup writes it into the
+sandbox image and the sandbox environment, so setup calls this check first.
+The provider profile check then requires the profile endpoint to match the
+URL. The check is syntactic. It does not resolve names and it does not prove
+where a name resolves.
 """
 
 from __future__ import annotations

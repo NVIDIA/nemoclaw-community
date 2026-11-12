@@ -8,13 +8,15 @@
 Local-Only Workspace Assistant is a community recipe for NemoClaw Community.
 It sets up an AI agent that answers questions about one folder of your files,
 on your own machine, with a model that also runs on your machine. The agent
-runs in an OpenShell sandbox. The sandbox policy gives the agent one network
-destination, the local inference route, and a short list of file paths.
+runs in an OpenShell sandbox. The sandbox policy gives the agent a short list
+of file paths and no network destination. An OpenShell provider, attached only
+to this sandbox, adds one destination: the local model server.
 
 The recipe has two parts:
 
-- **A deployment.** Scripts start a local model server, create the sandbox
-  with a local-only policy, and copy one approved folder into it.
+- **A deployment.** Scripts start a local model server, register it with
+  OpenShell as a provider, create the sandbox with a local-only policy and that
+  provider, and copy one approved folder into it.
 - **A test suite.** Tests run allowed and denied actions inside the sandbox
   and record what the sandbox did. They show whether the policy holds on the
   machine in front of you.
@@ -36,14 +38,15 @@ contain them. Three paths can carry them out:
 
 An instruction to the model does not close these paths. A model can ignore an
 instruction, and text inside a file can tell it to. The recipe closes the
-paths outside the model: in the sandbox policy, in the address of the
-inference endpoint, and in the way files enter the sandbox.
+paths outside the model: in the sandbox policy, in the provider profile that
+names the one local endpoint, and in the way files enter the sandbox.
 
 ## What You Get
 
 | Part | What it is |
 | --- | --- |
 | A dedicated sandbox | An OpenShell sandbox built from the published NemoClaw OpenClaw sandbox image, with the policy in [`policies/local-only.yaml`](../policies/local-only.yaml) |
+| One permitted endpoint | The provider profile in [`policies/ollama-provider-profile.yaml`](../policies/ollama-provider-profile.yaml) permits the inference paths of the local server and nothing else |
 | A local model server | An Ollama container that the recipe owns. By default it serves NVIDIA Nemotron 3 Nano 4B, on an NVIDIA GPU when the host has one and on the CPU otherwise |
 | A copy of one folder | Setup copies the folder that you approve to `/sandbox/workspace`. It never mounts a host folder |
 | A skill | `workspace-assistant` tells the agent to answer from the copied files and to name the file behind each statement |
@@ -52,7 +55,8 @@ inference endpoint, and in the way files enter the sandbox.
 
 ## What It Is Not
 
-- **Not finished.** Setup does not complete yet. See
+- **Not finished.** Only one host, macOS with CPU inference, has run the
+  recipe, and the agent has not answered a question yet. See
   [Status And Planned Work](status.md).
 - **Not a security guarantee.** The recipe configures OpenShell and tests the
   result. OpenShell and the host kernel enforce the boundary. A test result
@@ -75,20 +79,23 @@ inference endpoint, and in the way files enter the sandbox.
   different sandbox technology. See [Test Suite](test-suite.md).
 
 The recipe is designed for a GeForce RTX PC with Windows 11 and WSL2. The same
-scripts run on a Linux host, with or without an NVIDIA GPU.
+scripts run on a Linux host, with or without an NVIDIA GPU, and on macOS with
+Docker Desktop.
 
 ## Terms
 
 | Term | Meaning in this recipe |
 | --- | --- |
 | Sandbox | The OpenShell runtime boundary that the agent runs inside |
-| Policy | The file that lists the paths and network endpoints that the sandbox permits |
-| Inference route | `inference.local`, the address that the sandbox uses to reach a model through OpenShell |
-| Provider | The OpenShell record of an inference endpoint and its credential |
+| Sandbox policy | The file that lists the paths that the sandbox permits. In this recipe it lists no network endpoint |
+| Provider profile | The OpenShell definition of a provider type: its endpoints, request paths, programs, and credentials |
+| Provider | An OpenShell record created from a profile. Attaching it to a sandbox adds the profile's endpoints to that sandbox |
+| Effective policy | What the sandbox enforces: the sandbox policy plus one layer for each attached provider |
+| `host.openshell.internal` | The OpenShell name for the gateway host, where the local model server runs |
 | Approved folder | The one host folder that setup copies into the sandbox |
 | Copy filter | The host-side check that rejects links, special files, and oversized files before the copy |
 | Canary | A file in the sandbox image that file permissions allow every user to read and that the policy does not list |
-| Boundary signature | Text that a denial by the sandbox produces, such as `Permission denied` or HTTP status 403 |
+| Boundary signature | Text that a denial by the sandbox produces, such as `Permission denied` or `HTTP Error 403` |
 | Evidence record | One JSON line that holds the verdict of one test case and never the command output |
 | Host trait | A property of the host that gives a case its meaning, such as WSL2 |
 

@@ -22,7 +22,7 @@ The suite therefore asks two questions about a denied action:
 2. Did the failure carry text that the boundary produces?
 
 Only two yes answers give `PASS`. The suite calls that text a boundary
-signature. Examples are `Permission denied` and HTTP status 403.
+signature. Examples are `Permission denied` and `HTTP Error 403`.
 
 ## The Parts
 
@@ -42,7 +42,7 @@ the sandbox. The suite does not depend on how a tool passes exit codes along.
 
 ## The Cases
 
-![Output of the cases command: 18 cases with priority, expected result, and state](images/test-cases.png)
+![Output of the cases command: 20 cases with priority, expected result, and state](images/test-cases.png)
 
 The image shows the output of this command, run from the recipe directory:
 
@@ -55,13 +55,14 @@ as a table. The cases fall into these groups:
 
 | Group | Cases | What a pass shows |
 | --- | --- | --- |
-| Allowed actions work | S00, S01 | The sandbox can use the local inference route and read the copied folder |
+| Allowed actions work | S00, S01 | The sandbox can reach the local inference server and read the copied folder |
 | Filesystem policy | S02, S03 | The sandbox cannot read the canary file, directly or through a symbolic link |
 | Windows host boundary | S04, S04b | The sandbox cannot list a Windows drive or start a Windows program. These cases apply only on a WSL2 host |
 | Privileges and system paths | S05, S05b | The sandbox user cannot use `sudo` or write to `/etc` |
 | Egress | S06, S06b, S06c | Two programs cannot reach an external host over HTTP or HTTPS |
 | Remote inference | S09 | The sandbox cannot call a remote inference service directly |
-| No second route | S08 | Inference fails with an explicit error while the local server is stopped |
+| Local server scope | S09b, S09c | The sandbox cannot use another API of the local server, and a program that the provider profile does not name cannot reach it |
+| No second route | S08 | Inference fails while the local server is stopped. No other server answers |
 | Planned | S06d, S07, S10, S11, S12 | Nothing yet. These cases have no script |
 
 S05 and S05b check an outcome that ordinary file permissions also enforce.
@@ -157,7 +158,7 @@ PYTHONPATH=src python3 -m unittest discover -s src/tests -t src -p 'test_*.py'
 | File | What it tests |
 | --- | --- |
 | `test_runner.py` | Verdict rules, host actions, evidence content, the backend wrapper, and the case table |
-| `test_policy.py` | The policy file, the effective policy check, and the Compose and image files |
+| `test_policy.py` | The sandbox policy, the provider profile, the effective policy check, and the Compose and image files |
 | `test_endpoint.py` | Accepted and rejected inference addresses and publish addresses |
 | `test_workspace.py` | The copy filter: links, parent references, absolute paths, and size limits |
 
@@ -175,7 +176,7 @@ Case(
     priority="P1",
     expect=DENY,
     script="wget -nv -T 8 -O /dev/null http://example.com",
-    deny_signatures=("403", "forbidden"),
+    deny_signatures=("permission denied", "http error 403"),
 ),
 ```
 

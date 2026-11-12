@@ -3,9 +3,9 @@
 
 # How It Works
 
-This page describes the design. No live run has confirmed the behavior of the
-sandbox or the OpenShell gateway yet. [Status And Planned Work](status.md)
-lists what has run.
+This page describes the design for OpenShell 0.1. A live run on macOS with
+Docker Desktop and CPU inference confirmed it. No Linux, WSL2, or GPU host has
+run it yet. [Status And Planned Work](status.md) lists what has run.
 
 ## The Big Picture
 
@@ -18,12 +18,17 @@ it runs the agent and any code that the agent starts.
 Follow the solid arrows to see what is allowed:
 
 1. The operator runs the scripts. The scripts check the inputs and ask the
-   OpenShell gateway to create the sandbox with the policy.
-2. Setup passes the approved folder through the copy filter and copies the
+   OpenShell gateway to store a provider profile and a provider, and to create
+   the sandbox with the policy and that provider.
+2. The gateway composes the sandbox's effective policy: the sandbox policy
+   plus the provider layer.
+3. Setup passes the approved folder through the copy filter and uploads the
    accepted files into `/sandbox/workspace`.
-3. The agent reads the copy.
-4. The agent sends prompts to `inference.local`. The gateway forwards them to
-   the Ollama container on the same host.
+4. The agent reads the copy.
+5. The agent sends prompts to `host.openshell.internal` port 11434. Policy
+   enforcement in the sandbox checks the program, the host, the port, and the
+   path against the provider layer, and forwards the request to the Ollama
+   container on the same host.
 
 The dotted arrows are what the policy is designed to deny: any other network
 destination, and any host file outside the short list in the policy.
@@ -36,14 +41,15 @@ off.
 
 | Control | What it does | Where it runs |
 | --- | --- | --- |
-| Sandbox policy | Permits one egress endpoint, `inference.local`, and a short list of file paths | OpenShell enforces it |
-| Local inference endpoint | Setup rejects an inference address that does not point at this machine, before it registers the address with the gateway | Setup script, on the host |
+| Sandbox policy | Lists a short set of file paths and no network endpoint | OpenShell enforces it |
+| Provider profile | Names one endpoint, `host.openshell.internal` port 11434, the five inference API paths, and four programs. Attaching the provider adds these entries, and only these, to the effective policy | OpenShell enforces it. Setup checks the file and reads the effective policy back |
 | Copy, not mount | The sandbox receives a copy of the approved folder. No host folder is mounted. A filter rejects links, special files, and oversized files before the copy | Setup script, on the host |
 
-The second control exists because the gateway, not the sandbox, sends prompts
-to the model server. The sandbox policy does not apply to the gateway. If the
-gateway held a remote address, prompts would leave the machine even with a
-correct sandbox policy.
+OpenShell 0.1 has no gateway-wide inference route. The sandbox calls the model
+server itself, and the request passes the same policy enforcement as any other
+connection. So the provider profile is the one place that says where prompts
+may go. Setup also checks that the URL that OpenClaw and the test cases call,
+`INFERENCE_BASE_URL`, names a local host and matches the profile endpoint.
 
 ## Who Does What
 
@@ -51,11 +57,11 @@ The recipe configures and tests. It does not enforce.
 
 | Party | Responsibility |
 | --- | --- |
-| OpenShell and the host kernel | Enforce the filesystem allowlist and the egress policy. Route `inference.local` to the registered endpoint |
+| OpenShell and the host kernel | Compose the effective policy from the sandbox policy and the provider layer. Enforce the filesystem allowlist and the network entries |
 | Docker | Run the Ollama container and publish its port on one host address |
 | Ollama | Serve the model through an OpenAI-compatible API |
 | The recipe scripts | Check inputs, create and remove resources in order, and record what they created |
-| The `localonly` package | Check the policy file, the addresses, and the approved folder. Run the test cases and write evidence |
+| The `localonly` package | Check the sandbox policy, the provider profile, the addresses, and the approved folder. Run the test cases and write evidence |
 | The operator | Choose the approved folder, read the test results, and decide whether to trust them |
 
 ## Setup, Stage By Stage
@@ -67,42 +73,59 @@ fails. Stages 1 and 2 change nothing outside the `.run` directory.
 
 | Stage | What setup does | What it changes |
 | --- | --- | --- |
-| 1. Check inputs | Confirms that Docker, Compose, and OpenShell exist and that the gateway answers. Checks the policy file, the publish address, the endpoint address, and the approved folder | Writes the list of files to copy to `.run` |
+| 1. Check inputs | Confirms that Docker, Compose, and OpenShell exist and that the gateway answers. Checks the sandbox policy, the provider profile, the publish address, the endpoint address, and the approved folder | Writes the list of files to copy to `.run` |
 | 2. Select the device and check the kernel | Chooses the NVIDIA GPU or the CPU. On Linux, checks that the kernel lists the Landlock security module | Records the device in `.run/created` |
 | 3. Start the inference server | Starts the recipe-owned Ollama container and waits until it is healthy | Creates one container and one volume. The first run downloads the image |
 | 4. Make the model available | Downloads the model if the volume does not hold it | The first run downloads the model |
-| 5. Point the inference route at the local server | Saves the current route, creates a provider for the local endpoint, and sets the route | Changes the gateway. Every sandbox on that gateway uses the new route |
-| 6. Create the sandbox | Creates the sandbox from the `Dockerfile` with the policy, waits until it is ready, applies the policy again, reads the effective policy back, and checks it | Creates one sandbox |
-| 7. Copy the folder and the skill | Copies each accepted file to `/sandbox/workspace` and the skill to the agent's skill directory | Writes files inside the sandbox |
+| 5. Register the local server as a provider | Lints and imports the provider profile, then creates a provider from it | Adds one profile and one provider to the gateway. No other sandbox is affected |
+| 6. Build the image and create the sandbox | Builds the sandbox image from the `Dockerfile`, creates the sandbox from that image with the policy and the provider, waits until it is ready, applies the policy again, reads the effective policy back, and checks it | Creates one image and one sandbox |
+| 7. Copy the folder and the skill | Uploads each accepted file to `/sandbox/workspace` and the skill to the agent's skill directory | Writes files inside the sandbox |
 
-Setup refuses to reuse a sandbox or a provider that it did not create. That
-rule keeps setup from replacing the policy of a sandbox that belongs to
-something else.
+Setup refuses to reuse a sandbox, a provider, or a provider profile that it
+did not create. That rule keeps setup from replacing the policy of a sandbox
+that belongs to something else.
 
 Stage 6 reads the policy back because a policy that the gateway did not apply
-is worth nothing. Setup accepts the sandbox only when the effective policy
-lists `inference.local` and no other host.
+is worth nothing. Setup accepts the sandbox only when every network entry of
+the effective policy is a provider entry and every host is
+`host.openshell.internal`. It also rejects an effective policy with no host,
+which is what a sandbox without the provider has.
+
+The `Dockerfile` adapts the published OpenClaw sandbox image. That image
+configures OpenClaw for OpenShell 0.0: it sends model requests to
+`https://inference.local/v1` through an explicit proxy. OpenShell 0.1 removed
+both, and it does not run the image entry point that would apply a model
+override. The `Dockerfile` points the OpenClaw configuration at the local
+server, names the model, and turns the explicit proxy off.
 
 ## What Happens To A Request
 
-![Three request flows: allowed local inference, a denied remote request, and a stopped local server](images/request-flows.png)
+![Four request flows: allowed local inference, a denied remote request, a denied request to another path, and a stopped local server](images/request-flows.png)
 
-**Allowed.** The agent sends a chat request to `inference.local`. The egress
-policy permits that endpoint. OpenShell forwards the request to the local
-endpoint that setup registered. Ollama answers, and the answer returns to the
-agent. Test case S00 exercises this flow.
+**Allowed.** The agent sends a chat request to
+`http://host.openshell.internal:11434/v1/chat/completions`. The program, the
+host, the port, and the path match the provider layer, so OpenShell forwards
+the request to Ollama, and the answer returns to the agent. Test case S00
+exercises this flow.
 
-**Denied.** The agent, or a program that it starts, sends a request to any
-other host. The policy lists no such endpoint, so OpenShell does not forward
-the request. The expected reply is HTTP status 403. Cases S06, S06b, and S06c
-try this with two programs, because egress rules name programs. Case S09
+**Denied, another host.** The agent, or a program that it starts, connects to
+any other host. The effective policy lists no such endpoint, so the connection
+fails inside the sandbox with `Permission denied`. Cases S06, S06b, and S06c
+try this with two programs, because network entries name programs. Case S09
 tries a remote inference service directly.
 
+**Denied, another path or program.** A request to the local server on a path
+that the profile does not list, such as the model download API, receives
+`HTTP Error 403` with `policy_denied`. Case S09b tests this. A program that the
+profile does not name, such as `curl`, cannot connect to the local server at
+all. Case S09c tests this.
+
 **Local server stopped.** The agent sends a chat request while the Ollama
-container is stopped. The gateway has one provider and no second route, so the
-expected result is an explicit error. A completion in this state would mean
-that another inference service answered. Case S08 stops the container, sends
-the request, and starts the container again.
+container is stopped. The sandbox has one provider and no other endpoint, so
+the request fails. A completion in this state would mean that another
+inference service answered. Case S08 stops the container, sends the request,
+and starts the container again. On macOS with Docker Desktop, the request
+failed when the client timed out after 120 seconds.
 
 ## How The Recipe Tests Itself
 
@@ -128,19 +151,21 @@ evidence records.
 
 `scripts/teardown.sh` reads `.run/created` and removes what setup recorded:
 
-1. It deletes the sandbox, if setup created it.
-2. It deletes the provider, if setup created it.
-3. It stops the Ollama container, if setup started it. It keeps the model
+1. It deletes the sandbox, if setup created it, and waits until OpenShell no
+   longer lists it.
+2. It deletes the provider and the provider profile, if setup created them.
+   OpenShell does not delete a provider that a sandbox still holds, so this
+   step comes second.
+3. It deletes the sandbox image, if setup built it.
+4. It stops the Ollama container, if setup started it. It keeps the model
    volume unless you pass `--purge-models`.
 
-Teardown prints the inference route that the gateway used before setup. It
-does not restore that route. It does not change an Ollama installation that
-exists outside this recipe.
+Teardown does not change an Ollama installation that exists outside this
+recipe.
 
 ## OpenShell Versions
 
-Stages 5 to 7 use the commands of OpenShell 0.0.85 and 0.0.106, the versions
-that other examples in this repository use. OpenShell 0.1.8 replaces several
-of those commands. With that version, setup stops at stage 5. The design on
-this page does not change, but the commands that carry it out will.
+The scripts use the OpenShell 0.1 command set. They were run with OpenShell
+0.1.8. OpenShell 0.0 releases use a gateway-wide inference route and other
+commands, and the scripts do not run with them.
 [Status And Planned Work](status.md) lists the differences.

@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Remove the resources that scripts/bring-up.sh recorded. This script does not
-# remove a sandbox, a provider, or a model that existed before setup.
+# remove a sandbox, a provider, a provider profile, an image, or a model that
+# existed before setup.
 
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,39 +27,63 @@ done
 
 load_env
 
-echo "== 1/3 delete the recipe sandbox =="
+echo "== 1/4 delete the recipe sandbox =="
 if ! state_has sandbox "${SANDBOX_NAME}"; then
   echo "Setup did not create sandbox ${SANDBOX_NAME}; leaving it unchanged."
 elif ! command -v openshell >/dev/null 2>&1; then
   echo "openshell not found; sandbox ${SANDBOX_NAME} was not deleted." >&2
 else
   if [[ "$(sandbox_phase)" != "Missing" ]]; then
-    # Examples in this repository use both command forms, depending on the
-    # OpenShell version.
-    openshell sandbox delete "${SANDBOX_NAME}" \
-      || openshell sandbox destroy "${SANDBOX_NAME}" --force
+    openshell sandbox delete "${SANDBOX_NAME}"
+    # Deletion finishes in the background. The provider cannot be deleted
+    # while the sandbox still holds it.
+    for _ in $(seq 1 60); do
+      [[ "$(sandbox_phase)" == "Missing" ]] && break
+      sleep 2
+    done
+  fi
+  if [[ "$(sandbox_phase)" != "Missing" ]]; then
+    echo "Sandbox ${SANDBOX_NAME} is still listed. Run this script again later." >&2
+    exit 1
   fi
   state_remove sandbox "${SANDBOX_NAME}"
 fi
 
-echo "== 2/3 delete the recipe inference provider =="
-if ! state_has provider "${INFERENCE_PROVIDER_NAME}"; then
-  echo "Setup did not create provider ${INFERENCE_PROVIDER_NAME}; leaving it unchanged."
-elif ! command -v openshell >/dev/null 2>&1; then
-  echo "openshell not found; provider ${INFERENCE_PROVIDER_NAME} was not deleted." >&2
+echo "== 2/4 delete the recipe provider and its profile =="
+if ! command -v openshell >/dev/null 2>&1; then
+  echo "openshell not found; the provider and its profile were not deleted." >&2
 else
-  if openshell provider get "${INFERENCE_PROVIDER_NAME}" >/dev/null 2>&1; then
-    openshell provider delete "${INFERENCE_PROVIDER_NAME}"
+  if ! state_has provider "${INFERENCE_PROVIDER_NAME}"; then
+    echo "Setup did not create provider ${INFERENCE_PROVIDER_NAME}; leaving it unchanged."
+  else
+    if openshell provider get "${INFERENCE_PROVIDER_NAME}" >/dev/null 2>&1; then
+      openshell provider delete "${INFERENCE_PROVIDER_NAME}"
+    fi
+    state_remove provider "${INFERENCE_PROVIDER_NAME}"
   fi
-  state_remove provider "${INFERENCE_PROVIDER_NAME}"
-fi
-if [[ -s "${RUN_DIR}/previous-inference-route.txt" ]]; then
-  echo "The gateway inference route was changed by setup. The route before setup was:"
-  sed 's/^/  /' "${RUN_DIR}/previous-inference-route.txt"
-  echo "Restore it with 'openshell inference set' if other sandboxes need it."
+  if ! state_has profile "${PROFILE_ID}"; then
+    echo "Setup did not import provider profile ${PROFILE_ID}; leaving it unchanged."
+  else
+    if openshell profile describe "${PROFILE_ID}" >/dev/null 2>&1; then
+      openshell profile delete "${PROFILE_ID}"
+    fi
+    state_remove profile "${PROFILE_ID}"
+  fi
 fi
 
-echo "== 3/3 stop the recipe-owned inference server =="
+echo "== 3/4 delete the recipe sandbox image =="
+if ! state_has image "${SANDBOX_IMAGE}"; then
+  echo "Setup did not build image ${SANDBOX_IMAGE}; leaving it unchanged."
+elif ! command -v docker >/dev/null 2>&1; then
+  echo "docker not found; image ${SANDBOX_IMAGE} was not deleted." >&2
+else
+  if docker image inspect "${SANDBOX_IMAGE}" >/dev/null 2>&1; then
+    docker image rm "${SANDBOX_IMAGE}" >/dev/null
+  fi
+  state_remove image "${SANDBOX_IMAGE}"
+fi
+
+echo "== 4/4 stop the recipe-owned inference server =="
 if ! state_has compose ollama; then
   echo "Setup did not start the inference server; leaving Docker unchanged."
 elif ! command -v docker >/dev/null 2>&1; then

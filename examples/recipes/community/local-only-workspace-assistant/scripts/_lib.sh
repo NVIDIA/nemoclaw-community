@@ -13,6 +13,9 @@ STATE_FILE="${RUN_DIR}/created"
 COMPOSE_FILE="${EXAMPLE_DIR}/docker-compose.yml"
 COMPOSE_GPU_FILE="${EXAMPLE_DIR}/docker-compose.gpu.yml"
 POLICY_FILE="${EXAMPLE_DIR}/policies/local-only.yaml"
+PROFILE_FILE="${EXAMPLE_DIR}/policies/ollama-provider-profile.yaml"
+# The `id` in PROFILE_FILE. Setup imports the profile under this ID.
+PROFILE_ID="local-only-ollama"
 SANDBOX_WORKSPACE="/sandbox/workspace"
 SANDBOX_SKILL_DIR="/sandbox/.openclaw/skills/workspace-assistant"
 
@@ -23,14 +26,18 @@ load_env() {
     source "${EXAMPLE_DIR}/.env"
     set +a
   fi
-  export SANDBOX_NAME="${SANDBOX_NAME:-local-only-workspace-assistant}"
+  # OpenShell 0.1 limits sandbox names to 19 characters.
+  export SANDBOX_NAME="${SANDBOX_NAME:-local-only-assist}"
   export WORKSPACE_DIR="${WORKSPACE_DIR:-./fixtures/workspace}"
   export WORKSPACE_MAX_FILE_BYTES="${WORKSPACE_MAX_FILE_BYTES:-1048576}"
   export INFERENCE_MODEL="${INFERENCE_MODEL:-nemotron-3-nano:4b-q4_K_M}"
   export INFERENCE_PROVIDER_NAME="${INFERENCE_PROVIDER_NAME:-local-only-ollama}"
   export OLLAMA_PUBLISH_HOST="${OLLAMA_PUBLISH_HOST:-127.0.0.1}"
   export OLLAMA_PORT="${OLLAMA_PORT:-11434}"
-  export INFERENCE_BASE_URL="${INFERENCE_BASE_URL:-http://127.0.0.1:${OLLAMA_PORT}/v1}"
+  # URL that processes inside the sandbox call. host.openshell.internal is the
+  # OpenShell name for the gateway host.
+  export INFERENCE_BASE_URL="${INFERENCE_BASE_URL:-http://host.openshell.internal:${OLLAMA_PORT}/v1}"
+  export SANDBOX_IMAGE="${SANDBOX_IMAGE:-local-only-workspace-assistant:local}"
   export LOCAL_ENDPOINT_EXTRA_HOSTS="${LOCAL_ENDPOINT_EXTRA_HOSTS:-}"
   export INFERENCE_DEVICE="${INFERENCE_DEVICE:-auto}"
   export ALLOW_MISSING_LANDLOCK="${ALLOW_MISSING_LANDLOCK:-0}"
@@ -119,8 +126,10 @@ sandbox_exec() {
   openshell sandbox exec -n "${SANDBOX_NAME}" --no-tty -- "$@" </dev/null
 }
 
+# Copy one host file to an exact path in the sandbox. Setup has already
+# selected each file, so Git ignore rules must not drop one silently.
 sandbox_copy() {
-  openshell sandbox cp "$1" "${SANDBOX_NAME}:$2" </dev/null
+  openshell sandbox upload --no-git-ignore "${SANDBOX_NAME}" "$1" "$2" </dev/null
 }
 
 # Setup records each resource that it creates. Teardown removes only those.

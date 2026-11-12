@@ -5,46 +5,43 @@
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Answers questions about a copy of one approved folder with a local NVIDIA Nemotron model on Ollama, and tests the sandbox with denied actions: file escapes, Windows drive access under WSL2, egress, and remote inference. Setup does not complete yet; only static checks pass. |
+| Description | Answers questions about a copy of one approved folder with a local NVIDIA Nemotron model on Ollama, and tests the sandbox with denied actions: file escapes, WSL2 Windows drive access, egress, and remote inference. The live suite passed on macOS with CPU inference; Linux, GPU, and WSL2 are untested. |
 | Industry | ✨ Other |
-| Requirements | Linux or Windows 11 with WSL2 · Docker Compose · OpenShell · about 3 GB model download · NVIDIA GPU with NVIDIA Container Toolkit for GPU serving, CPU otherwise · static checks only so far |
+| Requirements | Linux, Windows 11 with WSL2, or macOS with Docker Desktop · Docker Compose · OpenShell 0.1 or later · about 3 GB model download · NVIDIA GPU with NVIDIA Container Toolkit for GPU serving, CPU otherwise |
 | NemoClaw | N/A |
 | Harness | OpenClaw Unknown |
-| OpenShell | Unpinned |
+| OpenShell | >=0.1.0 |
 
 Local-Only Workspace Assistant is a community recipe for a person who wants an
 agent to read one folder of files on their own machine without sending file
 contents or prompts to a remote service. The recipe runs an OpenClaw sandbox
-whose only network route is the OpenShell inference route, and it points that
-route at an Ollama server on the same machine. By default that server runs
-NVIDIA Nemotron 3 Nano 4B. The recipe is designed for a GeForce RTX PC with
-Windows Subsystem for Linux 2 (WSL2). The same scripts run on a Linux host, with or without an NVIDIA GPU.
+whose only network destination is an Ollama server on the same machine. By
+default that server runs NVIDIA Nemotron 3 Nano 4B. The recipe is designed
+for a GeForce RTX PC with Windows Subsystem for Linux 2 (WSL2). The same
+scripts run on a Linux host, with or without an NVIDIA GPU, and on macOS with
+Docker Desktop.
 
 The recipe also includes a denied-action test suite. The suite runs allowed and
 denied actions inside the running sandbox and records a verdict for each one.
 No test depends on model output.
 
-**Status:** this recipe is a first increment and setup does not complete yet.
-The static checks pass. Setup stages 1 to 4 ran on macOS with Docker Desktop.
-Setup stops at stage 5 with OpenShell 0.1.8, because the scripts use commands
-from earlier OpenShell versions. Nobody has created the sandbox or run the
-live test suite. Read [Known Limitations](#known-limitations) before you rely
-on any behavior that this document describes.
+**Status:** setup, the live test suite, and teardown completed on macOS with
+Docker Desktop, OpenShell 0.1.8, and CPU inference. Every ready case passed.
+Nobody has run the recipe on Linux, on WSL2, or with a GPU yet, and the agent
+has not answered a question in the sandbox. Read
+[Known Limitations](#known-limitations) before you rely on any behavior that
+this document describes.
 
 ## Screenshot
 
-![Terminal output of the static checks: 71 unit tests pass, the policy file permits egress only to inference.local, both addresses are local, and the last line reports PASS with 0 skipped](docs/images/static-checks.png)
+![Terminal output of the live test suite: the effective policy permits egress only to host.openshell.internal, every ready case passes, the WSL2 cases are not applicable, and the last line reports PASS](docs/images/live-suite.png)
 
-The image shows the output of `bash scripts/verify.sh`, the static checks.
-Notice the three `OK` lines: the policy file permits egress only to
-`inference.local`, the model server is published on loopback, and the
-inference endpoint is local. [Static Checks](#static-checks) has the same
-output as text.
-
-This is the only complete result that the recipe produces today. The image
-does not show a sandbox or an agent, because setup does not reach that stage
-yet. [Status And Planned Work](docs/status.md) shows the setup run that stops
-at stage 5.
+The image shows the output of `bash scripts/verify.sh --live` on macOS with
+Docker Desktop. Notice the first `OK` line: the effective sandbox policy
+permits egress only to `host.openshell.internal`. Then notice that every ready
+case passes, including the denied calls to remote hosts and to the model
+download API of the local server. [Live Test Suite](#live-test-suite) has the
+same output as text.
 
 ## At A Glance
 
@@ -53,13 +50,13 @@ at stage 5.
 | Category | Community Recipe |
 | Contributor or provenance | Independent community contribution with no organizational provenance |
 | Use this when | You want an agent to answer questions about local files, and prompts and file contents must stay on one machine |
-| You will get | A dedicated sandbox with a copy of one approved folder, a local inference route, and a JSON Lines record of each allowed and denied action |
-| Runs on | Designed for Windows 11 with WSL2 and an NVIDIA GeForce RTX GPU. A Linux host uses the same scripts. Without an NVIDIA GPU, the model runs on the CPU |
-| Requires | Docker with Compose, OpenShell with a running gateway, Python 3.10 or newer, and about 3 GB of disk space for the default model. GPU serving also requires the NVIDIA Container Toolkit. No API key |
-| Verified on | Static checks: macOS with Python 3.9.6 and Python 3.12.16. Setup stages 1 to 4 only: macOS with Docker Desktop 29.9.3 and CPU inference. Stage 5 and later are not verified |
-| Evidence level | local/static |
+| You will get | A dedicated sandbox with a copy of one approved folder, a single permitted endpoint on a local model server, and a JSON Lines record of each allowed and denied action |
+| Runs on | Designed for Windows 11 with WSL2 and an NVIDIA GeForce RTX GPU. A Linux host and macOS with Docker Desktop use the same scripts. Without an NVIDIA GPU, the model runs on the CPU |
+| Requires | Docker with Compose, OpenShell 0.1 or later with a running gateway, Python 3.10 or newer, and about 3 GB of disk space for the default model. GPU serving also requires the NVIDIA Container Toolkit. No API key |
+| Verified on | Setup, live test suite, and teardown: macOS on Apple M1 with Docker Desktop 29.9.3, Docker Compose 5.7.0, OpenShell 0.1.8 with the Docker driver in bridge network mode, and CPU inference. Static checks: Python 3.9.6 and Python 3.12.16 on the same Mac |
+| Evidence level | integration |
 | Support and maturity | Best-effort community support. See the [support policy](../../../../SUPPORT.md) |
-| External access, data, and actions | Setup downloads two container images and one model. Setup changes the inference route of the OpenShell gateway. The sandbox policy permits no external destination |
+| External access, data, and actions | Setup downloads two container images and one model. Setup builds one local image and adds one provider profile and one provider to the OpenShell gateway. The sandbox can reach only the local model server |
 | Start here | [Quickstart](#quickstart) |
 | Confirm success | [Verification](#verification) |
 
@@ -74,15 +71,20 @@ This README has the steps, the architecture, and the limits. The
 | [How It Works](docs/how-it-works.md) | The components, the three controls, and what happens during setup, a request, and teardown |
 | [Test Suite](docs/test-suite.md) | How the tests decide a verdict, what they record, and how to add a case or a backend |
 | [Configuration](docs/configuration.md) | Every setting, the default model, the files, and the state that the recipe keeps |
-| [Status And Planned Work](docs/status.md) | What has run, what fails today, and what comes next |
+| [Status And Planned Work](docs/status.md) | What has run, what remains unverified, and what comes next |
 
 ## Architecture
 
-This section describes the design. No live run has confirmed the behavior of
-the sandbox or the gateway yet. The inference route and the provider steps
-follow the command set of OpenShell 0.0.85 and 0.0.106. OpenShell 0.1.8
-replaces those commands, so these steps will change.
-[Known Limitations](#known-limitations) lists what is unverified.
+This section describes the design for OpenShell 0.1. A live run on macOS with
+Docker Desktop confirmed it. [Known Limitations](#known-limitations) lists what
+is still unverified.
+
+OpenShell 0.1 has no gateway-wide inference route. A sandbox reaches a model
+only through a provider that is attached to that sandbox. The provider's
+profile names the endpoint, the request paths, and the programs that may call
+it, and OpenShell adds those entries to the sandbox's effective network
+policy. This recipe puts no network endpoint in the sandbox policy, so the
+provider profile is the only egress the sandbox has.
 
 ### Components And Trust Zones
 
@@ -91,7 +93,7 @@ including the operator, the scripts, Docker, and the OpenShell gateway.
 
 ```mermaid
 flowchart LR
-    subgraph host ["Host: Linux or WSL2, trusted"]
+    subgraph host ["Host: Linux, WSL2, or macOS, trusted"]
         operator["Operator shell<br/>setup, verify, teardown scripts"]
         checks["localonly<br/>host-side checks<br/>and test runner"]
         folder["Approved folder<br/>WORKSPACE_DIR"]
@@ -102,10 +104,11 @@ flowchart LR
             models[("Model volume")]
         end
         subgraph openshell ["OpenShell"]
-            gateway["Gateway<br/>inference route,<br/>sandbox lifecycle, policy"]
+            gateway["Gateway<br/>provider profile, provider,<br/>sandbox lifecycle, policy"]
             subgraph sandbox ["Sandbox: untrusted zone"]
                 agent["OpenClaw agent<br/>workspace-assistant skill"]
                 copy["/sandbox/workspace<br/>copy of the approved folder"]
+                proxy["Policy enforcement<br/>sandbox policy plus<br/>provider layer"]
             end
         end
     end
@@ -114,23 +117,25 @@ flowchart LR
     operator --> checks
     folder --> checks
     checks -->|"filtered copy"| copy
-    operator -->|"provider, route,<br/>sandbox, policy"| gateway
+    operator -->|"profile, provider,<br/>sandbox, policy"| gateway
+    gateway -->|"effective policy"| proxy
     agent -->|"reads"| copy
-    agent -->|"inference.local"| gateway
-    gateway -->|"local endpoint"| ollama
+    agent -->|"host.openshell.internal:11434"| proxy
+    proxy -->|"inference paths only"| ollama
     ollama --- models
     checks -->|"test verdicts"| rundir
-    agent -.->|"denied"| remote
+    proxy -.->|"denied"| remote
     agent -.->|"denied"| hostfiles
 ```
 
 | Component | Runs in | Responsibility | Source |
 | --- | --- | --- | --- |
 | Setup, verify, and teardown scripts | Host shell | Order the stages, stop at the first failed check, and record each resource that setup creates | `scripts/` |
-| `localonly` host-side checks | Host, Python standard library | Check the policy file, the endpoint address, the publish address, the approved folder, and the effective sandbox policy | `src/localonly/endpoint.py`, `policy_facts.py`, `workspace.py` |
+| `localonly` host-side checks | Host, Python standard library | Check the sandbox policy, the provider profile, the endpoint address, the publish address, the approved folder, and the effective sandbox policy | `src/localonly/endpoint.py`, `policy_facts.py`, `workspace.py` |
 | `localonly` test suite | Host, Python standard library | Run each case in the sandbox, decide a verdict, and write evidence | `src/localonly/cases.py`, `runner.py`, `backends.py`, `evidence.py` |
 | Ollama server | Docker container that the recipe owns | Serve one model through an OpenAI-compatible API on one host address | `docker-compose.yml`, `docker-compose.gpu.yml` |
-| OpenShell gateway | Host, as a service or a container | Hold the inference route, create the sandbox, and apply the policy | Not part of this recipe |
+| Provider profile | OpenShell gateway | Name the one endpoint, the inference paths, and the programs that the sandbox may use | `policies/ollama-provider-profile.yaml` |
+| OpenShell gateway | Host, as a service or a container | Store the profile and the provider, create the sandbox, and compose its effective policy | Not part of this recipe |
 | Sandbox | OpenShell | Run the agent under the local-only policy | `Dockerfile`, `policies/local-only.yaml` |
 | Agent and skill | Sandbox | Answer questions from `/sandbox/workspace` | `src/SKILL.md` |
 
@@ -140,16 +145,23 @@ Three controls keep data on the machine. None of them runs inside the model or
 the agent process.
 
 1. **Sandbox policy.** [`policies/local-only.yaml`](policies/local-only.yaml)
-   lists one egress endpoint, `inference.local`, and a short filesystem
-   allowlist. OpenShell enforces the policy. The recipe adds no permission
-   check of its own inside the sandbox.
-2. **Local inference endpoint.** The OpenShell gateway sends prompts to the
-   inference endpoint. The sandbox policy does not apply to the gateway, so
-   setup rejects an endpoint address that does not point at this machine
-   before it registers the address.
+   declares no network endpoint and a short filesystem allowlist. OpenShell
+   enforces the policy. The recipe adds no permission check of its own inside
+   the sandbox.
+2. **Provider profile.**
+   [`policies/ollama-provider-profile.yaml`](policies/ollama-provider-profile.yaml)
+   names one endpoint, `host.openshell.internal` port 11434, the five
+   inference API paths, and four programs. It declares no credential. When
+   setup attaches the provider, OpenShell adds these entries to the effective
+   policy as the only network entry. Setup checks the profile, checks that the
+   URL inside the sandbox matches the profile endpoint, and reads the
+   effective policy back after it creates the sandbox.
 3. **Copy, not mount.** Setup copies the approved folder into the sandbox. It
    never mounts a host folder. The copy filter rejects a symbolic link, a
    special file, or a file larger than the limit.
+
+`host.openshell.internal` is the OpenShell name for the gateway host. The
+recipe-owned Ollama container is published on that host.
 
 The table maps each unwanted event to its control and to the test that is
 designed to detect a failure of that control.
@@ -159,13 +171,15 @@ designed to detect a failure of that control.
 | The agent reads a host file outside the copied folder | Filesystem allowlist. The host folder is never mounted | OpenShell | S02, S03, S04 |
 | The agent starts a Windows program or gains privileges | Filesystem allowlist and the sandbox user | OpenShell | S04b, S05 |
 | The agent writes to a system path | Read-only paths in the filesystem allowlist, and file permissions in the image | OpenShell and the sandbox image | S05b |
-| The agent sends data to a remote host | Egress policy with one endpoint | OpenShell | S06, S06b, S06c |
-| The agent calls a remote inference service directly | Egress policy with one endpoint | OpenShell | S09 |
-| The gateway sends prompts to a remote inference service | Endpoint address check before setup registers the endpoint | Setup script | Unit tests in `test_endpoint.py` |
-| Inference moves to another service when the local server stops | One provider and no second route | OpenShell gateway | S08 |
+| The agent sends data to a remote host | No endpoint in the sandbox policy. The provider layer names one local endpoint | OpenShell | S06, S06b, S06c |
+| The agent calls a remote inference service directly | No endpoint in the sandbox policy. The provider layer names one local endpoint | OpenShell | S09 |
+| The agent uses another API of the local server, such as the model download API | Path rules in the provider profile | OpenShell | S09b |
+| A program that the profile does not name reaches the local server | Program list in the provider profile | OpenShell | S09c |
+| The agent is configured to send prompts to a remote service | Endpoint address check, and a profile check that requires the profile endpoint to match the address | Setup script | Unit tests in `test_endpoint.py` and `test_policy.py` |
+| Inference moves to another service when the local server stops | One provider and no other endpoint | OpenShell | S08 |
 | Another machine reaches the inference server | Publish address check. The default is loopback | Setup script and Docker | Unit tests in `test_endpoint.py` and `test_policy.py` |
 | Setup copies host content from outside the approved folder | Copy filter | Setup script | Unit tests in `test_workspace.py` |
-| The running policy differs from the policy file | Setup and verification read the effective policy back and check it | Setup and verify scripts | Unit tests in `test_policy.py` |
+| The running policy differs from the policy files | Setup and verification read the effective policy back and check that every network entry is a provider entry for a local host | Setup and verify scripts | Unit tests in `test_policy.py` |
 | The evidence file exposes file contents | A record holds the verdict and never the command output | `evidence.py` | Unit tests in `test_runner.py` |
 
 The design does not protect these items:
@@ -175,8 +189,9 @@ The design does not protect these items:
   read in full.
 - **The copy inside the sandbox.** The agent can change or delete its copy.
   The host folder is not affected.
-- **Other sandboxes on the same gateway.** They share the inference route, so
-  their prompts also go to the local model while this recipe is set up.
+- **Other sandboxes on the same gateway.** Setup attaches the provider only to
+  the recipe sandbox. A person who operates the gateway can attach the same
+  provider to another sandbox.
 - **The host.** A person or process with access to the host can read the
   approved folder, the model, and the evidence files.
 
@@ -197,54 +212,56 @@ sequenceDiagram
 
     Op->>Up: bash scripts/bring-up.sh
     Up->>Gw: check that the gateway is reachable
-    Up->>Ck: check policy file, publish address,<br/>endpoint address, approved folder
+    Up->>Ck: check sandbox policy, provider profile,<br/>publish address, endpoint address, approved folder
     Ck-->>Up: accepted, or setup stops
     Up->>Up: select GPU or CPU, check Landlock
     Up->>Dk: start the Ollama container
     Up->>Dk: download the model if it is missing
-    Up->>Gw: create the provider for the local endpoint
-    Up->>Gw: set the inference route
-    Gw->>Dk: verify the route with a request
-    Up->>Gw: create the sandbox from the Dockerfile and the policy
+    Up->>Gw: import the provider profile
+    Up->>Gw: create the provider from the profile
+    Up->>Dk: build the sandbox image
+    Up->>Gw: create the sandbox from the image,<br/>the policy, and the provider
     Gw->>Sb: start
-    Up->>Gw: set the policy, then read it back
+    Up->>Gw: set the policy, then read the effective policy back
     Up->>Ck: check the effective policy
-    Ck-->>Up: only inference.local, or setup stops
-    Up->>Sb: copy the approved files and the skill
+    Ck-->>Up: only the provider entry for<br/>host.openshell.internal, or setup stops
+    Up->>Sb: upload the approved files and the skill
     Up-->>Op: Bring-up complete
 ```
 
 ### Request Flows
 
-The diagram shows the three flows that the test suite exercises: an allowed
-inference request, a denied request to another host, and an inference request
-while the local server is stopped.
+The diagram shows the four flows that the test suite exercises: an allowed
+inference request, a denied request to another host, a denied request to
+another path of the local server, and an inference request while the local
+server is stopped.
 
 ```mermaid
 sequenceDiagram
     participant Ag as Agent in sandbox
     participant Pe as OpenShell policy enforcement
-    participant Rt as inference.local route
     participant Ol as Local Ollama
     participant Rm as Remote host
 
     Note over Ag,Ol: Allowed - local inference, case S00
-    Ag->>Pe: POST to inference.local, chat completion
-    Pe->>Rt: permitted by the egress policy
-    Rt->>Ol: forward to the registered local endpoint
-    Ol-->>Rt: completion
-    Rt-->>Ag: completion
+    Ag->>Pe: POST host.openshell.internal:11434/v1/chat/completions
+    Pe->>Ol: program, host, port, and path match the provider entry
+    Ol-->>Ag: completion
 
-    Note over Ag,Rm: Denied - any other destination, cases S06 and S09
-    Ag->>Pe: request to a remote host
+    Note over Ag,Rm: Denied - any other host, cases S06 and S09
+    Ag->>Pe: connect to a remote host
     Pe--xRm: not forwarded
-    Pe-->>Ag: denied, HTTP status 403 expected
+    Pe-->>Ag: connect fails with Permission denied
+
+    Note over Ag,Ol: Denied - another path of the local server, case S09b
+    Ag->>Pe: POST host.openshell.internal:11434/api/pull
+    Pe--xOl: path not in the provider entry
+    Pe-->>Ag: HTTP 403 policy_denied
 
     Note over Ag,Ol: Local server stopped, case S08
-    Ag->>Pe: POST to inference.local, chat completion
-    Pe->>Rt: permitted by the egress policy
-    Rt--xOl: endpoint does not answer
-    Rt-->>Ag: explicit error, no second route
+    Ag->>Pe: POST host.openshell.internal:11434/v1/chat/completions
+    Pe--xOl: endpoint does not answer
+    Pe-->>Ag: request fails, no other server answers
 ```
 
 ### Test Suite Design
@@ -277,7 +294,7 @@ flowchart LR
 
 The runner checks these rules in order and reports the first verdict that
 applies. A denied case passes only when the output carries a boundary
-signature, such as `Permission denied` or HTTP status 403.
+signature, such as `Permission denied` or `HTTP Error 403`.
 
 | Order | Condition | Verdict |
 | --- | --- | --- |
@@ -298,10 +315,11 @@ as a denial.
 | State | Location | Removed by |
 | --- | --- | --- |
 | Record of the resources that setup created | `.run/created` | Teardown removes each entry as it removes the resource |
-| Inference route before setup | `.run/previous-inference-route.txt` | Not removed |
 | Evidence records | `.run/evidence/`. Each file is readable only by its owner | Not removed |
 | Sandbox creation log | `.run/sandbox-create.log` | Not removed |
 | Downloaded model | Docker volume `local-only-workspace-assistant-ollama-models` | `scripts/teardown.sh --purge-models` |
+| Sandbox image | Docker image `local-only-workspace-assistant:local` | Teardown |
+| Provider profile and provider | OpenShell gateway, ID `local-only-ollama` | Teardown |
 | Copy of the approved folder | `/sandbox/workspace` in the sandbox | Teardown, when it deletes the sandbox |
 
 Git ignores the `.run` directory.
@@ -311,13 +329,15 @@ Git ignores the `.run` directory.
 | Decision | Reason | Cost |
 | --- | --- | --- |
 | OpenShell is the only boundary. The recipe adds no check inside the sandbox | A check that runs in the agent process can be changed by that process | The recipe depends on the OpenShell version and the host kernel |
+| The sandbox policy has no network endpoint. The provider profile holds the only one | The local endpoint, its paths, and its programs live in one reviewed file, and removing the provider removes the egress | Two files describe the network boundary, so each has its own check |
 | Copy the approved folder. Do not mount it | The sandbox holds no path to the host folder | The copy is out of date until setup runs again |
 | The recipe owns its Ollama container and model volume | Teardown can remove what setup created without changing an existing Ollama installation | The model is downloaded again even when the host already has it |
+| The recipe builds its own image from the published OpenClaw image | The published image configures OpenClaw for OpenShell 0.0. The recipe points it at the local server and adds the canary file | Every setup builds an image layer |
 | A denied case needs a boundary signature to pass | A missing file or an offline network also makes an action fail | A reworded denial message produces `INCONCLUSIVE` until the signature list is updated |
 | The image holds a canary file that file permissions allow every user to read | Only the sandbox policy can deny the read, so a denial is meaningful | The recipe needs its own image layer |
 | Test cases name no sandbox technology | A second backend can run the same table | Each case must be expressible as a shell script |
-| Setup records what it creates | Setup and teardown do not change a sandbox, provider, or model that existed before | A lost `.run/created` file leaves resources that the operator must remove by hand |
-| Python standard library only | The recipe adds no dependency to review | The policy check reads YAML with a line scanner that accepts only plain block style |
+| Setup records what it creates | Setup and teardown do not change a sandbox, provider, profile, image, or model that existed before | A lost `.run/created` file leaves resources that the operator must remove by hand |
+| Python standard library only | The recipe adds no dependency to review | The policy checks read YAML with a line scanner that accepts only plain block style |
 
 ## Default Model
 
@@ -332,19 +352,13 @@ The recipe serves NVIDIA Nemotron 3 Nano 4B through Ollama by default.
 | Minimum Ollama version | 0.17.1. The recipe pins 0.32.3 | `ollama show` |
 | License | NVIDIA Open Model License Agreement | `ollama show` |
 
-One check of the model has run, outside the sandbox, against the recipe-owned
-Ollama container on an Apple M1 with Docker Desktop and CPU inference:
-
-- A chat request through the OpenAI-compatible endpoint returned a completion.
-  The first request, which also loads the model, took 17 seconds.
-- A request with one tool definition returned a call to that tool. It took
-  25 seconds for 42 output tokens.
-- The loaded model used 2.9 GB of the 3.8 GB that Docker gave the container,
-  with a context length of 4096.
+On an Apple M1 with Docker Desktop and CPU inference, a chat request from
+inside the sandbox through the provider endpoint returned a completion. In the
+live test suite, case S00 took 41 seconds, including the time to load the
+model.
 
 These numbers describe CPU inference in a virtual machine. They say nothing
-about GPU serving. The check does not show that an agent in the sandbox can
-use the model, because setup does not yet reach that stage.
+about GPU serving.
 
 To use another Ollama model, set `INFERENCE_MODEL` in `.env`. An agent needs a
 model with the tools capability.
@@ -358,33 +372,34 @@ Read this section before you run `scripts/bring-up.sh`.
   The default model, `nemotron-3-nano:4b-q4_K_M`, is about 2.8 GB. These
   downloads contact Docker Hub, the GitHub Container Registry, and
   `ollama.com`.
-- **Gateway inference route.** The inference route belongs to the OpenShell
-  gateway, not to one sandbox. Setup points it at the local Ollama server.
-  Every sandbox on the same gateway then uses the local model. Setup saves the
-  earlier route in `.run/previous-inference-route.txt`. Teardown prints it and
-  does not restore it.
-- **New resources.** Setup creates one sandbox, one OpenShell provider, one
-  Ollama container, and one Docker volume for the model. Setup refuses to
-  reuse a sandbox or provider that it did not create.
+- **Local image.** Setup builds the image `local-only-workspace-assistant:local`
+  from the recipe `Dockerfile`.
+- **Gateway resources.** Setup imports one provider profile and creates one
+  provider on the OpenShell gateway, both named `local-only-ollama`. The
+  provider is attached only to the recipe sandbox. Setup does not change the
+  gateway configuration or any other sandbox.
+- **New resources.** Setup creates one sandbox, one Ollama container, and one
+  Docker volume for the model. Setup refuses to reuse a sandbox, provider, or
+  provider profile that it did not create.
 - **Costs and credentials.** The recipe uses no paid service, no API key, and
-  no secret. OpenShell requires a credential for each provider, so setup
-  registers a fixed placeholder value. Ollama does not check it.
+  no secret. The provider declares no credential, because Ollama checks none.
 
 ## Quickstart
 
-These eight steps take a Linux host or a WSL2 distribution from a fresh shell
-to a recorded test result, and then clean up. Run every command in that shell.
-Run the commands of steps 3 to 8 from this recipe's directory.
+These eight steps take a host from a fresh shell to a recorded test result,
+and then clean up. Run every command in that shell. Run the commands of steps
+3 to 8 from this recipe's directory.
 
 Steps 1 to 3 change nothing outside the clone. Step 5 downloads images and a
-model and changes the OpenShell gateway. Nobody has completed steps 5 to 8 on
-a live host yet. [If A Step Fails](#if-a-step-fails) lists the most likely
-problems.
+model, builds an image, and adds resources to the OpenShell gateway. These
+steps completed on macOS with Docker Desktop. Nobody has run them on Linux or
+WSL2 yet. [If A Step Fails](#if-a-step-fails) lists the most likely problems.
 
 ### Step 1: Check The Prerequisites
 
 The host needs Docker with the Compose plugin, Python 3.10 or newer, and
-OpenShell with a running local gateway. Each of these commands must succeed:
+OpenShell 0.1 or later with a running local gateway. Each of these commands
+must succeed:
 
 ```bash
 docker info >/dev/null && docker compose version
@@ -393,21 +408,32 @@ openshell --version
 openshell status
 ```
 
+`openshell --version` must report 0.1.0 or later. OpenShell 0.0 releases have
+a different command set, and setup does not run with them. To install
+OpenShell, follow the
+[OpenShell documentation](https://docs.nvidia.com/openshell/latest/).
+
 If `openshell status` fails, the gateway is not running. On a host that runs
 the gateway as a user service, inspect it with
 `systemctl --user status openshell-gateway --no-pager`.
 
-If OpenShell is not installed, install it with the OpenShell installer:
+On macOS with Docker Desktop, the gateway's Docker driver must run the sandbox
+supervisor in bridge network mode, unless host networking is turned on in
+Docker Desktop. Without one of the two, sandbox creation fails with
+`Startup configuration fetch failed`. Set the mode in the gateway
+configuration file and restart the gateway:
 
-```bash
-curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh \
-  | OPENSHELL_VERSION=v0.0.85 sh
+```toml
+[openshell.gateway]
+compute_driver = "docker"
+
+[openshell.drivers.docker]
+supervisor_network_mode = "bridge"
 ```
 
-The sandbox image in `Dockerfile` is the one that another example in this
-repository pairs with OpenShell 0.0.85. Nobody has run this recipe with that
-version. With OpenShell 0.1.8, setup stops at stage 5. See
-[Known Limitations](#known-limitations).
+The OpenShell
+[sandbox runtimes](https://docs.nvidia.com/openshell/latest/how-it-works/sandboxes/runtimes)
+page describes both modes.
 
 For GPU serving, the host also needs an NVIDIA driver and the NVIDIA Container
 Toolkit. This command must list the GPU:
@@ -451,8 +477,11 @@ Edit `.env` only for these cases:
 | `WORKSPACE_DIR` | You want the agent to read your own folder. The default is the sample folder `fixtures/workspace` |
 | `INFERENCE_DEVICE` | You want setup to stop when it finds no GPU. Set `gpu`. The default, `auto`, uses the GPU when `nvidia-smi -L` finds one and the CPU otherwise |
 | `INFERENCE_MODEL` | You want a different Ollama model. Review its license first |
-| `SANDBOX_NAME`, `INFERENCE_PROVIDER_NAME` | A sandbox or provider with the default name already exists. Setup does not reuse one that it did not create |
-| `OLLAMA_PUBLISH_HOST`, `INFERENCE_BASE_URL`, `LOCAL_ENDPOINT_EXTRA_HOSTS` | The OpenShell gateway runs in a container and cannot reach host loopback. Set all three to the address of a Docker bridge on this machine |
+| `SANDBOX_NAME`, `INFERENCE_PROVIDER_NAME` | A sandbox or provider with the default name already exists. Setup does not reuse one that it did not create. A sandbox name has at most 19 characters |
+
+The provider profile names port 11434. To publish Ollama on another port, also
+change the port in `policies/ollama-provider-profile.yaml`. Setup stops when
+`INFERENCE_BASE_URL` and the profile endpoint differ.
 
 ### Step 5: Run Setup
 
@@ -470,8 +499,9 @@ and a final line:
 == 2/7 select the inference device and check the kernel ==
 == 3/7 start the recipe-owned inference server ==
 == 4/7 make the model available ==
-== 5/7 point the OpenShell inference route at the local server ==
-== 6/7 create the dedicated sandbox ==
+== 5/7 register the local server as an OpenShell provider ==
+== 6/7 build the sandbox image and create the dedicated sandbox ==
+OK: effective policy permits egress only to host.openshell.internal
 == 7/7 copy the approved folder and the skill ==
 Bring-up complete.
 ```
@@ -485,14 +515,17 @@ After you correct a problem, run the same command again. Setup reuses the
 resources that it already created. If setup reports that the sandbox exists in
 a phase other than ready, run `bash scripts/teardown.sh` first.
 
-### Step 6: Confirm The Inference Route
+### Step 6: Confirm The Provider
 
 ```bash
-openshell inference get
+openshell sandbox provider list local-only-assist
+openshell policy get local-only-assist --full
 ```
 
-The output must name the provider `local-only-ollama` and the model
-`nemotron-3-nano:4b-q4_K_M`, or the values that you set in `.env`.
+The first command must list the provider `local-only-ollama`. Under
+`network_policies`, the second command must show one entry,
+`_provider_local_only_ollama`, with the host `host.openshell.internal` and
+port 11434. Use the names that you set in `.env` if you changed them.
 
 ### Step 7: Run The Live Test Suite
 
@@ -513,29 +546,23 @@ On a host that is not WSL2, cases S04 and S04b show `N/A`. That is expected.
 bash scripts/teardown.sh
 ```
 
-Teardown prints the inference route that the gateway used before setup. If
-other sandboxes on the gateway need that route, restore it:
-
-```bash
-openshell inference set --provider <previous-provider> --model <previous-model>
-```
-
 [Teardown](#teardown) describes what the command removes and what it keeps.
 
 ### If A Step Fails
 
 | Symptom | Likely cause | What to do |
 | --- | --- | --- |
+| Step 5 stops in stage 1 with `profile endpoint ... does not match base URL` | `INFERENCE_BASE_URL` in `.env` names a host or port that the provider profile does not permit. An `.env` from an earlier version of this recipe sets `127.0.0.1` | Copy `.env.example` to `.env` again, or change the profile and the URL together |
 | Step 5 stops in stage 3 with a Docker error about the `nvidia` device driver | Docker cannot use the GPU | Install or repair the NVIDIA Container Toolkit, or set `INFERENCE_DEVICE=cpu` |
-| Step 5 stops in stage 5 with `provider profile 'openai' not found` | OpenShell 0.1.x is installed. It requires an imported provider profile and has no `inference` command | No fix exists in this recipe yet. See [Known Limitations](#known-limitations) |
-| Step 5 stops in stage 5 with another error | The gateway cannot reach the Ollama server at `INFERENCE_BASE_URL` | Use the last row of the table in step 4 |
-| Step 5 stops in stage 6 with "Sandbox did not become ready" | The policy allowlist is too narrow for the sandbox image, or the image and the installed OpenShell version do not match | Read `.run/sandbox-create.log` |
+| Step 5 stops in stage 5 with `unrecognized subcommand` or `provider profile ... not found` | An OpenShell 0.0 release is installed | Install OpenShell 0.1 or later |
+| Step 5 stops in stage 6 with `name exceeds maximum length` | `SANDBOX_NAME` has more than 19 characters | Set a shorter name in `.env` |
+| Step 5 stops in stage 6 with `Startup configuration fetch failed` in `.run/sandbox-create.log` | The sandbox supervisor cannot reach the gateway. This happens on Docker Desktop in host network mode | Set `supervisor_network_mode = "bridge"`, as step 1 shows |
 | Step 7 shows `FAIL` for S02 or S03 | The kernel does not enforce the filesystem policy | Check that `/sys/kernel/security/lsm` lists `landlock` |
 | Step 7 shows `INCONCLUSIVE` for a denied case | The action failed, but not with text that the suite recognizes as a denial | Run the case by hand with `openshell sandbox exec` and compare the message |
-| Step 7 shows `FAIL` or `INCONCLUSIVE` for S00 | The sandbox cannot use the inference route | Repeat step 6 |
+| Step 7 shows `FAIL` or `INCONCLUSIVE` for S00 | The sandbox cannot reach the local server | Repeat step 6, and run `openshell logs local-only-assist` to see the allowed and denied connections |
 
-These causes are estimates from reading the scripts. No live run has confirmed
-them.
+The causes for the first five rows were observed on macOS. The others are
+estimates from reading the scripts.
 
 ## What Each Host Can Prove
 
@@ -544,13 +571,16 @@ only the last one needs Windows.
 
 | Claim | Host that can test it | Cases |
 | --- | --- | --- |
-| The sandbox denies file escapes, egress, and remote inference, and inference fails with an explicit error when the local server stops | Any Linux host with Docker and OpenShell. No GPU | S00 to S03, S05 to S09 |
+| The sandbox denies file escapes, egress, remote inference, and other APIs of the local server, and inference fails when the local server stops | Any host with Docker and OpenShell. No GPU | S00 to S03, S05 to S09c |
 | An NVIDIA GPU serves the model | A Linux or WSL2 host with an NVIDIA GPU and the NVIDIA Container Toolkit | The model placement that `scripts/verify.sh --live` prints |
 | The sandbox cannot reach Windows drives or start Windows programs | Windows 11 with WSL2. No GPU | S04, S04b |
 
-A run on a host reports only what that host can test. On a Linux host that is
-not WSL2, the suite reports S04 and S04b as `N/A`. It does not report them as
+A run on a host reports only what that host can test. On a host that is not
+WSL2, the suite reports S04 and S04b as `N/A`. It does not report them as
 passed, because the Windows drive does not exist there.
+
+So far only the first claim has run, on macOS with Docker Desktop. On macOS
+the sandbox runs on the Linux kernel of the Docker Desktop virtual machine.
 
 ## Verification
 
@@ -568,15 +598,16 @@ bash scripts/verify.sh
 == 1/5 shell syntax ==
 == 2/5 python syntax ==
 == 3/5 unit tests ==
-.......................................................................
+..................................................................................
 ----------------------------------------------------------------------
-Ran 71 tests in 0.027s
+Ran 82 tests in 0.032s
 
 OK
-== 4/5 policy, endpoint, and approved folder ==
-OK: policy file permits egress only to inference.local
+== 4/5 policy, provider profile, endpoint, and approved folder ==
+OK: sandbox policy file declares no network endpoint
+OK: provider profile permits egress only to host.openshell.internal
 OK: publish host: 127.0.0.1
-OK: inference endpoint host is local: 127.0.0.1
+OK: inference endpoint host is local: host.openshell.internal
 == 5/5 compose rendering ==
 PASS: local-only-workspace-assistant static verification (0 skipped)
 ```
@@ -584,23 +615,68 @@ PASS: local-only-workspace-assistant static verification (0 skipped)
 On a machine without Docker Compose, step 5 prints a `SKIP` line and the last
 line reports `1 skipped`.
 
-**This verifies:** the policy file lists no egress host except
-`inference.local` and no filesystem path outside its allowlist. The endpoint
-check rejects remote URLs. The copy filter rejects links, parent references,
-and oversized files. The suite never reports a pass when a script did not run
-in the sandbox, and it never writes command output to the evidence file.
+**This verifies:** the sandbox policy declares no network endpoint and no
+filesystem path outside its allowlist. The provider profile names only
+`host.openshell.internal`, enforces its rules, lists explicit paths, declares
+no credential, and matches the URL that the sandbox calls. The endpoint check
+rejects remote URLs. The copy filter rejects links, parent references, and
+oversized files. The suite never reports a pass when a script did not run in
+the sandbox, and it never writes command output to the evidence file.
 
 **This does not verify:** that OpenShell accepts or enforces the policy, that
 the sandbox starts, that the GPU serves the model, or any other live behavior.
 
 ### Live Test Suite
 
-**Evidence level:** not yet run. A complete run on the target hardware is
-required before this recipe can claim `integration` or `live end-to-end`.
+**Evidence level:** integration. The run used macOS with Docker Desktop and
+CPU inference, which is not the target host.
 
 ```bash
 bash scripts/verify.sh --live
 ```
+
+**Expected result:**
+
+```text
+== 1/3 effective sandbox policy (sandbox policy plus provider layer) ==
+OK: effective policy permits egress only to host.openshell.internal
+== 2/3 denied-action test suite ==
+Host is not WSL2. The cases that test Windows drives are not applicable.
+S00   P0  allow PASS         Send a chat request to the local inference server
+S01   P0  allow PASS         Read a file in the approved workspace
+S02   P0  deny  PASS         Read a file outside the workspace through a parent reference
+S03   P0  deny  PASS         Read a file outside the workspace through a symbolic link
+S04   P0  deny  N/A          List a Windows drive that WSL2 mounts on the host
+S04b  P0  deny  N/A          Start a Windows program through WSL2 interoperability
+S05   P0  deny  PASS         Gain privileges with sudo
+S05b  P0  deny  PASS         Write to a system path
+S06   P0  deny  PASS         Reach an external HTTP endpoint with curl
+S06b  P0  deny  PASS         Reach an external HTTPS endpoint with curl
+S06c  P0  deny  PASS         Reach an external HTTP endpoint with a second program
+S06d  P1  deny  PLANNED      Open a TCP connection to an IP address
+S07   P0  deny  PLANNED      Follow a prompt that asks for a protected file
+S09   P0  deny  PASS         Call a remote inference API directly
+S09b  P0  deny  PASS         Call the model download API of the local inference server
+S09c  P0  deny  PASS         Reach the local inference server with a program the profile does not name
+S10   P1  deny  PLANNED      Read a file larger than the tool limit
+S11   P1  deny  PLANNED      Replace a file with a symbolic link during a read
+S12   P1  allow PLANNED      Run setup and teardown twice
+S08   P0  deny  PASS         Send a chat request while the local inference server is stopped
+Evidence written to .run/evidence/conformance-<timestamp>.jsonl
+RESULT: PASS
+== 3/3 where the model is loaded ==
+PASS: local-only-workspace-assistant live verification
+```
+
+**This verifies:** on that host, OpenShell composed an effective policy whose
+only network entry is the provider entry for `host.openshell.internal`. A
+program that the profile names reached the local model. Remote hosts, other
+paths of the local server, and other programs were denied. The filesystem
+policy denied reads outside the workspace, and no other server answered while
+the local server was stopped.
+
+**This does not verify:** enforcement on a Linux or WSL2 host, GPU serving,
+the Windows drive cases, or an answer from the OpenClaw agent.
 
 The command reads the effective sandbox policy, runs every ready case in the
 table below, and shows where Ollama loaded the model. It stops the recipe-owned
@@ -608,7 +684,7 @@ Ollama container once and starts it again. It writes one JSON record for each
 case to `.run/evidence/`.
 
 A denied case passes only when the action fails with text that the boundary
-produces, such as `Permission denied` or HTTP status 403. A failure without
+produces, such as `Permission denied` or `HTTP Error 403`. A failure without
 that text is `INCONCLUSIVE`, because a missing file or an offline network also
 makes an action fail. The command exits with status 1 on any `FAIL` and status
 2 on any `INCONCLUSIVE`. `PLANNED` and `N/A` cases do not change the exit
@@ -623,7 +699,7 @@ result in a public issue or pull request. Follow the repository
 
 | ID | Priority | Action inside the sandbox | Expected | State |
 | --- | --- | --- | --- | --- |
-| S00 | P0 | Send a chat request to the local inference route | Allowed | Ready |
+| S00 | P0 | Send a chat request to the local inference server | Allowed | Ready |
 | S01 | P0 | Read a file in the approved workspace | Allowed | Ready |
 | S02 | P0 | Read a file outside the workspace through a parent reference | Denied | Ready |
 | S03 | P0 | Read a file outside the workspace through a symbolic link | Denied | Ready |
@@ -636,8 +712,10 @@ result in a public issue or pull request. Follow the repository
 | S06c | P0 | Reach an external HTTP endpoint with a second program | Denied | Ready |
 | S06d | P1 | Open a TCP connection to an IP address | Denied | Planned |
 | S07 | P0 | Follow a prompt that asks for a protected file | Denied | Planned |
-| S08 | P0 | Send a chat request while the local inference server is stopped | Explicit error | Ready |
+| S08 | P0 | Send a chat request while the local inference server is stopped | Request fails | Ready |
 | S09 | P0 | Call a remote inference API directly | Denied | Ready |
+| S09b | P0 | Call the model download API of the local inference server | Denied | Ready |
+| S09c | P0 | Reach the local inference server with a program the profile does not name | Denied | Ready |
 | S10 | P1 | Read a file larger than the tool limit | Denied | Planned |
 | S11 | P1 | Replace a file with a symbolic link during a read | Denied | Planned |
 | S12 | P1 | Run setup and teardown twice | No leftover resources | Planned |
@@ -649,7 +727,10 @@ enforced.
 
 S05 and S05b check an outcome that ordinary file permissions also enforce.
 A pass shows that the action failed. It does not show which mechanism denied
-it.
+it. In the macOS run, S05 passed because the image has no `sudo` command.
+
+In the macOS run, S08 passed because the request timed out after 120 seconds.
+A pass shows that no other server answered. It does not show a fast failure.
 
 Print the table from the source of truth with:
 
@@ -659,13 +740,13 @@ PYTHONPATH=src python3 -m localonly cases
 
 ### Evidence Records
 
-Each record holds the decision and never the command output:
+Each record holds the decision and never the command output. This record is
+case S09b from the macOS run:
 
 ```json
-{"backend": "openshell", "case_id": "S02", "detail": "expected result", "duration_ms": 412, "exit_code": 1, "expect": "deny", "host_traits": [], "leak_detected": false, "matched_signature": "permission denied", "priority": "P0", "schema": 1, "timestamp": "2026-01-01T00:00:00Z", "verdict": "PASS"}
+{"backend": "openshell", "case_id": "S09b", "detail": "expected result", "duration_ms": 156, "exit_code": 1, "expect": "deny", "host_traits": [], "leak_detected": false, "matched_signature": "http error 403", "priority": "P0", "schema": 1, "timestamp": "2026-11-12T21:21:08Z", "verdict": "PASS"}
 ```
 
-This record is an illustration of the format. It is not the result of a run.
 If a denied action returns protected content, the record sets `leak_detected`
 to `true` and omits the content.
 
@@ -675,27 +756,28 @@ to `true` and omits the content.
 bash scripts/teardown.sh
 ```
 
-Teardown deletes the sandbox and the provider that setup created, and it stops
-the recipe-owned Ollama container. It leaves the model volume in place. To
-delete the model volume as well, run:
+Teardown deletes the sandbox, the provider, the provider profile, and the
+sandbox image that setup created, and it stops the recipe-owned Ollama
+container. It leaves the model volume in place. To delete the model volume as
+well, run:
 
 ```bash
 bash scripts/teardown.sh --purge-models
 ```
 
 Teardown removes only the resources that setup recorded in `.run/created`. It
-does not restore the earlier gateway inference route. It does not change an
-Ollama installation that exists outside this recipe.
+does not change an Ollama installation that exists outside this recipe.
 
 ## Files
 
 | Path | Purpose |
 | --- | --- |
-| `policies/local-only.yaml` | Full sandbox policy: filesystem allowlist and one egress endpoint |
+| `policies/local-only.yaml` | Full sandbox policy: filesystem allowlist and no network endpoint |
+| `policies/ollama-provider-profile.yaml` | OpenShell provider profile: the one local endpoint, its paths, and its programs |
 | `docker-compose.yml` | Recipe-owned Ollama server, published on loopback by default |
 | `docker-compose.gpu.yml` | NVIDIA GPU reservation that setup adds when the host has a GPU |
-| `Dockerfile` | Published OpenClaw sandbox image plus one canary file for the test suite |
-| `scripts/bring-up.sh` | Checks inputs, starts Ollama, sets the inference route, creates the sandbox, copies the folder |
+| `Dockerfile` | Published OpenClaw sandbox image, configured for the local server, plus one canary file for the test suite |
+| `scripts/bring-up.sh` | Checks inputs, starts Ollama, registers the provider, builds the image, creates the sandbox, copies the folder |
 | `scripts/verify.sh` | Static checks, or the live test suite with `--live` |
 | `scripts/teardown.sh` | Removes the resources that setup created |
 | `src/localonly/` | Host-side checks and the test suite. Uses only the Python standard library |
@@ -706,56 +788,42 @@ Ollama installation that exists outside this recipe.
 
 ## Known Limitations
 
-- **Setup does not complete with OpenShell 0.1.8.** `scripts/bring-up.sh`
-  follows the OpenShell commands that other examples in this repository use
-  with versions 0.0.85 and 0.0.106. A run with OpenShell 0.1.8 stopped at
-  stage 5 with `provider profile 'openai' not found`. That version differs in
-  these ways:
-  - It has no `openshell inference` command. Setup uses `inference set` and
-    `inference get`.
-  - `openshell provider create` requires a provider profile that was imported
-    with `openshell profile import`. The gateway had no profile.
-  - `openshell sandbox create --from` accepts an image reference or a root
-    file system archive, not a Dockerfile. Setup passes the Dockerfile.
-  - It has `openshell sandbox upload` and no `openshell sandbox cp`. Setup
-    uses `sandbox cp`.
-- **Stages 5 to 7 are not verified with any OpenShell version.** Nobody has
-  run this recipe with OpenShell 0.0.85 or 0.0.106, or created the sandbox
-  with this policy and this image.
-- **The policy allowlist may be too narrow.** The filesystem allowlist and the
-  program list for `inference.local` are a first estimate for the OpenClaw
-  sandbox image. The sandbox may need more read-only paths to start.
-- **A local provider may need a different OpenShell mode.** Another example in
-  this repository notes that a change from a cloud provider to local Ollama
-  did not take effect with the single-container Docker driver. Confirm the
-  route with `openshell inference get` after setup.
-- **The gateway must reach the endpoint.** The default endpoint is host
-  loopback. A gateway that runs in a container cannot reach host loopback. Set
-  `OLLAMA_PUBLISH_HOST`, `INFERENCE_BASE_URL`, and
-  `LOCAL_ENDPOINT_EXTRA_HOSTS` to the address of a Docker bridge on the same
-  machine in that case.
+- **Only one host has run the recipe.** Setup, the live test suite, and
+  teardown completed on macOS with Docker Desktop, OpenShell 0.1.8, and CPU
+  inference. Nobody has run them on Linux, on WSL2, or with a GPU.
+- **The agent has not answered a question.** Setup installs the skill and the
+  files and configures OpenClaw for the local server. With CPU inference on an
+  8 GB Apple M1, OpenClaw reached the model, but a full agent turn did not
+  finish within the time limit. The test suite does not depend on the agent.
+- **The image adapts a published image.** The published OpenClaw sandbox image
+  is configured for OpenShell 0.0, with the managed inference route and an
+  explicit proxy. The `Dockerfile` changes that configuration. A new release
+  of that image can change the configuration format.
+- **OpenShell 0.0 is not supported.** The scripts use the OpenShell 0.1
+  command set: provider profiles, sandbox provider attachment, image
+  references for `sandbox create --from`, and `sandbox upload`.
+- **Docker Desktop needs a gateway setting.** On macOS, the gateway's Docker
+  driver needs bridge network mode, or Docker Desktop needs host networking.
+  Step 1 of the quickstart shows the setting.
 - **Landlock is best effort.** The policy sets Landlock compatibility to
   `best_effort`, as the other examples do. On a kernel without Landlock,
   OpenShell may start the sandbox without filesystem enforcement. Setup checks
-  for Landlock, and cases S02 and S03 measure the result.
+  for Landlock on a Linux host, and cases S02 and S03 measure the result.
 - **The endpoint check is syntactic.** It accepts loopback addresses and three
   local names. It does not resolve names.
 - **The copy filter is a host-side convenience.** A file can change between
   the check and the copy. Use a folder that untrusted processes cannot write
   to. The sandbox receives a copy, so run setup again after you change files.
-- **The agent turn is not wired.** Setup installs the skill and the files. It
-  does not start the OpenClaw gateway in the sandbox or send a question.
 - **Some cases are planned.** The table marks them. S07 needs a recorded tool
   call that the harness replays.
 - **Denial text can differ.** The suite recognizes a denial by its text. A
   different OpenShell version may word a denial differently, which produces
   `INCONCLUSIVE`, not `PASS`.
+- **A stopped server makes requests wait.** In the macOS run, a request to the
+  stopped server failed only when the client timed out.
 - **CPU serving is a fallback, not the target.** Without an NVIDIA GPU, the
   model runs on the CPU. That run gives no evidence about GPU serving or
   speed.
-- **A small Docker virtual machine may not hold the model and the sandbox.**
-  In the one check so far, the loaded model used 2.9 GB of a 3.8 GB limit.
-  Nobody has started the sandbox next to it.
 - **WSL2 is Linux.** This recipe does not test a native Windows sandbox. The
   test cases name no enforcement technology, so a native Windows backend can
   run the same table later.
@@ -771,5 +839,5 @@ The recipe adds no Python package. It uses the `ollama/ollama` container image
 and, by default, the NVIDIA Nemotron 3 Nano 4B model under the NVIDIA Open
 Model License. The repository
 [THIRD-PARTY-NOTICES](../../../../THIRD-PARTY-NOTICES) file lists both. The
-sandbox image is the published NemoClaw OpenClaw sandbox image. Review the
-license of any other model before you set `INFERENCE_MODEL` to it.
+sandbox image is built from the published NemoClaw OpenClaw sandbox image.
+Review the license of any other model before you set `INFERENCE_MODEL` to it.

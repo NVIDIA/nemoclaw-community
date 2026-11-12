@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Full sandbox policy for the local-only workspace assistant.
-# Principle: deny by default. The only egress endpoint is inference.local,
-# the OpenShell route to the inference provider that the operator selects.
+# Principle: deny by default. This file declares no network endpoint. The only
+# egress the sandbox has comes from the provider that setup attaches, whose
+# profile (ollama-provider-profile.yaml) names the recipe-owned Ollama server.
 #
 # scripts/verify.sh checks this file. Keep the plain block style: the check
 # reads the file without a YAML library and rejects anchors, aliases, merge
@@ -31,38 +32,8 @@ process:
   run_as_user: sandbox
   run_as_group: sandbox
 
-network_policies:
-  managed_inference:
-    name: managed_inference
-    endpoints:
-      - host: inference.local
-        port: 443
-        protocol: rest
-        enforcement: enforce
-        rules:
-          - allow:
-              method: POST
-              path: /v1/chat/completions
-          - allow:
-              method: POST
-              path: /v1/responses
-          - allow:
-              method: POST
-              path: /v1/completions
-          - allow:
-              method: POST
-              path: /v1/embeddings
-          - allow:
-              method: GET
-              path: /v1/models
-          - allow:
-              method: GET
-              path: /v1/models/**
-    binaries:
-      - path: /usr/local/bin/openclaw
-      - path: /usr/local/bin/node
-      - path: /usr/bin/node
-      - path: /usr/bin/python3*
+network_policies: {}
 
-# Deliberately absent: every remote inference API and every other host.
+# Deliberately absent: every network endpoint, including every remote
+# inference API.
 # /mnt, /srv, /home, /root, and /var are also absent from filesystem_policy.

@@ -36,7 +36,7 @@ if [[ "${live}" == 1 ]]; then
     echo "Sandbox ${SANDBOX_NAME} is not ready. Run scripts/bring-up.sh first." >&2
     exit 1
   }
-  echo "== 1/3 effective sandbox policy =="
+  echo "== 1/3 effective sandbox policy (sandbox policy plus provider layer) =="
   openshell policy get "${SANDBOX_NAME}" --full -o json | localonly check-effective-policy
 
   echo "== 2/3 denied-action test suite =="
@@ -78,8 +78,9 @@ echo "== 3/5 unit tests =="
 PYTHONPATH="${EXAMPLE_DIR}/src" python3 -m unittest discover \
   -s "${EXAMPLE_DIR}/src/tests" -t "${EXAMPLE_DIR}/src" -p 'test_*.py'
 
-echo "== 4/5 policy, endpoint, and approved folder =="
+echo "== 4/5 policy, provider profile, endpoint, and approved folder =="
 localonly check-policy "${POLICY_FILE}"
+localonly check-profile "${PROFILE_FILE}" --base-url "${INFERENCE_BASE_URL}"
 localonly check-publish-host "${OLLAMA_PUBLISH_HOST}"
 localonly check-endpoint "${INFERENCE_BASE_URL}" --extra-hosts "${LOCAL_ENDPOINT_EXTRA_HOSTS}"
 localonly list-workspace "${WORKSPACE_DIR}" \
