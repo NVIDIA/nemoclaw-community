@@ -258,7 +258,7 @@ as the baseline to compare against.
 | 1 | CPU baseline | Done: standard-library tool, offline. |
 | 2 | Nemotron embed and rerank for policy evidence | Done: `retrieve.py`, egress policy, second provider, restart on install. Remaining: a larger document set, and measuring retrieval against BM25 (`--method bm25` is included for the comparison). |
 | 3 | Kumo risk ranking | Done: `kumo_predict.py`, the Kumo route in the policy and provider profile, a virtual environment built at install time (Python 3.13 wheels, no custom image needed), and the skill's compare-with-baseline rule. Remaining: a Kumo-versus-baseline evaluation on a larger graph. |
-| 4 | Auto Ontology | A host-side deployment reached through an authenticated, reviewed path, with its own API token. |
+| 4 | Auto Ontology | Spike partly done (see `ontology/`): sandbox plumbing works (header-credential placeholder, `host.openshell.internal` route, three allowed paths), but the text-to-SQL call is blocked because the deployed Auto Ontology build sends `nvext.guided_json`, which the hosted model API now rejects. Needs an Auto Ontology build that sends an accepted request shape. |
 | 5 | RAPIDS on GPU | A host-side service, not the sandbox. |
 | Evidence | Screenshot and a higher evidence level per stage | A real sandbox run of each stage. |
 
