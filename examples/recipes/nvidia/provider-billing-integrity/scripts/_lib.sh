@@ -31,7 +31,9 @@ run() {
 
 sandbox_exists() {
   command -v openshell >/dev/null || return 1
-  openshell sandbox list --names 2>/dev/null | grep -Fxq "$1"
+  local names
+  names="$(openshell sandbox list --names 2>/dev/null)" || return 1
+  grep -Fxq "$1" <<<"$names"  # captured first: "cmd | grep -q" can fail under pipefail (SIGPIPE)
 }
 
 load_env

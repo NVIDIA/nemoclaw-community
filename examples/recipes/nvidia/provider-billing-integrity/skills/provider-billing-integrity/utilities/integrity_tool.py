@@ -18,6 +18,7 @@ import argparse
 import json
 import sys
 import csv
+from datetime import date
 import statistics
 from collections import defaultdict
 from pathlib import Path
@@ -60,7 +61,8 @@ def scan(as_of, top):
         ratio = n / m if m else (float('inf') if n else 0.0)
         score = round(share * 0.7 + (min(ratio, 5) / 5) * 0.3, 4)
         rows.append({'provider_id': pid, 'specialty': p['specialty'], 'claims': n,
-                     'top_level_share': round(share, 3), 'peer_volume_ratio': round(ratio, 2), 'score': score})
+                     'top_level_share': round(share, 3), 'peer_volume_ratio': None if ratio == float('inf') else round(ratio, 2),
+                     'score': score})
     rows.sort(key=lambda r: (-r['score'], r['provider_id']))
     return rows[:top]
 
@@ -118,11 +120,23 @@ def exposure(provider, as_of):
             'total_paid_usd': round(sum(r['paid_usd'] for r in per.values()), 2), 'per_provider': per}
 
 
+def iso_date(text):
+    """--as-of must be a real YYYY-MM-DD date: dates are compared as strings, so a loose form such as
+    2026-7-1 would sort after 2026-06-30 and let later claims into every figure."""
+    try:
+        parsed = date.fromisoformat(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f'{text!r} is not a YYYY-MM-DD date')
+    if parsed.isoformat() != text:
+        raise argparse.ArgumentTypeError(f'{text!r} is not a YYYY-MM-DD date')
+    return text
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('command', choices=['scan', 'related', 'cluster-exposure'])
     ap.add_argument('provider', nargs='?')
-    ap.add_argument('--as-of', default='2026-06-30')
+    ap.add_argument('--as-of', type=iso_date, default='2026-06-30')
     ap.add_argument('--top', type=int, default=10)
     a = ap.parse_args()
     if a.command == 'scan':
@@ -131,7 +145,7 @@ def main():
         ap.error(f'{a.command} needs a provider id')
     else:
         out = (related if a.command == 'related' else exposure)(a.provider, a.as_of)
-    json.dump(out, sys.stdout, indent=2)
+    json.dump(out, sys.stdout, indent=2, allow_nan=False)
     print()
 
 

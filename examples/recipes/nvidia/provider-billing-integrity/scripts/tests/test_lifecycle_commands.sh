@@ -136,6 +136,17 @@ if grep -q 'ontology-secret' "$COMMAND_LOG"; then
   fail "the Auto Ontology token appeared in a command line"
 fi
 
+# a malformed Auto Ontology port is rejected before anything is run
+: >"$COMMAND_LOG"
+if FAKE_SANDBOX_EXISTS=1 NEMOCLAW_PROVIDER=build NVIDIA_INFERENCE_API_KEY=test-key \
+  AUTO_ONTOLOGY_API_TOKEN=ontology-secret AUTO_ONTOLOGY_PORT='4000/e' \
+  bash "$EXAMPLE_DIR/scripts/install.sh" >/dev/null 2>&1; then
+  fail "install accepted a malformed AUTO_ONTOLOGY_PORT"
+fi
+if grep -qE 'provider|policy-add|skill install' "$COMMAND_LOG"; then
+  fail "install changed the gateway or sandbox before rejecting a malformed port"
+fi
+
 # install without a key: only the skill is installed and no egress is opened
 : >"$COMMAND_LOG"
 FAKE_SANDBOX_EXISTS=1 NEMOCLAW_PROVIDER=build NVIDIA_INFERENCE_API_KEY= \

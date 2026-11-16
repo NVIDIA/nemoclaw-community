@@ -44,13 +44,43 @@ ONTOLOGY_PROFILE_FILE="$EXAMPLE_DIR/providers/auto-ontology.yaml"
 ONTOLOGY_PROFILE_ID="billing-integrity-auto-ontology"
 ONTOLOGY_PROVIDER="${NEMOCLAW_SANDBOX_NAME}-ontology"
 ONTOLOGY_PORT="${AUTO_ONTOLOGY_PORT:-4000}"
+if [[ ! "$ONTOLOGY_PORT" =~ ^[0-9]{1,5}$ ]] || ((ONTOLOGY_PORT < 1 || ONTOLOGY_PORT > 65535)); then
+  echo "error: AUTO_ONTOLOGY_PORT must be a port number (1-65535), got '$ONTOLOGY_PORT'" >&2
+  exit 1
+fi
+PYPI_ADDED=0
+CLEANUP_DIRS=()
+
+# Undo temporary state however the script ends: the pypi egress preset (added only while the Kumo
+# environment builds) and any scratch directory.
+cleanup() {
+  local status=$?
+  trap - EXIT
+  if [[ "$PYPI_ADDED" == "1" ]]; then
+    PYPI_ADDED=0
+    nemoclaw "$NEMOCLAW_SANDBOX_NAME" policy-remove pypi --yes || echo "warning: could not remove the pypi preset; run: nemoclaw $NEMOCLAW_SANDBOX_NAME policy-remove pypi --yes" >&2
+  fi
+  [[ ${#CLEANUP_DIRS[@]} -eq 0 ]] || rm -rf "${CLEANUP_DIRS[@]}"
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
+# contains NEEDLE COMMAND...: true when the command's output contains NEEDLE. The output is captured
+# first, because "cmd | grep -q" can report failure under pipefail when grep exits early (SIGPIPE).
+contains() {
+  local needle="$1" out
+  shift
+  out="$("$@" 2>/dev/null)" || true
+  [[ "$out" == *"$needle"* ]]
+}
 
 enable_hosted_retrieval() {
   # Import the profile once. A profile cannot be edited in place, so an older one
   # without the Kumo route is replaced: detach and delete its provider, delete the
   # profile, and import the current file (the provider is created again below).
   if openshell provider profile export "$PROFILE_ID" >/dev/null 2>&1; then
-    if openshell provider profile export "$PROFILE_ID" 2>/dev/null | grep -Fq 'kumo-relational/predictions'; then
+    if contains 'kumo-relational/predictions' openshell provider profile export "$PROFILE_ID"; then
       echo "Provider profile '$PROFILE_ID' already exists — keeping it."
     else
       echo "Provider profile '$PROFILE_ID' predates the Kumo route — recreating it."
@@ -73,7 +103,7 @@ enable_hosted_retrieval() {
   fi
   unset NVIDIA_AI_API_KEY
 
-  if ! openshell sandbox provider list "$NEMOCLAW_SANDBOX_NAME" 2>/dev/null | grep -Fq "$AI_PROVIDER"; then
+  if ! contains "$AI_PROVIDER" openshell sandbox provider list "$NEMOCLAW_SANDBOX_NAME"; then
     run openshell sandbox provider attach "$NEMOCLAW_SANDBOX_NAME" "$AI_PROVIDER"
     RESTART_NEEDED=1
   fi
@@ -86,11 +116,13 @@ enable_hosted_retrieval() {
 enable_auto_ontology() {
   # The profile pins one host port, so render it from AUTO_ONTOLOGY_PORT. A profile cannot be
   # edited in place: if the existing one has another port, replace it (and its provider).
-  local rendered
-  rendered="$(mktemp -d)/auto-ontology.yaml"
+  local rendered scratch
+  scratch="$(mktemp -d)"
+  CLEANUP_DIRS+=("$scratch")
+  rendered="$scratch/auto-ontology.yaml"
   sed "s/^  port: .*/  port: $ONTOLOGY_PORT/" "$ONTOLOGY_PROFILE_FILE" >"$rendered"
   if openshell provider profile export "$ONTOLOGY_PROFILE_ID" >/dev/null 2>&1; then
-    if openshell provider profile export "$ONTOLOGY_PROFILE_ID" 2>/dev/null | grep -Eq "port: $ONTOLOGY_PORT\$"; then
+    if contains "port: $ONTOLOGY_PORT"$'\n' openshell provider profile export "$ONTOLOGY_PROFILE_ID"; then
       echo "Provider profile '$ONTOLOGY_PROFILE_ID' already exists for port $ONTOLOGY_PORT — keeping it."
     else
       echo "Provider profile '$ONTOLOGY_PROFILE_ID' is for another port — recreating it for $ONTOLOGY_PORT."
@@ -102,7 +134,6 @@ enable_auto_ontology() {
   else
     run openshell provider profile import --file "$rendered"
   fi
-  rm -rf "$(dirname "$rendered")"
 
   if openshell provider get "$ONTOLOGY_PROVIDER" >/dev/null 2>&1; then
     run openshell provider update "$ONTOLOGY_PROVIDER" --credential AUTO_ONTOLOGY_API_TOKEN
@@ -110,7 +141,7 @@ enable_auto_ontology() {
     run openshell provider create --name "$ONTOLOGY_PROVIDER" --type "$ONTOLOGY_PROFILE_ID" \
       --credential AUTO_ONTOLOGY_API_TOKEN
   fi
-  if ! openshell sandbox provider list "$NEMOCLAW_SANDBOX_NAME" 2>/dev/null | grep -Fq "$ONTOLOGY_PROVIDER"; then
+  if ! contains "$ONTOLOGY_PROVIDER" openshell sandbox provider list "$NEMOCLAW_SANDBOX_NAME"; then
     run openshell sandbox provider attach "$NEMOCLAW_SANDBOX_NAME" "$ONTOLOGY_PROVIDER"
     RESTART_NEEDED=1
   fi
@@ -119,12 +150,13 @@ enable_auto_ontology() {
 SKILL_DIR_IN_SANDBOX="/sandbox/.openclaw/workspace/skills/provider-billing-integrity"
 
 setup_kumo_environment() {
-  local added_pypi=0
-  if nemoclaw "$NEMOCLAW_SANDBOX_NAME" policy list 2>/dev/null | grep -Eq '● +pypi'; then
+  local listing
+  listing="$(nemoclaw "$NEMOCLAW_SANDBOX_NAME" policy list 2>/dev/null)" || true
+  if [[ "$listing" =~ ●\ +pypi ]]; then
     echo "pypi egress preset already applied — leaving it in place."
   else
+    PYPI_ADDED=1 # the EXIT trap removes it again if this script is interrupted or fails first
     run nemoclaw "$NEMOCLAW_SANDBOX_NAME" policy-add pypi --yes
-    added_pypi=1
   fi
   local status=0
   run nemoclaw "$NEMOCLAW_SANDBOX_NAME" exec --timeout 900 -- bash -c '
@@ -136,8 +168,9 @@ setup_kumo_environment() {
     python3 -m venv "$V"
     "$V/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: -r "'"$SKILL_DIR_IN_SANDBOX"'/utilities/requirements-kumo.txt"
   ' || status=$?
-  if [[ "$added_pypi" == "1" ]]; then
+  if [[ "$PYPI_ADDED" == "1" ]]; then
     run nemoclaw "$NEMOCLAW_SANDBOX_NAME" policy-remove pypi --yes
+    PYPI_ADDED=0
   fi
   if [[ "$status" != "0" ]]; then
     echo "warning: the Kumo environment could not be built; kumo_predict.py will report blocked." >&2
@@ -158,6 +191,10 @@ else
   echo "      NVIDIA_INFERENCE_API_KEY in .env). The skill will report retrieval and Kumo as blocked." >&2
 fi
 
+if [[ -z "${AUTO_ONTOLOGY_API_TOKEN:-}" ]] && contains "$ONTOLOGY_PROVIDER" openshell sandbox provider list "$NEMOCLAW_SANDBOX_NAME"; then
+  echo "note: AUTO_ONTOLOGY_API_TOKEN is not set but provider '$ONTOLOGY_PROVIDER' is still attached and the skill" >&2
+  echo "      still points at its old URL. To remove it, see 'To remove Auto Ontology' in the README." >&2
+fi
 if [[ -n "${AUTO_ONTOLOGY_API_TOKEN:-}" ]]; then
   command -v openshell >/dev/null || {
     echo "openshell not in PATH" >&2
@@ -167,6 +204,9 @@ if [[ -n "${AUTO_ONTOLOGY_API_TOKEN:-}" ]]; then
   enable_auto_ontology
   ONTOLOGY_ENABLED=1
 fi
+
+# Host bytecode caches (ignored by git) would otherwise be copied into the skill.
+find "$EXAMPLE_DIR/skills" -name __pycache__ -type d -prune -exec rm -rf {} +
 
 run nemoclaw "$NEMOCLAW_SANDBOX_NAME" skill install \
   "$EXAMPLE_DIR/skills/provider-billing-integrity"

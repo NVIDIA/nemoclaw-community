@@ -22,10 +22,11 @@ memory. See [Agent Knowledge Foundation](#agent-knowledge-foundation) for what
 each component does here and which ones this version includes.
 
 > **Status: under development.** The CPU baseline, **Nemotron embed and
-> rerank** policy retrieval, **Kumo** risk ranking and, optionally, **Auto
-> Ontology** grounded text-to-SQL are included and verified. RAPIDS is planned
-> (see [Roadmap](#roadmap)). Auto Ontology needs a host-side deployment you run
-> yourself, with a patch for now (see [Auto Ontology](#auto-ontology-optional)).
+> rerank** policy retrieval and **Kumo** risk ranking are included and
+> verified. Optional **Auto Ontology** text-to-SQL is included as an integration
+> example: it needs a host-side deployment you run yourself, with a local patch
+> this repo does not ship (see [Auto Ontology](#auto-ontology-optional)). RAPIDS
+> is planned (see [Roadmap](#roadmap)).
 > See [Verification](#verification) for exactly what was run.
 
 ## Agent Knowledge Foundation
@@ -36,7 +37,7 @@ and what this version actually ships.
 
 | Reviewer question | Foundation component | In this version |
 | --- | --- | --- |
-| What do the tables mean, and what is the right denominator? | **Auto Ontology**: a semantic layer over the provider-billing database with terms, relationships and measures that carry explicit as-of dates, queried through grounded text-to-SQL | **Included, optional.** `ontology_qa.py` checks the semantic layer, asks for question coverage, streams the grounded text-to-SQL answer and prints the generated SQL, the rows and the answer. It needs a host-side Auto Ontology deployment and its token. The skill requires the agent to read and quote the SQL, to cross-check figures that matter, and to report `blocked` when the call fails. Without a token the skill reads the CSV files directly. |
+| What do the tables mean, and what is the right denominator? | **Auto Ontology**: a semantic layer over the provider-billing database with terms, relationships and measures, queried through grounded text-to-SQL (the generated SQL does not enforce an as-of date; see [Known limitations](#known-limitations)) | **Included, optional.** `ontology_qa.py` checks the semantic layer, asks for question coverage, streams the grounded text-to-SQL answer and prints the generated SQL, the rows and the answer. It needs a host-side Auto Ontology deployment and its token. The skill requires the agent to read and quote the SQL, to cross-check figures that matter, and to report `blocked` when the call fails. Without a token the skill reads the CSV files directly. |
 | Who is likely to be audited in the next 90 days? | **Kumo** (`nvidia/kumo-relational`, hosted on build.nvidia.com): relational prediction over providers, addresses, claims and audit findings | **Included.** `kumo_predict.py` builds the graph as of 2026-06-30, asks Kumo the PQL question `PREDICT COUNT(audit_findings.*, 0, 90, days) > 0`, and prints a ranking with the package version, graph sizes and a fingerprint. The skill requires the agent to compare it with the `scan` rule baseline and to say what each uses. If Kumo fails it reports `blocked`; `scan` is never presented as a substitute. |
 | What does policy say? | **Nemotron embed and rerank**: retrieval over four public 42 CFR sections with citable passages | **Included.** `retrieve.py` embeds the chunks and query, reranks the closest, and returns each passage with a ready-made `[document, chunk N]` tag the skill requires in every policy statement. If the hosted call fails it reports `blocked` and substitutes nothing. |
 | Who is connected, and does it scale? | **RAPIDS** (cuDF, cuGraph through nx-cugraph): the same baseline and related-entity expansion on GPU | Not included. `related` and `cluster-exposure` run on CPU in the standard library. |
@@ -48,15 +49,10 @@ blocked rather than filled in from memory. The skill's rules already enforce
 the last part: every number comes from a command that was run, and an
 unavailable step is reported as blocked.
 
-The same scenario ran with these components outside NemoClaw in the source
-experiments, where the CPU and GPU tools produced matching answers, hosted
-Kumo ranked the planted ring highest, and Auto Ontology answered three of four
-grounded questions correctly. This recipe places the components inside a
-NemoClaw sandbox with reviewed network policy, one at a time. Its Kumo
-ranking agrees with the earlier one on which six providers rank highest, but
-the probabilities are not comparable (see [Known limitations](#known-limitations)),
-and the GPU results are not reproduced here. Auto Ontology was exercised on one
-question (see [Verification](#verification)), not the earlier four.
+This recipe places the components inside a NemoClaw sandbox with reviewed
+network policy, one at a time. Kumo and Auto Ontology were each exercised on a
+small number of runs here (see [Verification](#verification)); the GPU stage is
+not built. Nothing here is a measured accuracy.
 
 ## Screenshot
 
@@ -73,10 +69,10 @@ required before submission.
 | You will get | Ranked leads, related-provider groups with the reason for each link, per-group paid totals, and a referral recommendation. |
 | Runs on | A host that runs NemoClaw with Docker. |
 | Requires | NemoClaw, an NVIDIA Endpoints API key for the agent's model. |
-| Verified on | NemoClaw v0.0.142, OpenShell v0.0.116, OpenClaw harness, Ubuntu 22.04, `nvidia/nemotron-3.5-lightning-30b-a3b` on NVIDIA Endpoints, a handful of runs, not repeated at scale. |
-| Evidence level | live end-to-end |
+| Verified on | NemoClaw v0.0.142, OpenShell v0.0.116, OpenClaw harness, Ubuntu 22.04, `nvidia/nemotron-3.5-lightning-30b-a3b` on NVIDIA Endpoints, one run per workflow, not repeated at scale. |
+| Evidence level | live end-to-end for the CPU, retrieval and Kumo workflows; integration for the optional Auto Ontology stage, which needs a host deployment this repo does not ship |
 | Support and maturity | Best-effort community support; see the repository support policy. |
-| External access, data, and actions | Inference calls to the configured provider. Three POST paths from sandbox Python to build.nvidia.com: embeddings and rerank (the 42 CFR text and the question) and Kumo, **which receives the provider, address, claim and finding tables**. The install also reaches PyPI, temporarily, to build a roughly 370 MB Python environment, and creates a second OpenShell provider from your key. No write actions. All data is synthetic. |
+| External access, data, and actions | Inference calls to the configured provider. Three POST paths from sandbox Python to build.nvidia.com: embeddings and rerank (the 42 CFR text and the question) and Kumo, **which receives the provider, address, claim and finding tables**. If you enable Auto Ontology, three paths on `host.openshell.internal:<port>` (the question text, to a deployment you run), which then sends the database schema and the question to its own hosted models, outside the sandbox policy. The install also reaches PyPI, temporarily, to build a roughly 370 MB Python environment, and creates a second OpenShell provider from your key. No write actions. All data is synthetic. |
 | Start here | [Quickstart](#quickstart) |
 | Confirm success | [Verification](#verification) |
 
@@ -154,10 +150,11 @@ the call to the deployment.
 
 ## Security notes
 
-- Egress is limited to three POST paths for Python only: `integrate.api.nvidia.com`
+- Without Auto Ontology, egress is limited to three POST paths for Python only; with it, add three paths on the host deployment (see [Auto Ontology](#auto-ontology-optional)). The hosted-model paths are: `integrate.api.nvidia.com`
   `/v1/embeddings`, and on `ai.api.nvidia.com` the rerank path and
   `/v1/structured-data/nvidia/kumo-relational/predictions`
   (`policies/nvidia-hosted-models.yaml`), plus the agent's inference provider.
+- **Any Python the agent runs can use these paths.** The allowed binaries are `python3*`, so the agent could send other text to embed, rerank or Kumo, not only what the tools send. The policy limits where and which paths, not what is sent. The Auto Ontology profile also allows `172.16.0.0/12` for the host route, wider than one address, narrowed by hostname binding.
 - **What leaves the sandbox:** the policy text chunks and the reviewer's
   question go to embed and rerank. **Kumo receives the graph tables**: provider
   specialty, state and address ID, address state, every claim row (provider,
@@ -182,13 +179,13 @@ the call to the deployment.
   `openshell provider profile delete billing-integrity-auto-ontology`.
 - To remove the hosted-model setup: `openshell sandbox provider detach billing-integrity billing-integrity-ai-api`,
   `openshell provider delete billing-integrity-ai-api`,
-  `nemoclaw billing-integrity policy remove nvidia-hosted-models`,
+  `nemoclaw billing-integrity policy-remove nvidia-hosted-models`,
   `openshell provider profile delete billing-integrity-nvidia-ai-api`, and
   delete `/sandbox/kumo-venv` inside the sandbox.
 
 ## Verification
 
-**Evidence level:** live end-to-end (one run per workflow below: offline CPU workflow, Nemotron retrieval and Kumo)
+**Evidence level:** live end-to-end for the offline CPU workflow, Nemotron retrieval and Kumo (one run each); integration for the optional Auto Ontology stage (one question, against a locally patched host deployment that this repo does not ship)
 
 Onboard, install, then ask one question:
 
@@ -210,7 +207,7 @@ tools, the tool running inside the sandbox, and an agent answer whose figures
 match the same tool run on the host.
 
 **This does not verify:** other models, other questions, repeat runs, GPU hosts,
-or the planned Kumo and Auto Ontology stages.
+GPU hosts, or Auto Ontology beyond the single question in its own stage.
 
 **Policy retrieval.** Reset the agent session first (see
 [Known limitations](#known-limitations)), then ask a policy question in a fresh session:
@@ -304,9 +301,12 @@ cd skills/provider-billing-integrity
 python3 utilities/integrity_tool.py scan --as-of 2026-06-30 --top 3
 ```
 
-Expected: the first command prints `ok`; the second prints a JSON list of three
-providers with `score` values. These two checks cover only the host scripts and
-the bundled tool.
+Expected: the first command prints `ok`; `bash -n` prints nothing when the
+scripts parse; the last command prints a JSON list of three providers with
+`score` values. These checks cover only the host scripts and the bundled tool.
+`python3 scripts/tests/test_ontology_qa.py` also prints `ok` and checks the
+Auto Ontology client against a local fake server, including the cases that must
+be reported as `blocked`.
 
 ## Roadmap
 
@@ -342,16 +342,16 @@ and 3; `providers/auto-ontology.yaml` covers stage 4.
   section and paragraph references (for example "(d)(1)") can still be wrong, so
   trust the quoted passage and its `cite` tag, not paragraph numbers the agent
   adds. Check that retrieval ran when it matters.
-- **Kumo scores are not comparable with the earlier experiments' receipt**
-  (maximum 0.045 now, 0.26 then), although the same six providers lead. Two
+- **Kumo scores are low and relative.** The maximum is 0.045 with only three
+  prior findings in the graph, although the six planted-ring providers lead. Two
   compatibility changes were needed for the hosted service's current
   validation and are recorded in each receipt: the adapter omits the engine's
   default `inference.inference_config`, which the service now rejects, and the
   graph drops the `addresses.street` column, which the service cannot read as
-  text. Either change, or the hosted model itself, could explain the lower
-  scale; they were not tested separately. The hosted API can change again.
+  text. Either change, or the hosted model itself, could affect the scale; they
+  were not tested separately. The hosted API can change again.
 - **Auto Ontology needs a patched deployment for now.** The upstream build tested
-  (`22e22c89`) does answer, but its structured-output calls to the hosted
+  does answer, but its structured-output calls to the hosted
   reasoning model (`nemotron-3-ultra-550b-a55b`) are slow: coverage returned HTTP
   500 after 224 to 300 seconds and a chat call took 159 seconds, close to the web
   frontend's 300-second limit. A local 44-line patch to `llm_invoke.py` brought
@@ -362,9 +362,17 @@ and 3; `providers/auto-ontology.yaml` covers stage 4.
 - Auto Ontology's 400 error `unknown field guided_json` in the deployment log is
   misleading: it is the last of three request shapes the client tries, and the
   earlier ones failed on timeouts.
-- The generated SQL does not carry the 2026-06-30 as-of date (the providers
-  table has no date column), so "as of" in a question is not enforced by the SQL.
-  The skill tells the agent to cross-check figures that matter.
+- The generated SQL does not carry the 2026-06-30 as-of date, so "as of" in a
+  question is not enforced. The `providers` table has no date column, and the
+  claims table runs to 2026-09-30, so an Auto Ontology total over claims can
+  include rows after the anchor. SKILL rule 1 cannot be met by this tool; the
+  skill tells the agent to cross-check figures that matter with
+  `integrity_tool.py`.
+- **Stage 4 is not reproducible from this repo.** It needs an Auto Ontology
+  deployment with the provider-billing database loaded and the semantic layer
+  compiled, plus the local patch described in `ontology/README.md`. The recipe
+  ships no loader, semantic-layer definition or patch, so treat stage 4 as an
+  integration example.
 - A stale file from an earlier session in the agent's workspace
   (`referral_P001_recommendation.md`) was read in place of a tool result in one
   run. Reset the session and clear stale outputs when testing.

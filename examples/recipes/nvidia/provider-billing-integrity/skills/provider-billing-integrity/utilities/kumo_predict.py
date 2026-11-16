@@ -200,11 +200,12 @@ class HostedRouteAdapter:
 def predict(frames):
     import importlib.metadata
     import logging
+    import warnings
 
     import pandas as pd
     from kumo_relational_client import RelationalClient, relational
 
-    logging.getLogger('kumo_relational_engine').setLevel(logging.WARNING)  # keep the engine's INFO lines out of the output
+    logging.disable(logging.INFO)  # keep the engine's INFO lines out of the output (its logger level alone did not)
 
     graph = relational.Graph.from_data(frames, edges=[], verbose=False)
     for name, table in TABLES.items():
@@ -223,7 +224,10 @@ def predict(frames):
         current = os.environ.get(name, '')
         if '127.0.0.1' not in current:
             os.environ[name] = f'{current},127.0.0.1,localhost' if current else '127.0.0.1,localhost'
-    with HostedRouteAdapter(key, ENDPOINT) as route:
+    # The engine warns, for example, that the anchor is later than the newest row. Those warnings are facts about the data,
+    # not failures, so they go into the receipt instead of stderr, where a reader could mistake them for an error.
+    with warnings.catch_warnings(record=True) as caught, HostedRouteAdapter(key, ENDPOINT) as route:
+        warnings.simplefilter('always')
         with RelationalClient(timeout=TIMEOUT_SECONDS, max_retries=0, url=route.url) as client:
             frame = client.relational(graph).predict(PQL, ids, anchor_time=pd.Timestamp(ANCHOR), run_mode='fast',
                                                      num_retries=0, verbose=False)
@@ -236,7 +240,7 @@ def predict(frames):
             'graph': {name: {'rows': len(f),
                              'latest': str(max(f[TABLES[name]['time_column']])) if 'time_column' in TABLES[name] else None}
                       for name, f in frames.items()},
-            'graph_fingerprint': fingerprint(frames), 'columns_dropped': DROPPED_COLUMNS, 'adapter_request_patches': patches, 'http_calls': calls, 'elapsed_seconds': round(time.monotonic() - started, 2),
+            'graph_fingerprint': fingerprint(frames), 'columns_dropped': DROPPED_COLUMNS, 'engine_warnings': sorted({f'{w.category.__name__}: {w.message}' for w in caught}), 'adapter_request_patches': patches, 'http_calls': calls, 'elapsed_seconds': round(time.monotonic() - started, 2),
             'predictions': sorted(rows, key=lambda r: -r['probability'])}
 
 

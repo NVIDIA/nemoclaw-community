@@ -13,7 +13,7 @@ bm25                Offline lexical ranking, for comparison. It is never used au
 
 A failed hosted call exits 1 with "blocked" and nothing is substituted. The policy-evidence answer is then reported as blocked.
 JSON goes to stdout (and to --output when given): the method, models, query, and each passage with its ready-made `cite` tag,
-document, chunk, scores and text, so an answer can cite exactly what was retrieved. Chunk embeddings are cached in the temp directory.
+document, chunk, scores and text, so an answer can cite exactly what was retrieved. Chunk embeddings are cached in a private per-user directory under the temp directory.
 """
 import argparse
 import hashlib
@@ -43,7 +43,7 @@ def chunks():
     out = []
     for path in sorted(DOCUMENTS.glob('*.md')):
         buffer, number = '', 0
-        for paragraph in path.read_text().split('\n\n'):
+        for paragraph in path.read_text(encoding='utf-8').split('\n\n'):
             paragraph = paragraph.strip()
             if not paragraph:
                 continue
@@ -96,19 +96,43 @@ def embed_one(text, input_type):
             time.sleep(2)
 
 
+def cache_dir():
+    """A private per-user directory (mode 700, owned by us) so another local user cannot plant or read vectors."""
+    path = Path(tempfile.gettempdir()) / f'pbi-embed-cache-{os.getuid()}'
+    path.mkdir(mode=0o700, exist_ok=True)
+    info = path.lstat()
+    if path.is_symlink() or info.st_uid != os.getuid() or info.st_mode & 0o077:
+        raise OSError(f'{path} is not a private directory')
+    return path
+
+
+def valid_vectors(vectors, count):
+    return (isinstance(vectors, list) and len(vectors) == count
+            and all(isinstance(v, list) and v and len({len(w) for w in vectors}) == 1
+                    and all(isinstance(x, (int, float)) for x in v) for v in vectors))
+
+
 def cached_vectors(parts):
     digest = hashlib.sha256(json.dumps([EMBED['model']] + [p['text'] for p in parts]).encode()).hexdigest()[:16]
-    path = Path(tempfile.gettempdir()) / f'pbi-embed-{digest}.json'
-    if path.exists():
-        try:
-            return json.loads(path.read_text()), True
-        except ValueError:
-            pass
-    vectors = [embed_one(p['text'], 'passage') for p in parts]
     try:
-        path.write_text(json.dumps(vectors))
+        path = cache_dir() / f'{digest}.json'
     except OSError:
-        pass  # a cache that cannot be written only costs time
+        path = None  # no safe cache: embed every time rather than trust a shared file
+    if path is not None and path.exists():
+        try:
+            vectors = json.loads(path.read_text(encoding='utf-8'))
+            if valid_vectors(vectors, len(parts)):
+                return vectors, True
+        except (ValueError, OSError):
+            pass  # a damaged cache is rebuilt, never trusted
+    vectors = [embed_one(p['text'], 'passage') for p in parts]
+    if path is not None:
+        try:
+            temporary = path.with_suffix(f'.{os.getpid()}.tmp')
+            temporary.write_text(json.dumps(vectors), encoding='utf-8')
+            os.replace(temporary, path)  # atomic, so a reader never sees half a file
+        except OSError:
+            pass  # a cache that cannot be written only costs time
     return vectors, False
 
 

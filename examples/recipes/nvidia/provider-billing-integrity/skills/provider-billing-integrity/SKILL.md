@@ -3,15 +3,12 @@ name: provider-billing-integrity
 description: >-
   Help a program-integrity reviewer find providers whose billing looks anomalous, expand each to the
   providers linked through shared addresses, bank accounts or owners, and total the paid exposure of
-  each linked group, using the synthetic provider-billing dataset bundled with this skill. Use for
-  questions about upcoding, related-entity clusters, cluster exposure, and whether a similar-looking
-  pair of providers deserves escalation. Any statement about what 42 CFR 455.23, 424.535, 411.353 or
-  1001.951 requires must come from this skill's retrieval tool (utilities/retrieve.py), quoted with its
-  document and chunk, any statement about which providers are likely to be audited must come from
-  Kumo (utilities/kumo_predict.py), and a business question about the billing database that the
-  bundled tools do not cover (a count, a join, a total under a stated definition) may be asked of
-  Auto Ontology (utilities/ontology_qa.py) when it is installed. Produces referral recommendations for human review, never fraud determinations
-  or payment suspensions.
+  each linked group, using the synthetic provider-billing dataset bundled with this skill. Any
+  statement about what 42 CFR 455.23, 424.535, 411.353 or 1001.951 requires must come from
+  utilities/retrieve.py, quoted with its document and chunk; any statement about which providers are
+  likely to be audited must come from utilities/kumo_predict.py; a business question the bundled tools
+  do not cover may be asked of Auto Ontology (utilities/ontology_qa.py) when installed. Produces
+  referral recommendations for human review, never fraud determinations or payment suspensions.
 ---
 
 # Provider Billing Integrity
@@ -29,7 +26,7 @@ that sends the database schema and your question to its own hosted models. Every
 
 Run these in order and use their output. If a step does not apply to the question, skip only that step.
 
-1. `integrity_tool.py` for the payment and entity facts the question needs.
+1. `integrity_tool.py` for any payment and entity facts the question needs.
 2. **If the answer says anything about what a regulation requires, you must first run**
    `python3 utilities/retrieve.py --query "<what you need to know>" --top 3` **at least once.** One call per
    regulation question, for example `--query "when must a State suspend payments and when may it decline"`
@@ -57,7 +54,7 @@ Run these in order and use their output. If a step does not apply to the questio
    file you read. Quote the command.
 3. **A link is a lead, not guilt.** Shared infrastructure alone proves nothing. Check each linked
    provider's billing behaviour (code mix, volume against specialty peers) before recommending
-   escalation. Some look-alike groups are legitimate.
+   escalation. Some groups that look linked are legitimate, so check before escalating.
 4. **Recommend, never determine.** Recommend referral or further review. Do not assert fraud, name
    a person as guilty, or order a payment suspension.
 5. **If a step cannot run, say so.** Report it as blocked with the reason. Do not substitute memory
@@ -75,7 +72,8 @@ Run these in order and use their output. If a step does not apply to the questio
    graph, so the ranking shows the method works and is not a measured accuracy. Treat the
    probabilities as relative scores: do not quote them as calibrated risk or compare them with scores
    from other runs. A Kumo ranking is a reason to review, never a determination.
-9. **A blocked Kumo stays blocked.** If `kumo_predict.py` exits with `blocked`, report the Kumo
+9. **A blocked Kumo stays blocked.** Only an exit with `blocked` means Kumo failed. A ranking with
+   `engine_warnings` is a successful run: report the warnings as notes about the data, not as a failure. If `kumo_predict.py` exits with `blocked`, report the Kumo
    ranking as blocked with that message. Do not present `scan` as a Kumo ranking or as its
    substitute.
 10. **Auto Ontology is a proposal generator.** Its answer text can hide a wrong query. Quote the SQL,
@@ -113,7 +111,7 @@ python3 utilities/ontology_qa.py --question "<business question, with the as-of 
 - `ontology_qa.py` asks a host-side NVIDIA Auto Ontology deployment, which holds a semantic layer
   over the provider-billing database. It checks the layer is compiled, asks how well the layer covers
   the question (`coverage`), then streams a grounded text-to-SQL answer and prints the generated
-  `sql`, the `rows` it returned and a `response`. A call takes about 30 to 60 seconds. It needs
+  `sql`, the `rows` it returned and a `response`. A call takes about 20 to 60 seconds. It needs
   `AUTO_ONTOLOGY_API_TOKEN` at install time; without it the tool exits with `blocked`.
 - `kumo_predict.py` ranks all 80 providers by the probability of an audit finding in the 90 days after
   2026-06-30, with NVIDIA Kumo Relational (hosted). It builds a graph of providers, addresses, claims
@@ -135,18 +133,18 @@ python3 utilities/ontology_qa.py --question "<business question, with the as-of 
 
 Data files are in `data/`: `providers.csv`, `claims.csv`, `addresses.csv`, `bank_accounts.csv`,
 `beneficiaries.csv`, `audit_findings.csv`. For any question the three commands do not cover, write a short
-Python script with the standard library (`csv`, `statistics`, `collections`; pandas is not installed) and show the code you ran.
+Python script with the standard library (`csv`, `statistics`, `collections`; the system Python has no pandas) and show the code you ran.
 
 ## How to answer
 
 Work in this order unless the question dictates otherwise:
 
 1. **Who looks risky?** Run `scan`. Note the score is a baseline, not a finding.
-2. **Who is connected?** Run `related` for each high-scoring provider. Explain chains, where two
-   providers share no entity directly but sit in one cluster through a third.
+2. **Who is connected?** Run `related` for each high-scoring provider. Explain how each link arises, including
+   any chain where two providers share no entity directly but sit in one cluster through a third.
 3. **How much is at stake?** Run `cluster-exposure`.
 4. **Is each link meaningful?** Compare the billing behaviour of cluster members and of any
-   look-alike groups. Say why each group is or is not worth escalating.
+   other group that looks similar. Say why each group is or is not worth escalating.
 5. **Rank risk with Kumo** when the question asks who is likely to be audited, and compare with `scan`.
 6. **Find the policy basis.** Run `retrieve.py` for what the regulations say about suspending
    payments, revocation or referral, and quote the passage you rely on with its document and chunk.

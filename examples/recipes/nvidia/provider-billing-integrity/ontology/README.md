@@ -24,7 +24,7 @@ Nothing here is installed.
 
 Two builds were tried.
 
-- The deployed build `cdaf61e1`: coverage and chat timed out. The deployment log
+- The build deployed on the test host (an older commit): coverage and chat timed out. The deployment log
   showed `unknown field guided_json` (HTTP 400). That error is only the last of
   three request shapes the `langchain-nvidia-ai-endpoints` client tries, and
   the client reports only the final failure. The first two shapes failed on a
@@ -32,7 +32,7 @@ Two builds were tried.
   which thinks for a long time before answering a structured-output request.
   An earlier note here attributed the failure to a request shape the hosted API
   rejects; that was incomplete.
-- Upstream `main` (`22e22c89`), run as a separate compose project: coverage
+- Upstream `main` at the time, run as a separate compose project: coverage
   returned HTTP 500 after 224 to 300 seconds; chat returned 200 in 159 seconds
   with the right rows.
 - Upstream plus a local patch to `auto_ontology/utils/llm_invoke.py`: coverage 200

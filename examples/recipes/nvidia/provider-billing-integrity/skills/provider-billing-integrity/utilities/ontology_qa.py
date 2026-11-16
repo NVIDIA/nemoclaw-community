@@ -26,6 +26,7 @@ import ast
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -60,19 +61,34 @@ def request(method, path, body=None, timeout=None):
     return urllib.request.urlopen(req, timeout=timeout)
 
 
-def read_events(response):
-    events = []
-    for raw in response:
-        line = raw.decode('utf-8', 'replace').strip()
-        if not line.startswith('data:'):
-            continue
-        payload = line[5:].strip()
+def read_events(response, deadline):
+    """Server-Sent Events: a blank line ends an event, and a data field may span several `data:` lines.
+    `deadline` is a total time limit (time.monotonic()); the socket timeout alone resets on every read."""
+    events, data = [], []
+
+    def flush():
+        if not data:
+            return False
+        payload = '\n'.join(data).strip()
+        data.clear()
         if payload == '[DONE]':
-            break
+            return True
         try:
             events.append(json.loads(payload))
         except ValueError:
             events.append({'unparsed': payload})
+        return False
+
+    for raw in response:
+        if time.monotonic() > deadline:
+            raise TimeoutError('the chat stream did not finish before the total deadline')
+        line = raw.decode('utf-8', 'replace').rstrip('\r\n')
+        if not line.strip():
+            if flush():
+                return events
+        elif line.startswith('data:'):
+            data.append(line[5:].lstrip())
+    flush()
     return events
 
 
@@ -81,8 +97,14 @@ def ask(question):
     if not status.get('calculated') or status.get('running'):
         raise RuntimeError(f'semantic layer not ready: {status}')
     coverage = json.load(request('POST', '/api/question-entity-coverage', {'question': question}, timeout=120))
+    deadline = time.monotonic() + int(os.environ.get('AUTO_ONTOLOGY_TIMEOUT_SECONDS', '900'))
     with request('POST', '/api/chat/completions', {'question': question, 'target_db': TARGET_DB}) as response:
-        events = read_events(response)
+        events = read_events(response, deadline)
+    errors = [e for e in events if e.get('type') == 'error']
+    if errors:
+        raise RuntimeError(f'the service reported an error: {json.dumps(errors[0], default=str)[:300]}')
+    if not any(e.get('type') == 'result' for e in events):
+        raise RuntimeError(f'the stream ended without a result event ({len(events)} events); it may have been cut off')
     return {'compilation_status': status, 'coverage': coverage, 'events': events}
 
 
@@ -93,13 +115,15 @@ def summarize(events):
     if isinstance(answer, str):
         try:
             answer = ast.literal_eval(answer)
-        except (ValueError, SyntaxError):
+        except (ValueError, SyntaxError, RecursionError, MemoryError):
             answer = {'response': answer}
     answer = answer if isinstance(answer, dict) else {}
+    # rows is None when no SQL result came back, so "no answer" is never mistaken for "the SQL returned zero rows"
     rows = None
-    raw = answer.get('sql_response_from_db') or []
+    raw = answer.get('sql_response_from_db')
     try:
-        rows = json.loads(raw[0]) if raw else []
+        parsed = json.loads(raw[0]) if raw else None
+        rows = parsed if isinstance(parsed, list) else None
     except (ValueError, TypeError, IndexError):
         rows = None
     return {'sql': answer.get('sql_code'), 'rows': rows, 'response': answer.get('response'), 'answered_with_sql': bool(answer.get('sql_code'))}
@@ -112,7 +136,7 @@ def main():
     args = ap.parse_args()
     try:
         result = ask(args.question)
-    except (RuntimeError, urllib.error.URLError, OSError, ValueError) as exc:
+    except Exception as exc:  # any failure is a blocked answer, never a traceback or a partial success
         ap.exit(1, f'blocked: Auto Ontology answer not obtained ({type(exc).__name__}: {exc}); nothing was substituted. '
                    'Report the ontology answer as blocked.\n')
     summary = summarize(result['events'])
