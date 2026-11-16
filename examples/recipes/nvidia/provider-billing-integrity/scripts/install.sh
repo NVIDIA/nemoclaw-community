@@ -12,6 +12,9 @@
 #      sees a new credential after its container restarts (the workspace is kept), and
 #   5. build the Kumo virtual environment (about 370 MB) from PyPI, using a temporary
 #      pypi egress preset that is removed again unless it was already applied.
+# When AUTO_ONTOLOGY_API_TOKEN is set, the same flow attaches a provider for a host-side
+# Auto Ontology deployment (profile providers/auto-ontology.yaml, port AUTO_ONTOLOGY_PORT,
+# default 4000) and tells the skill which URL to use.
 # The raw key stays in the OpenShell gateway; the sandbox holds placeholders.
 # Without that provider the skill still works and reports retrieval as blocked.
 # Re-run after changing the skill, policies, or key.
@@ -36,6 +39,11 @@ PROFILE_ID="billing-integrity-nvidia-ai-api"
 AI_PROVIDER="${NEMOCLAW_SANDBOX_NAME}-ai-api"
 RESTART_NEEDED=0
 HOSTED_ENABLED=0
+ONTOLOGY_ENABLED=0
+ONTOLOGY_PROFILE_FILE="$EXAMPLE_DIR/providers/auto-ontology.yaml"
+ONTOLOGY_PROFILE_ID="billing-integrity-auto-ontology"
+ONTOLOGY_PROVIDER="${NEMOCLAW_SANDBOX_NAME}-ontology"
+ONTOLOGY_PORT="${AUTO_ONTOLOGY_PORT:-4000}"
 
 enable_hosted_retrieval() {
   # Import the profile once. A profile cannot be edited in place, so an older one
@@ -73,6 +81,39 @@ enable_hosted_retrieval() {
   run nemoclaw "$NEMOCLAW_SANDBOX_NAME" policy-add \
     --from-dir "$EXAMPLE_DIR/policies" \
     --yes
+}
+
+enable_auto_ontology() {
+  # The profile pins one host port, so render it from AUTO_ONTOLOGY_PORT. A profile cannot be
+  # edited in place: if the existing one has another port, replace it (and its provider).
+  local rendered
+  rendered="$(mktemp -d)/auto-ontology.yaml"
+  sed "s/^  port: .*/  port: $ONTOLOGY_PORT/" "$ONTOLOGY_PROFILE_FILE" >"$rendered"
+  if openshell provider profile export "$ONTOLOGY_PROFILE_ID" >/dev/null 2>&1; then
+    if openshell provider profile export "$ONTOLOGY_PROFILE_ID" 2>/dev/null | grep -Eq "port: $ONTOLOGY_PORT\$"; then
+      echo "Provider profile '$ONTOLOGY_PROFILE_ID' already exists for port $ONTOLOGY_PORT — keeping it."
+    else
+      echo "Provider profile '$ONTOLOGY_PROFILE_ID' is for another port — recreating it for $ONTOLOGY_PORT."
+      openshell sandbox provider detach "$NEMOCLAW_SANDBOX_NAME" "$ONTOLOGY_PROVIDER" >/dev/null 2>&1 || true
+      openshell provider delete "$ONTOLOGY_PROVIDER" >/dev/null 2>&1 || true
+      run openshell provider profile delete "$ONTOLOGY_PROFILE_ID"
+      run openshell provider profile import --file "$rendered"
+    fi
+  else
+    run openshell provider profile import --file "$rendered"
+  fi
+  rm -rf "$(dirname "$rendered")"
+
+  if openshell provider get "$ONTOLOGY_PROVIDER" >/dev/null 2>&1; then
+    run openshell provider update "$ONTOLOGY_PROVIDER" --credential AUTO_ONTOLOGY_API_TOKEN
+  else
+    run openshell provider create --name "$ONTOLOGY_PROVIDER" --type "$ONTOLOGY_PROFILE_ID" \
+      --credential AUTO_ONTOLOGY_API_TOKEN
+  fi
+  if ! openshell sandbox provider list "$NEMOCLAW_SANDBOX_NAME" 2>/dev/null | grep -Fq "$ONTOLOGY_PROVIDER"; then
+    run openshell sandbox provider attach "$NEMOCLAW_SANDBOX_NAME" "$ONTOLOGY_PROVIDER"
+    RESTART_NEEDED=1
+  fi
 }
 
 SKILL_DIR_IN_SANDBOX="/sandbox/.openclaw/workspace/skills/provider-billing-integrity"
@@ -117,8 +158,24 @@ else
   echo "      NVIDIA_INFERENCE_API_KEY in .env). The skill will report retrieval and Kumo as blocked." >&2
 fi
 
+if [[ -n "${AUTO_ONTOLOGY_API_TOKEN:-}" ]]; then
+  command -v openshell >/dev/null || {
+    echo "openshell not in PATH" >&2
+    exit 1
+  }
+  echo "Enabling Auto Ontology (host.openshell.internal:$ONTOLOGY_PORT)"
+  enable_auto_ontology
+  ONTOLOGY_ENABLED=1
+fi
+
 run nemoclaw "$NEMOCLAW_SANDBOX_NAME" skill install \
   "$EXAMPLE_DIR/skills/provider-billing-integrity"
+
+if [[ "$ONTOLOGY_ENABLED" == "1" ]]; then
+  # The skill reads its Auto Ontology URL from this file (the sandbox has no other config channel).
+  run nemoclaw "$NEMOCLAW_SANDBOX_NAME" exec -- bash -c \
+    "printf '%s\n' http://host.openshell.internal:$ONTOLOGY_PORT > $SKILL_DIR_IN_SANDBOX/utilities/ontology.url"
+fi
 
 if [[ "$HOSTED_ENABLED" == "1" ]]; then
   setup_kumo_environment

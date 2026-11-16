@@ -1,39 +1,57 @@
 <!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# Auto Ontology (stage 4, work in progress)
+# Auto Ontology deployment notes (stage 4)
 
-Not installed by `scripts/install.sh` and not part of the skill. These files hold
-what a spike verified so the next step can start from them.
+The sandbox side of stage 4 is in the skill (`utilities/ontology_qa.py`) and
+`providers/auto-ontology.yaml`. This file records what the host-side deployment
+has to look like and what was learned while verifying it (2026-11-13 to 2026-11-16).
+Nothing here is installed.
 
-- `provider-auto-ontology.yaml`: an OpenShell provider profile that binds an Auto
-  Ontology API token to `host.openshell.internal:4000` and sends it as
-  `x-api-key`, with three allowed paths. Lint passes.
-- `ontology_qa.py`: the sandbox-side client (standard library): checks the
-  semantic layer, asks for coverage, streams the text-to-SQL answer, and prints the
-  SQL, rows and answer.
+## What the deployment needs
 
-## What the spike showed (2026-11-13)
+- A running Auto Ontology with the provider-billing database loaded and the
+  semantic layer compiled (`GET /api/semantic-compilation/status` returns
+  `calculated: true` and `running: false`).
+- An API token minted for it. The recipe sends it as `x-api-key`.
+- The deployment's **web port** reachable from the sandbox as
+  `host.openshell.internal:<port>`. The `/api/*` routes are served on the web
+  port; the backend port answers only a health check.
+- Hosted model access for its own text-to-SQL pipeline. That traffic is the
+  deployment's, not the sandbox's.
 
-Verified from sandbox Python, with only a placeholder token in the sandbox:
+## Timeout problem and local patch
 
-- `GET /api/semantic-compilation/status` returned 200 through the profile's
-  composed policy and `allowed_ips`.
-- A path outside the profile (`/api/health`) was denied by the L7 policy.
+Two builds were tried.
 
-Not verified: the chat (text-to-SQL) call. It timed out, from the sandbox and from
-the host alike. The deployment's logs show why: its structured-output call to
-the hosted `nemotron-3.5-bolt-e4b` model fails with HTTP 400 `unknown field
-guided_json`. The hosted endpoint now rejects `nvext.guided_json` (400) while
-top-level `guided_json` and `response_format: json_schema` both return 200, so
-the Auto Ontology build deployed on 2026-11-05 (commit `cdaf61e1`) sends a request
-shape the hosted API no longer accepts. The coverage endpoint still returned 200,
-after about two minutes of retries.
+- The deployed build `cdaf61e1`: coverage and chat timed out. The deployment log
+  showed `unknown field guided_json` (HTTP 400). That error is only the last of
+  three request shapes the `langchain-nvidia-ai-endpoints` client tries, and
+  the client reports only the final failure. The first two shapes failed on a
+  120-second read timeout from the reasoning model `nemotron-3-ultra-550b-a55b`,
+  which thinks for a long time before answering a structured-output request.
+  An earlier note here attributed the failure to a request shape the hosted API
+  rejects; that was incomplete.
+- Upstream `main` (`22e22c89`), run as a separate compose project: coverage
+  returned HTTP 500 after 224 to 300 seconds; chat returned 200 in 159 seconds
+  with the right rows.
+- Upstream plus a local patch to `auto_ontology/utils/llm_invoke.py`: coverage 200
+  in 5.8 seconds, chat 200 in about 53 seconds, no `guided_json` errors in the log.
 
-## Next step
+The patch has two changes: the client's timeout follows `LLM_INVOKE_TIMEOUT_S`,
+and the reasoning pass is switched off for structured-output calls. Which one
+matters was not tested separately, and the patch is not included here.
 
-Move the Auto Ontology deployment to a build that sends an accepted shape, then
-rerun the chat call from the sandbox. Then add `ontology_qa.py` to the skill with
-rules that require reading the generated SQL, install the profile from
-`install.sh`, and disclose that the deployment sends schema and question text to
-hosted models using its own configuration.
+## Result against the patched build
+
+Question "Which providers share a bank account with provider P001?": coverage
+1.0, a self-join on `providers.bank_account_id` excluding P001, rows P002 to
+P006, matching the SQLite file (B901 is shared by P001 to P006). From the
+sandbox the call took about 45 seconds. An OpenClaw agent run with the skill's
+rules reported the same five providers and quoted the SQL.
+
+## Not yet done
+
+- A build that does not need the local patch.
+- Questions the semantic layer should decline, and measuring whether the agent
+  catches wrong SQL.

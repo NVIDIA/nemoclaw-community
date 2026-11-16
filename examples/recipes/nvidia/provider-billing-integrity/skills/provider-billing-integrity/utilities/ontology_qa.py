@@ -10,7 +10,9 @@ question into SQL, runs it and returns the SQL, the rows and an answer. This scr
 (GET /api/semantic-compilation/status), asks how well the layer covers the question (POST /api/question-entity-coverage),
 then asks it (POST /api/chat/completions, a Server-Sent Events stream) and prints the generated SQL, the rows and the answer.
 
-  AUTO_ONTOLOGY_API_URL    default http://host.openshell.internal:4000 (the deployment's web origin, reached from a sandbox)
+  AUTO_ONTOLOGY_API_URL    the deployment's web origin as seen from the sandbox. When unset, the first line of ontology.url next
+                           to this script (written by scripts/install.sh from AUTO_ONTOLOGY_PORT), else
+                           http://host.openshell.internal:4000
   AUTO_ONTOLOGY_API_TOKEN  the x-api-key token. In a sandbox this is a placeholder that the egress proxy replaces on the way to
                            the bound host; the real token is never in the sandbox.
   AUTO_ONTOLOGY_TIMEOUT_SECONDS  per-request timeout for the chat stream, default 900 (a reasoning model can take minutes)
@@ -29,7 +31,19 @@ import urllib.request
 from pathlib import Path
 
 TARGET_DB = 'provider_billing'
-BASE = os.environ.get('AUTO_ONTOLOGY_API_URL', 'http://host.openshell.internal:4000')
+
+
+def base_url():
+    if os.environ.get('AUTO_ONTOLOGY_API_URL'):
+        return os.environ['AUTO_ONTOLOGY_API_URL']
+    try:
+        return (Path(__file__).with_name('ontology.url').read_text().strip().splitlines() or [''])[0] or DEFAULT_URL
+    except OSError:
+        return DEFAULT_URL
+
+
+DEFAULT_URL = 'http://host.openshell.internal:4000'
+BASE = base_url()
 ROW_LIMIT = 50
 
 

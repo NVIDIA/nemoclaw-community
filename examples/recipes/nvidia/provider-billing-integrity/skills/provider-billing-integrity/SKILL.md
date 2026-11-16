@@ -7,8 +7,10 @@ description: >-
   questions about upcoding, related-entity clusters, cluster exposure, and whether a similar-looking
   pair of providers deserves escalation. Any statement about what 42 CFR 455.23, 424.535, 411.353 or
   1001.951 requires must come from this skill's retrieval tool (utilities/retrieve.py), quoted with its
-  document and chunk, and any statement about which providers are likely to be audited must come from
-  Kumo (utilities/kumo_predict.py). Produces referral recommendations for human review, never fraud determinations
+  document and chunk, any statement about which providers are likely to be audited must come from
+  Kumo (utilities/kumo_predict.py), and a business question about the billing database that the
+  bundled tools do not cover (a count, a join, a total under a stated definition) may be asked of
+  Auto Ontology (utilities/ontology_qa.py) when it is installed. Produces referral recommendations for human review, never fraud determinations
   or payment suspensions.
 ---
 
@@ -18,9 +20,10 @@ description: >-
 
 A reviewer must decide which of 80 synthetic providers to refer for investigation, which other
 providers are tied to them, and how much was paid to each group. Everything here is computed from
-the CSV files in `data/` with the tools in `utilities/`. The only network use is policy retrieval and
-Kumo (below), which call hosted NVIDIA models; Kumo receives the provider, address, claim and finding
-tables. Every provider, address, bank account and amount is synthetic.
+the CSV files in `data/` with the tools in `utilities/`. The only network use is policy retrieval,
+Kumo and, when installed, Auto Ontology (below). Retrieval and Kumo call hosted NVIDIA models; Kumo
+receives the provider, address, claim and finding tables. Auto Ontology is a separate host-side service
+that sends the database schema and your question to its own hosted models. Every provider, address, bank account and amount is synthetic.
 
 ## Before you write any answer
 
@@ -37,7 +40,12 @@ Run these in order and use their output. If a step does not apply to the questio
    and compare the two lists in the answer: say where they agree, where they differ, and what each
    method uses (Kumo learns from the relational graph of providers, addresses, claims and prior
    findings; `scan` is a fixed billing-rule score).
-4. Every policy statement in the answer ends with the passage's `cite` value, copied exactly from the tool
+4. **If you use `ontology_qa.py`, read the `sql` field of its output before you write anything from it.**
+   Check that the SQL answers the question as asked (right tables, filters, the as-of date, the right
+   denominator) and that `rows` is what that SQL would return. If the SQL does not match the
+   question, or `answered_with_sql` is false, say so and do not use the rows. Quote the SQL in the
+   answer and call the result an Auto Ontology answer, not a fact.
+5. Every policy statement in the answer ends with the passage's `cite` value, copied exactly from the tool
    output, for example `[42-cfr-455-23-payment-suspension.md, chunk 0]`. Do not write section or
    paragraph numbers from memory, and do not cite a passage you did not retrieve. A policy statement
    without a `cite` tag is not allowed; delete it, or report the policy part as blocked.
@@ -70,8 +78,15 @@ Run these in order and use their output. If a step does not apply to the questio
 9. **A blocked Kumo stays blocked.** If `kumo_predict.py` exits with `blocked`, report the Kumo
    ranking as blocked with that message. Do not present `scan` as a Kumo ranking or as its
    substitute.
-10. **Out of scope in this version:** GPU acceleration and Auto Ontology. Say these are not available
-   if asked.
+10. **Auto Ontology is a proposal generator.** Its answer text can hide a wrong query. Quote the SQL,
+    state the as-of date in the question (for example "as of 2026-06-30"), and cross-check a figure
+    that matters with `integrity_tool.py` or a short script over `data/`. Do not use it for policy
+    questions (use `retrieve.py`) or for the audit ranking (use Kumo).
+11. **A blocked Auto Ontology stays blocked.** If `ontology_qa.py` exits with `blocked`, report that
+    answer as blocked with the message. Do not answer from memory, and do not present the CSV
+    computation as an Auto Ontology answer. If the tool is missing, Auto Ontology is not installed:
+    say so.
+12. **Out of scope in this version:** GPU acceleration. Say it is not available if asked.
 
 ## Tools
 
@@ -91,6 +106,15 @@ python3 utilities/retrieve.py --query "<policy question>" --top 3
 python3 utilities/kumo_predict.py --top 10
 ```
 
+```bash
+python3 utilities/ontology_qa.py --question "<business question, with the as-of date>"
+```
+
+- `ontology_qa.py` asks a host-side NVIDIA Auto Ontology deployment, which holds a semantic layer
+  over the provider-billing database. It checks the layer is compiled, asks how well the layer covers
+  the question (`coverage`), then streams a grounded text-to-SQL answer and prints the generated
+  `sql`, the `rows` it returned and a `response`. A call takes about 30 to 60 seconds. It needs
+  `AUTO_ONTOLOGY_API_TOKEN` at install time; without it the tool exits with `blocked`.
 - `kumo_predict.py` ranks all 80 providers by the probability of an audit finding in the 90 days after
   2026-06-30, with NVIDIA Kumo Relational (hosted). It builds a graph of providers, addresses, claims
   and findings as of the anchor (nothing later enters it), sends those tables to the hosted service, and
@@ -126,7 +150,9 @@ Work in this order unless the question dictates otherwise:
 5. **Rank risk with Kumo** when the question asks who is likely to be audited, and compare with `scan`.
 6. **Find the policy basis.** Run `retrieve.py` for what the regulations say about suspending
    payments, revocation or referral, and quote the passage you rely on with its document and chunk.
-7. **Write the recommendation.** Combine payment evidence, related entities, the retrieved policy
+7. **Ask Auto Ontology** only for a business question the tools above do not answer, then read its SQL
+   and cross-check the figure (rule 10).
+8. **Write the recommendation.** Combine payment evidence, related entities, the retrieved policy
    basis and what remains uncertain, ending with a recommended next step for a human reviewer.
 
 Cite the command or file behind every number. Keep observed facts, associations and judgments

@@ -33,6 +33,8 @@ cp "$SOURCE_EXAMPLE_DIR/scripts/_lib.sh" \
   "$SOURCE_EXAMPLE_DIR/scripts/stop.sh" \
   "$EXAMPLE_DIR/scripts/"
 
+cp "$SOURCE_EXAMPLE_DIR/providers/auto-ontology.yaml" "$EXAMPLE_DIR/providers/"
+
 nemoclaw() {
   {
     printf 'sandbox=%q agent=%q args=' "${NEMOCLAW_SANDBOX_NAME:-}" "${NEMOCLAW_AGENT:-}"
@@ -113,6 +115,27 @@ if grep -q 'test-key' "$COMMAND_LOG"; then
   fail "the key value appeared in a command line"
 fi
 
+# install with an Auto Ontology token and a non-default port: a rendered profile, a provider from the
+# environment, an attach, a URL file for the skill, and no token in any command line
+: >"$COMMAND_LOG"
+FAKE_SANDBOX_EXISTS=1 NEMOCLAW_PROVIDER=build NVIDIA_INFERENCE_API_KEY=test-key \
+  AUTO_ONTOLOGY_API_TOKEN=ontology-secret AUTO_ONTOLOGY_PORT=5000 \
+  bash "$EXAMPLE_DIR/scripts/install.sh" >/dev/null
+log="$(cat "$COMMAND_LOG")"
+assert_contains "$log" "openshell args=provider profile import --file " \
+  "install did not import a rendered Auto Ontology profile"
+assert_contains "$log" \
+  "openshell args=provider create --name billing-integrity-ontology --type billing-integrity-auto-ontology --credential AUTO_ONTOLOGY_API_TOKEN" \
+  "install did not create the Auto Ontology provider from the environment token"
+assert_contains "$log" \
+  "openshell args=sandbox provider attach billing-integrity billing-integrity-ontology" \
+  "install did not attach the Auto Ontology provider"
+assert_contains "$log" "host.openshell.internal:5000" \
+  "install did not tell the skill the Auto Ontology URL"
+if grep -q 'ontology-secret' "$COMMAND_LOG"; then
+  fail "the Auto Ontology token appeared in a command line"
+fi
+
 # install without a key: only the skill is installed and no egress is opened
 : >"$COMMAND_LOG"
 FAKE_SANDBOX_EXISTS=1 NEMOCLAW_PROVIDER=build NVIDIA_INFERENCE_API_KEY= \
@@ -121,7 +144,7 @@ log="$(cat "$COMMAND_LOG")"
 assert_contains "$log" \
   "args=billing-integrity skill install $EXAMPLE_DIR/skills/provider-billing-integrity" \
   "install without a key did not deploy the skill"
-if grep -qE 'policy-add|policy-remove|provider create|exec --timeout 900|args=billing-integrity (stop|start)' "$COMMAND_LOG"; then
+if grep -qE 'policy-add|policy-remove|provider create|provider profile import|exec --timeout 900|args=billing-integrity (stop|start)' "$COMMAND_LOG"; then
   fail "install without a key opened egress or created a provider"
 fi
 

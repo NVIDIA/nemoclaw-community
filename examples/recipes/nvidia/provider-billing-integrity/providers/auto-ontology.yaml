@@ -5,7 +5,8 @@
 # API token to host.openshell.internal and sends it as the x-api-key header, so the
 # sandbox holds only a placeholder. Three paths only: semantic-layer status,
 # question coverage, and the chat (text-to-SQL) stream. Imported by
-# scripts/install.sh when AUTO_ONTOLOGY_API_TOKEN is set in .env.
+# scripts/install.sh when AUTO_ONTOLOGY_API_TOKEN is set in .env; the script
+# replaces the port below with AUTO_ONTOLOGY_PORT (default 4000).
 
 id: billing-integrity-auto-ontology
 display_name: Auto Ontology (host-side)
