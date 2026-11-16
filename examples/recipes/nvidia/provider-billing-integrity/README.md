@@ -57,8 +57,16 @@ once on one H100. Nothing here is a measured accuracy or speed-up.
 
 ## Screenshot
 
-Not yet captured. A sanitized screenshot or terminal capture of a real run is
-required before submission.
+![Terminal capture of one OpenClaw agent run in the billing-integrity sandbox](assets/agent-run.png)
+
+One run of the prompt shown, on the CPU, retrieval and Kumo stages (the
+Auto Ontology and GPU stages were not called). The agent called
+`integrity_tool.py` (related, cluster-exposure), `kumo_predict.py` and
+`retrieve.py`, and cited the retrieved passage by its `cite` tag. The wording
+differs between runs; the figures come from the tools. In this run the agent
+named the Kumo top three but described the `scan` list only in words, so the
+side-by-side comparison is in [Expected results](#verification), not in the
+capture. Synthetic data throughout.
 
 ## At A Glance
 
