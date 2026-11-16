@@ -11,7 +11,9 @@
 #   4. restart the sandbox when a provider was newly attached: the running agent only
 #      sees a new credential after its container restarts (the workspace is kept), and
 #   5. build the Kumo virtual environment (about 370 MB) from PyPI, using a temporary
-#      pypi egress preset that is removed again unless it was already applied.
+#      pypi egress preset that is removed again unless it was already applied, and,
+#      when NEMOCLAW_SANDBOX_GPU=1 (a sandbox created with --sandbox-gpu), the RAPIDS
+#      environment for the CUDA-X path (a few GB) in the same preset window.
 # When AUTO_ONTOLOGY_API_TOKEN is set, the same flow attaches a provider for a host-side
 # Auto Ontology deployment (profile providers/auto-ontology.yaml, port AUTO_ONTOLOGY_PORT,
 # default 4000) and tells the skill which URL to use.
@@ -149,7 +151,22 @@ enable_auto_ontology() {
 
 SKILL_DIR_IN_SANDBOX="/sandbox/.openclaw/workspace/skills/provider-billing-integrity"
 
-setup_kumo_environment() {
+# build_venv NAME REQUIREMENTS-FILE IMPORT-CHECK TIMEOUT: create /sandbox/NAME from a pinned requirements file unless the
+# import check already passes. Runs inside the sandbox; returns the exit status of the build.
+build_venv() {
+  local name="$1" requirements="$2" check="$3" timeout="$4"
+  run nemoclaw "$NEMOCLAW_SANDBOX_NAME" exec --timeout "$timeout" -- bash -c '
+    set -e
+    V=/sandbox/'"$name"'
+    if "$V/bin/python" -c "'"$check"'" 2>/dev/null; then
+      echo "'"$name"' already present"; exit 0
+    fi
+    python3 -m venv "$V"
+    "$V/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: -r "'"$SKILL_DIR_IN_SANDBOX"'/utilities/'"$requirements"'"
+  '
+}
+
+setup_python_environments() {
   local listing
   listing="$(nemoclaw "$NEMOCLAW_SANDBOX_NAME" policy list 2>/dev/null)" || true
   if [[ "$listing" =~ ●\ +pypi ]]; then
@@ -159,21 +176,25 @@ setup_kumo_environment() {
     run nemoclaw "$NEMOCLAW_SANDBOX_NAME" policy-add pypi --yes
   fi
   local status=0
-  run nemoclaw "$NEMOCLAW_SANDBOX_NAME" exec --timeout 900 -- bash -c '
-    set -e
-    V=/sandbox/kumo-venv
-    if "$V/bin/python" -c "import kumo_relational_client, pandas" 2>/dev/null; then
-      echo "Kumo environment already present"; exit 0
+  build_venv kumo-venv requirements-kumo.txt "import kumo_relational_client, pandas" 900 || status=$?
+  if [[ "$status" != "0" ]]; then
+    echo "warning: the Kumo environment could not be built; kumo_predict.py will report blocked." >&2
+  fi
+  if [[ "${NEMOCLAW_SANDBOX_GPU:-0}" == "1" ]]; then
+    if nemoclaw "$NEMOCLAW_SANDBOX_NAME" exec -- nvidia-smi -L >/dev/null 2>&1; then
+      status=0
+      build_venv rapids-venv requirements-gpu.txt "import cudf, nx_cugraph" 1800 || status=$?
+      if [[ "$status" != "0" ]]; then
+        echo "warning: the RAPIDS environment could not be built; integrity_gpu.py will report blocked." >&2
+      fi
+    else
+      echo "warning: NEMOCLAW_SANDBOX_GPU=1 but no GPU is visible in '$NEMOCLAW_SANDBOX_NAME' (nvidia-smi failed)." >&2
+      echo "         Create the sandbox with NEMOCLAW_SANDBOX_GPU=1 bash scripts/onboard.sh; integrity_gpu.py will report blocked." >&2
     fi
-    python3 -m venv "$V"
-    "$V/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: -r "'"$SKILL_DIR_IN_SANDBOX"'/utilities/requirements-kumo.txt"
-  ' || status=$?
+  fi
   if [[ "$PYPI_ADDED" == "1" ]]; then
     run nemoclaw "$NEMOCLAW_SANDBOX_NAME" policy-remove pypi --yes
     PYPI_ADDED=0
-  fi
-  if [[ "$status" != "0" ]]; then
-    echo "warning: the Kumo environment could not be built; kumo_predict.py will report blocked." >&2
   fi
 }
 
@@ -218,7 +239,7 @@ if [[ "$ONTOLOGY_ENABLED" == "1" ]]; then
 fi
 
 if [[ "$HOSTED_ENABLED" == "1" ]]; then
-  setup_kumo_environment
+  setup_python_environments
 fi
 
 if [[ "$RESTART_NEEDED" == "1" ]]; then

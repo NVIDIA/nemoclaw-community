@@ -84,7 +84,13 @@ Run these in order and use their output. If a step does not apply to the questio
     answer as blocked with the message. Do not answer from memory, and do not present the CSV
     computation as an Auto Ontology answer. If the tool is missing, Auto Ontology is not installed:
     say so.
-12. **Out of scope in this version:** GPU acceleration. Say it is not available if asked.
+12. **The GPU path is a check, not a source of different answers.** `integrity_gpu.py` computes the same
+    baseline and related-entity clusters on the GPU with cuDF and cuGraph. Use it when asked for the
+    GPU or CUDA-X path or for a CPU/GPU comparison, and report its `parity` result as it is: matching
+    or not. Do not claim a speed-up: this is a small sample dataset, so the GPU is slower here, and a real
+    speed-up would need a much larger dataset that was not tested, and do not present
+    `integrity_tool.py` output as a GPU result. If it exits with `blocked`, report the GPU path as
+    blocked with the message; if the file is missing or the sandbox has no GPU, say it is not available.
 
 ## Tools
 
@@ -113,6 +119,17 @@ python3 utilities/ontology_qa.py --question "<business question, with the as-of 
   the question (`coverage`), then streams a grounded text-to-SQL answer and prints the generated
   `sql`, the `rows` it returned and a `response`. A call takes about 20 to 60 seconds. It needs
   `AUTO_ONTOLOGY_API_TOKEN` at install time; without it the tool exits with `blocked`.
+```bash
+python3 utilities/integrity_gpu.py parity --as-of 2026-06-30
+python3 utilities/integrity_gpu.py scan --as-of 2026-06-30 --top 10
+python3 utilities/integrity_gpu.py related <PROVIDER_ID> --as-of 2026-06-30
+```
+
+- `integrity_gpu.py` (optional, GPU sandbox only) is the CUDA-X path: `scan` is the baseline on cuDF,
+  `related` finds the cluster as connected components on cuGraph (through the nx-cugraph backend) and
+  lists the shared entities with the highest betweenness centrality, and `parity` runs both it and
+  the CPU tool and reports whether the rankings, scores and clusters match, with the GPU name,
+  library versions and timings. It uses a separate Python environment that it switches to by itself.
 - `kumo_predict.py` ranks all 80 providers by the probability of an audit finding in the 90 days after
   2026-06-30, with NVIDIA Kumo Relational (hosted). It builds a graph of providers, addresses, claims
   and findings as of the anchor (nothing later enters it), sends those tables to the hosted service, and

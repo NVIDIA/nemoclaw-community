@@ -4,7 +4,7 @@
 | --- | --- |
 | Description | Helps program-integrity reviewers find anomalous provider billing, expand each lead to providers linked by shared addresses, bank accounts or owners, and total the paid exposure of each group, ending in a referral recommendation for a human. |
 | Industry | 🏛️ Public Sector |
-| Requirements | Docker · NemoClaw · NVIDIA Endpoints API key · about 370 MB free in the sandbox · PyPI reachable at install time |
+| Requirements | Docker · NemoClaw · NVIDIA Endpoints API key · about 370 MB free in the sandbox · PyPI reachable at install time · optional GPU stage: an NVIDIA GPU with a working CDI setup and about 5 GB more |
 | NemoClaw | Unpinned |
 | Harness | OpenClaw Unpinned |
 | OpenShell | Unpinned |
@@ -25,8 +25,9 @@ each component does here and which ones this version includes.
 > rerank** policy retrieval and **Kumo** risk ranking are included and
 > verified. Optional **Auto Ontology** text-to-SQL is included as an integration
 > example: it needs a host-side deployment you run yourself, with a local patch
-> this repo does not ship (see [Auto Ontology](#auto-ontology-optional)). RAPIDS
-> is planned (see [Roadmap](#roadmap)).
+> this repo does not ship (see [Auto Ontology](#auto-ontology-optional)). The
+> optional **CUDA-X (RAPIDS)** path runs on a GPU sandbox and was verified on one
+> host (see [CUDA-X on a GPU sandbox](#cuda-x-on-a-gpu-sandbox-optional)).
 > See [Verification](#verification) for exactly what was run.
 
 ## Agent Knowledge Foundation
@@ -40,7 +41,7 @@ and what this version actually ships.
 | What do the tables mean, and what is the right denominator? | **Auto Ontology**: a semantic layer over the provider-billing database with terms, relationships and measures, queried through grounded text-to-SQL (the generated SQL does not enforce an as-of date; see [Known limitations](#known-limitations)) | **Included, optional.** `ontology_qa.py` checks the semantic layer, asks for question coverage, streams the grounded text-to-SQL answer and prints the generated SQL, the rows and the answer. It needs a host-side Auto Ontology deployment and its token. The skill requires the agent to read and quote the SQL, to cross-check figures that matter, and to report `blocked` when the call fails. Without a token the skill reads the CSV files directly. |
 | Who is likely to be audited in the next 90 days? | **Kumo** (`nvidia/kumo-relational`, hosted on build.nvidia.com): relational prediction over providers, addresses, claims and audit findings | **Included.** `kumo_predict.py` builds the graph as of 2026-06-30, asks Kumo the PQL question `PREDICT COUNT(audit_findings.*, 0, 90, days) > 0`, and prints a ranking with the package version, graph sizes and a fingerprint. The skill requires the agent to compare it with the `scan` rule baseline and to say what each uses. If Kumo fails it reports `blocked`; `scan` is never presented as a substitute. |
 | What does policy say? | **Nemotron embed and rerank**: retrieval over four public 42 CFR sections with citable passages | **Included.** `retrieve.py` embeds the chunks and query, reranks the closest, and returns each passage with a ready-made `[document, chunk N]` tag the skill requires in every policy statement. If the hosted call fails it reports `blocked` and substitutes nothing. |
-| Who is connected, and does it scale? | **RAPIDS** (cuDF, cuGraph through nx-cugraph): the same baseline and related-entity expansion on GPU | Not included. `related` and `cluster-exposure` run on CPU in the standard library. |
+| Who is connected, and does it scale? | **RAPIDS** (cuDF, cuGraph through nx-cugraph): the same baseline and related-entity expansion on GPU | **Included, optional, on a GPU sandbox.** `integrity_gpu.py` computes the baseline on cuDF and the clusters on cuGraph, lists the hub entities by betweenness, and `parity` checks that it matches the CPU tool. Without a GPU sandbox it reports `blocked`; the CPU tools (`related`, `cluster-exposure`, standard library) are the default. The sample data is far too small for the GPU to help: it is slower here (see [CUDA-X on a GPU sandbox](#cuda-x-on-a-gpu-sandbox-optional)). |
 
 What the foundation adds is grounding. An answer that names a provider, a
 dollar figure or a regulation can be traced to a query, a model run with its
@@ -51,8 +52,8 @@ unavailable step is reported as blocked.
 
 This recipe places the components inside a NemoClaw sandbox with reviewed
 network policy, one at a time. Kumo and Auto Ontology were each exercised on a
-small number of runs here (see [Verification](#verification)); the GPU stage is
-not built. Nothing here is a measured accuracy.
+small number of runs here (see [Verification](#verification)); the GPU stage ran
+once on one H100. Nothing here is a measured accuracy or speed-up.
 
 ## Screenshot
 
@@ -67,9 +68,9 @@ required before submission.
 | Contributor or provenance | NVIDIA |
 | Use this when | A reviewer needs a worked example of agent-assisted related-entity analysis with a human making the final decision. |
 | You will get | Ranked leads, related-provider groups with the reason for each link, per-group paid totals, and a referral recommendation. |
-| Runs on | A host that runs NemoClaw with Docker. |
+| Runs on | A host that runs NemoClaw with Docker. The optional GPU stage also needs an NVIDIA GPU. |
 | Requires | NemoClaw, an NVIDIA Endpoints API key for the agent's model. |
-| Verified on | NemoClaw v0.0.142, OpenShell v0.0.116, OpenClaw harness, Ubuntu 22.04, `nvidia/nemotron-3.5-lightning-30b-a3b` on NVIDIA Endpoints, one run per workflow, not repeated at scale. |
+| Verified on | NemoClaw v0.0.142, OpenShell v0.0.116, OpenClaw harness, Ubuntu 22.04, `nvidia/nemotron-3.5-lightning-30b-a3b` on NVIDIA Endpoints, one run per workflow, not repeated at scale. The GPU stage: one NVIDIA H100 NVL, driver 595.91.07 (CUDA 13.2), RAPIDS 26.10. |
 | Evidence level | live end-to-end for the CPU, retrieval and Kumo workflows; integration for the optional Auto Ontology stage, which needs a host deployment this repo does not ship |
 | Support and maturity | Best-effort community support; see the repository support policy. |
 | External access, data, and actions | Inference calls to the configured provider. Three POST paths from sandbox Python to build.nvidia.com: embeddings and rerank (the 42 CFR text and the question) and Kumo, **which receives the provider, address, claim and finding tables**. If you enable Auto Ontology, three paths on `host.openshell.internal:<port>` (the question text, to a deployment you run), which then sends the database schema and the question to its own hosted models, outside the sandbox policy. The install also reaches PyPI, temporarily, to build a roughly 370 MB Python environment, and creates a second OpenShell provider from your key. No write actions. All data is synthetic. |
@@ -103,14 +104,51 @@ Or connect and use the TUI: `nemoclaw billing-integrity connect`, then
 
 | Script | Purpose |
 | --- | --- |
-| `scripts/onboard.sh` | Create the sandbox with the OpenClaw harness. |
-| `scripts/install.sh` | Install the skill. With the `build` provider it also imports the provider profile, creates and attaches a second provider from your key, applies the egress policy, builds the Kumo Python environment in `/sandbox/kumo-venv` (using a temporary `pypi` egress preset, removed again unless it was already applied), and restarts the sandbox (workspace kept) so the agent sees the new credential. If `AUTO_ONTOLOGY_API_TOKEN` is set in `.env` it also renders `providers/auto-ontology.yaml` for `AUTO_ONTOLOGY_PORT` (default 4000), creates and attaches a provider from the token, and writes the deployment URL for the skill. |
+| `scripts/onboard.sh` | Create the sandbox with the OpenClaw harness (CPU-only; `NEMOCLAW_SANDBOX_GPU=1` enables direct GPU access). |
+| `scripts/install.sh` | Install the skill. With the `build` provider it also imports the provider profile, creates and attaches a second provider from your key, applies the egress policy, builds the Kumo Python environment in `/sandbox/kumo-venv` (using a temporary `pypi` egress preset, removed again unless it was already applied), and restarts the sandbox (workspace kept) so the agent sees the new credential. With `NEMOCLAW_SANDBOX_GPU=1` it also builds `/sandbox/rapids-venv` after checking `nvidia-smi` works in the sandbox. If `AUTO_ONTOLOGY_API_TOKEN` is set in `.env` it also renders `providers/auto-ontology.yaml` for `AUTO_ONTOLOGY_PORT` (default 4000), creates and attaches a provider from the token, and writes the deployment URL for the skill. |
 | `scripts/start.sh` | Recover the gateway and host forwards. |
 | `scripts/stop.sh` | Stop the gateway while keeping the sandbox and workspace. |
 | `scripts/generate_data.py` | Regenerate the synthetic data (deterministic). |
 
 To delete the sandbox permanently, run `nemoclaw billing-integrity destroy`
 and confirm.
+
+An environment variable you set when running a script beats the same name in
+`.env`, so `NEMOCLAW_SANDBOX_NAME=bi-gpu bash scripts/onboard.sh` creates a
+second sandbox without editing `.env`.
+
+## CUDA-X on a GPU sandbox (optional)
+
+The default sandbox is CPU-only. For the GPU path create a second sandbox with
+direct GPU access, then install into it:
+
+```bash
+export NEMOCLAW_SANDBOX_NAME=bi-gpu NEMOCLAW_SANDBOX_GPU=1
+export NEMOCLAW_SANDBOX_GPU_DEVICE=nvidia.com/gpu=0   # optional: index, UUID or CDI name
+bash scripts/onboard.sh && bash scripts/install.sh
+```
+
+Needs a host NVIDIA GPU, a driver that supports CUDA 13 (the wheels in
+`requirements-gpu.txt` are `-cu13`; swap in the `-cu12` names for a CUDA 12 driver),
+and a working CDI spec (`nvidia-ctk cdi generate`; a stale `/etc/cdi/nvidia.yaml` makes
+the sandbox fail to start). `install.sh` checks that `nvidia-smi` works in the
+sandbox, then builds `/sandbox/rapids-venv` from PyPI (cuDF, nx-cugraph and their CUDA
+libraries, about **4.7 GB**, several minutes) while the temporary `pypi` egress preset is
+applied. RAPIDS lives in its own environment, apart from Kumo's.
+
+`utilities/integrity_gpu.py` then offers `scan` (the baseline on cuDF), `related`
+(connected components on cuGraph and the shared entities with the highest betweenness)
+and `parity` (runs both paths and the CPU tool and compares them). It never falls back:
+without a GPU or the environment it exits 1 with `blocked`. The GPU holds no secrets and
+needs no extra egress. Direct device access does widen what the sandbox can touch, so
+enable it only where you want it.
+
+**About speed.** This is a sample dataset (80 providers, about 5,800 claims), so the GPU
+path is slower than the CPU one: the work is tiny and the fixed costs of starting the
+device, launching kernels and moving data dominate. A GPU speed-up needs a much larger
+dataset, in the order of millions of claims and far bigger graphs, where the computation
+outweighs those costs. This recipe did not measure where that break-even is, so treat
+the large-data benefit as the reason the path exists, not as a result shown here.
 
 ## What the skill ships
 
@@ -122,6 +160,8 @@ and confirm.
   related-entity expansion) and `cluster-exposure` (paid totals per group).
 - `utilities/retrieve.py`, `utilities/kumo_predict.py`: hosted policy retrieval
   and Kumo ranking.
+- `utilities/integrity_gpu.py`: the optional CUDA-X path (cuDF and cuGraph), used only on a
+  GPU sandbox.
 - `utilities/ontology_qa.py`: Auto Ontology text-to-SQL, used only when the
   deployment's token was set at install time.
 
@@ -174,6 +214,9 @@ the call to the deployment.
 - Outputs are recommendations for human review. The skill instructs the agent
   not to assert fraud or order a payment suspension; that is a prompt-level
   rule, not an enforced control.
+- To remove the GPU sandbox: `nemoclaw bi-gpu destroy` (it deletes that sandbox and its
+  `/sandbox/rapids-venv`); the providers `install.sh` created for it are named
+  `bi-gpu-ai-api` (and `bi-gpu-ontology` if you set an Auto Ontology token), removed as below.
 - To remove Auto Ontology: `openshell sandbox provider detach billing-integrity billing-integrity-ontology`,
   `openshell provider delete billing-integrity-ontology` and
   `openshell provider profile delete billing-integrity-auto-ontology`.
@@ -206,8 +249,7 @@ model; the numbers come from the tool and are deterministic.
 tools, the tool running inside the sandbox, and an agent answer whose figures
 match the same tool run on the host.
 
-**This does not verify:** other models, other questions, repeat runs, GPU hosts,
-GPU hosts, or Auto Ontology beyond the single question in its own stage.
+**This does not verify:** other models, other questions, repeat runs, or Auto Ontology beyond the single question in its own stage.
 
 **Policy retrieval.** Reset the agent session first (see
 [Known limitations](#known-limitations)), then ask a policy question in a fresh session:
@@ -256,6 +298,34 @@ reports its ranking and its limits.
 
 **This does not verify:** Kumo's accuracy. Three prior findings make the ranking
 a demonstration that the pipeline works, not evidence of predictive skill.
+
+### Stage 5: CUDA-X on a GPU sandbox (optional)
+
+On a sandbox created with `NEMOCLAW_SANDBOX_GPU=1` (see above):
+
+```bash
+nemoclaw bi-gpu sessions reset agent:main:main --agent main
+nemoclaw bi-gpu agent --agent main -m \
+  "Using the provider-billing-integrity skill: run the CUDA-X GPU path and tell me whether it gives the same answers as the CPU tool for as of 2026-06-30. Which GPU did it run on, which libraries, and which entities hold the P001 cluster together? Is the GPU faster here?"
+```
+
+**Expected result:** the agent runs `integrity_gpu.py parity` and reports
+`all_match: true`, the GPU name, the library versions, the same six-provider cluster
+P001 to P006, hub entities `bank_account_id:B901` and `owner_id:O901` (betweenness
+0.2778 each) ahead of `address_id:A901` (0.0278), and that the GPU is **not faster** at
+this size (about 0.02 s on the CPU against about 0.05 s on the GPU). Run on its own,
+`python3 utilities/integrity_gpu.py parity` in the sandbox prints the same receipt.
+
+**This verifies:** GPU passthrough into the sandbox, the RAPIDS environment build, that
+cuDF reproduces the baseline scores and the first-ten order, that cuGraph reproduces the
+clusters for four providers (P001, P010, P020, P030), and that an agent runs the tool
+and reports the result and its limits. The converted graph was checked to be
+nx-cugraph's `CudaGraph`, so the graph step is not a silent NetworkX fallback.
+
+**This does not verify:** any speed-up (there is none on this sample data, which is too small to show one), larger data,
+other GPUs or drivers, or the CUDA 12 wheels. The agent's own narration can contain
+slips: in this run it gave the claim count as "about 400" (the data has about 5,800)
+and guessed a cause for the timing. Trust the receipt, not the commentary.
 
 ### Stage 4: Auto Ontology (optional)
 
@@ -319,7 +389,7 @@ as the baseline to compare against.
 | 2 | Nemotron embed and rerank for policy evidence | Done: `retrieve.py`, egress policy, second provider, restart on install. Remaining: a larger document set, and measuring retrieval against BM25 (`--method bm25` is included for the comparison). |
 | 3 | Kumo risk ranking | Done: `kumo_predict.py`, the Kumo route in the policy and provider profile, a virtual environment built at install time (Python 3.13 wheels, no custom image needed), and the skill's compare-with-baseline rule. Remaining: a Kumo-versus-baseline evaluation on a larger graph. |
 | 4 | Auto Ontology | Done for one question: `ontology_qa.py`, a provider profile, install support, and skill rules that require reading the SQL. It was verified against a patched local deployment. Remaining: an upstream fix or a documented supported build, more questions (including ones the layer should decline), and a check that SQL is read when it is wrong. |
-| 5 | RAPIDS on GPU | A host-side service, not the sandbox. |
+| 5 | RAPIDS on GPU | Done for one host: `integrity_gpu.py` (scan, related, parity), an opt-in GPU sandbox in `onboard.sh` and `install.sh`, a separate RAPIDS environment, and a skill rule that treats it as a check. Remaining: a dataset large enough to show where the GPU pays off, and the CUDA 12 wheels. |
 | Evidence | Screenshot and a higher evidence level per stage | A real sandbox run of each stage. |
 
 `policies/nvidia-hosted-models.yaml` and `providers/nvidia-ai-api.yaml` cover stages 2
@@ -391,8 +461,19 @@ and 3; `providers/auto-ontology.yaml` covers stage 4.
   default returned HTTP 404 for the test key; availability depends on your
   NVIDIA Endpoints account. Set `NEMOCLAW_MODEL` in `.env` to any model your
   key can call.
-- The sandbox is created with `--no-sandbox-gpu` because this recipe is
-  CPU-only. On the test host GPU passthrough failed on a stale CDI file.
+- The sandbox is created with `--no-sandbox-gpu` unless you set `NEMOCLAW_SANDBOX_GPU=1`.
+  On the test host GPU passthrough first failed on a stale CDI file, which
+  `sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml` fixed.
+- **The GPU path is slower on this sample data.** At 80 providers and about 5,800 claims it
+  takes about 0.05 s against 0.02 s on the CPU, because the data is too small to outweigh
+  the device's fixed costs. Seeing a large GPU speed-up needs a much larger dataset, which
+  this recipe does not include or measure. The path shows the same answers on the device,
+  not a speed-up.
+- **The RAPIDS environment is large** (about 4.7 GB) and its versions float: the
+  requirements file pins only the cuDF and nx-cugraph series, and cuDF chooses pandas
+  3 (Kumo's environment keeps pandas 2.3). Wheels are `-cu13`.
+- The parity check compares the baseline and four clusters, not every provider's
+  cluster, and does not compare `cluster-exposure`.
 - NemoClaw limits sandbox names to 19 characters.
 - The data is synthetic and small; results show the method works, not that it
   would perform on real programs.
@@ -401,6 +482,9 @@ and 3; `providers/auto-ontology.yaml` covers stage 4.
 
 Uses the installed NemoClaw and OpenClaw components and NVIDIA Endpoints for
 inference. The CPU tools and `retrieve.py` use only the Python standard library.
+The optional GPU path needs `cudf-cu13`, `nx-cugraph-cu13` (RAPIDS 26.10) and `networkx`
+(`utilities/requirements-gpu.txt`), installed from PyPI into `/sandbox/rapids-venv`; RAPIDS
+is Apache-2.0 and the CUDA libraries it pulls in carry NVIDIA's own licence terms.
 `kumo_predict.py` needs `kumo-relational-client[relational]==1.0.2` and pandas
 (`skills/provider-billing-integrity/utilities/requirements-kumo.txt`), which
 `install.sh` installs from PyPI into a virtual environment inside the sandbox;

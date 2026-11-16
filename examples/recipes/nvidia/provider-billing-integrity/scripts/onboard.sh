@@ -5,7 +5,9 @@
 # Create the provider-billing-integrity sandbox non-interactively with the
 # OpenClaw harness. NVIDIA Endpoints is the default inference provider. Web
 # search is disabled: the skill works only from the data it ships. The sandbox
-# is CPU-only, so GPU passthrough is turned off.
+# is CPU-only by default, so GPU passthrough is turned off. For the optional CUDA-X
+# path set NEMOCLAW_SANDBOX_GPU=1 (and optionally NEMOCLAW_SANDBOX_GPU_DEVICE, a GPU
+# index, UUID or CDI name such as nvidia.com/gpu=0) to enable direct GPU access.
 
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -49,14 +51,21 @@ if sandbox_exists "$NEMOCLAW_SANDBOX_NAME"; then
   exit 0
 fi
 
+GPU_FLAGS=(--no-sandbox-gpu)
+if [[ "${NEMOCLAW_SANDBOX_GPU:-0}" == "1" ]]; then
+  GPU_FLAGS=(--sandbox-gpu)
+  [[ -z "${NEMOCLAW_SANDBOX_GPU_DEVICE:-}" ]] || GPU_FLAGS+=(--sandbox-gpu-device "$NEMOCLAW_SANDBOX_GPU_DEVICE")
+fi
+
 echo "Onboarding sandbox '$NEMOCLAW_SANDBOX_NAME'"
 echo "  harness: openclaw"
 echo "  inference: $NEMOCLAW_PROVIDER ($NEMOCLAW_MODEL)"
+echo "  sandbox GPU: ${GPU_FLAGS[*]}"
 run nemoclaw onboard \
   --non-interactive \
   --yes \
   --name "$NEMOCLAW_SANDBOX_NAME" \
-  --no-sandbox-gpu \
+  "${GPU_FLAGS[@]}" \
   --yes-i-accept-third-party-software
 
 echo

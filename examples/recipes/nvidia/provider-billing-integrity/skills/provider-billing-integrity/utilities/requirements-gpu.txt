@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Optional CUDA-X (RAPIDS) path for integrity_gpu.py: cuDF and cuGraph through the nx-cugraph backend for NetworkX.
+# Built into /sandbox/rapids-venv by scripts/install.sh when NEMOCLAW_SANDBOX_GPU=1; separate from the Kumo environment.
+# The CUDA 13 wheels need a driver that supports CUDA 13; use the -cu12 names for a CUDA 12 driver. Transitive packages
+# (pandas, the CUDA libraries, rmm, libcugraph) are chosen by cuDF and not pinned here: cuDF 26.10 needs pandas 3, which
+# is why this file does not share Kumo's pandas pin.
+cudf-cu13==26.10.*
+nx-cugraph-cu13==26.10.*
+networkx>=3.4

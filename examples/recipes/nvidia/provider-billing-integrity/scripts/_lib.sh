@@ -9,11 +9,23 @@ EXAMPLE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 load_env() {
   [[ -f "$EXAMPLE_DIR/.env" ]] || return 0
-  echo "Auto-sourcing $EXAMPLE_DIR/.env"
+  echo "Auto-sourcing $EXAMPLE_DIR/.env (variables already set in your environment win)"
+  # A value exported before running a script, such as NEMOCLAW_SANDBOX_NAME=bi-gpu, must beat the same name in .env.
+  local names=() values=() name
+  while IFS= read -r name; do
+    if [[ -n "${!name+x}" ]]; then
+      names+=("$name")
+      values+=("${!name}")
+    fi
+  done < <(sed -n 's/^[[:space:]]*\(export[[:space:]]\+\)\{0,1\}\([A-Za-z_][A-Za-z0-9_]*\)=.*/\2/p' "$EXAMPLE_DIR/.env")
   set -a
   # shellcheck disable=SC1091
   . "$EXAMPLE_DIR/.env"
   set +a
+  local i
+  for i in "${!names[@]}"; do
+    export "${names[$i]}=${values[$i]}"
+  done
 }
 
 require_var() {

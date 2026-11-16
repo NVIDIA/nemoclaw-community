@@ -68,6 +68,16 @@ assert_contains "$(cat "$COMMAND_LOG")" "agent=openclaw" \
 assert_contains "$(cat "$COMMAND_LOG")" "args=onboard --non-interactive --yes --name billing-integrity --no-sandbox-gpu" \
   "onboard did not create the named sandbox non-interactively"
 
+# opt-in GPU sandbox for the CUDA-X path
+: >"$COMMAND_LOG"
+NEMOCLAW_SANDBOX_GPU=1 NEMOCLAW_SANDBOX_GPU_DEVICE=nvidia.com/gpu=0 NVIDIA_INFERENCE_API_KEY=test-key \
+  bash "$EXAMPLE_DIR/scripts/onboard.sh" >/dev/null
+assert_contains "$(cat "$COMMAND_LOG")" "--sandbox-gpu --sandbox-gpu-device nvidia.com/gpu=0" \
+  "onboard did not enable the sandbox GPU when asked"
+if grep -q -- '--no-sandbox-gpu' "$COMMAND_LOG"; then
+  fail "onboard disabled the sandbox GPU although NEMOCLAW_SANDBOX_GPU=1"
+fi
+
 : >"$COMMAND_LOG"
 FAKE_SANDBOX_EXISTS=1 bash "$EXAMPLE_DIR/scripts/start.sh" >/dev/null
 assert_contains "$(cat "$COMMAND_LOG")" \
@@ -78,6 +88,14 @@ assert_contains "$(cat "$COMMAND_LOG")" \
 FAKE_SANDBOX_EXISTS=1 bash "$EXAMPLE_DIR/scripts/stop.sh" >/dev/null
 assert_contains "$(cat "$COMMAND_LOG")" "args=tunnel stop" \
   "stop did not stop the gateway through tunnel stop"
+
+# a variable set in the environment beats the same name in .env
+printf 'NEMOCLAW_SANDBOX_NAME=from-env\n' >"$EXAMPLE_DIR/.env"
+: >"$COMMAND_LOG"
+FAKE_SANDBOX_EXISTS=1 bash "$EXAMPLE_DIR/scripts/start.sh" >/dev/null
+assert_contains "$(cat "$COMMAND_LOG")" "args=billing-integrity recover" \
+  "a value from .env overrode the environment"
+rm -f "$EXAMPLE_DIR/.env"
 
 # install with a build.nvidia.com key: hosted retrieval is enabled, then the skill is installed
 : >"$COMMAND_LOG"
@@ -114,6 +132,18 @@ assert_contains "$log" "args=billing-integrity start" \
 if grep -q 'test-key' "$COMMAND_LOG"; then
   fail "the key value appeared in a command line"
 fi
+if grep -q 'requirements-gpu' "$COMMAND_LOG"; then
+  fail "install built the RAPIDS environment without NEMOCLAW_SANDBOX_GPU=1"
+fi
+
+# install on a GPU sandbox: the RAPIDS environment is built from its own requirements file
+: >"$COMMAND_LOG"
+FAKE_SANDBOX_EXISTS=1 NEMOCLAW_SANDBOX_GPU=1 NEMOCLAW_PROVIDER=build NVIDIA_INFERENCE_API_KEY=test-key \
+  bash "$EXAMPLE_DIR/scripts/install.sh" >/dev/null
+log="$(cat "$COMMAND_LOG")"
+assert_contains "$log" "args=billing-integrity exec --timeout 1800 -- bash -c" \
+  "install did not build the RAPIDS environment on a GPU sandbox"
+assert_contains "$log" "requirements-gpu.txt" "the RAPIDS build did not use its requirements file"
 
 # install with an Auto Ontology token and a non-default port: a rendered profile, a provider from the
 # environment, an attach, a URL file for the skill, and no token in any command line
