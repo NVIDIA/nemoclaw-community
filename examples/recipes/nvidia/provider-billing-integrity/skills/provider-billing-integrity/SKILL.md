@@ -32,6 +32,12 @@ Run these in order and use their output. If a step does not apply to the questio
    regulation question, for example `--query "when must a State suspend payments and when may it decline"`
    and `--query "revocation for a pattern of claims that fail Medicare requirements"`. Write the policy
    section only from the passages it returns.
+   **Read the `text` of every passage it returns, not only the first.** The ranking can put a passage about
+   an exception (good cause, law enforcement declining to certify) above the one that states the rule.
+   Write the rule from the passage whose text states it, and mention an exception only as an exception. If
+   none of the returned passages states what you need, run `retrieve.py` again with a query worded like the
+   rule itself (for example `--query "State must suspend all Medicaid payments after a credible allegation of fraud"`),
+   or report the policy part as not found.
 3. **If the answer says which providers are likely to be audited in the next 90 days, you must run**
    `python3 utilities/kumo_predict.py --top 10` **and use its ranking.** Then run `integrity_tool.py scan`
    and compare the two lists in the answer: say where they agree, where they differ, and what each
@@ -42,10 +48,12 @@ Run these in order and use their output. If a step does not apply to the questio
    denominator) and that `rows` is what that SQL would return. If the SQL does not match the
    question, or `answered_with_sql` is false, say so and do not use the rows. Quote the SQL in the
    answer and call the result an Auto Ontology answer, not a fact.
-5. Every policy statement in the answer ends with the passage's `cite` value, copied exactly from the tool
-   output, for example `[42-cfr-455-23-payment-suspension.md, chunk 0]`. Do not write section or
-   paragraph numbers from memory, and do not cite a passage you did not retrieve. A policy statement
-   without a `cite` tag is not allowed; delete it, or report the policy part as blocked.
+5. A policy statement is a sentence copied, or closely paraphrased, from one passage's `text`, followed by that
+   same passage's `cite` value, copied exactly from the tool output. Take the tag from the passage you took the
+   sentence from, not from another passage in the list. A tag with no sentence is not a statement. The cite
+   goes at the end of the statement, for example `[42-cfr-455-23-payment-suspension.md, chunk 0]`. Do not write
+   section or paragraph numbers from memory, and do not cite a passage you did not retrieve. A policy
+   statement without a `cite` tag is not allowed; delete it, or report the policy part as blocked.
 
 ## Rules
 
@@ -59,9 +67,12 @@ Run these in order and use their output. If a step does not apply to the questio
    a person as guilty, or order a payment suspension.
 5. **If a step cannot run, say so.** Report it as blocked with the reason. Do not substitute memory
    or a guess.
-6. **Policy claims need retrieved passages.** For any statement about what a regulation requires, run
-   `retrieve.py` and cite the document and chunk it returns. Do not answer policy questions from
-   memory, and do not paraphrase a rule that was not retrieved.
+6. **Policy claims need retrieved passages, and the passage must say it.** For any statement about what a
+   regulation requires, run `retrieve.py` and cite the document and chunk it returns. Do not answer policy
+   questions from memory, and do not paraphrase a rule that was not retrieved. A `cite` tag only shows the
+   passage was retrieved, not that it supports your sentence: before you write a sentence, check that the
+   passage's `text` contains the statement. A passage describing an exception does not support a statement of
+   the general requirement.
 7. **A blocked retrieval stays blocked.** If `retrieve.py` exits with `blocked`, report the policy
    answer as blocked with that message. Do not substitute memory, and do not open the files in
    `data/documents/` to answer instead: an answer without a retrieval receipt is not a retrieved
@@ -159,7 +170,7 @@ Work in this order unless the question dictates otherwise:
 1. **Who looks risky?** Run `scan`. Note the score is a baseline, not a finding.
 2. **Who is connected?** Run `related` for each high-scoring provider. Explain how each link arises, including
    any chain where two providers share no entity directly but sit in one cluster through a third.
-3. **How much is at stake?** Run `cluster-exposure`.
+3. **How much is at stake?** Run `cluster-exposure` and report the total paid and the number of claims.
 4. **Is each link meaningful?** Compare the billing behaviour of cluster members and of any
    other group that looks similar. Say why each group is or is not worth escalating.
 5. **Rank risk with Kumo** when the question asks who is likely to be audited, and compare with `scan`.

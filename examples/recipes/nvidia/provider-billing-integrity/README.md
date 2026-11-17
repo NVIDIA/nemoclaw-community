@@ -30,8 +30,10 @@ each component does here and which ones this version includes.
 > optional **CUDA-X (RAPIDS)** path runs on a GPU sandbox and was verified on one
 > host (see [CUDA-X on a GPU sandbox](#cuda-x-on-a-gpu-sandbox-optional)).
 > The skill also installs on the **Hermes** harness (see
-> [Hermes harness](#hermes-harness-optional)); that path was run twice, on the
-> CPU, retrieval and Kumo stages only.
+> [Hermes harness](#hermes-harness-optional)); that path was run on the
+> CPU, retrieval, Kumo and Auto Ontology stages, a few times each; before a
+> skill rule change, its policy sentence was wrong in two of four runs, and
+> after it in one of five.
 > See [Verification](#verification) for exactly what was run.
 
 ## Agent Knowledge Foundation
@@ -82,7 +84,7 @@ capture. Synthetic data throughout.
 | You will get | Ranked leads, related-provider groups with the reason for each link, per-group paid totals, and a referral recommendation. |
 | Runs on | A host that runs NemoClaw with Docker. The optional GPU stage also needs an NVIDIA GPU. |
 | Requires | NemoClaw, an NVIDIA Endpoints API key for the agent's model. |
-| Verified on | NemoClaw v0.0.142, OpenShell v0.0.116, OpenClaw harness (the Hermes path: Hermes Agent v0.21.3, two runs), Ubuntu 22.04, `nvidia/nemotron-3.5-lightning-30b-a3b` on NVIDIA Endpoints, one run per workflow, not repeated at scale. The GPU stage: one NVIDIA H100 NVL, driver 595.91.07 (CUDA 13.2), RAPIDS 26.10. |
+| Verified on | NemoClaw v0.0.142, OpenShell v0.0.116, OpenClaw harness (the Hermes path: Hermes Agent v0.21.3, four runs), Ubuntu 22.04, `nvidia/nemotron-3.5-lightning-30b-a3b` on NVIDIA Endpoints, one run per workflow, not repeated at scale. The GPU stage: one NVIDIA H100 NVL, driver 595.91.07 (CUDA 13.2), RAPIDS 26.10. |
 | Evidence level | live end-to-end for the CPU, retrieval and Kumo workflows; integration for the optional Auto Ontology stage, which needs a host deployment this repo does not ship |
 | Support and maturity | Best-effort community support; see the repository support policy. |
 | External access, data, and actions | Inference calls to the configured provider. Three POST paths from sandbox Python to build.nvidia.com: embeddings and rerank (the 42 CFR text and the question) and Kumo, **which receives the provider, address, claim and finding tables**. If you enable Auto Ontology, three paths on `host.openshell.internal:<port>` (the question text, to a deployment you run), which then sends the database schema and the question to its own hosted models, outside the sandbox policy. The install also reaches PyPI, temporarily, to build a roughly 370 MB Python environment, and creates a second OpenShell provider from your key. No write actions. All data is synthetic. |
@@ -143,7 +145,7 @@ What differs from OpenClaw:
   the script removes the earlier copy first.
 
 The tools, data, egress policy and providers are the same on both harnesses. The
-Auto Ontology and GPU stages were not run on Hermes.
+GPU stage was not run on Hermes.
 
 ## Commands
 
@@ -273,7 +275,7 @@ the call to the deployment.
 
 ## Verification
 
-**Evidence level:** live end-to-end for the offline CPU workflow, Nemotron retrieval and Kumo (one run each; also two runs on the Hermes harness); integration for the optional Auto Ontology stage (one question, against a locally patched host deployment that this repo does not ship)
+**Evidence level:** live end-to-end for the offline CPU workflow, Nemotron retrieval and Kumo (one run each; also four runs on the Hermes harness and one Auto Ontology question on it); integration for the optional Auto Ontology stage (one question, against a locally patched host deployment that this repo does not ship)
 
 Onboard, install, then ask one question:
 
@@ -296,18 +298,43 @@ match the same tool run on the host.
 
 **This does not verify:** other models, other questions, repeat runs, or Auto Ontology beyond the single question in its own stage.
 
-**Hermes harness.** On a separate sandbox onboarded with
-`NEMOCLAW_AGENT=hermes` (Hermes Agent v0.21.3), `install.sh` ran twice with
-exit 0, and the tools gave the same results as on OpenClaw: 1,255 claims and
-$211,006.18 for the P001 cluster, retrieval cite tags, and a Kumo ranking with
-empty stderr. The same three-part prompt as the screenshot was run twice with
-`hermes -z`. Both answers contained every figure and cite tag checked
-(including the cluster total, claim count, Kumo's top three P004, P005 and P006,
-and the scan baseline), and both ended with a referral recommendation. The
-narrative had mistakes the tools did not make: one answer named P005 as having
-the highest Kumo probability when P004 does, and another garbled which
-providers share which entity and said `scan` ranked P001 third. As on OpenClaw,
-check the answer against the tool output.
+**Hermes harness.** On sandboxes onboarded with `NEMOCLAW_AGENT=hermes`
+(Hermes Agent v0.21.3), a clean `onboard.sh` and `install.sh` (with Auto
+Ontology enabled) finished with exit 0, and `install.sh` also ran twice in a row
+on another sandbox. The tools gave the same results as on OpenClaw: 1,255
+claims and $211,006.18 for the P001 cluster, retrieval cite tags, and a Kumo
+ranking with empty stderr. The three-part prompt used for the screenshot was run
+four times with `hermes -z`, and one Auto Ontology question (providers sharing
+a bank account with P001) was run once. Every run reported the cluster total
+and Kumo's top three (P004, P005, P006), and the Auto Ontology run quoted its
+SQL and found its rows agreed with `integrity_tool.py`. The answers also had
+mistakes the tools did not make:
+
+- In two of the four runs the policy sentence came from the wrong passage
+  (chunk 4, a good-cause exception) or had no sentence, instead of the
+  must-suspend rule in chunk 0. The cite tag was real in each case, so a tag
+  does not show the sentence is the right one. Retrieval itself ranks the
+  exception passages (chunks 3 and 4) first for the natural wording "when must
+  a State suspend payments", so the model has to read past rank 1.
+- One answer named P005 as having the highest Kumo probability when P004 does,
+  another garbled which providers share which entity and said `scan` ranked
+  P001 third. Two runs left out the claim count.
+
+As on OpenClaw, check the answer against the tool output.
+
+**Policy sentence after a skill change.** Because of those runs, `SKILL.md` now
+tells the agent to read every returned passage, to write a policy statement as
+a sentence taken from one passage followed by that passage's own cite tag, and
+to treat a bare tag as no statement. The same prompt was then run five times on
+Hermes and five on OpenClaw, and the policy sentences were read by hand. On
+Hermes, four of five cited chunk 0 with the rule (one of those was a thin
+"The State must suspend payments") and one stated the right rule under chunk 4.
+On OpenClaw, three of five cited chunk 0 with the rule, one stated the right
+rule under chunk 3, and one was cut off by the model's output limit before the
+policy part. In a smaller trial before the last wording change, two of three
+OpenClaw runs cited the exception chunks. These are small counts from one model
+and one prompt: the change reduced, and did not remove, the mismatch between a
+sentence and its tag.
 
 **Policy retrieval.** Reset the agent session first (see
 [Known limitations](#known-limitations)), then ask a policy question in a fresh session:
@@ -460,11 +487,11 @@ and 3; `providers/auto-ontology.yaml` covers stage 4.
   agent that had earlier read the regulation files directly kept doing so and
   skipped retrieval; after `sessions reset` it ran retrieval as the skill
   instructs. `nemoclaw billing-integrity sessions reset agent:main:main --agent main`.
-- **Hermes was run twice, on three stages.** The Hermes path covers the CPU,
-  retrieval and Kumo stages with one model. Auto Ontology and the GPU stage
-  were not run on it, `nemoclaw <name> agent` does not support it, and the
-  narrative of its answers contained errors in both runs (see
-  [Verification](#verification)).
+- **Hermes was run four times on the main prompt.** The Hermes path covers
+  the CPU, retrieval, Kumo and Auto Ontology stages with one model. The GPU
+  stage was not run on it, `nemoclaw <name> agent` does not support it, and the
+  policy sentence was wrong in two of the first four runs and in one of five after
+  the skill rule change (see [Verification](#verification)).
 - **A new credential reaches the agent only after the sandbox container
   restarts.** `install.sh` does this when it attaches the provider. Without
   it, the agent's rerank call fails with HTTP 403.
