@@ -216,7 +216,7 @@ class ExampleStackFactsTests(unittest.TestCase):
                     # Workday HR assistant, and both harness optimization
                     # examples: CAE FreeCAD (on NeMo Helix) and Enterprise Assistant.
                     "unconfirmed": 14,
-                    "unpinned": 12,
+                    "unpinned": 13,
                     "unknown": 1,
                     "not-applicable": 1,
                 }
