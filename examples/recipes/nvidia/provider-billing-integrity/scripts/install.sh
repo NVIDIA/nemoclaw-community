@@ -149,8 +149,6 @@ enable_auto_ontology() {
   fi
 }
 
-SKILL_DIR_IN_SANDBOX="/sandbox/.openclaw/workspace/skills/provider-billing-integrity"
-
 # build_venv NAME REQUIREMENTS-FILE IMPORT-CHECK TIMEOUT: create /sandbox/NAME from a pinned requirements file unless the
 # import check already passes. Runs inside the sandbox; returns the exit status of the build.
 build_venv() {
@@ -229,8 +227,20 @@ fi
 # Host bytecode caches (ignored by git) would otherwise be copied into the skill.
 find "$EXAMPLE_DIR/skills" -name __pycache__ -type d -prune -exec rm -rf {} +
 
+if [[ "$NEMOCLAW_AGENT" == "hermes" ]]; then
+  # Hermes refuses to replace an installed skill, so drop any earlier copy first (none on a first install).
+  nemoclaw "$NEMOCLAW_SANDBOX_NAME" skill remove provider-billing-integrity >/dev/null 2>&1 || true
+fi
 run nemoclaw "$NEMOCLAW_SANDBOX_NAME" skill install \
   "$EXAMPLE_DIR/skills/provider-billing-integrity"
+
+# The tools and Python environments below are addressed by this path. A sandbox onboarded with the other harness
+# keeps skills elsewhere, so stop here instead of building environments from files that are not there.
+if ! nemoclaw "$NEMOCLAW_SANDBOX_NAME" exec -- test -d "$SKILL_DIR_IN_SANDBOX"; then
+  echo "error: the skill is not at $SKILL_DIR_IN_SANDBOX inside '$NEMOCLAW_SANDBOX_NAME'." >&2
+  echo "       NEMOCLAW_AGENT=$NEMOCLAW_AGENT must match the harness the sandbox was onboarded with." >&2
+  exit 1
+fi
 
 if [[ "$ONTOLOGY_ENABLED" == "1" ]]; then
   # The skill reads its Auto Ontology URL from this file (the sandbox has no other config channel).

@@ -25,4 +25,8 @@ run nemoclaw "$NEMOCLAW_SANDBOX_NAME" recover
 echo
 echo "Sandbox is ready."
 echo "  Interactive shell: nemoclaw $NEMOCLAW_SANDBOX_NAME connect"
-echo "  One agent turn:    nemoclaw $NEMOCLAW_SANDBOX_NAME agent --agent main -m '<question>'"
+if [[ "$NEMOCLAW_AGENT" == "hermes" ]]; then
+  echo "  One agent turn:    nemoclaw $NEMOCLAW_SANDBOX_NAME exec -- hermes -z '<question>' --skills provider-billing-integrity"
+else
+  echo "  One agent turn:    nemoclaw $NEMOCLAW_SANDBOX_NAME agent --agent main -m '<question>'"
+fi

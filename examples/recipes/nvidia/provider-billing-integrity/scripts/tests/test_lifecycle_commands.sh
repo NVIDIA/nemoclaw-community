@@ -41,6 +41,8 @@ nemoclaw() {
     printf '%q ' "$@"
     printf '\n'
   } >>"$COMMAND_LOG"
+  # A sandbox onboarded with the other harness keeps skills elsewhere: the placement check finds nothing.
+  [[ "${FAKE_SKILL_MISSING:-0}" != "1" || "$*" != *"exec -- test -d"* ]]
 }
 export -f nemoclaw
 
@@ -67,6 +69,21 @@ assert_contains "$(cat "$COMMAND_LOG")" "agent=openclaw" \
   "onboard did not select the OpenClaw harness"
 assert_contains "$(cat "$COMMAND_LOG")" "args=onboard --non-interactive --yes --name billing-integrity --no-sandbox-gpu" \
   "onboard did not create the named sandbox non-interactively"
+assert_contains "$(cat "$COMMAND_LOG")" "--agent openclaw" \
+  "onboard did not pass the harness to nemoclaw onboard"
+
+# the Hermes harness
+: >"$COMMAND_LOG"
+NEMOCLAW_AGENT=hermes NVIDIA_INFERENCE_API_KEY=test-key bash "$EXAMPLE_DIR/scripts/onboard.sh" >/dev/null
+assert_contains "$(cat "$COMMAND_LOG")" "--agent hermes" "onboard did not select the Hermes harness"
+assert_contains "$(cat "$COMMAND_LOG")" "agent=hermes" "onboard did not export the Hermes harness"
+
+# an unknown harness is rejected before anything is run
+: >"$COMMAND_LOG"
+if NEMOCLAW_AGENT=other NVIDIA_INFERENCE_API_KEY=test-key bash "$EXAMPLE_DIR/scripts/onboard.sh" >/dev/null 2>&1; then
+  fail "onboard accepted an unknown NEMOCLAW_AGENT"
+fi
+[[ ! -s "$COMMAND_LOG" ]] || fail "onboard ran commands before rejecting an unknown harness"
 
 # opt-in GPU sandbox for the CUDA-X path
 : >"$COMMAND_LOG"
@@ -187,6 +204,29 @@ assert_contains "$log" \
   "install without a key did not deploy the skill"
 if grep -qE 'policy-add|policy-remove|provider create|provider profile import|exec --timeout 900|args=billing-integrity (stop|start)' "$COMMAND_LOG"; then
   fail "install without a key opened egress or created a provider"
+fi
+
+# Hermes: the Python environments are built from the Hermes skill directory
+: >"$COMMAND_LOG"
+NEMOCLAW_AGENT=hermes FAKE_SANDBOX_EXISTS=1 NEMOCLAW_PROVIDER=build NVIDIA_INFERENCE_API_KEY=test-key \
+  bash "$EXAMPLE_DIR/scripts/install.sh" >/dev/null
+log="$(cat "$COMMAND_LOG")"
+assert_contains "$log" "/sandbox/.hermes/skills/provider-billing-integrity/utilities/requirements-kumo.txt" \
+  "Hermes install did not build the Kumo environment from the Hermes skill directory"
+if grep -q '\.openclaw' "$COMMAND_LOG"; then
+  fail "Hermes install used an OpenClaw path"
+fi
+assert_contains "$log" "args=billing-integrity skill remove provider-billing-integrity" \
+  "Hermes install did not clear an earlier copy of the skill"
+
+# a harness that does not match the sandbox stops the install before any environment is built
+: >"$COMMAND_LOG"
+if FAKE_SKILL_MISSING=1 NEMOCLAW_AGENT=hermes FAKE_SANDBOX_EXISTS=1 NEMOCLAW_PROVIDER=build NVIDIA_INFERENCE_API_KEY=test-key \
+  bash "$EXAMPLE_DIR/scripts/install.sh" >/dev/null 2>&1; then
+  fail "install carried on although the skill was not where the harness keeps skills"
+fi
+if grep -q 'exec --timeout' "$COMMAND_LOG"; then
+  fail "install built a Python environment although the skill was missing"
 fi
 
 echo "ok"

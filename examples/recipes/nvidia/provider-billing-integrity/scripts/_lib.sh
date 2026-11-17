@@ -51,3 +51,15 @@ sandbox_exists() {
 load_env
 
 NEMOCLAW_SANDBOX_NAME="${NEMOCLAW_SANDBOX_NAME:-billing-integrity}"
+
+# Agent harness: openclaw (default, the most tested path) or hermes. The harness decides where the sandbox keeps
+# installed skills, so install.sh needs to know it; use the same value for onboard.sh and install.sh.
+NEMOCLAW_AGENT="${NEMOCLAW_AGENT:-openclaw}"
+case "$NEMOCLAW_AGENT" in
+  openclaw) SKILL_DIR_IN_SANDBOX="/sandbox/.openclaw/workspace/skills/provider-billing-integrity" ;;
+  hermes) SKILL_DIR_IN_SANDBOX="/sandbox/.hermes/skills/provider-billing-integrity" ;;
+  *)
+    echo "error: NEMOCLAW_AGENT must be openclaw or hermes (got '$NEMOCLAW_AGENT')" >&2
+    exit 1
+    ;;
+esac

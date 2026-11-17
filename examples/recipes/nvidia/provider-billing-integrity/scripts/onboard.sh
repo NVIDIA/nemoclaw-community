@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Create the provider-billing-integrity sandbox non-interactively with the
-# OpenClaw harness. NVIDIA Endpoints is the default inference provider. Web
+# OpenClaw harness (default) or, with NEMOCLAW_AGENT=hermes, the Hermes harness.
+# NVIDIA Endpoints is the default inference provider. Web
 # search is disabled: the skill works only from the data it ships. The sandbox
 # is CPU-only by default, so GPU passthrough is turned off. For the optional CUDA-X
 # path set NEMOCLAW_SANDBOX_GPU=1 (and optionally NEMOCLAW_SANDBOX_GPU_DEVICE, a GPU
@@ -39,7 +40,7 @@ esac
 
 export NEMOCLAW_NON_INTERACTIVE=1
 export NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1
-export NEMOCLAW_AGENT=openclaw
+export NEMOCLAW_AGENT
 export NEMOCLAW_PROVIDER
 export NEMOCLAW_MODEL
 export NEMOCLAW_SANDBOX_NAME
@@ -58,7 +59,7 @@ if [[ "${NEMOCLAW_SANDBOX_GPU:-0}" == "1" ]]; then
 fi
 
 echo "Onboarding sandbox '$NEMOCLAW_SANDBOX_NAME'"
-echo "  harness: openclaw"
+echo "  harness: $NEMOCLAW_AGENT"
 echo "  inference: $NEMOCLAW_PROVIDER ($NEMOCLAW_MODEL)"
 echo "  sandbox GPU: ${GPU_FLAGS[*]}"
 run nemoclaw onboard \
@@ -66,6 +67,7 @@ run nemoclaw onboard \
   --yes \
   --name "$NEMOCLAW_SANDBOX_NAME" \
   "${GPU_FLAGS[@]}" \
+  --agent "$NEMOCLAW_AGENT" \
   --yes-i-accept-third-party-software
 
 echo

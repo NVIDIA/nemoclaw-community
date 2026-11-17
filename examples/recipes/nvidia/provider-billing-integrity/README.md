@@ -9,7 +9,8 @@
 | Harness | OpenClaw Unpinned |
 | OpenShell | Unpinned |
 
-An OpenClaw agent in a NemoClaw sandbox reviews 80 synthetic healthcare
+An OpenClaw agent (or, optionally, a Hermes agent) in a NemoClaw sandbox
+reviews 80 synthetic healthcare
 providers and about 5,800 synthetic claims. It ranks providers with a
 transparent billing-rule baseline, follows shared-entity links to build related
 groups, and reports paid exposure. It recommends review and never determines
@@ -28,6 +29,9 @@ each component does here and which ones this version includes.
 > this repo does not ship (see [Auto Ontology](#auto-ontology-optional)). The
 > optional **CUDA-X (RAPIDS)** path runs on a GPU sandbox and was verified on one
 > host (see [CUDA-X on a GPU sandbox](#cuda-x-on-a-gpu-sandbox-optional)).
+> The skill also installs on the **Hermes** harness (see
+> [Hermes harness](#hermes-harness-optional)); that path was run twice, on the
+> CPU, retrieval and Kumo stages only.
 > See [Verification](#verification) for exactly what was run.
 
 ## Agent Knowledge Foundation
@@ -78,7 +82,7 @@ capture. Synthetic data throughout.
 | You will get | Ranked leads, related-provider groups with the reason for each link, per-group paid totals, and a referral recommendation. |
 | Runs on | A host that runs NemoClaw with Docker. The optional GPU stage also needs an NVIDIA GPU. |
 | Requires | NemoClaw, an NVIDIA Endpoints API key for the agent's model. |
-| Verified on | NemoClaw v0.0.142, OpenShell v0.0.116, OpenClaw harness, Ubuntu 22.04, `nvidia/nemotron-3.5-lightning-30b-a3b` on NVIDIA Endpoints, one run per workflow, not repeated at scale. The GPU stage: one NVIDIA H100 NVL, driver 595.91.07 (CUDA 13.2), RAPIDS 26.10. |
+| Verified on | NemoClaw v0.0.142, OpenShell v0.0.116, OpenClaw harness (the Hermes path: Hermes Agent v0.21.3, two runs), Ubuntu 22.04, `nvidia/nemotron-3.5-lightning-30b-a3b` on NVIDIA Endpoints, one run per workflow, not repeated at scale. The GPU stage: one NVIDIA H100 NVL, driver 595.91.07 (CUDA 13.2), RAPIDS 26.10. |
 | Evidence level | live end-to-end for the CPU, retrieval and Kumo workflows; integration for the optional Auto Ontology stage, which needs a host deployment this repo does not ship |
 | Support and maturity | Best-effort community support; see the repository support policy. |
 | External access, data, and actions | Inference calls to the configured provider. Three POST paths from sandbox Python to build.nvidia.com: embeddings and rerank (the 42 CFR text and the question) and Kumo, **which receives the provider, address, claim and finding tables**. If you enable Auto Ontology, three paths on `host.openshell.internal:<port>` (the question text, to a deployment you run), which then sends the database schema and the question to its own hosted models, outside the sandbox policy. The install also reaches PyPI, temporarily, to build a roughly 370 MB Python environment, and creates a second OpenShell provider from your key. No write actions. All data is synthetic. |
@@ -93,7 +97,7 @@ OpenShell provider plumbing and does not write it into the sandbox.
 ```bash
 cd examples/recipes/nvidia/provider-billing-integrity
 cp .env.example .env      # add NVIDIA_INFERENCE_API_KEY (and optionally AUTO_ONTOLOGY_API_TOKEN, AUTO_ONTOLOGY_PORT)
-bash scripts/onboard.sh   # create the OpenClaw sandbox
+bash scripts/onboard.sh   # create the sandbox (OpenClaw by default; see Hermes harness below)
 bash scripts/install.sh   # install the skill, data and tools
 bash scripts/start.sh     # ensure the sandbox is running
 ```
@@ -108,11 +112,44 @@ nemoclaw billing-integrity agent --agent main -m \
 Or connect and use the TUI: `nemoclaw billing-integrity connect`, then
 `openclaw tui`.
 
+### Hermes harness (optional)
+
+OpenClaw is the default and the most tested path. To run the same skill on the
+Hermes harness instead, set `NEMOCLAW_AGENT=hermes` for both scripts, ideally
+with its own sandbox name:
+
+```bash
+export NEMOCLAW_AGENT=hermes NEMOCLAW_SANDBOX_NAME=bi-hermes   # or set them in .env
+bash scripts/onboard.sh && bash scripts/install.sh && bash scripts/start.sh
+
+nemoclaw bi-hermes exec -- hermes -z \
+  "Using the provider-billing-integrity skill, as of 2026-06-30: which providers are linked to P001 and what was paid to that group?" \
+  --skills provider-billing-integrity
+```
+
+What differs from OpenClaw:
+
+- **Where the skill lives.** Hermes keeps skills in `/sandbox/.hermes/skills/`,
+  OpenClaw in `/sandbox/.openclaw/workspace/skills/`. `install.sh` picks the
+  path from `NEMOCLAW_AGENT` and stops with an error if the skill is not there,
+  which is what happens when the value does not match the harness the sandbox
+  was onboarded with.
+- **Asking a question.** `nemoclaw <name> agent` does not support Hermes. Use
+  `hermes -z "<prompt>" --skills provider-billing-integrity` inside the sandbox
+  as above, or `hermes chat` after `nemoclaw <name> connect`. Each `-z` call is
+  a one-shot prompt that starts a new session, so the session-reset advice
+  below does not apply to it (Hermes memory, if you use it, is still loaded).
+- **Re-running `install.sh`.** Hermes refuses to replace an installed skill, so
+  the script removes the earlier copy first.
+
+The tools, data, egress policy and providers are the same on both harnesses. The
+Auto Ontology and GPU stages were not run on Hermes.
+
 ## Commands
 
 | Script | Purpose |
 | --- | --- |
-| `scripts/onboard.sh` | Create the sandbox with the OpenClaw harness (CPU-only; `NEMOCLAW_SANDBOX_GPU=1` enables direct GPU access). |
+| `scripts/onboard.sh` | Create the sandbox with the OpenClaw harness, or Hermes with `NEMOCLAW_AGENT=hermes` (CPU-only; `NEMOCLAW_SANDBOX_GPU=1` enables direct GPU access). |
 | `scripts/install.sh` | Install the skill. With the `build` provider it also imports the provider profile, creates and attaches a second provider from your key, applies the egress policy, builds the Kumo Python environment in `/sandbox/kumo-venv` (using a temporary `pypi` egress preset, removed again unless it was already applied), and restarts the sandbox (workspace kept) so the agent sees the new credential. With `NEMOCLAW_SANDBOX_GPU=1` it also builds `/sandbox/rapids-venv` after checking `nvidia-smi` works in the sandbox. If `AUTO_ONTOLOGY_API_TOKEN` is set in `.env` it also renders `providers/auto-ontology.yaml` for `AUTO_ONTOLOGY_PORT` (default 4000), creates and attaches a provider from the token, and writes the deployment URL for the skill. |
 | `scripts/start.sh` | Recover the gateway and host forwards. |
 | `scripts/stop.sh` | Stop the gateway while keeping the sandbox and workspace. |
@@ -236,7 +273,7 @@ the call to the deployment.
 
 ## Verification
 
-**Evidence level:** live end-to-end for the offline CPU workflow, Nemotron retrieval and Kumo (one run each); integration for the optional Auto Ontology stage (one question, against a locally patched host deployment that this repo does not ship)
+**Evidence level:** live end-to-end for the offline CPU workflow, Nemotron retrieval and Kumo (one run each; also two runs on the Hermes harness); integration for the optional Auto Ontology stage (one question, against a locally patched host deployment that this repo does not ship)
 
 Onboard, install, then ask one question:
 
@@ -258,6 +295,19 @@ tools, the tool running inside the sandbox, and an agent answer whose figures
 match the same tool run on the host.
 
 **This does not verify:** other models, other questions, repeat runs, or Auto Ontology beyond the single question in its own stage.
+
+**Hermes harness.** On a separate sandbox onboarded with
+`NEMOCLAW_AGENT=hermes` (Hermes Agent v0.21.3), `install.sh` ran twice with
+exit 0, and the tools gave the same results as on OpenClaw: 1,255 claims and
+$211,006.18 for the P001 cluster, retrieval cite tags, and a Kumo ranking with
+empty stderr. The same three-part prompt as the screenshot was run twice with
+`hermes -z`. Both answers contained every figure and cite tag checked
+(including the cluster total, claim count, Kumo's top three P004, P005 and P006,
+and the scan baseline), and both ended with a referral recommendation. The
+narrative had mistakes the tools did not make: one answer named P005 as having
+the highest Kumo probability when P004 does, and another garbled which
+providers share which entity and said `scan` ranked P001 third. As on OpenClaw,
+check the answer against the tool output.
 
 **Policy retrieval.** Reset the agent session first (see
 [Known limitations](#known-limitations)), then ask a policy question in a fresh session:
@@ -410,6 +460,11 @@ and 3; `providers/auto-ontology.yaml` covers stage 4.
   agent that had earlier read the regulation files directly kept doing so and
   skipped retrieval; after `sessions reset` it ran retrieval as the skill
   instructs. `nemoclaw billing-integrity sessions reset agent:main:main --agent main`.
+- **Hermes was run twice, on three stages.** The Hermes path covers the CPU,
+  retrieval and Kumo stages with one model. Auto Ontology and the GPU stage
+  were not run on it, `nemoclaw <name> agent` does not support it, and the
+  narrative of its answers contained errors in both runs (see
+  [Verification](#verification)).
 - **A new credential reaches the agent only after the sandbox container
   restarts.** `install.sh` does this when it attaches the provider. Without
   it, the agent's rerank call fails with HTTP 403.
@@ -488,7 +543,7 @@ and 3; `providers/auto-ontology.yaml` covers stage 4.
 
 ## Third-party services and dependencies
 
-Uses the installed NemoClaw and OpenClaw components and NVIDIA Endpoints for
+Uses the installed NemoClaw and OpenClaw (or Hermes) components and NVIDIA Endpoints for
 inference. The CPU tools and `retrieve.py` use only the Python standard library.
 The optional GPU path needs `cudf-cu13`, `nx-cugraph-cu13` (RAPIDS 26.10) and `networkx`
 (`utilities/requirements-gpu.txt`), installed from PyPI into `/sandbox/rapids-venv`; RAPIDS
