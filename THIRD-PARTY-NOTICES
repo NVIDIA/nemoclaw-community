@@ -404,6 +404,29 @@ Package: ziglang
 License: MIT
 URL: https://github.com/ziglang/zig-pypi
 
+Package: kumo-relational-client (with kumo-connectors and kumo-relational-engine)
+Version: 1.0.2
+License: Apache-2.0
+URL: https://github.com/kumo-ai/kumo-relational-client
+Notes: Installed by the reader into a sandbox virtual environment for examples/recipes/nvidia/provider-billing-integrity. Not vendored.
+
+Package: cudf-cu13
+Version: 26.10.*
+License: Apache-2.0
+URL: https://github.com/rapidsai/cudf
+Notes: Optional GPU path of examples/recipes/nvidia/provider-billing-integrity, installed by the reader into a sandbox virtual environment. Not vendored. The CUDA libraries it depends on carry NVIDIA's own license terms.
+
+Package: nx-cugraph-cu13
+Version: 26.10.*
+License: Apache-2.0
+URL: https://github.com/rapidsai/nx-cugraph
+Notes: Optional GPU path of examples/recipes/nvidia/provider-billing-integrity, installed by the reader. Not vendored.
+
+Package: networkx
+License: BSD-3-Clause
+URL: https://github.com/networkx/networkx
+Notes: Optional GPU path of examples/recipes/nvidia/provider-billing-integrity, installed by the reader. Not vendored.
+
 ================================================================================
 Node.js Packages
 ================================================================================
@@ -615,6 +638,11 @@ Dataset: Curated fixture derived from the U.S. Treasury OFAC Specially Designate
 License: U.S. Government work, public domain
 URL: https://sanctionslistservice.ofac.treas.gov/
 
+Dataset: Four sections of 42 CFR (455.23, 424.535, 411.353 and 1001.951) under examples/recipes/nvidia/provider-billing-integrity/skills/provider-billing-integrity/data/documents/
+License: U.S. Government work, public domain (Code of Federal Regulations)
+URL: https://www.ecfr.gov/
+Notes: Converted from the eCFR versioner XML as of 2026-08-17. The per-file source URL and SHA-256 are in the directory's manifest.json.
+
 ================================================================================
 Assets
 ================================================================================
@@ -626,6 +654,10 @@ Notes: Personal/workspace screenshots are intentionally not distributed in this 
 Asset: NVIDIA header image under examples/recipes/nvidia/payment-ops-hermes/assets/
 Owner: NVIDIA
 Notes: Reuses the repository's existing NVIDIA-owned header asset.
+
+Asset: agent-run.png under examples/recipes/nvidia/provider-billing-integrity/assets/
+Owner: NVIDIA
+Notes: Terminal capture of one agent run over the example's synthetic data, cropped to the prompt and answer.
 
 Asset: forklift-training.mp4 under examples/recipes/nvidia/sandboxed-hermes-bots/examples/videos/
 Owner: U.S. Army, Joint Forces Command United Assistance (U.S. Government work, public domain)

@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# OpenShell provider profile for a host-side Auto Ontology deployment. It binds an
+# API token to host.openshell.internal and sends it as the x-api-key header, so the
+# sandbox holds only a placeholder. Three paths only: semantic-layer status,
+# question coverage, and the chat (text-to-SQL) stream. Imported by
+# scripts/install.sh when AUTO_ONTOLOGY_API_TOKEN is set in .env; the script
+# replaces the port below with AUTO_ONTOLOGY_PORT (default 4000).
+
+id: billing-integrity-auto-ontology
+display_name: Auto Ontology (host-side)
+description: Grounded text-to-SQL over the provider_billing database on a host-side Auto Ontology deployment
+category: other
+credentials:
+- name: api_key
+  description: Auto Ontology API token (x-api-key)
+  env_vars:
+  - AUTO_ONTOLOGY_API_TOKEN
+  required: true
+  auth_style: header
+  header_name: x-api-key
+  query_param: ''
+endpoints:
+- host: host.openshell.internal
+  port: 4000
+  protocol: rest
+  enforcement: enforce
+  allowed_ips:
+  - 172.16.0.0/12
+  rules:
+  - allow:
+      method: GET
+      path: /api/semantic-compilation/status
+  - allow:
+      method: POST
+      path: /api/question-entity-coverage
+  - allow:
+      method: POST
+      path: /api/chat/completions
+binaries:
+- /usr/bin/python3*
+- /usr/local/bin/python3*

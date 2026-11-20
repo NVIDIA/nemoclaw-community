@@ -1,0 +1,18 @@
+{
+  "42-cfr-424-535-revocation.md": {
+    "source": "https://www.ecfr.gov/api/versioner/v1/full/2026-08-17/title-42.xml?section=424.535",
+    "sha256": "67f221e15805b063952315eecadcdae139e5002d427e1fd87d5f36b5eaeea8a8"
+  },
+  "42-cfr-455-23-payment-suspension.md": {
+    "source": "https://www.ecfr.gov/api/versioner/v1/full/2026-08-17/title-42.xml?section=455.23",
+    "sha256": "c23ca9588c7f6f4b71c41434fb830eb40e1977e49de565162b158f98c5db4843"
+  },
+  "42-cfr-1001-951-fraud-and-kickbacks.md": {
+    "source": "https://www.ecfr.gov/api/versioner/v1/full/2026-08-17/title-42.xml?section=1001.951",
+    "sha256": "ffbec17973945f823e9df13269dccac0789e792ca23d2895a5b47ceccc50937c"
+  },
+  "42-cfr-411-353-referral-prohibition.md": {
+    "source": "https://www.ecfr.gov/api/versioner/v1/full/2026-08-17/title-42.xml?section=411.353",
+    "sha256": "bce01152aa78a8d77637ece1d63bca8ff95cd07a001f99a258d933f1e9c4f5db"
+  }
+}

@@ -1,0 +1,12 @@
+finding_id,provider_id,finding_date,finding_type,recovered_usd
+F0009,P041,2026-01-15,overpayment_recovery,2600
+F0001,P001,2026-02-12,overpayment_recovery,34200
+F0002,P004,2026-04-20,overpayment_recovery,32100
+F0010,P057,2026-07-24,overpayment_recovery,2350
+F0003,P001,2026-07-28,overpayment_recovery,24400
+F0004,P002,2026-08-05,overpayment_recovery,39200
+F0005,P003,2026-08-19,overpayment_recovery,19000
+F0011,P066,2026-08-22,overpayment_recovery,1100
+F0008,P012,2026-08-26,overpayment_recovery,1250
+F0006,P005,2026-09-02,overpayment_recovery,27800
+F0007,P006,2026-09-14,overpayment_recovery,29400
