@@ -60,9 +60,9 @@ This recipe places the components inside a NemoClaw sandbox with reviewed
 network policy, one at a time. Kumo and Auto Ontology were each exercised on a
 small number of runs here (see [Verification](#verification)); the GPU stage ran
 once on one H100. Nothing here is a measured accuracy or speed-up. Accuracy
-and speed are measured in the [Agent Knowledge Foundation examples](https://github.com/TODO-AKF-REPO-URL/agent-knowledge-foundation-examples/tree/main/evals/provider-billing-integrity)
-(an eval kit with reference answers, arm comparisons and a scaled GPU benchmark),
-which runs outside a sandbox; this recipe covers the integration only.
+and speed are measured in the Agent Knowledge Foundation (AKF) examples repository,
+which will be published soon (an eval kit with reference answers, arm comparisons and
+a scaled GPU benchmark) and runs outside a sandbox; this recipe covers the integration only.
 
 ## Screenshot
 
@@ -196,7 +196,7 @@ enable it only where you want it.
 **About speed.** This is a sample dataset (80 providers, about 5,800 claims), so the GPU
 path is slower than the CPU one: the work is tiny and the fixed costs of starting the
 device, launching kernels and moving data dominate. This recipe does not measure where
-the break-even is. The [Agent Knowledge Foundation examples](https://github.com/TODO-AKF-REPO-URL/agent-knowledge-foundation-examples/tree/main/evals/provider-billing-integrity)
+the break-even is. The AKF examples repository (to be published soon)
 benchmarks the same CPU and GPU tools on scaled data on one H100 NVL: slower at 1,000
 providers (0.47x scan), faster at 10,000 (1.7x) and at 100,000 (4.1x), with identical
 results. That run is outside a sandbox, so treat it as context, not a result shown here.
@@ -242,8 +242,7 @@ the call to the deployment.
 **Check the SQL it returns.** In the AKF eval kit, an Auto Ontology compiled from the
 data alone, with no definitions added, got the P037 office-visit share wrong (it divided
 by all claims) where plain schema-based SQL got it right; it matched on the cluster
-total and the 90-day finding count. That is why the skill requires reading the SQL. See
-the [AKF eval kit](https://github.com/TODO-AKF-REPO-URL/agent-knowledge-foundation-examples/tree/main/evals/provider-billing-integrity).
+total and the 90-day finding count. That is why the skill requires reading the SQL.
 
 ## Security notes
 
@@ -477,8 +476,8 @@ be reported as `blocked`.
 
 This recipe verifies integration: each stage runs inside the sandbox under the
 reviewed egress policy. It does not measure accuracy or speed. The
-[Agent Knowledge Foundation examples](https://github.com/TODO-AKF-REPO-URL/agent-knowledge-foundation-examples/tree/main/evals/provider-billing-integrity)
-repository holds the eval kit for this scenario: 22 tasks with reference answers, a
+Agent Knowledge Foundation (AKF) examples repository, which will be published soon,
+holds the eval kit for this scenario: 22 tasks with reference answers, a
 grader, arm comparisons for retrieval and ontology, and a scaled CPU-versus-GPU
 benchmark. It runs outside a sandbox, with the agent kept away from the reference
 answers, and its results are directional (synthetic data, a few runs per arm). Do not
