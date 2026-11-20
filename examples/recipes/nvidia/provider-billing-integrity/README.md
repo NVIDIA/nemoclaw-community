@@ -59,7 +59,10 @@ unavailable step is reported as blocked.
 This recipe places the components inside a NemoClaw sandbox with reviewed
 network policy, one at a time. Kumo and Auto Ontology were each exercised on a
 small number of runs here (see [Verification](#verification)); the GPU stage ran
-once on one H100. Nothing here is a measured accuracy or speed-up.
+once on one H100. Nothing here is a measured accuracy or speed-up. Accuracy
+and speed are measured in the [Agent Knowledge Foundation examples](https://github.com/TODO-AKF-REPO-URL/agent-knowledge-foundation-examples/tree/main/evals/provider-billing-integrity)
+(an eval kit with reference answers, arm comparisons and a scaled GPU benchmark),
+which runs outside a sandbox; this recipe covers the integration only.
 
 ## Screenshot
 
@@ -192,10 +195,11 @@ enable it only where you want it.
 
 **About speed.** This is a sample dataset (80 providers, about 5,800 claims), so the GPU
 path is slower than the CPU one: the work is tiny and the fixed costs of starting the
-device, launching kernels and moving data dominate. A GPU speed-up needs a much larger
-dataset, in the order of millions of claims and far bigger graphs, where the computation
-outweighs those costs. This recipe did not measure where that break-even is, so treat
-the large-data benefit as the reason the path exists, not as a result shown here.
+device, launching kernels and moving data dominate. This recipe does not measure where
+the break-even is. The [Agent Knowledge Foundation examples](https://github.com/TODO-AKF-REPO-URL/agent-knowledge-foundation-examples/tree/main/evals/provider-billing-integrity)
+benchmarks the same CPU and GPU tools on scaled data on one H100 NVL: slower at 1,000
+providers (0.47x scan), faster at 10,000 (1.7x) and at 100,000 (4.1x), with identical
+results. That run is outside a sandbox, so treat it as context, not a result shown here.
 
 ## What the skill ships
 
@@ -234,6 +238,12 @@ and the timeout problem to avoid.
 model endpoints, using its own configuration. That transfer is outside this
 sandbox's egress policy**, so review it separately; the sandbox only controls
 the call to the deployment.
+
+**Check the SQL it returns.** In the AKF eval kit, an Auto Ontology compiled from the
+data alone, with no definitions added, got the P037 office-visit share wrong (it divided
+by all claims) where plain schema-based SQL got it right; it matched on the cluster
+total and the 90-day finding count. That is why the skill requires reading the SQL. See
+the [AKF eval kit](https://github.com/TODO-AKF-REPO-URL/agent-knowledge-foundation-examples/tree/main/evals/provider-billing-integrity).
 
 ## Security notes
 
@@ -463,6 +473,18 @@ scripts parse; the last command prints a JSON list of three providers with
 Auto Ontology client against a local fake server, including the cases that must
 be reported as `blocked`.
 
+## Evaluation
+
+This recipe verifies integration: each stage runs inside the sandbox under the
+reviewed egress policy. It does not measure accuracy or speed. The
+[Agent Knowledge Foundation examples](https://github.com/TODO-AKF-REPO-URL/agent-knowledge-foundation-examples/tree/main/evals/provider-billing-integrity)
+repository holds the eval kit for this scenario: 22 tasks with reference answers, a
+grader, arm comparisons for retrieval and ontology, and a scaled CPU-versus-GPU
+benchmark. It runs outside a sandbox, with the agent kept away from the reference
+answers, and its results are directional (synthetic data, a few runs per arm). Do not
+copy the reference answers into this recipe's skill: the agent can read everything the
+skill ships.
+
 ## Roadmap
 
 Each stage adds one Agent Knowledge Foundation component and keeps the CPU tool
@@ -471,10 +493,10 @@ as the baseline to compare against.
 | Stage | Component | Needs |
 | --- | --- | --- |
 | 1 | CPU baseline | Done: standard-library tool, offline. |
-| 2 | Nemotron embed and rerank for policy evidence | Done: `retrieve.py`, egress policy, second provider, restart on install. Remaining: a larger document set, and measuring retrieval against BM25 (`--method bm25` is included for the comparison). |
+| 2 | Nemotron embed and rerank for policy evidence | Done: `retrieve.py`, egress policy, second provider, restart on install. Remaining: a larger document set. Retrieval against BM25 is measured in the AKF eval kit (see [Evaluation](#evaluation)): on these four short sections they tie. |
 | 3 | Kumo risk ranking | Done: `kumo_predict.py`, the Kumo route in the policy and provider profile, a virtual environment built at install time (Python 3.13 wheels, no custom image needed), and the skill's compare-with-baseline rule. Remaining: a Kumo-versus-baseline evaluation on a larger graph. |
 | 4 | Auto Ontology | Done for one question: `ontology_qa.py`, a provider profile, install support, and skill rules that require reading the SQL. It was verified against a patched local deployment. Remaining: an upstream fix or a documented supported build, more questions (including ones the layer should decline), and a check that SQL is read when it is wrong. |
-| 5 | RAPIDS on GPU | Done for one host: `integrity_gpu.py` (scan, related, parity), an opt-in GPU sandbox in `onboard.sh` and `install.sh`, a separate RAPIDS environment, and a skill rule that treats it as a check. Remaining: a dataset large enough to show where the GPU pays off, and the CUDA 12 wheels. |
+| 5 | RAPIDS on GPU | Done for one host: `integrity_gpu.py` (scan, related, parity), an opt-in GPU sandbox in `onboard.sh` and `install.sh`, a separate RAPIDS environment, and a skill rule that treats it as a check. Remaining: the CUDA 12 wheels. Where the GPU pays off is measured in the AKF eval kit (see [Evaluation](#evaluation)). |
 | Evidence | Screenshot and a higher evidence level per stage | A real sandbox run of each stage. |
 
 `policies/nvidia-hosted-models.yaml` and `providers/nvidia-ai-api.yaml` cover stages 2
