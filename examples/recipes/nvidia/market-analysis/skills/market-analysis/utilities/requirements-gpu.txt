@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Optional CUDA-X (RAPIDS) path for accelerate.py: cuDF (cudf.pandas), cuML (cuml.accel) and nx-cugraph for NetworkX.
+# Built into /sandbox/rapids-venv by scripts/install.sh when NEMOCLAW_SANDBOX_GPU=1; separate from the analysis environment.
+# The CUDA 13 wheels need a driver that supports CUDA 13; use the -cu12 names for a CUDA 12 driver. Transitive packages
+# (pandas, numpy, the CUDA libraries, rmm, libcugraph) are chosen by cuDF and not pinned here.
+cudf-cu13==26.10.*
+cuml-cu13==26.10.*
+nx-cugraph-cu13==26.10.*
+# Do not pin pandas, treelite, networkx or scikit-learn here: cudf-cu13 and cuml-cu13 choose them (cuDF 26.10 needs pandas 3.0),
+# and a pin that disagrees makes the install fail. This environment therefore has pandas 3 while analysis-venv has pandas 2.3.

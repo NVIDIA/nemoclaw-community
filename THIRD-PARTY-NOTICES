@@ -291,6 +291,18 @@ Package: uvicorn
 License: BSD-3-Clause
 URL: https://github.com/Kludex/uvicorn
 
+Package: cudf-cu13
+Version: 26.10.*
+License: Apache-2.0
+URL: https://github.com/rapidsai/cudf
+Notes: Optional GPU path of examples/recipes/nvidia/market-analysis, installed by the reader into a sandbox virtual environment. Not vendored. The CUDA libraries it depends on carry NVIDIA's own license terms.
+
+Package: cuml-cu13
+Version: 26.10.*
+License: Apache-2.0
+URL: https://github.com/rapidsai/cuml
+Notes: Optional GPU path of examples/recipes/nvidia/market-analysis, installed by the reader. Not vendored.
+
 Package: data-designer
 License: Apache-2.0
 URL: https://pypi.org/project/data-designer/
@@ -318,6 +330,12 @@ URL: https://github.com/jupyterlab/jupyterlab
 Package: jupyterlab-git
 License: BSD-3-Clause
 URL: https://github.com/jupyterlab/jupyterlab-git
+
+Package: kumo-relational-client (with kumo-connectors and kumo-relational-engine)
+Version: 1.0.2
+License: Apache-2.0
+URL: https://github.com/kumo-ai/kumo-relational-client
+Notes: Installed by the reader into a sandbox virtual environment for examples/recipes/nvidia/market-analysis. Not vendored.
 
 Package: langchain
 License: MIT
@@ -355,6 +373,10 @@ Package: model-signing
 License: Apache-2.0
 URL: https://github.com/sigstore/model-transparency
 
+Package: networkx
+License: BSD-3-Clause
+URL: https://github.com/networkx/networkx
+
 Package: numpy
 License: BSD-3-Clause and included component licenses (upstream distribution
 metadata records BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0)
@@ -363,6 +385,12 @@ Notes: Declared by
 examples/tools/cae-freecad-agent-harness-optimization/requirements.txt for that
 example's offline test suite only. Its live scorer runs inside FreeCAD's
 bundled interpreter, which supplies its own NumPy.
+
+Package: nx-cugraph-cu13
+Version: 26.10.*
+License: Apache-2.0
+URL: https://github.com/rapidsai/nx-cugraph
+Notes: Optional GPU path of examples/recipes/nvidia/market-analysis, installed by the reader. Not vendored.
 
 Package: openai
 License: Apache-2.0
@@ -614,6 +642,11 @@ URL: https://smith.langchain.com/
 Dataset: Curated fixture derived from the U.S. Treasury OFAC Specially Designated Nationals list
 License: U.S. Government work, public domain
 URL: https://sanctionslistservice.ofac.treas.gov/
+
+Dataset: Three SEC rule texts (Form 8-K Item 1.05, 17 CFR 229.106 and 17 CFR 240.13a-11) under examples/recipes/nvidia/market-analysis/skills/market-analysis/data/documents/
+License: U.S. Government work, public domain
+URL: https://www.ecfr.gov/
+Notes: Form 8-K Item 1.05 is from the Federal Register full text (2023-16194); the two CFR sections are from the eCFR versioner as of 2026-08-17. The per-file source URL and SHA-256 are in the directory's manifest.json. The prices, news and issuers in the example are synthetic.
 
 ================================================================================
 Assets

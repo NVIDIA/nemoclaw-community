@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Installed by scripts/install.sh into a virtual environment (default /sandbox/analysis-venv): the interpreter for the
+# analyses the agent writes (run with accelerate.py) and for kumo_predict.py. Wheels only: no source build runs in the sandbox.
+# Never add the [explain] extra to the Kumo client: it sends raw cell values to a third-party LLM.
+# Transitive dependencies are not pinned; the install is a few hundred MB.
+kumo-relational-client[relational]==1.0.2
+pandas>=2.3,<2.4
+numpy>=2.4,<2.5
+networkx>=3.6,<3.7
+scikit-learn>=1.9,<1.10

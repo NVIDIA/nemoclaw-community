@@ -1,0 +1,14 @@
+{
+  "regulation-s-k-item-106.md": {
+    "source": "https://www.ecfr.gov/api/versioner/v1/full/2026-08-17/title-17.xml?section=229.106",
+    "sha256": "f159cfa852befca2dc08cb44acbcd6fbe5afdfef6adeffa172942df0ce2285d8"
+  },
+  "rule-13a-11.md": {
+    "source": "https://www.ecfr.gov/api/versioner/v1/full/2026-08-17/title-17.xml?section=240.13a-11",
+    "sha256": "d64c5922cd9c933431a3eadef9d623e7ea323d3770c18c411dc40f9f690b5f80"
+  },
+  "form-8k-item-1-05.md": {
+    "source": "https://www.federalregister.gov/documents/full_text/xml/2023/08/04/2023-16194.xml",
+    "sha256": "c1f5314824b4f97e08bc791a0098f33a37b7d65198c392a7b3652c43ac42119e"
+  }
+}
