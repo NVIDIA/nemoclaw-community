@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+name: deep-research-agent-configs
+services:
+  research-worker:
+    build: ../src
+    restart: unless-stopped
+    env_file: .run/worker.env
+    environment:
+      DEEPAGENTS_SERVICE_PORT: "9050"
+      DEEPAGENTS_WORKER_CONCURRENCY: "${DEEPAGENTS_WORKER_CONCURRENCY:-5}"
+      DEEPAGENTS_TASK_TTL_HOURS: "${DEEPAGENTS_TASK_TTL_HOURS:-168}"
+      DEEPAGENTS_STATE_DIR: /app/state
+      DEEPAGENTS_DEFAULT_MODEL: "${DEEPAGENTS_DEFAULT_MODEL:-nvidia/nemotron-3.5-super-vl-120b-a12b}"
+      DEEPAGENTS_TOOL_PROFILE: research
+      OPENAI_API_BASE: "${OPENAI_API_BASE:-https://integrate.api.nvidia.com/v1}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:?Set the worker inference API key}"
+      WEBSEARCH_ENDPOINT_URL: "${WEBSEARCH_ENDPOINT_URL:-}"
+      WEBSEARCH_SERVICE_SECRET: "${WEBSEARCH_SERVICE_SECRET:-}"
+      DOC_SEARCH_ENDPOINT_URL: "${DOC_SEARCH_ENDPOINT_URL:-}"
+      DOC_SEARCH_SERVICE_SECRET: "${DOC_SEARCH_SERVICE_SECRET:-}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./state:/app/state
+    networks:
+      - research
+    healthcheck:
+      test: [CMD, curl, -fsS, http://127.0.0.1:9050/healthz]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+networks:
+  research:
+    external: true
+    name: "${RESEARCH_GATEWAY_NETWORK:?Set the managed gateway network name}"

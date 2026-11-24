@@ -1,0 +1,73 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+# yaml-language-server: $schema=https://raw.githubusercontent.com/NVIDIA/NemoClaw/v0.1.0-rc.4/schemas/nemoclaw-v1alpha1.schema.json
+apiVersion: nemoclaw.nvidia.com/v1alpha1
+kind: NemoClawConfig
+metadata:
+  name: deep-research
+  uid: 7e3985d6-e124-4b82-94cb-aee51c9b03e7
+spec:
+  gateway:
+    management: managed
+    target:
+      docker:
+        port: 17672
+        # Docker Desktop on macOS: unix:///Users/YOU/.docker/run/docker.sock
+        engine: unix:///var/run/docker.sock
+        networkCIDR: 172.30.192.0/24
+    config:
+      openshell.drivers.docker:
+        allow_driver_config: true
+  inferenceProviders:
+    nvidia:
+      provider: openai
+      api: openai-completions
+      endpoint: https://integrate.api.nvidia.com/v1
+      credential:
+        env: NVIDIA_INFERENCE_API_KEY
+  sandboxes:
+    deep-research:
+      image:
+        ref: ghcr.io/nvidia/nemoclaw/v1/openclaw@sha256:bd4d5483797673c83d1dc607893c6e61b84b92cc467a181c2c278614344c168d
+      driverConfig:
+        docker:
+          mounts:
+            - type: volume
+              source: deep-research-assets
+              target: /sandbox/research
+              read_only: true
+      network:
+        tier: isolated
+        grants:
+          research-worker:
+            binaries:
+              - {path: /usr/local/bin/python*}
+              - {path: /usr/bin/python*}
+            endpoints:
+              - host: research-worker
+                port: 9050
+                protocol: rest
+                enforcement: enforce
+                rules:
+                  - allow: {method: GET, path: /healthz}
+                  - allow: {method: GET, path: /v1/tasks}
+                  - allow: {method: GET, path: /v1/tasks/**}
+                  - allow: {method: POST, path: /v1/tasks}
+                  - allow: {method: DELETE, path: /v1/tasks/**}
+      harness:
+        kind: nvidia.fabric.openclaw
+        runtime:
+          timeout_seconds: 300
+      agent:
+        name: main
+        skills:
+          directories:
+            - folder: /sandbox/research/skills
+          duplicates: reject
+        inference:
+          routes:
+            - name: primary
+              providerRef: nvidia
+              overrides:
+                model: nvidia/nemotron-3.5-super-vl-120b-a12b
+                maxTokens: 16384
