@@ -9,9 +9,9 @@
 Write analysis scripts in plain pandas, scikit-learn and NetworkX. `run` uses the interpreter of the matching virtual
 environment that scripts/install.sh built: /sandbox/cuda-x-venv on a GPU sandbox (override with CUDA_X_VENV) or
 /sandbox/analysis-venv (override with ANALYSIS_VENV). On the GPU it installs the CUDA-X accelerators (cudf.pandas,
-cuml.accel, nx-cugraph) before the script imports anything, so the same script runs on cuDF, cuML and nx-cugraph. Set
+cuml.accel, nx-cugraph) before the script imports anything, so the same script runs with those accelerators enabled (whether an operation then runs on the GPU or falls back to the CPU is not recorded). Set
 pass --engine cpu to stay on the CPU (the ACCELERATE_GPU=off environment variable is refused, so a CPU run is always an explicit choice). Inside the script, `json.loads(os.environ['ACCELERATE_ENGINE'])`
-is the engine receipt to copy into the answer (device, the libraries that ran, and host_gpu_usable: whether this sandbox
+is the engine receipt to copy into the answer (device, the configured libraries, and host_gpu_usable: whether this sandbox
 could use the GPU). Each run's time is appended to outputs/timings.jsonl in the working directory. `status` probes once
 (one CUDA-X operation in a child process), so `gpu_usable` means the stack works. A missing environment is reported as
 blocked and nothing is substituted.
@@ -129,7 +129,7 @@ def main():
                'evidence': 'configured',
                'note': 'The accelerators configured for this run, built before the script starts. It does not show that any '
                        'operation ran on the GPU: no dispatch or profiler evidence is collected.',
-               'libraries': ({'pandas': f"cudf.pandas {status['cuda_x']['cudf']}", 'scikit-learn': f"cuml.accel {status['cuda_x']['cuml']}",
+               'configured_libraries': ({'pandas': f"cudf.pandas {status['cuda_x']['cudf']}", 'scikit-learn': f"cuml.accel {status['cuda_x']['cuml']}",
                               'networkx': f"nx-cugraph {status['cuda_x']['nx_cugraph']}"} if device == 'gpu' else
                              {lib: version(lib) for lib in ('pandas', 'scikit-learn', 'networkx')})}
     os.environ['ACCELERATE_ENGINE'] = json.dumps(receipt)

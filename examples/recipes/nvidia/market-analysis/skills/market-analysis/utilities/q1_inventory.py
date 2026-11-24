@@ -64,8 +64,9 @@ def ask_ontology_once(timeout):
 def ask_ontology():
     """Always asks Auto Ontology (utilities/ontology_qa.py), so the question cannot be skipped. Never raises: an
     unavailable service is a `blocked` entry, quoted as is, and the numbers below come from the CSVs either way.
-    The deployment writes its SQL fresh each time and sometimes emits table names SQLite rejects, so a `no_sql` answer is
-    (and so is SQL without result rows, status `no_rows`) retried (at most MAX_ATTEMPTS calls, within one 1,200 second budget); `blocked` is not retried."""
+    The deployment writes its SQL fresh each time and sometimes emits table names SQLite rejects, so an answer with no SQL
+    (`no_sql`) or with SQL but no result rows (`no_rows`) is retried, at most MAX_ATTEMPTS calls within one 1,200 second
+    budget; `blocked` is not retried."""
     deadline = time.monotonic() + TOTAL_BUDGET_SECONDS
     result, attempts = None, 0
     while attempts < MAX_ATTEMPTS:

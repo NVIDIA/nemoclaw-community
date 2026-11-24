@@ -62,12 +62,12 @@ and your question to its own hosted models. Every issuer, price and headline is 
     sector median is the median across issuers of each issuer's 20-session return), and cross-check a figure
     that matters with a short script over `data/`. Quote the SQL and call the result an Auto Ontology answer,
     not a fact. Pass the whole question as asked, including every part (for any question you ask it yourself), and say if a call timed out or was stopped. If `ontology_qa.py` exits with `blocked`, or returns an
-    empty `sql` (`answered_with_sql` false), or is not installed, say so, quote its `blocked:` or `note` line
+    empty `sql`, or SQL without result rows (`answered_with_sql` false), or is not installed, say so, quote its `blocked:` or `note` line
     verbatim without guessing a cause from other output (the sandbox prints `cannot create /proc/self/oom_score_adj`
     on every command, which is harmless), and compute from the CSVs,
     saying which numbers you computed yourself.
 11. **The GPU is the same analysis on faster hardware, not a different one.** Scripts are plain pandas,
-    scikit-learn and NetworkX; `accelerate.py` puts cuDF, cuML and nx-cugraph under them on a GPU sandbox. Copy
+    scikit-learn and NetworkX; `accelerate.py` configures cuDF, cuML and nx-cugraph under them on a GPU sandbox (a script only uses what it imports: the shipped Q3 helper is pandas and NumPy). Copy
     the engine receipt (`ACCELERATE_ENGINE`) into the answer; an answer with no engine receipt is incomplete. Never
     run your analysis scripts with `python3`, a heredoc, `python3 -c`, `execute_code`, `pip install` or a virtual environment's
     interpreter directly: use `accelerate.py run`. Setting `os.environ['ACCELERATE_GPU']` inside a script does nothing; to stay on the CPU use `accelerate.py run --engine cpu`. Never `import cudf`, `cuml`, `cugraph` or `nx_cugraph` yourself and
@@ -104,7 +104,7 @@ python3 utilities/ontology_qa.py --question "<business question, with the as-of 
 - `accelerate.py` runs a script you wrote in the Python environment that matches this sandbox: the CUDA-X
   environment on a GPU sandbox, otherwise the CPU analysis environment. `status` reports whether the GPU stack
   works (`gpu_usable`); start an analysis session with it. Inside a script,
-  `json.loads(os.environ['ACCELERATE_ENGINE'])` is the engine receipt: device, libraries that ran, and whether
+  `json.loads(os.environ['ACCELERATE_ENGINE'])` is the engine receipt: device, configured libraries, and whether
   the sandbox could use the GPU. Pass `--engine cpu` to stay on the CPU (`ACCELERATE_GPU=off` is refused). A missing environment exits with
   `blocked`. The system Python has no pandas: always run analyses through `accelerate.py`.
 - `q1_inventory.py`, `q2_leaders.py`, `q3_unusual.py` and `q4_peers.py` are tested helpers that implement the

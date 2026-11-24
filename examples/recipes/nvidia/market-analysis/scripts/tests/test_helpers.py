@@ -15,7 +15,7 @@ import tempfile
 from pathlib import Path
 
 UTIL = Path(__file__).resolve().parents[2] / 'skills' / 'market-analysis' / 'utilities'
-RECEIPT = {'device': 'cpu', 'host_gpu_usable': False, 'settings_gpu': 'auto', 'libraries': {}}
+RECEIPT = {'device': 'cpu', 'host_gpu_usable': False, 'settings_gpu': 'auto', 'configured_libraries': {}}
 
 
 def run(name, *args):
@@ -136,6 +136,24 @@ def test_kumo_population_uses_rows_up_to_the_anchor():
             prices.loc[earlier, 'dollar_volume'] = 1e15  # the same change before the anchor must count
             prices.to_csv(data / 'daily_prices.csv', index=False)
             assert outsider in population(data), 'rows before the anchor did not change the Kumo population'
+            # a delisted or not yet listed issuer is never selected, however liquid it was before the anchor
+            assets = pd.read_csv(data / 'assets.csv')
+            for column, value in (('last_session', '2026-08-20'), ('first_session', '2026-08-25')):
+                shifted = assets.copy()
+                shifted.loc[shifted.asset_id == outsider, column] = value
+                shifted.to_csv(data / 'assets.csv', index=False)
+                assert outsider not in population(data), f'an issuer with {column}={value} was selected'
+            assets.to_csv(data / 'assets.csv', index=False)
+            # ties are broken by asset_id, ascending
+            prices = pd.read_csv(data / 'daily_prices.csv')
+            listed = assets[(assets.first_session <= '2026-08-24') & (assets.last_session >= '2026-08-24')].asset_id
+            others = sorted(a for a in listed if a not in base)[:3]
+            tops = sorted(base)[:10]
+            before = prices.trading_date <= '2026-08-24'
+            prices.loc[before & prices.asset_id.isin(tops), 'dollar_volume'] = 2e15
+            prices.loc[before & prices.asset_id.isin(others), 'dollar_volume'] = 1e15  # three tied for two places
+            prices.to_csv(data / 'daily_prices.csv', index=False)
+            assert population(data) == sorted(tops + others[:2]), 'ties were not broken by ascending asset_id'
     finally:
         kp.DATA = original
 

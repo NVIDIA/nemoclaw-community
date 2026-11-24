@@ -40,7 +40,7 @@
     "prediction": "A probability at an anchor close for an outcome over a horizon. The file contains the sessions after the anchor; a prediction may use only rows dated on or before its anchor.",
     "association": "A link between news and returns is an association, not proof of cause.",
     "centrality": "PageRank with damping 0.85 over the declared-peer graph, each link weighted by the absolute correlation of the two issuers' total_return_1d over the window.",
-    "acceleration": "Questions 1 to 4 are your own pandas, scikit-learn and NetworkX scripts, run with utilities/accelerate.py. On a machine with a usable GPU stack the same scripts run on CUDA-X (cudf.pandas, cuml.accel, nx-cugraph) with no code change; otherwise on the CPU. Session dates are closes (21:00 UTC)."
+    "acceleration": "Questions 1 to 4 are your own pandas, scikit-learn and NetworkX scripts, run with utilities/accelerate.py. On a machine with a usable GPU stack the same scripts run with CUDA-X (cudf.pandas, cuml.accel, nx-cugraph) configured and no code change; otherwise on the CPU. The receipt records that configuration, not which operations ran on the GPU. The shipped Question 3 helper uses pandas and NumPy only. Session dates are closes (21:00 UTC)."
   },
   "prediction_task": {
     "anchor": "2026-08-24",

@@ -12,7 +12,7 @@
 An OpenClaw agent (or, optionally, a Hermes agent) in a NemoClaw sandbox reviews 36 fictional issuers over 166
 trading days (2026-01-02 to 2026-08-31): prices, company news and declared peers, plus three real, public-domain
 SEC rule texts. The agent writes its own short pandas, scikit-learn and NetworkX analyses and runs them with a
-helper that uses CUDA-X on a GPU sandbox. It asks Kumo for a five-session ranking, retrieves the rule text with
+helper that configures CUDA-X on a GPU sandbox. It asks Kumo for a five-session ranking, retrieves the rule text with
 Nemotron embed and rerank, and can ask Auto Ontology a business question about the tables. It proposes issuers
 for human review and never gives investment advice, places trades or approves anything.
 
@@ -96,8 +96,8 @@ The skill answers any of these on their own, or all six as a review. The wording
 | # | Question | Component |
 | --- | --- | --- |
 | 1 | What do we have? Tables, reconciliation, issuers and median 20-session return per sector | Auto Ontology (optional, for the issuers-per-sector count; the medians come from the CSVs) |
-| 2 | Who led and lagged, and how did news line up with what followed? | pandas, on cuDF on a GPU |
-| 3 | Which sessions were unusual? | pandas and NumPy (a per-issuer baseline), on cuDF on a GPU; the shipped helper does not call scikit-learn or cuML |
+| 2 | Who led and lagged, and how did news line up with what followed? | pandas, with cuDF configured on a GPU |
+| 3 | Which sessions were unusual? | pandas and NumPy (a per-issuer baseline), with cuDF configured on a GPU; the shipped helper does not call scikit-learn or cuML |
 | 4 | Who moves together? | NetworkX PageRank, on nx-cugraph on a GPU |
 | 5 | What does a model expect for the next five sessions? | Kumo |
 | 6 | What does Form 8-K Item 1.05 require, and what should we take forward? | Nemotron embed and rerank |
@@ -143,8 +143,8 @@ bash scripts/onboard.sh && bash scripts/install.sh
 
 This needs a host NVIDIA GPU, a driver that supports CUDA 13 (the wheels in `requirements-gpu.txt` are `-cu13`; swap in
 the `-cu12` names for a CUDA 12 driver) and a working CDI setup (`nvidia-ctk cdi generate`). `install.sh` builds
-`/sandbox/cuda-x-venv` (cuDF, cuML, nx-cugraph; a few GB from PyPI). Then `accelerate.py run` puts cuDF, cuML and
-nx-cugraph under the agent's pandas, scikit-learn and NetworkX with no change to the script, and `accelerate.py status`
+`/sandbox/cuda-x-venv` (cuDF, cuML, nx-cugraph; a few GB from PyPI). Then `accelerate.py run` configures cuDF, cuML and
+nx-cugraph under the agent's pandas, scikit-learn and NetworkX with no change to the script (the shipped helpers use pandas, NumPy and NetworkX, so cuML is exercised only by scripts the agent writes), and `accelerate.py status`
 reports whether the stack works. Without a GPU or that environment, analyses run on the CPU and the engine receipt says
 so. Direct device access widens what the sandbox can touch, so enable it only where you want it.
 
