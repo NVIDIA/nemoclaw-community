@@ -4,7 +4,7 @@
 # Status And Planned Work
 
 This page records what has run, on which host, and what the result was. It
-was last updated on 2026-11-12.
+was last updated on 2026-11-24.
 
 ## Summary
 
@@ -20,12 +20,15 @@ the target host with an agent answer.
 
 | Item | State | Host and evidence |
 | --- | --- | --- |
-| Static checks: 82 unit tests, sandbox policy, provider profile, addresses, approved folder, Compose rendering | Pass | macOS, Python 3.9.6 and 3.12.16, Docker Compose 5.7.0 |
+| Static checks: 83 unit tests, sandbox policy, provider profile, addresses, approved folder, Compose rendering | Pass | macOS, Python 3.9.6 and 3.12.16, Docker Compose 5.7.0 |
 | Setup, all seven stages | Pass | macOS, Docker Desktop 29.9.3, OpenShell 0.1.8 with the Docker driver in bridge network mode, CPU inference |
 | Setup a second time, reusing the profile, the provider, and the sandbox | Pass | Same host |
+| Setup a second time after files were added to the sandbox copy of the folder: the copy holds only the approved files | Pass | Same host, on 2026-11-24 |
+| Setup a second time with another `INFERENCE_MODEL`: setup replaces the sandbox, and OpenClaw names the new model | Pass | Same host, on 2026-11-24, with two small test models |
 | Effective policy read back: one provider entry for `host.openshell.internal` port 11434 | Pass | Same host |
 | Live test suite: 14 ready cases | All pass | Same host. S04 and S04b are `N/A` off WSL2 |
 | Teardown: sandbox, provider, profile, image, and container removed, model volume kept | Pass | Same host |
+| `teardown.sh --purge-models` after that teardown: model volume removed | Pass | Same host, on 2026-11-24 |
 | OpenClaw reaches the local model from the sandbox | Pass | Same host. The OpenShell log shows the request allowed by the provider entry, and Ollama returned HTTP 200 |
 | The agent answers a question about the folder | Not finished | Same host. With CPU inference, an agent turn did not finish within the time limit |
 | GPU serving | Never run | None |
@@ -46,8 +49,13 @@ exited with status 0. These results are from the evidence file of that run:
 | S02, S03, S05b | `PASS` | `permission denied` |
 | S05 | `PASS` | `not found`. The image has no `sudo` command |
 | S06, S06b, S06c, S09, S09c | `PASS` | `permission denied`. The connection failed inside the sandbox |
-| S09b | `PASS` | `http error 403`. The response named the provider entry and `POST /api/pull` |
+| S09b | `PASS` | `policy_denied`. The response had status 403, and its body named the provider entry and `POST /api/pull` |
 | S08 | `PASS` | `timed out`, after 120 seconds. No other server answered |
+
+The timings are from the run of 2026-11-12 with the default model. The suite
+ran again on 2026-11-24, after the HTTP cases changed to match `policy_denied`
+in place of the status 403. That run used a small test model,
+`qwen2.5:0.5b`, and every ready case passed with the signatures in this table.
 
 The OpenShell log of the sandbox records each decision. Run
 `openshell logs local-only-assist` to read it. For example, it lists the denied

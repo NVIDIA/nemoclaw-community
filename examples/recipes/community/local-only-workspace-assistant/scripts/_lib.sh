@@ -18,6 +18,9 @@ PROFILE_FILE="${EXAMPLE_DIR}/policies/ollama-provider-profile.yaml"
 PROFILE_ID="local-only-ollama"
 SANDBOX_WORKSPACE="/sandbox/workspace"
 SANDBOX_SKILL_DIR="/sandbox/.openclaw/skills/workspace-assistant"
+SANDBOX_OPENCLAW_CONFIG="/sandbox/.openclaw/openclaw.json"
+# The volume `name` in COMPOSE_FILE. It holds the downloaded models.
+MODEL_VOLUME="local-only-workspace-assistant-ollama-models"
 
 load_env() {
   if [[ -f "${EXAMPLE_DIR}/.env" ]]; then
@@ -118,6 +121,35 @@ sandbox_phase() {
 
 sandbox_is_ready() {
   [[ "$(sandbox_phase "$@" | tr '[:upper:]' '[:lower:]')" == "ready" ]]
+}
+
+# Delete the recipe sandbox and wait until OpenShell no longer lists it.
+# Deletion finishes in the background, and the provider cannot be deleted
+# while the sandbox still holds it.
+sandbox_delete_and_wait() {
+  if [[ "$(sandbox_phase)" != "Missing" ]]; then
+    openshell sandbox delete "${SANDBOX_NAME}"
+    for _ in $(seq 1 60); do
+      [[ "$(sandbox_phase)" == "Missing" ]] && break
+      sleep 2
+    done
+  fi
+  [[ "$(sandbox_phase)" == "Missing" ]]
+}
+
+# Print the model reference and the inference URL in the OpenClaw
+# configuration of the running sandbox, as "<model reference> <URL>". The
+# image build writes both, so they show which settings the sandbox was
+# created with.
+sandbox_inference_settings() {
+  sandbox_exec python3 -c '
+import json, sys
+config = json.load(open(sys.argv[1]))
+print(
+    config["agents"]["defaults"]["model"]["primary"],
+    config["models"]["providers"]["inference"]["baseUrl"],
+)
+' "${SANDBOX_OPENCLAW_CONFIG}" | tr -d '\r' | tail -n 1
 }
 
 # Standard input is closed so a call inside a `while read` loop cannot consume

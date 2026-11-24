@@ -67,7 +67,10 @@ the NVIDIA Open Model License Agreement.
 | Minimum Ollama version | 0.17.1 |
 
 To use another model, set `INFERENCE_MODEL` to its Ollama tag and run setup
-again. Choose a model with the tools capability, because an agent calls tools.
+again. Setup downloads the model, deletes the sandbox, and creates it again
+from a new image, because the image holds the model name in the OpenClaw
+configuration. Files that the agent wrote in the sandbox are deleted. Choose a
+model with the tools capability, because an agent calls tools.
 Review the license of the model first.
 
 [README, Default Model](../README.md#default-model) records the one check of
@@ -142,14 +145,14 @@ The recipe keeps its state in the `.run` directory, which Git ignores.
 | List of files to copy | `.run/workspace-files.tsv` | Not removed. Setup writes it again on each run |
 | Evidence records | `.run/evidence/` | Not removed |
 | Sandbox creation log | `.run/sandbox-create.log` | Not removed |
-| Downloaded models | Docker volume `local-only-workspace-assistant-ollama-models` | `scripts/teardown.sh --purge-models` |
+| Downloaded models | Docker volume `local-only-workspace-assistant-ollama-models` | `scripts/teardown.sh --purge-models`, together with the other resources or in a later run |
 | Sandbox image | Docker image `local-only-workspace-assistant:local` | Teardown |
 | Provider profile and provider | OpenShell gateway, ID `local-only-ollama` | Teardown |
-| Copy of the approved folder | `/sandbox/workspace` in the sandbox | Teardown, when it deletes the sandbox |
+| Copy of the approved folder | `/sandbox/workspace` in the sandbox | Teardown, when it deletes the sandbox. Each setup run replaces the copy |
 
 Setup and teardown act only on resources that `.run/created` lists. If that
 file is lost, remove the sandbox, the provider, the provider profile, the
-image, and the container by hand.
+image, the container, and the model volume by hand.
 
 ## Commands Of The `localonly` Package
 

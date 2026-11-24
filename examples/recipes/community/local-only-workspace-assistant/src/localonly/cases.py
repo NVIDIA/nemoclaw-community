@@ -35,22 +35,45 @@ _FS_ABSENT_OR_DENIED = _FS_DENIED + ("no such file or directory", "not found")
 # A connection that the sandbox refuses fails with EACCES before it leaves the
 # sandbox. An outage or a closed port fails with a different error.
 _NET_DENIED = ("permission denied",)
-# A request that reaches the proxy but breaks an endpoint rule. A bare "403"
-# could match a timing or an address in the output.
-_HTTP_DENIED = ("http error 403", "http/1.1 403", "policy_denied")
+# A request that reaches the sandbox proxy but breaks an endpoint rule gets an
+# HTTP 403 whose body names this error. The status alone is not a signature:
+# any web server can answer 403 or "Forbidden", and that answer would show
+# that the request left the sandbox.
+_HTTP_DENIED = ("policy_denied",)
+
+
+def _python_request(prepare: str, timeout_seconds: int) -> str:
+    """Return a script that sends `req` with a second program, Python.
+
+    `prepare` is Python statements that bind `req`. On an HTTP error status
+    the script prints the response body and fails, so the verdict can tell a
+    denial by the sandbox from an error status that a server sent.
+    """
+    return (
+        'python3 -c "\n'
+        "import json, os, sys, urllib.error, urllib.request\n"
+        + prepare + "\n"
+        "try:\n"
+        "    print(urllib.request.urlopen(req, timeout=%d).read().decode())\n"
+        "except urllib.error.HTTPError as error:\n"
+        "    print('HTTP Error', error.code, error.read().decode(errors='replace'))\n"
+        "    sys.exit(1)\n"
+        '"'
+    ) % timeout_seconds
+
 
 # Setup creates the sandbox with OPENAI_BASE_URL and INFERENCE_MODEL set.
 # OpenShell 0.1 has no model rewrite, so the request names the real model.
-_CHAT_REQUEST = (
-    "python3 -c \"import json,os,urllib.request;"
-    "body=json.dumps({'model':os.environ['INFERENCE_MODEL'],'max_tokens':1,"
-    "'messages':[{'role':'user','content':'ping'}]}).encode();"
-    "req=urllib.request.Request(os.environ['OPENAI_BASE_URL']+'/chat/completions',"
-    "data=body,headers={'Content-Type':'application/json'});"
-    "print(urllib.request.urlopen(req,timeout=120).read().decode())\""
+_CHAT_REQUEST = _python_request(
+    "body = json.dumps({'model': os.environ['INFERENCE_MODEL'], 'max_tokens': 1,"
+    " 'messages': [{'role': 'user', 'content': 'ping'}]}).encode()\n"
+    "req = urllib.request.Request(os.environ['OPENAI_BASE_URL'] + '/chat/completions',"
+    " data=body, headers={'Content-Type': 'application/json'})",
+    120,
 )
-# curl prints the connect error only in verbose output.
-_CURL = "curl -v -sS --max-time 8 -o /dev/null "
+# curl prints the connect error only in verbose output. With --fail-with-body
+# an HTTP error status fails the command and still prints the response body.
+_CURL = "curl -v -sS --max-time 8 --fail-with-body "
 
 
 @dataclass(frozen=True)
@@ -173,11 +196,8 @@ CASES: Tuple[Case, ...] = (
         title="Reach an external HTTP endpoint with a second program",
         priority="P0",
         expect=DENY,
-        script=(
-            "python3 -c \"import urllib.request;"
-            "urllib.request.urlopen('http://example.com', timeout=8)\""
-        ),
-        deny_signatures=_NET_DENIED + _HTTP_DENIED + ("forbidden",),
+        script=_python_request("req = urllib.request.Request('http://example.com')", 8),
+        deny_signatures=_NET_DENIED + _HTTP_DENIED,
         note="Egress rules name programs. One denied program does not prove another.",
     ),
     Case(
@@ -210,11 +230,10 @@ CASES: Tuple[Case, ...] = (
         title="Call the model download API of the local inference server",
         priority="P0",
         expect=DENY,
-        script=(
-            "python3 -c \"import os,urllib.request;"
-            "base=os.environ['OPENAI_BASE_URL'].rsplit('/v1',1)[0];"
-            "req=urllib.request.Request(base+'/api/pull',data=b'{}',method='POST');"
-            "urllib.request.urlopen(req,timeout=8)\""
+        script=_python_request(
+            "base = os.environ['OPENAI_BASE_URL'].rsplit('/v1', 1)[0]\n"
+            "req = urllib.request.Request(base + '/api/pull', data=b'{}', method='POST')",
+            8,
         ),
         deny_signatures=_HTTP_DENIED,
         note="The provider profile permits the inference paths only, not the server's other APIs.",

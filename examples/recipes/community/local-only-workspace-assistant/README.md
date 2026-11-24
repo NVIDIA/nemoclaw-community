@@ -294,7 +294,7 @@ flowchart LR
 
 The runner checks these rules in order and reports the first verdict that
 applies. A denied case passes only when the output carries a boundary
-signature, such as `Permission denied` or `HTTP Error 403`.
+signature, such as `Permission denied` or `policy_denied`.
 
 | Order | Condition | Verdict |
 | --- | --- | --- |
@@ -330,7 +330,7 @@ Git ignores the `.run` directory.
 | --- | --- | --- |
 | OpenShell is the only boundary. The recipe adds no check inside the sandbox | A check that runs in the agent process can be changed by that process | The recipe depends on the OpenShell version and the host kernel |
 | The sandbox policy has no network endpoint. The provider profile holds the only one | The local endpoint, its paths, and its programs live in one reviewed file, and removing the provider removes the egress | Two files describe the network boundary, so each has its own check |
-| Copy the approved folder. Do not mount it | The sandbox holds no path to the host folder | The copy is out of date until setup runs again |
+| Copy the approved folder. Do not mount it | The sandbox holds no path to the host folder | The copy is out of date until setup runs again. Setup then replaces the whole copy |
 | The recipe owns its Ollama container and model volume | Teardown can remove what setup created without changing an existing Ollama installation | The model is downloaded again even when the host already has it |
 | The recipe builds its own image from the published OpenClaw image | The published image configures OpenClaw for OpenShell 0.0. The recipe points it at the local server and adds the canary file | Every setup builds an image layer |
 | A denied case needs a boundary signature to pass | A missing file or an offline network also makes an action fail | A reworded denial message produces `INCONCLUSIVE` until the signature list is updated |
@@ -512,7 +512,12 @@ Linux host, stage 2 stops when the kernel does not list the Landlock security
 module; `.env.example` documents the variable that lets setup continue.
 
 After you correct a problem, run the same command again. Setup reuses the
-resources that it already created. If setup reports that the sandbox exists in
+resources that it already created, with two exceptions. It empties
+`/sandbox/workspace` before it copies the approved folder, so the sandbox
+holds only the files that the folder holds now. And it replaces the sandbox
+when `INFERENCE_MODEL` or `INFERENCE_BASE_URL` differs from the values that
+the sandbox was created with. Both delete files that the agent wrote there.
+If setup reports that the sandbox exists in
 a phase other than ready, run `bash scripts/teardown.sh` first.
 
 ### Step 6: Confirm The Provider
@@ -600,7 +605,7 @@ bash scripts/verify.sh
 == 3/5 unit tests ==
 ..................................................................................
 ----------------------------------------------------------------------
-Ran 82 tests in 0.032s
+Ran 83 tests in 0.032s
 
 OK
 == 4/5 policy, provider profile, endpoint, and approved folder ==
@@ -684,9 +689,11 @@ Ollama container once and starts it again. It writes one JSON record for each
 case to `.run/evidence/`.
 
 A denied case passes only when the action fails with text that the boundary
-produces, such as `Permission denied` or `HTTP Error 403`. A failure without
+produces, such as `Permission denied` or `policy_denied`. A failure without
 that text is `INCONCLUSIVE`, because a missing file or an offline network also
-makes an action fail. The command exits with status 1 on any `FAIL` and status
+makes an action fail. An HTTP status 403 alone is not such text, because any
+web server can send it. Only the `policy_denied` error in the response body of
+the sandbox proxy counts. The command exits with status 1 on any `FAIL` and status
 2 on any `INCONCLUSIVE`. `PLANNED` and `N/A` cases do not change the exit
 status.
 
@@ -744,7 +751,7 @@ Each record holds the decision and never the command output. This record is
 case S09b from the macOS run:
 
 ```json
-{"backend": "openshell", "case_id": "S09b", "detail": "expected result", "duration_ms": 156, "exit_code": 1, "expect": "deny", "host_traits": [], "leak_detected": false, "matched_signature": "http error 403", "priority": "P0", "schema": 1, "timestamp": "2026-11-12T21:21:08Z", "verdict": "PASS"}
+{"backend": "openshell", "case_id": "S09b", "detail": "expected result", "duration_ms": 125, "exit_code": 1, "expect": "deny", "host_traits": [], "leak_detected": false, "matched_signature": "policy_denied", "priority": "P0", "schema": 1, "timestamp": "2026-11-24T23:26:10Z", "verdict": "PASS"}
 ```
 
 If a denied action returns protected content, the record sets `leak_detected`
@@ -759,7 +766,7 @@ bash scripts/teardown.sh
 Teardown deletes the sandbox, the provider, the provider profile, and the
 sandbox image that setup created, and it stops the recipe-owned Ollama
 container. It leaves the model volume in place. To delete the model volume as
-well, run:
+well, run this command in place of the first one, or after it:
 
 ```bash
 bash scripts/teardown.sh --purge-models
@@ -814,6 +821,8 @@ does not change an Ollama installation that exists outside this recipe.
 - **The copy filter is a host-side convenience.** A file can change between
   the check and the copy. Use a folder that untrusted processes cannot write
   to. The sandbox receives a copy, so run setup again after you change files.
+  Setup replaces the whole copy. It also deletes files that the agent wrote
+  in `/sandbox/workspace`.
 - **Some cases are planned.** The table marks them. S07 needs a recorded tool
   call that the harness replays.
 - **Denial text can differ.** The suite recognizes a denial by its text. A

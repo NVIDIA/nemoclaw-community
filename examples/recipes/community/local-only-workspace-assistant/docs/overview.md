@@ -95,7 +95,7 @@ Docker Desktop.
 | Approved folder | The one host folder that setup copies into the sandbox |
 | Copy filter | The host-side check that rejects links, special files, and oversized files before the copy |
 | Canary | A file in the sandbox image that file permissions allow every user to read and that the policy does not list |
-| Boundary signature | Text that a denial by the sandbox produces, such as `Permission denied` or `HTTP Error 403` |
+| Boundary signature | Text that a denial by the sandbox produces, such as `Permission denied` or `policy_denied` |
 | Evidence record | One JSON line that holds the verdict of one test case and never the command output |
 | Host trait | A property of the host that gives a case its meaning, such as WSL2 |
 

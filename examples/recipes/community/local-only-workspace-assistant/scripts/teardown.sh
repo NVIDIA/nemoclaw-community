@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Remove the resources that scripts/bring-up.sh recorded. This script does not
-# remove a sandbox, a provider, a provider profile, an image, or a model that
-# existed before setup.
+# remove a sandbox, a provider, a provider profile, an image, or a model
+# volume that existed before setup.
 
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -33,19 +33,10 @@ if ! state_has sandbox "${SANDBOX_NAME}"; then
 elif ! command -v openshell >/dev/null 2>&1; then
   echo "openshell not found; sandbox ${SANDBOX_NAME} was not deleted." >&2
 else
-  if [[ "$(sandbox_phase)" != "Missing" ]]; then
-    openshell sandbox delete "${SANDBOX_NAME}"
-    # Deletion finishes in the background. The provider cannot be deleted
-    # while the sandbox still holds it.
-    for _ in $(seq 1 60); do
-      [[ "$(sandbox_phase)" == "Missing" ]] && break
-      sleep 2
-    done
-  fi
-  if [[ "$(sandbox_phase)" != "Missing" ]]; then
+  sandbox_delete_and_wait || {
     echo "Sandbox ${SANDBOX_NAME} is still listed. Run this script again later." >&2
     exit 1
-  fi
+  }
   state_remove sandbox "${SANDBOX_NAME}"
 fi
 
@@ -84,20 +75,30 @@ else
 fi
 
 echo "== 4/4 stop the recipe-owned inference server =="
-if ! state_has compose ollama; then
-  echo "Setup did not start the inference server; leaving Docker unchanged."
-elif ! command -v docker >/dev/null 2>&1; then
+if ! command -v docker >/dev/null 2>&1; then
   echo "docker not found; the inference server was not stopped." >&2
 else
-  if [[ "${purge_models}" == 1 ]]; then
-    compose down --volumes
+  if ! state_has compose ollama; then
+    echo "Setup did not start the inference server; leaving it unchanged."
   else
     compose down
+    state_remove compose ollama
+    state_remove device gpu
+    state_remove device cpu
+  fi
+  # The volume record is separate from the server record, so --purge-models
+  # also works after a teardown that kept the volume.
+  if ! state_has volume "${MODEL_VOLUME}"; then
+    echo "Setup did not create volume ${MODEL_VOLUME}; leaving it unchanged."
+  elif [[ "${purge_models}" == 1 ]]; then
+    if docker volume inspect "${MODEL_VOLUME}" >/dev/null 2>&1; then
+      docker volume rm "${MODEL_VOLUME}" >/dev/null
+    fi
+    state_remove volume "${MODEL_VOLUME}"
+    echo "Deleted the model volume ${MODEL_VOLUME}."
+  else
     echo "The model volume is kept. Run with --purge-models to delete it."
   fi
-  state_remove compose ollama
-  state_remove device gpu
-  state_remove device cpu
 fi
 
 echo "Teardown complete."

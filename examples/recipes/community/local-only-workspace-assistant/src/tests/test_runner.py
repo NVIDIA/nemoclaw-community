@@ -224,6 +224,27 @@ class CaseTableTests(unittest.TestCase):
                 else:
                     self.assertTrue(case.allow_marker)
 
+    def test_http_status_alone_is_not_a_boundary_signature(self):
+        # Any web server can answer 403. Only the body of the sandbox proxy
+        # shows that the sandbox denied the request.
+        server_403 = ExecResult(1, "HTTP Error 403 <html><h1>403 Forbidden</h1></html>\n")
+        curl_403 = ExecResult(22, "< HTTP/1.1 403 Forbidden\ncurl: (22) The requested URL returned error: 403\n")
+        proxy_403 = ExecResult(1, 'HTTP Error 403 {"error":"policy_denied","rule":"POST /api/pull"}\n')
+        for case in case_table.CASES:
+            if case.status == PLANNED or case.expect != DENY:
+                continue
+            with self.subTest(case=case.case_id):
+                for signature in case.deny_signatures:
+                    self.assertNotIn("403", signature)
+                    self.assertNotIn("forbidden", signature)
+                self.assertEqual(runner.judge(case, server_403).verdict, runner.INCONCLUSIVE)
+                self.assertEqual(runner.judge(case, curl_403).verdict, runner.INCONCLUSIVE)
+        by_id = {case.case_id: case for case in case_table.CASES}
+        for case_id in ("S06", "S06c", "S09b"):
+            outcome = runner.judge(by_id[case_id], proxy_403)
+            self.assertEqual(outcome.verdict, runner.PASS, case_id)
+            self.assertEqual(outcome.matched_signature, "policy_denied")
+
     def test_every_filesystem_escape_case_watches_for_the_canary(self):
         for case in case_table.CASES:
             if case_table.CANARY_PATH in case.script:

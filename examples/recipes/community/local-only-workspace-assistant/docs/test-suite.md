@@ -6,8 +6,9 @@
 The test suite runs allowed and denied actions inside the running sandbox and
 records a verdict for each one. No test depends on model output.
 
-Nobody has run the suite against a sandbox yet. The unit tests for the suite
-itself pass. See [Status And Planned Work](status.md).
+The suite has run against a sandbox on one host: macOS with Docker Desktop
+and OpenShell 0.1.8. Every ready case passed. Nobody has run it on Linux or on
+WSL2. See [Status And Planned Work](status.md).
 
 ## Why A Failed Action Is Not Enough
 
@@ -22,7 +23,14 @@ The suite therefore asks two questions about a denied action:
 2. Did the failure carry text that the boundary produces?
 
 Only two yes answers give `PASS`. The suite calls that text a boundary
-signature. Examples are `Permission denied` and `HTTP Error 403`.
+signature. Examples are `Permission denied` and `policy_denied`.
+
+An HTTP status is not a boundary signature. Any web server can answer
+`403 Forbidden`, and that answer would show that the request left the sandbox.
+The sandbox proxy answers a request that breaks an endpoint rule with status
+403 and a body that names the error `policy_denied`. The cases that send HTTP
+requests print the response body, and only that error counts as a denial. A
+403 without it is `INCONCLUSIVE`.
 
 ## The Parts
 
@@ -176,7 +184,7 @@ Case(
     priority="P1",
     expect=DENY,
     script="wget -nv -T 8 -O /dev/null http://example.com",
-    deny_signatures=("permission denied", "http error 403"),
+    deny_signatures=("permission denied", "policy_denied"),
 ),
 ```
 
@@ -186,6 +194,9 @@ Follow these rules:
   shows nothing.
 - Write boundary signatures in lowercase. Run the action once against a
   running sandbox and read the denial text before you rely on a signature.
+- Do not use an HTTP status, such as `403` or `forbidden`, as a signature.
+  Print the response body and match the text that only the boundary produces.
+  The unit tests reject a ready case that passes on a bare 403.
 - Set `leak_marker` when the action could return protected content.
 - Set `requires` when the case has a meaning only on some hosts.
 - Do not name a sandbox tool in the script. The unit tests reject a script

@@ -69,6 +69,15 @@ else
 fi
 
 echo "== 3/7 start the recipe-owned inference server =="
+# Record the model volume when this run creates it, or when an earlier setup
+# of this recipe did. Teardown deletes only a recorded volume, and the record
+# outlives a teardown that keeps the volume.
+if ! docker volume inspect "${MODEL_VOLUME}" >/dev/null 2>&1 || state_has compose ollama; then
+  state_add volume "${MODEL_VOLUME}"
+elif ! state_has volume "${MODEL_VOLUME}"; then
+  echo "Volume ${MODEL_VOLUME} exists and this recipe has no record of creating it."
+  echo "Setup uses it. 'scripts/teardown.sh --purge-models' will not delete it."
+fi
 compose up -d --wait ollama
 state_add compose ollama
 
@@ -109,18 +118,42 @@ else
 fi
 
 echo "== 6/7 build the sandbox image and create the dedicated sandbox =="
+create_sandbox=0
 if [[ "$(sandbox_phase)" != "Missing" ]] && ! state_has sandbox "${SANDBOX_NAME}"; then
   echo "Sandbox ${SANDBOX_NAME} exists and this recipe did not create it." >&2
   echo "Setup replaces the sandbox policy, so it does not reuse that sandbox." >&2
   echo "Set SANDBOX_NAME to an unused name, then run this script again." >&2
   exit 1
 elif sandbox_is_ready; then
-  echo "Reusing sandbox ${SANDBOX_NAME}."
+  # The image build writes the model and the inference URL into the OpenClaw
+  # configuration. A sandbox that was created with other values would keep
+  # calling the old model, so setup replaces it.
+  wanted_settings="inference/${INFERENCE_MODEL} ${INFERENCE_BASE_URL}"
+  current_settings="$(sandbox_inference_settings)" || {
+    echo "Could not read the OpenClaw configuration of sandbox ${SANDBOX_NAME}." >&2
+    echo "Run scripts/teardown.sh, then run this script again." >&2
+    exit 1
+  }
+  if [[ "${current_settings}" == "${wanted_settings}" ]]; then
+    echo "Reusing sandbox ${SANDBOX_NAME}."
+  else
+    echo "Sandbox ${SANDBOX_NAME} is configured for: ${current_settings}"
+    echo "The settings ask for:                  ${wanted_settings}"
+    echo "Replacing the sandbox. Files that the agent wrote in it are deleted."
+    sandbox_delete_and_wait || {
+      echo "Sandbox ${SANDBOX_NAME} is still listed. Run this script again later." >&2
+      exit 1
+    }
+    create_sandbox=1
+  fi
 elif [[ "$(sandbox_phase)" != "Missing" ]]; then
   echo "Sandbox ${SANDBOX_NAME} exists in phase '$(sandbox_phase)'." >&2
   echo "Wait for it, or run scripts/teardown.sh, then run this script again." >&2
   exit 1
 else
+  create_sandbox=1
+fi
+if [[ "${create_sandbox}" == 1 ]]; then
   # OpenShell 0.1 creates a sandbox from an image, not from a Dockerfile.
   docker build \
     --build-arg "INFERENCE_MODEL=${INFERENCE_MODEL}" \
@@ -163,6 +196,10 @@ openshell policy set --policy "${POLICY_FILE}" --wait "${SANDBOX_NAME}"
 openshell policy get "${SANDBOX_NAME}" --full -o json | localonly check-effective-policy
 
 echo "== 7/7 copy the approved folder and the skill =="
+# Empty the sandbox copy first. Without this, a file that was deleted on the
+# host, or that came from a folder selected for an earlier run, would stay
+# readable by the agent. Files that the agent wrote there are deleted too.
+sandbox_exec rm -rf "${SANDBOX_WORKSPACE}"
 sandbox_exec mkdir -p "${SANDBOX_WORKSPACE}" "${SANDBOX_SKILL_DIR}"
 while IFS=$'\t' read -r relative source; do
   [[ -n "${relative}" ]] || continue
