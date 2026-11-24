@@ -43,13 +43,16 @@ RESTART_NEEDED=0
 HOSTED_ENABLED=0
 ONTOLOGY_ENABLED=0
 ONTOLOGY_PROFILE_FILE="$EXAMPLE_DIR/providers/auto-ontology.yaml"
-ONTOLOGY_PROFILE_ID="market-analysis-auto-ontology"
+ONTOLOGY_PROFILE_BASE="market-analysis-auto-ontology"
 ONTOLOGY_PROVIDER="${NEMOCLAW_SANDBOX_NAME}-ontology"
 ONTOLOGY_PORT="${AUTO_ONTOLOGY_PORT:-4000}"
 if [[ ! "$ONTOLOGY_PORT" =~ ^[0-9]{1,5}$ ]] || ((ONTOLOGY_PORT < 1 || ONTOLOGY_PORT > 65535)); then
   echo "error: AUTO_ONTOLOGY_PORT must be a port number (1-65535), got '$ONTOLOGY_PORT'" >&2
   exit 1
 fi
+# One profile per endpoint: a profile pins one port and cannot be edited in place, and sandboxes that share a gateway
+# can point at different deployments. A port change therefore adds a profile instead of replacing a shared one.
+ONTOLOGY_PROFILE_ID="$ONTOLOGY_PROFILE_BASE-$ONTOLOGY_PORT"
 PYPI_ADDED=0
 CLEANUP_DIRS=()
 
@@ -99,6 +102,9 @@ enable_hosted_retrieval() {
   export NVIDIA_AI_API_KEY="$NVIDIA_INFERENCE_API_KEY"
   if openshell provider get "$AI_PROVIDER" >/dev/null 2>&1; then
     run openshell provider update "$AI_PROVIDER" --credential NVIDIA_AI_API_KEY
+    # A running agent keeps the placeholders it started with, so a rotated key needs a restart even when the provider
+    # was already attached.
+    RESTART_NEEDED=1
   else
     run openshell provider create --name "$AI_PROVIDER" --type "$PROFILE_ID" \
       --credential NVIDIA_AI_API_KEY
@@ -116,29 +122,38 @@ enable_hosted_retrieval() {
 }
 
 enable_auto_ontology() {
-  # The profile pins one host port, so render it from AUTO_ONTOLOGY_PORT. A profile cannot be
-  # edited in place: if the existing one has another port, replace it (and its provider).
-  local rendered scratch
+  # The profile pins one host port, so render it from AUTO_ONTOLOGY_PORT under an id that names the port. Other
+  # sandboxes keep the profile they use; only this sandbox's provider moves when its port changes.
+  local rendered scratch current_type
   scratch="$(mktemp -d)"
   CLEANUP_DIRS+=("$scratch")
   rendered="$scratch/auto-ontology.yaml"
-  sed "s/^  port: .*/  port: $ONTOLOGY_PORT/" "$ONTOLOGY_PROFILE_FILE" >"$rendered"
+  sed -e "s/^id: .*/id: $ONTOLOGY_PROFILE_ID/" -e "s/^  port: .*/  port: $ONTOLOGY_PORT/" "$ONTOLOGY_PROFILE_FILE" >"$rendered"
   if openshell provider profile export "$ONTOLOGY_PROFILE_ID" >/dev/null 2>&1; then
-    if contains "port: $ONTOLOGY_PORT"$'\n' openshell provider profile export "$ONTOLOGY_PROFILE_ID"; then
-      echo "Provider profile '$ONTOLOGY_PROFILE_ID' already exists for port $ONTOLOGY_PORT — keeping it."
-    else
-      echo "Provider profile '$ONTOLOGY_PROFILE_ID' is for another port — recreating it for $ONTOLOGY_PORT."
-      openshell sandbox provider detach "$NEMOCLAW_SANDBOX_NAME" "$ONTOLOGY_PROVIDER" >/dev/null 2>&1 || true
-      openshell provider delete "$ONTOLOGY_PROVIDER" >/dev/null 2>&1 || true
-      run openshell provider profile delete "$ONTOLOGY_PROFILE_ID"
-      run openshell provider profile import --file "$rendered"
-    fi
+    echo "Provider profile '$ONTOLOGY_PROFILE_ID' already exists — keeping it."
   else
     run openshell provider profile import --file "$rendered"
   fi
 
   if openshell provider get "$ONTOLOGY_PROVIDER" >/dev/null 2>&1; then
-    run openshell provider update "$ONTOLOGY_PROVIDER" --credential AUTO_ONTOLOGY_API_TOKEN
+    if contains "Type: $ONTOLOGY_PROFILE_ID"$'\n' openshell provider get "$ONTOLOGY_PROVIDER"; then
+      run openshell provider update "$ONTOLOGY_PROVIDER" --credential AUTO_ONTOLOGY_API_TOKEN
+    else
+      # This sandbox's provider uses another endpoint's profile (an earlier port, or the profile from before ports were
+      # named). Replace only this sandbox's provider, then drop the old profile if nothing else still uses it.
+      current_type="$(openshell provider get "$ONTOLOGY_PROVIDER" 2>/dev/null | sed -n 's/^ *Type: //p')"
+      echo "Provider '$ONTOLOGY_PROVIDER' uses profile '$current_type' — moving it to '$ONTOLOGY_PROFILE_ID'."
+      openshell sandbox provider detach "$NEMOCLAW_SANDBOX_NAME" "$ONTOLOGY_PROVIDER" >/dev/null 2>&1 || true
+      run openshell provider delete "$ONTOLOGY_PROVIDER"
+      run openshell provider create --name "$ONTOLOGY_PROVIDER" --type "$ONTOLOGY_PROFILE_ID" \
+        --credential AUTO_ONTOLOGY_API_TOKEN
+      if [[ "$current_type" == "$ONTOLOGY_PROFILE_BASE"* ]]; then
+        # OpenShell refuses while another provider still references it; that is the expected answer, not an error.
+        openshell provider profile delete "$current_type" >/dev/null 2>&1 || true
+      fi
+    fi
+    # The running agent keeps the placeholders it started with, so a new or rotated token needs a restart.
+    RESTART_NEEDED=1
   else
     run openshell provider create --name "$ONTOLOGY_PROVIDER" --type "$ONTOLOGY_PROFILE_ID" \
       --credential AUTO_ONTOLOGY_API_TOKEN

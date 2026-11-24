@@ -33,7 +33,7 @@ cp "$SOURCE_EXAMPLE_DIR/scripts/_lib.sh" \
   "$SOURCE_EXAMPLE_DIR/scripts/stop.sh" \
   "$EXAMPLE_DIR/scripts/"
 
-cp "$SOURCE_EXAMPLE_DIR/providers/auto-ontology.yaml" "$EXAMPLE_DIR/providers/"
+cp "$SOURCE_EXAMPLE_DIR/providers/auto-ontology.yaml" "$SOURCE_EXAMPLE_DIR/providers/nvidia-ai-api.yaml" "$EXAMPLE_DIR/providers/"
 
 nemoclaw() {
   {
@@ -56,10 +56,51 @@ openshell() {
     printf '%s\n' "${NEMOCLAW_SANDBOX_NAME:-market-analysis}"
   fi
   # A fresh gateway: no provider exists yet, and the profile import succeeds.
+  if [[ -n "${FAKE_STATE_DIR:-}" ]]; then
+    fake_gateway "$@"
+    return
+  fi
   [[ "$1 $2" != "provider get" && "$1 $2 $3" != "provider profile export" ]] || return 1
   return 0
 }
-export -f openshell
+
+# A gateway that remembers providers, profiles and attachments, with OpenShell's rule that a profile still used by a
+# provider cannot be deleted. Used when FAKE_STATE_DIR is set.
+fake_gateway() {
+  local d="$FAKE_STATE_DIR" n
+  case "$1 $2" in
+    "provider get")
+      [[ -f "$d/provider/$3" ]] || return 1
+      printf 'Provider:\n\n  Name: %s\n  Type: %s\n  Resource version: 1\n' "$3" "$(cat "$d/provider/$3")" ;;
+    "provider create")
+      n="$4"
+      [[ ! -f "$d/provider/$n" ]] || return 1
+      [[ -f "$d/profile/$6" ]] || return 1
+      printf '%s' "$6" >"$d/provider/$n" ;;
+    "provider update") [[ -f "$d/provider/$3" ]] || return 1 ;;
+    "provider delete")
+      rm -f "$d/provider/$3"
+      rm -f "$d"/attached/*/"$3" ;;
+    "provider profile")
+      case "$3" in
+        export) [[ -f "$d/profile/$4" ]] && cat "$d/profile/$4" ;;
+        import) n="$(sed -n 's/^id: //p' "$5")"; cp "$5" "$d/profile/$n" ;;
+        delete)
+          if grep -qxF "$4" "$d"/provider/* 2>/dev/null; then
+            echo "profile $4 is still used by a provider" >&2
+            return 1
+          fi
+          rm -f "$d/profile/$4" ;;
+      esac ;;
+    "sandbox provider")
+      case "$3" in
+        list) ls "$d/attached/$4" 2>/dev/null || true ;;
+        attach) mkdir -p "$d/attached/$4"; : >"$d/attached/$4/$5" ;;
+        detach) rm -f "$d/attached/$4/$5" ;;
+      esac ;;
+  esac
+}
+export -f openshell fake_gateway
 
 export NEMOCLAW_SANDBOX_NAME=market-analysis
 
@@ -172,7 +213,7 @@ log="$(cat "$COMMAND_LOG")"
 assert_contains "$log" "openshell args=provider profile import --file " \
   "install did not import a rendered Auto Ontology profile"
 assert_contains "$log" \
-  "openshell args=provider create --name market-analysis-ontology --type market-analysis-auto-ontology --credential AUTO_ONTOLOGY_API_TOKEN" \
+  "openshell args=provider create --name market-analysis-ontology --type market-analysis-auto-ontology-5000 --credential AUTO_ONTOLOGY_API_TOKEN" \
   "install did not create the Auto Ontology provider from the environment token"
 assert_contains "$log" \
   "openshell args=sandbox provider attach market-analysis market-analysis-ontology" \
@@ -182,6 +223,56 @@ assert_contains "$log" "host.openshell.internal:5000" \
 if grep -q 'ontology-secret' "$COMMAND_LOG"; then
   fail "the Auto Ontology token appeared in a command line"
 fi
+
+# Credential rotation and port changes against a gateway that remembers state, with two sandboxes on one profile.
+export FAKE_STATE_DIR="$TEST_ROOT/gateway"
+reset_gateway() { rm -rf "$FAKE_STATE_DIR"; mkdir -p "$FAKE_STATE_DIR"/{provider,profile,attached}; }
+install_box() {  # install_box SANDBOX PORT TOKEN [KEY]
+  NEMOCLAW_SANDBOX_NAME="$1" FAKE_SANDBOX_EXISTS=1 NEMOCLAW_PROVIDER=build NVIDIA_INFERENCE_API_KEY="${4:-}" \
+    AUTO_ONTOLOGY_API_TOKEN="$3" AUTO_ONTOLOGY_PORT="$2" bash "$EXAMPLE_DIR/scripts/install.sh" >/dev/null
+}
+reset_gateway
+install_box box-a 4000 first-token
+install_box box-b 4000 first-token
+
+# rotating the token of an already attached provider updates it and restarts the agent
+: >"$COMMAND_LOG"
+install_box box-a 4000 second-token
+log="$(cat "$COMMAND_LOG")"
+assert_contains "$log" "openshell args=provider update box-a-ontology --credential AUTO_ONTOLOGY_API_TOKEN" \
+  "rotating the token did not update the provider"
+assert_contains "$log" "args=box-a stop" "rotating the token did not stop the sandbox"
+assert_contains "$log" "args=box-a start" "rotating the token did not start the sandbox again"
+if grep -q 'second-token' "$COMMAND_LOG"; then
+  fail "the rotated token appeared in a command line"
+fi
+
+# rotating the build.nvidia.com key of an already attached provider also restarts the agent
+install_box box-a 4000 second-token first-key
+: >"$COMMAND_LOG"
+install_box box-a 4000 second-token second-key
+log="$(cat "$COMMAND_LOG")"
+assert_contains "$log" "openshell args=provider update box-a-ai-api --credential NVIDIA_AI_API_KEY" \
+  "rotating the key did not update the provider"
+assert_contains "$log" "args=box-a start" "rotating the key did not restart the sandbox"
+
+# moving one sandbox to another port keeps the other sandbox's provider and profile
+: >"$COMMAND_LOG"
+install_box box-a 5000 second-token
+[[ "$(cat "$FAKE_STATE_DIR/provider/box-a-ontology")" == "market-analysis-auto-ontology-5000" ]] \
+  || fail "the moved sandbox does not use the profile for its new port"
+[[ "$(cat "$FAKE_STATE_DIR/provider/box-b-ontology")" == "market-analysis-auto-ontology-4000" ]] \
+  || fail "moving one sandbox changed the other sandbox's provider"
+[[ -f "$FAKE_STATE_DIR/profile/market-analysis-auto-ontology-4000" ]] \
+  || fail "moving one sandbox deleted a profile the other sandbox still uses"
+[[ -f "$FAKE_STATE_DIR/attached/box-b/box-b-ontology" ]] || fail "moving one sandbox detached the other"
+[[ -f "$FAKE_STATE_DIR/attached/box-a/box-a-ontology" ]] || fail "the moved sandbox lost its provider"
+
+# once the last user of an old profile moves away, the old profile goes too
+install_box box-b 5000 second-token
+[[ ! -f "$FAKE_STATE_DIR/profile/market-analysis-auto-ontology-4000" ]] \
+  || fail "the old port's profile was left behind after its last user moved"
+unset FAKE_STATE_DIR
 
 # a malformed Auto Ontology port is rejected before anything is run
 : >"$COMMAND_LOG"

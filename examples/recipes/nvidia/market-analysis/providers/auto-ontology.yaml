@@ -6,9 +6,10 @@
 # sandbox holds only a placeholder. Three paths only: semantic-layer status,
 # question coverage, and the chat (text-to-SQL) stream. Imported by
 # scripts/install.sh when AUTO_ONTOLOGY_API_TOKEN is set in .env; the script
-# replaces the port below with AUTO_ONTOLOGY_PORT (default 4000).
+# replaces the id and the port below with ones that name AUTO_ONTOLOGY_PORT (default 4000),
+# so each endpoint has its own profile and sandboxes that use another port are not affected.
 
-id: market-analysis-auto-ontology
+id: market-analysis-auto-ontology-4000
 display_name: Auto Ontology (host-side)
 description: Grounded text-to-SQL over the market database on a host-side Auto Ontology deployment
 category: other

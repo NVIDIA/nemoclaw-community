@@ -190,6 +190,9 @@ Setting up the deployment, as tested with a local build of Auto Ontology (`22e22
 - `APP_URL` in the deployment's configuration must equal the origin you sign in from, or sign-in returns HTTP 403.
 - A call can take several minutes. The agent must wait for it rather than stop it.
 - `scripts/install.sh` replaces the installed skill, so edits made inside the sandbox are lost on re-install.
+- The profile is per port (`market-analysis-auto-ontology-<port>`). Changing `AUTO_ONTOLOGY_PORT` and re-running the
+  install moves only that sandbox's provider to the new profile; other sandboxes keep theirs. Re-running the install with a
+  key or token updates the provider and restarts the sandbox, so a rotated credential reaches the running agent.
 - Set the deployment's `EMBED_MODEL` to a current model such as `nvidia/nemotron-3.5-embed-1b`. The earlier default
   `nvidia/nemotron-3-embed-1b` was retired on 2026-11-23 (HTTP 410), after which retrieval finds no candidates and every
   question returns `SQL can't be constructed from the data` with `coverage: 0.0`. Restart the stack after changing it; the
@@ -239,7 +242,8 @@ named the wrong cause, which is why the skill now tells it to wait and to quote 
   `ma-gpu-ai-api` (and `ma-gpu-ontology`), removed as below with that name.
 - To remove Auto Ontology: `openshell sandbox provider detach market-analysis market-analysis-ontology`,
   `openshell provider delete market-analysis-ontology` and
-  `openshell provider profile delete market-analysis-auto-ontology`.
+  `openshell provider profile delete market-analysis-auto-ontology-<port>` (the profile is per port; the delete is refused
+  while another sandbox's provider still uses it).
 - To remove the hosted-model setup: `openshell sandbox provider detach market-analysis market-analysis-ai-api`,
   `openshell provider delete market-analysis-ai-api`, `nemoclaw market-analysis policy-remove nvidia-hosted-models`
   and `openshell provider profile delete market-analysis-nvidia-ai-api`.

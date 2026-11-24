@@ -1,8 +1,8 @@
 # Data dictionary
 
 Everything here is fictional except `documents/`, which is public-domain US federal rule text. The tables come from a
-seeded generator that is not part of this folder; `documents/` can be rebuilt with
-`python3 utilities/fetch_documents.py` (network; checks the Federal Register text against a pinned SHA-256; `--out DIR` avoids rewriting the committed files).
+seeded generator that is not part of this folder, and `documents/` holds the rule texts as shipped; this recipe has no
+script that regenerates either.
 
 | File | Rows | Key | Columns |
 |---|---|---|---|

@@ -18,7 +18,7 @@
         "data/asset_relationships.csv"
       ],
       "dictionary": "data/README.md",
-      "database": "utilities/build_database.py builds a SQLite database with the same rows, keys and foreign keys; this is the source Auto Ontology ingests for Question 1.",
+      "database": "scripts/build_database.py (in the recipe, run on the host) builds a SQLite database with the same rows, keys and foreign keys; this is the source Auto Ontology ingests for Question 1.",
       "authority": "Synthetic. 36 fictional issuers, generated from a fixed seed. No real company, price or news item."
     },
     "regulations": {
