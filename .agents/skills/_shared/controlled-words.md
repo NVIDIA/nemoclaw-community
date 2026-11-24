@@ -19,6 +19,7 @@ follow-up pull request.
 | Use | Avoid or clarify | Guidance |
 | --- | --- | --- |
 | NemoClaw | Nemoclaw, Nemo Claw | Use the official product name. |
+| NemoClaw Agent Configs | NemoClaw v1 | Use for the configuration-driven deployment workflow. Preserve literal release versions, paths, image references, and API identifiers. |
 | NemoClaw Community | community NemoClaw, community repo | Use for this project or repository. |
 | OpenShell | Openshell, Open Shell | Use the official product name. |
 | example | demo, sample | Use for an independently deployable contribution. Use `demo` only when demonstration is the explicit purpose. |
