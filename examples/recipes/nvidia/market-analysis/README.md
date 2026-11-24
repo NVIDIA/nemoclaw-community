@@ -32,6 +32,28 @@ evaluation kit; this recipe covers the integration only.
 > not the median question (see [Auto Ontology](#auto-ontology-optional)). Do not read any statement below as a
 > measured accuracy or speed-up.
 
+## Screenshot
+
+![A Hermes agent in a NemoClaw sandbox answers question 1: table row counts, reconciliation checks, the SQL Auto Ontology returned, and median 20-session returns by sector](docs/images/market-analysis-hermes-q1.png)
+
+One Hermes turn on a GPU sandbox with the skill loaded, asked "what do we have?". The agent ran
+`accelerate.py run utilities/q1_inventory.py` once (93 seconds, mostly the Auto Ontology call) and reported what it
+printed. Notice three things: the reconciliation checks all pass; the **Auto Ontology SQL is shown as the tool returned
+it**, not written by the agent; and the sector medians are computed from the CSVs, not by Auto Ontology.
+
+The essential output as text (36 issuers; the SQL can differ from call to call, see [Auto Ontology](#auto-ontology-optional)):
+
+```text
+assets 36 · daily_prices 5,976 · trading_sessions 166 · company_news 484 · asset_relationships 54
+duplicate price keys 0 · orphan price/news/relationship rows 0 · rows after the as-of date 0
+
+SELECT sector, COUNT(DISTINCT asset_id) FROM assets WHERE last_session <= '2026-08-31' GROUP BY sector
+
+Finance, Insurance and Real Estate 6  -0.0339     Retail Trade 5  0.1178
+Manufacturing 15  0.0567                          Services 4  -0.0223
+Mining 2  -0.1544                                 Transportation, Communications, Electric, Gas and Sanitary Services 4  0.0772
+```
+
 ## Agent Knowledge Foundation
 
 | Question | Component | In this recipe |
