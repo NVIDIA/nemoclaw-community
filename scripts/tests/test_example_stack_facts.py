@@ -213,7 +213,7 @@ class ExampleStackFactsTests(unittest.TestCase):
             Counter(
                 {
                     # Includes the Kubernetes Deployer, SRE Assistant, the
-                    # Workday HR assistant, the NemoClaw v1 NV Tech Assistant,
+                    # Workday HR assistant, the NemoClaw Agent Configs NV Tech Assistant,
                     # and both harness optimization examples: CAE FreeCAD (on
                     # NeMo Helix) and Enterprise Assistant.
                     "unconfirmed": 15,

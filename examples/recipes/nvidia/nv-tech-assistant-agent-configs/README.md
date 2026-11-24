@@ -7,7 +7,7 @@
 
 | Catalog field | Value |
 | --- | --- |
-| Description | Helps developers choose and troubleshoot NVIDIA technologies by searching allowlisted documentation, repositories, model catalogs, and forums for current, evidence-linked answers, deployed from one NemoClaw v1 configuration file. |
+| Description | Helps developers choose and troubleshoot NVIDIA technologies by searching allowlisted documentation, repositories, model catalogs, and forums for current, evidence-linked answers, deployed with NemoClaw Agent Configs from one configuration file. |
 | Industry | 🖥️ Hardware/Semiconductor |
 | Requirements | Docker · NemoClaw CLI · NVIDIA Endpoints API key · no web search · no offline corpus |
 | NemoClaw | v0.1.0-rc.4 |
@@ -17,8 +17,8 @@
 NV Tech Assistant answers NVIDIA technical questions with citations to pages
 it retrieved during the task, not from model memory. It searches authorized
 NVIDIA sources, GitHub, Hugging Face, and arXiv. This version deploys the
-assistant with NemoClaw v1: one YAML file declares the gateway, the inference
-provider, the OpenClaw agent, its read-only network grants, and its skill, and
+assistant with NemoClaw Agent Configs: one YAML file declares the gateway, the
+inference provider, the OpenClaw agent, its read-only network grants, and its skill, and
 `nemoclaw plan` and `nemoclaw apply` create them.
 
 The [NemoClaw Classic version](../nv-tech-assistant/README.md) of this example
@@ -60,7 +60,7 @@ such as `ALLOWED GET https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.
 | --- | --- |
 | Category | NVIDIA Recipe |
 | Contributor or provenance | NVIDIA. Adapted from the [NemoClaw Classic NV Tech Assistant](../nv-tech-assistant/README.md). |
-| Use this when | You run NemoClaw v1 and want a research assistant whose network reach is limited to named NVIDIA, GitHub, Hugging Face, and arXiv hosts. |
+| Use this when | You run NemoClaw Agent Configs and want a research assistant whose network reach is limited to named NVIDIA, GitHub, Hugging Face, and arXiv hosts. |
 | You will get | One OpenClaw sandbox on a local NemoClaw gateway that answers NVIDIA questions with cited sources and drafts network grants for blocked sites. |
 | Runs on | A host with Docker. Verified on macOS with Docker Desktop on Apple silicon. |
 | Requires | The NemoClaw v0.1.0-rc.4 CLI, Docker, the OpenShell CLI (the release's [prerequisites](https://github.com/NVIDIA/NemoClaw/blob/v0.1.0-rc.4/docs/get-started/prerequisites.md) name 0.1.9), `jq`, and an NVIDIA Endpoints API key from [build.nvidia.com](https://build.nvidia.com). |
@@ -244,8 +244,8 @@ Follow the [Quickstart](#quickstart), then:
 **This verifies:** the deployment applies at NemoClaw v0.1.0-rc.4, the agent
 loads the skill from the volume, answers with sources it fetched through the
 grants, the sandbox denies other hosts, and the skill's grant instructions
-match NemoClaw v1. In verification, applying the drafted grant updated the
-running sandbox in place, after which the policy log allowed `medium.com`.
+match NemoClaw Agent Configs. In verification, applying the drafted grant
+updated the running sandbox in place, after which the policy log allowed `medium.com`.
 
 **This does not verify:** Linux hosts, AMD64 images, the other example prompts,
 answer quality across questions, or OpenClaw's interactive terminal UI
@@ -286,7 +286,7 @@ your API key. See
 ## Known Limitations
 
 - No web search. OpenClaw's Brave and Tavily plugins can't be configured
-  through NemoClaw v1 yet
+  through NemoClaw Agent Configs yet
   ([NVIDIA/NemoClaw#13361](https://github.com/NVIDIA/NemoClaw/issues/13361)),
   so the skill fetches its allowlisted sources directly. Pages that render in
   the browser, such as `build.nvidia.com` search, return little text.
@@ -305,10 +305,10 @@ your API key. See
 ## Layout
 
 ```text
-nv-tech-assistant-v1/
+nv-tech-assistant-agent-configs/
 ├── .env.example          # NVIDIA_INFERENCE_API_KEY
 ├── .gitignore            # keeps the .nemoclaw state directory out of Git
-├── nemoclaw.yaml         # the NemoClaw v1 deployment
+├── nemoclaw.yaml         # the NemoClaw Agent Configs deployment
 └── skills/
     └── nv-tech-assistant/
         ├── SKILL.md
