@@ -305,7 +305,7 @@ your API key. See
 ## Layout
 
 ```text
-nv-tech-assistant-v1/
+nv-tech-assistant-agent-configs/
 ├── .env.example          # NVIDIA_INFERENCE_API_KEY
 ├── .gitignore            # keeps the .nemoclaw state directory out of Git
 ├── nemoclaw.yaml         # the NemoClaw Agent Configs deployment
