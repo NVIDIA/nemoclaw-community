@@ -1,4 +1,4 @@
-# NV Tech Assistant
+# NV Tech Assistant (Classic)
 
 | Catalog field | Value |
 | --- | --- |
