@@ -250,7 +250,9 @@ def predict(frames):
                              'latest': str(max(f[TABLES[name]['time_column']])) if 'time_column' in TABLES[name] else None}
                       for name, f in frames.items()},
             'graph_fingerprint': fingerprint(frames), 'columns_dropped': DROPPED_COLUMNS, 'engine_warnings': sorted({f'{w.category.__name__}: {w.message}' for w in caught}), 'adapter_request_patches': patches, 'http_calls': calls, 'elapsed_seconds': round(time.monotonic() - started, 2),
-            'predictions': sorted(rows, key=lambda r: -r['probability'])}
+            'predictions': sorted(rows, key=lambda r: -r['probability']),
+            'trace_markdown': ('**Kumo PQL** (model `%s`, kumo-relational-client %s, anchor %s, %d issuers)\n\n```\n%s\n```'
+                               % (MODEL, importlib.metadata.version('kumo-relational-client'), ANCHOR, len(ids), PQL))}
 
 
 def main():

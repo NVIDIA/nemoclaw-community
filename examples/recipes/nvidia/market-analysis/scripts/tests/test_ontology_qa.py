@@ -67,6 +67,8 @@ def main():
     shown = json.loads(result.stdout) if result.returncode == 0 else {}
     if not (shown.get('row_count') == 2 and shown.get('sql', '').startswith('SELECT') and shown.get('answered_with_sql')):
         failures.append(f'success path wrong: rc={result.returncode} {result.stdout[:200]} {result.stderr[:200]}')
+    elif '```sql\n' + shown['sql'].strip() + '\n```' not in shown.get('trace_markdown', ''):
+        failures.append('trace_markdown does not hold the SQL: ' + shown.get('trace_markdown', '')[:200])
 
     for mode in ('cut', 'error', 'status-fail'):
         Handler.mode = mode

@@ -15,6 +15,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -36,18 +37,19 @@ def emit(result):
 
 # Count question only: the deployment tested for this recipe answers it but not the median question (README, Auto Ontology),
 # so the sector medians below are always computed from the CSVs.
+MAX_ATTEMPTS = 3
+TOTAL_BUDGET_SECONDS = 1200
+MIN_RETRY_SECONDS = 240
 ONTOLOGY_QUESTION = "How many issuers are in each sector as of 2026-08-31?"
 
 
-def ask_ontology():
-    """Always asks Auto Ontology (utilities/ontology_qa.py), so the question cannot be skipped. Never raises: an
-    unavailable service is a `blocked` entry, quoted as is, and the numbers below come from the CSVs either way."""
+def ask_ontology_once(timeout):
     script = Path(__file__).with_name("ontology_qa.py")
     try:
         done = subprocess.run([sys.executable, "-S", "-I", str(script), "--question", ONTOLOGY_QUESTION],  # -S: the cuML .pth hook must not start in this stdlib-only child
-                              capture_output=True, text=True, timeout=1200)
+                              capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
-        return {"status": "blocked", "message": "blocked: the Auto Ontology call timed out after 1200 seconds"}
+        return {"status": "blocked", "message": "blocked: the Auto Ontology call timed out after %d seconds" % timeout}
     if done.returncode != 0:
         return {"status": "blocked", "message": (done.stderr.strip().splitlines() or ["blocked: no message"])[-1]}
     try:
@@ -56,6 +58,29 @@ def ask_ontology():
         return {"status": "blocked", "message": "blocked: Auto Ontology returned output that is not JSON"}
     return {"status": "answered" if answer.get("answered_with_sql") else "no_sql", "answer": answer,
             "check": "Quote the sql, say it is an Auto Ontology answer, and compare it with the issuers count per sector in sector_median_20_session_return below. The medians are computed from the CSVs, not by Auto Ontology."}
+
+
+def ask_ontology():
+    """Always asks Auto Ontology (utilities/ontology_qa.py), so the question cannot be skipped. Never raises: an
+    unavailable service is a `blocked` entry, quoted as is, and the numbers below come from the CSVs either way.
+    The deployment writes its SQL fresh each time and sometimes emits table names SQLite rejects, so a `no_sql` answer is
+    retried (at most MAX_ATTEMPTS calls, within one 1,200 second budget); `blocked` is not retried."""
+    deadline = time.monotonic() + TOTAL_BUDGET_SECONDS
+    result, attempts = None, 0
+    while attempts < MAX_ATTEMPTS:
+        remaining = int(deadline - time.monotonic())
+        if attempts and remaining < MIN_RETRY_SECONDS:
+            break
+        attempts += 1
+        result = ask_ontology_once(remaining)
+        if result["status"] != "no_sql":
+            break
+    result["attempts"] = attempts
+    answer = result.get("answer") or {}
+    note = "" if attempts == 1 else " (%d attempts)" % attempts
+    result["trace_markdown"] = (answer.get("trace_markdown") or "**Auto Ontology SQL:** none. %s"
+                                % result.get("message", "")) + note
+    return result
 
 
 def main():

@@ -151,6 +151,11 @@ def main():
              'rows': None if rows is None else rows[:ROW_LIMIT],
              'response': summary['response'], 'events': len(result['events']),
              'check': 'Read the SQL and verify it against the data (for example with a short script over data/) before relying on it.'}
+    if summary['answered_with_sql']:
+        shown['trace_markdown'] = ('**Auto Ontology SQL** (database `%s`, %s rows returned)\n\n```sql\n%s\n```'
+                                   % (TARGET_DB, shown['row_count'], summary['sql'].strip()))
+    else:
+        shown['trace_markdown'] = '**Auto Ontology SQL:** none. It returned: %s' % (summary['response'] or 'no message')
     if not summary['answered_with_sql']:
         shown['note'] = 'Auto Ontology returned no SQL for this question; treat the ontology answer as blocked.'
         print('note: Auto Ontology returned no SQL; treat the ontology answer as blocked. Nothing was substituted.', file=sys.stderr)

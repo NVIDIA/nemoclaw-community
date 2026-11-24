@@ -50,6 +50,7 @@ def test_q1():
     out = run('q1_inventory.py')  # no token: Auto Ontology is asked anyway and must come back blocked, not skipped
     assert out['auto_ontology']['status'] == 'blocked' and 'AUTO_ONTOLOGY_API_TOKEN' in out['auto_ontology']['message'], out['auto_ontology']
     assert run('q1_inventory.py', '--no-ontology')['auto_ontology'] is None
+    assert out['auto_ontology']['trace_markdown'].startswith('**Auto Ontology SQL:** none.'), out['auto_ontology']
     assert out['issuer_count'] == 36 and out['tables']['daily_prices'] == 5976
     c = out['checks']
     assert c['news_after_as_of_close'] == 0 and c['price_rows_after_as_of'] == 0 and c['duplicate_price_keys'] == 0
@@ -58,6 +59,29 @@ def test_q1():
     for sector, want in {'Mining': -0.1544, 'Services': -0.0223, 'Finance': -0.0339, 'Manufacturing': 0.0567, 'Retail': 0.1178,
                          'Transportation': 0.0772}.items():
         close(med[sector], want)
+
+
+def test_q1_retries_no_sql():
+    sys.path.insert(0, str(UTIL))
+    import q1_inventory as q1
+    calls = []
+
+    def script(*results):
+        it = iter(results)
+        def fake(timeout):
+            calls.append(timeout)
+            return {"status": next(it)}
+        return fake
+
+    q1.ask_ontology_once = script('no_sql', 'no_sql', 'answered')
+    got = q1.ask_ontology()
+    assert got['status'] == 'answered' and got['attempts'] == 3 and got['trace_markdown'].endswith('(3 attempts)'), (got, calls)
+    calls.clear(); q1.ask_ontology_once = script('no_sql', 'no_sql', 'no_sql', 'answered')
+    got = q1.ask_ontology()
+    assert got["status"] == "no_sql" and got["attempts"] == 3  # stops at MAX_ATTEMPTS
+    calls.clear(); q1.ask_ontology_once = script('blocked', 'answered')
+    got = q1.ask_ontology()
+    assert got["status"] == "blocked" and got["attempts"] == 1  # blocked is not retried
 
 
 def test_q2():
@@ -132,6 +156,6 @@ def test_q4():
 
 
 if __name__ == '__main__':
-    for fn in (test_blocked_without_receipt, test_gpu_off_refused, test_q1, test_q2, test_q3, test_q4, test_q6, test_cite_ready_deadline):
+    for fn in (test_blocked_without_receipt, test_gpu_off_refused, test_q1, test_q1_retries_no_sql, test_q2, test_q3, test_q4, test_q6, test_cite_ready_deadline):
         fn()
         print(f'ok {fn.__name__}')

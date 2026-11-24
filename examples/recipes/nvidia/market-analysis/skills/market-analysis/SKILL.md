@@ -55,6 +55,8 @@ and your question to its own hosted models. Every issuer, price and headline is 
    anchor (2026-08-24), the five-session horizon and the cutoff. Treat the probabilities as relative scores, not
    calibrated risk, and make no accuracy claim without a held-out comparison. If `kumo_predict.py` exits with
    `blocked`, report the ranking as blocked; do not present your own model as Kumo.
+   Show the PQL, and wherever Auto Ontology is used show its SQL, copied from the tool's `trace_markdown` with nothing
+   reworded; never write a PQL or SQL query yourself and present it as the tool's.
 10. **Auto Ontology is a proposal generator.** Its answer text can hide a wrong query. Read the `sql` it returns,
     check it answers the question as asked (tables, filters, the as-of date, the denominator, for example a
     sector median is the median across issuers of each issuer's 20-session return), and cross-check a figure
@@ -139,10 +141,11 @@ your own script only for something the helper does not cover, under `work/`:
 
 1. **What do we have?** Describe the tables, check they reconcile (duplicate price keys, orphan price and news
    rows, issuers missing sessions, rows after the as-of date), then give the issuer count and the 20-session
-   median return by sector. `q1_inventory.py` asks Auto Ontology the issuers-per-sector count itself (the medians come from the CSVs) (its `auto_ontology` field); report what it
+   median return by sector. `q1_inventory.py` asks Auto Ontology the issuers-per-sector count itself, retrying up to three times when it returns no SQL (the `attempts` field says how many; the medians come from the CSVs) (its `auto_ontology` field); report what it
    returned: its SQL, or `blocked` / not installed (rule 10), quoting the message verbatim. It can take several minutes when
    the service is installed: run it with a timeout of at least 1,300 seconds and do not stop it. Do not also run
-   `ontology_qa.py` for this question. The other numbers come from the CSVs; say which numbers you computed yourself. Count rows after the
+   `ontology_qa.py` for this question. Paste the `auto_ontology.trace_markdown` text unchanged in the answer, under the
+   counts: it holds the exact SQL (or the reason there is none). The other numbers come from the CSVs; say which numbers you computed yourself. Count rows after the
    as-of date with `q1_inventory.py`, which compares full timestamps (a news item after the 2026-08-31 date but
    before its 21:00 UTC close is not after the as-of close), not from memory. Run only `q1_inventory.py`: no Kumo, no retrieval.
 2. **Who led and lagged?** Among the 12 most liquid issuers, rank the 20 sessions ending 2026-08-31 by return,
@@ -164,7 +167,7 @@ your own script only for something the helper does not cover, under `work/`:
    directions), sorted by absolute correlation, strongest first. `q4_peers.py` prints `pairs_table_markdown` (all 27 pairs) and `pagerank_top10_table_markdown`: paste both tables into the answer unchanged, with no "..." and no "see the tool output". Give the full list, and do not say a pair is the only one above a threshold unless you counted.
 5. **What does a model expect?** Run `kumo_predict.py` and report its ranking with the anchor and horizon, and
    state the cutoff: only rows dated on or before 2026-08-24 entered it. Run nothing else (no analysis helper, no
-   retrieval).
+   retrieval). Under the ranking, paste the output's `trace_markdown` unchanged: it holds the exact PQL.
 6. **What do the rules require?** Run `retrieve.py`, quote what Form 8-K Item 1.05 requires a company to
    disclose about a material cybersecurity incident and by when, copying the deadline sentence exactly from a
    retrieved passage, then recommend which issuers an analyst should review first.

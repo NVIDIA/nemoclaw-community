@@ -118,7 +118,7 @@ set when running a script beats the same name in `.env`.
 - `skills/market-analysis/utilities/q1_inventory.py`, `q2_leaders.py`, `q3_unusual.py`, `q4_peers.py`, `q6_review.py`: tested
   helper scripts (plain pandas and NetworkX, run with `accelerate.py run`) that implement the `scenario.json` definitions
   for questions 1 to 4 and 6 and print JSON with the engine receipt. `q1_inventory.py` also asks Auto Ontology the issuers-per-sector count
-  question (blocked with its message when the service is not installed), so that step cannot be skipped, and `q6_review.py`
+  question (retried up to three times if it returns no SQL) (blocked with its message when the service is not installed), so that step cannot be skipped, and `q6_review.py`
   builds the review-first table and its reasons from the other helpers, so the agent does not write them. They exist because the agents' own scripts kept getting
   the windows, the volatility and the ranking rules wrong; `SKILL.md` tells the agent to run them and copy the numbers.
   `scripts/tests/test_helpers.py` asserts the expected figures offline.
