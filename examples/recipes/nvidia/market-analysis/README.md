@@ -12,7 +12,7 @@
 An OpenClaw agent (or, optionally, a Hermes agent) in a NemoClaw sandbox reviews 36 fictional issuers over 166
 trading days (2026-01-02 to 2026-08-31): prices, company news and declared peers, plus three real, public-domain
 SEC rule texts. The agent writes its own short pandas, scikit-learn and NetworkX analyses and runs them with a
-helper that uses RAPIDS on a GPU sandbox. It asks Kumo for a five-session ranking, retrieves the rule text with
+helper that uses CUDA-X on a GPU sandbox. It asks Kumo for a five-session ranking, retrieves the rule text with
 Nemotron embed and rerank, and can ask Auto Ontology a business question about the tables. It proposes issuers
 for human review and never gives investment advice, places trades or approves anything.
 
@@ -41,25 +41,12 @@ One Hermes turn on a GPU sandbox with the skill loaded, asked "what do we have?"
 printed. Notice three things: the reconciliation checks all pass; the **Auto Ontology SQL is shown as the tool returned
 it**, not written by the agent; and the sector medians are computed from the CSVs, not by Auto Ontology.
 
-The essential output as text (36 issuers; the SQL can differ from call to call, see [Auto Ontology](#auto-ontology-optional)):
-
-```text
-assets 36 · daily_prices 5,976 · trading_sessions 166 · company_news 484 · asset_relationships 54
-duplicate price keys 0 · orphan price/news/relationship rows 0 · rows after the as-of date 0
-
-SELECT sector, COUNT(DISTINCT asset_id) FROM assets WHERE last_session <= '2026-08-31' GROUP BY sector
-
-Finance, Insurance and Real Estate 6  -0.0339     Retail Trade 5  0.1178
-Manufacturing 15  0.0567                          Services 4  -0.0223
-Mining 2  -0.1544                                 Transportation, Communications, Electric, Gas and Sanitary Services 4  0.0772
-```
-
 ## Agent Knowledge Foundation
 
 | Question | Component | In this recipe |
 | --- | --- | --- |
 | What do we have? | **Auto Ontology** text-to-SQL | **Optional.** `ontology_qa.py` asks a host-side deployment you run, shows its SQL, and the skill requires reading it. Reports `blocked` when not installed. |
-| Who led and lagged, what was unusual, who moves together? | **RAPIDS** (cuDF, cuML, nx-cugraph) under the agent's own pandas, scikit-learn and NetworkX | **Included.** `accelerate.py` runs the agent's scripts on the CPU, or on RAPIDS on a GPU sandbox with no change to the script, and records which engine ran. |
+| Who led and lagged, what was unusual, who moves together? | **CUDA-X** (cuDF, cuML, nx-cugraph) under the agent's own pandas, scikit-learn and NetworkX | **Included.** `accelerate.py` runs the agent's scripts on the CPU, or on CUDA-X on a GPU sandbox with no change to the script, and records which engine ran. |
 | What does a model expect next? | **Kumo** relational prediction | **Included.** `kumo_predict.py` ranks the 12 most liquid issuers; reports `blocked` if the hosted call fails. |
 | What do the rules require? | **Nemotron embed and rerank** retrieval | **Included.** `retrieve.py` returns passages from three SEC rule texts with a ready-made `[document, chunk N]` tag the skill requires in every policy statement. |
 
@@ -120,7 +107,7 @@ The skill answers any of these on their own, or all six as a review. The wording
 | Script | Purpose |
 | --- | --- |
 | `scripts/onboard.sh` | Create the sandbox with the OpenClaw harness, or Hermes with `NEMOCLAW_AGENT=hermes` (CPU-only; `NEMOCLAW_SANDBOX_GPU=1` enables direct GPU access). |
-| `scripts/install.sh` | Install the skill. With the `build` provider it also imports the provider profile, creates and attaches a second provider from your key, applies the egress policy, builds the analysis Python environment in `/sandbox/analysis-venv` (pandas, scikit-learn, NetworkX, the Kumo client; using a temporary `pypi` egress preset, removed again unless it was already applied), and restarts the sandbox (workspace kept) so the agent sees the new credential. With `NEMOCLAW_SANDBOX_GPU=1` it also builds `/sandbox/rapids-venv` after checking `nvidia-smi` works in the sandbox. If `AUTO_ONTOLOGY_API_TOKEN` is set in `.env` it also renders `providers/auto-ontology.yaml` for `AUTO_ONTOLOGY_PORT` (default 4000), creates and attaches a provider from the token, and writes the deployment URL for the skill. |
+| `scripts/install.sh` | Install the skill. With the `build` provider it also imports the provider profile, creates and attaches a second provider from your key, applies the egress policy, builds the analysis Python environment in `/sandbox/analysis-venv` (pandas, scikit-learn, NetworkX, the Kumo client; using a temporary `pypi` egress preset, removed again unless it was already applied), and restarts the sandbox (workspace kept) so the agent sees the new credential. With `NEMOCLAW_SANDBOX_GPU=1` it also builds `/sandbox/cuda-x-venv` after checking `nvidia-smi` works in the sandbox. If `AUTO_ONTOLOGY_API_TOKEN` is set in `.env` it also renders `providers/auto-ontology.yaml` for `AUTO_ONTOLOGY_PORT` (default 4000), creates and attaches a provider from the token, and writes the deployment URL for the skill. |
 | `scripts/start.sh` | Recover the gateway and host forwards. |
 | `scripts/stop.sh` | Stop the gateway while keeping the sandbox and workspace. |
 | `scripts/build_database.py` | Build the SQLite database from the bundled CSVs for an Auto Ontology deployment to ingest (host side, optional). |
@@ -156,7 +143,7 @@ bash scripts/onboard.sh && bash scripts/install.sh
 
 This needs a host NVIDIA GPU, a driver that supports CUDA 13 (the wheels in `requirements-gpu.txt` are `-cu13`; swap in
 the `-cu12` names for a CUDA 12 driver) and a working CDI setup (`nvidia-ctk cdi generate`). `install.sh` builds
-`/sandbox/rapids-venv` (cuDF, cuML, nx-cugraph; a few GB from PyPI). Then `accelerate.py run` puts cuDF, cuML and
+`/sandbox/cuda-x-venv` (cuDF, cuML, nx-cugraph; a few GB from PyPI). Then `accelerate.py run` puts cuDF, cuML and
 nx-cugraph under the agent's pandas, scikit-learn and NetworkX with no change to the script, and `accelerate.py status`
 reports whether the stack works. Without a GPU or that environment, analyses run on the CPU and the engine receipt says
 so. Direct device access widens what the sandbox can touch, so enable it only where you want it.
@@ -179,7 +166,7 @@ those imports. One run per arm is anecdotal.
 On Hermes (one run per arm, same GPU sandbox) the agent never opened the three library skills, so that arm was a second
 sample of the same agent and showed no slowdown. Both arms still ran exploratory `python3 -c` commands against rule 11.
 
-**pandas differs between the two environments.** cuDF 26.10 requires pandas 3, so `rapids-venv` has pandas 3.0 while
+**pandas differs between the two environments.** cuDF 26.10 requires pandas 3, so `cuda-x-venv` has pandas 3.0 while
 `analysis-venv` has pandas 2.3. A script tested on one can fail on the other (string dtype and datetime comparisons).
 Run the script you will keep through `accelerate.py run` on the engine you intend to use, and use `--engine cpu` to
 compare.
@@ -411,7 +398,7 @@ content is usually right and the formatting is not reliable.
 - **Hermes harness (optional).** Set `NEMOCLAW_AGENT=hermes` for `onboard.sh` and `install.sh`; the skill goes to
   `/sandbox/.hermes/skills/market-analysis`. One turn: `nemoclaw <sandbox> exec -- hermes -z '<question>' --skills market-analysis`.
   The Hermes agent needed its working directory set to the skill directory for the tool paths to resolve.
-- The CPU analysis environment pins pandas 2.3 and Python 3.13 wheels; the RAPIDS environment lets cuDF choose pandas,
+- The CPU analysis environment pins pandas 2.3 and Python 3.13 wheels; the CUDA-X environment lets cuDF choose pandas,
   and its versions float (the requirements file pins only the 26.10 series). Wheels are `-cu13`.
 - The Kumo hosted model and the `kumo-relational-client` can change what they accept; the adapter drops
   `inference.inference_config`, which the hosted model rejects, and the graph keeps free-text columns out. Either
@@ -425,7 +412,7 @@ Uses the installed NemoClaw and OpenClaw (or Hermes) components and NVIDIA Endpo
 `ontology_qa.py` use only the Python standard library. The analysis environment needs `pandas`, `numpy`, `networkx`,
 `scikit-learn` and `kumo-relational-client[relational]==1.0.2` (`skills/market-analysis/utilities/requirements.txt`),
 installed from PyPI into `/sandbox/analysis-venv`. The optional GPU path needs `cudf-cu13`, `cuml-cu13` and
-`nx-cugraph-cu13` (RAPIDS 26.10) (`utilities/requirements-gpu.txt`), installed into `/sandbox/rapids-venv`; RAPIDS is
+`nx-cugraph-cu13` (version 26.10) (`utilities/requirements-gpu.txt`), installed into `/sandbox/cuda-x-venv`; CUDA-X is
 Apache-2.0 and the CUDA libraries it pulls in carry NVIDIA's own license terms. Nothing is vendored, and transitive
 dependencies are not pinned. Each package and the hosted services are subject to their own terms and availability.
 The SEC rule text under `skills/market-analysis/data/documents/` is public-domain U.S. regulation text. Nothing in

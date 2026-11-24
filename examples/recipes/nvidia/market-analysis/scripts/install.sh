@@ -12,7 +12,7 @@
 #      sees a new credential after its container restarts (the workspace is kept), and
 #   5. build the analysis virtual environment (pandas, scikit-learn, NetworkX and the Kumo client) from PyPI, using a temporary
 #      pypi egress preset that is removed again unless it was already applied, and,
-#      when NEMOCLAW_SANDBOX_GPU=1 (a sandbox created with --sandbox-gpu), the RAPIDS
+#      when NEMOCLAW_SANDBOX_GPU=1 (a sandbox created with --sandbox-gpu), the CUDA-X
 #      environment for the CUDA-X path (a few GB) in the same preset window.
 # When AUTO_ONTOLOGY_API_TOKEN is set, the same flow attaches a provider for a host-side
 # Auto Ontology deployment (profile providers/auto-ontology.yaml, port AUTO_ONTOLOGY_PORT,
@@ -183,9 +183,9 @@ setup_python_environments() {
   if [[ "${NEMOCLAW_SANDBOX_GPU:-0}" == "1" ]]; then
     if nemoclaw "$NEMOCLAW_SANDBOX_NAME" exec -- nvidia-smi -L >/dev/null 2>&1; then
       status=0
-      build_venv rapids-venv requirements-gpu.txt "import cudf, cuml, nx_cugraph" 1800 || status=$?
+      build_venv cuda-x-venv requirements-gpu.txt "import cudf, cuml, nx_cugraph" 1800 || status=$?
       if [[ "$status" != "0" ]]; then
-        echo "warning: the RAPIDS environment could not be built; accelerate.py will run on the CPU." >&2
+        echo "warning: the CUDA-X environment could not be built; accelerate.py will run on the CPU." >&2
       fi
     else
       echo "warning: NEMOCLAW_SANDBOX_GPU=1 but no GPU is visible in '$NEMOCLAW_SANDBOX_NAME' (nvidia-smi failed)." >&2
@@ -250,7 +250,7 @@ if [[ "$ONTOLOGY_ENABLED" == "1" ]]; then
     "printf '%s\n' http://host.openshell.internal:$ONTOLOGY_PORT > $SKILL_DIR_IN_SANDBOX/utilities/ontology.url"
 fi
 
-# The analysis and RAPIDS environments serve accelerate.py with or without the hosted-model key.
+# The analysis and CUDA-X environments serve accelerate.py with or without the hosted-model key.
 setup_python_environments
 
 if [[ "$RESTART_NEEDED" == "1" ]]; then

@@ -5,7 +5,7 @@
 
   python3 utilities/accelerate.py run utilities/q1_inventory.py
 
-Plain pandas, so it runs under accelerate.py (RAPIDS on a GPU sandbox). Copy the numbers from the JSON. It also asks Auto Ontology
+Plain pandas, so it runs under accelerate.py (CUDA-X on a GPU sandbox). Copy the numbers from the JSON. It also asks Auto Ontology
 the sector question (`auto_ontology`: `blocked` with the message when the service is not installed; it can take minutes
 when it is) so rule 10 is applied whether or not the agent remembers it; `--no-ontology` skips the call for offline tests. Rows after
 the as-of date are counted by full timestamp: prices after 2026-08-31, news published after the 2026-08-31 close

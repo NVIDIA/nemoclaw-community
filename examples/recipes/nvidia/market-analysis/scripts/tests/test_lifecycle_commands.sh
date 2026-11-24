@@ -150,17 +150,17 @@ if grep -q 'test-key' "$COMMAND_LOG"; then
   fail "the key value appeared in a command line"
 fi
 if grep -q 'requirements-gpu' "$COMMAND_LOG"; then
-  fail "install built the RAPIDS environment without NEMOCLAW_SANDBOX_GPU=1"
+  fail "install built the CUDA-X environment without NEMOCLAW_SANDBOX_GPU=1"
 fi
 
-# install on a GPU sandbox: the RAPIDS environment is built from its own requirements file
+# install on a GPU sandbox: the CUDA-X environment is built from its own requirements file
 : >"$COMMAND_LOG"
 FAKE_SANDBOX_EXISTS=1 NEMOCLAW_SANDBOX_GPU=1 NEMOCLAW_PROVIDER=build NVIDIA_INFERENCE_API_KEY=test-key \
   bash "$EXAMPLE_DIR/scripts/install.sh" >/dev/null
 log="$(cat "$COMMAND_LOG")"
 assert_contains "$log" "args=market-analysis exec --timeout 1800 -- bash -c" \
-  "install did not build the RAPIDS environment on a GPU sandbox"
-assert_contains "$log" "requirements-gpu.txt" "the RAPIDS build did not use its requirements file"
+  "install did not build the CUDA-X environment on a GPU sandbox"
+assert_contains "$log" "requirements-gpu.txt" "the CUDA-X build did not use its requirements file"
 
 # install with an Auto Ontology token and a non-default port: a rendered profile, a provider from the
 # environment, an attach, a URL file for the skill, and no token in any command line

@@ -4,7 +4,7 @@ description: >-
   Help an analyst decide which of 36 fictional issuers deserve attention as of 2026-08-31, using the
   synthetic equity-market dataset bundled with this skill (prices, company news, declared peers). Write
   short pandas, scikit-learn and NetworkX scripts and run them with utilities/accelerate.py, which uses
-  RAPIDS on a GPU sandbox. Any statement about which issuers a model expects to rise must come from
+  CUDA-X on a GPU sandbox. Any statement about which issuers a model expects to rise must come from
   utilities/kumo_predict.py; any statement about what a rule (Form 8-K Item 1.05, Regulation S-K Item
   106, Rule 13a-11) requires must come from utilities/retrieve.py, quoted with its document and chunk;
   a business question over the tables may be asked of Auto Ontology (utilities/ontology_qa.py) when
@@ -100,7 +100,7 @@ python3 utilities/retrieve.py --query "<what you need to know>" --top 3
 python3 utilities/ontology_qa.py --question "<business question, with the as-of date>"
 ```
 
-- `accelerate.py` runs a script you wrote in the Python environment that matches this sandbox: the RAPIDS
+- `accelerate.py` runs a script you wrote in the Python environment that matches this sandbox: the CUDA-X
   environment on a GPU sandbox, otherwise the CPU analysis environment. `status` reports whether the GPU stack
   works (`gpu_usable`); start an analysis session with it. Inside a script,
   `json.loads(os.environ['ACCELERATE_ENGINE'])` is the engine receipt: device, libraries that ran, and whether
