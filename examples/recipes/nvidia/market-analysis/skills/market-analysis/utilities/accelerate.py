@@ -126,6 +126,9 @@ def main():
             sys.exit('--engine gpu, but this sandbox has no usable GPU stack')
         install()
     receipt = {'device': device, 'host_gpu_usable': host_usable, 'settings_gpu': gpu_setting,
+               'evidence': 'configured',
+               'note': 'The accelerators configured for this run, built before the script starts. It does not show that any '
+                       'operation ran on the GPU: no dispatch or profiler evidence is collected.',
                'libraries': ({'pandas': f"cudf.pandas {status['cuda_x']['cudf']}", 'scikit-learn': f"cuml.accel {status['cuda_x']['cuml']}",
                               'networkx': f"nx-cugraph {status['cuda_x']['nx_cugraph']}"} if device == 'gpu' else
                              {lib: version(lib) for lib in ('pandas', 'scikit-learn', 'networkx')})}

@@ -75,7 +75,8 @@ and your question to its own hosted models. Every issuer, price and headline is 
     Model scores (IsolationForest) can differ on the GPU; say which engine produced them. If you ran an analysis any other way, say so and report it as not
     run through `accelerate.py`. Do not claim a speed-up: this sample is small
     (about 6,000 price rows), so the GPU is usually slower here, and a speed-up needs far more data than was tested.
-    Never describe a CPU run as a GPU result.
+    Never describe a CPU run as a GPU result, and say "configured for the GPU" for a GPU receipt: it records which
+    accelerators were set up, not which operations ran on the GPU.
 
 ## Tools
 
@@ -113,7 +114,8 @@ python3 utilities/ontology_qa.py --question "<business question, with the as-of 
   re-derive them in your own script, and do not change the windows, the volatility definition or the ranking.
   If a number looks wrong, say so and show the helper's output rather than substituting your own. They print the
   `engine_receipt` field: copy that.
-- `kumo_predict.py` ranks the 12 most liquid issuers (`liquidity_rank` 1 to 12) by the probability of a positive
+- `kumo_predict.py` ranks the 12 most liquid issuers as of the anchor (median daily dollar volume through 2026-08-24, not
+  the `liquidity_rank` column, which uses data to 2026-08-31) by the probability of a positive
   adjusted-close return over the five sessions after the 2026-08-24 close, with NVIDIA Kumo Relational (hosted).
   It builds a graph of issuers, prices and news as of the anchor (nothing later enters it), sends those tables to
   the hosted service, and prints the ranking with the PQL, package version and graph sizes. It takes a few
@@ -141,7 +143,7 @@ your own script only for something the helper does not cover, under `work/`:
 
 1. **What do we have?** Describe the tables, check they reconcile (duplicate price keys, orphan price and news
    rows, issuers missing sessions, rows after the as-of date), then give the issuer count and the 20-session
-   median return by sector. `q1_inventory.py` asks Auto Ontology the issuers-per-sector count itself, retrying up to three times when it returns no SQL (the `attempts` field says how many; the medians come from the CSVs) (its `auto_ontology` field); report what it
+   median return by sector. `q1_inventory.py` asks Auto Ontology the issuers-per-sector count itself, retrying up to three times when it returns no SQL or SQL without result rows (the `attempts` field says how many; the medians come from the CSVs) (its `auto_ontology` field); report what it
    returned: its SQL, or `blocked` / not installed (rule 10), quoting the message verbatim. It can take several minutes when
    the service is installed: run it with a timeout of at least 1,300 seconds and do not stop it. Do not also run
    `ontology_qa.py` for this question. Paste the `auto_ontology.trace_markdown` text unchanged in the answer, under the

@@ -126,7 +126,10 @@ def summarize(events):
         rows = parsed if isinstance(parsed, list) else None
     except (ValueError, TypeError, IndexError):
         rows = None
-    return {'sql': answer.get('sql_code'), 'rows': rows, 'response': answer.get('response'), 'answered_with_sql': bool(answer.get('sql_code'))}
+    sql = answer.get('sql_code')
+    # SQL text alone is not an answer: a valid result is a list of rows, and an empty list ([]) is a valid result.
+    return {'sql': sql, 'rows': rows, 'response': answer.get('response'),
+            'answered_with_sql': bool(sql) and rows is not None, 'sql_without_rows': bool(sql) and rows is None}
 
 
 def main():
@@ -151,14 +154,18 @@ def main():
              'rows': None if rows is None else rows[:ROW_LIMIT],
              'response': summary['response'], 'events': len(result['events']),
              'check': 'Read the SQL and verify it against the data (for example with a short script over data/) before relying on it.'}
-    if summary['answered_with_sql']:
+    if summary['sql_without_rows']:
+        shown['trace_markdown'] = ('**Auto Ontology SQL** (database `%s`) was generated but no result rows came back, so it is not an '
+                                   'answer:\n\n```sql\n%s\n```' % (TARGET_DB, summary['sql'].strip()))
+    elif summary['answered_with_sql']:
         shown['trace_markdown'] = ('**Auto Ontology SQL** (database `%s`, %s rows returned)\n\n```sql\n%s\n```'
                                    % (TARGET_DB, shown['row_count'], summary['sql'].strip()))
     else:
         shown['trace_markdown'] = '**Auto Ontology SQL:** none. It returned: %s' % (summary['response'] or 'no message')
     if not summary['answered_with_sql']:
-        shown['note'] = 'Auto Ontology returned no SQL for this question; treat the ontology answer as blocked.'
-        print('note: Auto Ontology returned no SQL; treat the ontology answer as blocked. Nothing was substituted.', file=sys.stderr)
+        what = 'SQL but no result rows' if summary['sql_without_rows'] else 'no SQL'
+        shown['note'] = 'Auto Ontology returned %s for this question; treat the ontology answer as blocked.' % what
+        print('note: Auto Ontology returned %s; treat the ontology answer as blocked. Nothing was substituted.' % what, file=sys.stderr)
     print(json.dumps(shown, indent=2, default=str))
     return 0
 

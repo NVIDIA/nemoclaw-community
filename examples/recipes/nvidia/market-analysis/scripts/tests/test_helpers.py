@@ -84,6 +84,62 @@ def test_q1_retries_no_sql():
     assert got["status"] == "blocked" and got["attempts"] == 1  # blocked is not retried
 
 
+def test_q1_status_needs_rows():
+    sys.path.insert(0, str(UTIL))
+    import importlib
+    import q1_inventory as q1
+    q1 = importlib.reload(q1)  # the retry test replaced ask_ontology_once on the cached module
+
+    def fake(answer):
+        return lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout=json.dumps(answer), stderr='')
+
+    real = q1.subprocess.run
+    try:
+        q1.subprocess.run = fake({'sql': 'SELECT 1', 'answered_with_sql': False, 'rows': None})
+        assert q1.ask_ontology_once(10)['status'] == 'no_rows'
+        q1.subprocess.run = fake({'sql': '', 'answered_with_sql': False})
+        assert q1.ask_ontology_once(10)['status'] == 'no_sql'
+        q1.subprocess.run = fake({'sql': 'SELECT 1', 'answered_with_sql': True, 'rows': []})
+        assert q1.ask_ontology_once(10)['status'] == 'answered'
+        calls = []
+        q1.ask_ontology_once = lambda timeout: (calls.append(timeout) or {'status': 'no_rows'})
+        assert q1.ask_ontology()['attempts'] == 3 and len(calls) == 3  # SQL without rows is retried like no SQL
+    finally:
+        q1.subprocess.run = real
+
+
+def test_kumo_population_uses_rows_up_to_the_anchor():
+    import shutil
+    sys.path.insert(0, str(UTIL))
+    import kumo_predict as kp
+    import pandas as pd
+
+    def population(data):
+        kp.DATA = data
+        return sorted(kp.build_frames()['asset_entities']['asset_id'])
+
+    original = kp.DATA
+    try:
+        base = population(original)
+        assert len(base) == 12, base
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp)
+            for f in original.glob('*.csv'):
+                shutil.copy(f, data / f.name)
+            prices = pd.read_csv(data / 'daily_prices.csv')
+            outsider = next(a for a in prices.asset_id.unique() if a not in base)
+            later = (prices.asset_id == outsider) & (prices.trading_date > '2026-08-24')
+            prices.loc[later, 'dollar_volume'] = 1e15  # huge, but only after the anchor
+            prices.to_csv(data / 'daily_prices.csv', index=False)
+            assert population(data) == base, 'rows after the anchor changed the Kumo population'
+            earlier = (prices.asset_id == outsider) & (prices.trading_date <= '2026-08-24')
+            prices.loc[earlier, 'dollar_volume'] = 1e15  # the same change before the anchor must count
+            prices.to_csv(data / 'daily_prices.csv', index=False)
+            assert outsider in population(data), 'rows before the anchor did not change the Kumo population'
+    finally:
+        kp.DATA = original
+
+
 def test_q2():
     out = run('q2_leaders.py')
     rows = {r['asset_id']: r for r in out['ranking_strongest_first']}
@@ -156,6 +212,6 @@ def test_q4():
 
 
 if __name__ == '__main__':
-    for fn in (test_blocked_without_receipt, test_gpu_off_refused, test_q1, test_q1_retries_no_sql, test_q2, test_q3, test_q4, test_q6, test_cite_ready_deadline):
+    for fn in (test_blocked_without_receipt, test_gpu_off_refused, test_q1, test_q1_retries_no_sql, test_q1_status_needs_rows, test_kumo_population_uses_rows_up_to_the_anchor, test_q2, test_q3, test_q4, test_q6, test_cite_ready_deadline):
         fn()
         print(f'ok {fn.__name__}')

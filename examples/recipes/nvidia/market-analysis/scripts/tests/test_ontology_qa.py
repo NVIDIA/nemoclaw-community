@@ -22,6 +22,9 @@ ANSWER = {'sql_code': "SELECT asset_id FROM assets WHERE sector = 'Manufacturing
 MODES = {
     'success': ['data: {"type": "progress"}\n\n',
                 'data: {"type": "result",\ndata: "answer": ' + json.dumps(json.dumps(ANSWER)) + '}\n\n', 'data: [DONE]\n\n'],
+    'sql-no-rows': ['data: {"type": "result",\ndata: "answer": ' + json.dumps(json.dumps({'sql_code': ANSWER['sql_code'], 'response': 'ok'})) + '}\n\n'],
+    'sql-empty': ['data: {"type": "result",\ndata: "answer": ' + json.dumps(json.dumps({**ANSWER, 'sql_response_from_db': ['[]']})) + '}\n\n'],
+    'sql-bad-rows': ['data: {"type": "result",\ndata: "answer": ' + json.dumps(json.dumps({**ANSWER, 'sql_response_from_db': ['not json']})) + '}\n\n'],
     'cut': ['data: {"type": "progress"}\n\n'],
     'error': ['data: {"type": "error", "message": "model timeout"}\n\n'],
 }
@@ -69,6 +72,18 @@ def main():
         failures.append(f'success path wrong: rc={result.returncode} {result.stdout[:200]} {result.stderr[:200]}')
     elif '```sql\n' + shown['sql'].strip() + '\n```' not in shown.get('trace_markdown', ''):
         failures.append('trace_markdown does not hold the SQL: ' + shown.get('trace_markdown', '')[:200])
+
+    # SQL text alone is not an answer: missing or unparseable rows are not answered, a valid empty list is
+    for mode, answered in (('sql-no-rows', False), ('sql-bad-rows', False), ('sql-empty', True)):
+        Handler.mode = mode
+        result = run(url)
+        shown = json.loads(result.stdout) if result.returncode == 0 else {}
+        if shown.get('answered_with_sql') is not answered or not shown.get('sql'):
+            failures.append(f'{mode}: expected answered_with_sql={answered}, got {result.stdout[:200]}')
+        if not answered and ('no result rows' not in shown.get('trace_markdown', '') or 'no result rows' not in shown.get('note', '').replace('SQL but ', '')):
+            failures.append(f'{mode}: the trace and note must say no rows came back: {shown.get("trace_markdown", "")[:120]} / {shown.get("note")}')
+        if answered and shown.get('row_count') != 0:
+            failures.append(f'{mode}: an empty result must count as zero rows, got {shown.get("row_count")}')
 
     for mode in ('cut', 'error', 'status-fail'):
         Handler.mode = mode

@@ -32,7 +32,7 @@
     }
   },
   "definitions": {
-    "top_12": "The 12 issuers with liquidity_rank 1..12 (median daily dollar volume). They are the universe for Questions 2 and 5.",
+    "top_12": "The 12 issuers with liquidity_rank 1..12 (median daily dollar volume). They are the universe for Question 2. Question 5 asks Kumo about the 12 most liquid as of its 2026-08-24 anchor, chosen from rows on or before that date.",
     "return": "Over 'the N sessions ending D': adjusted_close at D divided by adjusted_close one session before the window's first session, minus 1. Daily volatility is the sample standard deviation of total_return_1d over the same N sessions.",
     "news_alignment": "A news item belongs to the first session whose close (trading_sessions.close_at, 21:00 UTC) is at or after published_at. 'Forward return over k sessions' is the aligned session's adjusted_close k sessions later divided by its adjusted_close, minus 1; items without k later sessions are excluded from means but still listed.",
     "peers": "asset_relationships lists declared same-industry peers. Correlations use total_return_1d on shared sessions.",

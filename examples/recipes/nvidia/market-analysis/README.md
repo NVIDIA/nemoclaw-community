@@ -46,8 +46,8 @@ it**, not written by the agent; and the sector medians are computed from the CSV
 | Question | Component | In this recipe |
 | --- | --- | --- |
 | What do we have? | **Auto Ontology** text-to-SQL | **Optional.** `ontology_qa.py` asks a host-side deployment you run, shows its SQL, and the skill requires reading it. Reports `blocked` when not installed. |
-| Who led and lagged, what was unusual, who moves together? | **CUDA-X** (cuDF, cuML, nx-cugraph) under the agent's own pandas, scikit-learn and NetworkX | **Included.** `accelerate.py` runs the agent's scripts on the CPU, or on CUDA-X on a GPU sandbox with no change to the script, and records which engine ran. |
-| What does a model expect next? | **Kumo** relational prediction | **Included.** `kumo_predict.py` ranks the 12 most liquid issuers; reports `blocked` if the hosted call fails. |
+| Who led and lagged, what was unusual, who moves together? | **CUDA-X** (cuDF, cuML, nx-cugraph) under the agent's own pandas, scikit-learn and NetworkX | **Included.** `accelerate.py` runs the agent's scripts on the CPU, or with CUDA-X configured on a GPU sandbox with no change to the script, and records the engine it configured. The receipt is configuration, not proof that an operation ran on the GPU. |
+| What does a model expect next? | **Kumo** relational prediction | **Included.** `kumo_predict.py` ranks the 12 most liquid issuers as of the anchor date; reports `blocked` if the hosted call fails. |
 | What do the rules require? | **Nemotron embed and rerank** retrieval | **Included.** `retrieve.py` returns passages from three SEC rule texts with a ready-made `[document, chunk N]` tag the skill requires in every policy statement. |
 
 A component that is unavailable is reported as **blocked** with a reason and nothing is substituted.
@@ -97,7 +97,7 @@ The skill answers any of these on their own, or all six as a review. The wording
 | --- | --- | --- |
 | 1 | What do we have? Tables, reconciliation, issuers and median 20-session return per sector | Auto Ontology (optional, for the issuers-per-sector count; the medians come from the CSVs) |
 | 2 | Who led and lagged, and how did news line up with what followed? | pandas, on cuDF on a GPU |
-| 3 | Which sessions were unusual? | scikit-learn or pandas, on cuML on a GPU |
+| 3 | Which sessions were unusual? | pandas and NumPy (a per-issuer baseline), on cuDF on a GPU; the shipped helper does not call scikit-learn or cuML |
 | 4 | Who moves together? | NetworkX PageRank, on nx-cugraph on a GPU |
 | 5 | What does a model expect for the next five sessions? | Kumo |
 | 6 | What does Form 8-K Item 1.05 require, and what should we take forward? | Nemotron embed and rerank |
@@ -127,7 +127,7 @@ set when running a script beats the same name in `.env`.
 - `skills/market-analysis/utilities/q1_inventory.py`, `q2_leaders.py`, `q3_unusual.py`, `q4_peers.py`, `q6_review.py`: tested
   helper scripts (plain pandas and NetworkX, run with `accelerate.py run`) that implement the `scenario.json` definitions
   for questions 1 to 4 and 6 and print JSON with the engine receipt. `q1_inventory.py` also asks Auto Ontology the issuers-per-sector count
-  question (retried up to three times if it returns no SQL) (blocked with its message when the service is not installed), so that step cannot be skipped, and `q6_review.py`
+  question (retried up to three times if it returns no SQL or no result rows) (blocked with its message when the service is not installed), so that step cannot be skipped, and `q6_review.py`
   builds the review-first table and its reasons from the other helpers, so the agent does not write them. They exist because the agents' own scripts kept getting
   the windows, the volatility and the ranking rules wrong; `SKILL.md` tells the agent to run them and copy the numbers.
   `scripts/tests/test_helpers.py` asserts the expected figures offline.
@@ -149,7 +149,7 @@ reports whether the stack works. Without a GPU or that environment, analyses run
 so. Direct device access widens what the sandbox can touch, so enable it only where you want it.
 
 **About speed.** On a GPU sandbox (one H100, one run each), the deterministic steps (returns, z-scores, correlations,
-PageRank) matched the CPU results exactly at 36 and at 10,000 synthetic issuers. IsolationForest did not: cuML's version
+PageRank) matched the CPU results exactly at 36 and at 10,000 synthetic issuers. IsolationForest did not (measured with scripts written for that test; the shipped `q3_unusual.py` uses pandas and NumPy and does not call it): cuML's version
 is a different implementation, and its top-10 overlap with scikit-learn was 9/10 at 36 issuers and 6/10 at 10,000. The
 GPU was not faster. At 36 issuers a run took about 1.5 s on the CPU and 2.0 s warm (14 s on the first, cold run) on the
 GPU. At 10,000 issuers (1.66 million price rows) the best GPU script took about 11.6 s against about 10 s for the best CPU

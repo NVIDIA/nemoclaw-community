@@ -56,7 +56,8 @@ def ask_ontology_once(timeout):
         answer = json.loads(done.stdout)
     except ValueError:
         return {"status": "blocked", "message": "blocked: Auto Ontology returned output that is not JSON"}
-    return {"status": "answered" if answer.get("answered_with_sql") else "no_sql", "answer": answer,
+    status = "answered" if answer.get("answered_with_sql") else ("no_rows" if answer.get("sql") else "no_sql")
+    return {"status": status, "answer": answer,
             "check": "Quote the sql, say it is an Auto Ontology answer, and compare it with the issuers count per sector in sector_median_20_session_return below. The medians are computed from the CSVs, not by Auto Ontology."}
 
 
@@ -64,7 +65,7 @@ def ask_ontology():
     """Always asks Auto Ontology (utilities/ontology_qa.py), so the question cannot be skipped. Never raises: an
     unavailable service is a `blocked` entry, quoted as is, and the numbers below come from the CSVs either way.
     The deployment writes its SQL fresh each time and sometimes emits table names SQLite rejects, so a `no_sql` answer is
-    retried (at most MAX_ATTEMPTS calls, within one 1,200 second budget); `blocked` is not retried."""
+    (and so is SQL without result rows, status `no_rows`) retried (at most MAX_ATTEMPTS calls, within one 1,200 second budget); `blocked` is not retried."""
     deadline = time.monotonic() + TOTAL_BUDGET_SECONDS
     result, attempts = None, 0
     while attempts < MAX_ATTEMPTS:
@@ -73,7 +74,7 @@ def ask_ontology():
             break
         attempts += 1
         result = ask_ontology_once(remaining)
-        if result["status"] != "no_sql":
+        if result["status"] not in ("no_sql", "no_rows"):
             break
     result["attempts"] = attempts
     answer = result.get("answer") or {}

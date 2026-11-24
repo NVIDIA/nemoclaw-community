@@ -84,6 +84,20 @@ def credential():
     raise RuntimeError(f'{KEY_ENV} is not set{hint}')
 
 
+POPULATION_SIZE = 12
+
+
+def population_at_anchor(assets, prices):
+    """The 12 most liquid issuers using only sessions on or before the anchor date (median daily dollar volume, ties by
+    asset_id), among issuers listed on that date. assets.csv's liquidity_rank is computed through 2026-08-31, so using it
+    would let rows after the anchor choose who is asked about."""
+    live = assets[(assets['first_session'] <= ANCHOR_DATE) & (assets['last_session'] >= ANCHOR_DATE)]
+    window = prices[prices['asset_id'].isin(live['asset_id']) & (prices['trading_date'] <= ANCHOR_DATE)]
+    ranked = (window.groupby('asset_id')['dollar_volume'].median().reset_index()
+              .sort_values(['dollar_volume', 'asset_id'], ascending=[False, True]))
+    return ranked['asset_id'].head(POPULATION_SIZE).tolist()
+
+
 def build_frames():
     """The three tables Kumo sees, as of the anchor (nothing later enters any of them)."""
     import numpy as np
@@ -93,8 +107,8 @@ def build_frames():
     prices = pd.read_csv(DATA / 'daily_prices.csv', parse_dates=['trading_date'])
     news = pd.read_csv(DATA / 'company_news.csv', parse_dates=['published_at'])
     anchor = pd.Timestamp(ANCHOR)
-    entities = assets[(assets['liquidity_rank'] <= 12) & (assets['first_session'] <= ANCHOR_DATE)
-                      & (assets['last_session'] >= ANCHOR_DATE)][['asset_id', 'company_name', 'sector', 'industry', 'exchange']]
+    entities = assets[assets['asset_id'].isin(population_at_anchor(assets, prices))][
+        ['asset_id', 'company_name', 'sector', 'industry', 'exchange']]
     prices = prices[prices['asset_id'].isin(entities['asset_id'])].sort_values(['asset_id', 'trading_date'], ignore_index=True)
     close = pd.Timedelta(hours=21)
     previous = prices.groupby('asset_id')['adjusted_close'].shift(1)
@@ -246,6 +260,7 @@ def predict(frames):
     return {'tool': 'kumo_relational', 'service': 'nvidia-api-catalog', 'endpoint': ENDPOINT, 'model': MODEL,
             'package_version': importlib.metadata.version('kumo-relational-client'), 'pql': PQL, 'anchor': ANCHOR,
             'horizon_sessions': HORIZON_SESSIONS, 'population': ids,
+            'population_rule': 'the 12 issuers with the highest median daily dollar volume over sessions on or before the anchor date',
             'graph': {name: {'rows': len(f),
                              'latest': str(max(f[TABLES[name]['time_column']])) if 'time_column' in TABLES[name] else None}
                       for name, f in frames.items()},
