@@ -145,7 +145,7 @@ The recipe keeps its state in the `.run` directory, which Git ignores.
 | List of files to copy | `.run/workspace-files.tsv` | Not removed. Setup writes it again on each run |
 | Evidence records | `.run/evidence/` | Not removed |
 | Sandbox creation log | `.run/sandbox-create.log` | Not removed |
-| Downloaded models | Docker volume `local-only-workspace-assistant-ollama-models` | `scripts/teardown.sh --purge-models`, together with the other resources or in a later run |
+| Downloaded models | Docker volume `local-only-workspace-assistant-ollama-models` | `scripts/teardown.sh --purge-models`, when setup created the volume, together with the other resources or in a later run |
 | Sandbox image | Docker image `local-only-workspace-assistant:local` | Teardown |
 | Provider profile and provider | OpenShell gateway, ID `local-only-ollama` | Teardown |
 | Copy of the approved folder | `/sandbox/workspace` in the sandbox | Teardown, when it deletes the sandbox. Each setup run replaces the copy |

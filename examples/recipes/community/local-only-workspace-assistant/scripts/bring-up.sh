@@ -41,8 +41,7 @@ echo "Approved files to copy: $(wc -l <"${RUN_DIR}/workspace-files.tsv" | tr -d 
 
 echo "== 2/7 select the inference device and check the kernel =="
 device="$(resolve_inference_device)"
-state_remove device gpu
-state_remove device cpu
+state_remove_key device
 state_add device "${device}"
 if [[ "${device}" == "gpu" ]]; then
   nvidia-smi -L
@@ -69,16 +68,37 @@ else
 fi
 
 echo "== 3/7 start the recipe-owned inference server =="
-# Record the model volume when this run creates it, or when an earlier setup
-# of this recipe did. Teardown deletes only a recorded volume, and the record
-# outlives a teardown that keeps the volume.
-if ! docker volume inspect "${MODEL_VOLUME}" >/dev/null 2>&1 || state_has compose ollama; then
-  state_add volume "${MODEL_VOLUME}"
-elif ! state_has volume "${MODEL_VOLUME}"; then
-  echo "Volume ${MODEL_VOLUME} exists and this recipe has no record of creating it."
-  echo "Setup uses it. 'scripts/teardown.sh --purge-models' will not delete it."
+if docker container inspect "${OLLAMA_CONTAINER}" >/dev/null 2>&1 && ! state_has compose ollama; then
+  echo "Container ${OLLAMA_CONTAINER} exists and this recipe did not start it." >&2
+  echo "Remove it, then run this script again." >&2
+  exit 1
 fi
-compose up -d --wait ollama
+# Track volume provenance separately from service ownership. Setup records
+# the model volume only when a setup run creates it, never because the
+# inference service was already recorded. Teardown deletes only a recorded
+# volume, and the volume record outlives a normal teardown that keeps it.
+volume_existed=0
+if existing_volume_id="$(model_volume_id)"; then
+  volume_existed=1
+  if ! state_has volume "${existing_volume_id}"; then
+    state_remove_key volume
+    echo "Volume ${MODEL_VOLUME} exists and this recipe has no record of creating it."
+    echo "Setup uses it. 'scripts/teardown.sh --purge-models' will not delete it."
+  fi
+else
+  state_remove_key volume
+fi
+compose_status=0
+compose up -d --wait ollama || compose_status=$?
+if [[ "${volume_existed}" == 0 ]] && created_volume_id="$(model_volume_id)"; then
+  state_add volume "${created_volume_id}"
+fi
+if [[ "${compose_status}" != 0 ]]; then
+  if docker container inspect "${OLLAMA_CONTAINER}" >/dev/null 2>&1; then
+    state_add compose ollama
+  fi
+  exit "${compose_status}"
+fi
 state_add compose ollama
 
 echo "== 4/7 make the model available =="

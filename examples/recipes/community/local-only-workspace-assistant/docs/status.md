@@ -20,7 +20,7 @@ the target host with an agent answer.
 
 | Item | State | Host and evidence |
 | --- | --- | --- |
-| Static checks: 83 unit tests, sandbox policy, provider profile, addresses, approved folder, Compose rendering | Pass | macOS, Python 3.9.6 and 3.12.16, Docker Compose 5.7.0 |
+| Static checks: 90 unit tests, sandbox policy, provider profile, addresses, approved folder, Compose rendering | Pass | macOS, Python 3.9.6 and 3.12.16, Docker Compose 5.7.0 |
 | Setup, all seven stages | Pass | macOS, Docker Desktop 29.9.3, OpenShell 0.1.8 with the Docker driver in bridge network mode, CPU inference |
 | Setup a second time, reusing the profile, the provider, and the sandbox | Pass | Same host |
 | Setup a second time after files were added to the sandbox copy of the folder: the copy holds only the approved files | Pass | Same host, on 2026-11-24 |

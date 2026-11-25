@@ -83,18 +83,22 @@ else
   else
     compose down
     state_remove compose ollama
-    state_remove device gpu
-    state_remove device cpu
   fi
-  # The volume record is separate from the server record, so --purge-models
-  # also works after a teardown that kept the volume.
-  if ! state_has volume "${MODEL_VOLUME}"; then
+  state_remove_key device
+  # Volume provenance is separate from service ownership, so --purge-models
+  # deletes only a volume that setup created, including after repeated setup
+  # runs or after a normal teardown that kept the volume.
+  if ! state_has_key volume; then
+    echo "Setup did not create volume ${MODEL_VOLUME}; leaving it unchanged."
+  elif ! current_volume_id="$(model_volume_id)"; then
+    state_remove_key volume
+    echo "Volume ${MODEL_VOLUME} is already absent."
+  elif ! state_has volume "${current_volume_id}"; then
+    state_remove_key volume
     echo "Setup did not create volume ${MODEL_VOLUME}; leaving it unchanged."
   elif [[ "${purge_models}" == 1 ]]; then
-    if docker volume inspect "${MODEL_VOLUME}" >/dev/null 2>&1; then
-      docker volume rm "${MODEL_VOLUME}" >/dev/null
-    fi
-    state_remove volume "${MODEL_VOLUME}"
+    docker volume rm "${MODEL_VOLUME}" >/dev/null
+    state_remove_key volume
     echo "Deleted the model volume ${MODEL_VOLUME}."
   else
     echo "The model volume is kept. Run with --purge-models to delete it."

@@ -169,6 +169,7 @@ PYTHONPATH=src python3 -m unittest discover -s src/tests -t src -p 'test_*.py'
 | `test_policy.py` | The sandbox policy, the provider profile, the effective policy check, and the Compose and image files |
 | `test_endpoint.py` | Accepted and rejected inference addresses and publish addresses |
 | `test_workspace.py` | The copy filter: links, parent references, absolute paths, and size limits |
+| `test_scripts.py` | Setup and teardown resource tracking, including pre-existing and recipe-created model volumes |
 
 `bash scripts/verify.sh` runs them with the other static checks.
 

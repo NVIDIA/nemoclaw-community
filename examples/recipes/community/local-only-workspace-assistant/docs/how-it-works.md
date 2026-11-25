@@ -75,15 +75,16 @@ fails. Stages 1 and 2 change nothing outside the `.run` directory.
 | --- | --- | --- |
 | 1. Check inputs | Confirms that Docker, Compose, and OpenShell exist and that the gateway answers. Checks the sandbox policy, the provider profile, the publish address, the endpoint address, and the approved folder | Writes the list of files to copy to `.run` |
 | 2. Select the device and check the kernel | Chooses the NVIDIA GPU or the CPU. On Linux, checks that the kernel lists the Landlock security module | Records the device in `.run/created` |
-| 3. Start the inference server | Starts the recipe-owned Ollama container and waits until it is healthy | Creates one container and one volume, and records the volume in `.run/created`. The first run downloads the image |
+| 3. Start the inference server | Starts the recipe-owned Ollama container and waits until it is healthy | Creates one container, creates the model volume when it is absent, and records the volume in `.run/created` only when setup created it. The first run downloads the image |
 | 4. Make the model available | Downloads the model if the volume does not hold it | The first run downloads the model |
 | 5. Register the local server as a provider | Lints and imports the provider profile, then creates a provider from it | Adds one profile and one provider to the gateway. No other sandbox is affected |
 | 6. Build the image and create the sandbox | Reuses a ready sandbox when its OpenClaw configuration names the current model and inference URL, and deletes it otherwise. Builds the sandbox image from the `Dockerfile`, creates the sandbox from that image with the policy and the provider, waits until it is ready, applies the policy again, reads the effective policy back, and checks it | Creates one image and one sandbox |
 | 7. Copy the folder and the skill | Empties `/sandbox/workspace`, then uploads each accepted file to it and the skill to the agent's skill directory | Replaces the files in `/sandbox/workspace` |
 
-Setup refuses to reuse a sandbox, a provider, or a provider profile that it
-did not create. That rule keeps setup from replacing the policy of a sandbox
-that belongs to something else.
+Setup refuses to reuse a sandbox, a provider, a provider profile, or an Ollama
+container that it did not create. That rule keeps setup from replacing the
+policy of a sandbox that belongs to something else, or stopping a container
+that setup did not start.
 
 The image build writes the model and the inference URL into the OpenClaw
 configuration, so a sandbox keeps the values that it was created with. When
@@ -166,10 +167,11 @@ evidence records.
    OpenShell does not delete a provider that a sandbox still holds, so this
    step comes second.
 3. It deletes the sandbox image, if setup built it.
-4. It stops the Ollama container, if setup started it. It keeps the model
-   volume unless you pass `--purge-models`. The record of the volume stays in
-   `.run/created` until the volume is deleted, so `--purge-models` also works
-   in a later run of teardown.
+4. It stops the Ollama container, if setup started it. When setup created the
+   model volume, teardown keeps the volume and its record in `.run/created`
+   unless you pass `--purge-models`, so `--purge-models` also works in a later
+   run of teardown. Teardown never deletes a model volume that existed before
+   setup.
 
 Teardown does not change an Ollama installation that exists outside this
 recipe.

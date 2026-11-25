@@ -19,7 +19,8 @@ PROFILE_ID="local-only-ollama"
 SANDBOX_WORKSPACE="/sandbox/workspace"
 SANDBOX_SKILL_DIR="/sandbox/.openclaw/skills/workspace-assistant"
 SANDBOX_OPENCLAW_CONFIG="/sandbox/.openclaw/openclaw.json"
-# The volume `name` in COMPOSE_FILE. It holds the downloaded models.
+# The `container_name` and volume `name` in COMPOSE_FILE.
+OLLAMA_CONTAINER="local-only-workspace-assistant-ollama"
 MODEL_VOLUME="local-only-workspace-assistant-ollama-models"
 
 load_env() {
@@ -164,6 +165,30 @@ sandbox_copy() {
   openshell sandbox upload --no-git-ignore "${SANDBOX_NAME}" "$1" "$2" </dev/null
 }
 
+# Print an identifier for the current model volume, or return 1 when the
+# volume does not exist. Including CreatedAt distinguishes a volume that
+# setup created from another volume created outside setup under the same
+# name.
+model_volume_id() {
+  local raw created_at
+  raw="$(docker volume inspect "${MODEL_VOLUME}" 2>/dev/null)" || return 1
+  created_at="$(printf '%s' "${raw}" | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    item = data[0] if isinstance(data, list) and data else data
+    value = item.get("CreatedAt", "") if isinstance(item, dict) else ""
+    print(str(value).strip())
+except Exception:
+    print("")
+' | tr -d '\r\n')"
+  if [[ -n "${created_at}" ]]; then
+    printf '%s@%s\n' "${MODEL_VOLUME}" "${created_at}"
+  else
+    printf '%s\n' "${MODEL_VOLUME}"
+  fi
+}
+
 # Setup records each resource that it creates. Teardown removes only those.
 state_add() {
   mkdir -p "${RUN_DIR}"
@@ -174,8 +199,18 @@ state_has() {
   [[ -f "${STATE_FILE}" ]] && grep -Fxq "$1=$2" "${STATE_FILE}"
 }
 
+state_has_key() {
+  [[ -f "${STATE_FILE}" ]] && grep -Eq "^$1=" "${STATE_FILE}"
+}
+
 state_remove() {
   [[ -f "${STATE_FILE}" ]] || return 0
   grep -Fxv "$1=$2" "${STATE_FILE}" >"${STATE_FILE}.tmp" || true
+  mv "${STATE_FILE}.tmp" "${STATE_FILE}"
+}
+
+state_remove_key() {
+  [[ -f "${STATE_FILE}" ]] || return 0
+  grep -Ev "^$1=" "${STATE_FILE}" >"${STATE_FILE}.tmp" || true
   mv "${STATE_FILE}.tmp" "${STATE_FILE}"
 }

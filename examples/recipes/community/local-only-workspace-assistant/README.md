@@ -379,8 +379,9 @@ Read this section before you run `scripts/bring-up.sh`.
   provider is attached only to the recipe sandbox. Setup does not change the
   gateway configuration or any other sandbox.
 - **New resources.** Setup creates one sandbox, one Ollama container, and one
-  Docker volume for the model. Setup refuses to reuse a sandbox, provider, or
-  provider profile that it did not create.
+  Docker volume for the model. Setup refuses to reuse a sandbox, provider,
+  provider profile, or Ollama container that it did not create, and teardown
+  never deletes a model volume that existed before setup.
 - **Costs and credentials.** The recipe uses no paid service, no API key, and
   no secret. The provider declares no credential, because Ollama checks none.
 
@@ -603,9 +604,9 @@ bash scripts/verify.sh
 == 1/5 shell syntax ==
 == 2/5 python syntax ==
 == 3/5 unit tests ==
-..................................................................................
+..........................................................................................
 ----------------------------------------------------------------------
-Ran 83 tests in 0.032s
+Ran 90 tests in 0.032s
 
 OK
 == 4/5 policy, provider profile, endpoint, and approved folder ==
