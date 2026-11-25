@@ -37,7 +37,7 @@ cp ../src/deep_research_client.py .run/stage/deep_research_client.py
 cp .run/worker-token .run/stage/worker-token
 cat > .run/stage/deep-research <<'WRAPPER'
 #!/usr/bin/env bash
-export DEEPAGENTS_ENDPOINT_URL=http://research-worker:9050
+export DEEPAGENTS_ENDPOINT_URL=http://172.30.192.10:9050
 export DEEPAGENTS_CREDENTIAL_FILE=/sandbox/research/worker-token
 exec python3 /sandbox/research/deep_research_client.py "$@"
 WRAPPER

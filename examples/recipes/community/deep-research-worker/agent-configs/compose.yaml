@@ -24,7 +24,8 @@ services:
     volumes:
       - ./state:/app/state
     networks:
-      - research
+      research:
+        ipv4_address: 172.30.192.10
     healthcheck:
       test: [CMD, curl, -fsS, http://127.0.0.1:9050/healthz]
       interval: 5s

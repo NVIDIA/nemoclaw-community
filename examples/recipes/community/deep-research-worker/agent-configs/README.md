@@ -4,8 +4,9 @@
 # Deep Research Worker With NemoClaw Agent Configs
 
 Deploy the [Deep Research Worker](../README.md) with NemoClaw Agent Configs.
-This path replaces Classic sandbox creation, `policy-add`, and skill uploads
-with `nemoclaw plan`, an attachable asset volume, and `nemoclaw apply`.
+This path creates a dedicated sandbox instead of requiring an existing one.
+It replaces Classic `policy-add` and skill uploads with `nemoclaw plan`, an
+attachable asset volume, and `nemoclaw apply`.
 It preserves the community contribution from [issue #110](https://github.com/NVIDIA/nemoclaw-community/issues/110)
 and reuses `../src` without copying the worker implementation.
 
@@ -17,11 +18,11 @@ and reuses `../src` without copying the worker implementation.
 | Contributor or provenance | Adaptation of the existing independent community Deep Research Worker recipe. |
 | Use this when | You want to queue research, return later, and retrieve text or JSON results through a dedicated Agent Configs sandbox. |
 | You will get | One OpenClaw agent and a separate Compose worker with a persistent SQLite task queue. |
-| Runs on | A local Docker engine on Linux or Docker Desktop on macOS; runtime validation is pending. |
+| Runs on | A local Docker engine; verified on Docker Desktop on macOS/Apple silicon. Linux is not yet verified. |
 | Requires | NemoClaw v0.1.0-rc.4, its OpenClaw image, OpenShell CLI 0.1.9, Docker Compose v2, Python 3.10+, `jq`, and inference API keys. Optional search helpers must already exist. |
-| Verified on | Local/static checks only; see Verification. |
-| Evidence level | local/static |
-| Support and maturity | Draft deployment path; best-effort [community support](../../../../../SUPPORT.md). |
+| Verified on | macOS 26.7.1, Docker 29.8.2, NemoClaw v0.1.0-rc.4, OpenShell CLI 0.1.9, and the pinned linux/arm64 OpenClaw 2026.9.34 image, 2026-11-24. |
+| Evidence level | live end-to-end for the model-only queue workflow; optional search helpers not tested. |
+| Support and maturity | Release-candidate deployment; best-effort [community support](../../../../../SUPPORT.md). |
 | External access, data, and actions | Agent prompts go to NVIDIA Endpoints. Worker prompts and configured search requests leave the host worker; provider usage can incur charges. Queue and reports are stored on the Docker host. |
 | Start here | [Setup](#setup) |
 | Confirm success | [Run The Workflow](#run-the-workflow) |
@@ -41,7 +42,8 @@ any task in this dedicated worker. The mount prevents modifications; it does
 not hide the token from the agent. Do not share this worker across trust domains.
 
 The worker publishes no host port. It joins the managed gateway's Docker
-network under `research-worker:9050`. The sandbox receives only GET health and
+network at `172.30.192.10:9050`. The fixed address avoids relying on Docker
+service-name resolution from inside an OpenShell sandbox. The sandbox receives only GET health and
 task routes, POST task submission, and DELETE task cancellation, plus managed
 inference. The host worker itself is outside the sandbox network policy and
 can contact its configured inference and search services. Do not expose the
@@ -170,13 +172,39 @@ the [original recipe's behavior](../README.md#task-lifecycle-and-state-managemen
 
 ## Verification
 
-**Evidence level:** local/static. The configuration passes the v0.1.0-rc.4
-JSON schema and a native `nemoclaw plan` with a nonfunctional validation-only
-credential. The plan reports nine new resources in the expected workspace;
-it does not verify the credential or the unavailable image. Live setup,
-sandbox DNS and network grants,
-agent delegation, provider-backed research, helper retrieval, and cleanup
-remain to be verified before this path is marked ready.
+**Evidence level:** live end-to-end for setup, the model-only asynchronous
+workflow, agent delegation, persistence, and cleanup on macOS/Apple silicon. Optional search-helper
+retrieval and Linux/AMD64 remain unverified.
+
+The v0.1.0-rc.4 deployment applied with the pinned image and OpenShell CLI
+0.1.9. Direct client submission completed a shallow polling-versus-callbacks
+comparison in 80 seconds with zero retries and a nonempty JSON result.
+OpenClaw loaded the external `deep-research` skill and returned a second task
+ID immediately; that task appeared in the authenticated worker list and
+completed in 64 seconds. After restarting the worker, retrieving that task
+returned the identical saved result. A second native plan reported no changes.
+
+Cleanup stopped the worker before destroying the deployment. The destroy
+preview then reported no changes and only retained gateway storage. Removing
+that storage, the asset volume, and local queue/state directories left no
+containers, volumes, or networks carrying this deployment's ownership label.
+The local API-key file and downloaded/built images were retained.
+
+Observed policy and credential checks:
+
+```text
+GET /healthz on the worker: 200
+GET /not-allowed on the worker: 403
+GET https://example.com from the sandbox: Permission denied
+GET /v1/tasks without a worker token: 401
+Worker token file: mode 0600, owner 10001
+Write to /sandbox/research: Read-only file system
+```
+
+The configuration also passes the release JSON schema and native plan. These
+checks do not establish answer quality, current-source research, or compatibility
+with other hosts. The worker uses Python 3.11 and the parent recipe's existing
+dependency ranges.
 
 From the parent recipe directory, run the existing client and worker checks:
 
@@ -196,7 +224,7 @@ NemoClaw v0.1.0-rc.4. The setup tests check credential reuse, skill-path
 adaptation, and refusal to modify a volume owned by another workspace. They
 use a temporary Docker command stub and do not prove a real deployment.
 
-For live acceptance, complete Setup and Run The Workflow, verify an
+To repeat the live checks, complete Setup and Run The Workflow, verify an
 ungranted host is denied from the sandbox, then complete Cleanup. Record the
 exact CLI, image, host, helper-service versions, and results in the pull request.
 
@@ -238,8 +266,11 @@ before then loses their management record.
   quality guarantees.
 - The Classic deployment and this path have separate tokens, queues, sandbox
   state, and lifecycle commands. Existing tasks are not migrated.
-- The fixed UID, gateway port, subnet, Compose project name, and asset volume
+- The fixed UID, gateway port, subnet, worker address, Compose project name, and asset volume
   support one copy on an engine. Change all of them for a second deployment.
+  Keep the worker address in `compose.yaml`, the network grant in
+  `nemoclaw.yaml`, and the endpoint in `prepare.sh` consistent. Reserve the
+  worker address for this container; no other container may use it.
 - The worker and sandbox share the gateway network; the worker is a trusted
   host-side component, not another sandbox. Its inference key is not protected
   by the sandbox's OpenShell provider store.
@@ -248,9 +279,10 @@ before then loses their management record.
 - Updating the skill or client requires rerunning `prepare.sh`. Do not delete
   `.run/worker-token` while preserving a running worker or existing assets;
   that rotates the client credential and requires restarting the worker too.
-- The first end-to-end run is pending release-package access and working
-  inference credentials. This document provides expected results, not a claim
-  that those live checks passed.
+- The completed run used no optional search helpers. A model-only comparison
+  validates queue execution and result retrieval, not current-source research
+  or citations. Configure and verify your helper services before relying on
+  retrieval-backed answers.
 
 The dependency licenses and support boundary are unchanged from the
 [parent recipe](../README.md#third-party-dependencies-and-license-notes).

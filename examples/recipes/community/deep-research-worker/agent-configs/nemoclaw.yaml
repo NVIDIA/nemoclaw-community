@@ -44,7 +44,7 @@ spec:
               - {path: /usr/local/bin/python*}
               - {path: /usr/bin/python*}
             endpoints:
-              - host: research-worker
+              - host: 172.30.192.10
                 port: 9050
                 protocol: rest
                 enforcement: enforce
