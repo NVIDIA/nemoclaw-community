@@ -347,6 +347,11 @@ hf_intake_value() {
 configured_namespace=$(hf_intake_value namespace)
 configured_hf_secret=$(hf_intake_value secretName)
 configured_hf_secret_key=$(hf_intake_value secretKey)
+case "$(hf_intake_value requireTokenForHuggingFaceModels)" in
+  true) hf_secret_optional=false ;;
+  false|'') hf_secret_optional=true ;;
+  *) emit_failure 'hf-token-intake-config-invalid' 'The chart token policy must be a boolean.' ;;
+esac
 model_runner_service_account=$(hf_intake_value modelRunnerServiceAccount)
 [ -n "$configured_namespace" ] && [ -n "$configured_hf_secret" ] && \
   [ -n "$configured_hf_secret_key" ] && [ -n "$model_runner_service_account" ] || \
@@ -357,10 +362,13 @@ model_runner_service_account=$(hf_intake_value modelRunnerServiceAccount)
   emit_failure 'unexpected-model-namespace' 'The runtime target namespace does not match the chart-provided skill configuration.'
 [ "$hf_secret" = "$configured_hf_secret" ] || \
   emit_failure 'unexpected-hf-token-secret' 'Use only the existing Secret name configured by Helm. The agent cannot substitute or inspect another Secret.'
-[ "$configured_hf_secret" = "${OPENSHIFT_LLM_HF_SECRET_NAME:-}" ] && \
-  [ "$configured_hf_secret_key" = "${OPENSHIFT_LLM_HF_SECRET_KEY:-}" ] && \
-  [ "$model_runner_service_account" = "${OPENSHIFT_LLM_RUNNER_SERVICE_ACCOUNT:-}" ] || \
+# The chart-owned, read-only intake file is the authority for the Secret name
+# and key. Those reference fields are not exported as agent environment values.
+[ "$model_runner_service_account" = "${OPENSHIFT_LLM_RUNNER_SERVICE_ACCOUNT:-}" ] || \
   emit_failure 'model-skill-runtime-config-mismatch' 'The mounted skill configuration does not match the chart-managed runtime environment.'
+
+oc -n "$namespace" get serviceaccount "$model_runner_service_account" -o name >/dev/null 2>&1 || \
+  emit_failure 'model-runner-unavailable' 'The configured model-runner account is unavailable in the target namespace. Have the operator reconcile it; do not create arbitrary accounts or grant permissions.'
 
 umask 077
 workdir=$(mktemp -d "${TMPDIR:-/tmp}/hermes-model-deploy.XXXXXX") || exit 1
@@ -452,6 +460,7 @@ if ! python3 "$renderer" --template "$skill_root/templates/model-download-job.ya
   --set "DOWNLOAD_IMAGE_PULL_SECRETS=$download_image_pull_secrets" \
   --set "MODEL_ID=$model" --set "HF_SECRET_NAME=$hf_secret" \
   --set "HF_SECRET_KEY=$configured_hf_secret_key" \
+  --set "HF_SECRET_OPTIONAL=$hf_secret_optional" \
   --set "MODEL_RUNNER_SERVICE_ACCOUNT=$model_runner_service_account" \
   --set "DOWNLOAD_TIMEOUT_SECONDS=$download_timeout" >>"$dry_run_log" 2>&1; then
   cat "$dry_run_log"
@@ -460,7 +469,7 @@ fi
 
 if ! oc -n "$namespace" apply --dry-run=client -f "$download_manifest" >"$dry_run_log" 2>&1 || \
   ! oc -n "$namespace" apply --dry-run=client -f "$fallback_manifest" >>"$dry_run_log" 2>&1 || \
-  { [ "$deployment_mode" = standard-vllm ] || oc -n "$namespace" apply --dry-run=client -f "$dynamo_manifest" >>"$dry_run_log" 2>&1; }; then
+  { [ "$deployment_mode" != standard-vllm ] && ! oc -n "$namespace" apply --dry-run=client -f "$dynamo_manifest" >>"$dry_run_log" 2>&1; }; then
   cat "$dry_run_log"
   emit_failure 'chart-managed-manifest-validation-failed' 'The stock manifests failed client validation. Inspect this one result; do not create another manifest.'
 fi
@@ -468,6 +477,28 @@ fi
 emit_download_phase() {
   printf '%s\n' "DEPLOYMENT_PHASE=$1" "DEPLOYMENT_RELEASE=$release" "DEPLOYMENT_NAMESPACE=$namespace"
 }
+
+# A retained failed Job cannot be restarted by apply. Do not replay its old
+# authentication error or grant the sandbox delete permission to bypass TTL.
+existing_download=$(oc -n "$namespace" get "job/$download_job" --ignore-not-found=true \
+  -o name 2>"$workdir/model-download-existing.log") || \
+  emit_failure 'model-download-status-unavailable' 'Cannot establish whether a download already exists. Inspect the existing Job before retrying.'
+if [ -n "$existing_download" ]; then
+  existing_terminal=$(oc -n "$namespace" get "job/$download_job" \
+    -o 'jsonpath={.status.conditions[?(@.status=="True")].type}' \
+    2>"$workdir/model-download-existing.log") || \
+    emit_failure 'model-download-status-unavailable' 'Cannot read existing download status. Do not start another download.'
+  case " $existing_terminal " in
+    *' Failed '*|*' FailureTarget '*)
+      printf '%s\n' \
+        'DEPLOYMENT_RESULT=pending' \
+        'DEPLOYMENT_REASON=model-download-retry-awaiting-cleanup' \
+        "MODEL_DOWNLOAD_JOB=$download_job" \
+        'DEPLOYMENT_ACTION=The previous failed download is retained for evidence. Wait for Kubernetes TTL cleanup (600 seconds after termination with the chart default), then confirm a retry. Updating the Secret does not restart a failed Job. Do not delete resources or create another deployment through the agent.'
+      exit 0
+      ;;
+  esac
+fi
 
 emit_download_phase 'applying-isolated-model-download'
 download_apply_log="$workdir/model-download-apply.log"
@@ -477,11 +508,35 @@ if ! oc -n "$namespace" apply -f "$download_manifest" >"$download_apply_log" 2>&
 fi
 
 emit_download_phase 'downloading-model-cache'
-if oc -n "$namespace" wait --for=condition=complete "job/$download_job" --timeout="${download_observation_timeout}s" >"$workdir/model-download-wait.log" 2>&1; then
+# Read both terminal outcomes before cleanup. A Job can have multiple true
+# conditions, which kubectl wait's JSONPath check rejects. Bounded GETs also
+# avoid relying on watch streaming through the trusted API proxy.
+download_observation_started=$(date +%s)
+while :; do
+  download_terminal=$(oc -n "$namespace" get "job/$download_job" \
+    --request-timeout=15s \
+    -o 'jsonpath={.status.conditions[?(@.status=="True")].type}' \
+    2>"$workdir/model-download-wait.log" || true)
+  case " $download_terminal " in
+    *' Complete '*|*' SuccessCriteriaMet '*|*' Failed '*|*' FailureTarget '*) break ;;
+  esac
+  [ "$(( $(date +%s) - download_observation_started ))" -lt "$download_observation_timeout" ] || break
+  sleep 2
+done
+download_complete=false
+case " $download_terminal " in
+  *' Complete '*|*' SuccessCriteriaMet '*) download_complete=true ;;
+esac
+if [ "$download_complete" = true ]; then
   printf '%s\n' 'MODEL_DOWNLOAD_RESULT=ready'
   printf '%s\n' 'HF_TOKEN_SECRET=external-reference-not-read-or-deleted'
   emit_download_phase 'model-cache-ready'
 else
+  download_auth_failure=$(oc -n "$namespace" logs "job/$download_job" --tail=40 2>/dev/null | \
+    awk '$0 == "MODEL_DOWNLOAD_REASON=huggingface-authentication-required" {print "true"; exit}' || true)
+  if [ "$download_auth_failure" = true ]; then
+    emit_failure 'huggingface-authentication-required' "Hugging Face denied access. Have an operator configure Secret $hf_secret (key $configured_hf_secret_key) in namespace $namespace with a valid read token, accept required model terms, then confirm a retry. Never paste the token into agent chat."
+  fi
   download_failed=$(oc -n "$namespace" get "job/$download_job" -o jsonpath='{.status.failed}' 2>/dev/null || true)
   if [ -n "$download_failed" ] && [ "$download_failed" != 0 ]; then
     printf '%s\n' 'MODEL_DOWNLOAD_RESULT=failed'

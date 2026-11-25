@@ -77,7 +77,7 @@ kubectl port-forward ───────────────────�
 | You will get | An OpenShell gateway, a sandboxed Hermes agent, the Hermes dashboard and OpenAI-compatible API (port-forward by default, Route/Ingress/NodePort optional), optional in-cluster terminal chat, an executable sandbox teardown, and extension points for seed plugins, state mounts, policy, and skills. |
 | Runs on | Kubernetes 1.33+ or OpenShift 4.20+ with an Agent Sandbox controller and a ReadWriteOnce StorageClass. |
 | Requires | Helm 3.14+, privileged sandbox admission, a pre-created model API-key Secret, and a decision about anonymous OIDC discovery (`values-kubernetes.yaml` or `values-openshift.yaml`). |
-| Verified on | OpenShift 4.22.6 on amd64 with Kubernetes 1.35.5, Agent Sandbox controller v0.4.5, and OpenShell 0.0.116 (chart 0.4.0, Route exposure with oauth-proxy, 2026-09-04). Also on a single-node kubeadm cluster, Kubernetes 1.36.2 on amd64 with Ubuntu 26.04 LTS, containerd 2.3.1, Calico, `local-path` storage, the same Agent Sandbox controller v0.4.5, and ClusterIP exposure (2026-09-08). |
+| Verified on | OpenShift 4.22.6 on amd64 with Kubernetes 1.35.5, Agent Sandbox controller v0.4.5, and OpenShell 0.0.116 (chart 0.4.0, Route exposure with oauth-proxy, 2026-09-04). Also on a single-node kubeadm cluster, Kubernetes 1.36.2 on amd64 with Ubuntu 26.04 LTS, containerd 2.3.1, Calico, `local-path` storage, the same Agent Sandbox controller v0.4.5, and ClusterIP exposure (2026-09-08). Both re-verified on 2026-09-16 after the helper-image refresh, including the sandbox delete-and-recreate upgrade path. |
 | Evidence level | Live end-to-end on both platforms: install, dashboard, `gateway-token`, `/v1/models` (401 without a token, 200 with one), a chat completion, the helm-driven sandbox teardown and recreation, and clean removal of the cert-generation hook RBAC. The standard-Kubernetes run additionally exercised the anonymous OIDC discovery probe against a kubeadm ServiceAccount issuer. |
 | Support and maturity | Experimental Kubernetes deployment path with best-effort community support. See the repository [support policy](../../../SUPPORT.md). |
 | External access, data, and actions | Pulls pinned images from public registries and downloads the checksum-pinned OpenShell CLI archive. Sends prompts to the configured model endpoint and may incur provider cost. Installation creates workloads, RBAC, NetworkPolicies, and retained PVCs, and optionally one ClusterRoleBinding that lets unauthenticated callers read the cluster's OIDC discovery document and public signing keys. |
@@ -103,11 +103,25 @@ kubectl port-forward ───────────────────�
 
 No Dockerfile or image build is part of installation.
 
-Hermes `0.21.0` is the newer standalone upstream release, but the latest
-published NemoClaw-managed Hermes image remains `v0.0.117` with Hermes `0.19.0`.
-The chart intentionally chooses that latest compatible managed image rather
-than creating an unverified custom image or substituting a generic Hermes
-container that lacks the NemoClaw/OpenShell runtime contract.
+This chart pins the managed NemoClaw image to `v0.0.117` with Hermes `0.19.0`.
+A contributor's earlier evaluation of NemoClaw `v0.0.124` with Hermes `0.20.6`
+reported an auxiliary compression-model context-window error with this chart's
+configuration:
+
+```text
+Auxiliary compression model nvidia/nemotron-3-super-120b-a12b has a context
+window of 16,384 tokens, which is below the minimum 64,000 required by Hermes
+Agent.
+```
+
+The reported failure used the image's placeholder model name in
+`/sandbox/.hermes/config.yaml`, rather than the serving endpoint's model
+configuration. The proposed workaround was to set
+`auxiliary.compression.context_length` in that file. This chart does not expose
+that setting. This historical report is not a compatibility claim for every
+newer release; evaluate a candidate image and its compression-model settings
+before changing the pin. The chart does not build a custom image or substitute
+a generic Hermes container for the managed NemoClaw/OpenShell runtime.
 
 ## Prerequisites
 

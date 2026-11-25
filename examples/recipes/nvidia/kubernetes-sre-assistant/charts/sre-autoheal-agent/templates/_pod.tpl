@@ -88,6 +88,11 @@ containers:
       {{- end }}
       - name: tmp
         mountPath: /tmp
+      {{- if $root.Values.metricsCA.configMapName }}
+      - name: metrics-ca
+        mountPath: /etc/sre-autoheal/metrics-ca
+        readOnly: true
+      {{- end }}
       {{- if eq $root.Values.memory.backend "file" }}
       - name: memory
         mountPath: /var/lib/sre-autoheal
@@ -115,6 +120,14 @@ volumes:
   {{- end }}
   - name: tmp
     emptyDir: {}
+  {{- if $root.Values.metricsCA.configMapName }}
+  - name: metrics-ca
+    configMap:
+      name: {{ $root.Values.metricsCA.configMapName | quote }}
+      items:
+        - key: {{ $root.Values.metricsCA.key | quote }}
+          path: ca.crt
+  {{- end }}
   {{- if eq $root.Values.memory.backend "file" }}
   - name: memory
     {{- if $root.Values.memory.persistence.enabled }}

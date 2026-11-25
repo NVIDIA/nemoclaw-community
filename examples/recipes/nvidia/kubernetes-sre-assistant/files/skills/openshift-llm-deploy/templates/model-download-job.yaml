@@ -34,7 +34,8 @@ metadata:
 spec:
   backoffLimit: 1
   activeDeadlineSeconds: ${DOWNLOAD_TIMEOUT_SECONDS}
-  ttlSecondsAfterFinished: 60
+  # Retain terminal evidence beyond the default observation window.
+  ttlSecondsAfterFinished: 600
   template:
     metadata:
       labels:
@@ -68,19 +69,28 @@ spec:
 
               download_error = None
               try:
-                  snapshot_download(repo_id=model_id, local_dir=str(model_dir), token=hf_token)
+                  # False explicitly disables cached/implicit credentials.
+                  snapshot_download(repo_id=model_id, local_dir=str(model_dir), token=hf_token or False)
                   if not (model_dir / "config.json").is_file():
                       raise RuntimeError("download completed without config.json")
                   (model_dir / ".hermes-model-ready").write_text(json.dumps({"model": model_id}) + "\n", encoding="utf-8")
                   print("MODEL_DOWNLOAD_RESULT=ready")
               except Exception as exc:
-                  download_error = exc
-                  print(f"MODEL_DOWNLOAD_RESULT=failed:{type(exc).__name__}")
+                  download_error = True
+                  status = getattr(getattr(exc, "response", None), "status_code", getattr(exc, "code", None))
+                  print("MODEL_DOWNLOAD_RESULT=failed")
+                  if status in (401, 403) or type(exc).__name__ == "GatedRepoError":
+                      print("MODEL_DOWNLOAD_REASON=huggingface-authentication-required")
+                      print("MODEL_DOWNLOAD_ACTION=Hugging Face denied access. This model may require an HF read token and accepted model terms. Have an operator configure the referenced Kubernetes Secret and retry after confirmation. Never paste a token into agent chat.")
+                  else:
+                      print("MODEL_DOWNLOAD_REASON=model-download-failed")
+                      print(f"MODEL_DOWNLOAD_ERROR_TYPE={type(exc).__name__}")
               finally:
                   hf_token = ""
                   os.environ.pop("HF_TOKEN", None)
               if download_error is not None:
-                  raise download_error
+                  # Do not print vendor exception text: it can contain signed URLs.
+                  raise SystemExit(1)
           env:
             - name: MODEL_ID
               value: ${MODEL_ID}
@@ -95,6 +105,7 @@ spec:
                 secretKeyRef:
                   name: ${HF_SECRET_NAME}
                   key: ${HF_SECRET_KEY}
+                  optional: ${HF_SECRET_OPTIONAL}
           volumeMounts:
             - name: model-cache
               mountPath: /models
