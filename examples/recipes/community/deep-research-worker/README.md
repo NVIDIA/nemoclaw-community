@@ -83,6 +83,14 @@ for the authorized sandbox client.
 Do not commit `.env`, generated state, or sandbox-local token material. The
 local `.gitignore` excludes `.env`, `state/`, and `.run/`.
 
+## Agent Configs Deployment
+
+For NemoClaw Agent Configs, follow [the deployment guide](agent-configs/README.md).
+It creates a dedicated OpenClaw sandbox with declarative network grants and
+reuses this recipe's worker, queue, client, and skill. The instructions below
+use the Classic lifecycle commands. Do not run them against an Agent Configs
+deployment.
+
 ## Quickstart
 
 ```bash
