@@ -1,0 +1,53 @@
+{
+  "name": "Synthetic equity market: approved input for an analyst's weekly review",
+  "question": "As of the 2026-08-31 close, which of 36 fictional issuers deserve an analyst's attention, what do prices, company news and peers say about them, and what should be taken forward for human review?",
+  "as_of": "2026-08-31",
+  "window": {
+    "first_session": "2026-01-02",
+    "last_session": "2026-08-31",
+    "sessions": 166
+  },
+  "sources": {
+    "market_data": {
+      "kind": "structured",
+      "files": [
+        "data/assets.csv",
+        "data/daily_prices.csv",
+        "data/trading_sessions.csv",
+        "data/company_news.csv",
+        "data/asset_relationships.csv"
+      ],
+      "dictionary": "data/README.md",
+      "database": "scripts/build_database.py (in the recipe, run on the host) builds a SQLite database with the same rows, keys and foreign keys; this is the source Auto Ontology ingests for Question 1.",
+      "authority": "Synthetic. 36 fictional issuers, generated from a fixed seed. No real company, price or news item."
+    },
+    "regulations": {
+      "kind": "documents",
+      "files": [
+        "data/documents/form-8k-item-1-05.md",
+        "data/documents/regulation-s-k-item-106.md",
+        "data/documents/rule-13a-11.md"
+      ],
+      "authority": "Real US federal rule text (public domain), with sources and hashes in data/documents/manifest.json. The rules apply to real SEC registrants; the fictional issuers are not registrants and no filing is invented for them."
+    }
+  },
+  "definitions": {
+    "top_12": "The 12 issuers with liquidity_rank 1..12 (median daily dollar volume). They are the universe for Question 2. Question 5 asks Kumo about the 12 most liquid as of its 2026-08-24 anchor, chosen from rows on or before that date.",
+    "return": "Over 'the N sessions ending D': adjusted_close at D divided by adjusted_close one session before the window's first session, minus 1. Daily volatility is the sample standard deviation of total_return_1d over the same N sessions.",
+    "news_alignment": "A news item belongs to the first session whose close (trading_sessions.close_at, 21:00 UTC) is at or after published_at. 'Forward return over k sessions' is the aligned session's adjusted_close k sessions later divided by its adjusted_close, minus 1; items without k later sessions are excluded from means but still listed.",
+    "peers": "asset_relationships lists declared same-industry peers. Correlations use total_return_1d on shared sessions.",
+    "anomaly": "A score against an earlier baseline over named features: return (total_return_1d), intraday_range ((high - low) / open) and volume. It is neither a forecast nor an explanation.",
+    "prediction": "A probability at an anchor close for an outcome over a horizon. The file contains the sessions after the anchor; a prediction may use only rows dated on or before its anchor.",
+    "association": "A link between news and returns is an association, not proof of cause.",
+    "centrality": "PageRank with damping 0.85 over the declared-peer graph, each link weighted by the absolute correlation of the two issuers' total_return_1d over the window.",
+    "acceleration": "Questions 1 to 4 are your own pandas, scikit-learn and NetworkX scripts, run with utilities/accelerate.py. On a machine with a usable GPU stack the same scripts run with CUDA-X (cudf.pandas, cuml.accel, nx-cugraph) configured and no code change; otherwise on the CPU. The receipt records that configuration, not which operations ran on the GPU. The shipped Question 3 helper uses pandas and NumPy only. Session dates are closes (21:00 UTC)."
+  },
+  "prediction_task": {
+    "anchor": "2026-08-24",
+    "horizon_sessions": 5,
+    "outcome": "positive adjusted-close return over the five sessions after the anchor close",
+    "population": "top_12"
+  },
+  "limits": "Synthetic daily bars only; no minute data, fundamentals, costs, liquidity or borrow. Nothing here is investment advice, an order, or an operational approval. Real regulation text is reference material, not a compliance opinion.",
+  "provenance": "Roster, narrative and headline text written with NeMo Data Designer and Nemotron. Prices come from a compact, seeded, standard-library generator. All fictional."
+}
