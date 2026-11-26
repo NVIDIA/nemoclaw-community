@@ -21,16 +21,19 @@ host_profile_state() {
   hermes profile list 2>/dev/null | strip_ansi | awk -v n="$1" '$1==n{print $3}' | head -1
 }
 
-# The one host gateway: state file, pid, and whether it is live.
-_hgw_state() { printf '%s/.hermes/gateway_state.json' "$HOME"; }
+# Ask Hermes for a validated PID, not the retained gateway_state.json snapshot.
+# In Hermes 0.21.4+ `gateway list` uses get_running_pid, which checks the live
+# process against the gateway's identity files. Only accept the default row.
 _hgw_log()   { printf '%s/logs/host-gateway.log' "$SWARM_STATE"; }
 host_gateway_pid() {
-  python3 -c 'import json,sys,os
-try:
-    d=json.load(open(sys.argv[1])); p=int(d.get("pid") or 0)
-    os.kill(p, 0); print(p)
-except Exception:
-    pass' "$(_hgw_state)" 2>/dev/null
+  local gateways
+  gateways=$(hermes -p default gateway list) || return 1
+  printf '%s\n' "$gateways" | strip_ansi | awk '
+    $2 == "default" {
+      for (i = 3; i < NF; i++) {
+        if ($i == "PID" && $(i + 1) ~ /^[1-9][0-9]*$/) { print $(i + 1); exit }
+      }
+    }'
 }
 host_gateway_running() { [[ -n "$(host_gateway_pid)" ]]; }
 
@@ -136,7 +139,7 @@ host_dropbox_remove() {
   # The one host gateway loaded this profile's plugins when it started serving
   # it; cycle it once so the removed plugin leaves memory.
   if [[ -n "$running" ]]; then
-    host_gateway_stop
+    host_gateway_stop || return 1
     host_gateway_ensure
   fi
   dim "removed legacy automatic video hook from $name"
@@ -145,9 +148,13 @@ host_dropbox_remove() {
 # Start the one host gateway if it is not running. Idempotent. Login shell +
 # setsid so it survives the SSH session that started it.
 host_gateway_ensure() {
-  host_gateway_running && return 0
-  daemonize "$(_hgw_log)" hermes gateway run
-  local i
+  local pid i
+  if ! pid=$(host_gateway_pid); then
+    warn "could not inspect the default host gateway; refusing to start another"
+    return 1
+  fi
+  [[ -n "$pid" ]] && return 0
+  daemonize "$(_hgw_log)" hermes -p default gateway run
   for ((i = 0; i < 12; i++)); do
     sleep 5
     host_gateway_running && { ok "host gateway running (pid $(host_gateway_pid), serves every bot profile)"; return 0; }
@@ -170,13 +177,23 @@ host_profile_wait_served() {
 }
 
 host_gateway_stop() {
-  local pid; pid=$(host_gateway_pid)
-  hermes gateway stop >/dev/null 2>&1 || true
-  [[ -n "$pid" ]] && kill "$pid" 2>/dev/null || true
-  local i
-  for ((i = 0; i < 10; i++)); do host_gateway_running || return 0; sleep 1; done
-  [[ -n "$pid" ]] && kill -9 "$pid" 2>/dev/null || true
-  return 0
+  # Let Hermes revalidate identity at stop time. Never signal a cached PID:
+  # it can have been reused, or be zero (the entire process group).
+  if ! hermes -p default gateway stop >/dev/null; then
+    warn "could not stop the default host gateway"
+    return 1
+  fi
+  local pid i
+  for ((i = 0; i < 10; i++)); do
+    if ! pid=$(host_gateway_pid); then
+      warn "could not verify that the default host gateway stopped"
+      return 1
+    fi
+    [[ -z "$pid" ]] && return 0
+    sleep 1
+  done
+  warn "default host gateway is still running; inspect hermes -p default gateway status"
+  return 1
 }
 
 host_profile_remove() {

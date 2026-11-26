@@ -47,7 +47,7 @@ the host, shared by every bot, and one inside each sandbox.
 ```
                  ┌──────────────────────────────────────────────────────┐
                  │ HOST                                                 │
-  Desktop ──────▶│  host gateway   hermes gateway run   (one per host)  │
+  Desktop ──────▶│  host gateway   hermes -p default gateway run       │
   Bots roster    │    serves every bot profile; makes `hermes profile   │
   lists THIS     │    list` say "running"; the only thing the roster sees
                  │    profile nemoclaw-researcher:                      │

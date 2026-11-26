@@ -106,7 +106,11 @@ profile cannot run a gateway of its own; the default profile's gateway serves
 them all and records who it serves in `~/.hermes/gateway_state.json` under
 `served_profiles`. `./swarm up` starts it; `./swarm status` checks it; a profile
 created while it runs is picked up within a few seconds. If a profile stays
-`stopped`, read `~/.swarm/logs/host-gateway.log`, then `hermes gateway restart`.
+`stopped`, read `~/.swarm/logs/host-gateway.log`, then
+`hermes -p default gateway restart`. The explicit profile overrides a persisted
+non-default active profile. `swarm` uses Hermes's validated gateway listing,
+not a saved runtime-state PID, and delegates stopping to Hermes without a raw
+PID-kill fallback.
 
 ## Desktop shows no bots at all
 

@@ -137,7 +137,7 @@ cmd_add() {
 
 cmd_rm() {
   local name="${1:-}" yes="${2:-}"
-  valid_name_loose "$name" || die "usage: swarm rm NAME [--yes]  (lowercase letters, digits, single hyphens)"
+  valid_name_loose "$name" || die "usage: swarm rm NAME [--yes]  (start with a lowercase letter; lowercase letters, digits, hyphens)"
   if [[ "$yes" != "--yes" ]]; then
     read -r -p "remove bot $name, its sandbox, profile, and key? [y/N] " a
     [[ "$a" == y || "$a" == Y ]] || { dim "aborted"; return 0; }
@@ -193,7 +193,7 @@ cmd_down() {
   [[ -n "$all" ]] && tracing_collector_remove
   # The one host gateway is the default profile's process, shared with anything
   # else this user runs through Hermes; leave it up. Say so once.
-  [[ "$HOST_GATEWAY" == on ]] && host_gateway_running && dim "host gateway left running (it is the default profile's; stop with: hermes gateway stop)"
+  [[ "$HOST_GATEWAY" == on ]] && host_gateway_running && dim "host gateway left running (it is the default profile's; stop with: hermes -p default gateway stop)"
   return 0
 }
 

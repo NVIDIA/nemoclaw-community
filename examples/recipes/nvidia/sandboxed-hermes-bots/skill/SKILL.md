@@ -142,7 +142,7 @@ In this order. Stop at the first failure.
 
 - **Bot works over HTTP but is missing from the roster.** Two gateways are
   involved: one inside the sandbox (serves the api_server), and one on the host
-  (`hermes gateway run`, from the default profile, shared by every bot) that
+  (`hermes -p default gateway run`, shared by every bot) that
   makes each bot profile report `running`. The roster lists only the second.
   Hermes 0.21.4+ refuses a per-profile gateway, so never run `hermes -p <bot>
   gateway run`. `swarm up` starts both; `swarm status` checks both.
