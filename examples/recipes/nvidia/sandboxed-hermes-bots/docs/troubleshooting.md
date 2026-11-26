@@ -99,12 +99,18 @@ backend belongs to the Desktop session, not to the swarm.
 
 Works from the CLI, api_server returns 200, `hermes profile list` says `stopped`.
 
-Two gateways per bot: one inside the sandbox serving the api_server, one on the
-host that makes the profile report `running`. The roster lists only the second.
-`./swarm up` starts it; `./swarm status` checks it. `hermes profile list`
-computes `running` from `gateway.lock` plus a `gateway.pid` whose recorded start
-time matches the live process, so `kill -0 $(cat gateway.pid)` is not enough,
-and `gateway.pid` is JSON, not a bare PID.
+Two gateways are involved: one inside the sandbox serving the api_server, and
+one on the host, shared by every bot, that makes each bot profile report
+`running`. The roster lists only the second. Since Hermes 0.21.4 a named
+profile cannot run a gateway of its own; the default profile's gateway serves
+them all and records who it serves in `~/.hermes/gateway_state.json` under
+`served_profiles`. `./swarm up` starts it; `./swarm status` checks it; a profile
+created while it runs is picked up within a few seconds. If a profile stays
+`stopped`, read `~/.swarm/logs/host-gateway.log`, then
+`hermes -p default gateway restart`. The explicit profile overrides a persisted
+non-default active profile. `swarm` uses Hermes's validated gateway listing,
+not a saved runtime-state PID, and delegates stopping to Hermes without a raw
+PID-kill fallback.
 
 ## Desktop shows no bots at all
 
@@ -275,8 +281,9 @@ traversal paths.
 
 ## Traps in your own diagnostics
 
-- `gateway.pid` holds JSON, so `ps -p $(cat gateway.pid)` reports every gateway
-  dead. Ask `hermes profile list` instead.
+- Bot profiles have no `gateway.pid` of their own; the one host gateway's pid is
+  in `~/.hermes/gateway_state.json`. Ask `hermes profile list` instead of
+  reading files.
 - Nested shell quoting mangles keys. Read them from files inside a script and
   never interpolate through `ssh '… "… \"…\" …" …'`. Same for `python -c`
   through `sandbox exec`; feed python a heredoc on stdin.

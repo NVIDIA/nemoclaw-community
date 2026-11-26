@@ -1,0 +1,2 @@
+WORKSPACE-ALLOWED-MARKER
+This file is part of the sample approved folder. Setup copies it into the sandbox.

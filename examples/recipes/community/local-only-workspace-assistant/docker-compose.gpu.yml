@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Adds the NVIDIA GPU reservation to the Ollama server in docker-compose.yml.
+# Docker rejects this reservation on a host without the NVIDIA Container
+# Toolkit, so scripts/bring-up.sh adds this file only when it finds a GPU.
+
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

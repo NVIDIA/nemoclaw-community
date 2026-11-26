@@ -11,6 +11,10 @@ Image: ghcr.io/nvidia/nemoclaw/hermes-sandbox-base
 License: See the image source and included notices
 URL: https://github.com/NVIDIA/nemoclaw-community
 
+Image: ghcr.io/nvidia/nemoclaw/openclaw-sandbox
+License: See the image source and included notices
+URL: https://github.com/NVIDIA/NemoClaw
+
 Image: python:3.12-slim
 License: Python Software Foundation License and Debian component licenses
 URL: https://hub.docker.com/_/python
@@ -538,7 +542,7 @@ License: Apache-2.0
 URL: https://github.com/kubernetes/kubernetes
 
 Project: OpenShift Client (oc and the accompanying kubectl binary)
-Version: 4.20.28
+Version: 4.20.38
 License: Apache-2.0
 URL: https://github.com/openshift/oc
 Release archives: https://mirror.openshift.com/pub/openshift-v4/
@@ -610,6 +614,10 @@ URL: https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4
 Model: Llama 3.2 3B
 License: Llama 3.2 Community License Agreement and Acceptable Use Policy
 URL: https://ollama.com/library/llama3.2
+
+Model: NVIDIA Nemotron 3 Nano 4B
+License: NVIDIA Open Model License
+URL: https://ollama.com/library/nemotron-3-nano
 
 Service: GitHub API
 Terms: See provider terms

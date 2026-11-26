@@ -1,0 +1,2 @@
+CANARY-OUTSIDE-WORKSPACE
+This file is baked into the sandbox image outside the policy allowlist. A sandbox process must not be able to read it.

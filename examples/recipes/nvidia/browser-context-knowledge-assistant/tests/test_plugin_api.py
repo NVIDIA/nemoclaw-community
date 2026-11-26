@@ -1162,6 +1162,169 @@ class ConversationApiTests(unittest.TestCase):
         source = PLUGIN.read_text(encoding="utf-8")
         self.assertNotIn('"method": "terminal.', source)
 
+    def test_cancel_during_initialization_prevents_submission(self):
+        conversation_id = self.create_conversation()
+        with mock.patch.object(module.threading, "Thread", _DeferredThread):
+            response = self.send(conversation_id, "Describe the page", "page text", "i" * 24)
+        job_id = _response_json(response)["job_id"]
+        calls = []
+        test = self
+
+        class Ready:
+            def wait(self, timeout):
+                response = asyncio.run(module.cancel_conversation_job(
+                    conversation_id, job_id, _FakeRequest()
+                ))
+                test.assertEqual(response.status_code, 202)
+                calls.append("cancel accepted")
+                return True
+
+        class Gateway:
+            _sessions_lock = threading.Lock()
+            _sessions = {"live": {"agent_ready": Ready(), "agent": object(), "agent_error": None}}
+
+            @staticmethod
+            def dispatch(request, transport):
+                method = request["method"]
+                calls.append(method)
+                if method == "session.create":
+                    return {"result": {"session_id": "live", "session_key": "stored"}}
+                if method == "prompt.submit":
+                    transport.write({"method": "event", "params": {
+                        "type": "message.complete", "payload": {"text": "unexpected execution"}
+                    }})
+                return {"result": {}}
+
+        with mock.patch.dict(sys.modules, {"tui_gateway": SimpleNamespace(server=Gateway)}), \
+             mock.patch.object(module, "_ensure_hermes_session_profile"), \
+             mock.patch.object(module, "_stored_message_high_water", return_value=0), \
+             mock.patch.object(module, "_stored_assistant_completion", return_value=None):
+            module._conversation_worker(job_id)
+        self.assertIn("cancel accepted", calls)
+        self.assertNotIn("prompt.submit", calls)
+        with module._conversation_connection() as connection:
+            job = connection.execute("SELECT status FROM conversation_jobs WHERE job_id = ?", (job_id,)).fetchone()
+        self.assertEqual(job["status"], "cancelled")
+
+    def test_cancel_acceptance_cannot_interleave_with_prompt_submission(self):
+        conversation_id = self.create_conversation()
+        with mock.patch.object(module.threading, "Thread", _DeferredThread):
+            response = self.send(conversation_id, "Describe the page", "Page text", "s" * 24)
+        job_id = _response_json(response)["job_id"]
+        checked = threading.Event()
+        release = threading.Event()
+        cancel_started = threading.Event()
+        cancel_done = threading.Event()
+        ready = threading.Event()
+        ready.set()
+        order = []
+        failures = []
+        check_count = 0
+        check_cancelled = module._raise_if_job_cancelled
+
+        def pause_after_final_check(job):
+            nonlocal check_count
+            check_cancelled(job)
+            check_count += 1
+            if check_count == 2:
+                checked.set()
+                if not release.wait(3):
+                    raise AssertionError("Submission test was not released")
+
+        class Gateway:
+            _sessions_lock = threading.Lock()
+            _sessions = {"live": {"agent_ready": ready, "agent": object(), "agent_error": None}}
+
+            @staticmethod
+            def dispatch(request, transport):
+                method = request["method"]
+                if method == "session.create":
+                    return {"result": {"session_id": "live", "session_key": "stored"}}
+                if method == "prompt.submit":
+                    order.append("submitted")
+                    transport.write({"method": "event", "params": {
+                        "type": "message.complete", "payload": {"text": "Completed"}
+                    }})
+                return {"result": {}}
+
+        def run_prompt():
+            try:
+                module._run_hermes_prompt("Question", session_source="test", session_title="Test",
+                                          job_id=job_id, cleanup_session_resources=False)
+            except Exception as error:
+                failures.append(error)
+
+        def cancel():
+            cancel_started.set()
+            try:
+                asyncio.run(module.cancel_conversation_job(conversation_id, job_id, _FakeRequest()))
+                order.append("cancel accepted")
+            except Exception as error:
+                failures.append(error)
+            finally:
+                cancel_done.set()
+
+        with mock.patch.dict(sys.modules, {"tui_gateway": SimpleNamespace(server=Gateway)}), \
+             mock.patch.object(module, "_raise_if_job_cancelled", side_effect=pause_after_final_check), \
+             mock.patch.object(module, "_ensure_hermes_session_profile"), \
+             mock.patch.object(module, "_stored_message_high_water", return_value=0), \
+             mock.patch.object(module, "_stored_assistant_completion", return_value=None):
+            worker = threading.Thread(target=run_prompt)
+            cancellation = threading.Thread(target=cancel)
+            worker.start()
+            try:
+                self.assertTrue(checked.wait(2))
+                cancellation.start()
+                self.assertTrue(cancel_started.wait(2))
+                self.assertFalse(cancel_done.wait(0.05))
+            finally:
+                release.set()
+                worker.join(3)
+                if cancellation.ident is not None:
+                    cancellation.join(3)
+        self.assertFalse(worker.is_alive())
+        self.assertFalse(cancellation.is_alive())
+        self.assertEqual(failures, [])
+        self.assertEqual(order, ["submitted", "cancel accepted"])
+
+    def test_timeout_recovery_resends_context_to_the_new_session(self):
+        conversation_id = self.create_conversation()
+        calls = []
+
+        def run_prompt(prompt, **kwargs):
+            calls.append((prompt, kwargs["stored_session_id"]))
+            kwargs["on_session_bound"]("stored-session")
+            if len(calls) == 2:
+                raise module.RequestFailure("inference_timeout", "Timed out")
+            return {"format": "text", "text": "Response"}, "stored-session"
+
+        with mock.patch.object(module.threading, "Thread", _ImmediateThread), \
+             mock.patch.object(module, "_run_hermes_prompt", side_effect=run_prompt), \
+             mock.patch.dict(sys.modules, {"tools.terminal_tool": SimpleNamespace(cleanup_vm=lambda _: None)}):
+            for index in range(3):
+                self.send(conversation_id, f"Question {index}", "Required page content", str(index) * 24)
+        self.assertIsNone(calls[2][1])
+        self.assertIn("Required page content", calls[2][0])
+        self.assertIn('"context_status": "new"', calls[2][0])
+
+    def test_reference_proxy_retains_origin_and_accepts_the_api_body_limit(self):
+        import re
+        config = (Path(__file__).parents[1] / "deploy/nginx/ask-nemoclaw-server.conf").read_text()
+        origin_rule = re.search(r"proxy_set_header\s+Origin\s+([^;]+);", config).group(1)
+        self.assertEqual(origin_rule, "$http_origin")
+        limit = int(re.search(r"client_max_body_size\s+([0-9]+);", config).group(1))
+        self.assertEqual(limit, module._MAX_REQUEST_BYTES)
+        for origin, allowed in (("https://unrelated.example", False),
+                                (f"chrome-extension://{module._DEFAULT_EXTENSION_ID}", True),
+                                ("https://hermes.example", True)):
+            request = _FakeRequest({"title": "Proxy test"}, headers={"origin": origin})
+            if allowed:
+                self.assertEqual(asyncio.run(module.create_conversation(request)).status_code, 201)
+            else:
+                with self.assertRaises(HTTPException) as rejected:
+                    asyncio.run(module.create_conversation(request))
+                self.assertEqual(rejected.exception.status_code, 403)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -144,7 +144,7 @@ gatewayPersistence:
 artifacts:
   # Buildless helper used to stage the architecture-specific OpenShell CLI and
   # run authenticated API proxies. This helper is an immutable multi-arch digest.
-  utilityImage: docker.io/library/python:3.13.7-slim@sha256:5f55cdf0c5d9dc1a415637a5ccc4a9e18663ad203673173b8cda8f8dcacef689
+  utilityImage: docker.io/library/python:3.13.15-slim@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285
   openshellCli:
     version: 0.0.116
     amd64:
