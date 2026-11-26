@@ -35,7 +35,7 @@ verify_bot() {
 
   local st; st=$(host_profile_state "$name")
   if [[ "$HOST_GATEWAY" == on ]]; then
-    if [[ "$st" == running ]]; then v_ok "host profile running (visible to Desktop)"
+    if [[ "$st" == running ]]; then v_ok "host profile served by the gateway (visible to Desktop)"
     else v_fail "host profile $st (Desktop roster will not list it)"; fi
   fi
 
@@ -46,6 +46,10 @@ verify_bot() {
 verify_all() {
   _v_pass=0; _v_fail=0
   local b sent failed
+  if [[ "$HOST_GATEWAY" == on ]]; then
+    if host_gateway_running; then v_ok "host gateway running (pid $(host_gateway_pid); one gateway serves every bot)"
+    else v_fail "host gateway not running (./swarm up starts it)"; fi
+  fi
   for b in $(bot_list); do verify_bot "$b" || true; done
   if [[ "$TRACING" == on ]]; then
     if collector_running; then

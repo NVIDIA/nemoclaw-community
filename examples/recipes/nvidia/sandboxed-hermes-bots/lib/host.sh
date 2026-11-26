@@ -5,14 +5,37 @@
 # bot's sandbox api_server. Hermes Desktop lists host profiles as Bots; every
 # turn it sends to this profile executes inside the sandbox.
 #
-# Whether the roster also needs a host-side gateway per profile is decided by
-# HOST_GATEWAY (auto|on|off). "auto" follows what Task 0 of the plan found.
+# One gateway per host. Since Hermes 0.21.4 the default profile's gateway
+# serves every named profile (`served_profiles` in ~/.hermes/gateway_state.json)
+# and a named profile refuses `gateway run` of its own. So this file starts
+# exactly one gateway, from the default profile, and every shim rides it.
+# A running gateway picks up new profiles on its own (`hermes profile create`
+# notifies it), so adding a bot never restarts the gateway.
+#
+# HOST_GATEWAY (on|off): off skips the gateway entirely (bots still answer to
+# `hermes -p NAME chat`; Desktop will not list them).
 
 : "${HOST_GATEWAY:=on}"
 
 host_profile_state() {
   hermes profile list 2>/dev/null | strip_ansi | awk -v n="$1" '$1==n{print $3}' | head -1
 }
+
+# Ask Hermes for a validated PID, not the retained gateway_state.json snapshot.
+# In Hermes 0.21.4+ `gateway list` uses get_running_pid, which checks the live
+# process against the gateway's identity files. Only accept the default row.
+_hgw_log()   { printf '%s/logs/host-gateway.log' "$SWARM_STATE"; }
+host_gateway_pid() {
+  local gateways
+  gateways=$(hermes -p default gateway list) || return 1
+  printf '%s\n' "$gateways" | strip_ansi | awk '
+    $2 == "default" {
+      for (i = 3; i < NF; i++) {
+        if ($i == "PID" && $(i + 1) ~ /^[1-9][0-9]*$/) { print $(i + 1); exit }
+      }
+    }'
+}
+host_gateway_running() { [[ -n "$(host_gateway_pid)" ]]; }
 
 # host_profile_ensure NAME PORT KEY SOUL(optional)
 # A host profile with our bot's name that this tool did not create belongs to
@@ -95,7 +118,8 @@ host_profile_ensure() {
   ok "host profile $name -> $HOST_API_ADDR:$port"
 
   if [[ "$HOST_GATEWAY" == on ]]; then
-    host_gateway_start "$name"
+    host_gateway_ensure
+    host_profile_wait_served "$name"
   fi
 }
 
@@ -108,46 +132,68 @@ host_dropbox_remove() {
   [[ -f "$envf" ]] && grep -q '^SWARM_VSS_SANDBOX=' "$envf" && changed=1
   [[ -e "$dst" ]] && changed=1
   [[ -n "$changed" ]] || return 0
-  [[ "$(host_profile_state "$name")" == running ]] && running=1
+  host_gateway_running && running=1
   [[ -f "$envf" ]] && sed_delete '^SWARM_VSS_SANDBOX=' "$envf"
   hermes -p "$name" plugins disable dropbox >/dev/null 2>&1 || true
   rm -rf "$dst"
+  # The one host gateway loaded this profile's plugins when it started serving
+  # it; cycle it once so the removed plugin leaves memory.
   if [[ -n "$running" ]]; then
-    host_gateway_stop "$name"
-    host_gateway_start "$name"
+    host_gateway_stop || return 1
+    host_gateway_ensure
   fi
   dim "removed legacy automatic video hook from $name"
 }
 
-# The profile shows `running` in `hermes profile list` only when a gateway for
-# it runs on this host. Login shell + setsid so it survives the SSH session.
-host_gateway_start() {
-  local name="$1" i st
-  st=$(host_profile_state "$name")
-  [[ "$st" == running ]] && { dim "host gateway for $name already running"; return 0; }
-  rm -f "$HOME/.hermes/profiles/$name"/gateway.{pid,lock}
-  daemonize "$(bot_log "$name" host-gateway)" hermes -p "$name" gateway run
+# Start the one host gateway if it is not running. Idempotent. Login shell +
+# setsid so it survives the SSH session that started it.
+host_gateway_ensure() {
+  local pid i
+  if ! pid=$(host_gateway_pid); then
+    warn "could not inspect the default host gateway; refusing to start another"
+    return 1
+  fi
+  [[ -n "$pid" ]] && return 0
+  daemonize "$(_hgw_log)" hermes -p default gateway run
   for ((i = 0; i < 12; i++)); do
     sleep 5
-    [[ "$(host_profile_state "$name")" == running ]] && { ok "host gateway for $name running"; return 0; }
+    host_gateway_running && { ok "host gateway running (pid $(host_gateway_pid), serves every bot profile)"; return 0; }
   done
-  warn "profile $name still '$(host_profile_state "$name")'; log: $(bot_log "$name" host-gateway)"
+  warn "host gateway did not come up; log: $(_hgw_log)"
+  return 1
+}
+
+# The profile shows `running` in `hermes profile list` once the gateway
+# serves it. A new profile is picked up within a few seconds.
+host_profile_wait_served() {
+  local name="$1" i st
+  for ((i = 0; i < 12; i++)); do
+    st=$(host_profile_state "$name")
+    [[ "$st" == running ]] && { ok "host profile $name served by the gateway (visible to Desktop)"; return 0; }
+    sleep 5
+  done
+  warn "profile $name still '$st' after 60s; log: $(_hgw_log)"
+  return 1
 }
 
 host_gateway_stop() {
-  local name="$1" pidf="$HOME/.hermes/profiles/$name/gateway.pid" pid
-  hermes -p "$name" gateway stop >/dev/null 2>&1 || true
-  # gateway.pid holds a JSON record, not a bare pid.
-  if [[ -f "$pidf" ]]; then
-    pid=$(python3 -c 'import json,sys
-try:
-    d=json.load(open(sys.argv[1])); print(d.get("pid") or "")
-except Exception:
-    print(open(sys.argv[1]).read().strip())' "$pidf" 2>/dev/null | tr -dc '0-9')
-    [[ -n "$pid" ]] && kill "$pid" 2>/dev/null || true
+  # Let Hermes revalidate identity at stop time. Never signal a cached PID:
+  # it can have been reused, or be zero (the entire process group).
+  if ! hermes -p default gateway stop >/dev/null; then
+    warn "could not stop the default host gateway"
+    return 1
   fi
-  pkill_pattern "hermes -p $name gateway run"
-  pkill_pattern "profile $name serve"
+  local pid i
+  for ((i = 0; i < 10; i++)); do
+    if ! pid=$(host_gateway_pid); then
+      warn "could not verify that the default host gateway stopped"
+      return 1
+    fi
+    [[ -z "$pid" ]] && return 0
+    sleep 1
+  done
+  warn "default host gateway is still running; inspect hermes -p default gateway status"
+  return 1
 }
 
 host_profile_remove() {
@@ -162,7 +208,8 @@ host_profile_remove() {
     return 0
   fi
   [[ -e "$dir" ]] || return 0
-  host_gateway_stop "$name"
+  # The gateway notices the tombstone and stops serving this profile; it
+  # stays up for the other bots.
   if hermes profile delete -y "$name" >/dev/null 2>&1; then ok "host profile $name deleted"
   else rm -rf "$HOME/.hermes/profiles/$name"; dim "host profile dir removed"; fi
 }
