@@ -1025,6 +1025,9 @@ async function loadConversation(conversationId, resumePolling = true) {
 async function selectConversation(conversationId) {
   const generation = ++refreshGeneration;
   refreshController?.abort();
+  refreshController = null;
+  elements.newConversationButton.disabled = false;
+  elements.refreshButton.disabled = false;
   clearTimeout(pollTimer);
   activeConversationId = null;
   activeJob = null;

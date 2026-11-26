@@ -67,7 +67,8 @@ The suite checks:
 - same-session image attachment;
 - tab and document changes during page capture;
 - Stop during page capture or upload, conversation selection while loading,
-  and page-context restoration after a session timeout;
+  restored New and Refresh controls when selection cancels conversation
+  creation, and page-context restoration after a session timeout;
 - cancellation during initialization, image attachment, and inference;
 - cancellation during vision requests, capacity waits, and retry waits;
 - cancellation, timeout, and non-PTY behavior;
@@ -140,7 +141,7 @@ third-party notices before redistributing the example or a built image.
 | Path | Purpose |
 | --- | --- |
 | `extension/` | Manifest V3 Chrome side-panel source. |
-| `release/ask-nemoclaw-extension-0.10.12.zip` | Prebuilt portable extension for local installation. |
+| `release/ask-nemoclaw-extension-0.10.15.zip` | Prebuilt portable extension for local installation. |
 | `hermes-plugin/` | Authenticated Hermes REST adapter backed by non-PTY JSON-RPC sessions. |
 | `relay/plugins.toml` | Local-only NeMo Relay ATIF configuration with provider-placeholder redaction. |
 | `scripts/prepare-hermes-image.py` | Adds the plugin, Relay settings, and managed enablement to the Hermes image source. |
