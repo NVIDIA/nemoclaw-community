@@ -684,6 +684,9 @@ the local server was stopped.
 **This does not verify:** enforcement on a Linux or WSL2 host, GPU serving,
 the Windows drive cases, or an answer from the OpenClaw agent.
 
+These live results predate the current connection-error exit-status checks.
+The revised suite has regression tests but has not been rerun in a live sandbox.
+
 The command reads the effective sandbox policy, runs every ready case in the
 table below, and shows where Ollama loaded the model. It stops the recipe-owned
 Ollama container once and starts it again. It writes one JSON record for each
@@ -692,9 +695,11 @@ case to `.run/evidence/`.
 A denied case passes only when the action fails with text that the boundary
 produces, such as `Permission denied` or `policy_denied`. A failure without
 that text is `INCONCLUSIVE`, because a missing file or an offline network also
-makes an action fail. An HTTP status 403 alone is not such text, because any
-web server can send it. Only the `policy_denied` error in the response body of
-the sandbox proxy counts. The command exits with status 1 on any `FAIL` and status
+makes an action fail. Connection probes also require a connection-error exit
+status: 7 from curl, or 13 from the Python probe after an `EACCES` error.
+HTTP response text cannot pass these probes. Only the local provider-path case
+S09b accepts `policy_denied` from the sandbox proxy's response body.
+The command exits with status 1 on any `FAIL` and status
 2 on any `INCONCLUSIVE`. `PLANNED` and `N/A` cases do not change the exit
 status.
 

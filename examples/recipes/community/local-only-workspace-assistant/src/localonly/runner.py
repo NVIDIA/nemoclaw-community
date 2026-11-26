@@ -61,6 +61,8 @@ def judge(case: Case, result: ExecResult) -> Outcome:
         return Outcome(case, FAIL, DETAIL_LEAK, result.exit_code, leak_detected=True)
     if result.exit_code == 0:
         return Outcome(case, FAIL, DETAIL_DENIED_SUCCEEDED, result.exit_code)
+    if case.deny_exit_codes and result.exit_code not in case.deny_exit_codes:
+        return Outcome(case, INCONCLUSIVE, DETAIL_NO_SIGNATURE, result.exit_code)
     lowered = output.lower()
     for signature in case.deny_signatures:
         if signature in lowered:

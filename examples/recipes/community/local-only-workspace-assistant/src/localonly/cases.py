@@ -33,9 +33,10 @@ CANARY_PATH = "/srv/conformance/outside-canary.txt"
 _FS_DENIED = ("permission denied", "operation not permitted")
 _FS_ABSENT_OR_DENIED = _FS_DENIED + ("no such file or directory", "not found")
 # A connection that the sandbox refuses fails with EACCES before it leaves the
-# sandbox. An outage or a closed port fails with a different error.
+# sandbox. Require the client's connection-error exit status as well as this
+# text: an HTTP response body can contain the same words.
 _NET_DENIED = ("permission denied",)
-# A request that reaches the sandbox proxy but breaks an endpoint rule gets an
+# A local provider request that breaks an endpoint rule gets an
 # HTTP 403 whose body names this error. The status alone is not a signature:
 # any web server can answer 403 or "Forbidden", and that answer would show
 # that the request left the sandbox.
@@ -47,17 +48,23 @@ def _python_request(prepare: str, timeout_seconds: int) -> str:
 
     `prepare` is Python statements that bind `req`. On an HTTP error status
     the script prints the response body and fails, so the verdict can tell a
-    denial by the sandbox from an error status that a server sent.
+    denial by the sandbox from an error status that a server sent. Only a
+    connection error with errno EACCES exits with status 13.
     """
     return (
         'python3 -c "\n'
-        "import json, os, sys, urllib.error, urllib.request\n"
+        "import errno, json, os, sys, urllib.error, urllib.request\n"
         + prepare + "\n"
         "try:\n"
         "    print(urllib.request.urlopen(req, timeout=%d).read().decode())\n"
         "except urllib.error.HTTPError as error:\n"
         "    print('HTTP Error', error.code, error.read().decode(errors='replace'))\n"
         "    sys.exit(1)\n"
+        "except urllib.error.URLError as error:\n"
+        "    if isinstance(error.reason, OSError) and error.reason.errno == errno.EACCES:\n"
+        "        print('Permission denied')\n"
+        "        sys.exit(13)\n"
+        "    raise\n"
         '"'
     ) % timeout_seconds
 
@@ -98,6 +105,8 @@ class Case:
     requires: Tuple[str, ...] = ()
     timeout_seconds: float = 30.0
     note: str = ""
+    # When set, a signature counts only with one of these client exit statuses.
+    deny_exit_codes: Tuple[int, ...] = ()
 
 
 CASES: Tuple[Case, ...] = (
@@ -181,7 +190,8 @@ CASES: Tuple[Case, ...] = (
         priority="P0",
         expect=DENY,
         script=_CURL + "http://example.com",
-        deny_signatures=_NET_DENIED + _HTTP_DENIED,
+        deny_signatures=_NET_DENIED,
+        deny_exit_codes=(7,),
     ),
     Case(
         case_id="S06b",
@@ -189,7 +199,8 @@ CASES: Tuple[Case, ...] = (
         priority="P0",
         expect=DENY,
         script=_CURL + "https://example.com",
-        deny_signatures=_NET_DENIED + _HTTP_DENIED,
+        deny_signatures=_NET_DENIED,
+        deny_exit_codes=(7,),
     ),
     Case(
         case_id="S06c",
@@ -197,7 +208,8 @@ CASES: Tuple[Case, ...] = (
         priority="P0",
         expect=DENY,
         script=_python_request("req = urllib.request.Request('http://example.com')", 8),
-        deny_signatures=_NET_DENIED + _HTTP_DENIED,
+        deny_signatures=_NET_DENIED,
+        deny_exit_codes=(13,),
         note="Egress rules name programs. One denied program does not prove another.",
     ),
     Case(
@@ -222,7 +234,8 @@ CASES: Tuple[Case, ...] = (
         priority="P0",
         expect=DENY,
         script=_CURL + "https://integrate.api.nvidia.com/v1/models",
-        deny_signatures=_NET_DENIED + _HTTP_DENIED,
+        deny_signatures=_NET_DENIED,
+        deny_exit_codes=(7,),
         note="A stock agent policy can permit this host. The local-only policy must not.",
     ),
     Case(
@@ -244,7 +257,8 @@ CASES: Tuple[Case, ...] = (
         priority="P0",
         expect=DENY,
         script=_CURL + "\"$OPENAI_BASE_URL/models\"",
-        deny_signatures=_NET_DENIED + _HTTP_DENIED,
+        deny_signatures=_NET_DENIED,
+        deny_exit_codes=(7,),
         note="The profile names the programs that may call the endpoint. curl is not one of them.",
     ),
     Case(

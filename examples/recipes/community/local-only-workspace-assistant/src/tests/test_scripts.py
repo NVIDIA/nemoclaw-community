@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+import json
 import shutil
 import stat
 import subprocess
@@ -408,6 +409,29 @@ class LifecycleScriptTests(unittest.TestCase):
         result = self._run_script("bring-up.sh")
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(any(item == "compose=ollama" for item in self._created_entries()))
+
+    def test_workspace_refresh_removes_deleted_files_and_previous_folder(self) -> None:
+        first = self._run_script("bring-up.sh")
+        self.assertEqual(first.returncode, 0, first.stdout)
+        workspace = self.mock_dir / "sandboxes/local-only-assist/fs/sandbox/workspace"
+        (workspace / "deleted-on-host.txt").write_text("old content", encoding="utf-8")
+        next_folder = self.base / "next-workspace"
+        next_folder.mkdir()
+        (next_folder / "current.txt").write_text("current content", encoding="utf-8")
+
+        refreshed = self._run_script("bring-up.sh", extra_env={"WORKSPACE_DIR": str(next_folder)})
+        self.assertEqual(refreshed.returncode, 0, refreshed.stdout)
+        self.assertEqual([path.name for path in workspace.iterdir()], ["current.txt"])
+
+    def test_changed_model_replaces_ready_sandbox_configuration(self) -> None:
+        first = self._run_script("bring-up.sh", extra_env={"INFERENCE_MODEL": "first-model"})
+        self.assertEqual(first.returncode, 0, first.stdout)
+        second = self._run_script("bring-up.sh", extra_env={"INFERENCE_MODEL": "second-model"})
+        self.assertEqual(second.returncode, 0, second.stdout)
+        self.assertIn("Replacing the sandbox", second.stdout)
+        config_path = self.mock_dir / "sandboxes/local-only-assist/fs/sandbox/.openclaw/openclaw.json"
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        self.assertEqual(config["agents"]["defaults"]["model"]["primary"], "inference/second-model")
 
 
 if __name__ == "__main__":

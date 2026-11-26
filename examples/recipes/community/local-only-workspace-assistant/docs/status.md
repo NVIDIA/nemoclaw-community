@@ -18,6 +18,11 @@ the target host with an agent answer.
 
 ## What Has Run
 
+The live results below predate the connection-error exit-status checks in
+the current suite. Those checks have regression tests with simulated HTTP
+responses and connection errors. The revised suite has not been run against
+a live sandbox.
+
 | Item | State | Host and evidence |
 | --- | --- | --- |
 | Static checks: 90 unit tests, sandbox policy, provider profile, addresses, approved folder, Compose rendering | Pass | macOS, Python 3.9.6 and 3.12.16, Docker Compose 5.7.0 |

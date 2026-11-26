@@ -25,12 +25,17 @@ The suite therefore asks two questions about a denied action:
 Only two yes answers give `PASS`. The suite calls that text a boundary
 signature. Examples are `Permission denied` and `policy_denied`.
 
-An HTTP status is not a boundary signature. Any web server can answer
-`403 Forbidden`, and that answer would show that the request left the sandbox.
-The sandbox proxy answers a request that breaks an endpoint rule with status
-403 and a body that names the error `policy_denied`. The cases that send HTTP
-requests print the response body, and only that error counts as a denial. A
-403 without it is `INCONCLUSIVE`.
+An HTTP status or arbitrary response text is not a connection-denial signature.
+Any web server can answer `403 Forbidden` with `Permission denied` in its body.
+The connection probes (S06, S06b, S06c, S09, and S09c) require both the
+permission-denial text and a connection-error exit status: 7 from curl, or 13
+from the Python probe after an `EACCES` error. An HTTP error response is
+`INCONCLUSIVE` for these cases, even if its body contains `policy_denied`.
+
+S09b tests a different boundary: the local provider's allowed API paths. The
+sandbox proxy answers a request that breaks an endpoint rule with status 403
+and a body that names the error `policy_denied`. Only S09b accepts that error
+as a denial signature. A 403 without it is `INCONCLUSIVE`.
 
 ## The Parts
 
@@ -170,6 +175,7 @@ PYTHONPATH=src python3 -m unittest discover -s src/tests -t src -p 'test_*.py'
 | `test_endpoint.py` | Accepted and rejected inference addresses and publish addresses |
 | `test_workspace.py` | The copy filter: links, parent references, absolute paths, and size limits |
 | `test_scripts.py` | Setup and teardown resource tracking, including pre-existing and recipe-created model volumes |
+| `test_network_cases.py` | HTTP response text cannot pass connection probes; connection denials, provider-path checks, and stopped-server verdicts remain distinct |
 
 `bash scripts/verify.sh` runs them with the other static checks.
 
@@ -181,11 +187,12 @@ inference server last.
 ```python
 Case(
     case_id="S06e",
-    title="Reach an external HTTP endpoint with wget",
+    title="Reach another external HTTPS path with curl",
     priority="P1",
     expect=DENY,
-    script="wget -nv -T 8 -O /dev/null http://example.com",
-    deny_signatures=("permission denied", "policy_denied"),
+    script="curl -v -sS --max-time 8 --fail-with-body https://example.com/health",
+    deny_signatures=("permission denied",),
+    deny_exit_codes=(7,),
 ),
 ```
 
@@ -195,9 +202,12 @@ Follow these rules:
   shows nothing.
 - Write boundary signatures in lowercase. Run the action once against a
   running sandbox and read the denial text before you rely on a signature.
-- Do not use an HTTP status, such as `403` or `forbidden`, as a signature.
-  Print the response body and match the text that only the boundary produces.
-  The unit tests reject a ready case that passes on a bare 403.
+- Do not use an HTTP status or response-body text as a connection-denial
+  signature. Set `deny_exit_codes` to the client's validated connection-error
+  status and test it together with the denial text. Test HTTP error bodies
+  that contain the same words; those results must remain `INCONCLUSIVE`.
+- Use `policy_denied` only for a local provider-path check such as S09b, not
+  for a connection probe.
 - Set `leak_marker` when the action could return protected content.
 - Set `requires` when the case has a meaning only on some hosts.
 - Do not name a sandbox tool in the script. The unit tests reject a script
