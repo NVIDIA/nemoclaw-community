@@ -1,0 +1,6 @@
+# Send only the image fixtures to the image build. This keeps a local .env
+# file and generated state out of the build context.
+*
+!fixtures
+!fixtures/image
+!fixtures/image/**

@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Recipe-owned Ollama server. It keeps its models in a named volume, so setup
+# and teardown do not change an Ollama installation that already exists on the
+# host.
+#
+# This file starts the server on the CPU. scripts/bring-up.sh adds
+# docker-compose.gpu.yml when the host has an NVIDIA GPU.
+
+services:
+  ollama:
+    # Tag and multi-platform index digest match the pin in
+    # examples/recipes/nvidia/kubernetes-gpu-autoscaling/values.yaml.
+    image: "${OLLAMA_IMAGE:-ollama/ollama:0.32.3@sha256:ec24bcaa2a810eb74171ce7c517813ef4821ed678988845e8d76cf62467036d4}"
+    container_name: local-only-workspace-assistant-ollama
+    restart: unless-stopped
+    ports:
+      # Loopback by default. scripts/bring-up.sh rejects an address that
+      # publishes the port on every interface.
+      - "${OLLAMA_PUBLISH_HOST:-127.0.0.1}:${OLLAMA_PORT:-11434}:11434"
+    environment:
+      OLLAMA_HOST: "0.0.0.0:11434"
+      OLLAMA_KEEP_ALIVE: "${OLLAMA_KEEP_ALIVE:-5m}"
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  ollama-models:
+    name: local-only-workspace-assistant-ollama-models

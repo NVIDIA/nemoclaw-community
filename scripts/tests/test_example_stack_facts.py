@@ -218,7 +218,9 @@ class ExampleStackFactsTests(unittest.TestCase):
                     # NeMo Helix) and Enterprise Assistant.
                     "unconfirmed": 15,
                     "unpinned": 12,
-                    "unknown": 1,
+                    # Includes the Local-Only Workspace Assistant, whose
+                    # digest-pinned sandbox image has no established harness version.
+                    "unknown": 2,
                     "not-applicable": 1,
                 }
             ),
