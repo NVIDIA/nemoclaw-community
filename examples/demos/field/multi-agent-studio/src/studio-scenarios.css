@@ -1,0 +1,41 @@
+/* The spaces live in the scene. Cards are only the accessible WebGL fallback. */
+#studio-scenarios{grid-column:1/-1;width:min(980px,calc(100% - 64px));margin:32px auto;color:#e9f1f5}
+#studio-scenarios h2{font-size:28px;margin:8px 0 24px}
+.scenario-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+#agent-campus .scenario-card{display:flex;flex-direction:column;align-items:flex-start;text-align:left;color:#e9f1f5;padding:24px;border:1px solid #354c59;border-radius:16px;background:#152530;cursor:pointer}
+.scenario-card h3{font-size:24px;margin:8px 0}.scenario-card p{color:#bbcad2;line-height:1.6}
+.scenario-team,.scenario-saved{font-size:12px;color:#9fb9c4}.scenario-saved{margin-top:12px}
+#agent-campus .studio-scenario-back{font-size:12px;min-height:34px;flex-basis:100%;text-align:left;border-color:transparent;background:transparent;color:#a9bdc8;padding:4px 0}
+
+/* Compact, extensible navigation: Stage 3 owns any number of scenario links. */
+#bac-planner #agent-campus .world-room-map.world-scenario-map{padding:12px 16px;border-radius:12px;max-width:calc(100% - 36px);backdrop-filter:blur(10px)}
+#bac-planner #agent-campus .world-scenario-map>.world-map-stages{display:flex;align-items:flex-start;gap:20px;width:auto;height:auto}
+#bac-planner #agent-campus .world-scenario-map button{position:static;left:auto;top:auto;right:auto;display:flex;align-items:center;gap:7px;padding:3px 0;background:transparent;font-size:12px;text-align:left;line-height:1.4}
+#bac-planner #agent-campus .world-scenario-map .world-map-scenarios{border-left:1px solid #ffffff1a;padding-left:20px}
+#bac-planner #agent-campus .world-map-scenarios>div{display:grid;grid-template-columns:repeat(2,max-content);gap:5px 18px;margin-top:7px;padding-left:4px}
+#bac-planner #agent-campus .world-map-scenarios [data-world-scenario]{font-size:11px;color:#adc0cd}
+#bac-planner #agent-campus .world-map-scenarios [data-world-scenario]:hover,
+#bac-planner #agent-campus .world-map-scenarios [data-world-scenario].selected{color:var(--scenario-accent)}
+.world-scenario-dot{width:5px;height:5px;border-radius:50%;background:var(--scenario-accent);flex-shrink:0}
+#agent-campus .world-map-scenarios button:disabled{opacity:.5;cursor:wait}
+
+#bac-planner #agent-campus .world-campus-room{--scenario-accent:#a7bfce;width:clamp(180px,14vw,215px);max-width:none;box-sizing:border-box;padding:12px 16px;border-radius:12px;border-color:color-mix(in srgb,var(--scenario-accent) 45%,#263f50);border-top:2px solid var(--scenario-accent);background:#10202bee;white-space:normal;backdrop-filter:blur(8px);box-shadow:0 14px 35px #0004;transition:background .16s,border-color .16s}
+#agent-campus .world-campus-room>span{display:block;font-size:10px;letter-spacing:.12em;margin-bottom:6px;color:var(--scenario-accent)}
+#agent-campus .world-campus-room>b{display:block;font-size:20px;line-height:1.2;white-space:nowrap}
+#bac-planner #agent-campus .world-campus-room:hover{background:#1c3038f5;border-color:var(--scenario-accent)}
+#bac-planner #agent-campus .world-campus-room:focus-visible{outline:2px solid var(--scenario-accent);outline-offset:4px}
+#agent-campus .world-scenario-label:disabled{opacity:.6;cursor:wait}
+#agent-campus[data-scenario-gallery=true] .world-overview-button{display:block!important}
+#agent-campus[data-scenario-gallery=true] .world-journey{display:none!important}
+/* Scenario mode still uses the full scene, including in presentation mode. */
+#agent-campus[data-scenario-gallery=true] #campus-location{display:none!important}
+#agent-campus .world-navigation[data-scenario-density=compact] .world-scenario-label{padding:11px 15px;width:clamp(175px,14vw,220px)}
+#agent-campus .world-navigation[data-scenario-density=compact] .world-campus-room>b{font-size:18px}
+
+@media(max-width:700px){
+ #bac-planner #agent-campus .world-campus-room{width:145px;padding:9px 12px}
+ #agent-campus .world-campus-room>b{font-size:16px}
+ #agent-campus .world-campus-room>span{margin-bottom:4px}
+ #bac-planner #agent-campus .world-scenario-map>.world-map-stages{flex-wrap:wrap;gap:8px 20px}
+ #bac-planner #agent-campus .world-scenario-map .world-map-scenarios{flex-basis:100%;border-left:0;border-top:1px solid #ffffff1a;padding:7px 0 0}
+}

@@ -1,0 +1,24 @@
+[
+  {
+    "id": "plan",
+    "number": "03",
+    "title": "Open Task",
+    "eyebrow": "Your task, the right team",
+    "description": "Casey chooses agents with the skills your task needs.",
+    "team": "Casey + your hires, with optional standby specialists",
+    "action": "Open Task",
+    "accent": "#a1d65e",
+    "floor": "#2a333e",
+    "residents": [
+      0
+    ],
+    "guide": {
+      "points": [
+        "Choose an example or type /goal followed by the result you want. Attach a file if needed.",
+        "Check the team before sending.\nHired\u00a0only uses your agents.\nHired\u00a0+\u00a0Standby lets Casey call on standby specialists too.",
+        "Follow progress in Mission Control. Open Results to read the answer, view saved files or preview a webpage."
+      ],
+      "note": "To chat with Casey directly, send a message without /goal."
+    }
+  }
+]

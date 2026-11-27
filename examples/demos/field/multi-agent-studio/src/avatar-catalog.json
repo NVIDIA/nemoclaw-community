@@ -1,0 +1,418 @@
+{
+  "bodies": [
+    {
+      "id": "classic",
+      "label": "Classic",
+      "name": "Jinny",
+      "accessories": [
+        "antenna",
+        "headset",
+        "glasses",
+        "cap",
+        "backpack"
+      ],
+      "palettes": [
+        "robot-silver",
+        "robot-graphite",
+        "robot-cream",
+        "robot-navy"
+      ]
+    },
+    {
+      "id": "round",
+      "label": "Orbit",
+      "name": "Orbit",
+      "accessories": [
+        "antenna",
+        "headset",
+        "glasses",
+        "cap",
+        "backpack"
+      ],
+      "palettes": [
+        "orbit-pearl",
+        "orbit-slate",
+        "robot-cream",
+        "orbit-rose"
+      ]
+    },
+    {
+      "id": "fox-companion",
+      "label": "Fox",
+      "name": "Rusty",
+      "accessories": [
+        "scarf",
+        "bowtie",
+        "glasses",
+        "backpack",
+        "flower"
+      ],
+      "palettes": [
+        "fox-red",
+        "fox-arctic",
+        "fox-silver",
+        "fox-fennec"
+      ]
+    },
+    {
+      "id": "operative",
+      "label": "Smith",
+      "name": "Smith",
+      "accessories": [
+        "earpiece",
+        "briefcase",
+        "watch",
+        "cap",
+        "backpack"
+      ],
+      "palettes": [
+        "smith-black",
+        "smith-navy",
+        "smith-stone"
+      ]
+    },
+    {
+      "id": "claw",
+      "label": "Claw",
+      "name": "Pixel",
+      "accessories": [
+        "bowtie",
+        "scarf",
+        "pirate",
+        "backpack",
+        "flag"
+      ],
+      "palettes": [
+        "claw-coral",
+        "claw-blue",
+        "claw-plum",
+        "claw-sand"
+      ]
+    },
+    {
+      "id": "crab",
+      "label": "Crab",
+      "name": "Sage",
+      "accessories": [
+        "flower",
+        "pirate",
+        "flag",
+        "bowtie",
+        "backpack"
+      ],
+      "palettes": [
+        "crab-rust",
+        "crab-ocean",
+        "crab-sand",
+        "crab-rose"
+      ]
+    },
+    {
+      "id": "cat",
+      "label": "Cat",
+      "name": "Mochi",
+      "accessories": [
+        "scarf",
+        "bowtie",
+        "glasses",
+        "backpack",
+        "flower"
+      ],
+      "palettes": [
+        "cat-ginger",
+        "cat-tuxedo",
+        "cat-silver",
+        "cat-cocoa"
+      ]
+    },
+    {
+      "id": "bunny",
+      "label": "Bunny",
+      "name": "Pip",
+      "accessories": [
+        "scarf",
+        "bowtie",
+        "carrot",
+        "backpack",
+        "flower"
+      ],
+      "palettes": [
+        "bunny-snow",
+        "bunny-oat",
+        "bunny-grey",
+        "bunny-cocoa"
+      ]
+    },
+    {
+      "id": "panda",
+      "label": "Panda",
+      "name": "Bao",
+      "accessories": [
+        "scarf",
+        "bowtie",
+        "glasses",
+        "backpack",
+        "bamboo"
+      ],
+      "palettes": [
+        "panda-classic",
+        "panda-brown",
+        "panda-slate"
+      ]
+    }
+  ],
+  "legacyBodies": [
+    "rover"
+  ],
+  "accessories": {
+    "none": "No accessory",
+    "antenna": "Signal antenna",
+    "headset": "Studio headphones",
+    "glasses": "Round glasses",
+    "cap": "Baseball cap",
+    "backpack": "Tiny backpack",
+    "earpiece": "Secret earpiece",
+    "briefcase": "Mission briefcase",
+    "watch": "Agent watch",
+    "bowtie": "Bow tie",
+    "scarf": "Cozy scarf",
+    "pirate": "Pirate hat",
+    "flower": "Flower",
+    "flag": "Little flag",
+    "carrot": "Emergency carrot",
+    "bamboo": "Bamboo snack"
+  },
+  "palettes": {
+    "robot-silver": {
+      "label": "Silver & graphite",
+      "base": "#e6edf5",
+      "light": "#cad4df",
+      "dark": "#283b50",
+      "accent": "#76b900"
+    },
+    "robot-graphite": {
+      "label": "Graphite & steel",
+      "base": "#566473",
+      "light": "#95a6b5",
+      "dark": "#202d3b",
+      "accent": "#6ccbd5"
+    },
+    "robot-cream": {
+      "label": "Cream & bronze",
+      "base": "#eddfc8",
+      "light": "#ceba9b",
+      "dark": "#705849",
+      "accent": "#b4774d"
+    },
+    "robot-navy": {
+      "label": "Navy & silver",
+      "base": "#425b79",
+      "light": "#b8c8d7",
+      "dark": "#233448",
+      "accent": "#e5b464"
+    },
+    "orbit-pearl": {
+      "label": "Pearl & blue",
+      "base": "#eff1e9",
+      "light": "#c8dce5",
+      "dark": "#527791",
+      "accent": "#65b3ce"
+    },
+    "orbit-slate": {
+      "label": "Slate & frost",
+      "base": "#718a9d",
+      "light": "#dbe4ea",
+      "dark": "#344b61",
+      "accent": "#a7d5d7"
+    },
+    "orbit-rose": {
+      "label": "Rose & cream",
+      "base": "#cfa4a7",
+      "light": "#f2e5d6",
+      "dark": "#775b64",
+      "accent": "#9a596b"
+    },
+    "fox-red": {
+      "label": "Red fox",
+      "base": "#d98b43",
+      "light": "#f7ecda",
+      "dark": "#483b34",
+      "accent": "#4d8c86"
+    },
+    "fox-arctic": {
+      "label": "Arctic white",
+      "base": "#e7eae6",
+      "light": "#faf6ed",
+      "dark": "#637281",
+      "accent": "#6c9fb0"
+    },
+    "fox-silver": {
+      "label": "Silver fox",
+      "base": "#78838e",
+      "light": "#e8e9df",
+      "dark": "#303c49",
+      "accent": "#b88e57"
+    },
+    "fox-fennec": {
+      "label": "Desert sand",
+      "base": "#cfb284",
+      "light": "#f5e6cb",
+      "dark": "#73604e",
+      "accent": "#a86f60"
+    },
+    "smith-black": {
+      "label": "Black & ivory",
+      "base": "#1c242c",
+      "light": "#e9e4d9",
+      "dark": "#10161e",
+      "accent": "#82ab67"
+    },
+    "smith-navy": {
+      "label": "Navy & pearl",
+      "base": "#354d6a",
+      "light": "#e0e7ec",
+      "dark": "#1e3047",
+      "accent": "#b4a079"
+    },
+    "smith-stone": {
+      "label": "Stone & espresso",
+      "base": "#a99f8d",
+      "light": "#f3ead8",
+      "dark": "#4a4038",
+      "accent": "#7f9b8a"
+    },
+    "claw-coral": {
+      "label": "Coral & cream",
+      "base": "#ce6857",
+      "light": "#f1d7bc",
+      "dark": "#8b4847",
+      "accent": "#467f83"
+    },
+    "claw-blue": {
+      "label": "Blue & sand",
+      "base": "#547f99",
+      "light": "#e6d6b8",
+      "dark": "#354d67",
+      "accent": "#d0a66a"
+    },
+    "claw-plum": {
+      "label": "Plum & pearl",
+      "base": "#987b9b",
+      "light": "#e5dce0",
+      "dark": "#61516e",
+      "accent": "#9db9a9"
+    },
+    "claw-sand": {
+      "label": "Sand & copper",
+      "base": "#c6aa77",
+      "light": "#f2e2bd",
+      "dark": "#92724c",
+      "accent": "#5a8f8b"
+    },
+    "crab-rust": {
+      "label": "Rust & sand",
+      "base": "#bc6850",
+      "light": "#edc9a0",
+      "dark": "#814734",
+      "accent": "#57918c"
+    },
+    "crab-ocean": {
+      "label": "Ocean blue",
+      "base": "#547d94",
+      "light": "#d0dfde",
+      "dark": "#35536a",
+      "accent": "#d6b479"
+    },
+    "crab-sand": {
+      "label": "Sandy beach",
+      "base": "#c8af81",
+      "light": "#efe0bf",
+      "dark": "#8b7656",
+      "accent": "#718f80"
+    },
+    "crab-rose": {
+      "label": "Rose & pearl",
+      "base": "#bf8d92",
+      "light": "#f1dce0",
+      "dark": "#855c68",
+      "accent": "#7e9b91"
+    },
+    "cat-ginger": {
+      "label": "Ginger & cream",
+      "base": "#d49a59",
+      "light": "#f5ead8",
+      "dark": "#9d673f",
+      "accent": "#527f89"
+    },
+    "cat-tuxedo": {
+      "label": "Black & white",
+      "base": "#39424c",
+      "light": "#eef0e8",
+      "dark": "#242e37",
+      "accent": "#b37e62"
+    },
+    "cat-silver": {
+      "label": "Grey & white",
+      "base": "#939fa7",
+      "light": "#f1eee5",
+      "dark": "#56616c",
+      "accent": "#8d7599"
+    },
+    "cat-cocoa": {
+      "label": "Cocoa & cream",
+      "base": "#a58264",
+      "light": "#f2e3cc",
+      "dark": "#604b3c",
+      "accent": "#719b8d"
+    },
+    "bunny-snow": {
+      "label": "Snow white",
+      "base": "#ebece6",
+      "light": "#faf5e8",
+      "dark": "#b6b7af",
+      "accent": "#a57c8b"
+    },
+    "bunny-oat": {
+      "label": "Oat & cream",
+      "base": "#c8b497",
+      "light": "#f4e7cf",
+      "dark": "#92806c",
+      "accent": "#7f9b84"
+    },
+    "bunny-grey": {
+      "label": "Grey & ivory",
+      "base": "#969fa8",
+      "light": "#eee9df",
+      "dark": "#63707c",
+      "accent": "#a27f97"
+    },
+    "bunny-cocoa": {
+      "label": "Cocoa & cream",
+      "base": "#a08470",
+      "light": "#edddc7",
+      "dark": "#6c5748",
+      "accent": "#88aab0"
+    },
+    "panda-classic": {
+      "label": "Black & white",
+      "base": "#e7ebe6",
+      "light": "#f5f2e6",
+      "dark": "#28343e",
+      "accent": "#7e9d69"
+    },
+    "panda-brown": {
+      "label": "Brown & cream",
+      "base": "#e6d6bc",
+      "light": "#f5e8cf",
+      "dark": "#77604d",
+      "accent": "#799e8d"
+    },
+    "panda-slate": {
+      "label": "Slate & ivory",
+      "base": "#e1e7e7",
+      "light": "#f4f0e4",
+      "dark": "#5c6e81",
+      "accent": "#b99570"
+    }
+  }
+}

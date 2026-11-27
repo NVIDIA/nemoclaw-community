@@ -1,0 +1,5 @@
+app/index.html linguist-generated=true
+src/vendor/** linguist-vendored=true
+/bac text eol=lf
+*.sh text eol=lf
+/scripts/owned_openshell.py text eol=lf

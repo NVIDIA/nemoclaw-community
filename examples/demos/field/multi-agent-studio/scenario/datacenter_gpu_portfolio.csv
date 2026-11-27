@@ -1,0 +1,12 @@
+product,max_single_gpu_tdp_w,tdp_mode,form_factor,gpu_memory,memory_bandwidth,nvlink_connectivity
+Vera Rubin NVL72,2300,Configurable up to,MGX rack 72-GPU,Up to 288 GB,22 TB/s,72 GPUs
+GB300 NVL72,1400,Configurable up to,MGX rack 72-GPU,Up to 279 GB,8 TB/s,72 GPUs
+GB200 NVL72,1200,Configurable up to,MGX rack 72-GPU,186 GB HBM3e,8 TB/s,72 GPUs
+HGX Rubin NVL8,2300,Configurable up to,HGX 8-SXM,Up to 288 GB,22 TB/s,8 GPUs
+HGX B300,1100,Configurable up to,HGX 8-SXM,Up to 270 GB,7.7 TB/s,8 GPUs
+HGX B200,1000,Configurable up to,HGX 8-SXM,180 GB HBM3e,7.7 TB/s,8 GPUs
+GB200 NVL4,1200,Configurable up to,MGX server,186 GB HBM3e,8 TB/s,4 GPUs
+RTX PRO 6000 BSE,600,Configurable up to,PCIe Gen5 x16 2-slot FHFL,96 GB GDDR7,1.6 TB/s,None listed
+RTX PRO 4500 BSE,165,Configurable up to,PCIe Gen5 x16 1-slot FHFL,32 GB GDDR7,800 GB/s,None listed
+H200 NVL,600,Configurable up to,PCIe Gen5 x16 2-slot FHFL NVLink bridged,141 GB HBM3e,4.8 TB/s,4 cards bridged
+L4,72,Configurable up to,PCIe Gen4 x16 1-slot LP,24 GB GDDR6,300 GB/s,None listed

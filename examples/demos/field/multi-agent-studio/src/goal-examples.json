@@ -1,0 +1,55 @@
+[
+  {
+    "id": "openshell",
+    "title": "OpenShell in action",
+    "detail": "Shell researches with OpenShell protection; review website permissions in Policy, then Continue. Uses Hired + Standby.",
+    "teamMode": "mixed",
+    "prompt": "/goal Ask Agent Shell to read https://developer.nvidia.com/blog/how-nvidia-openshell-reference-architecture-secures-and-governs-ai-agent-workloads-at-scale/ and save a short evidence brief. Then build one compact, self-contained desktop HTML page explaining what OpenShell protects, how website approval works, and its limits, using that brief with a source link. Use only the linked article. If its read fails, stop browsing. If OpenShell blocked it, let me review OpenShell Policy in Mission Control and choose Continue. Retry the article if I grant access; otherwise use existing evidence and label the gaps. Never fetch blocked sources through another agent."
+  },
+  {
+    "id": "gpu",
+    "title": "GPU portfolio",
+    "document": "datacenter_gpu_portfolio.csv",
+    "requiredDocument": true,
+    "prompt": "/goal Analyze the attached demo GPU portfolio CSV and create one compact, self-contained HTML dashboard. Rank the five highest single-GPU TDP values, compare memory capacity and bandwidth, and explain three useful findings, including products with the same TDP. Include a TDP bar chart and full portfolio comparison table, and save the top-five CSV and a short analysis brief. Sort TDP numerically descending and preserve source order for ties; normalize bandwidth units. Keep configurable maximums and \"up to\" qualifiers visible. These are supplied demo figures, not verified current specifications, measured power or rack totals. Do not infer performance or energy efficiency from TDP alone. No web research is needed.",
+    "detail": "GPU power, memory and bandwidth comparisons from the supplied CSV"
+  },
+  {
+    "id": "pong",
+    "title": "Ping-pong game",
+    "detail": "A playable two-player game with keyboard controls",
+    "prompt": "/goal Build a simple two-player ping-pong game as one self-contained HTML file. Use A and Q for the left paddle and P and M for the right paddle. Include a bouncing ball, correct collisions on both paddles, scores, visible controls and a restart button. Handle simultaneous keys, key release and lost focus. Keep the game small and desktop-focused, with no external libraries or web research."
+  },
+  {
+    "id": "travel",
+    "title": "Travel guide",
+    "detail": "A three-day plan for your Settings location, with weather and official tourism links",
+    "prompt": "/goal Plan a three-day visit to the city selected in Settings > Location starting tomorrow. Check the available weather forecast and find three interesting places using official tourism sources. Build one self-contained HTML page with a day-by-day plan, reasons to visit, useful source links and clear weather limitations. Use exact ISO dates. Keep the research brief; do not invent unavailable forecasts."
+  },
+  {
+    "id": "drone",
+    "title": "Drone research",
+    "detail": "Recent papers in a compact research dashboard",
+    "prompt": "/goal Create a self-contained HTML dashboard about drone swarm control research from the past six months. Include up to three research papers or preprints with short summaries, source links, publication or revision dates, and any verified NVIDIA connection. State the exact date window, exclude news articles, and distinguish revision dates from original publication dates. Fewer qualifying papers are fine; an NVIDIA connection is not required. Keep research brief and clearly label evidence gaps."
+  },
+  {
+    "id": "bill",
+    "title": "Bill splitter",
+    "detail": "A small calculator for splitting a bill and tip",
+    "prompt": "/goal Build a compact desktop bill-splitter as one self-contained HTML file. Include bill amount, tip percentage and number of people, then show the tip, total and amount per person. Reject blank, non-finite or negative amounts and require at least one whole person. Include clear labels, keyboard-friendly controls and a reset button. No external libraries, network access or saved remote data."
+  },
+  {
+    "id": "event",
+    "title": "Event page",
+    "detail": "An event webpage and announcement for your Settings location",
+    "prompt": "/goal Create one self-contained HTML event page and a short social announcement for a fictional NVIDIA developer meetup in the city selected in Settings > Location next Friday, 14:00-17:00, for 30 attendees. Use this agenda: welcome 14:00-14:15, agent demo 14:15-15:00, hands-on session 15:00-17:00. Show the exact date, mark the venue TBD and label the event fictional. Use only these supplied details, without additional research. Do not publish or send anything."
+  },
+  {
+    "id": "stores",
+    "title": "Store email review",
+    "detail": "A dashboard of the five stores in the supplied sample email",
+    "document": "demo-france-store-status-email-thread.txt",
+    "requiredDocument": true,
+    "prompt": "/goal Analyze the attached fictional France store email thread and create one self-contained HTML dashboard. Compare the five stores with last year, distinguish margin rates from profit amounts, and show comparison charts, a store table and three practical next actions. Identify missing data, keep the fictional-data label visible and do not invent figures. Use the supplied email; no web research is needed."
+  }
+]

@@ -1,0 +1,21 @@
+{
+  "source": "Build-a-Claw model guide (see docs/spark-operations.md)",
+  "verified_on": "2026-09-19",
+  "python": "3.13",
+  "packages": ["vllm==0.28.0", "flashinfer-python==0.6.16.post3", "nvidia-cutlass-dsl>=4.6.2"],
+  "environment": {"CUTE_DSL_ARCH": "sm_121a", "MAX_JOBS": "8"},
+  "models": {
+    "qwen": {
+      "id": "nvidia/Qwen3.6-35B-A3B-NVFP4",
+      "revision": "1355db6a052410cfd62085d94b58866fd0f2c3c5",
+      "args": ["--moe-backend", "flashinfer_b12x", "--enable-auto-tool-choice", "--tool-call-parser", "qwen3_coder", "--reasoning-parser", "qwen3", "--default-chat-template-kwargs", "{\"enable_thinking\":false}", "--tensor-parallel-size", "1", "--trust-remote-code", "--kv-cache-dtype", "fp8", "--attention-backend", "flashinfer", "--gpu-memory-utilization", "0.6", "--max-model-len", "262144", "--max-num-seqs", "4", "--max-num-batched-tokens", "8192", "--enable-chunked-prefill", "--async-scheduling", "--enable-prefix-caching", "--load-format", "fastsafetensors"]
+    },
+    "gemma": {
+      "id": "unsloth/gemma-4-26B-A4B-it-NVFP4",
+      "revision": "20df0542b1a86ce19f495ac2eca2c7c12bce82f9",
+      "args": ["--moe-backend", "flashinfer_b12x", "--gpu-memory-utilization", "0.7", "--max-num-seqs", "8", "--enable-prefix-caching", "--max-num-batched-tokens", "8192", "--tensor-parallel-size", "1", "--enable-auto-tool-choice", "--tool-call-parser", "gemma4", "--default-chat-template-kwargs", "{\"enable_thinking\":true}", "--reasoning-parser", "gemma4", "--max-model-len", "262144"],
+      "template_url": "https://raw.githubusercontent.com/vllm-project/vllm/v0.28.0/examples/tool_chat_template_gemma4.jinja",
+      "template_sha256": "afdbb2abe3667ccde95cc2f86919f05370339399bab5f750950a4390523b8927"
+    }
+  }
+}

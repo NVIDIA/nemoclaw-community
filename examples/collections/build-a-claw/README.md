@@ -10,3 +10,4 @@ Guided demos, tutorials, and reusable recipes created through the Build-a-Claw p
 | Example | Category | Industry | Description |
 | --- | --- | --- | --- |
 | [Build-a-Claw Tutorial](../../demos/field/build-a-claw-tutorial/README.md) | NVIDIA Field Demos | 🎓 Academia/Education | Guides DGX Spark users through serving local multimodal models with vLLM or llama.cpp, connecting an agent harness, and trying coding, vision, browser, messaging, and speech workflows. |
+| [Multi-Agent Studio](../../demos/field/multi-agent-studio/README.md) | NVIDIA Field Demos | 🎓 Academia/Education | Hire AI agents, chat with them in the Lounge, and give their team a task. Follow their work and open the result in the studio. |

@@ -1,0 +1,300 @@
+#!/usr/bin/env bash
+# One entry point: Docker for users; explicit dev subcommands for host installs.
+set -Eeuo pipefail
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
+
+usage() {
+  cat <<'HELP'
+Multi-Agent Studio
+
+  ./bac start     Start fresh with no agents, work, context or usage history
+  ./bac start --keep-data   Keep existing agents, conversations, results, and settings
+  ./bac status    Check service status
+  ./bac logs      Show recent errors and activity
+  ./bac stop      Reset the Compose stack, app data and OpenShell policies
+  ./bac stop --keep-data   Stop services; keep saved data and policies
+  ./bac remove    Uninstall Multi-Agent Studio, old images and all project data (asks once)
+
+First time? Run ./bac start, then connect your model in Settings.
+Developers with a source checkout: ./bac dev --help
+HELP
+}
+die() { echo "Multi-Agent Studio: $*" >&2; exit 1; }
+command_name=${1:-help}
+case "$command_name" in
+  help|-h|--help) usage; exit 0 ;;
+  dev)
+    shift
+    [[ -f scripts/manage.py ]] || die 'Development commands require the source checkout.'
+    command -v python3 >/dev/null || die 'Host development requires Python 3.9 or newer.'
+    python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3,9) else "Python 3.9+ is required.")'
+    if [[ ${1:-} == preview ]]; then
+      shift
+      python3 scripts/build.py
+      exec python3 scripts/serve.py "$@"
+    fi
+    exec python3 scripts/manage.py "$@"
+    ;;
+  start|status|logs|stop|remove) ;;
+  *) usage >&2; die "Unknown command: $command_name. Host development commands use ./bac dev COMMAND." ;;
+esac
+stop_keep_data=false
+fresh_start=false
+if [[ $command_name == start ]]; then
+  fresh_start=true
+  if [[ $# -eq 2 && $2 == --keep-data ]]; then
+    fresh_start=false
+  elif [[ $# -eq 2 && $2 == --fresh ]]; then
+    fresh_start=true
+  elif [[ $# -ne 1 ]]; then
+    die 'Use ./bac start [--keep-data].'
+  fi
+elif [[ $command_name == stop ]]; then
+  if [[ $# -eq 2 && $2 == --keep-data ]]; then
+    stop_keep_data=true
+  elif [[ $# -eq 2 && $2 == --all ]]; then
+    : # Backward-compatible alias; reset is now the default.
+  elif [[ $# -ne 1 ]]; then
+    die 'Use ./bac stop [--keep-data].'
+  fi
+else
+  [[ $# -eq 1 ]] || die "Use ./bac $command_name without extra arguments."
+fi
+if [[ $command_name == start ]]; then
+  [[ ! -L api.json ]] || die 'api.json must be a regular file, not a symlink.'
+  if [[ ! -e api.json ]]; then
+    (umask 077; set -C; cat api.json.example > api.json)
+  fi
+  [[ -f api.json ]] || die 'api.json must be a regular file.'
+  chmod 600 api.json
+fi
+[[ $(uname -s) == Linux ]] || die 'Docker deployment targets Ubuntu. For the existing Mac source preview use ./bac dev preview.'
+command -v docker >/dev/null || die 'Install Docker Engine and its Compose plugin, then retry the same start command.'
+docker compose version >/dev/null 2>&1 || die 'Docker Compose is missing. Install the Docker Compose plugin.'
+endpoint=${DOCKER_HOST:-$(docker context inspect --format '{{(index .Endpoints "docker").Host}}')}
+[[ $endpoint == unix://* ]] || die 'Use a local Docker Engine; remote Docker contexts are not supported.'
+engine=$(docker info --format '{{.ServerVersion}} {{.Architecture}} {{json .SecurityOptions}}' 2>/dev/null) || die 'Docker is not reachable. Start Docker and check that this account can run docker info.'
+[[ $engine != *rootless* ]] || die 'This package requires a rootful Docker Engine.'
+[[ ${engine%%.*} =~ ^[0-9]+$ ]] && (( ${engine%%.*} >= 28 )) || die 'Docker Engine 28 or newer is required.'
+compose_version=$(docker compose version --short)
+compose_version=${compose_version#v}
+IFS=. read -r compose_major compose_minor _ <<< "$compose_version"
+[[ $compose_major =~ ^[0-9]+$ && $compose_minor =~ ^[0-9]+$ ]] || die 'Could not determine the Compose version.'
+(( compose_major > 2 || (compose_major == 2 && compose_minor >= 24) )) || die 'Docker Compose 2.24 or newer is required.'
+
+if [[ ! -f .env ]]; then
+  [[ -f .env.example ]] || die 'The release is incomplete: keep .env beside bac and compose.yaml.'
+  cp .env.example .env
+fi
+[[ -f compose.yaml ]] || die 'Keep bac and compose.yaml in the same folder.'
+compose() { docker compose -f compose.yaml "$@"; }
+trap 'code=$?; echo "Multi-Agent Studio: $command_name failed. Run ./bac status and ./bac logs for details." >&2; exit "$code"' ERR
+
+ensure_image() {
+  # Read Docker’s resolved YAML, without executing .env or requiring Python/jq.
+  local image archive checksum actual expected
+  image=$(compose config | awk '$1=="studio:" {studio=1; next} studio && !found && $1=="image:" {print $2; found=1}')
+  [[ -n $image ]] || die 'Could not find the studio image in compose.yaml.'
+  if ! docker image inspect "$image" >/dev/null 2>&1; then
+    if [[ -f image-archive.txt ]]; then
+      IFS= read -r archive < image-archive.txt
+      [[ $archive =~ ^[a-zA-Z0-9._-]+\.tar(\.gz)?$ && -f $archive ]] || die 'The release image archive is missing. Copy the whole release folder to this PC.'
+      [[ -f SHA256SUMS ]] || die 'The release checksum file is missing.'
+      checksum=$(awk -v file="$archive" '$2==file {print}' SHA256SUMS)
+      [[ -n $checksum ]] || die 'No checksum was supplied for this image archive.'
+      echo 'Checking and loading the supplied image…'
+      printf '%s\n' "$checksum" | sha256sum --check --status - || die 'Image checksum failed. Copy the release image again.'
+      docker load -i "$archive"
+    elif [[ -f Dockerfile && ! -f release.json ]]; then
+      compose build
+    else
+      echo 'Downloading the release image…'
+      compose pull studio init
+    fi
+  fi
+  actual=$(docker image inspect --format '{{.Architecture}}' "$image")
+  case "$(echo "$engine" | awk '{print $2}')" in
+    aarch64|arm64) expected=arm64 ;;
+    x86_64|amd64) expected=amd64 ;;
+    *) die 'This release supports AMD64 and ARM64 Docker hosts.' ;;
+  esac
+  [[ $actual == "$expected" ]] || die "This image is $actual; use the $expected release folder for this PC."
+  studio_image=$image
+  if [[ $command_name == start ]]; then
+    if ! docker run --rm --pull never --network none --entrypoint python3 \
+      --mount "type=bind,src=$PWD,dst=/opt/bac/source,readonly" \
+      "$image" /opt/bac/bootstrap.py --check; then
+      if [[ -f Dockerfile && ! -f release.json ]]; then
+        echo 'Runtime requirements changed. Rebuilding the dependency image…'
+        compose build
+        docker run --rm --pull never --network none --entrypoint python3 \
+          --mount "type=bind,src=$PWD,dst=/opt/bac/source,readonly" \
+          "$image" /opt/bac/bootstrap.py --check
+      else
+        die 'App and runtime image do not match. Install the matching complete release.'
+      fi
+    fi
+  fi
+}
+
+resource_files() {
+  helper=remove.py; lock=runtime-lock.json
+  if [[ -f scripts/container_remove.py && ! -f release.json ]]; then
+    helper=scripts/container_remove.py; lock=docker/runtime-lock.json
+  fi
+  [[ -f $helper && -f $lock ]] || die 'Resource files are missing. Copy the complete release folder and retry.'
+}
+
+sandbox_lifecycle() {
+  local helper=scripts/container_remove.py image
+  [[ -f $helper ]] || helper=remove.py
+  image=$(compose config | awk '$1=="studio:" {studio=1; next} studio && !found && $1=="image:" {print $2; found=1}')
+  if [[ ! -f $helper || -z $image ]] || ! docker image inspect "$image" >/dev/null 2>&1; then
+    echo 'Could not manage Multi-Agent Studio sandboxes: the installed helper/image is missing.' >&2
+    return 1
+  fi
+  docker run --rm --pull never --network none --user 0 --entrypoint python3 \
+    --label com.nvidia.bac.cleanup=true \
+    --mount "type=bind,src=${endpoint#unix://},dst=/var/run/docker.sock" \
+    --mount "type=bind,src=$PWD/$helper,dst=/resources.py,readonly" \
+    -v /var/lib/bac-openshell:/var/lib/bac-openshell \
+    "$image" /resources.py "$1"
+}
+
+stop_legacy_model() {
+  if [[ -f .local-model/state.json ]]; then
+    python3 scripts/stop_legacy_model.py
+  fi
+}
+
+case "$command_name" in
+  start)
+    resource_files
+    ensure_image
+    echo 'Checking app files before restarting services…'
+    docker run --rm --pull never --network none --entrypoint python3 \
+      --mount "type=bind,src=$PWD,dst=/opt/bac/source,readonly" \
+      "$studio_image" /opt/bac/source/scripts/build.py --check
+    echo "Loading optional provider settings from api.json..."
+    if ! compose run --rm --no-deps -T --user 0 --entrypoint python3 \
+      -v "$PWD/api.json:/run/api.json:ro" studio \
+      /opt/bac/source/scripts/api_key_setup.py "/run/api.json" --optional; then
+      exit 1
+    fi
+    # Record before provisioning so failed starts and later version changes are
+    # both covered by remove. This helper needs no Docker socket or network.
+    docker run --rm --pull never --network none --user 0 --entrypoint python3 \
+      -v /var/lib/bac-openshell:/var/lib/bac-openshell \
+      --mount "type=bind,src=$PWD/$helper,dst=/resources.py,readonly" \
+      --mount "type=bind,src=$PWD/$lock,dst=/runtime-lock.json,readonly" \
+      "$studio_image" /resources.py --record /runtime-lock.json "$studio_image"
+    mkdir -p shared
+    if $fresh_start; then
+      echo 'Starting fresh. Removing agents, chats, results, context and usage history…'
+      sandbox_lifecycle --fresh
+      # Credentials are optional. Reload provider settings into the new data volume
+      # after clearing the previous runtime settings.
+      if ! compose run --rm --no-deps -T --user 0 --entrypoint python3 \
+        -v "$PWD/api.json:/run/api.json:ro" studio \
+        /opt/bac/source/scripts/api_key_setup.py "/run/api.json" --optional; then
+        exit 1
+      fi
+    else
+      echo 'Restarting Multi-Agent Studio services. Active work may stop; saved data is kept.'
+      compose stop studio openshell
+    fi
+    echo 'Starting the studio and checking readiness…'
+    compose up -d --force-recreate --no-build --pull missing --wait --wait-timeout 180
+    if ! $fresh_start; then sandbox_lifecycle --resume; fi
+    # The generated config contains the effective port even with .env overrides.
+    port=$(compose config | awk '$1=="studio:" {studio=1; next} studio && !found && $1=="PORT:" {gsub(/"/,"",$2); print $2; found=1}')
+    echo "Studio running at http://localhost:${port:-8080}"
+    echo 'Open Settings → Model to connect a local model or an external endpoint.'
+    ;;
+  status) compose ps -a ;;
+  logs) compose logs --tail=80 studio openshell ;;
+  stop)
+    # Stop dispatch first, then the sandboxes created outside Compose.
+    failed=0
+    compose stop || failed=1
+    if ! $stop_keep_data; then
+      # Reset the dedicated gateway database and policy history as well as
+      # sandboxes and application volumes. Keep only ownership/image metadata.
+      sandbox_lifecycle --fresh || failed=1
+    else
+      sandbox_lifecycle --stop || failed=1
+    fi
+    if ! $stop_keep_data; then
+      stop_legacy_model || failed=1
+      compose down --volumes || failed=1
+    fi
+    (( failed == 0 )) || die 'Shutdown was incomplete. Review the errors above.'
+    if ! $stop_keep_data; then
+      echo 'Multi-Agent Studio services and sandboxes stopped. Application data, OpenShell policies and Compose resources reset.'
+    else
+      echo 'Multi-Agent Studio services and sandboxes stopped. Saved data is kept. Start again with ./bac start --keep-data.'
+    fi
+    ;;
+  remove)
+    install_dir=$(pwd -P)
+    removal_mode=release
+    if [[ -f scripts/container_remove.py && ! -f release.json ]]; then
+      removal_mode=source
+    fi
+    echo 'Remove Multi-Agent Studio containers, agents, chats, results, shared files, backups, OpenShell state and current/previous Multi-Agent Studio images.'
+    if [[ $removal_mode == release ]]; then
+      echo "Also deletes this release folder and all its files: $install_dir"
+    else
+      echo 'Also removes local Multi-Agent Studio settings. Source code remains.'
+    fi
+    printf 'Type remove to continue: '
+    if ! IFS= read -r confirmation || [[ $confirmation != remove ]]; then
+      echo 'Cancelled.'; exit 0
+    fi
+    resource_files
+    ensure_image
+    image=$(compose config | awk '$1=="studio:" {studio=1; next} studio && !found && $1=="image:" {print $2; found=1}')
+    stop_legacy_model
+    if ! removal=$(docker run --rm --pull never --network none --user 0 \
+      --label com.nvidia.bac.cleanup=true --entrypoint python3 \
+      --mount "type=bind,src=${endpoint#unix://},dst=/var/run/docker.sock" \
+      -v /var/lib/bac-openshell:/var/lib/bac-openshell \
+      --mount "type=bind,src=$PWD/$helper,dst=/remove.py,readonly" \
+      --mount "type=bind,src=$PWD/$lock,dst=/runtime-lock.json,readonly" \
+      --mount "type=bind,src=$install_dir,dst=/installation" \
+      "$image" /remove.py /runtime-lock.json /installation "$install_dir" "$removal_mode"); then
+      printf '%s\n' "$removal"
+      die 'Removal did not finish. Fix the reported issue and run ./bac remove again.'
+    fi
+    image_refs=()
+    while IFS= read -r line; do
+      if [[ $line != 'BAC_IMAGE '* ]]; then printf '%s\n' "$line"; continue; fi
+      image_refs+=("${line#BAC_IMAGE }")
+    done <<< "$removal"
+    # Retry parents after deleting their derived images; never force a shared
+    # image away. Stop if another pass makes no progress.
+    while (( ${#image_refs[@]} )); do
+      remaining=(); progress=0
+      for ref in "${image_refs[@]}"; do
+        if ! image_id=$(docker image inspect --format '{{.Id}}' "$ref" 2>/dev/null); then continue; fi
+        users=$(docker ps -aq --filter "ancestor=$image_id")
+        if [[ -z $users ]] && docker image rm "$ref"; then
+          progress=1
+        else
+          remaining+=("$ref")
+        fi
+      done
+      if (( ${#remaining[@]} )); then image_refs=("${remaining[@]}"); else image_refs=(); fi
+      (( progress )) || break
+    done
+    if [[ $removal_mode == release ]]; then
+      cd ..
+      rmdir -- "$install_dir" || die "Multi-Agent Studio data was removed, but the release folder remains: $install_dir"
+    fi
+    if (( ${#image_refs[@]} )); then
+      printf 'Image still in use or not removed: %s\n' "${image_refs[@]}" >&2
+      die 'Multi-Agent Studio data was removed, but image cleanup is incomplete.'
+    fi
+    echo 'Multi-Agent Studio removed. Shared files and backups deleted.'
+    ;;
+esac
