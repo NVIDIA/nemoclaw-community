@@ -220,13 +220,11 @@ case "$command_name" in
     if ! $stop_keep_data; then
       # Reset the dedicated gateway database and policy history as well as
       # sandboxes and application volumes. Keep only ownership/image metadata.
-      sandbox_lifecycle --fresh || failed=1
-    else
-      sandbox_lifecycle --stop || failed=1
-    fi
-    if ! $stop_keep_data; then
+      sandbox_lifecycle --fresh || die 'Shutdown was incomplete. Cleanup failed; skipping further teardown.'
       stop_legacy_model || failed=1
       compose down --volumes || failed=1
+    else
+      sandbox_lifecycle --stop || failed=1
     fi
     (( failed == 0 )) || die 'Shutdown was incomplete. Review the errors above.'
     if ! $stop_keep_data; then

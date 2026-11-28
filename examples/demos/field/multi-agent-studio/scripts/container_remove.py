@@ -242,7 +242,7 @@ def remove(docker, gateway=GATEWAY, lock=None, hostname=None, installation=None,
     owned.sort(key=lambda c: 0 if (c.get('Labels') or {}).get('com.docker.compose.service') in ('studio', 'openshell') else 1)
     for container in owned:
         path = '/containers/' + container['Id']
-        if container.get('State') == 'running':
+        if container.get('State') in ('running', 'restarting'):
             docker.call('POST', path + '/stop?t=25')
         docker.call('DELETE', path + '?v=true')
     for network in networks:
@@ -321,7 +321,7 @@ def fresh(docker, gateway=GATEWAY, hostname=None):
         path = '/containers/' + container['Id']
         name=(container.get('Names') or [container['Id'][:12]])[0].lstrip('/')
         print('Clearing container ' + name + '…', flush=True)
-        if container.get('State') == 'running':
+        if container.get('State') in ('running', 'restarting'):
             docker.call('POST', path + '/stop?t=25')
         docker.call('DELETE', path + '?v=true')
     for network in networks:

@@ -515,6 +515,33 @@
     renderCrew();
   });
   let fileRequestRevision=0;
+  function protectedPageHtml(source, policy) {
+    // Only skip document prologue tokens. The policy must precede any page content.
+    let offset = source.charCodeAt(0) === 0xfeff ? 1 : 0;
+    const trivia = /[\t\n\f\r ]+|<!--(?:>|->|[\s\S]*?--!?>)/y;
+    function skipTrivia() {
+      trivia.lastIndex = offset;
+      while (trivia.test(source)) offset = trivia.lastIndex;
+    }
+    skipTrivia();
+    const doctype = /<!doctype[\t\n\f\r ]+html\b[^<>]*>/iy;
+    doctype.lastIndex = offset;
+    if (doctype.test(source)) {
+      offset = doctype.lastIndex;
+      skipTrivia();
+    }
+    const openingTag = /<(html|head)(?:[\t\n\f\r ]+[^\s"'<>/=]+(?:[\t\n\f\r ]*=[\t\n\f\r ]*(?:"[^"]*"|'[^']*'|[^\s"'=<>\x60]+))?)*[\t\n\f\r ]*\/?>/iy;
+    for (const tag of ['html', 'head']) {
+      openingTag.lastIndex = offset;
+      const match = openingTag.exec(source);
+      if (match && match[1].toLowerCase() === tag) {
+        offset = openingTag.lastIndex;
+        if (tag === 'html') skipTrivia();
+      }
+    }
+    // Without an explicit head the HTML parser creates it for this meta element.
+    return source.slice(0, offset) + policy + source.slice(offset);
+  }
   async function openFile(path,jobId='',workspace=''){
     const target=agentId,scenario=selectedScenario,revision=dialogRevision,request=++fileRequestRevision;
     try{
@@ -526,16 +553,17 @@
         (html?'<div class="studio-page-toolbar"><div role="group" aria-label="Preview width"><button type="button" data-preview-width="desktop" aria-pressed="true">Desktop</button><button type="button" data-preview-width="mobile" aria-pressed="false">Mobile</button></div><button class="studio-primary" id="studio-download">Download HTML</button></div><div class="studio-page-canvas"><span class="studio-preview-loading" role="status">Loading preview…</span><iframe id="studio-app-frame" title="Generated page preview" sandbox="allow-scripts allow-forms"></iframe></div>':
         '<section id="studio-text-preview"><h3>'+escape(path.split('/').pop())+'</h3><pre tabindex="0" aria-label="File contents">'+escape(file.content)+'</pre><div class="studio-dialog-actions"><button class="studio-secondary" id="studio-download">Download file</button></div></section>'));
       const protection='<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; img-src data: blob:; font-src data:; connect-src \'none\'; form-action \'none\'; base-uri \'none\'">';
+      const content = html ? protectedPageHtml(file.content, protection) : file.content;
       if(html){
         const frame=el('app-frame');
         frame.onload=()=>requestAnimationFrame(()=>requestAnimationFrame(()=>{if(!frame.isConnected)return;frame.dataset.ready='true';frame.previousElementSibling.hidden=true;}));
-        frame.srcdoc=protection+file.content;
+        frame.srcdoc=content;
         el('dialog-body').querySelectorAll('[data-preview-width]').forEach(button=>button.onclick=()=>{
           el('dialog-body').querySelector('.studio-page-canvas').dataset.width=button.dataset.previewWidth;
           el('dialog-body').querySelectorAll('[data-preview-width]').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));
         });
       }
-      el('download').onclick=()=>{const blob=new Blob([(html?protection:'')+file.content],{type:html?'text/html':'text/plain'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=path.split('/').pop();a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+      el('download').onclick=()=>downloadBytes(content,html?'text/html':'text/plain',path.split('/').pop());
     }catch(error){
       if(request===fileRequestRevision&&target===agentId&&scenario===selectedScenario&&revision===dialogRevision)alert(error.message,'error');
     }

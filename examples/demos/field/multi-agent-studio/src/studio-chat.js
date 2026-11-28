@@ -224,7 +224,9 @@ el('conversation').addEventListener('click',async event=>{
     body.replaceChildren();
     if(file.encoding!=='base64'){
       if(/\.html?$/i.test(path)){
-        const frame=document.createElement('iframe');frame.title='Generated page preview';frame.setAttribute('sandbox','');frame.srcdoc='<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:; form-action \'none\'; base-uri \'none\'">'+file.content;body.append(frame);
+        const frame=document.createElement('iframe');frame.title='Generated page preview';frame.setAttribute('sandbox','');
+        frame.srcdoc=protectedPageHtml(file.content,'<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:; form-action \'none\'; base-uri \'none\'">');
+        body.append(frame);
       }else{const prose=document.createElement('div');prose.className='chat-prose';prose.innerHTML=messageMarkup(file.content);body.append(prose);}
     }
     const download=document.createElement('button');download.type='button';download.textContent='Download file';download.onclick=()=>{const bytes=file.encoding==='base64'?Uint8Array.from(atob(file.content),c=>c.charCodeAt(0)):file.content;const url=URL.createObjectURL(new Blob([bytes],{type:file.mime||'text/plain'})),a=document.createElement('a');a.href=url;a.download=path.split('/').pop();a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};body.append(download);
