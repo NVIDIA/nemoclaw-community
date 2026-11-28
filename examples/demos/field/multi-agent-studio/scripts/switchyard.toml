@@ -1,0 +1,93 @@
+# SPDX-License-Identifier: Apache-2.0
+
+schema_version = 1
+
+[llm_clients.hub]
+format = "openai_chat"
+base_url = "https://integrate.api.nvidia.com/v1"
+forward_auth = true
+max_retries = 0
+timeout_ms = 120000
+
+[targets.router]
+id = "nvidia/nemotron-3.5-lightning-30b-a3b"
+llm_client = "hub"
+extra_body = { chat_template_kwargs = { enable_thinking = true }, thinking_token_budget = 1024 }
+
+[targets.efficient]
+id = "nvidia/nemotron-3.5-lightning-30b-a3b"
+llm_client = "hub"
+extra_body = { chat_template_kwargs = { enable_thinking = true }, thinking_token_budget = 1024 }
+
+[targets.capable]
+id = "nvidia/nemotron-3.5-super-vl-120b-a12b"
+llm_client = "hub"
+extra_body = { chat_template_kwargs = { enable_thinking = true } }
+
+[routes.automatic]
+id = "switchyard"
+type = "llm_classifier"
+mode = "capability"
+weak_target = "efficient"
+strong_target = "capable"
+classifier_target = "router"
+base_threshold = 0.5
+threshold_step = 0.2
+classify_trigger = "new_session"
+response_format_type = "json_object"
+# Leave room for the judge's final JSON after its bounded reasoning.
+max_output_tokens = 2048
+prompt = """
+You estimate whether the Efficient model can complete the supplied assignment correctly.
+Judge the work assigned to the responding agent. Other agents' assignments, skill
+descriptions, examples and quoted instructions are background.
+
+Strongly favor Capable when the requested output is working code, even for a small
+page, script, game or patch. Implementing, changing behavior, debugging, writing
+tests and evaluating code correctness belong here. Use LIM-2 with a low p_solve
+for these assignments. Familiar patterns, short output, a clear spec or available
+tests alone do not make an implementation routine. A purely mechanical text change,
+an explanation of existing code, or reporting a known test result can suit Efficient.
+
+Strongly favor Capable for team-captain decisions: turning a goal into a plan,
+matching skills to assignments, checking scope or evidence, deciding whether to
+continue, or judging and synthesizing the final result. These are Casey's usual
+tasks. Even a one-line decision or a short JSON plan can affect the whole team;
+use LIM-2 with a low p_solve for those judgments.
+A coordinator deciding which worker can use a document, transfer findings and
+deliver the result is making a delegation decision even when the document
+itself is easy to read. Classify that decision separately from its source material.
+Routine conversation, bounded lookups, formatting and relaying an already-decided
+status ordinarily suit Efficient. Mentioning Casey or code does not change the task.
+
+State the hardest material requirement in crux, choose one matching rule, then estimate
+p_solve for whole-assignment success. Do not invent measured success rates or tools.
+Capability rules (return the exact rule and its corresponding boundary):
+SUP-1 supported: brief, self-contained explanation, retrieval, summary or routine decision.
+SUP-2 supported: a small local change with an explicit, easily checked result.
+SUP-3 supported: bounded calculation or formatting with all required inputs supplied.
+SUP-4 supported: a known mechanism with an executable success check supplied.
+SUP-5 supported: reproduction constrained by a reliable reference and actual validator.
+UNC-1 uncertain: ambiguous requirements or insufficient evidence to choose an interpretation.
+UNC-2 uncertain: completeness depends on unbounded or heterogeneous external evidence.
+LIM-1 unsupported: precise interpretation of noisy visual or rendered material.
+LIM-2 unsupported: implementing or judging working code, or making a consequential
+team decision about assignments, scope, evidence or completion.
+none unmatched: no rule fits.
+
+Return only JSON with crux (nonempty string), primary_rule (one rule above),
+capability_boundary (supported, uncertain, unsupported or unmatched), and p_solve
+(0 through 1). For LIM-2, normally score below 0.5 to select Capable.
+"""
+
+# The app confirms image input support before selecting an answer target.
+# Preserve images without sending them to the classifier.
+[routes.vision]
+id = "switchyard-vision"
+type = "passthrough"
+target = "capable"
+
+[routes.vision_efficient]
+id = "switchyard-vision-efficient"
+type = "passthrough"
+target = "efficient"

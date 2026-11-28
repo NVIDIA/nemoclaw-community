@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "node": "24.16.0",
+  "openclaw": "2026.11.3",
+  "openshell": "0.1.4",
+  "baseImage": "debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a",
+  "images": {
+    "gateway": "ghcr.io/nvidia/openshell/gateway@sha256:bdb4fe248070032c88be78f029dad9325cb698480e90486e1413a674a5d8edc8",
+    "supervisor": "ghcr.io/nvidia/openshell/supervisor@sha256:aa681d8264af6ee860e38349ed3c76609a51778eb6d0f02743df03787b80a290",
+    "openclaw": "ghcr.io/nvidia/openshell-community/sandboxes/openclaw@sha256:c116946b3f9e84791630f21f115ac35c9c9f669af70ec0eef3035d79833a9550",
+    "sandbox": "ghcr.io/nvidia/openshell/sandbox@sha256:ca00c094aeaa60681b8196cda18ab3c5dd5f7d782d4c36798256427b67599070"
+  },
+  "downloads": {
+    "amd64": {
+      "node": {
+        "url": "https://nodejs.org/dist/v24.16.0/node-v24.16.0-linux-x64.tar.gz",
+        "sha256": "2faf6a387e9b62b888e21c54f01249fb27537ffecf1842f29f4c919d0a59a0ff"
+      },
+      "openshell": {
+        "url": "https://github.com/NVIDIA/OpenShell/releases/download/v0.1.4/openshell-x86_64-unknown-linux-musl.tar.gz",
+        "sha256": "2b65178e62e1ece1d90d482555e9f1f98ff0296e058409b33418104b6333df07"
+      }
+    },
+    "arm64": {
+      "node": {
+        "url": "https://nodejs.org/dist/v24.16.0/node-v24.16.0-linux-arm64.tar.gz",
+        "sha256": "589f5b6dd4fcfee4dfda73013903c966abaa8abd93dbc9d436544e472b4f0e74"
+      },
+      "openshell": {
+        "url": "https://github.com/NVIDIA/OpenShell/releases/download/v0.1.4/openshell-aarch64-unknown-linux-musl.tar.gz",
+        "sha256": "1cd6e63597e1947c44a753bf5352f949e8d8d02e344af92ab899b7c111112d95"
+      }
+    }
+  },
+  "nativeDownloads": {
+    "linux-amd64": {
+      "url": "https://github.com/NVIDIA/OpenShell/releases/download/v0.1.4/openshell-x86_64-unknown-linux-musl.tar.gz",
+      "sha256": "2b65178e62e1ece1d90d482555e9f1f98ff0296e058409b33418104b6333df07"
+    },
+    "linux-arm64": {
+      "url": "https://github.com/NVIDIA/OpenShell/releases/download/v0.1.4/openshell-aarch64-unknown-linux-musl.tar.gz",
+      "sha256": "1cd6e63597e1947c44a753bf5352f949e8d8d02e344af92ab899b7c111112d95"
+    },
+    "darwin-arm64": {
+      "url": "https://github.com/NVIDIA/OpenShell/releases/download/v0.1.4/openshell-aarch64-apple-darwin.tar.gz",
+      "sha256": "9ceeb66ff6aeb70a6ab9417eb5a039d572e0595a19da1dcc2491bc47d6ab3ce0"
+    }
+  }
+}

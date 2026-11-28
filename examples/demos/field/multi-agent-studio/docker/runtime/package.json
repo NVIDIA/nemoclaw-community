@@ -1,0 +1,15 @@
+{
+  "name": "bac-container-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@openclaw/openshell-sandbox": "2026.11.3",
+    "@openclaw/parallel-plugin": "2026.11.3",
+    "openclaw": "2026.11.3"
+  },
+  "overrides": {
+    "openclaw": {
+      "npm": "12.2.2"
+    }
+  }
+}

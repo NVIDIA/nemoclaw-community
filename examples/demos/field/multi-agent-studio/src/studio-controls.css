@@ -1,0 +1,458 @@
+/* Scene controls share one quiet surface and a consistent interaction scale. */
+#agent-campus{--control-surface:#1b2732;--control-hover:#263644;--control-line:#ffffff1c;--control-text:#e1e9ee;--control-muted:#a5b5c1;--control-radius:8px}
+#bac-planner #agent-campus :is(.studio-team-actions button,.campus-scene-bottom button,.world-overview-button,#studio-crew-send,#studio-crew-chat .studio-compose-actions>button){
+ box-sizing:border-box;border-radius:var(--control-radius);font-family:inherit;font-weight:500;line-height:1.25;cursor:pointer;
+ transition:background-color .16s ease,border-color .16s ease,box-shadow .16s ease,color .16s ease;
+}
+#bac-planner #agent-campus :is(.studio-team-actions button,.campus-scene-bottom button,.world-overview-button):not(.studio-primary){
+ background:var(--control-surface);border:1px solid var(--control-line);color:var(--control-text);box-shadow:0 1px 2px #0002;
+}
+#bac-planner #agent-campus :is(.studio-team-actions button,.campus-scene-bottom button,.world-overview-button):not(.studio-primary):hover:not(:disabled){
+ background:var(--control-hover);border-color:#ffffff35;color:#fff;
+}
+#bac-planner #agent-campus :is(.studio-team-actions button,#studio-crew-send).studio-primary{
+ background:#76b900;border:1px solid #76b900;color:#102000;font-weight:650;box-shadow:0 1px 2px #0003;
+}
+#bac-planner #agent-campus :is(.studio-team-actions button,#studio-crew-send).studio-primary:hover:not(:disabled){background:#8bcc18;border-color:#8bcc18}
+#bac-planner #agent-campus :is(.studio-team-actions button,.campus-scene-bottom button,#studio-crew-send):disabled{opacity:.4;cursor:not-allowed;box-shadow:none}
+#bac-planner #agent-campus :is(.studio-team-actions button,.campus-scene-bottom button,.world-overview-button,#studio-crew-chat button):focus-visible{
+ outline:2px solid #a5d85b;outline-offset:3px;
+}
+/* Primary work above, quiet settings below. Neither row stretches into equal boxes. */
+#bac-planner #agent-campus #studio-crew-passport .studio-team-actions{padding:16px 20px 4px;gap:6px;align-items:center;flex-wrap:wrap;background:transparent;border:0}
+#bac-planner #agent-campus #studio-crew-passport .studio-team-actions button{flex:0 0 auto;min-width:0;min-height:36px;padding:8px 11px;font-size:14px;font-weight:550;white-space:nowrap;border:1px solid transparent;background:transparent;box-shadow:none;color:#b9c9d2}
+#bac-planner #agent-campus #studio-crew-passport .studio-team-actions button:hover:not(:disabled){background:#ffffff08;border-color:transparent;color:#f2f7fa}
+#bac-planner #agent-campus #studio-crew-passport .studio-team-actions .studio-team-start{background:#243820;border-color:#76b90055;color:#d9edbf;padding-inline:14px;margin-right:4px}
+#bac-planner #agent-campus #studio-crew-passport .studio-team-actions .studio-team-start:hover:not(:disabled){background:#304924;border-color:#76b90099;color:#efffdb}
+#bac-planner #agent-campus #studio-crew-passport .studio-team-connection-bar{padding:6px 20px 12px;gap:12px;border-bottom:1px solid #ffffff0c;color:#91a6b4;font-size:12px;line-height:1.4}
+.studio-team-connection-state{min-width:0}
+.studio-team-connection-state i{flex:none}
+.studio-team-utilities{display:flex;align-items:center;gap:4px;flex:none}
+#bac-planner #agent-campus #studio-crew-passport .studio-team-utility{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:5px 7px;border:1px solid transparent;border-radius:6px;background:transparent;box-shadow:none;color:#a7bac6;font-family:inherit;font-size:12px;font-weight:500;line-height:1.4;cursor:pointer;white-space:nowrap;transition:background-color .16s,color .16s}
+#bac-planner #agent-campus #studio-crew-passport .studio-team-utility:hover:not(:disabled){background:#ffffff08;color:#edf5fa}
+#bac-planner #agent-campus #studio-crew-passport .studio-team-utility:focus-visible{outline:2px solid #a5d85b;outline-offset:2px}
+#bac-planner #agent-campus #studio-crew-passport .studio-team-utility:disabled{opacity:.4;cursor:not-allowed}
+.studio-team-utility svg{width:15px;height:15px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+#bac-planner #agent-campus #studio-crew-passport #studio-bac-reset{margin-left:5px;color:#91a6b4}
+#bac-planner #agent-campus #studio-crew-passport #studio-bac-reset:hover:not(:disabled){color:#f0afa6;background:#b44b3c12}
+#bac-planner #agent-campus #studio-crew-passport .studio-team-connection-bar[data-connected=false] .studio-team-connection-state{color:#d4b68b}
+/* A restrained utility bar instead of a row of mismatched boxes. */
+#bac-planner #agent-campus .campus-scene-bottom>.row{gap:6px;align-items:center}
+#bac-planner #agent-campus .campus-scene-bottom button{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;min-height:36px;padding:0;font-size:16px}
+#bac-planner #agent-campus .campus-scene-bottom #studio-focus{width:auto;min-height:36px;height:36px;padding:0 12px;font-size:13px;border-color:var(--control-line)}
+#bac-planner #agent-campus .campus-scene-bottom #campus-sound-toggle{width:36px;min-height:36px;height:36px;padding:0;font-size:16px}
+#bac-planner #agent-campus #campus-sound-toggle[aria-pressed=true]{color:#b6dd7c;background:#213023;border-color:#76b90045}
+#bac-planner #agent-campus .studio-sound-level summary{box-sizing:border-box;width:32px;height:36px;border-radius:8px;border-color:var(--control-line);background:var(--control-surface)}
+#bac-planner #agent-campus .world-overview-button{border-radius:8px;padding:9px 12px;font-size:13px;background:#15212bea;box-shadow:0 3px 12px #0002}
+#bac-planner #agent-campus .world-room-map{background:#101c26eb;border:1px solid #ffffff1c;border-radius:10px;box-shadow:0 4px 18px #0002;padding:13px 15px}
+#bac-planner #agent-campus .world-map-caption{font-size:10px;letter-spacing:1.6px;color:#849aa9}
+#bac-planner #agent-campus .world-room-map button{font-size:13px;background:#101c26;color:#a5b9c8;border-radius:5px}
+#bac-planner #agent-campus .world-room-map button:hover{color:#fff}
+#bac-planner #agent-campus .world-room-map button.selected{color:#e4f2cf}
+/* The crew picker is a selection control, visually quieter than the action bar. */
+#bac-planner #agent-campus #studio-crew-passport #campus-roster{padding:10px;gap:6px;border-top:1px solid #ffffff0e;background:#111b24}
+#bac-planner #agent-campus #studio-crew-passport #campus-roster button{min-height:48px;padding:8px 10px;border-radius:7px;border:1px solid transparent;background:transparent;color:#b5c4cf;box-shadow:none;transition:background-color .16s ease,border-color .16s ease}
+#bac-planner #agent-campus #studio-crew-passport #campus-roster button:hover{background:#ffffff06;color:#f2f6f9}
+#bac-planner #agent-campus #studio-crew-passport #campus-roster button[aria-pressed=true]{background:#76b90010;border-color:#76b90050;color:#e6f4d2;box-shadow:inset 3px 0 #76b900}
+#bac-planner #agent-campus #studio-crew-passport #campus-roster small{color:#99aebc;font-size:11px}
+#bac-planner #agent-campus #studio-crew-chat{background:#17232d;border:1px solid #ffffff20;border-radius:12px;box-shadow:0 2px 8px #0001;transition:border-color .16s ease}
+#bac-planner #agent-campus #studio-crew-chat:focus-within{border-color:#779a526e}
+#bac-planner #agent-campus #studio-crew-send{min-height:36px;padding:8px 13px;font-size:12px}
+#bac-planner #agent-campus #studio-crew-chat .studio-compose-actions>button:not(.studio-primary){min-height:36px;padding:6px 9px;font-size:12px;color:#afc0cd;background:transparent;border:1px solid transparent}
+#bac-planner #agent-campus #studio-crew-chat .studio-compose-actions>button:not(.studio-primary):hover{background:#ffffff08;color:#fff}
+@media(max-width:700px){
+ #bac-planner #agent-campus .world-overview-button{font-size:0}
+ #bac-planner #agent-campus .world-overview-button:after{font-size:13px}
+ #bac-planner #agent-campus .studio-team-actions button{font-size:12px;padding-inline:7px}
+}
+@media(pointer:coarse){
+ #bac-planner #agent-campus .campus-scene-bottom button{min-width:44px;min-height:44px;height:44px}
+ #bac-planner #agent-campus .campus-scene-bottom :is(#studio-focus,#campus-sound-toggle){min-height:44px;height:44px}
+ #bac-planner #agent-campus #studio-crew-chat .studio-compose-actions>button{min-height:44px}
+}
+@media(prefers-reduced-motion:reduce){#bac-planner #agent-campus :is(button,summary,#studio-crew-chat){transition:none}}
+
+/* Compact settings rows: one label, one action, with the combined reset separated below. */
+#studio-dialog:has(#studio-config-form,#studio-model-connections){width:min(720px,calc(100vw - 32px));padding:24px;border-color:#34434e;border-radius:10px}
+#studio-dialog:has(#studio-config-form,#studio-model-connections) #studio-config-form{max-width:none}
+#studio-dialog:has(#studio-config-form,#studio-model-connections) .studio-dialog-heading{margin-bottom:14px}
+#studio-dialog:has(#studio-config-form,#studio-model-connections) #studio-dialog-kicker{font-size:24px;line-height:1.25;letter-spacing:-.4px}
+/* Keep Settings anchored when switching between short and long tabs. */
+#studio-dialog[open]:has(#studio-config-form,#studio-model-connections){display:flex;flex-direction:column;height:min(640px,90dvh);max-height:90dvh;overflow:hidden}
+#studio-dialog:has(#studio-config-form,#studio-model-connections) .studio-dialog-heading{flex-shrink:0}
+#studio-dialog:has(#studio-config-form,#studio-model-connections) #studio-dialog-body{flex:1;min-height:0;overflow-y:auto;scrollbar-gutter:stable;padding:2px 4px}
+#studio-dialog .connection-tabs{position:sticky;top:0;z-index:2;background:#141b23;display:flex;gap:24px;margin:0 0 16px;border-bottom:1px solid #354e5d}
+#studio-dialog .connection-tabs button{box-sizing:border-box;background:none!important;border:0!important;border-bottom:2px solid transparent!important;border-radius:0!important;padding:12px 2px!important;color:#b7c7d2!important;font:inherit;font-size:14px;font-weight:600;line-height:20px}
+#studio-dialog .connection-tabs button:is([aria-selected=true],[aria-current=page]){color:#fff!important;border-bottom-color:#76b900!important}
+
+#studio-dialog .studio-reset-row{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:27px 0}
+#studio-dialog .studio-reset-row>div{min-width:0}
+#studio-dialog .studio-reset-row+.studio-reset-row{border-top:1px solid #293640}
+#studio-dialog .studio-reset-stage{display:block;margin:0 0 8px;color:#9ac44e;font-size:11px;font-weight:600;letter-spacing:.12em}
+#studio-dialog .studio-reset-footer{display:flex;align-items:center;justify-content:space-between;gap:24px;padding-top:22px;border-top:1px solid #293640}
+#studio-dialog .studio-reset-footer p{margin:0;color:#99a9b6;font-size:13px;line-height:1.5}
+#studio-dialog #studio-reset-all{background:#a43e38;border-color:#c0544c;color:#fff}
+#studio-dialog #studio-reset-all:hover:not(:disabled){background:#b44740}
+
+#studio-dialog .studio-reset-row h3{font-size:17px;line-height:1.4;letter-spacing:0;font-weight:600;margin:0 0 5px}
+#studio-dialog .studio-reset-row p{font-size:14px;line-height:1.5;color:#99a9b6;margin:0}
+#studio-dialog #studio-settings-reset-panel button{box-sizing:border-box;flex-shrink:0;min-width:112px;height:40px;padding:0 18px;border-radius:5px;font-size:14px;line-height:1;font-weight:600;white-space:nowrap}
+#studio-dialog #studio-settings-reset-panel button:disabled{cursor:not-allowed}
+#studio-dialog .studio-reset-row button{background:#1a252e;border:1px solid #41515e;color:#e5edf2}
+#studio-dialog .studio-reset-row button:hover:not(:disabled){background:#26343f;border-color:#738696}
+#studio-dialog #studio-settings-status:empty{display:none}
+#studio-config-form>.studio-dialog-actions:has(#studio-save-settings[hidden]):has(#studio-start-agents[hidden]){display:none}
+@media(max-width:520px){
+ #studio-dialog:has(#studio-config-form,#studio-model-connections){padding:20px}
+ #studio-dialog .connection-tabs{gap:12px;overflow-x:auto}
+ #studio-dialog .connection-tabs button{flex-shrink:0;font-size:12px}
+ #studio-dialog .studio-reset-row{gap:14px;padding:23px 0;align-items:flex-start}
+ #studio-dialog .studio-reset-row p{font-size:13px}
+ #studio-dialog #studio-settings-reset-panel button{min-width:88px;padding:0 12px}
+}
+
+.policy-recovery-actions{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}.policy-recovery-actions:empty{display:none}.policy-host-help{margin:14px 0 22px;color:#aebfc9;font-size:14px}.policy-host-help summary{cursor:pointer}.policy-host-help pre{padding:12px 16px;background:#111b23;border:1px solid #304653;border-radius:5px;overflow:auto}
+
+.studio-radar-monitor { display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0; }
+.studio-radar-monitor[hidden] { display:none; }
+.studio-radar-timing{display:flex;flex-wrap:wrap;gap:2px 14px;margin:4px 0 0;font-size:12px;line-height:1.4}
+.studio-radar-timing>div{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:5px}
+.studio-radar-timing dt{color:#93a8b6}
+.studio-radar-timing dd{margin:0;color:#cfdae1;font-variant-numeric:tabular-nums}
+
+.heartbeat-source { display:block;margin-top:.8rem;line-height:1.5;overflow-wrap:anywhere; }
+
+.studio-command-anchor{position:relative;min-width:0}
+.studio-command-anchor textarea{box-sizing:border-box;width:100%}
+.studio-command-menu{position:absolute;bottom:calc(100% + 6px);left:0;right:0;z-index:8;padding:5px;background:#152630;border:1px solid #425966;border-radius:10px;box-shadow:0 8px 24px #0006}
+.studio-command-menu[hidden]{display:none}
+#agent-campus .studio-command-menu button{display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;border:0;border-radius:6px;background:#243b45;color:#eef5f8;text-align:left;font-size:14px}
+.studio-command-menu strong{color:#b4ed64;font-size:15px}
+.studio-command-menu span{flex:1}
+.studio-command-menu small{color:#a0b5c0}
+.studio-command-menu button:hover{background:#304b56}
+
+.chat-webpages{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+#agent-campus .chat-webpages button{display:flex;align-items:center;gap:16px;border:1px solid #76b900;background:#20331c;color:#e9f8db;border-radius:6px;font-size:14px;padding:10px 14px}
+.chat-webpages button span{color:#b1e871}
+.chat-result-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:12px 0}
+.chat-result-actions:empty{display:none}
+.chat-result-actions .chat-webpages{display:contents}
+#agent-campus .chat-result-actions button{display:inline-flex;align-items:center;justify-content:center;gap:10px;width:auto;min-height:38px;margin:0;padding:8px 12px;border-radius:6px;font-size:13px;font-weight:500;line-height:1.5}
+#agent-campus .chat-result-actions [data-plan-file]{background:transparent;border:1px solid #435463;color:#c7d5df}
+#agent-campus .chat-result-actions [data-plan-file]:hover{background:#1d2c36;border-color:#718697;color:#eef4fa}
+.studio-page-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex:none;margin-bottom:14px}
+.studio-page-toolbar [role=group]{display:flex;gap:4px;padding:3px;background:#0b131b;border:1px solid #324653;border-radius:7px}
+#studio-dialog .studio-page-toolbar button{font-size:14px;padding:8px 14px;border-radius:4px;line-height:1.3}
+#studio-dialog [data-preview-width]{background:transparent;border:0;color:#afc0ca}
+#studio-dialog [data-preview-width][aria-pressed=true]{background:#304653;color:#fff}
+.studio-page-canvas{display:flex;justify-content:center;flex:1;min-height:0;background:#080e13;border:1px solid #30424d;overflow:hidden}
+#studio-dialog.studio-page-preview .studio-page-canvas #studio-app-frame{flex:none;box-sizing:border-box;height:100%;border:0;border-radius:0;width:100%;background:white}
+#studio-dialog.studio-page-preview .studio-page-canvas[data-width=mobile] #studio-app-frame{width:390px;max-width:100%}
+
+.studio-page-canvas{position:relative}
+.studio-preview-loading{position:absolute;inset:0;display:grid;place-items:center;color:#aabcc7;font-size:15px}
+.studio-preview-loading[hidden]{display:none}
+#studio-dialog.studio-page-preview .studio-page-canvas iframe:not([data-ready=true]){opacity:0;pointer-events:none}
+
+/* Stage 3 should be readable at normal desktop zoom, including large displays. */
+@media(min-width:1100px){
+ #bac-planner #agent-campus[data-room=mission]:not([data-world-overview=true]) .campus-layout{grid-template-columns:minmax(0,1fr) clamp(440px,34vw,640px)!important}
+ #bac-planner #agent-campus #studio-standby>summary{font-size:17px;padding:7px 24px}
+ #bac-planner #agent-campus #studio-standby-count{font-size:14px;min-width:26px;height:26px}
+ #bac-planner #agent-campus[data-room=mission] .campus-layout #studio-crew-passport .studio-crew-passport-content{padding:16px 24px;gap:12px;overflow-y:auto}
+ #bac-planner #agent-campus #studio-crew-passport .studio-companion-name{gap:12px}
+ #bac-planner #agent-campus #studio-crew-passport .studio-avatar{width:42px;height:46px}
+ #bac-planner #agent-campus #studio-crew-passport h3{font-size:26px!important}
+ #bac-planner #agent-campus #studio-crew-role{font-size:14px!important}
+ #bac-planner #agent-campus #studio-crew-passport .studio-model-label{font-size:13px;padding:4px 7px}
+ #bac-planner #agent-campus #studio-crew-conversation{font-size:18px;line-height:1.6}
+ #bac-planner #agent-campus #studio-crew-conversation :is(p,.chat-message,.chat-prose){font-size:18px!important;line-height:1.6}
+ #bac-planner #agent-campus #studio-crew-conversation .chat-message>small{font-size:14px}
+ #bac-planner #agent-campus #studio-crew-chat{padding:14px 16px}
+ #bac-planner #agent-campus #studio-crew-prompt{font-size:19px;min-height:100px;line-height:1.5}
+ #bac-planner #agent-campus #studio-crew-chat .studio-compose-actions>button{font-size:16px;min-height:44px;padding:10px 14px}
+ #bac-planner #agent-campus #studio-crew-passport #campus-roster button{font-size:17px;padding:10px 12px}
+ #bac-planner #agent-campus #studio-crew-passport #campus-roster small{font-size:14px}
+}
+
+/* Keep Casey compact even while busy work hides the examples. */
+#bac-planner #agent-campus[data-room=mission] .campus-layout #studio-crew-passport .studio-crew-passport-content:has(#studio-crew-chat:not([hidden]) #studio-crew-hired-option:not([hidden])){padding-top:12px;gap:8px}
+#bac-planner #agent-campus #studio-crew-passport:has(#studio-crew-chat:not([hidden]) #studio-crew-hired-option:not([hidden])) .studio-companion-name{margin:0}
+#bac-planner #agent-campus #studio-crew-passport:has(#studio-crew-chat:not([hidden]) #studio-crew-hired-option:not([hidden])) .studio-agent-title{margin-bottom:2px}
+
+/* Empty Mission Control describes the current workflow without preset cards. */
+#studio-surface #studio-board:not(.has-plan) .studio-board-intro{display:block;padding:24px 8px}
+#studio-surface #studio-board:not(.has-plan) .studio-kicker{display:none}
+
+/* Keep total process time inline with Casey's identity. */
+#studio-crew-passport .studio-captain-heading{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px}
+#studio-team-total-time,#studio-board [data-mission-total]{margin:0;color:#b9d88a;font:500 13px/1.4 Arial,sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap}
+#studio-team-total-time[hidden]{display:none}
+
+.studio-radar-info{min-width:0}
+.studio-radar-heading{display:flex;align-items:center;flex-wrap:wrap;gap:2px 8px;font-size:14px}
+#agent-campus .studio-radar-monitor>button{flex-shrink:0;min-height:30px;padding:3px 8px;font-size:12px}
+.studio-heartbeat-status{display:inline-flex;align-items:center;gap:6px;max-width:100%;box-sizing:border-box;padding:2px 6px;border:1px solid #80bedd30;border-radius:7px;background:#80bedd0d;color:#a7cee3;font-size:12px;font-weight:500;line-height:1.4;overflow-wrap:anywhere}
+.studio-heartbeat-status::before{content:"";width:5px;height:5px;flex-shrink:0;border-radius:50%;background:currentColor}
+.studio-heartbeat-guidance{display:block;font-weight:400}
+.studio-heartbeat-status[data-heartbeat-state=active]{color:#b3d68b;background:#a1d65e0d;border-color:#a1d65e30}
+.studio-heartbeat-status[data-heartbeat-state=paused]{color:#aab8c3;background:#aab8c308;border-color:#aab8c324}
+.studio-heartbeat-status[data-heartbeat-state=attention]{color:#e3c28a;background:#e3c28a0d;border-color:#e3c28a30}
+.studio-heartbeat-status[data-heartbeat-state=error]{color:#e9a49a;background:#e9a49a0d;border-color:#e9a49a30}
+.studio-policy-preparing{color:#f5b3a7}
+.policy-recent-list{margin:0;padding:0;list-style:none}
+.policy-recent-list li{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:11px 0;border-bottom:1px solid #2d3f49}
+.policy-recent-list li>span{min-width:0}
+#studio-policy-content .policy-recent-list strong{display:block;font-size:13px;font-weight:500;color:#dce7ee;overflow-wrap:anywhere}
+.policy-recent-list small{display:block;font-size:11px;color:#96adba;margin-top:4px}
+.policy-recent-list b{flex-shrink:0;border-radius:4px;padding:3px 7px;font-size:11px;font-weight:500;background:#293943;color:#b7c6ce}
+.policy-recent-list b[data-outcome=allow],.policy-recent-list b[data-outcome=saved]{background:#283b23;color:#b6df87}
+.policy-recent-list b[data-outcome=deny]{background:#3c3321;color:#e9c989}
+.policy-example-evidence{font-size:11px;color:#91a8b7}.policy-example-evidence summary{cursor:pointer}.policy-example-evidence pre{max-height:200px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:10px}
+
+/* Flat agent actions, skill cards and the three-column Instructions editor. */
+#bac-planner #agent-campus #studio-workshop .studio-style-group:has(#studio-skill-picker), #bac-planner #agent-campus #studio-companion .studio-companion-name, #bac-planner #agent-campus #studio-crew-agent-actions, #bac-planner #agent-campus #studio-dialog.studio-agent-code{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+#bac-planner #agent-campus #studio-workshop .studio-style-group:has(#studio-skill-picker){margin-top:24px}
+#bac-planner #agent-campus #studio-workshop .studio-style-group:has(#studio-skill-picker) legend{font-size:15px;font-weight:500;color:#c2ced6;margin-bottom:12px;letter-spacing:0}
+#bac-planner #agent-campus #studio-workshop #studio-skill-picker{gap:9px}
+#bac-planner #agent-campus #studio-workshop #studio-skill-picker label{padding:14px 12px;border:1px solid #ffffff12;border-radius:9px;background:#17232c;gap:11px;box-shadow:none}
+#bac-planner #agent-campus #studio-workshop #studio-skill-picker label:has(input:checked){border-color:#8bc83165;background:#203124}
+#bac-planner #agent-campus #studio-workshop #studio-skill-picker input{accent-color:#8dc943;width:14px;height:14px;flex:none;margin-top:3px}
+#bac-planner #agent-campus #studio-workshop #studio-skill-picker strong, #bac-planner #agent-campus #studio-workshop #studio-skill-picker b{font-size:13px;font-weight:550;line-height:1.45;letter-spacing:0;color:#e5edf2}
+#bac-planner #agent-campus #studio-workshop #studio-skill-picker small{font-size:12px;line-height:1.5;font-weight:400;color:#9eafbb;margin-top:5px}
+#bac-planner #agent-campus #studio-companion .studio-companion-name{align-items:flex-start;gap:9px}
+#bac-planner #agent-campus #studio-companion .studio-agent-title{display:flex;align-items:center;justify-content:flex-start;flex-direction:row;flex-wrap:wrap;gap:3px 7px;text-align:left}
+#bac-planner #agent-campus #studio-companion .studio-agent-title h3{font-size:23px;line-height:1.25;font-weight:550;letter-spacing:-.4px;margin:0!important;flex:none;max-width:100%;text-align:left}
+#bac-planner #agent-campus #studio-companion .studio-agent-actions{display:flex;align-items:center;flex-wrap:wrap;gap:4px;justify-content:flex-start;max-width:100%;min-width:0;flex:0 1 auto}
+#bac-planner #agent-campus :is(#studio-companion,#studio-crew-passport) .studio-agent-actions button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;height:31px;min-height:31px;padding:6px 8px;border:1px solid #ffffff15;border-radius:7px;background:#1d2a34;color:#c7d3dc;font-family:inherit;font-size:12px;font-weight:500;line-height:1.3;box-shadow:none;white-space:nowrap}
+#bac-planner #agent-campus #studio-companion .studio-agent-actions #studio-delete-agent{background:#39262c;border-color:#78464e;color:#f5b0b6}
+#bac-planner #agent-campus #studio-companion .studio-agent-actions #studio-delete-agent:hover:not(:disabled){background:#4a2d35;border-color:#a05c68;color:#ffc9cd}
+#bac-planner #agent-campus #studio-companion #studio-personality{display:block;margin:0;font-size:12px;line-height:1.5;color:#9dafbc}
+#bac-planner #agent-campus #studio-companion #studio-agent-skills{margin:0;gap:4px}
+#bac-planner #agent-campus #studio-companion .studio-avatar.small{width:38px;height:38px;margin-top:0;border-radius:10px}
+#bac-planner #agent-campus #studio-companion #studio-agent-skills button, #bac-planner #agent-campus #studio-companion #studio-agent-skills span{font-size:12px}
+#bac-planner #agent-campus :is(#studio-companion,#studio-crew-passport) .studio-agent-actions button:hover:not(:disabled){background:#293b48;border-color:#ffffff30;color:#eef5f8}
+#bac-planner #agent-campus :is(#studio-companion,#studio-crew-passport) .studio-agent-actions button:disabled{opacity:.45;cursor:not-allowed}
+#bac-planner #agent-campus :is(#studio-companion,#studio-crew-passport) .studio-agent-actions button:focus-visible{outline:2px solid #b4d987;outline-offset:3px}
+#bac-planner #agent-campus #studio-dialog.studio-agent-code{background:#131d25;border-color:#2b3c47;border-radius:12px}
+#bac-planner #agent-campus #studio-dialog.studio-agent-code .studio-identity-heading{align-items:center}
+#bac-planner #agent-campus #studio-dialog.studio-agent-code .studio-identity-heading h3{font-size:25px;font-weight:550;letter-spacing:-.5px}
+#bac-planner #agent-campus #studio-dialog.studio-agent-code .studio-identity-heading p{font-size:13px;color:#9eb2c0}
+#bac-planner #agent-campus #studio-dialog.studio-agent-code .studio-identity-heading button{font-family:inherit;font-size:13px;font-weight:500;line-height:1.4;padding:7px 13px;min-height:34px;border-radius:7px;border-color:#334752;background:transparent;color:#c6d5df}
+#bac-planner #agent-campus #studio-dialog.studio-agent-code .studio-code-layout{gap:12px}
+#bac-planner #agent-campus #studio-dialog.studio-agent-code .studio-code-panel{background:#101a22;border-color:#2b3c47;border-radius:9px}
+#bac-planner #agent-campus #studio-dialog.studio-agent-code .studio-code-panel>header{min-height:62px;box-sizing:border-box;padding:12px 14px;border-bottom:1px solid #2b3c47;background:#16232c;gap:12px}
+#bac-planner #agent-campus #studio-dialog.studio-agent-code .studio-code-panel>header h4{font-size:14px;font-weight:550;line-height:1.4;margin:4px 0 0;letter-spacing:0}
+#bac-planner #agent-campus #studio-dialog.studio-agent-code .studio-code-panel>header small{font-size:11px;font-weight:400;letter-spacing:.2px;color:#99afbd}
+#bac-planner #agent-campus #studio-dialog.studio-agent-code .studio-code-panel .studio-document-actions button:not([hidden]){display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:5px 8px;border:1px solid transparent;border-radius:6px;background:transparent;color:#9fb4c1;font-family:inherit;font-size:12px;font-weight:500;line-height:1.4;box-shadow:none}
+#bac-planner #agent-campus #studio-dialog.studio-agent-code .studio-code-panel .studio-document-actions [data-code-copy]::before{content:"";display:block;flex:none;width:13px;height:13px;background:currentColor;mask:url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLXdpZHRoPSIxLjQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxyZWN0IHg9IjUuNSIgeT0iNS41IiB3aWR0aD0iOCIgaGVpZ2h0PSI4IiByeD0iMSIvPjxwYXRoIGQ9Ik0xMC41IDUuNVYyLjVoLTh2OGgzIi8+PC9nPjwvc3ZnPg==") center/contain no-repeat}
+#bac-planner #agent-campus #studio-dialog.studio-agent-code .studio-code-panel textarea.studio-markdown-editor{font-size:13px;line-height:1.65;color:#c8d6df;padding:15px;font-weight:400}
+#bac-planner #agent-campus #studio-dialog.studio-agent-code [data-identity-save]:not(:disabled){background:#223020;border-color:#76b900;color:#d2edb2}
+#bac-planner #agent-campus #studio-dialog.studio-agent-code .studio-document-actions button:hover:not(:disabled){background:#21323d;color:#edf4f8}
+#bac-planner #agent-campus #studio-dialog.studio-agent-code button:focus-visible{outline:2px solid #b4d987;outline-offset:3px}
+
+@media(pointer:coarse){
+ #bac-planner #agent-campus :is(#studio-companion,#studio-crew-passport) .studio-agent-actions button{height:auto;min-height:44px}
+ #bac-planner #agent-campus #studio-dialog.studio-agent-code .studio-document-actions button:not([hidden]){min-height:44px}
+}
+
+/* Nine distinct silhouettes in nearly the same height as the former six tiles. */
+#bac-planner #agent-campus .studio-body-picker{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+#bac-planner #agent-campus .studio-body-picker button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:64px;min-width:0;padding:5px 6px;border-radius:8px;font-size:12px;line-height:1.25;font-weight:500}
+.studio-body-art{height:32px;display:flex;align-items:center;justify-content:center;width:100%;pointer-events:none}
+#agent-campus .studio-body-art .body-glyph{flex:none;margin:0;transform:scale(.75);transform-origin:center}
+#studio-saved-appearance{display:block;margin:7px 0;color:#a9bdc9;font-size:12px}
+#studio-saved-appearance[hidden]{display:none}
+.body-glyph.fox-companion,.studio-avatar[data-body=fox-companion]{border-radius:0!important;clip-path:polygon(0 0,28% 17%,72% 17%,100% 0,96% 72%,70% 100%,30% 100%,4% 72%);background:linear-gradient(145deg,transparent 50%,#f7eee0 51%) left/50% 100% no-repeat,linear-gradient(215deg,transparent 50%,#f7eee0 51%) right/50% 100% no-repeat,#e38e48}
+.body-glyph.bunny,.studio-avatar[data-body=bunny]{background:#e8e2db;border-color:#d4d5ce;border-radius:45%!important}
+.body-glyph.bunny::before,.studio-avatar[data-body=bunny]::before{content:"";position:absolute;left:18%;right:18%;top:-35%;height:57%;border-radius:40%;background:linear-gradient(90deg,#e8e2db 0 10%,#e6abb1 10% 24%,#e8e2db 24% 36%,transparent 36% 64%,#e8e2db 64% 76%,#e6abb1 76% 90%,#e8e2db 90%)}
+.body-glyph.bunny{width:34px;height:28px}
+.body-glyph.panda,.studio-avatar[data-body=panda]{background:#e5ebec;border-color:#d7e0e3;border-radius:45%!important;box-shadow:-12px -10px 0 -6px #293644,12px -10px 0 -6px #293644}
+.body-glyph.panda i,.studio-avatar[data-body=panda] i{background:#f7eee0;box-shadow:0 0 0 4px #293644;border-radius:50%;height:4px;width:3px}
+.body-glyph.fox-companion i,.body-glyph.bunny i,.studio-avatar:is([data-body=fox-companion],[data-body=bunny]) i{background:#293644;box-shadow:none}
+.studio-avatar:is([data-accessory=scarf],[data-accessory=bowtie])::after{content:"";position:absolute;left:25%;right:25%;bottom:-3px;height:6px;border-radius:3px;background:var(--avatar-accent)}
+.studio-avatar[data-accessory=flower]::after{content:"";position:absolute;top:-3px;right:-3px;width:11px;height:11px;border:3px dotted var(--avatar-light,#ffa5b7);border-radius:50%;background:var(--avatar-accent,#f6cb56)}
+
+/* Character palettes show the coat/shell and its contrasting markings together. */
+#agent-campus .studio-color-picker{gap:8px;margin-top:9px}
+#bac-planner #agent-campus .studio-color-picker button{width:27px;height:27px;flex:0 0 27px;border:3px solid #16212b;background:var(--swatch);box-shadow:none}
+#bac-planner #agent-campus #studio-palette-name{display:block;margin-top:7px;font-size:11px;line-height:1.35;color:#a7bac6}
+.body-glyph:is(.classic,.round),.studio-avatar:is([data-body=classic],[data-body=round],[data-body=rover]){background:linear-gradient(135deg,var(--avatar-base,#a8b7c7),var(--avatar-light,#637b91))}
+.body-glyph.cat,.studio-avatar[data-body=cat]{background:var(--avatar-base,var(--avatar-accent,#b2c8d7))}
+.body-glyph.operative,.studio-avatar[data-body=operative]{background:linear-gradient(90deg,var(--avatar-light,var(--avatar-accent,#76b900)) 0 9%,var(--avatar-base,#111820) 9% 91%,var(--avatar-light,var(--avatar-accent,#76b900)) 91%)}
+.body-glyph:is(.claw,.crab),.studio-avatar:is([data-body=claw],[data-body=crab]){background:var(--avatar-base,var(--avatar-accent,#ff8873))}
+.body-glyph.fox-companion,.studio-avatar[data-body=fox-companion]{background:linear-gradient(145deg,transparent 50%,var(--avatar-light,#f7eee0) 51%) left/50% 100% no-repeat,linear-gradient(215deg,transparent 50%,var(--avatar-light,#f7eee0) 51%) right/50% 100% no-repeat,var(--avatar-base,#e38e48)}
+.body-glyph.bunny,.studio-avatar[data-body=bunny]{background:var(--avatar-base,#e8e2db)}
+.body-glyph.bunny::before,.studio-avatar[data-body=bunny]::before{background:linear-gradient(90deg,var(--avatar-base,#e8e2db) 0 10%,#e6abb1 10% 24%,var(--avatar-base,#e8e2db) 24% 36%,transparent 36% 64%,var(--avatar-base,#e8e2db) 64% 76%,#e6abb1 76% 90%,var(--avatar-base,#e8e2db) 90%)}
+.body-glyph.panda,.studio-avatar[data-body=panda]{background:var(--avatar-base,#e5ebec);box-shadow:-12px -10px 0 -6px var(--avatar-dark,#293644),12px -10px 0 -6px var(--avatar-dark,#293644)}
+.body-glyph.panda i,.studio-avatar[data-body=panda] i{box-shadow:0 0 0 4px var(--avatar-dark,#293644)}
+
+/* Settings: compact connection controls with one focused editor. */
+#studio-dialog:has(#studio-model-connections){padding:20px}
+#studio-dialog:has(#studio-model-connections) .studio-dialog-heading{margin-bottom:10px}
+#studio-dialog:has(#studio-model-connections) .connection-tabs{gap:22px;margin-bottom:10px}
+#studio-dialog:has(#studio-model-connections) .connection-tabs button{padding:8px 2px!important;font-size:13px;font-weight:500}
+
+#bac-planner #agent-campus #studio-settings-model-panel{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+#studio-model-connections:has(#studio-connection-editor:not([hidden])) .connection-model-settings{display:none}
+#studio-dialog #studio-model-connections .connection-section-heading{margin:3px 0 8px;gap:12px}
+#studio-dialog #studio-model-connections .connection-section-heading h3{font-size:12px;font-weight:550;color:#aebfcb}
+#studio-dialog #studio-model-connections .connection-grid{gap:10px;margin:0 0 12px}
+#studio-dialog #studio-model-connections .connection-card{min-width:0;padding:8px 12px;border-radius:8px;border-color:#2c3d48;background:#16222b}
+#studio-dialog #studio-model-connections .connection-card header{gap:8px}
+#studio-dialog #studio-model-connections .connection-toggle{gap:8px}
+#studio-dialog #studio-model-connections .connection-toggle strong{font-size:13px;font-weight:550}
+#studio-dialog #studio-model-connections .connection-toggle input{width:15px!important;height:15px!important}
+#studio-dialog #studio-model-connections .connection-card header span{padding:0;background:transparent;font-size:10px;line-height:1.4;font-weight:500;max-width:100px}
+#studio-dialog #studio-model-connections .connection-card-details{display:flex;align-items:center;gap:8px;margin-top:5px;min-width:0}
+#studio-dialog #studio-model-connections .connection-card p{display:block;flex:1;min-width:0;margin:0;min-height:0;font-size:11px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#93a9b8}
+#studio-dialog #studio-model-connections .connection-text-button{flex:none;margin:0;padding:5px 7px;font:inherit;font-size:11px;font-weight:500;line-height:1.4;color:#c4d1da;border:1px solid transparent;border-radius:5px;background:transparent;box-shadow:none}
+#studio-dialog #studio-model-connections .connection-text-button:hover{background:#ffffff08;color:#f1f6f8}
+#studio-dialog #studio-model-connections .connection-text-button:focus-visible{outline:2px solid #8abb50;outline-offset:1px}
+#studio-dialog #studio-connection-editor{margin:0;padding:12px 0 2px;border:0;border-top:1px solid #2b3d49;border-radius:0;background:transparent}
+#studio-dialog #studio-connection-editor h3{margin:0 0 8px;font-size:15px;font-weight:550;letter-spacing:-.2px;line-height:1.3}
+#studio-dialog #studio-connection-editor label{display:block;min-width:0;margin:0;color:#aebfcb;font-size:12px;line-height:1.4;font-weight:450}
+#bac-planner #agent-campus #studio-connection-editor :is(input,select){box-sizing:border-box;display:block;min-width:0;width:100%;height:36px;margin:5px 0 0;padding:7px 10px;border:1px solid #344957;border-radius:6px;background:#101b23;color:#e2ebf1;font:inherit;font-size:13px;line-height:1.4;box-shadow:none}
+#bac-planner #agent-campus #studio-connection-editor :is(input,select):disabled{opacity:1;color:#8fa5b4;background:#14212a;border-color:#2a3c47}
+#studio-dialog #studio-connection-editor input::placeholder{color:#8399a8;font-size:12px;opacity:1}
+#studio-dialog #studio-connection-editor :is(input,select):focus-visible{outline:2px solid #83b848;outline-offset:1px}
+#studio-dialog #studio-connection-editor .connection-credentials{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.2fr);gap:14px;margin-bottom:8px}
+#studio-dialog #studio-connection-editor small{margin:5px 0 0;font-size:11px;line-height:1.4;color:#8fa5b4}
+#studio-connection-editor .connection-key-heading{display:flex;align-items:baseline;justify-content:space-between;gap:4px 10px;flex-wrap:wrap}
+#studio-get-nvidia-key{font-size:11px;color:#b5daed;text-underline-offset:2px}
+#studio-connect-key-status:empty{display:none}
+#studio-dialog #studio-connection-editor .connection-field-row{display:grid;grid-template-columns:64px minmax(0,1fr);align-items:center;gap:12px;margin-top:8px}
+#studio-dialog #studio-connection-editor .connection-field-row>input,#studio-dialog #studio-connection-editor .connection-field-row>div>input{margin-top:0}
+#studio-dialog #studio-connection-editor .connection-model-field{align-items:start}
+#studio-dialog #studio-connection-editor .connection-model-field>label{padding-top:10px}
+#studio-dialog #studio-connect-model-results{margin-top:6px;gap:0;max-height:88px;border-radius:6px;background:#101a22;scrollbar-width:thin;scrollbar-color:#3d5362 transparent}
+#studio-dialog #studio-connect-model-results:empty{display:none}
+#bac-planner #agent-campus #studio-connect-model-results button{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:38px;box-sizing:border-box;padding:6px 9px;border:0;border-bottom:1px solid #ffffff06;border-radius:0;background:transparent;color:#c2d2dd;font:inherit;text-align:left;box-shadow:none}
+#studio-dialog #studio-connect-model-results button:hover{background:#ffffff07}
+#bac-planner #agent-campus #studio-connect-model-results button[aria-pressed=true]{background:#203226;color:#d8eac5}
+#studio-dialog #studio-connect-model-results button>span:first-child{min-width:0}
+#studio-dialog #studio-connect-model-results strong{display:block;font-size:12px;font-weight:500;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#studio-dialog #studio-connect-model-results small{display:block;font-size:10px;margin:1px 0 0;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#studio-dialog #studio-connect-model-results .studio-model-choice-state{font-size:10px;white-space:nowrap;color:#96acba}
+#studio-dialog #studio-connect-model-results [aria-pressed=true] .studio-model-choice-state{color:#b8d88b}
+#studio-dialog #studio-connect-status{margin:8px 0 0;font-size:12px;line-height:1.4;color:#b5c8d4;overflow-wrap:anywhere}
+#studio-connect-status:empty{display:none}
+#studio-dialog #studio-connection-editor .connection-editor-bottom{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
+#studio-dialog #studio-connection-editor details{margin:0;min-width:0}
+#studio-dialog #studio-connection-editor summary{font-size:12px;line-height:1.5;color:#91a7b5}
+#studio-dialog #studio-connection-editor details label{margin:10px 0 0}
+#studio-dialog #studio-connection-editor .connection-editor-bottom:has(details[open]){display:block}
+#studio-dialog #studio-connection-editor .studio-dialog-actions{margin:0;gap:8px;flex:none}
+#studio-dialog #studio-connection-editor .connection-editor-bottom:has(details[open]) .studio-dialog-actions{margin-top:12px}
+#bac-planner #agent-campus #studio-connection-editor .studio-dialog-actions button{min-height:34px;padding:7px 12px;border-radius:6px;font:inherit;font-size:12px;font-weight:550;line-height:1.4;box-shadow:none}
+#studio-dialog #studio-connect-cancel{background:transparent;border-color:#344957;color:#b7c9d5}
+#studio-dialog #studio-model-connections .connection-model-settings{padding-top:2px}
+#studio-dialog #studio-model-connections .connection-scenario{padding:11px 0}
+#studio-dialog #studio-model-connections .connection-scenario label{font-size:13px;font-weight:500}
+#studio-dialog #studio-model-connections .connection-footer{box-shadow:none;padding:10px 0 0;margin-top:2px}
+#studio-dialog #studio-connections-status{margin:0 0 10px;font-size:12px;line-height:1.4}
+#studio-dialog #studio-connections-status:empty{display:none}
+#studio-dialog #studio-model-connections .connection-footer .studio-primary{padding:8px 14px;min-height:34px;border-radius:6px;font:inherit;font-size:12px;font-weight:550}
+#studio-dialog:has(.studio-about-panel){width:min(680px,calc(100vw - 32px));border-radius:10px}
+#studio-dialog[open]:has(.studio-about-panel){display:flex;flex-direction:column;overflow:hidden}
+#studio-dialog:has(.studio-about-panel) #studio-dialog-body{min-height:0;overflow-y:auto}
+#studio-dialog:has(.studio-about-panel) #studio-dialog-kicker{color:#f0f4f7;font-size:22px;font-weight:700;letter-spacing:-.4px;text-transform:none}
+#studio-dialog .studio-about-panel{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+#studio-dialog .studio-about-description{margin:4px 0 16px;color:#c7d4dc;font-size:14px;line-height:1.55}
+#studio-dialog .studio-about-version{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 14px;border:1px solid #344957;border-radius:8px;background:#15232c}
+#studio-dialog .studio-about-version span{color:#9fb1bd;font-size:12px}
+#studio-dialog .studio-about-version strong{color:#dff0ca;font-size:16px}
+#studio-dialog .studio-about-release{margin-top:18px}
+#studio-dialog .studio-about-release>h3{margin:0 0 10px;font-size:15px}
+#studio-dialog .studio-about-release>.chat-prose{max-height:330px;overflow:auto;padding:12px 14px;border:1px solid #2f424e;border-radius:8px;background:#101b23;scrollbar-width:thin}
+#studio-dialog .studio-about-release .chat-prose h4{margin:14px 0 7px;color:#dbe6ec;font-size:13px}
+#studio-dialog .studio-about-release .chat-prose h4:first-child{margin-top:0}
+#studio-dialog .studio-about-release .chat-prose p,#studio-dialog .studio-about-release .chat-prose li{font-size:12px;line-height:1.55}
+#studio-dialog .studio-about-release .chat-prose ul{padding-left:20px}
+#studio-dialog .studio-about-panel .studio-issue-report{margin-top:16px}
+@media(max-width:560px){
+ #studio-dialog:has(#studio-model-connections) .connection-tabs{justify-content:space-between;gap:7px}
+ #studio-dialog:has(#studio-model-connections) .connection-tabs button{padding-inline:1px!important;font-size:12px}
+ #studio-dialog #studio-model-connections .connection-grid{grid-template-columns:1fr;gap:7px}
+ #studio-dialog #studio-model-connections .connection-card{padding:8px 10px}
+ #studio-dialog #studio-connection-editor .connection-credentials{grid-template-columns:1fr;gap:10px}
+ #studio-dialog #studio-connection-editor .connection-field-row{grid-template-columns:1fr;gap:5px}
+ #studio-dialog #studio-connection-editor .connection-model-field>label{padding-top:0}
+ #studio-dialog #studio-connect-model-results .studio-model-choice-state{display:none}
+ #studio-dialog #studio-connection-editor .connection-editor-bottom{align-items:flex-start}
+ #studio-dialog #studio-connection-editor .studio-dialog-actions{flex-wrap:wrap;justify-content:flex-end}
+}
+
+/* Make room for replies; expanding never changes the draft or team choice. */
+#bac-planner #agent-campus #studio-crew-prompt{height:calc(6em + 16px);transition:height .18s ease,min-height .18s ease}
+#bac-planner #agent-campus #studio-crew-chat.is-reading{padding:8px 12px}
+#bac-planner #agent-campus #studio-crew-chat.is-reading .studio-goal-toolbar{margin-bottom:4px}
+#bac-planner #agent-campus #studio-crew-chat.is-reading #studio-crew-prompt{height:40px!important;min-height:40px;padding-block:4px;resize:none}
+#bac-planner #agent-campus #studio-crew-chat.is-reading .studio-compose-actions{margin-top:0}
+#bac-planner #agent-campus #studio-crew-chat.is-reading .studio-compose-actions>button{min-height:36px;padding:6px 10px}
+#bac-planner #agent-campus #studio-crew-chat.is-reading #studio-crew-send{font-size:14px}
+@media(pointer:coarse){#bac-planner #agent-campus #studio-crew-chat.is-reading .studio-compose-actions>button{min-height:44px}}
+@media(prefers-reduced-motion:reduce){#bac-planner #agent-campus #studio-crew-prompt{transition:none}}
+/* In the Lounge, keep agent controls together above the conversation. */
+#studio-companion{container-type:inline-size}
+.studio-agent-meta{display:flex;align-items:center;flex-wrap:wrap;gap:3px 8px}
+#studio-companion #studio-agent-skills .studio-skill-badge{min-height:24px;padding:2px 6px}
+.studio-lounge-runtime{display:grid;grid-template-columns:minmax(0,1fr);gap:6px}
+.studio-lounge-runtime:not(:has(> :not([hidden]))){display:none}
+#studio-model-routing .switchyard-overview{margin:0;padding:5px 8px}
+#studio-model-routing .switchyard-flow{margin-top:2px}
+#studio-model-routing .switchyard-destinations .switchyard-flow-node{padding:0}
+#agent-campus #studio-agent-policy:not([hidden]){
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  margin:0;min-height:38px;padding:6px 12px;text-align:left;font-size:15px;font-weight:600;
+  border:1px solid #465b4c;border-radius:7px;background:#1b2925;color:#deeadf;
+}
+#agent-campus #studio-agent-policy.has-policy-alert{border-color:#77613b;background:#2a271f;color:#f1d49c}
+#agent-campus #studio-agent-policy:hover{border-color:currentColor}
+#studio-agent-policy .policy-pending-badge{margin:0;flex:none;font-size:12px;box-shadow:none}
+@media(pointer:coarse){#agent-campus #studio-agent-policy:not([hidden]){min-height:44px}}
+@container (max-width: 210px){
+  #bac-planner #agent-campus #studio-companion .studio-companion-name{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:4px}
+  #bac-planner #agent-campus #studio-companion :is(.studio-companion-name>div,.studio-agent-title){display:contents}
+  #studio-companion :is(.studio-agent-actions,.studio-agent-meta){grid-column:1/-1}
+  #studio-companion #studio-personality{white-space:normal}
+  #studio-model-routing .switchyard-flow{grid-template-columns:minmax(0,1fr)}
+  #studio-model-routing .switchyard-destinations{padding-left:14px}
+  #studio-model-routing .switchyard-destinations::before{display:none}
+  #studio-model-routing .switchyard-destinations .switchyard-flow-node{grid-template-columns:auto minmax(0,1fr);gap:3px}
+  #studio-model-routing .switchyard-flow-node strong{white-space:normal;overflow-wrap:anywhere}
+}
+#agent-campus #studio-chat.is-heartbeat-only{padding:5px 8px;border-radius:6px;box-shadow:none}
+#agent-campus #studio-chat.is-heartbeat-only > :not(#studio-chat-connection,#studio-chat-error){display:none}
+#studio-chat.is-heartbeat-only #studio-chat-connection{padding:0;color:#aebdc5;font-size:12px;line-height:1.4}
+
+/* Compact, shared explanation for automatic routing and response provenance. */
+.switchyard-overview{margin:9px 0 0;padding:9px 11px;background:#142129;border:1px solid #2b3e48;border-radius:9px}
+.switchyard-overview-title{font-size:12px;font-weight:600;color:#c5dcdf}
+.switchyard-flow{--branch-color:#52747e;display:grid;grid-template-columns:fit-content(36%) minmax(0,1fr);column-gap:8px;align-items:center;margin-top:6px}
+.switchyard-flow-node{min-width:0}
+.switchyard-flow-node small{display:block;font-size:11px;line-height:16px;color:#a0b9c0;margin:0}
+.switchyard-flow-node strong{display:block;font-size:12px;font-weight:500;color:#d5e5e8;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.switchyard-destinations{position:relative;min-width:0;padding-left:24px}
+.switchyard-destinations::before{content:"";position:absolute;left:0;top:50%;width:9px;border-top:1px solid var(--branch-color)}
+.switchyard-destinations .switchyard-flow-node{position:relative;display:grid;grid-template-columns:49px minmax(0,1fr);gap:5px;align-items:baseline;padding:3px 0}
+.switchyard-destinations .switchyard-flow-node::before{content:"";position:absolute;left:-15px;width:10px;height:50%;box-sizing:border-box;border-left:1px solid var(--branch-color)}
+.switchyard-destinations .switchyard-flow-node:first-child::before{top:50%;border-top:1px solid var(--branch-color);border-top-left-radius:5px}
+.switchyard-destinations .switchyard-flow-node:last-child::before{bottom:50%;border-bottom:1px solid var(--branch-color);border-bottom-left-radius:5px}
+.model-usage{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin:7px 0 11px}
+.model-usage-chip{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:3px 7px;border:1px solid #334950;border-radius:5px;background:#16272d;color:#c2dadd;font-size:11px;font-weight:500;line-height:1.5;overflow-wrap:anywhere}
+.model-usage-chip>i{font-style:normal;color:#8db5bd}.model-usage-chip>small{font-size:10px!important;font-weight:400;color:#89a5ae!important;margin:0!important}
+.mission-plan-content>.model-usage{margin-top:0;margin-bottom:12px}
+.switchyard-editor{margin-top:12px;padding:12px 14px;border:1px solid #2d4850;border-radius:9px;background:#142229}
+.switchyard-editor-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;color:#c5dcdf;font-size:12px}
+#studio-connection-editor .switchyard-reset{min-height:26px;padding:2px 0;border:0;background:transparent;color:#98b3bb;font-size:11px;box-shadow:none}
+.switchyard-edit-row{display:grid;grid-template-columns:150px minmax(0,1fr);align-items:center;gap:12px;padding:8px 0}
+.switchyard-edit-row strong{font-size:12px;font-weight:600;color:#d5e5e8}.switchyard-edit-row small{display:block;font-size:10px!important;color:#8da9b0!important;margin:3px 0 0!important}
+#studio-connection-editor [data-routing-role]{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;padding:7px 10px;background:#0f1c24;border:1px solid #344b55;border-radius:6px;font-size:12px;font-weight:400;color:#d5e5e8;text-align:left;box-shadow:none;min-width:0}
+[data-routing-role]>span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#studio-connection-editor [data-routing-role]:hover,#studio-connection-editor [data-routing-role][aria-expanded=true]{border-color:#6e9aa4;background:#172b33}
+.switchyard-picker{padding:4px 0 8px 162px}.switchyard-picker input{font-size:12px!important;min-height:34px!important;padding:7px 10px!important}
+.switchyard-picker .studio-agent-model-results{max-height:180px!important;margin-top:5px!important}.switchyard-picker .studio-agent-model-results button{padding:7px 9px!important;min-height:0!important}
+#studio-dialog .switchyard-notice,#agent-campus .switchyard-notice{font-size:11px;line-height:1.45;color:#e4bd73;margin:8px 0 0;padding:6px 8px;background:#b4872210;border-left:2px solid #b28c40;border-radius:3px}
+@media(max-width:520px){.switchyard-edit-row{grid-template-columns:105px minmax(0,1fr);gap:8px}.switchyard-picker{padding-left:0}}

@@ -1,0 +1,91 @@
+# SPDX-License-Identifier: Apache-2.0
+
+name: bac-demo
+
+x-app: &app
+  image: ${BAC_IMAGE:-bac-studio:dev}
+
+x-environment: &environment
+  BAC_DEMO_VERSION: ${BAC_VERSION:-}
+  BAC_OPENCLAW_PORT: ${BAC_OPENCLAW_PORT:-28689}
+  BAC_OPENSHELL_PORT: ${BAC_OPENSHELL_PORT:-28680}
+  BAC_OPENSHELL_HEALTH_PORT: ${BAC_OPENSHELL_HEALTH_PORT:-28681}
+  PORT: ${BAC_PORT:-8080}
+
+services:
+  # Pull the protected-agent image during installation, before the first hire.
+  sandbox-image:
+    image: ghcr.io/nvidia/openshell-community/sandboxes/openclaw@sha256:c116946b3f9e84791630f21f115ac35c9c9f669af70ec0eef3035d79833a9550
+    entrypoint: ["/bin/true"]
+    command: []
+    network_mode: none
+
+  init:
+    <<: *app
+    user: "0:0"
+    command: ["init"]
+    network_mode: none
+    environment:
+      <<: *environment
+      HOME: /tmp/bac-init
+      XDG_CONFIG_HOME: /tmp/bac-init/config
+      XDG_DATA_HOME: /tmp/bac-init/data
+    volumes:
+      - .:/opt/bac/source:ro
+      - studio-data:/var/lib/bac
+      - client-certs:/run/bac-client
+      # OpenShell gives this absolute path to the HOST Docker daemon.
+      - /var/lib/bac-openshell:/var/lib/bac-openshell
+
+  openshell:
+    image: ghcr.io/nvidia/openshell/gateway@sha256:bdb4fe248070032c88be78f029dad9325cb698480e90486e1413a674a5d8edc8
+    user: "0:0"
+    command: ["--bind-address", "127.0.0.1", "--port", "${BAC_OPENSHELL_PORT:-28680}"]
+    network_mode: host
+    restart: unless-stopped
+    stop_grace_period: 45s
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    environment:
+      OPENSHELL_GATEWAY_CONFIG: /var/lib/bac-openshell/gateway.toml
+      OPENSHELL_DB_URL: sqlite:/var/lib/bac-openshell/gateway.db?mode=rwc
+      OPENSHELL_LOCAL_TLS_DIR: /var/lib/bac-openshell/tls
+      HOME: /var/lib/bac-openshell
+      XDG_DATA_HOME: /var/lib/bac-openshell
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/bac-openshell:/var/lib/bac-openshell
+
+  studio:
+    <<: *app
+    # init reuses this image; only one service should build and export it.
+    build:
+      context: .
+      target: release
+    network_mode: host
+    restart: unless-stopped
+    stop_grace_period: 45s
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      openshell:
+        condition: service_started
+      sandbox-image:
+        condition: service_completed_successfully
+    environment: *environment
+    volumes:
+      - .:/opt/bac/source:ro
+      - studio-data:/var/lib/bac
+      - client-certs:/run/bac-client:ro
+      - ./shared:/host-files
+    healthcheck:
+      test: ["CMD", "python3", "/opt/bac/app/scripts/container_runtime.py", "health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 3
+
+volumes:
+  studio-data:
+  client-certs:

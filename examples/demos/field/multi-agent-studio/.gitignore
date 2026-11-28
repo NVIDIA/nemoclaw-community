@@ -1,0 +1,24 @@
+.DS_Store
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+node_modules/
+test-results/
+playwright-report/
+/app/*
+shared/*
+!shared/README.txt
+backups/
+release/
+image-metadata.json
+
+# Machine-specific host model configuration and service identity
+local-model.json
+.local-model/
+
+# Install-local provider credentials. Ship only the blank example.
+/api.json
+# Keep credentials from older installations out of Git as well.
+/api.cfg

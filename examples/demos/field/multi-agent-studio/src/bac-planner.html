@@ -1,0 +1,60 @@
+<div id="bac-planner" lang="en" aria-label="Multi-Agent Studio" data-view="board">
+<style>
+#bac-planner{font:19px/1.5 Arial,Helvetica,sans-serif;color:var(--ink);background:var(--paper);overflow:hidden}
+#bac-planner *{box-sizing:border-box}
+#bac-planner [hidden]{display:none!important}
+#bac-planner button,#bac-planner input,#bac-planner select{font:inherit}
+#bac-planner button{cursor:pointer;color:inherit}
+#bac-planner button:disabled{opacity:.45;cursor:default}
+#bac-planner p{margin:0}
+#bac-planner h2{font-size:27px;font-weight:500;margin:3px 0 6px}
+#bac-planner h3{font-size:20px;font-weight:500;margin:0 0 9px}
+#bac-planner strong{font-weight:500}
+#bac-planner .quiet{color:var(--muted);font-size:17px}
+#bac-planner .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#bac-planner .spread{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+#bac-planner .brand{font-weight:500;display:flex;gap:9px;align-items:center}
+#bac-planner details{margin-top:13px}
+#bac-planner summary{cursor:pointer;font-size:18px;margin-bottom:12px}
+</style>
+<header class="topbar spread">
+  <div class="brand"><button type="button" class="nv-brand" id="studio-home" aria-label="NVIDIA · Back to main page" title="Back to main page">NVIDIA</button><span class="brand-divider" aria-hidden="true"></span><span>Multi-Agent Studio</span></div>
+  <div class="studio-header-actions">
+    <details id="studio-resources" class="studio-resources">
+      <summary>Resources <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></summary>
+      <nav class="studio-resources-panel" aria-label="Resources">
+        <a data-bac-resource href="https://www.nvidia.com/en-us/ai/build-a-claw/" target="_blank" rel="noopener noreferrer">Build-a-Claw<span aria-hidden="true">↗</span></a>
+        <a data-bac-resource href="https://brev.nvidia.com/" target="_blank" rel="noopener noreferrer">NVIDIA Brev<span aria-hidden="true">↗</span></a>
+        <a data-bac-resource href="https://brev.nvidia.com/launchables?tab=explore" target="_blank" rel="noopener noreferrer">Brev Launchables<span aria-hidden="true">↗</span></a>
+        <a data-bac-resource href="https://openclaw.ai/" target="_blank" rel="noopener noreferrer">OpenClaw<span aria-hidden="true">↗</span></a>
+        <a data-bac-resource href="https://hermes-agent.nousresearch.com/" target="_blank" rel="noopener noreferrer">Hermes<span aria-hidden="true">↗</span></a>
+        <a data-bac-resource href="https://www.nvidia.com/en-us/ai/openshell/" target="_blank" rel="noopener noreferrer">NVIDIA OpenShell<span aria-hidden="true">↗</span></a>
+        <a data-bac-resource href="https://github.com/NVIDIA-NeMo/Switchyard" target="_blank" rel="noopener noreferrer">NeMo Switchyard<span aria-hidden="true">↗</span></a>
+        <a data-bac-resource href="https://agentskills.io/specification" target="_blank" rel="noopener noreferrer">Agent Skills specification<span aria-hidden="true">↗</span></a>
+        <div class="studio-resource-about"><button type="button" id="studio-about" aria-haspopup="dialog" aria-controls="studio-dialog">About Multi-Agent Studio</button></div>
+      </nav>
+    </details>
+  </div>
+</header>
+
+<!-- AGENT_CAMPUS -->
+<!-- NVIDIA_THEME -->
+<script>
+(() => {
+  const scenarios = /* STAGE_SCENARIOS */;
+  window.BacCrewCatalog = Object.freeze((/* CREW_CATALOG */).map(member => Object.freeze(member)));
+  window.BacDemo = {
+    scenarios,
+    roomTitles: Object.freeze({workshop:'Hiring', lounge:'Agent Lounge', mission:scenarios.find(s=>s.id==='plan').title}),
+    snapshot: () => ({phase:-1,revision:0,brief:null,calc:null,gap:false,policy:null,selected:0,
+      flow:['Your crew is ready','', ''], agents:window.BacCrewCatalog.map((member,i)=>({
+        ...member,zone:member.role,tone:['lime','blue','sand','rose','purple','blue'][i],
+        displayed:i<4,skills:[],status:'Ready',lane:0,task:member.description,permission:''
+      }))})
+
+  };
+})();
+</script>
+<!-- CAMPUS_SCRIPT -->
+<!-- STUDIO_SCRIPT -->
+</div>

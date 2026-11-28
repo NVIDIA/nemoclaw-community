@@ -216,7 +216,7 @@ class ExampleStackFactsTests(unittest.TestCase):
                     # Workday HR assistant, the NemoClaw Agent Configs NV Tech Assistant,
                     # and both harness optimization examples: CAE FreeCAD (on
                     # NeMo Helix) and Enterprise Assistant.
-                    "unconfirmed": 15,
+                    "unconfirmed": 16,
                     "unpinned": 13,
                     # Includes the Local-Only Workspace Assistant, whose
                     # digest-pinned sandbox image has no established harness version.

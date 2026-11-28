@@ -1,0 +1,1 @@
+{"id":"bac-research-guard","name":"Multi-Agent Studio research and review bounds","description":"Bound Event Brief and Open Task file/tool output, Dylan research, Lounge research, Scout browsing and Vera review reads.","activation":{"onStartup":true},"configSchema":{"type":"object","additionalProperties":false,"properties":{}},"contracts":{"tools":["bac_weather"]}}

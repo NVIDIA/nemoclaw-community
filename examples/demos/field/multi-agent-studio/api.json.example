@@ -1,0 +1,5 @@
+{
+  "nvidia":    { "baseUrl": "https://integrate.api.nvidia.com/v1", "apiKey": "" },
+  "openai":    { "baseUrl": "https://api.openai.com/v1", "apiKey": "" },
+  "anthropic": { "baseUrl": "https://api.anthropic.com", "apiKey": "" }
+}

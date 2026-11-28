@@ -729,3 +729,24 @@ License: Apache-2.0
 Source: https://pypi.org/project/harbor/
 Notes: Installed by the reader (harbor==0.22.0) to run the eval in
 examples/tools/cae-freecad-agent-harness-optimization. Not vendored.
+
+Multi-Agent Studio (examples/demos/field/multi-agent-studio/)
+
+Component: Three.js r180 (0.180.0)
+License: MIT
+Source: https://github.com/mrdoob/three.js/tree/r180
+Notes: The example vendors the CommonJS renderer with an indentation-only change and includes its MIT license in the standalone page. See src/vendor/three-LICENSE.txt in the example.
+
+Data: GeoNames cities15000 and accompanying country and administrative subdivision tables
+License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+Source: https://download.geonames.org/export/dump/
+Notes: The example distributes an offline, reduced city table with truncated coordinates. See runtime/research-guard/weather/README.md in the example for the transformations and source attribution.
+
+Component: NVIDIA OpenShell sandbox policy reference
+License: Apache-2.0
+Source: https://github.com/NVIDIA/OpenShell/tree/fa0bfa490e42c87a74a70be6ebb40faee7fb8faa
+Notes: The example adapts policy fields and retains the upstream license in src/vendor/OpenShell-LICENSE.txt. Its README documents dependencies installed at runtime or during the local build.
+
+Runtime dependencies installed during the local build: OpenClaw and its OpenShell and Parallel plugins, NeMo Switchyard, Node.js, and the OpenShell CLI and containers. See the example's src/vendor/README.md, docker/runtime-lock.json, docker/runtime/package-lock.json, and Dockerfile for component sources, versions, and notices.
+
+External data and services: Weather forecasts are fetched at runtime from MET Norway (https://api.met.no/, CC BY 4.0 data). See runtime/research-guard/weather/README.md in the example for the source and attribution. Standard web research can send search terms and the search objective to Parallel Search. See docs/session-credentials.md in the example for its service terms and data-sharing guidance.

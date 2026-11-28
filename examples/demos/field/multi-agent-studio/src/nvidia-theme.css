@@ -1,0 +1,57 @@
+/* Demo theme informed by NVIDIA Build; not a bundled Kaizen component library. */
+#bac-planner {
+  --canvas:#0c0c0c;
+  --paper:#171717;
+  --soft:#222222;
+  --ink:#f2f2f2;
+  --muted:#b3b3b3;
+  --line:#3c3c3c;
+  --field:#101010;
+  --accent:#76b900;
+  --accent-hover:#91cc24;
+  --lime:#24331a;
+  --blue:#263238;
+  --rose:#332b2e;
+  --purple:#2e2b34;
+  --sand:#343225;
+  --warning:#342c19;
+  --warning-ink:#f0d391;
+  font-family:"NVIDIA Sans",Arial,Helvetica,sans-serif;
+  color-scheme:dark;
+  background:var(--canvas);
+  border:0;
+  border-radius:0;
+  min-height:100vh;
+}
+#bac-planner h2{font-size:37px;line-height:1.2;font-weight:700;letter-spacing:-.5px;margin:10px 0 12px}
+#bac-planner h3,#bac-planner strong{font-weight:600}
+#bac-planner .quiet{color:var(--muted);font-size:18px}
+#bac-planner .notice{line-height:1.6}
+#bac-planner .topbar{min-height:72px;padding:18px 32px;background:#080808;border-bottom:1px solid #303030}
+#bac-planner .brand{gap:20px;font-size:23px;font-weight:600}
+#bac-planner .nv-brand{display:inline-flex;align-items:center;color:#fff;font-size:26px;font-weight:700;letter-spacing:-.5px}
+#bac-planner .nv-brand svg{display:block;width:108px;height:auto}
+#bac-planner .brand-divider{height:26px;width:1px;background:#505050}
+#bac-planner .studio-header-actions{display:flex;align-items:center;gap:18px;margin-left:auto}
+#bac-planner .studio-resources{position:relative;flex:none;margin:0;font-size:14px;line-height:1.4}
+#bac-planner .studio-resources>summary{display:flex;align-items:center;justify-content:center;gap:8px;min-height:36px;margin:0;padding:7px 9px;list-style:none;border-radius:6px;font-size:14px;font-weight:500;color:#b3bec7;cursor:pointer;user-select:none}
+#bac-planner .studio-resources>summary::-webkit-details-marker{display:none}
+#bac-planner .studio-resources>summary:hover,#bac-planner .studio-resources[open]>summary{background:#ffffff0a;color:#f2f5f7}
+#bac-planner .studio-resources>summary svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+#bac-planner .studio-resources[open]>summary svg{transform:rotate(180deg)}
+#bac-planner .studio-resources-panel{position:absolute;top:calc(100% + 10px);right:0;z-index:110;width:246px;max-width:calc(100vw - 32px);padding:6px;background:#15202a;border:1px solid #35434e;border-radius:10px;box-shadow:0 12px 32px #0007}
+#bac-planner .studio-resources-panel :is(a,#studio-about){display:flex;align-items:center;justify-content:space-between;gap:22px;min-height:44px;padding:10px 12px;border-radius:5px;color:#dce6ec;text-decoration:none;white-space:nowrap;font-size:14px;font-weight:500}
+#bac-planner .studio-resource-about{border-top:1px solid #33434e;margin-top:4px;padding-top:4px}
+#bac-planner #studio-resources #studio-about{width:100%;height:auto;justify-content:flex-start;font-family:inherit;border:0;background:transparent;box-shadow:none;cursor:pointer}
+#bac-planner #studio-resources #studio-about:hover{background:#ffffff08;color:#fff}
+#bac-planner .studio-resources-panel a span{font-size:16px;color:#8297a5}
+#bac-planner .studio-resources-panel :is(a,#studio-about):hover{background:#ffffff08;color:#fff}
+#bac-planner .studio-resources-panel a:hover span{color:#b2d979}
+#bac-planner .studio-resources-panel :is(a,#studio-about):focus-visible{outline:2px solid #a5d85b;outline-offset:-2px}
+#bac-planner :is(button,input,select,summary):focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+#bac-planner input[type="checkbox"]{accent-color:var(--accent)}
+@media(max-width:700px){#bac-planner .topbar{padding:18px;gap:12px}#bac-planner .brand{gap:14px;font-size:21px}#bac-planner h2{font-size:32px}}
+
+#bac-planner button.nv-brand{border:0;background:transparent;padding:0;cursor:pointer;font-family:inherit}
+#bac-planner button.nv-brand:hover{color:#b5e26c}
+#bac-planner button.nv-brand:focus-visible{outline:2px solid #76b900;outline-offset:6px;border-radius:2px}
